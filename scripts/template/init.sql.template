@@ -1,0 +1,46 @@
+-- {{DB_TYPE}} 初始化脚本
+-- 创建测试表
+
+CREATE TABLE IF NOT EXISTS test_users (
+    id {{ID_TYPE}}{{PRIMARY_KEY}},
+    name {{VARCHAR_TYPE}}(255) NOT NULL,
+    email {{VARCHAR_TYPE}}(255) UNIQUE NOT NULL,
+    created_at {{TIMESTAMP_TYPE}} DEFAULT {{CURRENT_TIMESTAMP}}
+){{ENGINE_CLAUSE}};
+
+CREATE TABLE IF NOT EXISTS test_accounts (
+    id {{ID_TYPE}}{{PRIMARY_KEY}},
+    user_id {{INTEGER_TYPE}} {{NOT_NULL}},
+    balance {{DECIMAL_TYPE}}(10, 2) DEFAULT 0.00,
+    created_at {{TIMESTAMP_TYPE}} DEFAULT {{CURRENT_TIMESTAMP}}{{FOREIGN_KEY_USERS_CASCADE}}
+){{ENGINE_CLAUSE}};
+
+CREATE TABLE IF NOT EXISTS test_orders (
+    id {{ID_TYPE}}{{PRIMARY_KEY}},
+    user_id {{INTEGER_TYPE}},
+    amount {{DECIMAL_TYPE}}(10, 2) NOT NULL,
+    status {{VARCHAR_TYPE}}(50) DEFAULT 'pending',
+    created_at {{TIMESTAMP_TYPE}} DEFAULT {{CURRENT_TIMESTAMP}}{{FOREIGN_KEY_USERS_SET_NULL}}
+){{ENGINE_CLAUSE}};
+
+-- 创建索引
+CREATE INDEX IF NOT EXISTS idx_test_users_email ON test_users(email);
+CREATE INDEX IF NOT EXISTS idx_test_accounts_user_id ON test_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_test_orders_user_id ON test_orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_test_orders_status ON test_orders(status);
+
+-- 插入测试数据{{INSERT_IGNORE}}
+INSERT {{IGNORE_CLAUSE}} INTO test_users (name, email) VALUES
+    ('Alice', 'alice@example.com'),
+    ('Bob', 'bob@example.com'),
+    ('Charlie', 'charlie@example.com'){{ON_CONFLICT_EMAIL}};
+
+INSERT {{IGNORE_CLAUSE}} INTO test_accounts (user_id, balance) VALUES
+    (1, 1000.00),
+    (2, 500.00),
+    (3, 750.00){{ON_CONFLICT_ACCOUNTS}};
+
+INSERT {{IGNORE_CLAUSE}} INTO test_orders (user_id, amount, status) VALUES
+    (1, 100.00, 'completed'),
+    (2, 50.00, 'pending'),
+    (3, 75.00, 'completed'){{ON_CONFLICT_ORDERS}};
