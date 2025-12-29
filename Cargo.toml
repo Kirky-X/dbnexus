@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "dbnexus",
+    "dbnexus-macros",
+    "migrate-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0-alpha"
+edition = "2024"
+rust-version = "1.85"
+authors = ["DBNexus Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dbnexus/dbnexus"
+documentation = "https://docs.rs/dbnexus"
+keywords = ["database", "orm", "sea-orm", "sql"]
+categories = ["database", "asynchronous"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+
+# Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
+sea-orm = { version = "2.0.0-rc.22", default-features = false, features = ["macros"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+time = { version = "0.3", features = ["formatting", "parsing"] }
+
+# Testing
+tokio-test = "0.4"
+
+# Metrics
+prometheus = "0.13"
+
+# Caching
+lru = "0.12"
+
+[workspace.lints.rust]
+
+[workspace.lints.clippy]
+
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,0 +1,32 @@
+# Build outputs
+target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+*.profraw
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Misc
+*.pdb
+*.dll
+*.so
+*.dylib
+temp/
