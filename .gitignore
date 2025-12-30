@@ -1,3 +1,10 @@
+# Documentation
+docs/prd.md
+docs/task.md
+docs/tdd.md
+docs/test.md
+docs/uat.md
+
 # Build outputs
 target/
 Cargo.lock
