@@ -9,8 +9,15 @@ license = "MIT OR Apache-2.0"
 name = "dbnexus-migrate"
 path = "src/main.rs"
 
+# Database drivers (互斥 - 必须且只能选一个)
+# 使用时: cargo run --features sqlite|postgres|mysql
+[features]
+sqlite = ["dbnexus/sqlite"]
+postgres = ["dbnexus/postgres"]
+mysql = ["dbnexus/mysql"]
+
 [dependencies]
-dbnexus = { path = "../dbnexus", default-features = false, features = ["migration", "sqlite", "runtime-tokio-rustls"] }
+dbnexus = { path = "../dbnexus", default-features = false, features = ["migration", "runtime-tokio-rustls"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
