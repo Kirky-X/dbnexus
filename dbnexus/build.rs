@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! Build script for compile-time permissions validation
 //!
 //! This script reads the permissions.yaml file and generates:

@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! DB Nexus - 企业级数据库抽象层
 //!
 //! 基于 Sea-ORM 的高性能、高安全性 Rust 数据库访问层
@@ -55,12 +60,23 @@ compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', 
 // 模块声明
 // ============================================================================
 
+/// 审计日志模块
+#[cfg(feature = "audit")]
+pub mod audit;
+/// 缓存模块
+#[cfg(feature = "cache")]
+pub mod cache;
 /// 配置管理模块
 pub mod config;
+
+pub use config::{DatabaseType, DbConfig, PoolConfig};
 /// 实体转换模块
 pub mod entity;
 /// 生成的权限角色模块（由 build.rs 自动生成）
 pub mod generated_roles;
+/// 全局索引模块
+#[cfg(feature = "global-index")]
+pub mod global_index;
 /// Metrics 收集模块
 #[cfg(feature = "metrics")]
 pub mod metrics;
@@ -69,26 +85,19 @@ pub mod metrics;
 pub mod migration;
 /// 权限控制模块
 pub mod permission;
-/// 连接池管理模块
-pub mod pool;
-/// 分布式追踪模块
-#[cfg(feature = "tracing")]
-pub mod tracing;
-/// 分片管理模块
-#[cfg(feature = "sharding")]
-pub mod sharding;
-/// 全局索引模块
-#[cfg(feature = "global-index")]
-pub mod global_index;
-/// 缓存模块
-#[cfg(feature = "cache")]
-pub mod cache;
-/// 审计日志模块
-#[cfg(feature = "audit")]
-pub mod audit;
+
+pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
 /// 可插拔权限引擎模块
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
+/// 连接池管理模块
+pub mod pool;
+/// 分片管理模块
+#[cfg(feature = "sharding")]
+pub mod sharding;
+/// 分布式追踪模块
+#[cfg(feature = "tracing")]
+pub mod tracing;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
@@ -101,10 +110,10 @@ pub use crate::pool::Session;
 
 /// 过程宏重新导出
 pub use dbnexus_macros::DbEntity;
+pub use dbnexus_macros::db_audit;
+pub use dbnexus_macros::db_cache;
 pub use dbnexus_macros::db_crud;
 pub use dbnexus_macros::db_entity;
 pub use dbnexus_macros::db_permission;
-pub use dbnexus_macros::db_cache;
-pub use dbnexus_macros::db_audit;
 pub use dbnexus_macros::primary_key;
 pub use dbnexus_macros::table_name;
