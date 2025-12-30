@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 缓存模块
 //!
 //! 提供实体缓存功能，支持：
@@ -17,7 +22,7 @@
 //! ```
 
 use async_trait::async_trait;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -53,6 +58,7 @@ struct CacheEntry<T> {
     /// 缓存值
     value: T,
     /// 创建时间
+    #[allow(dead_code)]
     created_at: Instant,
     /// 过期时间
     expires_at: Instant,
@@ -83,6 +89,7 @@ impl<T> CacheEntry<T> {
         self.last_accessed = Instant::now();
     }
 
+    #[allow(dead_code)]
     fn remaining_ttl(&self) -> Duration {
         self.expires_at.saturating_duration_since(Instant::now())
     }
@@ -261,11 +268,7 @@ impl CacheStats {
         let hits = self.hits.load(std::sync::atomic::Ordering::Relaxed);
         let misses = self.misses.load(std::sync::atomic::Ordering::Relaxed);
         let total = hits + misses;
-        if total == 0 {
-            0.0
-        } else {
-            hits as f64 / total as f64
-        }
+        if total == 0 { 0.0 } else { hits as f64 / total as f64 }
     }
 
     /// 增加命中计数
@@ -295,14 +298,14 @@ impl CacheStats {
 }
 
 /// 缓存管理器
+#[allow(dead_code)]
 pub struct CacheManager<T>
 where
     T: Clone + Send + Sync + 'static,
 {
-    /// 内部存储 - 使用 LRU 排序的 HashMap
-    cache: RwLock<HashMap<CacheKey, CacheEntry<T>>>,
-    /// 访问顺序记录（用于 LRU）
-    access_order: RwLock<Vec<CacheKey>>,
+    /// 内部存储 - 使用 IndexMap 实现 O(1) LRU
+    /// IndexMap 维护插入顺序，move_to_end 实现访问顺序更新
+    cache: RwLock<IndexMap<CacheKey, CacheEntry<T>>>,
     /// 配置
     config: CacheConfig,
     /// 缓存策略
@@ -325,8 +328,7 @@ where
     /// 创建带策略的缓存管理器
     pub fn with_strategy(config: CacheConfig, strategy: Box<dyn CacheStrategy>) -> Self {
         Self {
-            cache: RwLock::new(HashMap::new()),
-            access_order: RwLock::new(Vec::new()),
+            cache: RwLock::new(IndexMap::new()),
             config: config.clone(),
             strategy,
             stats: CacheStats::new(),
@@ -341,18 +343,26 @@ where
         if let Some(entry) = cache.get_mut(key) {
             if entry.is_expired() {
                 // 过期，移除
-                cache.remove(key);
+                cache.shift_remove(key);
                 self.stats.record_miss();
                 self.strategy.on_miss(key).await;
                 return None;
             }
 
-            // 访问命中
+            // 访问命中 - 更新 LRU 顺序
             entry.access();
+            // 保存值和 TTL
+            let value = entry.value.clone();
+            let ttl = entry.expires_at.saturating_duration_since(Instant::now());
+
+            // 移除并重新插入到末尾
+            cache.shift_remove(key);
+            cache.insert(key.clone(), CacheEntry::new(value, ttl));
+
             self.stats.record_hit();
             self.strategy.on_hit(key).await;
 
-            Some(entry.value.clone())
+            Some(cache.get(key)?.value.clone())
         } else {
             self.stats.record_miss();
             self.strategy.on_miss(key).await;
@@ -368,23 +378,18 @@ where
     /// 设置缓存值（带自定义 TTL）
     pub async fn set_with_ttl(&self, key: CacheKey, value: T, ttl: Duration) {
         let mut cache = self.cache.write().await;
-        let mut access = self.access_order.write().await;
 
-        // 检查容量，必要时淘汰
+        // 检查容量，必要时淘汰最久未使用的项
         if cache.len() >= self.max_capacity && !cache.contains_key(&key) {
-            if let Some(lru_key) = access.first() {
-                cache.remove(lru_key);
-            }
-            access.retain(|k| k != &key);
+            // IndexMap 的 shift_remove_index 会移除第一个键（最久未使用）
+            cache.shift_remove_index(0);
         }
 
         // 创建新条目
         let entry = CacheEntry::new(value, ttl);
 
+        // 插入或更新条目
         cache.insert(key.clone(), entry);
-        if !access.contains(&key) {
-            access.push(key.clone());
-        }
 
         self.stats.record_set();
         self.strategy.on_update(&key).await;
@@ -393,10 +398,8 @@ where
     /// 删除缓存值
     pub async fn delete(&self, key: &CacheKey) {
         let mut cache = self.cache.write().await;
-        let mut access = self.access_order.write().await;
 
-        if cache.remove(key).is_some() {
-            access.retain(|k| *k != *key);
+        if cache.shift_remove(key).is_some() {
             self.stats.record_delete();
         }
     }
@@ -404,11 +407,8 @@ where
     /// 清空缓存
     pub async fn clear(&mut self) {
         let mut cache = self.cache.write().await;
-        let mut access = self.access_order.write().await;
 
         cache.clear();
-        access.clear();
-
         self.stats = CacheStats::new();
     }
 
@@ -430,28 +430,17 @@ where
     /// 清理过期条目
     pub async fn cleanup(&self) -> usize {
         let mut cache = self.cache.write().await;
-        let mut access = self.access_order.write().await;
 
         let before = cache.len();
-        cache.retain(|key, entry| {
+        cache.retain(|_key, entry| {
             let not_expired = !entry.is_expired();
             if !not_expired {
-                access.retain(|k| *k != *key);
                 self.stats.record_expiration();
             }
             not_expired
         });
 
         before - cache.len()
-    }
-
-    /// 移动到访问顺序末尾
-    async fn move_to_back(&self, _cache: &mut std::sync::RwLockWriteGuard<'_, HashMap<CacheKey, CacheEntry<T>>>, key: &CacheKey) {
-        let mut access = self.access_order.write().await;
-        if let Some(pos) = access.iter().position(|k| k == key) {
-            access.swap_remove(pos);
-            access.push(key.clone());
-        }
     }
 }
 
