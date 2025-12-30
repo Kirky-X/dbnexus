@@ -71,6 +71,9 @@ pub mod migration;
 pub mod permission;
 /// 连接池管理模块
 pub mod pool;
+/// 分布式追踪模块
+#[cfg(feature = "tracing")]
+pub mod tracing;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
