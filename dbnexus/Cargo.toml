@@ -37,7 +37,7 @@ metrics = ["dep:prometheus"]
 migration = []
 sharding = ["dep:twox-hash", "dep:chrono"]
 global-index = ["dep:sha2", "dep:async-trait", "dep:chrono"]
-cache = ["dep:async-trait", "dep:uuid"]
+cache = ["dep:async-trait", "dep:uuid", "dep:indexmap"]
 audit = ["dep:chrono", "dep:uuid", "dep:async-trait"]
 permission-engine = ["dep:async-trait"]
 tracing = [
@@ -85,10 +85,12 @@ twox-hash = { version = "1.6", optional = true }
 sha2 = { version = "0.10", optional = true }
 async-trait = { version = "0.1", optional = true }
 uuid = { version = "1.0", optional = true, features = ["v4"] }
+indexmap = { version = "2.0", optional = true }
 
 # External dependencies
 regex = "1.0"
 rand = "0.8"
+futures = "0.3"
 
 # Internal dependencies
 dbnexus-macros = { path = "../dbnexus-macros" }
