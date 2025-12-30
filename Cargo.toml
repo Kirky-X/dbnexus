@@ -44,7 +44,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 tokio-test = "0.4"
 
 # Metrics
-prometheus = "0.13"
+prometheus = "0.14"
 
 # Caching
 lru = "0.12"
