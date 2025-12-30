@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 全局索引表模块
 //!
 //! 提供跨分片的全局索引功能，支持：
@@ -15,13 +20,13 @@
 //! let entries = index.query_all("orders", "user_id = ?", &[&"user123"]).await?;
 //! ```
 
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue, Database};
-use chrono::{DateTime, TimeZone, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use async_trait::async_trait;
 
 /// 同步状态：待同步
 pub const SYNC_STATUS_PENDING: &str = "pending";
@@ -148,13 +153,16 @@ impl Default for ChangeCaptureConfig {
     }
 }
 
+/// 索引缓存类型
+type IndexCache = HashMap<String, HashMap<String, HashMap<String, Vec<IndexEntry>>>>;
+
 /// 全局索引管理器
 #[derive(Debug)]
 pub struct GlobalIndex {
     /// 数据库连接
     conn: DatabaseConnection,
     /// 缓存的索引数据
-    cache: Arc<RwLock<HashMap<String, HashMap<String, HashMap<String, Vec<IndexEntry>>>>>>,
+    cache: Arc<RwLock<IndexCache>>,
     /// 配置
     config: ChangeCaptureConfig,
 }
@@ -163,17 +171,17 @@ impl GlobalIndex {
     /// 创建新的全局索引管理器
     pub async fn new(database_url: &str) -> Result<Self, DbErr> {
         let conn = Database::connect(database_url).await?;
-        
+
         // 简单起见，使用 migrations
         Self::init_schema(&conn).await?;
-        
+
         Ok(Self {
             conn,
             cache: Arc::new(RwLock::new(HashMap::new())),
             config: ChangeCaptureConfig::default(),
         })
     }
-    
+
     /// 初始化数据库 schema
     async fn init_schema(conn: &DatabaseConnection) -> Result<(), DbErr> {
         // 创建全局索引表
@@ -194,22 +202,22 @@ impl GlobalIndex {
         CREATE INDEX IF NOT EXISTS idx_global_index_key ON global_index (table_name, index_key, index_value);
         CREATE INDEX IF NOT EXISTS idx_global_index_shard ON global_index (table_name, shard_id);
         "#;
-        
+
         conn.execute_unprepared(create_sql).await?;
         Ok(())
     }
-    
+
     /// 获取数据库连接
     pub fn get_connection(&self) -> &DatabaseConnection {
         &self.conn
     }
-    
+
     /// 注册索引条目
     pub async fn register_entry(&self, entry: IndexEntry) -> Result<(), DbErr> {
         let id = Self::generate_id(&entry.table_name, &entry.record_id);
         let now = chrono::Utc::now().to_rfc3339();
         let now_clone = now.clone();
-        
+
         let active = ActiveModel {
             id: ActiveValue::Set(id),
             table_name: ActiveValue::Set(entry.table_name.clone()),
@@ -221,45 +229,48 @@ impl GlobalIndex {
             updated_at: ActiveValue::Set(now),
             sync_status: ActiveValue::Set(SYNC_STATUS_SYNCED.to_string()),
         };
-        
+
         Entity::insert(active).exec(&self.conn).await?;
-        
+
         // 更新缓存
         self.update_cache(&entry).await;
         Ok(())
     }
-    
+
     /// 批量注册索引条目
     pub async fn register_entries(&self, entries: Vec<IndexEntry>) -> Result<(), DbErr> {
         let now = chrono::Utc::now().to_rfc3339();
         let sync_status = SYNC_STATUS_SYNCED.to_string();
         let now_clone = now.clone();
-        
-        let active_models: Vec<ActiveModel> = entries.iter().map(|entry| {
-            let id = Self::generate_id(&entry.table_name, &entry.record_id);
-            ActiveModel {
-                id: ActiveValue::Set(id),
-                table_name: ActiveValue::Set(entry.table_name.clone()),
-                record_id: ActiveValue::Set(entry.record_id.clone()),
-                shard_id: ActiveValue::Set(entry.shard_id as i32),
-                index_key: ActiveValue::Set(entry.index_key.clone()),
-                index_value: ActiveValue::Set(entry.index_value.clone()),
-                created_at: ActiveValue::Set(now_clone.clone()),
-                updated_at: ActiveValue::Set(now.clone()),
-                sync_status: ActiveValue::Set(sync_status.clone()),
-            }
-        }).collect();
-        
+
+        let active_models: Vec<ActiveModel> = entries
+            .iter()
+            .map(|entry| {
+                let id = Self::generate_id(&entry.table_name, &entry.record_id);
+                ActiveModel {
+                    id: ActiveValue::Set(id),
+                    table_name: ActiveValue::Set(entry.table_name.clone()),
+                    record_id: ActiveValue::Set(entry.record_id.clone()),
+                    shard_id: ActiveValue::Set(entry.shard_id as i32),
+                    index_key: ActiveValue::Set(entry.index_key.clone()),
+                    index_value: ActiveValue::Set(entry.index_value.clone()),
+                    created_at: ActiveValue::Set(now_clone.clone()),
+                    updated_at: ActiveValue::Set(now.clone()),
+                    sync_status: ActiveValue::Set(sync_status.clone()),
+                }
+            })
+            .collect();
+
         Entity::insert_many(active_models).exec(&self.conn).await?;
-        
+
         // 更新缓存
         for entry in entries {
             self.update_cache(&entry).await;
         }
-        
+
         Ok(())
     }
-    
+
     /// 根据索引键查询
     pub async fn query_by_index(
         &self,
@@ -278,7 +289,7 @@ impl GlobalIndex {
                 }
             }
         }
-        
+
         // 缓存未命中，从数据库查询
         let result = Entity::find()
             .filter(Column::TableName.eq(table_name))
@@ -286,7 +297,7 @@ impl GlobalIndex {
             .filter(Column::IndexValue.eq(index_value))
             .all(&self.conn)
             .await?;
-        
+
         let entries: Vec<IndexEntry> = result
             .iter()
             .map(|m| IndexEntry {
@@ -297,27 +308,23 @@ impl GlobalIndex {
                 index_value: m.index_value.clone(),
             })
             .collect();
-        
+
         // 更新缓存
         for entry in &entries {
             self.update_cache(entry).await;
         }
-        
+
         Ok(entries)
     }
-    
+
     /// 查询所有分片的记录
-    pub async fn query_all_shards(
-        &self,
-        table_name: &str,
-        index_key: &str,
-    ) -> Result<Vec<IndexEntry>, DbErr> {
+    pub async fn query_all_shards(&self, table_name: &str, index_key: &str) -> Result<Vec<IndexEntry>, DbErr> {
         let result = Entity::find()
             .filter(Column::TableName.eq(table_name))
             .filter(Column::IndexKey.eq(index_key))
             .all(&self.conn)
             .await?;
-        
+
         Ok(result
             .iter()
             .map(|m| IndexEntry {
@@ -329,11 +336,17 @@ impl GlobalIndex {
             })
             .collect())
     }
-    
+
     /// 处理同步事件
     pub async fn process_sync_event(&self, event: SyncEvent) -> Result<(), DbErr> {
         match event {
-            SyncEvent::Insert { table_name, record_id, shard_id, index_key, index_value } => {
+            SyncEvent::Insert {
+                table_name,
+                record_id,
+                shard_id,
+                index_key,
+                index_value,
+            } => {
                 let entry = IndexEntry {
                     table_name,
                     record_id,
@@ -343,10 +356,18 @@ impl GlobalIndex {
                 };
                 self.register_entry(entry).await?;
             }
-            SyncEvent::Update { table_name, record_id, shard_id, old_index_key: _, old_index_value: _, new_index_key, new_index_value } => {
+            SyncEvent::Update {
+                table_name,
+                record_id,
+                shard_id,
+                old_index_key: _,
+                old_index_value: _,
+                new_index_key,
+                new_index_value,
+            } => {
                 // 删除旧索引
                 self.delete_entry(&table_name, &record_id).await?;
-                
+
                 // 注册新索引
                 let entry = IndexEntry {
                     table_name,
@@ -357,19 +378,21 @@ impl GlobalIndex {
                 };
                 self.register_entry(entry).await?;
             }
-            SyncEvent::Delete { table_name, record_id, .. } => {
+            SyncEvent::Delete {
+                table_name, record_id, ..
+            } => {
                 self.delete_entry(&table_name, &record_id).await?;
             }
         }
         Ok(())
     }
-    
+
     /// 删除索引条目
     async fn delete_entry(&self, table_name: &str, record_id: &str) -> Result<(), DbErr> {
         let id = Self::generate_id(table_name, record_id);
-        
+
         Entity::delete_by_id(id).exec(&self.conn).await?;
-        
+
         // 从缓存中移除
         let mut cache = self.cache.write().await;
         if let Some(table_cache) = cache.get_mut(table_name) {
@@ -380,10 +403,10 @@ impl GlobalIndex {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// 生成唯一ID
     fn generate_id(table_name: &str, record_id: &str) -> String {
         use sha2::{Digest, Sha256};
@@ -391,29 +414,26 @@ impl GlobalIndex {
         hasher.update(format!("{}:{}", table_name, record_id));
         format!("{:x}", hasher.finalize())
     }
-    
+
     /// 更新缓存
     async fn update_cache(&self, entry: &IndexEntry) {
         let mut cache = self.cache.write().await;
-        let table_cache = cache.entry(entry.table_name.clone())
-            .or_insert_with(|| HashMap::new());
-        let key_cache = table_cache.entry(entry.index_key.clone())
-            .or_insert_with(|| HashMap::new());
-        
-        let entries = key_cache.entry(entry.index_value.clone())
-            .or_insert_with(Vec::new);
-        
+        let table_cache = cache.entry(entry.table_name.clone()).or_insert_with(HashMap::new);
+        let key_cache = table_cache.entry(entry.index_key.clone()).or_insert_with(HashMap::new);
+
+        let entries = key_cache.entry(entry.index_value.clone()).or_insert_with(Vec::new);
+
         // 检查是否已存在
         if !entries.iter().any(|e| e.record_id == entry.record_id) {
             entries.push(entry.clone());
         }
     }
-    
+
     /// 获取配置
     pub fn get_config(&self) -> &ChangeCaptureConfig {
         &self.config
     }
-    
+
     /// 设置配置
     pub fn set_config(&mut self, config: ChangeCaptureConfig) {
         self.config = config;
@@ -425,13 +445,13 @@ impl GlobalIndex {
 pub trait ChangeCapture: Send + Sync {
     /// 初始化变更捕获
     async fn start(&mut self) -> Result<(), DbErr>;
-    
+
     /// 停止变更捕获
     async fn stop(&mut self) -> Result<(), DbErr>;
-    
+
     /// 获取下一个变更事件
     async fn next_event(&mut self) -> Option<SyncEvent>;
-    
+
     /// 检查是否正在运行
     fn is_running(&self) -> bool;
 }
@@ -440,6 +460,7 @@ pub trait ChangeCapture: Send + Sync {
 #[derive(Debug)]
 pub struct PollingChangeCapture {
     /// 轮询间隔
+    #[allow(dead_code)]
     interval_ms: u64,
     /// 运行状态
     running: bool,
@@ -465,22 +486,22 @@ impl ChangeCapture for PollingChangeCapture {
         *self.last_poll.write().await = Utc::now();
         Ok(())
     }
-    
+
     async fn stop(&mut self) -> Result<(), DbErr> {
         self.running = false;
         Ok(())
     }
-    
+
     async fn next_event(&mut self) -> Option<SyncEvent> {
         if !self.running {
             return None;
         }
-        
+
         // 模拟轮询逻辑
         // 实际实现中，这里会查询 binlog 或变更追踪表
         None
     }
-    
+
     fn is_running(&self) -> bool {
         self.running
     }
@@ -489,13 +510,13 @@ impl ChangeCapture for PollingChangeCapture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_generate_id() {
         let id1 = GlobalIndex::generate_id("orders", "order_123");
         let id2 = GlobalIndex::generate_id("orders", "order_123");
         let id3 = GlobalIndex::generate_id("orders", "order_456");
-        
+
         // 相同输入应生成相同ID
         assert_eq!(id1, id2);
         // 不同输入应生成不同ID
@@ -503,7 +524,7 @@ mod tests {
         // ID 应该是 64 字符的十六进制字符串 (SHA256)
         assert_eq!(id1.len(), 64);
     }
-    
+
     #[test]
     fn test_index_entry() {
         let entry = IndexEntry {
@@ -513,11 +534,11 @@ mod tests {
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
         };
-        
+
         assert_eq!(entry.table_name, "orders");
         assert_eq!(entry.shard_id, 4);
     }
-    
+
     #[test]
     fn test_sync_event_variants() {
         let insert = SyncEvent::Insert {
@@ -527,7 +548,7 @@ mod tests {
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
         };
-        
+
         let update = SyncEvent::Update {
             table_name: "orders".to_string(),
             record_id: "order_123".to_string(),
@@ -537,7 +558,7 @@ mod tests {
             new_index_key: "user_id".to_string(),
             new_index_value: "user_789".to_string(),
         };
-        
+
         let delete = SyncEvent::Delete {
             table_name: "orders".to_string(),
             record_id: "order_123".to_string(),
@@ -545,33 +566,33 @@ mod tests {
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
         };
-        
+
         match insert {
             SyncEvent::Insert { table_name, .. } => assert_eq!(table_name, "orders"),
             _ => panic!("Expected Insert variant"),
         }
-        
+
         match update {
             SyncEvent::Update { new_index_value, .. } => assert_eq!(new_index_value, "user_789"),
             _ => panic!("Expected Update variant"),
         }
-        
+
         match delete {
             SyncEvent::Delete { record_id, .. } => assert_eq!(record_id, "order_123"),
             _ => panic!("Expected Delete variant"),
         }
     }
-    
+
     #[test]
     fn test_change_capture_config_defaults() {
         let config = ChangeCaptureConfig::default();
-        
+
         assert_eq!(config.batch_size, 1000);
         assert_eq!(config.poll_interval_ms, 1000);
         assert_eq!(config.max_retries, 3);
         assert_eq!(config.retry_interval_ms, 5000);
     }
-    
+
     #[test]
     fn test_sync_status_constants() {
         assert_eq!(SYNC_STATUS_PENDING, "pending");
