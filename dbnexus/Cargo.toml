@@ -35,7 +35,18 @@ mysql = ["sea-orm/sqlx-mysql"]
 # Optional features
 metrics = ["dep:prometheus"]
 migration = []
-tracing = ["tracing-subscriber/env-filter"]
+tracing = [
+    "dep:tracing-subscriber",
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-jaeger",
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:chrono",
+    "dep:http",
+    "dep:tower",
+    "dep:once_cell",
+]
 
 # 启用所有可选特性（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "tracing"]
@@ -56,6 +67,15 @@ toml = "0.8"
 parking_lot = "0.12"
 lru = { workspace = true }
 home = "0.5"
+chrono = { version = "0.4", optional = true }
+http = { version = "1.0", optional = true }
+tower = { version = "0.5", optional = true }
+tracing-opentelemetry = { version = "0.27", optional = true }
+opentelemetry = { version = "0.24", optional = true }
+opentelemetry-otlp = { version = "0.17", optional = true }
+opentelemetry-jaeger = { version = "0.18", optional = true }
+opentelemetry_sdk = { version = "0.24", optional = true }
+once_cell = { version = "1.20", optional = true }
 
 # External dependencies
 regex = "1.0"
@@ -63,6 +83,8 @@ rand = "0.8"
 
 # Internal dependencies
 dbnexus-macros = { path = "../dbnexus-macros" }
+
+tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
