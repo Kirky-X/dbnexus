@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 连接池管理模块
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
@@ -7,14 +12,14 @@ use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::timeout;
 use tracing::{info, warn};
 
 use crate::config::{DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
-use crate::permission::{Operation, PermissionConfig, PermissionContext, RolePolicy};
+use crate::permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy};
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::ConnectionTrait;
@@ -36,6 +41,9 @@ pub(crate) struct DbPoolInner {
 
     /// 空闲连接队列
     idle_connections: AsyncMutex<Vec<DatabaseConnection>>,
+
+    /// 连接可用通知（替代忙等待）
+    connection_available: Notify,
 
     /// 活跃连接数
     pub(crate) active_count: AtomicU32,
@@ -81,7 +89,7 @@ impl DbPool {
         let corrected_config = crate::config::ConfigCorrector::auto_correct_with_database_capability(
             corrected_config,
             &connection,
-            db_type.clone(),
+            db_type, // DatabaseType implements Copy, no need to clone
         )
         .await;
 
@@ -104,6 +112,7 @@ impl DbPool {
             inner: Arc::new(DbPoolInner {
                 config: corrected_config.clone(),
                 idle_connections: AsyncMutex::new(Vec::new()),
+                connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
                 policy_cache,
@@ -113,12 +122,29 @@ impl DbPool {
             }),
         };
 
-        // 预创建最小连接数
+        // 预创建最小连接数（并行创建以提高启动速度）
         let initial_connections = pool.inner.config.min_connections;
+        let mut connection_tasks = Vec::new();
+
         for _ in 0..initial_connections {
-            let conn = Self::create_connection(&corrected_config).await?;
-            pool.inner.idle_connections.lock().await.push(conn);
-            pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
+            let config = corrected_config.clone();
+            connection_tasks.push(async move { Self::create_connection(&config).await });
+        }
+
+        // 并行执行所有连接创建任务
+        let results = futures::future::join_all(connection_tasks).await;
+
+        for result in results {
+            match result {
+                Ok(conn) => {
+                    pool.inner.idle_connections.lock().await.push(conn);
+                    pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to create initial connection: {}", e);
+                    // 继续创建其他连接，即使有部分失败
+                }
+            }
         }
 
         info!(
@@ -423,13 +449,14 @@ impl DbPool {
 
         // 检查是否达到最大连接数
         if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections {
-            // 等待空闲连接
+            // 等待空闲连接（使用条件变量替代忙等待）
             let timeout_duration = self.inner.config.acquire_timeout_duration();
             let result = timeout(timeout_duration, async {
                 let mut idle = self.inner.idle_connections.lock().await;
                 while idle.is_empty() {
+                    // 释放锁并等待通知
                     drop(idle);
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    self.inner.connection_available.notified().await;
                     idle = self.inner.idle_connections.lock().await;
                 }
                 idle.pop()
@@ -470,6 +497,8 @@ impl DbPool {
             let mut idle = inner.idle_connections.lock().await;
             if idle.len() < inner.config.max_connections as usize {
                 idle.push(conn);
+                // 通知等待的请求者有新连接可用
+                inner.connection_available.notify_one();
             }
         });
     }
@@ -571,7 +600,7 @@ impl Session {
     }
 
     /// 检查权限
-    pub fn check_permission(&self, table: &str, operation: &Operation) -> Result<(), DbError> {
+    pub fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
         if self.permission_ctx.check_table_access(table, operation) {
             Ok(())
         } else {
@@ -735,7 +764,7 @@ impl Session {
     }
 
     /// 内部方法：解析 SQL 语句类型
-    fn parse_sql_operation(&self, sql: &str) -> Option<(String, crate::permission::Operation)> {
+    fn parse_sql_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
         use regex::Regex;
         use std::sync::OnceLock;
 
@@ -753,7 +782,7 @@ impl Session {
             let re = SELECT_RE.get_or_init(|| Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), crate::permission::Operation::Select));
+                    return Some((table_name.as_str().to_string(), PermissionAction::Select));
                 }
             }
         } else if sql_upper.starts_with("INSERT") {
@@ -761,7 +790,7 @@ impl Session {
             let re = INSERT_RE.get_or_init(|| Regex::new(r"INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), crate::permission::Operation::Insert));
+                    return Some((table_name.as_str().to_string(), PermissionAction::Insert));
                 }
             }
         } else if sql_upper.starts_with("UPDATE") {
@@ -769,7 +798,7 @@ impl Session {
             let re = UPDATE_RE.get_or_init(|| Regex::new(r"UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), crate::permission::Operation::Update));
+                    return Some((table_name.as_str().to_string(), PermissionAction::Update));
                 }
             }
         } else if sql_upper.starts_with("DELETE") {
@@ -777,7 +806,7 @@ impl Session {
             let re = DELETE_RE.get_or_init(|| Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), crate::permission::Operation::Delete));
+                    return Some((table_name.as_str().to_string(), PermissionAction::Delete));
                 }
             }
         }
@@ -805,9 +834,7 @@ impl Session {
             // 标记写操作（如果需要）
             if matches!(
                 operation,
-                crate::permission::Operation::Insert
-                    | crate::permission::Operation::Update
-                    | crate::permission::Operation::Delete
+                PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
             ) {
                 self.mark_write();
             }
@@ -851,7 +878,7 @@ impl Session {
         &mut self,
         sql: &str,
         table: &str,
-        operation: crate::permission::Operation,
+        operation: PermissionAction,
     ) -> DbResult<sea_orm::ExecResult> {
         use std::time::Instant;
 
@@ -861,9 +888,7 @@ impl Session {
         // 标记写操作（如果需要）
         if matches!(
             operation,
-            crate::permission::Operation::Insert
-                | crate::permission::Operation::Update
-                | crate::permission::Operation::Delete
+            PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
         ) {
             self.mark_write();
         }
@@ -948,10 +973,16 @@ impl Drop for Session {
                 metrics.update_pool_status(status.total, status.active, status.idle);
             }
 
-            tokio::spawn(async move {
+            // 注意：在 Drop 中启动异步任务可能不可靠（如果 Runtime 正在关闭）。
+            // 建议显式调用 release_connection() 方法。
+            // 这里使用 tokio::spawn 是为了向后兼容，但最好在业务代码中管理 Session 生命周期。
+            #[allow(clippy::let_underscore_future)]
+            let _ = tokio::spawn(async move {
                 let mut idle = inner.idle_connections.lock().await;
                 if idle.len() < inner.config.max_connections as usize {
                     idle.push(conn);
+                    // 通知等待的请求者有新连接可用
+                    inner.connection_available.notify_one();
                 }
             });
         }

@@ -1,30 +1,21 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! Migration 模块
 //!
 //! 提供数据库迁移功能，包括 Schema 抽象、Schema 差异检测和 SQL 生成
+//!
+//! **注意**：此模块使用 [`config`](crate::config) 中的 `DatabaseType` 枚举
+//! 来确保与整个项目的数据库类型统一。
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
-/// 数据库类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseType {
-    /// PostgreSQL
-    Postgres,
-    /// MySQL
-    MySQL,
-    /// SQLite
-    SQLite,
-}
-
-impl fmt::Display for DatabaseType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DatabaseType::Postgres => write!(f, "postgresql"),
-            DatabaseType::MySQL => write!(f, "mysql"),
-            DatabaseType::SQLite => write!(f, "sqlite"),
-        }
-    }
-}
+/// 从 config 模块导入并重新导出 DatabaseType 使其对外可见
+pub use crate::config::DatabaseType;
 
 /// 列数据类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -65,39 +56,39 @@ impl ColumnType {
         match self {
             ColumnType::Integer => "INTEGER".to_string(),
             ColumnType::BigInteger => match db_type {
-                DatabaseType::MySQL => "BIGINT".to_string(),
+                DatabaseType::MySql => "BIGINT".to_string(),
                 _ => "BIGINT".to_string(),
             },
             ColumnType::String(None) => match db_type {
-                DatabaseType::MySQL => "VARCHAR(255)".to_string(),
+                DatabaseType::MySql => "VARCHAR(255)".to_string(),
                 DatabaseType::Postgres => "VARCHAR(255)".to_string(),
-                DatabaseType::SQLite => "TEXT".to_string(),
+                DatabaseType::Sqlite => "TEXT".to_string(),
             },
             ColumnType::String(Some(len)) => match db_type {
-                DatabaseType::MySQL => format!("VARCHAR({})", len),
+                DatabaseType::MySql => format!("VARCHAR({})", len),
                 DatabaseType::Postgres => format!("VARCHAR({})", len),
-                DatabaseType::SQLite => "TEXT".to_string(),
+                DatabaseType::Sqlite => "TEXT".to_string(),
             },
             ColumnType::Text => "TEXT".to_string(),
             ColumnType::Boolean => match db_type {
-                DatabaseType::MySQL => "BOOLEAN".to_string(),
+                DatabaseType::MySql => "BOOLEAN".to_string(),
                 DatabaseType::Postgres => "BOOLEAN".to_string(),
-                DatabaseType::SQLite => "INTEGER".to_string(),
+                DatabaseType::Sqlite => "INTEGER".to_string(),
             },
             ColumnType::Float => "FLOAT".to_string(),
             ColumnType::Double => "DOUBLE PRECISION".to_string(),
             ColumnType::Date => "DATE".to_string(),
             ColumnType::Time => "TIME".to_string(),
             ColumnType::DateTime => match db_type {
-                DatabaseType::MySQL => "DATETIME".to_string(),
+                DatabaseType::MySql => "DATETIME".to_string(),
                 DatabaseType::Postgres => "TIMESTAMP".to_string(),
-                DatabaseType::SQLite => "TEXT".to_string(),
+                DatabaseType::Sqlite => "TEXT".to_string(),
             },
             ColumnType::Timestamp => "TIMESTAMP".to_string(),
             ColumnType::Json => match db_type {
-                DatabaseType::MySQL => "JSON".to_string(),
+                DatabaseType::MySql => "JSON".to_string(),
                 DatabaseType::Postgres => "JSONB".to_string(),
-                DatabaseType::SQLite => "TEXT".to_string(),
+                DatabaseType::Sqlite => "TEXT".to_string(),
             },
             ColumnType::Binary => "BLOB".to_string(),
             ColumnType::Custom(name) => name.to_string(),
@@ -209,8 +200,20 @@ impl fmt::Display for ForeignKeyAction {
 pub struct Schema {
     /// 数据库类型
     pub database_type: DatabaseType,
-    /// 表定义
+    /// 表定义（Vec 保留用于遍历）
     pub tables: Vec<Table>,
+    /// 表索引（HashMap 用于 O(1) 查找）
+    table_index: HashMap<String, usize>,
+}
+
+impl Default for Schema {
+    fn default() -> Self {
+        Self {
+            database_type: DatabaseType::Sqlite,
+            tables: Vec::new(),
+            table_index: HashMap::new(),
+        }
+    }
 }
 
 impl Schema {
@@ -219,27 +222,38 @@ impl Schema {
         Self {
             database_type,
             tables: Vec::new(),
+            table_index: HashMap::new(),
         }
     }
 
     /// 添加表
     pub fn add_table(&mut self, table: Table) {
+        let index = self.tables.len();
+        self.table_index.insert(table.name.clone(), index);
         self.tables.push(table);
     }
 
     /// 获取表
     pub fn get_table(&self, name: &str) -> Option<&Table> {
-        self.tables.iter().find(|t| t.name == name)
+        if let Some(&index) = self.table_index.get(name) {
+            self.tables.get(index)
+        } else {
+            None
+        }
     }
 
     /// 获取表（可变）
     pub fn get_table_mut(&mut self, name: &str) -> Option<&mut Table> {
-        self.tables.iter_mut().find(|t| t.name == name)
+        if let Some(&index) = self.table_index.get(name) {
+            self.tables.get_mut(index)
+        } else {
+            None
+        }
     }
 
     /// 检查表是否存在
     pub fn has_table(&self, name: &str) -> bool {
-        self.tables.iter().any(|t| t.name == name)
+        self.table_index.contains_key(name)
     }
 }
 
@@ -493,7 +507,7 @@ impl MigrationExecutor {
                     file_path TEXT
                 );"
             }
-            DatabaseType::MySQL => {
+            DatabaseType::MySql => {
                 "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
                     version INT PRIMARY KEY,
                     description TEXT NOT NULL,
@@ -501,7 +515,7 @@ impl MigrationExecutor {
                     file_path TEXT
                 );"
             }
-            DatabaseType::SQLite => {
+            DatabaseType::Sqlite => {
                 "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
                     version INTEGER PRIMARY KEY,
                     description TEXT NOT NULL,
@@ -549,7 +563,7 @@ impl MigrationExecutor {
 
         // 插入到迁移历史表
         let insert_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres | DatabaseType::MySQL => {
+            DatabaseType::Postgres | DatabaseType::MySql => {
                 format!(
                     "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
                     migration.version,
@@ -558,7 +572,7 @@ impl MigrationExecutor {
                     version_record.file_path.replace('\'', "''")
                 )
             }
-            DatabaseType::SQLite => {
+            DatabaseType::Sqlite => {
                 format!(
                     "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
                     migration.version,
@@ -945,8 +959,8 @@ impl SqlGenerator {
         // 自增列不需要指定
         if column.is_auto_increment && column.is_primary_key {
             match self.db_type {
-                DatabaseType::MySQL => def.push_str(" AUTO_INCREMENT"),
-                DatabaseType::SQLite => def.push_str(" PRIMARY KEY AUTOINCREMENT"),
+                DatabaseType::MySql => def.push_str(" AUTO_INCREMENT"),
+                DatabaseType::Sqlite => def.push_str(" PRIMARY KEY AUTOINCREMENT"),
                 _ => {}
             }
         }
@@ -1012,13 +1026,13 @@ impl SqlGenerator {
     /// 生成删除列的 SQL
     pub fn generate_drop_column_sql(&self, table_name: &str, column_name: &str) -> String {
         match self.db_type {
-            DatabaseType::MySQL => {
+            DatabaseType::MySql => {
                 format!("ALTER TABLE {} DROP COLUMN {};", table_name, column_name)
             }
             DatabaseType::Postgres => {
                 format!("ALTER TABLE {} DROP COLUMN {};", table_name, column_name)
             }
-            DatabaseType::SQLite => {
+            DatabaseType::Sqlite => {
                 // SQLite 不支持直接删除列，需要重建表
                 format!(
                     "-- SQLite 不支持直接删除列，请手动重建表 {}
@@ -1437,8 +1451,8 @@ mod tests {
     #[test]
     fn test_column_type_to_sql() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
-        let mysql = SqlGenerator::new(DatabaseType::MySQL);
-        let sqlite = SqlGenerator::new(DatabaseType::SQLite);
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
 
         // Integer
         assert_eq!(pg.generate_column_def(&ColumnType::Integer), "INTEGER");
