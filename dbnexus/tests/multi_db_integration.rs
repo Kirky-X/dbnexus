@@ -309,7 +309,9 @@ async fn test_pool_status_across_databases() {
 
     // 验证状态结构
     assert!(status.total >= 1, "Pool should have at least 1 connection");
-    // active 和 idle 是 u32 类型，无需检查负数
+    // 注意：u32 类型不能为负数，这些检查没有意义但保留以表明意图
+    // assert!(status.active >= 0, "Active connections should be >= 0");
+    // assert!(status.idle >= 0, "Idle connections should be >= 0");
     assert_eq!(
         status.total,
         status.active + status.idle,
@@ -324,17 +326,9 @@ async fn test_database_specific_features() {
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 获取数据库类型以创建正确的表
-    let db_type = common::get_current_db_type();
-
-    // 创建测试表（使用数据库特定的语法）
-    let create_table_sql = match db_type.as_str() {
-        "postgres" => "CREATE TABLE IF NOT EXISTS feature_test (id SERIAL PRIMARY KEY, data TEXT)",
-        "mysql" => "CREATE TABLE IF NOT EXISTS feature_test (id INT AUTO_INCREMENT PRIMARY KEY, data TEXT)",
-        _ => "CREATE TABLE IF NOT EXISTS feature_test (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT)", // sqlite
-    };
+    // 创建测试表
     session
-        .execute_raw(create_table_sql)
+        .execute_raw("CREATE TABLE IF NOT EXISTS feature_test (id INTEGER PRIMARY KEY, data TEXT)")
         .await
         .expect("Failed to create test table");
 
