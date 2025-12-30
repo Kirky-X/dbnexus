@@ -77,6 +77,12 @@ pub mod tracing;
 /// 分片管理模块
 #[cfg(feature = "sharding")]
 pub mod sharding;
+/// 全局索引模块
+#[cfg(feature = "global-index")]
+pub mod global_index;
+/// 分片管理模块
+#[cfg(feature = "sharding")]
+pub mod sharding;
 
 /// 错误类型定义
 pub use crate::config::DbResult;

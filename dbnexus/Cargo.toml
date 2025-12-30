@@ -36,6 +36,7 @@ mysql = ["sea-orm/sqlx-mysql"]
 metrics = ["dep:prometheus"]
 migration = []
 sharding = ["dep:twox-hash", "dep:chrono"]
+global-index = ["dep:sha2", "dep:async-trait", "dep:chrono"]
 tracing = [
     "dep:tracing-subscriber",
     "dep:tracing-opentelemetry",
@@ -50,7 +51,7 @@ tracing = [
 ]
 
 # 启用所有可选特性（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "tracing", "sharding"]
+all-optional = ["metrics", "migration", "tracing", "sharding", "global-index"]
 
 [dependencies]
 # Workspace dependencies
@@ -78,6 +79,8 @@ opentelemetry-jaeger = { version = "0.18", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true }
 once_cell = { version = "1.20", optional = true }
 twox-hash = { version = "1.6", optional = true }
+sha2 = { version = "0.10", optional = true }
+async-trait = { version = "0.1", optional = true }
 
 # External dependencies
 regex = "1.0"
