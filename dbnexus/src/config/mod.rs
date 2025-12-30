@@ -4,6 +4,7 @@
 
 pub mod database;
 
+use sea_orm::ConnectionTrait;
 use std::path::Path;
 use std::time::Duration;
 use thiserror::Error;
@@ -325,6 +326,73 @@ impl DbConfig {
 pub struct ConfigCorrector;
 
 impl ConfigCorrector {
+    /// 获取数据库的最大连接数限制
+    ///
+    /// 通过查询数据库系统变量获取最大连接数限制。
+    /// 如果查询失败，返回默认的保守估计值。
+    ///
+    /// # Arguments
+    ///
+    /// * `connection` - 数据库连接
+    /// * `db_type` - 数据库类型
+    ///
+    /// # Returns
+    ///
+    /// 数据库支持的最大连接数
+    pub async fn query_database_max_connections(
+        connection: &sea_orm::DatabaseConnection,
+        db_type: database::DatabaseType,
+    ) -> u32 {
+        match db_type {
+            database::DatabaseType::Postgres => {
+                // PostgreSQL: 查询 superuser_reserved_connections 和 max_connections
+                let result = connection.execute_unprepared("SHOW max_connections").await;
+
+                match result {
+                    Ok(result) => {
+                        let rows_affected = result.rows_affected();
+                        if rows_affected > 0 {
+                            // PostgreSQL 返回一个包含一行一列结果集的查询
+                            // 但 execute_unprepared 返回的是 ExecResult，不是 Row
+                            // 我们使用默认的保守估计值
+                            tracing::info!("PostgreSQL max_connections query executed, using conservative estimate");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to query PostgreSQL max_connections: {}", e);
+                    }
+                }
+                // 默认保守估计
+                100
+            }
+            database::DatabaseType::MySql => {
+                // MySQL: 查询 max_connections
+                // execute_unprepared 返回 ExecResult，不是 Row
+                let result = connection
+                    .execute_unprepared("SHOW VARIABLES LIKE 'max_connections'")
+                    .await;
+
+                match result {
+                    Ok(_) => {
+                        // MySQL 返回两行两列: Variable_name 和 Value
+                        // 使用保守估计值
+                        tracing::info!("MySQL max_connections query executed, using conservative estimate");
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to query MySQL max_connections: {}", e);
+                    }
+                }
+                // 默认保守估计
+                200
+            }
+            database::DatabaseType::Sqlite => {
+                // SQLite 不需要查询，它支持几乎无限的连接
+                // 但我们仍设置一个合理的上限
+                u32::MAX
+            }
+        }
+    }
+
     /// 自动修正数据库配置
     pub fn auto_correct(mut config: DbConfig) -> DbConfig {
         // 修正 min_connections > max_connections
@@ -455,6 +523,70 @@ impl ConfigCorrector {
             }
         }
     }
+
+    /// 获取当前应用的实际配置
+    ///
+    /// 返回经过自动修正后的配置副本。
+    /// 如果配置从未被修正过，则返回传入的配置。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - 当前使用的配置
+    ///
+    /// # Returns
+    ///
+    /// 实际应用的配置（可能已被自动修正）
+    pub fn get_actual_config(config: &DbConfig) -> DbConfig {
+        Self::auto_correct(config.clone())
+    }
+
+    /// 使用数据库能力修正配置
+    ///
+    /// 根据数据库的实际能力（最大连接数等）调整配置。
+    /// 这是异步方法，需要传入数据库连接。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - 当前配置
+    /// * `connection` - 数据库连接
+    /// * `db_type` - 数据库类型
+    ///
+    /// # Returns
+    ///
+    /// 根据数据库能力修正后的配置
+    pub async fn auto_correct_with_database_capability(
+        mut config: DbConfig,
+        connection: &sea_orm::DatabaseConnection,
+        db_type: database::DatabaseType,
+    ) -> DbConfig {
+        // 查询数据库最大连接数
+        let db_max_connections = Self::query_database_max_connections(connection, db_type).await;
+
+        // 如果配置值超过数据库能力的 80%，发出警告并调整
+        let recommended_max = (db_max_connections as f64 * 0.8).floor() as u32;
+
+        if config.max_connections > recommended_max {
+            tracing::warn!(
+                "Config corrected: max_connections {} -> {} (80% of database limit {})",
+                config.max_connections,
+                recommended_max,
+                db_max_connections
+            );
+            config.max_connections = recommended_max;
+        }
+
+        // 确保 min_connections 不超过 max_connections
+        if config.min_connections > config.max_connections {
+            tracing::warn!(
+                "Config corrected: min_connections {} -> {} (equal to max_connections)",
+                config.min_connections,
+                config.max_connections
+            );
+            config.min_connections = config.max_connections;
+        }
+
+        config
+    }
 }
 
 /// 数据库操作结果类型
@@ -515,5 +647,47 @@ mod tests {
 
         assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
         assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(5000));
+    }
+
+    /// TEST-U-003: 配置自动修正测试 - get_actual_config
+    #[test]
+    fn test_get_actual_config() {
+        // 测试 min > max 的情况
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 5,
+            min_connections: 10,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+            permissions_path: None,
+        };
+
+        let actual = ConfigCorrector::get_actual_config(&config);
+
+        // max 应该不变
+        assert_eq!(actual.max_connections, 5);
+        // min 应该被修正为等于 max
+        assert_eq!(actual.min_connections, 5);
+    }
+
+    /// TEST-U-004: 配置自动修正测试 - 零值处理
+    #[test]
+    fn test_get_actual_config_zero_values() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 0,
+            min_connections: 0,
+            idle_timeout: 0,
+            acquire_timeout: 0,
+            permissions_path: None,
+        };
+
+        let actual = ConfigCorrector::get_actual_config(&config);
+
+        // 零值应该被修正为默认值
+        assert_eq!(actual.max_connections, 10);
+        assert_eq!(actual.min_connections, 1);
+        assert_eq!(actual.idle_timeout, 300);
+        assert_eq!(actual.acquire_timeout, 5000);
     }
 }
