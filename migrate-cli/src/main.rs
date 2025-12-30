@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! DBNexus 迁移 CLI 工具
 //!
 //! 提供数据库迁移的命令行界面
@@ -521,10 +526,10 @@ async fn rollback_migration(
 
     // 删除迁移历史记录
     let delete_sql = match db_type {
-        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySQL => {
+        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySql => {
             format!("DELETE FROM dbnexus_migrations WHERE version = {};", version)
         }
-        MigrationDatabaseType::SQLite => {
+        MigrationDatabaseType::Sqlite => {
             format!("DELETE FROM dbnexus_migrations WHERE version = {};", version)
         }
     };
@@ -730,7 +735,7 @@ async fn parse_and_apply_migration(
 
     // 记录迁移历史
     let insert_sql = match db_type {
-        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySQL => {
+        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySql => {
             format!(
                 "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) \
                  VALUES ({}, '{}', '{}', 'migration_v{}.sql');",
@@ -740,7 +745,7 @@ async fn parse_and_apply_migration(
                 version
             )
         }
-        MigrationDatabaseType::SQLite => {
+        MigrationDatabaseType::Sqlite => {
             format!(
                 "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) \
                  VALUES ({}, '{}', '{}', 'migration_v{}.sql');",
@@ -814,9 +819,9 @@ fn detect_database_type(database_url: &str) -> MigrationDatabaseType {
     if database_url.starts_with("postgres") {
         MigrationDatabaseType::Postgres
     } else if database_url.starts_with("mysql") {
-        MigrationDatabaseType::MySQL
+        MigrationDatabaseType::MySql
     } else {
-        MigrationDatabaseType::SQLite
+        MigrationDatabaseType::Sqlite
     }
 }
 
