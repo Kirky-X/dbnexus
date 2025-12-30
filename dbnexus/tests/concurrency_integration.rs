@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 并发集成测试
 //!
 //! 测试连接池和数据库操作的并发场景，包括并发会话获取、并发健康检查、
