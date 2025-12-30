@@ -1100,6 +1100,335 @@ ALTER TABLE {} DROP COLUMN {};",
     }
 }
 
+/// Rust 结构体解析器
+///
+/// 从 Rust 实体结构体定义中解析数据库表结构，
+/// 支持从 `#[sea_orm(...)]` 属性中提取列信息
+#[derive(Debug, Clone)]
+pub struct RustEntityParser;
+
+impl RustEntityParser {
+    /// 解析 Rust 实体定义
+    ///
+    /// 通过解析 Rust 源代码，提取实体结构体中的字段信息，
+    /// 并转换为数据库表结构。
+    ///
+    /// # Arguments
+    ///
+    /// * `entity_code` - Rust 实体结构体源代码
+    /// * `table_name` - 目标数据库表名
+    ///
+    /// # Returns
+    ///
+    /// 解析后的表结构定义
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let code = r#"
+    /// #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    /// #[sea_orm(table_name = "users")]
+    /// pub struct Model {
+    ///     #[sea_orm(primary_key)]
+    ///     pub id: i32,
+    ///     #[sea_orm(column_type = "String(255)")]
+    ///     pub name: String,
+    /// }
+    /// "#;
+    ///
+    /// let table = RustEntityParser::parse_entity(code, "users").unwrap();
+    /// ```
+    pub fn parse_entity(entity_code: &str, table_name: &str) -> Result<Table, String> {
+        // 简化实现：解析 sea-orm 属性
+        // 实际实现需要完整的 Rust 解析器 (syn/quote)
+        let columns = Self::extract_columns_from_code(entity_code)?;
+
+        let primary_key_columns = columns
+            .iter()
+            .filter(|c| c.is_primary_key)
+            .map(|c| c.name.clone())
+            .collect();
+
+        Ok(Table {
+            name: table_name.to_string(),
+            columns,
+            primary_key_columns,
+            indexes: Vec::new(),
+            foreign_keys: Vec::new(),
+            comment: None,
+        })
+    }
+
+    /// 从代码中提取列信息
+    fn extract_columns_from_code(entity_code: &str) -> Result<Vec<Column>, String> {
+        let mut columns = Vec::new();
+
+        // 解析属性和字段
+        let lines: Vec<&str> = entity_code.lines().collect();
+
+        let mut current_field_name: Option<String> = None;
+        let mut current_field_type: Option<String> = None;
+        let mut current_column_type: Option<ColumnType> = None;
+        let mut field_column_type: Option<ColumnType> = None; // 当前字段开始前设置的 column_type
+        let mut is_primary_key = false;
+        let mut is_nullable = true;
+        let mut is_auto_increment = false;
+
+        for line in &lines {
+            let line = line.trim();
+
+            // 提取字段名和类型
+            if let Some((field_name, field_type)) = Self::extract_field_and_type(line) {
+                // 保存之前的字段（如果存在且有类型）
+                if let Some(ref prev_field_name) = current_field_name {
+                    let col_type = field_column_type
+                        .take()
+                        .or_else(|| Self::infer_column_type(&current_field_type));
+
+                    if let Some(type_result) = col_type {
+                        if !columns.iter().any(|c: &Column| c.name == *prev_field_name) {
+                            columns.push(Column {
+                                name: prev_field_name.clone(),
+                                column_type: type_result,
+                                is_primary_key,
+                                is_nullable,
+                                has_default: false,
+                                default_value: None,
+                                is_auto_increment,
+                                comment: None,
+                            });
+                        }
+                    }
+
+                    // 保存完后重置属性，为新字段做准备
+                    is_primary_key = false;
+                    is_nullable = true;
+                    is_auto_increment = false;
+                }
+
+                // 将当前属性行的 column_type 移到 field_column_type
+                field_column_type = current_column_type.take();
+
+                // 设置新字段
+                current_field_name = Some(field_name);
+                current_field_type = Some(field_type);
+                continue;
+            }
+
+            // 提取列类型
+            if line.contains("column_type") {
+                current_column_type = Self::extract_column_type(line);
+            }
+
+            // 检测主键
+            if line.contains("primary_key") {
+                is_primary_key = true;
+            }
+
+            // 检测可空性
+            if line.contains("NotNull") || line.contains("not_null") {
+                is_nullable = false;
+            }
+
+            // 检测自增
+            if line.contains("AutoIncrement") || line.contains("auto_increment") {
+                is_auto_increment = true;
+            }
+
+            // 如果遇到新属性行，跳过
+            if line.starts_with("#[") {
+                continue;
+            }
+        }
+
+        // 处理最后一个字段
+        if let Some(ref field_name) = current_field_name {
+            // 使用当前字段开始前设置的 column_type
+            let col_type = field_column_type
+                .take()
+                .or_else(|| Self::infer_column_type(&current_field_type));
+
+            if let Some(type_result) = col_type {
+                columns.push(Column {
+                    name: field_name.clone(),
+                    column_type: type_result,
+                    is_primary_key,
+                    is_nullable,
+                    has_default: false,
+                    default_value: None,
+                    is_auto_increment,
+                    comment: None,
+                });
+            }
+        }
+
+        if columns.is_empty() {
+            return Err("未能解析到任何列".to_string());
+        }
+
+        Ok(columns)
+    }
+
+    /// 从字段行提取字段名和类型
+    fn extract_field_and_type(line: &str) -> Option<(String, String)> {
+        let trimmed = line.trim();
+
+        // 跳过属性行
+        if trimmed.starts_with("#[") {
+            return None;
+        }
+
+        // 跳过结构体定义行: pub struct Xxx {
+        if trimmed.starts_with("pub struct ") || trimmed.starts_with("struct ") {
+            return None;
+        }
+
+        // 匹配模式: pub name: String, 或 name: String,
+        // 必须有冒号才是字段定义
+        let colon_idx = trimmed.find(':')?;
+        let before_colon = &trimmed[..colon_idx];
+        let after_colon = &trimmed[colon_idx + 1..];
+
+        // 清理字段名 - 去除 pub 前缀
+        let mut field_name = before_colon.trim_end().trim_end_matches(',').trim().to_string();
+        if field_name.starts_with("pub ") {
+            field_name = field_name[4..].to_string();
+        }
+
+        // 跳过非字段行
+        if field_name.starts_with("#[") || field_name.starts_with("fn ") || field_name.is_empty() {
+            return None;
+        }
+
+        // 提取类型（直到逗号或右花括号）
+        let mut type_str = after_colon.trim();
+        let type_end = type_str
+            .find(',')
+            .unwrap_or_else(|| type_str.find('}').unwrap_or(type_str.len()));
+        type_str = &type_str[..type_end];
+
+        if field_name.is_empty() || type_str.is_empty() {
+            return None;
+        }
+
+        Some((field_name.to_string(), type_str.to_string()))
+    }
+
+    /// 从属性行提取列类型
+    fn extract_column_type(attr_line: &str) -> Option<ColumnType> {
+        // 匹配: #[sea_orm(column_type = "String(255)")]
+        // 或: #[sea_orm(column_type = "Text")]
+        if let Some(start) = attr_line.find("column_type") {
+            let after = &attr_line[start..];
+            if let Some(eq_idx) = after.find('=') {
+                let type_str = &after[eq_idx + 1..];
+                // 提取引号内的内容
+                if let Some(quote_start) = type_str.find('"') {
+                    if let Some(quote_end) = type_str[quote_start + 1..].find('"') {
+                        let type_content = &type_str[quote_start + 1..quote_start + 1 + quote_end];
+                        return Some(Self::parse_column_type_str(type_content));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// 解析列类型字符串
+    fn parse_column_type_str(type_str: &str) -> ColumnType {
+        match type_str {
+            "Integer" | "Int" | "i32" => ColumnType::Integer,
+            "BigInteger" | "BigInt" => ColumnType::BigInteger,
+            "String" => ColumnType::String(Some(255)),
+            s if s.starts_with("String(") => {
+                if let Some(len_str) = s.strip_prefix("String(").and_then(|s| s.strip_suffix(')')) {
+                    if let Ok(len) = len_str.parse() {
+                        return ColumnType::String(Some(len));
+                    }
+                }
+                ColumnType::String(Some(255))
+            }
+            "Text" => ColumnType::Text,
+            "Boolean" | "Bool" | "bool" => ColumnType::Boolean,
+            "Float" | "f32" => ColumnType::Float,
+            "Double" | "f64" => ColumnType::Double,
+            "Date" => ColumnType::Date,
+            "Time" => ColumnType::Time,
+            "DateTime" | "DateTimeUtc" => ColumnType::DateTime,
+            "Timestamp" | "TimestampUtc" => ColumnType::Timestamp,
+            "Json" | "JsonValue" => ColumnType::Json,
+            "Binary" | "Vec<u8>" => ColumnType::Binary,
+            _ => ColumnType::Custom(type_str.to_string()),
+        }
+    }
+
+    /// 从 Rust 类型推断列类型
+    fn infer_column_type(field_type: &Option<String>) -> Option<ColumnType> {
+        let type_str = field_type.as_ref()?.to_lowercase();
+
+        // 处理 Option<T>
+        let inner_type = if type_str.starts_with("option<") {
+            if let Some(end) = type_str.find('>') {
+                &type_str[7..end]
+            } else {
+                &type_str
+            }
+        } else {
+            &type_str
+        };
+
+        // 映射 Rust 类型到 ColumnType
+        match inner_type {
+            t if t.contains("i32") || t == "integer" || t == "int" => Some(ColumnType::Integer),
+            t if t.contains("i64") || t == "biginteger" || t == "bigint" => Some(ColumnType::BigInteger),
+            t if t.contains("string") || t.contains("&str") => {
+                // 检查是否有长度指定
+                if let Some(len_start) = t.find('<') {
+                    if let Some(len_end) = t[len_start..].find('>') {
+                        let len_str = &t[len_start + 1..len_start + len_end];
+                        if let Ok(len) = len_str.parse() {
+                            return Some(ColumnType::String(Some(len)));
+                        }
+                    }
+                }
+                Some(ColumnType::String(Some(255)))
+            }
+            t if t.contains("text") || t.contains("string") => Some(ColumnType::Text),
+            t if t.contains("bool") => Some(ColumnType::Boolean),
+            t if t.contains("f32") | t.contains("float") => Some(ColumnType::Float),
+            t if t.contains("f64") | t.contains("double") => Some(ColumnType::Double),
+            t if t.contains("date") && t.contains("time") => Some(ColumnType::DateTime),
+            t if t.contains("date") => Some(ColumnType::Date),
+            t if t.contains("time") => Some(ColumnType::Time),
+            t if t.contains("timestamp") => Some(ColumnType::Timestamp),
+            t if t.contains("json") => Some(ColumnType::Json),
+            t if t.contains("vec<u8>") || t.contains("binary") => Some(ColumnType::Binary),
+            _ => None,
+        }
+    }
+
+    /// 生成从实体到表的迁移
+    ///
+    /// # Arguments
+    ///
+    /// * `entity_code` - Rust 实体结构体源代码
+    /// * `table_name` - 目标数据库表名
+    /// * `db_type` - 目标数据库类型
+    ///
+    /// # Returns
+    ///
+    /// 创建表的 SQL 语句
+    pub fn generate_migration_sql(
+        entity_code: &str,
+        table_name: &str,
+        db_type: DatabaseType,
+    ) -> Result<String, String> {
+        let table = Self::parse_entity(entity_code, table_name)?;
+        let generator = SqlGenerator::new(db_type);
+        Ok(generator.generate_create_table_sql(&table))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1234,5 +1563,79 @@ mod tests {
         assert!(sql.contains("name VARCHAR(255)"));
         assert!(sql.contains("NOT NULL"));
         assert!(sql.contains("PRIMARY KEY (id)"));
+    }
+
+    /// TEST-U-024: Rust 实体解析测试 - 基础解析
+    #[test]
+    fn test_rust_entity_parser_basic() {
+        let entity_code = r#"
+#[sea_orm(table_name = "users")]
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    #[sea_orm(column_type = "String(255)")]
+    pub name: String,
+    #[sea_orm(column_type = "Text")]
+    pub bio: Option<String>,
+}
+"#;
+
+        let table = RustEntityParser::parse_entity(entity_code, "users").unwrap();
+
+        assert_eq!(table.name, "users");
+        assert_eq!(table.columns.len(), 3);
+        assert_eq!(table.primary_key_columns, vec!["id"]);
+
+        // 检查 id 列
+        let id_col = table.columns.iter().find(|c| c.name == "id").unwrap();
+        assert_eq!(id_col.column_type, ColumnType::Integer);
+        assert!(id_col.is_primary_key);
+
+        // 检查 name 列
+        let name_col = table.columns.iter().find(|c| c.name == "name").unwrap();
+        assert_eq!(name_col.column_type, ColumnType::String(Some(255)));
+    }
+
+    /// TEST-U-025: Rust 实体解析测试 - 生成迁移 SQL
+    #[test]
+    fn test_rust_entity_generate_migration() {
+        let entity_code = r#"
+#[sea_orm(table_name = "posts")]
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    #[sea_orm(column_type = "String(255)")]
+    pub title: String,
+    #[sea_orm(column_type = "Text")]
+    pub content: String,
+    #[sea_orm(column_type = "DateTime")]
+    pub created_at: DateTimeUtc,
+}
+"#;
+
+        let sql = RustEntityParser::generate_migration_sql(entity_code, "posts", DatabaseType::Postgres).unwrap();
+
+        assert!(sql.contains("CREATE TABLE posts"));
+        assert!(sql.contains("id BIGINT"));
+        assert!(sql.contains("title VARCHAR(255)"));
+        assert!(sql.contains("content TEXT"));
+        assert!(sql.contains("created_at TIMESTAMP"));
+    }
+
+    /// TEST-U-026: Rust 实体解析测试 - 列类型解析
+    #[test]
+    fn test_parse_column_type_string() {
+        assert_eq!(RustEntityParser::parse_column_type_str("Integer"), ColumnType::Integer);
+        assert_eq!(
+            RustEntityParser::parse_column_type_str("String(100)"),
+            ColumnType::String(Some(100))
+        );
+        assert_eq!(RustEntityParser::parse_column_type_str("Text"), ColumnType::Text);
+        assert_eq!(RustEntityParser::parse_column_type_str("Boolean"), ColumnType::Boolean);
+        assert_eq!(
+            RustEntityParser::parse_column_type_str("DateTime"),
+            ColumnType::DateTime
+        );
+        assert_eq!(RustEntityParser::parse_column_type_str("Json"), ColumnType::Json);
     }
 }
