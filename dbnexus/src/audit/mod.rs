@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 审计日志模块
 //!
 //! 提供数据库操作审计功能，支持：
@@ -16,7 +21,7 @@
 //! ```
 
 use async_trait::async_trait;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
@@ -186,26 +191,12 @@ impl AuditEvent {
 
     /// 创建操作事件
     pub fn create(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(
-            AuditOperation::Create,
-            entity_type,
-            entity_id,
-            user_id,
-            "",
-            "",
-        )
+        Self::new(AuditOperation::Create, entity_type, entity_id, user_id, "", "")
     }
 
     /// 读取操作事件
     pub fn read(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(
-            AuditOperation::Read,
-            entity_type,
-            entity_id,
-            user_id,
-            "",
-            "",
-        )
+        Self::new(AuditOperation::Read, entity_type, entity_id, user_id, "", "")
     }
 
     /// 更新操作事件
@@ -216,14 +207,7 @@ impl AuditEvent {
         before: Option<String>,
         after: Option<String>,
     ) -> Self {
-        let mut event = Self::new(
-            AuditOperation::Update,
-            entity_type,
-            entity_id,
-            user_id,
-            "",
-            "",
-        );
+        let mut event = Self::new(AuditOperation::Update, entity_type, entity_id, user_id, "", "");
         event.before_value = before;
         event.after_value = after;
         event
@@ -231,14 +215,7 @@ impl AuditEvent {
 
     /// 删除操作事件
     pub fn delete(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(
-            AuditOperation::Delete,
-            entity_type,
-            entity_id,
-            user_id,
-            "",
-            "",
-        )
+        Self::new(AuditOperation::Delete, entity_type, entity_id, user_id, "", "")
     }
 
     /// 设置用户信息
@@ -461,6 +438,9 @@ impl AuditStorage for MemoryAuditStorage {
     }
 }
 
+/// 审计告警回调类型
+type AuditAlertCallback = Arc<dyn Fn(&AuditEvent) + Send + Sync>;
+
 /// 审计日志器
 pub struct AuditLogger {
     /// 配置
@@ -468,7 +448,7 @@ pub struct AuditLogger {
     /// 存储后端
     storage: Arc<dyn AuditStorage>,
     /// 告警回调
-    alert_callback: Option<Arc<dyn Fn(&AuditEvent) + Send + Sync>>,
+    alert_callback: Option<AuditAlertCallback>,
 }
 
 impl AuditLogger {
@@ -483,10 +463,7 @@ impl AuditLogger {
 
     /// 创建带默认配置的审计日志器
     pub fn with_default_storage() -> Self {
-        Self::new(
-            AuditConfig::default(),
-            Arc::new(MemoryAuditStorage::new(10000)),
-        )
+        Self::new(AuditConfig::default(), Arc::new(MemoryAuditStorage::new(10000)))
     }
 
     /// 设置告警回调
@@ -565,8 +542,7 @@ impl AuditLogger {
         user_id: &str,
         before: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let event = AuditEvent::delete(entity_type, entity_id, user_id)
-            .with_severity(AuditSeverity::High);
+        let event = AuditEvent::delete(entity_type, entity_id, user_id).with_severity(AuditSeverity::High);
         let event = match before {
             Some(ref v) => event.with_before_value(v),
             None => event,
@@ -575,7 +551,10 @@ impl AuditLogger {
     }
 
     /// 查询审计日志
-    pub async fn query(&self, filters: &AuditQueryFilters) -> Result<Vec<AuditEvent>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn query(
+        &self,
+        filters: &AuditQueryFilters,
+    ) -> Result<Vec<AuditEvent>, Box<dyn std::error::Error + Send + Sync>> {
         self.storage.query(filters).await
     }
 
@@ -626,11 +605,7 @@ impl AuditLogger {
         // 默认实现：打印到stderr
         eprintln!(
             "[AUDIT ALERT] {} - {} {} on {} by user {}",
-            event.severity,
-            event.operation,
-            event.entity_id,
-            event.entity_type,
-            event.user_id
+            event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
         );
     }
 }
@@ -724,8 +699,8 @@ mod tests {
         let config = AuditConfig::default();
         let logger = AuditLogger::new(config, storage);
 
-        let event = AuditEvent::create("users", "1", "admin")
-            .with_after_value(r#"{"password": "secret123", "name": "test"}"#);
+        let event =
+            AuditEvent::create("users", "1", "admin").with_after_value(r#"{"password": "secret123", "name": "test"}"#);
 
         logger.log(event).await.unwrap();
 
