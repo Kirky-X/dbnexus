@@ -86,6 +86,9 @@ pub mod cache;
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
+/// 可插拔权限引擎模块
+#[cfg(feature = "permission-engine")]
+pub mod permission_engine;
 
 /// 错误类型定义
 pub use crate::config::DbResult;

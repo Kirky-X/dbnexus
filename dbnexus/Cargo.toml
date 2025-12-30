@@ -37,8 +37,9 @@ metrics = ["dep:prometheus"]
 migration = []
 sharding = ["dep:twox-hash", "dep:chrono"]
 global-index = ["dep:sha2", "dep:async-trait", "dep:chrono"]
-cache = ["dep:async-trait", "dep:uuid", "dep:lru"]
-audit = ["dep:serde", "dep:serde_json", "dep:chrono", "dep:uuid", "dep:async-trait"]
+cache = ["dep:async-trait", "dep:uuid"]
+audit = ["dep:chrono", "dep:uuid", "dep:async-trait"]
+permission-engine = ["dep:async-trait"]
 tracing = [
     "dep:tracing-subscriber",
     "dep:tracing-opentelemetry",
@@ -53,23 +54,23 @@ tracing = [
 ]
 
 # 启用所有可选特性（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "tracing", "sharding", "global-index", "cache", "audit"]
+all-optional = ["metrics", "migration", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine"]
 
 [dependencies]
 # Workspace dependencies
 tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_yaml = { workspace = true }
-serde_json = { workspace = true, optional = true }
+serde_json = { workspace = true }
 sea-orm = { workspace = true }
 tracing = { workspace = true }
 time = { workspace = true }
 prometheus = { workspace = true, optional = true }
 toml = "0.8"
 parking_lot = "0.12"
-lru = { workspace = true, optional = true }
+lru = { workspace = true }
 home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 http = { version = "1.0", optional = true }
