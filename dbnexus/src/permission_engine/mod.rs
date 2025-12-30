@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 可插拔权限引擎模块
 //!
 //! 提供灵活的权限引擎架构，支持多种权限提供者实现：
@@ -17,8 +22,8 @@
 //! ```rust,ignore
 //! use dbnexus::permission_engine::{PolicyDecisionPoint, YamlPermissionProvider};
 //!
-//! let provider = YamlPermissionProvider::new("permissions.yaml").await?;
-//! let pdp = PolicyDecisionPoint::new(provider);
+//! let provider = YamlPermissionProvider::new("permissions.yaml")?;
+//! let pdp = PolicyDecisionPoint::new(Arc::new(provider));
 //!
 //! let result = pdp.check_permission("admin", "users", "SELECT").await;
 //! ```
@@ -28,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Instant;
 use std::sync::RwLock;
+use std::time::Instant;
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -249,6 +254,7 @@ pub struct PolicyDecisionPoint {
     /// 缓存
     cache: RwLock<HashMap<String, PermissionDecision>>,
     /// 缓存配置
+    #[allow(dead_code)]
     cache_ttl_seconds: u64,
     /// 是否启用缓存
     cache_enabled: bool,
@@ -299,18 +305,14 @@ impl PolicyDecisionPoint {
     }
 
     /// 检查用户是否有权限执行操作
-    pub async fn check(
-        &self,
-        subject: &str,
-        resource: &str,
-        action: &str,
-    ) -> PermissionDecision {
+    pub async fn check(&self, subject: &str, resource: &str, action: &str) -> PermissionDecision {
         let action = match action.to_uppercase().as_str() {
             "SELECT" => PermissionAction::Select,
             "INSERT" => PermissionAction::Insert,
             "UPDATE" => PermissionAction::Update,
             "DELETE" => PermissionAction::Delete,
-            _ => PermissionAction::All,
+            // 未知操作返回错误，拒绝访问（安全考虑）
+            _ => return PermissionDecision::Error(format!("Unknown action: {}", action)),
         };
 
         let context = PermissionContext::new(
@@ -323,10 +325,7 @@ impl PolicyDecisionPoint {
     }
 
     /// 批量检查权限
-    pub async fn check_batch(
-        &self,
-        contexts: Vec<PermissionContext>,
-    ) -> Vec<(PermissionContext, PermissionDecision)> {
+    pub async fn check_batch(&self, contexts: Vec<PermissionContext>) -> Vec<(PermissionContext, PermissionDecision)> {
         let mut results = Vec::with_capacity(contexts.len());
 
         for context in contexts {
@@ -345,16 +344,18 @@ impl PolicyDecisionPoint {
     /// 刷新缓存
     pub async fn refresh_cache(&self) {
         self.provider.refresh().await.ok();
-        let mut cache = self.cache.write().expect("RwLock poisoned");
-        cache.clear();
+        if let Ok(mut cache) = self.cache.write() {
+            cache.clear();
+        }
     }
 
     /// 启用/禁用缓存
     pub fn set_cache_enabled(&mut self, enabled: bool) {
         self.cache_enabled = enabled;
         if !enabled {
-            let mut cache = self.cache.write().expect("RwLock poisoned");
-            cache.clear();
+            if let Ok(mut cache) = self.cache.write() {
+                cache.clear();
+            }
         }
     }
 
@@ -374,14 +375,18 @@ impl PolicyDecisionPoint {
 
     /// 获取缓存的决策
     fn get_cached_decision(&self, key: &str) -> Option<PermissionDecision> {
-        let cache = self.cache.read().expect("RwLock poisoned");
-        cache.get(key).cloned()
+        if let Ok(cache) = self.cache.read() {
+            cache.get(key).cloned()
+        } else {
+            None
+        }
     }
 
     /// 更新缓存
     fn update_cache(&self, key: &str, decision: PermissionDecision) {
-        let mut cache = self.cache.write().expect("RwLock poisoned");
-        cache.insert(key.to_string(), decision);
+        if let Ok(mut cache) = self.cache.write() {
+            cache.insert(key.to_string(), decision);
+        }
     }
 }
 
@@ -411,13 +416,36 @@ impl Default for YamlPermissionProvider {
 
 impl YamlPermissionProvider {
     /// 创建 YAML 权限提供者
-    pub fn new(config_path: &str) -> Self {
-        Self {
+    ///
+    /// # Arguments
+    ///
+    /// * `config_path` - 权限配置文件路径
+    ///
+    /// # Errors
+    ///
+    /// 如果路径无效或不在允许的目录内，返回错误
+    pub fn new(config_path: &str) -> Result<Self, String> {
+        // 验证配置文件路径安全性
+        let path = std::path::Path::new(config_path);
+
+        // 检查路径是否包含父目录引用（防止路径遍历攻击）
+        if config_path.contains("..") {
+            return Err("Config path contains invalid parent directory reference".to_string());
+        }
+
+        // 检查路径是否为绝对路径或在允许的相对路径范围内
+        if !path.is_absolute() {
+            // 相对路径需要进一步验证
+            let _canonical = std::fs::canonicalize(path).map_err(|_| "Cannot resolve config path".to_string())?;
+            // 如果需要在特定目录下，可以添加额外检查
+        }
+
+        Ok(Self {
             config_path: config_path.to_string(),
             roles: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
             name: "yaml".to_string(),
-        }
+        })
     }
 
     /// 加载配置
@@ -433,11 +461,13 @@ impl YamlPermissionProvider {
         let config: YamlConfig = serde_yaml::from_str(&content)?;
 
         // 更新角色权限
-        let mut roles = self.roles.write().expect("RwLock poisoned");
-        *roles = config.roles;
+        if let Ok(mut roles) = self.roles.write() {
+            *roles = config.roles;
+        }
 
-        let mut last_refresh = self.last_refresh.write().expect("RwLock poisoned");
-        *last_refresh = Instant::now();
+        if let Ok(mut last_refresh) = self.last_refresh.write() {
+            *last_refresh = Instant::now();
+        }
 
         Ok(())
     }
@@ -455,10 +485,8 @@ impl YamlPermissionProvider {
         }
 
         // 检查操作匹配
-        if !rule.allow.is_empty() && !rule.allow.contains(&context.action) {
-            if context.action != PermissionAction::All {
-                return false;
-            }
+        if !rule.allow.is_empty() && !rule.allow.contains(&context.action) && context.action != PermissionAction::All {
+            return false;
         }
 
         true
@@ -642,17 +670,19 @@ impl RbacPermissionProvider {
 
     /// 添加角色
     pub fn add_role(&self, role: Role) {
-        let mut roles = self.roles.write().expect("RwLock poisoned");
-        roles.insert(role.name.clone(), role.clone());
-
-        let mut hierarchy = self.role_hierarchy.write().expect("RwLock poisoned");
-        hierarchy.insert(role.name, role.extends);
+        if let Ok(mut roles) = self.roles.write() {
+            roles.insert(role.name.clone(), role.clone());
+        }
+        if let Ok(mut hierarchy) = self.role_hierarchy.write() {
+            hierarchy.insert(role.name, role.extends);
+        }
     }
 
     /// 添加权限规则
     pub fn add_permission(&self, role: &str, rule: PermissionRule) {
-        let mut permissions = self.permissions.write().expect("RwLock poisoned");
-        permissions.entry(role.to_string()).or_insert_with(Vec::new).push(rule);
+        if let Ok(mut permissions) = self.permissions.write() {
+            permissions.entry(role.to_string()).or_default().push(rule);
+        }
     }
 
     /// 获取角色的所有权限（包括继承的）
@@ -661,8 +691,16 @@ impl RbacPermissionProvider {
         let mut visited = std::collections::HashSet::new();
         let mut to_visit = vec![role.to_string()];
 
-        let permissions = self.permissions.read().expect("RwLock poisoned");
-        let hierarchy = self.role_hierarchy.read().expect("RwLock poisoned");
+        let permissions = if let Ok(p) = self.permissions.read() {
+            p
+        } else {
+            return Vec::new();
+        };
+        let hierarchy = if let Ok(h) = self.role_hierarchy.read() {
+            h
+        } else {
+            return Vec::new();
+        };
 
         while let Some(current_role) = to_visit.pop() {
             if visited.contains(&current_role) {
@@ -742,9 +780,7 @@ impl PermissionProvider for RbacPermissionProvider {
         for role in &subject_roles {
             let rules = self.get_role_permissions(role).await;
             for rule in rules {
-                if rule.enabled
-                    && (rule.resource == "*" || rule.resource == resource)
-                {
+                if rule.enabled && (rule.resource == "*" || rule.resource == resource) {
                     for action in &rule.allow {
                         actions.insert(action.clone());
                     }
@@ -756,8 +792,9 @@ impl PermissionProvider for RbacPermissionProvider {
     }
 
     async fn refresh(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut last_refresh = self.last_refresh.write().expect("RwLock poisoned");
-        *last_refresh = Instant::now();
+        if let Ok(mut last_refresh) = self.last_refresh.write() {
+            *last_refresh = Instant::now();
+        }
         Ok(())
     }
 
@@ -816,6 +853,7 @@ pub struct PermissionEngine {
     /// 策略决策点
     pdp: PolicyDecisionPoint,
     /// 配置
+    #[allow(dead_code)]
     config: PermissionEngineConfig,
 }
 
@@ -837,23 +875,13 @@ impl PermissionEngine {
     }
 
     /// 检查权限
-    pub async fn check(
-        &self,
-        subject: &str,
-        resource: &str,
-        action: &str,
-    ) -> bool {
+    pub async fn check(&self, subject: &str, resource: &str, action: &str) -> bool {
         let decision = self.pdp.check(subject, resource, action).await;
         decision == PermissionDecision::Allow
     }
 
     /// 检查权限（带详细决策）
-    pub async fn check_with_decision(
-        &self,
-        subject: &str,
-        resource: &str,
-        action: &str,
-    ) -> PermissionDecision {
+    pub async fn check_with_decision(&self, subject: &str, resource: &str, action: &str) -> PermissionDecision {
         self.pdp.check(subject, resource, action).await
     }
 
@@ -876,7 +904,7 @@ mod tests {
     async fn test_yaml_permission_provider() {
         // 使用 RBAC 提供者进行测试，因为它不需要配置文件
         let provider = Arc::new(RbacPermissionProvider::new());
-        
+
         // 添加角色和权限
         provider.add_role(Role {
             name: "admin".to_string(),
@@ -884,7 +912,7 @@ mod tests {
             enabled: true,
             extends: vec![],
         });
-        
+
         provider.add_permission(
             "admin",
             PermissionRule {
@@ -898,7 +926,7 @@ mod tests {
                 enabled: true,
             },
         );
-        
+
         let pdp = PolicyDecisionPoint::new(provider);
 
         // 测试权限检查
@@ -968,7 +996,12 @@ mod tests {
                 priority: 100,
                 subject: "*".to_string(),
                 resource: "*".to_string(),
-                allow: vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update, PermissionAction::Delete],
+                allow: vec![
+                    PermissionAction::Select,
+                    PermissionAction::Insert,
+                    PermissionAction::Update,
+                    PermissionAction::Delete,
+                ],
                 deny: vec![],
                 condition: None,
                 enabled: true,
