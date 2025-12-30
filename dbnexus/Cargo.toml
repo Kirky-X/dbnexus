@@ -37,6 +37,8 @@ metrics = ["dep:prometheus"]
 migration = []
 sharding = ["dep:twox-hash", "dep:chrono"]
 global-index = ["dep:sha2", "dep:async-trait", "dep:chrono"]
+cache = ["dep:async-trait", "dep:uuid", "dep:lru"]
+audit = ["dep:serde", "dep:serde_json", "dep:chrono", "dep:uuid", "dep:async-trait"]
 tracing = [
     "dep:tracing-subscriber",
     "dep:tracing-opentelemetry",
@@ -51,25 +53,25 @@ tracing = [
 ]
 
 # 启用所有可选特性（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "tracing", "sharding", "global-index"]
+all-optional = ["metrics", "migration", "tracing", "sharding", "global-index", "cache", "audit"]
 
 [dependencies]
 # Workspace dependencies
 tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 serde_yaml = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, optional = true }
 sea-orm = { workspace = true }
 tracing = { workspace = true }
 time = { workspace = true }
 prometheus = { workspace = true, optional = true }
 toml = "0.8"
 parking_lot = "0.12"
-lru = { workspace = true }
+lru = { workspace = true, optional = true }
 home = "0.5"
-chrono = { version = "0.4", optional = true }
+chrono = { version = "0.4", optional = true, features = ["serde"] }
 http = { version = "1.0", optional = true }
 tower = { version = "0.5", optional = true }
 tracing-opentelemetry = { version = "0.27", optional = true }
@@ -81,6 +83,7 @@ once_cell = { version = "1.20", optional = true }
 twox-hash = { version = "1.6", optional = true }
 sha2 = { version = "0.10", optional = true }
 async-trait = { version = "0.1", optional = true }
+uuid = { version = "1.0", optional = true, features = ["v4"] }
 
 # External dependencies
 regex = "1.0"

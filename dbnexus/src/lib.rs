@@ -80,9 +80,12 @@ pub mod sharding;
 /// 全局索引模块
 #[cfg(feature = "global-index")]
 pub mod global_index;
-/// 分片管理模块
-#[cfg(feature = "sharding")]
-pub mod sharding;
+/// 缓存模块
+#[cfg(feature = "cache")]
+pub mod cache;
+/// 审计日志模块
+#[cfg(feature = "audit")]
+pub mod audit;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
@@ -98,5 +101,7 @@ pub use dbnexus_macros::DbEntity;
 pub use dbnexus_macros::db_crud;
 pub use dbnexus_macros::db_entity;
 pub use dbnexus_macros::db_permission;
+pub use dbnexus_macros::db_cache;
+pub use dbnexus_macros::db_audit;
 pub use dbnexus_macros::primary_key;
 pub use dbnexus_macros::table_name;
