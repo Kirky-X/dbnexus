@@ -3,7 +3,16 @@
 
 [advisories]
 yanked = "warn"
-ignore = []
+unmaintained = "transitive"
+ignore = [
+    # rsa 漏洞来自 sqlx-mysql，仅在启用 mysql 特性时影响
+    "RUSTSEC-2023-0071",
+    # unmaintained 警告（这些是上游依赖，无法直接解决）
+    "RUSTSEC-2025-0052",  # async-std (sqlx 依赖)
+    "RUSTSEC-2024-0384",  # instant (sqlx 依赖)
+    "RUSTSEC-2025-0123",  # opentelemetry-jaeger (tracing 特性)
+    "RUSTSEC-2024-0387",  # opentelemetry_api (tracing 特性)
+]
 
 [licenses]
 allow = [
@@ -13,9 +22,10 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
     "Zlib",
+    "Unicode-DFS-2016",
     "Unicode-3.0",
+    "CDLA-Permissive-2.0",
 ]
 
 [bans]
