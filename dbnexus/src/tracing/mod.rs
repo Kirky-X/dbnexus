@@ -1,15 +1,19 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 分布式追踪模块
 //!
 //! 提供基于 OpenTelemetry 的分布式追踪功能。
 //! 支持 OTLP 和标准输出导出器。
 
+use opentelemetry::KeyValue;
 use opentelemetry::global;
-use opentelemetry::propagation::TextMapPropagator;
-use opentelemetry_sdk::propagation::TraceContextPropagator;
-use opentelemetry_sdk::trace::{Config, TracerProvider};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
-use opentelemetry::KeyValue;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::{Config, TracerProvider};
 use std::collections::HashMap;
 
 /// 追踪初始化结果
@@ -41,19 +45,13 @@ pub async fn init(exporter: &str, endpoint: &str) -> Result<TracingGuard, String
 
 /// 使用 OTLP 初始化追踪
 async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", "dbnexus"),
-    ]);
+    let resource = Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
     let config = Config::default().with_resource(resource);
 
     let provider = opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(endpoint),
-        )
+        .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(endpoint))
         .with_trace_config(config)
         .install_simple()
         .map_err(|e| e.to_string())?;
@@ -63,19 +61,13 @@ async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
 
 /// 使用标准输出初始化追踪
 fn init_stdout() -> Result<TracerProvider, String> {
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", "dbnexus"),
-    ]);
+    let resource = Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
     let config = Config::default().with_resource(resource);
 
     let provider = opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint("stdout"),
-        )
+        .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint("stdout"))
         .with_trace_config(config)
         .install_simple()
         .map_err(|e| e.to_string())?;
