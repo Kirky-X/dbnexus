@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 连接池集成测试
 //!
 //! 测试连接池的创建、管理、连接健康检查等功能

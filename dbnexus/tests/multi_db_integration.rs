@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 多数据库集成测试
 //!
 //! 测试跨不同数据库类型（SQLite、PostgreSQL、MySQL）的功能，
@@ -53,21 +58,21 @@ async fn test_mysql_connection() {
 #[test]
 fn test_database_type_detection() {
     // SQLite
-    assert_eq!(DatabaseType::SQLite, detect_db_type("sqlite::memory:"));
-    assert_eq!(DatabaseType::SQLite, detect_db_type("sqlite:///tmp/test.db"));
+    assert_eq!(DatabaseType::Sqlite, detect_db_type("sqlite::memory:"));
+    assert_eq!(DatabaseType::Sqlite, detect_db_type("sqlite:///tmp/test.db"));
 
     // PostgreSQL
     assert_eq!(DatabaseType::Postgres, detect_db_type("postgres://localhost/test"));
     assert_eq!(DatabaseType::Postgres, detect_db_type("postgresql://localhost/test"));
 
     // MySQL
-    assert_eq!(DatabaseType::MySQL, detect_db_type("mysql://localhost/test"));
+    assert_eq!(DatabaseType::MySql, detect_db_type("mysql://localhost/test"));
 }
 
 /// TEST-MDB-005: SQLite特定SQL生成测试
 #[test]
 fn test_sqlite_sql_generation() {
-    let generator = SqlGenerator::new(DatabaseType::SQLite);
+    let generator = SqlGenerator::new(DatabaseType::Sqlite);
 
     // Boolean类型 - SQLite使用INTEGER
     assert_eq!(generator.generate_column_def(&ColumnType::Boolean), "INTEGER");
@@ -108,7 +113,7 @@ fn test_postgresql_sql_generation() {
 /// TEST-MDB-007: MySQL特定SQL生成测试
 #[test]
 fn test_mysql_sql_generation() {
-    let generator = SqlGenerator::new(DatabaseType::MySQL);
+    let generator = SqlGenerator::new(DatabaseType::MySql);
 
     // Boolean类型
     assert_eq!(generator.generate_column_def(&ColumnType::Boolean), "BOOLEAN");
@@ -223,9 +228,9 @@ fn test_database_url_format_validation() {
 /// TEST-MDB-011: 跨数据库数据类型映射测试
 #[test]
 fn test_cross_database_type_mapping() {
-    let sqlite = SqlGenerator::new(DatabaseType::SQLite);
+    let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
     let postgres = SqlGenerator::new(DatabaseType::Postgres);
-    let mysql = SqlGenerator::new(DatabaseType::MySQL);
+    let mysql = SqlGenerator::new(DatabaseType::MySql);
 
     // 验证相同列类型在不同数据库中的差异
     let column_types = vec![
@@ -489,13 +494,13 @@ async fn test_database_config_compatibility() {
 /// 辅助函数：检测数据库类型
 fn detect_db_type(url: &str) -> DatabaseType {
     if url.starts_with("sqlite:") {
-        DatabaseType::SQLite
+        DatabaseType::Sqlite
     } else if url.starts_with("postgres:") || url.starts_with("postgresql:") {
         DatabaseType::Postgres
     } else if url.starts_with("mysql:") {
-        DatabaseType::MySQL
+        DatabaseType::MySql
     } else {
-        DatabaseType::SQLite
+        DatabaseType::Sqlite
     }
 }
 

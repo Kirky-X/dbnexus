@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! CLI 集成测试
 //!
 //! 测试 CLI 工具的各个命令功能：status、up、down、create、generate
