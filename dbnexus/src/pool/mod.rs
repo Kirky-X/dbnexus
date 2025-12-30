@@ -69,6 +69,30 @@ impl DbPool {
         // 使用配置修正器自动修正配置
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
 
+        // 创建初始连接以查询数据库能力
+        let db_type = crate::config::DatabaseType::parse_database_type(&corrected_config.url);
+
+        // 创建连接并应用数据库能力修正
+        let connection = sea_orm::Database::connect(&corrected_config.url)
+            .await
+            .map_err(DbError::Connection)?;
+
+        // 应用数据库能力修正（如果需要）
+        let corrected_config = crate::config::ConfigCorrector::auto_correct_with_database_capability(
+            corrected_config,
+            &connection,
+            db_type.clone(),
+        )
+        .await;
+
+        // 输出配置修正信息
+        if corrected_config.max_connections < 100 && db_type.is_real_database() {
+            info!(
+                "Database connection limit: 80% of {} = {} connections",
+                corrected_config.max_connections, corrected_config.max_connections
+            );
+        }
+
         let policy_cache = Arc::new(std::sync::Mutex::new(LruCache::new(
             NonZeroUsize::new(256).expect("LRU cache size must be non-zero"),
         )));
@@ -152,6 +176,18 @@ impl DbPool {
     #[cfg(feature = "metrics")]
     pub fn metrics(&self) -> Option<&Arc<MetricsCollector>> {
         self.inner.metrics_collector.as_ref()
+    }
+
+    /// 获取当前应用的实际配置
+    ///
+    /// 返回经过自动修正后的配置副本。
+    /// 如果配置从未被修正过，则返回传入的配置。
+    ///
+    /// # Returns
+    ///
+    /// 实际应用的配置（可能已被自动修正）
+    pub fn get_actual_config(&self) -> DbConfig {
+        crate::config::ConfigCorrector::get_actual_config(&self.inner.config)
     }
 
     /// 从池中获取 Session（带 metrics 支持）
