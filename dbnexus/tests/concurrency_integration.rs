@@ -436,9 +436,11 @@ async fn test_concurrent_validate_and_recreate() {
     // 等待所有验证操作完成
     let results = futures::future::join_all(handles).await;
 
-    // 验证所有验证操作都成功完成（unwrap 确保没有错误）
-    for result in results.into_iter() {
+    // 验证所有验证操作都成功完成
+    for (i, result) in results.into_iter().enumerate() {
         let _recreated = result.unwrap();
+        // 注意: 移除无意义的 assert!(true) 断言，因为 result.unwrap() 已经在前面验证了结果
+        tracing::info!("Validation {} completed successfully", i);
     }
 }
 
