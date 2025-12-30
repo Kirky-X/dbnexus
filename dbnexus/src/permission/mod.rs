@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 权限控制模块
 //!
 //! 提供基于角色的表级权限控制功能
@@ -8,33 +13,27 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
-/// 数据库操作类型
+/// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Operation {
-    /// SELECT 查询
-    #[serde(rename = "SELECT")]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionAction {
+    /// 查询操作
     Select,
-
-    /// INSERT 插入
-    #[serde(rename = "INSERT")]
+    /// 插入操作
     Insert,
-
-    /// UPDATE 更新
-    #[serde(rename = "UPDATE")]
+    /// 更新操作
     Update,
-
-    /// DELETE 删除
-    #[serde(rename = "DELETE")]
+    /// 删除操作
     Delete,
 }
 
-impl std::fmt::Display for Operation {
+impl std::fmt::Display for PermissionAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Operation::Select => write!(f, "SELECT"),
-            Operation::Insert => write!(f, "INSERT"),
-            Operation::Update => write!(f, "UPDATE"),
-            Operation::Delete => write!(f, "DELETE"),
+            PermissionAction::Select => write!(f, "SELECT"),
+            PermissionAction::Insert => write!(f, "INSERT"),
+            PermissionAction::Update => write!(f, "UPDATE"),
+            PermissionAction::Delete => write!(f, "DELETE"),
         }
     }
 }
@@ -46,7 +45,7 @@ pub struct TablePermission {
     pub name: String,
 
     /// 允许的操作列表
-    pub operations: Vec<Operation>,
+    pub operations: Vec<PermissionAction>,
 }
 
 /// 角色策略
@@ -58,7 +57,7 @@ pub struct RolePolicy {
 
 impl RolePolicy {
     /// 检查角色是否有权限执行操作
-    pub fn allows(&self, table: &str, operation: &Operation) -> bool {
+    pub fn allows(&self, table: &str, operation: &PermissionAction) -> bool {
         for perm in &self.tables {
             // 检查表名匹配（支持通配符）
             if perm.name == "*" || perm.name == table {
@@ -92,7 +91,7 @@ impl PermissionConfig {
     }
 
     /// 检查角色是否有权限
-    pub fn check_access(&self, role: &str, table: &str, operation: Operation) -> bool {
+    pub fn check_access(&self, role: &str, table: &str, operation: PermissionAction) -> bool {
         if let Some(policy) = self.get_role_policy(role) {
             policy.allows(table, &operation)
         } else {
@@ -175,10 +174,12 @@ impl PermissionContext {
 
     /// 创建新的权限上下文（使用自定义缓存大小）
     pub fn with_cache_size(role: String, cache_capacity: usize) -> Self {
+        // 确保缓存容量至少为 1
+        let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
         Self {
             role,
             policy_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(cache_capacity).expect("Cache capacity must be non-zero"),
+                NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
             ))),
         }
     }
@@ -191,7 +192,7 @@ impl PermissionContext {
     /// 检查表访问权限
     ///
     /// 此方法会先检查缓存，如果缓存未命中则加载权限策略到缓存
-    pub fn check_table_access(&self, table: &str, operation: &Operation) -> bool {
+    pub fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
         let mut cache = match self.policy_cache.lock() {
             Ok(guard) => guard,
             Err(_) => {
@@ -276,13 +277,13 @@ pub struct CacheStats {
 mod tests {
     use super::*;
 
-    /// TEST-U-010: Operation Display 实现测试
+    /// TEST-U-010: Operation (PermissionAction) Display 实现测试
     #[test]
     fn test_operation_display() {
-        assert_eq!(Operation::Select.to_string(), "SELECT");
-        assert_eq!(Operation::Insert.to_string(), "INSERT");
-        assert_eq!(Operation::Update.to_string(), "UPDATE");
-        assert_eq!(Operation::Delete.to_string(), "DELETE");
+        assert_eq!(PermissionAction::Select.to_string(), "SELECT");
+        assert_eq!(PermissionAction::Insert.to_string(), "INSERT");
+        assert_eq!(PermissionAction::Update.to_string(), "UPDATE");
+        assert_eq!(PermissionAction::Delete.to_string(), "DELETE");
     }
 
     /// TEST-U-011: RolePolicy allows 测试
@@ -292,23 +293,23 @@ mod tests {
             tables: vec![
                 TablePermission {
                     name: "users".to_string(),
-                    operations: vec![Operation::Select, Operation::Insert],
+                    operations: vec![PermissionAction::Select, PermissionAction::Insert],
                 },
                 TablePermission {
                     name: "*".to_string(),
-                    operations: vec![Operation::Select],
+                    operations: vec![PermissionAction::Select],
                 },
             ],
         };
 
         // 精确表名匹配
-        assert!(policy.allows("users", &Operation::Select));
-        assert!(policy.allows("users", &Operation::Insert));
-        assert!(!policy.allows("users", &Operation::Delete));
+        assert!(policy.allows("users", &PermissionAction::Select));
+        assert!(policy.allows("users", &PermissionAction::Insert));
+        assert!(!policy.allows("users", &PermissionAction::Delete));
 
         // 通配符匹配
-        assert!(policy.allows("orders", &Operation::Select));
-        assert!(!policy.allows("orders", &Operation::Update));
+        assert!(policy.allows("orders", &PermissionAction::Select));
+        assert!(!policy.allows("orders", &PermissionAction::Update));
     }
 
     /// TEST-U-012: PermissionConfig YAML 解析测试
@@ -320,28 +321,28 @@ roles:
     tables:
       - name: users
         operations:
-          - SELECT
-          - INSERT
-          - UPDATE
-          - DELETE
+          - select
+          - insert
+          - update
+          - delete
   user:
     tables:
       - name: users
         operations:
-          - SELECT
+          - select
 "#;
 
         let config = PermissionConfig::from_yaml(yaml).unwrap();
 
         // 检查 admin 角色
         let admin_policy = config.get_role_policy("admin").unwrap();
-        assert!(admin_policy.allows("users", &Operation::Select));
-        assert!(admin_policy.allows("users", &Operation::Delete));
+        assert!(admin_policy.allows("users", &PermissionAction::Select));
+        assert!(admin_policy.allows("users", &PermissionAction::Delete));
 
         // 检查 user 角色
         let user_policy = config.get_role_policy("user").unwrap();
-        assert!(user_policy.allows("users", &Operation::Select));
-        assert!(!user_policy.allows("users", &Operation::Insert));
+        assert!(user_policy.allows("users", &PermissionAction::Select));
+        assert!(!user_policy.allows("users", &PermissionAction::Insert));
 
         // 检查不存在的角色
         assert!(config.get_role_policy("guest").is_none());
@@ -367,7 +368,7 @@ roles:
                     RolePolicy {
                         tables: vec![TablePermission {
                             name: "*".to_string(),
-                            operations: vec![Operation::Select, Operation::Insert],
+                            operations: vec![PermissionAction::Select, PermissionAction::Insert],
                         }],
                     },
                 );
@@ -375,9 +376,9 @@ roles:
             },
         };
 
-        assert!(config.check_access("admin", "users", Operation::Select));
-        assert!(!config.check_access("admin", "users", Operation::Delete));
-        assert!(!config.check_access("guest", "users", Operation::Select));
+        assert!(config.check_access("admin", "users", PermissionAction::Select));
+        assert!(!config.check_access("admin", "users", PermissionAction::Delete));
+        assert!(!config.check_access("guest", "users", PermissionAction::Select));
     }
 
     /// TEST-U-015: PermissionConfig 验证测试 - 有效配置
@@ -391,7 +392,7 @@ roles:
                     RolePolicy {
                         tables: vec![TablePermission {
                             name: "users".to_string(),
-                            operations: vec![Operation::Select, Operation::Insert],
+                            operations: vec![PermissionAction::Select, PermissionAction::Insert],
                         }],
                     },
                 );

@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 生成的权限角色模块
 //!
 //! 此模块由 build.rs 自动生成，包含 permissions.yaml 中定义的所有角色
