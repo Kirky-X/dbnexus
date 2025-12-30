@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 迁移集成测试
 //!
 //! 测试数据库迁移功能的各个组件：执行器、文件解析、SQL生成、Schema差异检测等
@@ -17,7 +22,7 @@ async fn test_migration_executor_creation() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let connection = session.connection().expect("Failed to get connection").clone();
 
-    let executor = MigrationExecutor::new(connection, DatabaseType::SQLite);
+    let executor = MigrationExecutor::new(connection, DatabaseType::Sqlite);
 
     // 通过生成的SQL验证数据库类型
     let test_sql = executor.sql_generator.generate_drop_table_sql("test");
@@ -163,12 +168,12 @@ No SQL statements here
 #[test]
 fn test_sql_generator_creation() {
     let pg_gen = SqlGenerator::new(DatabaseType::Postgres);
-    let mysql_gen = SqlGenerator::new(DatabaseType::MySQL);
-    let sqlite_gen = SqlGenerator::new(DatabaseType::SQLite);
+    let mysql_gen = SqlGenerator::new(DatabaseType::MySql);
+    let sqlite_gen = SqlGenerator::new(DatabaseType::Sqlite);
 
     assert_eq!(pg_gen.db_type, DatabaseType::Postgres);
-    assert_eq!(mysql_gen.db_type, DatabaseType::MySQL);
-    assert_eq!(sqlite_gen.db_type, DatabaseType::SQLite);
+    assert_eq!(mysql_gen.db_type, DatabaseType::MySql);
+    assert_eq!(sqlite_gen.db_type, DatabaseType::Sqlite);
 }
 
 /// TEST-M-010: 创建表SQL生成测试
@@ -218,7 +223,7 @@ fn test_create_table_sql_generation() {
 /// TEST-M-011: 删除表SQL生成测试
 #[test]
 fn test_drop_table_sql_generation() {
-    let generator = SqlGenerator::new(DatabaseType::SQLite);
+    let generator = SqlGenerator::new(DatabaseType::Sqlite);
 
     let sql = generator.generate_drop_table_sql("test_table");
 
@@ -250,7 +255,7 @@ fn test_add_column_sql_generation() {
 /// TEST-M-013: 创建索引SQL生成测试
 #[test]
 fn test_create_index_sql_generation() {
-    let generator = SqlGenerator::new(DatabaseType::MySQL);
+    let generator = SqlGenerator::new(DatabaseType::MySql);
 
     let index = Index {
         name: "idx_email".to_string(),
@@ -280,7 +285,7 @@ fn test_schema_creation() {
 /// TEST-M-015: Schema表操作测试
 #[test]
 fn test_schema_table_operations() {
-    let mut schema = Schema::new(DatabaseType::SQLite);
+    let mut schema = Schema::new(DatabaseType::Sqlite);
 
     let table = Table {
         name: "users".to_string(),
@@ -444,8 +449,8 @@ fn test_schema_diff_alter_table() {
 #[test]
 fn test_column_type_to_sql() {
     let pg = SqlGenerator::new(DatabaseType::Postgres);
-    let mysql = SqlGenerator::new(DatabaseType::MySQL);
-    let sqlite = SqlGenerator::new(DatabaseType::SQLite);
+    let mysql = SqlGenerator::new(DatabaseType::MySql);
+    let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
 
     // Integer
     assert_eq!(pg.generate_column_def(&ColumnType::Integer), "INTEGER");
@@ -491,10 +496,10 @@ async fn test_migration_apply() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let executor = MigrationExecutor::new(_connection, DatabaseType::SQLite);
+    let executor = MigrationExecutor::new(_connection, DatabaseType::Sqlite);
 
     // 验证执行器可以创建
-    assert!(executor.sql_generator.db_type == DatabaseType::SQLite);
+    assert!(executor.sql_generator.db_type == DatabaseType::Sqlite);
 
     // 直接执行SQL来创建表（不通过迁移历史）
     let create_result = session
@@ -517,7 +522,7 @@ async fn test_migration_history_table_creation() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let _executor = MigrationExecutor::new(_connection, DatabaseType::SQLite);
+    let _executor = MigrationExecutor::new(_connection, DatabaseType::Sqlite);
 
     // 验证迁移历史表已创建
     let check_result = session
@@ -535,7 +540,7 @@ async fn test_full_migration_workflow() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let generator = SqlGenerator::new(DatabaseType::SQLite);
+    let generator = SqlGenerator::new(DatabaseType::Sqlite);
 
     // 生成创建 users 表的 SQL
     let users_table = Table {

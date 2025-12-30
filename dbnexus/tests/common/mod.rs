@@ -1,8 +1,13 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 测试辅助模块
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
-use dbnexus::config::{DatabaseConfig, DbConfig, PoolConfig};
+use dbnexus::config::{DbConfig, PoolConfig};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -18,8 +23,23 @@ pub fn get_test_config() -> DbConfig {
         acquire_timeout: 5000,
     };
 
-    let db_config = DatabaseConfig::from_env_with_pool_config(pool_config);
-    db_config.to_db_config(None)
+    // 直接从环境变量创建配置
+    let mut config = DbConfig::from_env().unwrap_or_else(|_| DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: pool_config.max_connections,
+        min_connections: pool_config.min_connections,
+        idle_timeout: pool_config.idle_timeout,
+        acquire_timeout: pool_config.acquire_timeout,
+        permissions_path: None,
+    });
+
+    // 应用池配置
+    config.max_connections = pool_config.max_connections;
+    config.min_connections = pool_config.min_connections;
+    config.idle_timeout = pool_config.idle_timeout;
+    config.acquire_timeout = pool_config.acquire_timeout;
+
+    config
 }
 
 /// 获取当前测试的数据库类型
