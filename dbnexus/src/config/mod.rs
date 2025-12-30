@@ -1,15 +1,84 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 配置管理模块
 //!
 //! 提供数据库配置加载、验证和自动修正功能
 
-pub mod database;
-
 use sea_orm::ConnectionTrait;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
 use thiserror::Error;
 
-pub use database::{DatabaseConfig, DatabaseType, PoolConfig};
+/// 数据库连接池配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolConfig {
+    /// 最大连接数
+    pub max_connections: u32,
+    /// 最小连接数
+    pub min_connections: u32,
+    /// 连接空闲超时时间（秒）
+    pub idle_timeout: u64,
+    /// 连接获取超时时间（毫秒）
+    pub acquire_timeout: u64,
+}
+
+impl Default for PoolConfig {
+    fn default() -> Self {
+        Self {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        }
+    }
+}
+
+/// 数据库类型枚举
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DatabaseType {
+    /// PostgreSQL
+    Postgres,
+    /// MySQL
+    MySql,
+    /// SQLite
+    Sqlite,
+}
+
+impl DatabaseType {
+    /// 从字符串解析数据库类型
+    pub fn parse_database_type(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "postgres" | "postgresql" => DatabaseType::Postgres,
+            "mysql" => DatabaseType::MySql,
+            "sqlite" => DatabaseType::Sqlite,
+            _ => DatabaseType::Sqlite,
+        }
+    }
+
+    /// 获取数据库类型的显示名称
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DatabaseType::Postgres => "postgres",
+            DatabaseType::MySql => "mysql",
+            DatabaseType::Sqlite => "sqlite",
+        }
+    }
+
+    /// 检查是否为真实数据库（非内存数据库）
+    pub fn is_real_database(&self) -> bool {
+        !matches!(self, DatabaseType::Sqlite)
+    }
+}
+
+impl std::fmt::Display for DatabaseType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
 
 /// 配置加载错误
 #[derive(Debug, Error)]
@@ -341,10 +410,10 @@ impl ConfigCorrector {
     /// 数据库支持的最大连接数
     pub async fn query_database_max_connections(
         connection: &sea_orm::DatabaseConnection,
-        db_type: database::DatabaseType,
+        db_type: DatabaseType,
     ) -> u32 {
         match db_type {
-            database::DatabaseType::Postgres => {
+            DatabaseType::Postgres => {
                 // PostgreSQL: 查询 superuser_reserved_connections 和 max_connections
                 let result = connection.execute_unprepared("SHOW max_connections").await;
 
@@ -365,7 +434,7 @@ impl ConfigCorrector {
                 // 默认保守估计
                 100
             }
-            database::DatabaseType::MySql => {
+            DatabaseType::MySql => {
                 // MySQL: 查询 max_connections
                 // execute_unprepared 返回 ExecResult，不是 Row
                 let result = connection
@@ -385,7 +454,7 @@ impl ConfigCorrector {
                 // 默认保守估计
                 200
             }
-            database::DatabaseType::Sqlite => {
+            DatabaseType::Sqlite => {
                 // SQLite 不需要查询，它支持几乎无限的连接
                 // 但我们仍设置一个合理的上限
                 u32::MAX
@@ -557,7 +626,7 @@ impl ConfigCorrector {
     pub async fn auto_correct_with_database_capability(
         mut config: DbConfig,
         connection: &sea_orm::DatabaseConnection,
-        db_type: database::DatabaseType,
+        db_type: DatabaseType,
     ) -> DbConfig {
         // 查询数据库最大连接数
         let db_max_connections = Self::query_database_max_connections(connection, db_type).await;
