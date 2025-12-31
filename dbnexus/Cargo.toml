@@ -104,6 +104,12 @@ assert_cmd = "2.0"
 predicates = "3.0"
 tempfile = "3.10"
 futures = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+async-trait = "0.1"
+indexmap = "2.0"
+twox-hash = "1.6"
+sha2 = "0.10"
 
 [lints]
 workspace = true

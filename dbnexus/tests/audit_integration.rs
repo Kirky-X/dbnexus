@@ -13,7 +13,6 @@ use dbnexus::audit::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-mod common;
 
 /// TEST-AUDIT-001: 多条件组合查询测试
 #[tokio::test]
@@ -31,7 +30,7 @@ async fn test_audit_query_multiple_conditions() {
         entity_type: Some("users".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(results.len(), 100, "Should find all 100 user events");
 }
 
@@ -53,7 +52,7 @@ async fn test_audit_query_time_range() {
         start_time: Some(base_time - chrono::Duration::hours(5)),
         ..Default::default()
     };
-    let recent = storage.query(&filters).await.expect("Query should succeed");
+    let recent: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert!(recent.len() >= 4, "Should find events from last 5 hours");
 }
 
@@ -69,7 +68,7 @@ async fn test_audit_query_empty_conditions() {
         let _ = logger.log(event).await;
     }
 
-    let all = storage
+    let all: Vec<AuditEvent> = storage
         .query(&AuditQueryFilters::default())
         .await
         .expect("Query should succeed");
@@ -92,7 +91,7 @@ async fn test_audit_query_pagination() {
         entity_type: Some("paged".to_string()),
         ..Default::default()
     };
-    let all_results = storage.query(&filters).await.expect("Query should succeed");
+    let all_results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
 
     assert_eq!(all_results.len(), 50, "Should find all 50 events");
 
@@ -117,7 +116,7 @@ async fn test_audit_storage_write_read() {
         entity_type: Some("files".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(results.len(), 10, "Should retrieve all written events");
 }
 
@@ -165,7 +164,7 @@ async fn test_audit_batch_operations() {
         entity_type: Some("batch_table".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(results.len(), batch_size, "All batch events should be logged");
 }
 
@@ -187,7 +186,7 @@ async fn test_audit_storage_capacity_limit() {
         entity_type: Some("capacity_test".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert!(
         results.len() <= 50,
         "Storage should respect capacity limit: got {}",
@@ -213,7 +212,7 @@ async fn test_audit_all_event_types() {
         entity_type: Some("test".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(results.len(), 4, "All event types should be logged");
 
     let logged_operations: Vec<_> = results.iter().map(|e| e.operation.clone()).collect();
@@ -255,7 +254,7 @@ async fn test_audit_query_timestamp_range() {
         end_time: Some(now),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert!(results.len() >= 10, "Should find recent events");
 }
 
@@ -279,14 +278,14 @@ async fn test_audit_query_by_user() {
         user_id: Some("alice".to_string()),
         ..Default::default()
     };
-    let alice_events = storage.query(&filters).await.expect("Query should succeed");
+    let alice_events: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(alice_events.len(), 10, "Should find only alice's events");
 
     let filters = AuditQueryFilters {
         user_id: Some("bob".to_string()),
         ..Default::default()
     };
-    let bob_events = storage.query(&filters).await.expect("Query should succeed");
+    let bob_events: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(bob_events.len(), 10, "Should find only bob's events");
 }
 
@@ -309,7 +308,7 @@ async fn test_audit_operation_results() {
         entity_type: Some("test".to_string()),
         ..Default::default()
     };
-    let results = storage.query(&filters).await.expect("Query should succeed");
+    let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(results.len(), 2);
 
     let success_count = results

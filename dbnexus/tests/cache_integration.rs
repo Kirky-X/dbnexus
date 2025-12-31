@@ -11,7 +11,6 @@ use dbnexus::cache::{CacheConfig, CacheKey, CacheManager, LruStrategy};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-mod common;
 
 /// TEST-CACHE-001: 容量为0的边界测试
 #[tokio::test]
@@ -91,7 +90,7 @@ async fn test_cache_strategy_combo_operations() {
 
     for i in 0..30 {
         let key = CacheKey::new("products", &i.to_string());
-        let retrieved = cache.get(&key).await;
+        let retrieved: Option<String> = cache.get(&key).await;
         assert!(retrieved.is_some(), "Should retrieve product_{}", i);
     }
 
@@ -251,7 +250,7 @@ async fn test_cache_concurrent_eviction() {
 
     // 检查最后写入的键应该存在
     let key = CacheKey::new("evict", "9_9");
-    let retrieved = cache.get(&key).await;
+    let retrieved: Option<String> = cache.get(&key).await;
     assert!(
         retrieved.is_some(),
         "Should retrieve the last written value after concurrent eviction"
