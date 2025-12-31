@@ -10,7 +10,6 @@
 use chrono::TimeZone;
 use chrono::Utc;
 use dbnexus::sharding::{DailyStrategy, MonthlyStrategy, ShardConfig, ShardRouter, ShardingStrategy, YearlyStrategy};
-mod common;
 
 /// TEST-SHARD-001: 闰年2月29日分片测试
 #[test]
