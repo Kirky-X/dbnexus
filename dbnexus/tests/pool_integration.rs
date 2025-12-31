@@ -279,3 +279,45 @@ async fn test_connection_reuse_with_health_checks() {
     let status = pool.status();
     assert!(status.total >= 1, "Pool should still have connections");
 }
+
+/// TEST-I-015: 数据库 URL 格式验证测试
+///
+/// 验证配置验证器能正确检测无效的 URL 格式
+#[tokio::test]
+async fn test_config_url_validation() {
+    use dbnexus::config::DbConfig;
+
+    // 有效 URL - 使用正确的 YAML 格式和有效的 URL
+    let valid_configs = vec![
+        "url: 'sqlite://test.db'\nmax_connections: 10\nmin_connections: 1",
+        "url: 'sqlite://:memory:'\nmax_connections: 10\nmin_connections: 1",
+        "url: 'sqlite://./test.db'\nmax_connections: 10\nmin_connections: 1",
+        "url: 'postgres://localhost:5432/mydb'\nmax_connections: 10\nmin_connections: 1",
+        "url: 'postgresql://user:pass@localhost:5432/mydb'\nmax_connections: 10\nmin_connections: 1",
+        "url: 'mysql://localhost:3306/mydb'\nmax_connections: 10\nmin_connections: 1",
+    ];
+
+    for yaml in valid_configs {
+        let result = DbConfig::from_yaml_str(yaml);
+        assert!(result.is_ok(), "URL config should be valid: {}", yaml);
+        let config = result.unwrap();
+        assert!(!config.url.is_empty(), "URL should not be empty");
+    }
+
+    // 无效 URL - 这些应该解析失败
+    let invalid_urls = vec![
+        "",                          // empty string
+        "invalid-url",               // missing protocol separator
+        "://localhost",              // missing protocol
+        "http://localhost",          // unsupported protocol
+    ];
+
+    for (idx, url) in invalid_urls.iter().enumerate() {
+        // 使用 from_env 风格的测试方式
+        let yaml = format!("url: '{}'\nmax_connections: 10\nmin_connections: 1", url);
+        let result = DbConfig::from_yaml_str(&yaml);
+        
+        // 这些无效 URL 应该导致解析或验证失败
+        assert!(result.is_err(), "Test {}: '{}' should be invalid", idx, url);
+    }
+}
