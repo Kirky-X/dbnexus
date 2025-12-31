@@ -28,6 +28,9 @@ coverage/
 # Environment
 .env
 .env.local
+.env.example
+docker-compose.yml
+docker-compose.override.yml
 
 # Logs
 *.log
