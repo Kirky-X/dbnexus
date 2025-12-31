@@ -35,6 +35,7 @@ mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 # Optional features
 metrics = ["dep:prometheus"]
 migration = []
+auto-migrate = ["migration"]
 sharding = ["dep:twox-hash", "dep:chrono"]
 global-index = ["dep:sha2", "dep:async-trait", "dep:chrono"]
 cache = ["dep:async-trait", "dep:uuid", "dep:indexmap"]
@@ -53,8 +54,8 @@ tracing = [
     "dep:once_cell",
 ]
 
-# 启用所有可选特性（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine"]
+# 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
+all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine"]
 
 [dependencies]
 # Workspace dependencies

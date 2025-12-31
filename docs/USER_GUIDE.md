@@ -21,6 +21,7 @@
 - [Basic Usage](#basic-usage)
   - [Initialization](#initialization)
   - [Configuration](#configuration)
+  - [Database Migrations](#database-migrations)
   - [Basic Operations](#basic-operations)
 - [Advanced Usage](#advanced-usage)
   - [Database Sharding](#database-sharding)
@@ -518,6 +519,104 @@ let config = Config::builder()
 <td>Enable Prometheus metrics</td>
 </tr>
 </table>
+
+### Database Migrations
+
+dbnexus provides powerful database migration support with both automatic and manual migration capabilities. This feature is available when the `auto-migrate` feature is enabled.
+
+#### Auto-Migrate
+
+Automatic migrations run when the connection pool is initialized, ensuring your database schema is always up-to-date.
+
+```rust
+use dbnexus::{DbPool, DbConfig};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = DbConfig {
+        url: "sqlite://./data/app.db".to_string(),
+        migrations_dir: Some(PathBuf::from("./migrations")),
+        auto_migrate: true,
+        migration_timeout: 60,
+        ..Default::default()
+    };
+    
+    // Migrations run automatically during pool creation
+    let pool = DbPool::with_config(config).await?;
+    
+    Ok(())
+}
+```
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_AUTO_MIGRATE` | Enable automatic migrations | `false` |
+| `DB_MIGRATIONS_DIR` | Directory containing migration files | None |
+| `DB_MIGRATION_TIMEOUT` | Timeout for migration operations (seconds) | `60` |
+
+#### Manual Migrations
+
+You can also run migrations manually at any time:
+
+```rust
+let pool = DbPool::new("sqlite://./data/app.db").await?;
+
+// Run all pending migrations
+let applied = pool.run_migrations(Path::new("./migrations")).await?;
+println!("Applied {} migrations", applied);
+
+// Or use auto-migrate explicitly
+let applied = pool.run_auto_migrate().await?;
+```
+
+#### Migration File Format
+
+Migration files should be named `{version}_{description}.sql`:
+
+```sql
+-- Migration: create_users_table
+-- Version: 1
+
+-- UP
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- DOWN
+DROP TABLE users;
+```
+
+**Key Points:**
+
+- Files must have `.sql` extension
+- Version numbers should be unique and incrementing
+- `-- UP:` section contains the migration SQL
+- `-- DOWN:` section (optional) contains rollback SQL
+
+#### Migration Features
+
+- **Automatic Version Tracking**: dbnexus creates a `dbnexus_migrations` table to track applied migrations
+- **Idempotent Operations**: Running migrations multiple times is safe - already-applied migrations are skipped
+- **Transaction Support**: Each migration runs in a transaction for safety
+- **Multiple Database Support**: Works with SQLite, PostgreSQL, and MySQL
+
+<div align="center">
+
+| Feature | Status |
+|---------|--------|
+| Auto-migrate on startup | ✅ Supported |
+| Manual migration control | ✅ Supported |
+| Rollback support | ✅ Supported |
+| Migration history | ✅ Supported |
+| Multi-database SQL generation | ✅ Supported |
+
+</div>
 
 ### Basic Operations
 
