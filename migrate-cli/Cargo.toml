@@ -12,7 +12,7 @@ path = "src/main.rs"
 # Database drivers (互斥 - 必须且只能选一个)
 # 使用时: cargo run --features sqlite|postgres|mysql
 [features]
-default = ["sqlite"]
+default = []
 sqlite = ["dbnexus/sqlite"]
 postgres = ["dbnexus/postgres"]
 mysql = ["dbnexus/mysql"]
