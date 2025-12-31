@@ -102,7 +102,7 @@ impl DbPool {
         }
 
         let policy_cache = Arc::new(std::sync::Mutex::new(LruCache::new(
-            NonZeroUsize::new(256).expect("LRU cache size must be non-zero"),
+            NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
         )));
 
         // 加载权限配置（如果指定了路径）
@@ -813,23 +813,84 @@ impl Session {
         })
     }
 
-    /// 执行原始 SQL 语句
+    /// 执行原始 SQL 语句（带权限检查）
+    ///
+    /// # 安全说明
+    ///
+    /// 此方法会自动进行权限检查，确保用户有权限执行相应的操作。
+    /// 如果无法解析 SQL 语句（例如复杂查询），则会拒绝执行以确保安全。
+    ///
+    /// 对于 DDL 操作（CREATE、DROP、ALTER 等），只允许管理员角色执行。
+    /// 对于系统表（如 sqlite_master、information_schema 等），跳过权限检查。
     ///
     /// # Arguments
     ///
-    /// * `sql` - SQL 语句
+    /// * `sql` - 要执行的 SQL 语句
+    ///
+    /// # Returns
+    ///
+    /// 执行结果
     ///
     /// # Errors
     ///
-    /// 如果 SQL 执行失败，返回错误
+    /// 如果 SQL 执行失败或权限不足，返回错误
     pub async fn execute_raw(&self, sql: &str) -> DbResult<sea_orm::ExecResult> {
+        let sql_upper = sql.trim_start().to_uppercase();
+
+        // 检查是否为 DDL 操作（CREATE、DROP、ALTER 等）
+        let is_ddl = sql_upper.starts_with("CREATE")
+            || sql_upper.starts_with("DROP")
+            || sql_upper.starts_with("ALTER")
+            || sql_upper.starts_with("TRUNCATE");
+
+        if is_ddl {
+            // DDL 操作只允许管理员角色执行
+            if self.role() != "admin" {
+                return Err(DbError::Permission(format!(
+                    "Permission denied: only 'admin' role can execute DDL operations. SQL: {}",
+                    sql.chars().take(100).collect::<String>()
+                )));
+            }
+        } else if let Some((table_name, action)) = self.parse_sql_operation(sql) {
+            // 检查是否为系统表，系统表跳过权限检查
+            let is_system_table = table_name.to_uppercase() == "SQLITE_MASTER"
+                || table_name.to_uppercase() == "INFORMATION_SCHEMA"
+                || table_name.to_uppercase().starts_with("PG_")
+                || table_name.to_uppercase().starts_with("MYSQL.");
+
+            if !is_system_table {
+                // DML 操作：检查表级权限
+                if !self.permission_ctx.check_table_access(&table_name, &action) {
+                    return Err(DbError::Permission(format!(
+                        "Permission denied: role '{}' does not have permission to '{}' on table '{}'",
+                        self.role(),
+                        action,
+                        table_name
+                    )));
+                }
+            }
+        } else {
+            // 如果无法解析 SQL 且不是 DDL，拒绝执行以确保安全
+            return Err(DbError::Permission(format!(
+                "无法解析 SQL 语句进行权限检查，请使用明确的方法。SQL: {}",
+                sql.chars().take(100).collect::<String>()
+            )));
+        }
+
         let conn = self.connection.as_ref().ok_or_else(|| {
             DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                 sea_orm::ConnAcquireErr::ConnectionClosed,
             ))
         })?;
 
-        let stmt = sea_orm::Statement::from_string(sea_orm::DatabaseBackend::Sqlite, sql.to_string());
+        // 从 URL 解析数据库类型
+        let backend = match self.pool.config.url.as_str() {
+            url if url.starts_with("postgres") => sea_orm::DatabaseBackend::Postgres,
+            url if url.starts_with("mysql") => sea_orm::DatabaseBackend::MySql,
+            _ => sea_orm::DatabaseBackend::Sqlite,
+        };
+
+        let stmt = sea_orm::Statement::from_string(backend, sql.to_string());
 
         conn.execute_raw(stmt).await.map_err(DbError::Connection)
     }
@@ -850,7 +911,9 @@ impl Session {
         // 使用正则表达式匹配表名
         if sql_upper.starts_with("SELECT") {
             // 匹配 SELECT ... FROM table_name
-            let re = SELECT_RE.get_or_init(|| Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
+            let re = SELECT_RE.get_or_init(|| {
+                Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile SELECT regex pattern")
+            });
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
                     return Some((table_name.as_str().to_string(), PermissionAction::Select));
@@ -858,7 +921,9 @@ impl Session {
             }
         } else if sql_upper.starts_with("INSERT") {
             // 匹配 INSERT INTO table_name
-            let re = INSERT_RE.get_or_init(|| Regex::new(r"INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
+            let re = INSERT_RE.get_or_init(|| {
+                Regex::new(r"INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile INSERT regex pattern")
+            });
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
                     return Some((table_name.as_str().to_string(), PermissionAction::Insert));
@@ -866,7 +931,9 @@ impl Session {
             }
         } else if sql_upper.starts_with("UPDATE") {
             // 匹配 UPDATE table_name
-            let re = UPDATE_RE.get_or_init(|| Regex::new(r"UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
+            let re = UPDATE_RE.get_or_init(|| {
+                Regex::new(r"UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile UPDATE regex pattern")
+            });
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
                     return Some((table_name.as_str().to_string(), PermissionAction::Update));
@@ -874,7 +941,9 @@ impl Session {
             }
         } else if sql_upper.starts_with("DELETE") {
             // 匹配 DELETE FROM table_name
-            let re = DELETE_RE.get_or_init(|| Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
+            let re = DELETE_RE.get_or_init(|| {
+                Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile DELETE regex pattern")
+            });
             if let Some(caps) = re.captures(&sql_upper) {
                 if let Some(table_name) = caps.get(1) {
                     return Some((table_name.as_str().to_string(), PermissionAction::Delete));
