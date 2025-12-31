@@ -170,6 +170,21 @@ impl DbPool {
             info!("Loaded permission policies for {} roles", config.roles.len());
         }
 
+        #[cfg(feature = "auto-migrate")]
+        if corrected_config.auto_migrate {
+            if let Some(ref migrations_dir) = corrected_config.migrations_dir {
+                if migrations_dir.exists() {
+                    info!("Auto-migrate enabled, running migrations from: {}", migrations_dir.display());
+                    let applied = pool.run_migrations(migrations_dir).await?;
+                    info!("Auto-migrate completed: {} migrations applied", applied);
+                } else {
+                    warn!("Auto-migrate enabled but migrations directory does not exist: {}", migrations_dir.display());
+                }
+            } else {
+                warn!("Auto-migrate enabled but migrations_dir not configured");
+            }
+        }
+
         Ok(pool)
     }
 
@@ -517,6 +532,56 @@ impl DbPool {
     /// 获取配置
     pub fn config(&self) -> &DbConfig {
         &self.inner.config
+    }
+
+    /// 运行自动迁移
+    ///
+    /// 如果配置中启用了 `auto_migrate`，此方法会在连接池创建后自动执行迁移。
+    /// 也可以手动调用此方法来执行迁移。
+    ///
+    /// # Returns
+    ///
+    /// 成功应用的迁移数量
+    #[cfg(feature = "auto-migrate")]
+    pub async fn run_auto_migrate(&self) -> Result<u32, DbError> {
+        if let Some(ref migrations_dir) = self.inner.config.migrations_dir {
+            tracing::info!("Running auto-migrate from directory: {}", migrations_dir.display());
+            self.run_migrations(migrations_dir).await
+        } else {
+            tracing::warn!("Auto-migrate enabled but migrations_dir not configured");
+            Ok(0)
+        }
+    }
+
+    /// 手动运行迁移
+    ///
+    /// # Arguments
+    ///
+    /// * `migrations_dir` - 迁移文件目录路径
+    ///
+    /// # Returns
+    ///
+    /// 成功应用的迁移数量
+    #[cfg(feature = "auto-migrate")]
+    pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
+        use crate::migration::{DatabaseType, MigrationExecutor};
+
+        let db_type = DatabaseType::parse_database_type(&self.inner.config.url);
+
+        // 获取一个连接来执行迁移
+        let connection = self.acquire_connection().await?;
+
+        // 克隆连接，因为执行器需要拥有连接
+        let connection_for_migration = connection.clone();
+
+        let mut executor = MigrationExecutor::new(connection_for_migration, db_type);
+
+        let applied = executor.run_migrations(migrations_dir).await?;
+
+        // 归还连接到池中
+        self.release_connection(connection);
+
+        Ok(applied)
     }
 }
 
@@ -1017,6 +1082,9 @@ mod tests {
             idle_timeout: 300,
             acquire_timeout: 5000,
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
@@ -1035,6 +1103,9 @@ mod tests {
             idle_timeout: 0,
             acquire_timeout: 0,
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
@@ -1055,6 +1126,9 @@ mod tests {
             idle_timeout: 10,       // 太小
             acquire_timeout: 50000, // 在范围内
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);

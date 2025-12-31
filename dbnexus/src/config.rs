@@ -9,7 +9,7 @@
 
 use sea_orm::ConnectionTrait;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use thiserror::Error;
 
@@ -130,6 +130,18 @@ pub struct DbConfig {
     /// 权限配置文件路径
     #[serde(default)]
     pub permissions_path: Option<String>,
+
+    /// 迁移文件目录
+    #[serde(default)]
+    pub migrations_dir: Option<PathBuf>,
+
+    /// 是否启用自动迁移
+    #[serde(default)]
+    pub auto_migrate: bool,
+
+    /// 迁移超时时间（秒）
+    #[serde(default = "default_migration_timeout")]
+    pub migration_timeout: u64,
 }
 
 fn default_max_connections() -> u32 {
@@ -146,6 +158,10 @@ fn default_idle_timeout() -> u64 {
 
 fn default_acquire_timeout() -> u64 {
     5000
+}
+
+fn default_migration_timeout() -> u64 {
+    60
 }
 
 impl DbConfig {
@@ -184,6 +200,15 @@ impl DbConfig {
             idle_timeout,
             acquire_timeout,
             permissions_path: std::env::var("DB_PERMISSIONS_PATH").ok(),
+            migrations_dir: std::env::var("DB_MIGRATIONS_DIR").ok().map(PathBuf::from),
+            auto_migrate: std::env::var("DB_AUTO_MIGRATE")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            migration_timeout: std::env::var("DB_MIGRATION_TIMEOUT")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()
+                .unwrap_or(60),
         })
     }
 
@@ -317,6 +342,11 @@ impl DbConfig {
     /// 获取获取超时 Duration
     pub fn acquire_timeout_duration(&self) -> Duration {
         Duration::from_millis(self.acquire_timeout)
+    }
+
+    /// 获取迁移超时 Duration
+    pub fn migration_timeout_duration(&self) -> Duration {
+        Duration::from_secs(self.migration_timeout)
     }
 
     /// 将配置序列化为 YAML 字符串
@@ -712,6 +742,9 @@ mod tests {
             idle_timeout: 300,
             acquire_timeout: 5000,
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
@@ -729,6 +762,9 @@ mod tests {
             idle_timeout: 300,
             acquire_timeout: 5000,
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);
@@ -749,6 +785,9 @@ mod tests {
             idle_timeout: 0,
             acquire_timeout: 0,
             permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: 60,
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);
