@@ -20,7 +20,10 @@ async fn test_permission_context_role() {
     let session = pool.get_session("admin").await.expect("Failed to get session");
     // 加载权限策略到缓存
     let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
-    session.permission_ctx().load_policy(&perm_config).expect("Failed to load policy");
+    session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .expect("Failed to load policy");
     let ctx = session.permission_ctx();
     assert_eq!(ctx.role(), "admin");
 }
@@ -36,7 +39,10 @@ async fn test_permission_check() {
     let session = pool.get_session("admin").await.expect("Failed to get session");
     // 加载权限策略到缓存
     let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
-    session.permission_ctx().load_policy(&perm_config).expect("Failed to load policy");
+    session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .expect("Failed to load policy");
     let result = session.check_permission("unknown_table", &Operation::Select);
     // admin 可以访问所有表，所以应该成功
     assert!(result.is_ok(), "admin should have SELECT permission on any table");
