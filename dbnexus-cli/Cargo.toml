@@ -20,7 +20,7 @@ postgres = ["dbnexus/postgres"]
 mysql = ["dbnexus/mysql"]
 
 [dependencies]
-dbnexus = { path = "../dbnexus", default-features = false, features = ["migration", "runtime-tokio-rustls"] }
+dbnexus = { version = "0.1.0", path = "../dbnexus", default-features = false, features = ["migration", "runtime-tokio-rustls"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
