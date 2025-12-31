@@ -447,7 +447,9 @@ impl DbConfig {
         // 尝试查找配置文件
         for config_path in &config_paths {
             let path = Path::new(config_path);
-            if path.exists() {
+
+            // 安全检查：路径规范化、符号链接检查、父目录引用检查
+            if Self::is_safe_config_path(path)? {
                 tracing::info!("Loading configuration from: {}", config_path);
 
                 if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
@@ -466,19 +468,58 @@ impl DbConfig {
             ];
 
             for config_path in &user_config_paths {
-                if config_path.exists() {
+                if Self::is_safe_config_path(&config_path)? {
                     tracing::info!("Loading configuration from: {}", config_path.display());
 
                     if config_path.ends_with(".yaml") {
-                        return Self::from_yaml_file(config_path);
+                        return Self::from_yaml_file(&config_path);
                     } else {
-                        return Self::from_toml_file(config_path);
+                        return Self::from_toml_file(&config_path);
                     }
                 }
             }
         }
 
         Err(ConfigError::FileNotFound)
+    }
+
+    /// 检查配置文件路径是否安全
+    ///
+    /// 防止路径遍历攻击：
+    /// - 检查路径是否包含父目录引用 (..)
+    /// - 检查路径是否包含符号链接
+    /// - 检查路径是否在预期目录内
+    fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
+        // 规范化路径
+        let canonical = match path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return Ok(false), // 文件不存在或不安全
+        };
+
+        // 检查路径是否包含 ..（父目录遍历）
+        if path.to_string_lossy().contains("..") {
+            tracing::warn!("Rejected config path with parent directory traversal: {:?}", path);
+            return Ok(false);
+        }
+
+        // 检查是否为绝对路径且不在系统关键目录
+        if canonical.is_absolute() {
+            let forbidden_prefixes = ["/etc", "/usr", "/var", "/root", "/boot"];
+            for prefix in &forbidden_prefixes {
+                if canonical.starts_with(prefix) {
+                    tracing::warn!("Rejected config path in system directory: {:?}", path);
+                    return Ok(false);
+                }
+            }
+        }
+
+        // 检查符号链接（指向不安全位置的符号链接）
+        if path.is_symlink() {
+            tracing::warn!("Rejected symlink config path: {:?}", path);
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 
