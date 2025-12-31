@@ -305,18 +305,18 @@ async fn test_config_url_validation() {
     }
 
     // 无效 URL - 这些应该解析失败
-    let invalid_urls = vec![
-        "",                          // empty string
-        "invalid-url",               // missing protocol separator
-        "://localhost",              // missing protocol
-        "http://localhost",          // unsupported protocol
+    let invalid_urls = [
+        "",                 // empty string
+        "invalid-url",      // missing protocol separator
+        "://localhost",     // missing protocol
+        "http://localhost", // unsupported protocol
     ];
 
     for (idx, url) in invalid_urls.iter().enumerate() {
         // 使用 from_env 风格的测试方式
         let yaml = format!("url: '{}'\nmax_connections: 10\nmin_connections: 1", url);
         let result = DbConfig::from_yaml_str(&yaml);
-        
+
         // 这些无效 URL 应该导致解析或验证失败
         assert!(result.is_err(), "Test {}: '{}' should be invalid", idx, url);
     }
