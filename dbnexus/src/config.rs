@@ -315,11 +315,14 @@ impl DbConfig {
     ///
     /// # Errors
     ///
-    /// 如果缺少必填字段，返回错误
+    /// 如果缺少必填字段或格式无效，返回错误
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.url.is_empty() {
             return Err(ConfigError::MissingField("url".to_string()));
         }
+
+        // URL 格式验证
+        self.validate_url_format()?;
 
         if self.max_connections == 0 {
             return Err(ConfigError::MissingField("max_connections".to_string()));
@@ -328,6 +331,49 @@ impl DbConfig {
         if self.min_connections > self.max_connections {
             return Err(ConfigError::InvalidFormat(
                 "min_connections cannot be greater than max_connections".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// 验证数据库 URL 格式
+    fn validate_url_format(&self) -> Result<(), ConfigError> {
+        // 使用正则表达式验证基本 URL 格式
+        // 匹配: protocol://[user:password@]host[:port][/database][?params]
+        static URL_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+            regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^ ]+$").expect("Failed to compile URL regex")
+        });
+
+        if !URL_RE.is_match(&self.url) {
+            return Err(ConfigError::InvalidFormat(
+                format!("Invalid database URL format: {}", self.url)
+            ));
+        }
+
+        // 提取协议并验证是否支持
+        if let Some(protocol_end) = self.url.find("://") {
+            let protocol = &self.url[..protocol_end];
+            match protocol {
+                "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {},
+                "file" | "mem" => {
+                    // SQLite 特殊协议
+                    if !protocol.starts_with("sqlite") {
+                        return Err(ConfigError::InvalidFormat(
+                            format!("Unsupported database protocol: '{}'. Use 'sqlite://' for SQLite databases", protocol)
+                        ));
+                    }
+                },
+                _ => return Err(ConfigError::InvalidFormat(
+                    format!(
+                        "Unsupported database protocol: '{}'. Supported protocols: sqlite, postgres, mysql",
+                        protocol
+                    )
+                )),
+            }
+        } else {
+            return Err(ConfigError::InvalidFormat(
+                "Database URL must contain '://' separator".to_string()
             ));
         }
 
