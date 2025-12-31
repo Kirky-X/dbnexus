@@ -2,7 +2,7 @@
 members = [
     "dbnexus",
     "dbnexus-macros",
-    "migrate-cli",
+    "dbnexus-cli",
 ]
 resolver = "2"
 

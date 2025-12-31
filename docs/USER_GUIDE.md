@@ -1310,17 +1310,17 @@ let config = Config::builder()
 
 **Solution:**
 ```rust
-// Use migrate-cli for proper migration management
-// Install: cargo install dbnexus-migrate-cli
+// Use dbnexus-cli for proper migration management
+// Install: cargo install dbnexus-cli
 
 // Create migration
-dbnexus-migrate create add_users_table
+dbnexus-cli migrate create add_users_table
 
 // Run migrations
-dbnexus-migrate up
+dbnexus-cli migrate up
 
 // Rollback if needed
-dbnexus-migrate down
+dbnexus-cli migrate down
 ```
 
 </details>

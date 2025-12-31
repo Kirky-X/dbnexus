@@ -219,7 +219,7 @@ dbnexus/
 ├── dbnexus-macros/      # 过程宏
 │   └── src/
 │       └── lib.rs       # 宏定义
-├── migrate-cli/         # Migration CLI 工具
+├── dbnexus-cli/         # CLI 工具
 │   └── src/
 │       └── main.rs      # CLI 入口
 ├── examples/            # 示例代码
