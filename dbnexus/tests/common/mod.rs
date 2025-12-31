@@ -11,10 +11,39 @@ use dbnexus::config::{DbConfig, PoolConfig};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
+/// 测试用的权限配置内容
+static TEST_PERMISSIONS_CONTENT: &str = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - SELECT
+          - INSERT
+          - UPDATE
+          - DELETE
+  user:
+    tables:
+      - name: "users"
+        operations:
+          - SELECT
+          - INSERT
+  test_role:
+    tables:
+      - name: "*"
+        operations:
+          - SELECT
+"#;
+
 /// 获取测试数据库配置
 ///
 /// 根据环境变量或默认值返回数据库配置
 pub fn get_test_config() -> DbConfig {
+    get_test_config_with_permissions(false)
+}
+
+/// 获取测试数据库配置（可选择包含权限配置）
+pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     // 使用统一的配置管理
     let pool_config = PoolConfig {
         max_connections: 5,
@@ -24,7 +53,7 @@ pub fn get_test_config() -> DbConfig {
     };
 
     // 直接从环境变量创建配置
-    let mut config = DbConfig::from_env().unwrap_or_else(|_| DbConfig {
+    let mut config = DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: pool_config.max_connections,
         min_connections: pool_config.min_connections,
@@ -34,7 +63,19 @@ pub fn get_test_config() -> DbConfig {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
-    });
+    };
+
+    // 可选：添加权限配置
+    if with_permissions {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let perm_file = temp_dir.path().join("test_permissions.yaml");
+        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT)
+            .expect("Failed to write test permissions file");
+        config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+
+        // 保存 temp_dir 以防止被删除
+        let _ = temp_dir;
+    }
 
     // 应用池配置
     config.max_connections = pool_config.max_connections;
