@@ -1,12 +1,14 @@
 [package]
-name = "dbnexus-migrate"
-version = "0.1.0"
-edition = "2021"
-description = "DBNexus 数据库迁移命令行工具"
-license = "MIT OR Apache-2.0"
+name = "dbnexus-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "DBNexus CLI tool for database migration and management"
 
 [[bin]]
-name = "dbnexus-migrate"
+name = "dbnexus-cli"
 path = "src/main.rs"
 
 # Database drivers (互斥 - 必须且只能选一个)

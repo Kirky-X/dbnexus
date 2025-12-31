@@ -219,7 +219,7 @@ dbnexus/
 ├── dbnexus-macros/      # Procedural macros
 │   └── src/
 │       └── lib.rs       # Macro definitions
-├── migrate-cli/         # Migration CLI tool
+├── dbnexus-cli/         # CLI tool
 │   └── src/
 │       └── main.rs      # CLI entry point
 ├── examples/            # Example code
