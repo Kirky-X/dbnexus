@@ -94,7 +94,7 @@ rand = "0.8"
 futures = "0.3"
 
 # Internal dependencies
-dbnexus-macros = { path = "../dbnexus-macros" }
+dbnexus-macros.workspace = true
 
 tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
 

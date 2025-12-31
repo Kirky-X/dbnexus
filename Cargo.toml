@@ -49,6 +49,9 @@ prometheus = "0.14"
 # Caching
 lru = "0.12"
 
+# Internal packages
+dbnexus-macros = { version = "0.1.0" }
+
 [workspace.lints.rust]
 
 [workspace.lints.clippy]
