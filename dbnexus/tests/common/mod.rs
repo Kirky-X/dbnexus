@@ -31,6 +31,9 @@ pub fn get_test_config() -> DbConfig {
         idle_timeout: pool_config.idle_timeout,
         acquire_timeout: pool_config.acquire_timeout,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     });
 
     // 应用池配置
@@ -64,7 +67,8 @@ pub fn create_temp_migrations_dir() -> (PathBuf, TempDir) {
     (path, temp_dir)
 }
 
-/// 创建测试用的SQLite内存数据库配置
+/// 创建测试用的SQLite内存数据库配置（注意：每个连接是独立的数据库）
+/// 对于需要共享状态的测试，请使用 get_sqlite_file_config()
 #[allow(dead_code)]
 pub fn get_sqlite_memory_config() -> DbConfig {
     DbConfig {
@@ -74,10 +78,13 @@ pub fn get_sqlite_memory_config() -> DbConfig {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     }
 }
 
-/// 创建测试用的SQLite文件数据库配置
+/// 创建测试用的SQLite文件数据库配置（推荐用于迁移测试）
 ///
 /// 返回配置和临时目录
 #[allow(dead_code)]
@@ -92,6 +99,9 @@ pub fn get_sqlite_file_config() -> (DbConfig, TempDir) {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     };
 
     (config, temp_dir)
@@ -107,6 +117,9 @@ pub fn get_small_pool_config() -> DbConfig {
         idle_timeout: 300,
         acquire_timeout: 1000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     }
 }
 
@@ -120,6 +133,9 @@ pub fn get_large_pool_config() -> DbConfig {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     }
 }
 
