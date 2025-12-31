@@ -216,6 +216,9 @@ async fn test_connection_acquire_with_small_pool() {
         idle_timeout: 300,
         acquire_timeout: 100, // 100毫秒超时
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");

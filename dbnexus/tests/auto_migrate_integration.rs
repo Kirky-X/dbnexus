@@ -7,8 +7,10 @@
 //!
 //! 测试自动迁移功能的各个组件：配置解析、迁移扫描、手动迁移、自动迁移触发等
 
-use dbnexus::config::DbConfig;
+#![cfg(feature = "auto-migrate")]
+
 use dbnexus::DbPool;
+use dbnexus::config::DbConfig;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -84,7 +86,10 @@ DROP TABLE orders;
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
-    let migrations = pool.run_migrations(temp_dir.path()).await.expect("Failed to run migrations");
+    let migrations = pool
+        .run_migrations(temp_dir.path())
+        .await
+        .expect("Failed to run migrations");
 
     // 验证迁移已应用（内存数据库不支持幂等性测试，因为每次连接都是新的数据库）
     assert_eq!(migrations, 2, "Should have applied 2 migrations");
@@ -149,7 +154,10 @@ async fn test_nonexistent_migrations_directory() {
 
     let result = pool.run_migrations(&non_existent_path).await;
 
-    assert!(result.is_ok(), "Running migrations on non-existent directory should succeed");
+    assert!(
+        result.is_ok(),
+        "Running migrations on non-existent directory should succeed"
+    );
     assert_eq!(result.unwrap(), 0, "Should apply 0 migrations");
 }
 

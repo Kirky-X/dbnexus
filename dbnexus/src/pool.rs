@@ -174,11 +174,17 @@ impl DbPool {
         if corrected_config.auto_migrate {
             if let Some(ref migrations_dir) = corrected_config.migrations_dir {
                 if migrations_dir.exists() {
-                    info!("Auto-migrate enabled, running migrations from: {}", migrations_dir.display());
+                    info!(
+                        "Auto-migrate enabled, running migrations from: {}",
+                        migrations_dir.display()
+                    );
                     let applied = pool.run_migrations(migrations_dir).await?;
                     info!("Auto-migrate completed: {} migrations applied", applied);
                 } else {
-                    warn!("Auto-migrate enabled but migrations directory does not exist: {}", migrations_dir.display());
+                    warn!(
+                        "Auto-migrate enabled but migrations directory does not exist: {}",
+                        migrations_dir.display()
+                    );
                 }
             } else {
                 warn!("Auto-migrate enabled but migrations_dir not configured");

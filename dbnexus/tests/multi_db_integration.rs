@@ -278,6 +278,9 @@ fn test_multi_database_config() {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     };
 
     let postgres_config = DbConfig {
@@ -287,6 +290,9 @@ fn test_multi_database_config() {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     };
 
     let mysql_config = DbConfig {
@@ -296,6 +302,9 @@ fn test_multi_database_config() {
         idle_timeout: 300,
         acquire_timeout: 5000,
         permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
     };
 
     // 验证配置有效
