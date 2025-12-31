@@ -61,7 +61,7 @@ Add the dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.1.0-alpha", features = ["sqlite"] }
+dbnexus = { version = "0.1", features = ["sqlite"] }
 ```
 
 ### Basic Usage
@@ -259,7 +259,7 @@ dbnexus/
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.1.0-alpha", features = ["sqlite", "cache", "audit"] }
+dbnexus = { version = "0.1", features = ["sqlite", "cache", "audit"] }
 ```
 
 ### Feature Options

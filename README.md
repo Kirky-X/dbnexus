@@ -61,7 +61,7 @@
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.1.0-alpha", features = ["sqlite"] }
+dbnexus = { version = "0.1", features = ["sqlite"] }
 ```
 
 ### 基本使用
@@ -259,7 +259,7 @@ dbnexus/
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.1.0-alpha", features = ["sqlite", "cache", "audit"] }
+dbnexus = { version = "0.1", features = ["sqlite", "cache", "audit"] }
 ```
 
 ### Feature 选项
