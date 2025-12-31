@@ -69,7 +69,9 @@ pub mod cache;
 /// 配置管理模块
 pub mod config;
 
-pub use config::{DatabaseType, DbConfig, PoolConfig};
+/// 错误类型定义
+pub use crate::config::DbResult;
+pub use config::{DatabaseType, DbConfig, DbError, PoolConfig};
 /// 实体转换模块
 pub mod entity;
 /// 生成的权限角色模块（由 build.rs 自动生成）
@@ -87,9 +89,18 @@ pub mod migration;
 pub mod permission;
 
 pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
+/// Operation 是 PermissionAction 的别名，用于简化使用
+pub type Operation = permission::PermissionAction;
 /// 可插拔权限引擎模块
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
+/// 权限引擎类型导出
+#[cfg(feature = "permission-engine")]
+pub use permission_engine::{
+    PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
+    PermissionEngine, PermissionEngineConfig, PermissionProvider, PermissionResource, PermissionRule,
+    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role, YamlPermissionProvider,
+};
 /// 连接池管理模块
 pub mod pool;
 /// 分片管理模块
@@ -99,10 +110,11 @@ pub mod sharding;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 
-/// 错误类型定义
-pub use crate::config::DbResult;
-
-/// Sea-ORM 类型重导出
+pub use crate::entity::{
+    ActiveModelBehavior, ActiveModelTrait, Condition, DeriveActiveModel, DeriveIntoActiveModel, EntityTrait, Iden,
+    RelationTrait, Set,
+};
+/// Sea-ORM 类型重导出（通过 entity 子模块访问）
 pub use sea_orm as orm;
 
 pub use crate::pool::DbPool;
@@ -113,7 +125,4 @@ pub use dbnexus_macros::DbEntity;
 pub use dbnexus_macros::db_audit;
 pub use dbnexus_macros::db_cache;
 pub use dbnexus_macros::db_crud;
-pub use dbnexus_macros::db_entity;
 pub use dbnexus_macros::db_permission;
-pub use dbnexus_macros::primary_key;
-pub use dbnexus_macros::table_name;
