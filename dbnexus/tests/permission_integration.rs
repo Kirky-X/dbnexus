@@ -10,22 +10,36 @@ use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RoleP
 mod common;
 
 #[tokio::test]
+#[allow(clippy::unwrap_used)]
 async fn test_permission_context_role() {
-    let config = common::get_test_config();
+    // 使用包含权限配置的配置
+    let mut config = common::get_test_config();
+    config.permissions_path = Some("/tmp/test_perms.yaml".to_string());
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("test_role").await.expect("Failed to get session");
+    // 使用配置中定义的 admin 角色
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    // 加载权限策略到缓存
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
+    session.permission_ctx().load_policy(&perm_config).expect("Failed to load policy");
     let ctx = session.permission_ctx();
-    assert_eq!(ctx.role(), "test_role");
+    assert_eq!(ctx.role(), "admin");
 }
 
 #[tokio::test]
+#[allow(clippy::unwrap_used)]
 async fn test_permission_check() {
-    let config = common::get_test_config();
+    // 使用包含权限配置的配置
+    let mut config = common::get_test_config();
+    config.permissions_path = Some("/tmp/test_perms.yaml".to_string());
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    // admin 角色有所有权限
     let session = pool.get_session("admin").await.expect("Failed to get session");
-    let result = session.check_permission("users", &Operation::Select);
-    // Result depends on permission configuration
-    assert!(result.is_ok() || result.is_err());
+    // 加载权限策略到缓存
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
+    session.permission_ctx().load_policy(&perm_config).expect("Failed to load policy");
+    let result = session.check_permission("unknown_table", &Operation::Select);
+    // admin 可以访问所有表，所以应该成功
+    assert!(result.is_ok(), "admin should have SELECT permission on any table");
 }
 
 #[test]
