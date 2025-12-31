@@ -505,12 +505,18 @@ async fn test_migration_apply() {
     let create_result = session
         .execute_raw("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
         .await;
+    if create_result.is_err() {
+        eprintln!("CREATE TABLE error: {:?}", create_result);
+    }
     assert!(create_result.is_ok(), "Table should be created successfully");
 
     // 验证表已创建
     let check_result = session
         .execute_raw("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'")
         .await;
+    if check_result.is_err() {
+        eprintln!("SELECT error: {:?}", check_result);
+    }
     assert!(check_result.is_ok());
 }
 
