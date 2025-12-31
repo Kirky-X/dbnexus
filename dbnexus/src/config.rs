@@ -80,28 +80,57 @@ impl std::fmt::Display for DatabaseType {
     }
 }
 
-/// 配置加载错误
+/// 配置加载错误（生产环境安全，不暴露内部细节）
 #[derive(Debug, Error)]
 pub enum ConfigError {
     /// 文件未找到
-    #[error("File not found: {0}")]
-    FileNotFound(String),
+    #[error("Configuration file not found")]
+    FileNotFound,
 
     /// 格式无效
-    #[error("Invalid format: {0}")]
-    InvalidFormat(String),
+    #[error("Invalid configuration format")]
+    InvalidFormat,
 
     /// 缺少必填字段
-    #[error("Missing required field: {0}")]
-    MissingField(String),
+    #[error("Missing required configuration field")]
+    MissingField,
 
     /// 环境变量错误
-    #[error("Environment variable error: {0}")]
-    EnvVarError(#[from] std::env::VarError),
+    #[error("Environment variable error")]
+    EnvVarError,
 
     /// IO错误
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("Configuration file I/O error")]
+    IoError,
+
+    /// URL格式错误
+    #[error("Invalid database URL format")]
+    InvalidUrl,
+
+    /// 不支持的数据库协议
+    #[error("Unsupported database protocol")]
+    UnsupportedProtocol,
+
+    /// 验证失败
+    #[error("Configuration validation failed")]
+    ValidationFailed,
+
+    /// 内部错误（包含原始错误，用于调试）
+    #[cfg(feature = "dev")]
+    #[error(transparent)]
+    Internal(#[from] Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl From<std::io::Error> for ConfigError {
+    fn from(_: std::io::Error) -> Self {
+        ConfigError::IoError
+    }
+}
+
+impl From<std::env::VarError> for ConfigError {
+    fn from(_: std::env::VarError) -> Self {
+        ConfigError::EnvVarError
+    }
 }
 
 /// 数据库配置
@@ -171,27 +200,27 @@ impl DbConfig {
     ///
     /// 如果必需的环境变量缺失或格式错误，返回错误
     pub fn from_env() -> Result<Self, ConfigError> {
-        let url = std::env::var("DATABASE_URL").map_err(|_| ConfigError::MissingField("DATABASE_URL".to_string()))?;
+        let url = std::env::var("DATABASE_URL").map_err(|_| ConfigError::MissingField)?;
 
         let max_connections = std::env::var("DB_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "20".to_string())
             .parse()
-            .map_err(|_| ConfigError::InvalidFormat("DB_MAX_CONNECTIONS must be a valid integer".to_string()))?;
+            .map_err(|_| ConfigError::InvalidFormat)?;
 
         let min_connections = std::env::var("DB_MIN_CONNECTIONS")
             .unwrap_or_else(|_| "5".to_string())
             .parse()
-            .map_err(|_| ConfigError::InvalidFormat("DB_MIN_CONNECTIONS must be a valid integer".to_string()))?;
+            .map_err(|_| ConfigError::InvalidFormat)?;
 
         let idle_timeout = std::env::var("DB_IDLE_TIMEOUT")
             .unwrap_or_else(|_| "300".to_string())
             .parse()
-            .map_err(|_| ConfigError::InvalidFormat("DB_IDLE_TIMEOUT must be a valid integer".to_string()))?;
+            .map_err(|_| ConfigError::InvalidFormat)?;
 
         let acquire_timeout = std::env::var("DB_ACQUIRE_TIMEOUT")
             .unwrap_or_else(|_| "5000".to_string())
             .parse()
-            .map_err(|_| ConfigError::InvalidFormat("DB_ACQUIRE_TIMEOUT must be a valid integer".to_string()))?;
+            .map_err(|_| ConfigError::InvalidFormat)?;
 
         Ok(Self {
             url,
@@ -244,7 +273,7 @@ impl DbConfig {
         }
 
         let wrapper: ConfigWrapper =
-            serde_yaml::from_str(&content).map_err(|e| ConfigError::InvalidFormat(e.to_string()))?;
+            serde_yaml::from_str(&content).map_err(|_| ConfigError::InvalidFormat)?;
 
         wrapper.database.validate()?;
         Ok(wrapper.database)
@@ -281,7 +310,7 @@ impl DbConfig {
             database: DbConfig,
         }
 
-        let wrapper: ConfigWrapper = toml::from_str(&content).map_err(|e| ConfigError::InvalidFormat(e.to_string()))?;
+        let wrapper: ConfigWrapper = toml::from_str(&content).map_err(|_| ConfigError::InvalidFormat)?;
 
         wrapper.database.validate()?;
         Ok(wrapper.database)
@@ -293,7 +322,7 @@ impl DbConfig {
     ///
     /// 如果格式错误，返回错误
     pub fn from_yaml_str(yaml: &str) -> Result<Self, ConfigError> {
-        let config: DbConfig = serde_yaml::from_str(yaml).map_err(|e| ConfigError::InvalidFormat(e.to_string()))?;
+        let config: DbConfig = serde_yaml::from_str(yaml).map_err(|_| ConfigError::InvalidFormat)?;
 
         config.validate()?;
         Ok(config)
@@ -305,7 +334,7 @@ impl DbConfig {
     ///
     /// 如果格式错误，返回错误
     pub fn from_toml_str(toml: &str) -> Result<Self, ConfigError> {
-        let config: DbConfig = toml::from_str(toml).map_err(|e| ConfigError::InvalidFormat(e.to_string()))?;
+        let config: DbConfig = toml::from_str(toml).map_err(|_| ConfigError::InvalidFormat)?;
 
         config.validate()?;
         Ok(config)
@@ -318,20 +347,18 @@ impl DbConfig {
     /// 如果缺少必填字段或格式无效，返回错误
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.url.is_empty() {
-            return Err(ConfigError::MissingField("url".to_string()));
+            return Err(ConfigError::MissingField);
         }
 
         // URL 格式验证
         self.validate_url_format()?;
 
         if self.max_connections == 0 {
-            return Err(ConfigError::MissingField("max_connections".to_string()));
+            return Err(ConfigError::MissingField);
         }
 
         if self.min_connections > self.max_connections {
-            return Err(ConfigError::InvalidFormat(
-                "min_connections cannot be greater than max_connections".to_string(),
-            ));
+            return Err(ConfigError::InvalidFormat);
         }
 
         Ok(())
@@ -346,9 +373,7 @@ impl DbConfig {
         });
 
         if !URL_RE.is_match(&self.url) {
-            return Err(ConfigError::InvalidFormat(
-                format!("Invalid database URL format: {}", self.url)
-            ));
+            return Err(ConfigError::InvalidUrl);
         }
 
         // 提取协议并验证是否支持
@@ -359,22 +384,13 @@ impl DbConfig {
                 "file" | "mem" => {
                     // SQLite 特殊协议
                     if !protocol.starts_with("sqlite") {
-                        return Err(ConfigError::InvalidFormat(
-                            format!("Unsupported database protocol: '{}'. Use 'sqlite://' for SQLite databases", protocol)
-                        ));
+                        return Err(ConfigError::UnsupportedProtocol);
                     }
                 },
-                _ => return Err(ConfigError::InvalidFormat(
-                    format!(
-                        "Unsupported database protocol: '{}'. Supported protocols: sqlite, postgres, mysql",
-                        protocol
-                    )
-                )),
+                _ => return Err(ConfigError::UnsupportedProtocol),
             }
         } else {
-            return Err(ConfigError::InvalidFormat(
-                "Database URL must contain '://' separator".to_string()
-            ));
+            return Err(ConfigError::InvalidUrl);
         }
 
         Ok(())
@@ -397,12 +413,12 @@ impl DbConfig {
 
     /// 将配置序列化为 YAML 字符串
     pub fn to_yaml(&self) -> Result<String, ConfigError> {
-        serde_yaml::to_string(self).map_err(|e| ConfigError::InvalidFormat(e.to_string()))
+        serde_yaml::to_string(self).map_err(|_| ConfigError::InvalidFormat)
     }
 
     /// 将配置序列化为 TOML 字符串
     pub fn to_toml(&self) -> Result<String, ConfigError> {
-        toml::to_string(self).map_err(|e| ConfigError::InvalidFormat(e.to_string()))
+        toml::to_string(self).map_err(|_| ConfigError::InvalidFormat)
     }
 
     /// 自动加载配置文件
@@ -462,7 +478,7 @@ impl DbConfig {
             }
         }
 
-        Err(ConfigError::FileNotFound("No configuration file found".to_string()))
+        Err(ConfigError::FileNotFound)
     }
 }
 
