@@ -102,6 +102,35 @@ impl PermissionConfig {
         }
     }
 
+    /// 创建拒绝所有的安全默认配置
+    ///
+    /// 当配置加载失败时使用此方法作为安全默认策略
+    pub fn deny_all() -> Self {
+        Self {
+            roles: HashMap::new(), // 空角色映射，任何角色都无权限
+        }
+    }
+
+    /// 创建允许所有的配置（仅用于开发/测试环境）
+    pub fn allow_all() -> Self {
+        Self {
+            roles: HashMap::from([(
+                "admin".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "*".to_string(),
+                        operations: vec![
+                            PermissionAction::Select,
+                            PermissionAction::Insert,
+                            PermissionAction::Update,
+                            PermissionAction::Delete,
+                        ],
+                    }],
+                },
+            )]),
+        }
+    }
+
     /// 验证配置完整性
     ///
     /// # Errors
@@ -194,7 +223,8 @@ impl PermissionContext {
 
     /// 检查表访问权限
     ///
-    /// 此方法会先检查缓存，如果缓存未命中则加载权限策略到缓存
+    /// 此方法会先检查缓存，如果缓存未命中则返回 false
+    /// 注意：需要先调用 `load_policy()` 加载权限策略
     pub fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
         let mut cache = match self.policy_cache.lock() {
             Ok(guard) => guard,
@@ -217,10 +247,53 @@ impl PermissionContext {
             return allowed;
         }
 
-        // 缓存未命中，返回 false（实际使用时应该先调用 load_policy）
-        // 注意：权限策略加载需要 I/O 操作，应在外部异步加载
-        tracing::debug!(
-            "Permission cache miss for role '{}', consider loading policy first",
+        // 缓存未命中：返回 false（安全默认），但提供更详细的警告
+        tracing::warn!(
+            target: "security",
+            "Permission cache miss for role '{}' on table '{}' operation '{}'. \
+             Access denied by default. Did you call `load_policy()` first? \
+             See: https://docs.rs/dbnexus/latest/dbnexus/permission/index.html#usage",
+            self.role,
+            table,
+            operation
+        );
+        false
+    }
+
+    /// 检查表访问权限（自动加载策略版本）
+    ///
+    /// 如果缓存未命中，自动从配置加载权限策略
+    /// 注意：此方法会在每次缓存未命中时尝试加载，可能影响性能
+    pub fn check_table_access_with_config(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+        config: &PermissionConfig,
+    ) -> bool {
+        let mut cache = match self.policy_cache.lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                tracing::error!("Permission cache mutex poisoned");
+                return false;
+            }
+        };
+
+        // 尝试从缓存获取
+        if let Some(policy) = cache.get(self.role.as_str()) {
+            return policy.allows(table, operation);
+        }
+
+        // 缓存未命中：自动加载策略
+        if let Some(policy) = config.get_role_policy(&self.role) {
+            cache.put(self.role.clone(), policy.clone());
+            tracing::info!("Auto-loaded permission policy for role '{}' on cache miss", self.role);
+            return policy.allows(table, operation);
+        }
+
+        // 角色未定义
+        tracing::warn!(
+            target: "security",
+            "Role '{}' not found in permission config. Access denied.",
             self.role
         );
         false
