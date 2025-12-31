@@ -635,7 +635,10 @@ impl AuditLogger {
                 let mut new_obj = serde_json::Map::new();
                 for (k, v) in obj {
                     if k == field || k.contains(&format!("_{}", field)) {
-                        new_obj.insert(format!("{}_redacted", k), serde_json::Value::String(replacement.to_string()));
+                        new_obj.insert(
+                            format!("{}_redacted", k),
+                            serde_json::Value::String(replacement.to_string()),
+                        );
                         modified = true;
                     } else if v.is_string() {
                         let s = v.as_str().unwrap_or("");
@@ -665,7 +668,9 @@ impl AuditLogger {
             return false;
         }
         let valid_chars: std::collections::HashSet<char> =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".chars().collect();
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                .chars()
+                .collect();
         s.chars().all(|c| valid_chars.contains(&c) || c == '=')
     }
 
