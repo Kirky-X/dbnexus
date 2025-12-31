@@ -671,14 +671,12 @@ impl MigrationExecutor {
             return Ok(migrations);
         }
 
-        let entries = std::fs::read_dir(dir).map_err(|e| {
-            crate::config::DbError::Config(format!("Failed to read migration directory: {}", e))
-        })?;
+        let entries = std::fs::read_dir(dir)
+            .map_err(|e| crate::config::DbError::Config(format!("Failed to read migration directory: {}", e)))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                crate::config::DbError::Config(format!("Failed to read migration entry: {}", e))
-            })?;
+            let entry =
+                entry.map_err(|e| crate::config::DbError::Config(format!("Failed to read migration entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_file() && path.extension().map(|e| e == "sql").unwrap_or(false) {
@@ -788,14 +786,31 @@ impl MigrationExecutor {
 
     /// 检查迁移是否已应用（通过查询数据库）
     async fn is_migration_applied(&self, version: u32) -> Result<bool, crate::config::DbError> {
-        use crate::orm::ConnectionTrait;
+        use crate::orm::{ConnectionTrait, Statement};
 
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        let check_sql = format!("SELECT 1 FROM dbnexus_migrations WHERE version = {}", version);
+        // 使用参数化查询防止 SQL 注入
+        let check_sql = match self.sql_generator.db_type {
+            DatabaseType::Postgres => Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                r#"SELECT 1 FROM dbnexus_migrations WHERE version = $1"#,
+                [version.into()],
+            ),
+            DatabaseType::MySql => Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::MySql,
+                r#"SELECT 1 FROM dbnexus_migrations WHERE version = ?"#,
+                [version.into()],
+            ),
+            DatabaseType::Sqlite => Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Sqlite,
+                r#"SELECT 1 FROM dbnexus_migrations WHERE version = ?1"#,
+                [version.into()],
+            ),
+        };
 
-        match self.connection.execute_unprepared(&check_sql).await {
+        match self.connection.execute(check_sql).await {
             Ok(result) => Ok(result.rows_affected() > 0),
             Err(_) => Ok(false),
         }
@@ -824,28 +839,42 @@ impl MigrationExecutor {
 
         // 记录迁移历史
         let applied_at = time::OffsetDateTime::now_utc();
+
+        // 使用参数化查询防止 SQL 注入
         let insert_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres | DatabaseType::MySql => {
-                format!(
-                    "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
-                    migration_file.version,
-                    migration_file.description.replace('\'', "''"),
-                    applied_at.to_string().replace('\'', "''"),
-                    migration_file.file_path.to_string_lossy().replace('\'', "''")
-                )
-            }
-            DatabaseType::Sqlite => {
-                format!(
-                    "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
-                    migration_file.version,
-                    migration_file.description.replace('\'', "''"),
-                    applied_at.to_string().replace('\'', "''"),
-                    migration_file.file_path.to_string_lossy().replace('\'', "''")
-                )
-            }
+            DatabaseType::Postgres => sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ($1, $2, $3, $4)"#,
+                [
+                    migration_file.version.into(),
+                    migration_file.description.clone().into(),
+                    applied_at.to_string().into(),
+                    migration_file.file_path.to_string_lossy().to_string().into(),
+                ],
+            ),
+            DatabaseType::MySql => sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::MySql,
+                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)"#,
+                [
+                    migration_file.version.into(),
+                    migration_file.description.clone().into(),
+                    applied_at.to_string().into(),
+                    migration_file.file_path.to_string_lossy().to_string().into(),
+                ],
+            ),
+            DatabaseType::Sqlite => sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Sqlite,
+                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?1, ?2, ?3, ?4)"#,
+                [
+                    migration_file.version.into(),
+                    migration_file.description.clone().into(),
+                    applied_at.to_string().into(),
+                    migration_file.file_path.to_string_lossy().to_string().into(),
+                ],
+            ),
         };
 
-        txn.execute_unprepared(&insert_sql)
+        txn.execute(insert_sql)
             .await
             .map_err(crate::config::DbError::Connection)?;
 
@@ -866,8 +895,14 @@ impl MigrationExecutor {
     /// 从迁移文件中提取 UP SQL
     fn extract_up_sql(content: &str) -> &str {
         // 查找 UP 标记之后的内容
-        let up_marker = content.find("-- UP:").or(content.find("-- up:")).or(content.find("UP:"));
-        let down_marker = content.find("-- DOWN:").or(content.find("-- down:")).or(content.find("DOWN:"));
+        let up_marker = content
+            .find("-- UP:")
+            .or(content.find("-- up:"))
+            .or(content.find("UP:"));
+        let down_marker = content
+            .find("-- DOWN:")
+            .or(content.find("-- down:"))
+            .or(content.find("DOWN:"));
 
         match (up_marker, down_marker) {
             (Some(up_pos), Some(down_pos)) if down_pos > up_pos => {
@@ -943,9 +978,7 @@ impl MigrationExecutor {
         txn.commit().await.map_err(crate::config::DbError::Connection)?;
 
         // 从历史记录中移除
-        self.history
-            .applied_migrations
-            .retain(|m| m.version != version);
+        self.history.applied_migrations.retain(|m| m.version != version);
 
         Ok(())
     }
