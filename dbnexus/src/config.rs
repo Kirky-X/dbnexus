@@ -272,8 +272,7 @@ impl DbConfig {
             database: DbConfig,
         }
 
-        let wrapper: ConfigWrapper =
-            serde_yaml::from_str(&content).map_err(|_| ConfigError::InvalidFormat)?;
+        let wrapper: ConfigWrapper = serde_yaml::from_str(&content).map_err(|_| ConfigError::InvalidFormat)?;
 
         wrapper.database.validate()?;
         Ok(wrapper.database)
@@ -380,13 +379,13 @@ impl DbConfig {
         if let Some(protocol_end) = self.url.find("://") {
             let protocol = &self.url[..protocol_end];
             match protocol {
-                "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {},
+                "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
                 "file" | "mem" => {
                     // SQLite 特殊协议
                     if !protocol.starts_with("sqlite") {
                         return Err(ConfigError::UnsupportedProtocol);
                     }
-                },
+                }
                 _ => return Err(ConfigError::UnsupportedProtocol),
             }
         } else {
@@ -468,13 +467,13 @@ impl DbConfig {
             ];
 
             for config_path in &user_config_paths {
-                if Self::is_safe_config_path(&config_path)? {
+                if Self::is_safe_config_path(config_path)? {
                     tracing::info!("Loading configuration from: {}", config_path.display());
 
                     if config_path.ends_with(".yaml") {
-                        return Self::from_yaml_file(&config_path);
+                        return Self::from_yaml_file(config_path);
                     } else {
-                        return Self::from_toml_file(&config_path);
+                        return Self::from_toml_file(config_path);
                     }
                 }
             }
