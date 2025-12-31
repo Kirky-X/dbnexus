@@ -69,8 +69,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     if with_permissions {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let perm_file = temp_dir.path().join("test_permissions.yaml");
-        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT)
-            .expect("Failed to write test permissions file");
+        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
         config.permissions_path = Some(perm_file.to_string_lossy().to_string());
 
         // 保存 temp_dir 以防止被删除

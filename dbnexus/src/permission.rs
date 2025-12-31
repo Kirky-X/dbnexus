@@ -172,10 +172,38 @@ impl PermissionConfig {
     }
 
     /// 验证并返回验证结果
-    ///
     /// 如果验证失败，返回第一个错误
     pub fn validate_with_first_error(&self) -> Result<(), String> {
         self.validate().map_err(|errors| errors.join("; "))
+    }
+
+    /// 检查角色是否可以执行 DDL 操作
+    ///
+    /// DDL 权限定义为：角色对 "*" 表拥有所有操作权限（SELECT, INSERT, UPDATE, DELETE）
+    /// 这表示该角色是管理员角色，可以执行 DDL 操作
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - 要检查的角色名称
+    ///
+    /// # Returns
+    ///
+    /// 如果角色可以执行 DDL 操作返回 true
+    pub fn is_ddl_allowed_role(&self, role: &str) -> bool {
+        if let Some(policy) = self.get_role_policy(role) {
+            // 检查角色是否有 "*" 表的所有操作权限
+            if let Some(table_perm) = policy.tables.iter().find(|tp| tp.name == "*") {
+                // 检查是否包含所有 DDL 相关操作
+                table_perm.operations.contains(&PermissionAction::Select)
+                    && table_perm.operations.contains(&PermissionAction::Insert)
+                    && table_perm.operations.contains(&PermissionAction::Update)
+                    && table_perm.operations.contains(&PermissionAction::Delete)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
