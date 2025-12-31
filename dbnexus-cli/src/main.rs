@@ -9,7 +9,7 @@
 
 use clap::{Parser, Subcommand};
 use dbnexus::migration::{DatabaseType as MigrationDatabaseType, MigrationExecutor, MigrationFileParser};
-use dbnexus::{config::DbError, DbPool, DbResult};
+use dbnexus::{DbPool, DbResult, config::DbError};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -827,15 +827,12 @@ fn detect_database_type(database_url: &str) -> MigrationDatabaseType {
 
 /// 隐藏数据库 URL 中的敏感信息
 fn mask_database_url(url: &str) -> String {
-    // 隐藏密码
-    let masked = url::Url::parse(url)
+    url::Url::parse(url)
         .map(|mut url| {
             if let Some(password) = url.password() {
                 url.set_password(Some(&"*".repeat(password.len()))).ok();
             }
             url.to_string()
         })
-        .unwrap_or_else(|_| url.to_string());
-
-    masked
+        .unwrap_or_else(|_| url.to_string())
 }
