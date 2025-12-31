@@ -408,12 +408,9 @@ cargo bench
 
 ## 📄 许可证
 
-本项目采用双重许可证：
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-您可以选择任一许可证进行使用。
+本项目采用 MIT 许可证。
 
 ---
 

@@ -408,12 +408,9 @@ See the [Contributing Guide](docs/CONTRIBUTING.md) for more details.
 
 ## 📄 License
 
-This project uses dual licensing:
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-You may choose either license for your use.
+This project uses the MIT License.
 
 ---
 
