@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::timeout;
-use tracing::{info};
+use tracing::info;
 
 use crate::config::{DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
@@ -279,9 +279,11 @@ impl DbPool {
     /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
     fn validate_role_name(&self, role: &str) -> DbResult<()> {
         // 获取权限配置锁
-        let permission_config = self.inner.permission_config.lock().map_err(|_| {
-            DbError::Permission("Failed to acquire permission config lock".to_string())
-        })?;
+        let permission_config = self
+            .inner
+            .permission_config
+            .lock()
+            .map_err(|_| DbError::Permission("Failed to acquire permission config lock".to_string()))?;
 
         // 检查权限配置是否存在（用户是否显式配置了权限文件）
         if permission_config.is_none() {
@@ -295,13 +297,10 @@ impl DbPool {
         // 检查角色是否存在
         if permission_config
             .as_ref()
-            .map_or(false, |c| c.get_role_policy(role).is_none())
+            .is_some_and(|c| c.get_role_policy(role).is_none())
         {
             // 角色不存在
-            tracing::warn!(
-                "Unknown role '{}' requested, falling back to deny_all policy",
-                role
-            );
+            tracing::warn!("Unknown role '{}' requested, falling back to deny_all policy", role);
             return Err(DbError::Permission(format!(
                 "Role '{}' is not defined in permission configuration",
                 role
