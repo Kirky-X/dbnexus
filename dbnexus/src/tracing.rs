@@ -11,7 +11,6 @@
 use opentelemetry::KeyValue;
 use opentelemetry::global;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::{Config, TracerProvider};
 use std::collections::HashMap;
@@ -45,7 +44,7 @@ pub async fn init(exporter: &str, endpoint: &str) -> Result<TracingGuard, String
 
 /// 使用 OTLP 初始化追踪
 async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
-    let resource = Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
+    let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
     let config = Config::default().with_resource(resource);
 
@@ -61,7 +60,7 @@ async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
 
 /// 使用标准输出初始化追踪
 fn init_stdout() -> Result<TracerProvider, String> {
-    let resource = Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
+    let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
     let config = Config::default().with_resource(resource);
 
