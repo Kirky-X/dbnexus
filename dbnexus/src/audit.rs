@@ -592,8 +592,24 @@ impl AuditLogger {
                 let mut result = v;
                 for field in &self.config.sensitive_fields {
                     let replacement = format!("***REDACTED_{}***", field.to_uppercase());
+
+                    // 1. JSON 格式: "field":
                     result = result.replace(&format!(r#""{}":"#, field), &format!(r#""{}":"#, &replacement));
+
+                    // 2. 非 JSON 格式: field:
                     result = result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, &replacement));
+
+                    // 3. 嵌套字段 (如 user.password)
+                    if field.contains('.') {
+                        let parts: Vec<&str> = field.split('.').collect();
+                        if parts.len() >= 2 {
+                            let nested_pattern = format!(r#""{}""#, field);
+                            result = result.replace(&nested_pattern, &format!(r#""{}""#, &replacement));
+                        }
+                    }
+
+                    // 4. Base64 编码值检测和脱敏
+                    result = Self::sanitize_base64_values(&result, field, &replacement);
                 }
                 Some(result)
             } else {
@@ -606,6 +622,51 @@ impl AuditLogger {
         event.extra = sanitize_value(event.extra);
 
         event
+    }
+
+    /// 检测并脱敏 Base64 编码的敏感字段
+    fn sanitize_base64_values(value: &str, field: &str, replacement: &str) -> String {
+        let mut result = value.to_string();
+
+        // 尝试检测 Base64 编码的 JSON 对象
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
+            if let Some(obj) = json_val.as_object() {
+                let mut modified = false;
+                let mut new_obj = serde_json::Map::new();
+                for (k, v) in obj {
+                    if k == field || k.contains(&format!("_{}", field)) {
+                        new_obj.insert(format!("{}_redacted", k), serde_json::Value::String(replacement.to_string()));
+                        modified = true;
+                    } else if v.is_string() {
+                        let s = v.as_str().unwrap_or("");
+                        // 检测是否是 Base64 编码
+                        if Self::is_base64(s) {
+                            new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                            modified = true;
+                        } else {
+                            new_obj.insert(k.clone(), v.clone());
+                        }
+                    } else {
+                        new_obj.insert(k.clone(), v.clone());
+                    }
+                }
+                if modified {
+                    result = serde_json::to_string(&new_obj).unwrap_or(result);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// 检测字符串是否为有效的 Base64 编码
+    fn is_base64(s: &str) -> bool {
+        if s.len() % 4 != 0 || s.is_empty() {
+            return false;
+        }
+        let valid_chars: std::collections::HashSet<char> =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".chars().collect();
+        s.chars().all(|c| valid_chars.contains(&c) || c == '=')
     }
 
     /// 检查是否需要告警
