@@ -49,6 +49,9 @@ prometheus = "0.14"
 # Caching
 lru = "0.12"
 
+# Random
+rand = "0.9"
+
 # Internal packages
 dbnexus-macros = { version = "0.1.0" }
 

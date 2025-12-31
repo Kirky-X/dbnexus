@@ -54,6 +54,9 @@ tracing = [
     "dep:once_cell",
 ]
 
+# Development features
+dev = []
+
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine"]
 
@@ -69,7 +72,7 @@ sea-orm = { workspace = true }
 tracing = { workspace = true }
 time = { workspace = true }
 prometheus = { workspace = true, optional = true }
-toml = "0.8"
+toml = "0.9.10"
 parking_lot = "0.12"
 lru = { workspace = true }
 home = "0.5"
@@ -82,7 +85,7 @@ opentelemetry-otlp = { version = "0.17", optional = true }
 opentelemetry-jaeger = { version = "0.22", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true }
 once_cell = { version = "1.20", optional = true }
-twox-hash = { version = "1.6", optional = true }
+twox-hash = { version = "2.1", optional = true }
 sha2 = { version = "0.10", optional = true }
 async-trait = { version = "0.1", optional = true }
 uuid = { version = "1.0", optional = true, features = ["v4"] }
@@ -109,7 +112,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
 async-trait = "0.1"
 indexmap = "2.0"
-twox-hash = "1.6"
+twox-hash = "2.1"
 sha2 = "0.10"
 
 [lints]

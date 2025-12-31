@@ -25,7 +25,7 @@ clap = { version = "4.0", features = ["derive", "env"] }
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-toml = "0.8"
+toml = "0.9.10"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 chrono = { version = "0.4", features = ["std"] }
 url = "2.4"
