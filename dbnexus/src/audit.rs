@@ -25,6 +25,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -359,10 +360,17 @@ pub struct AuditQueryFilters {
 }
 
 /// 内存审计存储（默认实现）
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemoryAuditStorage {
     events: Mutex<Vec<AuditEvent>>,
     max_events: usize,
+    dropped_count: AtomicU64,
+}
+
+impl Default for MemoryAuditStorage {
+    fn default() -> Self {
+        Self::new(10000) // 默认最多存储 10000 条审计日志
+    }
 }
 
 impl MemoryAuditStorage {
@@ -370,8 +378,20 @@ impl MemoryAuditStorage {
     pub fn new(max_events: usize) -> Self {
         Self {
             events: Mutex::new(Vec::with_capacity(max_events)),
-            max_events,
+            max_events: if max_events == 0 { 10000 } else { max_events },
+            dropped_count: AtomicU64::new(0),
         }
+    }
+
+    /// 获取已丢弃的事件数量
+    pub fn dropped_count(&self) -> u64 {
+        self.dropped_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// 获取当前事件数量
+    pub async fn event_count(&self) -> usize {
+        let events = self.events.lock().await;
+        events.len()
     }
 }
 
@@ -383,6 +403,7 @@ impl AuditStorage for MemoryAuditStorage {
         // 如果超过最大容量，移除最旧的
         if events.len() >= self.max_events {
             events.remove(0);
+            self.dropped_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
 
         events.push(event.clone());
