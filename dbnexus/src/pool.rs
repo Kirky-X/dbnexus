@@ -214,9 +214,12 @@ impl DbPool {
             }
         }
 
-        // 如果没有配置或加载失败，返回默认配置（允许所有）
-        info!("Using default permission config (allow all)");
-        Some(PermissionConfig::default())
+        // 如果没有配置或加载失败，返回安全默认配置（拒绝所有）
+        warn!(
+            "Failed to load permission config, using deny_all (secure default). \
+             Create a permissions.yaml file to configure role permissions."
+        );
+        Some(PermissionConfig::deny_all())
     }
 
     /// 获取指标收集器（如果已设置）
@@ -895,63 +898,96 @@ impl Session {
         conn.execute_raw(stmt).await.map_err(DbError::Connection)
     }
 
-    /// 内部方法：解析 SQL 语句类型
-    fn parse_sql_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
+    /// 内部方法：解析 SQL 语句类型（用于测试）
+    ///
+    /// 支持解析以下表名格式：
+    /// - 简单表名：users
+    /// - Schema 限定：public.users, schema.table
+    /// - 引号包裹："table", `table`
+    /// - 带别名：users AS u, users u
+    pub(super) fn parse_sql_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
         use regex::Regex;
         use std::sync::OnceLock;
 
-        // 使用静态正则表达式编译以提高性能
-        static SELECT_RE: OnceLock<Regex> = OnceLock::new();
-        static INSERT_RE: OnceLock<Regex> = OnceLock::new();
-        static UPDATE_RE: OnceLock<Regex> = OnceLock::new();
-        static DELETE_RE: OnceLock<Regex> = OnceLock::new();
+        // 匹配表名：支持 schema.qualified.names、引号包裹的表名、别名
+        // 格式：([schema.]table | "table" | `table`) [AS alias]
+        static TABLE_RE: OnceLock<Regex> = OnceLock::new();
 
         let sql_upper = sql.trim_start().to_uppercase();
 
-        // 使用正则表达式匹配表名
+        // 获取复用正则（处理 schema、引用、别名）
+        let table_pattern = TABLE_RE.get_or_init(|| {
+            Regex::new("(?:(?:([a-zA-Z_][a-zA-Z0-9_]*)\\.)?([a-zA-Z_][a-zA-Z0-9_]*)|\\\"([^\\\"]+)\\\"|`([^`]+)`)")
+                .expect("Failed to compile table regex pattern")
+        });
+
         if sql_upper.starts_with("SELECT") {
-            // 匹配 SELECT ... FROM table_name
-            let re = SELECT_RE.get_or_init(|| {
-                Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile SELECT regex pattern")
-            });
-            if let Some(caps) = re.captures(&sql_upper) {
-                if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), PermissionAction::Select));
-                }
+            // 匹配 SELECT ... FROM table_name [AS alias]
+            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("FROM").unwrap_or(0)..]) {
+                let table_name = Self::extract_table_name(&caps);
+                return Some((table_name, PermissionAction::Select));
             }
         } else if sql_upper.starts_with("INSERT") {
             // 匹配 INSERT INTO table_name
-            let re = INSERT_RE.get_or_init(|| {
-                Regex::new(r"INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile INSERT regex pattern")
-            });
-            if let Some(caps) = re.captures(&sql_upper) {
-                if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), PermissionAction::Insert));
-                }
+            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("INTO").unwrap_or(0)..]) {
+                let table_name = Self::extract_table_name(&caps);
+                return Some((table_name, PermissionAction::Insert));
             }
         } else if sql_upper.starts_with("UPDATE") {
             // 匹配 UPDATE table_name
-            let re = UPDATE_RE.get_or_init(|| {
-                Regex::new(r"UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile UPDATE regex pattern")
-            });
-            if let Some(caps) = re.captures(&sql_upper) {
-                if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), PermissionAction::Update));
-                }
+            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("UPDATE").unwrap_or(0)..]) {
+                let table_name = Self::extract_table_name(&caps);
+                return Some((table_name, PermissionAction::Update));
             }
         } else if sql_upper.starts_with("DELETE") {
             // 匹配 DELETE FROM table_name
-            let re = DELETE_RE.get_or_init(|| {
-                Regex::new(r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile DELETE regex pattern")
-            });
-            if let Some(caps) = re.captures(&sql_upper) {
-                if let Some(table_name) = caps.get(1) {
-                    return Some((table_name.as_str().to_string(), PermissionAction::Delete));
-                }
+            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("FROM").unwrap_or(0)..]) {
+                let table_name = Self::extract_table_name(&caps);
+                return Some((table_name, PermissionAction::Delete));
             }
         }
 
         None
+    }
+
+    /// 从正则捕获组中提取表名
+    /// 捕获组格式：
+    /// - Group 1: schema (optional)
+    /// - Group 2: table name (unquoted)
+    /// - Group 3: table name (double quoted)
+    /// - Group 4: table name (backtick quoted)
+    fn extract_table_name(caps: &regex::Captures) -> String {
+        // 优先检查带 schema 的情况
+        if let Some(schema) = caps.get(1) {
+            if let Some(table) = caps.get(2) {
+                return format!("{}.{}", schema.as_str(), table.as_str());
+            }
+        }
+
+        // 检查双引号包裹
+        if let Some(table) = caps.get(3) {
+            return table.as_str().to_string();
+        }
+
+        // 检查反引号包裹
+        if let Some(table) = caps.get(4) {
+            return table.as_str().to_string();
+        }
+
+        // 回退：直接返回完整匹配（带别名的情况）
+        let full_match = caps.get(0).unwrap().as_str();
+        Self::normalize_table_name(full_match)
+    }
+
+    /// 规范化表名：移除别名，保留 schema 和表名
+    fn normalize_table_name(input: &str) -> String {
+        // 移除 AS alias 或直接跟的别名
+        if let Some(idx) = input.to_uppercase().find(" AS ") {
+            input[..idx].to_string()
+        } else {
+            // 处理可能的尾随空格
+            input.split_whitespace().next().unwrap_or(input).to_string()
+        }
     }
 
     /// 执行 SQL 语句的统一入口，集成权限检查和指标收集（自动解析操作类型）
