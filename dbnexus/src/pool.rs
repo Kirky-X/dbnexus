@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::timeout;
-use tracing::{info, warn};
+use tracing::{info};
 
 use crate::config::{DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
@@ -181,13 +181,13 @@ impl DbPool {
                     let applied = pool.run_migrations(migrations_dir).await?;
                     info!("Auto-migrate completed: {} migrations applied", applied);
                 } else {
-                    warn!(
+                    tracing::warn!(
                         "Auto-migrate enabled but migrations directory does not exist: {}",
                         migrations_dir.display()
                     );
                 }
             } else {
-                warn!("Auto-migrate enabled but migrations_dir not configured");
+                tracing::warn!("Auto-migrate enabled but migrations_dir not configured");
             }
         }
 
@@ -195,31 +195,38 @@ impl DbPool {
     }
 
     /// 加载权限配置文件
+    ///
+    /// # Returns
+    ///
+    /// - `Some(PermissionConfig)` - 成功加载的权限配置
+    /// - `None` - 没有配置权限文件或加载失败，使用默认的 deny_all 策略
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
+            tracing::info!("Loading permission config from: {}", path);
             match std::fs::read_to_string(path) {
                 Ok(content) => match PermissionConfig::from_yaml(&content) {
                     Ok(perm_config) => {
-                        info!("Loaded permission config from: {}", path);
+                        tracing::info!("Successfully loaded permission config from: {}", path);
                         return Some(perm_config);
                     }
                     Err(e) => {
-                        warn!("Failed to parse permission config: {}", e);
+                        tracing::warn!("Failed to parse permission config from '{}': {}", path, e);
+                        // 配置文件存在但解析失败，不验证角色
+                        return None;
                     }
                 },
                 Err(e) => {
-                    warn!("Failed to read permission config: {}", e);
+                    tracing::warn!("Failed to read permission config from '{}': {}", path, e);
+                    // 配置文件存在但读取失败，不验证角色
+                    return None;
                 }
             }
         }
 
-        // 如果没有配置或加载失败，返回安全默认配置（拒绝所有）
-        warn!(
-            "Failed to load permission config, using deny_all (secure default). \
-             Create a permissions.yaml file to configure role permissions."
-        );
-        Some(PermissionConfig::deny_all())
+        // 没有配置权限文件
+        tracing::debug!("No permission config path specified");
+        None
     }
 
     /// 获取指标收集器（如果已设置）
@@ -241,7 +248,18 @@ impl DbPool {
     }
 
     /// 从池中获取 Session（带 metrics 支持）
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - 角色名称，必须在权限配置中定义
+    ///
+    /// # Errors
+    ///
+    /// 如果角色未在权限配置中定义，返回错误
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
+        // 验证角色名称
+        self.validate_role_name(role)?;
+
         let connection = self.acquire_connection().await?;
         #[allow(unused_mut)]
         let mut session = Session::new(connection, self.inner.clone(), role.to_string());
@@ -253,6 +271,44 @@ impl DbPool {
         }
 
         Ok(session)
+    }
+
+    /// 验证角色名称是否在权限配置中定义
+    ///
+    /// 仅在权限配置文件存在且成功加载时验证角色。
+    /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
+    fn validate_role_name(&self, role: &str) -> DbResult<()> {
+        // 获取权限配置锁
+        let permission_config = self.inner.permission_config.lock().map_err(|_| {
+            DbError::Permission("Failed to acquire permission config lock".to_string())
+        })?;
+
+        // 检查权限配置是否存在（用户是否显式配置了权限文件）
+        if permission_config.is_none() {
+            // 没有配置权限文件，使用 deny_all 策略，不进行角色验证
+            tracing::debug!("No permission config configured, skipping role validation");
+            return Ok(());
+        }
+
+        tracing::debug!("Permission config present, checking role '{}'", role);
+
+        // 检查角色是否存在
+        if permission_config
+            .as_ref()
+            .map_or(false, |c| c.get_role_policy(role).is_none())
+        {
+            // 角色不存在
+            tracing::warn!(
+                "Unknown role '{}' requested, falling back to deny_all policy",
+                role
+            );
+            return Err(DbError::Permission(format!(
+                "Role '{}' is not defined in permission configuration",
+                role
+            )));
+        }
+
+        Ok(())
     }
 
     /// 创建单个数据库连接
