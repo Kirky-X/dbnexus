@@ -19,7 +19,7 @@ mod common;
 #[test]
 #[allow(deprecated)]
 fn test_cli_help() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--help")
         .assert()
@@ -30,7 +30,7 @@ fn test_cli_help() {
 /// TEST-CLI-002: CLI 子命令帮助测试
 #[test]
 fn test_cli_subcommand_help() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.args(["create", "--help"])
         .assert()
@@ -41,7 +41,7 @@ fn test_cli_subcommand_help() {
 /// TEST-CLI-003: 状态命令 - 基础功能测试
 #[tokio::test]
 async fn test_cli_status_basic() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--database-url")
         .arg("sqlite::memory:")
@@ -53,7 +53,7 @@ async fn test_cli_status_basic() {
 /// TEST-CLI-004: 状态命令 - 数据库连接测试
 #[tokio::test]
 async fn test_cli_status_database_connection() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     let assert_result = cmd.arg("--database-url").arg("sqlite::memory:").arg("status").assert();
 
@@ -67,7 +67,7 @@ async fn test_cli_create_migration() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let _migrations_dir = temp_dir.path().to_str().unwrap().to_string();
 
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--database-url")
         .arg("sqlite::memory:")
@@ -103,7 +103,7 @@ DROP TABLE test_table;
     )
     .expect("Failed to write migration file");
 
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     let output = cmd
         .arg("--database-url")
@@ -124,7 +124,7 @@ DROP TABLE test_table;
 /// TEST-CLI-007: 迁移向下命令 - 基础测试
 #[tokio::test]
 async fn test_cli_down_migration() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     // 回滚命令在没有迁移时应该处理得当
     // 使用 SQLite 内存数据库（CLI 工具使用 sqlite 特性编译）
@@ -138,7 +138,7 @@ async fn test_cli_down_migration() {
 /// TEST-CLI-008: CLI 参数解析测试 - 无效参数
 #[test]
 fn test_cli_invalid_args() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.args(["--invalid-option"]).assert().failure();
 }
@@ -146,7 +146,7 @@ fn test_cli_invalid_args() {
 /// TEST-CLI-009: CLI 生成命令帮助测试
 #[test]
 fn test_cli_generate_help() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.args(["generate", "--help"]).assert().success();
 }
@@ -154,7 +154,7 @@ fn test_cli_generate_help() {
 /// TEST-CLI-010: CLI 向下命令带版本测试
 #[tokio::test]
 async fn test_cli_down_with_version() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--database-url")
         .arg("sqlite::memory:")
@@ -185,7 +185,7 @@ DROP TABLE test_table;
     std::fs::write(temp_dir.path().join("1700000000_test_migration.sql"), migration_content)
         .expect("Failed to write migration file");
 
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     let output = cmd
         .arg("--database-url")
@@ -208,7 +208,7 @@ DROP TABLE test_table;
 /// TEST-CLI-012: CLI 完整状态测试
 #[tokio::test]
 async fn test_cli_full_status() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--database-url")
         .arg("sqlite::memory:")
@@ -249,7 +249,7 @@ DROP TABLE test_table_{};
 
     // 验证命令尝试执行（即使可能因为迁移表不存在而失败）
     // 这个测试主要验证 CLI 参数解析正确
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     let output = cmd
         .arg("--database-url")
@@ -270,7 +270,7 @@ DROP TABLE test_table_{};
 /// TEST-CLI-014: CLI 帮助显示所有命令
 #[test]
 fn test_cli_help_shows_all_commands() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     cmd.arg("--help")
         .assert()
@@ -285,7 +285,7 @@ fn test_cli_help_shows_all_commands() {
 /// TEST-CLI-015: CLI 状态命令输出格式测试
 #[tokio::test]
 async fn test_cli_status_output_format() {
-    let mut cmd = Command::cargo_bin("dbnexus-migrate").expect("Failed to find CLI binary");
+    let mut cmd = Command::cargo_bin("dbnexus-cli").expect("Failed to find CLI binary");
 
     let assert_result = cmd.arg("--database-url").arg("sqlite::memory:").arg("status").assert();
 

@@ -12,6 +12,20 @@ mod common;
 #[tokio::test]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_context_role() {
+    // 创建测试权限配置文件
+    let perm_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+"#;
+    std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
+
     // 使用包含权限配置的配置
     let mut config = common::get_test_config();
     config.permissions_path = Some("/tmp/test_perms.yaml".to_string());
@@ -31,6 +45,20 @@ async fn test_permission_context_role() {
 #[tokio::test]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_check() {
+    // 创建测试权限配置文件
+    let perm_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+"#;
+    std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
+
     // 使用包含权限配置的配置
     let mut config = common::get_test_config();
     config.permissions_path = Some("/tmp/test_perms.yaml".to_string());

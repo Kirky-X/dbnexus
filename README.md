@@ -121,6 +121,137 @@ cargo run --example transactions --features sqlite
 
 ---
 
+## 🎨 宏 vs API 使用指南
+
+### 宏的使用场景
+
+**适用场景**：
+- 简单的 CRUD 操作（insert、delete）
+- 需要自动生成 SQL 语句
+- 代码简洁性优先
+
+**示例**：
+```rust
+use dbnexus::{DbPool, DbEntity, db_crud};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users"]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = DbPool::new("sqlite::memory:").await?;
+    let session = pool.get_session("admin").await?;
+    
+    // 使用宏生成的 insert 方法
+    let user = User {
+        id: 1,
+        name: "Alice".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+    User::insert(&session, user).await?;
+    
+    // 使用宏生成的 delete 方法
+    User::delete(&session, 1).await?;
+    
+    Ok(())
+}
+```
+
+**宏的限制**：
+- 无法解析查询结果返回实体
+- 不支持复杂查询（JOIN、子查询等）
+- 不支持事务操作
+
+### API 的使用场景
+
+**适用场景**：
+- 复杂的查询操作（JOIN、子查询、聚合）
+- 需要获取查询结果
+- 事务操作
+- 需要完整的灵活性
+
+**示例**：
+```rust
+use dbnexus::{DbPool, DbEntity, db_crud};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users"]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = DbPool::new("sqlite::memory:").await?;
+    let session = pool.get_session("admin").await?;
+    
+    // 使用 API 执行复杂查询
+    session.execute_raw("SELECT u.*, COUNT(o.id) as order_count FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id").await?;
+    
+    // 使用 API 执行事务
+    session.transaction(|s| {
+        s.execute_raw("INSERT INTO users ...")?;
+        s.execute_raw("UPDATE orders ...")?;
+        Ok(())
+    }).await?;
+    
+    Ok(())
+}
+```
+
+### 推荐使用方式
+
+**1. 简单 CRUD**：使用宏 + API
+```rust
+// 使用宏的 insert/delete 方法
+User::insert(&session, user).await?;
+User::delete(&session, 1).await?;
+
+// 使用 API 的查询方法
+session.execute_raw("SELECT * FROM users WHERE id = 1").await?;
+```
+
+**2. 复杂查询**：直接使用 API
+```rust
+session.execute_raw("SELECT u.*, COUNT(o.id) FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id").await?;
+```
+
+**3. 事务操作**：使用 API
+```rust
+session.transaction(|s| {
+    s.execute_raw("INSERT INTO users ...")?;
+    s.execute_raw("UPDATE inventory SET count = count - 1 WHERE id = ?")?;
+    s.execute_raw("INSERT INTO orders ...")?;
+    Ok(())
+}).await?;
+```
+
+### 功能对比
+
+| 功能 | 宏 | API |
+|-----|-----|-----|
+| **权限检查** | ✅ 自动 | ✅ 自动 |
+| **数据库操作** | ✅ 自动 | ✅ 手动 |
+| **SQL 生成** | ✅ 自动 | ❌ 手动 |
+| **结果解析** | ❌ 不支持 | ❌ 不支持 |
+| **事务管理** | ❌ 不支持 | ✅ 支持 |
+| **复杂查询** | ❌ 不支持 | ✅ 支持 |
+
+---
+
 ## 🎨 示例
 
 ### 快速开始示例

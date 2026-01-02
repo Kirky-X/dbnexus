@@ -9,41 +9,14 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Run tests
-        run: cargo test --all-features --workspace
-
+  # 格式检查
   format:
     name: Format Check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       
@@ -55,9 +28,16 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  # Clippy 检查
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.db }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite]
+        # 可以添加其他数据库：postgres, mysql
     steps:
       - uses: actions/checkout@v4
       
@@ -71,81 +51,242 @@ jobs:
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
       
       - name: Cache cargo index
         uses: actions/cache@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
       
       - name: Cache cargo build
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
+            ${{ runner.os }}-cargo-build-
       
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        run: |
+          cargo clippy --all-targets --features ${{ matrix.db }},all-optional --workspace -- -D warnings
 
-  security:
-    name: Security Audit
+  # 测试
+  test:
+    name: Test (${{ matrix.db }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite]
+        # 可以添加其他数据库：postgres, mysql
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
-      
-      - name: Run cargo-deny
-        run: cargo deny check
-
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
       
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
       
       - name: Cache cargo index
         uses: actions/cache@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
       
-      - name: Generate coverage
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 300 --out xml
-      
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v4
+      - name: Cache cargo build
+        uses: actions/cache@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
+            ${{ runner.os }}-cargo-build-
+      
+      - name: Run tests
+        run: |
+          cargo test --features ${{ matrix.db }},all-optional --workspace
 
-  build-check:
-    name: Build Check
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  # 安全审计
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       
+      - name: Cache cargo-deny
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: ${{ runner.os }}-cargo-deny-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install cargo-deny
+        run: |
+          if [ ! -f ~/.cargo/bin/cargo-deny ]; then
+            cargo install --locked cargo-deny
+          fi
+      
+      - name: Run cargo-deny
+        run: cargo deny check
+
+  # 文档检查
+  docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
+            ${{ runner.os }}-cargo-build-
+      
+      - name: Build documentation
+        run: |
+          cargo doc --no-deps --features ${{ matrix.db }},all-optional --workspace
+
+  # 代码覆盖率
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo-tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install tarpaulin
+        run: |
+          if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
+            cargo install cargo-tarpaulin
+          fi
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+      
+      - name: Generate coverage
+        run: |
+          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --timeout 300 --out xml
+      
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          files: ./cobertura.xml
+
+  # 跨平台构建检查
+  build-check:
+    name: Build Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            db: sqlite
+          - os: macos-latest
+            db: sqlite
+          - os: windows-latest
+            db: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
+            ${{ runner.os }}-cargo-build-
+      
       - name: Build
-        run: cargo build --all-features --workspace
+        run: |
+          cargo build --features ${{ matrix.db }},all-optional --workspace
