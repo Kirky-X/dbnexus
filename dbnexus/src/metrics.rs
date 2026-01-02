@@ -13,7 +13,7 @@
 //! - **事务指标**: 事务持续时间、事务成功率
 
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -399,7 +399,7 @@ pub struct MetricsCollector {
     transaction: Arc<RwLock<TransactionMetricsInner>>,
 
     /// 慢查询记录（最近 N 条）
-    slow_queries: Arc<RwLock<Vec<SlowQueryRecord>>>,
+    slow_queries: Arc<RwLock<VecDeque<SlowQueryRecord>>>,
     /// 慢查询配置
     slow_query_config: Arc<RwLock<SlowQueryConfig>>,
     /// 慢查询最大记录数
@@ -589,7 +589,7 @@ impl MetricsCollector {
             query_errors: Arc::new(AtomicU64::new(0)),
             connection_acquire: Arc::new(RwLock::new(ConnectionAcquireMetricsInner::new())),
             transaction: Arc::new(RwLock::new(TransactionMetricsInner::new())),
-            slow_queries: Arc::new(RwLock::new(Vec::new())),
+            slow_queries: Arc::new(RwLock::new(VecDeque::new())),
             slow_query_config: Arc::new(RwLock::new(SlowQueryConfig {
                 threshold_ms: 1000,
                 enabled: true,
@@ -638,13 +638,13 @@ impl MetricsCollector {
         let config = self.slow_query_config.read();
         if config.enabled && duration_ms >= config.threshold_ms {
             let mut slow = self.slow_queries.write();
-            slow.push(SlowQueryRecord {
+            slow.push_back(SlowQueryRecord {
                 query_type: query_type.to_string(),
                 duration_ms,
                 timestamp: time::OffsetDateTime::now_utc(),
             });
             while slow.len() > self.max_slow_queries {
-                slow.remove(0);
+                slow.pop_front();
             }
         }
     }
@@ -722,7 +722,7 @@ impl MetricsCollector {
 
     /// 获取慢查询记录
     pub fn slow_queries(&self) -> Vec<SlowQueryRecord> {
-        self.slow_queries.read().clone()
+        self.slow_queries.read().iter().cloned().collect()
     }
 
     /// 设置慢查询阈值

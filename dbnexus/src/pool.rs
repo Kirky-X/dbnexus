@@ -917,14 +917,22 @@ impl Session {
                 || table_name.to_uppercase().starts_with("MYSQL.");
 
             if !is_system_table {
-                // DML 操作：检查表级权限
-                if !self.permission_ctx.check_table_access(&table_name, &action) {
-                    return Err(DbError::Permission(format!(
-                        "Permission denied: role '{}' does not have permission to '{}' on table '{}'",
-                        self.role(),
-                        action,
-                        table_name
-                    )));
+                // 检查是否配置了权限文件
+                let permission_config = self.pool.permission_config.lock().unwrap();
+                let has_permission_config = permission_config.is_some();
+                drop(permission_config);
+
+                // 只有配置了权限文件才进行权限检查
+                if has_permission_config {
+                    // DML 操作：检查表级权限
+                    if !self.permission_ctx.check_table_access(&table_name, &action) {
+                        return Err(DbError::Permission(format!(
+                            "Permission denied: role '{}' does not have permission to '{}' on table '{}'",
+                            self.role(),
+                            action,
+                            table_name
+                        )));
+                    }
                 }
             }
         } else {
@@ -978,15 +986,23 @@ impl Session {
 
         if sql_upper.starts_with("SELECT") {
             // 匹配 SELECT ... FROM table_name [AS alias]
-            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("FROM").unwrap_or(0)..]) {
-                let table_name = Self::extract_table_name(&caps);
-                return Some((table_name, PermissionAction::Select));
+            if let Some(from_pos) = sql_upper.find("FROM") {
+                // 跳过 "FROM" 关键字（4个字符）
+                let after_from = &sql[from_pos + 4..];
+                if let Some(caps) = table_pattern.captures(after_from) {
+                    let table_name = Self::extract_table_name(&caps);
+                    return Some((table_name, PermissionAction::Select));
+                }
             }
         } else if sql_upper.starts_with("INSERT") {
             // 匹配 INSERT INTO table_name
-            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("INTO").unwrap_or(0)..]) {
-                let table_name = Self::extract_table_name(&caps);
-                return Some((table_name, PermissionAction::Insert));
+            if let Some(into_pos) = sql_upper.find("INTO") {
+                // 跳过 "INTO" 关键字（4个字符）
+                let after_into = &sql[into_pos + 4..];
+                if let Some(caps) = table_pattern.captures(after_into) {
+                    let table_name = Self::extract_table_name(&caps);
+                    return Some((table_name, PermissionAction::Insert));
+                }
             }
         } else if sql_upper.starts_with("UPDATE") {
             // 匹配 UPDATE table_name
@@ -996,9 +1012,13 @@ impl Session {
             }
         } else if sql_upper.starts_with("DELETE") {
             // 匹配 DELETE FROM table_name
-            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("FROM").unwrap_or(0)..]) {
-                let table_name = Self::extract_table_name(&caps);
-                return Some((table_name, PermissionAction::Delete));
+            if let Some(from_pos) = sql_upper.find("FROM") {
+                // 跳过 "FROM" 关键字（4个字符）
+                let after_from = &sql[from_pos + 4..];
+                if let Some(caps) = table_pattern.captures(after_from) {
+                    let table_name = Self::extract_table_name(&caps);
+                    return Some((table_name, PermissionAction::Delete));
+                }
             }
         }
 
@@ -1030,7 +1050,7 @@ impl Session {
         }
 
         // 回退：直接返回完整匹配（带别名的情况）
-        let full_match = caps.get(0).unwrap().as_str();
+        let full_match = caps.get(0).map(|c| c.as_str()).unwrap_or("");
         Self::normalize_table_name(full_match)
     }
 

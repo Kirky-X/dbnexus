@@ -11,6 +11,7 @@ jobs:
     name: Cleanup Release
     if: github.event.ref_type == 'tag'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       
@@ -21,28 +22,78 @@ jobs:
           VERSION="${TAG_NAME#v}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Tag deleted: $TAG_NAME"
+          echo "📦 Version: $VERSION"
       
-      - name: Delete GitHub Release
+      - name: Check if release exists
+        id: check_release
         run: |
           TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
           
+          echo "🔍 Checking for release associated with tag: $TAG_NAME"
+          
           # 查找对应的 release
-          RELEASE_ID=$(curl -s \
+          RELEASE_RESPONSE=$(curl -s \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME" \
-            | jq -r '.id')
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
+          
+          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
+          RELEASE_NAME=$(echo "$RELEASE_RESPONSE" | jq -r '.name // "N/A"')
           
           if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
-            echo "Deleting release $RELEASE_ID for tag $TAG_NAME"
-            curl -X DELETE \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
-            echo "✅ GitHub Release deleted successfully"
+            echo "✅ Found release: $RELEASE_NAME (ID: $RELEASE_ID)"
+            echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+            echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+            echo "release_exists=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ No release found for tag $TAG_NAME"
+            echo "⚠️ No release found for tag: $TAG_NAME"
+            echo "release_exists=false" >> $GITHUB_OUTPUT
           fi
+      
+      - name: Delete GitHub Release
+        if: steps.check_release.outputs.release_exists == 'true'
+        run: |
+          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
+          RELEASE_ID="${{ steps.check_release.outputs.release_id }}"
+          RELEASE_NAME="${{ steps.check_release.outputs.release_name }}"
+          
+          echo "🗑️  Deleting release: $RELEASE_NAME (ID: $RELEASE_ID)"
+          
+          # 删除 release
+          DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID")
+          
+          HTTP_CODE=$(echo "$DELETE_RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "✅ GitHub Release deleted successfully"
+            echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME"
+          else
+            echo "❌ Failed to delete release (HTTP $HTTP_CODE)"
+            echo "$DELETE_RESPONSE"
+            exit 1
+          fi
+      
+      - name: Summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Cleanup Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Tag: ${{ steps.get_tag.outputs.tag_name }}"
+          echo "Version: ${{ steps.get_tag.outputs.version }}"
+          echo "Release existed: ${{ steps.check_release.outputs.release_exists }}"
+          echo ""
+          if [ "${{ steps.check_release.outputs.release_exists }}" = "true" ]; then
+            echo "✅ Release deleted successfully"
+          else
+            echo "ℹ️ No release to delete"
+          fi
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
       - name: Warning about crates.io
         run: |

@@ -484,8 +484,12 @@ impl YamlPermissionProvider {
             return false;
         }
 
-        // 检查操作匹配
-        if !rule.allow.is_empty() && !rule.allow.contains(&context.action) && context.action != PermissionAction::All {
+        // 检查操作匹配（允许列表或拒绝列表）
+        let in_allow = rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All);
+        let in_deny = rule.deny.contains(&context.action) || rule.deny.contains(&PermissionAction::All);
+
+        // 如果操作既不在 allow 也不在 deny 中，则不匹配
+        if !in_allow && !in_deny && context.action != PermissionAction::All {
             return false;
         }
 
