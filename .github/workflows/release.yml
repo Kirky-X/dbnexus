@@ -11,12 +11,14 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   # 更新版本号并提交
   update-version:
     name: Update Version
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
@@ -32,93 +34,164 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
       
+      - name: Check if version already matches
+        id: check_version
+        run: |
+          CURRENT_VERSION=$(grep "^version" Cargo.toml | head -1 | awk '{print $3}' | tr -d '"')
+          TAG_VERSION=${{ steps.get_version.outputs.version }}
+          
+          echo "Current version in Cargo.toml: $CURRENT_VERSION"
+          echo "Tag version: $TAG_VERSION"
+          
+          if [ "$CURRENT_VERSION" = "$TAG_VERSION" ]; then
+            echo "Version already matches, skipping update"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version needs update"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Install Rust
+        if: steps.check_version.outputs.needs_update == 'true'
         uses: dtolnay/rust-toolchain@stable
       
       - name: Install cargo-edit
+        if: steps.check_version.outputs.needs_update == 'true'
         run: cargo install cargo-edit
       
       - name: Update Cargo.toml version
+        if: steps.check_version.outputs.needs_update == 'true'
         run: |
           VERSION=${{ steps.get_version.outputs.version }}
           cargo set-version $VERSION
       
       - name: Commit version changes
+        if: steps.check_version.outputs.needs_update == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock
-          git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
-          git push origin HEAD:main || echo "Failed to push, continuing..."
+          
+          # 检查是否有变化
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
+            git push origin HEAD:main
+            echo "Version updated and pushed"
+          fi
 
   # 构建多平台二进制文件
-  build:
-    name: Build ${{ matrix.target }}
-    needs: update-version
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            cross: true
-    
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main  # 使用更新后的版本
+    build:
+      name: Build ${{ matrix.target }}
+      needs: update-version
+      runs-on: ${{ matrix.os }}
+      timeout-minutes: 45
+      strategy:
+        matrix:
+          include:
+            - target: x86_64-unknown-linux-gnu
+              os: ubuntu-latest
+              
+            - target: aarch64-unknown-linux-gnu
+              os: ubuntu-latest
+              cross: true
       
+      steps:      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史以支持 tag 检查
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      
+
       - name: Install cross-compilation tools
         if: matrix.cross
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
-      
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Build binaries
         run: |
+          echo "Building for target: ${{ matrix.target }}"
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }} --bins
           else
             cargo build --release --target ${{ matrix.target }} --bins
           fi
-      
+
+      - name: Verify binaries exist
+        run: |
+          echo "Checking for binaries in target/${{ matrix.target }}/release/"
+          ls -lh target/${{ matrix.target }}/release/ || echo "No release directory found"
+
       - name: Package binaries
         run: |
           mkdir -p artifacts
           cd target/${{ matrix.target }}/release
-          
+
           # 查找所有二进制文件（排除 .d 文件和库文件）
-          for binary in $(find . -maxdepth 1 -type f -executable ! -name "*.d" ! -name "*.so" ! -name "*.dylib" ! -name "*.dll"); do
-            binary_name=$(basename "$binary")
-            # 创建 tar.gz 包
-            tar czf "../../../artifacts/${binary_name}-${{ needs.update-version.outputs.version }}-${{ matrix.target }}.tar.gz" "$binary_name"
-            
-            # 生成 SHA256
-            sha256sum "$binary_name" | awk '{print $1}' > "../../../artifacts/${binary_name}-${{ needs.update-version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256"
+          binaries_found=0
+          for binary in $(find . -maxdepth 1 -type f -executable ! -name "*.d" ! -name "*.so" ! -name "*.dylib" ! -name "*.dll" ! -name "*.rlib" ! -name "*.a"); do
+            if [ -f "$binary" ]; then
+              binaries_found=$((binaries_found + 1))
+              binary_name=$(basename "$binary")
+              echo "Packaging binary: $binary_name"
+
+              # 创建 tar.gz 包
+              tar czf "../../../artifacts/${binary_name}-${{ needs.update-version.outputs.version }}-${{ matrix.target }}.tar.gz" "$binary_name"
+
+              # 生成 SHA256
+              sha256sum "$binary" | awk '{print $1}' > "../../../artifacts/${binary_name}-${{ needs.update-version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256"
+            fi
           done
-      
+
+          if [ $binaries_found -eq 0 ]; then
+            echo "Warning: No binaries found to package"
+          else
+            echo "Packaged $binaries_found binary(ies)"
+          fi
+
+      - name: List artifacts
+        run: |
+          echo "Artifacts created:"
+          ls -lah artifacts/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.target }}
           path: artifacts/*
+          if-no-files-found: error
 
   # 发布到 GitHub Release
   release:
     name: Create GitHub Release
     needs: [update-version, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          fetch-depth: 0
       
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -129,22 +202,36 @@ jobs:
         run: |
           mkdir -p release-assets
           find artifacts -type f -exec cp {} release-assets/ \;
+          echo "Release assets:"
           ls -lah release-assets/
+      
+      - name: Verify assets exist
+        run: |
+          if [ -z "$(ls -A release-assets/)" ]; then
+            echo "Error: No release assets found!"
+            exit 1
+          fi
       
       - name: Generate changelog
         id: changelog
         run: |
           VERSION=${{ needs.update-version.outputs.version }}
+          TAG_NAME="v${VERSION}"
           
           # 获取上一个 tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
-          echo "## What's Changed" > changelog.md
+          echo "Generating changelog for ${TAG_NAME}"
+          echo "Previous tag: ${PREV_TAG}"
+          
+          echo "## What's Changed in ${TAG_NAME}" > changelog.md
           echo "" >> changelog.md
           
           if [ -n "$PREV_TAG" ]; then
-            git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" >> changelog.md
+            echo "Changes since ${PREV_TAG}:" >> changelog.md
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" >> changelog.md
           else
+            echo "Initial release:" >> changelog.md
             git log --pretty=format:"- %s (%h)" >> changelog.md
           fi
           
@@ -153,48 +240,98 @@ jobs:
           echo "## Assets" >> changelog.md
           echo "" >> changelog.md
           echo "### Binaries" >> changelog.md
-          ls release-assets/*.tar.gz | while read file; do
+          ls release-assets/*.tar.gz 2>/dev/null | while read file; do
             basename_file=$(basename "$file")
-            echo "- \`$basename_file\`" >> changelog.md
+            sha256_file="${basename_file}.sha256"
+            if [ -f "release-assets/${sha256_file}" ]; then
+              sha256=$(cat "release-assets/${sha256_file}")
+              echo "- \`${basename_file}\` - SHA256: \`${sha256}\`" >> changelog.md
+            else
+              echo "- \`${basename_file}\`" >> changelog.md
+            fi
           done
           
+          echo "" >> changelog.md
+          echo "---" >> changelog.md
+          echo "" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG_NAME}" >> changelog.md
+          
+          echo "Generated changelog:"
           cat changelog.md
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.update-version.outputs.version }}
+          name: Release v${{ needs.update-version.outputs.version }}
           files: release-assets/*
           body_path: changelog.md
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Release created successfully
+        run: |
+          echo "✅ Release v${{ needs.update-version.outputs.version }} created successfully!"
+          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.update-version.outputs.version }}"
 
   # 发布到 crates.io（使用 Trusted Publishing）
   publish-crates:
     name: Publish to crates.io
     needs: [update-version, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: crates.io
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
-      
+          fetch-depth: 0
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Publish to crates.io
+
+      - name: Check if CARGO_REGISTRY_TOKEN is set
         run: |
-          # 等待 crates.io 索引更新（如果有依赖）
-          sleep 5
-          
-          # 发布 workspace 中的所有 crate
-          # 如果有多个 crate，按依赖顺序发布
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
+            echo "Warning: CARGO_REGISTRY_TOKEN is not set, skipping crates.io publish"
+            echo "Set CARGO_REGISTRY_TOKEN in repository secrets to enable auto-publishing"
+            echo "::warning::CARGO_REGISTRY_TOKEN is not set"
+            exit 1
+          fi
+
+      - name: Publish dbnexus-macros
+        run: |
+          echo "Publishing dbnexus-macros..."
+          cd dbnexus-macros
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "dbnexus-macros may already be published"
+          cd ..
+
+      - name: Wait for crates.io index update
+        run: |
+          echo "Waiting for crates.io index to update..."
+          sleep 10
+
+      - name: Publish dbnexus
+        run: |
+          echo "Publishing dbnexus..."
+          cd dbnexus
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "dbnexus may already be published"
+          cd ..
+
+      - name: Publish dbnexus-cli
+        run: |
+          echo "Publishing dbnexus-cli..."
+          cd dbnexus-cli
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "dbnexus-cli may already be published"
+          cd ..
+
+      - name: Publish success
+        run: |
+          echo "✅ All crates published successfully!"
+          echo "📦 Check crates.io: https://crates.io/users/${{ github.actor }}"
 
   # 清理：当 tag 被删除时触发
   cleanup-on-tag-delete:

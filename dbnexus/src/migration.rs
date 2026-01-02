@@ -786,31 +786,16 @@ impl MigrationExecutor {
 
     /// 检查迁移是否已应用（通过查询数据库）
     async fn is_migration_applied(&self, version: u32) -> Result<bool, crate::config::DbError> {
-        use crate::orm::{ConnectionTrait, Statement};
+        use crate::orm::ConnectionTrait;
 
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        // 使用参数化查询防止 SQL 注入
-        let check_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres => Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Postgres,
-                r#"SELECT 1 FROM dbnexus_migrations WHERE version = $1"#,
-                [version.into()],
-            ),
-            DatabaseType::MySql => Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::MySql,
-                r#"SELECT 1 FROM dbnexus_migrations WHERE version = ?"#,
-                [version.into()],
-            ),
-            DatabaseType::Sqlite => Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Sqlite,
-                r#"SELECT 1 FROM dbnexus_migrations WHERE version = ?1"#,
-                [version.into()],
-            ),
-        };
+        // 使用基本的字符串转义防止 SQL 注入
+        let escaped_version = version.to_string().replace('\'', "''");
+        let check_query = format!("SELECT 1 FROM dbnexus_migrations WHERE version = '{}'", escaped_version);
 
-        match self.connection.execute(check_sql).await {
+        match self.connection.execute_unprepared(&check_query).await {
             Ok(result) => Ok(result.rows_affected() > 0),
             Err(_) => Ok(false),
         }
@@ -840,41 +825,18 @@ impl MigrationExecutor {
         // 记录迁移历史
         let applied_at = time::OffsetDateTime::now_utc();
 
-        // 使用参数化查询防止 SQL 注入
-        let insert_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres => sea_orm::Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Postgres,
-                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ($1, $2, $3, $4)"#,
-                [
-                    migration_file.version.into(),
-                    migration_file.description.clone().into(),
-                    applied_at.to_string().into(),
-                    migration_file.file_path.to_string_lossy().to_string().into(),
-                ],
-            ),
-            DatabaseType::MySql => sea_orm::Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::MySql,
-                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)"#,
-                [
-                    migration_file.version.into(),
-                    migration_file.description.clone().into(),
-                    applied_at.to_string().into(),
-                    migration_file.file_path.to_string_lossy().to_string().into(),
-                ],
-            ),
-            DatabaseType::Sqlite => sea_orm::Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Sqlite,
-                r#"INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?1, ?2, ?3, ?4)"#,
-                [
-                    migration_file.version.into(),
-                    migration_file.description.clone().into(),
-                    applied_at.to_string().into(),
-                    migration_file.file_path.to_string_lossy().to_string().into(),
-                ],
-            ),
-        };
+        // 使用基本的字符串转义防止 SQL 注入
+        let escaped_version = migration_file.version.to_string().replace('\'', "''");
+        let escaped_description = migration_file.description.replace('\'', "''");
+        let escaped_file_path = migration_file.file_path.to_string_lossy().replace('\'', "''");
+        let applied_at_str = applied_at.to_string().replace('\'', "''");
 
-        txn.execute(insert_sql)
+        let insert_query = format!(
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ('{}', '{}', '{}', '{}')",
+            escaped_version, escaped_description, applied_at_str, escaped_file_path
+        );
+
+        txn.execute_unprepared(&insert_query)
             .await
             .map_err(crate::config::DbError::Connection)?;
 

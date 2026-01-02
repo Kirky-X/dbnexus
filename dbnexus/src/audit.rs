@@ -581,7 +581,9 @@ impl AuditLogger {
 
     /// 清理旧日志
     pub async fn cleanup(&self, days: i64) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-        let before = Utc::now().checked_sub_signed(chrono::Duration::days(days)).unwrap();
+        let before = Utc::now()
+            .checked_sub_signed(chrono::Duration::days(days))
+            .ok_or("Invalid date calculation")?;
         self.storage.cleanup(&before).await
     }
 
