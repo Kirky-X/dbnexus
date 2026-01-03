@@ -522,7 +522,7 @@ async fn rollback_migration(
     version: u32,
     db_type: MigrationDatabaseType,
 ) -> DbResult<()> {
-    use dbnexus::orm::{ConnectionTrait, TransactionTrait};
+    use sea_orm::{ConnectionTrait, TransactionTrait};
 
     // 删除迁移历史记录
     let delete_sql = match db_type {
@@ -534,7 +534,7 @@ async fn rollback_migration(
         }
     };
 
-    let txn = executor.connection.begin().await.map_err(DbError::Connection)?;
+    let txn: sea_orm::DatabaseTransaction = executor.connection.begin().await.map_err(DbError::Connection)?;
 
     txn.execute_unprepared(&delete_sql).await.map_err(DbError::Connection)?;
 
@@ -716,7 +716,7 @@ async fn parse_and_apply_migration(
     version: u32,
     db_type: MigrationDatabaseType,
 ) -> DbResult<()> {
-    use dbnexus::orm::{ConnectionTrait, TransactionTrait};
+    use sea_orm::{ConnectionTrait, TransactionTrait};
 
     // 解析迁移内容
     let (description, _full_content) =
@@ -726,7 +726,7 @@ async fn parse_and_apply_migration(
     let up_sql = extract_sql_section(content, "UP")?;
 
     // 开始事务
-    let txn = executor.connection.begin().await.map_err(DbError::Connection)?;
+    let txn: sea_orm::DatabaseTransaction = executor.connection.begin().await.map_err(DbError::Connection)?;
 
     // 执行 UP SQL
     if !up_sql.trim().is_empty() {

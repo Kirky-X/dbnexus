@@ -74,8 +74,8 @@ pub use crate::config::DbResult;
 pub use config::{DatabaseType, DbConfig, DbError, PoolConfig};
 /// 实体转换模块
 pub mod entity;
-/// 生成的权限角色模块（由 build.rs 自动生成）
-pub mod generated_roles;
+// 生成的权限角色模块（由 build.rs 自动生成，内部使用）
+mod generated_roles;
 /// 全局索引模块
 #[cfg(feature = "global-index")]
 pub mod global_index;
@@ -110,12 +110,8 @@ pub mod sharding;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 
-pub use crate::entity::{
-    ActiveModelBehavior, ActiveModelTrait, Condition, DeriveActiveModel, DeriveIntoActiveModel, EntityTrait, Iden,
-    RelationTrait, Set,
-};
-/// Sea-ORM 类型重导出（通过 entity 子模块访问）
-pub use sea_orm as orm;
+// Sea-ORM 类型重导出（通过 entity 子模块访问）
+// 注意：不再直接导出 sea_orm，用户应使用 dbnexus 提供的抽象层
 
 pub use crate::pool::DbPool;
 pub use crate::pool::Session;
