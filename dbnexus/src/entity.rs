@@ -6,9 +6,21 @@
 //! 实体转换模块
 //!
 //! 提供实体转换工具和类型重导出
+//!
+//! # 重新导出的类型
+//!
+//! 这些类型由 `#[derive(DbEntity)]` 宏自动生成，用户需要使用它们来定义实体。
+//!
+//! - [`EntityTrait`] - 实体 trait，由宏自动实现
+//! - [`ActiveModelTrait`] - ActiveModel trait，用于修改实体
+//! - [`Condition`] - 查询条件构建器
+//! - [`Set`] - 值设置辅助类型
 
-pub use sea_orm::entity::prelude::{
-    ActiveModelBehavior, ActiveModelTrait, DeriveActiveModel, DeriveIntoActiveModel, EntityTrait, Iden, RelationTrait,
-};
-
+// 只暴露用户必需的类型
+pub use sea_orm::entity::prelude::{EntityTrait, ActiveModelTrait};
 pub use sea_orm::{Condition, Set};
+
+// 内部实现细节，不对外暴露
+pub(crate) use sea_orm::entity::prelude::{
+    ActiveModelBehavior, DeriveActiveModel, DeriveIntoActiveModel, Iden, RelationTrait,
+};

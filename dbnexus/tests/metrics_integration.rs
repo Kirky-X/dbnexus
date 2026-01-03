@@ -195,7 +195,7 @@ async fn test_error_counting() {
     collector.record_connection_error();
 
     // 验证错误已记录
-    let error_count = collector.connection_errors.load(std::sync::atomic::Ordering::SeqCst);
+    let error_count = collector.connection_error_count();
     assert_eq!(error_count, 2, "连接错误计数应该为 2");
 }
 
