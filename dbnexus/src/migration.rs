@@ -10,11 +10,11 @@
 //! **注意**：此模块使用 [`config`](crate::config) 中的 `DatabaseType` 枚举
 //! 来确保与整个项目的数据库类型统一。
 
+use sea_orm::{ConnectionTrait, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
-use sea_orm::{ConnectionTrait, TransactionTrait};
 
 /// 从 config 模块导入并重新导出 DatabaseType 使其对外可见
 pub use crate::config::DatabaseType;

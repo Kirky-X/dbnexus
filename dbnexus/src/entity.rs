@@ -17,10 +17,11 @@
 //! - [`Set`] - 值设置辅助类型
 
 // 只暴露用户必需的类型
-pub use sea_orm::entity::prelude::{EntityTrait, ActiveModelTrait};
+pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
 pub use sea_orm::{Condition, Set};
 
 // 内部实现细节，不对外暴露
+#[allow(unused)]
 pub(crate) use sea_orm::entity::prelude::{
     ActiveModelBehavior, DeriveActiveModel, DeriveIntoActiveModel, Iden, RelationTrait,
 };
