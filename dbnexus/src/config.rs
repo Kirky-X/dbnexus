@@ -17,13 +17,65 @@ use thiserror::Error;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolConfig {
     /// 最大连接数
-    pub max_connections: u32,
+    max_connections: u32,
     /// 最小连接数
-    pub min_connections: u32,
+    min_connections: u32,
     /// 连接空闲超时时间（秒）
-    pub idle_timeout: u64,
+    idle_timeout: u64,
     /// 连接获取超时时间（毫秒）
-    pub acquire_timeout: u64,
+    acquire_timeout: u64,
+}
+
+impl PoolConfig {
+    /// 创建新的 PoolConfig
+    pub fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
+        Self {
+            max_connections,
+            min_connections,
+            idle_timeout,
+            acquire_timeout,
+        }
+    }
+
+    /// 获取最大连接数
+    pub fn max_connections(&self) -> u32 {
+        self.max_connections
+    }
+
+    /// 设置最大连接数
+    pub fn set_max_connections(&mut self, value: u32) {
+        self.max_connections = value;
+    }
+
+    /// 获取最小连接数
+    pub fn min_connections(&self) -> u32 {
+        self.min_connections
+    }
+
+    /// 设置最小连接数
+    pub fn set_min_connections(&mut self, value: u32) {
+        self.min_connections = value;
+    }
+
+    /// 获取空闲超时时间（秒）
+    pub fn idle_timeout(&self) -> u64 {
+        self.idle_timeout
+    }
+
+    /// 设置空闲超时时间（秒）
+    pub fn set_idle_timeout(&mut self, value: u64) {
+        self.idle_timeout = value;
+    }
+
+    /// 获取连接获取超时时间（毫秒）
+    pub fn acquire_timeout(&self) -> u64 {
+        self.acquire_timeout
+    }
+
+    /// 设置连接获取超时时间（毫秒）
+    pub fn set_acquire_timeout(&mut self, value: u64) {
+        self.acquire_timeout = value;
+    }
 }
 
 impl Default for PoolConfig {

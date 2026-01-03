@@ -382,16 +382,16 @@ pub struct MetricsCollector {
     query_metrics: Arc<RwLock<HashMap<String, Arc<QueryMetricsInner>>>>,
 
     /// 连接池总连接数
-    pub pool_total: Arc<AtomicU64>,
+    pool_total: Arc<AtomicU64>,
     /// 连接池活跃连接数
-    pub pool_active: Arc<AtomicU64>,
+    pool_active: Arc<AtomicU64>,
     /// 连接池空闲连接数
-    pub pool_idle: Arc<AtomicU64>,
+    pool_idle: Arc<AtomicU64>,
 
     /// 连接错误计数
-    pub connection_errors: Arc<AtomicU64>,
+    connection_errors: Arc<AtomicU64>,
     /// 查询错误计数
-    pub query_errors: Arc<AtomicU64>,
+    query_errors: Arc<AtomicU64>,
 
     /// 连接获取指标
     connection_acquire: Arc<RwLock<ConnectionAcquireMetricsInner>>,
@@ -740,6 +740,11 @@ impl MetricsCollector {
     /// 记录连接错误
     pub fn record_connection_error(&self) {
         self.connection_errors.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 获取连接错误计数
+    pub fn connection_error_count(&self) -> u64 {
+        self.connection_errors.load(Ordering::SeqCst)
     }
 
     /// 更新连接池状态

@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use sea_orm::{ConnectionTrait, TransactionTrait};
 
 /// 从 config 模块导入并重新导出 DatabaseType 使其对外可见
 pub use crate::config::DatabaseType;
@@ -467,7 +468,7 @@ impl MigrationHistory {
 #[derive(Debug, Clone)]
 pub struct MigrationExecutor {
     /// 数据库连接
-    pub connection: crate::orm::DatabaseConnection,
+    pub connection: sea_orm::DatabaseConnection,
     /// SQL 生成器
     pub sql_generator: SqlGenerator,
     /// 迁移历史记录
@@ -476,7 +477,7 @@ pub struct MigrationExecutor {
 
 impl MigrationExecutor {
     /// 创建新的迁移执行器
-    pub fn new(connection: crate::orm::DatabaseConnection, db_type: DatabaseType) -> Self {
+    pub fn new(connection: sea_orm::DatabaseConnection, db_type: DatabaseType) -> Self {
         Self {
             connection,
             sql_generator: SqlGenerator::new(db_type),
@@ -486,8 +487,6 @@ impl MigrationExecutor {
 
     /// 读取数据库中的迁移历史
     pub async fn load_history(&mut self) -> Result<(), crate::config::DbError> {
-        use crate::orm::ConnectionTrait;
-
         // 确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
@@ -512,8 +511,6 @@ impl MigrationExecutor {
 
     /// 确保迁移历史表存在
     async fn ensure_migration_table_exists(&self) -> Result<(), crate::config::DbError> {
-        use crate::orm::ConnectionTrait;
-
         // 这里需要执行创建迁移历史表的 SQL
         let create_table_sql = match self.sql_generator.db_type {
             DatabaseType::Postgres => {
@@ -551,8 +548,6 @@ impl MigrationExecutor {
 
     /// 应用单个迁移
     pub async fn apply_migration(&mut self, migration: &Migration) -> Result<(), crate::config::DbError> {
-        use crate::orm::{ConnectionTrait, TransactionTrait};
-
         // 生成迁移 SQL
         let sql = self.sql_generator.generate_migration_sql(migration);
 
@@ -786,8 +781,6 @@ impl MigrationExecutor {
 
     /// 检查迁移是否已应用（通过查询数据库）
     async fn is_migration_applied(&self, version: u32) -> Result<bool, crate::config::DbError> {
-        use crate::orm::ConnectionTrait;
-
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
@@ -803,8 +796,6 @@ impl MigrationExecutor {
 
     /// 应用单个迁移文件
     async fn apply_migration_file(&mut self, migration_file: &MigrationFile) -> Result<(), crate::config::DbError> {
-        use crate::orm::{ConnectionTrait, TransactionTrait};
-
         // 解析迁移文件内容
         let sql = Self::extract_up_sql(&migration_file.content);
 
@@ -923,11 +914,9 @@ impl MigrationExecutor {
 
     /// 回滚指定版本的迁移
     pub async fn rollback_migration(&mut self, version: u32) -> Result<(), crate::config::DbError> {
-        use crate::orm::{ConnectionTrait, TransactionTrait};
-
         let delete_sql = format!("DELETE FROM dbnexus_migrations WHERE version = {};", version);
 
-        let txn = self
+        let txn: sea_orm::DatabaseTransaction = self
             .connection
             .begin()
             .await
