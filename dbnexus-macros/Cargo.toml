@@ -1,0 +1,29 @@
+[package]
+name = "dbnexus-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation.workspace = true
+description = "Procedural macros for dbnexus"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Proc macro dependencies
+syn = { version = "2.0.112", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+regex = "1"
+
+[dev-dependencies]
+trybuild = "1"
+tokio-test = { workspace = true }
+
+[lints]
+workspace = true
