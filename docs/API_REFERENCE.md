@@ -1,1304 +1,829 @@
-<div align="center">
+# DB Nexus API 参考
 
-# 📘 API Reference
+## 目录
 
-### Complete API Documentation
-
-[🏠 Home](../README.md) • [📖 User Guide](USER_GUIDE.md) • [🏗️ Architecture](ARCHITECTURE.md)
-
----
-
-</div>
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Core API](#core-api)
-  - [Database Pool](#database-pool)
-  - [Database Session](#database-session)
-  - [Entity Operations](#entity-operations)
-  - [Configuration](#configuration)
-- [Database Adapters](#database-adapters)
-- [Permission Engine](#permission-engine)
-- [Cache Manager](#cache-manager)
-- [Error Handling](#error-handling)
-- [Type Definitions](#type-definitions)
-- [Examples](#examples)
+- [核心类型](#核心类型)
+- [宏属性](#宏属性)
+- [配置类型](#配置类型)
+- [错误类型](#错误类型)
+- [可选模块 API](#可选模块-api)
 
 ---
 
-## Overview
+## 核心类型
 
-<div align="center">
+### DbPool
 
-### 🎯 API Design Principles
-
-</div>
-
-<table>
-<tr>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/easy.png" width="64"><br>
-<b>Simple</b><br>
-Intuitive and easy to use
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/security-checked.png" width="64"><br>
-<b>Safe</b><br>
-Type-safe and secure by default
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/module.png" width="64"><br>
-<b>Composable</b><br>
-Build complex workflows easily
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/documentation.png" width="64"><br>
-<b>Well-documented</b><br>
-Comprehensive documentation
-</td>
-</tr>
-</table>
-
----
-
-## Core API
-
-### Database Pool
-
-<div align="center">
-
-#### 🚀 DbPool - Connection Pool Management
-
-</div>
-
----
-
-#### `DbPool::new()`
-
-Create a new database connection pool.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+数据库连接池管理器，负责创建和管理数据库连接。
 
 ```rust
-pub async fn new(database_url: &str) -> Result<Self, DbError>
+pub struct DbPool;
 ```
 
-</td>
-</tr>
-<tr>
-<td><b>Description</b></td>
-<td>Initializes a new connection pool with the specified database URL. Must be called before creating sessions.</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `database_url: &str` - Database connection URL (e.g., "sqlite://db.sqlite", "postgresql://user:pass@localhost/db")
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;DbPool, DbError&gt;</code> - Ok on success, DbError on failure</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `DbError::ConnectionError` - Failed to connect to database
-- `DbError::InvalidConfig` - Invalid configuration
-
-</td>
-</tr>
-</table>
-
-**Example:**
+#### 方法
 
 ```rust
-use dbnexus::DbPool;
+impl DbPool {
+    /// 从连接字符串创建连接池
+    pub async fn new(url: &str) -> Result<Self, DbError>;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite://./db.sqlite").await?;
-    println!("✅ Database pool created successfully");
-    Ok(())
+    /// 从环境变量加载配置并创建连接池
+    pub async fn new() -> Result<Self, DbError>;
+
+    /// 使用自定义配置创建连接池
+    pub async fn with_config(config: DbConfig) -> Result<Self, DbError>;
+
+    /// 获取指定角色的 Session
+    pub async fn get_session(&self, role: &str) -> Result<Session, DbError>;
+
+    /// 获取只读 Session
+    pub async fn get_read_session(&self) -> Result<Session, DbError>;
+
+    /// 获取连接池状态
+    pub fn status(&self) -> PoolStatus;
+
+    /// 关闭连接池
+    pub async fn close(&self);
 }
 ```
 
----
-
-#### `DbPool::get_session()`
-
-Create a new database session for a user.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+#### PoolStatus
 
 ```rust
-pub async fn get_session(&self, user_id: &str) -> Result<DbSession, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `user_id: &str` - User identifier for permission checking
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;DbSession, DbError&gt;</code> - New session instance</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let session = pool.get_session("user123").await?;
-```
-
----
-
-#### `DbPool::close()`
-
-Close the connection pool and release all resources.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub async fn close(self) -> Result<(), DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;(), DbError&gt;</code></td>
-</tr>
-</table>
-
----
-
-### Database Session
-
-<div align="center">
-
-#### 🔐 DbSession - Session-based Database Access
-
-</div>
-
----
-
-#### `DbSession`
-
-A database session that tracks user context and enforces permissions.
-
-<table>
-<tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
-
-```rust
-pub struct DbSession {
-    pool: DatabaseConnection,
-    user_id: String,
-    permission_engine: Arc<PermissionEngine>,
-    cache_manager: Option<Arc<CacheManager>>,
+pub struct PoolStatus {
+    pub total: u32,      // 总连接数
+    pub active: u32,     // 活跃连接数
+    pub idle: u32,       // 空闲连接数
+    pub waiters: u32,    // 等待获取连接的请求数
 }
 ```
 
-</td>
-</tr>
-</table>
+### Session
 
----
-
-#### `DbSession::begin_transaction()`
-
-Begin a new database transaction.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+数据库会话包装器，提供 RAII 风格的连接管理。
 
 ```rust
-pub async fn begin_transaction(&self) -> Result<Transaction, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Transaction, DbError&gt;</code> - Transaction handle</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let tx = session.begin_transaction().await?;
-tx.commit().await?;
-```
-
----
-
-#### `DbSession::execute()`
-
-Execute a raw SQL query.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub async fn execute(&self, query: &str) -> Result<QueryResult, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `query: &str` - SQL query string
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;QueryResult, DbError&gt;</code></td>
-</tr>
-</table>
-
----
-
-### Entity Operations
-
-<div align="center">
-
-#### 📦 DbEntity - Entity CRUD Operations
-
-</div>
-
----
-
-#### `DbEntity` Trait
-
-Core trait for database entities with automatic CRUD operations.
-
-<table>
-<tr>
-<td width="30%"><b>Definition</b></td>
-<td width="70%">
-
-```rust
-#[async_trait]
-pub trait DbEntity: ModelTrait + Sized {
-    async fn insert(&self, session: &DbSession) -> Result<Self, DbError>;
-    async fn update(&self, session: &DbSession) -> Result<Self, DbError>;
-    async fn delete(&self, session: &DbSession) -> Result<(), DbError>;
-    async fn find_by_id(id: i32, session: &DbSession) -> Result<Option<Self>, DbError>;
-    async fn find_all(session: &DbSession) -> Result<Vec<Self>, DbError>;
+pub struct Session {
+    // 私有字段
 }
 ```
 
-</td>
-</tr>
-</table>
-
----
-
-#### `db_entity!` Macro
-
-Derive macro to implement DbEntity trait for a struct.
-
-<table>
-<tr>
-<td width="30%"><b>Usage</b></td>
-<td width="70%">
+#### 方法
 
 ```rust
-use dbnexus::db_entity;
+impl Session {
+    /// 获取连接
+    pub fn connection(&self) -> &sea_orm::prelude::Connection;
 
-#[db_entity]
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "users")]
+    /// 开始事务
+    pub async fn transaction<F, T, E, Fut>(
+        &self,
+        f: F,
+    ) -> Result<T, DbError>
+    where
+        F: FnMut(&Session) -> Fut,
+        Fut: Future<Output = Result<T, E>>,
+        E: Into<DbError>;
+
+    /// 提交事务
+    pub async fn commit(&self) -> Result<(), DbError>;
+
+    /// 回滚事务
+    pub async fn rollback(&self) -> Result<(), DbError>;
+
+    /// 检查是否在事务中
+    pub fn in_transaction(&self) -> bool;
+
+    /// 获取角色
+    pub fn role(&self) -> &str;
+
+    /// 执行原始 SQL
+    pub async fn execute_raw(
+        &self,
+        sql: &str,
+        params: Vec<sea_orm::prelude::Value>,
+    ) -> Result<sea_orm::prelude::ExecResult, DbError>;
+
+    /// 获取底层连接
+    pub fn conn(&self) -> &(dyn sea_orm::prelude::Connection + Send + Sync);
+}
+```
+
+### DbEntity 派生宏生成的类型
+
+当使用 `#[derive(DbEntity)]` 时，会自动生成以下类型：
+
+```rust
+/// Sea-ORM Entity
+pub struct Entity;
+
+/// ActiveModel - 用于插入和更新
+#[derive(Clone, Default)]
+pub struct ActiveModel {
+    pub id: Option<i64>,
+    pub name: Option<String>,
+    pub email: Option<String>,
+    // ...
+}
+
+/// Model - 数据库记录类型
+#[derive(Clone, Debug, PartialEq)]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
+    pub id: i64,
     pub name: String,
     pub email: String,
-}
-```
-
-</td>
-</tr>
-</table>
-
----
-
-#### `DbEntity::insert()`
-
-Insert a new entity into the database.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-async fn insert(&self, session: &DbSession) -> Result<Self, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `session: &DbSession` - Database session
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Self, DbError&gt;</code> - Inserted entity with generated ID</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `DbError::PermissionDenied` - User lacks insert permission
-- `DbError::DuplicateKey` - Unique constraint violation
-- `DbError::QueryError` - Database query error
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let user = User {
-    id: 0,
-    name: "John Doe".to_string(),
-    email: "john@example.com".to_string(),
-};
-
-let inserted = user.insert(&session).await?;
-println!("Inserted user with ID: {}", inserted.id);
-```
-
----
-
-#### `DbEntity::update()`
-
-Update an existing entity in the database.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-async fn update(&self, session: &DbSession) -> Result<Self, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `session: &DbSession` - Database session
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Self, DbError&gt;</code> - Updated entity</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `DbError::PermissionDenied` - User lacks update permission
-- `DbError::NotFound` - Entity not found
-- `DbError::QueryError` - Database query error
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let mut user = User::find_by_id(1, &session).await?.unwrap();
-user.name = "Jane Doe".to_string();
-let updated = user.update(&session).await?;
-```
-
----
-
-#### `DbEntity::delete()`
-
-Delete an entity from the database.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-async fn delete(&self, session: &DbSession) -> Result<(), DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `session: &DbSession` - Database session
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;(), DbError&gt;</code></td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `DbError::PermissionDenied` - User lacks delete permission
-- `DbError::NotFound` - Entity not found
-- `DbError::QueryError` - Database query error
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let user = User::find_by_id(1, &session).await?.unwrap();
-user.delete(&session).await?;
-```
-
----
-
-#### `DbEntity::find_by_id()`
-
-Find an entity by its primary key.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-async fn find_by_id(id: i32, session: &DbSession) -> Result<Option<Self>, DbError>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `id: i32` - Primary key value
-- `session: &DbSession` - Database session
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Option&lt;Self&gt;, DbError&gt;</code> - Entity if found</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-if let Some(user) = User::find_by_id(1, &session).await? {
-    println!("Found user: {}", user.name);
+    // ...
 }
 ```
 
 ---
 
-#### `DbEntity::find_all()`
+## 宏属性
 
-Find all entities of a given type.
+### #[derive(DbEntity)]
 
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+将 Rust struct 映射为 Sea-ORM Entity。
 
 ```rust
-async fn find_all(session: &DbSession) -> Result<Vec<Self>, DbError>
+use dbnexus::DbEntity;
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
 ```
 
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
+#### 可用属性
 
-- `session: &DbSession` - Database session
+| 属性 | 描述 |
+|------|------|
+| `#[db_entity]` | 标记为数据库实体 |
+| `#[table_name = "..."]` | 指定数据库表名 |
+| `#[primary_key]` | 标记主键字段 |
+| `#[column_name = "..."]` | 指定列名 |
 
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Vec&lt;Self&gt;, DbError&gt;</code> - All entities</td>
-</tr>
-</table>
+### #[db_crud]
 
-**Example:**
+自动生成 CRUD 方法（每次操作前自动检查权限）。
 
 ```rust
-let users = User::find_all(&session).await?;
-for user in users {
-    println!("User: {}", user.name);
+use dbnexus::{DbEntity, db_crud};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+#### 生成的方法
+
+```rust
+impl User {
+    /// 插入新记录
+    pub async fn insert(
+        session: &Session,
+        entity: Model,
+    ) -> Result<Model, DbError>;
+
+    /// 根据 ID 查询
+    pub async fn find_by_id(
+        session: &Session,
+        id: i64,
+    ) -> Result<Model, DbError>;
+
+    /// 更新记录
+    pub async fn update(
+        session: &Session,
+        entity: Model,
+    ) -> Result<Model, DbError>;
+
+    /// 根据 ID 删除
+    pub async fn delete(
+        session: &Session,
+        id: i64,
+    ) -> Result<u64, DbError>;
+
+    /// 查询所有记录
+    pub async fn find_all(
+        session: &Session,
+    ) -> Result<Vec<Model>, DbError>;
+
+    /// 批量删除
+    pub async fn delete_many(
+        session: &Session,
+        filter: String,
+    ) -> Result<u64, DbError>;
+
+    /// 统计数量
+    pub async fn count(
+        session: &Session,
+    ) -> Result<u64, DbError>;
+}
+```
+
+### #[db_permission]
+
+声明允许访问的角色和操作。
+
+```rust
+use dbnexus::{DbEntity, db_crud, db_permission};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
+#[db_permission(role = "user", actions = ["read"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+### #[db_audit]
+
+启用审计日志记录。
+
+```rust
+use dbnexus::{DbEntity, db_audit};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+### #[db_cache]
+
+启用实体缓存。
+
+```rust
+use dbnexus::{DbEntity, db_cache};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_cache(ttl = 300, capacity = 1000)]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+### #[global_index]
+
+启用全局索引。
+
+```rust
+use dbnexus::DbEntity;
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "orders")]
+#[global_index(fields = ["user_id", "product_id"])]
+struct Order {
+    #[primary_key]
+    id: i64,
+    user_id: i64,
+    product_id: i64,
+    amount: Decimal,
 }
 ```
 
 ---
 
-### Configuration
+## 配置类型
 
-<div align="center">
+### DbConfig
 
-#### ⚙️ Configuration Management
-
-</div>
-
----
-
-#### `Config`
-
-Configuration struct for customizing database behavior.
-
-<table>
-<tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
+数据库连接配置。
 
 ```rust
-pub struct Config {
-    pub database_url: String,
+use dbnexus::DbConfig;
+
+pub struct DbConfig {
+    pub url: String,
+    pub database_type: DatabaseType,
     pub max_connections: u32,
     pub min_connections: u32,
-    pub connection_timeout: Duration,
-    pub idle_timeout: Duration,
-    pub cache_enabled: bool,
-    pub cache_ttl: Duration,
-    pub audit_enabled: bool,
-    pub metrics_enabled: bool,
+    pub idle_timeout: u64,
+    pub acquire_timeout: u64,
 }
 ```
 
-</td>
-</tr>
-</table>
-
----
-
-#### `Config::from_url()`
-
-Create configuration from database URL.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+#### 方法
 
 ```rust
-pub fn from_url(url: &str) -> Result<Self, DbError>
-```
+impl DbConfig {
+    /// 从环境变量加载配置
+    pub fn from_env() -> Result<Self, DbError>;
 
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
+    /// 从连接字符串创建配置
+    pub fn new(url: &str) -> Self;
 
-- `url: &str` - Database connection URL
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Config, DbError&gt;</code></td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let config = Config::from_url("postgresql://localhost/mydb")?;
-```
-
----
-
-## Database Adapters
-
-<div align="center">
-
-#### 🗄️ Supported Database Backends
-
-</div>
-
-### Supported Databases
-
-<details open>
-<summary><b>🔹 SQLite</b></summary>
-
-**Feature Flag:** `sqlite`
-
-**Connection URL:** `sqlite://path/to/database.sqlite`
-
-**Characteristics:**
-- Lightweight, serverless database
-- Single file storage
-- Zero configuration
-- Ideal for development and small applications
-
-**Example:**
-```rust
-let pool = DbPool::new("sqlite://./db.sqlite").await?;
-```
-
-</details>
-
-<details>
-<summary><b>🔹 PostgreSQL</b></summary>
-
-**Feature Flag:** `postgres`
-
-**Connection URL:** `postgresql://user:password@localhost/database`
-
-**Characteristics:**
-- Full-featured, enterprise-grade database
-- ACID compliant
-- Advanced features (JSON, arrays, etc.)
-- Excellent for production workloads
-
-**Example:**
-```rust
-let pool = DbPool::new(
-    "postgresql://user:pass@localhost/mydb"
-).await?;
-```
-
-</details>
-
-<details>
-<summary><b>🔹 MySQL</b></summary>
-
-**Feature Flag:** `mysql`
-
-**Connection URL:** `mysql://user:password@localhost/database`
-
-**Characteristics:**
-- Popular open-source database
-- High performance
-- Wide compatibility
-- Good for web applications
-
-**Example:**
-```rust
-let pool = DbPool::new(
-    "mysql://user:pass@localhost/mydb"
-).await?;
-```
-
-</details>
-
-### Feature Selection
-
-**Cargo.toml:**
-```toml
-[dependencies]
-dbnexus = { version = "0.1", features = ["postgres"] }
-```
-
-**Note:** Only one database feature can be enabled at a time.
-
----
-
-## Permission Engine
-
-<div align="center">
-
-#### 🛡️ Permission Control System
-
-</div>
-
----
-
-#### `PermissionEngine`
-
-Manages and enforces database access permissions.
-
-<table>
-<tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
-
-```rust
-pub struct PermissionEngine {
-    roles: HashMap<String, Role>,
-    permissions: HashMap<String, Permission>,
+    /// 验证配置
+    pub fn validate(&self) -> Result<(), DbError>;
 }
 ```
 
-</td>
-</tr>
-</table>
+### PoolConfig
 
----
-
-#### `PermissionEngine::new()`
-
-Create a new permission engine.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+连接池配置。
 
 ```rust
-pub fn new() -> Self
-```
+use dbnexus::PoolConfig;
 
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>PermissionEngine</code> - New instance</td>
-</tr>
-</table>
-
----
-
-#### `PermissionEngine::add_role()`
-
-Add a new role to the engine.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn add_role(&mut self, role: Role)
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `role: Role` - Role definition
-
-</td>
-</tr>
-</table>
-
----
-
-#### `PermissionEngine::check_permission()`
-
-Check if a user has a specific permission.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn check_permission(
-    &self,
-    user_id: &str,
-    resource: &str,
-    action: &str
-) -> bool
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `user_id: &str` - User identifier
-- `resource: &str` - Resource name (e.g., "users")
-- `action: &str` - Action (e.g., "read", "write", "delete")
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>bool</code> - true if permission granted</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let has_permission = permission_engine.check_permission(
-    "user123",
-    "users",
-    "write"
-);
-```
-
----
-
-## Cache Manager
-
-<div align="center">
-
-#### ⚡ Caching Layer
-
-</div>
-
----
-
-#### `CacheManager`
-
-Manages in-memory caching of query results.
-
-<table>
-<tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
-
-```rust
-pub struct CacheManager {
-    cache: Arc<Mutex<LruCache<String, CacheEntry>>>,
-    ttl: Duration,
+pub struct PoolConfig {
+    pub max_connections: u32,
+    pub min_connections: u32,
+    pub idle_timeout: u64,
+    pub acquire_timeout: u64,
 }
 ```
 
-</td>
-</tr>
-</table>
-
----
-
-#### `CacheManager::new()`
-
-Create a new cache manager.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+#### 方法
 
 ```rust
-pub fn new(ttl: Duration) -> Result<Self, DbError>
+impl PoolConfig {
+    pub fn new() -> Self;
+
+    pub fn max_connections(mut self, n: u32) -> Self;
+
+    pub fn min_connections(mut self, n: u32) -> Self;
+
+    pub fn idle_timeout(mut self, seconds: u64) -> Self;
+
+    pub fn acquire_timeout(mut self, millis: u64) -> Self;
+}
 ```
 
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
+### DatabaseType
 
-- `ttl: Duration` - Time-to-live for cache entries
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;CacheManager, DbError&gt;</code></td>
-</tr>
-</table>
-
----
-
-#### `CacheManager::get()`
-
-Retrieve a value from cache.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+数据库类型枚举。
 
 ```rust
-pub fn get<T>(&self, key: &str) -> Option<T>
-where
-    T: DeserializeOwned,
+use dbnexus::DatabaseType;
+
+pub enum DatabaseType {
+    SQLite,
+    PostgreSQL,
+    MySQL,
+}
+
+impl DatabaseType {
+    pub fn as_str(&self) -> &str;
+
+    pub fn from_str(s: &str) -> Option<Self>;
+}
 ```
 
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key: &str` - Cache key
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Option&lt;T&gt;</code> - Cached value if exists and not expired</td>
-</tr>
-</table>
-
 ---
 
-#### `CacheManager::set()`
+## 错误类型
 
-Store a value in cache.
+### DbError
 
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+数据库错误类型。
 
 ```rust
-pub fn set<T>(&self, key: &str, value: &T) -> Result<(), DbError>
-where
-    T: Serialize,
-```
+use dbnexus::DbError;
 
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key: &str` - Cache key
-- `value: &T` - Value to cache
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;(), DbError&gt;</code></td>
-</tr>
-</table>
-
----
-
-#### `CacheManager::invalidate()`
-
-Invalidate a cache entry.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn invalidate(&self, key: &str)
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key: &str` - Cache key to invalidate
-
-</td>
-</tr>
-</table>
-
----
-
-## Error Handling
-
-<div align="center">
-
-#### 🚨 Error Types and Handling
-
-</div>
-
-### `DbError` Enum
-
-```rust
 pub enum DbError {
-    ConnectionError(String),
-    QueryError(String),
+    /// 连接失败
+    ConnectionFailed(String),
+
+    /// 连接池耗尽
+    PoolExhausted,
+
+    /// 连接超时
+    ConnectionTimeout,
+
+    /// 权限被拒绝
     PermissionDenied(String),
-    NotFound(String),
-    DuplicateKey(String),
-    InvalidConfig(String),
-    SerializationError(String),
-    CacheError(String),
+
+    /// 配置错误
+    ConfigError(String),
+
+    /// 迁移错误
     MigrationError(String),
-    Custom(String),
+
+    /// 事务错误
+    TransactionError(String),
+
+    /// 缓存错误
+    CacheError(String),
+
+    /// 审计错误
+    AuditError(String),
+
+    /// 未知错误
+    Unknown(String),
 }
+
+impl std::fmt::Display for DbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+}
+
+impl std::error::Error for DbError {}
 ```
 
-### Error Handling Pattern
+### DbResult
 
-<table>
-<tr>
-<td width="50%">
+结果类型的别名。
 
-**Pattern Matching**
 ```rust
-match operation() {
-    Ok(result) => {
-        println!("Success: {:?}", result);
-    }
-    Err(DbError::PermissionDenied(msg)) => {
-        eprintln!("Permission denied: {}", msg);
-    }
-    Err(DbError::NotFound(msg)) => {
-        eprintln!("Not found: {}", msg);
-    }
-    Err(e) => {
-        eprintln!("Error: {:?}", e);
-    }
-}
+pub type DbResult<T> = Result<T, DbError>;
 ```
-
-</td>
-<td width="50%">
-
-**? Operator**
-```rust
-async fn process_user(
-    id: i32,
-    session: &DbSession
-) -> Result<User, DbError> {
-    let mut user = User::find_by_id(id, session)
-        .await?
-        .ok_or(DbError::NotFound(
-            "User not found".to_string()
-        ))?;
-    
-    user.name = "Updated".to_string();
-    user.update(session).await?;
-    
-    Ok(user)
-}
-```
-
-</td>
-</tr>
-</table>
 
 ---
 
-## Type Definitions
+## 可选模块 API
 
-### Common Types
+### 缓存模块 (cache)
 
-<table>
-<tr>
-<td width="50%">
+#### CacheConfig
 
-**Database Connection**
 ```rust
-pub type DatabaseConnection = 
-    sea_orm::DatabaseConnection;
+use dbnexus::cache::CacheConfig;
+
+pub struct CacheConfig {
+    pub ttl: u64,           // 过期时间（秒）
+    pub capacity: usize,    // 最大容量
+    pub strategy: LruStrategy,
+}
 ```
 
-**Transaction**
+#### CacheManager
+
 ```rust
-pub type Transaction = 
-    sea_orm::Transaction;
+use dbnexus::cache::CacheManager;
+
+pub trait CacheManager {
+    async fn get(&self, key: &str) -> Option<Vec<u8>>;
+
+    async fn set(&self, key: &str, value: &[u8], ttl: u64) -> Result<(), DbError>;
+
+    async fn delete(&self, key: &str) -> Result<(), DbError>;
+
+    async fn clear(&self) -> Result<(), DbError>;
+
+    async fn exists(&self, key: &str) -> bool;
+}
 ```
 
-**Query Result**
+### 审计模块 (audit)
+
+#### AuditLog
+
 ```rust
-pub type QueryResult = 
-    sea_orm::QueryResult;
+use dbnexus::audit::AuditLog;
+
+pub struct AuditLog {
+    pub id: i64,
+    pub user_id: Option<i64>,
+    pub operation: String,
+    pub table_name: String,
+    pub record_id: Option<String>,
+    pub old_value: Option<Json>,
+    pub new_value: Option<Json>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub ip_address: Option<String>,
+}
+
+impl AuditLog {
+    pub async fn query() -> AuditLogQuery;
+
+    pub async fn create(
+        session: &Session,
+        log: &CreateAuditLog,
+    ) -> Result<Self, DbError>;
+}
 ```
 
-</td>
-<td width="50%">
+### 分片模块 (sharding)
 
-**DbResult**
-```rust
-pub type DbResult<T> = 
-    Result<T, DbError>;
-```
-
-**UserId**
-```rust
-pub type UserId = String;
-```
-
-**ResourceId**
-```rust
-pub type ResourceId = String;
-```
-
-</td>
-</tr>
-</table>
-
----
-
-## Examples
-
-<div align="center">
-
-### 💡 Common Usage Patterns
-
-</div>
-
-### Example 1: Basic CRUD Operations
+#### ShardConfig
 
 ```rust
-use dbnexus::{DbPool, db_entity};
+use dbnexus::sharding::ShardConfig;
 
-#[db_entity]
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "users")]
-pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
+pub struct ShardConfig {
     pub name: String,
-    pub email: String,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite://./db.sqlite").await?;
-    let session = pool.get_session("admin").await?;
-    
-    let user = User {
-        id: 0,
-        name: "John Doe".to_string(),
-        email: "john@example.com".to_string(),
-    };
-    
-    let inserted = user.insert(&session).await?;
-    println!("✅ Inserted user with ID: {}", inserted.id);
-    
-    let found = User::find_by_id(inserted.id, &session).await?;
-    println!("✅ Found user: {:?}", found);
-    
-    Ok(())
+    pub num_shards: u32,
+    pub table_name: String,
+    pub connection_template: String,
+    pub strategy: ShardingStrategy,
 }
 ```
 
-### Example 2: Transaction Handling
+#### ShardRouter
 
 ```rust
-async fn transfer_funds(
-    from_id: i32,
-    to_id: i32,
-    amount: f64,
-    session: &DbSession
-) -> Result<(), DbError> {
-    let tx = session.begin_transaction().await?;
-    
-    let mut from = Account::find_by_id(from_id, session)
-        .await?
-        .ok_or(DbError::NotFound(
-            "Source account not found".to_string()
-        ))?;
-    
-    let mut to = Account::find_by_id(to_id, session)
-        .await?
-        .ok_or(DbError::NotFound(
-            "Target account not found".to_string()
-        ))?;
-    
-    from.balance -= amount;
-    to.balance += amount;
-    
-    from.update(session).await?;
-    to.update(session).await?;
-    
-    tx.commit().await?;
-    
-    Ok(())
+use dbnexus::sharding::ShardRouter;
+
+pub struct ShardRouter {
+    // 私有字段
+}
+
+impl ShardRouter {
+    pub fn with_config(config: &ShardConfig) -> Self;
+
+    pub fn route_by_hash(&self, key: &[u8]) -> u32;
+
+    pub fn route_by_time(&self, time: chrono::DateTime<chrono::Utc>) -> u32;
+
+    pub fn get_shard_connection(&self, shard_id: u32) -> Result<DbPool, DbError>;
 }
 ```
 
-### Example 3: Permission Checking
+#### ShardingStrategy
 
 ```rust
-use dbnexus::{DbPool, PermissionEngine, Role, Permission};
+use dbnexus::sharding::ShardingStrategy;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite://./db.sqlite").await?;
-    
-    let mut permission_engine = PermissionEngine::new();
-    
-    let admin_role = Role {
-        name: "admin".to_string(),
-        permissions: vec![
-            Permission::new("users", "read"),
-            Permission::new("users", "write"),
-            Permission::new("users", "delete"),
-        ],
-    };
-    
-    permission_engine.add_role(admin_role);
-    
-    let session = pool.get_session("admin").await?;
-    
-    let has_permission = permission_engine.check_permission(
-        "admin",
-        "users",
-        "delete"
-    );
-    
-    println!("✅ Has delete permission: {}", has_permission);
-    
-    Ok(())
+pub enum ShardingStrategy {
+    /// 时间分片
+    Yearly {
+        current_year: i32,
+    },
+
+    /// 哈希分片
+    Hash {
+        algorithm: HashAlgorithm,
+        num_shards: u32,
+    },
+
+    /// 范围分片
+    Range {
+        start_id: i64,
+        shard_size: i64,
+    },
+
+    /// 地理位置分片
+    Geo {
+        region: String,
+    },
 }
 ```
 
-### Example 4: Advanced Configuration
+### 全局索引模块 (global-index)
+
+#### GlobalIndex
 
 ```rust
-use dbnexus::{DbPool, Config};
-use std::time::Duration;
+use dbnexus::global_index::GlobalIndex;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_url("postgresql://localhost/mydb")?;
-    
-    let pool = DbPool::new_with_config(config).await?;
-    
-    let session = pool.get_session("user123").await?;
-    
-    Ok(())
+pub struct GlobalIndex {
+    pub name: String,
+    pub fields: Vec<String>,
+    pub unique: bool,
+}
+
+impl GlobalIndex {
+    pub fn new(name: &str, fields: Vec<&str>) -> Self;
+
+    pub async fn create(&self, session: &Session) -> Result<(), DbError>;
+
+    pub async fn lookup(
+        &self,
+        session: &Session,
+        values: &[sea_orm::prelude::Value],
+    ) -> Result<Option<i64>, DbError>;
+
+    pub async fn insert(
+        &self,
+        session: &Session,
+        record_id: i64,
+        values: &[sea_orm::prelude::Value],
+    ) -> Result<(), DbError>;
+
+    pub async fn delete(
+        &self,
+        session: &Session,
+        record_id: i64,
+    ) -> Result<(), DbError>;
+}
+```
+
+### 指标模块 (metrics)
+
+#### MetricsConfig
+
+```rust
+use dbnexus::metrics::MetricsConfig;
+
+pub struct MetricsConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub path: String,
+}
+```
+
+#### Metrics
+
+```rust
+use dbnexus::metrics;
+
+pub fn register_histogram(
+    name: &str,
+    help: &str,
+) -> Result<metrics::Histogram, DbError>;
+
+pub fn register_counter(
+    name: &str,
+    help: &str,
+) -> Result<metrics::Counter, DbError>;
+
+pub fn register_gauge(
+    name: &str,
+    help: &str,
+) -> Result<metrics::Gauge, DbError>;
+```
+
+### 权限引擎模块 (permission-engine)
+
+#### PolicyDecisionPoint
+
+```rust
+use dbnexus::permission_engine::{PolicyDecisionPoint, PermissionContext};
+
+pub struct PolicyDecisionPoint {
+    // 私有字段
+}
+
+impl PolicyDecisionPoint {
+    pub fn new(provider: Arc<dyn PermissionProvider>) -> Self;
+
+    pub async fn check_permission(
+        &self,
+        role: &str,
+        resource: &str,
+        action: &str,
+    ) -> Result<PermissionDecision, DbError>;
+
+    pub async fn check_permission_with_context(
+        &self,
+        role: &str,
+        resource: &str,
+        action: &str,
+        context: &PermissionContext,
+    ) -> Result<PermissionDecision, DbError>;
+}
+```
+
+#### PermissionProvider
+
+```rust
+use dbnexus::permission_engine::PermissionProvider;
+
+pub trait PermissionProvider: Send + Sync {
+    fn get_role_permissions(&self, role: &str) -> Option<Vec<TablePermission>>;
+
+    fn get_all_roles(&self) -> Vec<String>;
+
+    fn has_role(&self, role: &str) -> bool;
+}
+```
+
+#### YamlPermissionProvider
+
+```rust
+use dbnexus::permission_engine::YamlPermissionProvider;
+
+pub struct YamlPermissionProvider {
+    // 私有字段
+}
+
+impl YamlPermissionProvider {
+    pub fn new(path: &str) -> Result<Self, DbError>;
+
+    pub fn with_content(content: &str) -> Result<Self, DbError>;
+}
+```
+
+#### RbacPermissionProvider
+
+```rust
+use dbnexus::permission_engine::RbacPermissionProvider;
+
+pub struct RbacPermissionProvider {
+    // 私有字段
+}
+
+impl RbacPermissionProvider {
+    pub fn new(roles: Vec<Role>, permissions: Vec<Permission>) -> Self;
+}
+```
+
+### 追踪模块 (tracing)
+
+#### TracingConfig
+
+```rust
+use dbnexus::tracing::TracingConfig;
+
+pub struct TracingConfig {
+    pub enabled: bool,
+    pub service_name: String,
+    pub exporter: ExporterType,
+    pub sample_rate: f64,
+}
+```
+
+#### ExporterType
+
+```rust
+use dbnexus::tracing::ExporterType;
+
+pub enum ExporterType {
+    /// OpenTelemetry OTLP 导出器
+    OTLP,
+
+    /// Jaeger 导出器
+    Jaeger,
+
+    /// Zipkin 导出器
+    Zipkin,
+
+    /// 控制台导出器（开发用）
+    Console,
 }
 ```
 
 ---
 
-<div align="center">
+## 类型别名
 
-**[📖 User Guide](USER_GUIDE.md)** • **[🏗️ Architecture](ARCHITECTURE.md)** • **[🏠 Home](../README.md)**
+### Operation
 
-Made with ❤️ by the Documentation Team
+`PermissionAction` 的别名，用于简化使用。
 
-[⬆ Back to Top](#-api-reference)
-</div>
+```rust
+use dbnexus::Operation;
+
+pub type Operation = PermissionAction;
+```
+
+### PermissionAction
+
+权限操作类型。
+
+```rust
+use dbnexus::PermissionAction;
+
+pub enum PermissionAction {
+    Select,
+    Insert,
+    Update,
+    Delete,
+    All,
+}
+```
+
+### RolePolicy
+
+角色策略类型。
+
+```rust
+use dbnexus::RolePolicy;
+
+pub struct RolePolicy {
+    pub name: String,
+    pub inherits: Vec<String>,
+    pub permissions: Vec<TablePermission>,
+}
+```
+
+### PermissionConfig
+
+权限配置类型。
+
+```rust
+use dbnexus::PermissionConfig;
+
+pub struct PermissionConfig {
+    pub roles: HashMap<String, RolePolicy>,
+    pub resources: HashMap<String, ResourcePermission>,
+}
+```

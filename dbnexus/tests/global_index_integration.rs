@@ -23,9 +23,7 @@ async fn test_global_index_creation() {
     let db_url = "sqlite::memory:".to_string();
 
     // Act - 创建全局索引
-    let index = GlobalIndex::new(&db_url)
-        .await
-        .expect("Failed to create global index");
+    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // Assert - 验证创建成功
     // 1. 验证配置可以获取
@@ -35,16 +33,12 @@ async fn test_global_index_creation() {
     assert!(config.max_retries > 0, "Max retries should be positive");
 
     // 2. 验证可以执行查询操作（即使没有数据）
-    let empty_result = index
-        .query_by_index("test_table", "test_key", "test_value")
-        .await;
+    let empty_result = index.query_by_index("test_table", "test_key", "test_value").await;
     assert!(empty_result.is_ok(), "Query on empty index should succeed");
     assert!(empty_result.unwrap().is_empty(), "Empty query should return empty vec");
 
     // 3. 验证可以查询所有分片
-    let all_shards = index
-        .query_all_shards("test_table", "test_key")
-        .await;
+    let all_shards = index.query_all_shards("test_table", "test_key").await;
     assert!(all_shards.is_ok(), "Query all shards should succeed");
     assert!(all_shards.unwrap().is_empty(), "Empty query should return empty vec");
 
@@ -66,10 +60,7 @@ async fn test_global_index_creation() {
         .await
         .expect("Failed to query entries");
     assert_eq!(query_result.len(), 1, "Should find 1 entry");
-    assert_eq!(
-        query_result[0].record_id, "prod_001",
-        "Entry record_id should match"
-    );
+    assert_eq!(query_result[0].record_id, "prod_001", "Entry record_id should match");
 }
 /// TEST-GI-002: 注册索引条目测试
 #[tokio::test]

@@ -1,1087 +1,605 @@
-<div align="center">
+# DB Nexus 架构文档
 
-# 🏗️ Architecture Design
+## 目录
 
-### Technical Architecture & Design Decisions
-
-[🏠 Home](../README.md) • [📖 User Guide](USER_GUIDE.md) • [🔧 API Docs](https://docs.rs/dbnexus)
-
----
-
-</div>
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Component Design](#component-design)
-- [Data Flow](#data-flow)
-- [Design Decisions](#design-decisions)
-- [Technology Stack](#technology-stack)
-- [Performance Considerations](#performance-considerations)
-- [Security Architecture](#security-architecture)
-- [Scalability](#scalability)
-- [Future Improvements](#future-improvements)
+- [架构概述](#架构概述)
+- [核心组件](#核心组件)
+- [数据流](#数据流)
+- [安全性设计](#安全性设计)
+- [性能优化](#性能优化)
+- [扩展性考虑](#扩展性考虑)
 
 ---
 
-## Overview
+## 架构概述
 
-<div align="center">
+### 系统架构图
 
-### 🎯 Architecture Goals
-
-</div>
-
-<table>
-<tr>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/speed.png" width="64"><br>
-<b>Performance</b><br>
-Connection pooling, caching
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/security-checked.png" width="64"><br>
-<b>Security</b><br>
-Permission control, audit
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/module.png" width="64"><br>
-<b>Modularity</b><br>
-Multi-database support
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/maintenance.png" width="64"><br>
-<b>Maintainability</b><br>
-Declarative macros
-</td>
-</tr>
-</table>
-
-### Design Principles
-
-> 🎯 **Simplicity First**: Keep the API simple and intuitive with declarative macros
-> 
-> 🔒 **Security by Design**: Built-in permission control and audit logging
-> 
-> ⚡ **Performance by Default**: Connection pooling, caching, and async operations
-> 
-> 🧩 **Modularity**: Independent components with clear separation of concerns
-
----
-
-## System Architecture
-
-<div align="center">
-
-### 🏛️ High-Level Architecture
-
-</div>
-
-```mermaid
-graph TB
-    subgraph "Application Layer"
-        A[User Application]
-    end
-    
-    subgraph "API Layer"
-        B[DbPool API]
-        C[DbSession API]
-        D[DbEntity Macros]
-    end
-    
-    subgraph "Core Layer"
-        E[Connection Pool]
-        F[Session Manager]
-        G[Permission Engine]
-        H[Cache Manager]
-    end
-    
-    subgraph "Data Layer"
-        I[Database Adapter]
-        J[Shard Manager]
-        K[Migration Engine]
-    end
-    
-    subgraph "Infrastructure"
-        L[(Database)]
-        M[Cache Store]
-        N[Audit Log]
-        O[Metrics Exporter]
-    end
-    
-    A --> B
-    A --> C
-    A --> D
-    
-    B --> E
-    C --> F
-    C --> G
-    C --> H
-    
-    E --> I
-    F --> I
-    G --> I
-    H --> M
-    
-    I --> J
-    I --> K
-    I --> L
-    
-    G --> N
-    H --> O
-    
-    style A fill:#e1f5ff
-    style B fill:#b3e5fc
-    style C fill:#b3e5fc
-    style D fill:#b3e5fc
-    style E fill:#81d4fa
-    style F fill:#81d4fa
-    style G fill:#81d4fa
-    style H fill:#81d4fa
-    style I fill:#4fc3f7
-    style J fill:#4fc3f7
-    style K fill:#4fc3f7
-    style L fill:#29b6f6
-    style M fill:#29b6f6
-    style N fill:#29b6f6
-    style O fill:#29b6f6
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                           应用层                                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │  Web API    │  │  gRPC       │  │  CLI        │  │  定时任务   │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         DB Nexus 抽象层                              │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                    DbPool (连接池管理)                         │  │
+│  │  - 连接创建和销毁                                              │  │
+│  │  - 连接复用和回收                                              │  │
+│  │  - 负载均衡                                                    │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                │                                     │
+│                                ▼                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                    Session (会话管理)                          │  │
+│  │  - RAII 连接包装                                              │  │
+│  │  - 事务管理                                                    │  │
+│  │  - 权限上下文                                                  │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                │                                     │
+│              ┌─────────────────┼─────────────────┐                  │
+│              ▼                 ▼                 ▼                  │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
+│  │  权限控制层       │ │  缓存层          │ │  审计层          │    │
+│  │  - 声明式宏       │ │  - LRU 缓存      │ │  - 操作记录      │    │
+│  │  - RBAC 支持      │ │  - TTL 过期      │ │  - 追踪          │    │
+│  │  - 引擎可插拔     │ │  - 穿透防护      │ │  - 告警          │    │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
+│                                │                                     │
+│                                ▼                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                    宏生成层                                    │  │
+│  │  - #[derive(DbEntity)]                                        │  │
+│  │  - #[db_crud]                                                 │  │
+│  │  - #[db_permission]                                           │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Sea-ORM + sqlx                              │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
+│  │    SQLite        │ │   PostgreSQL     │ │     MySQL        │    │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Layer Responsibilities
+### 设计原则
 
-<table>
-<tr>
-<th>Layer</th>
-<th>Purpose</th>
-<th>Key Components</th>
-<th>Dependencies</th>
-</tr>
-<tr>
-<td><b>Application</b></td>
-<td>User-facing code</td>
-<td>Business logic, entities</td>
-<td>API Layer</td>
-</tr>
-<tr>
-<td><b>API</b></td>
-<td>Public interface</td>
-<td>DbPool, DbSession, macros</td>
-<td>Core Layer</td>
-</tr>
-<tr>
-<td><b>Core</b></td>
-<td>Business logic</td>
-<td>Pool, session, permissions, cache</td>
-<td>Data Layer</td>
-</tr>
-<tr>
-<td><b>Data</b></td>
-<td>Database operations</td>
-<td>Adapters, sharding, migrations</td>
-<td>Infrastructure</td>
-</tr>
-<tr>
-<td><b>Infrastructure</b></td>
-<td>Low-level resources</td>
-<td>DB, cache, logs, metrics</td>
-<td>None</td>
-</tr>
-</table>
+1. **简洁性优先** - 默认采用简单直接的实现，避免过度设计
+2. **类型安全** - 充分利用 Rust 的类型系统和借用检查器
+3. **零成本抽象** - 宏生成的代码应该是高效的
+4. **可扩展性** - 通过特性标志和可插拔组件支持扩展
+
+### 核心目标
+
+- **高性能**: 连接池、缓存、异步 I/O
+- **高安全**: 权限控制、审计日志、SQL 注入防护
+- **易用性**: 声明式宏、RAII 资源管理、清晰的错误处理
+- **可维护**: 清晰的模块划分、一致的代码风格
 
 ---
 
-## Component Design
+## 核心组件
 
-### 1️⃣ DbPool - Connection Pool Manager
+### 连接池 (DbPool)
 
-<details open>
-<summary><b>🔧 Component Overview</b></summary>
+连接池是 DB Nexus 的核心组件，负责管理数据库连接的生命周期。
 
-The DbPool manages database connections with pooling and session-based access control.
+#### 职责
+
+- **连接管理**: 创建、维护和回收数据库连接
+- **负载均衡**: 在多个连接之间分配请求
+- **健康检查**: 检测和替换失效的连接
+- **超时控制**: 管理连接获取和空闲超时
+
+#### 设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 连接复用 | 池化模式 | 减少连接建立开销 |
+| 分配策略 | FIFO + 优先级 | 简单且公平 |
+| 空闲处理 | LRU 淘汰 | 平衡内存使用和性能 |
+| 健康检测 | 轻量查询 | 最小化性能影响 |
+
+#### 代码结构
+
+```
+DbPool
+├── ConnectionManager    // 连接管理器
+├── PoolInner           // 内部状态
+├── Spawner             // 任务调度器
+└── PoolStatus          // 状态信息
+```
+
+### 会话 (Session)
+
+Session 是连接池与用户代码之间的桥梁，提供 RAII 风格的资源管理。
+
+#### 职责
+
+- **连接包装**: 封装数据库连接
+- **事务管理**: 提供事务 API
+- **权限上下文**: 携带当前用户的权限信息
+- **资源清理**: Drop 时自动释放连接到池中
+
+#### 设计模式
 
 ```rust
-pub struct DbPool {
-    pool: DatabaseConnection,
-    config: Arc<Config>,
-    permission_engine: Arc<PermissionEngine>,
-    cache_manager: Option<Arc<CacheManager>>,
-}
+// RAII 模式示例
+let session = pool.get_session("admin").await?;
 
-impl DbPool {
-    pub fn new(database_url: &str) -> Result<Self> {
-        let config = Config::from_url(database_url)?;
-        let pool = Database::connect(&config.connection_string()).await?;
-        
-        Ok(Self {
-            pool,
-            config: Arc::new(config),
-            permission_engine: Arc::new(PermissionEngine::new()),
-            cache_manager: if config.cache_enabled {
-                Some(Arc::new(CacheManager::new(config.cache_ttl)?))
-            } else {
-                None
-            },
-        })
-    }
-    
-    pub async fn get_session(&self, user_id: &str) -> Result<DbSession> {
-        let session = DbSession::new(
-            self.pool.clone(),
-            user_id.to_string(),
-            self.permission_engine.clone(),
-            self.cache_manager.clone(),
-        );
-        Ok(session)
-    }
+// Session 在作用域结束时自动:
+// 1. 回滚未提交的事务
+// 2. 释放连接回连接池
+```
+
+### 宏系统
+
+DB Nexus 提供三层宏系统，实现声明式数据库操作。
+
+#### 第 1 层: #[derive(DbEntity)]
+
+将 Rust struct 映射为 Sea-ORM Entity。
+
+```rust
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
 }
 ```
 
-</details>
+**生成代码**:
+- `EntityTrait` 实现（表名、主键）
+- `ActiveModel` 结构体
+- `IntoActiveModel` 实现
 
-**Responsibilities:**
-- 📌 Connection pool management
-- 📌 Session creation and lifecycle
-- 📌 Permission engine initialization
-- 📌 Cache manager configuration
+#### 第 2 层: #[db_crud]
 
-**Design Patterns:**
-- 🎨 **Factory Pattern**: Creates DbSession instances
-- 🎨 **Builder Pattern**: Flexible configuration
-- 🎨 **Singleton Pattern**: Shared pool across sessions
-
-### 2️⃣ DbSession - Session-Based Database Access
-
-```mermaid
-classDiagram
-    class DbSession {
-        -DatabaseConnection connection
-        -String user_id
-        -PermissionEngine permission_engine
-        -CacheManager cache_manager
-        -Transaction current_transaction
-        +begin_transaction()
-        +commit()
-        +rollback()
-        +execute_query()
-        +check_permission()
-    }
-    
-    class PermissionEngine {
-        -HashMap permissions
-        +check_permission(user_id, resource, action)
-        +grant_permission()
-        +revoke_permission()
-    }
-    
-    class CacheManager {
-        -HashMap cache
-        -Duration ttl
-        +get(key)
-        +set(key, value)
-        +invalidate()
-    }
-    
-    DbSession --> PermissionEngine
-    DbSession --> CacheManager
-```
-
-<details>
-<summary><b>🔍 Implementation Details</b></summary>
+自动生成 CRUD 方法。
 
 ```rust
-pub struct DbSession {
-    connection: DatabaseConnection,
-    user_id: String,
-    permission_engine: Arc<PermissionEngine>,
-    cache_manager: Option<Arc<CacheManager>>,
-    current_transaction: Option<Transaction>,
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]
+struct User { /* ... */ }
+```
+
+**生成方法**:
+- `insert()` - 插入并返回带 ID 的实体
+- `find_by_id()` - 根据 ID 查询
+- `update()` - 更新记录
+- `delete()` - 删除记录
+- `find_all()` - 查询所有
+- `delete_many()` - 批量删除
+- `count()` - 统计数量
+
+#### 第 3 层: #[db_permission]
+
+声明式权限配置。
+
+```rust
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
+#[db_permission(role = "user", actions = ["read"])]
+struct User { /* ... */ }
+```
+
+**生成代码**:
+- 权限检查中间件
+- 权限验证逻辑
+
+### 权限引擎
+
+可插拔的权限引擎架构。
+
+```
+┌─────────────────────────────────────────┐
+│         应用代码                         │
+└─────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│      PolicyDecisionPoint (PDP)          │
+│  - 权限决策中心                          │
+│  - 协调 Provider 和 Rules               │
+└─────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│      PermissionProvider (PP)            │
+│  - YamlPermissionProvider               │
+│  - RbacPermissionProvider               │
+│  - 自定义 Provider                       │
+└─────────────────────────────────────────┘
+```
+
+### 缓存系统
+
+多级缓存架构。
+
+```
+┌─────────────────────────────────────────┐
+│           应用查询                       │
+└─────────────────────────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+   ┌─────────┐         ┌─────────┐
+   │ L1 缓存 │         │ 缓存未中 │
+   │ (内存)  │         │         │
+   └─────────┘         └────┬────┘
+                            │
+                            ▼
+                      ┌─────────┐
+                      │ 数据库  │
+                      └─────────┘
+```
+
+### 审计系统
+
+操作审计追踪。
+
+```
+┌─────────────┐    操作事件     ┌─────────────┐
+│   应用层     │ ─────────────▶ │  审计模块    │
+└─────────────┘                 └─────────────┘
+                                        │
+                                        ▼
+                              ┌─────────────────┐
+                              │   存储后端       │
+                              │  - 数据库        │
+                              │  - 文件          │
+                              │  - 外部服务      │
+                              └─────────────────┘
+```
+
+---
+
+## 数据流
+
+### 查询流程
+
+```
+1. 用户调用
+   User::find_by_id(&session, 1).await?
+
+2. 权限检查
+   ├── 验证用户角色
+   ├── 检查资源权限
+   └── 记录审计日志
+
+3. 缓存查询
+   ├── 检查 L1 缓存
+   └── 命中则返回
+
+4. 数据库查询
+   ├── 获取连接
+   ├── 执行 SQL
+   └── 返回结果
+
+5. 缓存更新
+   ├── 更新 L1 缓存
+   └── 设置 TTL
+
+6. 返回结果
+```
+
+### 写入流程
+
+```
+1. 用户调用
+   User::insert(&session, user).await?
+
+2. 权限检查
+   ├── 验证写入权限
+   └── 记录审计日志
+
+3. 事务开始
+   ├── 获取连接
+   └── 开始事务
+
+4. 数据库写入
+   ├── 执行 INSERT
+   └── 获取自增 ID
+
+5. 缓存失效
+   ├── 删除相关缓存
+   └── 避免脏数据
+
+6. 事务提交
+   └── 返回结果
+```
+
+### 分片路由流程
+
+```
+1. 接收请求
+   Order::find_by_id(&session, order_id).await?
+
+2. 计算分片
+   ├── 确定分片策略
+   └── 计算目标分片
+
+3. 获取分片连接
+   ├── 连接目标分片
+   └── 执行查询
+
+4. 合并结果
+   └── 返回给用户
+```
+
+---
+
+## 安全性设计
+
+### 权限控制
+
+#### RBAC 模型
+
+```
+┌─────────────────────────────────────────┐
+│              角色层次                    │
+│                                         │
+│         ┌───────────┐                   │
+│         │  super    │ ◀── 继承所有角色  │
+│         │   admin   │                   │
+│         └─────┬─────┘                   │
+│               │                         │
+│       ┌───────┴───────┐                 │
+│       ▼               ▼                 │
+│  ┌─────────┐    ┌─────────┐             │
+│  │ manager │    │ user    │             │
+│  └─────────┘    └─────────┘             │
+└─────────────────────────────────────────┘
+```
+
+#### 权限粒度
+
+| 级别 | 描述 |
+|------|------|
+| 表级 | 控制对整个表的访问 |
+| 行级 | 基于条件的行级过滤（可选） |
+| 列级 | 控制特定列的访问（可选） |
+
+### SQL 注入防护
+
+```rust
+// 推荐：使用参数化查询
+session.execute_raw(
+    "SELECT * FROM users WHERE id = $1",
+    vec![user_id.into()],
+).await?;
+
+// 不推荐：字符串拼接
+let sql = format!("SELECT * FROM users WHERE id = {}", user_id);
+```
+
+### 连接安全
+
+```rust
+// PostgreSQL SSL 连接
+let config = DbConfig::new("postgres://user:pass@host/db?sslmode=require");
+
+// 连接池加密
+let pool_config = PoolConfig::new()
+    .max_connections(50)
+    .min_connections(5);
+```
+
+### 审计日志
+
+记录所有敏感操作：
+
+```rust
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
 }
+```
 
-impl DbSession {
-    pub async fn begin_transaction(&mut self) -> Result<()> {
-        if self.current_transaction.is_some() {
-            return Err(Error::TransactionAlreadyActive);
-        }
-        
-        let txn = self.connection.begin().await?;
-        self.current_transaction = Some(txn);
-        Ok(())
-    }
-    
-    pub async fn commit(&mut self) -> Result<()> {
-        match self.current_transaction.take() {
-            Some(txn) => {
-                txn.commit().await?;
-                Ok(())
-            }
-            None => Err(Error::NoActiveTransaction),
-        }
-    }
-    
-    pub async fn rollback(&mut self) -> Result<()> {
-        match self.current_transaction.take() {
-            Some(txn) => {
-                txn.rollback().await?;
-                Ok(())
-            }
-            None => Err(Error::NoActiveTransaction),
-        }
-    }
-    
-    pub fn check_permission(&self, resource: &str, action: &str) -> Result<()> {
-        self.permission_engine
-            .check_permission(&self.user_id, resource, action)
-    }
+---
+
+## 性能优化
+
+### 连接池配置
+
+```rust
+let pool_config = PoolConfig::new()
+    .max_connections(100)       // 根据并发需求调整
+    .min_connections(10)        // 保持最小连接数
+    .idle_timeout(600)          // 空闲超时 10 分钟
+    .acquire_timeout(10000);    // 获取超时 10 秒
+```
+
+### 缓存策略
+
+```rust
+// 高频读取、低频修改的数据
+#[db_cache(ttl = 3600, capacity = 10000)]
+struct Product {
+    #[primary_key]
+    id: i64,
+    name: String,
+    price: Decimal,
 }
 ```
 
-</details>
-
-### 3️⃣ DbEntity - Declarative Entity System
-
-<div align="center">
-
-#### 📦 Entity Definition with CRUD Operations
-
-</div>
-
-```mermaid
-stateDiagram-v2
-    [*] --> Defined: #[derive(DbEntity)]
-    Defined --> Generated: #[db_crud] macro
-    Generated --> Insertable: insert()
-    Generated --> Selectable: find_by_id()
-    Generated --> Updatable: update()
-    Generated --> Deletable: delete()
-    
-    Insertable --> [*]
-    Selectable --> [*]
-    Updatable --> [*]
-    Deletable --> [*]
-```
-
-<table>
-<tr>
-<th>Macro</th><th>Purpose</th><th>Generated Methods</th>
-</tr>
-<tr>
-<td><b>#[db_entity]</b></td>
-<td>Define entity metadata</td>
-<td>Table name, primary key, relations</td>
-</tr>
-<tr>
-<td><b>#[db_crud]</b></td>
-<td>Generate CRUD operations</td>
-<td>insert, find_by_id, update, delete, find_all</td>
-</tr>
-<tr>
-<td><b>#[primary_key]</b></td>
-<td>Mark primary key field</td>
-<td>Used in find_by_id, update, delete</td>
-</tr>
-</table>
-
----
-
-## Data Flow
-
-<div align="center">
-
-### 🔄 Request Processing Flow
-
-</div>
-
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant Pool as DbPool
-    participant Session as DbSession
-    participant Perm as Permission Engine
-    participant Cache as Cache Manager
-    participant DB as Database
-    participant Audit as Audit Logger
-    
-    App->>Pool: get_session(user_id)
-    Pool->>Session: Create session
-    
-    App->>Session: User::insert(user)
-    Session->>Perm: check_permission(user, users, insert)
-    Perm-->>Session: Permission granted
-    
-    Session->>Cache: check_cache(key)
-    Cache-->>Session: Cache miss
-    
-    Session->>DB: INSERT INTO users
-    DB-->>Session: Inserted
-    
-    Session->>Cache: set_cache(key, result)
-    Session->>Audit: log_operation(insert, users)
-    Session-->>App: Result
-```
-
-### CRUD Operation Flow
-
-<table>
-<tr>
-<td width="50%">
-
-**Insert Flow**
-
-1. 📥 **Permission Check**
-   - Verify user has insert permission
-   - Check resource access rights
-
-2. 💾 **Cache Check**
-   - Check if entity exists in cache
-   - Skip if cached (rare for inserts)
-
-3. 🗄️ **Database Insert**
-   - Execute INSERT statement
-   - Return generated ID
-
-4. 📝 **Cache Update**
-   - Store new entity in cache
-   - Set TTL based on config
-
-5. 📊 **Audit Logging**
-   - Log insert operation
-   - Record user, timestamp, data
-
-</td>
-<td width="50%">
-
-**Query Flow**
-
-1. 🔒 **Permission Check**
-   - Verify user has read permission
-   - Apply row-level filters
-
-2. 💾 **Cache Lookup**
-   - Check cache for entity
-   - Return if found and valid
-
-3. 🗄️ **Database Query**
-   - Execute SELECT statement
-   - Apply filters and joins
-
-4. 💾 **Cache Store**
-   - Store result in cache
-   - Set TTL for expiration
-
-5. 📊 **Audit Logging**
-   - Log query operation
-   - Record query details
-
-</td>
-</tr>
-</table>
-
----
-
-## Design Decisions
-
-<div align="center">
-
-### 🤔 Why We Made These Choices
-
-</div>
-
-### Decision 1: Declarative Macro System
-
-<table>
-<tr>
-<td width="50%">
-
-**✅ Pros**
-- Minimal boilerplate code
-- Type-safe database operations
-- Compile-time validation
-- IDE-friendly autocomplete
-- Consistent API across entities
-
-</td>
-<td width="50%">
-
-**❌ Cons**
-- Macro complexity
-- Debugging challenges
-- Compile-time overhead
-- Less flexibility for edge cases
-
-</td>
-</tr>
-</table>
-
-**Verdict:** ✅ **Chosen** - Benefits of reduced boilerplate and type safety outweigh cons
-
----
-
-### Decision 2: Session-Based Access Control
+### 批量操作
 
 ```rust
-// Before: Direct pool access (no user context)
-let result = pool.query("SELECT * FROM users").await?;
-
-// After: Session-based with user context
-let session = pool.get_session("user123").await?;
-let result = User::find_by_id(&session, 1).await?;
-// Permission checks automatically applied
-```
-
-**Rationale:**
-- 🎯 Security: User context always available
-- 🎯 Audit: All operations traceable to users
-- 🎯 Permissions: Fine-grained access control
-- 🎯 Compliance: Meets regulatory requirements
-
----
-
-### Decision 3: Multi-Database Support via Feature Flags
-
-<table>
-<tr>
-<td width="33%" align="center">
-
-**SQLite**
-```toml
-[dependencies]
-dbnexus = { version = "0.1", features = ["sqlite"] }
-```
-Embedded, no server
-
-</td>
-<td width="33%" align="center">
-
-**PostgreSQL**
-```toml
-[dependencies]
-dbnexus = { version = "0.1", features = ["postgres"] }
-```
-Full-featured, scalable
-
-</td>
-<td width="33%" align="center">
-
-**MySQL**
-```toml
-[dependencies]
-dbnexus = { version = "0.1", features = ["mysql"] }
-```
-Widely used, reliable
-
-</td>
-</tr>
-</table>
-
-**Chosen:** Feature flags - Optimize binary size and dependencies
-
-**Implementation:**
-```rust
-#[cfg(all(feature = "sqlite", feature = "postgres"))]
-compile_error!("Cannot enable both 'sqlite' and 'postgres' features");
-
-#[cfg(feature = "sqlite")]
-use sea_orm::SqliteConnectOptions;
-
-#[cfg(feature = "postgres")]
-use sea_orm::PostgresConnectOptions;
-
-#[cfg(feature = "mysql")]
-use sea_orm::MySqlConnectOptions;
-```
-
----
-
-### Decision 4: Async-First with Tokio
-
-<table>
-<tr>
-<td width="50%">
-
-**❌ Synchronous API**
-```rust
-let result = User::find_by_id(1)?;
-// Blocking operation
-```
-
-</td>
-<td width="50%">
-
-**✅ Async API**
-```rust
-let result = User::find_by_id(&session, 1).await?;
-// Non-blocking, concurrent
-```
-
-</td>
-</tr>
-</table>
-
-**Benefits:**
-- 📌 High concurrency
-- 📌 Efficient resource usage
-- 📌 Better scalability
-- 📌 Modern Rust ecosystem
-
----
-
-## Technology Stack
-
-<div align="center">
-
-### 🛠️ Core Technologies
-
-</div>
-
-<table>
-<tr>
-<th>Category</th>
-<th>Technology</th>
-<th>Version</th>
-<th>Purpose</th>
-</tr>
-<tr>
-<td rowspan="2"><b>Language</b></td>
-<td>Rust</td>
-<td>1.75+</td>
-<td>Primary language</td>
-</tr>
-<tr>
-<td>Procedural Macros</td>
-<td>1.75+</td>
-<td>Code generation</td>
-</tr>
-<tr>
-<td rowspan="2"><b>Database</b></td>
-<td>Sea-ORM</td>
-<td>2.0.0-rc.22</td>
-<td>ORM framework</td>
-</tr>
-<tr>
-<td>Sea-Query</td>
-<td>0.31</td>
-<td>Query builder</td>
-</tr>
-<tr>
-<td rowspan="3"><b>Async Runtime</b></td>
-<td>tokio</td>
-<td>1.42</td>
-<td>Async runtime</td>
-</tr>
-<tr>
-<td>async-trait</td>
-<td>0.1</td>
-<td>Async traits</td>
-</tr>
-<tr>
-<td>futures</td>
-<td>0.3</td>
-<td>Futures utilities</td>
-</tr>
-<tr>
-<td><b>Serialization</b></td>
-<td>serde</td>
-<td>1.0</td>
-<td>Data serialization</td>
-</tr>
-<tr>
-<td><b>Error Handling</b></td>
-<td>thiserror</td>
-<td>2.0</td>
-<td>Error types</td>
-</tr>
-<tr>
-<td><b>Logging</b></td>
-<td>tracing</td>
-<td>0.1</td>
-<td>Structured logging</td>
-</tr>
-<tr>
-<td><b>Caching</b></td>
-<td>moka</td>
-<td>0.12</td>
-<td>In-memory cache</td>
-</tr>
-<tr>
-<td><b>Metrics</b></td>
-<td>prometheus</td>
-<td>0.13</td>
-<td>Metrics export</td>
-</tr>
-</table>
-
-### Dependency Graph
-
-```mermaid
-graph LR
-    A[dbnexus] --> B[sea-orm]
-    A --> C[tokio]
-    A --> D[serde]
-    A --> E[thiserror]
-    A --> F[tracing]
-    A --> G[moka]
-    A --> H[prometheus]
-    
-    B --> I[sea-query]
-    B --> J[sqlx]
-    
-    style A fill:#81d4fa
-    style B fill:#4fc3f7
-    style C fill:#4fc3f7
-    style D fill:#4fc3f7
-    style E fill:#4fc3f7
-    style F fill:#4fc3f7
-    style G fill:#4fc3f7
-    style H fill:#4fc3f7
-```
-
----
-
-## Performance Considerations
-
-<div align="center">
-
-### ⚡ Performance Optimizations
-
-</div>
-
-### 1️⃣ Connection Pooling
-
-```rust
-// Connection pool configuration
-let pool = DbPool::builder()
-    .max_connections(100)
-    .min_connections(10)
-    .connect_timeout(Duration::from_secs(30))
-    .idle_timeout(Duration::from_secs(600))
-    .max_lifetime(Duration::from_secs(1800))
-    .build("postgres://localhost/db")?;
-```
-
-**Benefits:**
-- 📌 Reduced connection overhead
-- 📌 Better resource utilization
-- 📌 Improved throughput
-- 📌 Connection reuse
-
-### 2️⃣ Caching Strategy
-
-```mermaid
-graph LR
-    A[Request] --> B{Cache Hit?}
-    B -->|Yes| C[Return Cached]
-    B -->|No| D[Query Database]
-    D --> E[Store in Cache]
-    E --> F[Return Result]
-    
-    style C fill:#4caf50
-    style D fill:#ff9800
-```
-
-**Cache Configuration:**
-```rust
-let config = Config::builder()
-    .enable_cache(true)
-    .cache_ttl(Duration::from_secs(3600))
-    .cache_max_capacity(10000)
-    .build()?;
-```
-
-### 3️⃣ Batch Operations
-
-<table>
-<tr>
-<td width="50%">
-
-**Individual Inserts**
-```rust
-for user in users {
-    User::insert(&session, user).await?;
-}
-// N database round trips
-```
-
-</td>
-<td width="50%">
-
-**Batch Insert**
-```rust
-User::insert_batch(&session, users).await?;
-// 1 database round trip
-```
-
-</td>
-</tr>
-</table>
-
-### Performance Metrics
-
-<table>
-<tr>
-<th>Operation</th><th>Throughput</th><th>Latency (P50)</th><th>Latency (P99)</th>
-</tr>
-<tr>
-<td>Simple SELECT</td>
-<td>10K ops/s</td>
-<td>1 ms</td>
-<td>5 ms</td>
-</tr>
-<tr>
-<td>INSERT</td>
-<td>5K ops/s</td>
-<td>2 ms</td>
-<td>10 ms</td>
-</tr>
-<tr>
-<td>UPDATE</td>
-<td>5K ops/s</td>
-<td>2 ms</td>
-<td>10 ms</td>
-</tr>
-<tr>
-<td>Batch INSERT (100)</td>
-<td>500 batches/s</td>
-<td>50 ms</td>
-<td>200 ms</td>
-</tr>
-</table>
-
----
-
-## Security Architecture
-
-<div align="center">
-
-### 🔒 Defense in Depth
-
-</div>
-
-```mermaid
-graph TB
-    A[Application Layer] --> B[Session Management]
-    B --> C[Permission Engine]
-    C --> D[Input Validation]
-    D --> E[Parameterized Queries]
-    E --> F[Audit Logging]
-    F --> G[Secure Storage]
-    
-    style A fill:#e1f5ff
-    style B fill:#b3e5fc
-    style C fill:#81d4fa
-    style D fill:#4fc3f7
-    style E fill:#29b6f6
-    style F fill:#0288d1
-    style G fill:#01579b
-```
-
-### Security Layers
-
-<table>
-<tr>
-<th>Layer</th><th>Controls</th><th>Purpose</th>
-</tr>
-<tr>
-<td><b>1. Session Management</b></td>
-<td>User authentication, session lifecycle</td>
-<td>Identity verification</td>
-</tr>
-<tr>
-<td><b>2. Permission Engine</b></td>
-<td>Role-based access control</td>
-<td>Authorization</td>
-</tr>
-<tr>
-<td><b>3. Input Validation</b></td>
-<td>Type checking, sanitization</td>
-<td>Prevent injection</td>
-</tr>
-<tr>
-<td><b>4. Parameterized Queries</b></td>
-<td>Prepared statements</td>
-<td>SQL injection prevention</td>
-</tr>
-<tr>
-<td><b>5. Audit Logging</b></td>
-<td>Activity logging</td>
-<td>Detection and forensics</td>
-</tr>
-<tr>
-<td><b>6. Secure Storage</b></td>
-<td>Encryption at rest, TLS</td>
-<td>Data protection</td>
-</tr>
-</table>
-
-### Permission Model
-
-<details>
-<summary><b>🎯 Permission System Design</b></summary>
-
-```rust
-pub struct Permission {
-    pub user_id: String,
-    pub resource: String,
-    pub action: String,
-    pub conditions: Option<PermissionConditions>,
-}
-
-pub enum Action {
-    Read,
-    Write,
-    Update,
-    Delete,
-    Admin,
-}
-
-impl PermissionEngine {
-    pub fn check_permission(&self, user_id: &str, resource: &str, action: &str) -> Result<()> {
-        let permission = self.permissions
-            .get(&(user_id.to_string(), resource.to_string(), action.to_string()))
-            .ok_or(Error::PermissionDenied)?;
-        
-        if let Some(conditions) = &permission.conditions {
-            if !conditions.evaluate()? {
-                return Err(Error::PermissionDenied);
-            }
-        }
-        
-        Ok(())
+// 批量插入
+for batch in users.chunks(100) {
+    for user in batch {
+        User::insert(&session, user).await?;
     }
 }
 ```
 
-</details>
-
-### Threat Model
-
-| Threat | Impact | Mitigation | Status |
-|--------|--------|------------|--------|
-| SQL injection | High | Parameterized queries | ✅ |
-| Unauthorized access | High | Permission engine | ✅ |
-| Data leakage | Medium | Audit logging | ✅ |
-| Session hijacking | High | Secure session management | ✅ |
-| Cache poisoning | Low | Cache validation | ✅ |
-
----
-
-## Scalability
-
-<div align="center">
-
-### 📈 Scaling Strategies
-
-</div>
-
-### Horizontal Scaling
-
-```mermaid
-graph TB
-    LB[Load Balancer]
-    LB --> A[App Instance 1]
-    LB --> B[App Instance 2]
-    LB --> C[App Instance 3]
-    
-    A --> DB[(Database)]
-    B --> DB
-    C --> DB
-    
-    A --> Cache[(Redis Cache)]
-    B --> Cache
-    C --> Cache
-    
-    style LB fill:#81d4fa
-    style A fill:#4fc3f7
-    style B fill:#4fc3f7
-    style C fill:#4fc3f7
-    style DB fill:#29b6f6
-    style Cache fill:#29b6f6
-```
-
-**Key Points:**
-- 🔹 Stateless sessions enable horizontal scaling
-- 🔹 Shared cache for consistency
-- 🔹 Connection pooling limits DB connections
-
-### Database Sharding
+### 只读副本
 
 ```rust
-// Sharding configuration
-let shard_manager = ShardManager::builder()
-    .strategy(ShardStrategy::Hash)
-    .shard_count(4)
-    .add_shard("shard1", "postgres://localhost/shard1")
-    .add_shard("shard2", "postgres://localhost/shard2")
-    .add_shard("shard3", "postgres://localhost/shard3")
-    .add_shard("shard4", "postgres://localhost/shard4")
-    .build()?;
+// 查询使用只读副本
+let read_session = pool.get_session("reader").await?;
 ```
 
-**Sharding Strategies:**
-- 🎯 **Hash-based**: Consistent hashing for even distribution
-- 🎯 **Range-based**: Partition by key ranges
-- 🎯 **Custom**: User-defined sharding logic
+### 性能指标
 
-### Vertical Scaling
-
-<table>
-<tr>
-<th>Resource</th><th>Scaling Strategy</th><th>Impact</th>
-</tr>
-<tr>
-<td>CPU</td>
-<td>Increase cores, use connection pooling</td>
-<td>⬆️ Throughput</td>
-</tr>
-<tr>
-<td>Memory</td><td>Increase RAM, larger cache</td>
-<td>⬆️ Cache hit rate</td>
-</tr>
-<tr>
-<td>Storage</td><td>Use SSD, increase IOPS</td>
-<td>⬇️ Query latency</td>
-</tr>
-</table>
+| 指标 | 目标值 | 监控方式 |
+|------|--------|----------|
+| P50 查询延迟 | < 10ms | Prometheus |
+| P99 查询延迟 | < 100ms | Prometheus |
+| 连接池利用率 | < 80% | 内部指标 |
+| 缓存命中率 | > 90% | 内部指标 |
 
 ---
 
-## Future Improvements
+## 扩展性考虑
 
-<div align="center">
+### 插件架构
 
-### 🚀 Planned Enhancements
+```
+┌─────────────────────────────────────────┐
+│           核心模块                       │
+│  - 连接池                               │
+│  - Session 管理                         │
+│  - 宏生成                               │
+└─────────────────────────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+   ┌──────────┐       ┌──────────┐
+   │  插件 A  │       │  插件 B  │
+   │  审计日志 │       │  缓存    │
+   └──────────┘       └──────────┘
+```
 
-</div>
+### 多数据库支持
 
-### Short Term (3-6 months)
+```rust
+// SQLite
+dbnexus = { features = ["sqlite"] }
 
-- [ ] **Query Optimization** - Automatic query plan analysis
-- [ ] **Read Replicas** - Support for read replica routing
-- [ ] **Advanced Caching** - Distributed cache with Redis
-- [ ] **Query Builder** - Fluent query API for complex queries
+// PostgreSQL
+dbnexus = { features = ["postgres"] }
 
-### Medium Term (6-12 months)
+// MySQL
+dbnexus = { features = ["mysql"] }
+```
 
-- [ ] **Multi-Tenancy** - Tenant isolation at data level
-- [ ] **Event Sourcing** - Change data capture and events
-- [ ] **GraphQL Integration** - GraphQL schema generation
-- [ ] **Migration Tooling** - Enhanced CLI for migrations
+### 自定义 Provider
 
-### Long Term (12+ months)
+```rust
+use dbnexus::permission_engine::{PermissionProvider, TablePermission};
 
-- [ ] **Distributed Transactions** - Two-phase commit support
-- [ ] **Machine Learning** - Query optimization with ML
-- [ ] **Cloud Native** - Kubernetes operators
-- [ ] **Multi-Region** - Cross-region data replication
+struct CustomPermissionProvider {
+    // 自定义权限存储
+}
+
+impl PermissionProvider for CustomPermissionProvider {
+    fn get_role_permissions(&self, role: &str) -> Option<Vec<TablePermission>> {
+        // 自定义权限获取逻辑
+    }
+
+    fn get_all_roles(&self) -> Vec<String> {
+        // 返回所有角色
+    }
+}
+```
+
+### 未来扩展方向
+
+| 扩展方向 | 描述 | 优先级 |
+|----------|------|--------|
+| 分布式事务 | 跨分片事务支持 | 高 |
+| 多租户支持 | 租户隔离和数据共享 | 中 |
+| 更丰富的缓存策略 | Redis 集成 | 中 |
+| GraphQL 支持 | GraphQL 集成 | 低 |
+| 插件市场 | 社区插件生态 | 低 |
 
 ---
 
-<div align="center">
+## 模块关系
 
-**[📖 User Guide](USER_GUIDE.md)** • **[🔧 API Docs](https://docs.rs/dbnexus)** • **[🏠 Home](../README.md)**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                              lib.rs                                  │
+│                    公共 API 导出和模块组织                            │
+└─────────────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│     pool.rs     │  │   session.rs    │  │   config.rs     │
+│   连接池管理     │  │   会话管理      │  │   配置管理      │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  permission.rs  │  │     cache.rs    │  │    audit.rs     │
+│   权限控制      │  │    缓存管理     │  │   审计日志      │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   sharding.rs   │  │  global_index   │  │   metrics.rs    │
+│    分片管理     │  │   全局索引      │  │   监控指标      │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
 
-Made with ❤️ by the dbnexus Team
+---
 
-[⬆ Back to Top](#️-architecture-design)
+## 依赖关系
 
-</div>
+### 外部依赖
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Sea-ORM | 2.0.0-rc.22 | 异步 ORM 框架 |
+| Tokio | 1.42 | 异步运行时 |
+| sqlx | 最新 | 数据库驱动 |
+| async-trait | 0.1 | 异步 trait 简化 |
+| chrono | 0.4 | 时间处理 |
+
+### 内部依赖
+
+```
+dbnexus/
+├── dbnexus-macros/    # 过程宏定义
+└── dbnexus/          # 核心实现
+```
+
+### 特性标志
+
+```
+dbnexus
+├── sqlite            # SQLite 支持
+├── postgres         # PostgreSQL 支持
+├── mysql            # MySQL 支持
+├── cache            # 缓存功能
+├── audit            # 审计功能
+├── sharding         # 分片功能
+├── global-index     # 全局索引
+├── metrics          # 监控指标
+├── migration        # 迁移工具
+├── permission-engine # 权限引擎
+└── tracing          # 分布式追踪
+```

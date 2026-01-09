@@ -74,15 +74,16 @@ async fn test_context_injection() {
 
     // 验证 traceparent 格式正确
     let tp = headers.get("traceparent").unwrap();
-    assert!(
-        tp.starts_with("00-"),
-        "traceparent should start with version byte 00"
-    );
+    assert!(tp.starts_with("00-"), "traceparent should start with version byte 00");
     let parts: Vec<&str> = tp.split('-').collect();
     assert_eq!(parts.len(), 3, "traceparent should have 3 parts");
     assert_eq!(parts[0], "00", "version should be 00");
     assert_eq!(parts[1].len(), 32, "trace_id should be 32 hex characters");
-    assert_eq!(parts[2].len(), 18, "span_id+flag should be 18 characters (16 hex + 2 flag)");
+    assert_eq!(
+        parts[2].len(),
+        18,
+        "span_id+flag should be 18 characters (16 hex + 2 flag)"
+    );
 }
 
 /// TEST-TRACING-003: 上下文提取测试
@@ -106,15 +107,9 @@ async fn test_context_extraction() {
 
     // 验证追踪ID格式正确
     let extracted_trace_id = result.unwrap();
-    assert!(
-        extracted_trace_id.is_some(),
-        "Should extract trace_id"
-    );
+    assert!(extracted_trace_id.is_some(), "Should extract trace_id");
     let tid = extracted_trace_id.unwrap();
-    assert!(
-        tid.len() == 32,
-        "Extracted trace_id should be 32 characters"
-    );
+    assert!(tid.len() == 32, "Extracted trace_id should be 32 characters");
 
     // 验证都是有效的十六进制
     u64::from_str_radix(&tid[0..16], 16).expect("First 16 chars should be valid hex");
@@ -201,14 +196,8 @@ async fn test_multiple_tracing_init() {
     let status2 = pool2.status();
 
     // Assert - 验证两个池都正常
-    assert!(
-        status1.total >= 1,
-        "First pool should have connections"
-    );
-    assert!(
-        status2.total >= 1,
-        "Second pool should have connections"
-    );
+    assert!(status1.total >= 1, "First pool should have connections");
+    assert!(status2.total >= 1, "Second pool should have connections");
 
     // 验证两个池独立工作
     let session1 = pool1.get_session("admin").await.expect("First pool session");
@@ -275,11 +264,7 @@ async fn test_trace_headers_content() {
     let traceparent = format!("00-{}-{}01", trace_id, span_id);
 
     // Assert - 验证追踪头格式
-    assert_eq!(
-        traceparent.len(),
-        54,
-        "traceparent should be 54 characters"
-    );
+    assert_eq!(traceparent.len(), 54, "traceparent should be 54 characters");
 
     // 解析并验证各部分
     let parts: Vec<&str> = traceparent.split('-').collect();
@@ -315,7 +300,8 @@ async fn test_tracing_scope() {
     let result = async {
         let session = pool.get_session("admin").await?;
         Ok::<_, dbnexus::DbError>(session)
-    }.await;
+    }
+    .await;
 
     // Assert
     assert!(result.is_ok(), "Operation in scope should succeed");
@@ -335,10 +321,7 @@ async fn test_tracing_cleanup() {
 
     // 验证初始状态
     let initial_status = pool.status();
-    assert!(
-        initial_status.total >= 1,
-        "Pool should have connections initially"
-    );
+    assert!(initial_status.total >= 1, "Pool should have connections initially");
 
     // Act - 获取并释放会话
     {
@@ -369,10 +352,7 @@ async fn test_concurrent_context_injection() {
     let (success_count, _failure_count) = common::concurrent_trace_injection_test(&pool, num_tasks).await;
 
     // Assert - 验证并发操作结果
-    assert!(
-        success_count > 0,
-        "At least some concurrent operations should succeed"
-    );
+    assert!(success_count > 0, "At least some concurrent operations should succeed");
     assert!(
         success_count <= num_tasks,
         "Success count should not exceed total tasks"
@@ -380,10 +360,7 @@ async fn test_concurrent_context_injection() {
 
     // 验证连接池状态
     let status = pool.status();
-    assert!(
-        status.total >= 1,
-        "Pool should still have connections"
-    );
+    assert!(status.total >= 1, "Pool should still have connections");
 }
 
 /// TEST-TRACING-014: 追踪上下文持久化测试
@@ -420,9 +397,8 @@ async fn test_tracing_init_performance() {
 
     // Act - 创建多个连接池
     let start = std::time::Instant::now();
-    let pool_results: Vec<Result<_, _>> = futures::future::join_all(
-        (0..5).map(|_| common::create_sqlite_file_pool())
-    ).await;
+    let pool_results: Vec<Result<_, _>> =
+        futures::future::join_all((0..5).map(|_| common::create_sqlite_file_pool())).await;
     let elapsed = start.elapsed();
 
     // Assert - 功能验证
@@ -444,11 +420,7 @@ async fn test_tracing_init_performance() {
     // 验证所有连接池正常
     for (i, (pool, _)) in pools.into_iter().enumerate() {
         let status = pool.status();
-        assert!(
-            status.total >= 1,
-            "Pool {} should have connections",
-            i
-        );
+        assert!(status.total >= 1, "Pool {} should have connections", i);
     }
 }
 
@@ -466,7 +438,7 @@ async fn test_trace_propagation_with_db_operations() {
     let (table_name, _table_temp) = common::create_tracing_test_table(&pool).await;
 
     // 生成追踪ID
-    let trace_id = "a3ce929d0e0e4736" .to_string();
+    let trace_id = "a3ce929d0e0e4736".to_string();
 
     // Act - 执行带追踪的数据库操作
     let session = pool.get_session("admin").await.expect("Get session");
@@ -482,10 +454,7 @@ async fn test_trace_propagation_with_db_operations() {
 
     // 查询验证
     let select_result = session
-        .execute_raw(&format!(
-            "SELECT * FROM {} WHERE trace_id = '{}'",
-            table_name, trace_id
-        ))
+        .execute_raw(&format!("SELECT * FROM {} WHERE trace_id = '{}'", table_name, trace_id))
         .await;
     assert!(select_result.is_ok(), "Select should succeed");
 
@@ -530,7 +499,8 @@ async fn test_multi_request_trace_consistency() {
         handles.push(handle);
     }
 
-    let results: Vec<Result<Result<(), dbnexus::DbError>, tokio::task::JoinError>> = futures::future::join_all(handles).await;
+    let results: Vec<Result<Result<(), dbnexus::DbError>, tokio::task::JoinError>> =
+        futures::future::join_all(handles).await;
 
     // Assert - 所有操作都成功
     for (i, result) in results.into_iter().enumerate() {

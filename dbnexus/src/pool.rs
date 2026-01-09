@@ -9,8 +9,8 @@
 
 use lru::LruCache;
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::{interval, timeout};
@@ -160,18 +160,10 @@ impl DbPool {
         );
 
         // 加载权限策略到缓存
-        let permission_config_guard = pool
-            .inner
-            .permission_config
-            .lock()
-            .await;
+        let permission_config_guard = pool.inner.permission_config.lock().await;
 
         if let Some(ref config) = *permission_config_guard {
-            let mut cache = pool
-                .inner
-                .policy_cache
-                .lock()
-                .await;
+            let mut cache = pool.inner.policy_cache.lock().await;
             for (role, policy) in &config.roles {
                 cache.put(role.clone(), policy.clone());
             }
@@ -288,11 +280,7 @@ impl DbPool {
     /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
     async fn validate_role_name(&self, role: &str) -> DbResult<()> {
         // 获取权限配置锁
-        let permission_config = self
-            .inner
-            .permission_config
-            .lock()
-            .await;
+        let permission_config = self.inner.permission_config.lock().await;
 
         // 检查权限配置是否存在（用户是否显式配置了权限文件）
         if permission_config.is_none() {
@@ -1024,9 +1012,23 @@ impl Session {
     fn is_ddl_operation(&self, sql: &str) -> bool {
         // 完整的 DDL 关键字列表
         const DDL_KEYWORDS: &[&str] = &[
-            "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME", "INDEX", "TRIGGER",
-            "VIEW", "FUNCTION", "PROCEDURE", "SEQUENCE", "SYNONYM", "DATABASE", "SCHEMA",
-            "TEMPORARY", "EXTERNAL", "MATERIALIZED"
+            "CREATE",
+            "DROP",
+            "ALTER",
+            "TRUNCATE",
+            "RENAME",
+            "INDEX",
+            "TRIGGER",
+            "VIEW",
+            "FUNCTION",
+            "PROCEDURE",
+            "SEQUENCE",
+            "SYNONYM",
+            "DATABASE",
+            "SCHEMA",
+            "TEMPORARY",
+            "EXTERNAL",
+            "MATERIALIZED",
         ];
 
         // 去除前导空白和注释
@@ -1127,8 +1129,7 @@ impl Session {
         });
 
         let select_pattern = SELECT_RE.get_or_init(|| {
-            regex::Regex::new(r"(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)")
-                .expect("Failed to compile SELECT regex pattern")
+            regex::Regex::new(r"(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)").expect("Failed to compile SELECT regex pattern")
         });
 
         let update_pattern = UPDATE_RE.get_or_init(|| {
