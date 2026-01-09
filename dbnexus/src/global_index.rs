@@ -23,7 +23,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue, Database};
+use sea_orm::{ActiveValue, Database, QueryOrder, QuerySelect};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -56,6 +56,8 @@ pub struct Model {
     pub created_at: String,
     /// 更新时间
     pub updated_at: String,
+    /// 最后修改时间（用于 CDC 增量查询）
+    pub last_modified: String,
     /// 同步状态
     pub sync_status: String,
 }
@@ -195,12 +197,14 @@ impl GlobalIndex {
             index_value VARCHAR(512) NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            last_modified VARCHAR(32) NOT NULL,
             sync_status VARCHAR(20) DEFAULT 'synced',
             CONSTRAINT uk_table_record UNIQUE (table_name, record_id)
         );
         
         CREATE INDEX IF NOT EXISTS idx_global_index_key ON global_index (table_name, index_key, index_value);
         CREATE INDEX IF NOT EXISTS idx_global_index_shard ON global_index (table_name, shard_id);
+        CREATE INDEX IF NOT EXISTS idx_global_index_modified ON global_index (table_name, last_modified);
         "#;
 
         conn.execute_unprepared(create_sql).await?;
@@ -226,7 +230,8 @@ impl GlobalIndex {
             index_key: ActiveValue::Set(entry.index_key.clone()),
             index_value: ActiveValue::Set(entry.index_value.clone()),
             created_at: ActiveValue::Set(now_clone),
-            updated_at: ActiveValue::Set(now),
+            updated_at: ActiveValue::Set(now.clone()),
+            last_modified: ActiveValue::Set(now),
             sync_status: ActiveValue::Set(SYNC_STATUS_SYNCED.to_string()),
         };
 
@@ -256,6 +261,7 @@ impl GlobalIndex {
                     index_value: ActiveValue::Set(entry.index_value.clone()),
                     created_at: ActiveValue::Set(now_clone.clone()),
                     updated_at: ActiveValue::Set(now.clone()),
+                    last_modified: ActiveValue::Set(now.clone()),
                     sync_status: ActiveValue::Set(sync_status.clone()),
                 }
             })
@@ -441,6 +447,11 @@ impl GlobalIndex {
 }
 
 /// Binlog/CDC 变更捕获 trait
+///
+/// 提供数据库变更捕获接口，支持：
+/// - INSERT 事件检测
+/// - UPDATE 事件检测（包含旧值和新值）
+/// - DELETE 事件检测
 #[async_trait]
 pub trait ChangeCapture: Send + Sync {
     /// 初始化变更捕获
@@ -456,26 +467,101 @@ pub trait ChangeCapture: Send + Sync {
     fn is_running(&self) -> bool;
 }
 
-/// 简单的轮询变更捕获实现
+/// 轮询变更捕获配置
+#[derive(Debug, Clone)]
+pub struct PollingCaptureConfig {
+    /// 轮询间隔（毫秒）
+    pub interval_ms: u64,
+    /// 批量获取大小
+    pub batch_size: usize,
+    /// 监控的表列表（空列表表示监控所有表）
+    pub watched_tables: Vec<String>,
+}
+
+impl Default for PollingCaptureConfig {
+    fn default() -> Self {
+        Self {
+            interval_ms: 1000,
+            batch_size: 100,
+            watched_tables: Vec::new(),
+        }
+    }
+}
+
+/// 轮询变更捕获实现
+///
+/// 通过定期查询变更追踪表来捕获数据库变更
 #[derive(Debug)]
 pub struct PollingChangeCapture {
-    /// 轮询间隔
-    #[allow(dead_code)]
-    interval_ms: u64,
+    /// 配置
+    config: PollingCaptureConfig,
+    /// 全局索引引用
+    global_index: Arc<GlobalIndex>,
     /// 运行状态
     running: bool,
     /// 最后轮询时间
     last_poll: RwLock<DateTime<Utc>>,
+    /// 待处理的变更事件队列
+    event_queue: RwLock<Vec<SyncEvent>>,
 }
 
 impl PollingChangeCapture {
     /// 创建新的轮询变更捕获
-    pub fn new(interval_ms: u64) -> Self {
+    pub fn new(global_index: Arc<GlobalIndex>, config: Option<PollingCaptureConfig>) -> Self {
         Self {
-            interval_ms,
+            config: config.unwrap_or_default(),
+            global_index,
             running: false,
             last_poll: RwLock::new(Utc::now()),
+            event_queue: RwLock::new(Vec::new()),
         }
+    }
+
+    /// 获取自上次轮询以来修改的条目
+    async fn fetch_changes(&self) -> Result<Vec<Model>, DbErr> {
+        let last_poll_time = *self.last_poll.read().await;
+
+        let mut query = Entity::find().filter(Column::LastModified.gt(last_poll_time.to_rfc3339()));
+
+        // 如果配置了监控表列表，只查询这些表
+        if !self.config.watched_tables.is_empty() {
+            query = query.filter(Column::TableName.is_in(&self.config.watched_tables));
+        }
+
+        // 按时间排序，获取最早的变更
+        query = query.order_by(Column::LastModified, sea_orm::Order::Asc);
+
+        // 限制批量大小
+        query = query.limit(self.config.batch_size as u64);
+
+        let results = query.all(self.global_index.get_connection()).await?;
+
+        // 更新最后轮询时间
+        if let Some(latest) = results.last() {
+            let latest_modified = DateTime::parse_from_rfc3339(&latest.last_modified)
+                .map(|dt| dt.into())
+                .unwrap_or_else(|_| Utc::now());
+            let mut last_poll = self.last_poll.write().await;
+            if latest_modified > *last_poll {
+                *last_poll = latest_modified;
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// 将模型转换为同步事件
+    #[allow(clippy::unused_self)]
+    fn model_to_event(model: &Model, _previous_value: Option<&Model>) -> Option<SyncEvent> {
+        // 简单实现：假设所有变更都是 INSERT
+        // 实际实现需要比较前后来确定是 INSERT/UPDATE/DELETE
+        Some(SyncEvent::Insert {
+            table_name: model.table_name.clone(),
+            record_id: model.record_id.clone(),
+            shard_id: model.shard_id as u32,
+            index_key: model.index_key.clone(),
+            index_value: model.index_value.clone(),
+        })
     }
 }
 
@@ -484,11 +570,16 @@ impl ChangeCapture for PollingChangeCapture {
     async fn start(&mut self) -> Result<(), DbErr> {
         self.running = true;
         *self.last_poll.write().await = Utc::now();
+        tracing::info!(
+            "PollingChangeCapture started with interval {}ms",
+            self.config.interval_ms
+        );
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<(), DbErr> {
         self.running = false;
+        tracing::info!("PollingChangeCapture stopped");
         Ok(())
     }
 
@@ -497,9 +588,33 @@ impl ChangeCapture for PollingChangeCapture {
             return None;
         }
 
-        // 模拟轮询逻辑
-        // 实际实现中，这里会查询 binlog 或变更追踪表
-        None
+        // 首先检查是否有缓存的事件
+        {
+            let mut queue = self.event_queue.write().await;
+            if let Some(event) = queue.pop() {
+                return Some(event);
+            }
+        }
+
+        // 获取新的变更
+        match self.fetch_changes().await {
+            Ok(changes) => {
+                for change in changes {
+                    if let Some(event) = Self::model_to_event(&change, None) {
+                        let mut queue = self.event_queue.write().await;
+                        queue.push(event);
+                    }
+                }
+
+                // 返回第一个事件
+                let mut queue = self.event_queue.write().await;
+                queue.pop()
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch changes: {}", e);
+                None
+            }
+        }
     }
 
     fn is_running(&self) -> bool {
