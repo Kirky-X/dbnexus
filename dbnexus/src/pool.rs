@@ -958,15 +958,8 @@ impl Session {
     ///
     /// 如果 SQL 执行失败或权限不足，返回错误
     pub async fn execute_raw(&self, sql: &str) -> DbResult<sea_orm::ExecResult> {
-        let sql_upper = sql.trim_start().to_uppercase();
-
-        // 检查是否为 DDL 操作（CREATE、DROP、ALTER 等）
-        let is_ddl = sql_upper.starts_with("CREATE")
-            || sql_upper.starts_with("DROP")
-            || sql_upper.starts_with("ALTER")
-            || sql_upper.starts_with("TRUNCATE");
-
-        if is_ddl {
+        // 检查是否为 DDL 操作（使用更安全的检测方法）
+        if self.is_ddl_operation(sql) {
             // DDL 操作只允许管理员角色执行
             if self.role() != "admin" {
                 return Err(DbError::Permission(
@@ -1022,6 +1015,75 @@ impl Session {
         let stmt = sea_orm::Statement::from_string(backend, sql.to_string());
 
         conn.execute_raw(stmt).await.map_err(DbError::Connection)
+    }
+
+    /// 检查 SQL 是否为 DDL 操作
+    ///
+    /// DDL 操作包括：CREATE, DROP, ALTER, TRUNCATE, RENAME, INDEX, TRIGGER 等
+    /// 使用规范化后的 SQL 进行检查，防止通过空白字符或注释绕过
+    fn is_ddl_operation(&self, sql: &str) -> bool {
+        // 完整的 DDL 关键字列表
+        const DDL_KEYWORDS: &[&str] = &[
+            "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME", "INDEX", "TRIGGER",
+            "VIEW", "FUNCTION", "PROCEDURE", "SEQUENCE", "SYNONYM", "DATABASE", "SCHEMA",
+            "TEMPORARY", "EXTERNAL", "MATERIALIZED"
+        ];
+
+        // 去除前导空白和注释
+        let normalized = Self::normalize_sql_statement(sql);
+
+        // 检查是否以任何 DDL 关键字开头（不区分大小写）
+        DDL_KEYWORDS.iter().any(|kw| {
+            let upper_kw = kw.to_uppercase();
+            normalized.to_uppercase().starts_with(&upper_kw)
+        })
+    }
+
+    /// 规范化 SQL 语句（去除前导空白、注释等）
+    fn normalize_sql_statement(sql: &str) -> String {
+        let mut result = String::with_capacity(sql.len());
+        let mut chars = sql.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            // 跳过空白
+            if c.is_whitespace() {
+                continue;
+            }
+
+            // 处理 SQL 注释
+            if c == '-' {
+                if chars.peek() == Some(&'-') {
+                    // 单行注释，跳到行尾
+                    while let Some(&next_c) = chars.peek() {
+                        if next_c == '\n' {
+                            break;
+                        }
+                        chars.next();
+                    }
+                    continue;
+                }
+            }
+
+            // 处理 C 风格注释
+            if c == '/' {
+                if chars.peek() == Some(&'*') {
+                    chars.next(); // 消耗 '*'
+                    while let Some(c1) = chars.next() {
+                        if c1 == '*' {
+                            if chars.peek() == Some(&'/') {
+                                chars.next(); // 消耗 '/'
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            result.push(c);
+        }
+
+        result
     }
 
     /// 内部方法：解析 SQL 语句类型（用于权限检查）
@@ -1146,6 +1208,32 @@ impl Session {
     /// 如果权限检查失败或 SQL 执行失败，返回错误
     pub async fn execute(&mut self, sql: &str) -> DbResult<sea_orm::ExecResult> {
         use std::time::Instant;
+
+        // 首先检查是否是 DDL 操作
+        if self.is_ddl_operation(sql) {
+            // DDL 操作只允许管理员角色执行
+            if self.role() != "admin" {
+                return Err(DbError::Permission(
+                    "Permission denied: only 'admin' role can execute DDL operations".to_string(),
+                ));
+            }
+
+            // 管理员执行 DDL，标记为写操作
+            self.mark_write();
+
+            // 执行 SQL（不进行权限检查）
+            let result = self.execute_raw(sql).await;
+
+            // 记录指标
+            #[cfg(feature = "metrics")]
+            {
+                let _start_time = Instant::now();
+                let duration = _start_time.elapsed();
+                self.record_query_metrics("DDL", duration, result.is_ok());
+            }
+
+            return result;
+        }
 
         // 尝试自动解析 SQL 操作类型和表名
         if let Some((table_name, operation)) = self.parse_sql_operation(sql) {
