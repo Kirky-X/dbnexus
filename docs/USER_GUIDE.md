@@ -1,204 +1,167 @@
-<div align="center">
+# DB Nexus 用户指南
 
-# 📖 User Guide
+## 目录
 
-### Complete Guide to Using dbnexus
-
-[🏠 Home](../README.md) • [📚 Docs](README.md) • [🎯 Examples](../examples/) • [❓ FAQ](FAQ.md)
-
----
-
-</div>
-
-## 📋 Table of Contents
-
-- [Introduction](#introduction)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [First Steps](#first-steps)
-- [Core Concepts](#core-concepts)
-- [Basic Usage](#basic-usage)
-  - [Initialization](#initialization)
-  - [Configuration](#configuration)
-  - [Database Migrations](#database-migrations)
-  - [Basic Operations](#basic-operations)
-- [Advanced Usage](#advanced-usage)
-  - [Database Sharding](#database-sharding)
-  - [Caching](#caching)
-  - [Audit Logging](#audit-logging)
-  - [Metrics and Monitoring](#metrics-and-monitoring)
-  - [Error Handling](#error-handling)
-- [Best Practices](#best-practices)
-- [Common Patterns](#common-patterns)
-- [Troubleshooting](#troubleshooting)
-- [Next Steps](#next-steps)
+- [产品概述](#产品概述)
+- [快速开始](#快速开始)
+- [安装与配置](#安装与配置)
+- [基本 CRUD 操作](#基本-crud-操作)
+- [权限控制](#权限控制)
+- [高级特性](#高级特性)
+- [最佳实践](#最佳实践)
+- [故障排除](#故障排除)
 
 ---
 
-## Introduction
+## 产品概述
 
-<div align="center">
+### 什么是 DB Nexus
 
-### 🎯 What You'll Learn
+DB Nexus 是一个基于 Sea-ORM 构建的**企业级 Rust 数据库抽象层**，为应用提供高性能、高安全性、可扩展的数据访问能力。
 
-</div>
+### 核心特性
 
-<table>
-<tr>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/rocket.png" width="64"><br>
-<b>Quick Start</b><br>
-Get up and running in 5 minutes
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/settings.png" width="64"><br>
-<b>Configuration</b><br>
-Customize to your needs
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/code.png" width="64"><br>
-<b>Best Practices</b><br>
-Learn the right way
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/rocket-take-off.png" width="64"><br>
-<b>Advanced Topics</b><br>
-Master the details
-</td>
-</tr>
-</table>
+| 特性 | 描述 |
+|------|------|
+| **Session 机制** | RAII 自动管理数据库连接生命周期，防止连接泄漏 |
+| **权限控制** | 声明式宏自动生成权限检查代码，支持 YAML 配置和 RBAC |
+| **连接池管理** | 动态配置修正、健康检查、自动重连 |
+| **三层宏系统** | `#[derive(DbEntity)]`、`#[db_crud]`、`#[db_permission]` |
+| **多数据库支持** | SQLite、PostgreSQL、MySQL（编译时互斥选择） |
+| **监控指标** | Prometheus 指标导出，查询延迟统计 |
+| **审计日志** | CRUD 操作审计、用户追踪、敏感操作告警 |
+| **实体缓存** | LRU 缓存策略、TTL 过期、缓存穿透/击穿防护 |
+| **分片管理** | 时间/哈希分片策略，自动路由 |
+| **分布式追踪** | OpenTelemetry 集成，全链路追踪 |
+| **全局索引** | 跨分片的全局唯一索引支持 |
 
-**dbnexus** is a powerful database abstraction layer for Rust that provides multi-database support, connection pooling, session management, and advanced features like sharding, caching, and audit logging. This guide will walk you through everything from basic setup to advanced usage patterns.
+### 技术栈
 
-> 💡 **Tip**: This guide assumes basic knowledge of Rust and database concepts. If you're new to Rust, check out the [Rust Book](https://doc.rust-lang.org/book/) first.
+- **语言**: Rust 2024 Edition
+- **ORM**: Sea-ORM 2.0.0-rc.22
+- **异步运行时**: Tokio 1.42
+- **数据库驱动**: sqlx (sqlite/postgres/mysql)
+- **宏系统**: dbnexus-macros (过程宏)
+
+### 使用场景
+
+- **企业级应用**: 需要严格权限控制的大型系统
+- **微服务架构**: 多数据库、多租户场景
+- **高并发系统**: 需要连接池和缓存优化
+- **审计要求**: 需要完整操作日志的系统
+- **数据敏感**: 需要细粒度权限控制的应用
 
 ---
 
-## Getting Started
+## 快速开始
 
-### Prerequisites
+### 环境要求
 
-Before you begin, ensure you have the following installed:
+- **Rust 版本**: 1.85+
+- **数据库**: SQLite 3.35+ / PostgreSQL 12+ / MySQL 8.0+
+- **Cargo**: 最新版本
 
-<table>
-<tr>
-<td width="50%">
+### 步骤 1：添加依赖
 
-**Required**
-- ✅ Rust 1.75+ (stable)
-- ✅ Cargo (comes with Rust)
-- ✅ Git
+在 `Cargo.toml` 中添加依赖：
 
-</td>
-<td width="50%">
-
-**Optional**
-- 🔧 IDE with Rust support (VS Code, IntelliJ IDEA)
-- 🔧 Docker (for containerized databases)
-- 🔧 Database server (PostgreSQL, MySQL, or SQLite)
-
-</td>
-</tr>
-</table>
-
-<details>
-<summary><b>🔍 Verify Your Installation</b></summary>
-
-```bash
-# Check Rust version
-rustc --version
-# Expected: rustc 1.75.0 (or higher)
-
-# Check Cargo version
-cargo --version
-# Expected: cargo 1.75.0 (or higher)
-
-# Check Git version
-git --version
-# Expected: git version 2.x.x
-```
-
-</details>
-
-### Installation
-
-<div align="center">
-
-#### Choose Your Installation Method
-
-</div>
-
-<table>
-<tr>
-<td width="50%">
-
-**📦 Using Cargo (Recommended)**
-
-```bash
-# Add to Cargo.toml
+```toml
 [dependencies]
-dbnexus = { version = "0.1", features = ["sqlite"] }
-
-# Or for PostgreSQL
-dbnexus = { version = "0.1", features = ["postgres"] }
-
-# Or for MySQL
-dbnexus = { version = "0.1", features = ["mysql"] }
-
-# With optional features
-dbnexus = { version = "0.1", features = ["postgres", "metrics", "cache", "audit", "sharding"] }
+dbnexus = { version = "0.1.0", features = ["sqlite"] }
 ```
 
-</td>
-<td width="50%">
+选择数据库特性（互斥）：
 
-**🐙 From Source**
+```toml
+# SQLite
+dbnexus = { version = "0.1.0", features = ["sqlite"] }
 
-```bash
-git clone https://github.com/yourusername/dbnexus
-cd dbnexus
-cargo build --release
+# PostgreSQL
+dbnexus = { version = "0.1.0", features = ["postgres"] }
+
+# MySQL
+dbnexus = { version = "0.1.0", features = ["mysql"] }
 ```
 
-</td>
-</tr>
-</table>
-
-<details>
-<summary><b>⚙️ Feature Flags</b></summary>
-
-**Database Drivers (mutually exclusive, must choose exactly one):**
-- `sqlite` - SQLite database support
-- `postgres` - PostgreSQL database support
-- `mysql` - MySQL database support
-
-**Optional Features:**
-- `metrics` - Prometheus metrics integration
-- `cache` - Result caching support
-- `audit` - Audit logging support
-- `sharding` - Database sharding support
-- `global-index` - Global index support
-- `permission-engine` - Permission engine support
-- `migration` - Database migration support
-
-**Runtime Options (mutually exclusive):**
-- `runtime-tokio-rustls` (default) - Tokio runtime with rustls
-- `runtime-tokio-native-tls` - Tokio runtime with native TLS
-- `runtime-async-std` - async-std runtime
-
-</details>
-
-### First Steps
-
-Let's verify your installation with a simple example:
+### 步骤 2：定义实体
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud};
 
 #[derive(DbEntity)]
 #[db_entity]
-#[table_name = "users"]
+#[table_name = "users")]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+### 步骤 3：创建连接池
+
+```rust
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建连接池
+    let pool = DbPool::new("sqlite::memory:").await?;
+
+    // 或者从环境变量读取配置
+    // let pool = DbPool::new().await?;
+
+    println!("连接池创建成功！");
+    Ok(())
+}
+```
+
+### 步骤 4：执行 CRUD 操作
+
+```rust
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = DbPool::new("sqlite::memory:").await?;
+    let session = pool.get_session("admin").await?;
+
+    // 创建用户
+    let user = User {
+        id: 1,
+        name: "Alice".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+    User::insert(&session, user).await?;
+    println!("用户创建成功！");
+
+    // 查询用户
+    let found = User::find_by_id(&session, 1).await?;
+    println!("查询到用户: {}", found.name);
+
+    // 更新用户
+    let updated = User {
+        id: 1,
+        name: "Alice Smith".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+    User::update(&session, updated).await?;
+    println!("用户更新成功！");
+
+    // 删除用户
+    User::delete(&session, 1).await?;
+    println!("用户删除成功！");
+
+    Ok(())
+}
+```
+
+### 完整示例
+
+```rust
+use dbnexus::{DbPool, DbEntity, db_crud};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
 #[db_crud]
 struct User {
     #[primary_key]
@@ -209,1172 +172,876 @@ struct User {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建连接池
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
-    
+
+    // 创建用户
     let user = User {
         id: 1,
         name: "Alice".to_string(),
         email: "alice@example.com".to_string(),
     };
-    
     User::insert(&session, user).await?;
-    println!("✅ dbnexus is ready!");
-    
+    println!("用户创建成功！");
+
+    // 查询用户
+    let found = User::find_by_id(&session, 1).await?;
+    println!("查询到用户: {}", found.name);
+
     Ok(())
 }
 ```
 
-<details>
-<summary><b>🎬 Run the Example</b></summary>
+### 运行示例
 
 ```bash
-# Create a new project
-cargo new hello-dbnexus
-cd hello-dbnexus
+# 运行快速开始示例
+cargo run --example quickstart --features sqlite
 
-# Add dependency
-cargo add dbnexus --features sqlite
+# 运行权限控制示例
+cargo run --example permissions --features sqlite
 
-# Copy the code above to src/main.rs
-
-# Run it!
-cargo run
-```
-
-**Expected Output:**
-```
-✅ dbnexus is ready!
-```
-
-</details>
-
----
-
-## Core Concepts
-
-Understanding these core concepts will help you use dbnexus effectively.
-
-<div align="center">
-
-### 🧩 Key Components
-
-</div>
-
-```mermaid
-graph TD
-    A[Your Application] --> B[DbPool]
-    B --> C[DbSession]
-    C --> D[DbEntity]
-    C --> E[PermissionEngine]
-    B --> F[Connection Pool]
-    C --> G[Cache Layer]
-    C --> H[Audit Logger]
-    C --> I[Metrics Collector]
-    
-    style A fill:#e1f5ff
-    style B fill:#81d4fa
-    style C fill:#4fc3f7
-    style D fill:#29b6f6
-    style E fill:#29b6f6
-    style F fill:#0288d1
-    style G fill:#0288d1
-    style H fill:#0288d1
-    style I fill:#0288d1
-```
-
-### 1️⃣ DbPool: Connection Pool Manager
-
-**What it is:** Manages database connections and provides sessions for database operations.
-
-**Why it matters:** Efficient connection management is crucial for performance and resource utilization.
-
-**Example:**
-```rust
-use dbnexus::DbPool;
-
-// Create a connection pool
-let pool = DbPool::new("postgres://user:pass@localhost/db").await?;
-
-// Get a session
-let session = pool.get_session("admin").await?;
-```
-
-<details>
-<summary><b>📚 Learn More</b></summary>
-
-The DbPool:
-- Manages a pool of database connections
-- Provides sessions with automatic permission checking
-- Supports multiple database backends (SQLite, PostgreSQL, MySQL)
-- Handles connection lifecycle automatically
-- Configurable pool size and timeout settings
-
-</details>
-
-### 2️⃣ DbSession: Database Session
-
-**What it is:** Represents a database session with associated user context and permissions.
-
-**Key Features:**
-- ✅ Automatic permission checking
-- ✅ Transaction support
-- ✅ Audit logging
-- ✅ Result caching
-- ✅ Metrics collection
-
-**Example:**
-```rust
-let session = pool.get_session("admin").await?;
-
-// Use session for database operations
-User::insert(&session, user).await?;
-let users = User::find_all(&session).await?;
-```
-
-### 3️⃣ DbEntity: Database Entity
-
-**What it is:** A declarative macro that generates CRUD operations for your structs.
-
-<table>
-<tr>
-<td width="50%">
-
-**Manual Approach**
-```rust
-// Write all CRUD operations manually
-fn insert_user(conn: &Connection, user: &User) -> Result<()> {
-    // Manual SQL and mapping
-}
-```
-
-</td>
-<td width="50%">
-
-**With DbEntity**
-```rust
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users"]
-#[db_crud]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-}
-
-// CRUD operations auto-generated
-User::insert(&session, user).await?;
-```
-
-</td>
-</tr>
-</table>
-
-### 4️⃣ PermissionEngine: Access Control
-
-**What it is:** Fine-grained permission system for database operations.
-
-**Key Features:**
-- ✅ Role-based access control
-- ✅ Row-level security
-- ✅ Column-level permissions
-- ✅ Custom permission rules
-
-**Example:**
-```rust
-// Define permissions
-#[derive(Permission)]
-#[permission]
-struct UserPermission {
-    resource: String,
-    action: String,
-    condition: String,
-}
-
-// Check permissions
-let has_access = session.check_permission("users", "read")?;
+# 运行事务示例
+cargo run --example transactions --features sqlite
 ```
 
 ---
 
-## Basic Usage
+## 安装与配置
 
-### Initialization
+### 安装方式
 
-Every application must initialize the database pool before use:
+#### 方式一：Cargo 依赖（推荐）
+
+```toml
+[dependencies]
+dbnexus = "0.1.0"
+```
+
+#### 方式二：Git 源码
+
+```toml
+[dependencies]
+dbnexus = { git = "https://github.com/Kirky-X/dbnexus", tag = "v0.1.0" }
+```
+
+### 编译特性
+
+DB Nexus 采用模块化设计，所有特性都是可选的：
+
+```toml
+[dependencies]
+dbnexus = { version = "0.1.0", features = ["sqlite", "cache", "audit"] }
+```
+
+#### 数据库特性（互斥）
+
+| 特性 | 描述 |
+|------|------|
+| `sqlite` | SQLite 数据库支持 |
+| `postgres` | PostgreSQL 数据库支持 |
+| `mysql` | MySQL 数据库支持 |
+
+#### 可选特性
+
+| 特性 | 描述 | 默认 |
+|------|------|------|
+| `cache` | 实体缓存支持 | false |
+| `audit` | 审计日志支持 | false |
+| `sharding` | 分片支持 | false |
+| `global-index` | 全局索引支持 | false |
+| `metrics` | Prometheus 指标导出 | false |
+| `migration` | Migration 工具 | false |
+| `auto-migrate` | 自动迁移支持 | false |
+| `permission-engine` | 可插拔权限引擎 | false |
+| `tracing` | 分布式追踪支持 | false |
+| `runtime-tokio-rustls` | Tokio 运行时 + RustLS | true |
+| `all-optional` | 启用所有可选功能 | false |
+
+### 环境变量配置
+
+DB Nexus 支持以下环境变量：
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `DATABASE_URL` | 数据库连接字符串 | - | 是 |
+| `DB_MAX_CONNECTIONS` | 最大连接数 | 20 | 否 |
+| `DB_MIN_CONNECTIONS` | 最小连接数 | 5 | 否 |
+| `DB_IDLE_TIMEOUT` | 空闲超时（秒） | 300 | 否 |
+| `DB_ACQUIRE_TIMEOUT` | 获取连接超时（毫秒） | 5000 | 否 |
+| `DB_PERMISSIONS_PATH` | 权限配置文件路径 | `permissions.yaml` | 否 |
+| `TEST_DB_TYPE` | 测试数据库类型 | `sqlite` | 否 |
+| `TEST_TIMEOUT_MS` | 测试超时时间（毫秒） | 30000 | 否 |
+
+### 配置文件
+
+#### 数据库配置
 
 ```rust
-use dbnexus::DbPool;
+use dbnexus::DbConfig;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Simple initialization with connection string
-    let pool = DbPool::new("sqlite::memory:").await?;
-    
-    // Or with configuration
-    let config = dbnexus::Config::builder()
-        .database_url("postgres://user:pass@localhost/db")
-        .max_connections(10)
-        .build()?;
-    
-    let pool = DbPool::from_config(config).await?;
-    
-    Ok(())
-}
+let config = DbConfig::from_env()?;
+println!("Database URL: {}", config.url);
+println!("Max connections: {}", config.max_connections);
 ```
 
-<div align="center">
-
-| Method | Use Case | Performance | Complexity |
-|--------|----------|-------------|------------|
-| `DbPool::new()` | Quick start, development | ⚡ Fast | 🟢 Simple |
-| `DbPool::from_config()` | Production, custom needs | ⚡⚡ Optimized | 🟡 Moderate |
-
-</div>
-
-### Configuration
-
-<details open>
-<summary><b>⚙️ Configuration Options</b></summary>
+#### 连接池配置
 
 ```rust
-use dbnexus::Config;
-use std::time::Duration;
+use dbnexus::{DbPool, PoolConfig};
 
-let config = Config::builder()
-    // Database connection
-    .database_url("postgres://user:pass@localhost/db")
-    
-    // Connection pool settings
-    .max_connections(20)
-    .min_connections(5)
-    .connection_timeout(Duration::from_secs(30))
-    .idle_timeout(Duration::from_secs(600))
-    
-    // Performance settings
-    .enable_cache(true)
-    .cache_ttl(Duration::from_secs(3600))
-    
-    // Logging
-    .enable_audit(true)
-    .log_level("info")
-    
-    // Metrics
-    .enable_metrics(true)
-    .metrics_port(9090)
-    
-    .build()?;
+let pool_config = PoolConfig::new()
+    .max_connections(50)
+    .min_connections(10)
+    .idle_timeout(600)
+    .acquire_timeout(10000);
+
+let pool = DbPool::with_config(pool_config).await?;
 ```
 
-</details>
+### 数据库连接字符串格式
 
-<table>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-<tr>
-<td><code>database_url</code></td>
-<td>String</td>
-<td>Required</td>
-<td>Database connection string</td>
-</tr>
-<tr>
-<td><code>max_connections</code></td>
-<td>usize</td>
-<td>10</td>
-<td>Maximum connections in pool</td>
-</tr>
-<tr>
-<td><code>min_connections</code></td>
-<td>usize</td>
-<td>1</td>
-<td>Minimum connections to maintain</td>
-</tr>
-<tr>
-<td><code>connection_timeout</code></td>
-<td>Duration</td>
-<td>30s</td>
-<td>Connection acquisition timeout</td>
-</tr>
-<tr>
-<td><code>enable_cache</code></td>
-<td>bool</td>
-<td>false</td>
-<td>Enable result caching</td>
-</tr>
-<tr>
-<td><code>enable_audit</code></td>
-<td>bool</td>
-<td>false</td>
-<td>Enable audit logging</td>
-</tr>
-<tr>
-<td><code>enable_metrics</code></td>
-<td>bool</td>
-<td>false</td>
-<td>Enable Prometheus metrics</td>
-</tr>
-</table>
+#### SQLite
 
-### Database Migrations
+```bash
+# 内存数据库
+DATABASE_URL=sqlite::memory:
 
-dbnexus provides powerful database migration support with both automatic and manual migration capabilities. This feature is available when the `auto-migrate` feature is enabled.
+# 文件数据库
+DATABASE_URL=sqlite:./data.db
 
-#### Auto-Migrate
-
-Automatic migrations run when the connection pool is initialized, ensuring your database schema is always up-to-date.
-
-```rust
-use dbnexus::{DbPool, DbConfig};
-use std::path::PathBuf;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DbConfig {
-        url: "sqlite://./data/app.db".to_string(),
-        migrations_dir: Some(PathBuf::from("./migrations")),
-        auto_migrate: true,
-        migration_timeout: 60,
-        ..Default::default()
-    };
-    
-    // Migrations run automatically during pool creation
-    let pool = DbPool::with_config(config).await?;
-    
-    Ok(())
-}
+# 带 URI 参数
+DATABASE_URL=sqlite:./data.db?mode=ro
 ```
 
-**Environment Variables:**
+#### PostgreSQL
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DB_AUTO_MIGRATE` | Enable automatic migrations | `false` |
-| `DB_MIGRATIONS_DIR` | Directory containing migration files | None |
-| `DB_MIGRATION_TIMEOUT` | Timeout for migration operations (seconds) | `60` |
+```bash
+# 基本连接
+DATABASE_URL=postgres://user:password@localhost:5432/dbname
 
-#### Manual Migrations
+# SSL 连接
+DATABASE_URL=postgres://user:password@localhost:5432/dbname?sslmode=require
 
-You can also run migrations manually at any time:
-
-```rust
-let pool = DbPool::new("sqlite://./data/app.db").await?;
-
-// Run all pending migrations
-let applied = pool.run_migrations(Path::new("./migrations")).await?;
-println!("Applied {} migrations", applied);
-
-// Or use auto-migrate explicitly
-let applied = pool.run_auto_migrate().await?;
+# Unix Socket
+DATABASE_URL=postgres://user@/dbname?host=/var/run/postgresql
 ```
 
-#### Migration File Format
+#### MySQL
 
-Migration files should be named `{version}_{description}.sql`:
+```bash
+# 基本连接
+DATABASE_URL=mysql://user:password@localhost:3306/dbname
 
-```sql
--- Migration: create_users_table
--- Version: 1
+# SSL 连接
+DATABASE_URL=mysql://user:password@localhost:3306/dbname?ssl-mode=REQUIRED
 
--- UP
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
--- DOWN
-DROP TABLE users;
+# Unix Socket
+DATABASE_URL=mysql://user@/dbname?unix_socket=/var/run/mysqld/mysqld.sock
 ```
 
-**Key Points:**
+---
 
-- Files must have `.sql` extension
-- Version numbers should be unique and incrementing
-- `-- UP:` section contains the migration SQL
-- `-- DOWN:` section (optional) contains rollback SQL
+## 基本 CRUD 操作
 
-#### Migration Features
+### 宏 vs API 选择指南
 
-- **Automatic Version Tracking**: dbnexus creates a `dbnexus_migrations` table to track applied migrations
-- **Idempotent Operations**: Running migrations multiple times is safe - already-applied migrations are skipped
-- **Transaction Support**: Each migration runs in a transaction for safety
-- **Multiple Database Support**: Works with SQLite, PostgreSQL, and MySQL
+DB Nexus 提供两种操作方式：宏和 API。
 
-<div align="center">
+#### 宏的使用场景
 
-| Feature | Status |
-|---------|--------|
-| Auto-migrate on startup | ✅ Supported |
-| Manual migration control | ✅ Supported |
-| Rollback support | ✅ Supported |
-| Migration history | ✅ Supported |
-| Multi-database SQL generation | ✅ Supported |
+- 简单的 CRUD 操作（insert、delete）
+- 需要自动生成 SQL 语句
+- 代码简洁性优先
 
-</div>
+#### API 的使用场景
 
-### Basic Operations
+- 复杂的查询操作（JOIN、子查询、聚合）
+- 需要获取查询结果
+- 事务操作
+- 需要完整的灵活性
 
-<div align="center">
+### 插入操作
 
-#### 📝 CRUD Operations with DbEntity
-
-</div>
-
-First, define your entity:
+#### 使用宏
 
 ```rust
 use dbnexus::{DbEntity, db_crud};
 
 #[derive(DbEntity)]
 #[db_entity]
-#[table_name = "users"]
+#[table_name = "users")]
 #[db_crud]
 struct User {
     #[primary_key]
     id: i64,
     name: String,
     email: String,
-    age: i32,
 }
-```
 
-Then use the auto-generated CRUD operations:
-
-<table>
-<tr>
-<td width="50%">
-
-**Create**
-```rust
+// 插入单个用户
 let user = User {
     id: 1,
     name: "Alice".to_string(),
     email: "alice@example.com".to_string(),
-    age: 30,
 };
-
-User::insert(&session, user).await?;
+let inserted = User::insert(&session, user).await?;
+println!("插入的用户 ID: {}", inserted.id);
 ```
 
-**Read**
+#### 使用 API
+
 ```rust
-// Find by primary key
+use dbnexus::Session;
+
+// 执行原始 SQL
+session.execute_raw(
+    "INSERT INTO users (name, email) VALUES ($1, $2)",
+    vec!["Alice".into(), "alice@example.com".into()],
+).await?;
+```
+
+### 查询操作
+
+#### 使用宏
+
+```rust
+// 根据 ID 查询
 let user = User::find_by_id(&session, 1).await?;
 
-// Find all
-let users = User::find_all(&session).await?;
+// 查询所有
+let all_users = User::find_all(&session).await?;
 
-// Find with condition
-let users = User::find_by_condition(&session, "age > 25").await?;
+// 统计数量
+let count = User::count(&session).await?;
 ```
 
-</td>
-<td width="50%">
+#### 使用 API
 
-**Update**
 ```rust
-let mut user = User::find_by_id(&session, 1).await?;
-user.age = 31;
-User::update(&session, &user).await?;
+// 执行查询
+let results = session.execute_raw(
+    "SELECT * FROM users WHERE name LIKE $1",
+    vec!["%Alice%".into()],
+).await?;
 
-// Or update specific fields
-User::update_field(&session, 1, "age", 31).await?;
+// 事务中的查询
+session.transaction(|s| {
+    let users = s.execute_raw("SELECT * FROM users", vec![])?;
+    Ok(users)
+}).await?;
 ```
 
-**Delete**
+### 更新操作
+
+#### 使用宏
+
 ```rust
+let user = User {
+    id: 1,
+    name: "Alice Smith".to_string(),
+    email: "alice.smith@example.com".to_string(),
+};
+User::update(&session, user).await?;
+```
+
+#### 使用 API
+
+```rust
+session.execute_raw(
+    "UPDATE users SET name = $1, email = $2 WHERE id = $3",
+    vec!["Alice Smith".into(), "alice.smith@example.com".into(), 1.into()],
+).await?;
+```
+
+### 删除操作
+
+#### 使用宏
+
+```rust
+// 删除单个用户
 User::delete(&session, 1).await?;
 
-// Or delete by condition
-User::delete_by_condition(&session, "age < 18").await?;
+// 批量删除
+User::delete_many(&session, "name = 'Alice'".to_string()).await?;
 ```
 
-</td>
-</tr>
-</table>
-
-<details>
-<summary><b>🎯 Complete Example</b></summary>
+#### 使用 API
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud};
+session.execute_raw(
+    "DELETE FROM users WHERE id = $1",
+    vec![1.into()],
+).await?;
+```
+
+### 事务操作
+
+```rust
+use dbnexus::Session;
+
+let result = session.transaction(|s| -> Result<(), Box<dyn std::error::Error>> {
+    // 扣减库存
+    s.execute_raw(
+        "UPDATE inventory SET count = count - 1 WHERE id = $1",
+        vec![1.into()],
+    )?;
+
+    // 创建订单
+    s.execute_raw(
+        "INSERT INTO orders (user_id, product_id) VALUES ($1, $2)",
+        vec![1.into(), 1.into()],
+    )?;
+
+    Ok(())
+}).await?;
+
+match result {
+    Ok(_) => println!("事务提交成功！"),
+    Err(e) => println!("事务回滚: {}", e),
+}
+```
+
+---
+
+## 权限控制
+
+### 声明式权限
+
+DB Nexus 提供声明式权限配置，通过宏属性简化权限检查：
+
+```rust
+use dbnexus::{DbEntity, db_crud, db_permission};
 
 #[derive(DbEntity)]
 #[db_entity]
-#[table_name = "users"]
+#[table_name = "users")]
 #[db_crud]
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
+#[db_permission(role = "user", actions = ["read"])]
 struct User {
     #[primary_key]
     id: i64,
     name: String,
     email: String,
-    age: i32,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite::memory:").await?;
-    let session = pool.get_session("admin").await?;
-    
-    // Create
-    let user = User {
-        id: 1,
-        name: "Alice".to_string(),
-        email: "alice@example.com".to_string(),
-        age: 30,
-    };
-    User::insert(&session, user).await?;
-    println!("✅ Created user: Alice");
-    
-    // Read
-    let loaded = User::find_by_id(&session, 1).await?;
-    println!("📖 Loaded: {} ({})", loaded.name, loaded.email);
-    
-    // Update
-    let mut updated = loaded.clone();
-    updated.age = 31;
-    User::update(&session, &updated).await?;
-    println!("✏️ Updated age to 31");
-    
-    // Find all
-    let all_users = User::find_all(&session).await?;
-    println!("📊 Total users: {}", all_users.len());
-    
-    // Delete
-    User::delete(&session, 1).await?;
-    println!("🗑️ Deleted user");
-    
-    Ok(())
 }
 ```
 
-</details>
+### 权限配置说明
+
+#### `#[db_permission]` 属性
+
+| 参数 | 描述 |
+|------|------|
+| `role` | 角色名称 |
+| `actions` | 允许的操作列表 |
+
+#### 支持的操作
+
+| 操作 | 描述 |
+|------|------|
+| `read` | 读取/查询操作 |
+| `write` | 写入/插入操作 |
+| `delete` | 删除操作 |
+
+### 权限配置文件
+
+#### permissions.yaml 格式
+
+```yaml
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - SELECT
+          - INSERT
+          - UPDATE
+          - DELETE
+
+  user:
+    tables:
+      - name: "users"
+        operations:
+          - SELECT
+          - INSERT
+      - name: "products"
+        operations:
+          - SELECT
+
+  guest:
+    tables:
+      - name: "products"
+        operations:
+          - SELECT
+```
+
+#### 使用权限引擎
+
+```rust
+use dbnexus::permission_engine::{PolicyDecisionPoint, YamlPermissionProvider};
+
+let provider = YamlPermissionProvider::new("permissions.yaml")?;
+let pdp = PolicyDecisionPoint::new(Arc::new(provider));
+
+// 检查权限
+let result = pdp.check_permission("admin", "users", "SELECT").await;
+
+match result {
+    Ok(decision) => {
+        if decision.allowed {
+            println!("权限检查通过");
+        } else {
+            println!("权限被拒绝: {}", decision.reason);
+        }
+    }
+    Err(e) => println!("权限检查错误: {}", e),
+}
+```
+
+### 角色继承
+
+```rust
+use dbnexus::{RolePolicy, PermissionConfig, PermissionContext, TablePermission};
+
+let role_policy = RolePolicy {
+    name: "super_admin".to_string(),
+    inherits: vec!["admin".to_string(), "moderator".to_string()],
+    permissions: vec![],
+};
+```
+
+### 权限上下文
+
+```rust
+use dbnexus::{PermissionContext, PermissionAction};
+
+let ctx = PermissionContext::new()
+    .with_user_id(123)
+    .with_tenant_id("tenant_abc")
+    .with_ip_address("192.168.1.1");
+```
 
 ---
 
-## Advanced Usage
+## 高级特性
 
-### Database Sharding
+### 审计日志
 
-Sharding allows you to distribute data across multiple database instances for scalability.
+启用审计日志功能：
 
 ```rust
-use dbnexus::sharding::{ShardManager, ShardStrategy};
+use dbnexus::{DbEntity, db_audit};
 
-let shard_manager = ShardManager::builder()
-    .strategy(ShardStrategy::Hash)
-    .shard_count(4)
-    .add_shard("shard1", "postgres://localhost/shard1")
-    .add_shard("shard2", "postgres://localhost/shard2")
-    .add_shard("shard3", "postgres://localhost/shard3")
-    .add_shard("shard4", "postgres://localhost/shard4")
-    .build()?;
-
-// Operations are automatically routed to the correct shard
-let session = shard_manager.get_session("admin", "user_123").await?;
-User::insert(&session, user).await?;
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[table_name = "users")]
+#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
 ```
 
-<details>
-<summary><b>📋 Sharding Strategies</b></summary>
+#### 审计操作类型
 
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| `Hash` | Consistent hashing | Even distribution |
-| `Range` | Range-based partitioning | Time-series data |
-| `Modulo` | Simple modulo operation | Simple distribution |
-| `Custom` | Custom sharding logic | Specific requirements |
+| 操作 | 描述 |
+|------|------|
+| `CREATE` | 创建操作 |
+| `READ` | 读取操作 |
+| `UPDATE` | 更新操作 |
+| `DELETE` | 删除操作 |
 
-</details>
-
-### Caching
-
-Enable caching to reduce database load and improve performance.
+#### 查询审计日志
 
 ```rust
-use dbnexus::cache::Cache;
-use std::time::Duration;
+use dbnexus::audit::AuditLog;
 
-let cache = Cache::builder()
-    .max_size(10_000)
-    .ttl(Duration::from_secs(3600))
-    .build()?;
+let logs = AuditLog::query()
+    .user_id(123)
+    .operation("CREATE")
+    .table_name("users")
+    .execute(&session)
+    .await?;
+```
 
-// Cache is automatically used when enabled in config
-let config = Config::builder()
-    .enable_cache(true)
-    .cache_ttl(Duration::from_secs(3600))
-    .build()?;
+### 实体缓存
 
-// Manual cache usage
-let cache_key = format!("user:{}", user_id);
-if let Some(user) = cache.get(&cache_key)? {
-    return Ok(user);
+启用缓存功能：
+
+```rust
+use dbnexus::{DbEntity, db_cache};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_cache(ttl = 300, capacity = 1000)]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
+```
+
+#### 缓存配置
+
+| 参数 | 描述 | 默认值 |
+|------|------|--------|
+| `ttl` | 缓存过期时间（秒） | 300 |
+| `capacity` | 缓存最大容量 | 1000 |
+
+#### 缓存策略
+
+- **LRU**: 最近最少使用的条目优先被淘汰
+- **TTL**: 基于时间的过期策略
+- **穿透防护**: 防止缓存击穿
+- **击穿防护**: 防止热点 key 过期时的并发冲击
+
+### 分片管理
+
+#### 时间分片
+
+```rust
+use dbnexus::sharding::{ShardRouter, ShardConfig, YearlyStrategy};
+
+let config = ShardConfig::new("yearly", 12, "orders", "postgresql://localhost/{shard}");
+let router = ShardRouter::with_config(&config);
+
+// 路由到特定分片
+let shard = router.route_by_time(chrono::Utc::now());
+```
+
+#### 哈希分片
+
+```rust
+use dbnexus::sharding::{ShardRouter, ShardConfig, HashStrategy};
+
+let config = ShardConfig::new("hash", 4, "users", "postgresql://localhost/shard_{shard}");
+let router = ShardRouter::with_config(&config);
+
+// 根据用户 ID 路由
+let shard = router.route_by_hash(&12345i64.to_le_bytes());
+```
+
+### 全局索引
+
+```rust
+use dbnexus::{DbEntity, global_index};
+
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "orders")]
+#[global_index]
+struct Order {
+    #[primary_key]
+    id: i64,
+    user_id: i64,
+    product_id: i64,
+    amount: Decimal,
 }
 
-let user = User::find_by_id(&session, user_id).await?;
-cache.set(&cache_key, user.clone())?;
+// 创建全局唯一索引
+let index = global_index::GlobalIndex::new("order_user_product", vec!["user_id", "product_id"]);
 ```
 
-### Audit Logging
+### 监控指标
 
-Track all database operations for compliance and debugging.
-
-```rust
-use dbnexus::audit::AuditLogger;
-
-let audit_logger = AuditLogger::builder()
-    .log_level("info")
-    .log_file("/var/log/dbnexus/audit.log")
-    .build()?;
-
-// Enable in config
-let config = Config::builder()
-    .enable_audit(true)
-    .audit_logger(audit_logger)
-    .build()?;
-
-// Audit events are automatically logged
-User::insert(&session, user).await?;
-// Logs: INSERT INTO users VALUES (...) by admin at 2024-01-01 12:00:00
-```
-
-### Metrics and Monitoring
-
-Enable Prometheus metrics for monitoring database operations.
+启用 Prometheus 指标：
 
 ```rust
-use dbnexus::metrics::MetricsCollector;
+use dbnexus::metrics;
 
-let metrics = MetricsCollector::builder()
+let metrics_config = metrics::MetricsConfig::new()
+    .enabled(true)
     .port(9090)
-    .path("/metrics")
-    .build()?;
+    .path("/metrics");
 
-// Enable in config
-let config = Config::builder()
-    .enable_metrics(true)
-    .metrics_collector(metrics)
-    .build()?;
-
-// Metrics are automatically collected
-// Available metrics:
-// - dbnexus_query_duration_seconds
-// - dbnexus_query_total
-// - dbnexus_query_errors_total
-// - dbnexus_connection_pool_size
-// - dbnexus_cache_hits_total
-// - dbnexus_cache_misses_total
+// 注册指标
+let query_duration = metrics::register_histogram!(
+    "dbnexus_query_duration_seconds",
+    "Query duration in seconds"
+)?;
 ```
 
-### Error Handling
+#### 内置指标
 
-<div align="center">
+| 指标名称 | 类型 | 描述 |
+|----------|------|------|
+| `dbnexus_pool_connections` | Gauge | 连接池连接数 |
+| `dbnexus_query_duration_seconds` | Histogram | 查询耗时 |
+| `dbnexus_queries_total` | Counter | 查询总数 |
+| `dbnexus_cache_hits_total` | Counter | 缓存命中次数 |
+| `dbnexus_cache_misses_total` | Counter | 缓存未命中次数 |
 
-#### 🚨 Handling Errors Gracefully
+### 分布式追踪
 
-</div>
+启用 OpenTelemetry 追踪：
 
 ```rust
-use dbnexus::{Error, ErrorKind};
+use dbnexus::tracing;
 
-async fn handle_operation() -> Result<(), Error> {
-    match User::find_by_id(&session, user_id).await {
-        Ok(user) => {
-            println!("Found user: {}", user.name);
-            Ok(())
-        }
-        Err(e) => {
-            match e.kind() {
-                ErrorKind::NotFound => {
-                    println!("⚠️ User not found, creating new...");
-                    create_user(user_id).await?;
-                    Ok(())
-                }
-                ErrorKind::PermissionDenied => {
-                    eprintln!("❌ Access denied");
-                    Err(e)
-                }
-                ErrorKind::ConnectionError => {
-                    println!("🔌 Connection error, retrying...");
-                    retry_operation().await?;
-                    Ok(())
-                }
-                ErrorKind::QueryError => {
-                    eprintln!("❌ Query error: {}", e);
-                    Err(e)
-                }
-                _ => {
-                    eprintln!("❌ Unexpected error: {}", e);
-                    Err(e)
-                }
-            }
-        }
+let tracing_config = tracing::TracingConfig::new()
+    .enabled(true)
+    .service_name("dbnexus")
+    .exporter(tracing::ExporterType::OTLP);
+
+tracing::init(tracing_config)?;
+```
+
+---
+
+## 最佳实践
+
+### 1. 连接池配置
+
+```rust
+use dbnexus::PoolConfig;
+
+let pool_config = PoolConfig::new()
+    .max_connections(50)           // 根据并发需求调整
+    .min_connections(5)            // 保持最小连接数
+    .idle_timeout(600)             // 空闲超时 10 分钟
+    .acquire_timeout(10000);       // 获取连接超时 10 秒
+```
+
+### 2. 错误处理
+
+```rust
+use dbnexus::{DbPool, DbError};
+
+match DbPool::new().await {
+    Ok(pool) => {
+        let session = pool.get_session("admin").await?;
+        // 业务逻辑
+    }
+    Err(DbError::ConnectionFailed(e)) => {
+        eprintln!("数据库连接失败: {}", e);
+        // 重试逻辑
+    }
+    Err(DbError::PoolExhausted) => {
+        eprintln!("连接池已耗尽");
+        // 排队或拒绝
+    }
+    Err(e) => {
+        eprintln!("数据库错误: {}", e);
     }
 }
 ```
 
-<details>
-<summary><b>📋 Error Types</b></summary>
+### 3. 事务使用
 
-| Error Type | Description | Recovery Strategy |
-|------------|-------------|-------------------|
-| `NotFound` | Record doesn't exist | Create or return 404 |
-| `AlreadyExists` | Duplicate record | Use existing or update |
-| `PermissionDenied` | Access violation | Request permissions |
-| `ConnectionError` | Database connection failed | Retry with backoff |
-| `QueryError` | SQL execution failed | Fix query or data |
-| `ValidationError` | Invalid input data | Validate and retry |
-| `TimeoutError` | Operation timed out | Retry with timeout |
-
-</details>
-
----
-
-## Best Practices
-
-<div align="center">
-
-### 🌟 Follow These Guidelines
-
-</div>
-
-### ✅ DO's
-
-<table>
-<tr>
-<td width="50%">
-
-**Initialize Pool Once**
 ```rust
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    // Initialize pool at the start
-    let pool = DbPool::new(&db_url).await?;
-    
-    // Use Arc for sharing across threads
-    let pool = Arc::new(pool);
-    
-    do_work(pool).await?;
-    Ok(())
+let result = session.transaction(|s| {
+    // 在事务中执行多个操作
+
+    // 1. 创建订单
+    let order = create_order(s, &user_id, &items)?;
+
+    // 2. 扣减库存
+    update_inventory(s, &items)?;
+
+    // 3. 更新用户积分
+    update_points(s, &user_id, &points)?;
+
+    Ok(order)
+}).await;
+
+match result {
+    Ok(order) => println!("订单创建成功: {}", order.id),
+    Err(e) => println!("订单创建失败: {}", e),
 }
 ```
 
-</td>
-<td width="50%">
+### 4. 权限最小化
 
-**Use Sessions Properly**
 ```rust
-// Get session for each operation
-let session = pool.get_session("admin").await?;
-User::insert(&session, user).await?;
+// 不推荐：过度宽松的权限
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
 
-// Or reuse session within transaction
-let session = pool.get_session("admin").await?;
-session.begin_transaction().await?;
-User::insert(&session, user1).await?;
-User::insert(&session, user2).await?;
-session.commit().await?;
-```
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Handle Errors Properly**
-```rust
-match User::find_by_id(&session, id).await {
-    Ok(user) => process_user(user),
-    Err(Error::NotFound) => return None,
-    Err(e) => return Err(e.into()),
+// 推荐：精确的权限配置
+#[db_permission(role = "admin", actions = ["read", "write"])]
+#[db_permission(role = "admin", actions = ["delete"], condition = "is_owner()")]
+struct UserData {
+    // ...
 }
 ```
 
-</td>
-<td width="50%">
-
-**Use Transactions for Multiple Operations**
-```rust
-session.begin_transaction().await?;
-
-User::insert(&session, user).await?;
-Order::insert(&session, order).await?;
-
-session.commit().await?;
-// or
-session.rollback().await?;
-```
-
-</td>
-</tr>
-</table>
-
-### ❌ DON'Ts
-
-<table>
-<tr>
-<td width="50%">
-
-**Don't Ignore Errors**
-```rust
-// ❌ Bad
-let _ = User::insert(&session, user).await;
-
-// ✅ Good
-User::insert(&session, user).await?;
-```
-
-</td>
-<td width="50%">
-
-**Don't Block Async Context**
-```rust
-// ❌ Bad (in async fn)
-std::thread::sleep(duration);
-
-// ✅ Good
-tokio::time::sleep(duration).await;
-```
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Don't Create Multiple Pools**
-```rust
-// ❌ Bad
-let pool1 = DbPool::new(&db_url).await?;
-let pool2 = DbPool::new(&db_url).await?;
-
-// ✅ Good
-let pool = DbPool::new(&db_url).await?;
-let pool = Arc::new(pool);
-```
-
-</td>
-<td width="50%">
-
-**Don't Forget to Close Connections**
-```rust
-// ❌ Bad - connections leak
-let pool = DbPool::new(&db_url).await?;
-// forget pool
-
-// ✅ Good - pool handles cleanup
-{
-    let pool = DbPool::new(&db_url).await?;
-    // use pool
-} // pool is dropped, connections closed
-```
-
-</td>
-</tr>
-</table>
-
-### 💡 Tips and Tricks
-
-> **🔥 Performance Tip**: Use connection pooling efficiently:
-> ```rust
-> let config = Config::builder()
->     .max_connections(20)  // Set based on your workload
->     .min_connections(5)  // Keep some connections ready
->     .build()?;
-> ```
-
-> **🔒 Security Tip**: Never hardcode database credentials:
-> ```rust
-> // ❌ Bad
-> let db_url = "postgres://user:password@localhost/db";
-> 
-> // ✅ Good
-> let db_url = env::var("DATABASE_URL")?;
-> ```
-
-> **📊 Monitoring Tip**: Enable metrics in production:
-> ```rust
-> Config::builder()
->     .enable_metrics(true)
->     .metrics_port(9090)
->     .build()?
-> ```
-
-> **🎯 Caching Tip**: Cache frequently accessed data:
-> ```rust
-> Config::builder()
->     .enable_cache(true)
->     .cache_ttl(Duration::from_secs(3600))
->     .build()?
-> ```
-
----
-
-## Common Patterns
-
-### Pattern 1: Repository Pattern
+### 5. 缓存策略
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud};
-
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users"]
-#[db_crud]
-struct User {
+// 高频读取、低频修改的数据适合缓存
+#[db_cache(ttl = 3600, capacity = 5000)]
+struct Product {
     #[primary_key]
     id: i64,
     name: String,
-    email: String,
+    price: Decimal,
 }
 
-struct UserRepository {
-    pool: Arc<DbPool>,
-}
-
-impl UserRepository {
-    fn new(pool: Arc<DbPool>) -> Self {
-        Self { pool }
-    }
-    
-    async fn find_by_email(&self, email: &str) -> Result<Option<User>, Error> {
-        let session = self.pool.get_session("admin").await?;
-        let users = User::find_by_condition(&session, &format!("email = '{}'", email)).await?;
-        Ok(users.into_iter().next())
-    }
-    
-    async fn create(&self, user: User) -> Result<User, Error> {
-        let session = self.pool.get_session("admin").await?;
-        User::insert(&session, user).await?;
-        Ok(user)
-    }
+// 低频读取或高频修改的数据不适合缓存
+struct AuditLog {
+    #[primary_key]
+    id: i64,
+    // ... 不启用缓存
 }
 ```
 
-### Pattern 2: Service Layer
+### 6. 分片策略选择
+
+| 分片类型 | 适用场景 |
+|----------|----------|
+| **时间分片** | 日志、订单、事件等按时间增长的数据 |
+| **哈希分片** | 用户数据、需要均匀分布的数据 |
+| **范围分片** | ID 范围明确、需要范围查询的数据 |
+| **地理位置** | 需要按地区查询的数据 |
+
+### 7. 性能优化
 
 ```rust
-use dbnexus::DbPool;
-use std::sync::Arc;
+// 使用批量操作减少数据库往返
+let users = vec![
+    User { id: 1, name: "Alice".into(), email: "alice@example.com".into() },
+    User { id: 2, name: "Bob".into(), email: "bob@example.com".into() },
+    User { id: 3, name: "Charlie".into(), email: "charlie@example.com".into() },
+];
 
-struct UserService {
-    user_repo: Arc<UserRepository>,
-    audit_logger: Arc<AuditLogger>,
+for user in users {
+    User::insert(&session, user).await?;
 }
 
-impl UserService {
-    async fn register_user(&self, name: String, email: String) -> Result<User, Error> {
-        // Check if user exists
-        if let Some(_) = self.user_repo.find_by_email(&email).await? {
-            return Err(Error::AlreadyExists);
-        }
-        
-        // Create user
-        let user = User {
-            id: generate_id(),
-            name,
-            email,
-        };
-        
-        self.user_repo.create(user.clone()).await?;
-        
-        // Log audit
-        self.audit_logger.log("user_registered", &user).await?;
-        
-        Ok(user)
-    }
-}
-```
-
-### Pattern 3: Transactional Operations
-
-```rust
-async fn transfer_funds(
-    pool: Arc<DbPool>,
-    from_id: i64,
-    to_id: i64,
-    amount: i64,
-) -> Result<(), Error> {
-    let session = pool.get_session("admin").await?;
-    
-    // Begin transaction
-    session.begin_transaction().await?;
-    
-    // Check balance
-    let from_account = Account::find_by_id(&session, from_id).await?;
-    if from_account.balance < amount {
-        session.rollback().await?;
-        return Err(Error::InsufficientFunds);
-    }
-    
-    // Update balances
-    Account::update_balance(&session, from_id, from_account.balance - amount).await?;
-    Account::update_balance(&session, to_id, to_account.balance + amount).await?;
-    
-    // Commit transaction
-    session.commit().await?;
-    
-    Ok(())
-}
+// 使用只读副本处理查询（如果配置了）
+let read_session = pool.get_session("reader").await?;
 ```
 
 ---
 
-## Troubleshooting
+## 故障排除
 
-<details>
-<summary><b>❓ Problem: Connection pool exhausted</b></summary>
+### 常见错误
 
-**Solution:**
+#### 1. 连接池耗尽
+
+**错误信息**: `DbError: PoolExhausted`
+
+**解决方案**:
 ```rust
-// Increase pool size
-let config = Config::builder()
-    .max_connections(50)
-    .connection_timeout(Duration::from_secs(60))
-    .build()?;
+// 增加连接池大小
+let pool_config = PoolConfig::new()
+    .max_connections(100);
+
+// 使用连接超时
+let session = pool
+    .get_session_with_timeout("admin", Duration::from_secs(30))
+    .await?;
 ```
 
-**Diagnosis:**
-- Check if you're properly closing sessions
-- Monitor connection pool metrics
-- Review your connection usage patterns
+#### 2. 数据库连接失败
 
-</details>
+**错误信息**: `DbError::ConnectionFailed`
 
-<details>
-<summary><b>❓ Problem: Slow query performance</b></summary>
+**解决方案**:
+```bash
+# 检查数据库服务状态
+pg_isready -h localhost -p 5432
 
-**Diagnosis:**
-1. Enable query logging
-2. Check database indexes
-3. Review query execution plans
-4. Consider caching
-
-**Solution:**
-```rust
-// Enable query logging
-let config = Config::builder()
-    .log_level("debug")
-    .build()?;
-
-// Enable caching for frequent queries
-let config = Config::builder()
-    .enable_cache(true)
-    .cache_ttl(Duration::from_secs(3600))
-    .build()?;
+# 验证连接字符串
+export DATABASE_URL="postgres://user:pass@localhost:5432/db"
 ```
 
-</details>
+#### 3. 权限检查失败
 
-<details>
-<summary><b>❓ Problem: Permission denied errors</b></summary>
+**错误信息**: `PermissionDenied`
 
-**Solution:**
+**解决方案**:
 ```rust
-// Check user permissions
-let session = pool.get_session("admin").await?;
-let has_permission = session.check_permission("users", "read")?;
+// 确认角色在配置中定义
+let provider = YamlPermissionProvider::new("permissions.yaml")?;
 
-// Grant necessary permissions
-session.grant_permission("user", "users", "read").await?;
+// 打印权限配置用于调试
+println!("{:?}", provider.get_role_permissions("admin"));
 ```
 
-</details>
+#### 4. 编译特性冲突
 
-<details>
-<summary><b>❓ Problem: High memory usage</b></summary>
+**错误信息**: `Cannot enable both 'sqlite' and 'postgres' features`
 
-**Solution:**
-```rust
-// Reduce cache size
-let config = Config::builder()
-    .cache_max_size(1000)  // Reduce from default
-    .build()?;
-
-// Reduce connection pool size
-let config = Config::builder()
-    .max_connections(10)
-    .build()?;
+**解决方案**:
+```toml
+# 只能选择一种数据库
+dbnexus = { version = "0.1.0", features = ["sqlite"] }
 ```
 
-</details>
+#### 5. 宏冲突
 
-<details>
-<summary><b>❓ Problem: Database migration conflicts</b></summary>
+**错误信息**: 重复实现错误
 
-**Solution:**
+**解决方案**:
 ```rust
-// Use dbnexus-cli for proper migration management
-// Install: cargo install dbnexus-cli
+// 不要同时使用 #[db_crud] 和 #[db_permission]
+// 使用 #[db_crud] 时，权限在宏内部自动生成
 
-// Create migration
-dbnexus-cli migrate create add_users_table
+// 正确的用法
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]  // 包含权限检查
+struct User {
+    #[primary_key]
+    id: i64,
+}
 
-// Run migrations
-dbnexus-cli migrate up
-
-// Rollback if needed
-dbnexus-cli migrate down
+// 正确的用法（自定义权限）
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
+struct UserData {
+    #[primary_key]
+    id: i64,
+    // 手动实现 CRUD 或使用 API
+}
 ```
 
-</details>
+### 调试技巧
 
-<div align="center">
+#### 1. 启用日志
 
-**💬 Still need help?** [Open an issue](https://github.com/yourusername/dbnexus/issues) or check our [FAQ](FAQ.md)
+```rust
+use env_logger;
 
-</div>
+env_logger::init();
 
----
+let pool = DbPool::new().await?;
+```
 
-## Next Steps
+#### 2. 连接池状态监控
 
-<div align="center">
+```rust
+let status = pool.status();
+println!("总连接数: {}", status.total);
+println!("活跃连接: {}", status.active);
+println!("空闲连接: {}", status.idle);
+println!("等待任务: {}", status.waiters);
+```
 
-### 🎯 Continue Your Journey
+#### 3. 慢查询日志
 
-</div>
+```rust
+use dbnexus::metrics;
 
-<table>
-<tr>
-<td width="33%" align="center">
-<a href="../examples/">
-<img src="https://img.icons8.com/fluency/96/000000/code.png" width="64"><br>
-<b>💻 Examples</b>
-</a><br>
-Real-world code samples
-</td>
-<td width="33%" align="center">
-<a href="ARCHITECTURE.md">
-<img src="https://img.icons8.com/fluency/96/000000/settings.png" width="64"><br>
-<b>🔧 Architecture</b>
-</a><br>
-Deep dive into design
-</td>
-<td width="33%" align="center">
-<a href="API_REFERENCE.md">
-<img src="https://img.icons8.com/fluency/96/000000/book.png" width="64"><br>
-<b>📖 API Reference</b>
-</a><br>
-Complete API documentation
-</td>
-</tr>
-</table>
+let slow_query_duration = std::time::Duration::from_millis(1000);
 
----
+// 配置慢查询阈值
+```
 
-<div align="center">
+### 获取帮助
 
-**[📖 API Reference](API_REFERENCE.md)** • **[❓ FAQ](FAQ.md)** • **[🐛 Report Issue](https://github.com/yourusername/dbnexus/issues)**
-
-Made with ❤️ by the dbnexus Team
-
-[⬆ Back to Top](#-user-guide)
-
-</div>
+- **GitHub Issues**: [报告问题](https://github.com/Kirky-X/dbnexus/issues)
+- **文档**: [docs.rs/dbnexus](https://docs.rs/dbnexus)
+- **API 参考**: [docs/API_REFERENCE.md](./API_REFERENCE.md)
+- **架构文档**: [docs/ARCHITECTURE.md](./ARCHITECTURE.md)

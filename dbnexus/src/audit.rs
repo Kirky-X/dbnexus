@@ -640,10 +640,7 @@ impl AuditLogger {
                 for (k, v) in obj {
                     if k == field || k.contains(&field_with_underscore) {
                         let redacted_key = format!("{}{}redacted", k, underscore_str);
-                        new_obj.insert(
-                            redacted_key,
-                            serde_json::Value::String(replacement.to_string()),
-                        );
+                        new_obj.insert(redacted_key, serde_json::Value::String(replacement.to_string()));
                         modified = true;
                     } else if v.is_string() {
                         let s = v.as_str().unwrap_or("");

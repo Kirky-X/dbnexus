@@ -344,10 +344,11 @@ pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str
 ///
 /// 返回注入的 headers 和提取的追踪ID
 #[allow(dead_code)]
-pub async fn verify_trace_injection(
-    pool: &dbnexus::DbPool,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _session = pool.get_session("admin").await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+pub async fn verify_trace_injection(pool: &dbnexus::DbPool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _session = pool
+        .get_session("admin")
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
     let trace_id = "0af7651916cd43dd8448eb211c80319c";
     let span_id = "b7ad6b7169203331";
     let traceparent = format!("00-{}-{}01", trace_id, span_id);
@@ -361,10 +362,7 @@ pub async fn verify_trace_injection(
         "Headers should contain traceparent"
     );
     let tp = headers.get("traceparent").unwrap();
-    assert!(
-        tp.starts_with("00-"),
-        "traceparent format should be valid"
-    );
+    assert!(tp.starts_with("00-"), "traceparent format should be valid");
 
     Ok(())
 }
@@ -386,14 +384,8 @@ pub async fn verify_trace_extraction(
     let span_id = &parts[2][0..16]; // 只取前16个字符作为span_id
 
     // 验证追踪ID格式（32位十六进制）
-    assert!(
-        trace_id.len() == 32,
-        "trace_id should be 32 characters"
-    );
-    assert!(
-        span_id.len() == 16,
-        "span_id should be 16 characters"
-    );
+    assert!(trace_id.len() == 32, "trace_id should be 32 characters");
+    assert!(span_id.len() == 16, "span_id should be 16 characters");
 
     // 验证都是有效的十六进制
     u64::from_str_radix(&trace_id[0..16], 16).map_err(|_| "Invalid trace_id")?;
@@ -420,8 +412,8 @@ pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
 /// 返回成功和失败的数量
 #[allow(dead_code)]
 pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: usize) -> (usize, usize) {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let success_count = Arc::new(AtomicUsize::new(0));
     let mut handles = Vec::new();
@@ -450,7 +442,10 @@ pub async fn verify_db_operation_with_trace(
     table_name: &str,
     trace_id: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let session = pool.get_session("admin").await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+    let session = pool
+        .get_session("admin")
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     // 插入带追踪ID的记录
     session

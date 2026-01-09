@@ -29,7 +29,7 @@ repos:
       - id: clippy
         name: Rust Clippy Check
         description: 检查 Rust 代码质量问题，将警告视为错误
-        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        entry: cargo clippy --all-targets --features sqlite,all-optional --workspace -- -D warnings
         language: system
         pass_filenames: false
         types: [rust]
@@ -43,19 +43,16 @@ repos:
       - id: cargo-check
         name: Cargo Check
         description: 检查 Rust 代码是否可以编译
-        entry: scripts/pre-commit-check.sh cargo_check
+        entry: bash scripts/pre-commit-check.sh cargo_check
         language: system
         pass_filenames: false
         types: [rust]
         stages: [pre-commit]
 
-  # =============================================================================
-  # Rust 构建检查
-  # =============================================================================
       - id: cargo-build
         name: Cargo Build
         description: 检查 Rust 代码是否可以成功构建
-        entry: scripts/pre-commit-check.sh cargo_build
+        entry: bash scripts/pre-commit-check.sh cargo_build
         language: system
         pass_filenames: false
         types: [rust]
@@ -67,131 +64,42 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
-      - id: yamllint
-        name: YAML Syntax Check
-        description: 检查 YAML 文件语法
-        files: \.yaml$
-        types: [yaml]
-
-  # =============================================================================
-  # YAML 安全检查
-  # =============================================================================
-      - id: yaml安全性检查
-        name: YAML Security Check
-        description: 检查 YAML 文件中的潜在安全问题
-        entry: python -c "import yaml; yaml.safe_load(open('$0'))"
-        language: python
-        files: \.yaml$
-        types: [yaml]
-
-  # =============================================================================
-  # TOML 格式检查
-  # =============================================================================
-      - id: toml-format
-        name: TOML Format Check
-        description: 检查 TOML 文件格式
-        entry: python -c "import toml; toml.load('$0')"
-        language: python
-        files: \.toml$
-        types: [toml]
-        require_serial: true
-
-  # =============================================================================
-  # 去除行尾空白字符
-  # =============================================================================
       - id: trailing-whitespace
         name: Remove Trailing Whitespace
         description: 去除行尾空白字符
-        entry: scripts/pre-commit-check.sh trailing_whitespace
-        language: system
-        pass_filenames: false
+        args: ['--markdown-linebreak-ext=md']
         types: [text]
-        exclude: \.(png|jpg|jpeg|gif|ico|svg|bin|zip|tar|gz|pdf|db)$
 
-  # =============================================================================
-  # 检测合并冲突标记
-  # =============================================================================
+      - id: check-yaml
+        name: Check YAML Syntax
+        description: 检查 YAML 文件语法
+        args: ['--unsafe']  # 允许自定义标签
+
+      - id: check-toml
+        name: Check TOML Syntax
+        description: 检查 TOML 文件语法
+        files: \.toml$
+
       - id: check-merge-conflict
         name: Check Merge Conflict Markers
         description: 检测文件中的合并冲突标记
-        entry: scripts/pre-commit-check.sh merge_conflict
-        language: system
-        pass_filenames: false
-        types: [text]
 
-  # =============================================================================
-  # 检测大文件
-  # =============================================================================
-      - id: check-large-files
-        name: Check Large Files
-        description: 检测是否提交了超过 1MB 的文件
-        entry: scripts/pre-commit-check.sh large_files
-        language: system
-        pass_filenames: false
-        args: ['--maxkb=1024']
-
-  # =============================================================================
-  # 检测添加的空文件
-  # =============================================================================
       - id: check-added-large-files
         name: Check Added Large Files
         description: 检测是否添加了超过 1MB 的文件
-        entry: scripts/pre-commit-check.sh added_large_files
-        language: system
-        pass_filenames: false
         args: ['--maxkb=1024']
 
   # =============================================================================
-  # 检测私有密钥
+  # Shell 脚本语法检查
   # =============================================================================
-      - id: detect-private-keys
-        name: Detect Private Keys
-        description: 检测是否意外提交了私钥
-        entry: scripts/pre-commit-check.sh private_keys
-        language: system
-        pass_filenames: false
-
-  # =============================================================================
-  # 检测 AWS 密钥
-  # =============================================================================
-      - id: detect-aws-keys
-        name: Detect AWS Keys
-        description: 检测是否意外提交了 AWS 密钥
-        entry: scripts/pre-commit-check.sh aws_keys
-        language: system
-        pass_filenames: false
-
-  # =============================================================================
-  # 检测 JSON 语法
-  # =============================================================================
-      - id: json-format
-        name: JSON Format Check
-        description: 检查 JSON 文件格式
-        entry: python -c "import json; json.load(open('$0'))"
-        language: python
-        files: \.json$
-        types: [json]
-
-  # =============================================================================
-  # 检测 Markdown 链接
-  # =============================================================================
-      - id: markdown-links
-        name: Markdown Links Check
-        description: 检查 Markdown 文件中的链接
-        files: \.md$
-        types: [markdown]
-
-  # =============================================================================
-  # 检测 Shell 脚本语法
-  # =============================================================================
-      - repo: https://github.com/koalaman/shellcheck-precommit
-        rev: v0.9.0
-        hooks:
-          - id: shellcheck
-            name: Shell Script Syntax Check
-            description: 检查 Shell 脚本语法
-            files: \.sh$
-            types: [shell]
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.9.0
+    hooks:
+      - id: shellcheck
+        name: Shell Script Syntax Check
+        description: 检查 Shell 脚本语法
+        files: \.sh$
+        types: [shell]
 
 # =============================================================================
 # 排除的目录和文件
@@ -199,11 +107,11 @@ repos:
 exclude: |
   (?x)^(
     target/|
-    .git/|
-    .cargo/|
-    .rustc/|
+    \.git/|
+    \.cargo/|
+    \.rustc/|
     coverage/|
-    .tarpaulin/|
+    \.tarpaulin/|
     \.htmlcov/|
     \.DS_Store|
     \.idea/|
@@ -224,7 +132,11 @@ exclude: |
     \*.orig|
     \*.rej|
     \*.bak|
-    \*.log
+    \*.log|
+    openspec/|
+    \.iflow/|
+    \.serena/|
+    \.claude/
   )
 
 # =============================================================================
@@ -234,12 +146,8 @@ default_install_hook_types: [pre-commit]
 default_stages: [pre-commit]
 
 # =============================================================================
-# 回退行为
+# 回退行为和并行设置
 # =============================================================================
 fail_fast: false
 verbose: true
-
-# =============================================================================
-# 并行执行设置
-# =============================================================================
 require_serial: false

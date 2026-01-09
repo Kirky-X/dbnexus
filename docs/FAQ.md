@@ -1,355 +1,628 @@
-# dbnexus FAQ
+# DB Nexus 常见问题解答 (FAQ)
 
-## General Questions
+## 目录
 
-### What is dbnexus?
+- [安装问题](#安装问题)
+- [配置问题](#配置问题)
+- [功能使用问题](#功能使用问题)
+- [性能问题](#性能问题)
+- [故障排除](#故障排除)
 
-dbnexus is a high-performance, feature-rich database abstraction library for Rust that provides a unified interface for multiple database backends. It offers advanced features like connection pooling, session management, permission control, caching, audit logging, sharding, and Prometheus metrics integration.
+---
 
-### What databases does dbnexus support?
+## 安装问题
 
-dbnexus currently supports the following databases through Sea-ORM:
-- PostgreSQL
-- MySQL
-- SQLite
-- Microsoft SQL Server
+### Q1: 编译错误 "Cannot enable both 'sqlite' and 'postgres' features"
 
-### What are the key features of dbnexus?
+**问题**:
+```error
+error: Cannot enable both 'sqlite' and 'postgres' features
+```
 
-Key features include:
-- Multi-database support with unified API
-- Connection pool management
-- Session-based database access
-- Declarative entity definitions with macros
-- Permission-based access control
-- Built-in caching support
-- Comprehensive audit logging
-- Database sharding support
-- Prometheus metrics integration
-- Transaction management
-- Async/await support
+**原因**: 数据库特性互斥，只能选择一种。
 
-### Is dbnexus production-ready?
+**解决方案**:
+```toml
+# 只能选择一种数据库
+[dependencies]
+dbnexus = { version = "0.1.0", features = ["sqlite"] }
 
-Yes, dbnexus is designed for production use with robust error handling, connection pooling, and comprehensive testing. However, as with any database library, thorough testing in your specific environment is recommended.
+# PostgreSQL
+# dbnexus = { version = "0.1.0", features = ["postgres"] }
 
-## Installation
+# MySQL
+# dbnexus = { version = "0.1.0", features = ["mysql"] }
+```
 
-### How do I add dbnexus to my project?
+### Q2: 找不到 `dbnexus` crate
 
-Add dbnexus to your `Cargo.toml`:
+**问题**:
+```error
+error: could not find `dbnexus` in `crates.io`
+```
 
+**原因**: crate 名称错误或未发布。
+
+**解决方案**:
+```toml
+# 检查 crate 名称
+[dependencies]
+dbnexus = "0.1.0"
+
+# 或者从 Git 安装
+[dependencies]
+dbnexus = { git = "https://github.com/Kirky-X/dbnexus", tag = "v0.1.0" }
+```
+
+### Q3: Rust 版本不兼容
+
+**问题**:
+```error
+error: package `dbnexus v0.1.0` requires Rust version 1.85.0
+```
+
+**原因**: 当前 Rust 版本低于项目要求。
+
+**解决方案**:
+```bash
+# 检查当前版本
+rustc --version
+
+# 更新 Rust
+rustup update stable
+
+# 或者安装特定版本
+rustup install 1.85.0
+rustup default 1.85.0
+```
+
+### Q4: 依赖下载失败
+
+**问题**:
+```error
+error: failed to fetch `https://github.com/...`
+```
+
+**原因**: 网络问题或 Git 配置问题。
+
+**解决方案**:
+```bash
+# 配置 Git
+git config --global url."https://".insteadOf git://
+
+# 清除缓存重新下载
+cargo clean
+cargo fetch
+```
+
+---
+
+## 配置问题
+
+### Q5: DATABASE_URL 格式错误
+
+**问题**:
+```error
+DbError: ConfigError("Invalid DATABASE_URL format")
+```
+
+**原因**: 连接字符串格式不正确。
+
+**解决方案**:
+
+```bash
+# SQLite
+export DATABASE_URL=sqlite:./data.db
+# 或
+export DATABASE_URL=sqlite::memory:
+
+# PostgreSQL
+export DATABASE_URL=postgres://user:password@localhost:5432/dbname
+
+# MySQL
+export DATABASE_URL=mysql://user:password@localhost:3306/dbname
+```
+
+### Q6: 连接池配置不生效
+
+**问题**: 修改 `DB_MAX_CONNECTIONS` 后没有效果。
+
+**解决方案**:
+```rust
+use dbnexus::{DbPool, PoolConfig};
+
+let pool_config = PoolConfig::new()
+    .max_connections(100)  // 显式设置
+    .min_connections(10)
+    .idle_timeout(600)
+    .acquire_timeout(10000);
+
+let pool = DbPool::with_config(pool_config).await?;
+```
+
+### Q7: 环境变量不读取
+
+**问题**: 设置的环境变量没有被读取。
+
+**解决方案**:
+```rust
+use dbnexus::DbConfig;
+
+let config = DbConfig::from_env()?;
+
+println!("URL: {}", config.url);
+println!("Max connections: {}", config.max_connections);
+```
+
+检查环境变量是否设置：
+```bash
+echo $DATABASE_URL
+```
+
+### Q8: 权限配置文件路径
+
+**问题**: 无法找到权限配置文件。
+
+**解决方案**:
+```bash
+# 设置权限配置文件路径
+export DB_PERMISSIONS_PATH=/path/to/permissions.yaml
+
+# 或使用绝对路径
+```
+
+```rust
+let provider = YamlPermissionProvider::new("/absolute/path/permissions.yaml")?;
+```
+
+---
+
+## 功能使用问题
+
+### Q9: #[db_crud] 和 #[db_permission] 冲突
+
+**问题**:
+```error
+error[E0119]: conflicting implementations
+```
+
+**原因**: 同时使用两个宏导致重复实现。
+
+**解决方案**:
+```rust
+// 使用 #[db_crud]（包含内置权限检查）
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]  // 包含权限检查
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+}
+
+// 或自定义权限（不使用 #[db_crud]）
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
+struct UserData {
+    #[primary_key]
+    id: i64,
+    // 手动实现 CRUD 或使用 API
+}
+```
+
+### Q10: 宏不生成代码
+
+**问题**: 宏没有生成预期的方法。
+
+**解决方案**:
+1. 确保启用了必要的特性：
 ```toml
 [dependencies]
-dbnexus = "0.1"
+dbnexus = { version = "0.1.0", features = ["sqlite"] }
 ```
 
-### What are the feature flags?
+2. 检查宏导入：
+```rust
+use dbnexus::{DbEntity, db_crud, db_permission};
+```
 
-dbnexus uses feature flags to enable optional functionality:
+3. 确保 struct 定义正确：
+```rust
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+}
+```
 
+### Q11: 事务不生效
+
+**问题**: 事务回滚没有生效。
+
+**解决方案**:
+```rust
+let result = session.transaction(|s| {
+    // 操作1
+    s.execute_raw("INSERT INTO ...![])?;
+
+    // 操作2 - 模拟错误", vec
+    if condition {
+        return Err(DbError::TransactionError("custom error".into()));
+    }
+
+    Ok(())
+}).await;
+
+match result {
+    Ok(_) => println!("事务提交"),
+    Err(e) => {
+        println!("事务自动回滚: {}", e);
+    }
+}
+```
+
+### Q12: 缓存没有生效
+
+**问题**: 启用缓存但没有看到缓存效果。
+
+**解决方案**:
+1. 确保启用了 `cache` 特性：
 ```toml
 [dependencies]
-dbnexus = { version = "0.1", features = ["postgres", "mysql", "permission", "cache", "audit", "sharding", "metrics"] }
+dbnexus = { version = "0.1.0", features = ["sqlite", "cache"] }
 ```
 
-Available features:
-- `postgres`: PostgreSQL support
-- `mysql`: MySQL support
-- `sqlite`: SQLite support
-- `mssql`: Microsoft SQL Server support
-- `permission`: Permission control system
-- `cache`: Caching support
-- `audit`: Audit logging
-- `sharding`: Database sharding
-- `metrics`: Prometheus metrics
-
-### What are the minimum Rust version requirements?
-
-dbnexus requires Rust 1.75 or later due to its use of async/await and modern Rust features.
-
-## Usage
-
-### How do I initialize a database connection pool?
-
+2. 为实体添加缓存属性：
 ```rust
-use dbnexus::DbPool;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("postgres://user:password@localhost/dbname").await?;
-    Ok(())
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_cache(ttl = 300, capacity = 1000)]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
 }
 ```
 
-### How do I define a database entity?
-
-Use the `DbEntity` macro:
-
+3. 检查缓存命中情况：
 ```rust
-use dbnexus::DbEntity;
+let status = pool.status();
+```
 
-#[derive(Clone, Debug, DbEntity)]
-#[db_entity(table_name = "users")]
-pub struct User {
-    #[db_entity(primary_key)]
-    pub id: i32,
-    pub name: String,
-    pub email: String,
-    #[db_entity(created_at)]
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    #[db_entity(updated_at)]
-    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+### Q13: 审计日志不记录
+
+**问题**: 启用审计但没有日志。
+
+**解决方案**:
+1. 确保启用了 `audit` 特性：
+```toml
+[dependencies]
+dbnexus = { version = "0.1.0", features = ["sqlite", "audit"] }
+```
+
+2. 为实体添加审计属性：
+```rust
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users")]
+#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
 }
 ```
 
-### How do I perform CRUD operations?
-
+3. 检查操作类型是否匹配：
 ```rust
-use dbnexus::{DbEntity, DbPool, DbSession};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("postgres://user:password@localhost/dbname").await?;
-    let session = pool.get_session().await?;
-
-    // Create
-    let user = User {
-        id: 0,
-        name: "John Doe".to_string(),
-        email: "john@example.com".to_string(),
-        created_at: None,
-        updated_at: None,
-    };
-    let created_user = user.insert(&session).await?;
-
-    // Read
-    let found_user = User::find_by_id(1, &session).await?;
-
-    // Update
-    let mut user = found_user.unwrap();
-    user.name = "Jane Doe".to_string();
-    let updated_user = user.update(&session).await?;
-
-    // Delete
-    updated_user.delete(&session).await?;
-
-    Ok(())
-}
+// CREATE, READ, UPDATE, DELETE
+#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
 ```
 
-### How do I use transactions?
+### Q14: 分片路由不正确
 
+**问题**: 分片路由返回错误的分片。
+
+**解决方案**:
 ```rust
-use dbnexus::{DbEntity, DbPool, DbSession};
+use dbnexus::sharding::{ShardRouter, ShardConfig, HashStrategy};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("postgres://user:password@localhost/dbname").await?;
-    let session = pool.get_session().await?;
+// 配置哈希分片
+let config = ShardConfig::new(
+    "hash",                    // 分片名称
+    4,                         // 分片数量
+    "orders",                  // 表名
+    "postgresql://localhost/shard_{shard}"  // 连接模板
+);
 
-    let result = session.transaction(|tx| async move {
-        let user = User {
-            id: 0,
-            name: "John Doe".to_string(),
-            email: "john@example.com".to_string(),
-            created_at: None,
-            updated_at: None,
-        };
-        let created_user = user.insert(&tx).await?;
-        Ok::<_, dbnexus::DbError>(created_user)
-    }).await?;
+// 使用哈希策略
+let router = ShardRouter::with_config(&config);
 
-    Ok(())
-}
+// 根据用户 ID 路由
+let shard_id = router.route_by_hash(&user_id.to_le_bytes());
 ```
 
-## Performance
+---
 
-### How does connection pooling work?
+## 性能问题
 
-dbnexus uses Sea-ORM's connection pool which maintains a pool of database connections that can be reused. This eliminates the overhead of creating new connections for each query. The pool size can be configured based on your application's needs.
+### Q15: 查询速度慢
 
-### How can I optimize performance?
+**问题**: 查询响应时间长。
 
-Performance optimization tips:
-- Use connection pooling with appropriate pool size
-- Enable caching for frequently accessed data
-- Use batch operations for bulk inserts/updates
-- Leverage database indexes properly
-- Use sharding for large datasets
-- Monitor metrics to identify bottlenecks
-- Use prepared statements
-
-### Does dbnexus support caching?
-
-Yes, dbnexus supports caching through the `cache` feature. You can enable caching for entities and queries:
-
+**解决方案**:
+1. **使用缓存**：
 ```rust
-use dbnexus::DbEntity;
-
-#[derive(Clone, Debug, DbEntity)]
-#[db_entity(table_name = "users", cache = true, cache_ttl = 300)]
-pub struct User {
-    // ... fields
-}
+#[db_cache(ttl = 3600, capacity = 10000)]
+struct Product { /* ... */ }
 ```
 
-## Security
-
-### How does permission control work?
-
-dbnexus provides a permission-based access control system through the `permission` feature. You can define permissions and check them before operations:
-
-```rust
-use dbnexus::permission::{Permission, PermissionContext};
-
-let permission = Permission::new("users", "read");
-let context = PermissionContext::new(user_id);
-let has_permission = permission.check(&context).await?;
+2. **添加索引**：
+```sql
+CREATE INDEX idx_user_email ON users(email);
 ```
 
-### How do I enable audit logging?
-
-Enable the `audit` feature and configure audit logging:
-
+3. **优化连接池**：
 ```rust
-use dbnexus::audit::AuditLogger;
-
-let audit_logger = AuditLogger::new(pool.clone());
-audit_logger.log_operation("create", "users", user_id, &user).await?;
+let pool_config = PoolConfig::new()
+    .max_connections(100)
+    .min_connections(10);
 ```
 
-### Are database credentials secure?
-
-dbnexus supports environment variables and configuration files for storing database credentials. Never hardcode credentials in your source code. Use environment variables or secure secret management systems.
-
-## Troubleshooting
-
-### Why am I getting connection errors?
-
-Common causes:
-- Database server is not running
-- Incorrect connection URL
-- Network connectivity issues
-- Firewall blocking connections
-- Database user lacks necessary permissions
-
-Check your connection string and ensure the database is accessible.
-
-### Why are my queries slow?
-
-Possible reasons:
-- Missing database indexes
-- Inefficient queries
-- Connection pool too small
-- Network latency
-- Large result sets
-
-Use the metrics feature to monitor query performance and identify bottlenecks.
-
-### How do I debug issues?
-
-Enable debug logging:
-
+4. **使用只读副本**：
 ```rust
-env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+let read_session = pool.get_session("reader").await?;
 ```
 
-Check the logs for detailed error messages and stack traces.
+### Q16: 连接池耗尽
 
-## Contributing
+**问题**: `PoolExhausted` 错误。
 
-### How can I contribute to dbnexus?
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
-- Setting up the development environment
-- Running tests
-- Submitting pull requests
-- Coding standards
-
-### What is the contribution process?
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request with a clear description
-
-### Where can I report bugs?
-
-Report bugs using the GitHub issue tracker. Please include:
-- A clear description of the bug
-- Steps to reproduce
-- Expected vs actual behavior
-- Environment details (OS, Rust version, database type)
-- Relevant code snippets
-
-## Licensing
-
-### What license does dbnexus use?
-
-dbnexus is licensed under the MIT License. See the [LICENSE](../LICENSE) file for details.
-
-### Can I use dbnexus in commercial projects?
-
-Yes, dbnexus is free to use in commercial projects under the MIT License.
-
-### Can I modify dbnexus?
-
-Yes, you are free to modify dbnexus as long as you comply with the MIT License terms, including preserving the copyright notice and license text.
-
-## Advanced Topics
-
-### How do I implement database sharding?
-
-Enable the `sharding` feature and configure sharding strategy:
-
+**解决方案**:
+1. **增加连接池大小**：
 ```rust
-use dbnexus::sharding::{ShardConfig, ShardStrategy};
-
-let config = ShardConfig::new()
-    .with_strategy(ShardStrategy::Hash)
-    .with_shard_count(4);
-
-let pool = DbPool::new_with_sharding("postgres://...", &config).await?;
+let pool_config = PoolConfig::new()
+    .max_connections(200);
 ```
 
-### How do I integrate Prometheus metrics?
-
-Enable the `metrics` feature and configure metrics:
-
+2. **减少连接占用时间**：
 ```rust
-use dbnexus::metrics::MetricsCollector;
-
-let metrics = MetricsCollector::new();
-metrics.start_server(9090).await?;
+// 快速释放连接
+let _ = session; // 使用后让 Session 释放
 ```
 
-Metrics are available at `http://localhost:9090/metrics`.
-
-### Can I use dbnexus with multiple databases?
-
-Yes, you can create multiple `DbPool` instances for different databases:
-
+3. **增加获取超时**：
 ```rust
-let postgres_pool = DbPool::new("postgres://...").await?;
-let mysql_pool = DbPool::new("mysql://...").await?;
+let pool_config = PoolConfig::new()
+    .acquire_timeout(30000);  // 30秒
 ```
 
-## Support
+4. **检查连接泄漏**：
+```rust
+let status = pool.status();
+println!("等待任务: {}", status.waiters);
+```
 
-### Where can I get help?
+### Q17: 内存使用过高
 
-- Documentation: [docs/](../docs/)
-- GitHub Issues: [Issues](https://github.com/yourorg/dbnexus/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourorg/dbnexus/discussions)
+**问题**: 内存使用持续增长。
 
-### Is there a community forum?
+**解决方案**:
+1. **减少缓存容量**：
+```rust
+#[db_cache(ttl = 300, capacity = 100)]  // 减小容量
+struct User { /* ... */ }
+```
 
-Join our GitHub Discussions for community support and discussions about dbnexus.
+2. **设置连接池上限**：
+```rust
+let pool_config = PoolConfig::new()
+    .max_connections(50);
+```
 
-### How do I stay updated?
+3. **监控内存使用**：
+```rust
+let status = pool.status();
+println!("总连接数: {}", status.total);
+```
 
-Watch the GitHub repository for releases and updates. Follow the project on social media for announcements.
+---
+
+## 故障排除
+
+### Q18: 测试超时
+
+**问题**: 测试运行超时。
+
+**解决方案**:
+```bash
+# 增加测试超时
+export TEST_TIMEOUT_MS=60000
+
+# 或在测试中
+#[tokio::test(timeout = 60)]
+async fn test_name() { /* ... */ }
+```
+
+### Q19: 数据库迁移失败
+
+**问题**: `MigrationError` 错误。
+
+**解决方案**:
+```rust
+// 检查迁移目录
+let migrations_dir = "./migrations";
+
+// 使用测试夹具
+let (pool, migrations_dir, _temp_dir) = create_test_fixture().await;
+
+// 查看详细错误
+println!("{:?}", error);
+```
+
+### Q20: SSL/TLS 连接问题
+
+**问题**: 数据库 SSL 连接失败。
+
+**解决方案**:
+```bash
+# PostgreSQL SSL
+export DATABASE_URL=postgres://user:pass@host/db?sslmode=require
+
+# MySQL SSL
+export DATABASE_URL=mysql://user:pass@host/db?ssl-mode=REQUIRED
+```
+
+### Q21: 权限检查失败
+
+**问题**: `PermissionDenied` 错误。
+
+**解决方案**:
+1. **检查角色配置**：
+```yaml
+# permissions.yaml
+roles:
+  admin:
+    tables:
+      - name: "users"
+        operations:
+          - SELECT
+```
+
+2. **验证角色名称**：
+```rust
+let session = pool.get_session("admin").await?;
+// 确认 "admin" 角色存在
+```
+
+3. **打印权限调试**：
+```rust
+let provider = YamlPermissionProvider::new("permissions.yaml")?;
+println!("{:?}", provider.get_role_permissions("admin"));
+```
+
+### Q22: 编译警告视为错误
+
+**问题**: 所有警告导致编译失败。
+
+**解决方案**:
+```bash
+# 仅检查错误（开发环境）
+cargo check
+
+# 或临时禁用警告
+cargo clippy --all-features --all -- -A warnings
+```
+
+### Q23: 找不到测试文件
+
+**问题**: 测试文件无法运行。
+
+**解决方案**:
+```bash
+# 运行特定测试文件
+cargo test --test pool_integration --features sqlite
+
+# 列出所有测试
+cargo test --features sqlite -- --list
+```
+
+### Q24: Docker 数据库连接失败
+
+**问题**: 无法连接到 Docker 中的数据库。
+
+**解决方案**:
+```bash
+# 检查容器状态
+docker ps
+
+# 查看容器日志
+docker logs container_name
+
+# 检查网络
+docker network ls
+
+# 重新启动容器
+docker-compose restart
+```
+
+### Q25: 与其他 crate 冲突
+
+**问题**: 与其他依赖冲突。
+
+**解决方案**:
+```toml
+# 使用 Cargo.lock 解决
+cargo update -p sea-orm --precise x.x.x
+
+# 或在 Cargo.toml 中指定版本
+[dependencies]
+sea-orm = { version = "=0.12.0" }
+```
+
+---
+
+## 获取更多帮助
+
+### 报告问题
+
+- **GitHub Issues**: [报告新问题](https://github.com/Kirky-X/dbnexus/issues/new)
+- **请包含**:
+  - 错误信息
+  - 复现步骤
+  - 环境信息（Rust 版本、操作系统等）
+
+### 社区支持
+
+- **GitHub Discussions**: [提问和讨论](https://github.com/Kirky-X/dbnexus/discussions)
+- **Gitter**: 实时聊天室（如果有）
+
+### 文档资源
+
+- [API 文档](https://docs.rs/dbnexus)
+- [用户指南](USER_GUIDE.md)
+- [架构文档](ARCHITECTURE.md)
+- [Sea-ORM 文档](https://www.sea-ql.org/SeaORM/)
+
+---
+
+## 快速参考
+
+### 常用命令
+
+```bash
+# 检查编译
+cargo check --all-features
+
+# 运行测试
+cargo test --features sqlite --all
+
+# 格式化代码
+cargo fmt --all
+
+# Clippy 检查
+cargo clippy --all-features --all -- -D warnings
+
+# 构建文档
+cargo doc --no-deps --all-features
+```
+
+### 环境变量
+
+| 变量 | 描述 | 默认值 |
+|------|------|--------|
+| `DATABASE_URL` | 数据库连接字符串 | - |
+| `DB_MAX_CONNECTIONS` | 最大连接数 | 20 |
+| `DB_MIN_CONNECTIONS` | 最小连接数 | 5 |
+| `DB_IDLE_TIMEOUT` | 空闲超时（秒） | 300 |
+| `DB_ACQUIRE_TIMEOUT` | 获取超时（毫秒） | 5000 |
+| `DB_PERMISSIONS_PATH` | 权限文件路径 | `permissions.yaml` |
+| `TEST_DB_TYPE` | 测试数据库类型 | `sqlite` |
+| `TEST_TIMEOUT_MS` | 测试超时（毫秒） | 30000 |
