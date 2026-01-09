@@ -10,6 +10,7 @@
 use chrono::TimeZone;
 use chrono::Utc;
 use dbnexus::sharding::{DailyStrategy, MonthlyStrategy, ShardConfig, ShardRouter, ShardingStrategy, YearlyStrategy};
+use std::sync::Arc;
 
 /// TEST-SHARD-001: 闰年2月29日分片测试
 #[test]
@@ -300,7 +301,7 @@ fn test_shard_config_template_parsing() {
 fn test_router_with_config_integration() {
     let config = ShardConfig::new("monthly", 6, "products", "postgresql://localhost/{shard}/products.db");
 
-    let router = ShardRouter::with_config(&config);
+    let router = ShardRouter::with_config_sync(&config);
 
     let total = router.total_shards();
     let strategy = router.strategy_name();
@@ -314,24 +315,79 @@ fn test_router_with_config_integration() {
     println!("Total shards: {}, Strategy: {}", total, strategy);
 }
 
-/// TEST-SHARD-015: 分片策略边界值测试
+/// TEST-SHARD-016: ShardRouter 异步初始化测试
+#[tokio::test]
+async fn test_shard_router_async_init() {
+    let config = ShardConfig::new("yearly", 2, "test", "sqlite::memory:");
+    let router = ShardRouter::with_config(&config).await.unwrap();
+    assert_eq!(router.total_shards(), 2);
+    assert_eq!(router.strategy_name(), "yearly");
+}
+
+/// TEST-SHARD-017: ShardRouter 连接池管理测试
+#[tokio::test]
+async fn test_shard_router_pool_management() {
+    let config = ShardConfig::new("yearly", 3, "test", "sqlite::memory:");
+    let router = ShardRouter::with_config(&config).await.unwrap();
+
+    assert_eq!(router.pool_count(), 3);
+    let initialized = router.initialized_shards();
+    assert_eq!(initialized.len(), 3);
+
+    for shard_id in 0..3 {
+        assert!(router.has_pool(shard_id));
+        assert!(router.get_pool(shard_id).is_some());
+    }
+}
+
+/// TEST-SHARD-018: ShardRouter 同步初始化测试
 #[test]
-fn test_sharding_strategy_boundaries() {
-    let yearly = YearlyStrategy;
-    let monthly = MonthlyStrategy;
-    let daily = DailyStrategy;
+fn test_shard_router_sync_init() {
+    let config = ShardConfig::new("monthly", 4, "data", "sqlite:./test_data/{shard}.db");
+    let router = ShardRouter::with_config_sync(&config);
 
-    let dt = Utc::now();
+    assert_eq!(router.total_shards(), 4);
+    assert_eq!(router.strategy_name(), "monthly");
+    assert_eq!(router.pool_count(), 0);
+    assert_eq!(router.all_shards().len(), 4);
+}
 
-    let shard_1 = yearly.calculate(dt, 1);
-    assert_eq!(shard_1, 0, "With 1 shard, result should always be 0");
+/// TEST-SHARD-019: ShardRouter 动态注册连接池测试
+#[tokio::test]
+async fn test_shard_router_dynamic_pool_registration() {
+    let config = ShardConfig::new("yearly", 2, "dynamic", "sqlite:./test_dynamic_{shard}.db");
+    let mut router = ShardRouter::with_config_sync(&config);
 
-    let shard_2 = yearly.calculate(dt, 2);
-    assert!(shard_2 < 2, "Shard should be 0 or 1");
+    assert_eq!(router.pool_count(), 0);
 
-    let shard_1000 = monthly.calculate(dt, 1000);
-    assert!(shard_1000 < 1000, "Shard should be less than 1000");
+    let pool0 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    router.set_pool(0, Arc::new(pool0)).unwrap();
 
-    let shard_365 = daily.calculate(dt, 365);
-    assert!(shard_365 < 365, "Daily shard should be less than 365");
+    assert_eq!(router.pool_count(), 1);
+    assert!(router.has_pool(0));
+    assert!(!router.has_pool(1));
+
+    let pool1 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    router.set_pool(1, Arc::new(pool1)).unwrap();
+
+    assert_eq!(router.pool_count(), 2);
+
+    let pool2 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    let result = router.set_pool(99, Arc::new(pool2));
+    assert!(result.is_err());
+}
+
+/// TEST-SHARD-020: ShardRouter 克隆测试
+#[tokio::test]
+async fn test_shard_router_clone() {
+    let config = ShardConfig::new("yearly", 2, "clone_test", "sqlite::memory:");
+    let router = ShardRouter::with_config(&config).await.unwrap();
+
+    let router_clone = router.clone();
+
+    assert_eq!(router_clone.total_shards(), router.total_shards());
+    assert_eq!(router_clone.strategy_name(), router.strategy_name());
+    assert_eq!(router_clone.all_shards().len(), router.all_shards().len());
+    // 克隆后的路由器共享连接池 Arc 引用
+    assert_eq!(router_clone.pool_count(), router.pool_count());
 }

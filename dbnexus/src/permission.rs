@@ -11,7 +11,8 @@ use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -213,8 +214,8 @@ pub struct PermissionContext {
     /// 角色名称
     role: String,
 
-    /// 权限策略 LRU 缓存（使用 Mutex 保护以支持线程安全）
-    policy_cache: Arc<Mutex<LruCache<String, RolePolicy>>>,
+    /// 权限策略 LRU 缓存（使用 tokio 异步锁保护以支持异步上下文）
+    policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
 }
 
 /// LRU 缓存容量默认值
@@ -228,7 +229,7 @@ impl Default for PermissionContext {
 
 impl PermissionContext {
     /// 创建新的权限上下文（使用默认缓存大小）
-    pub fn new(role: String, policy_cache: Arc<Mutex<LruCache<String, RolePolicy>>>) -> Self {
+    pub fn new(role: String, policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>) -> Self {
         Self { role, policy_cache }
     }
 
@@ -238,7 +239,7 @@ impl PermissionContext {
         let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
         Self {
             role,
-            policy_cache: Arc::new(Mutex::new(LruCache::new(
+            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
                 NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
             ))),
         }
@@ -253,14 +254,8 @@ impl PermissionContext {
     ///
     /// 此方法会先检查缓存，如果缓存未命中则返回 false
     /// 注意：需要先调用 `load_policy()` 加载权限策略
-    pub fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
-        let mut cache = match self.policy_cache.lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                tracing::error!("Permission cache mutex poisoned");
-                return false; // 如果锁被破坏，拒绝访问
-            }
-        };
+    pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
+        let mut cache = self.policy_cache.lock().await;
 
         // 尝试从缓存获取
         if let Some(policy) = cache.get(self.role.as_str()) {
@@ -292,19 +287,13 @@ impl PermissionContext {
     ///
     /// 如果缓存未命中，自动从配置加载权限策略
     /// 注意：此方法会在每次缓存未命中时尝试加载，可能影响性能
-    pub fn check_table_access_with_config(
+    pub async fn check_table_access_with_config(
         &self,
         table: &str,
         operation: &PermissionAction,
         config: &PermissionConfig,
     ) -> bool {
-        let mut cache = match self.policy_cache.lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                tracing::error!("Permission cache mutex poisoned");
-                return false;
-            }
-        };
+        let mut cache = self.policy_cache.lock().await;
 
         // 尝试从缓存获取
         if let Some(policy) = cache.get(self.role.as_str()) {
@@ -334,11 +323,8 @@ impl PermissionContext {
     /// # Errors
     ///
     /// 如果加载失败，返回错误信息
-    pub fn load_policy(&self, config: &PermissionConfig) -> Result<(), String> {
-        let mut cache = match self.policy_cache.lock() {
-            Ok(guard) => guard,
-            Err(_) => return Err("Permission cache mutex poisoned".to_string()),
-        };
+    pub async fn load_policy(&self, config: &PermissionConfig) -> Result<(), String> {
+        let mut cache = self.policy_cache.lock().await;
 
         if let Some(policy) = config.get_role_policy(&self.role) {
             cache.put(self.role.clone(), policy.clone());
@@ -350,16 +336,8 @@ impl PermissionContext {
     }
 
     /// 获取缓存统计信息
-    pub fn cache_stats(&self) -> CacheStats {
-        let cache = match self.policy_cache.lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                return CacheStats {
-                    cached_roles: 0,
-                    capacity: 0,
-                };
-            }
-        };
+    pub async fn cache_stats(&self) -> CacheStats {
+        let cache = self.policy_cache.lock().await;
         CacheStats {
             cached_roles: cache.len(),
             capacity: cache.cap().get(),
@@ -455,7 +433,7 @@ roles:
     /// TEST-U-013: PermissionContext 创建和访问测试
     #[test]
     fn test_permission_context_creation() {
-        let cache = Arc::new(std::sync::Mutex::new(LruCache::new(NonZeroUsize::new(256).unwrap())));
+        let cache = Arc::new(tokio::sync::Mutex::new(LruCache::new(NonZeroUsize::new(256).unwrap())));
         let ctx = PermissionContext::new("admin".to_string(), cache);
 
         assert_eq!(ctx.role(), "admin");

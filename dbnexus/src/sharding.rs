@@ -22,6 +22,7 @@
 
 use chrono::{DateTime, Datelike, Utc};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// 分片策略 trait
 pub trait ShardingStrategy: Send + Sync {
@@ -234,6 +235,8 @@ pub struct ShardInfo {
 }
 
 /// 分片路由器
+///
+/// 提供数据库分片的路由功能，支持为每个分片维护独立的连接池
 pub struct ShardRouter {
     /// 总分片数
     total_shards: u32,
@@ -241,6 +244,19 @@ pub struct ShardRouter {
     strategy: Box<dyn ShardingStrategy>,
     /// 分片配置映射
     shards: HashMap<u32, ShardInfo>,
+    /// 分片连接池映射
+    pools: HashMap<u32, Arc<crate::pool::DbPool>>,
+}
+
+impl Default for ShardRouter {
+    fn default() -> Self {
+        Self {
+            total_shards: 0,
+            strategy: Box::new(YearlyStrategy),
+            shards: HashMap::new(),
+            pools: HashMap::new(),
+        }
+    }
 }
 
 impl Clone for ShardRouter {
@@ -249,6 +265,7 @@ impl Clone for ShardRouter {
             total_shards: self.total_shards,
             strategy: self.strategy.boxed_clone(),
             shards: self.shards.clone(),
+            pools: self.pools.clone(),
         }
     }
 }
@@ -260,6 +277,7 @@ impl ShardRouter {
             total_shards,
             strategy: Box::new(strategy),
             shards: HashMap::new(),
+            pools: HashMap::new(),
         }
     }
 
@@ -269,11 +287,38 @@ impl ShardRouter {
             total_shards,
             strategy: create_strategy(strategy),
             shards: HashMap::new(),
+            pools: HashMap::new(),
         }
     }
 
-    /// 使用配置创建路由器
-    pub fn with_config(config: &ShardConfig) -> Self {
+    /// 使用配置创建路由器（异步初始化连接池）
+    pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::config::DbError> {
+        let mut router = Self::with_strategy(&config.strategy, config.total_shards);
+
+        for (shard_id, connection_string) in config.generate_all_connections() {
+            // 为每个分片创建连接池
+            match crate::pool::DbPool::new(&connection_string).await {
+                Ok(pool) => {
+                    router.register_shard_with_pool(
+                        shard_id,
+                        format!("{}_{}", config.prefix, shard_id),
+                        connection_string,
+                        Arc::new(pool),
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to create connection pool for shard {}: {}", shard_id, e);
+                    // 仍然注册分片信息，但没有连接池
+                    router.register_shard(shard_id, format!("{}_{}", config.prefix, shard_id), connection_string);
+                }
+            }
+        }
+
+        Ok(router)
+    }
+
+    /// 使用配置创建路由器（同步版本，不创建连接池）
+    pub fn with_config_sync(config: &ShardConfig) -> Self {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
         for (shard_id, connection_string) in config.generate_all_connections() {
@@ -293,6 +338,37 @@ impl ShardRouter {
                 connection_string,
             },
         );
+    }
+
+    /// 注册分片（带连接池）
+    pub fn register_shard_with_pool(
+        &mut self,
+        shard_id: u32,
+        name: String,
+        connection_string: String,
+        pool: Arc<crate::pool::DbPool>,
+    ) {
+        self.shards.insert(
+            shard_id,
+            ShardInfo {
+                shard_id,
+                name,
+                connection_string: connection_string.clone(),
+            },
+        );
+        self.pools.insert(shard_id, pool);
+    }
+
+    /// 为分片设置连接池（动态添加）
+    pub fn set_pool(&mut self, shard_id: u32, pool: Arc<crate::pool::DbPool>) -> Result<(), crate::config::DbError> {
+        if !self.shards.contains_key(&shard_id) {
+            return Err(crate::config::DbError::Config(format!(
+                "Shard {} not registered",
+                shard_id
+            )));
+        }
+        self.pools.insert(shard_id, pool);
+        Ok(())
     }
 
     /// 根据时间戳路由到分片
@@ -337,6 +413,55 @@ impl ShardRouter {
     /// 获取总分片数
     pub fn total_shards(&self) -> u32 {
         self.total_shards
+    }
+
+    /// 获取指定分片的连接池
+    pub fn get_pool(&self, shard_id: u32) -> Option<&Arc<crate::pool::DbPool>> {
+        self.pools.get(&shard_id)
+    }
+
+    /// 获取指定分片的 Session
+    pub async fn get_session(&self, shard_id: u32) -> Result<Option<crate::pool::Session>, crate::config::DbError> {
+        if let Some(pool) = self.pools.get(&shard_id) {
+            let session = pool.get_session("default").await?;
+            Ok(Some(session))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 根据时间戳获取对应分片的 Session
+    pub async fn get_session_for_timestamp(
+        &self,
+        timestamp: DateTime<Utc>,
+    ) -> Result<Option<crate::pool::Session>, crate::config::DbError> {
+        let shard_id = self.strategy.calculate(timestamp, self.total_shards);
+        self.get_session(shard_id).await
+    }
+
+    /// 获取所有已初始化的分片 ID
+    pub fn initialized_shards(&self) -> Vec<u32> {
+        self.pools.keys().cloned().collect()
+    }
+
+    /// 检查分片是否有连接池
+    pub fn has_pool(&self, shard_id: u32) -> bool {
+        self.pools.contains_key(&shard_id)
+    }
+
+    /// 获取连接池数量
+    pub fn pool_count(&self) -> usize {
+        self.pools.len()
+    }
+
+    /// 移除分片的连接池
+    pub fn remove_pool(&mut self, shard_id: u32) -> Option<Arc<crate::pool::DbPool>> {
+        self.pools.remove(&shard_id)
+    }
+
+    /// 清空所有连接池
+    pub fn clear_pools(&mut self) {
+        self.pools.clear();
     }
 }
 
@@ -454,10 +579,10 @@ mod tests {
         assert_eq!(config.strategy, "yearly");
     }
 
-    #[test]
-    fn test_router_with_config() {
+    #[tokio::test]
+    async fn test_router_with_config() {
         let config = ShardConfig::new("yearly", 4, "data", "postgresql://localhost/{shard}");
-        let router = ShardRouter::with_config(&config);
+        let router = ShardRouter::with_config(&config).await.unwrap();
 
         assert_eq!(router.total_shards(), 4);
         assert_eq!(router.all_shards().len(), 4);
