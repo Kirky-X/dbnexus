@@ -88,13 +88,42 @@ pub mod migration;
 /// 权限控制模块
 pub mod permission;
 
+/// 基础权限类型（简单 RBAC）
+///
+/// 提供基于角色的表级权限控制，适合基本使用场景。
+///
+/// # 类型说明
+///
+/// - [`PermissionAction`] - 权限操作类型（Select, Insert, Update, Delete）
+/// - [`TablePermission`] - 表级权限配置
+/// - [`RolePolicy`] - 角色策略
+/// - [`PermissionConfig`] - 权限配置
+/// - [`PermissionContext`] - 权限检查上下文
 pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
+
 /// Operation 是 PermissionAction 的别名，用于简化使用
 pub type Operation = permission::PermissionAction;
+
 /// 可插拔权限引擎模块
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
+
 /// 权限引擎类型导出
+///
+/// 提供高级权限引擎，支持多种权限提供者实现。
+/// 当启用 `permission-engine` 特性时可用。
+///
+/// # 与基础权限类型的区别
+///
+/// - [`EnginePermissionAction`] 包含额外的 `All` 变体
+/// - [`PermissionEngineContext`] 包含更丰富的上下文信息
+/// - 提供 [`PolicyDecisionPoint`] 策略决策点
+/// - 支持 [`YamlPermissionProvider`] 和 [`RbacPermissionProvider`]
+///
+/// # 使用建议
+///
+/// - 简单场景：使用基础权限类型（无需启用特性）
+/// - 复杂场景：启用 `permission-engine` 特性并使用权限引擎
 #[cfg(feature = "permission-engine")]
 pub use permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
