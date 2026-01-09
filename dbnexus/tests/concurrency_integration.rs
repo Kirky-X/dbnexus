@@ -150,11 +150,13 @@ async fn test_concurrent_database_operations() {
     // 等待所有插入完成
     futures::future::join_all(handles).await;
 
-    // 验证插入数量
+    // 验证插入数量（SQLite 内存数据库并发写入能力有限）
     let insert_count = counter.load(Ordering::SeqCst);
+    // 在 SQLite 内存数据库中，并发插入可能因锁而失败，但至少应该有一些成功
+    // 如果全部失败，可能是权限检查问题而不是 SQLite 限制
     assert!(
-        insert_count >= 1,
-        "At least some inserts should succeed, got {}",
+        insert_count > 0,
+        "At least some inserts should succeed (got {}). This may indicate permission check issues.",
         insert_count
     );
 
