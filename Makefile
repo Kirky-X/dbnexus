@@ -37,15 +37,15 @@ docker-logs: ## 查看数据库日志
 # 测试相关
 test-sqlite: ## 运行 SQLite 测试
 	@echo "运行 SQLite 测试..."
-	TEST_DB_TYPE=sqlite cargo test --features sqlite
+	TEST_DB_TYPE=sqlite cargo test --features "sqlite,all-optional"
 
 test-postgres: ## 运行 PostgreSQL 测试
 	@echo "运行 PostgreSQL 测试..."
-	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test cargo test --features postgres
+	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test cargo test --features "postgres,all-optional"
 
 test-mysql: ## 运行 MySQL 测试
 	@echo "运行 MySQL 测试..."
-	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test cargo test --features mysql
+	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test cargo test --features "mysql,all-optional"
 
 test-all: ## 运行所有数据库测试
 	@echo "运行所有数据库测试..."
