@@ -434,7 +434,7 @@ impl YamlPermissionProvider {
         }
 
         // 2. 检查路径是否包含父目录引用（防止路径遍历攻击）
-        // 使用正则更严格地检测 .. 
+        // 使用正则更严格地检测 ..
         if regex::Regex::new(r"\.\.|%2e%2e").unwrap().is_match(config_path) {
             return Err("Config path contains invalid parent directory reference".to_string());
         }
@@ -457,8 +457,7 @@ impl YamlPermissionProvider {
             }
 
             // 检查是否在允许的目录内（当前目录或 config 子目录）
-            let current_dir = std::env::current_dir()
-                .map_err(|_| "Cannot determine current directory".to_string())?;
+            let current_dir = std::env::current_dir().map_err(|_| "Cannot determine current directory".to_string())?;
             let allowed_dirs = [
                 current_dir.clone(),
                 current_dir.join("config"),
@@ -468,8 +467,7 @@ impl YamlPermissionProvider {
 
             let mut is_allowed = false;
             for allowed in &allowed_dirs {
-                let allowed_canonical = std::fs::canonicalize(allowed)
-                    .unwrap_or_else(|_| allowed.clone());
+                let allowed_canonical = std::fs::canonicalize(allowed).unwrap_or_else(|_| allowed.clone());
                 if canonical.starts_with(&allowed_canonical) {
                     is_allowed = true;
                     break;
@@ -492,8 +490,7 @@ impl YamlPermissionProvider {
                 std::path::Path::new("/proc"),
             ];
 
-            let canonical = std::fs::canonicalize(path)
-                .map_err(|_| "Cannot resolve config path".to_string())?;
+            let canonical = std::fs::canonicalize(path).map_err(|_| "Cannot resolve config path".to_string())?;
 
             for prefix in &forbidden_prefixes {
                 if canonical.starts_with(prefix) {

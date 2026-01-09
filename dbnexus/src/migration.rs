@@ -575,7 +575,8 @@ impl MigrationExecutor {
 
         // 插入到迁移历史表（使用参数化查询防止 SQL 注入）
         // 使用 Statement::from_sql_and_values 进行参数化查询
-        let insert_sql = "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
+        let insert_sql =
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
 
         let backend = match self.sql_generator.db_type {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
@@ -815,7 +816,8 @@ impl MigrationExecutor {
         // 记录迁移历史（使用参数化查询防止 SQL 注入）
         let applied_at = time::OffsetDateTime::now_utc();
 
-        let insert_sql = "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
+        let insert_sql =
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
         let backend = match self.sql_generator.db_type {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,

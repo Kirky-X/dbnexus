@@ -2,291 +2,387 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   CARGO_INCREMENTAL: 0
+  CARGO_NET_GIT_FETCH_WITH_CLI: false
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
-  # 格式检查
-  format:
-    name: Format Check
+  # 基础检查 - 快速反馈
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: swatinmurthy/cache-for-rust@v1
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-lint-
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-  # Clippy 检查
-  clippy:
-    name: Clippy (${{ matrix.db }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        db: [sqlite]
-        # 可以添加其他数据库：postgres, mysql
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-index-
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
-            ${{ runner.os }}-cargo-build-
-      
       - name: Run clippy
-        run: |
-          cargo clippy --all-targets --features ${{ matrix.db }},all-optional --workspace -- -D warnings
+        run: cargo clippy --all-targets --workspace -- -D warnings
 
-  # 测试
-  test:
-    name: Test (${{ matrix.db }})
+  # OpenSpec 规范检查
+  openspec:
+    name: OpenSpec Validation
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        db: [sqlite]
-        # 可以添加其他数据库：postgres, mysql
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-index-
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
-            ${{ runner.os }}-cargo-build-
-      
-      - name: Run tests
+
+      - name: Install openspec
         run: |
-          cargo test --features ${{ matrix.db }},all-optional --workspace
+          if ! command -v openspec &> /dev/null; then
+            cargo install --git https://github.com/anomalyco/openspec --locked
+          fi
+
+      - name: Cache openspec
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/openspec
+          key: ${{ runner.os }}-openspec-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run openspec validation
+        run: openspec validate --strict
+
+      - name: List active changes
+        run: openspec list
 
   # 安全审计
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Cache cargo-deny
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/cargo-deny
+          path: |
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/registry/index
           key: ${{ runner.os }}-cargo-deny-${{ hashFiles('**/Cargo.lock') }}
-      
+          restore-keys: |
+            ${{ runner.os }}-cargo-deny-
+
       - name: Install cargo-deny
         run: |
           if [ ! -f ~/.cargo/bin/cargo-deny ]; then
             cargo install --locked cargo-deny
           fi
-      
-      - name: Run cargo-deny
-        run: cargo deny check
 
-  # 文档检查
-  docs:
-    name: Documentation Check
+      - name: Run cargo-deny check
+        run: cargo deny check license advisories
+
+      - name: Check for vulnerable dependencies
+        run: cargo deny check bans --show-transitive
+
+  # 数据库矩阵测试
+  test:
+    name: Test (${{ matrix.db }})
+    needs: [lint, openspec, security]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        db: [sqlite]
+        db: [sqlite, postgres, mysql]
+        include:
+          - db: sqlite
+            db-image: sqlite
+          - db: postgres
+            db-image: postgres:15-alpine
+          - db: mysql
+            db-image: mysql:8.0
+    services:
+      postgres:
+        image: postgres:15-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: dbnexus
+          POSTGRES_PASSWORD: dbnexus_password
+          POSTGRES_DB: dbnexus_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: dbnexus_password
+          MYSQL_DATABASE: dbnexus_test
+          MYSQL_USER: dbnexus
+          MYSQL_PASSWORD: dbnexus_password
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-index-
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
-            ${{ runner.os }}-cargo-build-
-      
-      - name: Build documentation
-        run: |
-          cargo doc --no-deps --features ${{ matrix.db }},all-optional --workspace
 
-  # 代码覆盖率
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo-tarpaulin
-        uses: actions/cache@v4
+
+      - name: Cache dependencies
+        uses: swatinmurthy/cache-for-rust@v1
         with:
-          path: ~/.cargo/bin/cargo-tarpaulin
-          key: ${{ runner.os }}-cargo-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Install tarpaulin
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.db }}-
+            ${{ runner.os }}-
+
+      - name: Set up database environment
         run: |
-          if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
-            cargo install cargo-tarpaulin
+          echo "DATABASE_URL=${{ matrix.db }}://dbnexus:dbnexus_password@localhost:5432/dbnexus_test" >> $GITHUB_ENV
+          if [ "${{ matrix.db }}" == "mysql" ]; then
+            echo "DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:3306/dbnexus_test" >> $GITHUB_ENV
           fi
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-index-
-      
-      - name: Generate coverage
+
+      - name: Wait for database
         run: |
-          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --timeout 300 --out xml
-      
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-          files: ./cobertura.xml
+          if [ "${{ matrix.db }}" == "postgres" ]; then
+            for i in {1..30}; do
+              if pg_isready -h localhost -p 5432 -q; then
+                echo "PostgreSQL is ready"
+                break
+              fi
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+          fi
+          if [ "${{ matrix.db }}" == "mysql" ]; then
+            for i in {1..30}; do
+              if mysqladmin ping -h localhost -P 3306 -q; then
+                echo "MySQL is ready"
+                break
+              fi
+              echo "Waiting for MySQL..."
+              sleep 2
+            done
+          fi
+
+      - name: Run tests
+        run: cargo test --features ${{ matrix.db }},all-optional --workspace
+
+      - name: Run doc tests
+        run: cargo test --features ${{ matrix.db }},all-optional --doc --workspace
 
   # 跨平台构建检查
-  build-check:
-    name: Build Check (${{ matrix.os }})
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.db }})
+    needs: [lint, openspec, security]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        db: [sqlite]
         include:
           - os: ubuntu-latest
-            db: sqlite
+            target: x86_64-unknown-linux-gnu
           - os: macos-latest
-            db: sqlite
+            target: x86_64-apple-darwin
           - os: windows-latest
-            db: sqlite
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v4
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
+          targets: ${{ matrix.target }}
+
+      - name: Cache dependencies
+        uses: swatinmurthy/cache-for-rust@v1
         with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-index-
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ matrix.db }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ matrix.db }}-
-            ${{ runner.os }}-cargo-build-
-      
+            ${{ runner.os }}-${{ matrix.db }}-
+            ${{ runner.os }}-
+
       - name: Build
+        run: cargo build --features ${{ matrix.db }},all-optional --workspace --target ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --features ${{ matrix.db }},all-optional --workspace --target ${{ matrix.target }} --release
+
+  # 代码覆盖率
+  coverage:
+    name: Code Coverage
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-tarpaulin
+            target
+          key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tarpaulin-
+
+      - name: Install tarpaulin
         run: |
-          cargo build --features ${{ matrix.db }},all-optional --workspace
+          if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
+            cargo install cargo-tarpaulin
+          fi
+
+      - name: Generate coverage
+        run: |
+          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --timeout 300 --out xml --exclude-files "**/tests/**"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          files: ./cobertura.xml
+          directory: coverage-report
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel: true
+          flag-name: Unit Tests
+
+  # 文档检查
+  docs:
+    name: Documentation
+    needs: [lint, openspec]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: swatinmurthy/cache-for-rust@v1
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-docs-
+
+      - name: Build documentation
+        run: cargo doc --no-deps --features sqlite,all-optional --workspace
+
+      - name: Check documentation links
+        run: |
+          # 验证文档构建成功
+          ls -la target/doc/dbnexus/
+
+      - name: Verify docs.rs configuration
+        run: |
+          # 检查 docs.rs 配置是否正确
+          cargo metadata --format-version 1 | jq -r '.[0].metadata["docs.rs"]'
+
+  # 依赖更新检查
+  dependabot:
+    name: Dependency Updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for outdated dependencies
+        run: |
+          cargo outdated --root-deps-only --exit-code 1 || echo "OUTDATED=true" >> $GITHUB_ENV
+
+      - name: Report outdated dependencies
+        if: env.OUTDATED == 'true'
+        run: |
+          echo "⚠️  Some dependencies are outdated"
+          cargo outdated --root-deps-only
+
+  # 提交状态汇总
+  status:
+    name: Status Check
+    needs: [test, build, coverage, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    steps:
+      - name: Check status
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 CI Status Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "✅ Lint: ${{ needs.lint.result }}"
+          echo "✅ OpenSpec: ${{ needs.openspec.result }}"
+          echo "✅ Security: ${{ needs.security.result }}"
+          echo "✅ Test: ${{ needs.test.result }}"
+          echo "✅ Build: ${{ needs.build.result }}"
+          echo "✅ Coverage: ${{ needs.coverage.result }}"
+          echo "✅ Documentation: ${{ needs.docs.result }}"
+          echo ""
+          if [[ "${{ needs.test.result }}" == "success" ]] && \
+             [[ "${{ needs.build.result }}" == "success" ]]; then
+            echo "🎉 All critical checks passed!"
+            exit 0
+          else
+            echo "❌ Some checks failed"
+            exit 1
+          fi

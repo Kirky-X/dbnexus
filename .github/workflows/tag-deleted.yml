@@ -2,117 +2,106 @@ name: Tag Deleted
 
 on:
   delete:
+    branches:
+      - main
+      - develop
 
 permissions:
   contents: write
 
 jobs:
   cleanup:
-    name: Cleanup Release
+    name: Cleanup on Tag Delete
     if: github.event.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get tag name
-        id: get_tag
+        id: tag
         run: |
           TAG_NAME="${{ github.event.ref }}"
           VERSION="${TAG_NAME#v}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📌 Tag deleted: $TAG_NAME"
-          echo "📦 Version: $VERSION"
-      
-      - name: Check if release exists
-        id: check_release
+          echo "🗑️  Tag deleted: $TAG_NAME"
+
+      - name: Check for GitHub Release
+        id: release
         run: |
-          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
-          
-          echo "🔍 Checking for release associated with tag: $TAG_NAME"
-          
-          # 查找对应的 release
-          RELEASE_RESPONSE=$(curl -s \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          TAG_NAME="${{ steps.tag.outputs.tag_name }}"
+          RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
-          
-          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
-          RELEASE_NAME=$(echo "$RELEASE_RESPONSE" | jq -r '.name // "N/A"')
-          
-          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
-            echo "✅ Found release: $RELEASE_NAME (ID: $RELEASE_ID)"
+
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
             echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
-            echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
             echo "release_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Found release: $(echo "$RESPONSE" | jq -r '.name // "N/A"')"
           else
-            echo "⚠️ No release found for tag: $TAG_NAME"
             echo "release_exists=false" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Delete GitHub Release
-        if: steps.check_release.outputs.release_exists == 'true'
+        if: steps.release.outputs.release_exists == 'true'
         run: |
-          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
-          RELEASE_ID="${{ steps.check_release.outputs.release_id }}"
-          RELEASE_NAME="${{ steps.check_release.outputs.release_name }}"
-          
-          echo "🗑️  Deleting release: $RELEASE_NAME (ID: $RELEASE_ID)"
-          
-          # 删除 release
-          DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          TAG_NAME="${{ steps.tag.outputs.tag_name }}"
+          RELEASE_ID="${{ steps.release.outputs.release_id }}"
+
+          curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID")
-          
-          HTTP_CODE=$(echo "$DELETE_RESPONSE" | tail -n1)
-          
-          if [ "$HTTP_CODE" = "204" ]; then
-            echo "✅ GitHub Release deleted successfully"
-            echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME"
-          else
-            echo "❌ Failed to delete release (HTTP $HTTP_CODE)"
-            echo "$DELETE_RESPONSE"
-            exit 1
-          fi
-      
+            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+
+          echo "✅ Release deleted"
+
       - name: Summary
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📊 Cleanup Summary"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
-          echo "Tag: ${{ steps.get_tag.outputs.tag_name }}"
-          echo "Version: ${{ steps.get_tag.outputs.version }}"
-          echo "Release existed: ${{ steps.check_release.outputs.release_exists }}"
+          echo "Tag: ${{ steps.tag.outputs.tag_name }}"
+          echo "Version: ${{ steps.tag.outputs.version }}"
+          echo "Release deleted: ${{ steps.release.outputs.release_exists }}"
           echo ""
-          if [ "${{ steps.check_release.outputs.release_exists }}" = "true" ]; then
-            echo "✅ Release deleted successfully"
-          else
-            echo "ℹ️ No release to delete"
-          fi
+          echo "⚠️  crates.io 限制说明"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "crates.io 不支持删除已发布的版本。"
+          echo ""
+          echo "选项 1: Yank 版本（标记为不推荐）"
+          echo "  cargo yank --version $VERSION <crate-name>"
+          echo ""
+          echo "选项 2: 联系 crates.io 支持"
+          echo "  https://crates.io/policies"
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      
-      - name: Warning about crates.io
+
+  # 清理分支删除的资源
+  branch-cleanup:
+    name: Branch Cleanup
+    if: github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Get branch name
+        id: branch
         run: |
-          cat << 'EOF'
-          
-          ⚠️  IMPORTANT: crates.io Limitation
-          =====================================
-          
-          crates.io does NOT support deleting published versions.
-          The version ${{ steps.get_tag.outputs.version }} will remain published.
-          
-          Options:
-          1. Yank the version (marks it as not recommended):
-             cargo yank --version ${{ steps.get_tag.outputs.version }} <crate-name>
-          
-          2. Contact crates.io support for exceptional circumstances:
-             https://crates.io/policies
-          
-          Note: Yanking prevents new projects from depending on this version,
-          but existing projects can still use it.
-          
-          EOF
+          BRANCH_NAME="${{ github.event.ref }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "🌿 Branch deleted: $BRANCH_NAME"
+
+      - name: Summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Branch Cleanup Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Branch: ${{ steps.branch.outputs.branch_name }}"
+          echo ""
+          echo "ℹ️  注意：删除分支不会自动清理相关资源。"
+          echo "如果需要清理 CI 缓存，请手动操作或联系管理员。"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -31,7 +31,7 @@ serde_yaml = "0.9"
 serde_json = "1.0"
 
 # Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
-sea-orm = { version = "2.0.0-rc.22", default-features = false, features = ["macros"] }
+sea-orm = { version = "2.0.0-rc.27", default-features = false, features = ["macros"] }
 
 # Logging
 tracing = "0.1"

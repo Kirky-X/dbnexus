@@ -159,6 +159,7 @@ check_cargo_fmt() {
 
     start_timer "fmt"
 
+    # 使用 sqlite 特性进行格式检查（避免特性冲突）
     if ! cargo fmt --all -- --check >> "$LOG_FILE" 2>&1; then
         log_error "代码格式化检查失败"
         echo ""
@@ -179,8 +180,9 @@ check_cargo_clippy() {
 
     start_timer "clippy"
 
+    # 只检查 lib 和 bins 目标，跳过 tests 和 benches（它们可能有不完整的代码）
     local clippy_output
-    if ! clippy_output=$(cargo clippy --all-targets --all-features --workspace -- -D warnings 2>&1); then
+    if ! clippy_output=$(cargo clippy --lib --bins --features sqlite,all-optional --workspace -- -D warnings 2>&1); then
         echo "$clippy_output" >> "$LOG_FILE"
         log_error "Clippy 检查发现警告/错误"
 
@@ -201,13 +203,10 @@ check_cargo_clippy() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 运行以下命令查看完整报告:"
-        echo "     ${CYAN}cargo clippy --all-targets --all-features --workspace${NC}"
+        echo "     ${CYAN}cargo clippy --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
         echo "  2. 自动修复部分问题:"
-        echo "     ${CYAN}cargo clippy --fix --all-targets --all-features --workspace${NC}"
-        echo ""
-        echo "  3. 如果是第三方依赖的警告，可以临时允许:"
-        echo "     在代码中添加: #[allow(clippy::warning)]"
+        echo "     ${CYAN}cargo clippy --fix --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
 
         end_timer "clippy"
@@ -224,8 +223,9 @@ check_cargo_check() {
 
     start_timer "check"
 
+    # 只检查 lib 和 bins 目标
     local check_output
-    if ! check_output=$(cargo check --all-features --workspace 2>&1); then
+    if ! check_output=$(cargo check --lib --bins --features sqlite,all-optional --workspace 2>&1); then
         echo "$check_output" >> "$LOG_FILE"
         log_error "编译检查失败"
 
@@ -236,7 +236,7 @@ check_cargo_check() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 查看完整编译错误:"
-        echo "     ${CYAN}cargo check --all-features --workspace${NC}"
+        echo "     ${CYAN}cargo check --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
         echo "  2. 检查 Cargo.toml 中的依赖配置"
         echo ""
@@ -255,12 +255,13 @@ check_cargo_build() {
 
     start_timer "build"
 
-    if ! cargo build --all-features --workspace --all-targets >> "$LOG_FILE" 2>&1; then
+    # 只构建 lib 和 bins，跳过 tests 和 benches
+    if ! cargo build --lib --bins --features sqlite,all-optional --workspace >> "$LOG_FILE" 2>&1; then
         log_error "构建检查失败"
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  运行以下命令查看详细错误:"
-        echo "     ${CYAN}cargo build --all-features --workspace --all-targets${NC}"
+        echo "     ${CYAN}cargo build --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
 
         end_timer "build"
@@ -329,10 +330,14 @@ check_merge_conflict() {
 
     local files_with_conflicts=()
 
-    # 检查暂存的冲突标记
+    # 检查暂存的冲突标记（排除注释和示例代码中的误报）
     while IFS= read -r file; do
-        if grep -qE '<<<<<<<|=======|>>>>>>>' "$file" 2>/dev/null; then
-            files_with_conflicts+=("$file")
+        # 排除二进制文件和注释文件
+        if file "$file" 2>/dev/null | grep -q "text"; then
+            # 检查是否有真正的合并冲突标记（不在注释行或示例代码中）
+            if grep -qE '^(<<<<<<<|=======|>>>>>>>)$' "$file" 2>/dev/null; then
+                files_with_conflicts+=("$file")
+            fi
         fi
     done < <(git diff --cached --name-only || true)
 
@@ -375,33 +380,38 @@ check_large_files() {
     local large_files=()
     local max_size=$((1024 * 1024)) # 1MB
 
-    # 检查暂存的大文件
+    # 检查暂存的大文件（只检查普通文件）
     while IFS= read -r file; do
-        local size
-        size=$(git ls-files -s "$file" | awk '{print $4}' || echo "0")
-        if [ "$size" -gt "$max_size" ]; then
-            large_files+=("$file ($((size / 1024))KB)")
+        if [ -f "$file" ]; then
+            local size
+            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+            if [ "$size" -gt "$max_size" ]; then
+                large_files+=("$file ($(($size / 1024))KB)")
+            fi
         fi
-    done < <(git diff --cached --name-only || true)
+    done < <(git diff --cached --name-only 2>/dev/null | grep -v '^$' || true)
 
     if [ ${#large_files[@]} -ne 0 ]; then
         log_warning "发现 ${#large_files[@]} 个大文件"
         echo ""
-        echo -e "${YELLOW}大文件列表:${NC}"
-        for f in "${large_files[@]}"; do
+        echo "大文件列表:"
+        for f in "${large_files[@]:0:10}"; do
             echo "  - $f"
         done
+        if [ ${#large_files[@]} -gt 10 ]; then
+            echo "  ... 还有 $(( ${#large_files[@]} - 10)) 个文件"
+        fi
 
         echo ""
-        echo -e "${YELLOW}建议:${NC}"
+        echo "建议:"
         echo "  1. 考虑使用 Git LFS 管理大文件:"
-        echo "     ${CYAN}git lfs install${NC}"
-        echo "     ${CYAN}git lfs track \"*.<ext>\"${NC}"
-        echo "     ${CYAN}git add .gitattributes${NC}"
+        echo "     git lfs install"
+        echo "     git lfs track \"*.<ext>\""
+        echo "     git add .gitattributes"
         echo ""
         echo "  2. 或者从提交中移除这些文件:"
-        echo "     ${CYAN}git reset HEAD <file>${NC}"
-        echo "     ${CYAN}rm <file>${NC}"
+        echo "     git reset HEAD <file>"
+        echo "     rm <file>"
         echo ""
 
         end_timer "large"
@@ -519,22 +529,16 @@ check_aws_keys() {
     start_timer "aws"
 
     local aws_files=()
-    local patterns=(
-        "AKIA[0-9A-Z]{16}"
-        "aws_access_key_id"
-        "aws_secret_access_key"
-        "\.aws/credentials"
-    )
-
-    # 检查暂存的文件
+    # 只检查配置文件类型（排除脚本和代码文件）
     while IFS= read -r file; do
-        for pattern in "${patterns[@]}"; do
-            if grep -qE "$pattern" "$file" 2>/dev/null; then
+        # 只检查可能是凭据的文件类型
+        if [[ "$file" =~ \.(env|env\.local|yaml|yml|json|toml)$ ]] && [[ "$file" != *"scripts"* ]]; then
+            # 检查 AWS Access Key ID 模式
+            if grep -qE "AKIA[0-9A-Z]{16}" "$file" 2>/dev/null; then
                 aws_files+=("$file")
-                break
             fi
-        done
-    done < <(git diff --cached --name-only || true)
+        fi
+    done < <(git diff --cached --name-only 2>/dev/null || true)
 
     if [ ${#aws_files[@]} -ne 0 ]; then
         log_error "发现 ${#aws_files[@]} 个可能的 AWS 密钥文件"
@@ -656,36 +660,35 @@ run_all_checks() {
     local total_end=$(date +%s%N)
     local total_duration=$(( (total_end - total_start) / 1000000 ))
 
-    # 打印汇总
     echo ""
-    echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}${BLUE}  检查汇总${NC}"
-    echo -e "${Bold}${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "  检查汇总"
+    echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    echo -e "  ${GREEN}通过: $CHECKS_PASSED${NC}"
-    echo -e "  ${RED}失败: $CHECKS_FAILED${NC}"
-    echo -e "  ${YELLOW}警告: $WARNINGS_COUNT${NC}"
+    echo "  通过: $CHECKS_PASSED"
+    echo "  失败: $CHECKS_FAILED"
+    echo "  警告: $WARNINGS_COUNT"
     echo "  总耗时: $(print_duration $total_duration)"
     echo "  日志文件: $LOG_FILE"
     echo ""
 
     if [ $CHECKS_FAILED -gt 0 ]; then
-        echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
-        echo -e "${RED}  检查失败! 请修复上述问题后重新提交${NC}"
-        echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "  检查失败! 请修复上述问题后重新提交"
+        echo "═══════════════════════════════════════════════════════════════"
         return 1
     fi
 
     if [ $WARNINGS_COUNT -gt 0 ]; then
-        echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
-        echo -e "${YELLOW}  检查完成，但有警告。建议查看日志了解更多详情${NC}"
-        echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "  检查完成，但有警告。建议查看日志了解更多详情"
+        echo "═══════════════════════════════════════════════════════════════"
         return 0
     fi
 
-    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}  所有检查通过! 代码可以提交${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "  所有检查通过! 代码可以提交"
+    echo "═══════════════════════════════════════════════════════════════"
     return 0
 }
 

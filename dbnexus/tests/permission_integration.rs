@@ -198,7 +198,9 @@ async fn test_permission_check_with_auto_load() {
     let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256);
 
     // 使用 auto_load 版本（缓存未命中时会自动加载）
-    let result = ctx.check_table_access_with_config("users", &Operation::Select, &config).await;
+    let result = ctx
+        .check_table_access_with_config("users", &Operation::Select, &config)
+        .await;
     assert!(result, "Should have permission after auto-load");
 
     // 再次检查应该从缓存读取

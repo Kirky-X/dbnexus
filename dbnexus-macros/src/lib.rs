@@ -353,7 +353,6 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
     })
 }
 
-
 ///
 /// 有效的角色名必须：
 /// - 以字母或下划线开头

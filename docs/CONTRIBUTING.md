@@ -1,941 +1,454 @@
-<div align="center">
+# DB Nexus 贡献指南
 
-# 🤝 Contributing Guide
+感谢您考虑为 DB Nexus 项目贡献力量！本指南将帮助您了解如何参与项目贡献。
 
-### Join Us in Building Something Great!
+## 目录
 
-[🏠 Home](../README.md) • [📖 Docs](USER_GUIDE.md)
-
----
-
-</div>
-
-## 🎯 Welcome Contributors!
-
-Thank you for your interest in contributing to **dbnexus**! We're excited to have you here. Whether you're fixing a bug, adding a feature, improving documentation, or helping others, your contributions are valuable and appreciated.
-
-<div align="center">
-
-### 🌟 Ways to Contribute
-
-<table>
-<tr>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/code.png" width="64"><br>
-<b>Code</b><br>
-Fix bugs & add features
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/documentation.png" width="64"><br>
-<b>Documentation</b><br>
-Improve docs & guides
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/test-tube.png" width="64"><br>
-<b>Testing</b><br>
-Write tests & find bugs
-</td>
-<td width="25%" align="center">
-<img src="https://img.icons8.com/fluency/96/000000/chat.png" width="64"><br>
-<b>Community</b><br>
-Help & support others
-</td>
-</tr>
-</table>
-
-</div>
+- [如何贡献](#如何贡献)
+- [开发环境设置](#开发环境设置)
+- [代码规范](#代码规范)
+- [测试要求](#测试要求)
+- [Pull Request 流程](#pull-request-流程)
+- [代码审查标准](#代码审查标准)
 
 ---
 
-## 📋 Table of Contents
+##### 如何贡献
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Workflow](#development-workflow)
-- [Coding Standards](#coding-standards)
-- [Testing Guidelines](#testing-guidelines)
-- [Documentation](#documentation)
-- [Submitting Changes](#submitting-changes)
-- [Review Process](#review-process)
-- [Community](#community)
+ 贡献类型
 
----
+我们欢迎各种形式的贡献，包括但不限于：
 
-## Code of Conduct
+- 🐛 **Bug 修复** - 修复已知的 bug 和问题
+- ✨ **新功能** - 添加新特性或改进现有功能
+- 📚 **文档** - 改进或翻译文档
+- 🎨 **代码优化** - 改进代码性能和可读性
+- 🧪 **测试** - 添加或改进测试用例
+- 📦 **依赖更新** - 更新依赖版本
+- 💡 **想法和建议** - 提出新想法或改进建议
 
-<div align="center">
+### 贡献流程
 
-### 🤗 Be Kind and Respectful
-
-</div>
-
-We are committed to providing a welcoming and inclusive environment. By participating, you agree to:
-
-<table>
-<tr>
-<td width="50%">
-
-**✅ DO**
-- Be respectful and considerate
-- Welcome newcomers
-- Accept constructive criticism
-- Focus on what's best for the community
-- Show empathy towards others
-
-</td>
-<td width="50%">
-
-**❌ DON'T**
-- Use offensive language
-- Harass or insult others
-- Publish private information
-- Make personal attacks
-- Disrupt discussions
-
-</td>
-</tr>
-</table>
-
+1. **Fork 本仓库**
+2. **创建特性分支**
+3. **提交更改**
+4. **推送分支**
+5. **创建 Pull Request**
 
 ---
 
-## Getting Started
+## 开发环境设置
 
-### Prerequisites
+### 环境要求
 
-Before you begin, ensure you have:
+- **Rust 版本**: 1.85+
+- **Git**: 最新版本
+- **数据库**: SQLite 3.35+ / PostgreSQL 12+ / MySQL 8.0+（用于测试）
+- **Docker**: 可选，用于启动测试数据库
 
-- ✅ **Git** - Version control
-- ✅ **Rust 1.75+** - Programming language
-- ✅ **Cargo** - Rust package manager
-- ✅ **Docker** - For running test databases (optional but recommended)
-- ✅ **IDE** - VS Code, IntelliJ, or similar
+### 步骤 1：Fork 仓库
 
-<details>
-<summary><b>🔧 Setting Up Your Environment</b></summary>
+访问 [DB Nexus 仓库](https://github.com/Kirky-X/dbnexus)，点击右上角的 Fork 按钮。
 
-**1. Install Rust:**
+### 步骤 2：克隆仓库
+
 ```bash
+# 克隆您的 Fork
+git clone https://github.com/YOUR_USERNAME/dbnexus.git
+cd dbnexus
+
+# 添加上游仓库
+git remote add upstream https://github.com/Kirky-X/dbnexus.git
+```
+
+### 步骤 3：设置开发环境
+
+```bash
+# 安装 Rust（如果尚未安装）
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
 
-**2. Install additional tools:**
-```bash
-# Code formatter
-rustup component add rustfmt
-
-# Linter
-rustup component add clippy
-
-# Code coverage (optional)
-cargo install cargo-tarpaulin
-```
-
-**3. Verify installation:**
-```bash
+# 验证 Rust 版本
 rustc --version
 cargo --version
+
+# 安装依赖
+cargo fetch
+cargo build --all-features
 ```
 
-**4. Install Docker (for testing):**
-```bash
-# Ubuntu/Debian
-sudo apt-get install docker.io
-
-# macOS
-brew install --cask docker
-
-# Start Docker service
-sudo systemctl start docker  # Linux
-# or open Docker Desktop      # macOS/Windows
-```
-
-</details>
-
-### Fork and Clone
-
-<table>
-<tr>
-<td width="50%">
-
-**1. Fork the Repository**
-
-Click the "Fork" button on GitHub
-
-</td>
-<td width="50%">
-
-**2. Clone Your Fork**
+### 步骤 4：运行测试（验证环境）
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/dbnexus
-cd dbnexus
+# 运行基本测试
+cargo test --features sqlite --lib
+
+# 运行所有测试
+cargo test --all-features --all
 ```
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**3. Add Upstream Remote**
-
-```bash
-git remote add upstream \
-  https://github.com/ORIGINAL/dbnexus
-```
-
-</td>
-<td width="50%">
-
-**4. Verify Remotes**
-
-```bash
-git remote -v
-# origin    your-fork
-# upstream  original-repo
-```
-
-</td>
-</tr>
-</table>
-
-### Build and Test
-
-```bash
-# Build the project
-cargo build
-
-# Run tests
-cargo test
-
-# Run with examples
-cargo run --example basic
-```
-
-✅ **Success!** You're ready to contribute!
 
 ---
 
-## Development Workflow
+## 代码规范
 
-<div align="center">
+### 编码规范
 
-### 🔄 Standard Contribution Flow
+| 类型 | 约定 | 示例 |
+|------|------|------|
+| 结构体/枚举 | PascalCase | `DbPool`, `Session` |
+| 函数/变量 | snake_case | `check_connection_health` |
+| 常量 | SCREAMING_SNAKE_CASE | `ALLOWED_ROLES` |
+| 宏属性 | snake_case | `#[db_crud]`, `#[primary_key]` |
+| 字段 | snake_case | `max_connections` |
 
-</div>
+### 格式化配置
 
-```mermaid
-graph LR
-    A[Fork Repo] --> B[Create Branch]
-    B --> C[Make Changes]
-    C --> D[Write Tests]
-    D --> E[Run Tests]
-    E --> F{Tests Pass?}
-    F -->|No| C
-    F -->|Yes| G[Commit]
-    G --> H[Push to Fork]
-    H --> I[Create PR]
-    I --> J[Code Review]
-    J --> K{Approved?}
-    K -->|Changes| C
-    K -->|Yes| L[Merge!]
-    
-    style A fill:#e1f5ff
-    style L fill:#4caf50
+项目使用 `rustfmt` 进行代码格式化，配置在 `rustfmt.toml`：
+
+```toml
+edition = "2024"
+max_width = 120
+tab_spaces = 4
+fn_single_line = true
 ```
 
-### Step-by-Step Guide
-
-#### 1️⃣ Create a Branch
+### 运行格式化
 
 ```bash
-# Update your fork
-git fetch upstream
-git checkout main
-git merge upstream/main
+# 格式化代码
+cargo fmt --all
 
-# Create feature branch
-git checkout -b feature/your-feature-name
-
-# Or for bug fixes
-git checkout -b fix/issue-123
+# 检查格式化
+cargo fmt --check --all
 ```
 
-**Branch Naming:**
-- `feature/` - New features
-- `fix/` - Bug fixes
-- `docs/` - Documentation
-- `test/` - Test improvements
-- `refactor/` - Code refactoring
+### Clippy 检查
 
-#### 2️⃣ Make Your Changes
-
-<table>
-<tr>
-<td width="50%">
-
-**Writing Code:**
-```rust
-// Add your implementation
-pub fn new_feature() -> Result<(), DbError> {
-    // Your code here
-    Ok(())
-}
-```
-
-</td>
-<td width="50%">
-
-**Adding Tests:**
-```rust
-#[test]
-fn test_new_feature() {
-    let result = new_feature();
-    assert!(result.is_ok());
-}
-```
-
-</td>
-</tr>
-</table>
-
-#### 3️⃣ Test Your Changes
+所有警告视为错误：
 
 ```bash
-# Format code
-cargo fmt
+# 运行 Clippy
+cargo clippy --all-features --all -- -D warnings
+```
 
-# Run linter
-cargo clippy -- -D warnings
+### 文档要求
 
-# Run all tests
-cargo test --all-features
+所有公开 API 必须有文档注释：
 
-# Run specific test
-cargo test test_new_feature
+```rust
+/// 创建新的数据库连接池
+///
+/// # 参数
+///
+/// * `url` - 数据库连接字符串
+///
+/// # 示例
+///
+/// ```rust
+/// use dbnexus::DbPool;
+///
+/// let pool = DbPool::new("sqlite::memory:").await?;
+/// ```
+pub async fn new(url: &str) -> Result<Self, DbError>;
+```
 
-# Check coverage (optional)
+### 禁止使用的代码
+
+- `unsafe_code` - 项目强制禁止使用 unsafe 代码
+- `unwrap()` 在生产代码中（使用 `?` 或 `expect()` 替代）
+- 硬编码的敏感信息
+
+---
+
+## 测试要求
+
+### 测试类型
+
+| 测试类型 | 位置 | 描述 |
+|----------|------|------|
+| 单元测试 | 各模块 `#[cfg(test)]` 块 | 测试单个函数或模块 |
+| 集成测试 | `tests/*_integration.rs` | 测试组件交互 |
+| 文档测试 | `///` 代码块 | 验证文档示例 |
+
+### 运行测试
+
+```bash
+# 运行所有测试
+cargo test --all-features --all
+
+# 运行特定测试
+cargo test --features sqlite test_name
+
+# 运行集成测试
+cargo test --features sqlite --test pool_integration
+
+# 运行文档测试
+cargo test --doc
+```
+
+### 测试覆盖率
+
+我们使用 `cargo tarpaulin` 监控测试覆盖率：
+
+```bash
+# 生成覆盖率报告
 cargo tarpaulin --out Html
+
+# 查看覆盖率
+open tarpaulin-report.html
 ```
 
-#### 4️⃣ Commit Your Changes
+### 测试数据库
 
-**Good Commit Messages:**
+测试使用环境变量选择数据库：
 
 ```bash
-# Format: <type>(<scope>): <description>
+# SQLite（默认）
+export TEST_DB_TYPE=sqlite
 
-git commit -m "feat(pool): add connection pool configuration"
-git commit -m "fix(session): resolve memory leak in session management"
-git commit -m "docs(readme): update installation instructions"
-git commit -m "test(entity): add edge case tests for CRUD operations"
+# PostgreSQL
+export TEST_DB_TYPE=postgres
+export DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test
+
+# MySQL
+export TEST_DB_TYPE=mysql
+export DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test
 ```
 
-**Commit Types:**
-- `feat` - New feature
-- `fix` - Bug fix
-- `docs` - Documentation
-- `style` - Formatting
-- `refactor` - Code restructuring
-- `test` - Adding tests
-- `chore` - Maintenance
+### 测试辅助函数
 
-<details>
-<summary><b>📝 Commit Message Template</b></summary>
+使用 `common/mod.rs` 中的辅助函数：
 
-```
-<type>(<scope>): <short summary>
+```rust
+use dbnexus::tests::common;
 
-<detailed description>
+// 获取测试配置
+let config = common::get_test_config();
 
-<footer>
+// 获取 SQLite 内存数据库
+let config = common::get_sqlite_memory_config();
+
+// 创建测试夹具
+let (pool, _migrations_dir, _temp_dir) = common::create_test_fixture().await;
 ```
 
-**Example:**
-```
-feat(entity): add batch insert support
+### 测试要求
 
-Implement batch processing for multiple entity insertions.
-This improves performance by 40% for bulk operations.
-
-Closes #123
-```
-
-</details>
-
-#### 5️⃣ Push to Your Fork
-
-```bash
-git push origin feature/your-feature-name
-```
-
-#### 6️⃣ Create Pull Request
-
-1. Go to your fork on GitHub
-2. Click "Compare & pull request"
-3. Fill in the PR template
-4. Link related issues
-5. Submit!
+- 新功能必须包含对应的测试
+- Bug 修复必须包含回归测试
+- 公共 API 必须包含文档测试
+- 目标：测试覆盖率不低于 80%
 
 ---
 
-## Coding Standards
+## Pull Request 流程
 
-<div align="center">
+### 创建 PR 前的准备
 
-### ✨ Write Clean, Maintainable Code
-
-</div>
-
-### Rust Style Guide
-
-Follow the [Rust Style Guide](https://rust-lang.github.io/api-guidelines/):
-
-<table>
-<tr>
-<td width="50%">
-
-**✅ Good**
-
-```rust
-// Descriptive names
-pub async fn query_users(
-    session: &DbSession,
-    filters: &UserFilters,
-) -> Result<Vec<User>, DbError> {
-    // Implementation
-}
-
-// Proper error handling
-match operation() {
-    Ok(result) => result,
-    Err(e) => return Err(e),
-}
-```
-
-</td>
-<td width="50%">
-
-**❌ Bad**
-
-```rust
-// Vague names
-pub async fn qry(
-    s: &DbSession,
-    f: &UserFilters,
-) -> Result<Vec<User>, DbError> {
-    // Implementation
-}
-
-// Ignoring errors
-let result = operation().unwrap();
-```
-
-</td>
-</tr>
-</table>
-
-### Code Organization
-
-```
-src/
-├── lib.rs              # Public API
-├── pool/               # Connection pool
-│   ├── mod.rs
-│   └── manager.rs
-├── session/            # Session management
-│   ├── mod.rs
-│   └── session.rs
-├── entity/             # Entity operations
-│   ├── mod.rs
-│   └── macros.rs
-├── adapters/           # Database adapters
-│   ├── mod.rs
-│   ├── postgres.rs
-│   └── mysql.rs
-├── permission/         # Permission control
-│   ├── mod.rs
-│   └── engine.rs
-├── cache/              # Caching
-│   ├── mod.rs
-│   └── manager.rs
-├── audit/              # Audit logging
-│   ├── mod.rs
-│   └── logger.rs
-├── sharding/           # Sharding
-│   ├── mod.rs
-│   └── strategy.rs
-├── metrics/            # Metrics
-│   ├── mod.rs
-│   └── collector.rs
-├── error.rs            # Error types
-└── utils/              # Utilities
-    ├── mod.rs
-    └── helpers.rs
-```
-
-### Documentation
-
-<details>
-<summary><b>📖 Documentation Standards</b></summary>
-
-**Every public item must have documentation:**
-
-```rust
-/// Queries users from the database with optional filters.
-///
-/// # Arguments
-///
-/// * `session` - The database session to use for the query
-/// * `filters` - Optional filters to apply to the query
-///
-/// # Returns
-///
-/// Returns a vector of users matching the criteria on success.
-///
-/// # Errors
-///
-/// Returns `DbError::QueryFailed` if the query fails.
-///
-/// # Examples
-///
-/// ```
-/// use dbnexus::{DbPool, DbSession};
-///
-/// let pool = DbPool::new("postgres://localhost/test").await?;
-/// let session = pool.get_session().await?;
-/// let users = query_users(&session, &filters).await?;
-/// ```
-pub async fn query_users(
-    session: &DbSession,
-    filters: &UserFilters,
-) -> Result<Vec<User>, DbError> {
-    // Implementation
-}
-```
-
-</details>
-
-### Error Handling
-
-```rust
-// ✅ Use Result types
-pub async fn fallible_operation() -> Result<Value, DbError> {
-    // Implementation
-}
-
-// ✅ Provide context
-Err(DbError::QueryFailed {
-    reason: "Connection lost",
-    context: format!("Query: {}", query),
-})
-
-// ❌ Don't panic in library code
-// panic!("Something went wrong");  // Bad!
-```
-
-### Async/Await Best Practices
-
-```rust
-// ✅ Use async functions for I/O operations
-pub async fn fetch_user(id: i32, session: &DbSession) -> Result<User, DbError> {
-    // Implementation
-}
-
-// ✅ Handle async errors properly
-match fetch_user(1, &session).await {
-    Ok(user) => println!("{:?}", user),
-    Err(e) => eprintln!("Error: {}", e),
-}
-
-// ✅ Use tokio::spawn for concurrent operations
-let handles: Vec<_> = user_ids
-    .into_iter()
-    .map(|id| tokio::spawn(fetch_user(id, &session)))
-    .collect();
-```
-
----
-
-## Testing Guidelines
-
-<div align="center">
-
-### 🧪 Test Everything!
-
-</div>
-
-### Test Categories
-
-<table>
-<tr>
-<th>Type</th>
-<th>Purpose</th>
-<th>Location</th>
-</tr>
-<tr>
-<td><b>Unit Tests</b></td>
-<td>Test individual functions</td>
-<td><code>src/*.rs</code> (inline)</td>
-</tr>
-<tr>
-<td><b>Integration Tests</b></td>
-<td>Test public API</td>
-<td><code>tests/</code></td>
-</tr>
-<tr>
-<td><b>Doc Tests</b></td>
-<td>Test examples in docs</td>
-<td>Doc comments</td>
-</tr>
-<tr>
-<td><b>Benchmarks</b></td>
-<td>Performance tests</td>
-<td><code>benches/</code></td>
-</tr>
-</table>
-
-### Setting Up Test Databases
-
-<details>
-<summary><b>🐳 Docker Test Database Setup</b></summary>
-
-**PostgreSQL:**
-```bash
-docker run --name dbnexus-postgres \
-  -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=dbnexus_test \
-  -p 5432:5432 \
-  -d postgres:15
-```
-
-**MySQL:**
-```bash
-docker run --name dbnexus-mysql \
-  -e MYSQL_ROOT_PASSWORD=test \
-  -e MYSQL_DATABASE=dbnexus_test \
-  -p 3306:3306 \
-  -d mysql:8
-```
-
-**Stop databases after testing:**
-```bash
-docker stop dbnexus-postgres dbnexus-mysql
-docker rm dbnexus-postgres dbnexus-mysql
-```
-
-</details>
-
-### Writing Tests
-
-**Unit Test Example:**
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_connection_string_parsing() {
-        let url = "postgres://user:pass@localhost/db";
-        let result = parse_connection_url(url);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().database, "db");
-    }
-
-    #[test]
-    fn test_invalid_connection_string() {
-        let result = parse_connection_url("invalid-url");
-        assert!(result.is_err());
-    }
-}
-```
-
-**Integration Test Example:**
-
-```rust
-// tests/integration_test.rs
-use dbnexus::{DbPool, DbEntity, DbSession};
-
-#[derive(Clone, Debug, DbEntity)]
-#[db_entity(table_name = "test_users")]
-pub struct TestUser {
-    #[db_entity(primary_key)]
-    pub id: i32,
-    pub name: String,
-}
-
-#[tokio::test]
-async fn test_crud_operations() {
-    let pool = DbPool::new("postgres://test:test@localhost/dbnexus_test")
-        .await
-        .unwrap();
-    let session = pool.get_session().await.unwrap();
-    
-    // Create
-    let user = TestUser {
-        id: 0,
-        name: "Test User".to_string(),
-    };
-    let created = user.insert(&session).await.unwrap();
-    
-    // Read
-    let found = TestUser::find_by_id(created.id, &session).await.unwrap();
-    assert!(found.is_some());
-    
-    // Update
-    let mut user = found.unwrap();
-    user.name = "Updated".to_string();
-    user.update(&session).await.unwrap();
-    
-    // Delete
-    user.delete(&session).await.unwrap();
-}
-```
-
-### Test Coverage
-
-**Aim for ≥80% coverage:**
+1. **保持代码同步**
 
 ```bash
-# Generate coverage report
-cargo tarpaulin --out Html --output-dir coverage
+# 同步上游更改
+git fetch upstream
+git rebase upstream/main
 
-# View report
-open coverage/index.html
+# 解决冲突后
+git push --force-with-lease
 ```
 
----
+2. **运行所有检查**
 
-## Documentation
+```bash
+# 格式化检查
+cargo fmt --check --all
 
-<div align="center">
+# Clippy 检查
+cargo clippy --all-features --all -- -D warnings
 
-### 📚 Documentation Matters!
+# 运行测试
+cargo test --all-features --all
+```
 
-</div>
+3. **更新相关文档**
 
-### What to Document
+- 如果添加新功能，更新用户指南
+- 如果修改 API，更新 API 参考
+- 如果添加示例，更新示例代码
 
-<table>
-<tr>
-<td width="50%">
+### 创建 PR
 
-**Code Documentation:**
-- ✅ Public functions
-- ✅ Public types
-- ✅ Complex algorithms
-- ✅ Non-obvious behavior
+1. 访问您的 Fork 仓库
+2. 点击 **New Pull Request**
+3. 选择您的特性分支
+4. 填写 PR 模板
 
-</td>
-<td width="50%">
-
-**User Documentation:**
-- ✅ README updates
-- ✅ User guide changes
-- ✅ API reference
-- ✅ Examples
-
-</td>
-</tr>
-</table>
-
-### Documentation Checklist
-
-- [ ] All public items have doc comments
-- [ ] Examples compile and run
-- [ ] README is updated (if needed)
-- [ ] CHANGELOG is updated
-- [ ] User guide reflects changes
-- [ ] Migration guide (for breaking changes)
-
----
-
-## Submitting Changes
-
-<div align="center">
-
-### 📤 Pull Request Process
-
-</div>
-
-### PR Template
-
-<details>
-<summary><b>📋 Pull Request Template</b></summary>
+### PR 模板
 
 ```markdown
-## Description
-Brief description of changes
+## 描述
 
-## Type of Change
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Performance improvement
-- [ ] Code refactoring
+简要描述您的更改。
 
-## Changes Made
-- Change 1
-- Change 2
-- Change 3
+## 变更类型
 
-## Testing
-- [ ] Unit tests pass
-- [ ] Integration tests pass
-- [ ] Manual testing completed
-- [ ] Tested with PostgreSQL
-- [ ] Tested with MySQL (if applicable)
+- [ ] Bug 修复
+- [ ] 新功能
+- [ ] 破坏性变更
+- [ ] 文档更新
+- [ ] 代码重构
 
-## Checklist
-- [ ] Code follows style guidelines
-- [ ] Self-review completed
-- [ ] Comments added for complex code
-- [ ] Documentation updated
-- [ ] No new warnings
-- [ ] Tests added/updated
+## 测试
 
-## Related Issues
-Closes #123
+- [ ] 我添加了测试来验证我的更改
+- [ ] 所有现有测试通过
+- [ ] 我在本地运行了测试
+
+## 清单
+
+- [ ] 我的代码遵循项目的代码风格
+- [ ] 我的更改需要更新文档
+- [ ] 我已经更新了相关文档
+- [ ] 我的更改不会导致任何警告
+- [ ] 我的 PR 标题清晰描述了更改内容
 ```
 
-</details>
+### PR 描述要点
 
-### PR Best Practices
-
-<table>
-<tr>
-<td width="50%">
-
-**✅ Good PRs:**
-- Focused on single issue
-- Small, reviewable size
-- Clear description
-- Tests included
-- Documentation updated
-
-</td>
-<td width="50%">
-
-**❌ Avoid:**
-- Multiple unrelated changes
-- Huge diffs (>500 lines)
-- Missing context
-- No tests
-- Undocumented changes
-
-</td>
-</tr>
-</table>
+1. **清晰描述** - 解释您做了什么以及为什么
+2. **关联 Issue** - 如果修复了某个 issue，关联它
+3. **截图/演示** - 如果是 UI 更改，添加截图
+4. **测试结果** - 列出测试通过情况
 
 ---
 
-## Review Process
+## 代码审查标准
 
-<div align="center">
+### 代码审查清单
 
-### 👀 What to Expect
+- [ ] **正确性** - 代码是否按预期工作？
+- [ ] **完整性** - 是否包含所有必要的部分？
+- [ ] **清晰性** - 代码是否易于理解？
+- [ ] **安全性** - 是否有安全漏洞？
+- [ ] **性能** - 是否有明显的性能问题？
+- [ ] **测试** - 是否有足够的测试？
+- [ ] **文档** - 是否有适当的文档？
 
-</div>
+### 常见审查意见
 
-### Timeline
+#### 代码风格
 
-```mermaid
-gantt
-    title PR Review Timeline
-    dateFormat  YYYY-MM-DD
-    section Review
-    Initial Review       :a1, 2024-01-01, 2d
-    Feedback Round 1     :a2, after a1, 3d
-    Feedback Round 2     :a3, after a2, 2d
-    Final Approval       :a4, after a3, 1d
-    Merge                :milestone, after a4, 0d
+```rust
+// 不推荐
+fn do_something(a:i64,b:&str)->Result<bool,Error>{
+    if a>0 { return Ok(true); }
+    else { return Err(Error::new("invalid")); }
+}
+
+// 推荐
+fn do_something(a: i64, b: &str) -> Result<bool, Error> {
+    if a > 0 {
+        Ok(true)
+    } else {
+        Err(Error::new("invalid"))
+    }
+}
 ```
 
-**Typical Timeline:**
-- 📧 Initial review: 1-3 days
-- 💬 Feedback rounds: 2-5 days each
-- ✅ Approval & merge: 1-2 days
+#### 错误处理
 
-### Review Criteria
+```rust
+// 不推荐
+.unwrap()
 
-Reviewers will check:
-
-- ✅ **Functionality**: Does it work as intended?
-- ✅ **Code Quality**: Is it clean and maintainable?
-- ✅ **Tests**: Are there adequate tests?
-- ✅ **Documentation**: Is it well documented?
-- ✅ **Performance**: Any performance impact?
-- ✅ **Security**: Any security concerns?
-- ✅ **Database Compatibility**: Works with supported databases?
-
-### Responding to Feedback
-
-```bash
-# Address feedback
-git add .
-git commit -m "Address review comments"
-git push origin feature/your-feature
-
-# PR automatically updates!
+// 推荐
+.expect("描述错误原因")
+// 或
+?
 ```
 
----
+#### 文档注释
 
-## Community
+```rust
+// 不推荐
+/// Get the user
+pub fn get_user() -> User {}
 
-<div align="center">
+// 推荐
+/// 根据 ID 获取用户
+///
+/// # 参数
+///
+/// * `id` - 用户的唯一标识符
+///
+/// # 返回
+///
+/// 返回找到的用户，如果不存在返回 None
+///
+/// # 示例
+///
+/// ```
+/// let user = get_user(1);
+/// ```
+pub fn get_user(id: i64) -> Option<User> {}
+```
 
-### 💬 Connect With Us
+### 响应审查意见
 
-</div>
-
-<table>
-<tr>
-<td width="33%" align="center">
-<a href="../../discussions">
-<img src="https://img.icons8.com/fluency/96/000000/chat.png" width="64"><br>
-<b>Discussions</b>
-</a><br>
-Q&A and ideas
-</td>
-<td width="33%" align="center">
-<a href="https://discord.gg/project">
-<img src="https://img.icons8.com/fluency/96/000000/discord-logo.png" width="64"><br>
-<b>Discord</b>
-</a><br>
-Live chat
-</td>
-<td width="33%" align="center">
-<a href="https://twitter.com/project">
-<img src="https://img.icons8.com/fluency/96/000000/twitter.png" width="64"><br>
-<b>Twitter</b>
-</a><br>
-Updates & news
-</td>
-</tr>
-</table>
-
-### Recognition
-
-We value all contributions! Contributors will be:
-
-- 🌟 Shown in README contributors section
-- 💝 Mentioned in release notes
+1. **礼貌回应** - 感谢审查者的反馈
+2. **解释思考** - 如果不同意，解释您的理由
+3. **积极修改** - 按意见进行修改
+4. **标记完成** - 修改后标记为已解决
 
 ---
 
-<div align="center">
+## 行为准则
 
-## 🎉 Thank You!
+### 我们的承诺
 
-Your contributions make this project better for everyone.
+为了营造一个开放和包容的社区，我们承诺让参与本项目的每个人都享有无骚扰的体验，无论其年龄、体型、可见或不可见的残疾、种族、性别特征、性别认同和表达、经验水平、教育程度、社会经济地位、国籍、个人外貌、种族、宗教或性取向如何。
+
+### 我们的标准
+
+**鼓励的行为**：
+- 使用友好和包容的语言
+- 尊重不同的观点和经历
+- 优雅地接受建设性批评
+- 关注对社区最有利的事情
+
+**不可接受的行为**：
+- 使用带有性意味的语言或图像
+- 骚扰、侮辱或贬低的评论
+- 公开或私下骚扰
+- 未经许可发布他人的私人信息
+- 其他不合理的行为
+
+### 举报
+
+如果遇到不可接受的行为，请通过以下方式报告：
+- GitHub Issues
+- 发送邮件给项目维护者
 
 ---
 
-**[🏠 Home](../README.md)** • **[📖 Docs](USER_GUIDE.md)**
+## 获取帮助
 
-Made with ❤️ by our amazing community
+### 常见问题
 
-[⬆ Back to Top](#-contributing-guide)
-</div>
+**Q: 我不知道如何开始**
+A: 查看 GitHub Issues 中标记为 `good first issue` 的问题
+
+**Q: 我的 PR 被拒绝了**
+A: 查看审查意见，根据反馈修改后重新提交
+
+**Q: 有问题需要帮助**
+A: 在 GitHub Discussions 中提问
+
+### 资源
+
+- [项目文档](https://docs.rs/dbnexus)
+- [GitHub Issues](https://github.com/Kirky-X/dbnexus/issues)
+- [GitHub Discussions](https://github.com/Kirky-X/dbnexus/discussions)
+- [Sea-ORM 文档](https://www.sea-ql.org/SeaORM/)
+
+---
+
+感谢您对 DB Nexus 项目的贡献！ 🙏

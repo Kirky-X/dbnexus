@@ -5,6 +5,19 @@
 //! - 使用 Session 执行权限检查
 //! - 测试不同角色的访问权限
 //!
+//! # 编译时角色验证
+//!
+//! 通过 `config` 属性启用编译时角色验证：
+//! ```rust,ignore
+//! #[db_permission(
+//!     roles = ["admin", "manager"],
+//!     operations = ["SELECT", "INSERT", "UPDATE"],
+//!     config = "permissions.yaml"  // 编译时验证角色是否在配置中定义
+//! )]
+//! ```
+//!
+//! 如果配置文件 `permissions.yaml` 中没有定义声明的角色，编译将失败。
+//!
 //! # 运行示例
 //!
 //! ```bash
@@ -18,6 +31,9 @@ use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 // #[db_permission] 声明允许访问此实体的角色和操作
 // - roles: 允许访问的角色列表
 // - operations: 允许的操作列表（可选，不指定则允许所有操作）
+// - config: 可选，指定权限配置文件路径，启用编译时角色验证
+//
+// 注意：编译时验证需要配置文件存在于项目根目录
 #[derive(DbEntity)]
 #[db_entity]
 #[table_name = "users")]
