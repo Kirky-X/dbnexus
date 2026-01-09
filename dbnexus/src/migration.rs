@@ -441,7 +441,7 @@ impl MigrationHistory {
     /// 添加已应用的迁移
     pub fn add_migration(&mut self, migration: MigrationVersion) {
         self.applied_migrations.push(migration);
-        // 按版本号排序
+        // 按版本号排序（保持插入顺序的稳定性）
         self.applied_migrations.sort_by_key(|m| m.version);
     }
 
