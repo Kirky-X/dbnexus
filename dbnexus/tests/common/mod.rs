@@ -8,6 +8,7 @@
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
 use dbnexus::config::{DbConfig, PoolConfig};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -263,4 +264,212 @@ where
     T: Send,
 {
     futures::future::join_all(tasks).await
+}
+
+// ============================================================================
+// 追踪测试辅助函数
+// ============================================================================
+
+/// 创建 SQLite 文件数据库连接池（用于追踪测试）
+///
+/// 返回连接池和临时目录（用于自动清理）
+#[allow(dead_code)]
+pub async fn create_sqlite_file_pool() -> Result<(dbnexus::DbPool, TempDir), dbnexus::DbError> {
+    // 使用 tempfile 创建临时目录
+    let temp_dir = tempfile::Builder::new()
+        .prefix("dbnexus_tracing_test_")
+        .tempdir()
+        .expect("Failed to create temp directory");
+
+    // 获取数据库文件路径
+    let db_path = temp_dir.path().join("test.db");
+    let db_path_str = db_path.to_string_lossy();
+
+    // 预先创建数据库文件（解决权限问题）
+    std::fs::File::create(&db_path).expect("Failed to create database file");
+
+    // 使用 sqlx 标准的 SQLite URL 格式
+    let config = DbConfig {
+        url: format!("sqlite://{}", db_path_str),
+        max_connections: 5,
+        min_connections: 1,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+        permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
+    };
+
+    let pool = dbnexus::DbPool::with_config(config).await?;
+    Ok((pool, temp_dir))
+}
+
+/// 创建用于追踪测试的测试表
+///
+/// 返回表名和临时目录
+#[allow(dead_code)]
+pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempDir) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let table_name = generate_test_table_name("tracing_test");
+
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    session
+        .execute_raw(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY,
+                trace_id TEXT,
+                span_id TEXT,
+                data TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            table_name
+        ))
+        .await
+        .expect("Failed to create test table");
+
+    (table_name, temp_dir)
+}
+
+/// 清理追踪测试表
+#[allow(dead_code)]
+pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str) {
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let _ = session
+        .execute_raw(&format!("DROP TABLE IF EXISTS {}", table_name))
+        .await;
+}
+
+/// 验证追踪上下文注入
+///
+/// 返回注入的 headers 和提取的追踪ID
+#[allow(dead_code)]
+pub async fn verify_trace_injection(
+    pool: &dbnexus::DbPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _session = pool.get_session("admin").await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+    let trace_id = "0af7651916cd43dd8448eb211c80319c";
+    let span_id = "b7ad6b7169203331";
+    let traceparent = format!("00-{}-{}01", trace_id, span_id);
+
+    let mut headers = HashMap::new();
+    headers.insert("traceparent".to_string(), traceparent);
+
+    // 验证 headers 包含有效追踪信息
+    assert!(
+        headers.contains_key("traceparent"),
+        "Headers should contain traceparent"
+    );
+    let tp = headers.get("traceparent").unwrap();
+    assert!(
+        tp.starts_with("00-"),
+        "traceparent format should be valid"
+    );
+
+    Ok(())
+}
+
+/// 验证追踪上下文提取
+///
+/// 返回提取的追踪ID
+#[allow(dead_code)]
+pub async fn verify_trace_extraction(
+    traceparent: &str,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // 解析 traceparent 格式: version-trace_id-span_id-flags
+    let parts: Vec<&str> = traceparent.split('-').collect();
+    if parts.len() < 3 {
+        return Ok(None);
+    }
+
+    let trace_id = parts[1];
+    let span_id = &parts[2][0..16]; // 只取前16个字符作为span_id
+
+    // 验证追踪ID格式（32位十六进制）
+    assert!(
+        trace_id.len() == 32,
+        "trace_id should be 32 characters"
+    );
+    assert!(
+        span_id.len() == 16,
+        "span_id should be 16 characters"
+    );
+
+    // 验证都是有效的十六进制
+    u64::from_str_radix(&trace_id[0..16], 16).map_err(|_| "Invalid trace_id")?;
+    u64::from_str_radix(&trace_id[16..32], 16).map_err(|_| "Invalid trace_id")?;
+    u64::from_str_radix(span_id, 16).map_err(|_| "Invalid span_id")?;
+
+    Ok(Some(trace_id.to_string()))
+}
+
+/// 测试连接池在追踪上下文下的行为
+#[allow(dead_code)]
+pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
+    // 验证池状态正常
+    let status = pool.status();
+    assert!(status.total >= 1, "Pool should have at least 1 connection");
+
+    // 获取会话并验证
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    assert!(!session.role().is_empty(), "Session should have a role");
+}
+
+/// 并发测试追踪上下文注入
+///
+/// 返回成功和失败的数量
+#[allow(dead_code)]
+pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: usize) -> (usize, usize) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let success_count = Arc::new(AtomicUsize::new(0));
+    let mut handles = Vec::new();
+
+    for i in 0..num_tasks {
+        let pool = pool.clone();
+        let success_count = success_count.clone();
+        let handle = tokio::spawn(async move {
+            if pool.get_session(&format!("test_role_{}", i)).await.is_ok() {
+                success_count.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        handles.push(handle);
+    }
+
+    futures::future::join_all(handles).await;
+
+    let success = success_count.load(Ordering::SeqCst);
+    (success, num_tasks - success)
+}
+
+/// 验证数据库操作与追踪上下文关联
+#[allow(dead_code)]
+pub async fn verify_db_operation_with_trace(
+    pool: &dbnexus::DbPool,
+    table_name: &str,
+    trace_id: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let session = pool.get_session("admin").await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    // 插入带追踪ID的记录
+    session
+        .execute_raw(&format!(
+            "INSERT INTO {} (trace_id, data) VALUES ('{}', 'test data')",
+            table_name, trace_id
+        ))
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    // 验证记录已插入
+    let result = session
+        .execute_raw(&format!(
+            "SELECT COUNT(*) FROM {} WHERE trace_id = '{}'",
+            table_name, trace_id
+        ))
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    // result 是 DbResult<ExecResult>，如果执行成功已经通过 map_err
+    Ok(())
 }

@@ -428,30 +428,79 @@ async fn test_concurrent_clean_invalid_connections() {
 }
 
 /// TEST-CONC-011: 并发验证和重新创建连接测试
+///
+/// 验证多个并发验证操作能正确执行并验证连接池状态
 #[tokio::test]
 async fn test_concurrent_validate_and_recreate() {
+    // Arrange
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
 
-    let mut handles = Vec::new();
+    // 预热：获取一些连接以确保池中有活动连接
+    let mut sessions = Vec::new();
+    for _ in 0..3 {
+        let session = pool.get_session("admin").await.expect("Pre-warm session");
+        sessions.push(session);
+    }
+    let initial_status = pool.status();
+    assert!(initial_status.total >= 3, "Pool should have connections after pre-warm");
 
-    // 并发执行验证操作
-    for _i in 0..5 {
+    // 释放会话
+    drop(sessions);
+
+    let mut handles = Vec::new();
+    let num_validations = 5;
+
+    // Act - 并发执行验证操作
+    for i in 0..num_validations {
         let pool = pool.clone();
-        let handle = tokio::spawn(async move { pool.validate_and_recreate_connections().await });
+        let handle = tokio::spawn(async move {
+            let result = pool.validate_and_recreate_connections().await;
+            (i, result)
+        });
         handles.push(handle);
     }
 
     // 等待所有验证操作完成
-    let results = futures::future::join_all(handles).await;
+    let results: Vec<Result<(usize, u32), tokio::task::JoinError>> = futures::future::join_all(handles).await;
+
+    // Assert - 验证所有验证操作都成功完成
+    let mut _total_recreated = 0;
+    let mut successful_count = 0;
+    let mut recreated_counts = Vec::new();
+
+    for result in results.into_iter() {
+        let (i, recreated_count) = result.expect("Validation should complete without error");
+        _total_recreated += recreated_count;
+        successful_count += 1; // 每个完成的任务都算成功
+        if recreated_count > 0 {
+            recreated_counts.push(i);
+        }
+    }
 
     // 验证所有验证操作都成功完成
-    for (i, result) in results.into_iter().enumerate() {
-        let _recreated = result.unwrap();
-        // 注意: 移除无意义的 assert!(true) 断言，因为 result.unwrap() 已经在前面验证了结果
-        tracing::info!("Validation {} completed successfully", i);
-    }
+    assert_eq!(
+        successful_count, num_validations,
+        "All {} validations should have completed, got {}",
+        num_validations, successful_count
+    );
+
+    // 验证连接池在验证后仍然正常工作
+    let final_status = pool.status();
+    assert!(
+        final_status.total >= 1,
+        "Pool should have at least 1 connection after validations"
+    );
+    assert_eq!(
+        final_status.total,
+        final_status.active + final_status.idle,
+        "Total connections should equal active + idle"
+    );
+
+    // 验证能获取新会话
+    let session = pool.get_session("admin").await.expect("Get session after validation");
+    assert!(!session.role().is_empty(), "Session should have role");
 }
 
 /// TEST-CONC-012: 大规模并发压力测试
