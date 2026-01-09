@@ -10,10 +10,10 @@
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
-use tokio::time::timeout;
+use tokio::time::{interval, timeout};
 use tracing::info;
 
 use crate::config::{DbConfig, DbError, DbResult};
@@ -51,11 +51,14 @@ pub(crate) struct DbPoolInner {
     /// 总连接数
     pub(crate) total_count: AtomicU32,
 
-    /// 权限策略 LRU 缓存
-    pub(crate) policy_cache: Arc<Mutex<LruCache<String, RolePolicy>>>,
+    /// 权限策略 LRU 缓存（使用 tokio 异步锁）
+    pub(crate) policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
 
-    /// 权限配置（懒加载）
-    permission_config: Arc<Mutex<Option<PermissionConfig>>>,
+    /// 权限配置（懒加载，使用 tokio 异步锁）
+    permission_config: Arc<AsyncMutex<Option<PermissionConfig>>>,
+
+    /// 后台健康检查任务（用于优雅关闭）
+    health_check_shutdown: Arc<Notify>,
 
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
@@ -101,7 +104,7 @@ impl DbPool {
             );
         }
 
-        let policy_cache = Arc::new(std::sync::Mutex::new(LruCache::new(
+        let policy_cache = Arc::new(AsyncMutex::new(LruCache::new(
             NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
         )));
 
@@ -116,11 +119,15 @@ impl DbPool {
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
                 policy_cache,
-                permission_config: Arc::new(Mutex::new(permission_config)),
+                permission_config: Arc::new(AsyncMutex::new(permission_config)),
+                health_check_shutdown: Arc::new(Notify::new()),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
             }),
         };
+
+        // 启动后台健康检查任务
+        pool.start_background_health_check();
 
         // 预创建最小连接数（并行创建以提高启动速度）
         let initial_connections = pool.inner.config.min_connections;
@@ -153,22 +160,24 @@ impl DbPool {
         );
 
         // 加载权限策略到缓存
-        if let Some(ref config) = *pool
+        let permission_config_guard = pool
             .inner
             .permission_config
             .lock()
-            .map_err(|_| DbError::Config("Permission config mutex poisoned".to_string()))?
-        {
+            .await;
+
+        if let Some(ref config) = *permission_config_guard {
+            let mut cache = pool
+                .inner
+                .policy_cache
+                .lock()
+                .await;
             for (role, policy) in &config.roles {
-                let mut cache = pool
-                    .inner
-                    .policy_cache
-                    .lock()
-                    .map_err(|_| DbError::Config("Policy cache mutex poisoned".to_string()))?;
                 cache.put(role.clone(), policy.clone());
             }
             info!("Loaded permission policies for {} roles", config.roles.len());
         }
+        drop(permission_config_guard);
 
         #[cfg(feature = "auto-migrate")]
         if corrected_config.auto_migrate {
@@ -258,7 +267,7 @@ impl DbPool {
     /// 如果角色未在权限配置中定义，返回错误
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
         // 验证角色名称
-        self.validate_role_name(role)?;
+        self.validate_role_name(role).await?;
 
         let connection = self.acquire_connection().await?;
         #[allow(unused_mut)]
@@ -277,13 +286,13 @@ impl DbPool {
     ///
     /// 仅在权限配置文件存在且成功加载时验证角色。
     /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
-    fn validate_role_name(&self, role: &str) -> DbResult<()> {
+    async fn validate_role_name(&self, role: &str) -> DbResult<()> {
         // 获取权限配置锁
         let permission_config = self
             .inner
             .permission_config
             .lock()
-            .map_err(|_| DbError::Permission("Failed to acquire permission config lock".to_string()))?;
+            .await;
 
         // 检查权限配置是否存在（用户是否显式配置了权限文件）
         if permission_config.is_none() {
@@ -513,6 +522,53 @@ impl DbPool {
         recreated_count as u32
     }
 
+    /// 启动后台连接健康检查任务
+    ///
+    /// 该任务会定期检查所有空闲连接的健康状态，
+    /// 自动移除无效连接并重建新连接以维持最小连接数。
+    ///
+    /// 健康检查间隔默认为 30 秒，可通过环境变量 `DB_HEALTH_CHECK_INTERVAL` 配置（秒）。
+    fn start_background_health_check(&self) {
+        let pool = self.clone();
+        let shutdown = self.inner.health_check_shutdown.clone();
+
+        // 从环境变量获取健康检查间隔，默认为 30 秒
+        let interval_secs = std::env::var("DB_HEALTH_CHECK_INTERVAL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
+        tracing::info!(
+            "Starting background health check task with interval: {} seconds",
+            interval_secs
+        );
+
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(interval_secs));
+
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        // 执行连接健康检查
+                        let recreated = pool.validate_and_recreate_connections().await;
+                        if recreated > 0 {
+                            tracing::info!(
+                                "Background health check: recreated {} connections",
+                                recreated
+                            );
+                        } else {
+                            tracing::debug!("Background health check: all connections healthy");
+                        }
+                    }
+                    _ = shutdown.notified() => {
+                        tracing::info!("Background health check task shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     /// 从池中获取连接
     async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
         // 尝试从空闲队列获取
@@ -649,6 +705,15 @@ impl DbPool {
     }
 }
 
+/// DbPool 的优雅关闭
+impl Drop for DbPool {
+    fn drop(&mut self) {
+        // 通知后台健康检查任务关闭
+        self.inner.health_check_shutdown.notify_one();
+        tracing::info!("DbPool dropped, shutdown signal sent to background health check task");
+    }
+}
+
 /// 连接池状态
 #[derive(Debug, Clone)]
 pub struct PoolStatus {
@@ -729,8 +794,8 @@ impl Session {
     }
 
     /// 检查权限
-    pub fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
-        if self.permission_ctx.check_table_access(table, operation) {
+    pub async fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
+        if self.permission_ctx.check_table_access(table, operation).await {
             Ok(())
         } else {
             Err(DbError::Permission(format!(
@@ -904,10 +969,9 @@ impl Session {
         if is_ddl {
             // DDL 操作只允许管理员角色执行
             if self.role() != "admin" {
-                return Err(DbError::Permission(format!(
-                    "Permission denied: only 'admin' role can execute DDL operations. SQL: {}",
-                    sql.chars().take(100).collect::<String>()
-                )));
+                return Err(DbError::Permission(
+                    "Permission denied: only 'admin' role can execute DDL operations".to_string(),
+                ));
             }
         } else if let Some((table_name, action)) = self.parse_sql_operation(sql) {
             // 检查是否为系统表，系统表跳过权限检查
@@ -918,14 +982,14 @@ impl Session {
 
             if !is_system_table {
                 // 检查是否配置了权限文件
-                let permission_config = self.pool.permission_config.lock().unwrap();
+                let permission_config = self.pool.permission_config.lock().await;
                 let has_permission_config = permission_config.is_some();
                 drop(permission_config);
 
                 // 只有配置了权限文件才进行权限检查
                 if has_permission_config {
                     // DML 操作：检查表级权限
-                    if !self.permission_ctx.check_table_access(&table_name, &action) {
+                    if !self.permission_ctx.check_table_access(&table_name, &action).await {
                         return Err(DbError::Permission(format!(
                             "Permission denied: role '{}' does not have permission to '{}' on table '{}'",
                             self.role(),
@@ -937,10 +1001,9 @@ impl Session {
             }
         } else {
             // 如果无法解析 SQL 且不是 DDL，拒绝执行以确保安全
-            return Err(DbError::Permission(format!(
-                "无法解析 SQL 语句进行权限检查，请使用明确的方法。SQL: {}",
-                sql.chars().take(100).collect::<String>()
-            )));
+            return Err(DbError::Permission(
+                "Unable to parse SQL statement for permission check, please use explicit methods".to_string(),
+            ));
         }
 
         let conn = self.connection.as_ref().ok_or_else(|| {
@@ -961,108 +1024,115 @@ impl Session {
         conn.execute_raw(stmt).await.map_err(DbError::Connection)
     }
 
-    /// 内部方法：解析 SQL 语句类型（用于测试）
+    /// 内部方法：解析 SQL 语句类型（用于权限检查）
     ///
-    /// 支持解析以下表名格式：
-    /// - 简单表名：users
-    /// - Schema 限定：public.users, schema.table
-    /// - 引号包裹："table", `table`
-    /// - 带别名：users AS u, users u
+    /// 使用 sqlparser 解析 SQL 语句类型（SELECT/INSERT/UPDATE/DELETE）
+    /// 表名提取使用正则作为后备方案
     pub(super) fn parse_sql_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
-        use regex::Regex;
-        use std::sync::OnceLock;
+        use sqlparser::dialect::GenericDialect;
+        use sqlparser::parser::Parser;
 
-        // 匹配表名：支持 schema.qualified.names、引号包裹的表名、别名
-        // 格式：([schema.]table | "table" | `table`) [AS alias]
-        static TABLE_RE: OnceLock<Regex> = OnceLock::new();
+        let _dialect = GenericDialect {};
+        let _ast = Parser::parse_sql(&_dialect, sql).ok()?;
 
+        let _statement = _ast.first()?;
         let sql_upper = sql.trim_start().to_uppercase();
 
-        // 获取复用正则（处理 schema、引用、别名）
+        // 确定操作类型
+        let action = if sql_upper.starts_with("SELECT") {
+            PermissionAction::Select
+        } else if sql_upper.starts_with("INSERT") {
+            PermissionAction::Insert
+        } else if sql_upper.starts_with("UPDATE") {
+            PermissionAction::Update
+        } else if sql_upper.starts_with("DELETE") {
+            PermissionAction::Delete
+        } else {
+            return None;
+        };
+
+        // 提取表名
+        let table_name = self.extract_table_name_fallback(sql, &action);
+        table_name.map(|name| (name, action))
+    }
+
+    /// 从 SQL 中提取表名（正则后备方案）
+    fn extract_table_name_fallback(&self, sql: &str, action: &PermissionAction) -> Option<String> {
+        use std::sync::OnceLock;
+        static INSERT_RE: OnceLock<regex::Regex> = OnceLock::new();
+        static SELECT_RE: OnceLock<regex::Regex> = OnceLock::new();
+        static UPDATE_RE: OnceLock<regex::Regex> = OnceLock::new();
+        static DELETE_RE: OnceLock<regex::Regex> = OnceLock::new();
+        static TABLE_RE: OnceLock<regex::Regex> = OnceLock::new();
+
+        let insert_pattern = INSERT_RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)INSERT\s+INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .expect("Failed to compile INSERT regex pattern")
+        });
+
+        let select_pattern = SELECT_RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .expect("Failed to compile SELECT regex pattern")
+        });
+
+        let update_pattern = UPDATE_RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)\bUPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .expect("Failed to compile UPDATE regex pattern")
+        });
+
+        let delete_pattern = DELETE_RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)\bDELETE\s+FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .expect("Failed to compile DELETE regex pattern")
+        });
+
         let table_pattern = TABLE_RE.get_or_init(|| {
-            Regex::new("(?:(?:([a-zA-Z_][a-zA-Z0-9_]*)\\.)?([a-zA-Z_][a-zA-Z0-9_]*)|\\\"([^\\\"]+)\\\"|`([^`]+)`)")
+            regex::Regex::new(r##"(?:(?:([a-zA-Z_][a-zA-Z0-9_]*)\.)?([a-zA-Z_][a-zA-Z0-9_]*)|"([^"]+)"|`([^`]+)`)"##)
                 .expect("Failed to compile table regex pattern")
         });
 
-        if sql_upper.starts_with("SELECT") {
-            // 匹配 SELECT ... FROM table_name [AS alias]
-            if let Some(from_pos) = sql_upper.find("FROM") {
-                // 跳过 "FROM" 关键字（4个字符）
-                let after_from = &sql[from_pos + 4..];
-                if let Some(caps) = table_pattern.captures(after_from) {
-                    let table_name = Self::extract_table_name(&caps);
-                    return Some((table_name, PermissionAction::Select));
+        // 根据操作类型选择对应的正则模式
+        match action {
+            PermissionAction::Select => {
+                if let Some(caps) = select_pattern.captures(sql) {
+                    if let Some(table) = caps.get(1) {
+                        return Some(table.as_str().to_string());
+                    }
                 }
             }
-        } else if sql_upper.starts_with("INSERT") {
-            // 匹配 INSERT INTO table_name
-            if let Some(into_pos) = sql_upper.find("INTO") {
-                // 跳过 "INTO" 关键字（4个字符）
-                let after_into = &sql[into_pos + 4..];
-                if let Some(caps) = table_pattern.captures(after_into) {
-                    let table_name = Self::extract_table_name(&caps);
-                    return Some((table_name, PermissionAction::Insert));
+            PermissionAction::Insert => {
+                if let Some(caps) = insert_pattern.captures(sql) {
+                    if let Some(table) = caps.get(1) {
+                        return Some(table.as_str().to_string());
+                    }
                 }
             }
-        } else if sql_upper.starts_with("UPDATE") {
-            // 匹配 UPDATE table_name
-            if let Some(caps) = table_pattern.captures(&sql[sql_upper.find("UPDATE").unwrap_or(0)..]) {
-                let table_name = Self::extract_table_name(&caps);
-                return Some((table_name, PermissionAction::Update));
-            }
-        } else if sql_upper.starts_with("DELETE") {
-            // 匹配 DELETE FROM table_name
-            if let Some(from_pos) = sql_upper.find("FROM") {
-                // 跳过 "FROM" 关键字（4个字符）
-                let after_from = &sql[from_pos + 4..];
-                if let Some(caps) = table_pattern.captures(after_from) {
-                    let table_name = Self::extract_table_name(&caps);
-                    return Some((table_name, PermissionAction::Delete));
+            PermissionAction::Update => {
+                if let Some(caps) = update_pattern.captures(sql) {
+                    if let Some(table) = caps.get(1) {
+                        return Some(table.as_str().to_string());
+                    }
                 }
+            }
+            PermissionAction::Delete => {
+                if let Some(caps) = delete_pattern.captures(sql) {
+                    if let Some(table) = caps.get(1) {
+                        return Some(table.as_str().to_string());
+                    }
+                }
+            }
+        }
+
+        // 尝试通用表名模式作为后备
+        if let Some(caps) = table_pattern.captures(sql) {
+            if let (Some(schema), Some(table)) = (caps.get(1), caps.get(2)) {
+                return Some(format!("{}.{}", schema.as_str(), table.as_str()));
+            }
+            if let Some(table) = caps.get(3).or(caps.get(4)) {
+                return Some(table.as_str().to_string());
             }
         }
 
         None
-    }
-
-    /// 从正则捕获组中提取表名
-    /// 捕获组格式：
-    /// - Group 1: schema (optional)
-    /// - Group 2: table name (unquoted)
-    /// - Group 3: table name (double quoted)
-    /// - Group 4: table name (backtick quoted)
-    fn extract_table_name(caps: &regex::Captures) -> String {
-        // 优先检查带 schema 的情况
-        if let Some(schema) = caps.get(1) {
-            if let Some(table) = caps.get(2) {
-                return format!("{}.{}", schema.as_str(), table.as_str());
-            }
-        }
-
-        // 检查双引号包裹
-        if let Some(table) = caps.get(3) {
-            return table.as_str().to_string();
-        }
-
-        // 检查反引号包裹
-        if let Some(table) = caps.get(4) {
-            return table.as_str().to_string();
-        }
-
-        // 回退：直接返回完整匹配（带别名的情况）
-        let full_match = caps.get(0).map(|c| c.as_str()).unwrap_or("");
-        Self::normalize_table_name(full_match)
-    }
-
-    /// 规范化表名：移除别名，保留 schema 和表名
-    fn normalize_table_name(input: &str) -> String {
-        // 移除 AS alias 或直接跟的别名
-        if let Some(idx) = input.to_uppercase().find(" AS ") {
-            input[..idx].to_string()
-        } else {
-            // 处理可能的尾随空格
-            input.split_whitespace().next().unwrap_or(input).to_string()
-        }
     }
 
     /// 执行 SQL 语句的统一入口，集成权限检查和指标收集（自动解析操作类型）
@@ -1080,7 +1150,7 @@ impl Session {
         // 尝试自动解析 SQL 操作类型和表名
         if let Some((table_name, operation)) = self.parse_sql_operation(sql) {
             // 权限检查
-            self.check_permission(&table_name, &operation)?;
+            self.check_permission(&table_name, &operation).await?;
 
             // 标记写操作（如果需要）
             if matches!(
@@ -1134,7 +1204,7 @@ impl Session {
         use std::time::Instant;
 
         // 权限检查
-        self.check_permission(table, &operation)?;
+        self.check_permission(table, &operation).await?;
 
         // 标记写操作（如果需要）
         if matches!(
