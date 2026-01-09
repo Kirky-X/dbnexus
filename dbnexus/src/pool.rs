@@ -1051,33 +1051,27 @@ impl Session {
             }
 
             // 处理 SQL 注释
-            if c == '-' {
-                if chars.peek() == Some(&'-') {
-                    // 单行注释，跳到行尾
-                    while let Some(&next_c) = chars.peek() {
-                        if next_c == '\n' {
-                            break;
-                        }
-                        chars.next();
+            if c == '-' && chars.peek() == Some(&'-') {
+                // 单行注释，跳到行尾
+                while let Some(&next_c) = chars.peek() {
+                    if next_c == '\n' {
+                        break;
                     }
-                    continue;
+                    chars.next();
                 }
+                continue;
             }
 
             // 处理 C 风格注释
-            if c == '/' {
-                if chars.peek() == Some(&'*') {
-                    chars.next(); // 消耗 '*'
-                    while let Some(c1) = chars.next() {
-                        if c1 == '*' {
-                            if chars.peek() == Some(&'/') {
-                                chars.next(); // 消耗 '/'
-                                break;
-                            }
-                        }
+            if c == '/' && chars.peek() == Some(&'*') {
+                chars.next(); // 消耗 '*'
+                while let Some(c1) = chars.next() {
+                    if c1 == '*' && chars.peek() == Some(&'/') {
+                        chars.next(); // 消耗 '/'
+                        break;
                     }
-                    continue;
                 }
+                continue;
             }
 
             result.push(c);
