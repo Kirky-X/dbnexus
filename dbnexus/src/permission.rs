@@ -260,7 +260,7 @@ impl PermissionContext {
         // 尝试从缓存获取
         if let Some(policy) = cache.get(self.role.as_str()) {
             let allowed = policy.allows(table, operation);
-            tracing::debug!(
+            tracing::trace!(
                 "Permission check: role='{}' table='{}' operation='{}' result={}",
                 self.role,
                 table,
@@ -270,15 +270,13 @@ impl PermissionContext {
             return allowed;
         }
 
-        // 缓存未命中：返回 false（安全默认），但提供更详细的警告
-        tracing::warn!(
+        // 缓存未命中：返回 false（安全默认）
+        // 使用 debug 级别避免日志膨胀
+        tracing::debug!(
             target: "security",
-            "Permission cache miss for role '{}' on table '{}' operation '{}'. \
-             Access denied by default. Did you call `load_policy()` first? \
-             See: https://docs.rs/dbnexus/latest/dbnexus/permission/index.html#usage",
+            "Permission cache miss for role '{}' on table '{}'. Access denied by default.",
             self.role,
             table,
-            operation
         );
         false
     }

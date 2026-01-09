@@ -635,10 +635,13 @@ impl AuditLogger {
             if let Some(obj) = json_val.as_object() {
                 let mut modified = false;
                 let mut new_obj = serde_json::Map::new();
+                let underscore_str = String::from("_");
+                let field_with_underscore = format!("{}{}", underscore_str, field);
                 for (k, v) in obj {
-                    if k == field || k.contains(&format!("_{}", field)) {
+                    if k == field || k.contains(&field_with_underscore) {
+                        let redacted_key = format!("{}{}redacted", k, underscore_str);
                         new_obj.insert(
-                            format!("{}_redacted", k),
+                            redacted_key,
                             serde_json::Value::String(replacement.to_string()),
                         );
                         modified = true;

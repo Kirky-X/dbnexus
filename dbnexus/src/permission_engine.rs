@@ -428,16 +428,91 @@ impl YamlPermissionProvider {
         // 验证配置文件路径安全性
         let path = std::path::Path::new(config_path);
 
-        // 检查路径是否包含父目录引用（防止路径遍历攻击）
-        if config_path.contains("..") {
+        // 1. 检查空路径
+        if config_path.is_empty() {
+            return Err("Config path cannot be empty".to_string());
+        }
+
+        // 2. 检查路径是否包含父目录引用（防止路径遍历攻击）
+        // 使用正则更严格地检测 .. 
+        if regex::Regex::new(r"\.\.|%2e%2e").unwrap().is_match(config_path) {
             return Err("Config path contains invalid parent directory reference".to_string());
         }
 
-        // 检查路径是否为绝对路径或在允许的相对路径范围内
+        // 3. 检查空字节注入
+        if config_path.as_bytes().contains(&0) {
+            return Err("Config path contains null byte".to_string());
+        }
+
+        // 4. 检查路径是否为绝对路径或在允许的相对路径范围内
         if !path.is_absolute() {
             // 相对路径需要进一步验证
-            let _canonical = std::fs::canonicalize(path).map_err(|_| "Cannot resolve config path".to_string())?;
-            // 如果需要在特定目录下，可以添加额外检查
+            let canonical = std::fs::canonicalize(path)
+                .map_err(|_| "Cannot resolve config path, it may not exist or is inaccessible".to_string())?;
+
+            // 检查规范化后的路径是否包含 ..
+            let canonical_str = canonical.to_string_lossy();
+            if canonical_str.contains("..") {
+                return Err("Config path resolves to invalid parent directory reference".to_string());
+            }
+
+            // 检查是否在允许的目录内（当前目录或 config 子目录）
+            let current_dir = std::env::current_dir()
+                .map_err(|_| "Cannot determine current directory".to_string())?;
+            let allowed_dirs = [
+                current_dir.clone(),
+                current_dir.join("config"),
+                current_dir.join("permissions"),
+                current_dir.join("etc"),
+            ];
+
+            let mut is_allowed = false;
+            for allowed in &allowed_dirs {
+                let allowed_canonical = std::fs::canonicalize(allowed)
+                    .unwrap_or_else(|_| allowed.clone());
+                if canonical.starts_with(&allowed_canonical) {
+                    is_allowed = true;
+                    break;
+                }
+            }
+
+            if !is_allowed {
+                return Err("Config path is not in allowed directory".to_string());
+            }
+        } else {
+            // 绝对路径检查
+            // 检查是否在系统关键目录外
+            let forbidden_prefixes = [
+                std::path::Path::new("/etc"),
+                std::path::Path::new("/usr"),
+                std::path::Path::new("/var"),
+                std::path::Path::new("/root"),
+                std::path::Path::new("/boot"),
+                std::path::Path::new("/sys"),
+                std::path::Path::new("/proc"),
+            ];
+
+            let canonical = std::fs::canonicalize(path)
+                .map_err(|_| "Cannot resolve config path".to_string())?;
+
+            for prefix in &forbidden_prefixes {
+                if canonical.starts_with(prefix) {
+                    return Err("Config path is in system directory, which is not allowed".to_string());
+                }
+            }
+        }
+
+        // 5. 检查是否为符号链接
+        if path.is_symlink() {
+            return Err("Config path cannot be a symbolic link".to_string());
+        }
+
+        // 6. 检查文件是否存在且可读
+        if !path.exists() {
+            return Err("Config file does not exist".to_string());
+        }
+        if !path.is_file() {
+            return Err("Config path must point to a file".to_string());
         }
 
         Ok(Self {
