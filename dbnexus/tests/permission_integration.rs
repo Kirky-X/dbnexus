@@ -37,6 +37,7 @@ roles:
     session
         .permission_ctx()
         .load_policy(&perm_config)
+        .await
         .expect("Failed to load policy");
     let ctx = session.permission_ctx();
     assert_eq!(ctx.role(), "admin");
@@ -70,8 +71,9 @@ roles:
     session
         .permission_ctx()
         .load_policy(&perm_config)
+        .await
         .expect("Failed to load policy");
-    let result = session.check_permission("unknown_table", &Operation::Select);
+    let result = session.check_permission("unknown_table", &Operation::Select).await;
     // admin 可以访问所有表，所以应该成功
     assert!(result.is_ok(), "admin should have SELECT permission on any table");
 }
@@ -169,7 +171,7 @@ async fn test_permission_cache_miss_behavior() {
     let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256);
 
     // 缓存未命中应该返回 false（拒绝访问）
-    let result = ctx.check_table_access("users", &Operation::Select);
+    let result = ctx.check_table_access("users", &Operation::Select).await;
     assert!(!result, "Cache miss should deny access by default");
 }
 
@@ -196,10 +198,10 @@ async fn test_permission_check_with_auto_load() {
     let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256);
 
     // 使用 auto_load 版本（缓存未命中时会自动加载）
-    let result = ctx.check_table_access_with_config("users", &Operation::Select, &config);
+    let result = ctx.check_table_access_with_config("users", &Operation::Select, &config).await;
     assert!(result, "Should have permission after auto-load");
 
     // 再次检查应该从缓存读取
-    let result2 = ctx.check_table_access("users", &Operation::Select);
+    let result2 = ctx.check_table_access("users", &Operation::Select).await;
     assert!(result2, "Should have permission from cache");
 }
