@@ -573,29 +573,28 @@ impl MigrationExecutor {
             file_path: format!("migration_v{}.sql", migration.version),
         };
 
-        // 插入到迁移历史表
-        let insert_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres | DatabaseType::MySql => {
-                format!(
-                    "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
-                    migration.version,
-                    migration.description.replace('\'', "''"), // 转义单引号
-                    version_record.applied_at.to_string().replace('\'', "''"),
-                    version_record.file_path.replace('\'', "''")
-                )
-            }
-            DatabaseType::Sqlite => {
-                format!(
-                    "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}');",
-                    migration.version,
-                    migration.description.replace('\'', "''"), // 转义单引号
-                    version_record.applied_at.to_string().replace('\'', "''"),
-                    version_record.file_path.replace('\'', "''")
-                )
-            }
+        // 插入到迁移历史表（使用参数化查询防止 SQL 注入）
+        // 使用 Statement::from_sql_and_values 进行参数化查询
+        let insert_sql = "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
+
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
         };
 
-        txn.execute_unprepared(&insert_sql)
+        let stmt = sea_orm::Statement::from_sql_and_values(
+            backend,
+            insert_sql.to_string(),
+            vec![
+                migration.version.into(),
+                migration.description.clone().into(),
+                version_record.applied_at.to_string().into(),
+                version_record.file_path.clone().into(),
+            ],
+        );
+
+        txn.execute_raw(stmt)
             .await
             .map_err(crate::config::DbError::Connection)?;
         // 提交事务
@@ -813,21 +812,27 @@ impl MigrationExecutor {
                 .map_err(crate::config::DbError::Connection)?;
         }
 
-        // 记录迁移历史
+        // 记录迁移历史（使用参数化查询防止 SQL 注入）
         let applied_at = time::OffsetDateTime::now_utc();
 
-        // 使用基本的字符串转义防止 SQL 注入
-        let escaped_version = migration_file.version.to_string().replace('\'', "''");
-        let escaped_description = migration_file.description.replace('\'', "''");
-        let escaped_file_path = migration_file.file_path.to_string_lossy().replace('\'', "''");
-        let applied_at_str = applied_at.to_string().replace('\'', "''");
-
-        let insert_query = format!(
-            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ('{}', '{}', '{}', '{}')",
-            escaped_version, escaped_description, applied_at_str, escaped_file_path
+        let insert_sql = "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+        };
+        let stmt = sea_orm::Statement::from_sql_and_values(
+            backend,
+            insert_sql.to_string(),
+            vec![
+                migration_file.version.into(),
+                migration_file.description.clone().into(),
+                applied_at.to_string().into(),
+                migration_file.file_path.to_string_lossy().into(),
+            ],
         );
 
-        txn.execute_unprepared(&insert_query)
+        txn.execute_raw(stmt)
             .await
             .map_err(crate::config::DbError::Connection)?;
 

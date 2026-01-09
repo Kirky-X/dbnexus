@@ -428,19 +428,51 @@ where
     }
 
     /// 清理过期条目
+    ///
+    /// 使用分批清理策略，避免长时间持有写锁
+    /// 每次最多清理 BATCH_SIZE 个过期条目
     pub async fn cleanup(&self) -> usize {
-        let mut cache = self.cache.write().await;
+        const BATCH_SIZE: usize = 100;
+        let mut total_removed = 0;
 
-        let before = cache.len();
-        cache.retain(|_key, entry| {
-            let not_expired = !entry.is_expired();
-            if !not_expired {
+        loop {
+            let mut cache = self.cache.write().await;
+
+            // 如果缓存很小，直接清理全部
+            if cache.len() <= BATCH_SIZE {
+                let before = cache.len();
+                cache.retain(|_key, entry| {
+                    let not_expired = !entry.is_expired();
+                    if !not_expired {
+                        self.stats.record_expiration();
+                    }
+                    not_expired
+                });
+                return before - cache.len();
+            }
+
+            // 大批量只清理一部分
+            let keys_to_remove: Vec<_> = cache
+                .iter()
+                .filter(|(_, entry)| entry.is_expired())
+                .take(BATCH_SIZE)
+                .map(|(k, _)| k.clone())
+                .collect();
+
+            if keys_to_remove.is_empty() {
+                // 没有更多过期条目
+                break;
+            }
+
+            for key in &keys_to_remove {
+                cache.shift_remove(key);
                 self.stats.record_expiration();
             }
-            not_expired
-        });
 
-        before - cache.len()
+            total_removed += keys_to_remove.len();
+        }
+
+        total_removed
     }
 }
 
