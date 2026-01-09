@@ -17,6 +17,7 @@ proc-macro = true
 syn = { version = "2.0.112", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
+proc-macro-error = "1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 regex = "1"
@@ -24,6 +25,7 @@ regex = "1"
 [dev-dependencies]
 trybuild = "1"
 tokio-test = { workspace = true }
+dbnexus = { path = "../dbnexus", features = ["sqlite", "global-index", "sharding"] }
 
 [lints]
 workspace = true
