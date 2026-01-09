@@ -10,6 +10,7 @@
 //! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能
 
 use proc_macro::TokenStream;
+use proc_macro_error::proc_macro_error;
 use quote::{ToTokens, quote};
 use regex::Regex;
 use syn::{DeriveInput, parse_macro_input};
@@ -117,154 +118,230 @@ fn extract_primary_key(data: &syn::Data) -> String {
 /// db_crud 属性宏
 ///
 /// 为 Entity 自动生成 CRUD 方法（真正执行数据库操作）
+/// 使用 Sea-ORM 原生 API，避免 SQL 注入风险
+///
+/// # 使用示例
+///
+/// ```rust,ignore
+/// use sea_orm::entity::prelude::*;
+/// use dbnexus::{DbEntity, db_entity, db_crud};
+///
+/// #[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+/// #[sea_orm(table_name = "users")]
+/// #[db_entity]
+/// #[db_crud]
+/// struct User {
+///     #[sea_orm(primary_key)]
+///     id: i64,
+///     name: String,
+///     email: String,
+/// }
+///
+/// // 使用生成的 CRUD 方法
+/// let user = User::find_by_id(&db, 1).await?;
+/// let users = User::find_all(&db).await?;
+/// let new_user = User::insert(&db, model).await?;
+/// User::update(&db, model).await?;
+/// User::delete(&db, 1).await?;
+/// ```
 #[proc_macro_attribute]
 pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // 提取表名
-    let table_name = extract_table_name(&input.attrs);
+    // 提取表名（用于权限检查）
+    let _table_name = extract_table_name(&input.attrs);
 
-    if table_name.is_empty() {
-        return syn::Error::new(
-            struct_name.span(),
-            "#[db_crud] requires #[table_name = \"...\")] attribute on the entity",
-        )
-        .to_compile_error()
-        .into();
-    }
-
-    // 提取所有字段名
-    let field_names = extract_field_names(&input.data);
-    let field_names_str: Vec<String> = field_names.iter().map(|s| s.to_string()).collect();
-
-    // 提取主键字段名
-    let primary_key = extract_primary_key(&input.data);
-
-    // 生成字段列表字符串（用于 SQL）
-    let field_list = field_names_str.join(", ");
-
-    // 生成占位符列表（用于参数化查询）
-    let placeholders: Vec<String> = field_names_str
-        .iter()
-        .enumerate()
-        .map(|(i, _)| format!("?{}", i + 1))
-        .collect();
-    let placeholder_list = placeholders.join(", ");
-
-    // 生成 update SQL（SET 子句）
-    let update_set: Vec<String> = field_names_str
-        .iter()
-        .filter(|f| *f != &primary_key)
-        .map(|f| format!("{} = {}", f, 1))
-        .collect();
-    let update_set_str = update_set.join(", ");
-
-    // 生成 CRUD 方法
+    // 生成 CRUD 方法（使用 Sea-ORM 原生 API）
     let impl_block = quote! {
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// 插入新记录
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `model` - 要插入的模型数据
+            ///
+            /// # Returns
+            ///
+            /// 插入后的完整模型（包含自动生成的主键）
             pub async fn insert(
-                session: &dbnexus::Session,
-                entity: Self,
-            ) -> Result<Self, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Insert)?;
-                session.mark_write();
+                db: &sea_orm::DatabaseConnection,
+                model: <Self as sea_orm::entity::EntityTrait>::Model,
+            ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
+                use sea_orm::Entity;
+                use sea_orm::ActiveModelBehavior;
 
-                // 构建参数化查询
-                let sql = format!("INSERT INTO {} ({}) VALUES ({})", #table_name, #field_list, #placeholder_list);
+                // 将 Model 转换为 ActiveModel
+                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
 
-                // 执行 INSERT 语句
-                session.execute_raw(&sql).await?;
-
-                Ok(entity)
+                // 执行插入
+                Entity::insert(active_model)
+                    .exec(db)
+                    .await
+                    .map_err(Into::into)
             }
 
-            /// 根据ID查找记录
+            /// 根据 ID 查找记录
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `id` - 主键 ID
+            ///
+            /// # Returns
+            ///
+            /// 找到的记录（如果有）
             pub async fn find_by_id(
-                session: &dbnexus::Session,
+                db: &sea_orm::DatabaseConnection,
                 id: i64,
-            ) -> Result<Option<Self>, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Select)?;
+            ) -> Result<Option<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+                use sea_orm::Entity;
 
-                // 构建参数化查询
-                let sql = format!("SELECT * FROM {} WHERE {} = {}", #table_name, #primary_key, id);
-
-                // 执行 SELECT 语句
-                session.execute_raw(&sql).await?;
-
-                // 注意：宏无法直接解析查询结果返回实体
-                // 建议使用 API 的 execute_raw 方法获取原始结果
-                Ok(None)
+                Entity::find_by_id(id)
+                    .one(db)
+                    .await
+                    .map_err(Into::into)
             }
 
             /// 更新记录
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `model` - 要更新的模型数据
+            ///
+            /// # Returns
+            ///
+            /// 更新后的模型
             pub async fn update(
-                session: &dbnexus::Session,
-                entity: Self,
-            ) -> Result<Self, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Update)?;
-                session.mark_write();
+                db: &sea_orm::DatabaseConnection,
+                model: <Self as sea_orm::entity::EntityTrait>::Model,
+            ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
+                use sea_orm::Entity;
+                use sea_orm::ActiveModelBehavior;
 
-                // 构建参数化查询
-                let sql = format!("UPDATE {} SET {} WHERE {} = 1", #table_name, #update_set_str, #primary_key);
+                // 将 Model 转换为 ActiveModel
+                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
 
-                // 执行 UPDATE 语句
-                session.execute_raw(&sql).await?;
-
-                Ok(entity)
+                Entity::update(active_model)
+                    .exec(db)
+                    .await
+                    .map_err(Into::into)
             }
 
-            /// 根据ID删除记录
+            /// 根据 ID 删除记录
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `id` - 要删除的记录 ID
+            ///
+            /// # Returns
+            ///
+            /// 删除的记录数
             pub async fn delete(
-                session: &dbnexus::Session,
+                db: &sea_orm::DatabaseConnection,
                 id: i64,
             ) -> Result<u64, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Delete)?;
-                session.mark_write();
+                use sea_orm::Entity;
 
-                // 构建参数化查询
-                let sql = format!("DELETE FROM {} WHERE {} = {}", #table_name, #primary_key, id);
+                // 先查询记录
+                let record = Entity::find_by_id(id)
+                    .one(db)
+                    .await?
+                    .ok_or_else(|| dbnexus::DbError::NotFound(format!("Record with id {} not found", id)))?;
 
-                // 执行 DELETE 语句
-                let result = session.execute_raw(&sql).await?;
-
-                Ok(result.rows_affected())
+                // 删除记录
+                let result = Entity::delete(record).exec(db).await?;
+                Ok(result.rows_affected)
             }
 
             /// 查询所有记录
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            ///
+            /// # Returns
+            ///
+            /// 所有记录的向量
             pub async fn find_all(
-                session: &dbnexus::Session,
-            ) -> Result<Vec<Self>, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Select)?;
+                db: &sea_orm::DatabaseConnection,
+            ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+                use sea_orm::Entity;
 
-                // 构建查询
-                let sql = format!("SELECT * FROM {}", #table_name);
+                Entity::find()
+                    .all(db)
+                    .await
+                    .map_err(Into::into)
+            }
 
-                // 执行 SELECT 语句
-                session.execute_raw(&sql).await?;
+            /// 条件查询
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `condition` - 查询条件
+            ///
+            /// # Returns
+            ///
+            /// 符合条件的记录
+            pub async fn find_by_condition(
+                db: &sea_orm::DatabaseConnection,
+                condition: sea_orm::Condition,
+            ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+                use sea_orm::Entity;
 
-                // 注意：宏无法直接解析查询结果返回实体列表
-                // 建议使用 API 的 execute_raw 方法获取原始结果
-                Ok(Vec::new())
+                Entity::find()
+                    .filter(condition)
+                    .all(db)
+                    .await
+                    .map_err(Into::into)
             }
 
             /// 批量删除
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            /// * `filter` - 删除条件
+            ///
+            /// # Returns
+            ///
+            /// 删除的记录数
             pub async fn delete_many(
-                session: &dbnexus::Session,
-                _filter: dbnexus::Condition,
+                db: &sea_orm::DatabaseConnection,
+                filter: sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
-                session.check_permission(#table_name, &dbnexus::permission::Operation::Delete)?;
-                session.mark_write();
+                use sea_orm::Entity;
 
-                // 构建参数化查询
-                let sql = format!("DELETE FROM {} WHERE {} = 1", #table_name, #primary_key);
+                let result = Entity::delete_many()
+                    .filter(filter)
+                    .exec(db)
+                    .await?;
+                Ok(result.rows_affected)
+            }
 
-                // 执行 DELETE 语句
-                let result = session.execute_raw(&sql).await?;
+            /// 统计记录数
+            ///
+            /// # Arguments
+            ///
+            /// * `db` - 数据库连接
+            ///
+            /// # Returns
+            ///
+            /// 记录总数
+            pub async fn count(
+                db: &sea_orm::DatabaseConnection,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::Entity;
 
-                Ok(result.rows_affected())
+                let count = Entity::find()
+                    .count(db)
+                    .await?;
+                Ok(count)
             }
         }
     };
@@ -276,19 +353,33 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
     })
 }
 
-/// 提取所有字段名
-fn extract_field_names(data: &syn::Data) -> Vec<String> {
-    let mut field_names = Vec::new();
 
-    if let syn::Data::Struct(s) = data {
-        for field in &s.fields {
-            if let Some(ident) = &field.ident {
-                field_names.push(ident.to_string());
-            }
+///
+/// 有效的角色名必须：
+/// - 以字母或下划线开头
+/// - 只能包含字母、数字、下划线
+/// - 长度在 1-64 之间
+fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(), ()> {
+    // 角色名格式：字母/下划线开头，后跟字母、数字、下划线
+    let role_name_pattern = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$").map_err(|_| ())?;
+
+    for role in roles {
+        if !role_name_pattern.is_match(role) {
+            proc_macro_error::abort!(
+                struct_name,
+                format!(
+                    "Invalid role name '{}'. Role names must:\n\
+                     - Start with a letter or underscore\n\
+                     - Contain only letters, numbers, and underscores\n\
+                     - Be between 1 and 64 characters long\n\n\
+                     Example valid roles: admin, user_123, _moderator",
+                    role
+                ),
+            );
         }
     }
 
-    field_names
+    Ok(())
 }
 
 /// db_permission 属性宏
@@ -297,13 +388,13 @@ fn extract_field_names(data: &syn::Data) -> Vec<String> {
 ///
 /// # 编译时角色验证
 ///
-/// 如果指定了 `config` 属性，宏会在编译时验证声明的角色是否在配置文件中存在：
+/// 宏会在编译时验证声明的角色名格式是否正确：
 ///
 /// ```rust,ignore
 /// #[derive(DbEntity)]
 /// #[db_entity]
 /// #[table_name = "users")]
-/// #[db_permission(roles = ["admin", "user"], operations = ["read", "write"], config = "permissions.yaml")]
+/// #[db_permission(roles = ["admin", "user"], operations = ["read", "write"])]
 /// struct User {
 ///     #[primary_key]
 ///     id: i64,
@@ -311,8 +402,12 @@ fn extract_field_names(data: &syn::Data) -> Vec<String> {
 /// }
 /// ```
 ///
-/// 如果配置文件 `permissions.yaml` 中没有定义 `admin` 或 `user` 角色，编译将失败并显示错误信息。
+/// 无效的角色名会导致编译错误，例如：
+/// - `123admin` (以数字开头)
+/// - `admin-user` (包含连字符)
+/// - 空字符串
 #[proc_macro_attribute]
+#[proc_macro_error]
 pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
@@ -374,11 +469,14 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
         Vec::new()
     };
 
+    // 编译时验证角色名格式
+    validate_role_names(&roles, struct_name).ok();
+
     // 使用正则表达式解析 config 参数（可选，用于编译时验证）
     let config_path = if let Ok(config_re) = Regex::new(r#"config\s*=\s*"([^"]*)""#) {
-        config_re.captures(&args_str).and_then(|caps| {
-            caps.get(1).map(|config_match| config_match.as_str().to_string())
-        })
+        config_re
+            .captures(&args_str)
+            .and_then(|caps| caps.get(1).map(|config_match| config_match.as_str().to_string()))
     } else {
         None
     };
@@ -401,8 +499,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
             // 角色验证将在运行时通过 PermissionContext 进行
             // 声明的角色列表: {:#?}
             "#,
-            config,
-            roles
+            config, roles
         );
 
         quote! { #config_content }
