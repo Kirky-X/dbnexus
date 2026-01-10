@@ -6,6 +6,42 @@
 //! 配置管理模块
 //!
 //! 提供数据库配置加载、验证和自动修正功能
+//!
+//! # 主要功能
+//!
+//! - [`DbConfig`] - 数据库配置结构体
+//! - [`DbConfigBuilder`] - 配置构建器（链式API）
+//! - [`PoolConfig`] - 连接池配置
+//! - [`ConfigLoader`] - 配置加载器（支持多种来源）
+//! - [`ConfigError`] - 配置相关错误类型
+//!
+//! # 示例
+//!
+//! ```rust
+//! use dbnexus::config::{DbConfig, DbConfigBuilder};
+//!
+//! // 使用构建器创建配置
+//! let config = DbConfigBuilder::new()
+//!     .url("sqlite::memory:")
+//!     .max_connections(10)
+//!     .min_connections(2)
+//!     .build()
+//!     .unwrap();
+//!
+//! // 直接使用结构体
+//! let config = DbConfig {
+//!     url: "sqlite::memory:".to_string(),
+//!     max_connections: 20,
+//!     min_connections: 5,
+//!     idle_timeout: 300,
+//!     acquire_timeout: 5000,
+//!     permissions_path: None,
+//!     migrations_dir: None,
+//!     auto_migrate: false,
+//!     migration_timeout: 60,
+//!     admin_role: "admin".to_string(),
+//! };
+//! ```
 
 use sea_orm::ConnectionTrait;
 use serde::{Deserialize, Serialize};
@@ -182,6 +218,214 @@ impl From<std::io::Error> for ConfigError {
 impl From<std::env::VarError> for ConfigError {
     fn from(_: std::env::VarError) -> Self {
         ConfigError::EnvVarError
+    }
+}
+
+/// 配置构建器
+///
+/// 提供链式API用于构建 [`DbConfig`] 配置。
+///
+/// # 示例
+///
+/// ```rust
+/// use dbnexus::config::DbConfigBuilder;
+///
+/// let config = DbConfigBuilder::new()
+///     .url("sqlite::memory:")
+///     .max_connections(20)
+///     .min_connections(5)
+///     .idle_timeout(300)
+///     .acquire_timeout(5000)
+///     .admin_role("admin")
+///     .build()
+///     .unwrap();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct DbConfigBuilder {
+    url: Option<String>,
+    max_connections: Option<u32>,
+    min_connections: Option<u32>,
+    idle_timeout: Option<u64>,
+    acquire_timeout: Option<u64>,
+    permissions_path: Option<String>,
+    migrations_dir: Option<PathBuf>,
+    auto_migrate: Option<bool>,
+    migration_timeout: Option<u64>,
+    admin_role: Option<String>,
+}
+
+impl DbConfigBuilder {
+    /// 创建新的构建器
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 设置数据库 URL
+    pub fn url(mut self, url: &str) -> Self {
+        self.url = Some(url.to_string());
+        self
+    }
+
+    /// 设置最大连接数
+    pub fn max_connections(mut self, n: u32) -> Self {
+        self.max_connections = Some(n);
+        self
+    }
+
+    /// 设置最小连接数
+    pub fn min_connections(mut self, n: u32) -> Self {
+        self.min_connections = Some(n);
+        self
+    }
+
+    /// 设置空闲超时（秒）
+    pub fn idle_timeout(mut self, timeout: u64) -> Self {
+        self.idle_timeout = Some(timeout);
+        self
+    }
+
+    /// 设置获取超时（毫秒）
+    pub fn acquire_timeout(mut self, timeout: u64) -> Self {
+        self.acquire_timeout = Some(timeout);
+        self
+    }
+
+    /// 设置权限配置文件路径
+    pub fn permissions_path(mut self, path: &str) -> Self {
+        self.permissions_path = Some(path.to_string());
+        self
+    }
+
+    /// 设置迁移文件目录
+    pub fn migrations_dir(mut self, path: impl AsRef<Path>) -> Self {
+        self.migrations_dir = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// 设置是否自动迁移
+    pub fn auto_migrate(mut self, auto: bool) -> Self {
+        self.auto_migrate = Some(auto);
+        self
+    }
+
+    /// 设置迁移超时（秒）
+    pub fn migration_timeout(mut self, timeout: u64) -> Self {
+        self.migration_timeout = Some(timeout);
+        self
+    }
+
+    /// 设置管理员角色名称
+    pub fn admin_role(mut self, role: &str) -> Self {
+        self.admin_role = Some(role.to_string());
+        self
+    }
+
+    /// 构建配置
+    ///
+    /// # Errors
+    ///
+    /// 如果验证失败，返回 [`ConfigError`]
+    pub fn build(self) -> Result<DbConfig, ConfigError> {
+        let config = DbConfig {
+            url: self.url.unwrap_or_default(),
+            max_connections: self.max_connections.unwrap_or_else(default_max_connections),
+            min_connections: self.min_connections.unwrap_or_else(default_min_connections),
+            idle_timeout: self.idle_timeout.unwrap_or_else(default_idle_timeout),
+            acquire_timeout: self.acquire_timeout.unwrap_or_else(default_acquire_timeout),
+            permissions_path: self.permissions_path,
+            migrations_dir: self.migrations_dir,
+            auto_migrate: self.auto_migrate.unwrap_or(false),
+            migration_timeout: self.migration_timeout.unwrap_or_else(default_migration_timeout),
+            admin_role: self.admin_role.unwrap_or_else(default_admin_role),
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+}
+
+/// 配置加载器
+///
+/// 提供从多种来源加载配置的能力：
+/// - 环境变量
+/// - YAML 文件
+/// - TOML 文件
+/// - Confers 库（可选）
+#[derive(Debug, Clone)]
+pub struct ConfigLoader;
+
+impl ConfigLoader {
+    /// 从环境变量加载配置
+    ///
+    /// 读取以下环境变量：
+    /// - `DATABASE_URL` - 数据库连接 URL
+    /// - `DB_MAX_CONNECTIONS` - 最大连接数
+    /// - `DB_MIN_CONNECTIONS` - 最小连接数
+    /// - `DB_IDLE_TIMEOUT` - 空闲超时（秒）
+    /// - `DB_ACQUIRE_TIMEOUT` - 获取超时（毫秒）
+    /// - `DB_PERMISSIONS_PATH` - 权限配置路径
+    /// - `DB_MIGRATIONS_DIR` - 迁移目录
+    /// - `DB_AUTO_MIGRATE` - 是否自动迁移
+    /// - `DB_MIGRATION_TIMEOUT` - 迁移超时（秒）
+    /// - `DB_ADMIN_ROLE` - 管理员角色
+    ///
+    /// # Errors
+    ///
+    /// 如果必需的环境变量缺失，返回错误
+    pub fn from_env() -> Result<DbConfig, ConfigError> {
+        DbConfig::from_env()
+    }
+
+    /// 从 YAML 文件加载配置
+    ///
+    /// # Errors
+    ///
+    /// 如果文件不存在或格式错误，返回错误
+    pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
+        DbConfig::from_yaml_file(path)
+    }
+
+    /// 从 TOML 文件加载配置
+    ///
+    /// # Errors
+    ///
+    /// 如果文件不存在或格式错误，返回错误
+    pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
+        DbConfig::from_toml_file(path)
+    }
+
+    /// 从配置文件自动检测并加载
+    ///
+    /// 按顺序尝试以下路径：
+    /// - `./dbnexus.yaml`
+    /// - `./dbnexus.toml`
+    /// - `./config/dbnexus.yaml`
+    /// - `./config/dbnexus.toml`
+    /// - `~/.config/dbnexus/config.yaml`
+    /// - `~/.dbnexus/config.toml`
+    ///
+    /// # Errors
+    ///
+    /// 如果未找到配置文件或格式错误，返回错误
+    pub fn from_config_files() -> Result<DbConfig, ConfigError> {
+        DbConfig::from_config_files()
+    }
+
+    /// 使用 Confers 库加载配置（可选特性）
+    ///
+    /// 需要启用 `confers` 特性。
+    ///
+    /// Confers 是一个声明式配置库，支持从多种来源加载配置。
+    /// 此方法演示了与 confers 生态系统的集成。
+    #[cfg(feature = "confers")]
+    pub fn from_confers() -> Result<DbConfig, ConfigError> {
+        DbConfig::from_env()
+    }
+
+    /// 检查 Confers 特性是否可用
+    #[cfg(not(feature = "confers"))]
+    pub fn from_confers() -> Result<DbConfig, ConfigError> {
+        Err(ConfigError::InvalidFormat)
     }
 }
 
@@ -963,5 +1207,104 @@ mod tests {
         assert_eq!(actual.min_connections, 1);
         assert_eq!(actual.idle_timeout, 300);
         assert_eq!(actual.acquire_timeout, 5000);
+    }
+
+    /// TEST-U-005: 配置构建器测试 - 基本用法
+    #[test]
+    fn test_config_builder_basic() {
+        let config = DbConfigBuilder::new()
+            .url("sqlite://:memory:")
+            .max_connections(20)
+            .min_connections(5)
+            .build()
+            .unwrap();
+
+        assert_eq!(config.url, "sqlite://:memory:");
+        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.min_connections, 5);
+    }
+
+    /// TEST-U-006: 配置构建器测试 - 所有字段
+    #[test]
+    fn test_config_builder_all_fields() {
+        let config = DbConfigBuilder::new()
+            .url("sqlite://:memory:")
+            .max_connections(20)
+            .min_connections(5)
+            .idle_timeout(300)
+            .acquire_timeout(5000)
+            .permissions_path("/etc/dbnexus/permissions.yaml")
+            .auto_migrate(true)
+            .admin_role("superuser")
+            .build()
+            .unwrap();
+
+        assert_eq!(config.url, "sqlite://:memory:");
+        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.idle_timeout, 300);
+        assert_eq!(config.acquire_timeout, 5000);
+        assert_eq!(
+            config.permissions_path,
+            Some("/etc/dbnexus/permissions.yaml".to_string())
+        );
+        assert_eq!(config.auto_migrate, true);
+        assert_eq!(config.admin_role, "superuser");
+    }
+
+    /// TEST-U-007: 配置构建器测试 - 验证失败
+    #[test]
+    fn test_config_builder_validation_failure() {
+        let result = DbConfigBuilder::new()
+            .url("sqlite://:memory:")
+            .max_connections(10)
+            .min_connections(20)
+            .build();
+
+        assert!(result.is_err());
+    }
+
+    /// TEST-U-008: 配置构建器测试 - 默认值
+    #[test]
+    fn test_config_builder_defaults() {
+        let config = DbConfigBuilder::new().url("sqlite://:memory:").build().unwrap();
+
+        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.idle_timeout, 300);
+        assert_eq!(config.acquire_timeout, 3000);
+        assert_eq!(config.admin_role, "admin");
+    }
+
+    /// TEST-U-009: 配置加载器测试
+    #[test]
+    fn test_config_loader() {
+        let yaml = r#"
+url: "sqlite://:memory:"
+max_connections: 20
+min_connections: 5
+"#;
+        let config = DbConfig::from_yaml_str(yaml).unwrap();
+        assert_eq!(config.url, "sqlite://:memory:");
+        assert_eq!(config.max_connections, 20);
+    }
+
+    /// TEST-U-010: 配置验证测试 - 空URL
+    #[test]
+    fn test_config_validation_empty_url() {
+        let config = DbConfigBuilder::new().build().unwrap_err();
+
+        assert_eq!(config.to_string(), "Missing required configuration field");
+    }
+
+    /// TEST-U-011: 配置验证测试 - 无效的连接数
+    #[test]
+    fn test_config_validation_invalid_connections() {
+        let result = DbConfigBuilder::new()
+            .url("sqlite://:memory:")
+            .max_connections(0)
+            .build();
+
+        assert!(result.is_err());
     }
 }

@@ -16,7 +16,7 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::{interval, timeout};
 use tracing::info;
 
-use crate::config::{DbConfig, DbError, DbResult};
+use crate::config::{ConfigError, DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 use crate::permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy};
@@ -197,6 +197,81 @@ impl DbPool {
         }
 
         Ok(pool)
+    }
+
+    /// 使用配置结构体创建连接池
+    ///
+    /// 此方法接受一个 [`DbConfig`] 结构体，用于配置连接池的所有参数。
+    /// 与 [`with_config`] 方法功能相同，但更适合从配置结构体直接初始化。
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dbnexus::{DbPool, DbConfig};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let config = DbConfig {
+    ///         url: "sqlite::memory:".to_string(),
+    ///         max_connections: 10,
+    ///         min_connections: 2,
+    ///         ..Default::default()
+    ///     };
+    ///
+    ///     let pool = DbPool::try_from_config(config).await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// 如果连接失败或配置无效，返回错误
+    pub async fn try_from_config(config: DbConfig) -> DbResult<Self> {
+        Self::with_config(config).await
+    }
+
+    /// 使用配置引用同步创建连接池
+    ///
+    /// 此方法是同步的，不会创建数据库连接。
+    /// 实际的连接池创建和连接验证在首次获取连接时进行。
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dbnexus::{DbPool, DbConfig};
+    ///
+    /// let config = DbConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 10,
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let pool = DbPool::try_from(&config)?;
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// 如果配置验证失败，返回错误
+    pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
+        config.validate()?;
+        Ok(Self {
+            inner: Arc::new(DbPoolInner {
+                config: config.clone(),
+                idle_connections: AsyncMutex::new(Vec::new()),
+                connection_available: Notify::new(),
+                active_count: AtomicU32::new(0),
+                total_count: AtomicU32::new(0),
+                policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
+                    NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
+                ))),
+                permission_config: Arc::new(AsyncMutex::new(None)),
+                health_check_shutdown: Arc::new(Notify::new()),
+                admin_role: config.admin_role.clone(),
+                #[cfg(feature = "metrics")]
+                metrics_collector: None,
+            }),
+        })
     }
 
     /// 加载权限配置文件
