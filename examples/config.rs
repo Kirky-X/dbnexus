@@ -1,0 +1,76 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
+//! 配置管理示例
+//!
+//! 演示 DB Nexus 的多种配置初始化方式。
+
+use dbnexus::{DbPool, config::DbConfigBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("=== DB Nexus 配置管理示例 ===\n");
+
+    // 示例 1: 使用构建器创建配置
+    println!("1. 使用配置构建器:");
+    let config = DbConfigBuilder::new()
+        .url("sqlite://:memory:")
+        .max_connections(20)
+        .min_connections(5)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
+
+    println!("   URL: {}", config.url);
+    println!("   Max connections: {}", config.max_connections);
+    println!("   Min connections: {}", config.min_connections);
+
+    // 示例 2: 使用结构体创建配置
+    println!("\n2. 使用配置结构体:");
+    let config = dbnexus::DbConfig {
+        url: "sqlite://:memory:".to_string(),
+        max_connections: 10,
+        min_connections: 2,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+        permissions_path: None,
+        migrations_dir: None,
+        auto_migrate: false,
+        migration_timeout: 60,
+        admin_role: "admin".to_string(),
+    };
+
+    println!("   URL: {}", config.url);
+    println!("   Max connections: {}", config.max_connections);
+
+    // 示例 3: 使用 try_from_config 初始化连接池
+    println!("\n3. 使用 try_from_config 初始化连接池:");
+    let config = DbConfigBuilder::new()
+        .url("sqlite://:memory:")
+        .max_connections(10)
+        .build()
+        .unwrap();
+
+    let pool = DbPool::try_from_config(config).await?;
+    println!("   连接池创建成功!");
+    println!("   池状态: {:?}", pool.status());
+
+    // 示例 4: 使用 try_from 同步初始化
+    println!("\n4. 使用 try_from 同步初始化:");
+    let config = DbConfigBuilder::new()
+        .url("sqlite://:memory:")
+        .max_connections(5)
+        .build()
+        .unwrap();
+
+    let pool = DbPool::try_from(&config)?;
+    println!("   连接池同步创建成功!");
+    println!("   池状态: {:?}", pool.status());
+
+    println!("\n=== 所有示例完成 ===");
+    Ok(())
+}
