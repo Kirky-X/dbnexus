@@ -524,19 +524,21 @@ async fn rollback_migration(
 ) -> DbResult<()> {
     use sea_orm::{ConnectionTrait, TransactionTrait};
 
-    // 删除迁移历史记录
-    let delete_sql = match db_type {
-        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySql => {
-            format!("DELETE FROM dbnexus_migrations WHERE version = {};", version)
-        }
-        MigrationDatabaseType::Sqlite => {
-            format!("DELETE FROM dbnexus_migrations WHERE version = {};", version)
-        }
+    // 使用参数化查询防止 SQL 注入
+    let backend = match db_type {
+        MigrationDatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+        MigrationDatabaseType::MySql => sea_orm::DbBackend::MySql,
+        MigrationDatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
     };
+    let delete_sql = sea_orm::Statement::from_sql_and_values(
+        backend,
+        "DELETE FROM dbnexus_migrations WHERE version = ?".to_string(),
+        vec![version.into()],
+    );
 
     let txn: sea_orm::DatabaseTransaction = executor.connection.begin().await.map_err(DbError::Connection)?;
 
-    txn.execute_unprepared(&delete_sql).await.map_err(DbError::Connection)?;
+    txn.execute_raw(delete_sql).await.map_err(DbError::Connection)?;
 
     txn.commit().await.map_err(DbError::Connection)?;
 
@@ -733,31 +735,21 @@ async fn parse_and_apply_migration(
         txn.execute_unprepared(&up_sql).await.map_err(DbError::Connection)?;
     }
 
-    // 记录迁移历史
-    let insert_sql = match db_type {
-        MigrationDatabaseType::Postgres | MigrationDatabaseType::MySql => {
-            format!(
-                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) \
-                 VALUES ({}, '{}', '{}', 'migration_v{}.sql');",
-                version,
-                description.replace('\'', "''"),
-                chrono::Utc::now().to_rfc3339(),
-                version
-            )
-        }
-        MigrationDatabaseType::Sqlite => {
-            format!(
-                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) \
-                 VALUES ({}, '{}', '{}', 'migration_v{}.sql');",
-                version,
-                description.replace('\'', "''"),
-                chrono::Utc::now().to_rfc3339(),
-                version
-            )
-        }
+    // 记录迁移历史（使用参数化查询防止 SQL 注入）
+    let backend = match db_type {
+        MigrationDatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+        MigrationDatabaseType::MySql => sea_orm::DbBackend::MySql,
+        MigrationDatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
     };
+    let applied_at = chrono::Utc::now().to_rfc3339();
+    let file_path = format!("migration_v{}.sql", version);
+    let insert_sql = sea_orm::Statement::from_sql_and_values(
+        backend,
+        "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)".to_string(),
+        vec![version.into(), description.into(), applied_at.into(), file_path.into()],
+    );
 
-    txn.execute_unprepared(&insert_sql).await.map_err(DbError::Connection)?;
+    txn.execute_raw(insert_sql).await.map_err(DbError::Connection)?;
 
     txn.commit().await.map_err(DbError::Connection)?;
 
