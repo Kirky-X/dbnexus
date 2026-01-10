@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::RwLock;
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -36,6 +38,93 @@ impl std::fmt::Display for PermissionAction {
             PermissionAction::Update => write!(f, "UPDATE"),
             PermissionAction::Delete => write!(f, "DELETE"),
         }
+    }
+}
+
+/// 简单速率限制器
+///
+/// 使用固定时间窗口算法限制请求频率
+#[derive(Debug, Clone)]
+pub struct RateLimiter {
+    /// 每个时间窗口允许的最大请求数
+    max_requests: u32,
+    /// 时间窗口大小
+    window_duration: Duration,
+    /// 请求记录存储
+    requests: Arc<RwLock<HashMap<String, Vec<Instant>>>>,
+}
+
+impl RateLimiter {
+    /// 创建新的速率限制器
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - 每个时间窗口允许的最大请求数
+    /// * `window_duration` - 时间窗口大小
+    pub fn new(max_requests: u32, window_duration: Duration) -> Self {
+        Self {
+            max_requests,
+            window_duration,
+            requests: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// 检查是否允许请求
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 速率限制的键（如 IP 地址、用户 ID）
+    ///
+    /// # Returns
+    ///
+    /// 如果允许请求返回 true，否则返回 false
+    pub async fn check(&self, key: &str) -> bool {
+        let now = Instant::now();
+        let window_start = now - self.window_duration;
+
+        let mut requests = self.requests.write().await;
+
+        // 清理过期的请求记录
+        if let Some(timestamps) = requests.get_mut(key) {
+            timestamps.retain(|&t| t > window_start);
+        }
+
+        // 检查是否超过限制
+        let count = requests.entry(key.to_string()).or_default().len();
+        if count < self.max_requests as usize {
+            requests.get_mut(key).unwrap().push(now);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 获取剩余请求数量
+    pub async fn remaining(&self, key: &str) -> u32 {
+        let now = Instant::now();
+        let window_start = now - self.window_duration;
+
+        let requests = self.requests.read().await;
+
+        if let Some(timestamps) = requests.get(key) {
+            let valid_count = timestamps.iter().filter(|&&t| t > window_start).count();
+            self.max_requests.saturating_sub(valid_count as u32)
+        } else {
+            self.max_requests
+        }
+    }
+
+    /// 重置指定键的速率限制
+    pub async fn reset(&self, key: &str) {
+        let mut requests = self.requests.write().await;
+        requests.remove(key);
+    }
+}
+
+/// 默认速率限制配置
+impl Default for RateLimiter {
+    fn default() -> Self {
+        Self::new(100, Duration::from_secs(60))
     }
 }
 
@@ -216,10 +305,17 @@ pub struct PermissionContext {
 
     /// 权限策略 LRU 缓存（使用 tokio 异步锁保护以支持异步上下文）
     policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
+
+    /// 权限检查速率限制器
+    rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 /// LRU 缓存容量默认值
 const DEFAULT_CACHE_CAPACITY: usize = 256;
+
+/// 权限检查速率限制默认值
+const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 
 impl Default for PermissionContext {
     fn default() -> Self {
@@ -228,19 +324,49 @@ impl Default for PermissionContext {
 }
 
 impl PermissionContext {
-    /// 创建新的权限上下文（使用默认缓存大小）
+    /// 创建新的权限上下文（使用默认缓存大小和速率限制）
     pub fn new(role: String, policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>) -> Self {
-        Self { role, policy_cache }
+        Self {
+            role,
+            policy_cache,
+            rate_limiter: Some(Arc::new(RateLimiter::new(
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+            ))),
+        }
     }
 
     /// 创建新的权限上下文（使用自定义缓存大小）
     pub fn with_cache_size(role: String, cache_capacity: usize) -> Self {
-        // 确保缓存容量至少为 1
         let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
         Self {
             role,
             policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
                 NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
+            ))),
+            rate_limiter: Some(Arc::new(RateLimiter::new(
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+            ))),
+        }
+    }
+
+    /// 创建新的权限上下文（使用自定义缓存大小和速率限制）
+    pub fn with_cache_size_and_rate_limit(
+        role: String,
+        cache_capacity: usize,
+        max_requests: u32,
+        window_secs: u64,
+    ) -> Self {
+        let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
+        Self {
+            role,
+            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
+                NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
+            ))),
+            rate_limiter: Some(Arc::new(RateLimiter::new(
+                max_requests,
+                Duration::from_secs(window_secs),
             ))),
         }
     }
@@ -252,9 +378,21 @@ impl PermissionContext {
 
     /// 检查表访问权限
     ///
-    /// 此方法会先检查缓存，如果缓存未命中则返回 false
-    /// 注意：需要先调用 `load_policy()` 加载权限策略
+    /// 此方法会先检查速率限制，然后检查缓存
     pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
+        // 检查速率限制
+        if let Some(limiter) = &self.rate_limiter {
+            if !limiter.check(&self.role).await {
+                tracing::warn!(
+                    target: "security",
+                    "Rate limit exceeded for role '{}' on table '{}'",
+                    self.role,
+                    table
+                );
+                return false;
+            }
+        }
+
         let mut cache = self.policy_cache.lock().await;
 
         // 尝试从缓存获取
@@ -291,6 +429,19 @@ impl PermissionContext {
         operation: &PermissionAction,
         config: &PermissionConfig,
     ) -> bool {
+        // 检查速率限制
+        if let Some(limiter) = &self.rate_limiter {
+            if !limiter.check(&self.role).await {
+                tracing::warn!(
+                    target: "security",
+                    "Rate limit exceeded for role '{}' on table '{}'",
+                    self.role,
+                    table
+                );
+                return false;
+            }
+        }
+
         let mut cache = self.policy_cache.lock().await;
 
         // 尝试从缓存获取
@@ -540,5 +691,66 @@ roles:
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("has no operations defined")));
+    }
+
+    /// TEST-U-019: 速率限制器测试 - 基本功能
+    #[tokio::test]
+    async fn test_rate_limiter_basic() {
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60));
+
+        // 前3个请求应该允许
+        assert!(limiter.check("user1").await);
+        assert!(limiter.check("user1").await);
+        assert!(limiter.check("user1").await);
+
+        // 第4个请求应该被拒绝
+        assert!(!limiter.check("user1").await);
+    }
+
+    /// TEST-U-020: 速率限制器测试 - 不同键独立计数
+    #[tokio::test]
+    async fn test_rate_limiter_different_keys() {
+        let limiter = RateLimiter::new(2, std::time::Duration::from_secs(60));
+
+        assert!(limiter.check("user1").await);
+        assert!(limiter.check("user1").await);
+        assert!(!limiter.check("user1").await);
+
+        assert!(limiter.check("user2").await);
+        assert!(limiter.check("user2").await);
+        assert!(!limiter.check("user2").await);
+    }
+
+    /// TEST-U-021: 速率限制器测试 - 重置功能
+    #[tokio::test]
+    async fn test_rate_limiter_reset() {
+        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60));
+
+        assert!(limiter.check("user1").await);
+        assert!(!limiter.check("user1").await);
+
+        limiter.reset("user1").await;
+
+        assert!(limiter.check("user1").await);
+    }
+
+    /// TEST-U-022: 速率限制器测试 - 剩余请求计数
+    #[tokio::test]
+    async fn test_rate_limiter_remaining() {
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60));
+
+        assert_eq!(limiter.remaining("user1").await, 3);
+
+        limiter.check("user1").await;
+        assert_eq!(limiter.remaining("user1").await, 2);
+
+        limiter.check("user1").await;
+        assert_eq!(limiter.remaining("user1").await, 1);
+
+        limiter.check("user1").await;
+        assert_eq!(limiter.remaining("user1").await, 0);
+
+        assert!(!limiter.check("user1").await);
+        assert_eq!(limiter.remaining("user1").await, 0);
     }
 }
