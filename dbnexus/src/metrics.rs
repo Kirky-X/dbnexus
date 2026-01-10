@@ -18,6 +18,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+/// 最大延迟样本数（滑动窗口大小）
+const MAX_LATENCY_SAMPLES: usize = 10000;
+
 /// 延迟百分位数据
 #[derive(Debug, Clone, Default)]
 pub struct LatencyPercentiles {
@@ -307,11 +310,11 @@ impl PoolMetrics {
     }
 }
 
-/// 延迟样本存储（使用锁保护）
+/// 延迟样本存储（使用滑动窗口限制内存使用）
 #[derive(Debug)]
 struct LatencyStorage {
-    /// 存储的延迟样本
-    samples: Vec<u64>,
+    /// 存储的延迟样本（滑动窗口，使用 VecDeque 实现）
+    samples: VecDeque<u64>,
     /// 最小延迟
     min: u64,
     /// 最大延迟
@@ -321,14 +324,19 @@ struct LatencyStorage {
 impl LatencyStorage {
     fn new() -> Self {
         Self {
-            samples: Vec::with_capacity(10000),
+            samples: VecDeque::with_capacity(MAX_LATENCY_SAMPLES),
             min: u64::MAX,
             max: 0,
         }
     }
 
     fn record(&mut self, latency_ns: u64) {
-        self.samples.push(latency_ns);
+        // 使用滑动窗口：如果达到最大容量，移除最旧的样本
+        if self.samples.len() >= MAX_LATENCY_SAMPLES {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(latency_ns);
+
         if latency_ns < self.min {
             self.min = latency_ns;
         }
@@ -342,7 +350,7 @@ impl LatencyStorage {
             return LatencyPercentiles::default();
         }
 
-        let mut sorted = self.samples.clone();
+        let mut sorted: Vec<_> = self.samples.iter().cloned().collect();
         sorted.sort();
 
         let len = sorted.len();

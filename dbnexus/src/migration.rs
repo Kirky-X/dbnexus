@@ -784,11 +784,19 @@ impl MigrationExecutor {
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        // 使用基本的字符串转义防止 SQL 注入
-        let escaped_version = version.to_string().replace('\'', "''");
-        let check_query = format!("SELECT 1 FROM dbnexus_migrations WHERE version = '{}'", escaped_version);
+        // 使用参数化查询防止 SQL 注入
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+        };
+        let check_query = sea_orm::Statement::from_sql_and_values(
+            backend,
+            "SELECT 1 FROM dbnexus_migrations WHERE version = ?".to_string(),
+            vec![version.into()],
+        );
 
-        match self.connection.execute_unprepared(&check_query).await {
+        match self.connection.execute_raw(check_query).await {
             Ok(result) => Ok(result.rows_affected() > 0),
             Err(_) => Ok(false),
         }
@@ -921,7 +929,17 @@ impl MigrationExecutor {
 
     /// 回滚指定版本的迁移
     pub async fn rollback_migration(&mut self, version: u32) -> Result<(), crate::config::DbError> {
-        let delete_sql = format!("DELETE FROM dbnexus_migrations WHERE version = {};", version);
+        // 使用参数化查询防止 SQL 注入
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+        };
+        let delete_sql = sea_orm::Statement::from_sql_and_values(
+            backend,
+            "DELETE FROM dbnexus_migrations WHERE version = ?".to_string(),
+            vec![version.into()],
+        );
 
         let txn: sea_orm::DatabaseTransaction = self
             .connection
@@ -929,7 +947,7 @@ impl MigrationExecutor {
             .await
             .map_err(crate::config::DbError::Connection)?;
 
-        txn.execute_unprepared(&delete_sql)
+        txn.execute_raw(delete_sql)
             .await
             .map_err(crate::config::DbError::Connection)?;
 

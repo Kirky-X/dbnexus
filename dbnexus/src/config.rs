@@ -223,6 +223,14 @@ pub struct DbConfig {
     /// 迁移超时时间（秒）
     #[serde(default = "default_migration_timeout")]
     pub migration_timeout: u64,
+
+    /// 管理员角色名称（用于 DDL 操作）
+    #[serde(default = "default_admin_role")]
+    pub admin_role: String,
+}
+
+fn default_admin_role() -> String {
+    "admin".to_string()
 }
 
 fn default_max_connections() -> u32 {
@@ -238,7 +246,7 @@ fn default_idle_timeout() -> u64 {
 }
 
 fn default_acquire_timeout() -> u64 {
-    5000
+    3000
 }
 
 fn default_migration_timeout() -> u64 {
@@ -290,6 +298,7 @@ impl DbConfig {
                 .unwrap_or_else(|_| "60".to_string())
                 .parse()
                 .unwrap_or(60),
+            admin_role: std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string()),
         })
     }
 
@@ -899,6 +908,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
@@ -919,6 +929,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);
@@ -942,6 +953,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);

@@ -60,6 +60,9 @@ pub(crate) struct DbPoolInner {
     /// 后台健康检查任务（用于优雅关闭）
     health_check_shutdown: Arc<Notify>,
 
+    /// 管理员角色名称
+    admin_role: String,
+
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
     pub(crate) metrics_collector: Option<Arc<MetricsCollector>>,
@@ -121,6 +124,7 @@ impl DbPool {
                 policy_cache,
                 permission_config: Arc::new(AsyncMutex::new(permission_config)),
                 health_check_shutdown: Arc::new(Notify::new()),
+                admin_role: corrected_config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
             }),
@@ -949,10 +953,16 @@ impl Session {
         // 检查是否为 DDL 操作（使用更安全的检测方法）
         if self.is_ddl_operation(sql) {
             // DDL 操作只允许管理员角色执行
-            if self.role() != "admin" {
-                return Err(DbError::Permission(
-                    "Permission denied: only 'admin' role can execute DDL operations".to_string(),
-                ));
+            if self.role() != self.pool.admin_role {
+                tracing::warn!(
+                    target: "security",
+                    "DDL operation blocked: role '{}' attempted DDL",
+                    self.role(),
+                );
+                return Err(DbError::Permission(format!(
+                    "Permission denied: only '{}' role can execute DDL operations",
+                    self.pool.admin_role
+                )));
             }
         } else if let Some((table_name, action)) = self.parse_sql_operation(sql) {
             // 检查是否为系统表，系统表跳过权限检查
@@ -971,6 +981,13 @@ impl Session {
                 if has_permission_config {
                     // DML 操作：检查表级权限
                     if !self.permission_ctx.check_table_access(&table_name, &action).await {
+                        tracing::warn!(
+                            target: "security",
+                            "Permission denied: role '{}' denied {} on table '{}'",
+                            self.role(),
+                            action,
+                            table_name,
+                        );
                         return Err(DbError::Permission(format!(
                             "Permission denied: role '{}' does not have permission to '{}' on table '{}'",
                             self.role(),
@@ -982,6 +999,11 @@ impl Session {
             }
         } else {
             // 如果无法解析 SQL 且不是 DDL，拒绝执行以确保安全
+            tracing::warn!(
+                target: "security",
+                "Unknown SQL operation blocked: role '{}' attempted unknown SQL",
+                self.role(),
+            );
             return Err(DbError::Permission(
                 "Unable to parse SQL statement for permission check, please use explicit methods".to_string(),
             ));
@@ -1207,10 +1229,16 @@ impl Session {
         // 首先检查是否是 DDL 操作
         if self.is_ddl_operation(sql) {
             // DDL 操作只允许管理员角色执行
-            if self.role() != "admin" {
-                return Err(DbError::Permission(
-                    "Permission denied: only 'admin' role can execute DDL operations".to_string(),
-                ));
+            if self.role() != self.pool.admin_role {
+                tracing::warn!(
+                    target: "security",
+                    "DDL operation blocked: role '{}' attempted DDL",
+                    self.role(),
+                );
+                return Err(DbError::Permission(format!(
+                    "Permission denied: only '{}' role can execute DDL operations",
+                    self.pool.admin_role
+                )));
             }
 
             // 管理员执行 DDL，标记为写操作
@@ -1424,6 +1452,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
@@ -1445,6 +1474,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
@@ -1468,6 +1498,7 @@ mod tests {
             migrations_dir: None,
             auto_migrate: false,
             migration_timeout: 60,
+            admin_role: "admin".to_string(),
         };
 
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
