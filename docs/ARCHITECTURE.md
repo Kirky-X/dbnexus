@@ -1,605 +1,239 @@
-# DB Nexus 架构文档
+# DBNexus Architecture
 
-## 目录
+<div align="center">
 
-- [架构概述](#架构概述)
-- [核心组件](#核心组件)
-- [数据流](#数据流)
-- [安全性设计](#安全性设计)
-- [性能优化](#性能优化)
-- [扩展性考虑](#扩展性考虑)
+**Enterprise-grade database abstraction layer architecture**
 
----
+</div>
 
-## 架构概述
+## Overview
 
-### 系统架构图
+DBNexus is built on a modular architecture that separates concerns while maintaining tight integration between components. The architecture follows a layered approach with clear boundaries between core functionality and optional extensions.
+
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           应用层                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │  Web API    │  │  gRPC       │  │  CLI        │  │  定时任务   │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         DB Nexus 抽象层                              │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                    DbPool (连接池管理)                         │  │
-│  │  - 连接创建和销毁                                              │  │
-│  │  - 连接复用和回收                                              │  │
-│  │  - 负载均衡                                                    │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                │                                     │
-│                                ▼                                     │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                    Session (会话管理)                          │  │
-│  │  - RAII 连接包装                                              │  │
-│  │  - 事务管理                                                    │  │
-│  │  - 权限上下文                                                  │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                │                                     │
-│              ┌─────────────────┼─────────────────┐                  │
-│              ▼                 ▼                 ▼                  │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
-│  │  权限控制层       │ │  缓存层          │ │  审计层          │    │
-│  │  - 声明式宏       │ │  - LRU 缓存      │ │  - 操作记录      │    │
-│  │  - RBAC 支持      │ │  - TTL 过期      │ │  - 追踪          │    │
-│  │  - 引擎可插拔     │ │  - 穿透防护      │ │  - 告警          │    │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
-│                                │                                     │
-│                                ▼                                     │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                    宏生成层                                    │  │
-│  │  - #[derive(DbEntity)]                                        │  │
-│  │  - #[db_crud]                                                 │  │
-│  │  - #[db_permission]                                           │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          Sea-ORM + sqlx                              │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐    │
-│  │    SQLite        │ │   PostgreSQL     │ │     MySQL        │    │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        Application Layer                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   CLI Tool   │  │   Examples   │  │   Tests      │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                  │
+├──────────────────────────┬─────────────────────────────────────┤
+│                          │                                     │
+│  ┌──────────────────────▼──────────────────────┐               │
+│  │              Core Library (dbnexus)          │               │
+│  │  ┌─────────────────────────────────────────┐│               │
+│  │  │              Connection Pool             ││               │
+│  │  │        (DbPool, Session Management)      ││               │
+│  │  └─────────────────────────────────────────┘│               │
+│  │                                             │               │
+│  │  ┌─────────────────────────────────────────┐│               │
+│  │  │            Permission Engine             ││               │
+│  │  │     (Role Policies, Access Control)      ││               │
+│  │  └─────────────────────────────────────────┘│               │
+│  │                                             │               │
+│  │  ┌─────────────────────────────────────────┐│               │
+│  │  │            Audit System                  ││               │
+│  │  │      (Logging, Sanitization, Alerts)     ││               │
+│  │  └─────────────────────────────────────────┘│               │
+│  │                                             │               │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  │               │
+│  │  │ Caching  │  │Metrics   │  │ Tracing  │  │               │
+│  │  └──────────┘  └──────────┘  └──────────┘  │               │
+│  └──────────────────────────┬──────────────────┘               │
+│                             │                                    │
+├─────────────────────────────▼────────────────────────────────────┤
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │                     Sea-ORM Layer                           │  │
+│  │     (Query Builder, Transaction Management, Migrations)     │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+├─────────────────────────────▼────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   SQLite     │  │  PostgreSQL  │  │    MySQL     │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### 设计原则
+## Core Components
 
-1. **简洁性优先** - 默认采用简单直接的实现，避免过度设计
-2. **类型安全** - 充分利用 Rust 的类型系统和借用检查器
-3. **零成本抽象** - 宏生成的代码应该是高效的
-4. **可扩展性** - 通过特性标志和可插拔组件支持扩展
+### 1. Connection Pool (pool.rs)
 
-### 核心目标
+The connection pool manages database connections efficiently:
 
-- **高性能**: 连接池、缓存、异步 I/O
-- **高安全**: 权限控制、审计日志、SQL 注入防护
-- **易用性**: 声明式宏、RAII 资源管理、清晰的错误处理
-- **可维护**: 清晰的模块划分、一致的代码风格
+- **DbPool**: Main pool orchestrator
+  - Configuration management
+  - Connection creation and recycling
+  - Background health checks
+  - Graceful shutdown
 
----
+- **Session**: Individual connection wrapper
+  - Permission context attachment
+  - Transaction management
+  - Query execution
 
-## 核心组件
+**Key Features**:
+- Configurable min/max connections
+- Idle connection timeout
+- Connection validation on acquire
+- Automatic reconnection for maintaining min connections
 
-### 连接池 (DbPool)
+### 2. Permission Engine (permission.rs, permission_engine.rs)
 
-连接池是 DB Nexus 的核心组件，负责管理数据库连接的生命周期。
+Role-based access control system:
 
-#### 职责
+- **PermissionConfig**: YAML-based policy definition
+- **RolePolicy**: Role to table/operation mappings
+- **PermissionContext**: Runtime permission checks
+- **RateLimiter**: Request rate limiting (100 req/60s default)
 
-- **连接管理**: 创建、维护和回收数据库连接
-- **负载均衡**: 在多个连接之间分配请求
-- **健康检查**: 检测和替换失效的连接
-- **超时控制**: 管理连接获取和空闲超时
-
-#### 设计决策
-
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 连接复用 | 池化模式 | 减少连接建立开销 |
-| 分配策略 | FIFO + 优先级 | 简单且公平 |
-| 空闲处理 | LRU 淘汰 | 平衡内存使用和性能 |
-| 健康检测 | 轻量查询 | 最小化性能影响 |
-
-#### 代码结构
-
-```
-DbPool
-├── ConnectionManager    // 连接管理器
-├── PoolInner           // 内部状态
-├── Spawner             // 任务调度器
-└── PoolStatus          // 状态信息
+**Permission Model**:
+```yaml
+roles:
+  <role_name>:
+    - table: <table_name|*>
+      operations: [SELECT, INSERT, UPDATE, DELETE]
 ```
 
-### 会话 (Session)
+### 3. Audit System (audit.rs)
 
-Session 是连接池与用户代码之间的桥梁，提供 RAII 风格的资源管理。
+Comprehensive audit logging:
 
-#### 职责
+- **AuditEvent**: Individual audit records
+- **AuditLogger**: Event logging interface
+- **AuditStorage**: Storage backends (memory, future: database)
+- **Data Sanitization**: Automatic sensitive data redaction
 
-- **连接包装**: 封装数据库连接
-- **事务管理**: 提供事务 API
-- **权限上下文**: 携带当前用户的权限信息
-- **资源清理**: Drop 时自动释放连接到池中
+**Logged Operations**:
+- CREATE, READ, UPDATE, DELETE
+- DDL operations
+- Permission denials
 
-#### 设计模式
+### 4. Metrics (metrics.rs)
 
-```rust
-// RAII 模式示例
-let session = pool.get_session("admin").await?;
+Prometheus-compatible metrics collection:
 
-// Session 在作用域结束时自动:
-// 1. 回滚未提交的事务
-// 2. 释放连接回连接池
-```
+- **PoolMetrics**: Connection pool statistics
+- **LatencyStorage**: Query latency tracking
+- **Percentile Calculation**: P50, P95, P99 latencies
 
-### 宏系统
+### 5. Sharding (sharding.rs)
 
-DB Nexus 提供三层宏系统，实现声明式数据库操作。
+Horizontal scaling support:
 
-#### 第 1 层: #[derive(DbEntity)]
+- **ShardRouter**: Request routing to shards
+- **ShardConfig**: Per-shard configuration
+- **GlobalIndex**: Cross-shard queries
 
-将 Rust struct 映射为 Sea-ORM Entity。
-
-```rust
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users")]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
-}
-```
-
-**生成代码**:
-- `EntityTrait` 实现（表名、主键）
-- `ActiveModel` 结构体
-- `IntoActiveModel` 实现
-
-#### 第 2 层: #[db_crud]
-
-自动生成 CRUD 方法。
-
-```rust
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users")]
-#[db_crud]
-struct User { /* ... */ }
-```
-
-**生成方法**:
-- `insert()` - 插入并返回带 ID 的实体
-- `find_by_id()` - 根据 ID 查询
-- `update()` - 更新记录
-- `delete()` - 删除记录
-- `find_all()` - 查询所有
-- `delete_many()` - 批量删除
-- `count()` - 统计数量
-
-#### 第 3 层: #[db_permission]
-
-声明式权限配置。
-
-```rust
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users")]
-#[db_crud]
-#[db_permission(role = "admin", actions = ["read", "write", "delete"])]
-#[db_permission(role = "user", actions = ["read"])]
-struct User { /* ... */ }
-```
-
-**生成代码**:
-- 权限检查中间件
-- 权限验证逻辑
-
-### 权限引擎
-
-可插拔的权限引擎架构。
+## Configuration Flow
 
 ```
-┌─────────────────────────────────────────┐
-│         应用代码                         │
-└─────────────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────┐
-│      PolicyDecisionPoint (PDP)          │
-│  - 权限决策中心                          │
-│  - 协调 Provider 和 Rules               │
-└─────────────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────┐
-│      PermissionProvider (PP)            │
-│  - YamlPermissionProvider               │
-│  - RbacPermissionProvider               │
-│  - 自定义 Provider                       │
-└─────────────────────────────────────────┘
+Application Config
+       │
+       ▼
+┌──────────────┐
+│  DbConfig    │ ─────► ConfigCorrector (validation/fixes)
+└──────────────┘              │
+       │                      ▼
+       │              ┌──────────────┐
+       │              │  DbPool      │
+       │              └──────────────┘
+       │                     │
+       ▼                     ▼
+┌──────────────�     ┌──────────────┐
+│Permissions   │     │  Sessions    │
+│(YAML Config) │────►│(with Context)│
+└──────────────┘     └──────────────┘
 ```
 
-### 缓存系统
+## Error Handling
 
-多级缓存架构。
-
-```
-┌─────────────────────────────────────────┐
-│           应用查询                       │
-└─────────────────────────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        ▼                   ▼
-   ┌─────────┐         ┌─────────┐
-   │ L1 缓存 │         │ 缓存未中 │
-   │ (内存)  │         │         │
-   └─────────┘         └────┬────┘
-                            │
-                            ▼
-                      ┌─────────┐
-                      │ 数据库  │
-                      └─────────┘
-```
-
-### 审计系统
-
-操作审计追踪。
+DBNexus uses a hierarchical error system:
 
 ```
-┌─────────────┐    操作事件     ┌─────────────┐
-│   应用层     │ ─────────────▶ │  审计模块    │
-└─────────────┘                 └─────────────┘
-                                        │
-                                        ▼
-                              ┌─────────────────┐
-                              │   存储后端       │
-                              │  - 数据库        │
-                              │  - 文件          │
-                              │  - 外部服务      │
-                              └─────────────────┘
+DbError (top-level)
+ ├── Config (configuration errors)
+ ├── Connection (connection issues)
+ ├── Permission (access denied)
+ ├── Migration (migration failures)
+ └── Internal (unexpected errors)
 ```
 
----
+## Concurrency Model
 
-## 数据流
+- **Async Runtime**: Tokio multi-threaded runtime
+- **Connection Pool**: Arc<Mutex> for thread-safe access
+- **Permission Cache**: LRU cache with async mutex
+- **Rate Limiter**: RwLock for concurrent reads/writes
 
-### 查询流程
+## Performance Considerations
 
-```
-1. 用户调用
-   User::find_by_id(&session, 1).await?
-
-2. 权限检查
-   ├── 验证用户角色
-   ├── 检查资源权限
-   └── 记录审计日志
-
-3. 缓存查询
-   ├── 检查 L1 缓存
-   └── 命中则返回
-
-4. 数据库查询
-   ├── 获取连接
-   ├── 执行 SQL
-   └── 返回结果
-
-5. 缓存更新
-   ├── 更新 L1 缓存
-   └── 设置 TTL
-
-6. 返回结果
-```
-
-### 写入流程
+### Connection Pool Sizing
 
 ```
-1. 用户调用
-   User::insert(&session, user).await?
-
-2. 权限检查
-   ├── 验证写入权限
-   └── 记录审计日志
-
-3. 事务开始
-   ├── 获取连接
-   └── 开始事务
-
-4. 数据库写入
-   ├── 执行 INSERT
-   └── 获取自增 ID
-
-5. 缓存失效
-   ├── 删除相关缓存
-   └── 避免脏数据
-
-6. 事务提交
-   └── 返回结果
+max_connections = (CPU cores * 2) + disk_count
+min_connections = 25% of max_connections
 ```
 
-### 分片路由流程
+### Query Optimization
 
-```
-1. 接收请求
-   Order::find_by_id(&session, order_id).await?
+- Prepared statements for repeated queries
+- Connection validation with 2-second timeout
+- Rate limiting to prevent abuse
 
-2. 计算分片
-   ├── 确定分片策略
-   └── 计算目标分片
+### Memory Management
 
-3. 获取分片连接
-   ├── 连接目标分片
-   └── 执行查询
+- Sliding window for latency samples (max 10,000)
+- LRU cache for permission policies (256 entries default)
+- Automatic cleanup of idle connections
 
-4. 合并结果
-   └── 返回给用户
-```
+## Security Measures
 
----
+1. **SQL Injection Prevention**: Parameterized queries throughout
+2. **Rate Limiting**: 100 requests/60s per role
+3. **Data Sanitization**: Automatic password/secret redaction
+4. **Audit Logging**: Security events with target="security"
+5. **Configurable Admin Role**: DB_ADMIN_ROLE environment variable
 
-## 安全性设计
+## Extension Points
 
-### 权限控制
+### Custom Storage Backends
 
-#### RBAC 模型
+Implement the `AuditStorage` trait for custom audit storage.
 
-```
-┌─────────────────────────────────────────┐
-│              角色层次                    │
-│                                         │
-│         ┌───────────┐                   │
-│         │  super    │ ◀── 继承所有角色  │
-│         │   admin   │                   │
-│         └─────┬─────┘                   │
-│               │                         │
-│       ┌───────┴───────┐                 │
-│       ▼               ▼                 │
-│  ┌─────────┐    ┌─────────┐             │
-│  │ manager │    │ user    │             │
-│  └─────────┘    └─────────┘             │
-└─────────────────────────────────────────┘
-```
+### Custom Health Checks
 
-#### 权限粒度
+Extend `validate_and_recreate_connections` for database-specific checks.
 
-| 级别 | 描述 |
-|------|------|
-| 表级 | 控制对整个表的访问 |
-| 行级 | 基于条件的行级过滤（可选） |
-| 列级 | 控制特定列的访问（可选） |
+### Custom Sharding Strategies
 
-### SQL 注入防护
+Implement `ShardRouter` for application-specific routing logic.
 
-```rust
-// 推荐：使用参数化查询
-session.execute_raw(
-    "SELECT * FROM users WHERE id = $1",
-    vec![user_id.into()],
-).await?;
+## Dependencies
 
-// 不推荐：字符串拼接
-let sql = format!("SELECT * FROM users WHERE id = {}", user_id);
-```
+### Core Dependencies
 
-### 连接安全
+- **tokio**: Async runtime
+- **sea-orm**: ORM and query builder
+- **tracing**: Structured logging
+- **serde**: Serialization
 
-```rust
-// PostgreSQL SSL 连接
-let config = DbConfig::new("postgres://user:pass@host/db?sslmode=require");
+### Optional Dependencies
 
-// 连接池加密
-let pool_config = PoolConfig::new()
-    .max_connections(50)
-    .min_connections(5);
-```
+- **prometheus**: Metrics export
+- **opentelemetry**: Distributed tracing
+- **sqlx**: Alternative database driver support
 
-### 审计日志
+## Version
 
-记录所有敏感操作：
+0.1.0
 
-```rust
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users")]
-#[db_audit(operations = ["CREATE", "UPDATE", "DELETE"])]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
-}
-```
+## Authors
 
----
-
-## 性能优化
-
-### 连接池配置
-
-```rust
-let pool_config = PoolConfig::new()
-    .max_connections(100)       // 根据并发需求调整
-    .min_connections(10)        // 保持最小连接数
-    .idle_timeout(600)          // 空闲超时 10 分钟
-    .acquire_timeout(10000);    // 获取超时 10 秒
-```
-
-### 缓存策略
-
-```rust
-// 高频读取、低频修改的数据
-#[db_cache(ttl = 3600, capacity = 10000)]
-struct Product {
-    #[primary_key]
-    id: i64,
-    name: String,
-    price: Decimal,
-}
-```
-
-### 批量操作
-
-```rust
-// 批量插入
-for batch in users.chunks(100) {
-    for user in batch {
-        User::insert(&session, user).await?;
-    }
-}
-```
-
-### 只读副本
-
-```rust
-// 查询使用只读副本
-let read_session = pool.get_session("reader").await?;
-```
-
-### 性能指标
-
-| 指标 | 目标值 | 监控方式 |
-|------|--------|----------|
-| P50 查询延迟 | < 10ms | Prometheus |
-| P99 查询延迟 | < 100ms | Prometheus |
-| 连接池利用率 | < 80% | 内部指标 |
-| 缓存命中率 | > 90% | 内部指标 |
-
----
-
-## 扩展性考虑
-
-### 插件架构
-
-```
-┌─────────────────────────────────────────┐
-│           核心模块                       │
-│  - 连接池                               │
-│  - Session 管理                         │
-│  - 宏生成                               │
-└─────────────────────────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        ▼                   ▼
-   ┌──────────┐       ┌──────────┐
-   │  插件 A  │       │  插件 B  │
-   │  审计日志 │       │  缓存    │
-   └──────────┘       └──────────┘
-```
-
-### 多数据库支持
-
-```rust
-// SQLite
-dbnexus = { features = ["sqlite"] }
-
-// PostgreSQL
-dbnexus = { features = ["postgres"] }
-
-// MySQL
-dbnexus = { features = ["mysql"] }
-```
-
-### 自定义 Provider
-
-```rust
-use dbnexus::permission_engine::{PermissionProvider, TablePermission};
-
-struct CustomPermissionProvider {
-    // 自定义权限存储
-}
-
-impl PermissionProvider for CustomPermissionProvider {
-    fn get_role_permissions(&self, role: &str) -> Option<Vec<TablePermission>> {
-        // 自定义权限获取逻辑
-    }
-
-    fn get_all_roles(&self) -> Vec<String> {
-        // 返回所有角色
-    }
-}
-```
-
-### 未来扩展方向
-
-| 扩展方向 | 描述 | 优先级 |
-|----------|------|--------|
-| 分布式事务 | 跨分片事务支持 | 高 |
-| 多租户支持 | 租户隔离和数据共享 | 中 |
-| 更丰富的缓存策略 | Redis 集成 | 中 |
-| GraphQL 支持 | GraphQL 集成 | 低 |
-| 插件市场 | 社区插件生态 | 低 |
-
----
-
-## 模块关系
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                              lib.rs                                  │
-│                    公共 API 导出和模块组织                            │
-└─────────────────────────────────────────────────────────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│     pool.rs     │  │   session.rs    │  │   config.rs     │
-│   连接池管理     │  │   会话管理      │  │   配置管理      │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  permission.rs  │  │     cache.rs    │  │    audit.rs     │
-│   权限控制      │  │    缓存管理     │  │   审计日志      │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│   sharding.rs   │  │  global_index   │  │   metrics.rs    │
-│    分片管理     │  │   全局索引      │  │   监控指标      │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-```
-
----
-
-## 依赖关系
-
-### 外部依赖
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| Sea-ORM | 2.0.0-rc.22 | 异步 ORM 框架 |
-| Tokio | 1.42 | 异步运行时 |
-| sqlx | 最新 | 数据库驱动 |
-| async-trait | 0.1 | 异步 trait 简化 |
-| chrono | 0.4 | 时间处理 |
-
-### 内部依赖
-
-```
-dbnexus/
-├── dbnexus-macros/    # 过程宏定义
-└── dbnexus/          # 核心实现
-```
-
-### 特性标志
-
-```
-dbnexus
-├── sqlite            # SQLite 支持
-├── postgres         # PostgreSQL 支持
-├── mysql            # MySQL 支持
-├── cache            # 缓存功能
-├── audit            # 审计功能
-├── sharding         # 分片功能
-├── global-index     # 全局索引
-├── metrics          # 监控指标
-├── migration        # 迁移工具
-├── permission-engine # 权限引擎
-└── tracing          # 分布式追踪
-```
+DBNexus Team
