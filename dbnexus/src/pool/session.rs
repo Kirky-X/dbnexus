@@ -60,7 +60,7 @@ pub struct Session {
 
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
-    metrics: Option<Arc<MetricsCollector>>,
+    metrics_collector: Option<Arc<MetricsCollector>>,
 }
 
 impl Session {
@@ -75,7 +75,7 @@ impl Session {
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
         #[cfg(feature = "metrics")]
-        let metrics = pool_inner.metrics.clone();
+        let metrics = pool_inner.metrics_collector.clone();
 
         Session {
             connection: Some(connection),
@@ -87,7 +87,7 @@ impl Session {
             permission_ctx,
             transaction: None,
             #[cfg(feature = "metrics")]
-            metrics,
+            metrics_collector: metrics,
         }
     }
 
@@ -447,8 +447,8 @@ impl Session {
     /// 记录查询指标
     #[cfg(feature = "metrics")]
     fn record_query_metrics(&self, query_type: &str, duration: Duration, success: bool) {
-        if let Some(metrics) = &self.metrics {
-            metrics.record_query(query_type, duration, success);
+        if let Some(metrics) = &self.metrics_collector {
+            metrics.record_query(query_type, duration, success, None);
         }
     }
 
@@ -461,7 +461,7 @@ impl Session {
     /// 记录连接错误
     #[cfg(feature = "metrics")]
     fn record_connection_error(&self) {
-        if let Some(metrics) = &self.metrics {
+        if let Some(metrics) = &self.metrics_collector {
             metrics.record_connection_error();
         }
     }
