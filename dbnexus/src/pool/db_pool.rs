@@ -20,7 +20,9 @@ use tracing::info;
 use crate::config::{ConfigError, DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
+#[cfg(feature = "permission")]
 use crate::permission::{PermissionConfig, RolePolicy};
+#[cfg(feature = "sql-parser")]
 use crate::sql_parser::{SqlParser, is_ddl_operation};
 use super::Session;
 
@@ -55,9 +57,11 @@ pub(crate) struct DbPoolInner {
     pub(crate) total_count: AtomicU32,
 
     /// 权限策略 LRU 缓存（使用 tokio 异步锁）
+    #[cfg(feature = "permission")]
     pub(crate) policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
 
     /// 权限配置（懒加载，使用 tokio 异步锁）
+    #[cfg(feature = "permission")]
     permission_config: Arc<AsyncMutex<Option<PermissionConfig>>>,
 
     /// 后台健康检查任务（用于优雅关闭）
@@ -119,11 +123,13 @@ impl DbPool {
             );
         }
 
+        #[cfg(feature = "permission")]
         let policy_cache = Arc::new(AsyncMutex::new(LruCache::new(
             NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
         )));
 
         // 加载权限配置（如果指定了路径）
+        #[cfg(feature = "permission")]
         let permission_config = Self::load_permission_config(&corrected_config).await;
 
         let pool = Self {
@@ -133,7 +139,9 @@ impl DbPool {
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
+                #[cfg(feature = "permission")]
                 policy_cache,
+                #[cfg(feature = "permission")]
                 permission_config: Arc::new(AsyncMutex::new(permission_config)),
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: corrected_config.admin_role.clone(),
@@ -146,83 +154,90 @@ impl DbPool {
         };
 
         // 启动后台健康检查任务
+        #[cfg(feature = "pool-health-check")]
         pool.start_background_health_check();
 
         // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
-        let initial_connections = pool.inner.config.min_connections;
-        let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
-        let warmup_retries = pool.inner.config.warmup_retries;
+        #[cfg(feature = "pool-warmup")]
+        {
+            let initial_connections = pool.inner.config.min_connections;
+            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
+            let warmup_retries = pool.inner.config.warmup_retries;
 
-        let mut connection_tasks = Vec::new();
+            let mut connection_tasks = Vec::new();
 
-        for _ in 0..initial_connections {
-            let config = corrected_config.clone();
-            connection_tasks.push(async move {
-                let mut retries = 0;
-                let mut last_error = None;
+            for _ in 0..initial_connections {
+                let config = corrected_config.clone();
+                connection_tasks.push(async move {
+                    let mut retries = 0;
+                    let mut last_error = None;
 
-                while retries <= warmup_retries {
-                    match timeout(warmup_timeout, Self::create_connection(&config)).await {
-                        Ok(Ok(conn)) => return Ok(conn),
-                        Ok(Err(e)) => {
-                            last_error = Some(e);
-                            retries += 1;
-                            if retries <= warmup_retries {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
+                    while retries <= warmup_retries {
+                        match timeout(warmup_timeout, Self::create_connection(&config)).await {
+                            Ok(Ok(conn)) => return Ok(conn),
+                            Ok(Err(e)) => {
+                                last_error = Some(e);
+                                retries += 1;
+                                if retries <= warmup_retries {
+                                    tokio::time::sleep(Duration::from_millis(100)).await;
+                                }
+                            }
+                            Err(_) => {
+                                last_error = Some(DbError::Connection(
+                                    sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)
+                                ));
+                                break;
                             }
                         }
-                        Err(_) => {
-                            last_error = Some(DbError::Connection(
-                                sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)
-                            ));
-                            break;
-                        }
+                    }
+
+                    Err(last_error.unwrap_or_else(|| {
+                        DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                    }))
+                });
+            }
+
+            // 并行执行所有连接创建任务
+            let results = futures::future::join_all(connection_tasks).await;
+
+            let mut successful = 0;
+            let mut failed = 0;
+
+            for result in results {
+                match result {
+                    Ok(conn) => {
+                        pool.inner.idle_connections.lock().await.push(conn);
+                        pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
+                        successful += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create initial connection: {}", e);
+                        failed += 1;
                     }
                 }
-
-                Err(last_error.unwrap_or_else(|| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-                }))
-            });
-        }
-
-        // 并行执行所有连接创建任务
-        let results = futures::future::join_all(connection_tasks).await;
-
-        let mut successful = 0;
-        let mut failed = 0;
-
-        for result in results {
-            match result {
-                Ok(conn) => {
-                    pool.inner.idle_connections.lock().await.push(conn);
-                    pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
-                    successful += 1;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to create initial connection: {}", e);
-                    failed += 1;
-                }
             }
-        }
 
-        info!(
-            "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
-            successful, initial_connections, corrected_config.min_connections,
-            corrected_config.max_connections, failed
-        );
+            info!(
+                "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
+                successful, initial_connections, corrected_config.min_connections,
+                corrected_config.max_connections, failed
+            );
+        }
 
         // 加载权限策略到缓存
-        let permission_config_guard = pool.inner.permission_config.lock().await;
+        #[cfg(feature = "permission")]
+        {
+            let permission_config_guard = pool.inner.permission_config.lock().await;
 
-        if let Some(ref config) = *permission_config_guard {
-            let mut cache = pool.inner.policy_cache.lock().await;
-            for (role, policy) in &config.roles {
-                cache.put(role.clone(), policy.clone());
+            if let Some(ref config) = *permission_config_guard {
+                let mut cache = pool.inner.policy_cache.lock().await;
+                for (role, policy) in &config.roles {
+                    cache.put(role.clone(), policy.clone());
+                }
+                info!("Loaded permission policies for {} roles", config.roles.len());
             }
-            info!("Loaded permission policies for {} roles", config.roles.len());
+            drop(permission_config_guard);
         }
-        drop(permission_config_guard);
 
         #[cfg(feature = "auto-migrate")]
         if corrected_config.auto_migrate {
@@ -318,9 +333,11 @@ impl DbPool {
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
+                #[cfg(feature = "permission")]
                 policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
                     NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
                 ))),
+                #[cfg(feature = "permission")]
                 permission_config: Arc::new(AsyncMutex::new(None)),
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
@@ -339,6 +356,7 @@ impl DbPool {
     ///
     /// - `Some(PermissionConfig)` - 成功加载的权限配置
     /// - `None` - 没有配置权限文件或加载失败，使用默认的 deny_all 策略
+    #[cfg(feature = "permission")]
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
@@ -397,6 +415,7 @@ impl DbPool {
     /// 如果角色未在权限配置中定义，返回错误
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
         // 验证角色名称
+        #[cfg(feature = "permission")]
         self.validate_role_name(role).await?;
 
         let connection = self.acquire_connection().await?;
@@ -417,6 +436,7 @@ impl DbPool {
     ///
     /// 仅在权限配置文件存在且成功加载时验证角色。
     /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
+    #[cfg(feature = "permission")]
     async fn validate_role_name(&self, role: &str) -> DbResult<()> {
         // 获取权限配置锁
         let permission_config = self.inner.permission_config.lock().await;
@@ -713,6 +733,7 @@ impl DbPool {
     /// 自动移除无效连接并重建新连接以维持最小连接数。
     ///
     /// 健康检查间隔默认为 30 秒，可通过环境变量 `DB_HEALTH_CHECK_INTERVAL` 配置（秒）。
+    #[cfg(feature = "pool-health-check")]
     fn start_background_health_check(&self) {
         let pool = self.clone();
         let shutdown = self.inner.health_check_shutdown.clone();

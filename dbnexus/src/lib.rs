@@ -86,11 +86,14 @@ pub mod metrics;
 #[cfg(feature = "migration")]
 pub mod migration;
 /// 权限控制模块
+#[cfg(feature = "permission")]
 pub mod permission;
 /// SQL 解析模块
+#[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
 /// SQL 解析类型导出
+#[cfg(feature = "sql-parser")]
 pub use sql_parser::{ParsedSqlOperation, SqlOperationType, SqlParseError, SqlParser};
 
 /// 基础权限类型（简单 RBAC）
@@ -104,9 +107,11 @@ pub use sql_parser::{ParsedSqlOperation, SqlOperationType, SqlParseError, SqlPar
 /// - [`RolePolicy`] - 角色策略
 /// - [`PermissionConfig`] - 权限配置
 /// - [`PermissionContext`] - 权限检查上下文
+#[cfg(feature = "permission")]
 pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
 
 /// Operation 是 PermissionAction 的别名，用于简化使用
+#[cfg(feature = "permission")]
 pub type Operation = permission::PermissionAction;
 
 /// 可插拔权限引擎模块
@@ -152,8 +157,13 @@ pub use crate::pool::Session;
 pub use crate::pool::{ConnectionPool, DatabaseSession};
 
 /// 过程宏重新导出
+#[cfg(feature = "macros")]
 pub use dbnexus_macros::DbEntity;
+#[cfg(feature = "macros")]
 pub use dbnexus_macros::db_audit;
+#[cfg(feature = "macros")]
 pub use dbnexus_macros::db_cache;
+#[cfg(feature = "macros")]
 pub use dbnexus_macros::db_crud;
+#[cfg(feature = "macros")]
 pub use dbnexus_macros::db_permission;

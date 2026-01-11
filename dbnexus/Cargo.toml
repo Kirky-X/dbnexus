@@ -12,7 +12,7 @@ categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
 
 [features]
-default = ["runtime-tokio-rustls"]
+default = ["runtime-tokio-rustls", "permission", "sql-parser", "macros"]
 
 # Async runtime (互斥)
 runtime-tokio-rustls = [
@@ -31,6 +31,20 @@ runtime-async-std = [
 sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros", "sea-orm/with-json"]
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros", "sea-orm/with-json"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros", "sea-orm/with-json"]
+
+# Core features (可选，用于最小化部署)
+permission = ["dep:dashmap", "dep:lru"]
+sql-parser = ["dep:sqlparser", "dep:regex"]
+macros = ["dbnexus-macros"]
+
+# Config features (可选，用于配置文件支持)
+config-yaml = ["dep:serde_yaml"]
+config-toml = ["dep:toml"]
+config-env = []  # 环境变量支持，默认启用
+
+# Pool features (可选，用于连接池高级功能)
+pool-health-check = []
+pool-warmup = ["dep:futures"]
 
 # Optional features
 metrics = ["dep:prometheus"]
@@ -59,6 +73,13 @@ confers = ["dep:confers"]
 dev = []
 cli-tests = []
 
+# Preset configurations
+# 嵌入式设备最小配置（仅连接池 + 环境变量配置 + SQLite）
+minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "dep:async-trait", "dep:lru", "dep:regex", "sql-parser"]
+
+# 微服务基础配置（连接池 + 权限 + SQL 解析 + PostgreSQL + 健康检查）
+microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "dep:async-trait"]
+
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]
 
@@ -68,15 +89,15 @@ tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
+serde_yaml = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true }
 tracing = { workspace = true }
 time = { workspace = true }
 prometheus = { workspace = true, optional = true }
-toml = "0.9.10"
+toml = { version = "0.9.10", optional = true }
 parking_lot = "0.12"
-lru = { workspace = true }
+lru = { workspace = true, optional = true }
 home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 http = { version = "1.0", optional = true }
@@ -95,14 +116,14 @@ indexmap = { version = "2.0", optional = true }
 confers = { version = "0.1", optional = true, default-features = false }
 
 # External dependencies
-regex = "1.0"
-sqlparser = "0.47"
+regex = { version = "1.0", optional = true }
+sqlparser = { version = "0.47", optional = true }
 rand = "0.8"
-futures = "0.3"
-dashmap = "5.5"
+futures = { version = "0.3", optional = true }
+dashmap = { version = "5.5", optional = true }
 
 # Internal dependencies
-dbnexus-macros.workspace = true
+dbnexus-macros = { workspace = true, optional = true }
 
 tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
 
