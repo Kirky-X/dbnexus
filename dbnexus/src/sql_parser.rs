@@ -122,7 +122,9 @@ impl SqlParser {
             return Err(SqlParseError::MultipleStatements);
         }
 
-        let statement = statements.into_iter().next().unwrap();
+        let statement = statements.into_iter().next().ok_or_else(|| {
+            SqlParseError::ParseError("No statement found".to_string())
+        })?;
         self.classify_statement(statement, sql.to_string())
     }
 
