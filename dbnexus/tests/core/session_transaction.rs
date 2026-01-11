@@ -11,6 +11,7 @@ use dbnexus::DbPool;
 mod common;
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_session_role() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -19,6 +20,7 @@ async fn test_session_role() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_session_permission_ctx() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -28,6 +30,7 @@ async fn test_session_permission_ctx() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_session_mark_write() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -37,6 +40,7 @@ async fn test_session_mark_write() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_transaction_begin() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -47,6 +51,7 @@ async fn test_transaction_begin() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_transaction_commit() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -58,6 +63,7 @@ async fn test_transaction_commit() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_transaction_rollback() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -69,6 +75,7 @@ async fn test_transaction_rollback() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_transaction_double_begin_error() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -79,6 +86,7 @@ async fn test_transaction_double_begin_error() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_transaction_commit_without_begin_error() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
