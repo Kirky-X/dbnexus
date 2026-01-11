@@ -38,6 +38,8 @@ async fn test_config_direct() {
         auto_migrate: false,
         migration_timeout: 120,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     assert_eq!(config.max_connections, 15);
@@ -125,6 +127,7 @@ async fn test_dbpool_from_config() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_dbpool_new() {
     let pool = DbPool::new("sqlite::memory:").await.unwrap();
     let status = pool.status();

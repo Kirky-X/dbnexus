@@ -18,6 +18,7 @@ mod common;
 
 /// TEST-CONC-001: 并发会话获取测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_session_acquisition() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
