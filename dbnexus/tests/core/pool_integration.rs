@@ -9,6 +9,8 @@
 
 use dbnexus::DbPool;
 use std::time::Duration;
+
+#[path = "../common/mod.rs"]
 mod common;
 
 /// TEST-I-001: 连接健康检查测试
@@ -86,8 +88,13 @@ async fn test_pool_status_after_operations() {
 
     let final_status = pool.status();
     assert!(
-        final_status.idle >= 2,
-        "Should have at least 2 idle connections after release"
+        final_status.total >= config.min_connections as u32,
+        "Should have at least {} total connections after release",
+        config.min_connections
+    );
+    assert_eq!(
+        final_status.active, 0,
+        "Should have 0 active connections after release"
     );
 }
 
@@ -219,6 +226,7 @@ async fn test_connection_acquire_with_small_pool() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -267,12 +275,16 @@ async fn test_connection_reuse_with_health_checks() {
 
     // 多次获取和释放同一角色的会话
     for i in 0..10 {
-        let mut session = pool.get_session("admin").await.expect("Failed to get session");
-        let conn = session.connection().expect("Failed to get connection");
+        {
+            let mut session = pool.get_session("admin").await.expect("Failed to get session");
+            let conn = session.connection().expect("Failed to get connection");
 
-        // 执行健康检查
-        let is_healthy = pool.check_connection_health(conn).await;
-        assert!(is_healthy, "Connection {} should be healthy", i);
+            // 执行健康检查
+            let is_healthy = pool.check_connection_health(conn).await;
+            assert!(is_healthy, "Connection {} should be healthy", i);
+        } // session 在此处被释放
+        // 短暂等待确保连接返回池中
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
     // 验证池状态仍然正常

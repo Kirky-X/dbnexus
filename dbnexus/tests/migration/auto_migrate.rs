@@ -82,6 +82,7 @@ DROP TABLE orders;
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
