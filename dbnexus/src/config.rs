@@ -732,11 +732,14 @@ impl DbConfig {
             return Ok(());
         }
 
-        static URL_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-            regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^ ]+$").expect("Failed to compile URL regex")
-        });
-
-        if !URL_RE.is_match(&self.url) {
+        // Simple URL validation without regex
+        if let Some(protocol_end) = self.url.find("://") {
+            let protocol = &self.url[..protocol_end];
+            // Check protocol is valid (alphanumeric with +.-)
+            if !protocol.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-') {
+                return Err(ConfigError::InvalidUrl);
+            }
+        } else {
             return Err(ConfigError::InvalidUrl);
         }
 
