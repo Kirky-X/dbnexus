@@ -1,3 +1,16 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
+//! 迁移执行器
+//!
+//! 负责执行数据库迁移操作
+
+use super::schema::*;
+use super::types::*;
+use super::differ::SqlGenerator;
+
 pub struct MigrationExecutor {
     /// 数据库连接
     pub connection: sea_orm::DatabaseConnection,
