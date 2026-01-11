@@ -397,6 +397,7 @@ impl ConfigLoader {
     /// # Errors
     ///
     /// 如果文件不存在或格式错误，返回错误
+    #[cfg(feature = "config-yaml")]
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         DbConfig::from_yaml_file(path)
     }
@@ -406,6 +407,7 @@ impl ConfigLoader {
     /// # Errors
     ///
     /// 如果文件不存在或格式错误，返回错误
+    #[cfg(feature = "config-toml")]
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         DbConfig::from_toml_file(path)
     }
@@ -601,6 +603,7 @@ impl DbConfig {
     /// # Errors
     ///
     /// 如果文件不存在或格式错误，返回错误
+    #[cfg(feature = "config-yaml")]
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path.as_ref())?;
 
@@ -638,6 +641,7 @@ impl DbConfig {
     /// # Errors
     ///
     /// 如果文件不存在或格式错误，返回错误
+    #[cfg(feature = "config-toml")]
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path.as_ref())?;
 
@@ -665,6 +669,7 @@ impl DbConfig {
     /// # Errors
     ///
     /// 如果格式错误，返回错误
+    #[cfg(feature = "config-yaml")]
     pub fn from_yaml_str(yaml: &str) -> Result<Self, ConfigError> {
         let config: DbConfig = serde_yaml::from_str(yaml).map_err(|_| ConfigError::InvalidFormat)?;
 
@@ -677,6 +682,7 @@ impl DbConfig {
     /// # Errors
     ///
     /// 如果格式错误，返回错误
+    #[cfg(feature = "config-toml")]
     pub fn from_toml_str(toml: &str) -> Result<Self, ConfigError> {
         let config: DbConfig = toml::from_str(toml).map_err(|_| ConfigError::InvalidFormat)?;
 
@@ -766,11 +772,13 @@ impl DbConfig {
     }
 
     /// 将配置序列化为 YAML 字符串
+    #[cfg(feature = "config-yaml")]
     pub fn to_yaml(&self) -> Result<String, ConfigError> {
         serde_yaml::to_string(self).map_err(|_| ConfigError::InvalidFormat)
     }
 
     /// 将配置序列化为 TOML 字符串
+    #[cfg(feature = "config-toml")]
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         toml::to_string(self).map_err(|_| ConfigError::InvalidFormat)
     }
@@ -791,43 +799,106 @@ impl DbConfig {
     ///
     /// 如果未找到配置文件或文件格式错误，返回错误
     pub fn from_config_files() -> Result<Self, ConfigError> {
-        let config_paths = [
-            "dbnexus.yaml",
-            "dbnexus.toml",
-            "config/dbnexus.yaml",
-            "config/dbnexus.toml",
-        ];
+        #[cfg(all(feature = "config-yaml", feature = "config-toml"))]
+        {
+            let config_paths = [
+                "dbnexus.yaml",
+                "dbnexus.toml",
+                "config/dbnexus.yaml",
+                "config/dbnexus.toml",
+            ];
 
-        // 尝试查找配置文件
-        for config_path in &config_paths {
-            let path = Path::new(config_path);
+            // 尝试查找配置文件
+            for config_path in &config_paths {
+                let path = Path::new(config_path);
 
-            // 安全检查：路径规范化、符号链接检查、父目录引用检查
-            if Self::is_safe_config_path(path)? {
-                tracing::info!("Loading configuration from: {}", config_path);
+                // 安全检查：路径规范化、符号链接检查、父目录引用检查
+                if Self::is_safe_config_path(path)? {
+                    tracing::info!("Loading configuration from: {}", config_path);
 
-                if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
-                    return Self::from_yaml_file(path);
-                } else {
-                    return Self::from_toml_file(path);
+                    if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
+                        return Self::from_yaml_file(path);
+                    } else {
+                        return Self::from_toml_file(path);
+                    }
+                }
+            }
+
+            // 尝试用户目录
+            if let Some(home_dir) = home::home_dir() {
+                let user_config_paths = [
+                    home_dir.join(".config").join("dbnexus").join("config.yaml"),
+                    home_dir.join(".dbnexus").join("config.toml"),
+                ];
+
+                for config_path in &user_config_paths {
+                    if Self::is_safe_config_path(config_path)? {
+                        tracing::info!("Loading configuration from: {}", config_path.display());
+
+                        if config_path.ends_with(".yaml") {
+                            return Self::from_yaml_file(config_path);
+                        } else {
+                            return Self::from_toml_file(config_path);
+                        }
+                    }
                 }
             }
         }
 
-        // 尝试用户目录
-        if let Some(home_dir) = home::home_dir() {
-            let user_config_paths = [
-                home_dir.join(".config").join("dbnexus").join("config.yaml"),
-                home_dir.join(".dbnexus").join("config.toml"),
+        #[cfg(all(feature = "config-yaml", not(feature = "config-toml")))]
+        {
+            let config_paths = [
+                "dbnexus.yaml",
+                "config/dbnexus.yaml",
             ];
 
-            for config_path in &user_config_paths {
-                if Self::is_safe_config_path(config_path)? {
-                    tracing::info!("Loading configuration from: {}", config_path.display());
+            for config_path in &config_paths {
+                let path = Path::new(config_path);
 
-                    if config_path.ends_with(".yaml") {
+                if Self::is_safe_config_path(path)? {
+                    tracing::info!("Loading configuration from: {}", config_path);
+                    return Self::from_yaml_file(path);
+                }
+            }
+
+            if let Some(home_dir) = home::home_dir() {
+                let user_config_paths = [
+                    home_dir.join(".config").join("dbnexus").join("config.yaml"),
+                ];
+
+                for config_path in &user_config_paths {
+                    if Self::is_safe_config_path(config_path)? {
+                        tracing::info!("Loading configuration from: {}", config_path.display());
                         return Self::from_yaml_file(config_path);
-                    } else {
+                    }
+                }
+            }
+        }
+
+        #[cfg(all(not(feature = "config-yaml"), feature = "config-toml"))]
+        {
+            let config_paths = [
+                "dbnexus.toml",
+                "config/dbnexus.toml",
+            ];
+
+            for config_path in &config_paths {
+                let path = Path::new(config_path);
+
+                if Self::is_safe_config_path(path)? {
+                    tracing::info!("Loading configuration from: {}", config_path);
+                    return Self::from_toml_file(path);
+                }
+            }
+
+            if let Some(home_dir) = home::home_dir() {
+                let user_config_paths = [
+                    home_dir.join(".dbnexus").join("config.toml"),
+                ];
+
+                for config_path in &user_config_paths {
+                    if Self::is_safe_config_path(config_path)? {
+                        tracing::info!("Loading configuration from: {}", config_path.display());
                         return Self::from_toml_file(config_path);
                     }
                 }
@@ -1056,6 +1127,7 @@ impl ConfigCorrector {
     }
 
     /// 从配置文件加载配置并自动修正
+    #[cfg(feature = "config-yaml")]
     pub fn load_and_correct_from_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_yaml_file(path)?;
         config = ConfigCorrector::auto_correct(config);
