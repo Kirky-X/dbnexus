@@ -30,7 +30,12 @@ async fn test_concurrent_session_acquisition() {
     // 并发获取会话
     for i in 0..num_tasks {
         let pool = pool.clone();
-        let handle = tokio::spawn(async move { pool.get_session(&format!("user{}", i)).await });
+        let role = if i % 2 == 0 { "admin" } else { "system" };
+        let handle = tokio::spawn(async move {
+            let session = pool.get_session(role).await?;
+            drop(session);
+            Ok::<(), dbnexus::config::DbError>(())
+        });
         handles.push(handle);
     }
 
@@ -39,7 +44,8 @@ async fn test_concurrent_session_acquisition() {
 
     // 验证所有会话都成功获取
     for (i, result) in results.into_iter().enumerate() {
-        assert!(result.is_ok(), "Session {} should be acquired successfully", i);
+        let task_result = result.expect("Join should succeed");
+        assert!(task_result.is_ok(), "Session {} should be acquired successfully", i);
     }
 
     // 验证连接池状态
@@ -60,11 +66,8 @@ async fn test_concurrent_session_release() {
 
     // 快速获取多个会话 - 使用安全角色
     let safe_roles = ["admin", "system", "admin", "system", "admin"];
-    for i in 0..num_sessions {
-        let session = pool
-            .get_session(safe_roles[i])
-            .await
-            .expect("Failed to get session");
+    for role in safe_roles.iter().take(num_sessions) {
+        let session = pool.get_session(role).await.expect("Failed to get session");
         sessions.push(session);
     }
 
@@ -146,7 +149,11 @@ roles:
     let setup_session = pool.get_session("admin").await.expect("Failed to get session");
     // 加载权限策略
     let perm_config = dbnexus::permission::PermissionConfig::from_yaml(perm_content).unwrap();
-    setup_session.permission_ctx().load_policy(&perm_config).await.expect("Failed to load policy");
+    setup_session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .await
+        .expect("Failed to load policy");
 
     // 注意：由于权限限制，我们无法执行 DDL 操作
     // 这里我们跳过表创建，直接测试插入操作
@@ -164,7 +171,11 @@ roles:
             let session = pool.get_session("admin").await.expect("Failed to get session");
             // 加载权限策略
             let perm_config = dbnexus::permission::PermissionConfig::from_yaml(perm_content).unwrap();
-            session.permission_ctx().load_policy(&perm_config).await.expect("Failed to load policy");
+            session
+                .permission_ctx()
+                .load_policy(&perm_config)
+                .await
+                .expect("Failed to load policy");
 
             let result = session
                 .execute_raw(&format!(
@@ -191,7 +202,7 @@ roles:
     // 如果表不存在，所有插入都会失败，但这是预期的行为
     // 我们只验证没有发生崩溃或超时
     assert!(
-        true,
+        insert_count <= 10,
         "Concurrent operations completed without crashes. Insert count: {}",
         insert_count
     );
@@ -214,7 +225,8 @@ async fn test_connection_pool_stress() {
         // 每个周期创建多个会话
         for i in 0..sessions_per_cycle {
             let pool = pool.clone();
-            let handle = tokio::spawn(async move { pool.get_session(&format!("user{}", i)).await });
+            let role = if i % 2 == 0 { "admin" } else { "system" };
+            let handle = tokio::spawn(async move { pool.get_session(role).await });
             handles.push(handle);
         }
 
@@ -222,7 +234,7 @@ async fn test_connection_pool_stress() {
         let sessions: Vec<_> = futures::future::join_all(handles)
             .await
             .into_iter()
-            .filter_map(|r| r.ok())
+            .filter_map(|r| r.ok().and_then(|session| session.ok()))
             .collect();
 
         // 验证本周期获取的会话数量
@@ -290,7 +302,7 @@ async fn test_concurrent_role_sessions() {
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
 
-    let roles = ["admin", "user", "reader", "writer"];
+    let roles = ["admin", "system", "admin", "system"];
     let iterations = 5;
 
     for _ in 0..iterations {
@@ -308,7 +320,12 @@ async fn test_concurrent_role_sessions() {
 
         // 验证所有会话都成功获取
         for (i, result) in results.into_iter().enumerate() {
-            assert!(result.is_ok(), "Session for role {} should be acquired", roles[i]);
+            let session_result = result.expect("Join should succeed");
+            assert!(
+                session_result.is_ok(),
+                "Session for role {} should be acquired",
+                roles[i]
+            );
         }
     }
 }
@@ -352,14 +369,16 @@ roles:
             let mut session = pool.get_session("admin").await.expect("Failed to get session");
             // 加载权限策略
             let perm_config = dbnexus::permission::PermissionConfig::from_yaml(perm_content).unwrap();
-            session.permission_ctx().load_policy(&perm_config).await.expect("Failed to load policy");
+            session
+                .permission_ctx()
+                .load_policy(&perm_config)
+                .await
+                .expect("Failed to load policy");
 
             session.begin_transaction().await.expect("Failed to begin transaction");
 
             // 尝试读取（如果表不存在会失败，但事务功能仍然可以测试）
-            let result = session
-                .execute_raw("SELECT 1")
-                .await;
+            let result = session.execute_raw("SELECT 1").await;
 
             // 提交事务
             session.commit().await.expect("Failed to commit");
@@ -407,11 +426,8 @@ async fn test_pool_capacity_boundary() {
     // 获取所有可用连接 - 使用安全角色
     let mut sessions = Vec::new();
     let safe_roles = ["admin", "system", "admin"];
-    for i in 0..3 {
-        let session = pool
-            .get_session(safe_roles[i])
-            .await
-            .expect("Failed to get session");
+    for role in safe_roles {
+        let session = pool.get_session(role).await.expect("Failed to get session");
         sessions.push(session);
     }
 
@@ -420,11 +436,10 @@ async fn test_pool_capacity_boundary() {
 
     // 尝试获取超出容量的连接 - 使用安全角色
     let extra_roles = ["admin", "system", "admin", "system", "admin"];
-    for i in 0..5 {
+    for role in extra_roles {
         let pool = pool_clone.clone();
-        let handle = tokio::spawn(async move {
-            tokio::time::timeout(Duration::from_millis(500), pool.get_session(extra_roles[i])).await
-        });
+        let handle =
+            tokio::spawn(async move { tokio::time::timeout(Duration::from_millis(500), pool.get_session(role)).await });
         handles.push(handle);
     }
 

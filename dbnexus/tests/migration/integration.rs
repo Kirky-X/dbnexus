@@ -8,14 +8,31 @@
 //! 测试数据库迁移功能的各个组件：执行器、文件解析、SQL生成、Schema差异检测等
 
 use dbnexus::DbPool;
-use dbnexus::migration::{
-    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory,
-    Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
-};
 use dbnexus::config::DatabaseType;
+use dbnexus::migration::{
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory, Schema,
+    SchemaDiffer, SqlGenerator, Table, TableChange,
+};
 
 #[path = "../common/mod.rs"]
 mod common;
+
+fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
+    match db_type {
+        DatabaseType::Sqlite => format!(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+            table_name
+        ),
+        DatabaseType::Postgres => format!(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='{}'",
+            table_name
+        ),
+        DatabaseType::MySql => format!(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name='{}'",
+            table_name
+        ),
+    }
+}
 
 /// TEST-M-001: 迁移执行器创建测试
 #[tokio::test]
@@ -499,10 +516,12 @@ async fn test_migration_apply() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let executor = MigrationExecutor::new(_connection, DatabaseType::Sqlite);
+    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+
+    let executor = MigrationExecutor::new(_connection, db_type);
 
     // 验证执行器可以创建
-    assert!(executor.sql_generator.db_type == DatabaseType::Sqlite);
+    assert!(executor.sql_generator.db_type == db_type);
 
     // 直接执行SQL来创建表（不通过迁移历史）
     let create_result = session
@@ -514,9 +533,8 @@ async fn test_migration_apply() {
     assert!(create_result.is_ok(), "Table should be created successfully");
 
     // 验证表已创建
-    let check_result = session
-        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'")
-        .await;
+    let check_sql = table_exists_check_sql(db_type, "test_table");
+    let check_result = session.execute_raw_ddl(&check_sql).await;
     if check_result.is_err() {
         eprintln!("SELECT error: {:?}", check_result);
     }
@@ -531,12 +549,13 @@ async fn test_migration_history_table_creation() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let _executor = MigrationExecutor::new(_connection, DatabaseType::Sqlite);
+    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+
+    let _executor = MigrationExecutor::new(_connection, db_type);
 
     // 验证迁移历史表已创建
-    let check_result = session
-        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='dbnexus_migrations'")
-        .await;
+    let check_sql = table_exists_check_sql(db_type, "dbnexus_migrations");
+    let check_result = session.execute_raw_ddl(&check_sql).await;
     assert!(check_result.is_ok());
 }
 
@@ -549,11 +568,16 @@ async fn test_full_migration_workflow() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let generator = SqlGenerator::new(DatabaseType::Sqlite);
+    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+
+    let generator = SqlGenerator::new(db_type);
+
+    let users_table_name = common::generate_test_table_name("users");
+    let posts_table_name = common::generate_test_table_name("posts");
 
     // 生成创建 users 表的 SQL
     let users_table = Table {
-        name: "users".to_string(),
+        name: users_table_name.clone(),
         columns: vec![Column {
             name: "id".to_string(),
             column_type: ColumnType::Integer,
@@ -571,15 +595,15 @@ async fn test_full_migration_workflow() {
     };
 
     let users_sql = generator.generate_create_table_sql(&users_table);
-    assert!(users_sql.contains("CREATE TABLE users"));
+    assert!(users_sql.contains(&format!("CREATE TABLE {}", users_table_name)));
 
     // 直接执行 SQL 创建表
-    let create_users = session.execute_raw(&users_sql).await;
+    let create_users = session.execute_raw_ddl(&users_sql).await;
     assert!(create_users.is_ok(), "Users table should be created");
 
     // 生成创建 posts 表的 SQL
     let posts_table = Table {
-        name: "posts".to_string(),
+        name: posts_table_name.clone(),
         columns: vec![Column {
             name: "id".to_string(),
             column_type: ColumnType::Integer,
@@ -597,19 +621,17 @@ async fn test_full_migration_workflow() {
     };
 
     let posts_sql = generator.generate_create_table_sql(&posts_table);
-    assert!(posts_sql.contains("CREATE TABLE posts"));
+    assert!(posts_sql.contains(&format!("CREATE TABLE {}", posts_table_name)));
 
     // 直接执行 SQL 创建表
     let create_posts = session.execute_raw_ddl(&posts_sql).await;
     assert!(create_posts.is_ok(), "Posts table should be created");
 
     // 验证两个表都存在
-    let check_users = session
-        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-        .await;
-    let check_posts = session
-        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='posts'")
-        .await;
+    let check_users_sql = table_exists_check_sql(db_type, &users_table_name);
+    let check_posts_sql = table_exists_check_sql(db_type, &posts_table_name);
+    let check_users = session.execute_raw_ddl(&check_users_sql).await;
+    let check_posts = session.execute_raw_ddl(&check_posts_sql).await;
 
     assert!(check_users.is_ok(), "Users table should exist");
     assert!(check_posts.is_ok(), "Posts table should exist");

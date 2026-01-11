@@ -13,12 +13,18 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use dbnexus::cache::{CacheManager, CacheConfig};
+//! ```rust,no_run
+//! use dbnexus::cache::{CacheConfig, CacheKey, CacheManager};
 //!
-//! let cache = CacheManager::new(CacheConfig::default());
-//! cache.set("user:1", user, Duration::from_secs(300)).await;
-//! let user = cache.get("user:1").await;
+//! fn main() {
+//!     let cache: CacheManager<String> = CacheManager::new(CacheConfig::default());
+//!     let key = CacheKey::new("user", "1");
+//!
+//!     tokio::runtime::Runtime::new().unwrap().block_on(async {
+//!         cache.set(key.clone(), "Alice".to_string()).await;
+//!         let _ = cache.get(&key).await;
+//!     });
+//! }
 //! ```
 
 use async_trait::async_trait;
@@ -518,10 +524,8 @@ where
     /// 返回成功加载的条目数
     pub async fn warmup_with_default_ttl(&self, data: Vec<(CacheKey, T)>) -> usize {
         let default_ttl = self.strategy.ttl();
-        let data_with_ttl: Vec<(CacheKey, T, Duration)> = data
-            .into_iter()
-            .map(|(key, value)| (key, value, default_ttl))
-            .collect();
+        let data_with_ttl: Vec<(CacheKey, T, Duration)> =
+            data.into_iter().map(|(key, value)| (key, value, default_ttl)).collect();
         self.warmup(data_with_ttl).await
     }
 

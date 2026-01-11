@@ -97,4 +97,4 @@ pub enum ColumnChange {
     },
 }
 
-use super::schema::{Column, Table, Index, ForeignKey};
+use super::schema::{Column, ForeignKey, Index, Table};

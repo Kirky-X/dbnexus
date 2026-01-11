@@ -11,6 +11,8 @@
 //! - 批量操作
 //! - 同步事件处理
 
+#![cfg(all(feature = "global-index", feature = "with-json"))]
+
 use dbnexus::global_index::{GlobalIndex, IndexEntry, SyncEvent};
 
 #[path = "../common/mod.rs"]
@@ -25,7 +27,7 @@ async fn test_global_index_creation() {
     let db_url = "sqlite::memory:".to_string();
 
     // Act - 创建全局索引
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // Assert - 验证创建成功
     // 1. 验证配置可以获取
@@ -71,7 +73,7 @@ async fn test_register_index_entry() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     let entry = IndexEntry {
         table_name: "orders".to_string(),
@@ -102,7 +104,7 @@ async fn test_register_batch_entries() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     let entries = vec![
         IndexEntry {
@@ -148,7 +150,7 @@ async fn test_query_by_index_value() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     let entries = vec![
         IndexEntry {
@@ -194,7 +196,7 @@ async fn test_query_all_shards() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     let entries = vec![
         IndexEntry {
@@ -240,7 +242,7 @@ async fn test_process_sync_event_insert() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // 测试插入事件
     let insert_event = SyncEvent::Insert {
@@ -257,7 +259,7 @@ async fn test_process_sync_event_insert() {
         .expect("Failed to process insert event");
 
     // 验证插入成功
-    let entries = index
+    let entries: Vec<IndexEntry> = index
         .query_by_index("orders", "user_id", "user_123")
         .await
         .expect("Failed to query entries");
@@ -271,7 +273,7 @@ async fn test_process_sync_event_delete() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // 先插入一条记录
     let entry = IndexEntry {
@@ -299,7 +301,7 @@ async fn test_process_sync_event_delete() {
         .expect("Failed to process delete event");
 
     // 验证删除成功（查询结果为空）
-    let entries = index
+    let entries: Vec<IndexEntry> = index
         .query_by_index("orders", "user_id", "user_123")
         .await
         .expect("Failed to query entries");
@@ -313,7 +315,7 @@ async fn test_process_sync_event_update() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // 先插入一条记录
     let entry = IndexEntry {
@@ -343,13 +345,13 @@ async fn test_process_sync_event_update() {
         .expect("Failed to process update event");
 
     // 验证更新成功
-    let old_entries = index
+    let old_entries: Vec<IndexEntry> = index
         .query_by_index("orders", "user_id", "user_123")
         .await
         .expect("Failed to query entries");
     assert_eq!(old_entries.len(), 0);
 
-    let new_entries = index
+    let new_entries: Vec<IndexEntry> = index
         .query_by_index("orders", "user_id", "user_456")
         .await
         .expect("Failed to query entries");
@@ -363,7 +365,7 @@ async fn test_config_management() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // 获取默认配置
     let config = index.get_config();
@@ -381,7 +383,7 @@ async fn test_multiple_tables() {
 
     let db_url = "sqlite::memory:".to_string();
 
-    let index = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
+    let index: GlobalIndex = GlobalIndex::new(&db_url).await.expect("Failed to create global index");
 
     // 注册不同表的条目
     let entries = vec![
@@ -414,14 +416,14 @@ async fn test_multiple_tables() {
         .expect("Failed to register entries");
 
     // 验证订单表
-    let orders = index
+    let orders: Vec<IndexEntry> = index
         .query_all_shards("orders", "user_id")
         .await
         .expect("Failed to query orders");
     assert_eq!(orders.len(), 2);
 
     // 验证用户表
-    let users = index
+    let users: Vec<IndexEntry> = index
         .query_all_shards("users", "email")
         .await
         .expect("Failed to query users");
@@ -435,7 +437,7 @@ async fn test_polling_change_capture_start_stop() {
     use std::sync::Arc;
 
     let db_url = "sqlite::memory:".to_string();
-    let index = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
+    let index: Arc<GlobalIndex> = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
 
     let config = PollingCaptureConfig {
         interval_ms: 100,
@@ -464,7 +466,7 @@ async fn test_polling_change_capture_change_detection() {
     use std::sync::Arc;
 
     let db_url = "sqlite::memory:".to_string();
-    let index = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
+    let index: Arc<GlobalIndex> = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
 
     // 先注册一些数据
     let entry = dbnexus::global_index::IndexEntry {
@@ -515,7 +517,7 @@ async fn test_polling_change_capture_config() {
     use std::sync::Arc;
 
     let db_url = "sqlite::memory:".to_string();
-    let index = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
+    let index: Arc<GlobalIndex> = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
 
     // 测试自定义配置
     let config = PollingCaptureConfig {
@@ -542,7 +544,7 @@ async fn test_change_capture_trait_object() {
     use std::sync::Arc;
 
     let db_url = "sqlite::memory:".to_string();
-    let index = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
+    let index: Arc<GlobalIndex> = Arc::new(GlobalIndex::new(&db_url).await.expect("Failed to create global index"));
     let config = PollingCaptureConfig::default();
 
     // 创建一个具体的实现
