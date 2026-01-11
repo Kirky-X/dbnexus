@@ -63,7 +63,7 @@ pub(crate) struct DbPoolInner {
     health_check_shutdown: Arc<Notify>,
 
     /// 管理员角色名称
-    admin_role: String,
+    pub(crate) admin_role: String,
 
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
@@ -729,10 +729,10 @@ impl DbPool {
         if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections {
             // 等待空闲连接（使用条件变量替代忙等待）
             let timeout_duration = self.inner.config.acquire_timeout_duration();
-            
+
             // 释放锁并等待通知
             drop(idle);
-            
+
             let result = timeout(timeout_duration, async {
                 let mut idle = self.inner.idle_connections.lock().await;
                 while idle.is_empty() {
@@ -745,34 +745,29 @@ impl DbPool {
             })
             .await;
 
-            match result {
+            return match result {
                 Ok(Some(conn)) => {
                     self.inner.active_count.fetch_add(1, Ordering::SeqCst);
-                    return Ok(conn);
+                    Ok(conn)
                 }
-                Ok(None) => {
-                    return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                        sea_orm::ConnAcquireErr::Timeout,
-                    )));
-                }
-                Err(_) => {
-                    return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                        sea_orm::ConnAcquireErr::Timeout,
-                    )));
-                }
-            }
+                Ok(None) => Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                    sea_orm::ConnAcquireErr::Timeout,
+                ))),
+                Err(_) => Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                    sea_orm::ConnAcquireErr::Timeout,
+                ))),
+            };
         }
 
         // 创建新连接（在持有锁的情况下，确保不会超过最大连接数）
         // 先增加 total_count，确保原子性
         self.inner.total_count.fetch_add(1, Ordering::SeqCst);
         self.inner.active_count.fetch_add(1, Ordering::SeqCst);
-        
+
         // 释放锁后再创建连接（避免阻塞其他操作）
         drop(idle);
-        
-        let conn = Self::create_connection(&self.inner.config).await?;
-        Ok(conn)
+
+        Self::create_connection(&self.inner.config).await
     }
 
     /// 归还连接到池中
@@ -804,6 +799,24 @@ impl DbPool {
     }
 
     /// 获取连接池状态
+    ///
+    /// 返回当前连接池的统计信息，包括总连接数、活跃连接数和空闲连接数。
+    ///
+    /// # Returns
+    ///
+    /// 连接池状态信息
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dbnexus::DbPool;
+    ///
+    /// # async fn example(pool: &DbPool) {
+    /// let status = pool.status();
+    /// println!("Total: {}, Active: {}, Idle: {}",
+    ///     status.total, status.active, status.idle);
+    /// # }
+    /// ```
     pub fn status(&self) -> PoolStatus {
         let total = self.inner.total_count.load(Ordering::SeqCst);
         let active = self.inner.active_count.load(Ordering::SeqCst);
@@ -815,6 +828,23 @@ impl DbPool {
     }
 
     /// 获取配置
+    ///
+    /// 返回连接池的配置引用。
+    ///
+    /// # Returns
+    ///
+    /// 连接池配置的引用
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dbnexus::DbPool;
+    ///
+    /// # async fn example(pool: &DbPool) {
+    /// let config = pool.config();
+    /// println!("Max connections: {}", config.max_connections);
+    /// # }
+    /// ```
     pub fn config(&self) -> &DbConfig {
         &self.inner.config
     }
