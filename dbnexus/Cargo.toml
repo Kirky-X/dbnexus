@@ -12,7 +12,7 @@ categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
 
 [features]
-default = ["sqlite", "runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:async-trait", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
+default = ["sqlite", "runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
 
 # Async runtime (互斥)
 runtime-tokio-rustls = [
@@ -33,7 +33,7 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # Core features (可选，用于最小化部署)
-permission = ["dep:dashmap", "dep:lru", "dep:async-trait", "dep:serde_yaml"]
+permission = ["dep:dashmap", "dep:lru", "dep:serde_yaml"]
 sql-parser = ["dep:sqlparser", "dep:regex"]
 macros = ["dbnexus-macros"]
 
@@ -51,11 +51,11 @@ metrics = ["dep:prometheus"]
 migration = []
 auto-migrate = ["migration"]
 sharding = ["dep:twox-hash", "dep:chrono"]
-global-index = ["dep:sha2", "dep:async-trait", "dep:chrono", "sea-orm/with-json"]
+global-index = ["dep:sha2", "dep:chrono", "sea-orm/with-json"]
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
-cache = ["dep:async-trait", "dep:uuid", "dep:indexmap"]
-audit = ["dep:chrono", "dep:uuid", "dep:async-trait"]
-permission-engine = ["dep:async-trait"]
+cache = ["dep:uuid", "dep:indexmap"]
+audit = ["dep:chrono", "dep:uuid"]
+permission-engine = []
 tracing = [
     "dep:tracing-subscriber",
     "dep:tracing-opentelemetry",
@@ -76,10 +76,10 @@ cli-tests = []
 
 # Preset configurations
 # 嵌入式设备最小配置（仅连接池 + 环境变量配置 + SQLite）
-minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "dep:async-trait", "dep:lru", "dep:regex", "sql-parser"]
+minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "dep:lru", "dep:regex", "sql-parser"]
 
 # 微服务基础配置（连接池 + 权限 + SQL 解析 + PostgreSQL + 健康检查）
-microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "dep:async-trait", "dep:regex", "dep:lru"]
+microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "dep:regex", "dep:lru"]
 
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]
@@ -111,7 +111,7 @@ opentelemetry_sdk = { version = "0.24", optional = true }
 once_cell = { version = "1.20", optional = true }
 twox-hash = { version = "2.1", optional = true }
 sha2 = { version = "0.10", optional = true }
-async-trait = { version = "0.1", optional = true }
+async-trait = "0.1"
 uuid = { version = "1.0", optional = true, features = ["v4"] }
 indexmap = { version = "2.0", optional = true }
 confers = { version = "0.1", optional = true, default-features = false }
@@ -138,7 +138,6 @@ criterion = "0.5"
 futures = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
-async-trait = "0.1"
 indexmap = "2.0"
 twox-hash = "2.1"
 sha2 = "0.10"

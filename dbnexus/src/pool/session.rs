@@ -498,10 +498,7 @@ impl Drop for Session {
     fn drop(&mut self) {
         // 归还连接到池
         if let Some(conn) = self.connection.take() {
-            let pool = self.pool.clone();
-            tokio::spawn(async move {
-                pool.release_connection(conn);
-            });
+            self.pool.release_connection(conn);
         }
     }
 }

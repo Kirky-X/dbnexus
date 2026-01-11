@@ -11,6 +11,7 @@
 
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
+use proc_macro2::Span;
 use quote::{ToTokens, quote};
 use regex::Regex;
 use syn::{DeriveInput, parse_macro_input};
@@ -55,10 +56,16 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
     if table_name.is_empty() {
         return syn::Error::new(
             struct_name.span(),
-            "Missing #[table_name = \"...\")] attribute on the struct",
+            "Missing #[table_name = \"...\"] attribute on the struct",
         )
         .to_compile_error()
         .into();
+    }
+
+    if primary_key_name.is_empty() {
+        return syn::Error::new(struct_name.span(), "Missing #[primary_key] attribute on a struct field")
+            .to_compile_error()
+            .into();
     }
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -171,7 +178,6 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 model: <Self as sea_orm::entity::EntityTrait>::Model,
             ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
                 use sea_orm::Entity;
-                use sea_orm::ActiveModelBehavior;
 
                 // 将 Model 转换为 ActiveModel
                 let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
@@ -220,7 +226,6 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 model: <Self as sea_orm::entity::EntityTrait>::Model,
             ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
                 use sea_orm::Entity;
-                use sea_orm::ActiveModelBehavior;
 
                 // 将 Model 转换为 ActiveModel
                 let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
@@ -381,6 +386,19 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
     Ok(())
 }
 
+fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
+    if config_path.starts_with('/')
+        || config_path.starts_with('\\')
+        || config_path.contains("..")
+        || config_path.contains(':')
+    {
+        proc_macro_error::abort!(
+            struct_name,
+            "Invalid config path. Use a relative path without '..' or drive letters.",
+        );
+    }
+}
+
 /// db_permission 属性宏
 ///
 /// 声明 Entity 允许访问的角色和操作
@@ -486,22 +504,11 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // 如果指定了 config 文件，进行编译时角色验证
     let validation_code = if let Some(config) = &config_path {
-        // 使用 include_str! 在编译时读取配置文件
-        // 注意：由于 Rust const 表达式的限制，无法在编译时进行复杂的 YAML 解析
-        // 我们改为在运行时进行验证，或者使用宏在编译时进行验证
-        let config_content = format!(
-            r#"
-            // 编译时包含配置文件
-            const _PERMISSIONS_CONFIG: &str = include_str!("{}");
-
-            // 注意：编译时角色验证已禁用，因为 Rust const 表达式不支持复杂的控制流
-            // 角色验证将在运行时通过 PermissionContext 进行
-            // 声明的角色列表: {:#?}
-            "#,
-            config, roles
-        );
-
-        quote! { #config_content }
+        validate_config_path(config, struct_name);
+        let config_lit = syn::LitStr::new(config, Span::call_site());
+        quote! {
+            const _PERMISSIONS_CONFIG: &str = include_str!(#config_lit);
+        }
     } else {
         // 如果没有指定 config，跳过编译时验证
         quote! {
