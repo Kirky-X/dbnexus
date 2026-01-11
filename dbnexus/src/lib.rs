@@ -77,7 +77,7 @@ pub mod entity;
 // 生成的权限角色模块（由 build.rs 自动生成，内部使用）
 mod generated_roles;
 /// 全局索引模块
-#[cfg(feature = "global-index")]
+#[cfg(all(feature = "global-index", feature = "with-json"))]
 pub mod global_index;
 /// Metrics 收集模块
 #[cfg(feature = "metrics")]
