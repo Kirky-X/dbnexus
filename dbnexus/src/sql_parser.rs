@@ -1,7 +1,7 @@
 //! SQL Parser module using sqlparser for enhanced SQL parsing and validation.
 //! This module provides robust SQL operation detection and permission action mapping.
 
-use sqlparser::ast::{Delete, FromTable, Statement, TableWithJoins};
+use sqlparser::ast::{Delete, FromTable, Query, SetExpr, Statement, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use thiserror::Error;
@@ -130,54 +130,47 @@ impl SqlParser {
             return Err(SqlParseError::ContainsVariables(sql.to_string()));
         }
 
-        let statements = Parser::parse_sql(&self.dialect, sql)
-            .map_err(|e| SqlParseError::ParseError(e.to_string()))?;
+        let statements = Parser::parse_sql(&self.dialect, sql).map_err(|e| SqlParseError::ParseError(e.to_string()))?;
 
         if statements.len() != 1 {
             return Err(SqlParseError::MultipleStatements);
         }
 
-        let statement = statements.into_iter().next().ok_or_else(|| {
-            SqlParseError::ParseError("No statement found".to_string())
-        })?;
+        let statement = statements
+            .into_iter()
+            .next()
+            .ok_or_else(|| SqlParseError::ParseError("No statement found".to_string()))?;
         self.classify_statement(statement, sql.to_string())
     }
 
     /// Parse SQL and extract operation type (simplified version for backward compatibility)
     pub fn parse_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
-        self.parse_single(sql)
-            .ok()
-            .map(|parsed| {
-                // DDL/DCL/Transaction 操作默认拒绝（权限引擎会处理）
-                // 这里只返回 DML 操作的权限动作
-                let action = match parsed.operation_type {
-                    SqlOperationType::Select => PermissionAction::Select,
-                    SqlOperationType::Insert => PermissionAction::Insert,
-                    SqlOperationType::Update => PermissionAction::Update,
-                    SqlOperationType::Delete => PermissionAction::Delete,
-                    SqlOperationType::Ddl => PermissionAction::Select, // 占位，会被 is_ddl_operation 拦截
-                    SqlOperationType::Dcl => PermissionAction::Select, // 占位
-                    SqlOperationType::Transaction => PermissionAction::Select, // 占位
-                    SqlOperationType::Other => PermissionAction::Select, // 占位
-                };
-                (sql.to_string(), action)
-            })
+        self.parse_single(sql).ok().and_then(|parsed| {
+            // DDL/DCL/Transaction 操作默认拒绝（权限引擎会处理）
+            // 这里只返回 DML 操作的权限动作
+            let action = match parsed.operation_type {
+                SqlOperationType::Select => PermissionAction::Select,
+                SqlOperationType::Insert => PermissionAction::Insert,
+                SqlOperationType::Update => PermissionAction::Update,
+                SqlOperationType::Delete => PermissionAction::Delete,
+                SqlOperationType::Ddl => PermissionAction::Select, // 占位，会被 is_ddl_operation 拦截
+                SqlOperationType::Dcl => PermissionAction::Select, // 占位
+                SqlOperationType::Transaction => PermissionAction::Select, // 占位
+                SqlOperationType::Other => PermissionAction::Select, // 占位
+            };
+            parsed.table_name.map(|table_name| (table_name, action))
+        })
     }
 
     /// Classify a parsed statement into an operation
-    fn classify_statement(
-        &self,
-        statement: Statement,
-        sql: String,
-    ) -> Result<ParsedSqlOperation, SqlParseError> {
+    fn classify_statement(&self, statement: Statement, sql: String) -> Result<ParsedSqlOperation, SqlParseError> {
         let (operation_type, table_name) = match statement {
-            Statement::Query(_) => (SqlOperationType::Select, None),
-            Statement::Insert(insert) => {
-                (SqlOperationType::Insert, Some(insert.table_name.to_string()))
-            }
-            Statement::Update { table, .. } => {
-                (SqlOperationType::Update, extract_table_name_from_table_with_joins(&table))
-            }
+            Statement::Query(query) => (SqlOperationType::Select, extract_table_from_query(&query)),
+            Statement::Insert(insert) => (SqlOperationType::Insert, Some(insert.table_name.to_string())),
+            Statement::Update { table, .. } => (
+                SqlOperationType::Update,
+                extract_table_name_from_table_with_joins(&table),
+            ),
             Statement::Delete(delete) => {
                 let table_name = extract_table_from_delete(&delete);
                 (SqlOperationType::Delete, table_name)
@@ -194,18 +187,19 @@ impl SqlParser {
                 };
                 (SqlOperationType::Ddl, table_name)
             }
-            Statement::Truncate { table_name, .. } => {
-                (SqlOperationType::Ddl, Some(table_name.to_string()))
-            }
-            Statement::CreateIndex { table_name, .. } => {
-                (SqlOperationType::Ddl, Some(table_name.to_string()))
-            }
+            Statement::Truncate { table_name, .. } => (SqlOperationType::Ddl, Some(table_name.to_string())),
+            Statement::CreateIndex { table_name, .. } => (SqlOperationType::Ddl, Some(table_name.to_string())),
             Statement::Grant { .. } => (SqlOperationType::Dcl, None),
             Statement::Revoke { .. } => (SqlOperationType::Dcl, None),
             Statement::StartTransaction { .. } | Statement::Commit { .. } | Statement::Rollback { .. } => {
                 (SqlOperationType::Transaction, None)
             }
-            Statement::SetVariable { local: _, hivevar: _, variables, .. } => {
+            Statement::SetVariable {
+                local: _,
+                hivevar: _,
+                variables,
+                ..
+            } => {
                 // Check if it's a system variable
                 let var_name = variables.to_string().to_lowercase();
                 if is_ddl_related_variable(&var_name) {
@@ -232,12 +226,18 @@ fn contains_variables(sql: &str) -> bool {
     let sql_without_strings = remove_string_literals(sql);
 
     // Detect patterns like @variable, :variable, $variable
-    let patterns = [r"@[\w]+", r":[a-zA-Z_][\w]*", r"\$[a-zA-Z_][\w]*"];
-    for pattern in &patterns {
-        if regex::Regex::new(pattern)
-            .unwrap()
-            .is_match(&sql_without_strings)
-        {
+    use std::sync::OnceLock;
+    static PATTERNS: OnceLock<Vec<regex::Regex>> = OnceLock::new();
+
+    let patterns = PATTERNS.get_or_init(|| {
+        [r"@[\w]+", r":[a-zA-Z_][\w]*", r"\$[a-zA-Z_][\w]*"]
+            .iter()
+            .map(|p| regex::Regex::new(p).unwrap())
+            .collect()
+    });
+
+    for pattern in patterns {
+        if pattern.is_match(&sql_without_strings) {
             return true;
         }
     }
@@ -325,6 +325,18 @@ fn extract_table_from_delete(delete: &Delete) -> Option<String> {
     }
 }
 
+fn extract_table_from_query(query: &Query) -> Option<String> {
+    let SetExpr::Select(select) = query.body.as_ref() else {
+        return None;
+    };
+
+    if select.from.is_empty() {
+        return None;
+    }
+
+    extract_table_name_from_table_with_joins(&select.from[0])
+}
+
 /// Check if a variable is DDL-related
 fn is_ddl_related_variable(var_name: &str) -> bool {
     let ddl_vars = [
@@ -342,12 +354,7 @@ pub fn is_ddl_operation(sql: &str) -> bool {
     let parser = SqlParser::new();
     parser
         .parse_single(sql)
-        .map(|parsed| {
-            matches!(
-                parsed.operation_type,
-                SqlOperationType::Ddl | SqlOperationType::Dcl
-            )
-        })
+        .map(|parsed| matches!(parsed.operation_type, SqlOperationType::Ddl | SqlOperationType::Dcl))
         .unwrap_or(false)
 }
 
@@ -362,6 +369,7 @@ mod tests {
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Select);
+        assert_eq!(parsed.table_name, Some("users".to_string()));
     }
 
     #[test]
@@ -397,8 +405,7 @@ mod tests {
     #[test]
     fn test_parse_create_table() {
         let parser = SqlParser::new();
-        let result =
-            parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
+        let result = parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
@@ -430,10 +437,7 @@ mod tests {
         let parser = SqlParser::new();
         let result = parser.parse_single("SELECT * FROM users; SELECT * FROM posts");
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            SqlParseError::MultipleStatements
-        ));
+        assert!(matches!(result.unwrap_err(), SqlParseError::MultipleStatements));
     }
 
     #[test]
@@ -449,10 +453,7 @@ mod tests {
         let parser = SqlParser::new();
         let result = parser.parse_single("SELECT * FROM users WHERE id = @userId");
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            SqlParseError::ContainsVariables(..)
-        ));
+        assert!(matches!(result.unwrap_err(), SqlParseError::ContainsVariables(..)));
     }
 
     #[test]

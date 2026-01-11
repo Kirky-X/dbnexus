@@ -10,22 +10,23 @@
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
 use lru::LruCache;
+#[cfg(feature = "permission")]
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
-use tokio::time::timeout;
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
+use tokio::time::timeout;
 use tracing::info;
 
+use super::Session;
 use crate::config::{ConfigError, DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
 use crate::permission::{PermissionConfig, RolePolicy};
-use super::Session;
 
 // 导入 Sea-ORM 的连接 trait
 use sea_orm::ConnectionTrait;
@@ -183,9 +184,9 @@ impl DbPool {
                                 }
                             }
                             Err(_) => {
-                                last_error = Some(DbError::Connection(
-                                    sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)
-                                ));
+                                last_error = Some(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                                    sea_orm::ConnAcquireErr::Timeout,
+                                )));
                                 break;
                             }
                         }
@@ -219,8 +220,11 @@ impl DbPool {
 
             info!(
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
-                successful, initial_connections, corrected_config.min_connections,
-                corrected_config.max_connections, failed
+                successful,
+                initial_connections,
+                corrected_config.min_connections,
+                corrected_config.max_connections,
+                failed
             );
         }
 
@@ -322,11 +326,12 @@ impl DbPool {
     /// let pool = DbPool::try_from(&config)?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
-        ///
-        /// # Errors
-        ///
-        /// 如果配置验证失败，返回错误
-        pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {        config.validate()?;
+    ///
+    /// # Errors
+    ///
+    /// 如果配置验证失败，返回错误
+    pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
+        config.validate()?;
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
@@ -362,7 +367,7 @@ impl DbPool {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
             tracing::info!("Loading permission config from: {}", path);
-            match std::fs::read_to_string(path) {
+            match tokio::fs::read_to_string(path).await {
                 Ok(content) => match PermissionConfig::from_yaml(&content) {
                     Ok(perm_config) => {
                         tracing::info!("Successfully loaded permission config from: {}", path);
@@ -452,10 +457,7 @@ impl DbPool {
                     safe_roles.join(", ")
                 )));
             }
-            tracing::debug!(
-                "No permission config configured, allowing safe role '{}'",
-                role
-            );
+            tracing::debug!("No permission config configured, allowing safe role '{}'", role);
             return Ok(());
         }
 
@@ -515,14 +517,12 @@ impl DbPool {
     /// 如果连接有效返回 `true`，否则返回 `false`
     pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
         let health_query = Self::get_health_check_query(&self.inner.config.url);
+        let backend = Self::get_database_backend(&self.inner.config.url);
 
         // 创建带超时的健康检查
         let result = timeout(
             Duration::from_secs(5),
-            conn.execute_raw(sea_orm::Statement::from_string(
-                sea_orm::DatabaseBackend::Sqlite,
-                health_query.to_string(),
-            )),
+            conn.execute_raw(sea_orm::Statement::from_string(backend, health_query.to_string())),
         )
         .await;
 
@@ -840,7 +840,15 @@ impl DbPool {
         // 释放锁后再创建连接（避免阻塞其他操作）
         drop(idle);
 
-        Self::create_connection(&self.inner.config).await
+        match Self::create_connection(&self.inner.config).await {
+            Ok(conn) => Ok(conn),
+            Err(e) => {
+                // 创建失败，回滚计数
+                self.inner.total_count.fetch_sub(1, Ordering::SeqCst);
+                self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
+                Err(e)
+            }
+        }
     }
 
     /// 归还连接到池中
@@ -867,6 +875,9 @@ impl DbPool {
                 idle.push(conn);
                 // 通知等待的请求者有新连接可用
                 inner.connection_available.notify_one();
+            } else {
+                // 连接池已满，丢弃连接，减少总连接数
+                inner.total_count.fetch_sub(1, Ordering::SeqCst);
             }
         });
     }
@@ -1026,4 +1037,3 @@ impl super::ConnectionPool for DbPool {
         self.config()
     }
 }
-

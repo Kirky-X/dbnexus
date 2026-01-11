@@ -7,11 +7,11 @@
 //!
 //! 负责执行数据库迁移操作
 
-use super::schema::*;
 use super::differ::SqlGenerator;
+use super::schema::*;
 use crate::config::DatabaseType;
-use std::path::PathBuf;
 use sea_orm::{ConnectionTrait, TransactionTrait};
+use std::path::PathBuf;
 
 /// 迁移执行器
 pub struct MigrationExecutor {

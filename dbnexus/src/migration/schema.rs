@@ -7,11 +7,11 @@
 //!
 //! 定义数据库表、列、索引等结构
 
-use serde::{Deserialize, Serialize};
+use super::types::*;
 use crate::config::DatabaseType;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use super::types::*;
 
 /// 列类型
 #[derive(Debug, Clone, PartialEq, Eq)]

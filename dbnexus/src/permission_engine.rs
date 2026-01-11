@@ -19,13 +19,20 @@
 //!
 //! # 使用示例
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! use std::sync::Arc;
+//!
 //! use dbnexus::permission_engine::{PolicyDecisionPoint, YamlPermissionProvider};
 //!
-//! let provider = YamlPermissionProvider::new("permissions.yaml")?;
-//! let pdp = PolicyDecisionPoint::new(Arc::new(provider));
+//! fn main() -> Result<(), String> {
+//!     let provider = YamlPermissionProvider::new("permissions.yaml")?;
+//!     let pdp = PolicyDecisionPoint::new(Arc::new(provider));
 //!
-//! let result = pdp.check_permission("admin", "users", "SELECT").await;
+//!     let rt = tokio::runtime::Runtime::new().unwrap();
+//!     let _decision = rt.block_on(async { pdp.check("admin", "users", "SELECT").await });
+//!
+//!     Ok(())
+//! }
 //! ```
 
 use async_trait::async_trait;

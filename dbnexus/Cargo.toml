@@ -12,7 +12,7 @@ categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
 
 [features]
-default = ["runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:async-trait", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
+default = ["sqlite", "runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:async-trait", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
 
 # Async runtime (互斥)
 runtime-tokio-rustls = [

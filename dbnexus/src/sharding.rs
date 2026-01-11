@@ -13,11 +13,14 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use dbnexus::sharding::{ShardRouter, ShardConfig};
+//! ```rust
+//! use dbnexus::sharding::{ShardConfig, ShardRouter};
 //!
-//! let config = ShardConfig::new("yearly", 12, "order", "postgresql://localhost/{shard}");
-//! let mut router = ShardRouter::with_config(&config);
+//! fn main() {
+//!     let config = ShardConfig::new("yearly", 12, "order", "postgresql://localhost/{shard}");
+//!     let router = ShardRouter::with_config_sync(&config);
+//!     let _ = router.total_shards();
+//! }
 //! ```
 
 use chrono::{DateTime, Datelike, Utc};
