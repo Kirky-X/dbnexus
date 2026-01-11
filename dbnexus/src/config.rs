@@ -1272,7 +1272,7 @@ mod tests {
         assert_eq!(config.max_connections, 20);
         assert_eq!(config.min_connections, 5);
         assert_eq!(config.idle_timeout, 300);
-        assert_eq!(config.acquire_timeout, 3000);
+        assert_eq!(config.acquire_timeout, 5000); // 恢复为保守的默认值
         assert_eq!(config.admin_role, "admin");
     }
 

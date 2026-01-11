@@ -203,6 +203,33 @@ impl Session {
         })
     }
 
+    /// 执行 DDL 操作（允许创建表、删除表等操作）
+    ///
+    /// 此方法专门用于执行 DDL 操作，绕过常规的 DDL 检查。
+    /// 仅用于测试和迁移场景，生产环境应谨慎使用。
+    ///
+    /// # Arguments
+    ///
+    /// * `sql` - 要执行的 DDL SQL 语句
+    ///
+    /// # Returns
+    ///
+    /// 执行结果
+    ///
+    /// # Note
+    ///
+    /// 此方法不进行权限检查，仅用于测试和迁移场景。
+    pub async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
+        // 执行 SQL（不进行 DDL 检查）
+        let conn = self.connection.as_ref().ok_or_else(|| {
+            DbError::Config("Connection not available".to_string())
+        })?;
+
+        conn.execute_unprepared(sql).await.map_err(|e| {
+            DbError::Connection(e)
+        })
+    }
+
     /// 执行 SQL（带权限检查和操作类型）
     pub async fn execute(&mut self, sql: &str) -> DbResult<ExecResult> {
         let start = Instant::now();

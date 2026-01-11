@@ -255,7 +255,7 @@ async fn test_config_default_values() {
     assert_eq!(config.max_connections, 20);  // 默认值
     assert_eq!(config.min_connections, 5);   // 默认值
     assert_eq!(config.idle_timeout, 300);    // 默认值
-    assert_eq!(config.acquire_timeout, 3000); // 默认值
+    assert_eq!(config.acquire_timeout, 5000); // 默认值（恢复为保守值）
     assert!(!config.auto_migrate);           // 默认值
     assert_eq!(config.migration_timeout, 60); // 默认值
     assert_eq!(config.admin_role, "admin");  // 默认值

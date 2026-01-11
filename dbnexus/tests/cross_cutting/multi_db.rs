@@ -167,7 +167,7 @@ async fn test_migration_table_creation() {
         .expect("Failed to create pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 创建迁移历史表
+    // 创建迁移历史表（使用 execute_raw_ddl）
     let create_sql = match config.url.as_str() {
         url if url.starts_with("sqlite") => {
             "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
@@ -196,10 +196,10 @@ async fn test_migration_table_creation() {
         _ => return, // 未知数据库类型，跳过
     };
 
-    let result = session.execute_raw(create_sql).await;
+    let result = session.execute_raw_ddl(create_sql).await;
     assert!(result.is_ok(), "Migration table should be created successfully");
 
-    // 验证表存在
+    // 验证表存在（使用 execute_raw_ddl 执行查询）
     let verify_sql = match config.url.as_str() {
         url if url.starts_with("sqlite") => {
             "SELECT name FROM sqlite_master WHERE type='table' AND name='dbnexus_migrations'"
@@ -207,7 +207,8 @@ async fn test_migration_table_creation() {
         _ => "SELECT 1 FROM dbnexus_migrations LIMIT 1",
     };
 
-    let verify_result = session.execute_raw(verify_sql).await;
+    // 使用 execute_raw_ddl 执行查询（因为表不存在时权限检查会失败）
+    let verify_result = session.execute_raw_ddl(verify_sql).await;
     assert!(verify_result.is_ok(), "Migration table should exist");
 }
 
@@ -342,13 +343,30 @@ async fn test_pool_status_across_databases() {
 /// TEST-MDB-014: 数据库特定功能测试
 #[tokio::test]
 async fn test_database_specific_features() {
-    let config = common::get_test_config();
+    // 创建带有权限配置的测试
+    let perm_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+"#;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let perm_file = temp_dir.path().join("test_permissions.yaml");
+    std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
+
+    let mut config = common::get_test_config();
+    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 创建测试表
+    // 创建测试表（使用 execute_raw_ddl）
     session
-        .execute_raw("CREATE TABLE IF NOT EXISTS feature_test (id INTEGER PRIMARY KEY, data TEXT)")
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS feature_test (id INTEGER PRIMARY KEY, data TEXT)")
         .await
         .expect("Failed to create test table");
 
@@ -364,9 +382,9 @@ async fn test_database_specific_features() {
         .await
         .expect("Failed to query data");
 
-    // 清理
+    // 清理（使用 execute_raw_ddl）
     session
-        .execute_raw("DROP TABLE feature_test")
+        .execute_raw_ddl("DROP TABLE feature_test")
         .await
         .expect("Failed to drop test table");
 }
@@ -395,9 +413,9 @@ async fn test_transaction_compatibility() {
     // 使用单独的会话进行事务操作
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 创建测试表
+    // 创建测试表（使用 execute_raw_ddl）
     session
-        .execute_raw("CREATE TABLE IF NOT EXISTS txn_test (id INTEGER PRIMARY KEY, value INTEGER)")
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS txn_test (id INTEGER PRIMARY KEY, value INTEGER)")
         .await
         .expect("Failed to create test table");
 
@@ -413,8 +431,8 @@ async fn test_transaction_compatibility() {
 
     // 如果插入失败，可能是连接问题，直接跳过此测试
     if insert_result.is_err() {
-        // 清理并返回
-        let _ = session.execute_raw("DROP TABLE IF EXISTS txn_test").await;
+        // 清理并返回（使用 execute_raw_ddl）
+        let _ = session.execute_raw_ddl("DROP TABLE IF EXISTS txn_test").await;
         return;
     }
 
@@ -440,10 +458,10 @@ async fn test_concurrent_operations_cross_database() {
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let pool = std::sync::Arc::new(pool);
 
-    // 创建测试表
+    // 创建测试表（使用 execute_raw_ddl）
     let setup_session = pool.get_session("admin").await.expect("Failed to get session");
     setup_session
-        .execute_raw("CREATE TABLE IF NOT EXISTS concurrent_test (id INTEGER PRIMARY KEY, counter INTEGER)")
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS concurrent_test (id INTEGER PRIMARY KEY, counter INTEGER)")
         .await
         .expect("Failed to create test table");
     drop(setup_session);

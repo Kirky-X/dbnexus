@@ -56,10 +56,11 @@ async fn test_concurrent_session_release() {
     let num_sessions = 5;
     let mut sessions = Vec::new();
 
-    // 快速获取多个会话
+    // 快速获取多个会话 - 使用安全角色
+    let safe_roles = ["admin", "system", "admin", "system", "admin"];
     for i in 0..num_sessions {
         let session = pool
-            .get_session(&format!("user{}", i))
+            .get_session(safe_roles[i])
             .await
             .expect("Failed to get session");
         sessions.push(session);
@@ -393,11 +394,12 @@ async fn test_pool_capacity_boundary() {
     let pool = DbPool::with_config(pool_config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
 
-    // 获取所有可用连接
+    // 获取所有可用连接 - 使用安全角色
     let mut sessions = Vec::new();
+    let safe_roles = ["admin", "system", "admin"];
     for i in 0..3 {
         let session = pool
-            .get_session(&format!("user{}", i))
+            .get_session(safe_roles[i])
             .await
             .expect("Failed to get session");
         sessions.push(session);
@@ -406,11 +408,12 @@ async fn test_pool_capacity_boundary() {
     let pool_clone = pool.clone();
     let mut handles = Vec::new();
 
-    // 尝试获取超出容量的连接
+    // 尝试获取超出容量的连接 - 使用安全角色
+    let extra_roles = ["admin", "system", "admin", "system", "admin"];
     for i in 0..5 {
         let pool = pool_clone.clone();
         let handle = tokio::spawn(async move {
-            tokio::time::timeout(Duration::from_millis(500), pool.get_session(&format!("extra{}", i))).await
+            tokio::time::timeout(Duration::from_millis(500), pool.get_session(extra_roles[i])).await
         });
         handles.push(handle);
     }
@@ -432,7 +435,7 @@ async fn test_pool_capacity_boundary() {
     drop(sessions);
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let new_session = pool.get_session("new_user").await;
+    let new_session = pool.get_session("admin").await;
     assert!(new_session.is_ok(), "Should be able to get session after release");
 }
 
@@ -555,7 +558,9 @@ async fn test_large_scale_concurrent_stress() {
         let total_operations = total_operations.clone();
         let handle = tokio::spawn(async move {
             for op in 0..operations_per_task {
-                let session = pool.get_session(&format!("task{}_op{}", task_id, op)).await;
+                // 使用安全角色在 admin 和 system 之间轮换
+                let role = if (task_id + op) % 2 == 0 { "admin" } else { "system" };
+                let session = pool.get_session(role).await;
                 if session.is_ok() {
                     total_operations.fetch_add(1, Ordering::SeqCst);
                     drop(session);

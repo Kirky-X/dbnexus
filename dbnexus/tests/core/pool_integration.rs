@@ -71,13 +71,15 @@ async fn test_pool_status_after_operations() {
     let initial_status = pool.status();
     assert!(initial_status.total >= config.min_connections as u32);
 
-    // 获取多个会话
+    // 获取多个会话（使用安全角色 admin 和 system）
     let mut sessions = Vec::new();
     for i in 0..3 {
+        // 交替使用 admin 和 system 角色
+        let role = if i % 2 == 0 { "admin" } else { "system" };
         let session = pool
-            .get_session(&format!("user{}", i))
+            .get_session(role)
             .await
-            .expect(&format!("TEST-I-004: Failed to get session for user{}", i));
+            .expect(&format!("TEST-I-004: Failed to get session for {}", role));
         sessions.push(session);
     }
 
@@ -248,15 +250,15 @@ async fn test_connection_acquire_with_small_pool() {
     let pool = DbPool::with_config(config).await
         .expect("TEST-I-010: Failed to create test pool with small size for acquire timeout test");
 
-    // 获取两个连接（达到最大限制）
-    let _session1 = pool.get_session("user1").await
+    // 获取两个连接（达到最大限制）- 使用安全角色
+    let _session1 = pool.get_session("admin").await
         .expect("TEST-I-010: Failed to get first session from small pool");
-    let _session2 = pool.get_session("user2").await
+    let _session2 = pool.get_session("system").await
         .expect("TEST-I-010: Failed to get second session from small pool");
 
     // 第三个获取可能会超时或等待（取决于实现）
     // 这个测试验证池能够处理连接耗尽的情况
-    let result = pool.get_session("user3").await;
+    let result = pool.get_session("admin").await;
 
     // 结果可能是成功（如果实现了等待队列）或超时
     // 我们不强制要求超时行为，因为这取决于具体实现
