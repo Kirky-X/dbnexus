@@ -141,7 +141,9 @@ impl Session {
             return Err(DbError::Transaction("Not in transaction".to_string()));
         }
 
-        let transaction = self.transaction.take().unwrap();
+        let transaction = self.transaction.take().ok_or_else(|| {
+            DbError::Transaction("No active transaction to rollback".to_string())
+        })?;
         transaction.rollback().await.map_err(|e| {
             DbError::Transaction(format!("Failed to rollback transaction: {}", e))
         })?;
@@ -218,8 +220,16 @@ impl Session {
     ///
     /// # Note
     ///
-    /// 此方法不进行权限检查，仅用于测试和迁移场景。
+    /// 此方法只允许管理员角色执行，用于测试和迁移场景。
     pub async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
+        // 检查角色白名单（只允许管理员角色执行 DDL）
+        if self.role != self.pool_inner.admin_role {
+            return Err(DbError::Permission(format!(
+                "DDL operations are only allowed for admin role. Current role: '{}', Admin role: '{}'",
+                self.role, self.pool_inner.admin_role
+            )));
+        }
+
         // 执行 SQL（不进行 DDL 检查）
         let conn = self.connection.as_ref().ok_or_else(|| {
             DbError::Config("Connection not available".to_string())

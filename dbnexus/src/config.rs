@@ -661,6 +661,16 @@ impl DbConfig {
             return Err(ConfigError::MissingField);
         }
 
+        // 验证 max_connections 范围（1-1000）
+        if self.max_connections > 1000 {
+            return Err(ConfigError::ValidationFailed);
+        }
+
+        // 验证 min_connections 范围（1-100）
+        if self.min_connections == 0 || self.min_connections > 100 {
+            return Err(ConfigError::ValidationFailed);
+        }
+
         if self.min_connections > self.max_connections {
             return Err(ConfigError::InvalidFormat);
         }
