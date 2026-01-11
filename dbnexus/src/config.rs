@@ -670,8 +670,10 @@ impl DbConfig {
 
     /// 验证数据库 URL 格式
     fn validate_url_format(&self) -> Result<(), ConfigError> {
-        // 使用正则表达式验证基本 URL 格式
-        // 匹配: protocol://[user:password@]host[:port][/database][?params]
+        if self.url.starts_with("sqlite:") || self.url.starts_with("sqlite3:") {
+            return Ok(());
+        }
+
         static URL_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
             regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^ ]+$").expect("Failed to compile URL regex")
         });
@@ -680,13 +682,11 @@ impl DbConfig {
             return Err(ConfigError::InvalidUrl);
         }
 
-        // 提取协议并验证是否支持
         if let Some(protocol_end) = self.url.find("://") {
             let protocol = &self.url[..protocol_end];
             match protocol {
                 "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
                 "file" | "mem" => {
-                    // SQLite 特殊协议
                     if !protocol.starts_with("sqlite") {
                         return Err(ConfigError::UnsupportedProtocol);
                     }
