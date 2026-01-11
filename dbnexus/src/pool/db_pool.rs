@@ -86,6 +86,20 @@ pub(crate) struct DbPoolInner {
 }
 
 impl DbPool {
+    fn update_max_active(&self, active: u32) {
+        let mut current = self.inner.max_active.load(Ordering::Relaxed);
+        while active > current {
+            match self
+                .inner
+                .max_active
+                .compare_exchange(current, active, Ordering::SeqCst, Ordering::Relaxed)
+            {
+                Ok(_) => return,
+                Err(observed) => current = observed,
+            }
+        }
+    }
+
     /// 创建新的连接池
     pub async fn new(url: &str) -> DbResult<Self> {
         let config = DbConfig {
@@ -792,7 +806,9 @@ impl DbPool {
 
         // 尝试从空闲队列获取
         if !idle.is_empty() {
-            self.inner.active_count.fetch_add(1, Ordering::SeqCst);
+            let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
+            self.update_max_active(active);
+            self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
             return idle.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
             });
@@ -802,6 +818,7 @@ impl DbPool {
         if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections {
             // 等待空闲连接（使用条件变量替代忙等待）
             let timeout_duration = self.inner.config.acquire_timeout_duration();
+            self.inner.wait_count.fetch_add(1, Ordering::SeqCst);
 
             // 释放锁并等待通知
             drop(idle);
@@ -809,9 +826,9 @@ impl DbPool {
             let result = timeout(timeout_duration, async {
                 let mut idle = self.inner.idle_connections.lock().await;
                 while idle.is_empty() {
-                    // 释放锁并等待通知
+                    let notified = self.inner.connection_available.notified();
                     drop(idle);
-                    self.inner.connection_available.notified().await;
+                    notified.await;
                     idle = self.inner.idle_connections.lock().await;
                 }
                 idle.pop()
@@ -820,7 +837,9 @@ impl DbPool {
 
             return match result {
                 Ok(Some(conn)) => {
-                    self.inner.active_count.fetch_add(1, Ordering::SeqCst);
+                    let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
+                    self.update_max_active(active);
+                    self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
                     Ok(conn)
                 }
                 Ok(None) => Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
@@ -835,13 +854,17 @@ impl DbPool {
         // 创建新连接（在持有锁的情况下，确保不会超过最大连接数）
         // 先增加 total_count，确保原子性
         self.inner.total_count.fetch_add(1, Ordering::SeqCst);
-        self.inner.active_count.fetch_add(1, Ordering::SeqCst);
+        let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
+        self.update_max_active(active);
 
         // 释放锁后再创建连接（避免阻塞其他操作）
         drop(idle);
 
         match Self::create_connection(&self.inner.config).await {
-            Ok(conn) => Ok(conn),
+            Ok(conn) => {
+                self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
+                Ok(conn)
+            }
             Err(e) => {
                 // 创建失败，回滚计数
                 self.inner.total_count.fetch_sub(1, Ordering::SeqCst);
@@ -869,17 +892,31 @@ impl DbPool {
     pub(crate) fn release_connection(&self, conn: DatabaseConnection) {
         self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
         let inner = self.inner.clone();
-        tokio::spawn(async move {
-            let mut idle = inner.idle_connections.lock().await;
+
+        if let Ok(mut idle) = inner.idle_connections.try_lock() {
             if idle.len() < inner.config.max_connections as usize {
                 idle.push(conn);
-                // 通知等待的请求者有新连接可用
                 inner.connection_available.notify_one();
             } else {
-                // 连接池已满，丢弃连接，减少总连接数
                 inner.total_count.fetch_sub(1, Ordering::SeqCst);
             }
-        });
+            return;
+        }
+
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::spawn(async move {
+                let mut idle = inner.idle_connections.lock().await;
+                if idle.len() < inner.config.max_connections as usize {
+                    idle.push(conn);
+                    inner.connection_available.notify_one();
+                } else {
+                    inner.total_count.fetch_sub(1, Ordering::SeqCst);
+                }
+            });
+        } else {
+            inner.total_count.fetch_sub(1, Ordering::SeqCst);
+            drop(conn);
+        }
     }
 
     /// 获取连接池状态

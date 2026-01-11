@@ -38,21 +38,57 @@ impl MigrationExecutor {
         // 确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        // 查询已应用的迁移版本
-        let query_sql = "SELECT version FROM dbnexus_migrations ORDER BY version";
+        let rows = {
+            use sea_orm::sea_query::{Alias, Expr, Order, Query};
 
-        match self.connection.execute_unprepared(query_sql).await {
-            Ok(_) => {
-                // 表存在且查询成功
-                // 由于 Sea-ORM 的限制，我们使用一个简单的方法：
-                // 每次应用迁移时都会添加记录到历史中
-                // 这里我们假设历史已经被正确填充
+            let mut query = Query::select();
+            query.from(Alias::new("dbnexus_migrations"));
+            query.column(Alias::new("version"));
+            query.column(Alias::new("description"));
+            query.column(Alias::new("file_path"));
+
+            match self.sql_generator.db_type {
+                DatabaseType::Postgres => {
+                    query.expr_as(Expr::cust("applied_at::text"), Alias::new("applied_at"));
+                }
+                DatabaseType::MySql => {
+                    query.expr_as(Expr::cust("CAST(applied_at AS CHAR)"), Alias::new("applied_at"));
+                }
+                DatabaseType::Sqlite => {
+                    query.column(Alias::new("applied_at"));
+                }
             }
-            Err(e) => {
-                tracing::warn!("Failed to load migration history: {}", e);
-                self.history = MigrationHistory::new();
-            }
+
+            query.order_by(Alias::new("version"), Order::Asc);
+
+            self.connection
+                .query_all(&query)
+                .await
+                .map_err(crate::config::DbError::Connection)?
+        };
+
+        let mut history = MigrationHistory::new();
+        for row in rows {
+            let version: i64 = row.try_get("", "version").unwrap_or_default();
+            let Ok(version) = u32::try_from(version) else {
+                continue;
+            };
+
+            let description: String = row.try_get("", "description").unwrap_or_default();
+            let applied_at_str: String = row.try_get("", "applied_at").unwrap_or_default();
+            let applied_at =
+                time::OffsetDateTime::parse(&applied_at_str, &time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+            let file_path: String = row.try_get("", "file_path").unwrap_or_default();
+
+            history.add_migration(MigrationVersion {
+                version,
+                description,
+                applied_at,
+                file_path,
+            });
         }
+        self.history = history;
 
         Ok(())
     }
@@ -148,6 +184,8 @@ impl MigrationExecutor {
             .map_err(crate::config::DbError::Connection)?;
         // 提交事务
         txn.commit().await.map_err(crate::config::DbError::Connection)?;
+
+        self.history.add_migration(version_record);
 
         Ok(())
     }
@@ -332,22 +370,22 @@ impl MigrationExecutor {
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        // 使用参数化查询防止 SQL 注入
-        let backend = match self.sql_generator.db_type {
-            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
-            DatabaseType::MySql => sea_orm::DbBackend::MySql,
-            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
-        };
-        let check_query = sea_orm::Statement::from_sql_and_values(
-            backend,
-            "SELECT 1 FROM dbnexus_migrations WHERE version = ?".to_string(),
-            vec![version.into()],
-        );
+        let row = {
+            use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
 
-        match self.connection.execute_raw(check_query).await {
-            Ok(result) => Ok(result.rows_affected() > 0),
-            Err(_) => Ok(false),
-        }
+            let mut query = Query::select();
+            query.expr(Expr::cust("1"));
+            query.from(Alias::new("dbnexus_migrations"));
+            query.and_where(Expr::col(Alias::new("version")).eq(version));
+            query.limit(1);
+
+            self.connection
+                .query_one(&query)
+                .await
+                .map_err(crate::config::DbError::Connection)?
+        };
+
+        Ok(row.is_some())
     }
 
     /// 应用单个迁移文件
