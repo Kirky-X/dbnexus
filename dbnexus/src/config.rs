@@ -252,6 +252,8 @@ pub struct DbConfigBuilder {
     auto_migrate: Option<bool>,
     migration_timeout: Option<u64>,
     admin_role: Option<String>,
+    warmup_timeout: Option<u64>,
+    warmup_retries: Option<u32>,
 }
 
 impl DbConfigBuilder {
@@ -320,6 +322,18 @@ impl DbConfigBuilder {
         self
     }
 
+    /// 设置预热超时时间（秒）
+    pub fn warmup_timeout(mut self, timeout: u64) -> Self {
+        self.warmup_timeout = Some(timeout);
+        self
+    }
+
+    /// 设置预热重试次数
+    pub fn warmup_retries(mut self, retries: u32) -> Self {
+        self.warmup_retries = Some(retries);
+        self
+    }
+
     /// 构建配置
     ///
     /// # Errors
@@ -337,6 +351,8 @@ impl DbConfigBuilder {
             auto_migrate: self.auto_migrate.unwrap_or(false),
             migration_timeout: self.migration_timeout.unwrap_or_else(default_migration_timeout),
             admin_role: self.admin_role.unwrap_or_else(default_admin_role),
+            warmup_timeout: self.warmup_timeout.unwrap_or_else(default_warmup_timeout),
+            warmup_retries: self.warmup_retries.unwrap_or_else(default_warmup_retries),
         };
 
         config.validate()?;
@@ -471,6 +487,14 @@ pub struct DbConfig {
     /// 管理员角色名称（用于 DDL 操作）
     #[serde(default = "default_admin_role")]
     pub admin_role: String,
+
+    /// 预热超时时间（秒）
+    #[serde(default = "default_warmup_timeout")]
+    pub warmup_timeout: u64,
+
+    /// 预热重试次数
+    #[serde(default = "default_warmup_retries")]
+    pub warmup_retries: u32,
 }
 
 fn default_admin_role() -> String {
@@ -495,6 +519,14 @@ fn default_acquire_timeout() -> u64 {
 
 fn default_migration_timeout() -> u64 {
     60
+}
+
+fn default_warmup_timeout() -> u64 {
+    30
+}
+
+fn default_warmup_retries() -> u32 {
+    3
 }
 
 impl DbConfig {
@@ -543,6 +575,14 @@ impl DbConfig {
                 .parse()
                 .unwrap_or(60),
             admin_role: std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string()),
+            warmup_timeout: std::env::var("DB_WARMUP_TIMEOUT")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .unwrap_or(30),
+            warmup_retries: std::env::var("DB_WARMUP_RETRIES")
+                .unwrap_or_else(|_| "3".to_string())
+                .parse()
+                .unwrap_or(3),
         })
     }
 
@@ -1163,6 +1203,8 @@ mod tests {
             auto_migrate: false,
             migration_timeout: 60,
             admin_role: "admin".to_string(),
+            warmup_timeout: 30,
+            warmup_retries: 3,
         };
 
         assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
@@ -1184,6 +1226,8 @@ mod tests {
             auto_migrate: false,
             migration_timeout: 60,
             admin_role: "admin".to_string(),
+            warmup_timeout: 30,
+            warmup_retries: 3,
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);
@@ -1208,6 +1252,8 @@ mod tests {
             auto_migrate: false,
             migration_timeout: 60,
             admin_role: "admin".to_string(),
+            warmup_timeout: 0,
+            warmup_retries: 0,
         };
 
         let actual = ConfigCorrector::get_actual_config(&config);
