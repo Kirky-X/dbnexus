@@ -6,7 +6,22 @@ use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use thiserror::Error;
 
+#[cfg(feature = "permission")]
 use crate::permission::PermissionAction;
+
+#[cfg(not(feature = "permission"))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// 权限操作类型（本地定义，当 permission 特性未启用时使用）
+pub enum PermissionAction {
+    /// 查询操作
+    Select,
+    /// 插入操作
+    Insert,
+    /// 更新操作
+    Update,
+    /// 删除操作
+    Delete,
+}
 
 /// Errors that can occur during SQL parsing
 #[derive(Debug, Error)]
