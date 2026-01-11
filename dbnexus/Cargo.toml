@@ -12,7 +12,7 @@ categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
 
 [features]
-default = ["runtime-tokio-rustls", "permission", "sql-parser", "macros"]
+default = ["runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:async-trait", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
 
 # Async runtime (互斥)
 runtime-tokio-rustls = [
@@ -33,14 +33,14 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros", "sea-orm/with-json"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros", "sea-orm/with-json"]
 
 # Core features (可选，用于最小化部署)
-permission = ["dep:dashmap", "dep:lru"]
+permission = ["dep:dashmap", "dep:lru", "dep:async-trait", "dep:serde_yaml"]
 sql-parser = ["dep:sqlparser", "dep:regex"]
 macros = ["dbnexus-macros"]
 
 # Config features (可选，用于配置文件支持)
-config-yaml = ["dep:serde_yaml"]
-config-toml = ["dep:toml"]
-config-env = []  # 环境变量支持，默认启用
+config-yaml = ["dep:serde_yaml", "dep:regex"]
+config-toml = ["dep:toml", "dep:regex"]
+config-env = ["dep:regex"]  # 环境变量支持，默认启用
 
 # Pool features (可选，用于连接池高级功能)
 pool-health-check = []
