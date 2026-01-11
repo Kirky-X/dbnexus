@@ -728,36 +728,34 @@ impl DbConfig {
 
     /// 验证数据库 URL 格式
     fn validate_url_format(&self) -> Result<(), ConfigError> {
+        // 特殊处理 sqlite::memory: 和 sqlite3::memory: 格式（无 ://）
+        if self.url.starts_with("sqlite::memory:") || self.url.starts_with("sqlite3::memory:") {
+            return Ok(());
+        }
+        // 特殊处理 sqlite: 和 sqlite3: 格式（无 //）
         if self.url.starts_with("sqlite:") || self.url.starts_with("sqlite3:") {
             return Ok(());
         }
-
-        // Simple URL validation without regex
-        if let Some(protocol_end) = self.url.find("://") {
-            let protocol = &self.url[..protocol_end];
-            // Check protocol is valid (alphanumeric with +.-)
-            if !protocol.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-') {
-                return Err(ConfigError::InvalidUrl);
-            }
-        } else {
+        
+        let protocol_end = match self.url.find("://") {
+            Some(pos) => pos,
+            None => return Err(ConfigError::InvalidUrl),
+        };
+        
+        let protocol = &self.url[..protocol_end];
+        
+        // 检查协议格式（字母数字 + + . -）
+        if !protocol.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-') {
             return Err(ConfigError::InvalidUrl);
         }
-
-        if let Some(protocol_end) = self.url.find("://") {
-            let protocol = &self.url[..protocol_end];
-            match protocol {
-                "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
-                "file" | "mem" => {
-                    if !protocol.starts_with("sqlite") {
-                        return Err(ConfigError::UnsupportedProtocol);
-                    }
-                }
-                _ => return Err(ConfigError::UnsupportedProtocol),
-            }
-        } else {
-            return Err(ConfigError::InvalidUrl);
+        
+        // 协议白名单验证
+        match protocol {
+            "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
+            "file" | "mem" if protocol.starts_with("sqlite") => {}
+            _ => return Err(ConfigError::UnsupportedProtocol),
         }
-
+        
         Ok(())
     }
 
