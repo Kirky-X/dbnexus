@@ -87,6 +87,11 @@ pub mod metrics;
 pub mod migration;
 /// 权限控制模块
 pub mod permission;
+/// SQL 解析模块
+pub mod sql_parser;
+
+/// SQL 解析类型导出
+pub use sql_parser::{ParsedSqlOperation, SqlOperationType, SqlParseError, SqlParser};
 
 /// 基础权限类型（简单 RBAC）
 ///
