@@ -7,6 +7,7 @@
 //!
 //! 提供基于角色的表级权限控制功能
 
+use dashmap::DashMap;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,7 +15,6 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::sync::RwLock;
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,8 +50,8 @@ pub struct RateLimiter {
     max_requests: u32,
     /// 时间窗口大小
     window_duration: Duration,
-    /// 请求记录存储
-    requests: Arc<RwLock<HashMap<String, Vec<Instant>>>>,
+    /// 请求记录存储（使用 DashMap 实现细粒度并发控制）
+    requests: Arc<DashMap<String, Vec<Instant>>>,
 }
 
 impl RateLimiter {
@@ -65,7 +65,7 @@ impl RateLimiter {
         Self {
             max_requests,
             window_duration,
-            requests: Arc::new(RwLock::new(HashMap::new())),
+            requests: Arc::new(DashMap::new()),
         }
     }
 
@@ -82,19 +82,16 @@ impl RateLimiter {
         let now = Instant::now();
         let window_start = now - self.window_duration;
 
-        let mut requests = self.requests.write().await;
+        // 使用 DashMap 的细粒度锁
+        let mut entry = self.requests.entry(key.to_string()).or_default();
 
         // 清理过期的请求记录
-        if let Some(timestamps) = requests.get_mut(key) {
-            timestamps.retain(|&t| t > window_start);
-        }
+        entry.retain(|&t| t > window_start);
 
         // 检查是否超过限制
-        let count = requests.entry(key.to_string()).or_default().len();
+        let count = entry.len();
         if count < self.max_requests as usize {
-            if let Some(timestamps) = requests.get_mut(key) {
-                timestamps.push(now);
-            }
+            entry.push(now);
             true
         } else {
             false
@@ -106,9 +103,7 @@ impl RateLimiter {
         let now = Instant::now();
         let window_start = now - self.window_duration;
 
-        let requests = self.requests.read().await;
-
-        if let Some(timestamps) = requests.get(key) {
+        if let Some(timestamps) = self.requests.get(key) {
             let valid_count = timestamps.iter().filter(|&&t| t > window_start).count();
             self.max_requests.saturating_sub(valid_count as u32)
         } else {
@@ -118,8 +113,7 @@ impl RateLimiter {
 
     /// 重置指定键的速率限制
     pub async fn reset(&self, key: &str) {
-        let mut requests = self.requests.write().await;
-        requests.remove(key);
+        self.requests.remove(key);
     }
 }
 

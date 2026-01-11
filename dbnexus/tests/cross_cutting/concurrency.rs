@@ -389,6 +389,8 @@ async fn test_pool_capacity_boundary() {
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(pool_config).await.expect("Failed to create pool");
