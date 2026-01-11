@@ -116,9 +116,68 @@ roles:
 | `auto-migrate` | 启动时自动迁移 |
 | `sharding` | 水平分片支持 |
 | `global-index` | 分布式查询全局索引 |
-| `cache` | 高级缓存功能 |
+| `cache` | LRU 缓存用于权限策略和频繁访问的数据 |
 | `audit` | 完整审计日志 |
 | `tracing` | OpenTelemetry 分布式追踪 |
+| `permission` | 基于角色的访问控制 |
+| `sql-parser` | SQL 解析与分析 |
+| `pool-health-check` | 连接池健康监控 |
+| `config-yaml` | YAML 配置文件支持 |
+| `config-toml` | TOML 配置文件支持 |
+
+### 预设配置
+
+提供两种预设配置以适应不同场景：
+
+#### Minimal（精简版）
+
+```toml
+dbnexus = { version = "0.1", features = ["minimal", "sqlite"] }
+```
+
+| 功能 | 包含 |
+|---------|----------|
+| `runtime-tokio-rustls` | ✅ 异步运行时与 TLS 支持 |
+| `sqlite` | SQLite 数据库驱动 |
+| `config-env` | 环境变量配置 |
+| `sql-parser` | SQL 解析 |
+| `lru` | 权限 LRU 缓存 |
+| `async-trait` | 异步 trait 支持 |
+| `regex` | 正则表达式支持 |
+
+#### Microservice（完整版）
+
+```toml
+dbnexus = { version = "0.1", features = ["microservice", "postgres"] }
+```
+
+| 功能 | 包含 |
+|---------|----------|
+| `runtime-tokio-rustls` | ✅ 异步运行时与 TLS 支持 |
+| `postgres` | PostgreSQL 数据库驱动 |
+| `permission` | 基于角色的访问控制 |
+| `sql-parser` | SQL 解析 |
+| `config-env` | 环境变量配置 |
+| `pool-health-check` | 连接健康监控 |
+| `config-yaml` | YAML 配置 |
+| `lru` | LRU 缓存 |
+| `async-trait` | 异步 trait 支持 |
+| `regex` | 正则表达式支持 |
+
+### 自定义配置
+
+可组合数据库驱动与所需的可选功能：
+
+```toml
+# 精简版 + 缓存
+dbnexus = { version = "0.1", features = ["minimal", "sqlite", "cache"] }
+
+# 完整版 + 审计日志
+dbnexus = { version = "0.1", features = ["microservice", "postgres", "audit"] }
+
+# 全功能版本
+dbnexus = { version = "0.1", features = ["all-optional", "postgres"] }
+```
 
 启用所有可选功能：
 

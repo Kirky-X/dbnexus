@@ -38,6 +38,43 @@ dbnexus = { version = "0.1", features = ["postgres"] }
 dbnexus = { version = "0.1", features = ["mysql"] }
 ```
 
+### Preset Configurations
+
+Two preset configurations are available for common use cases:
+
+#### Minimal (Lite)
+
+```toml
+dbnexus = { version = "0.1", features = ["minimal", "sqlite"] }
+```
+
+Features included:
+- `runtime-tokio-rustls` - Async runtime with TLS
+- `sqlite` - SQLite database driver
+- `config-env` - Environment variable configuration
+- `sql-parser` - SQL parsing
+- `lru` - LRU cache for permissions
+- `async-trait` - Async trait support
+- `regex` - Regex support
+
+#### Microservice (Full-featured)
+
+```toml
+dbnexus = { version = "0.1", features = ["microservice", "postgres"] }
+```
+
+Features included:
+- `runtime-tokio-rustls` - Async runtime with TLS
+- `postgres` - PostgreSQL database driver
+- `permission` - Role-based access control
+- `sql-parser` - SQL parsing
+- `config-env` - Environment variable configuration
+- `pool-health-check` - Connection health monitoring
+- `config-yaml` - YAML configuration
+- `lru` - LRU cache
+- `async-trait` - Async trait support
+- `regex` - Regex support
+
 ### Optional Features
 
 Enable additional functionality:
@@ -56,8 +93,18 @@ all-optional = [
     "cache",
     "audit",
     "tracing",
-    "permission-engine"
+    "permission",
+    "sql-parser",
+    "pool-health-check",
+    "config-yaml",
+    "config-toml"
 ]
+
+# Cache feature
+cache = ["dep:async-trait", "dep:uuid", "dep:indexmap"]
+
+# Permission feature
+permission = ["dep:async-trait", "dep:lru", "dep:regex"]
 ```
 
 ---
