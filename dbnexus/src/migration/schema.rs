@@ -7,6 +7,14 @@
 //!
 //! 定义数据库表、列、索引等结构
 
+use serde::{Deserialize, Serialize};
+use crate::config::DatabaseType;
+use std::collections::HashMap;
+use std::fmt;
+use super::types::*;
+
+/// 列类型
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnType {
     /// 整数类型
     Integer,
@@ -374,6 +382,3 @@ impl MigrationHistory {
             .collect()
     }
 }
-
-/// 迁移执行器
-#[derive(Debug, Clone)]

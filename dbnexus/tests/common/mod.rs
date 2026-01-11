@@ -59,6 +59,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     // 可选：添加权限配置
@@ -117,6 +118,7 @@ pub fn get_sqlite_memory_config() -> DbConfig {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     }
 }
 
@@ -138,6 +140,7 @@ pub fn get_sqlite_file_config() -> (DbConfig, TempDir) {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     (config, temp_dir)
@@ -156,6 +159,7 @@ pub fn get_small_pool_config() -> DbConfig {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     }
 }
 
@@ -172,6 +176,7 @@ pub fn get_large_pool_config() -> DbConfig {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     }
 }
 
@@ -299,6 +304,7 @@ pub async fn create_sqlite_file_pool() -> Result<(dbnexus::DbPool, TempDir), dbn
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     let pool = dbnexus::DbPool::with_config(config).await?;

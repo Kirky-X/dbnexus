@@ -10,7 +10,11 @@
 use super::schema::*;
 use super::types::*;
 use super::differ::SqlGenerator;
+use crate::config::DatabaseType;
+use std::path::PathBuf;
+use sea_orm::{ConnectionTrait, TransactionTrait};
 
+/// 迁移执行器
 pub struct MigrationExecutor {
     /// 数据库连接
     pub connection: sea_orm::DatabaseConnection,
@@ -556,6 +560,3 @@ impl MigrationFileParser {
         Ok(())
     }
 }
-
-/// 迁移计划
-#[derive(Debug, Clone)]

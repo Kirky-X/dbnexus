@@ -16,6 +16,8 @@ use dbnexus::DbPool;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
+
+#[path = "../common/mod.rs"]
 mod common;
 
 /// TEST-TRACING-001: 追踪初始化测试

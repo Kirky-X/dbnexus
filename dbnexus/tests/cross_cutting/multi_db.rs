@@ -10,7 +10,10 @@
 
 use dbnexus::DbPool;
 use dbnexus::config::DbConfig;
-use dbnexus::migration::{ColumnType, DatabaseType, SqlGenerator};
+use dbnexus::config::DatabaseType;
+use dbnexus::migration::{ColumnType, SqlGenerator};
+
+#[path = "../common/mod.rs"]
 mod common;
 
 /// TEST-MDB-001: SQLite连接测试
@@ -281,6 +284,7 @@ fn test_multi_database_config() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     let postgres_config = DbConfig {
@@ -293,6 +297,7 @@ fn test_multi_database_config() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     let mysql_config = DbConfig {
@@ -305,6 +310,7 @@ fn test_multi_database_config() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
     };
 
     // 验证配置有效

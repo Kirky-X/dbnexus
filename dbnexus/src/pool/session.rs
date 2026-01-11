@@ -26,8 +26,11 @@ pub struct Session {
     /// 数据库连接
     connection: Option<DatabaseConnection>,
 
+    /// 连接池（用于释放连接）
+    pool: Arc<DbPool>,
+
     /// 连接池内部状态
-    pool: Arc<DbPoolInner>,
+    pool_inner: Arc<DbPoolInner>,
 
     /// 角色
     role: String,
@@ -50,17 +53,19 @@ impl Session {
     /// 创建新的 Session
     pub(crate) fn new(
         connection: DatabaseConnection,
-        pool: Arc<DbPoolInner>,
+        pool: Arc<DbPool>,
+        pool_inner: Arc<DbPoolInner>,
         role: String,
     ) -> Self {
-        let permission_ctx = PermissionContext::new(role.clone(), pool.policy_cache.clone());
+        let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
         #[cfg(feature = "metrics")]
-        let metrics = pool.metrics.clone();
+        let metrics = pool_inner.metrics.clone();
 
         Session {
             connection: Some(connection),
             pool,
+            pool_inner,
             role,
             last_write: None,
             permission_ctx,
@@ -319,11 +324,9 @@ impl Drop for Session {
     fn drop(&mut self) {
         // 归还连接到池
         if let Some(conn) = self.connection.take() {
+            let pool = self.pool.clone();
             tokio::spawn(async move {
-                // 这里应该调用 DbPool 的 release_connection 方法
-                // 由于 Drop trait 是同步的，我们使用 spawn 异步处理
-                // 实际实现需要更复杂的处理
-                tracing::debug!("Connection being released to pool");
+                pool.release_connection(conn);
             });
         }
     }

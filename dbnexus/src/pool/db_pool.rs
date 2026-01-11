@@ -343,8 +343,9 @@ impl DbPool {
         self.validate_role_name(role).await?;
 
         let connection = self.acquire_connection().await?;
+        let pool_ref = Arc::new(self.clone());
         #[allow(unused_mut)]
-        let mut session = Session::new(connection, self.inner.clone(), role.to_string());
+        let mut session = Session::new(connection, pool_ref, self.inner.clone(), role.to_string());
 
         // 设置 metrics（如果有）
         #[cfg(feature = "metrics")]

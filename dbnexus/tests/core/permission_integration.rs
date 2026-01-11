@@ -7,6 +7,8 @@
 
 use dbnexus::DbPool;
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
+
+#[path = "../common/mod.rs"]
 mod common;
 
 #[tokio::test]
