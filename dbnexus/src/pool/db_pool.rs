@@ -8,6 +8,7 @@
 //! 提供数据库连接池的创建、管理和自动修正功能
 
 use async_trait::async_trait;
+#[cfg(feature = "permission")]
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
