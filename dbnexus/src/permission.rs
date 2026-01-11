@@ -92,7 +92,9 @@ impl RateLimiter {
         // 检查是否超过限制
         let count = requests.entry(key.to_string()).or_default().len();
         if count < self.max_requests as usize {
-            requests.get_mut(key).unwrap().push(now);
+            if let Some(timestamps) = requests.get_mut(key) {
+                timestamps.push(now);
+            }
             true
         } else {
             false

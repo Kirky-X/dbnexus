@@ -691,8 +691,8 @@ impl AuditLogger {
             callback(event);
         }
 
-        // 默认实现：打印到stderr
-        eprintln!(
+        // 默认实现：使用 tracing 记录告警
+        tracing::warn!(
             "[AUDIT ALERT] {} - {} {} on {} by user {}",
             event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
         );
