@@ -1,3 +1,12 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
+//! 迁移类型定义
+//!
+//! 定义迁移相关的数据类型
+
 pub enum TableChange {
     /// 新增表
     CreateTable(Table),
@@ -34,42 +43,28 @@ pub enum TableChange {
 }
 
 /// 列变更类型
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnChange {
-    /// 列类型变更
-    ///
-    /// 变更的列名
-    TypeChanged {
+    /// 新增列
+    AddColumn(Column),
+    /// 删除列
+    RemoveColumn {
         /// 列名
         column_name: String,
-        /// 旧的类型
-        old_type: ColumnType,
-        /// 新的类型
-        new_type: ColumnType,
     },
-    /// 列可空性变更
-    ///
-    /// 变更的列名和新的可空性
-    NullabilityChanged {
+    /// 修改列
+    ModifyColumn {
         /// 列名
         column_name: String,
-        /// 旧的可空性
-        old_nullable: bool,
-        /// 新的可空性
-        new_nullable: bool,
+        /// 新列定义
+        new_column: Column,
     },
-    /// 添加默认值
-    ///
-    /// 变更的列名和新的默认值
-    DefaultChanged {
-        /// 列名
-        column_name: String,
-        /// 旧的默认值
-        old_default: Option<String>,
-        /// 新的默认值
-        new_default: Option<String>,
+    /// 重命名列
+    RenameColumn {
+        /// 旧列名
+        old_name: String,
+        /// 新列名
+        new_name: String,
     },
 }
 
-/// Migration 变更
-#[derive(Debug, Clone)]
+use super::schema::{Column, Table, Index, ForeignKey};

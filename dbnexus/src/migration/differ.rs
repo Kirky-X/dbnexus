@@ -1,3 +1,15 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
+//! 迁移差异计算和 SQL 生成
+//!
+//! 计算模式差异并生成迁移 SQL
+
+use super::schema::*;
+use super::types::*;
+
 pub struct MigrationPlan {
     /// 待执行的迁移列表
     pub migrations: Vec<Migration>,
