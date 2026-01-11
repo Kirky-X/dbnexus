@@ -552,7 +552,7 @@ where
                     self.stats.record_hit();
                     self.strategy.on_hit(key).await;
 
-                    results.push(Some(cache.get(key)?.value.clone()));
+                    results.push(Some(cache.get(key).map(|e| e.value.clone()).unwrap()));
                 } else {
                     cache.shift_remove(key);
                     self.stats.record_miss();

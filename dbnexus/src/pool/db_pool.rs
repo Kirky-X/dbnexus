@@ -423,12 +423,6 @@ impl DbPool {
         #[allow(unused_mut)]
         let mut session = Session::new(connection, pool_ref, self.inner.clone(), role.to_string());
 
-        // 设置 metrics（如果有）
-        #[cfg(feature = "metrics")]
-        if let Some(ref metrics) = self.inner.metrics_collector {
-            session.set_metrics(metrics.clone());
-        }
-
         Ok(session)
     }
 
@@ -964,9 +958,9 @@ impl DbPool {
     /// 成功应用的迁移数量
     #[cfg(feature = "auto-migrate")]
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
-        use crate::migration::{DatabaseType, MigrationExecutor};
+        use crate::migration::MigrationExecutor;
 
-        let db_type = DatabaseType::parse_database_type(&self.inner.config.url);
+        let db_type = crate::DatabaseType::parse_database_type(&self.inner.config.url);
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
