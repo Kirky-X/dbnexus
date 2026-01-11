@@ -116,9 +116,68 @@ roles:
 | `auto-migrate` | Automatic migration on startup |
 | `sharding` | Horizontal sharding support |
 | `global-index` | Global index for distributed queries |
-| `cache` | Advanced caching functionality |
+| `cache` | LRU cache for permission policies and frequently accessed data |
 | `audit` | Comprehensive audit logging |
 | `tracing` | OpenTelemetry distributed tracing |
+| `permission` | Role-based access control |
+| `sql-parser` | SQL parsing and analysis |
+| `pool-health-check` | Connection pool health monitoring |
+| `config-yaml` | YAML configuration file support |
+| `config-toml` | TOML configuration file support |
+
+### Preset Configurations
+
+Two preset configurations are available for common use cases:
+
+#### Minimal (Lite)
+
+```toml
+dbnexus = { version = "0.1", features = ["minimal", "sqlite"] }
+```
+
+| Feature | Included |
+|---------|----------|
+| `runtime-tokio-rustls` | ✅ Async runtime with TLS |
+| `sqlite` | SQLite driver |
+| `config-env` | Environment variable config |
+| `sql-parser` | SQL parsing |
+| `lru` | LRU cache for permissions |
+| `async-trait` | Async trait support |
+| `regex` | Regex support |
+
+#### Microservice (Full-featured)
+
+```toml
+dbnexus = { version = "0.1", features = ["microservice", "postgres"] }
+```
+
+| Feature | Included |
+|---------|----------|
+| `runtime-tokio-rustls` | ✅ Async runtime with TLS |
+| `postgres` | PostgreSQL driver |
+| `permission` | Role-based access control |
+| `sql-parser` | SQL parsing |
+| `config-env` | Environment variable config |
+| `pool-health-check` | Connection health monitoring |
+| `config-yaml` | YAML configuration |
+| `lru` | LRU cache |
+| `async-trait` | Async trait support |
+| `regex` | Regex support |
+
+### Custom Configuration
+
+Combine database driver with required and optional features:
+
+```toml
+# Minimal with cache
+dbnexus = { version = "0.1", features = ["minimal", "sqlite", "cache"] }
+
+# Microservice with audit logging
+dbnexus = { version = "0.1", features = ["microservice", "postgres", "audit"] }
+
+# Full featured
+dbnexus = { version = "0.1", features = ["all-optional", "postgres"] }
+```
 
 Enable all optional features:
 
