@@ -286,6 +286,8 @@ fn test_multi_database_config() {
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let postgres_config = DbConfig {
@@ -299,6 +301,8 @@ fn test_multi_database_config() {
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let mysql_config = DbConfig {
@@ -312,6 +316,8 @@ fn test_multi_database_config() {
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     // 验证配置有效

@@ -99,6 +99,7 @@ regex = "1.0"
 sqlparser = "0.47"
 rand = "0.8"
 futures = "0.3"
+dashmap = "5.5"
 
 # Internal dependencies
 dbnexus-macros.workspace = true

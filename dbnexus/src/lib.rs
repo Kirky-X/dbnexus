@@ -149,6 +149,7 @@ pub mod tracing;
 
 pub use crate::pool::DbPool;
 pub use crate::pool::Session;
+pub use crate::pool::{ConnectionPool, DatabaseSession};
 
 /// 过程宏重新导出
 pub use dbnexus_macros::DbEntity;

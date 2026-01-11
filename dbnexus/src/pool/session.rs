@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::time::SystemTime;
 
+use async_trait::async_trait;
 use crate::config::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
@@ -328,6 +329,62 @@ impl Session {
         Ok(result)
     }
 
+    /// 批量执行 SQL
+    ///
+    /// # Arguments
+    ///
+    /// * `sqls` - 要执行的 SQL 语句列表
+    ///
+    /// # Returns
+    ///
+    /// 返回执行结果列表
+    pub async fn batch_execute(&mut self, sqls: Vec<&str>) -> DbResult<Vec<DbResult<ExecResult>>> {
+        let mut results = Vec::new();
+
+        for sql in sqls {
+            let result = self.execute(sql).await;
+            results.push(result);
+        }
+
+        Ok(results)
+    }
+
+    /// 批量执行（带事务）
+    ///
+    /// 所有操作在一个事务中执行，任一失败则全部回滚
+    ///
+    /// # Arguments
+    ///
+    /// * `sqls` - 要执行的 SQL 语句列表
+    ///
+    /// # Returns
+    ///
+    /// 返回执行结果列表，任一失败则返回错误
+    pub async fn batch_execute_in_transaction(&mut self, sqls: Vec<&str>) -> DbResult<Vec<ExecResult>> {
+        self.begin_transaction().await?;
+
+        let mut results = Vec::new();
+        let mut last_error = None;
+
+        for sql in sqls {
+            match self.execute_raw(sql).await {
+                Ok(result) => results.push(result),
+                Err(e) => {
+                    last_error = Some(e);
+                    break;
+                }
+            }
+        }
+
+        if let Some(error) = last_error {
+            self.rollback().await?;
+            Err(error)
+        } else {
+            self.commit().await?;
+            Ok(results)
+        }
+    }
+
     /// 记录查询指标
     #[cfg(feature = "metrics")]
     fn record_query_metrics(&self, query_type: &str, duration: Duration, success: bool) {
@@ -402,4 +459,40 @@ fn extract_table_name(sql: &str) -> String {
     }
 
     String::new()
+}
+
+// 实现 DatabaseSession trait
+#[async_trait]
+impl super::DatabaseSession for Session {
+    async fn execute(&mut self, sql: &str) -> DbResult<ExecResult> {
+        self.execute(sql).await
+    }
+
+    async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
+        self.execute_raw(sql).await
+    }
+
+    async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
+        self.execute_raw_ddl(sql).await
+    }
+
+    async fn begin_transaction(&mut self) -> DbResult<()> {
+        self.begin_transaction().await
+    }
+
+    async fn commit(&mut self) -> DbResult<()> {
+        self.commit().await
+    }
+
+    async fn rollback(&mut self) -> DbResult<()> {
+        self.rollback().await
+    }
+
+    fn role(&self) -> &str {
+        self.role()
+    }
+
+    fn is_in_transaction(&self) -> bool {
+        self.is_in_transaction()
+    }
 }

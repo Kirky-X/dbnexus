@@ -7,10 +7,11 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
+use async_trait::async_trait;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::{interval, timeout};
@@ -68,6 +69,15 @@ pub(crate) struct DbPoolInner {
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
     pub(crate) metrics_collector: Option<Arc<MetricsCollector>>,
+
+    /// 等待计数
+    pub(crate) wait_count: AtomicU32,
+
+    /// 借用计数
+    pub(crate) borrow_count: AtomicU64,
+
+    /// 最大活跃连接数
+    pub(crate) max_active: AtomicU32,
 }
 
 impl DbPool {
@@ -129,40 +139,77 @@ impl DbPool {
                 admin_role: corrected_config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
+                wait_count: AtomicU32::new(0),
+                borrow_count: AtomicU64::new(0),
+                max_active: AtomicU32::new(0),
             }),
         };
 
         // 启动后台健康检查任务
         pool.start_background_health_check();
 
-        // 预创建最小连接数（并行创建以提高启动速度）
+        // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
         let initial_connections = pool.inner.config.min_connections;
+        let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
+        let warmup_retries = pool.inner.config.warmup_retries;
+
         let mut connection_tasks = Vec::new();
 
         for _ in 0..initial_connections {
             let config = corrected_config.clone();
-            connection_tasks.push(async move { Self::create_connection(&config).await });
+            connection_tasks.push(async move {
+                let mut retries = 0;
+                let mut last_error = None;
+
+                while retries <= warmup_retries {
+                    match timeout(warmup_timeout, Self::create_connection(&config)).await {
+                        Ok(Ok(conn)) => return Ok(conn),
+                        Ok(Err(e)) => {
+                            last_error = Some(e);
+                            retries += 1;
+                            if retries <= warmup_retries {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                        }
+                        Err(_) => {
+                            last_error = Some(DbError::Connection(
+                                sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)
+                            ));
+                            break;
+                        }
+                    }
+                }
+
+                Err(last_error.unwrap_or_else(|| {
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                }))
+            });
         }
 
         // 并行执行所有连接创建任务
         let results = futures::future::join_all(connection_tasks).await;
+
+        let mut successful = 0;
+        let mut failed = 0;
 
         for result in results {
             match result {
                 Ok(conn) => {
                     pool.inner.idle_connections.lock().await.push(conn);
                     pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
+                    successful += 1;
                 }
                 Err(e) => {
                     tracing::error!("Failed to create initial connection: {}", e);
-                    // 继续创建其他连接，即使有部分失败
+                    failed += 1;
                 }
             }
         }
 
         info!(
-            "Connection pool initialized: {} connections (min: {}, max: {})",
-            initial_connections, corrected_config.min_connections, corrected_config.max_connections
+            "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
+            successful, initial_connections, corrected_config.min_connections,
+            corrected_config.max_connections, failed
         );
 
         // 加载权限策略到缓存
@@ -279,6 +326,9 @@ impl DbPool {
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
+                wait_count: AtomicU32::new(0),
+                borrow_count: AtomicU64::new(0),
+                max_active: AtomicU32::new(0),
             }),
         })
     }
@@ -827,10 +877,17 @@ impl DbPool {
     pub fn status(&self) -> PoolStatus {
         let total = self.inner.total_count.load(Ordering::SeqCst);
         let active = self.inner.active_count.load(Ordering::SeqCst);
+        let wait_count = self.inner.wait_count.load(Ordering::SeqCst);
+        let borrow_count = self.inner.borrow_count.load(Ordering::SeqCst);
+        let max_active = self.inner.max_active.load(Ordering::SeqCst);
+
         PoolStatus {
             total,
             active,
             idle: total.saturating_sub(active),
+            wait_count,
+            borrow_count,
+            max_active,
         }
     }
 
@@ -927,5 +984,30 @@ pub struct PoolStatus {
 
     /// 空闲连接数
     pub idle: u32,
+
+    /// 等待连接的请求数
+    pub wait_count: u32,
+
+    /// 借用次数
+    pub borrow_count: u64,
+
+    /// 最大活跃连接数（历史峰值）
+    pub max_active: u32,
+}
+
+// 实现 ConnectionPool trait
+#[async_trait]
+impl super::ConnectionPool for DbPool {
+    async fn get_session(&self, role: &str) -> DbResult<Session> {
+        self.get_session(role).await
+    }
+
+    fn status(&self) -> PoolStatus {
+        self.status()
+    }
+
+    fn config(&self) -> &DbConfig {
+        self.config()
+    }
 }
 

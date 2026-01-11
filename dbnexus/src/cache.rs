@@ -474,6 +474,148 @@ where
 
         total_removed
     }
+
+    /// 预热缓存
+    ///
+    /// 批量加载热点数据到缓存中
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - 要预加载的数据列表 (key, value, ttl)
+    ///
+    /// # Returns
+    ///
+    /// 返回成功加载的条目数
+    pub async fn warmup(&self, data: Vec<(CacheKey, T, Duration)>) -> usize {
+        let mut cache = self.cache.write().await;
+        let mut loaded = 0;
+
+        for (key, value, ttl) in data {
+            if cache.len() < self.max_capacity {
+                let entry = CacheEntry::new(value, ttl);
+                cache.insert(key, entry);
+                loaded += 1;
+                self.stats.record_set();
+            } else {
+                // 容量已满，停止加载
+                break;
+            }
+        }
+
+        loaded
+    }
+
+    /// 批量预热（使用默认 TTL）
+    ///
+    /// 批量加载热点数据到缓存中，使用默认 TTL
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - 要预加载的数据列表 (key, value)
+    ///
+    /// # Returns
+    ///
+    /// 返回成功加载的条目数
+    pub async fn warmup_with_default_ttl(&self, data: Vec<(CacheKey, T)>) -> usize {
+        let default_ttl = self.strategy.ttl();
+        let data_with_ttl: Vec<(CacheKey, T, Duration)> = data
+            .into_iter()
+            .map(|(key, value)| (key, value, default_ttl))
+            .collect();
+        self.warmup(data_with_ttl).await
+    }
+
+    /// 批量获取缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - 要获取的缓存键列表
+    ///
+    /// # Returns
+    ///
+    /// 返回缓存值列表，未命中的键返回 None
+    pub async fn batch_get(&self, keys: &[CacheKey]) -> Vec<Option<T>> {
+        let mut cache = self.cache.write().await;
+        let mut results = Vec::with_capacity(keys.len());
+
+        for key in keys {
+            if let Some(entry) = cache.get_mut(key) {
+                if !entry.is_expired() {
+                    entry.access();
+                    let value = entry.value.clone();
+
+                    // 更新 LRU 顺序
+                    let ttl = entry.expires_at.saturating_duration_since(Instant::now());
+                    cache.shift_remove(key);
+                    cache.insert(key.clone(), CacheEntry::new(value, ttl));
+
+                    self.stats.record_hit();
+                    self.strategy.on_hit(key).await;
+
+                    results.push(Some(cache.get(key)?.value.clone()));
+                } else {
+                    cache.shift_remove(key);
+                    self.stats.record_miss();
+                    self.strategy.on_miss(key).await;
+                    results.push(None);
+                }
+            } else {
+                self.stats.record_miss();
+                self.strategy.on_miss(key).await;
+                results.push(None);
+            }
+        }
+
+        results
+    }
+
+    /// 批量设置缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - 要设置的缓存项列表 (key, value)
+    ///
+    /// # Note
+    ///
+    /// 使用默认 TTL
+    pub async fn batch_set(&self, items: Vec<(CacheKey, T)>) {
+        let mut cache = self.cache.write().await;
+
+        for (key, value) in items {
+            // 检查容量
+            if cache.len() >= self.max_capacity && !cache.contains_key(&key) {
+                cache.shift_remove_index(0);
+            }
+
+            let entry = CacheEntry::new(value, self.strategy.ttl());
+            cache.insert(key.clone(), entry);
+            self.stats.record_set();
+            self.strategy.on_update(&key).await;
+        }
+    }
+
+    /// 批量删除缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - 要删除的缓存键列表
+    ///
+    /// # Returns
+    ///
+    /// 返回成功删除的条目数
+    pub async fn batch_delete(&self, keys: &[CacheKey]) -> usize {
+        let mut cache = self.cache.write().await;
+        let mut removed = 0;
+
+        for key in keys {
+            if cache.shift_remove(key).is_some() {
+                removed += 1;
+                self.stats.record_delete();
+            }
+        }
+
+        removed
+    }
 }
 
 /// 生成缓存键
