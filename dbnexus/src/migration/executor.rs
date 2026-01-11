@@ -8,7 +8,6 @@
 //! 负责执行数据库迁移操作
 
 use super::schema::*;
-use super::types::*;
 use super::differ::SqlGenerator;
 use crate::config::DatabaseType;
 use std::path::PathBuf;
