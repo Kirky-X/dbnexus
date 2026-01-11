@@ -366,8 +366,24 @@ impl DbPool {
 
         // 检查权限配置是否存在（用户是否显式配置了权限文件）
         if permission_config.is_none() {
-            // 没有配置权限文件，使用 deny_all 策略，不进行角色验证
-            tracing::debug!("No permission config configured, skipping role validation");
+            // 没有配置权限文件时，使用安全默认策略
+            // 只允许预定义的安全角色，防止未授权访问
+            let safe_roles = ["admin", "system"];
+            if !safe_roles.contains(&role) {
+                tracing::warn!(
+                    "Role '{}' is not allowed without explicit permission configuration",
+                    role
+                );
+                return Err(DbError::Permission(format!(
+                    "Role '{}' is not allowed without explicit permission configuration. Allowed roles: {}",
+                    role,
+                    safe_roles.join(", ")
+                )));
+            }
+            tracing::debug!(
+                "No permission config configured, allowing safe role '{}'",
+                role
+            );
             return Ok(());
         }
 
@@ -698,21 +714,25 @@ impl DbPool {
     ///
     /// 如果获取连接超时或创建连接失败，返回错误
     async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
+        // 使用锁保护整个连接获取流程，避免竞争条件
+        let mut idle = self.inner.idle_connections.lock().await;
+
         // 尝试从空闲队列获取
-        {
-            let mut idle = self.inner.idle_connections.lock().await;
-            if !idle.is_empty() {
-                self.inner.active_count.fetch_add(1, Ordering::SeqCst);
-                return idle.pop().ok_or_else(|| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-                });
-            }
+        if !idle.is_empty() {
+            self.inner.active_count.fetch_add(1, Ordering::SeqCst);
+            return idle.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+            });
         }
 
-        // 检查是否达到最大连接数
+        // 检查是否达到最大连接数（在持有锁的情况下）
         if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections {
             // 等待空闲连接（使用条件变量替代忙等待）
             let timeout_duration = self.inner.config.acquire_timeout_duration();
+            
+            // 释放锁并等待通知
+            drop(idle);
+            
             let result = timeout(timeout_duration, async {
                 let mut idle = self.inner.idle_connections.lock().await;
                 while idle.is_empty() {
@@ -743,10 +763,15 @@ impl DbPool {
             }
         }
 
-        // 创建新连接
-        let conn = Self::create_connection(&self.inner.config).await?;
+        // 创建新连接（在持有锁的情况下，确保不会超过最大连接数）
+        // 先增加 total_count，确保原子性
         self.inner.total_count.fetch_add(1, Ordering::SeqCst);
         self.inner.active_count.fetch_add(1, Ordering::SeqCst);
+        
+        // 释放锁后再创建连接（避免阻塞其他操作）
+        drop(idle);
+        
+        let conn = Self::create_connection(&self.inner.config).await?;
         Ok(conn)
     }
 

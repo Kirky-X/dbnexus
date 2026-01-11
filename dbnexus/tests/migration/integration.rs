@@ -506,7 +506,7 @@ async fn test_migration_apply() {
 
     // 直接执行SQL来创建表（不通过迁移历史）
     let create_result = session
-        .execute_raw("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
         .await;
     if create_result.is_err() {
         eprintln!("CREATE TABLE error: {:?}", create_result);
@@ -515,7 +515,7 @@ async fn test_migration_apply() {
 
     // 验证表已创建
     let check_result = session
-        .execute_raw("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'")
+        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'")
         .await;
     if check_result.is_err() {
         eprintln!("SELECT error: {:?}", check_result);
@@ -535,7 +535,7 @@ async fn test_migration_history_table_creation() {
 
     // 验证迁移历史表已创建
     let check_result = session
-        .execute_raw("SELECT name FROM sqlite_master WHERE type='table' AND name='dbnexus_migrations'")
+        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='dbnexus_migrations'")
         .await;
     assert!(check_result.is_ok());
 }
@@ -600,15 +600,15 @@ async fn test_full_migration_workflow() {
     assert!(posts_sql.contains("CREATE TABLE posts"));
 
     // 直接执行 SQL 创建表
-    let create_posts = session.execute_raw(&posts_sql).await;
+    let create_posts = session.execute_raw_ddl(&posts_sql).await;
     assert!(create_posts.is_ok(), "Posts table should be created");
 
     // 验证两个表都存在
     let check_users = session
-        .execute_raw("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
         .await;
     let check_posts = session
-        .execute_raw("SELECT name FROM sqlite_master WHERE type='table' AND name='posts'")
+        .execute_raw_ddl("SELECT name FROM sqlite_master WHERE type='table' AND name='posts'")
         .await;
 
     assert!(check_users.is_ok(), "Users table should exist");
