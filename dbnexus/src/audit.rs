@@ -13,11 +13,19 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use dbnexus::audit::{AuditLogger, AuditEvent, AuditConfig};
+//! ```rust,no_run
+//! use dbnexus::audit::{AuditEvent, AuditLogger};
 //!
-//! let logger = AuditLogger::new(AuditConfig::default());
-//! logger.log(AuditEvent::create("users", "1", "admin")).await;
+//! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//!     let logger = AuditLogger::with_default_storage();
+//!     let event = AuditEvent::create("users", "1", "admin");
+//!
+//!     tokio::runtime::Runtime::new()
+//!         .unwrap()
+//!         .block_on(async { logger.log(event).await })?;
+//!
+//!     Ok(())
+//! }
 //! ```
 
 use async_trait::async_trait;
@@ -694,7 +702,11 @@ impl AuditLogger {
         // 默认实现：使用 tracing 记录告警
         tracing::warn!(
             "[AUDIT ALERT] {} - {} {} on {} by user {}",
-            event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
+            event.severity,
+            event.operation,
+            event.entity_id,
+            event.entity_type,
+            event.user_id
         );
     }
 }

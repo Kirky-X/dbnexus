@@ -37,15 +37,15 @@ docker-logs: ## 查看数据库日志
 # 测试相关
 test-sqlite: ## 运行 SQLite 测试
 	@echo "运行 SQLite 测试..."
-	TEST_DB_TYPE=sqlite cargo test --features "sqlite,all-optional"
+	TEST_DB_TYPE=sqlite cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,all-optional"
 
 test-postgres: ## 运行 PostgreSQL 测试
 	@echo "运行 PostgreSQL 测试..."
-	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test cargo test --features "postgres,all-optional"
+	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,all-optional"
 
 test-mysql: ## 运行 MySQL 测试
 	@echo "运行 MySQL 测试..."
-	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test cargo test --features "mysql,all-optional"
+	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,all-optional"
 
 test-all: ## 运行所有数据库测试
 	@echo "运行所有数据库测试..."
@@ -56,15 +56,15 @@ test-all: ## 运行所有数据库测试
 # Clippy 检查
 clippy-sqlite: ## 运行 SQLite 的 clippy 检查
 	@echo "运行 SQLite clippy 检查..."
-	cargo clippy --features "sqlite,all-optional"
+	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,all-optional"
 
 clippy-postgres: ## 运行 PostgreSQL 的 clippy 检查
 	@echo "运行 PostgreSQL clippy 检查..."
-	cargo clippy --features "postgres,all-optional"
+	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,all-optional"
 
 clippy-mysql: ## 运行 MySQL 的 clippy 检查
 	@echo "运行 MySQL clippy 检查..."
-	cargo clippy --features "mysql,all-optional"
+	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,all-optional"
 
 clippy-all: ## 运行所有数据库的 clippy 检查
 	@echo "运行所有数据库的 clippy 检查..."

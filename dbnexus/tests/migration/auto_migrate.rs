@@ -33,6 +33,7 @@ async fn test_auto_migrate_config_creation() {
 
 /// TEST-AM-002: 迁移文件扫描测试（使用内存数据库）
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_migration_file_scanning() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
@@ -83,6 +84,8 @@ DROP TABLE orders;
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -111,6 +114,7 @@ async fn test_migration_timeout_config() {
 
 /// TEST-AM-004: 空迁移目录测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_empty_migrations_directory() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
@@ -124,6 +128,9 @@ async fn test_empty_migrations_directory() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -136,6 +143,7 @@ async fn test_empty_migrations_directory() {
 
 /// TEST-AM-005: 不存在目录测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_nonexistent_migrations_directory() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
@@ -147,6 +155,9 @@ async fn test_nonexistent_migrations_directory() {
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -189,6 +200,7 @@ async fn test_migration_config_from_env() {
 
 /// TEST-AM-007: 迁移版本排序测试（使用内存数据库）
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_migration_version_sorting() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
@@ -232,6 +244,9 @@ DROP TABLE table_2;
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
+        admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");

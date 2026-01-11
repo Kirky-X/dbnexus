@@ -9,7 +9,10 @@
 
 use clap::{Parser, Subcommand};
 use dbnexus::migration::{MigrationExecutor, MigrationFileParser};
-use dbnexus::{DbPool, DbResult, config::{DbError, DatabaseType as MigrationDatabaseType}};
+use dbnexus::{
+    DbPool, DbResult,
+    config::{DatabaseType as MigrationDatabaseType, DbError},
+};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

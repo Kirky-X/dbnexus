@@ -12,12 +12,20 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use dbnexus::global_index::{GlobalIndex, IndexEntry};
+//! ```rust,no_run
+//! use dbnexus::global_index::GlobalIndex;
 //!
-//! let index = GlobalIndex::new("sqlite:./global_index.db").await?;
-//! // 查询所有分片中的数据
-//! let entries = index.query_all("orders", "user_id = ?", &[&"user123"]).await?;
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     tokio::runtime::Runtime::new().unwrap().block_on(async {
+//!         let index = GlobalIndex::new("sqlite:./global_index.db").await?;
+//!         let _entries = index
+//!             .query_by_index("orders", "user_id", "user123")
+//!             .await?;
+//!         Ok::<(), sea_orm::DbErr>(())
+//!     })?;
+//!
+//!     Ok(())
+//! }
 //! ```
 
 use async_trait::async_trait;

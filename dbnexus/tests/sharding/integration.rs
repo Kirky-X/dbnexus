@@ -12,6 +12,18 @@ use chrono::Utc;
 use dbnexus::sharding::{DailyStrategy, MonthlyStrategy, ShardConfig, ShardRouter, ShardingStrategy, YearlyStrategy};
 use std::sync::Arc;
 
+fn get_database_url() -> Option<String> {
+    if let Ok(url) = std::env::var("DATABASE_URL") {
+        return Some(url);
+    }
+
+    if cfg!(feature = "sqlite") {
+        return Some("sqlite::memory:".to_string());
+    }
+
+    None
+}
+
 /// TEST-SHARD-001: 闰年2月29日分片测试
 #[test]
 fn test_sharding_leap_year_feb29() {
@@ -318,7 +330,11 @@ fn test_router_with_config_integration() {
 /// TEST-SHARD-016: ShardRouter 异步初始化测试
 #[tokio::test]
 async fn test_shard_router_async_init() {
-    let config = ShardConfig::new("yearly", 2, "test", "sqlite::memory:");
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let config = ShardConfig::new("yearly", 2, "test", &url);
     let router = ShardRouter::with_config(&config).await.unwrap();
     assert_eq!(router.total_shards(), 2);
     assert_eq!(router.strategy_name(), "yearly");
@@ -327,7 +343,11 @@ async fn test_shard_router_async_init() {
 /// TEST-SHARD-017: ShardRouter 连接池管理测试
 #[tokio::test]
 async fn test_shard_router_pool_management() {
-    let config = ShardConfig::new("yearly", 3, "test", "sqlite::memory:");
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let config = ShardConfig::new("yearly", 3, "test", &url);
     let router = ShardRouter::with_config(&config).await.unwrap();
 
     assert_eq!(router.pool_count(), 3);
@@ -360,19 +380,23 @@ async fn test_shard_router_dynamic_pool_registration() {
 
     assert_eq!(router.pool_count(), 0);
 
-    let pool0 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let pool0 = dbnexus::DbPool::new(&url).await.unwrap();
     router.set_pool(0, Arc::new(pool0)).unwrap();
 
     assert_eq!(router.pool_count(), 1);
     assert!(router.has_pool(0));
     assert!(!router.has_pool(1));
 
-    let pool1 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    let pool1 = dbnexus::DbPool::new(&url).await.unwrap();
     router.set_pool(1, Arc::new(pool1)).unwrap();
 
     assert_eq!(router.pool_count(), 2);
 
-    let pool2 = dbnexus::DbPool::new("sqlite::memory:").await.unwrap();
+    let pool2 = dbnexus::DbPool::new(&url).await.unwrap();
     let result = router.set_pool(99, Arc::new(pool2));
     assert!(result.is_err());
 }
@@ -380,7 +404,11 @@ async fn test_shard_router_dynamic_pool_registration() {
 /// TEST-SHARD-020: ShardRouter 克隆测试
 #[tokio::test]
 async fn test_shard_router_clone() {
-    let config = ShardConfig::new("yearly", 2, "clone_test", "sqlite::memory:");
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let config = ShardConfig::new("yearly", 2, "clone_test", &url);
     let router = ShardRouter::with_config(&config).await.unwrap();
 
     let router_clone = router.clone();

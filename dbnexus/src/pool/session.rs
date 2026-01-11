@@ -10,24 +10,20 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use async_trait::async_trait;
 use crate::config::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
 use crate::permission::{PermissionAction, PermissionContext};
+use crate::pool::db_pool::{DatabaseConnection, DbPool, DbPoolInner};
 #[cfg(feature = "sql-parser")]
 use crate::sql_parser::{SqlParser, is_ddl_operation};
-use crate::pool::db_pool::{DbPool, DbPoolInner, DatabaseConnection};
+use async_trait::async_trait;
 
-// 当 permission 和 sql-parser 特性都未启用时，定义本地的 PermissionAction
 #[cfg(not(any(feature = "permission", feature = "sql-parser")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PermissionAction {
     Select,
-    Insert,
-    Update,
-    Delete,
 }
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
@@ -130,13 +126,15 @@ impl Session {
             return Err(DbError::Transaction("Already in transaction".to_string()));
         }
 
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available".to_string())
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
 
-        let transaction = conn.begin().await.map_err(|e| {
-            DbError::Transaction(format!("Failed to begin transaction: {}", e))
-        })?;
+        let transaction = conn
+            .begin()
+            .await
+            .map_err(|e| DbError::Transaction(format!("Failed to begin transaction: {}", e)))?;
 
         self.transaction = Some(transaction);
         Ok(())
@@ -144,10 +142,14 @@ impl Session {
 
     /// 提交事务
     pub async fn commit(&mut self) -> Result<(), DbError> {
-        let transaction = self.transaction.take().ok_or_else(|| {
-            DbError::Transaction("No active transaction to commit".to_string())
-        })?;
-        transaction.commit().await.map_err(|e| DbError::Transaction(e.to_string()))?;
+        let transaction = self
+            .transaction
+            .take()
+            .ok_or_else(|| DbError::Transaction("No active transaction to commit".to_string()))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DbError::Transaction(e.to_string()))?;
         self.last_write = None;
         Ok(())
     }
@@ -158,12 +160,14 @@ impl Session {
             return Err(DbError::Transaction("Not in transaction".to_string()));
         }
 
-        let transaction = self.transaction.take().ok_or_else(|| {
-            DbError::Transaction("No active transaction to rollback".to_string())
-        })?;
-        transaction.rollback().await.map_err(|e| {
-            DbError::Transaction(format!("Failed to rollback transaction: {}", e))
-        })?;
+        let transaction = self
+            .transaction
+            .take()
+            .ok_or_else(|| DbError::Transaction("No active transaction to rollback".to_string()))?;
+        transaction
+            .rollback()
+            .await
+            .map_err(|e| DbError::Transaction(format!("Failed to rollback transaction: {}", e)))?;
 
         Ok(())
     }
@@ -183,9 +187,9 @@ impl Session {
 
     /// 获取连接引用
     pub fn connection(&mut self) -> Result<&mut DatabaseConnection, DbError> {
-        self.connection.as_mut().ok_or_else(|| {
-            DbError::Config("Connection not available".to_string())
-        })
+        self.connection
+            .as_mut()
+            .ok_or_else(|| DbError::Config("Connection not available".to_string()))
     }
 
     /// 执行原始 SQL（带权限检查）
@@ -204,10 +208,12 @@ impl Session {
         {
             // 解析 SQL 操作类型和表名
             let parser = SqlParser::new();
-            if let Some((_, action)) = parser.parse_operation(sql) {
-                // 提取表名（简化实现）
-                let table_name = extract_table_name(sql);
-
+            if let Some((table_name, action)) = parser.parse_operation(sql) {
+                if table_name.is_empty() {
+                    return Err(DbError::Permission(
+                        "Failed to extract table name for permission checking".to_string(),
+                    ));
+                }
                 // 检查权限
                 if !self.permission_ctx.check_table_access(&table_name, &action).await {
                     return Err(DbError::Permission(format!(
@@ -215,17 +221,38 @@ impl Session {
                         action, table_name
                     )));
                 }
+            } else {
+                // 解析失败，拒绝执行
+                return Err(DbError::Permission(
+                    "Failed to parse SQL statement for permission checking".to_string(),
+                ));
+            }
+        }
+
+        #[cfg(all(feature = "permission", not(feature = "sql-parser")))]
+        {
+            let (table_name, action) = parse_table_and_action(sql);
+            if table_name.is_empty() {
+                return Err(DbError::Permission(
+                    "Failed to extract table name for permission checking".to_string(),
+                ));
+            }
+
+            if !self.permission_ctx.check_table_access(&table_name, &action).await {
+                return Err(DbError::Permission(format!(
+                    "Permission denied for {} on {}",
+                    action, table_name
+                )));
             }
         }
 
         // 执行 SQL
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available".to_string())
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
 
-        conn.execute_unprepared(sql).await.map_err(|e| {
-            DbError::Connection(e)
-        })
+        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
     }
 
     /// 执行 DDL 操作（允许创建表、删除表等操作）
@@ -254,13 +281,12 @@ impl Session {
         }
 
         // 执行 SQL（不进行 DDL 检查）
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available".to_string())
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
 
-        conn.execute_unprepared(sql).await.map_err(|e| {
-            DbError::Connection(e)
-        })
+        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
     }
 
     /// 执行 SQL（带权限检查和操作类型）
@@ -277,33 +303,32 @@ impl Session {
             }
         }
 
-        // 解析 SQL 操作类型和表名
-        #[cfg(all(feature = "sql-parser", feature = "permission"))]
+        #[cfg(all(feature = "permission", feature = "sql-parser"))]
         let (table_name, action) = {
             let parser = SqlParser::new();
-            parser
-                .parse_operation(sql)
-                .unwrap_or_else(|| (String::new(), PermissionAction::Select))
+            parser.parse_operation(sql).ok_or_else(|| {
+                DbError::Permission("Failed to parse SQL statement for permission checking".to_string())
+            })?
         };
 
-        #[cfg(not(all(feature = "sql-parser", feature = "permission")))]
-        let table_name = String::new();
+        #[cfg(all(feature = "permission", not(feature = "sql-parser")))]
+        let (table_name, action) = parse_table_and_action(sql);
 
-        #[cfg(feature = "permission")]
-        #[cfg(not(feature = "sql-parser"))]
-        let action = crate::permission::PermissionAction::Select;
-
-        #[cfg(feature = "sql-parser")]
-        #[cfg(not(feature = "permission"))]
+        #[cfg(all(not(feature = "permission"), feature = "sql-parser"))]
         let action = crate::sql_parser::PermissionAction::Select;
 
         #[cfg(not(any(feature = "permission", feature = "sql-parser")))]
         let action = PermissionAction::Select;
 
-        // 检查权限
         #[cfg(feature = "permission")]
         {
-            if !table_name.is_empty() && !self.permission_ctx.check_table_access(&table_name, &action).await {
+            if table_name.is_empty() {
+                return Err(DbError::Permission(
+                    "Failed to extract table name for permission checking".to_string(),
+                ));
+            }
+
+            if !self.permission_ctx.check_table_access(&table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",
                     action, table_name
@@ -321,7 +346,10 @@ impl Session {
         // 如果是写操作，标记
         #[cfg(feature = "permission")]
         {
-            if matches!(action, PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete) {
+            if matches!(
+                action,
+                PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
+            ) {
                 self.mark_write();
             }
         }
@@ -331,11 +359,7 @@ impl Session {
 
     /// 执行 SQL 并指定操作类型
     #[cfg(feature = "permission")]
-    pub async fn execute_with_operation(
-        &mut self,
-        sql: &str,
-        operation: &PermissionAction,
-    ) -> DbResult<ExecResult> {
+    pub async fn execute_with_operation(&mut self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
         let start = Instant::now();
 
         #[cfg(feature = "sql-parser")]
@@ -483,6 +507,7 @@ impl Drop for Session {
 }
 
 /// 简化的表名提取（用于权限检查）
+#[cfg(feature = "permission")]
 fn extract_table_name(sql: &str) -> String {
     // 这是一个简化的实现，实际应该使用 sqlparser
     let sql_upper = sql.to_uppercase();
@@ -515,6 +540,23 @@ fn extract_table_name(sql: &str) -> String {
     }
 
     String::new()
+}
+
+#[cfg(all(feature = "permission", not(feature = "sql-parser")))]
+fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
+    let table_name = extract_table_name(sql);
+    let sql_upper = sql.trim_start().to_uppercase();
+    let action = if sql_upper.starts_with("INSERT") {
+        PermissionAction::Insert
+    } else if sql_upper.starts_with("UPDATE") {
+        PermissionAction::Update
+    } else if sql_upper.starts_with("DELETE") {
+        PermissionAction::Delete
+    } else {
+        PermissionAction::Select
+    };
+
+    (table_name, action)
 }
 
 // 实现 DatabaseSession trait

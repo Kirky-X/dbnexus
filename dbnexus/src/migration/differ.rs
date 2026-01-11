@@ -477,7 +477,9 @@ impl RustEntityParser {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```rust,no_run
+    /// use dbnexus::migration::RustEntityParser;
+    ///
     /// let code = r#"
     /// #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     /// #[sea_orm(table_name = "users")]

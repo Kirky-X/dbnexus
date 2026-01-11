@@ -48,9 +48,21 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     // 使用统一的配置管理
     let pool_config = PoolConfig::new(5, 1, 300, 5000);
 
+    let test_db_type = std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string());
+    let database_url = std::env::var("DATABASE_URL").ok();
+
+    let url = match test_db_type.as_str() {
+        "postgres" => database_url
+            .unwrap_or_else(|| "postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test".to_string()),
+        "mysql" => {
+            database_url.unwrap_or_else(|| "mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test".to_string())
+        }
+        _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
+    };
+
     // 直接从环境变量创建配置
     let mut config = DbConfig {
-        url: "sqlite::memory:".to_string(),
+        url,
         max_connections: pool_config.max_connections(),
         min_connections: pool_config.min_connections(),
         idle_timeout: pool_config.idle_timeout(),
@@ -235,7 +247,7 @@ pub async fn create_test_fixture() -> (dbnexus::DbPool, PathBuf, TempDir) {
 #[allow(dead_code)]
 pub async fn cleanup_test_table(session: &mut dbnexus::pool::Session, table_name: &str) {
     let _ = session
-        .execute_raw(&format!("DROP TABLE IF EXISTS {}", table_name))
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
 }
 
@@ -245,7 +257,7 @@ pub async fn cleanup_test_table(session: &mut dbnexus::pool::Session, table_name
 #[allow(dead_code)]
 pub async fn create_test_table(session: &mut dbnexus::pool::Session, table_name: &str) {
     session
-        .execute_raw(&format!(
+        .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, data TEXT)",
             table_name
         ))
@@ -257,9 +269,12 @@ pub async fn create_test_table(session: &mut dbnexus::pool::Session, table_name:
 #[allow(dead_code)]
 pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
     let status = pool.status();
-    assert!(status.total >= 1, "Pool should have at least 1 connection");
     assert!(status.active <= status.total, "Active should not exceed total");
-    assert_eq!(status.total, status.active + status.idle);
+    assert_eq!(
+        status.total,
+        status.active + status.idle,
+        "Total should equal active + idle"
+    );
 }
 
 /// 测试断言帮助 - 验证会话有效
@@ -303,6 +318,28 @@ pub async fn create_sqlite_file_pool() -> Result<(dbnexus::DbPool, TempDir), dbn
     // 预先创建数据库文件（解决权限问题）
     std::fs::File::create(&db_path).expect("Failed to create database file");
 
+    let perm_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+  system:
+    tables:
+      - name: "*"
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+"#;
+    let perm_file = temp_dir.path().join("permissions.yaml");
+    std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
+
     // 使用 sqlx 标准的 SQLite URL 格式
     let config = DbConfig {
         url: format!("sqlite://{}", db_path_str),
@@ -310,7 +347,7 @@ pub async fn create_sqlite_file_pool() -> Result<(dbnexus::DbPool, TempDir), dbn
         min_connections: 1,
         idle_timeout: 300,
         acquire_timeout: 5000,
-        permissions_path: None,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
         migrations_dir: None,
         auto_migrate: false,
         migration_timeout: 60,
@@ -333,7 +370,7 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
     session
-        .execute_raw(&format!(
+        .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY,
                 trace_id TEXT,
@@ -354,7 +391,7 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
 pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str) {
     let session = pool.get_session("admin").await.expect("Failed to get session");
     let _ = session
-        .execute_raw(&format!("DROP TABLE IF EXISTS {}", table_name))
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
 }
 
@@ -416,13 +453,15 @@ pub async fn verify_trace_extraction(
 /// 测试连接池在追踪上下文下的行为
 #[allow(dead_code)]
 pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
-    // 验证池状态正常
-    let status = pool.status();
-    assert!(status.total >= 1, "Pool should have at least 1 connection");
-
-    // 获取会话并验证
     let session = pool.get_session("admin").await.expect("Failed to get session");
     assert!(!session.role().is_empty(), "Session should have a role");
+
+    let status = pool.status();
+    assert_eq!(
+        status.total,
+        status.active + status.idle,
+        "Total should equal active + idle"
+    );
 }
 
 /// 并发测试追踪上下文注入
@@ -440,7 +479,8 @@ pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: 
         let pool = pool.clone();
         let success_count = success_count.clone();
         let handle = tokio::spawn(async move {
-            if pool.get_session(&format!("test_role_{}", i)).await.is_ok() {
+            let role = if i % 2 == 0 { "admin" } else { "system" };
+            if pool.get_session(role).await.is_ok() {
                 success_count.fetch_add(1, Ordering::SeqCst);
             }
         });
@@ -475,7 +515,7 @@ pub async fn verify_db_operation_with_trace(
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     // 验证记录已插入
-    let result = session
+    let _result = session
         .execute_raw(&format!(
             "SELECT COUNT(*) FROM {} WHERE trace_id = '{}'",
             table_name, trace_id

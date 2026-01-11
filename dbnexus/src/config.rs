@@ -141,11 +141,13 @@ pub enum DatabaseType {
 impl DatabaseType {
     /// 从字符串解析数据库类型
     pub fn parse_database_type(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "postgres" | "postgresql" => DatabaseType::Postgres,
-            "mysql" => DatabaseType::MySql,
-            "sqlite" => DatabaseType::Sqlite,
-            _ => DatabaseType::Sqlite,
+        let s = s.to_lowercase();
+        if s.starts_with("postgres") {
+            DatabaseType::Postgres
+        } else if s.starts_with("mysql") {
+            DatabaseType::MySql
+        } else {
+            DatabaseType::Sqlite
         }
     }
 
@@ -736,26 +738,29 @@ impl DbConfig {
         if self.url.starts_with("sqlite:") || self.url.starts_with("sqlite3:") {
             return Ok(());
         }
-        
+
         let protocol_end = match self.url.find("://") {
             Some(pos) => pos,
             None => return Err(ConfigError::InvalidUrl),
         };
-        
+
         let protocol = &self.url[..protocol_end];
-        
+
         // 检查协议格式（字母数字 + + . -）
-        if !protocol.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-') {
+        if !protocol
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-')
+        {
             return Err(ConfigError::InvalidUrl);
         }
-        
+
         // 协议白名单验证
         match protocol {
             "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
             "file" | "mem" if protocol.starts_with("sqlite") => {}
             _ => return Err(ConfigError::UnsupportedProtocol),
         }
-        
+
         Ok(())
     }
 
@@ -850,10 +855,7 @@ impl DbConfig {
 
         #[cfg(all(feature = "config-yaml", not(feature = "config-toml")))]
         {
-            let config_paths = [
-                "dbnexus.yaml",
-                "config/dbnexus.yaml",
-            ];
+            let config_paths = ["dbnexus.yaml", "config/dbnexus.yaml"];
 
             for config_path in &config_paths {
                 let path = Path::new(config_path);
@@ -865,9 +867,7 @@ impl DbConfig {
             }
 
             if let Some(home_dir) = home::home_dir() {
-                let user_config_paths = [
-                    home_dir.join(".config").join("dbnexus").join("config.yaml"),
-                ];
+                let user_config_paths = [home_dir.join(".config").join("dbnexus").join("config.yaml")];
 
                 for config_path in &user_config_paths {
                     if Self::is_safe_config_path(config_path)? {
@@ -880,10 +880,7 @@ impl DbConfig {
 
         #[cfg(all(not(feature = "config-yaml"), feature = "config-toml"))]
         {
-            let config_paths = [
-                "dbnexus.toml",
-                "config/dbnexus.toml",
-            ];
+            let config_paths = ["dbnexus.toml", "config/dbnexus.toml"];
 
             for config_path in &config_paths {
                 let path = Path::new(config_path);
@@ -895,9 +892,7 @@ impl DbConfig {
             }
 
             if let Some(home_dir) = home::home_dir() {
-                let user_config_paths = [
-                    home_dir.join(".dbnexus").join("config.toml"),
-                ];
+                let user_config_paths = [home_dir.join(".dbnexus").join("config.toml")];
 
                 for config_path in &user_config_paths {
                     if Self::is_safe_config_path(config_path)? {
@@ -1380,7 +1375,7 @@ mod tests {
             config.permissions_path,
             Some("/etc/dbnexus/permissions.yaml".to_string())
         );
-        assert_eq!(config.auto_migrate, true);
+        assert!(config.auto_migrate);
         assert_eq!(config.admin_role, "superuser");
     }
 
@@ -1409,6 +1404,7 @@ mod tests {
     }
 
     /// TEST-U-009: 配置加载器测试
+    #[cfg(feature = "config-yaml")]
     #[test]
     fn test_config_loader() {
         let yaml = r#"
@@ -1416,17 +1412,10 @@ url: "sqlite::memory:"
 max_connections: 20
 min_connections: 5
 "#;
-        #[cfg(feature = "config-yaml")]
         let config = DbConfig::from_yaml_str(yaml).unwrap();
-        #[cfg(feature = "config-yaml")]
         {
             assert_eq!(config.url, "sqlite::memory:");
             assert_eq!(config.max_connections, 20);
-        }
-        #[cfg(not(feature = "config-yaml"))]
-        {
-            // Skip this test when config-yaml feature is not enabled
-            assert!(true);
         }
     }
     /// TEST-U-010: 配置验证测试 - 空URL

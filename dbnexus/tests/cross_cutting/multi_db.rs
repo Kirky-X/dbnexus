@@ -9,8 +9,8 @@
 //! 包括数据库特定SQL生成、连接健康检查、Schema差异等
 
 use dbnexus::DbPool;
-use dbnexus::config::DbConfig;
 use dbnexus::config::DatabaseType;
+use dbnexus::config::DbConfig;
 use dbnexus::migration::{ColumnType, SqlGenerator};
 
 #[path = "../common/mod.rs"]
@@ -332,6 +332,9 @@ async fn test_pool_status_across_databases() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
 
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    drop(session);
+
     let status = pool.status();
 
     // 验证状态结构
@@ -378,7 +381,7 @@ roles:
 
     // 插入测试数据
     session
-        .execute_raw("INSERT INTO feature_test (data) VALUES ('test')")
+        .execute_raw("INSERT INTO feature_test (id, data) VALUES (1, 'test')")
         .await
         .expect("Failed to insert data");
 

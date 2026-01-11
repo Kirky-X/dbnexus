@@ -150,10 +150,9 @@ criterion_group!(
 criterion_main!(benches);
 
 /// 性能测试辅助函数
-
 /// 测量操作执行时间
 #[allow(dead_code)]
-fn measure_duration<F, T>(name: &str, f: F) -> (T, Duration)
+fn measure_duration<F, T>(_name: &str, f: F) -> (T, Duration)
 where
     F: FnOnce() -> T,
 {

@@ -7,18 +7,18 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-mod session;
 mod db_pool;
+mod session;
 
-pub use db_pool::{DbPool, DatabaseConnection, PoolStatus};
+pub use db_pool::{DatabaseConnection, DbPool, PoolStatus};
 pub use session::Session;
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
 use crate::config::{DbConfig, DbResult};
-use sea_orm::ExecResult;
 use async_trait::async_trait;
+use sea_orm::ExecResult;
 
 /// 连接池抽象 trait
 ///

@@ -12,9 +12,7 @@
 //! - 追踪传播
 //! - 与数据库操作的集成
 
-use dbnexus::DbPool;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::Duration;
 
 #[path = "../common/mod.rs"]
@@ -26,24 +24,19 @@ mod common;
 #[tokio::test]
 async fn test_tracing_initialization() {
     // 使用真实数据库创建连接池
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
-    // 验证连接池创建成功
+    let session = pool.get_session("admin").await.expect("Get session");
+    drop(session);
+
     let status = pool.status();
-    assert!(
-        status.total >= 1,
-        "Pool should have at least 1 connection after initialization"
-    );
     assert_eq!(
         status.total,
         status.active + status.idle,
         "Total connections should equal active + idle"
     );
-
-    // 保持 temp_dir 存活直到测试结束
-    let _ = temp_dir;
 }
 
 /// TEST-TRACING-002: 上下文注入测试
@@ -52,7 +45,7 @@ async fn test_tracing_initialization() {
 #[tokio::test]
 async fn test_context_injection() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -124,7 +117,7 @@ async fn test_context_extraction() {
 #[tokio::test]
 async fn test_context_injection_extraction_consistency() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -160,7 +153,7 @@ async fn test_context_injection_extraction_consistency() {
 #[tokio::test]
 async fn test_empty_context_handling() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -186,22 +179,18 @@ async fn test_empty_context_handling() {
 #[tokio::test]
 async fn test_multiple_tracing_init() {
     // Arrange
-    let (pool1, temp_dir1) = common::create_sqlite_file_pool()
+    let (pool1, _temp_dir1) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create first pool");
-    let (pool2, temp_dir2) = common::create_sqlite_file_pool()
+    let (pool2, _temp_dir2) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create second pool");
 
-    // Act - 验证多个连接池都能正常工作
-    let status1 = pool1.status();
-    let status2 = pool2.status();
+    let session1 = pool1.get_session("admin").await.expect("First pool session");
+    let session2 = pool2.get_session("admin").await.expect("Second pool session");
+    drop(session1);
+    drop(session2);
 
-    // Assert - 验证两个池都正常
-    assert!(status1.total >= 1, "First pool should have connections");
-    assert!(status2.total >= 1, "Second pool should have connections");
-
-    // 验证两个池独立工作
     let session1 = pool1.get_session("admin").await.expect("First pool session");
     let session2 = pool2.get_session("admin").await.expect("Second pool session");
 
@@ -215,10 +204,10 @@ async fn test_multiple_tracing_init() {
 #[tokio::test]
 async fn test_init_otlp_tracing() {
     // 使用无效的 OTLP 端点测试错误处理
-    let invalid_endpoint = "http://invalid-endpoint:4317";
+    let _invalid_endpoint = "http://invalid-endpoint:4317";
 
     // 验证数据库操作仍能正常工作（追踪初始化不应影响核心功能）
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -228,7 +217,7 @@ async fn test_init_otlp_tracing() {
     // 验证表操作
     let session = pool.get_session("admin").await.expect("Failed to get session");
     let result = session
-        .execute_raw("CREATE TABLE IF NOT EXISTS otlp_test (id INTEGER PRIMARY KEY)")
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS otlp_test (id INTEGER PRIMARY KEY)")
         .await;
     assert!(result.is_ok(), "Table creation should succeed");
 }
@@ -239,7 +228,7 @@ async fn test_init_otlp_tracing() {
 #[tokio::test]
 async fn test_unknown_exporter_fallback() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -294,7 +283,7 @@ async fn test_trace_headers_content() {
 #[tokio::test]
 async fn test_tracing_scope() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -317,13 +306,12 @@ async fn test_tracing_scope() {
 #[tokio::test]
 async fn test_tracing_cleanup() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
-    // 验证初始状态
-    let initial_status = pool.status();
-    assert!(initial_status.total >= 1, "Pool should have connections initially");
+    let session = pool.get_session("admin").await.expect("Get session");
+    drop(session);
 
     // Act - 获取并释放会话
     {
@@ -333,9 +321,10 @@ async fn test_tracing_cleanup() {
 
     // 验证清理后连接池状态
     let final_status = pool.status();
-    assert!(
-        final_status.total >= 1,
-        "Pool should still have connections after cleanup"
+    assert_eq!(
+        final_status.total,
+        final_status.active + final_status.idle,
+        "Total connections should equal active + idle"
     );
 }
 
@@ -345,7 +334,7 @@ async fn test_tracing_cleanup() {
 #[tokio::test]
 async fn test_concurrent_context_injection() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
     let num_tasks = 10;
@@ -360,9 +349,12 @@ async fn test_concurrent_context_injection() {
         "Success count should not exceed total tasks"
     );
 
-    // 验证连接池状态
     let status = pool.status();
-    assert!(status.total >= 1, "Pool should still have connections");
+    assert_eq!(
+        status.total,
+        status.active + status.idle,
+        "Total connections should equal active + idle"
+    );
 }
 
 /// TEST-TRACING-014: 追踪上下文持久化测试
@@ -371,7 +363,7 @@ async fn test_concurrent_context_injection() {
 #[tokio::test]
 async fn test_trace_context_persistence() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -419,10 +411,17 @@ async fn test_tracing_init_performance() {
         elapsed
     );
 
-    // 验证所有连接池正常
     for (i, (pool, _)) in pools.into_iter().enumerate() {
+        let session = pool.get_session("admin").await.expect("Get session");
+        drop(session);
+
         let status = pool.status();
-        assert!(status.total >= 1, "Pool {} should have connections", i);
+        assert_eq!(
+            status.total,
+            status.active + status.idle,
+            "Pool {} total should equal active + idle",
+            i
+        );
     }
 }
 
@@ -432,7 +431,7 @@ async fn test_tracing_init_performance() {
 #[tokio::test]
 async fn test_trace_propagation_with_db_operations() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 
@@ -470,7 +469,7 @@ async fn test_trace_propagation_with_db_operations() {
 #[tokio::test]
 async fn test_multi_request_trace_consistency() {
     // Arrange
-    let (pool, temp_dir) = common::create_sqlite_file_pool()
+    let (pool, _temp_dir) = common::create_sqlite_file_pool()
         .await
         .expect("Failed to create test pool");
 

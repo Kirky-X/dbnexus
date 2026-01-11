@@ -16,11 +16,10 @@
 //!
 //! # 快速开始
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use dbnexus::DbPool;
 //!
 //! #[derive(dbnexus::DbEntity)]
-//! #[db_entity]
 //! #[table_name = "users"]
 //! struct User {
 //!     #[primary_key]

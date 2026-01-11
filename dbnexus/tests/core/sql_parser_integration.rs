@@ -7,11 +7,11 @@
 //!
 //! 测试 SQL 解析、操作类型检测和权限动作映射功能
 
-use dbnexus::sql_parser::{is_ddl_operation, SqlOperationType, SqlParser};
 #[cfg(feature = "permission")]
 use dbnexus::PermissionAction;
 #[cfg(not(feature = "permission"))]
 use dbnexus::sql_parser::PermissionAction;
+use dbnexus::sql_parser::{SqlOperationType, SqlParser, is_ddl_operation};
 
 #[tokio::test]
 async fn test_parse_select() {
@@ -55,8 +55,7 @@ async fn test_parse_delete() {
 #[tokio::test]
 async fn test_parse_create_table() {
     let parser = SqlParser::new();
-    let result =
-        parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
+    let result = parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
@@ -143,9 +142,7 @@ async fn test_parse_transaction() {
 #[tokio::test]
 async fn test_parse_select_with_joins() {
     let parser = SqlParser::new();
-    let result = parser.parse_single(
-        "SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id",
-    );
+    let result = parser.parse_single("SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id");
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -165,9 +162,8 @@ async fn test_parse_insert_with_multiple_values() {
 #[tokio::test]
 async fn test_parse_update_with_subquery() {
     let parser = SqlParser::new();
-    let result = parser.parse_single(
-        "UPDATE users SET status = 'active' WHERE id IN (SELECT user_id FROM orders WHERE total > 100)",
-    );
+    let result = parser
+        .parse_single("UPDATE users SET status = 'active' WHERE id IN (SELECT user_id FROM orders WHERE total > 100)");
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Update);
@@ -176,9 +172,8 @@ async fn test_parse_update_with_subquery() {
 #[tokio::test]
 async fn test_parse_delete_with_join() {
     let parser = SqlParser::new();
-    let result = parser.parse_single(
-        "DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')",
-    );
+    let result =
+        parser.parse_single("DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')");
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Delete);
