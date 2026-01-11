@@ -122,15 +122,11 @@ impl Session {
 
     /// 提交事务
     pub async fn commit(&mut self) -> Result<(), DbError> {
-        if !self.is_in_transaction() {
-            return Err(DbError::Transaction("Not in transaction".to_string()));
-        }
-
-        let transaction = self.transaction.take().unwrap();
-        transaction.commit().await.map_err(|e| {
-            DbError::Transaction(format!("Failed to commit transaction: {}", e))
+        let transaction = self.transaction.take().ok_or_else(|| {
+            DbError::Transaction("No active transaction to commit".to_string())
         })?;
-
+        transaction.commit().await.map_err(|e| DbError::Transaction(e.to_string()))?;
+        self.last_write = None;
         Ok(())
     }
 
