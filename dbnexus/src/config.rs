@@ -917,6 +917,7 @@ impl DbConfig {
     /// - 检查路径是否包含父目录引用 (..)
     /// - 检查路径是否包含符号链接
     /// - 检查路径是否在预期目录内
+    #[allow(dead_code)]
     fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
         // 规范化路径
         let canonical = match path.canonicalize() {

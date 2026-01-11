@@ -9,7 +9,6 @@
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::time::SystemTime;
 
 use async_trait::async_trait;
 use crate::config::{DbError, DbResult};
@@ -32,7 +31,7 @@ enum PermissionAction {
 }
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
-use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, Statement, TransactionTrait};
+use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
 
 /// Session 结构
 pub struct Session {
@@ -304,13 +303,11 @@ impl Session {
         // 检查权限
         #[cfg(feature = "permission")]
         {
-            if !table_name.is_empty() {
-                if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                    return Err(DbError::Permission(format!(
-                        "Permission denied for {} on {}",
-                        action, table_name
-                    )));
-                }
+            if !table_name.is_empty() && !self.permission_ctx.check_table_access(&table_name, &action).await {
+                return Err(DbError::Permission(format!(
+                    "Permission denied for {} on {}",
+                    action, table_name
+                )));
             }
         }
 
@@ -357,13 +354,11 @@ impl Session {
         // 检查权限
         #[cfg(feature = "permission")]
         {
-            if !table_name.is_empty() {
-                if !self.permission_ctx.check_table_access(&table_name, operation).await {
-                    return Err(DbError::Permission(format!(
-                        "Permission denied for {} on {}",
-                        operation, table_name
-                    )));
-                }
+            if !table_name.is_empty() && !self.permission_ctx.check_table_access(&table_name, operation).await {
+                return Err(DbError::Permission(format!(
+                    "Permission denied for {} on {}",
+                    operation, table_name
+                )));
             }
         }
 
@@ -459,6 +454,7 @@ impl Session {
     }
 
     /// 记录连接错误
+    #[allow(dead_code)]
     #[cfg(feature = "metrics")]
     fn record_connection_error(&self) {
         if let Some(metrics) = &self.metrics_collector {
@@ -467,6 +463,7 @@ impl Session {
     }
 
     /// 记录连接错误（无 metrics 特性）
+    #[allow(dead_code)]
     #[cfg(not(feature = "metrics"))]
     fn record_connection_error(&self) {
         // No-op when metrics feature is disabled
@@ -493,7 +490,7 @@ fn extract_table_name(sql: &str) -> String {
     if sql_upper.contains("FROM ") {
         if let Some(start) = sql_upper.find("FROM ") {
             let rest = &sql[start + 5..];
-            if let Some(end) = rest.find(|c| c == ' ' || c == ',' || c == ';') {
+            if let Some(end) = rest.find(|c| [' ', ',', ';'].contains(&c)) {
                 return rest[..end].trim().to_string();
             }
         }
@@ -502,7 +499,7 @@ fn extract_table_name(sql: &str) -> String {
     if sql_upper.contains("INTO ") {
         if let Some(start) = sql_upper.find("INTO ") {
             let rest = &sql[start + 5..];
-            if let Some(end) = rest.find(|c| c == ' ' || c == '(' || c == ';') {
+            if let Some(end) = rest.find(|c| [' ', '(', ';'].contains(&c)) {
                 return rest[..end].trim().to_string();
             }
         }
@@ -511,7 +508,7 @@ fn extract_table_name(sql: &str) -> String {
     if sql_upper.starts_with("UPDATE ") {
         if let Some(start) = sql_upper.find("UPDATE ") {
             let rest = &sql[start + 7..];
-            if let Some(end) = rest.find(|c| c == ' ' || c == ';') {
+            if let Some(end) = rest.find(|c| [' ', ';'].contains(&c)) {
                 return rest[..end].trim().to_string();
             }
         }

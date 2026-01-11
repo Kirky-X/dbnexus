@@ -13,9 +13,11 @@ use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
-use tokio::time::{interval, timeout};
+use tokio::time::timeout;
+#[cfg(feature = "pool-health-check")]
+use tokio::time::interval;
 use tracing::info;
 
 use crate::config::{ConfigError, DbConfig, DbError, DbResult};
@@ -23,13 +25,10 @@ use crate::config::{ConfigError, DbConfig, DbError, DbResult};
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
 use crate::permission::{PermissionConfig, RolePolicy};
-#[cfg(feature = "sql-parser")]
-use crate::sql_parser::{SqlParser, is_ddl_operation};
 use super::Session;
 
-// 导入 Sea-ORM 的事务 trait 和连接 trait
+// 导入 Sea-ORM 的连接 trait
 use sea_orm::ConnectionTrait;
-use sea_orm::TransactionTrait;
 
 /// 数据库连接类型
 pub type DatabaseConnection = sea_orm::DatabaseConnection;
