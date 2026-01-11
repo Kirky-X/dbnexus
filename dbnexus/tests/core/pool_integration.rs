@@ -15,6 +15,7 @@ mod common;
 
 /// TEST-I-001: 连接健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_connection_health_check() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -35,6 +36,7 @@ async fn test_connection_health_check() {
 
 /// TEST-I-002: 清理无效连接测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_clean_invalid_connections() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -45,8 +47,9 @@ async fn test_clean_invalid_connections() {
     assert_eq!(removed, 0, "No invalid connections should be removed initially");
 }
 
-/// TEST-I-003: 验证并重新创建连接测试
+/// TEST-I-003: 验证并重建连接测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_validate_and_recreate_connections() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config.clone())
@@ -62,6 +65,7 @@ async fn test_validate_and_recreate_connections() {
 
 /// TEST-I-004: 连接池状态测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_pool_status_after_operations() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config.clone())
@@ -106,6 +110,7 @@ async fn test_pool_status_after_operations() {
 
 /// TEST-I-005: 连续健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_sequential_health_checks() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -124,6 +129,7 @@ async fn test_sequential_health_checks() {
 
 /// TEST-I-006: 健康检查超时处理测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_health_check_timeout_handling() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -149,6 +155,7 @@ async fn test_health_check_timeout_handling() {
 
 /// TEST-I-007: 大量连接后的健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_health_check_after_heavy_usage() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -179,6 +186,7 @@ async fn test_health_check_after_heavy_usage() {
 
 /// TEST-I-008: 并发健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_health_checks() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -215,6 +223,7 @@ async fn test_concurrent_health_checks() {
 
 /// TEST-I-009: 连接池配置边界测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_pool_config_boundaries() {
     // 测试最小配置
     let config = common::get_test_config();
@@ -229,6 +238,7 @@ async fn test_pool_config_boundaries() {
 
 /// TEST-I-010: 连接获取超时测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_connection_acquire_with_small_pool() {
     // 创建一个小连接池
     use dbnexus::config::DbConfig;
@@ -245,6 +255,8 @@ async fn test_connection_acquire_with_small_pool() {
         auto_migrate: false,
         migration_timeout: 60,
         admin_role: "admin".to_string(),
+        warmup_timeout: 30,
+        warmup_retries: 3,
     };
 
     let pool = DbPool::with_config(config).await
@@ -270,6 +282,7 @@ async fn test_connection_acquire_with_small_pool() {
 
 /// TEST-I-011: 健康检查与数据库类型兼容性测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_health_check_compatibility() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await
@@ -293,6 +306,7 @@ async fn test_health_check_compatibility() {
 
 /// TEST-I-012: 连接复用与健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_connection_reuse_with_health_checks() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await

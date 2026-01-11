@@ -315,17 +315,18 @@ impl DbPool {
     ///     auto_migrate: false,
     ///     migration_timeout: 60,
     ///     admin_role: "admin".to_string(),
+    ///     warmup_timeout: 30,
+    ///     warmup_retries: 3,
     /// };
     ///
     /// let pool = DbPool::try_from(&config)?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// 如果配置验证失败，返回错误
-    pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        config.validate()?;
+        ///
+        /// # Errors
+        ///
+        /// 如果配置验证失败，返回错误
+        pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {        config.validate()?;
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),

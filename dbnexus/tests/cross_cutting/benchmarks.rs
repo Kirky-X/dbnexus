@@ -130,6 +130,8 @@ fn config_validation_benchmark(c: &mut Criterion) {
                 auto_migrate: false,
                 migration_timeout: 60,
                 admin_role: "admin".to_string(),
+                warmup_timeout: 30,
+                warmup_retries: 3,
             };
             black_box(config.validate())
         })

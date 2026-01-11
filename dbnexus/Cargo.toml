@@ -152,32 +152,32 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[test]]
 name = "core_config_integration"
 path = "tests/core/config_integration.rs"
-required-features = []
+required-features = ["config-yaml", "permission"]
 
 [[test]]
 name = "core_entity_integration"
 path = "tests/core/entity_integration.rs"
-required-features = []
+required-features = ["macros"]
 
 [[test]]
 name = "core_sql_parser_integration"
 path = "tests/core/sql_parser_integration.rs"
-required-features = []
+required-features = ["sql-parser"]
 
 [[test]]
 name = "core_pool_integration"
 path = "tests/core/pool_integration.rs"
-required-features = []
+required-features = ["config-yaml", "permission"]
 
 [[test]]
 name = "core_session_transaction"
 path = "tests/core/session_transaction.rs"
-required-features = []
+required-features = ["permission"]
 
 [[test]]
 name = "core_permission_integration"
 path = "tests/core/permission_integration.rs"
-required-features = []
+required-features = ["permission"]
 
 [[test]]
 name = "audit_integration"
@@ -227,7 +227,7 @@ required-features = ["permission-engine"]
 [[test]]
 name = "cross_cutting_benchmarks"
 path = "tests/cross_cutting/benchmarks.rs"
-required-features = []
+required-features = ["permission"]
 
 [[test]]
 name = "cross_cutting_cli"
@@ -237,7 +237,7 @@ required-features = ["cli-tests"]
 [[test]]
 name = "cross_cutting_concurrency"
 path = "tests/cross_cutting/concurrency.rs"
-required-features = []
+required-features = ["permission"]
 
 [[test]]
 name = "cross_cutting_multi_db"

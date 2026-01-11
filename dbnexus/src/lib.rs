@@ -96,6 +96,10 @@ pub mod sql_parser;
 #[cfg(feature = "sql-parser")]
 pub use sql_parser::{ParsedSqlOperation, SqlOperationType, SqlParseError, SqlParser};
 
+/// PermissionAction 类型导出（当 permission 特性未启用时，从 sql_parser 导出）
+#[cfg(all(feature = "sql-parser", not(feature = "permission")))]
+pub use sql_parser::PermissionAction;
+
 /// 基础权限类型（简单 RBAC）
 ///
 /// 提供基于角色的表级权限控制，适合基本使用场景。
