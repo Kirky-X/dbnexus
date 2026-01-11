@@ -6,6 +6,8 @@
 //! Session 和事务集成测试
 
 use dbnexus::DbPool;
+
+#[path = "../common/mod.rs"]
 mod common;
 
 #[tokio::test]

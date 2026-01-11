@@ -7,6 +7,8 @@
 //!
 //! 定义迁移相关的数据类型
 
+/// 表变更类型
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TableChange {
     /// 新增表
     CreateTable(Table),
@@ -43,6 +45,7 @@ pub enum TableChange {
 }
 
 /// 列变更类型
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColumnChange {
     /// 新增列
     AddColumn(Column),
@@ -64,6 +67,33 @@ pub enum ColumnChange {
         old_name: String,
         /// 新列名
         new_name: String,
+    },
+    /// 类型变更
+    TypeChanged {
+        /// 列名
+        column_name: String,
+        /// 旧类型
+        old_type: crate::migration::schema::ColumnType,
+        /// 新类型
+        new_type: crate::migration::schema::ColumnType,
+    },
+    /// 可空性变更
+    NullabilityChanged {
+        /// 列名
+        column_name: String,
+        /// 旧的可空性
+        old_nullable: bool,
+        /// 新的可空性
+        new_nullable: bool,
+    },
+    /// 默认值变更
+    DefaultChanged {
+        /// 列名
+        column_name: String,
+        /// 旧默认值
+        old_default: Option<String>,
+        /// 新默认值
+        new_default: Option<String>,
     },
 }
 

@@ -12,6 +12,8 @@
 //! - 同步事件处理
 
 use dbnexus::global_index::{GlobalIndex, IndexEntry, SyncEvent};
+
+#[path = "../common/mod.rs"]
 mod common;
 
 /// TEST-GI-001: 创建全局索引测试

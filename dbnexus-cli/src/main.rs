@@ -8,8 +8,8 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
-use dbnexus::migration::{DatabaseType as MigrationDatabaseType, MigrationExecutor, MigrationFileParser};
-use dbnexus::{DbPool, DbResult, config::DbError};
+use dbnexus::migration::{MigrationExecutor, MigrationFileParser};
+use dbnexus::{DbPool, DbResult, config::{DbError, DatabaseType as MigrationDatabaseType}};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

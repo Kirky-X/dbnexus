@@ -24,6 +24,7 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use dbnexus::permission::{Operation, PermissionConfig, RolePolicy, TablePermission};
 use std::time::{Duration, Instant};
 
+#[path = "../common/mod.rs"]
 mod common;
 
 /// 基准测试：权限配置加载（同步）
@@ -128,6 +129,7 @@ fn config_validation_benchmark(c: &mut Criterion) {
                 migrations_dir: None,
                 auto_migrate: false,
                 migration_timeout: 60,
+                admin_role: "admin".to_string(),
             };
             black_box(config.validate())
         })

@@ -9,7 +9,9 @@
 
 use super::schema::*;
 use super::types::*;
+use crate::config::DatabaseType;
 
+/// 迁移计划
 pub struct MigrationPlan {
     /// 待执行的迁移列表
     pub migrations: Vec<Migration>,

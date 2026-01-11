@@ -213,17 +213,69 @@ impl SqlParser {
 
 /// Check if SQL contains variables (basic detection)
 fn contains_variables(sql: &str) -> bool {
+    // Remove string literals first to avoid false positives
+    let sql_without_strings = remove_string_literals(sql);
+
     // Detect patterns like @variable, :variable, $variable
     let patterns = [r"@[\w]+", r":[a-zA-Z_][\w]*", r"\$[a-zA-Z_][\w]*"];
     for pattern in &patterns {
         if regex::Regex::new(pattern)
             .unwrap()
-            .is_match(sql)
+            .is_match(&sql_without_strings)
         {
             return true;
         }
     }
     false
+}
+
+/// Remove string literals from SQL to avoid false positives in variable detection
+fn remove_string_literals(sql: &str) -> String {
+    let mut result = String::new();
+    let mut in_string = false;
+    let mut string_char = ' ';
+    let mut escape_next = false;
+
+    for ch in sql.chars() {
+        if escape_next {
+            escape_next = false;
+            if in_string {
+                result.push(' '); // Replace escaped chars in strings with space
+            } else {
+                result.push(ch);
+            }
+            continue;
+        }
+
+        if ch == '\\' {
+            escape_next = true;
+            if in_string {
+                result.push(' '); // Replace escape char in strings with space
+            } else {
+                result.push(ch);
+            }
+            continue;
+        }
+
+        if in_string {
+            if ch == string_char {
+                in_string = false;
+            }
+            result.push(' '); // Replace string content with space
+            continue;
+        }
+
+        if ch == '\'' || ch == '"' || ch == '`' {
+            in_string = true;
+            string_char = ch;
+            result.push(' '); // Replace string delimiters with space
+            continue;
+        }
+
+        result.push(ch);
+    }
+
+    result
 }
 
 /// Extract table name from TableWithJoins

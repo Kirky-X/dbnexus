@@ -57,6 +57,7 @@ confers = ["dep:confers"]
 
 # Development features
 dev = []
+cli-tests = []
 
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]
@@ -125,3 +126,98 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[test]]
+name = "core_config_integration"
+path = "tests/core/config_integration.rs"
+required-features = []
+
+[[test]]
+name = "core_entity_integration"
+path = "tests/core/entity_integration.rs"
+required-features = []
+
+[[test]]
+name = "core_sql_parser_integration"
+path = "tests/core/sql_parser_integration.rs"
+required-features = []
+
+[[test]]
+name = "core_pool_integration"
+path = "tests/core/pool_integration.rs"
+required-features = []
+
+[[test]]
+name = "core_session_transaction"
+path = "tests/core/session_transaction.rs"
+required-features = []
+
+[[test]]
+name = "core_permission_integration"
+path = "tests/core/permission_integration.rs"
+required-features = []
+
+[[test]]
+name = "audit_integration"
+path = "tests/audit/integration.rs"
+required-features = ["audit"]
+
+[[test]]
+name = "cache_integration"
+path = "tests/cache/integration.rs"
+required-features = ["cache"]
+
+[[test]]
+name = "migration_integration"
+path = "tests/migration/integration.rs"
+required-features = ["migration"]
+
+[[test]]
+name = "migration_auto_migrate"
+path = "tests/migration/auto_migrate.rs"
+required-features = ["auto-migrate"]
+
+[[test]]
+name = "sharding_integration"
+path = "tests/sharding/integration.rs"
+required-features = ["sharding"]
+
+[[test]]
+name = "global_index_integration"
+path = "tests/global_index/integration.rs"
+required-features = ["global-index"]
+
+[[test]]
+name = "metrics_integration"
+path = "tests/metrics/integration.rs"
+required-features = ["metrics"]
+
+[[test]]
+name = "tracing_integration"
+path = "tests/tracing/integration.rs"
+required-features = ["tracing"]
+
+[[test]]
+name = "permission_engine_integration"
+path = "tests/permission_engine/integration.rs"
+required-features = ["permission-engine"]
+
+[[test]]
+name = "cross_cutting_benchmarks"
+path = "tests/cross_cutting/benchmarks.rs"
+required-features = []
+
+[[test]]
+name = "cross_cutting_cli"
+path = "tests/cross_cutting/cli.rs"
+required-features = ["cli-tests"]
+
+[[test]]
+name = "cross_cutting_concurrency"
+path = "tests/cross_cutting/concurrency.rs"
+required-features = []
+
+[[test]]
+name = "cross_cutting_multi_db"
+path = "tests/cross_cutting/multi_db.rs"
+required-features = ["migration"]

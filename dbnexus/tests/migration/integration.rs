@@ -9,9 +9,12 @@
 
 use dbnexus::DbPool;
 use dbnexus::migration::{
-    Column, ColumnType, DatabaseType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory,
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory,
     Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
+use dbnexus::config::DatabaseType;
+
+#[path = "../common/mod.rs"]
 mod common;
 
 /// TEST-M-001: 迁移执行器创建测试
