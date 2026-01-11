@@ -49,6 +49,7 @@ async fn test_concurrent_session_acquisition() {
 
 /// TEST-CONC-002: 并发会话释放测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_session_release() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -87,6 +88,7 @@ async fn test_concurrent_session_release() {
 
 /// TEST-CONC-003: 并发健康检查测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_health_checks() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -116,6 +118,7 @@ async fn test_concurrent_health_checks() {
 
 /// TEST-CONC-004: 并发数据库操作测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_database_operations() {
     // 使用带权限配置的测试配置，允许 DDL 操作
     let mut config = common::get_test_config();
@@ -196,6 +199,7 @@ roles:
 
 /// TEST-CONC-005: 连接池压力测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_connection_pool_stress() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -244,6 +248,7 @@ async fn test_connection_pool_stress() {
 
 /// TEST-CONC-006: 竞争条件测试 - 快速获取和释放
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_race_condition_rapid_acquire_release() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -279,6 +284,7 @@ async fn test_race_condition_rapid_acquire_release() {
 
 /// TEST-CONC-007: 并发角色会话测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_role_sessions() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -374,6 +380,7 @@ roles:
 
 /// TEST-CONC-009: 连接池容量边界测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_pool_capacity_boundary() {
     use dbnexus::config::DbConfig;
 
@@ -444,6 +451,7 @@ async fn test_pool_capacity_boundary() {
 
 /// TEST-CONC-010: 并发清理无效连接测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_clean_invalid_connections() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -471,6 +479,7 @@ async fn test_concurrent_clean_invalid_connections() {
 ///
 /// 验证多个并发验证操作能正确执行并验证连接池状态
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_validate_and_recreate() {
     // Arrange
     let config = common::get_test_config();
@@ -545,6 +554,7 @@ async fn test_concurrent_validate_and_recreate() {
 
 /// TEST-CONC-012: 大规模并发压力测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_large_scale_concurrent_stress() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
