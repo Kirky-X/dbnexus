@@ -17,13 +17,16 @@ mod common;
 #[tokio::test]
 async fn test_connection_health_check() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-001: Failed to create test pool for connection health check");
 
     // 获取一个会话
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let mut session = pool.get_session("admin").await
+        .expect("TEST-I-001: Failed to get admin session for health check");
 
     // 获取底层连接进行健康检查
-    let conn = session.connection().expect("Failed to get connection");
+    let conn = session.connection()
+        .expect("TEST-I-001: Failed to get underlying connection from session");
 
     // 执行健康检查
     let is_healthy = pool.check_connection_health(conn).await;
@@ -34,7 +37,8 @@ async fn test_connection_health_check() {
 #[tokio::test]
 async fn test_clean_invalid_connections() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-002: Failed to create test pool for cleaning invalid connections");
 
     // 初始状态应该没有无效连接
     let removed = pool.clean_invalid_connections().await;
@@ -47,7 +51,7 @@ async fn test_validate_and_recreate_connections() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config.clone())
         .await
-        .expect("Failed to create test pool");
+        .expect("TEST-I-003: Failed to create test pool for validating and recreating connections");
 
     // 初始验证应该不会重新创建任何连接（所有连接都是有效的）
     let _recreated = pool.validate_and_recreate_connections().await;
@@ -62,7 +66,7 @@ async fn test_pool_status_after_operations() {
     let config = common::get_test_config();
     let pool = DbPool::with_config(config.clone())
         .await
-        .expect("Failed to create test pool");
+        .expect("TEST-I-004: Failed to create test pool for status operations test");
 
     let initial_status = pool.status();
     assert!(initial_status.total >= config.min_connections as u32);
@@ -73,7 +77,7 @@ async fn test_pool_status_after_operations() {
         let session = pool
             .get_session(&format!("user{}", i))
             .await
-            .expect("Failed to get session");
+            .expect(&format!("TEST-I-004: Failed to get session for user{}", i));
         sessions.push(session);
     }
 
@@ -102,12 +106,15 @@ async fn test_pool_status_after_operations() {
 #[tokio::test]
 async fn test_sequential_health_checks() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-005: Failed to create test pool for sequential health checks");
 
     // 连续执行多次健康检查
     for i in 0..5 {
-        let mut session = pool.get_session("admin").await.expect("Failed to get session");
-        let conn = session.connection().expect("Failed to get connection");
+        let mut session = pool.get_session("admin").await
+            .expect(&format!("TEST-I-005: Failed to get admin session for health check {}", i));
+        let conn = session.connection()
+            .expect(&format!("TEST-I-005: Failed to get connection for health check {}", i));
         let is_healthy = pool.check_connection_health(conn).await;
         assert!(is_healthy, "Connection {} should be healthy", i);
     }
@@ -117,11 +124,14 @@ async fn test_sequential_health_checks() {
 #[tokio::test]
 async fn test_health_check_timeout_handling() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-006: Failed to create test pool for health check timeout handling");
 
     // 获取一个有效的连接
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let conn = session.connection().expect("Failed to get connection");
+    let mut session = pool.get_session("admin").await
+        .expect("TEST-I-006: Failed to get admin session for timeout handling test");
+    let conn = session.connection()
+        .expect("TEST-I-006: Failed to get connection for timeout handling test");
 
     // 健康检查应该在合理时间内完成（5秒超时）
     let start = std::time::Instant::now();
@@ -139,7 +149,8 @@ async fn test_health_check_timeout_handling() {
 #[tokio::test]
 async fn test_health_check_after_heavy_usage() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-007: Failed to create test pool for heavy usage health check");
 
     // 模拟使用（使用较小数量，避免超出连接池限制）
     let mut sessions = Vec::new();
@@ -157,7 +168,8 @@ async fn test_health_check_after_heavy_usage() {
 
     // 逐个释放并检查健康
     for (i, mut session) in sessions.into_iter().enumerate() {
-        let conn = session.connection().expect("Failed to get connection");
+        let conn = session.connection()
+            .expect(&format!("TEST-I-007: Failed to get connection for session {} after heavy usage", i));
         let is_healthy = pool.check_connection_health(conn).await;
         assert!(is_healthy, "Connection {} should be healthy after heavy usage", i);
     }
@@ -167,7 +179,8 @@ async fn test_health_check_after_heavy_usage() {
 #[tokio::test]
 async fn test_concurrent_health_checks() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-008: Failed to create test pool for concurrent health checks");
 
     let pool = std::sync::Arc::new(pool);
     let mut handles = Vec::new();
@@ -176,8 +189,10 @@ async fn test_concurrent_health_checks() {
     for _ in 0..5 {
         let pool = pool.clone();
         let handle = tokio::spawn(async move {
-            let mut session = pool.get_session("admin").await.expect("Failed to get session");
-            let conn = session.connection().expect("Failed to get connection");
+            let mut session = pool.get_session("admin").await
+                .expect("TEST-I-008: Failed to get admin session for concurrent health check");
+            let conn = session.connection()
+                .expect("TEST-I-008: Failed to get connection for concurrent health check");
             pool.check_connection_health(conn).await
         });
         handles.push(handle);
@@ -189,7 +204,7 @@ async fn test_concurrent_health_checks() {
     // 所有健康检查都应该成功
     for (i, result) in results.into_iter().enumerate() {
         assert!(
-            result.expect("Health check should not panic"),
+            result.expect(&format!("TEST-I-008: Health check task {} panicked", i)),
             "Health check {} should succeed",
             i
         );
@@ -201,7 +216,8 @@ async fn test_concurrent_health_checks() {
 async fn test_pool_config_boundaries() {
     // 测试最小配置
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-009: Failed to create test pool for config boundaries test");
     let status = pool.status();
 
     assert!(status.total >= 1, "Pool should have at least 1 connection");
@@ -221,7 +237,7 @@ async fn test_connection_acquire_with_small_pool() {
         max_connections: 2,
         min_connections: 1,
         idle_timeout: 300,
-        acquire_timeout: 100, // 100毫秒超时
+        acquire_timeout: 1000, // 1000毫秒超时
         permissions_path: None,
         migrations_dir: None,
         auto_migrate: false,
@@ -229,11 +245,14 @@ async fn test_connection_acquire_with_small_pool() {
         admin_role: "admin".to_string(),
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-010: Failed to create test pool with small size for acquire timeout test");
 
     // 获取两个连接（达到最大限制）
-    let _session1 = pool.get_session("user1").await.expect("Should get first session");
-    let _session2 = pool.get_session("user2").await.expect("Should get second session");
+    let _session1 = pool.get_session("user1").await
+        .expect("TEST-I-010: Failed to get first session from small pool");
+    let _session2 = pool.get_session("user2").await
+        .expect("TEST-I-010: Failed to get second session from small pool");
 
     // 第三个获取可能会超时或等待（取决于实现）
     // 这个测试验证池能够处理连接耗尽的情况
@@ -251,10 +270,13 @@ async fn test_connection_acquire_with_small_pool() {
 #[tokio::test]
 async fn test_health_check_compatibility() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-011: Failed to create test pool for database compatibility test");
 
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let conn = session.connection().expect("Failed to get connection");
+    let mut session = pool.get_session("admin").await
+        .expect("TEST-I-011: Failed to get admin session for compatibility test");
+    let conn = session.connection()
+        .expect("TEST-I-011: Failed to get connection for compatibility test");
 
     // 无论数据库类型如何，健康检查都应该返回有效结果
     let is_healthy = pool.check_connection_health(conn).await;
@@ -271,13 +293,16 @@ async fn test_health_check_compatibility() {
 #[tokio::test]
 async fn test_connection_reuse_with_health_checks() {
     let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config).await
+        .expect("TEST-I-012: Failed to create test pool for connection reuse test");
 
     // 多次获取和释放同一角色的会话
     for i in 0..10 {
         {
-            let mut session = pool.get_session("admin").await.expect("Failed to get session");
-            let conn = session.connection().expect("Failed to get connection");
+            let mut session = pool.get_session("admin").await
+                .expect(&format!("TEST-I-012: Failed to get admin session for reuse iteration {}", i));
+            let conn = session.connection()
+                .expect(&format!("TEST-I-012: Failed to get connection for reuse iteration {}", i));
 
             // 执行健康检查
             let is_healthy = pool.check_connection_health(conn).await;

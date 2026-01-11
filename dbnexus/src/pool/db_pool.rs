@@ -390,6 +390,21 @@ impl DbPool {
     }
 
     /// 创建单个数据库连接
+    ///
+    /// 使用配置中的 URL 建立新的数据库连接。
+    /// 此方法不进行连接池管理，仅创建原始连接。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - 数据库配置，包含连接 URL
+    ///
+    /// # Returns
+    ///
+    /// 成功创建的数据库连接
+    ///
+    /// # Errors
+    ///
+    /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
         let conn = sea_orm::Database::connect(&config.url).await?;
         Ok(conn)
@@ -440,6 +455,21 @@ impl DbPool {
     }
 
     /// 获取数据库类型
+    ///
+    /// 根据数据库 URL 的协议部分解析数据库类型。
+    /// 支持的数据库类型包括 SQLite、PostgreSQL 和 MySQL。
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - 数据库连接 URL
+    ///
+    /// # Returns
+    ///
+    /// 对应的 Sea-ORM 数据库后端类型
+    ///
+    /// # Note
+    ///
+    /// 如果 URL 无法识别，默认返回 SQLite 类型
     fn get_database_backend(url: &str) -> sea_orm::DatabaseBackend {
         if url.starts_with("sqlite:") {
             sea_orm::DatabaseBackend::Sqlite
@@ -453,6 +483,18 @@ impl DbPool {
     }
 
     /// 获取健康检查查询语句
+    ///
+    /// 根据数据库类型返回对应的健康检查 SQL 语句。
+    /// 所有支持的数据库类型都使用简单的 `SELECT 1` 查询，
+    /// 这是一个轻量级的查询，用于验证连接是否仍然有效。
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - 数据库连接 URL
+    ///
+    /// # Returns
+    ///
+    /// 对应数据库类型的健康检查 SQL 语句
     fn get_health_check_query(url: &str) -> &'static str {
         match Self::get_database_backend(url) {
             sea_orm::DatabaseBackend::Sqlite => "SELECT 1",
@@ -640,6 +682,21 @@ impl DbPool {
     }
 
     /// 从池中获取连接
+    ///
+    /// 实现连接获取逻辑，包括：
+    /// 1. 尝试从空闲连接队列获取
+    /// 2. 如果队列为空且未达到最大连接数，创建新连接
+    /// 3. 如果已达到最大连接数，等待其他连接释放（带超时）
+    ///
+    /// 使用异步条件变量（Notify）实现高效的等待机制，避免忙等待。
+    ///
+    /// # Returns
+    ///
+    /// 成功获取的数据库连接
+    ///
+    /// # Errors
+    ///
+    /// 如果获取连接超时或创建连接失败，返回错误
     async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
         // 尝试从空闲队列获取
         {
@@ -694,6 +751,19 @@ impl DbPool {
     }
 
     /// 归还连接到池中
+    ///
+    /// 将使用完毕的连接归还到空闲连接队列。
+    /// 如果空闲队列已满（达到最大连接数），则丢弃该连接。
+    /// 归还后会通知一个等待的请求者有新连接可用。
+    ///
+    /// # Arguments
+    ///
+    /// * `conn` - 要归还的数据库连接
+    ///
+    /// # Note
+    ///
+    /// 此方法是异步的，使用 tokio::spawn 在后台执行，
+    /// 避免阻塞调用者。
     #[allow(dead_code)]
     pub(crate) fn release_connection(&self, conn: DatabaseConnection) {
         self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
