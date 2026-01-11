@@ -490,7 +490,7 @@ fn default_idle_timeout() -> u64 {
 }
 
 fn default_acquire_timeout() -> u64 {
-    3000
+    5000
 }
 
 fn default_migration_timeout() -> u64 {
