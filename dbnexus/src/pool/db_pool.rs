@@ -245,7 +245,14 @@ impl DbPool {
     /// let config = DbConfig {
     ///     url: "sqlite::memory:".to_string(),
     ///     max_connections: 10,
-    ///     ..Default::default()
+    ///     min_connections: 1,
+    ///     idle_timeout: 300,
+    ///     acquire_timeout: 5000,
+    ///     permissions_path: None,
+    ///     migrations_dir: None,
+    ///     auto_migrate: false,
+    ///     migration_timeout: 60,
+    ///     admin_role: "admin".to_string(),
     /// };
     ///
     /// let pool = DbPool::try_from(&config)?;
