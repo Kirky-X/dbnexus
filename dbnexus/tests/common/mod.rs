@@ -505,11 +505,15 @@ pub async fn verify_db_operation_with_trace(
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
+    // 验证表名安全性（防止 SQL 注入）
+    let safe_table_name = validate_table_name(table_name)?;
+    let safe_trace_id = sanitize_sql_string(trace_id);
+
     // 插入带追踪ID的记录
     session
         .execute_raw(&format!(
             "INSERT INTO {} (trace_id, data) VALUES ('{}', 'test data')",
-            table_name, trace_id
+            safe_table_name, safe_trace_id
         ))
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
@@ -518,11 +522,35 @@ pub async fn verify_db_operation_with_trace(
     let _result = session
         .execute_raw(&format!(
             "SELECT COUNT(*) FROM {} WHERE trace_id = '{}'",
-            table_name, trace_id
+            safe_table_name, safe_trace_id
         ))
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     // result 是 DbResult<ExecResult>，如果执行成功已经通过 map_err
     Ok(())
+}
+
+/// 验证表名安全性（白名单验证）
+fn validate_table_name(table_name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // 只允许字母、数字、下划线
+    if !table_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid table name: contains disallowed characters",
+        )));
+    }
+    // 限制长度
+    if table_name.len() > 64 {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid table name: too long",
+        )));
+    }
+    Ok(table_name.to_string())
+}
+
+/// 清理 SQL 字符串（转义单引号）
+fn sanitize_sql_string(input: &str) -> String {
+    input.replace('\'', "''")
 }

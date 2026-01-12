@@ -29,6 +29,30 @@ enum PermissionAction {
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
 
+/// 通用错误格式化辅助函数（减少重复代码）
+#[allow(dead_code)]
+mod error_helpers {
+    use crate::config::DbError;
+
+    /// 格式化权限错误
+    #[allow(dead_code)]
+    pub fn permission_denied(operation: &str, resource: &str) -> DbError {
+        DbError::Permission(format!("Permission denied for {} on {}", operation, resource))
+    }
+
+    /// 格式化事务错误
+    #[allow(dead_code)]
+    pub fn transaction_error(message: &str, source: &str) -> DbError {
+        DbError::Transaction(format!("{}: {}", message, source))
+    }
+
+    /// 格式化配置错误
+    #[allow(dead_code)]
+    pub fn config_error(message: &str) -> DbError {
+        DbError::Config(message.to_string())
+    }
+}
+
 /// Session 结构
 pub struct Session {
     /// 数据库连接
@@ -209,7 +233,7 @@ impl Session {
             // 解析 SQL 操作类型和表名
             let parser = SqlParser::new();
             if let Some((table_name, action)) = parser.parse_operation(sql) {
-                if table_name.is_empty() {
+                if table_name.is_empty() || is_invalid_table_name(&table_name) {
                     return Err(DbError::Permission(
                         "Failed to extract table name for permission checking".to_string(),
                     ));
@@ -246,7 +270,10 @@ impl Session {
             }
         }
 
-        // 执行 SQL
+        if let Some(tx) = self.transaction.as_ref() {
+            return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
+        }
+
         let conn = self
             .connection
             .as_ref()
@@ -280,7 +307,47 @@ impl Session {
             )));
         }
 
-        // 执行 SQL（不进行 DDL 检查）
+        // DDL 操作白名单验证（防止危险操作）
+        let sql_upper = sql.trim().to_uppercase();
+
+        // 禁止的危险操作
+        let forbidden_patterns = [
+            "DROP DATABASE",
+            "TRUNCATE TABLE", // 可选：完全禁止 TRUNCATE
+            "DROP ALL",
+            "DELETE FROM",
+        ];
+
+        for pattern in &forbidden_patterns {
+            if sql_upper.contains(pattern) {
+                return Err(DbError::Permission(format!(
+                    "DDL operation not allowed: contains forbidden pattern '{}'",
+                    pattern
+                )));
+            }
+        }
+
+        // 只允许特定的 DDL 操作
+        let allowed_prefixes = [
+            "CREATE TABLE",
+            "ALTER TABLE",
+            "DROP TABLE",
+            "CREATE INDEX",
+            "DROP INDEX",
+            "CREATE VIEW",
+            "DROP VIEW",
+        ];
+
+        let is_allowed = allowed_prefixes.iter().any(|prefix| sql_upper.starts_with(prefix));
+
+        if !is_allowed {
+            return Err(DbError::Permission(format!(
+                "DDL operation not allowed: {}. Allowed operations: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE INDEX, DROP INDEX, CREATE VIEW, DROP VIEW",
+                sql_upper.split_whitespace().next().unwrap_or("UNKNOWN")
+            )));
+        }
+
+        // 执行 SQL
         let conn = self
             .connection
             .as_ref()
@@ -322,7 +389,7 @@ impl Session {
 
         #[cfg(feature = "permission")]
         {
-            if table_name.is_empty() {
+            if table_name.is_empty() || is_invalid_table_name(&table_name) {
                 return Err(DbError::Permission(
                     "Failed to extract table name for permission checking".to_string(),
                 ));
@@ -492,6 +559,35 @@ impl Session {
     fn record_connection_error(&self) {
         // No-op when metrics feature is disabled
     }
+}
+
+#[cfg(feature = "permission")]
+fn is_invalid_table_name(table_name: &str) -> bool {
+    let table_name = table_name.trim();
+    if table_name.is_empty() {
+        return true;
+    }
+
+    for part in table_name.split('.') {
+        let part = part.trim();
+        if part.is_empty() {
+            return true;
+        }
+
+        let unquoted = part
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .or_else(|| part.strip_prefix('`').and_then(|s| s.strip_suffix('`')))
+            .or_else(|| part.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+            .unwrap_or(part)
+            .trim();
+
+        if unquoted.is_empty() {
+            return true;
+        }
+    }
+
+    false
 }
 
 impl Drop for Session {

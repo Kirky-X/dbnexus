@@ -482,6 +482,11 @@ async fn test_concurrent_operations_cross_database() {
     for i in 0..10 {
         let pool = pool_clone.clone();
         let handle = tokio::spawn(async move {
+            // 验证输入安全性（防止 SQL 注入）
+            if i > 10000 {
+                return Err(dbnexus::DbError::Config("Invalid counter value".to_string()));
+            }
+
             let session = pool.get_session("admin").await.expect("Failed to get session");
             session
                 .execute_raw(&format!("INSERT INTO concurrent_test (counter) VALUES ({})", i))

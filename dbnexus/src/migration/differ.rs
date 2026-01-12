@@ -842,7 +842,7 @@ mod tests {
         if let TableChange::CreateTable(table) = &migrations[0].table_changes[0] {
             assert_eq!(table.name, "users");
         } else {
-            panic!("Expected CreateTable change");
+            unreachable!("Expected CreateTable change");
         }
     }
 
@@ -872,7 +872,7 @@ mod tests {
         if let TableChange::DropTable { table_name } = &migrations[0].table_changes[0] {
             assert_eq!(table_name, "users");
         } else {
-            panic!("Expected DropTable change");
+            unreachable!("Expected DropTable change");
         }
     }
 
@@ -935,19 +935,27 @@ pub struct Model {
 }
 "#;
 
-        let table = RustEntityParser::parse_entity(entity_code, "users").unwrap();
+        let table = RustEntityParser::parse_entity(entity_code, "users").expect("Failed to parse entity code");
 
         assert_eq!(table.name, "users");
         assert_eq!(table.columns.len(), 3);
         assert_eq!(table.primary_key_columns, vec!["id"]);
 
         // 检查 id 列
-        let id_col = table.columns.iter().find(|c| c.name == "id").unwrap();
+        let id_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "id")
+            .expect("id column should exist");
         assert_eq!(id_col.column_type, ColumnType::Integer);
         assert!(id_col.is_primary_key);
 
         // 检查 name 列
-        let name_col = table.columns.iter().find(|c| c.name == "name").unwrap();
+        let name_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "name")
+            .expect("name column should exist");
         assert_eq!(name_col.column_type, ColumnType::String(Some(255)));
     }
 
@@ -968,7 +976,8 @@ pub struct Model {
 }
 "#;
 
-        let sql = RustEntityParser::generate_migration_sql(entity_code, "posts", DatabaseType::Postgres).unwrap();
+        let sql = RustEntityParser::generate_migration_sql(entity_code, "posts", DatabaseType::Postgres)
+            .expect("Failed to generate migration SQL");
 
         assert!(sql.contains("CREATE TABLE posts"));
         assert!(sql.contains("id BIGINT"));
