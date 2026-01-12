@@ -693,8 +693,10 @@ roles:
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
         .await
         .expect("Failed to create table");
+
+    // INSERT 是 DML 操作，应使用 execute_raw 而非 execute_raw_ddl
     session
-        .execute_raw_ddl("INSERT INTO users (id, name) VALUES (1, 'a')")
+        .execute_raw("INSERT INTO users (id, name) VALUES (1, 'a')")
         .await
         .expect("Failed to insert");
 
