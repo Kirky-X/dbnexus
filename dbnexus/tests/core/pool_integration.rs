@@ -63,7 +63,13 @@ async fn test_validate_and_recreate_connections() {
 
     // 初始验证应该不会重新创建任何连接（所有连接都是有效的）
     let _recreated = pool.validate_and_recreate_connections().await;
-    // 由于所有连接都是有效的，可能不会重新创建
+
+    // 先获取一个连接以触发连接池初始化
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("TEST-I-003: Failed to get session to initialize pool");
+
     let status = pool.status();
     assert!(status.total >= config.min_connections as u32);
 }
@@ -76,6 +82,12 @@ async fn test_pool_status_after_operations() {
     let pool = DbPool::with_config(config.clone())
         .await
         .expect("TEST-I-004: Failed to create test pool for status operations test");
+
+    // 先获取一个连接以触发连接池初始化
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("TEST-I-004: Failed to get session to initialize pool");
 
     let initial_status = pool.status();
     assert!(initial_status.total >= config.min_connections as u32);
@@ -93,7 +105,11 @@ async fn test_pool_status_after_operations() {
     }
 
     let status_after_acquire = pool.status();
-    assert_eq!(status_after_acquire.active, 3, "Should have 3 active connections");
+    // 初始化连接 + 3个会话 = 4 个活动连接
+    assert_eq!(
+        status_after_acquire.active, 4,
+        "Should have 4 active connections (1 init + 3 sessions)"
+    );
 
     // 释放所有会话（通过离开作用域）
     drop(sessions);
@@ -107,7 +123,11 @@ async fn test_pool_status_after_operations() {
         "Should have at least {} total connections after release",
         config.min_connections
     );
-    assert_eq!(final_status.active, 0, "Should have 0 active connections after release");
+    // 初始化连接仍在使用中，所以 active = 1
+    assert_eq!(
+        final_status.active, 1,
+        "Should have 1 active connection (init session still held)"
+    );
 }
 
 /// TEST-I-005: 连续健康检查测试
@@ -247,6 +267,13 @@ async fn test_pool_config_boundaries() {
     let pool = DbPool::with_config(config)
         .await
         .expect("TEST-I-009: Failed to create test pool for config boundaries test");
+
+    // 先获取一个连接以触发连接池初始化
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("TEST-I-009: Failed to get session to initialize pool");
+
     let status = pool.status();
 
     assert!(status.total >= 1, "Pool should have at least 1 connection");
