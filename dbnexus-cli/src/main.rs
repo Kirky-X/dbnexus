@@ -462,7 +462,11 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
             .collect()
     } else {
         // 回滚上一个版本
-        vec![applied_migrations.iter().map(|m| m.version).max().unwrap()]
+        if let Some(max_version) = applied_migrations.iter().map(|m| m.version).max() {
+            vec![max_version]
+        } else {
+            Vec::new() // 无迁移可回滚
+        }
     };
 
     // 按版本号降序排序（先回滚最新的）

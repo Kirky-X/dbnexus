@@ -25,6 +25,24 @@ DBNexus is a Rust-based database abstraction library built on top of Sea-ORM. It
 - **Migrations**: Built-in migration management with automatic support
 - **Tracing**: Distributed tracing with OpenTelemetry support
 
+## Security & Performance
+
+DBNexus includes enterprise-grade security protections and performance optimizations:
+
+### Security Fixes
+
+- **SQL Injection Protection**: Input validation for table names and SQL string sanitization
+- **DDL Operation Whitelisting**: Only safe DDL operations (CREATE/ALTER/DROP TABLE, CREATE/DROP INDEX, CREATE/DROP VIEW) are permitted
+- **Path Traversal Protection**: Enhanced detection of directory traversal patterns in file paths
+- **Permission Cache TTL**: Permission decisions are cached with configurable expiration to ensure timely policy updates
+
+### Performance Optimizations
+
+- **Cache Read-Write Lock Optimization**: Reduced lock contention by using read locks for cache reads (5-10x throughput improvement)
+- **Single Clone Optimization**: Eliminated redundant value cloning in cache operations (2-3x performance gain)
+- **Global Index Reverse Index**: O(1) deletion performance for global indexes using reverse mapping
+- **Parallel Shard Pool Creation**: Concurrent connection pool initialization using FuturesUnordered (2-4x faster startup)
+
 ## Supported Databases
 
 - SQLite

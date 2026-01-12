@@ -218,6 +218,22 @@ async fn test_variables_detected() {
 }
 
 #[tokio::test]
+async fn test_set_variable_with_semicolon_allowed() {
+    let parser = SqlParser::new();
+    let result = parser.parse_single("SET sql_mode = 'STRICT_ALL_TABLES';");
+    assert!(result.is_ok());
+    let parsed = result.unwrap();
+    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
+}
+
+#[tokio::test]
+async fn test_variables_inside_string_literals_not_detected() {
+    let parser = SqlParser::new();
+    let result = parser.parse_single("SELECT '@userId' AS v");
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn test_is_ddl_operation() {
     assert!(is_ddl_operation("CREATE TABLE users (id INT)"));
     assert!(is_ddl_operation("DROP TABLE users"));

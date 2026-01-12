@@ -13,7 +13,32 @@
 //! - 与数据库操作的集成
 
 use std::collections::HashMap;
+use std::io;
 use std::time::Duration;
+
+/// 验证表名安全性（防止 SQL 注入）
+fn validate_table_name(table_name: &str) -> Result<String, io::Error> {
+    // 只允许字母、数字、下划线
+    if !table_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Invalid table name: contains disallowed characters",
+        ));
+    }
+    // 限制长度
+    if table_name.len() > 64 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Invalid table name: too long",
+        ));
+    }
+    Ok(table_name.to_string())
+}
+
+/// 清理 SQL 字符串（转义单引号）
+fn sanitize_sql_string(input: &str) -> String {
+    input.replace('\'', "''")
+}
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -444,18 +469,25 @@ async fn test_trace_propagation_with_db_operations() {
     // Act - 执行带追踪的数据库操作
     let session = pool.get_session("admin").await.expect("Get session");
 
+    // 验证表名安全性
+    let safe_table_name = validate_table_name(table_name)?;
+    let safe_trace_id = sanitize_sql_string(trace_id);
+
     // 插入记录
     let insert_result = session
         .execute_raw(&format!(
             "INSERT INTO {} (trace_id, data) VALUES ('{}', 'test operation')",
-            table_name, trace_id
+            safe_table_name, safe_trace_id
         ))
         .await;
     assert!(insert_result.is_ok(), "Insert should succeed");
 
     // 查询验证
     let select_result = session
-        .execute_raw(&format!("SELECT * FROM {} WHERE trace_id = '{}'", table_name, trace_id))
+        .execute_raw(&format!(
+            "SELECT * FROM {} WHERE trace_id = '{}'",
+            safe_table_name, safe_trace_id
+        ))
         .await;
     assert!(select_result.is_ok(), "Select should succeed");
 

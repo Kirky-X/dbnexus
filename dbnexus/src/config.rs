@@ -45,6 +45,7 @@
 //! };
 //! ```
 
+#[cfg(any(feature = "postgres", feature = "mysql"))]
 use sea_orm::ConnectionTrait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -969,47 +970,56 @@ impl ConfigCorrector {
         connection: &sea_orm::DatabaseConnection,
         db_type: DatabaseType,
     ) -> u32 {
+        let _ = connection;
         match db_type {
             DatabaseType::Postgres => {
-                // PostgreSQL: 查询 superuser_reserved_connections 和 max_connections
-                let result = connection.execute_unprepared("SHOW max_connections").await;
+                #[cfg(feature = "postgres")]
+                {
+                    let result = connection.execute_unprepared("SHOW max_connections").await;
 
-                match result {
-                    Ok(result) => {
-                        let rows_affected = result.rows_affected();
-                        if rows_affected > 0 {
-                            // PostgreSQL 返回一个包含一行一列结果集的查询
-                            // 但 execute_unprepared 返回的是 ExecResult，不是 Row
-                            // 我们使用默认的保守估计值
-                            tracing::info!("PostgreSQL max_connections query executed, using conservative estimate");
+                    match result {
+                        Ok(result) => {
+                            let rows_affected = result.rows_affected();
+                            if rows_affected > 0 {
+                                tracing::info!(
+                                    "PostgreSQL max_connections query executed, using conservative estimate"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to query PostgreSQL max_connections: {}", e);
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to query PostgreSQL max_connections: {}", e);
-                    }
+                    100
                 }
-                // 默认保守估计
-                100
+
+                #[cfg(not(feature = "postgres"))]
+                {
+                    100
+                }
             }
             DatabaseType::MySql => {
-                // MySQL: 查询 max_connections
-                // execute_unprepared 返回 ExecResult，不是 Row
-                let result = connection
-                    .execute_unprepared("SHOW VARIABLES LIKE 'max_connections'")
-                    .await;
+                #[cfg(feature = "mysql")]
+                {
+                    let result = connection
+                        .execute_unprepared("SHOW VARIABLES LIKE 'max_connections'")
+                        .await;
 
-                match result {
-                    Ok(_) => {
-                        // MySQL 返回两行两列: Variable_name 和 Value
-                        // 使用保守估计值
-                        tracing::info!("MySQL max_connections query executed, using conservative estimate");
+                    match result {
+                        Ok(_) => {
+                            tracing::info!("MySQL max_connections query executed, using conservative estimate");
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to query MySQL max_connections: {}", e);
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to query MySQL max_connections: {}", e);
-                    }
+                    200
                 }
-                // 默认保守估计
-                200
+
+                #[cfg(not(feature = "mysql"))]
+                {
+                    200
+                }
             }
             DatabaseType::Sqlite => {
                 // SQLite 不需要查询，它支持几乎无限的连接

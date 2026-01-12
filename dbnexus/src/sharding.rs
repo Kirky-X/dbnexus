@@ -294,25 +294,65 @@ impl ShardRouter {
         }
     }
 
-    /// 使用配置创建路由器（异步初始化连接池）
+    /// 使用配置创建路由器（异步初始化连接池）- 并行优化版本
+    ///
+    /// 优化策略：
+    /// - 使用 FuturesUnordered 并行创建所有分片连接池
+    /// - 显著减少启动时间（从 O(n) 串行到 O(1) 并行）
+    /// - 保持错误处理和日志记录
     pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::config::DbError> {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
-        for (shard_id, connection_string) in config.generate_all_connections() {
-            // 为每个分片创建连接池
-            match crate::pool::DbPool::new(&connection_string).await {
+        // 收集所有分片信息
+        let connections: Vec<(u32, String, String)> = config
+            .generate_all_connections()
+            .into_iter()
+            .map(|(shard_id, connection_string)| {
+                let name = format!("{}_{}", config.prefix, shard_id);
+                (shard_id, name, connection_string)
+            })
+            .collect();
+
+        // 并行创建所有连接池
+        use futures::stream::{self, StreamExt};
+
+        let pool_futures: Vec<_> = connections
+            .iter()
+            .map(|(shard_id, name, connection_string)| {
+                let conn_string = connection_string.clone();
+                let shard_id_copy = *shard_id;
+                let name_copy = name.clone();
+                async move {
+                    let result = crate::pool::DbPool::new(&conn_string).await;
+                    (shard_id_copy, name_copy, result)
+                }
+            })
+            .collect();
+
+        // 使用 FuturesUnordered 并行执行
+        let mut pool_stream = stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
+
+        // 收集结果
+        let mut results: Vec<(u32, String, Result<crate::pool::DbPool, crate::config::DbError>)> = Vec::new();
+
+        while let Some(result) = pool_stream.next().await {
+            results.push(result);
+        }
+
+        // 注册所有分片
+        for (shard_id, name, result) in results {
+            match result {
                 Ok(pool) => {
                     router.register_shard_with_pool(
                         shard_id,
+                        name,
                         format!("{}_{}", config.prefix, shard_id),
-                        connection_string,
                         Arc::new(pool),
                     );
                 }
                 Err(e) => {
                     tracing::warn!("Failed to create connection pool for shard {}: {}", shard_id, e);
-                    // 仍然注册分片信息，但没有连接池
-                    router.register_shard(shard_id, format!("{}_{}", config.prefix, shard_id), connection_string);
+                    router.register_shard(shard_id, name, format!("{}_{}", config.prefix, shard_id));
                 }
             }
         }
