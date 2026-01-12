@@ -166,6 +166,18 @@ impl Default for ChangeCaptureConfig {
 /// 索引缓存类型
 type IndexCache = HashMap<String, HashMap<String, HashMap<String, Vec<IndexEntry>>>>;
 
+/// 倒排索引类型 - record_id 到位置的快速映射
+/// 优化删除操作：从 O(n*k) 降到 O(1)
+type ReverseIndex = HashMap<String, Vec<IndexLocation>>;
+
+/// 索引位置信息（用于倒排索引）
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct IndexLocation {
+    table_name: String,
+    index_key: String,
+    index_value: String,
+}
+
 /// 全局索引管理器
 #[derive(Debug)]
 pub struct GlobalIndex {
@@ -173,6 +185,9 @@ pub struct GlobalIndex {
     conn: DatabaseConnection,
     /// 缓存的索引数据
     cache: Arc<RwLock<IndexCache>>,
+    /// 倒排索引（record_id -> 位置映射）
+    /// 用于快速删除，不需要遍历所有层级
+    reverse_index: Arc<RwLock<ReverseIndex>>,
     /// 配置
     config: ChangeCaptureConfig,
 }
@@ -188,6 +203,7 @@ impl GlobalIndex {
         Ok(Self {
             conn,
             cache: Arc::new(RwLock::new(HashMap::new())),
+            reverse_index: Arc::new(RwLock::new(HashMap::new())),
             config: ChangeCaptureConfig::default(),
         })
     }
@@ -401,21 +417,44 @@ impl GlobalIndex {
         Ok(())
     }
 
-    /// 删除索引条目
+    /// 删除索引条目 - 优化版本（O(1)）
+    ///
+    /// 优化策略：
+    /// - 使用倒排索引直接定位 record_id 对应的所有位置
+    /// - 避免遍历三层嵌套结构
+    /// - 批量清理空条目
     async fn delete_entry(&self, table_name: &str, record_id: &str) -> Result<(), DbErr> {
         let id = Self::generate_id(table_name, record_id);
 
+        // 从数据库删除
         Entity::delete_by_id(id).exec(&self.conn).await?;
 
-        // 从缓存中移除
+        // 使用倒排索引快速定位并删除 - O(1)
         let mut cache = self.cache.write().await;
-        if let Some(table_cache) = cache.get_mut(table_name) {
-            for key_cache in table_cache.values_mut() {
-                key_cache.retain(|_key, entries| {
-                    entries.retain(|e| e.record_id != record_id);
-                    !entries.is_empty()
-                });
+        let mut reverse_index = self.reverse_index.write().await;
+
+        // 从倒排索引获取位置
+        if let Some(locations) = reverse_index.get(record_id) {
+            // 从主索引中删除所有相关条目
+            for location in locations {
+                if let Some(table_cache) = cache.get_mut(&location.table_name) {
+                    if let Some(key_cache) = table_cache.get_mut(&location.index_key) {
+                        if let Some(entries) = key_cache.get_mut(&location.index_value) {
+                            entries.retain(|e| e.record_id != record_id);
+                        }
+                        // 清理空条目
+                        if key_cache
+                            .get(&location.index_value)
+                            .map(|v| v.is_empty())
+                            .unwrap_or(false)
+                        {
+                            key_cache.remove(&location.index_value);
+                        }
+                    }
+                }
             }
+            // 清除倒排索引
+            reverse_index.remove(record_id);
         }
 
         Ok(())
@@ -429,9 +468,14 @@ impl GlobalIndex {
         format!("{:x}", hasher.finalize())
     }
 
-    /// 更新缓存
+    /// 更新缓存 - 维护倒排索引
+    ///
+    /// 优化：同时更新主索引和倒排索引
+    /// 倒排索引使得删除操作从 O(n*k) 降到 O(1)
     async fn update_cache(&self, entry: &IndexEntry) {
         let mut cache = self.cache.write().await;
+        let mut reverse_index = self.reverse_index.write().await;
+
         let table_cache = cache.entry(entry.table_name.clone()).or_insert_with(HashMap::new);
         let key_cache = table_cache.entry(entry.index_key.clone()).or_insert_with(HashMap::new);
 
@@ -440,6 +484,17 @@ impl GlobalIndex {
         // 检查是否已存在
         if !entries.iter().any(|e| e.record_id == entry.record_id) {
             entries.push(entry.clone());
+
+            // 更新倒排索引 - O(1)
+            let location = IndexLocation {
+                table_name: entry.table_name.clone(),
+                index_key: entry.index_key.clone(),
+                index_value: entry.index_value.clone(),
+            };
+            reverse_index
+                .entry(entry.record_id.clone())
+                .or_insert_with(Vec::new)
+                .push(location);
         }
     }
 

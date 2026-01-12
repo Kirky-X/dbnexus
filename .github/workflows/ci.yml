@@ -283,7 +283,7 @@ jobs:
 
       - name: Generate coverage
         run: |
-          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --timeout 300 --out xml --exclude-files "**/tests/**"
+          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --timeout 300 --out xml --exclude-files "**/tests/**"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

@@ -589,9 +589,8 @@ impl AuditLogger {
 
     /// 清理旧日志
     pub async fn cleanup(&self, days: i64) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-        let before = Utc::now()
-            .checked_sub_signed(chrono::Duration::days(days))
-            .ok_or("Invalid date calculation")?;
+        let delta = chrono::Duration::try_days(days).ok_or("Invalid date calculation")?;
+        let before = Utc::now().checked_sub_signed(delta).ok_or("Invalid date calculation")?;
         self.storage.cleanup(&before).await
     }
 
@@ -699,15 +698,11 @@ impl AuditLogger {
             callback(event);
         }
 
-        // 默认实现：使用 tracing 记录告警
-        tracing::warn!(
+        let msg = format!(
             "[AUDIT ALERT] {} - {} {} on {} by user {}",
-            event.severity,
-            event.operation,
-            event.entity_id,
-            event.entity_type,
-            event.user_id
+            event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
         );
+        tracing::warn!("{}", msg);
     }
 }
 
@@ -754,6 +749,7 @@ impl AuditContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[tokio::test]
     async fn test_audit_event_creation() {
@@ -773,6 +769,113 @@ mod tests {
         assert_eq!(event.operation, AuditOperation::Update);
         assert_eq!(event.before_value, Some(before.to_string()));
         assert_eq!(event.after_value, Some(after.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_audit_event_setters_and_default_storage() {
+        let event = AuditEvent::create("users", "1", "admin")
+            .with_user("role", "127.0.0.1")
+            .with_result(AuditResult::Failure)
+            .with_severity(AuditSeverity::High)
+            .with_extra("x")
+            .with_before_value("b")
+            .with_after_value("a")
+            .with_request_id("r")
+            .with_session_id("s");
+
+        assert_eq!(event.user_role, "role");
+        assert_eq!(event.client_ip, "127.0.0.1");
+        assert_eq!(event.result, AuditResult::Failure);
+        assert_eq!(event.severity, AuditSeverity::High);
+        assert_eq!(event.extra.as_deref(), Some("x"));
+        assert_eq!(event.before_value.as_deref(), Some("b"));
+        assert_eq!(event.after_value.as_deref(), Some("a"));
+        assert_eq!(event.request_id, "r");
+        assert_eq!(event.session_id, "s");
+
+        let storage = MemoryAuditStorage::default();
+        storage.store(&event).await.expect("Storage operation should succeed");
+        assert_eq!(storage.event_count().await, 1);
+    }
+
+    #[test]
+    fn test_audit_event_json_roundtrip() {
+        let event = AuditEvent::create("users", "1", "admin")
+            .with_user("role", "127.0.0.1")
+            .with_result(AuditResult::Success)
+            .with_severity(AuditSeverity::Medium)
+            .with_extra("x")
+            .with_before_value("b")
+            .with_after_value("a")
+            .with_request_id("r")
+            .with_session_id("s");
+
+        let json = event.to_json().unwrap();
+        let parsed = AuditEvent::from_json(&json).unwrap();
+
+        assert_eq!(parsed.operation, event.operation);
+        assert_eq!(parsed.entity_type, event.entity_type);
+        assert_eq!(parsed.entity_id, event.entity_id);
+        assert_eq!(parsed.user_id, event.user_id);
+        assert_eq!(parsed.user_role, event.user_role);
+        assert_eq!(parsed.client_ip, event.client_ip);
+        assert_eq!(parsed.result, event.result);
+        assert_eq!(parsed.severity, event.severity);
+        assert_eq!(parsed.extra, event.extra);
+        assert_eq!(parsed.before_value, event.before_value);
+        assert_eq!(parsed.after_value, event.after_value);
+        assert_eq!(parsed.request_id, event.request_id);
+        assert_eq!(parsed.session_id, event.session_id);
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_helpers_and_alert_disabled() {
+        let storage = Arc::new(MemoryAuditStorage::new(10));
+
+        let mut config = AuditConfig::default();
+        config.enabled = false;
+        config.alert_operations = vec![AuditOperation::Delete];
+        let logger = AuditLogger::new(config, storage.clone());
+
+        logger.log_create("t", "1", "u", Some("v".to_string())).await.unwrap();
+        logger.log_read("t", "1", "u").await.unwrap();
+        logger
+            .log_update("t", "1", "u", Some("b".to_string()), Some("a".to_string()))
+            .await
+            .unwrap();
+        logger.log_delete("t", "1", "u", None).await.unwrap();
+
+        assert_eq!(storage.event_count().await, 0);
+        assert!(!logger.should_alert(&AuditEvent::delete("t", "1", "u")));
+    }
+
+    #[tokio::test]
+    async fn test_audit_log_create_none_branch_and_cleanup_success() {
+        let storage = Arc::new(MemoryAuditStorage::new(10));
+        let logger = AuditLogger::new(AuditConfig::default(), storage.clone());
+
+        logger.log_create("t", "1", "u", None).await.unwrap();
+
+        let mut old = AuditEvent::create("t", "2", "u");
+        old.timestamp = Utc::now() - chrono::Duration::days(2);
+        logger.log(old).await.unwrap();
+
+        let removed = logger.cleanup(1).await.unwrap();
+        assert_eq!(removed, 1);
+        assert_eq!(storage.event_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_audit_sanitize_base64_non_string_values() {
+        let storage = Arc::new(MemoryAuditStorage::new(10));
+        let logger = AuditLogger::new(AuditConfig::default(), storage);
+
+        let event = AuditEvent::create("t", "1", "u").with_after_value(r#"{"count":1,"name":"x"}"#);
+        logger.log(event).await.unwrap();
+
+        let results = logger.query(&AuditQueryFilters::default()).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].after_value.as_ref().unwrap().contains("count"));
     }
 
     #[tokio::test]
@@ -821,5 +924,161 @@ mod tests {
         assert_eq!(ctx.user_role, "admin");
         assert_eq!(ctx.client_ip, "192.168.1.1");
         assert!(!ctx.request_id.is_empty());
+    }
+
+    #[test]
+    fn test_audit_enum_display_and_defaults() {
+        assert_eq!(AuditOperation::Create.to_string(), "CREATE");
+        assert_eq!(AuditOperation::Read.to_string(), "READ");
+        assert_eq!(AuditOperation::Update.to_string(), "UPDATE");
+        assert_eq!(AuditOperation::Delete.to_string(), "DELETE");
+        assert_eq!(AuditOperation::Login.to_string(), "LOGIN");
+        assert_eq!(AuditOperation::Logout.to_string(), "LOGOUT");
+        assert_eq!(AuditOperation::PermissionChange.to_string(), "PERMISSION_CHANGE");
+        assert_eq!(AuditOperation::ConfigChange.to_string(), "CONFIG_CHANGE");
+        assert_eq!(AuditOperation::Other("custom_op".to_string()).to_string(), "CUSTOM_OP");
+        assert_eq!(AuditOperation::default().to_string(), "UNKNOWN");
+
+        assert_eq!(AuditSeverity::Info.to_string(), "INFO");
+        assert_eq!(AuditSeverity::Low.to_string(), "LOW");
+        assert_eq!(AuditSeverity::Medium.to_string(), "MEDIUM");
+        assert_eq!(AuditSeverity::High.to_string(), "HIGH");
+        assert_eq!(AuditSeverity::Critical.to_string(), "CRITICAL");
+
+        assert_eq!(AuditResult::Success.to_string(), "SUCCESS");
+        assert_eq!(AuditResult::Failure.to_string(), "FAILURE");
+        assert_eq!(AuditResult::Partial.to_string(), "PARTIAL");
+        assert_eq!(AuditResult::Unknown.to_string(), "UNKNOWN");
+    }
+
+    #[tokio::test]
+    async fn test_memory_storage_overflow_and_dropped_count() {
+        let storage = MemoryAuditStorage::new(1);
+        assert_eq!(storage.dropped_count(), 0);
+
+        let event1 = AuditEvent::create("users", "1", "admin");
+        let event2 = AuditEvent::create("users", "2", "admin");
+
+        storage.store(&event1).await.unwrap();
+        storage.store(&event2).await.unwrap();
+
+        assert_eq!(storage.event_count().await, 1);
+        assert_eq!(storage.dropped_count(), 1);
+
+        let results = storage.query(&AuditQueryFilters::default()).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].entity_id, "2");
+    }
+
+    #[tokio::test]
+    async fn test_audit_query_filters_all_fields_and_cleanup() {
+        let storage = Arc::new(MemoryAuditStorage::new(100));
+        let logger = AuditLogger::new(AuditConfig::default(), storage.clone());
+
+        let now = Utc::now();
+        let mut e1 = AuditEvent::create("users", "1", "u1")
+            .with_user("admin", "10.0.0.1")
+            .with_severity(AuditSeverity::Low)
+            .with_result(AuditResult::Success)
+            .with_request_id("r1")
+            .with_session_id("s1");
+        e1.timestamp = now - chrono::Duration::minutes(10);
+
+        let mut e2 = AuditEvent::delete("orders", "9", "u2")
+            .with_user("system", "10.0.0.2")
+            .with_severity(AuditSeverity::High)
+            .with_result(AuditResult::Failure);
+        e2.timestamp = now;
+
+        logger.log(e1.clone()).await.unwrap();
+        logger.log(e2.clone()).await.unwrap();
+
+        let filters = AuditQueryFilters {
+            user_id: Some("u2".to_string()),
+            entity_type: Some("orders".to_string()),
+            operation: Some(AuditOperation::Delete),
+            start_time: Some(now - chrono::Duration::minutes(5)),
+            end_time: Some(now + chrono::Duration::minutes(1)),
+            severity: Some(AuditSeverity::High),
+            result: Some(AuditResult::Failure),
+        };
+
+        let filtered = logger.query(&filters).await.unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].entity_id, "9");
+
+        let removed = storage.cleanup(&(now - chrono::Duration::minutes(1))).await.unwrap();
+        assert_eq!(removed, 1);
+        assert_eq!(storage.event_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_disabled_and_alert_callback() {
+        let storage = Arc::new(MemoryAuditStorage::new(100));
+
+        let mut disabled_config = AuditConfig::default();
+        disabled_config.enabled = false;
+        let disabled_logger = AuditLogger::new(disabled_config, storage.clone());
+
+        disabled_logger
+            .log(AuditEvent::create("users", "1", "admin"))
+            .await
+            .unwrap();
+        assert_eq!(storage.event_count().await, 0);
+
+        let called = Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+
+        let mut logger = AuditLogger::with_default_storage();
+        logger.set_alert_callback(move |_event| {
+            called_clone.store(true, Ordering::SeqCst);
+        });
+
+        logger
+            .log_delete("users", "2", "admin", Some(r#"{\"password\":\"x\"}"#.to_string()))
+            .await
+            .unwrap();
+        assert!(called.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_audit_sanitization_base64_and_nested_field() {
+        let storage = Arc::new(MemoryAuditStorage::new(100));
+        let mut config = AuditConfig::default();
+        config.sensitive_fields.push("user.password".to_string());
+        let logger = AuditLogger::new(config, storage);
+
+        let after_value = r#"{"password":"p","_password":"p2","data":"c2VjcmV0","user.password":"v"}"#;
+        let event = AuditEvent::create("users", "1", "admin").with_after_value(after_value);
+        logger.log(event).await.unwrap();
+
+        let results = logger.query(&AuditQueryFilters::default()).await.unwrap();
+        let stored = results[0].after_value.as_ref().unwrap();
+        assert!(stored.contains("***REDACTED_PASSWORD***"));
+        assert!(stored.contains("_password_redacted"));
+        assert!(stored.contains(r#""data":"***REDACTED_PASSWORD***""#));
+        assert!(stored.contains("***REDACTED_USER.PASSWORD***"));
+
+        assert!(!AuditLogger::is_base64(""));
+        assert!(!AuditLogger::is_base64("abc"));
+        assert!(!AuditLogger::is_base64("!!!!"));
+        assert!(AuditLogger::is_base64("c2VjcmV0"));
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_cleanup_invalid_date_calculation() {
+        let storage = Arc::new(MemoryAuditStorage::new(100));
+        let logger = AuditLogger::new(AuditConfig::default(), storage);
+        let result = logger.cleanup(i64::MAX).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_audit_context_setters() {
+        let ctx = AuditContext::new("u", "r", "ip")
+            .with_request_id("req")
+            .with_session_id("sess");
+        assert_eq!(ctx.request_id, "req");
+        assert_eq!(ctx.session_id, "sess");
     }
 }

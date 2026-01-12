@@ -34,7 +34,7 @@ mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # Core features (可选，用于最小化部署)
 permission = ["dep:dashmap", "dep:lru", "dep:serde_yaml"]
-sql-parser = ["dep:sqlparser", "dep:regex"]
+sql-parser = ["dep:sqlparser", "dep:regex", "dep:once_cell"]
 macros = ["dbnexus-macros"]
 
 # Config features (可选，用于配置文件支持)
@@ -50,7 +50,7 @@ pool-warmup = ["dep:futures"]
 metrics = ["dep:prometheus"]
 migration = []
 auto-migrate = ["migration"]
-sharding = ["dep:twox-hash", "dep:chrono"]
+sharding = ["dep:twox-hash", "dep:chrono", "dep:futures"]
 global-index = ["dep:sha2", "dep:chrono", "sea-orm/with-json"]
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 cache = ["dep:uuid", "dep:indexmap"]

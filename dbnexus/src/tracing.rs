@@ -87,3 +87,29 @@ pub fn extract(headers: &HashMap<String, String>) {
         let _ = propagator.extract(headers);
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_tracing_init_and_propagation() {
+        let mut headers = HashMap::new();
+        headers.insert("x-test".to_string(), "1".to_string());
+
+        let guard = init("stdout", "unused").await.expect("init stdout");
+        inject(&mut headers);
+        extract(&headers);
+        drop(guard);
+
+        let guard = init("unknown", "unused").await.expect("init fallback");
+        inject(&mut headers);
+        extract(&headers);
+        drop(guard);
+
+        let guard = init("otlp", "http://localhost:4317").await.expect("init otlp");
+        inject(&mut headers);
+        extract(&headers);
+        drop(guard);
+    }
+}

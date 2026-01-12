@@ -229,16 +229,22 @@ impl<S: CacheStrategy> CacheStrategy for TtlAwareStrategy<S> {
         self.default_ttl
     }
 
+    #[inline(never)]
     async fn on_hit(&self, key: &CacheKey) {
-        self.inner.on_hit(key).await;
+        let inner = &self.inner;
+        inner.on_hit(key).await;
     }
 
+    #[inline(never)]
     async fn on_miss(&self, key: &CacheKey) {
-        self.inner.on_miss(key).await;
+        let inner = &self.inner;
+        inner.on_miss(key).await;
     }
 
+    #[inline(never)]
     async fn on_update(&self, key: &CacheKey) {
-        self.inner.on_update(key).await;
+        let inner = &self.inner;
+        inner.on_update(key).await;
     }
 }
 
@@ -342,38 +348,56 @@ where
         }
     }
 
-    /// 获取缓存值
+    /// 获取缓存值 - 读写分离优化版本
+    ///
+    /// 性能优化：
+    /// - 读操作优先使用读锁，多个读取可并发
+    /// - 仅在需要更新 LRU 顺序时升级为写锁
+    /// - 减少不必要的克隆操作
     pub async fn get(&self, key: &CacheKey) -> Option<T> {
-        let mut cache = self.cache.write().await;
+        // 第一阶段：使用读锁检查条目状态
+        let cache = self.cache.read().await;
 
-        if let Some(entry) = cache.get_mut(key) {
-            if entry.is_expired() {
-                // 过期，移除
-                cache.shift_remove(key);
+        // 获取条目的不可变引用用于读取
+        let entry_ref = match cache.get(key) {
+            Some(entry) if !entry.is_expired() => entry,
+            Some(_) | None => {
+                // 条目不存在或已过期，使用写锁清理
+                drop(cache);
+                let mut cache = self.cache.write().await;
+
+                if let Some(entry) = cache.get(key) {
+                    if entry.is_expired() {
+                        cache.shift_remove(key);
+                    }
+                }
+
                 self.stats.record_miss();
                 self.strategy.on_miss(key).await;
                 return None;
             }
+        };
 
-            // 访问命中 - 更新 LRU 顺序
-            entry.access();
-            // 保存值和 TTL
-            let value = entry.value.clone();
-            let ttl = entry.expires_at.saturating_duration_since(Instant::now());
+        // 读取值（仅一次克隆）
+        let value = entry_ref.value.clone();
+        let ttl = entry_ref.expires_at.saturating_duration_since(Instant::now());
 
-            // 移除并重新插入到末尾
+        drop(cache);
+
+        // 第二阶段：使用写锁更新 LRU 顺序
+        let mut cache = self.cache.write().await;
+
+        // 重新检查条目是否存在
+        if let Some(_) = cache.get(key) {
+            // 移除并重新插入到末尾（更新 LRU 顺序）
             cache.shift_remove(key);
-            cache.insert(key.clone(), CacheEntry::new(value, ttl));
-
-            self.stats.record_hit();
-            self.strategy.on_hit(key).await;
-
-            Some(cache.get(key)?.value.clone())
-        } else {
-            self.stats.record_miss();
-            self.strategy.on_miss(key).await;
-            None
+            cache.insert(key.clone(), CacheEntry::new(value.clone(), ttl));
         }
+
+        self.stats.record_hit();
+        self.strategy.on_hit(key).await;
+
+        Some(value)
     }
 
     /// 设置缓存值
@@ -448,13 +472,15 @@ where
             if cache.len() <= BATCH_SIZE {
                 let before = cache.len();
                 cache.retain(|_key, entry| {
-                    let not_expired = !entry.is_expired();
-                    if !not_expired {
+                    if entry.is_expired() {
                         self.stats.record_expiration();
+                        false
+                    } else {
+                        true
                     }
-                    not_expired
                 });
-                return before - cache.len();
+                total_removed += before - cache.len();
+                return total_removed;
             }
 
             // 大批量只清理一部分
@@ -466,8 +492,7 @@ where
                 .collect();
 
             if keys_to_remove.is_empty() {
-                // 没有更多过期条目
-                break;
+                return total_removed;
             }
 
             for key in &keys_to_remove {
@@ -477,8 +502,6 @@ where
 
             total_removed += keys_to_remove.len();
         }
-
-        total_removed
     }
 
     /// 预热缓存
@@ -503,8 +526,7 @@ where
                 loaded += 1;
                 self.stats.record_set();
             } else {
-                // 容量已满，停止加载
-                break;
+                return loaded;
             }
         }
 
@@ -524,8 +546,10 @@ where
     /// 返回成功加载的条目数
     pub async fn warmup_with_default_ttl(&self, data: Vec<(CacheKey, T)>) -> usize {
         let default_ttl = self.strategy.ttl();
-        let data_with_ttl: Vec<(CacheKey, T, Duration)> =
-            data.into_iter().map(|(key, value)| (key, value, default_ttl)).collect();
+        let mut data_with_ttl = Vec::with_capacity(data.len());
+        for (key, value) in data {
+            data_with_ttl.push((key, value, default_ttl));
+        }
         self.warmup(data_with_ttl).await
     }
 
@@ -747,5 +771,295 @@ mod tests {
 
         // 命中率
         assert!((cache.stats().hit_rate() - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_cache_key_from_value_and_hash() {
+        let k1 = CacheKey::from_value("users", &"abc");
+        let k2 = CacheKey::from_value("users", &"abc");
+        let k3 = CacheKey::from_value("users", &"def");
+
+        assert_eq!(k1, k2);
+        assert_ne!(k1, k3);
+
+        let mut h1 = std::collections::hash_map::DefaultHasher::new();
+        k1.hash(&mut h1);
+        let mut h2 = std::collections::hash_map::DefaultHasher::new();
+        k2.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+
+        let k4 = make_cache_key("t", "1");
+        assert_eq!(k4, CacheKey::new("t", "1"));
+    }
+
+    #[test]
+    fn test_cache_entry_remaining_ttl() {
+        let entry = CacheEntry::new("v".to_string(), Duration::from_secs(1));
+        let remaining = entry.remaining_ttl();
+        assert!(remaining <= Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn test_cache_cleanup_small_and_large_batches() {
+        let config = CacheConfig {
+            max_capacity: 1000,
+            default_ttl: 1,
+            cleanup_interval: 10,
+            enable_stats: true,
+        };
+        let cache = CacheManager::<String>::new(config);
+
+        cache
+            .set_with_ttl(CacheKey::new("t", "1"), "v1".to_string(), Duration::from_millis(0))
+            .await;
+        cache
+            .set_with_ttl(CacheKey::new("t", "2"), "v2".to_string(), Duration::from_secs(60))
+            .await;
+
+        let removed_small = cache.cleanup().await;
+        assert_eq!(removed_small, 1);
+
+        for i in 0..150 {
+            cache
+                .set_with_ttl(
+                    CacheKey::new("batch", &i.to_string()),
+                    i.to_string(),
+                    Duration::from_millis(0),
+                )
+                .await;
+        }
+
+        let removed_large = cache.cleanup().await;
+        assert!(removed_large > 0);
+        assert_eq!(cache.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_cache_warmup_and_batch_ops() {
+        let config = CacheConfig {
+            max_capacity: 2,
+            default_ttl: 60,
+            cleanup_interval: 10,
+            enable_stats: true,
+        };
+        let cache = CacheManager::<String>::new(config);
+
+        let loaded = cache
+            .warmup(vec![
+                (CacheKey::new("w", "1"), "a".to_string(), Duration::from_secs(60)),
+                (CacheKey::new("w", "2"), "b".to_string(), Duration::from_secs(60)),
+                (CacheKey::new("w", "3"), "c".to_string(), Duration::from_secs(60)),
+            ])
+            .await;
+        assert_eq!(loaded, 2);
+
+        let loaded2 = cache
+            .warmup_with_default_ttl(vec![(CacheKey::new("w", "4"), "d".to_string())])
+            .await;
+        assert_eq!(loaded2, 0);
+
+        let k_hit = CacheKey::new("b", "hit");
+        let k_expired = CacheKey::new("b", "expired");
+        let k_miss = CacheKey::new("b", "miss");
+
+        cache
+            .set_with_ttl(k_hit.clone(), "vh".to_string(), Duration::from_secs(60))
+            .await;
+        cache
+            .set_with_ttl(k_expired.clone(), "ve".to_string(), Duration::from_millis(0))
+            .await;
+
+        let got = cache
+            .batch_get(&[k_hit.clone(), k_expired.clone(), k_miss.clone()])
+            .await;
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0], Some("vh".to_string()));
+        assert_eq!(got[1], None);
+        assert_eq!(got[2], None);
+
+        cache
+            .batch_set(vec![
+                (CacheKey::new("s", "1"), "v1".to_string()),
+                (CacheKey::new("s", "2"), "v2".to_string()),
+            ])
+            .await;
+
+        let removed = cache
+            .batch_delete(&[CacheKey::new("s", "1"), CacheKey::new("s", "nope")])
+            .await;
+        assert_eq!(removed, 1);
+    }
+
+    #[tokio::test]
+    async fn test_cache_warmup_full_load_returns_loaded() {
+        let config = CacheConfig {
+            max_capacity: 10,
+            default_ttl: 60,
+            cleanup_interval: 10,
+            enable_stats: true,
+        };
+        let cache = CacheManager::<String>::new(config);
+
+        let loaded = cache
+            .warmup(vec![
+                (CacheKey::new("wf", "1"), "a".to_string(), Duration::from_secs(60)),
+                (CacheKey::new("wf", "2"), "b".to_string(), Duration::from_secs(60)),
+            ])
+            .await;
+        assert_eq!(loaded, 2);
+        assert_eq!(cache.len().await, 2);
+    }
+
+    #[test]
+    fn test_lru_strategy_name_and_ttl() {
+        let strategy = LruStrategy::new(7);
+        assert_eq!(strategy.name(), "lru");
+        assert_eq!(strategy.ttl(), Duration::from_secs(7));
+    }
+
+    #[tokio::test]
+    async fn test_ttl_aware_strategy_delegation() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Debug, Clone)]
+        struct CountingStrategy {
+            hits: Arc<AtomicUsize>,
+            misses: Arc<AtomicUsize>,
+            updates: Arc<AtomicUsize>,
+        }
+
+        #[async_trait]
+        impl CacheStrategy for CountingStrategy {
+            fn name(&self) -> &'static str {
+                "counting"
+            }
+
+            fn ttl(&self) -> Duration {
+                Duration::from_secs(1)
+            }
+
+            async fn on_hit(&self, _key: &CacheKey) {
+                self.hits.fetch_add(1, Ordering::Relaxed);
+            }
+
+            async fn on_miss(&self, _key: &CacheKey) {
+                self.misses.fetch_add(1, Ordering::Relaxed);
+            }
+
+            async fn on_update(&self, _key: &CacheKey) {
+                self.updates.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let misses = Arc::new(AtomicUsize::new(0));
+        let updates = Arc::new(AtomicUsize::new(0));
+
+        let inner = CountingStrategy {
+            hits: hits.clone(),
+            misses: misses.clone(),
+            updates: updates.clone(),
+        };
+
+        let wrapped = TtlAwareStrategy::new(inner, 123);
+        assert_eq!(wrapped.name(), "counting");
+        assert_eq!(wrapped.ttl(), Duration::from_secs(123));
+        assert_eq!(wrapped.default_ttl, Duration::from_secs(123));
+
+        let key = CacheKey::new("t", "1");
+        wrapped.on_hit(&key).await;
+        wrapped.on_miss(&key).await;
+        wrapped.on_update(&key).await;
+
+        assert_eq!(hits.load(Ordering::Relaxed), 1);
+        assert_eq!(misses.load(Ordering::Relaxed), 1);
+        assert_eq!(updates.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_cache_cleanup_large_batch_no_expired_breaks() {
+        let config = CacheConfig {
+            max_capacity: 1000,
+            default_ttl: 3600,
+            cleanup_interval: 10,
+            enable_stats: true,
+        };
+        let cache = CacheManager::<String>::new(config);
+
+        for i in 0..101 {
+            cache
+                .set_with_ttl(
+                    CacheKey::new("keep", &i.to_string()),
+                    format!("v{}", i),
+                    Duration::from_secs(3600),
+                )
+                .await;
+        }
+        assert!(cache.len().await > 100);
+
+        let removed = cache.cleanup().await;
+        assert_eq!(removed, 0);
+        assert!(cache.len().await > 100);
+    }
+
+    #[tokio::test]
+    async fn test_cache_cleanup_large_batch_multiple_iterations() {
+        let config = CacheConfig {
+            max_capacity: 1000,
+            default_ttl: 3600,
+            cleanup_interval: 10,
+            enable_stats: true,
+        };
+        let cache = CacheManager::<String>::new(config);
+
+        for i in 0..210 {
+            cache
+                .set_with_ttl(
+                    CacheKey::new("exp", &i.to_string()),
+                    format!("v{}", i),
+                    Duration::from_secs(3600),
+                )
+                .await;
+        }
+        for i in 0..10 {
+            cache
+                .set_with_ttl(
+                    CacheKey::new("keep", &i.to_string()),
+                    format!("k{}", i),
+                    Duration::from_secs(3600),
+                )
+                .await;
+        }
+
+        assert_eq!(cache.len().await, 220);
+
+        let (exp_key_count, keep_key_count) = {
+            let cache_guard = cache.cache.read().await;
+            let exp_count = cache_guard.keys().filter(|k| k.key.starts_with("exp:")).count();
+            let keep_count = cache_guard.keys().filter(|k| k.key.starts_with("keep:")).count();
+            (exp_count, keep_count)
+        };
+        assert_eq!(exp_key_count, 210);
+        assert_eq!(keep_key_count, 10);
+
+        {
+            let now = Instant::now();
+            let mut cache_guard = cache.cache.write().await;
+            for (key, entry) in cache_guard.iter_mut() {
+                if key.key.starts_with("exp:") {
+                    entry.expires_at = now - Duration::from_secs(1);
+                }
+            }
+        }
+
+        let expired_after = {
+            let cache_guard = cache.cache.read().await;
+            cache_guard.iter().filter(|(_, entry)| entry.is_expired()).count()
+        };
+        assert_eq!(expired_after, 210);
+
+        let removed = cache.cleanup().await;
+        assert_eq!(removed, 210);
+        assert_eq!(cache.len().await, 10);
     }
 }

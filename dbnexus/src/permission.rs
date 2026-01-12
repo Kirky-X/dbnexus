@@ -14,7 +14,28 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use thiserror::Error;
 use tokio::sync::Mutex as AsyncMutex;
+
+/// 权限相关错误类型
+#[derive(Debug, Error)]
+pub enum PermissionError {
+    /// 缓存容量无效（不能为 0）
+    #[error("Cache capacity must be non-zero")]
+    InvalidCacheCapacity,
+
+    /// 角色未找到
+    #[error("Role '{0}' not found in permission config")]
+    RoleNotFound(String),
+
+    /// 配置文件加载失败
+    #[error("Failed to load permission config: {0}")]
+    ConfigLoadError(String),
+
+    /// 权限检查被速率限制拒绝
+    #[error("Permission check rate limited")]
+    RateLimited,
+}
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -315,7 +336,9 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 
 impl Default for PermissionContext {
     fn default() -> Self {
+        // DEFAULT_CACHE_CAPACITY is always > 0, so unwrap is safe here
         Self::with_cache_size("admin".to_string(), DEFAULT_CACHE_CAPACITY)
+            .expect("Default cache capacity should always be valid")
     }
 }
 
@@ -333,38 +356,42 @@ impl PermissionContext {
     }
 
     /// 创建新的权限上下文（使用自定义缓存大小）
-    pub fn with_cache_size(role: String, cache_capacity: usize) -> Self {
-        let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// 如果 `cache_capacity` 为 0，返回 `InvalidCacheCapacity` 错误
+    pub fn with_cache_size(role: String, cache_capacity: usize) -> Result<Self, PermissionError> {
+        let capacity = NonZeroUsize::new(cache_capacity).ok_or(PermissionError::InvalidCacheCapacity)?;
+        Ok(Self {
             role,
-            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
-                NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
-            ))),
+            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(capacity))),
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
             ))),
-        }
+        })
     }
 
     /// 创建新的权限上下文（使用自定义缓存大小和速率限制）
+    ///
+    /// # Errors
+    ///
+    /// 如果 `cache_capacity` 为 0，返回 `InvalidCacheCapacity` 错误
     pub fn with_cache_size_and_rate_limit(
         role: String,
         cache_capacity: usize,
         max_requests: u32,
         window_secs: u64,
-    ) -> Self {
-        let capacity = if cache_capacity == 0 { 1 } else { cache_capacity };
-        Self {
+    ) -> Result<Self, PermissionError> {
+        let capacity = NonZeroUsize::new(cache_capacity).ok_or(PermissionError::InvalidCacheCapacity)?;
+        Ok(Self {
             role,
-            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
-                NonZeroUsize::new(capacity).expect("Cache capacity must be non-zero"),
-            ))),
+            policy_cache: Arc::new(AsyncMutex::new(LruCache::new(capacity))),
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 max_requests,
                 Duration::from_secs(window_secs),
             ))),
-        }
+        })
     }
 
     /// 获取角色
@@ -748,5 +775,79 @@ roles:
 
         assert!(!limiter.check("user1").await);
         assert_eq!(limiter.remaining("user1").await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_permission_context_load_policy_then_check_access() {
+        let config = PermissionConfig {
+            roles: [(
+                "test_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256).unwrap();
+        ctx.load_policy(&config).await.unwrap();
+
+        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(!ctx.check_table_access("users", &PermissionAction::Delete).await);
+    }
+
+    #[tokio::test]
+    async fn test_permission_context_check_table_access_with_config_role_missing_denies() {
+        let config = PermissionConfig {
+            roles: [(
+                "defined_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let ctx = PermissionContext::with_cache_size("missing_role".to_string(), 256).unwrap();
+        assert!(
+            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
+                .await
+        );
+    }
+
+    #[tokio::test]
+    async fn test_permission_context_check_table_access_with_config_rate_limited_denies() {
+        let config = PermissionConfig {
+            roles: [(
+                "test_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let ctx = PermissionContext::with_cache_size_and_rate_limit("test_role".to_string(), 256, 1, 60).unwrap();
+
+        assert!(
+            ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
+                .await
+        );
     }
 }

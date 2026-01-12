@@ -36,12 +36,32 @@
 //! ```
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
+
+/// 预编译的正则表达式，用于检测路径遍历攻击模式
+/// 使用 once_cell 确保线程安全的单次初始化
+static PATH_TRAVERSAL_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
+
+/// 额外的危险路径模式列表（用于白名单验证）
+#[allow(dead_code)]
+static DANGEROUS_PATH_PATTERNS: &[&str] = &[
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "/root/.ssh",
+    "/proc/self",
+    "/sys/kernel",
+    "C:\\Windows\\System32",
+    "..\\..\\",
+];
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -252,28 +272,47 @@ pub trait PermissionProvider: Send + Sync + Debug {
     fn name(&self) -> &str;
 }
 
+/// 缓存的权限决策（包含时间戳）
+#[derive(Debug, Clone)]
+struct CachedDecision {
+    decision: PermissionDecision,
+    cached_at: Instant,
+}
+
+impl CachedDecision {
+    fn new(decision: PermissionDecision) -> Self {
+        Self {
+            decision,
+            cached_at: Instant::now(),
+        }
+    }
+
+    fn is_expired(&self, ttl_seconds: u64) -> bool {
+        self.cached_at.elapsed().as_secs() >= ttl_seconds
+    }
+}
+
 /// 策略决策点
 /// 统一处理权限决策，支持多种权限提供者
 #[derive(Debug)]
 pub struct PolicyDecisionPoint {
     /// 权限提供者
     provider: Arc<dyn PermissionProvider>,
-    /// 缓存
-    cache: RwLock<HashMap<String, PermissionDecision>>,
+    /// 缓存（包含时间戳）
+    cache: RwLock<HashMap<String, CachedDecision>>,
     /// 缓存配置
-    #[allow(dead_code)]
     cache_ttl_seconds: u64,
     /// 是否启用缓存
     cache_enabled: bool,
 }
 
 impl PolicyDecisionPoint {
-    /// 创建策略决策点
+    /// 创建策略决策点（默认 TTL 5 分钟）
     pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
         Self {
             provider,
             cache: RwLock::new(HashMap::new()),
-            cache_ttl_seconds: 300,
+            cache_ttl_seconds: 300, // 5 分钟
             cache_enabled: true,
         }
     }
@@ -288,12 +327,12 @@ impl PolicyDecisionPoint {
         }
     }
 
-    /// 检查权限
+    /// 检查权限（带 TTL 缓存）
     pub async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
         // 生成缓存键
         let cache_key = self.generate_cache_key(context);
 
-        // 检查缓存
+        // 检查缓存（带 TTL 验证）
         if self.cache_enabled {
             if let Some(decision) = self.get_cached_decision(&cache_key) {
                 return decision;
@@ -303,7 +342,7 @@ impl PolicyDecisionPoint {
         // 获取权限决策
         let decision = self.provider.check_permission(context).await;
 
-        // 更新缓存
+        // 更新缓存（带时间戳）
         if self.cache_enabled {
             self.update_cache(&cache_key, decision.clone());
         }
@@ -380,19 +419,23 @@ impl PolicyDecisionPoint {
         )
     }
 
-    /// 获取缓存的决策
+    /// 获取缓存的决策（带 TTL 检查）
     fn get_cached_decision(&self, key: &str) -> Option<PermissionDecision> {
         if let Ok(cache) = self.cache.read() {
-            cache.get(key).cloned()
-        } else {
-            None
+            if let Some(cached) = cache.get(key) {
+                // 检查是否过期
+                if !cached.is_expired(self.cache_ttl_seconds) {
+                    return Some(cached.decision.clone());
+                }
+            }
         }
+        None
     }
 
-    /// 更新缓存
+    /// 更新缓存（带时间戳）
     fn update_cache(&self, key: &str, decision: PermissionDecision) {
         if let Ok(mut cache) = self.cache.write() {
-            cache.insert(key.to_string(), decision);
+            cache.insert(key.to_string(), CachedDecision::new(decision));
         }
     }
 }
@@ -441,8 +484,8 @@ impl YamlPermissionProvider {
         }
 
         // 2. 检查路径是否包含父目录引用（防止路径遍历攻击）
-        // 使用正则更严格地检测 ..
-        if regex::Regex::new(r"\.\.|%2e%2e").unwrap().is_match(config_path) {
+        // 使用预编译的正则表达式进行检测
+        if PATH_TRAVERSAL_REGEX.is_match(config_path) {
             return Err("Config path contains invalid parent directory reference".to_string());
         }
 
@@ -474,10 +517,11 @@ impl YamlPermissionProvider {
 
             let mut is_allowed = false;
             for allowed in &allowed_dirs {
-                let allowed_canonical = std::fs::canonicalize(allowed).unwrap_or_else(|_| allowed.clone());
-                if canonical.starts_with(&allowed_canonical) {
-                    is_allowed = true;
-                    break;
+                if let Ok(allowed_canonical) = std::fs::canonicalize(allowed) {
+                    if canonical.starts_with(&allowed_canonical) {
+                        is_allowed = true;
+                        break;
+                    }
                 }
             }
 

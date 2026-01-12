@@ -1,6 +1,13 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! SQL Parser module using sqlparser for enhanced SQL parsing and validation.
 //! This module provides robust SQL operation detection and permission action mapping.
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use sqlparser::ast::{Delete, FromTable, Query, SetExpr, Statement, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -226,17 +233,20 @@ fn contains_variables(sql: &str) -> bool {
     let sql_without_strings = remove_string_literals(sql);
 
     // Detect patterns like @variable, :variable, $variable
-    use std::sync::OnceLock;
-    static PATTERNS: OnceLock<Vec<regex::Regex>> = OnceLock::new();
-
-    let patterns = PATTERNS.get_or_init(|| {
-        [r"@[\w]+", r":[a-zA-Z_][\w]*", r"\$[a-zA-Z_][\w]*"]
-            .iter()
-            .map(|p| regex::Regex::new(p).unwrap())
-            .collect()
+    // 使用 once_cell 确保线程安全的单次初始化
+    static PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+        vec![
+            Regex::new(r"@[\w]+").expect("Regex pattern should be valid"),
+            Regex::new(r":[a-zA-Z_][\w]*").expect("Regex pattern should be valid"),
+            Regex::new(r"\$[a-zA-Z_][\w]*").expect("Regex pattern should be valid"),
+        ]
     });
 
-    for pattern in patterns {
+    if PATTERNS.is_empty() {
+        return false;
+    }
+
+    for pattern in PATTERNS.iter() {
         if pattern.is_match(&sql_without_strings) {
             return true;
         }
