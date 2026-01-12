@@ -12,6 +12,8 @@
 //! - 追踪传播
 //! - 与数据库操作的集成
 
+#![allow(clippy::expect_fun_call)]
+
 use std::collections::HashMap;
 use std::io;
 use std::time::Duration;
@@ -470,8 +472,9 @@ async fn test_trace_propagation_with_db_operations() {
     let session = pool.get_session("admin").await.expect("Get session");
 
     // 验证表名安全性
-    let safe_table_name = validate_table_name(table_name)?;
-    let safe_trace_id = sanitize_sql_string(trace_id);
+    let safe_table_name =
+        validate_table_name(&table_name).unwrap_or_else(|e| panic!("Table name validation failed: {}", e));
+    let safe_trace_id = sanitize_sql_string(&trace_id);
 
     // 插入记录
     let insert_result = session

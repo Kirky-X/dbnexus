@@ -388,7 +388,7 @@ where
         let mut cache = self.cache.write().await;
 
         // 重新检查条目是否存在
-        if let Some(_) = cache.get(key) {
+        if cache.get(key).is_some() {
             // 移除并重新插入到末尾（更新 LRU 顺序）
             cache.shift_remove(key);
             cache.insert(key.clone(), CacheEntry::new(value.clone(), ttl));

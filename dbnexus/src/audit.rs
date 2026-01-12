@@ -832,10 +832,14 @@ mod tests {
     async fn test_audit_logger_helpers_and_alert_disabled() {
         let storage = Arc::new(MemoryAuditStorage::new(10));
 
-        let mut config = AuditConfig::default();
-        config.enabled = false;
-        config.alert_operations = vec![AuditOperation::Delete];
-        let logger = AuditLogger::new(config, storage.clone());
+        let logger = AuditLogger::new(
+            AuditConfig {
+                enabled: false,
+                alert_operations: vec![AuditOperation::Delete],
+                ..Default::default()
+            },
+            storage.clone(),
+        );
 
         logger.log_create("t", "1", "u", Some("v".to_string())).await.unwrap();
         logger.log_read("t", "1", "u").await.unwrap();
@@ -1016,9 +1020,13 @@ mod tests {
     async fn test_audit_logger_disabled_and_alert_callback() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
 
-        let mut disabled_config = AuditConfig::default();
-        disabled_config.enabled = false;
-        let disabled_logger = AuditLogger::new(disabled_config, storage.clone());
+        let disabled_logger = AuditLogger::new(
+            AuditConfig {
+                enabled: false,
+                ..Default::default()
+            },
+            storage.clone(),
+        );
 
         disabled_logger
             .log(AuditEvent::create("users", "1", "admin"))
