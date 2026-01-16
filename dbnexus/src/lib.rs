@@ -70,7 +70,7 @@ pub mod config;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
-pub use config::{ConfigError, ConfigLoader, DatabaseType, DbConfig, DbConfigBuilder, DbError, PoolConfig};
+pub use config::{ConfigError, DatabaseType, DbConfig, DbConfigBuilder, DbError, PoolConfig};
 /// 实体转换模块
 pub mod entity;
 // 生成的权限角色模块（由 build.rs 自动生成，内部使用）
