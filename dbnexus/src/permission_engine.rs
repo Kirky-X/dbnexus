@@ -987,9 +987,10 @@ pub struct PermissionEngine {
 impl PermissionEngine {
     /// 创建权限引擎
     pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
+        let config = PermissionEngineConfig::default();
         Self {
-            pdp: PolicyDecisionPoint::with_cache(provider, 300),
-            config: PermissionEngineConfig::default(),
+            pdp: PolicyDecisionPoint::with_cache(provider, config.cache_ttl_seconds),
+            config,
         }
     }
 

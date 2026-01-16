@@ -136,6 +136,59 @@ impl RateLimiter {
     pub async fn reset(&self, key: &str) {
         self.requests.remove(key);
     }
+
+    /// 清理孤立条目（防止内存泄漏）
+    ///
+    /// 移除长时间没有任何请求的 key（超过 10 倍时间窗口）
+    /// 建议定期调用此方法，例如每小时一次
+    pub async fn cleanup(&self) -> usize {
+        let cleanup_threshold = self.window_duration * 10;
+        let now = Instant::now();
+        let mut removed_count = 0;
+
+        // 收集需要清理的键
+        let keys_to_remove: Vec<String> = self
+            .requests
+            .iter()
+            .filter_map(|entry| {
+                let key = entry.key();
+                // 获取最新时间戳
+                let latest = entry.value().iter().max();
+                match latest {
+                    Some(&t) if now - t > cleanup_threshold => Some(key.clone()),
+                    None => Some(key.clone()), // 空列表也清理
+                    _ => None,
+                }
+            })
+            .collect();
+
+        // 移除孤立条目
+        for key in &keys_to_remove {
+            if self.requests.remove(key.as_str()).is_some() {
+                removed_count += 1;
+            }
+        }
+
+        if removed_count > 0 {
+            tracing::info!(
+                "RateLimiter cleanup: removed {} stale entries, remaining {}",
+                removed_count,
+                self.requests.len()
+            );
+        }
+
+        removed_count
+    }
+
+    /// 获取当前条目数量（用于监控）
+    pub fn len(&self) -> usize {
+        self.requests.len()
+    }
+
+    /// 检查是否为空
+    pub fn is_empty(&self) -> bool {
+        self.requests.is_empty()
+    }
 }
 
 /// 默认速率限制配置

@@ -227,18 +227,25 @@ impl SqlParser {
     }
 }
 
-/// Check if SQL contains variables (basic detection)
+/// Check if SQL contains variables or dangerous patterns (enhanced detection)
 fn contains_variables(sql: &str) -> bool {
     // Remove string literals first to avoid false positives
     let sql_without_strings = remove_string_literals(sql);
 
-    // Detect patterns like @variable, :variable, $variable
-    // 使用 once_cell 确保线程安全的单次初始化
+    // Enhanced detection patterns for SQL injection and dynamic SQL variables
     static PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
         vec![
+            // Named parameters: @variable, :variable
             Regex::new(r"@[\w]+").expect("Regex pattern should be valid"),
             Regex::new(r":[a-zA-Z_][\w]*").expect("Regex pattern should be valid"),
-            Regex::new(r"\$[a-zA-Z_][\w]*").expect("Regex pattern should be valid"),
+            // Shell/PHP variables: $variable, ${variable}
+            Regex::new(r"\$\{?[\w]+\}?").expect("Regex pattern should be valid"),
+            // Percent-encoded parameters: %variable%
+            Regex::new(r"%[\w]+%").expect("Regex pattern should be valid"),
+            // Question mark placeholders (ODBC style)
+            Regex::new(r"\?").expect("Regex pattern should be valid"),
+            // Hex literals that might be used to bypass filters
+            Regex::new(r"0x[0-9A-Fa-f]+").expect("Regex pattern should be valid"),
         ]
     });
 

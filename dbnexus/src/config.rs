@@ -196,9 +196,9 @@ pub enum ConfigError {
     #[error("Configuration file I/O error")]
     IoError,
 
-    /// URL格式错误
-    #[error("Invalid database URL format")]
-    InvalidUrl,
+    /// URL格式错误（带详细错误信息）
+    #[error("Invalid database URL format: {0}")]
+    InvalidUrl(String),
 
     /// 不支持的数据库协议
     #[error("Unsupported database protocol")]
@@ -729,7 +729,7 @@ impl DbConfig {
         Ok(())
     }
 
-    /// 验证数据库 URL 格式
+    /// 验证数据库 URL 格式（增强版）
     fn validate_url_format(&self) -> Result<(), ConfigError> {
         // 特殊处理 sqlite::memory: 和 sqlite3::memory: 格式（无 ://）
         if self.url.starts_with("sqlite::memory:") || self.url.starts_with("sqlite3::memory:") {
@@ -740,19 +740,20 @@ impl DbConfig {
             return Ok(());
         }
 
-        let protocol_end = match self.url.find("://") {
-            Some(pos) => pos,
-            None => return Err(ConfigError::InvalidUrl),
-        };
+        // 使用 URL 解析器进行完整验证
+        let url =
+            url::Url::parse(&self.url).map_err(|e| ConfigError::InvalidUrl(format!("Invalid URL format: {}", e)))?;
 
-        let protocol = &self.url[..protocol_end];
+        let protocol = url.scheme();
 
         // 检查协议格式（字母数字 + + . -）
         if !protocol
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-')
         {
-            return Err(ConfigError::InvalidUrl);
+            return Err(ConfigError::InvalidUrl(
+                "Protocol contains invalid characters".to_string(),
+            ));
         }
 
         // 协议白名单验证
@@ -760,6 +761,29 @@ impl DbConfig {
             "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
             "file" | "mem" if protocol.starts_with("sqlite") => {}
             _ => return Err(ConfigError::UnsupportedProtocol),
+        }
+
+        // 验证主机名格式（如果有）
+        if let Some(host) = url.host() {
+            let host_str = host.to_string();
+            // 主机名不能包含空白字符或特殊符号
+            if host_str
+                .chars()
+                .any(|c| c.is_whitespace() || matches!(c, '\'' | '"' | ';' | '|' | '&' | '$' | '`'))
+            {
+                return Err(ConfigError::InvalidUrl(
+                    "Hostname contains invalid characters".to_string(),
+                ));
+            }
+        }
+
+        // 验证端口号范围（如果有）
+        if let Some(port) = url.port() {
+            if port == 0 {
+                return Err(ConfigError::InvalidUrl(
+                    "Port number out of valid range (1-65535)".to_string(),
+                ));
+            }
         }
 
         Ok(())
@@ -913,23 +937,43 @@ impl DbConfig {
     /// - 检查路径是否包含父目录引用 (..)
     /// - 检查路径是否包含符号链接
     /// - 检查路径是否在预期目录内
+    /// - 检查 Windows 风格路径遍历
+    /// - 检查 null 字节注入
     #[allow(dead_code)]
     fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
-        // 规范化路径
-        let canonical = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => return Ok(false), // 文件不存在或不安全
-        };
+        // 1. 检查 null 字节注入
+        let path_str = path.to_string_lossy();
+        if path_str.contains('\0') {
+            tracing::warn!("Rejected config path with null byte: {:?}", path);
+            return Ok(false);
+        }
 
-        // 检查路径是否包含 ..（父目录遍历）
-        if path.to_string_lossy().contains("..") {
+        // 2. 检查路径是否包含 ..（父目录遍历）
+        if path_str.contains("..") {
             tracing::warn!("Rejected config path with parent directory traversal: {:?}", path);
             return Ok(false);
         }
 
-        // 检查是否为绝对路径且不在系统关键目录
+        // 3. 检查 Windows 风格路径遍历
+        if path_str.contains(".\\") || path_str.starts_with(".\\") {
+            tracing::warn!("Rejected config path with Windows-style traversal: {:?}", path);
+            return Ok(false);
+        }
+
+        // 4. 规范化路径并检查
+        let canonical = match path.canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!("Failed to canonicalize config path {:?}: {}", path, e);
+                return Ok(false);
+            }
+        };
+
+        // 5. 检查是否为绝对路径且不在系统关键目录
         if canonical.is_absolute() {
-            let forbidden_prefixes = ["/etc", "/usr", "/var", "/root", "/boot"];
+            let forbidden_prefixes = [
+                "/etc", "/usr", "/var", "/root", "/boot", "/srv", "/opt", "/bin", "/sbin", "/lib", "/lib64",
+            ];
             for prefix in &forbidden_prefixes {
                 if canonical.starts_with(prefix) {
                     tracing::warn!("Rejected config path in system directory: {:?}", path);
@@ -938,9 +982,24 @@ impl DbConfig {
             }
         }
 
-        // 检查符号链接（指向不安全位置的符号链接）
+        // 6. 检查符号链接（指向不安全位置的符号链接）
         if path.is_symlink() {
             tracing::warn!("Rejected symlink config path: {:?}", path);
+            return Ok(false);
+        }
+
+        // 7. 检查规范化后的路径是否仍然包含 ..
+        if canonical.to_string_lossy().contains("..") {
+            tracing::warn!(
+                "Rejected config path with hidden traversal after canonicalization: {:?}",
+                path
+            );
+            return Ok(false);
+        }
+
+        // 8. 检查路径是否指向目录（配置文件应该是文件）
+        if canonical.is_dir() {
+            tracing::warn!("Rejected config path pointing to directory: {:?}", path);
             return Ok(false);
         }
 
