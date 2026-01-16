@@ -67,7 +67,7 @@ pub struct PoolConfig {
 
 impl PoolConfig {
     /// 创建新的 PoolConfig
-    pub fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
+    pub(crate) fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
         Self {
             max_connections,
             min_connections,
@@ -81,19 +81,9 @@ impl PoolConfig {
         self.max_connections
     }
 
-    /// 设置最大连接数
-    pub fn set_max_connections(&mut self, value: u32) {
-        self.max_connections = value;
-    }
-
     /// 获取最小连接数
     pub fn min_connections(&self) -> u32 {
         self.min_connections
-    }
-
-    /// 设置最小连接数
-    pub fn set_min_connections(&mut self, value: u32) {
-        self.min_connections = value;
     }
 
     /// 获取空闲超时时间（秒）
@@ -101,19 +91,9 @@ impl PoolConfig {
         self.idle_timeout
     }
 
-    /// 设置空闲超时时间（秒）
-    pub fn set_idle_timeout(&mut self, value: u64) {
-        self.idle_timeout = value;
-    }
-
     /// 获取连接获取超时时间（毫秒）
     pub fn acquire_timeout(&self) -> u64 {
         self.acquire_timeout
-    }
-
-    /// 设置连接获取超时时间（毫秒）
-    pub fn set_acquire_timeout(&mut self, value: u64) {
-        self.acquire_timeout = value;
     }
 }
 
@@ -373,7 +353,7 @@ impl DbConfigBuilder {
 /// - TOML 文件
 /// - Confers 库（可选）
 #[derive(Debug, Clone)]
-pub struct ConfigLoader;
+pub(crate) struct ConfigLoader;
 
 impl ConfigLoader {
     /// 从环境变量加载配置
