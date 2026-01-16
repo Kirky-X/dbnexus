@@ -7,7 +7,7 @@
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
-use dbnexus::config::{DbConfig, PoolConfig};
+use dbnexus::config::{DbConfig, DbConfigBuilder};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -45,9 +45,6 @@ pub fn get_test_config() -> DbConfig {
 
 /// 获取测试数据库配置（可选择包含权限配置）
 pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
-    // 使用统一的配置管理
-    let pool_config = PoolConfig::new(5, 1, 300, 5000);
-
     let test_db_type = std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string());
     let database_url = std::env::var("DATABASE_URL").ok();
 
@@ -60,21 +57,15 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
     };
 
-    // 直接从环境变量创建配置
-    let mut config = DbConfig {
-        url,
-        max_connections: pool_config.max_connections(),
-        min_connections: pool_config.min_connections(),
-        idle_timeout: pool_config.idle_timeout(),
-        acquire_timeout: pool_config.acquire_timeout(),
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    // 使用 DbConfigBuilder 构建配置
+    let mut config = DbConfigBuilder::new()
+        .url(&url)
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .build()
+        .expect("Failed to build test config");
 
     // 可选：添加权限配置
     if with_permissions {
@@ -87,25 +78,13 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         let _ = temp_dir;
     }
 
-    // 应用池配置
-    config.max_connections = pool_config.max_connections();
-    config.min_connections = pool_config.min_connections();
-    config.idle_timeout = pool_config.idle_timeout();
-    config.acquire_timeout = pool_config.acquire_timeout();
-
     config
-}
-
-/// 获取当前测试的数据库类型
-#[allow(dead_code)]
-pub fn get_current_db_type() -> String {
-    std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string())
 }
 
 /// 是否使用真实数据库（非内存数据库）
 #[allow(dead_code)]
 pub fn is_real_database() -> bool {
-    get_current_db_type() != "sqlite"
+    std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string()) != "sqlite"
 }
 
 /// 创建测试用的临时迁移目录
