@@ -1,36 +1,166 @@
-# DBNexus
-
 <div align="center">
 
-**企业级 Rust 数据库抽象层**
+<img src="resource/DBNexus.png" alt="DBNexus Logo" width="200" style="margin-bottom: 16px;">
 
-[![Crates.io](https://img.shields.io/crates/v/dbnexus)](https://crates.io/crates/dbnexus)
-[![文档](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus)
-[![许可证](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+<p>
+  <!-- CI/CD 状态 -->
+  <a href="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml">
+    <img src="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg" alt="CI 状态" style="display:inline;margin:0 4px;">
+  </a>
+  <!-- 版本 -->
+  <a href="https://crates.io/crates/dbnexus">
+    <img src="https://img.shields.io/crates/v/dbnexus.svg" alt="版本" style="display:inline;margin:0 4px;">
+  </a>
+  <!-- 文档 -->
+  <a href="https://docs.rs/dbnexus">
+    <img src="https://docs.rs/dbnexus/badge.svg" alt="文档" style="display:inline;margin:0 4px;">
+  </a>
+  <!-- 下载量 -->
+  <a href="https://crates.io/crates/dbnexus">
+    <img src="https://img.shields.io/crates/d/dbnexus.svg" alt="下载量" style="display:inline;margin:0 4px;">
+  </a>
+  <!-- 许可证 -->
+  <a href="https://github.com/Kirky-X/dbnexus/blob/main/LICENSE">
+    <img src="https://img.shields.io/crates/l/dbnexus.svg" alt="许可证" style="display:inline;margin:0 4px;">
+  </a>
+  <!-- Rust 版本 -->
+  <a href="https://www.rust-lang.org/">
+    <img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+" style="display:inline;margin:0 4px;">
+  </a>
+</p>
 
-**基于 Sea-ORM 构建的高性能、高安全性、功能丰富的数据库访问层**
+<p align="center">
+  <strong>企业级 Rust 数据库抽象层</strong>
+</p>
 
-[快速开始](#快速开始) • [功能特性](#功能特性) • [文档](https://docs.rs/dbnexus) • [示例](#示例)
+<p align="center">
+  <a href="#features" style="color:#3B82F6;">✨ 功能特性</a> •
+  <a href="#quick-start" style="color:#3B82F6;">🚀 快速开始</a> •
+  <a href="#documentation" style="color:#3B82F6;">📚 文档</a> •
+  <a href="#examples" style="color:#3B82F6;">💻 示例</a> •
+  <a href="#contributing" style="color:#3B82F6;">🤝 贡献</a>
+</p>
 
 </div>
 
 ---
 
-## 📖 概述
+### 🎯 基于 Sea-ORM 构建的高性能、高安全性、功能丰富的数据库访问层
 
-DBNexus 是一个为 Rust 构建的企业级数据库抽象层，提供：
+DBNexus 提供了一种**声明式**的数据库访问方法：
 
-- **基于会话的连接管理**：RAII 风格的自动连接生命周期管理
-- **声明式权限控制**：通过过程宏实现编译时权限检查
-- **智能连接池**：动态配置修正和健康检查
-- **企业级功能**：指标、分布式追踪、审计日志等
+| ✨ 类型安全 | 🔒 权限控制 | 🏊 智能连接池 | 📊 企业级监控 |
+|:---------:|:----------:|:--------------:|:--------:|
+| 编译时检查 | 表级 RBAC | RAII 自动管理 | Prometheus 指标 |
 
-建立在 [Sea-ORM](https://www.sea-ql.org/SeaORM/) 之上，DBNexus 在保持简单和易用性的同时，增加了生产就绪的功能。
+```rust
+use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
-## 🚀 快速开始
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users"]
+#[db_crud]
+#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
 
-### 安装
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = DbPool::new("sqlite::memory:").await?;
+    let session = pool.get_session("admin").await?;
+    let user = User { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
+    User::insert(&session, user).await?;
+    Ok(())
+}
+```
+
+---
+
+## 📋 目录
+
+<details open style="border-radius:8px; padding:16px; border:1px solid #E2E8F0;">
+<summary style="cursor:pointer; font-weight:600; color:#1E293B;">📑 目录（点击展开）</summary>
+
+- [✨ 功能特性](#features)
+- [🚀 快速开始](#quick-start)
+  - [📦 安装](#installation)
+  - [💡 基本用法](#basic-usage)
+  - [🔒 权限控制](#permission-control)
+- [🎨 特性标志](#feature-flags)
+- [📚 文档](#documentation)
+- [💻 示例](#examples)
+- [🏗️ 架构](#architecture)
+- [🔒 安全性](#security)
+- [🧪 测试](#testing)
+- [🤝 贡献](#contributing)
+- [📄 许可证](#license)
+- [🙏 致谢](#acknowledgments)
+
+</details>
+
+---
+
+## <span id="features">✨ 功能特性</span>
+
+<div align="center" style="margin: 24px 0;">
+
+| 🎯 核心功能 | ⚡ 企业级功能 |
+|:----------:|:----------:|
+| 始终可用 | 按需启用 |
+
+</div>
+
+<table style="width:100%; border-collapse: collapse;">
+<tr>
+<td width="50%" style="vertical-align:top; padding: 16px; border-radius:8px; border:1px solid #E2E8F0;">
+
+### 🎯 核心功能（始终可用）
+
+| 状态 | 功能 | 描述 |
+|:----:|------|------|
+| ✅ | **连接池管理** | RAII 风格的自动连接生命周期管理 |
+| ✅ | **权限控制** | 基于角色的表级访问控制（RBAC） |
+| ✅ | **过程宏** | 自动生成 CRUD 方法和权限检查 |
+| ✅ | **SQL 解析器** | 提取操作类型和目标表 |
+| ✅ | **事务支持** | 完整的事务管理 |
+| ✅ | **多数据库支持** | SQLite、PostgreSQL、MySQL |
+
+</td>
+<td width="50%" style="vertical-align:top; padding: 16px; border-radius:8px; border:1px solid #E2E8F0;">
+
+### ⚡ 企业级功能
+
+| 状态 | 功能 | 描述 |
+|:----:|------|------|
+| 🔍 | **指标监控** | Prometheus 指标导出（`metrics` 特性） |
+| 📊 | **分布式追踪** | OpenTelemetry 集成（`tracing` 特性） |
+| 📝 | **审计日志** | 所有操作的自动审计（`audit` 特性） |
+| 🗄️ | **数据库迁移** | 自动迁移执行（`migration` 特性） |
+| 🔀 | **数据分片** | 支持分片策略（`sharding` 特性） |
+| 🌐 | **全局索引** | 跨分片查询（`global-index` 特性） |
+| 💾 | **缓存** | LRU 缓存支持（`cache` 特性） |
+
+</td>
+</tr>
+</table>
+
+### 📦 特性预设
+
+| 预设 | 特性 | 使用场景 |
+|------|------|----------|
+| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `sqlite`, `runtime-tokio-rustls` | 嵌入式设备最小配置 |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `postgres`, `permission`, `pool-health-check` | 微服务配置 |
+| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | 所有企业级特性 | 完整企业功能 |
+
+---
+
+## <span id="quick-start">🚀 快速开始</span>
+
+### <span id="installation">📦 安装</span>
 
 在你的 `Cargo.toml` 中添加：
 
@@ -39,12 +169,23 @@ DBNexus 是一个为 Rust 构建的企业级数据库抽象层，提供：
 dbnexus = "0.1"
 ```
 
-### 基础用法
+### <span id="basic-usage">💡 基本用法</span>
+
+<div align="center" style="margin: 24px 0;">
+
+#### 🎬 5 分钟快速开始
+
+</div>
+
+<table style="width:100%; border-collapse: collapse;">
+<tr>
+<td width="50%" style="padding: 16px; vertical-align:top;">
+
+**步骤 1：定义实体**
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud};
 
-// 定义你的实体
 #[derive(DbEntity)]
 #[db_entity]
 #[table_name = "users"]
@@ -55,32 +196,53 @@ struct User {
     name: String,
     email: String,
 }
+```
 
+</td>
+<td width="50%" style="padding: 16px; vertical-align:top;">
+
+**步骤 2：创建连接池**
+
+```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建连接池
     let pool = DbPool::new("sqlite::memory:").await?;
-
-    // 获取基于角色访问的会话
     let session = pool.get_session("admin").await?;
-
-    // 插入用户
-    let user = User {
-        id: 1,
-        name: "张三".to_string(),
-        email: "zhangsan@example.com".to_string(),
-    };
-    User::insert(&session, user).await?;
-
-    // 查询用户
-    let users = User::find_all(&session).await?;
-    println!("找到 {} 个用户", users.len());
-
     Ok(())
 }
 ```
 
-### 使用权限控制
+</td>
+</tr>
+<tr>
+<td width="50%" style="padding: 16px; vertical-align:top;">
+
+**步骤 3：插入数据**
+
+```rust
+let user = User {
+    id: 1,
+    name: "Alice".to_string(),
+    email: "alice@example.com".to_string(),
+};
+User::insert(&session, user).await?;
+```
+
+</td>
+<td width="50%" style="padding: 16px; vertical-align:top;">
+
+**步骤 4：查询数据**
+
+```rust
+let users = User::find_all(&session).await?;
+println!("找到 {} 个用户", users.len());
+```
+
+</td>
+</tr>
+</table>
+
+### <span id="permission-control">🔒 权限控制</span>
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
@@ -96,85 +258,18 @@ struct User {
     name: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite::memory:").await?;
+// 管理员可以访问
+let session = pool.get_session("admin").await?;
+User::find_all(&session).await?;
 
-    // 管理员可以访问
-    let session = pool.get_session("admin").await?;
-    User::find_all(&session).await?;
-
-    // 普通用户会被拒绝
-    let session = pool.get_session("guest").await?;
-    User::find_all(&session).await?; // 错误：权限被拒绝
-
-    Ok(())
-}
+// 普通用户会被拒绝
+let session = pool.get_session("guest").await?;
+User::find_all(&session).await?; // 错误：权限被拒绝
 ```
 
-## ✨ 功能特性
+---
 
-### 核心功能
-
-- **🔒 权限控制**
-  - 基于角色的表级访问控制
-  - 编译时权限验证
-  - 支持 YAML 和 RBAC 策略提供者
-  - 权限策略的 LRU 缓存
-
-- **🏊 智能连接池**
-  - 基于 RAII 的自动连接管理
-  - 动态配置修正
-  - 健康检查和自动连接重建
-  - 连接预热支持
-
-- **⚡ 高性能**
-  - 零成本抽象
-  - 频繁访问数据的 LRU 缓存
-  - 使用原子操作的无锁计数器
-  - 面向 Tokio 的异步设计
-
-### 企业级功能
-
-- **📊 监控**
-  - Prometheus 指标导出
-  - 连接池状态监控
-  - 查询性能跟踪
-
-- **🔍 分布式追踪**
-  - OpenTelemetry 集成
-  - Jaeger 支持
-  - 自动追踪传播
-
-- **📝 审计日志**
-  - 所有数据库操作的自动审计
-  - 操作类型和时间戳跟踪
-  - 用户上下文捕获
-
-- **🗄️ 高级数据库功能**
-  - 数据库迁移支持
-  - 自动迁移执行
-  - 数据分片支持
-  - 跨数据库查询的全局索引
-
-### 开发者体验
-
-- **🎯 过程宏**
-  - `#[db_entity]` - 实体定义
-  - `#[db_crud]` - 自动生成 CRUD 方法
-  - `#[db_permission]` - 权限声明
-  - `#[db_cache]` - 缓存注解
-  - `#[db_audit]` - 审计注解
-
-- **🔧 灵活配置**
-  - 环境变量
-  - YAML 配置文件
-  - TOML 配置文件
-  - 构建器模式 API
-
-## 🎨 特性标志
-
-DBNexus 使用 Cargo 特性让你精确选择所需功能：
+## <span id="feature-flags">🎨 特性标志</span>
 
 ### 数据库驱动（选择一个）
 
@@ -225,36 +320,71 @@ dbnexus = { version = "0.1", features = [
 dbnexus = { version = "0.1", features = [
     "config-yaml",     # YAML 配置支持
     "config-toml",     # TOML 配置支持
-    "config-env",       # 环境变量（默认）
+    "config-env",      # 环境变量（默认）
 ] }
 ```
 
-### 预设配置
+---
 
-```toml
-# 嵌入式设备最小配置
-dbnexus = { version = "0.1", default-features = false, features = ["minimal"] }
+## <span id="documentation">📚 文档</span>
 
-# 微服务配置
-dbnexus = { version = "0.1", default-features = false, features = ["microservice"] }
+<div align="center" style="margin: 24px 0;">
 
-# 完整企业功能
-dbnexus = { version = "0.1", default-features = false, features = ["all-optional"] }
-```
+<table style="width:100%; max-width: 800px;">
+<tr>
+<td align="center" width="33%" style="padding: 16px;">
+<a href="USER_GUIDE.md" style="text-decoration:none;">
+<div style="padding: 24px; border-radius:12px; transition: transform 0.2s;">
+<b style="color:#1E293B;">📖 用户指南</b>
+</div>
+</a>
+<br><span style="color:#64748B;">完整使用指南</span>
+</td>
+<td align="center" width="33%" style="padding: 16px;">
+<a href="https://docs.rs/dbnexus" style="text-decoration:none;">
+<div style="padding: 24px; border-radius:12px; transition: transform 0.2s;">
+<b style="color:#1E293B;">📘 API 参考</b>
+</div>
+</a>
+<br><span style="color:#64748B;">完整 API 文档</span>
+</td>
+<td align="center" width="33%" style="padding: 16px;">
+<a href="examples/" style="text-decoration:none;">
+<div style="padding: 24px; border-radius:12px; transition: transform 0.2s;">
+<b style="color:#1E293B;">💻 示例代码</b>
+</div>
+</a>
+<br><span style="color:#64748B;">代码示例</span>
+</td>
+</tr>
+</table>
 
-查看 [FEATURES.md](FEATURES.md) 了解所有特性及其组合的完整列表。
+</div>
 
-## 📚 文档
+### 📖 补充资源
 
-- **[用户指南](USER_GUIDE.md)** - 使用 DBNexus 的全面指南
-- **[API 参考](API_REFERENCE.md)** - 完整 API 文档
-- **[架构文档](ARCHITECTURE.md)** - 系统架构和设计决策
-- **[示例](examples/)** - 可运行的代码示例
-- **[Rust 文档](https://docs.rs/dbnexus)** - docs.rs 上的 API 文档
+| 资源 | 描述 |
+|------|------|
+| 📖 [用户指南](USER_GUIDE.md) | 使用 DBNexus 的全面指南 |
+| 📘 [API 参考](API_REFERENCE.md) | 完整 API 文档 |
+| 🏗️ [架构文档](ARCHITECTURE.md) | 系统架构和设计决策 |
+| 📦 [示例](examples/) | 可运行的代码示例 |
 
-## 💡 示例
+---
 
-### 配置
+## <span id="examples">💻 示例</span>
+
+<div align="center" style="margin: 24px 0;">
+
+### 💡 真实示例
+
+</div>
+
+<table style="width:100%; border-collapse: collapse;">
+<tr>
+<td width="50%" style="padding: 16px; border-radius:8px; border:1px solid #E2E8F0; vertical-align:top;">
+
+#### 📝 配置管理
 
 ```rust
 use dbnexus::{DbPool, config::DbConfigBuilder};
@@ -270,7 +400,10 @@ let config = DbConfigBuilder::new()
 let pool = DbPool::try_from_config(config).await?;
 ```
 
-### 环境变量
+</td>
+<td width="50%" style="padding: 16px; border-radius:8px; border:1px solid #E2E8F0; vertical-align:top;">
+
+#### 🔧 环境变量
 
 ```bash
 export DATABASE_URL="postgresql://user:pass@localhost/db"
@@ -283,12 +416,14 @@ export DB_ADMIN_ROLE=admin
 let pool = DbPool::new().await?;
 ```
 
-### 事务
+</td>
+</tr>
+<tr>
+<td width="50%" style="padding: 16px; border-radius:8px; border:1px solid #E2E8F0; vertical-align:top;">
+
+#### 🔄 事务处理
 
 ```rust
-use dbnexus::DbPool;
-
-let pool = DbPool::new("sqlite::memory:").await?;
 let mut session = pool.get_session("admin").await?;
 
 // 开始事务
@@ -302,7 +437,10 @@ User::insert(&session, user2).await?;
 session.commit_transaction().await?;
 ```
 
-### 监控
+</td>
+<td width="50%" style="padding: 16px; border-radius:8px; border:1px solid #E2E8F0; vertical-align:top;">
+
+#### 📊 监控
 
 ```rust
 use dbnexus::{DbPool, metrics::MetricsCollector};
@@ -318,11 +456,31 @@ let metrics = MetricsCollector::new(&pool);
 println!("{}", metrics.export_prometheus());
 ```
 
-查看 [examples/](examples/) 目录获取更全面的示例。
+</td>
+</tr>
+</table>
 
-## 🏗️ 架构
+<div align="center" style="margin: 24px 0;">
 
-DBNexus 采用分层架构：
+**[📂 查看所有示例 →](examples/)**
+
+</div>
+
+---
+
+## <span id="architecture">🏗️ 架构</span>
+
+<div align="center" style="margin: 24px 0;">
+
+### 🏗️ 系统架构
+
+</div>
+
+<div align="center">
+
+![DBNexus Architecture](resource/DBNexus.png)
+
+</div>
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -359,7 +517,15 @@ DBNexus 采用分层架构：
 
 查看 [ARCHITECTURE.md](ARCHITECTURE.md) 获取详细的架构文档。
 
-## 🔒 安全性
+---
+
+## <span id="security">🔒 安全性</span>
+
+<div align="center" style="margin: 24px 0;">
+
+### 🛡️ 安全特性
+
+</div>
 
 DBNexus 在设计时就考虑了安全性：
 
@@ -369,9 +535,15 @@ DBNexus 在设计时就考虑了安全性：
 - **配置路径验证** - 防止路径遍历攻击
 - **速率限制** - 权限检查速率限制以防止滥用
 
-## 🧪 测试
+---
 
-### 运行测试
+## <span id="testing">🧪 测试</span>
+
+<div align="center" style="margin: 24px 0;">
+
+### 🎯 运行测试
+
+</div>
 
 ```bash
 # SQLite 测试
@@ -400,9 +572,15 @@ make test-all
 make docker-down
 ```
 
-## 🤝 贡献
+---
+
+## <span id="contributing">🤝 贡献</span>
+
+<div align="center" style="margin: 24px 0;">
 
 欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解指南。
+
+</div>
 
 ### 开发设置
 
@@ -421,37 +599,96 @@ cargo test --all-features
 cargo clippy --all-features
 ```
 
-## 📝 许可证
+---
 
-以以下任一许可方式授权：
+## <span id="license">📄 许可证</span>
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) 或 http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) 或 http://opensource.org/licenses/MIT)
+<div align="center" style="margin: 24px 0;">
 
-由你选择。
+本项目采用 **MIT / Apache-2.0 双重许可证**：
 
-## 🙏 致谢
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
+
+</div>
+
+---
+
+## <span id="acknowledgments">🙏 致谢</span>
+
+<div align="center" style="margin: 24px 0;">
+
+### 🌟 基于优秀工具构建
+
+</div>
 
 - [Sea-ORM](https://www.sea-ql.org/SeaORM/) - 优秀的 ORM 框架，DBNexus 建立在其上
 - [SQLx](https://github.com/launchbadge/sqlx) - 异步 SQL 工具包
 - Rust 社区提供的优秀工具和库
 
+---
+
 ## 📞 支持
 
-- **文档**: https://docs.rs/dbnexus
-- **问题**: https://github.com/Kirky-X/dbnexus/issues
-- **讨论**: https://github.com/Kirky-X/dbnexus/discussions
+<div align="center" style="margin: 24px 0;">
 
-## 🌟 获取星标
+<table style="width:100%; max-width: 600px;">
+<tr>
+<td align="center" width="33%">
+<a href="https://github.com/Kirky-X/dbnexus/issues">
+<div style="padding: 16px; border-radius:8px;">
+<b style="color:#991B1B;">📋 Issues</b>
+</div>
+</a>
+<br><span style="color:#64748B;">报告 Bug 和问题</span>
+</td>
+<td align="center" width="33%">
+<a href="https://github.com/Kirky-X/dbnexus/discussions">
+<div style="padding: 16px; border-radius:8px;">
+<b style="color:#1E40AF;">💬 Discussions</b>
+</div>
+</a>
+<br><span style="color:#64748B;">提问和分享想法</span>
+</td>
+<td align="center" width="33%">
+<a href="https://github.com/Kirky-X/dbnexus">
+<div style="padding: 16px; border-radius:8px;">
+<b style="color:#1E293B;">🐙 GitHub</b>
+</div>
+</a>
+<br><span style="color:#64748B;">查看源代码</span>
+</td>
+</tr>
+</table>
 
-如果你觉得 DBNexus 有用，请考虑在 [GitHub](https://github.com/Kirky-X/dbnexus) 上给它一个星标 ⭐！
+</div>
 
 ---
 
+## ⭐ Star 历史
+
 <div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Kirky-X/dbnexus&type=Date)](https://star-history.com/#Kirky-X/dbnexus&Date)
+
+</div>
+
+---
+
+<div align="center" style="margin: 32px 0; padding: 24px; border-radius: 12px;">
+
+### 💝 支持本项目
+
+如果您觉得这个项目有用，请考虑给它一个 ⭐️！
 
 **由 DBNexus 团队用 ❤️ 构建**
 
-[GitHub](https://github.com/Kirky-X/dbnexus) • [Rust](https://www.rust-lang.org) • [Sea-ORM](https://www.sea-ql.org/SeaORM/)
+---
+
+**[⬆ 返回顶部](#dbnexus)**
+
+---
+
+<sub>© 2024 DBNexus Project. All rights reserved.</sub>
 
 </div>
