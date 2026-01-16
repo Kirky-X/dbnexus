@@ -2,276 +2,462 @@
 
 <div align="center">
 
-**An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling**
+**Enterprise-grade Database Abstraction Layer for Rust**
 
-[![Rust Version](https://img.shields.io/badge/rust-1.85+-blue.svg)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/Kirky-X/dbnexus)
+[![Crates.io](https://img.shields.io/crates/v/dbnexus)](https://crates.io/crates/dbnexus)
+[![Documentation](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+
+**A high-performance, secure, and feature-rich database access layer built on Sea-ORM**
+
+[Quick Start](#quick-start) • [Features](#features) • [Documentation](https://docs.rs/dbnexus) • [Examples](#examples)
 
 </div>
 
-## Overview
+---
 
-DBNexus is a Rust-based database abstraction library built on top of Sea-ORM. It provides enterprise-grade features including connection pooling, role-based access control, audit logging, caching, and database sharding.
+## 📖 Overview
 
-## Features
+DBNexus is an enterprise-grade database abstraction layer for Rust that provides:
 
-- **Connection Pooling**: Efficient database connection management with configurable min/max connections
-- **Permission Engine**: Role-based table-level access control with YAML configuration
-- **Audit Logging**: Comprehensive audit trail with data sanitization
-- **Caching**: LRU cache for permission policies and frequently accessed data
-- **Sharding**: Horizontal scaling support for large datasets
-- **Metrics**: Prometheus-compatible metrics collection
-- **Migrations**: Built-in migration management with automatic support
-- **Tracing**: Distributed tracing with OpenTelemetry support
+- **Session-based Connection Management**: RAII-style automatic connection lifecycle management
+- **Declarative Permission Control**: Compile-time permission checks via procedural macros
+- **Intelligent Connection Pooling**: Dynamic configuration correction and health checking
+- **Enterprise Features**: Metrics, distributed tracing, audit logging, and more
 
-## Security & Performance
+Built on top of [Sea-ORM](https://www.sea-ql.org/SeaORM/), DBNexus adds production-ready features while maintaining the simplicity and ergonomics you love.
 
-DBNexus includes enterprise-grade security protections and performance optimizations:
-
-### Security Fixes
-
-- **SQL Injection Protection**: Input validation for table names and SQL string sanitization
-- **DDL Operation Whitelisting**: Only safe DDL operations (CREATE/ALTER/DROP TABLE, CREATE/DROP INDEX, CREATE/DROP VIEW) are permitted
-- **Path Traversal Protection**: Enhanced detection of directory traversal patterns in file paths
-- **Permission Cache TTL**: Permission decisions are cached with configurable expiration to ensure timely policy updates
-
-### Performance Optimizations
-
-- **Cache Read-Write Lock Optimization**: Reduced lock contention by using read locks for cache reads (5-10x throughput improvement)
-- **Single Clone Optimization**: Eliminated redundant value cloning in cache operations (2-3x performance gain)
-- **Global Index Reverse Index**: O(1) deletion performance for global indexes using reverse mapping
-- **Parallel Shard Pool Creation**: Concurrent connection pool initialization using FuturesUnordered (2-4x faster startup)
-
-## Supported Databases
-
-- SQLite
-- PostgreSQL
-- MySQL
-
-## Quick Start
+## 🚀 Quick Start
 
 ### Installation
+
+Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
 dbnexus = "0.1"
-# Choose one database driver
-dbnexus = { version = "0.1", features = ["sqlite"] }
-dbnexus = { version = "0.1", features = ["postgres"] }
-dbnexus = { version = "0.1", features = ["mysql"] }
 ```
 
 ### Basic Usage
 
 ```rust
-use dbnexus::{DbPool, DbConfig};
+use dbnexus::{DbPool, DbEntity, db_crud};
+
+// Define your entity
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users"]
+#[db_crud]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+    email: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DbConfig {
-        url: "sqlite://example.db".to_string(),
-        max_connections: 10,
-        min_connections: 2,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-    };
+    // Create a connection pool
+    let pool = DbPool::new("sqlite::memory:").await?;
 
-    let pool = DbPool::with_config(config).await?;
+    // Get a session with role-based access
     let session = pool.get_session("admin").await?;
 
-    // Execute queries
-    let result = session.execute_raw("SELECT 1").await?;
-    println!("Query executed successfully");
+    // Insert a user
+    let user = User {
+        id: 1,
+        name: "Alice".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+    User::insert(&session, user).await?;
+
+    // Query users
+    let users = User::find_all(&session).await?;
+    println!("Found {} users", users.len());
 
     Ok(())
 }
 ```
 
-## Configuration
+### With Permission Control
 
-### Environment Variables
+```rust
+use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DB_URL` | Database connection URL | - |
-| `DB_MAX_CONNECTIONS` | Maximum pool size | 10 |
-| `DB_MIN_CONNECTIONS` | Minimum pool size | 2 |
-| `DB_IDLE_TIMEOUT` | Idle connection timeout (seconds) | 300 |
-| `DB_ACQUIRE_TIMEOUT` | Connection acquire timeout (milliseconds) | 3000 |
-| `DB_ADMIN_ROLE` | Admin role for DDL operations | "admin" |
+#[derive(DbEntity)]
+#[db_entity]
+#[table_name = "users"]
+#[db_crud]
+#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
+struct User {
+    #[primary_key]
+    id: i64,
+    name: String,
+}
 
-### Permission Configuration
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = DbPool::new("sqlite::memory:").await?;
 
-Create a `permissions.yaml` file:
+    // Admin can access
+    let session = pool.get_session("admin").await?;
+    User::find_all(&session).await?;
 
-```yaml
-roles:
-  admin:
-    - table: "*"
-      operations: ["SELECT", "INSERT", "UPDATE", "DELETE"]
-  user:
-    - table: "users"
-      operations: ["SELECT", "INSERT"]
-    - table: "orders"
-      operations: ["SELECT"]
-  reader:
-    - table: "*"
-      operations: ["SELECT"]
+    // Regular user will be denied
+    let session = pool.get_session("guest").await?;
+    User::find_all(&session).await?; // Error: Permission denied
+
+    Ok(())
+}
 ```
 
-## Optional Features
+## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| `metrics` | Prometheus metrics collection |
-| `migration` | Database migration support |
-| `auto-migrate` | Automatic migration on startup |
-| `sharding` | Horizontal sharding support |
-| `global-index` | Global index for distributed queries |
-| `cache` | LRU cache for permission policies and frequently accessed data |
-| `audit` | Comprehensive audit logging |
-| `tracing` | OpenTelemetry distributed tracing |
-| `permission` | Role-based access control |
-| `sql-parser` | SQL parsing and analysis |
-| `pool-health-check` | Connection pool health monitoring |
-| `config-yaml` | YAML configuration file support |
-| `config-toml` | TOML configuration file support |
+### Core Features
+
+- **🔒 Permission Control**
+  - Table-level access control with roles
+  - Compile-time permission verification
+  - Support for YAML and RBAC policy providers
+  - LRU cache for permission policies
+
+- **🏊 Smart Connection Pooling**
+  - RAII-based automatic connection management
+  - Dynamic configuration correction
+  - Health checking with automatic connection recreation
+  - Connection warmup support
+
+- **⚡ High Performance**
+  - Zero-cost abstractions
+  - LRU caching for frequently accessed data
+  - Lock-free counters using atomic operations
+  - Async-first design with Tokio
+
+### Enterprise Features
+
+- **📊 Monitoring**
+  - Prometheus metrics export
+  - Connection pool status monitoring
+  - Query performance tracking
+
+- **🔍 Distributed Tracing**
+  - OpenTelemetry integration
+  - Jaeger support
+  - Automatic trace propagation
+
+- **📝 Audit Logging**
+  - Automatic audit for all database operations
+  - Operation type and timestamp tracking
+  - User context capture
+
+- **🗄️ Advanced Database Features**
+  - Database migration support
+  - Automatic migration execution
+  - Data sharding support
+  - Global index for cross-database queries
+
+### Developer Experience
+
+- **🎯 Procedural Macros**
+  - `#[db_entity]` - Entity definition
+  - `#[db_crud]` - Automatic CRUD methods
+  - `#[db_permission]` - Permission declarations
+  - `#[db_cache]` - Cache annotations
+  - `#[db_audit]` - Audit annotations
+
+- **🔧 Flexible Configuration**
+  - Environment variables
+  - YAML configuration files
+  - TOML configuration files
+  - Builder pattern API
+
+## 🎨 Feature Flags
+
+DBNexus uses Cargo features to allow you to pick exactly what you need:
+
+### Database Drivers (choose one)
+
+```toml
+# SQLite (default)
+dbnexus = { version = "0.1", features = ["sqlite"] }
+
+# PostgreSQL
+dbnexus = { version = "0.1", features = ["postgres"] }
+
+# MySQL
+dbnexus = { version = "0.1", features = ["mysql"] }
+```
+
+### Runtime
+
+```toml
+# Tokio with RustLS (default)
+dbnexus = { version = "0.1", features = ["runtime-tokio-rustls"] }
+
+# Tokio with Native TLS
+dbnexus = { version = "0.1", features = ["runtime-tokio-native-tls"] }
+
+# AsyncStd
+dbnexus = { version = "0.1", features = ["runtime-async-std"] }
+```
+
+### Optional Features
+
+```toml
+# Core features
+dbnexus = { version = "0.1", features = [
+    "permission",      # Permission control
+    "sql-parser",      # SQL parsing
+    "macros",          # Procedural macros
+] }
+
+# Enterprise features
+dbnexus = { version = "0.1", features = [
+    "metrics",         # Prometheus metrics
+    "tracing",         # Distributed tracing
+    "audit",           # Audit logging
+    "migration",       # Database migration
+    "sharding",        # Data sharding
+] }
+
+# Configuration
+dbnexus = { version = "0.1", features = [
+    "config-yaml",     # YAML config support
+    "config-toml",     # TOML config support
+    "config-env",       # Environment variables (default)
+] }
+```
 
 ### Preset Configurations
 
-Two preset configurations are available for common use cases:
-
-#### Minimal (Lite)
-
 ```toml
-dbnexus = { version = "0.1", features = ["minimal", "sqlite"] }
+# Minimal for embedded devices
+dbnexus = { version = "0.1", default-features = false, features = ["minimal"] }
+
+# Microservice setup
+dbnexus = { version = "0.1", default-features = false, features = ["microservice"] }
+
+# Full enterprise features
+dbnexus = { version = "0.1", default-features = false, features = ["all-optional"] }
 ```
 
-| Feature | Included |
-|---------|----------|
-| `runtime-tokio-rustls` | ✅ Async runtime with TLS |
-| `sqlite` | SQLite driver |
-| `config-env` | Environment variable config |
-| `sql-parser` | SQL parsing |
-| `lru` | LRU cache for permissions |
-| `async-trait` | Async trait support |
-| `regex` | Regex support |
+See [FEATURES.md](FEATURES.md) for a complete list of all features and their combinations.
 
-#### Microservice (Full-featured)
+## 📚 Documentation
 
-```toml
-dbnexus = { version = "0.1", features = ["microservice", "postgres"] }
+- **[User Guide](USER_GUIDE.md)** - Comprehensive guide for using DBNexus
+- **[API Reference](API_REFERENCE.md)** - Complete API documentation
+- **[Architecture](ARCHITECTURE.md)** - System architecture and design decisions
+- **[Examples](examples/)** - Working code examples
+- **[Rust Docs](https://docs.rs/dbnexus)** - API documentation on docs.rs
+
+## 💡 Examples
+
+### Configuration
+
+```rust
+use dbnexus::{DbPool, config::DbConfigBuilder};
+
+let config = DbConfigBuilder::new()
+    .url("postgresql://user:pass@localhost/db")
+    .max_connections(20)
+    .min_connections(5)
+    .idle_timeout(300)
+    .acquire_timeout(5000)
+    .build()?;
+
+let pool = DbPool::try_from_config(config).await?;
 ```
 
-| Feature | Included |
-|---------|----------|
-| `runtime-tokio-rustls` | ✅ Async runtime with TLS |
-| `postgres` | PostgreSQL driver |
-| `permission` | Role-based access control |
-| `sql-parser` | SQL parsing |
-| `config-env` | Environment variable config |
-| `pool-health-check` | Connection health monitoring |
-| `config-yaml` | YAML configuration |
-| `lru` | LRU cache |
-| `async-trait` | Async trait support |
-| `regex` | Regex support |
-
-### Custom Configuration
-
-Combine database driver with required and optional features:
-
-```toml
-# Minimal with cache
-dbnexus = { version = "0.1", features = ["minimal", "sqlite", "cache"] }
-
-# Microservice with audit logging
-dbnexus = { version = "0.1", features = ["microservice", "postgres", "audit"] }
-
-# Full featured
-dbnexus = { version = "0.1", features = ["all-optional", "postgres"] }
-```
-
-Enable all optional features:
-
-```toml
-dbnexus = { version = "0.1", features = ["all-optional", "postgres"] }
-```
-
-## Project Structure
-
-```
-dbnexus/
-├── dbnexus/           # Core library
-├── dbnexus-cli/       # CLI tool
-├── dbnexus-macros/    # Procedural macros
-├── examples/          # Example code
-├── scripts/           # Build and utility scripts
-└── docs/              # Documentation
-```
-
-## Examples
-
-See the [examples](examples/) directory for complete usage examples:
-
-- Basic database operations
-- Permission configuration
-- Sharding setup
-- Audit logging
-
-## Documentation
-
-- [API Reference](https://docs.rs/dbnexus)
-- [Architecture Guide](docs/ARCHITECTURE.md)
-- [User Guide](docs/USER_GUIDE.md)
-- [API Reference](docs/API_REFERENCE.md)
-
-## Testing
+### Environment Variables
 
 ```bash
+export DATABASE_URL="postgresql://user:pass@localhost/db"
+export DB_MAX_CONNECTIONS=20
+export DB_MIN_CONNECTIONS=5
+export DB_ADMIN_ROLE=admin
+```
+
+```rust
+let pool = DbPool::new().await?;
+```
+
+### Transactions
+
+```rust
+use dbnexus::DbPool;
+
+let pool = DbPool::new("sqlite::memory:").await?;
+let mut session = pool.get_session("admin").await?;
+
+// Begin transaction
+session.begin_transaction().await?;
+
+// Multiple operations
+User::insert(&session, user1).await?;
+User::insert(&session, user2).await?;
+
+// Commit
+session.commit_transaction().await?;
+```
+
+### Monitoring
+
+```rust
+use dbnexus::{DbPool, metrics::MetricsCollector};
+
+let pool = DbPool::new("postgresql://localhost/db").await?;
+
+// Get pool status
+let status = pool.status();
+println!("Active: {}, Idle: {}", status.active, status.idle);
+
+// Export Prometheus metrics
+let metrics = MetricsCollector::new(&pool);
+println!("{}", metrics.export_prometheus());
+```
+
+See the [examples/](examples/) directory for more comprehensive examples.
+
+## 🏗️ Architecture
+
+DBNexus follows a layered architecture:
+
+<div align="center">
+
+![DBNexus Architecture](resource/DBNexus.png)
+
+</div>
+
+```
+┌─────────────────────────────────────────────────┐
+│           Application Layer                    │
+│  (Your code using DbPool and Session)       │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         DBNexus API Layer                  │
+│  - DbPool, Session                        │
+│  - Permission checking                    │
+│  - Transaction management                 │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Feature Modules                     │
+│  - Config, Permission, Metrics            │
+│  - Migration, Sharding, Audit             │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Connection Pool                     │
+│  - Connection lifecycle management          │
+│  - Health checking                        │
+│  - RAII guarantees                       │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Sea-ORM / SQLx                    │
+│  - Database drivers                       │
+│  - Query builder                        │
+└───────────────────────────────────────────┘
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
+
+## 🔒 Security
+
+DBNexus is built with security in mind:
+
+- **No unsafe code** - `#![forbid(unsafe_code)]` in all library code
+- **Permission enforcement** - Table-level access control with compile-time verification
+- **SQL injection prevention** - Parameterized queries by default
+- **Config path validation** - Protection against path traversal attacks
+- **Rate limiting** - Permission check rate limiting to prevent abuse
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# SQLite tests
+cargo test --features sqlite
+
+# PostgreSQL tests
+cargo test --features postgres
+
+# MySQL tests
+cargo test --features mysql
+
+# All tests (requires Docker)
+make test-all
+```
+
+### Using Docker
+
+```bash
+# Start databases
+make docker-up
+
 # Run all tests
-cargo test --all
+make test-all
 
-# Run tests with coverage
-cargo tarpaulin --output-dir ./target/tarpaulin
-
-# Run specific test suites
-cargo test --package dbnexus --lib
-cargo test --package dbnexus-cli
+# Stop databases
+make docker-down
 ```
 
-## Benchmarking
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
 
 ```bash
-cargo bench
+# Clone repository
+git clone https://github.com/Kirky-X/dbnexus.git
+cd dbnexus
+
+# Install pre-commit hooks
+./scripts/install-pre-commit.sh
+
+# Run tests
+cargo test --all-features
+
+# Run linter
+cargo clippy --all-features
 ```
 
-## Contributing
+## 📝 License
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+Licensed under either of
 
-## License
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
-This project is licensed under the MIT OR Apache-2.0 License.
+at your option.
 
-## Authors
+## 🙏 Acknowledgments
 
-DBNexus Team
+- [Sea-ORM](https://www.sea-ql.org/SeaORM/) - The excellent ORM framework DBNexus is built on
+- [SQLx](https://github.com/launchbadge/sqlx) - Async SQL toolkit
+- The Rust community for amazing tools and libraries
 
-## Version
+## 📞 Support
 
-0.1.0
+- **Documentation**: https://docs.rs/dbnexus
+- **Issues**: https://github.com/Kirky-X/dbnexus/issues
+- **Discussions**: https://github.com/Kirky-X/dbnexus/discussions
 
-## Contact
+## 🌟 Star History
 
-- Repository: https://github.com/Kirky-X/dbnexus
-- Issues: https://github.com/Kirky-X/dbnexus/issues
+If you find DBNexus useful, please consider giving it a star ⭐ on [GitHub](https://github.com/Kirky-X/dbnexus)!
+
+---
+
+<div align="center">
+
+**Built with ❤️ by the DBNexus Team**
+
+[GitHub](https://github.com/Kirky-X/dbnexus) • [Rust](https://www.rust-lang.org) • [Sea-ORM](https://www.sea-ql.org/SeaORM/)
+
+</div>

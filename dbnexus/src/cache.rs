@@ -165,13 +165,13 @@ pub trait CacheStrategy: Send + Sync {
 
 /// LRU 缓存策略
 #[derive(Debug, Default)]
-pub struct LruStrategy {
+pub(crate) struct LruStrategy {
     ttl: Duration,
 }
 
 impl LruStrategy {
     /// 创建 LRU 策略
-    pub fn new(ttl_seconds: u64) -> Self {
+    pub(crate) fn new(ttl_seconds: u64) -> Self {
         Self {
             ttl: Duration::from_secs(ttl_seconds),
         }
@@ -203,15 +203,15 @@ impl CacheStrategy for LruStrategy {
 
 /// TTLAware 缓存策略 - 包装其他策略，提供 TTL 功能
 #[derive(Debug)]
-pub struct TtlAwareStrategy<S: CacheStrategy> {
+pub(crate) struct TtlAwareStrategy<S: CacheStrategy> {
     inner: S,
     /// 默认 TTL
-    pub default_ttl: Duration,
+    default_ttl: Duration,
 }
 
 impl<S: CacheStrategy> TtlAwareStrategy<S> {
     /// 创建带 TTL 的策略
-    pub fn new(inner: S, ttl_seconds: u64) -> Self {
+    pub(crate) fn new(inner: S, ttl_seconds: u64) -> Self {
         Self {
             inner,
             default_ttl: Duration::from_secs(ttl_seconds),
@@ -250,22 +250,22 @@ impl<S: CacheStrategy> CacheStrategy for TtlAwareStrategy<S> {
 
 /// 缓存统计信息
 #[derive(Debug, Default)]
-pub struct CacheStats {
+pub(crate) struct CacheStats {
     /// 命中次数
-    pub hits: Arc<std::sync::atomic::AtomicU64>,
+    hits: Arc<std::sync::atomic::AtomicU64>,
     /// 未命中次数
-    pub misses: Arc<std::sync::atomic::AtomicU64>,
+    misses: Arc<std::sync::atomic::AtomicU64>,
     /// 设置次数
-    pub sets: Arc<std::sync::atomic::AtomicU64>,
+    sets: Arc<std::sync::atomic::AtomicU64>,
     /// 删除次数
-    pub deletes: Arc<std::sync::atomic::AtomicU64>,
+    deletes: Arc<std::sync::atomic::AtomicU64>,
     /// 过期清除次数
-    pub expirations: Arc<std::sync::atomic::AtomicU64>,
+    expirations: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl CacheStats {
     /// 创建新的统计信息
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             hits: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             misses: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -276,7 +276,7 @@ impl CacheStats {
     }
 
     /// 获取命中率
-    pub fn hit_rate(&self) -> f64 {
+    pub(crate) fn hit_rate(&self) -> f64 {
         let hits = self.hits.load(std::sync::atomic::Ordering::Relaxed);
         let misses = self.misses.load(std::sync::atomic::Ordering::Relaxed);
         let total = hits + misses;
@@ -284,27 +284,27 @@ impl CacheStats {
     }
 
     /// 增加命中计数
-    pub fn record_hit(&self) {
+    pub(crate) fn record_hit(&self) {
         self.hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加未命中计数
-    pub fn record_miss(&self) {
+    pub(crate) fn record_miss(&self) {
         self.misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加设置计数
-    pub fn record_set(&self) {
+    pub(crate) fn record_set(&self) {
         self.sets.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加删除计数
-    pub fn record_delete(&self) {
+    pub(crate) fn record_delete(&self) {
         self.deletes.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加过期清除计数
-    pub fn record_expiration(&self) {
+    pub(crate) fn record_expiration(&self) {
         self.expirations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
