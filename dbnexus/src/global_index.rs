@@ -507,6 +507,54 @@ impl GlobalIndex {
     pub fn set_config(&mut self, config: ChangeCaptureConfig) {
         self.config = config;
     }
+
+    /// 清理和优化 reverse_index
+    ///
+    /// 防止内存泄漏：
+    /// - 移除孤立条目（没有对应主索引的记录）
+    /// - 限制 reverse_index 最大大小
+    pub async fn cleanup_reverse_index(&self, max_entries: usize) {
+        let cache = self.cache.write().await;
+        let mut reverse_index = self.reverse_index.write().await;
+
+        // 如果超出限制，清理最旧的条目
+        if reverse_index.len() > max_entries {
+            tracing::warn!(
+                "Reverse index size {} exceeds limit {}, cleaning up...",
+                reverse_index.len(),
+                max_entries
+            );
+
+            // 收集需要保留的有效 record_id
+            let valid_record_ids: std::collections::HashSet<String> = cache
+                .values()
+                .flat_map(|table_cache| {
+                    table_cache.values().flat_map(|key_cache| {
+                        key_cache
+                            .values()
+                            .flat_map(|entries| entries.iter().map(|e| e.record_id.clone()))
+                    })
+                })
+                .collect();
+
+            // 移除不在有效集合中的条目
+            reverse_index.retain(|record_id, _| valid_record_ids.contains(record_id));
+
+            // 如果仍然超出限制，移除最旧的条目
+            if reverse_index.len() > max_entries {
+                let to_remove = reverse_index.len() - max_entries;
+                let keys: Vec<_> = reverse_index.keys().take(to_remove).cloned().collect();
+                for key in keys {
+                    reverse_index.remove(&key);
+                }
+            }
+        }
+    }
+
+    /// 获取 reverse_index 大小（用于监控）
+    pub async fn reverse_index_size(&self) -> usize {
+        self.reverse_index.read().await.len()
+    }
 }
 
 /// Binlog/CDC 变更捕获 trait
