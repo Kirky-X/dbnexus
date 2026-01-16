@@ -461,11 +461,24 @@ where
     ///
     /// 使用分批清理策略，避免长时间持有写锁
     /// 每次最多清理 BATCH_SIZE 个过期条目
+    /// 最多执行 MAX_BATCHES 批次，防止无限循环
     pub async fn cleanup(&self) -> usize {
         const BATCH_SIZE: usize = 100;
+        const MAX_BATCHES: usize = 100; // 最多清理 100 * 100 = 10000 个条目
         let mut total_removed = 0;
+        let mut batches = 0;
 
         loop {
+            // 超时保护：最多执行 MAX_BATCHES 次迭代
+            if batches >= MAX_BATCHES {
+                tracing::warn!(
+                    "Cache cleanup stopped after {} batches ({} items removed)",
+                    batches,
+                    total_removed
+                );
+                break;
+            }
+
             let mut cache = self.cache.write().await;
 
             // 如果缓存很小，直接清理全部
@@ -501,7 +514,10 @@ where
             }
 
             total_removed += keys_to_remove.len();
+            batches += 1;
         }
+
+        total_removed
     }
 
     /// 预热缓存

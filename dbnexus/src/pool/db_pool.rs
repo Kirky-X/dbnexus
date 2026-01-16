@@ -101,11 +101,43 @@ impl DbPool {
     }
 
     /// 创建新的连接池
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - 数据库连接 URL
+    ///
+    /// # Errors
+    ///
+    /// 如果 URL 格式无效或不支持，返回错误
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use dbnexus::DbPool;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let pool = DbPool::new("sqlite://example.db").await?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn new(url: &str) -> DbResult<Self> {
+        // 创建带默认值的配置
         let config = DbConfig {
             url: url.to_string(),
+            max_connections: 20,
+            min_connections: 5,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+            migration_timeout: 60,
+            admin_role: "admin".to_string(),
+            warmup_timeout: 30,
+            warmup_retries: 3,
             ..Default::default()
         };
+        config
+            .validate()
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Config validation failed: {:?}", e)))?;
         Self::with_config(config).await
     }
 
@@ -666,8 +698,8 @@ impl DbPool {
     ///
     /// # Returns
     ///
-    /// 被重新创建的连接数量
-    pub async fn validate_and_recreate_connections(&self) -> u32 {
+    /// 被重新创建的连接数量，或错误
+    pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::DbErr> {
         let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
         let mut recreated_count = 0;
@@ -718,6 +750,7 @@ impl DbPool {
                     }
                     Err(e) => {
                         tracing::error!("Failed to recreate connection: {}", e);
+                        return Err(sea_orm::DbErr::Custom(format!("Failed to recreate connections: {}", e)));
                     }
                 }
             }
@@ -733,7 +766,7 @@ impl DbPool {
             idle.extend(valid_connections);
         }
 
-        recreated_count as u32
+        Ok(recreated_count as u32)
     }
 
     /// 启动后台连接健康检查任务
@@ -765,14 +798,23 @@ impl DbPool {
                 tokio::select! {
                     _ = interval.tick() => {
                         // 执行连接健康检查
-                        let recreated = pool.validate_and_recreate_connections().await;
-                        if recreated > 0 {
-                            tracing::info!(
-                                "Background health check: recreated {} connections",
-                                recreated
-                            );
-                        } else {
-                            tracing::debug!("Background health check: all connections healthy");
+                        match pool.validate_and_recreate_connections().await {
+                            Ok(recreated) => {
+                                if recreated > 0 {
+                                    tracing::info!(
+                                        "Background health check: recreated {} connections",
+                                        recreated
+                                    );
+                                } else {
+                                    tracing::debug!("Background health check: all connections healthy");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Background health check failed: {}",
+                                    e
+                                );
+                            }
                         }
                     }
                     _ = shutdown.notified() => {

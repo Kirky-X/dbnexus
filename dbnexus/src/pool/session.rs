@@ -228,6 +228,55 @@ impl Session {
             }
         }
 
+        #[cfg(not(feature = "sql-parser"))]
+        {
+            // 当 sql-parser 特性未启用时，执行基本的 SQL 注入防护检查
+            let sql_upper = sql.trim().to_uppercase();
+
+            // 检测多语句执行（SQL 注入常用技术）
+            if let Some(semi_colon_pos) = sql_upper.find(';') {
+                // 检查分号后是否有非空内容
+                let after_semicolon = sql_upper[semi_colon_pos + 1..].trim();
+                if !after_semicolon.is_empty() {
+                    tracing::warn!(
+                        "Rejected SQL with multiple statements (potential SQL injection): {}",
+                        sql
+                    );
+                    return Err(DbError::Permission(
+                        "Multiple SQL statements not allowed in this context".to_string(),
+                    ));
+                }
+            }
+
+            // 检测常见的 SQL 注入模式
+            let dangerous_patterns = [
+                "--", // 行注释
+                "/*", // 块注释
+                "UNION ALL",
+                "UNION SELECT",
+                "DROP DATABASE",
+                "TRUNCATE TABLE",
+                "DELETE FROM",
+                "EXEC(",
+                "EXECUTE(",
+                " xp_", // SQL Server 扩展存储过程
+                " sp_", // SQL Server 存储过程
+            ];
+
+            for pattern in &dangerous_patterns {
+                if sql_upper.contains(pattern) {
+                    tracing::warn!(
+                        "Rejected SQL containing' dangerous pattern '{} (potential SQL injection)",
+                        pattern
+                    );
+                    return Err(DbError::Permission(format!(
+                        "SQL statement contains forbidden pattern: {}",
+                        pattern
+                    )));
+                }
+            }
+        }
+
         #[cfg(all(feature = "sql-parser", feature = "permission"))]
         {
             // 解析 SQL 操作类型和表名
@@ -327,7 +376,7 @@ impl Session {
             }
         }
 
-        // 只允许特定的 DDL 操作
+        // 只允许特定的 DDL 操作和 SELECT 查询（用于验证）
         let allowed_prefixes = [
             "CREATE TABLE",
             "ALTER TABLE",
@@ -336,13 +385,14 @@ impl Session {
             "DROP INDEX",
             "CREATE VIEW",
             "DROP VIEW",
+            "SELECT", // 允许 SELECT 用于验证查询
         ];
 
         let is_allowed = allowed_prefixes.iter().any(|prefix| sql_upper.starts_with(prefix));
 
         if !is_allowed {
             return Err(DbError::Permission(format!(
-                "DDL operation not allowed: {}. Allowed operations: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE INDEX, DROP INDEX, CREATE VIEW, DROP VIEW",
+                "DDL operation not allowed: {}. Allowed operations: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE INDEX, DROP INDEX, CREATE VIEW, DROP VIEW, SELECT",
                 sql_upper.split_whitespace().next().unwrap_or("UNKNOWN")
             )));
         }
