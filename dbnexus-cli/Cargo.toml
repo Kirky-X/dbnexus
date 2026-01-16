@@ -19,6 +19,16 @@ sqlite = ["dbnexus/sqlite"]
 postgres = ["dbnexus/postgres"]
 mysql = ["dbnexus/mysql"]
 
+# Re-export dbnexus features for conditional compilation
+sql-parser = ["dbnexus/sql-parser"]
+permission = ["dbnexus/permission"]
+config-yaml = ["dbnexus/config-yaml"]
+config-toml = ["dbnexus/config-toml"]
+config-env = ["dbnexus/config-env"]
+audit = ["dbnexus/audit"]
+metrics = ["dbnexus/metrics"]
+tracing = ["dbnexus/tracing"]
+
 [dependencies]
 dbnexus = { version = "0.1.0", path = "../dbnexus", default-features = false, features = ["migration", "runtime-tokio-rustls"] }
 sea-orm = { workspace = true, default-features = false, features = ["runtime-tokio-rustls"] }

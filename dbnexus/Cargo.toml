@@ -12,7 +12,14 @@ categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
 
 [features]
-default = ["sqlite", "runtime-tokio-rustls", "permission", "sql-parser", "macros", "dep:serde_yaml", "dep:dashmap", "dep:lru", "dep:sqlparser", "dep:regex"]
+default = [
+    "sqlite",
+    "runtime-tokio-rustls",
+    "permission",
+    "sql-parser",
+    "macros",
+    "config-env",  # 环境变量配置，默认启用
+]
 
 # Async runtime (互斥)
 runtime-tokio-rustls = [
@@ -33,53 +40,53 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # Core features (可选，用于最小化部署)
-permission = ["dep:dashmap", "dep:lru", "dep:serde_yaml"]
-sql-parser = ["dep:sqlparser", "dep:regex", "dep:once_cell"]
+permission = ["dashmap", "lru", "serde_yaml"]
+sql-parser = ["sqlparser", "regex", "once_cell"]
 macros = ["dbnexus-macros"]
 
-# Config features (可选，用于配置文件支持)
-config-yaml = ["dep:serde_yaml", "dep:regex"]
-config-toml = ["dep:toml", "dep:regex"]
-config-env = ["dep:regex"]  # 环境变量支持，默认启用
+# Config features (配置文件支持)
+config-yaml = ["serde_yaml", "regex"]
+config-toml = ["toml", "regex"]
+config-env = ["regex"]  # 环境变量配置
 
-# Pool features (可选，用于连接池高级功能)
+# Pool features (连接池高级功能)
 pool-health-check = []
-pool-warmup = ["dep:futures"]
+pool-warmup = ["futures"]
 
-# Optional features
-metrics = ["dep:prometheus"]
+# Optional features (可选功能)
+metrics = ["prometheus"]
 migration = []
 auto-migrate = ["migration"]
-sharding = ["dep:twox-hash", "dep:chrono", "dep:futures"]
-global-index = ["dep:sha2", "dep:chrono", "sea-orm/with-json"]
+sharding = ["twox-hash", "chrono", "futures"]
+global-index = ["sha2", "chrono", "sea-orm/with-json"]
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
-cache = ["dep:uuid", "dep:indexmap"]
-audit = ["dep:chrono", "dep:uuid"]
+cache = ["uuid", "indexmap"]
+audit = ["chrono", "uuid"]
 permission-engine = []
 tracing = [
-    "dep:tracing-subscriber",
-    "dep:tracing-opentelemetry",
-    "dep:opentelemetry-otlp",
-    "dep:opentelemetry-jaeger",
-    "dep:opentelemetry",
-    "dep:opentelemetry_sdk",
-    "dep:chrono",
-    "dep:http",
-    "dep:tower",
-    "dep:once_cell",
+    "tracing-subscriber",
+    "tracing-opentelemetry",
+    "opentelemetry-otlp",
+    "opentelemetry-jaeger",
+    "opentelemetry",
+    "opentelemetry_sdk",
+    "chrono",
+    "http",
+    "tower",
+    "once_cell",
 ]
 confers = ["dep:confers"]
 
-# Development features
+# Development features (开发测试专用)
 dev = []
 cli-tests = []
 
-# Preset configurations
+# Preset configurations (预设配置)
 # 嵌入式设备最小配置（仅连接池 + 环境变量配置 + SQLite）
-minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "dep:lru", "dep:regex", "sql-parser"]
+minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "lru", "regex", "sql-parser"]
 
 # 微服务基础配置（连接池 + 权限 + SQL 解析 + PostgreSQL + 健康检查）
-microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "dep:regex", "dep:lru"]
+microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "regex", "lru"]
 
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]
