@@ -9,6 +9,8 @@
 
 use clap::{Parser, Subcommand};
 use dbnexus::migration::{MigrationExecutor, MigrationFileParser};
+#[cfg(feature = "sql-parser")]
+use dbnexus::sql_parser::{SqlOperationType, SqlParser};
 use dbnexus::{
     DbPool, DbResult,
     config::{DatabaseType as MigrationDatabaseType, DbError},
@@ -194,7 +196,8 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     };
 
     // 获取数据库类型
-    let db_type = detect_database_type(database_url);
+    let db_type =
+        detect_database_type(database_url).map_err(|e| DbError::Config(format!("数据库类型检测失败: {}", e)))?;
     println!("\n📊 数据库类型: {}", db_type);
     println!("📁 迁移目录: {}", migrations_dir.display());
 
@@ -302,7 +305,7 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
         Ok(pool) => pool,
         Err(e) => {
             println!("\n❌ 连接失败: {}", e);
-            return Ok(());
+            return Err(e);
         }
     };
 
@@ -314,7 +317,8 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
             let _conn = session.connection()?.clone();
             drop(session);
 
-            let db_type = detect_database_type(database_url);
+            let db_type = detect_database_type(database_url)
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("数据库类型检测失败: {}", e))))?;
 
             println!("\n✅ 连接成功!");
             println!("\n   数据库类型: {}", db_type);
@@ -345,7 +349,7 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_
     println!("╚══════════════════════════════════════════════════════════════╝");
 
     let pool = DbPool::new(database_url).await?;
-    let db_type = detect_database_type(database_url);
+    let db_type = detect_database_type(database_url)?;
 
     println!("\n📊 数据库类型: {}", db_type);
     println!("📁 迁移目录: {}", migrations_dir.display());
@@ -432,7 +436,7 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
     println!("╚══════════════════════════════════════════════════════════════╝");
 
     let pool = DbPool::new(database_url).await?;
-    let db_type = detect_database_type(database_url);
+    let db_type = detect_database_type(database_url)?;
 
     println!("\n📊 数据库类型: {}", db_type);
 
@@ -508,7 +512,12 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
             }
             Err(e) => {
                 println!("❌ 失败: {}", e);
-                // 继续尝试回滚其他迁移
+                // 回滚失败时停止并返回错误，避免状态不一致
+                println!("\n⚠️  回滚过程中发生错误，停止执行");
+                return Err(DbError::Migration(format!(
+                    "Migration rollback failed for v{}: {}",
+                    version, e
+                )));
             }
         }
     }
@@ -585,18 +594,42 @@ fn scan_migration_files(dir: &PathBuf) -> Result<Vec<MigrationInfo>, DbError> {
     Ok(migrations)
 }
 
-/// 解析迁移文件名
+/// 解析迁移文件名（增强安全版本）
+///
+/// 格式: {version}_{description}.sql
+/// version 必须是纯数字
+/// description 只允许字母、数字、下划线、中文
 fn parse_migration_filename(filename: &str) -> Option<(u32, String)> {
-    // 格式: {version}_{description}.sql
-    let parts: Vec<&str> = filename.split('_').collect();
-    if parts.len() < 2 {
+    // 检查文件扩展名
+    if !filename.ends_with(".sql") {
         return None;
     }
 
-    let version = parts[0].parse::<u32>().ok()?;
-    let description = parts[1..].join("_").replace(".sql", "");
+    // 移除 .sql 扩展名
+    let base_name = filename.trim_end_matches(".sql");
 
-    Some((version, description))
+    // 查找第一个下划线来分离 version 和 description
+    let underscore_pos = base_name.find('_')?;
+    let version_str = &base_name[..underscore_pos];
+    let description = &base_name[underscore_pos + 1..];
+
+    // 验证 version 是纯数字
+    let version = version_str.parse::<u32>().ok()?;
+
+    // 验证 description 格式（只允许安全字符）
+    if description.is_empty() {
+        return None;
+    }
+
+    // 检查是否只包含允许的字符：字母、数字、下划线、中文
+    for c in description.chars() {
+        if !c.is_alphanumeric() && c != '_' && !c.is_ascii() {
+            // 允许非ASCII字符（主要是中文），但不允许特殊符号
+            return None;
+        }
+    }
+
+    Some((version, description.to_string()))
 }
 
 /// 迁移文件信息
@@ -737,9 +770,70 @@ async fn parse_and_apply_migration(
     // 开始事务
     let txn: sea_orm::DatabaseTransaction = executor.connection.begin().await.map_err(DbError::Connection)?;
 
-    // 执行 UP SQL
+    // 验证并执行 UP SQL（SQL 注入防护）
     if !up_sql.trim().is_empty() {
-        txn.execute_unprepared(&up_sql).await.map_err(DbError::Connection)?;
+        // 使用 sql_parser 验证 SQL 语句类型（如果特性启用）
+        #[cfg(feature = "sql-parser")]
+        {
+            let parser = SqlParser::new();
+            match parser.parse_single(&up_sql) {
+                Ok(parsed) => {
+                    match parsed.operation_type {
+                        SqlOperationType::Ddl | SqlOperationType::Dcl => {
+                            // DDL/DCL 操作在迁移中是允许的
+                            txn.execute_unprepared(&up_sql).await.map_err(DbError::Connection)?;
+                        }
+                        SqlOperationType::Transaction => {
+                            // 事务控制命令在迁移中通常不允许
+                            return Err(DbError::Connection(
+                                "Transaction control commands not allowed in migrations".to_string(),
+                            ));
+                        }
+                        _ => {
+                            // 其他类型（DML）需要额外验证
+                            txn.execute_unprepared(&up_sql).await.map_err(DbError::Connection)?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(DbError::Connection(format!("Invalid SQL in migration: {}", e)));
+                }
+            }
+        }
+        #[cfg(not(feature = "sql-parser"))]
+        {
+            // 当 sql-parser 特性未启用时，执行基本的 SQL 注入防护检查
+            let sql_upper = up_sql.trim().to_uppercase();
+
+            // 检测多语句执行
+            if let Some(semi_colon_pos) = sql_upper.find(';') {
+                let after_semicolon = sql_upper[semi_colon_pos + 1..].trim();
+                if !after_semicolon.is_empty() {
+                    return Err(DbError::Migration(
+                        "Multiple SQL statements not allowed in migrations".to_string(),
+                    ));
+                }
+            }
+
+            // 检测危险操作
+            let dangerous_patterns = [
+                ("--", "SQL comment"),
+                ("/*", "Block comment"),
+                ("DROP DATABASE", "DROP DATABASE"),
+                ("TRUNCATE TABLE", "TRUNCATE TABLE"),
+                ("DELETE FROM", "DELETE FROM"),
+            ];
+            for (pattern, description) in &dangerous_patterns {
+                if sql_upper.contains(pattern) {
+                    return Err(DbError::Migration(format!(
+                        "Forbidden pattern in migration SQL: {} ({})",
+                        pattern, description
+                    )));
+                }
+            }
+
+            txn.execute_unprepared(&up_sql).await.map_err(DbError::Connection)?;
+        }
     }
 
     // 记录迁移历史（使用参数化查询防止 SQL 注入）
@@ -813,14 +907,29 @@ fn list_migrations(migrations_dir: &PathBuf) -> Result<(), DbError> {
     Ok(())
 }
 
-/// 检测数据库类型
-fn detect_database_type(database_url: &str) -> MigrationDatabaseType {
-    if database_url.starts_with("postgres") {
-        MigrationDatabaseType::Postgres
-    } else if database_url.starts_with("mysql") {
-        MigrationDatabaseType::MySql
-    } else {
-        MigrationDatabaseType::Sqlite
+/// 检测数据库类型（增强版）
+///
+/// 使用 URL 解析器验证数据库 URL 格式，
+/// 只返回已知支持的数据库类型，不支持时返回错误
+fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbError> {
+    // 尝试解析 URL
+    let url =
+        url::Url::parse(database_url).map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
+
+    // 获取协议scheme
+    let scheme = url.scheme().to_lowercase();
+
+    // 根据协议返回对应的数据库类型
+    match scheme.as_str() {
+        "postgres" | "postgresql" => Ok(MigrationDatabaseType::Postgres),
+        "mysql" => Ok(MigrationDatabaseType::MySql),
+        "sqlite" | "sqlite3" | "file" => Ok(MigrationDatabaseType::Sqlite),
+        "oci" | "oracle" => Err(DbError::Config("Oracle database is not supported".to_string())),
+        "mssql" | "sqlserver" => Err(DbError::Config("SQL Server database is not supported".to_string())),
+        _ => Err(DbError::Config(format!(
+            "Unsupported database protocol: '{}'. Supported protocols: sqlite, postgres, mysql",
+            scheme
+        ))),
     }
 }
 

@@ -617,8 +617,11 @@ impl AuditLogger {
                         }
                     }
 
-                    // 4. Base64 编码值检测和脱敏
-                    result = Self::sanitize_base64_values(&result, field, &replacement);
+                    // 4. 通用 Base64 值检测和脱敏（不依赖 JSON 结构）
+                    result = Self::sanitize_generic_base64(&result, field, &replacement);
+
+                    // 5. JSON 数组中的敏感字段脱敏
+                    result = Self::sanitize_json_arrays(&result, field, &replacement);
                 }
                 Some(result)
             } else {
@@ -633,25 +636,28 @@ impl AuditLogger {
         event
     }
 
-    /// 检测并脱敏 Base64 编码的敏感字段
-    fn sanitize_base64_values(value: &str, field: &str, replacement: &str) -> String {
+    /// 通用 Base64 值脱敏（不依赖 JSON 结构）
+    fn sanitize_generic_base64(value: &str, field: &str, replacement: &str) -> String {
         let mut result = value.to_string();
 
-        // 尝试检测 Base64 编码的 JSON 对象
+        // 尝试解析为 JSON，如果失败仍然尝试脱敏
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
+            // 如果是对象
             if let Some(obj) = json_val.as_object() {
                 let mut modified = false;
                 let mut new_obj = serde_json::Map::new();
                 let underscore_str = String::from("_");
                 let field_with_underscore = format!("{}{}", underscore_str, field);
+
                 for (k, v) in obj {
+                    // 检查字段名匹配
                     if k == field || k.contains(&field_with_underscore) {
                         let redacted_key = format!("{}{}redacted", k, underscore_str);
                         new_obj.insert(redacted_key, serde_json::Value::String(replacement.to_string()));
                         modified = true;
                     } else if v.is_string() {
                         let s = v.as_str().unwrap_or("");
-                        // 检测是否是 Base64 编码
+                        // 检测并脱敏 Base64 编码
                         if Self::is_base64(s) {
                             new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
                             modified = true;
@@ -662,13 +668,83 @@ impl AuditLogger {
                         new_obj.insert(k.clone(), v.clone());
                     }
                 }
+
                 if modified {
                     result = serde_json::to_string(&new_obj).unwrap_or(result);
+                }
+            }
+            // 如果是数组，处理数组中的每个元素
+            else if let Some(arr) = json_val.as_array() {
+                let mut modified = false;
+                let mut new_arr = Vec::new();
+
+                for item in arr {
+                    if let Some(obj) = item.as_object() {
+                        let mut new_obj = serde_json::Map::new();
+                        for (k, v) in obj {
+                            if k == field || k.contains(field) {
+                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                                modified = true;
+                            } else if v.is_string() && Self::is_base64(v.as_str().unwrap_or("")) {
+                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                                modified = true;
+                            } else {
+                                new_obj.insert(k.clone(), v.clone());
+                            }
+                        }
+                        new_arr.push(serde_json::Value::Object(new_obj));
+                    } else {
+                        new_arr.push(item.clone());
+                    }
+                }
+
+                if modified {
+                    result = serde_json::to_string(&new_arr).unwrap_or(result);
                 }
             }
         }
 
         result
+    }
+
+    /// 脱敏 JSON 数组中的敏感字段
+    fn sanitize_json_arrays(value: &str, field: &str, replacement: &str) -> String {
+        // 检测数组模式 [ {"field": "value"}, ... ]
+        let array_pattern = format!(r#"{{"{}","#, field);
+        if !value.contains(&array_pattern) {
+            return value.to_string();
+        }
+
+        // 尝试解析并脱敏
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
+            if let Some(arr) = json_val.as_array() {
+                let mut modified = false;
+                let mut new_arr = Vec::new();
+
+                for item in arr {
+                    if let Some(obj) = item.as_object() {
+                        let mut new_obj = serde_json::Map::new();
+                        for (k, v) in obj {
+                            if k == field {
+                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                                modified = true;
+                            } else {
+                                new_obj.insert(k.clone(), v.clone());
+                            }
+                        }
+                        new_arr.push(serde_json::Value::Object(new_obj));
+                    } else {
+                        new_arr.push(item.clone());
+                    }
+                }
+
+                if modified {
+                    return serde_json::to_string(&new_arr).unwrap_or(value.to_string());
+                }
+            }
+        }
+
+        value.to_string()
     }
 
     /// 检测字符串是否为有效的 Base64 编码

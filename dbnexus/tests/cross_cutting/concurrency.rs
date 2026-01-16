@@ -527,7 +527,8 @@ async fn test_concurrent_validate_and_recreate() {
     }
 
     // 等待所有验证操作完成
-    let results: Vec<Result<(usize, u32), tokio::task::JoinError>> = futures::future::join_all(handles).await;
+    let results: Vec<Result<(usize, Result<u32, sea_orm::DbErr>), tokio::task::JoinError>> =
+        futures::future::join_all(handles).await;
 
     // Assert - 验证所有验证操作都成功完成
     let mut _total_recreated = 0;
@@ -535,7 +536,8 @@ async fn test_concurrent_validate_and_recreate() {
     let mut recreated_counts = Vec::new();
 
     for result in results.into_iter() {
-        let (i, recreated_count) = result.expect("Validation should complete without error");
+        let (i, recreated_result) = result.expect("Validation should complete without error");
+        let recreated_count = recreated_result.expect("Validation should not fail");
         _total_recreated += recreated_count;
         successful_count += 1; // 每个完成的任务都算成功
         if recreated_count > 0 {
