@@ -67,6 +67,7 @@ pub struct PoolConfig {
 
 impl PoolConfig {
     /// 创建新的 PoolConfig
+    #[allow(dead_code)]
     pub(crate) fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
         Self {
             max_connections,
@@ -353,6 +354,7 @@ impl DbConfigBuilder {
 /// - TOML 文件
 /// - Confers 库（可选）
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct ConfigLoader;
 
 impl ConfigLoader {
@@ -373,6 +375,7 @@ impl ConfigLoader {
     /// # Errors
     ///
     /// 如果必需的环境变量缺失，返回错误
+    #[allow(dead_code)]
     pub fn from_env() -> Result<DbConfig, ConfigError> {
         DbConfig::from_env()
     }
@@ -383,6 +386,7 @@ impl ConfigLoader {
     ///
     /// 如果文件不存在或格式错误，返回错误
     #[cfg(feature = "config-yaml")]
+    #[allow(dead_code)]
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         DbConfig::from_yaml_file(path)
     }
@@ -393,6 +397,7 @@ impl ConfigLoader {
     ///
     /// 如果文件不存在或格式错误，返回错误
     #[cfg(feature = "config-toml")]
+    #[allow(dead_code)]
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         DbConfig::from_toml_file(path)
     }
@@ -410,6 +415,7 @@ impl ConfigLoader {
     /// # Errors
     ///
     /// 如果未找到配置文件或格式错误，返回错误
+    #[allow(dead_code)]
     pub fn from_config_files() -> Result<DbConfig, ConfigError> {
         DbConfig::from_config_files()
     }
@@ -421,12 +427,14 @@ impl ConfigLoader {
     /// Confers 是一个声明式配置库，支持从多种来源加载配置。
     /// 此方法演示了与 confers 生态系统的集成。
     #[cfg(feature = "confers")]
+    #[allow(dead_code)]
     pub fn from_confers() -> Result<DbConfig, ConfigError> {
         DbConfig::from_env()
     }
 
     /// 检查 Confers 特性是否可用
     #[cfg(not(feature = "confers"))]
+    #[allow(dead_code)]
     pub fn from_confers() -> Result<DbConfig, ConfigError> {
         Err(ConfigError::InvalidFormat)
     }
@@ -1141,6 +1149,7 @@ impl ConfigCorrector {
     }
 
     /// 验证配置是否有效
+    #[allow(dead_code)]
     pub(crate) fn validate_config(config: &DbConfig) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
@@ -1168,6 +1177,7 @@ impl ConfigCorrector {
     }
 
     /// 从环境变量加载配置并自动修正
+    #[allow(dead_code)]
     pub(crate) fn load_and_correct_from_env() -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_env()?;
         config = ConfigCorrector::auto_correct(config);
@@ -1176,6 +1186,7 @@ impl ConfigCorrector {
 
     /// 从配置文件加载配置并自动修正
     #[cfg(feature = "config-yaml")]
+    #[allow(dead_code)]
     pub(crate) fn load_and_correct_from_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_yaml_file(path)?;
         config = ConfigCorrector::auto_correct(config);
@@ -1183,6 +1194,7 @@ impl ConfigCorrector {
     }
 
     /// 验证配置并应用自动修正
+    #[allow(dead_code)]
     pub(crate) fn validate_and_correct(config: &DbConfig) -> Result<DbConfig, Vec<String>> {
         let errors = Self::validate_config(config);
         let corrected_config = Self::auto_correct(config.clone());

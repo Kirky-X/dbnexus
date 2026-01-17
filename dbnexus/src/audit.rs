@@ -682,10 +682,11 @@ impl AuditLogger {
                     if let Some(obj) = item.as_object() {
                         let mut new_obj = serde_json::Map::new();
                         for (k, v) in obj {
-                            if k == field || k.contains(field) {
-                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
-                                modified = true;
-                            } else if v.is_string() && Self::is_base64(v.as_str().unwrap_or("")) {
+                            let should_mask = k == field
+                                || k.contains(field)
+                                || (v.is_string() && Self::is_base64(v.as_str().unwrap_or("")));
+
+                            if should_mask {
                                 new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
                                 modified = true;
                             } else {

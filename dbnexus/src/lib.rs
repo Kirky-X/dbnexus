@@ -88,12 +88,11 @@ pub mod migration;
 #[cfg(feature = "permission")]
 pub mod permission;
 /// SQL 解析模块
+///
+/// 提供 SQL 语句解析和操作类型分类功能。
+/// 该模块中的类型主要用于内部权限检查逻辑。
 #[cfg(feature = "sql-parser")]
 pub mod sql_parser;
-
-/// SQL 解析类型导出
-#[cfg(feature = "sql-parser")]
-pub use sql_parser::{ParsedSqlOperation, SqlOperationType, SqlParseError, SqlParser};
 
 /// PermissionAction 类型导出（当 permission 特性未启用时，从 sql_parser 导出）
 #[cfg(all(feature = "sql-parser", not(feature = "permission")))]
