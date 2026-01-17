@@ -14,7 +14,7 @@ use sqlparser::parser::Parser;
 use thiserror::Error;
 
 #[cfg(feature = "permission")]
-use crate::permission::PermissionAction;
+pub use crate::permission::PermissionAction;
 
 #[cfg(not(feature = "permission"))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

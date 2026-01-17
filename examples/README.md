@@ -2,6 +2,8 @@
 
 本目录包含 DBNexus 的所有功能示例，帮助您快速了解和使用 DBNexus 的各项特性。
 
+**注意**：这是一个独立的 Rust 项目，需要进入 `examples/` 目录后运行。
+
 ## 📋 目录
 
 - [快速开始](#快速开始)
@@ -166,58 +168,81 @@ cargo run --example global_index --features "sqlite,global-index"
 
 ### 基本运行
 
-所有示例都可以使用以下命令运行：
+**首先进入 examples 目录**：
 
 ```bash
-cargo run --example <example_name> --features <features>
+cd examples
 ```
 
-其中：
-- `<example_name>` 是示例文件名（不带 `.rs` 扩展名）
-- `<features>` 是所需的 feature flags
+然后可以使用以下方式运行示例：
+
+#### 方式 1：交互式菜单
+
+```bash
+cargo run
+```
+
+这会显示一个交互式菜单，让您选择要运行的示例。
+
+#### 方式 2：直接运行特定示例
+
+```bash
+cargo run --bin quickstart
+cargo run --bin permissions
+cargo run --bin metrics
+```
+
+#### 方式 3：通过命令行参数
+
+```bash
+cargo run -- quickstart
+cargo run -- permissions
+cargo run -- metrics
+```
 
 ### Feature Flags
 
-DBNexus 支持以下 feature flags：
+本项目已默认启用所有必要的 features，包括：
 
-#### 数据库驱动（必须选择一个）
+#### 数据库驱动
 - `sqlite` - SQLite 数据库（默认）
-- `postgres` - PostgreSQL 数据库
-- `mysql` - MySQL 数据库
 
 #### 核心特性
 - `permission` - 权限控制
 - `sql-parser` - SQL 解析器
-- `macros` - 过程宏
 
 #### 企业特性
 - `metrics` - Prometheus 指标
 - `tracing` - OpenTelemetry 追踪
 - `audit` - 审计日志
-- `migration` - 数据库迁移
-- `sharding` - 数据分片
-- `global-index` - 全局索引
-- `cache` - 缓存
 - `permission-engine` - 权限引擎
+
+#### 高级特性
+- `cache` - 缓存
+- `sharding` - 数据分片
+- `migration` - 数据库迁移
+- `global-index` - 全局索引
 
 ### 快速测试所有示例
 
 ```bash
-# 使用 SQLite 测试所有示例
-cargo test --examples --all-features
+# 检查所有示例编译
+cargo build --all-targets
 
-# 检查示例编译
-cargo check --examples --all-features
+# 运行特定示例
+cargo run --bin <example_name>
 ```
 
 ### 使用不同的数据库
 
-```bash
-# PostgreSQL
-cargo run --example quickstart --features postgres
+如需使用 PostgreSQL 或 MySQL，请修改 `Cargo.toml` 中的 features：
 
-# MySQL
-cargo run --example quickstart --features mysql
+```toml
+[dependencies]
+dbnexus = { path = "..", features = [
+    "postgres",  # 或 "mysql"
+    # ... 其他 features
+] }
 ```
 
 ## 示例文件结构

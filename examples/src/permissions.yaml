@@ -1,0 +1,62 @@
+roles:
+  admin:
+    tables:
+      - name: users
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+      - name: accounts
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+      - name: orders
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+      - name: products
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+  manager:
+    tables:
+      - name: users
+        operations:
+          - select
+          - insert
+          - update
+      - name: orders
+        operations:
+          - select
+  orders_manager:
+    tables:
+      - name: users
+        operations:
+          - select
+      - name: orders
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+  system:
+    tables:
+      - name: users
+        operations:
+          - select
+      - name: accounts
+        operations:
+          - select
+      - name: orders
+        operations:
+          - select
+      - name: products
+        operations:
+          - select
