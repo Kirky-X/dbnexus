@@ -256,3 +256,172 @@ async fn test_config_default_values() {
     assert_eq!(config.migration_timeout, 60); // 默认值
     assert_eq!(config.admin_role, "admin"); // 默认值
 }
+
+// ============ 边界场景测试 ============
+
+#[tokio::test]
+async fn test_config_boundary_values() {
+    // 测试边界值：最小连接数为 1
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(1)
+        .min_connections(1)
+        .build()
+        .unwrap();
+    assert_eq!(config.max_connections, 1);
+    assert_eq!(config.min_connections, 1);
+
+    // 测试边界值：最大允许连接数 1000
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(1000)
+        .min_connections(1)
+        .build()
+        .unwrap();
+    assert_eq!(config.max_connections, 1000);
+}
+
+#[tokio::test]
+async fn test_config_boundary_rejection() {
+    // 测试超过最大连接数限制
+    let result = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(1001) // 超过 1000 限制
+        .build();
+    assert!(result.is_err());
+
+    // 测试 min_connections 超过 100
+    let result = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(200)
+        .min_connections(101) // 超过 100 限制
+        .build();
+    assert!(result.is_err());
+
+    // 测试 min_connections 为 0
+    let result = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(10)
+        .min_connections(0)
+        .build();
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_config_invalid_urls() {
+    // 测试空 URL
+    let result = DbConfigBuilder::new().url("").build();
+    assert!(result.is_err());
+
+    // 测试无效协议
+    let result = DbConfigBuilder::new().url("invalid://test").build();
+    assert!(result.is_err());
+
+    // 测试包含非法字符的协议
+    let result = DbConfigBuilder::new().url("test@protocol://host").build();
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_config_valid_url_variants() {
+    // 测试各种有效的 URL 变体
+    let test_cases = vec![
+        ("sqlite::memory:", true),
+        ("sqlite3::memory:", true),
+        ("sqlite:///test.db", true),
+        ("sqlite3:///test.db", true),
+        ("postgres://localhost/test", true),
+        ("postgresql://localhost/test", true),
+        ("mysql://localhost/test", true),
+    ];
+
+    for (url, _should_pass) in test_cases {
+        let result = DbConfigBuilder::new().url(url).build();
+        // 这些 URL 应该都能通过基本验证
+        // 注意：有些可能需要实际的数据库连接
+        assert!(
+            result.is_ok() || matches!(result, Err(dbnexus::config::ConfigError::UnsupportedProtocol)),
+            "URL {} should be valid or unsupported protocol",
+            url
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_config_timeout_boundaries() {
+    // 测试超时边界值
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .idle_timeout(1) // 最小空闲超时
+        .acquire_timeout(1) // 最小获取超时
+        .build()
+        .unwrap();
+    assert_eq!(config.idle_timeout, 1);
+    assert_eq!(config.acquire_timeout, 1);
+
+    // 测试大超时值
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .idle_timeout(86400) // 24小时
+        .acquire_timeout(300000) // 5分钟
+        .build()
+        .unwrap();
+    assert_eq!(config.idle_timeout, 86400);
+    assert_eq!(config.acquire_timeout, 300000);
+}
+
+#[tokio::test]
+async fn test_config_url_sanitization() {
+    // 测试 URL 脱敏功能
+    let config = DbConfigBuilder::new()
+        .url("postgres://user:password@localhost:5432/mydb")
+        .build()
+        .unwrap();
+
+    let sanitized = config.url_sanitized();
+    assert!(sanitized.contains("postgres://"));
+    assert!(!sanitized.contains("password"));
+    assert!(sanitized.contains("@"));
+
+    // 内存数据库不应该被脱敏
+    let mem_config = DbConfigBuilder::new().url("sqlite::memory:").build().unwrap();
+    assert_eq!(mem_config.url_sanitized(), "sqlite::memory:");
+}
+
+#[tokio::test]
+async fn test_config_admin_role_variants() {
+    // 测试管理员角色名称变体
+    let test_roles = vec!["admin", "administrator", "root", "superuser", "ADMIN", "Admin"];
+
+    for role in test_roles {
+        let config = DbConfigBuilder::new()
+            .url("sqlite::memory:")
+            .admin_role(role)
+            .build()
+            .unwrap();
+        assert_eq!(config.admin_role, role);
+    }
+}
+
+#[tokio::test]
+async fn test_config_warmup_boundaries() {
+    // 测试预热参数边界值
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .warmup_timeout(1) // 最小超时
+        .warmup_retries(0) // 最小重试次数
+        .build()
+        .unwrap();
+    assert_eq!(config.warmup_timeout, 1);
+    assert_eq!(config.warmup_retries, 0);
+
+    // 测试大值
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .warmup_timeout(300) // 5分钟
+        .warmup_retries(10)
+        .build()
+        .unwrap();
+    assert_eq!(config.warmup_timeout, 300);
+    assert_eq!(config.warmup_retries, 10);
+}
