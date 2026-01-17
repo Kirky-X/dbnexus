@@ -7,10 +7,10 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
-authors = ["DBNexus Team"]
+authors = ["Kirky.X"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Kirky-X/dbnexus"
 documentation = "https://docs.rs/dbnexus"
