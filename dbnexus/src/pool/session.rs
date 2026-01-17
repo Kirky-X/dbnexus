@@ -30,26 +30,80 @@ enum PermissionAction {
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
 
 /// 通用错误格式化辅助函数（减少重复代码）
+///
+/// 在生产环境中，这些函数会清理错误消息以避免泄露内部信息。
+/// 在调试模式中，保留详细错误信息用于调试。
 #[allow(dead_code)]
-mod error_helpers {
+pub(crate) mod error_helpers {
     use crate::config::DbError;
 
     /// 格式化权限错误
+    ///
+    /// 在生产环境中返回通用的 "Permission denied" 消息。
+    /// 在调试模式中返回包含 operation 和 resource 的详细消息。
     #[allow(dead_code)]
     pub fn permission_denied(operation: &str, resource: &str) -> DbError {
-        DbError::Permission(format!("Permission denied for {} on {}", operation, resource))
+        #[cfg(not(debug_assertions))]
+        {
+            // 生产环境：清理后的消息，不暴露内部细节
+            DbError::Permission("Permission denied".to_string())
+        }
+        #[cfg(debug_assertions)]
+        {
+            // 调试模式：详细消息用于调试
+            DbError::Permission(format!("Permission denied for {} on {}", operation, resource))
+        }
+    }
+
+    /// 格式化权限错误（无资源参数）
+    ///
+    /// 用于不需要暴露资源信息的权限错误。
+    #[allow(dead_code)]
+    pub fn permission_denied_simple(message: &str) -> DbError {
+        #[cfg(not(debug_assertions))]
+        {
+            // 生产环境：通用消息
+            DbError::Permission("Permission denied".to_string())
+        }
+        #[cfg(debug_assertions)]
+        {
+            // 调试模式：详细消息
+            DbError::Permission(message.to_string())
+        }
     }
 
     /// 格式化事务错误
+    ///
+    /// 在生产环境中清理 source 参数。
     #[allow(dead_code)]
     pub fn transaction_error(message: &str, source: &str) -> DbError {
-        DbError::Transaction(format!("{}: {}", message, source))
+        #[cfg(not(debug_assertions))]
+        {
+            // 生产环境：只保留 message，清理 source
+            DbError::Transaction(message.to_string())
+        }
+        #[cfg(debug_assertions)]
+        {
+            // 调试模式：保留完整信息
+            DbError::Transaction(format!("{}: {}", message, source))
+        }
     }
 
     /// 格式化配置错误
+    ///
+    /// 在生产环境中避免暴露敏感信息。
     #[allow(dead_code)]
     pub fn config_error(message: &str) -> DbError {
-        DbError::Config(message.to_string())
+        #[cfg(not(debug_assertions))]
+        {
+            // 生产环境：通用消息
+            DbError::Config("Configuration error".to_string())
+        }
+        #[cfg(debug_assertions)]
+        {
+            // 调试模式：保留详细消息
+            DbError::Config(message.to_string())
+        }
     }
 }
 

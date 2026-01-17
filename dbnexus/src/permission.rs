@@ -66,6 +66,7 @@ impl std::fmt::Display for PermissionAction {
 ///
 /// 使用固定时间窗口算法限制请求频率
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RateLimiter {
     /// 每个时间窗口允许的最大请求数
     max_requests: u32,
@@ -120,6 +121,7 @@ impl RateLimiter {
     }
 
     /// 获取剩余请求数量
+    #[allow(dead_code)]
     pub(crate) async fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
         let window_start = now - self.window_duration;
@@ -133,6 +135,7 @@ impl RateLimiter {
     }
 
     /// 重置指定键的速率限制
+    #[allow(dead_code)]
     pub(crate) async fn reset(&self, key: &str) {
         self.requests.remove(key);
     }
@@ -141,6 +144,7 @@ impl RateLimiter {
     ///
     /// 移除长时间没有任何请求的 key（超过 10 倍时间窗口）
     /// 建议定期调用此方法，例如每小时一次
+    #[allow(dead_code)]
     pub(crate) async fn cleanup(&self) -> usize {
         let cleanup_threshold = self.window_duration * 10;
         let now = Instant::now();
@@ -181,11 +185,13 @@ impl RateLimiter {
     }
 
     /// 获取当前条目数量（用于监控）
+    #[allow(dead_code)]
     pub(crate) fn len(&self) -> usize {
         self.requests.len()
     }
 
     /// 检查是否为空
+    #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.requests.is_empty()
     }
