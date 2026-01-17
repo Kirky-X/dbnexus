@@ -91,6 +91,22 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
 /// 提取 table_name 属性
 fn extract_table_name(attrs: &[syn::Attribute]) -> String {
     for attr in attrs {
+        // 首先尝试从 #[sea_orm(table_name = "...")] 中提取
+        if attr.path().is_ident("sea_orm") {
+            let attr_str = attr.meta.clone().into_token_stream().to_string();
+            if let Some(table_name_start) = attr_str.find("table_name") {
+                let after_table_name = &attr_str[table_name_start..];
+                if let Some(eq_pos) = after_table_name.find('=') {
+                    let after_eq = &after_table_name[eq_pos + 1..];
+                    if let Some(quote_start) = after_eq.find('"') {
+                        if let Some(quote_end) = after_eq[quote_start + 1..].find('"') {
+                            return after_eq[quote_start + 1..quote_start + 1 + quote_end].to_string();
+                        }
+                    }
+                }
+            }
+        }
+        // 然后尝试从 #[table_name = "...")] 中提取
         if attr.path().is_ident("table_name") {
             let attr_str = attr.meta.clone().into_token_stream().to_string();
             if let Some(eq_pos) = attr_str.find('=') {
@@ -122,35 +138,6 @@ fn extract_primary_key(data: &syn::Data) -> String {
     String::new()
 }
 
-/// db_crud 属性宏
-///
-/// 为 Entity 自动生成 CRUD 方法（真正执行数据库操作）
-/// 使用 Sea-ORM 原生 API，避免 SQL 注入风险
-///
-/// # 使用示例
-///
-/// ```rust,ignore
-/// use sea_orm::entity::prelude::*;
-/// use dbnexus::{DbEntity, db_entity, db_crud};
-///
-/// #[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
-/// #[sea_orm(table_name = "users")]
-/// #[db_entity]
-/// #[db_crud]
-/// struct User {
-///     #[sea_orm(primary_key)]
-///     id: i64,
-///     name: String,
-///     email: String,
-/// }
-///
-/// // 使用生成的 CRUD 方法
-/// let user = User::find_by_id(&db, 1).await?;
-/// let users = User::find_all(&db).await?;
-/// let new_user = User::insert(&db, model).await?;
-/// User::update(&db, model).await?;
-/// User::delete(&db, 1).await?;
-/// ```
 #[proc_macro_attribute]
 pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -158,7 +145,17 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     // 提取表名（用于权限检查）
-    let _table_name = extract_table_name(&input.attrs);
+    let table_name = extract_table_name(&input.attrs);
+
+    // 验证表名是否存在
+    if table_name.is_empty() {
+        return syn::Error::new(
+            struct_name.span(),
+            "#[db_crud] requires #[table_name = \"...\"] or #[sea_orm(table_name = \"...\")] attribute on the entity",
+        )
+        .to_compile_error()
+        .into();
+    }
 
     // 生成 CRUD 方法（使用 Sea-ORM 原生 API）
     let impl_block = quote! {

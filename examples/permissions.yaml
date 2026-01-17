@@ -1,0 +1,14 @@
+roles:
+  admin:
+    tables:
+      - name: users
+        operations:
+          - select
+          - insert
+          - update
+          - delete
+  system:
+    tables:
+      - name: users
+        operations:
+          - select
