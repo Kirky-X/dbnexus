@@ -1,3 +1,8 @@
+// Copyright (c) 2025 Kirky.X
+//
+// Licensed under the MIT License
+// See LICENSE file in the project root for full license information.
+
 //! 快速开始示例
 //!
 //! 展示 dbnexus 的基本使用方法，包括：
