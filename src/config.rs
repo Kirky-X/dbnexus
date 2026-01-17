@@ -441,55 +441,205 @@ impl ConfigLoader {
 }
 
 /// 数据库配置
+///
+/// # 安全说明
+///
+/// 此结构体包含敏感的数据库连接信息（URL 可能包含密码）。
+/// 建议：
+/// - 通过 [`DbConfigBuilder`] 构建配置
+/// - 使用提供的 getter 方法访问配置值
+/// - 避免直接暴露 `url` 字段
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct DbConfig {
-    /// 数据库连接 URL
+    /// 数据库连接 URL（敏感信息）
     #[serde(default)]
-    pub url: String,
+    url: String,
 
     /// 最大连接数
     #[serde(default = "default_max_connections")]
-    pub max_connections: u32,
+    max_connections: u32,
 
     /// 最小连接数
     #[serde(default = "default_min_connections")]
-    pub min_connections: u32,
+    min_connections: u32,
 
     /// 空闲连接超时（秒）
     #[serde(default = "default_idle_timeout")]
-    pub idle_timeout: u64,
+    idle_timeout: u64,
 
     /// 连接获取超时（毫秒）
     #[serde(default = "default_acquire_timeout")]
-    pub acquire_timeout: u64,
+    acquire_timeout: u64,
 
     /// 权限配置文件路径
     #[serde(default)]
-    pub permissions_path: Option<String>,
+    permissions_path: Option<String>,
 
     /// 迁移文件目录
     #[serde(default)]
-    pub migrations_dir: Option<PathBuf>,
+    migrations_dir: Option<PathBuf>,
 
     /// 是否启用自动迁移
     #[serde(default)]
-    pub auto_migrate: bool,
+    auto_migrate: bool,
 
     /// 迁移超时时间（秒）
     #[serde(default = "default_migration_timeout")]
-    pub migration_timeout: u64,
+    migration_timeout: u64,
 
     /// 管理员角色名称（用于 DDL 操作）
     #[serde(default = "default_admin_role")]
-    pub admin_role: String,
+    admin_role: String,
 
     /// 预热超时时间（秒）
     #[serde(default = "default_warmup_timeout")]
-    pub warmup_timeout: u64,
+    warmup_timeout: u64,
 
     /// 预热重试次数
     #[serde(default = "default_warmup_retries")]
-    pub warmup_retries: u32,
+    warmup_retries: u32,
+}
+
+impl DbConfig {
+    /// 获取数据库 URL（原始值，包含密码）
+    ///
+    /// # Warning
+    ///
+    /// 此方法返回原始 URL，可能包含敏感信息（如密码）。
+    /// 建议在日志输出时使用 [`Self::url_sanitized`] 进行脱敏。
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// 获取数据库 URL（脱敏版本）
+    ///
+    /// 隐藏密码等敏感信息，用于日志输出。
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use dbnexus::config::DbConfigBuilder;
+    ///
+    /// let config = DbConfigBuilder::new()
+    ///     .url("postgres://user:password@localhost/db")
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// // 日志中使用脱敏版本
+    /// let sanitized = config.url_sanitized();
+    /// assert!(sanitized.contains("postgres://"));
+    /// assert!(!sanitized.contains("password"));
+    /// ```
+    pub fn url_sanitized(&self) -> String {
+        sanitize_url_for_logging(&self.url)
+    }
+
+    /// 获取最大连接数
+    pub fn max_connections(&self) -> u32 {
+        self.max_connections
+    }
+
+    /// 获取最小连接数
+    pub fn min_connections(&self) -> u32 {
+        self.min_connections
+    }
+
+    /// 获取空闲超时（秒）
+    pub fn idle_timeout(&self) -> u64 {
+        self.idle_timeout
+    }
+
+    /// 获取连接获取超时（毫秒）
+    pub fn acquire_timeout(&self) -> u64 {
+        self.acquire_timeout
+    }
+
+    /// 获取权限配置文件路径
+    pub fn permissions_path(&self) -> Option<&str> {
+        self.permissions_path.as_deref()
+    }
+
+    /// 获取迁移文件目录
+    pub fn migrations_dir(&self) -> Option<&Path> {
+        self.migrations_dir.as_deref()
+    }
+
+    /// 是否启用自动迁移
+    pub fn auto_migrate(&self) -> bool {
+        self.auto_migrate
+    }
+
+    /// 获取迁移超时（秒）
+    pub fn migration_timeout(&self) -> u64 {
+        self.migration_timeout
+    }
+
+    /// 获取管理员角色名称
+    pub fn admin_role(&self) -> &str {
+        &self.admin_role
+    }
+
+    /// 获取预热超时时间（秒）
+    pub fn warmup_timeout(&self) -> u64 {
+        self.warmup_timeout
+    }
+
+    /// 获取预热重试次数
+    pub fn warmup_retries(&self) -> u32 {
+        self.warmup_retries
+    }
+
+    /// 内部方法：设置 URL（供构建器使用）
+    pub(crate) fn set_url(&mut self, url: String) {
+        self.url = url;
+    }
+
+    /// 设置最大连接数（内部使用）
+    pub(crate) fn set_max_connections(&mut self, max_connections: u32) {
+        self.max_connections = max_connections;
+    }
+
+    /// 设置最小连接数（内部使用）
+    pub(crate) fn set_min_connections(&mut self, min_connections: u32) {
+        self.min_connections = min_connections;
+    }
+
+    /// 设置空闲超时（内部使用）
+    pub(crate) fn set_idle_timeout(&mut self, idle_timeout: u64) {
+        self.idle_timeout = idle_timeout;
+    }
+
+    /// 设置获取超时（内部使用）
+    pub(crate) fn set_acquire_timeout(&mut self, acquire_timeout: u64) {
+        self.acquire_timeout = acquire_timeout;
+    }
+
+    /// 内部方法：克隆配置（供连接池使用）
+    pub(crate) fn clone_config(&self) -> Self {
+        self.clone()
+    }
+}
+
+/// 对 URL 进行脱敏处理，用于日志输出
+fn sanitize_url_for_logging(url: &str) -> String {
+    // 特殊处理 SQLite 内存数据库
+    if url.starts_with("sqlite::memory:") || url.starts_with("sqlite3::memory:") {
+        return url.to_string();
+    }
+    if url.starts_with("sqlite:") || url.starts_with("sqlite3:") {
+        return url.to_string();
+    }
+
+    // 处理标准的数据库 URL 格式：protocol://user:password@host:port/path
+    if let Some(at_pos) = url.find('@') {
+        let protocol_end = url.find("://").map(|p| p + 3).unwrap_or(0);
+        let protocol_part = &url[..protocol_end];
+        let rest = &url[at_pos..];
+        format!("{}****@{}", protocol_part, rest)
+    } else {
+        // 没有 @ 符号，可能是没有密码的 URL 或其他格式
+        url.to_string()
+    }
 }
 
 fn default_admin_role() -> String {
@@ -730,7 +880,7 @@ impl DbConfig {
 
         // 使用 URL 解析器进行完整验证
         let url =
-            url::Url::parse(&self.url).map_err(|e| ConfigError::InvalidUrl(format!("Invalid URL format: {}", e)))?;
+            url::Url::parse(&self.url).map_err(|e| ConfigError::InvalidUrl("Invalid URL format".to_string()))?;
 
         let protocol = url.scheme();
 
@@ -1082,8 +1232,8 @@ impl ConfigCorrector {
         if config.min_connections > config.max_connections {
             tracing::warn!(
                 "Correcting min_connections ({}) > max_connections ({}), setting min to max",
-                config.min_connections,
-                config.max_connections
+                config.min_connections(),
+                config.max_connections()
             );
             config.min_connections = config.max_connections;
         }
@@ -1106,13 +1256,13 @@ impl ConfigCorrector {
         } else if config.acquire_timeout < 1000 {
             tracing::warn!(
                 "Adjusting acquire_timeout from {}ms to minimum 1000ms",
-                config.acquire_timeout
+                config.acquire_timeout()
             );
             config.acquire_timeout = 1000;
         } else if config.acquire_timeout > 60000 {
             tracing::warn!(
                 "Adjusting acquire_timeout from {}ms to maximum 60000ms",
-                config.acquire_timeout
+                config.acquire_timeout()
             );
             config.acquire_timeout = 60000;
         }
@@ -1121,10 +1271,10 @@ impl ConfigCorrector {
         if config.idle_timeout == 0 {
             config.idle_timeout = 300;
         } else if config.idle_timeout < 30 {
-            tracing::warn!("Adjusting idle_timeout from {}s to minimum 30s", config.idle_timeout);
+            tracing::warn!("Adjusting idle_timeout from {}s to minimum 30s", config.idle_timeout());
             config.idle_timeout = 30;
         } else if config.idle_timeout > 3600 {
-            tracing::warn!("Adjusting idle_timeout from {}s to maximum 3600s", config.idle_timeout);
+            tracing::warn!("Adjusting idle_timeout from {}s to maximum 3600s", config.idle_timeout());
             config.idle_timeout = 3600;
         }
 
@@ -1157,19 +1307,19 @@ impl ConfigCorrector {
             errors.push("Database URL cannot be empty".to_string());
         }
 
-        if config.max_connections == 0 {
+        if config.max_connections() == 0 {
             errors.push("max_connections must be greater than 0".to_string());
         }
 
-        if config.min_connections > config.max_connections {
+        if config.min_connections() > config.max_connections() {
             errors.push("min_connections cannot be greater than max_connections".to_string());
         }
 
-        if config.acquire_timeout == 0 {
+        if config.acquire_timeout() == 0 {
             errors.push("acquire_timeout must be greater than 0".to_string());
         }
 
-        if config.idle_timeout == 0 {
+        if config.idle_timeout() == 0 {
             errors.push("idle_timeout must be greater than 0".to_string());
         }
 
@@ -1253,10 +1403,10 @@ impl ConfigCorrector {
         // 如果配置值超过数据库能力的 80%，发出警告并调整
         let recommended_max = (db_max_connections as f64 * 0.8).floor() as u32;
 
-        if config.max_connections > recommended_max {
+        if config.max_connections() > recommended_max {
             tracing::warn!(
                 "Config corrected: max_connections {} -> {} (80% of database limit {})",
-                config.max_connections,
+                config.max_connections(),
                 recommended_max,
                 db_max_connections
             );
@@ -1264,13 +1414,13 @@ impl ConfigCorrector {
         }
 
         // 确保 min_connections 不超过 max_connections
-        if config.min_connections > config.max_connections {
+        if config.min_connections() > config.max_connections() {
             tracing::warn!(
                 "Config corrected: min_connections {} -> {} (equal to max_connections)",
-                config.min_connections,
-                config.max_connections
+                config.min_connections(),
+                config.max_connections()
             );
-            config.min_connections = config.max_connections;
+            config.min_connections = config.max_connections();
         }
 
         config
@@ -1313,31 +1463,26 @@ mod tests {
     fn test_default_config_values() {
         let config = DbConfig::default();
 
-        assert_eq!(config.url, "");
-        assert_eq!(config.max_connections, 0);
-        assert_eq!(config.min_connections, 0);
-        assert_eq!(config.idle_timeout, 0);
-        assert_eq!(config.acquire_timeout, 0);
-        assert!(config.permissions_path.is_none());
+        assert_eq!(config.url_sanitized(), "");
+        assert_eq!(config.max_connections(), 0);
+        assert_eq!(config.min_connections(), 0);
+        assert_eq!(config.idle_timeout(), 0);
+        assert_eq!(config.acquire_timeout(), 0);
+        assert!(config.permissions_path().is_none());
     }
 
     /// TEST-U-002: 配置 Duration 转换测试
     #[test]
     fn test_config_duration_conversion() {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 10,
-            min_connections: 2,
-            idle_timeout: 300,
-            acquire_timeout: 5000,
-            permissions_path: None,
-            migrations_dir: None,
-            auto_migrate: false,
-            migration_timeout: 60,
-            admin_role: "admin".to_string(),
-            warmup_timeout: 30,
-            warmup_retries: 3,
-        };
+        let config = DbConfigBuilder::new()
+            .url("sqlite::memory:")
+            .max_connections(10)
+            .min_connections(2)
+            .idle_timeout(300)
+            .acquire_timeout(5000)
+            .admin_role("admin")
+            .build()
+            .unwrap();
 
         assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
         assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(5000));
@@ -1346,77 +1491,75 @@ mod tests {
     /// TEST-U-003: 配置自动修正测试 - get_actual_config
     #[test]
     fn test_get_actual_config() {
-        // 测试 min > max 的情况
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 5,
-            min_connections: 10,
-            idle_timeout: 300,
-            acquire_timeout: 5000,
-            permissions_path: None,
-            migrations_dir: None,
-            auto_migrate: false,
-            migration_timeout: 60,
-            admin_role: "admin".to_string(),
-            warmup_timeout: 30,
-            warmup_retries: 3,
-        };
+        // 测试 min > max 的情况 - 先用有效值构建，然后模拟无效场景
+        let mut config = DbConfigBuilder::new()
+            .url("sqlite::memory:")
+            .max_connections(10)
+            .min_connections(10)
+            .admin_role("admin")
+            .build()
+            .unwrap();
+
+        // 手动设置无效值来测试 auto_correct 的修正
+        config.set_min_connections(30);
 
         let actual = ConfigCorrector::get_actual_config(&config);
 
-        // max 应该不变
-        assert_eq!(actual.max_connections, 5);
-        // min 应该被修正为等于 max
-        assert_eq!(actual.min_connections, 5);
+        // min 应该被修正为等于 max (10)
+        assert_eq!(actual.max_connections(), 10);
+        assert_eq!(actual.min_connections(), 10);
     }
 
     /// TEST-U-004: 配置自动修正测试 - 零值处理
     #[test]
     fn test_get_actual_config_zero_values() {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 0,
-            min_connections: 0,
-            idle_timeout: 0,
-            acquire_timeout: 0,
-            permissions_path: None,
-            migrations_dir: None,
-            auto_migrate: false,
-            migration_timeout: 60,
-            admin_role: "admin".to_string(),
-            warmup_timeout: 0,
-            warmup_retries: 0,
-        };
+        // 先用有效值构建，然后测试 auto_correct 对零值的修正
+        let config = DbConfigBuilder::new()
+            .url("sqlite::memory:")
+            .max_connections(5)
+            .min_connections(5)
+            .idle_timeout(0)
+            .acquire_timeout(0)
+            .admin_role("admin")
+            .build()
+            .unwrap();
 
-        let actual = ConfigCorrector::get_actual_config(&config);
+        // 模拟零值场景，通过手动设置
+        let mut zero_config = config.clone();
+        zero_config.set_max_connections(0);
+        zero_config.set_min_connections(0);
+        zero_config.set_idle_timeout(0);
+        zero_config.set_acquire_timeout(0);
+
+        let actual = ConfigCorrector::get_actual_config(&zero_config);
 
         // 零值应该被修正为默认值
-        assert_eq!(actual.max_connections, 10);
-        assert_eq!(actual.min_connections, 1);
-        assert_eq!(actual.idle_timeout, 300);
-        assert_eq!(actual.acquire_timeout, 5000);
+        assert_eq!(actual.max_connections(), 10);
+        assert_eq!(actual.min_connections(), 1);
+        assert_eq!(actual.idle_timeout(), 300);
+        assert_eq!(actual.acquire_timeout(), 5000);
     }
 
     /// TEST-U-005: 配置构建器测试 - 基本用法
     #[test]
     fn test_config_builder_basic() {
         let config = DbConfigBuilder::new()
-            .url("sqlite://:memory:")
+            .url("sqlite::memory:")
             .max_connections(20)
             .min_connections(5)
             .build()
             .unwrap();
 
-        assert_eq!(config.url, "sqlite://:memory:");
-        assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.url_sanitized(), "sqlite::memory:");
+        assert_eq!(config.max_connections(), 20);
+        assert_eq!(config.min_connections(), 5);
     }
 
     /// TEST-U-006: 配置构建器测试 - 所有字段
     #[test]
     fn test_config_builder_all_fields() {
         let config = DbConfigBuilder::new()
-            .url("sqlite://:memory:")
+            .url("sqlite::memory:")
             .max_connections(20)
             .min_connections(5)
             .idle_timeout(300)
@@ -1427,24 +1570,24 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(config.url, "sqlite://:memory:");
-        assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 5);
-        assert_eq!(config.idle_timeout, 300);
-        assert_eq!(config.acquire_timeout, 5000);
+        assert_eq!(config.url_sanitized(), "sqlite::memory:");
+        assert_eq!(config.max_connections(), 20);
+        assert_eq!(config.min_connections(), 5);
+        assert_eq!(config.idle_timeout(), 300);
+        assert_eq!(config.acquire_timeout(), 5000);
         assert_eq!(
-            config.permissions_path,
-            Some("/etc/dbnexus/permissions.yaml".to_string())
+            config.permissions_path(),
+            Some("/etc/dbnexus/permissions.yaml")
         );
-        assert!(config.auto_migrate);
-        assert_eq!(config.admin_role, "superuser");
+        assert!(config.auto_migrate());
+        assert_eq!(config.admin_role(), "superuser");
     }
 
     /// TEST-U-007: 配置构建器测试 - 验证失败
     #[test]
     fn test_config_builder_validation_failure() {
         let result = DbConfigBuilder::new()
-            .url("sqlite://:memory:")
+            .url("sqlite::memory:")
             .max_connections(10)
             .min_connections(20)
             .build();
@@ -1455,13 +1598,13 @@ mod tests {
     /// TEST-U-008: 配置构建器测试 - 默认值
     #[test]
     fn test_config_builder_defaults() {
-        let config = DbConfigBuilder::new().url("sqlite://:memory:").build().unwrap();
+        let config = DbConfigBuilder::new().url("sqlite::memory:").build().unwrap();
 
-        assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 5);
-        assert_eq!(config.idle_timeout, 300);
-        assert_eq!(config.acquire_timeout, 5000); // 恢复为保守的默认值
-        assert_eq!(config.admin_role, "admin");
+        assert_eq!(config.max_connections(), 20);
+        assert_eq!(config.min_connections(), 5);
+        assert_eq!(config.idle_timeout(), 300);
+        assert_eq!(config.acquire_timeout(), 5000); // 恢复为保守的默认值
+        assert_eq!(config.admin_role(), "admin");
     }
 
     /// TEST-U-009: 配置加载器测试
@@ -1475,8 +1618,8 @@ min_connections: 5
 "#;
         let config = DbConfig::from_yaml_str(yaml).unwrap();
         {
-            assert_eq!(config.url, "sqlite::memory:");
-            assert_eq!(config.max_connections, 20);
+            assert_eq!(config.url_sanitized(), "sqlite::memory:");
+            assert_eq!(config.max_connections(), 20);
         }
     }
     /// TEST-U-010: 配置验证测试 - 空URL
@@ -1491,7 +1634,7 @@ min_connections: 5
     #[test]
     fn test_config_validation_invalid_connections() {
         let result = DbConfigBuilder::new()
-            .url("sqlite://:memory:")
+            .url("sqlite::memory:")
             .max_connections(0)
             .build();
 
