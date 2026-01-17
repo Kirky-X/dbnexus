@@ -22,7 +22,7 @@ use tokio::time::timeout;
 use tracing::info;
 
 use super::Session;
-use crate::config::{ConfigError, DbConfig, DbError, DbResult};
+use crate::config::{ConfigError, DbConfig, DbConfigBuilder, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
@@ -122,21 +122,15 @@ impl DbPool {
     /// }
     /// ```
     pub async fn new(url: &str) -> DbResult<Self> {
-        // 创建带默认值的配置
-        let config = DbConfig {
-            url: url.to_string(),
-            max_connections: 20,
-            min_connections: 5,
-            idle_timeout: 300,
-            acquire_timeout: 5000,
-            migration_timeout: 60,
-            admin_role: "admin".to_string(),
-            warmup_timeout: 30,
-            warmup_retries: 3,
-            ..Default::default()
-        };
-        config
-            .validate()
+        // 使用构建器创建带默认值的配置
+        let config = DbConfigBuilder::new()
+            .url(url)
+            .max_connections(20)
+            .min_connections(5)
+            .idle_timeout(300)
+            .acquire_timeout(5000)
+            .admin_role("admin")
+            .build()
             .map_err(|e| sea_orm::DbErr::Custom(format!("Config validation failed: {:?}", e)))?;
         Self::with_config(config).await
     }
@@ -147,10 +141,10 @@ impl DbPool {
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
 
         // 创建初始连接以查询数据库能力
-        let db_type = crate::config::DatabaseType::parse_database_type(&corrected_config.url);
+        let db_type = crate::config::DatabaseType::parse_database_type(corrected_config.url());
 
         // 创建连接并应用数据库能力修正
-        let connection = sea_orm::Database::connect(&corrected_config.url)
+        let connection = sea_orm::Database::connect(corrected_config.url())
             .await
             .map_err(DbError::Connection)?;
 
@@ -163,10 +157,10 @@ impl DbPool {
         .await;
 
         // 输出配置修正信息
-        if corrected_config.max_connections < 100 && db_type.is_real_database() {
+        if corrected_config.max_connections() < 100 && db_type.is_real_database() {
             info!(
                 "Database connection limit: 80% of {} = {} connections",
-                corrected_config.max_connections, corrected_config.max_connections
+                corrected_config.max_connections(), corrected_config.max_connections()
             );
         }
 
@@ -191,7 +185,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 permission_config: Arc::new(AsyncMutex::new(permission_config)),
                 health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: corrected_config.admin_role.clone(),
+                admin_role: corrected_config.admin_role().to_string(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
@@ -207,9 +201,9 @@ impl DbPool {
         // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
         #[cfg(feature = "pool-warmup")]
         {
-            let initial_connections = pool.inner.config.min_connections;
-            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
-            let warmup_retries = pool.inner.config.warmup_retries;
+            let initial_connections = pool.inner.config.min_connections();
+            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout());
+            let warmup_retries = pool.inner.config.warmup_retries();
 
             let mut connection_tasks = Vec::new();
 
@@ -268,8 +262,8 @@ impl DbPool {
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
                 successful,
                 initial_connections,
-                corrected_config.min_connections,
-                corrected_config.max_connections,
+                corrected_config.min_connections(),
+                corrected_config.max_connections(),
                 failed
             );
         }
@@ -290,8 +284,8 @@ impl DbPool {
         }
 
         #[cfg(feature = "auto-migrate")]
-        if corrected_config.auto_migrate {
-            if let Some(ref migrations_dir) = corrected_config.migrations_dir {
+        if corrected_config.auto_migrate() {
+            if let Some(ref migrations_dir) = corrected_config.migrations_dir() {
                 if migrations_dir.exists() {
                     info!(
                         "Auto-migrate enabled, running migrations from: {}",
@@ -380,7 +374,7 @@ impl DbPool {
         config.validate()?;
         Ok(Self {
             inner: Arc::new(DbPoolInner {
-                config: config.clone(),
+                config: config.clone_config(),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -392,7 +386,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 permission_config: Arc::new(AsyncMutex::new(None)),
                 health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: config.admin_role.clone(),
+                admin_role: config.admin_role().to_string(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
@@ -411,7 +405,7 @@ impl DbPool {
     #[cfg(feature = "permission")]
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
-        if let Some(ref path) = config.permissions_path {
+        if let Some(ref path) = config.permissions_path() {
             tracing::info!("Loading permission config from: {}", path);
             match tokio::fs::read_to_string(path).await {
                 Ok(content) => match PermissionConfig::from_yaml(&content) {
@@ -542,7 +536,7 @@ impl DbPool {
     ///
     /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
-        let conn = sea_orm::Database::connect(&config.url).await?;
+        let conn = sea_orm::Database::connect(config.url()).await?;
         Ok(conn)
     }
 
@@ -562,8 +556,8 @@ impl DbPool {
     ///
     /// 如果连接有效返回 `true`，否则返回 `false`
     pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
-        let health_query = Self::get_health_check_query(&self.inner.config.url);
-        let backend = Self::get_database_backend(&self.inner.config.url);
+        let health_query = Self::get_health_check_query(self.inner.config.url());
+        let backend = Self::get_database_backend(self.inner.config.url());
 
         // 创建带超时的健康检查
         let result = timeout(
@@ -651,8 +645,8 @@ impl DbPool {
         let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
 
-        let health_query = Self::get_health_check_query(&config.url);
-        let backend = Self::get_database_backend(&config.url);
+        let health_query = Self::get_health_check_query(config.url());
+        let backend = Self::get_database_backend(config.url());
         let mut removed_count = 0;
 
         // 保留有效连接
@@ -704,8 +698,8 @@ impl DbPool {
         let config = &self.inner.config;
         let mut recreated_count = 0;
 
-        let health_query = Self::get_health_check_query(&config.url);
-        let backend = Self::get_database_backend(&config.url);
+        let health_query = Self::get_health_check_query(config.url());
+        let backend = Self::get_database_backend(config.url());
 
         // 手动分区连接为有效和无效两组
         let mut valid_connections: Vec<DatabaseConnection> = Vec::new();
@@ -739,7 +733,7 @@ impl DbPool {
 
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
-            let needed = config.min_connections.saturating_sub(current_idle as u32) as usize;
+            let needed = config.min_connections().saturating_sub(current_idle as u32) as usize;
 
             for _ in 0..needed {
                 match Self::create_connection(config).await {
@@ -857,7 +851,7 @@ impl DbPool {
         }
 
         // 检查是否达到最大连接数（在持有锁的情况下）
-        if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections {
+        if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections() {
             // 等待空闲连接（使用条件变量替代忙等待）
             let timeout_duration = self.inner.config.acquire_timeout_duration();
             self.inner.wait_count.fetch_add(1, Ordering::SeqCst);
@@ -936,7 +930,7 @@ impl DbPool {
         let inner = self.inner.clone();
 
         if let Ok(mut idle) = inner.idle_connections.try_lock() {
-            if idle.len() < inner.config.max_connections as usize {
+            if idle.len() < inner.config.max_connections() as usize {
                 idle.push(conn);
                 inner.connection_available.notify_one();
             } else {
@@ -948,7 +942,7 @@ impl DbPool {
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::spawn(async move {
                 let mut idle = inner.idle_connections.lock().await;
-                if idle.len() < inner.config.max_connections as usize {
+                if idle.len() < inner.config.max_connections() as usize {
                     idle.push(conn);
                     inner.connection_available.notify_one();
                 } else {
@@ -1012,7 +1006,7 @@ impl DbPool {
     ///
     /// # async fn example(pool: &DbPool) {
     /// let config = pool.config();
-    /// println!("Max connections: {}", config.max_connections);
+    /// println!("Max connections: {}", config.max_connections());
     /// # }
     /// ```
     pub fn config(&self) -> &DbConfig {
@@ -1029,7 +1023,7 @@ impl DbPool {
     /// 成功应用的迁移数量
     #[cfg(feature = "auto-migrate")]
     pub async fn run_auto_migrate(&self) -> Result<u32, DbError> {
-        if let Some(ref migrations_dir) = self.inner.config.migrations_dir {
+        if let Some(ref migrations_dir) = self.inner.config.migrations_dir() {
             tracing::info!("Running auto-migrate from directory: {}", migrations_dir.display());
             self.run_migrations(migrations_dir).await
         } else {
@@ -1051,7 +1045,7 @@ impl DbPool {
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
         use crate::migration::MigrationExecutor;
 
-        let db_type = crate::DatabaseType::parse_database_type(&self.inner.config.url);
+        let db_type = crate::DatabaseType::parse_database_type(self.inner.config.url());
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
