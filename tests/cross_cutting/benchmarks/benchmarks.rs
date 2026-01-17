@@ -24,7 +24,7 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use dbnexus::permission::{Operation, PermissionConfig, RolePolicy, TablePermission};
 use std::time::{Duration, Instant};
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 /// 基准测试：权限配置加载（同步）

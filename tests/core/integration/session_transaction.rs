@@ -11,7 +11,7 @@ use dbnexus::DbPool;
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig};
 use tempfile::TempDir;
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 #[tokio::test]
