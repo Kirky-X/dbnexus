@@ -52,10 +52,10 @@ pub(crate) struct DbPoolInner {
     connection_available: Notify,
 
     /// 活跃连接数
-    pub(crate) active_count: AtomicU32,
+    pub(super) active_count: AtomicU32,
 
     /// 总连接数
-    pub(crate) total_count: AtomicU32,
+    pub(super) total_count: AtomicU32,
 
     /// 权限策略 LRU 缓存（使用 tokio 异步锁）
     #[cfg(feature = "permission")]
@@ -69,20 +69,20 @@ pub(crate) struct DbPoolInner {
     health_check_shutdown: Arc<Notify>,
 
     /// 管理员角色名称
-    pub(crate) admin_role: String,
+    pub(super) admin_role: String,
 
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
     pub(crate) metrics_collector: Option<Arc<MetricsCollector>>,
 
     /// 等待计数
-    pub(crate) wait_count: AtomicU32,
+    pub(super) wait_count: AtomicU32,
 
     /// 借用计数
-    pub(crate) borrow_count: AtomicU64,
+    pub(super) borrow_count: AtomicU64,
 
     /// 最大活跃连接数
-    pub(crate) max_active: AtomicU32,
+    pub(super) max_active: AtomicU32,
 }
 
 impl DbPool {
