@@ -1,0 +1,101 @@
+[workspace]
+
+[package]
+name = "dbnexus-examples"
+version = "0.1.1"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Kirky.X"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Kirky-X/dbnexus"
+documentation = "https://docs.rs/dbnexus"
+keywords = ["database", "orm", "sea-orm", "sql"]
+categories = ["database", "asynchronous"]
+description = "Examples and demonstrations for DBNexus database abstraction layer"
+default-run = "dbnexus-examples"
+
+[dependencies]
+dbnexus = { path = "..", features = [
+    "sqlite",
+    "permission",
+    "sql-parser",
+    "metrics",
+    "tracing",
+    "audit",
+    "cache",
+    "sharding",
+    "migration",
+    "global-index",
+    "with-json",
+    "permission-engine",
+] }
+
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-opentelemetry = "0.27"
+time = "0.3"
+sea-orm = { version = "2.0.0-rc.27", default-features = false, features = ["sqlx-sqlite", "macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[[bin]]
+name = "quickstart"
+path = "src/quickstart.rs"
+
+[[bin]]
+name = "config"
+path = "src/config.rs"
+
+[[bin]]
+name = "permissions"
+path = "src/permissions.rs"
+
+[[bin]]
+name = "transactions"
+path = "src/transactions.rs"
+
+[[bin]]
+name = "sql_parser"
+path = "src/sql_parser.rs"
+
+[[bin]]
+name = "permission_engine"
+path = "src/permission_engine.rs"
+
+[[bin]]
+name = "metrics"
+path = "src/metrics.rs"
+
+[[bin]]
+name = "tracing"
+path = "src/tracing.rs"
+
+[[bin]]
+name = "audit"
+path = "src/audit.rs"
+
+[[bin]]
+name = "cache"
+path = "src/cache.rs"
+
+[[bin]]
+name = "sharding"
+path = "src/sharding.rs"
+
+[[bin]]
+name = "migration"
+path = "src/migration.rs"
+
+[[bin]]
+name = "global_index"
+path = "src/global_index.rs"
+
+[[bin]]
+name = "dbnexus-examples"
+path = "src/main.rs"
+
+[[bin]]
+name = "test_permission"
+path = "test_permission.rs"

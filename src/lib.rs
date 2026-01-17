@@ -78,6 +78,10 @@ mod generated_roles;
 /// 全局索引模块
 #[cfg(all(feature = "global-index", feature = "with-json"))]
 pub mod global_index;
+
+/// 全局索引类型导出
+#[cfg(all(feature = "global-index", feature = "with-json"))]
+pub use global_index::{GlobalIndex, IndexEntry, SyncEvent};
 /// Metrics 收集模块
 #[cfg(feature = "metrics")]
 pub mod metrics;
