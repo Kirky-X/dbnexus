@@ -13,7 +13,7 @@ use dbnexus::config::DatabaseType;
 use dbnexus::config::DbConfig;
 use dbnexus::migration::{ColumnType, SqlGenerator};
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 /// TEST-MDB-001: SQLite连接测试
