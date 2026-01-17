@@ -14,13 +14,15 @@ use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
 
 /// 迁移执行器
+///
+/// 负责执行数据库迁移操作，内部字段已封装以防止未授权访问
 pub struct MigrationExecutor {
     /// 数据库连接
-    pub connection: sea_orm::DatabaseConnection,
+    pub(crate) connection: sea_orm::DatabaseConnection,
     /// SQL 生成器
-    pub sql_generator: SqlGenerator,
+    pub(crate) sql_generator: SqlGenerator,
     /// 迁移历史记录
-    pub history: MigrationHistory,
+    pub(crate) history: MigrationHistory,
 }
 
 impl MigrationExecutor {
@@ -31,6 +33,20 @@ impl MigrationExecutor {
             sql_generator: SqlGenerator::new(db_type),
             history: MigrationHistory::new(),
         }
+    }
+
+    /// 获取数据库连接的不可变引用
+    ///
+    /// 返回数据库连接的只读引用，用于执行查询操作
+    pub fn connection(&self) -> &sea_orm::DatabaseConnection {
+        &self.connection
+    }
+
+    /// 获取迁移历史的不可变引用
+    ///
+    /// 返回迁移历史的只读引用，用于查看已应用的迁移
+    pub fn history(&self) -> &MigrationHistory {
+        &self.history
     }
 
     /// 读取数据库中的迁移历史
@@ -218,16 +234,40 @@ impl MigrationExecutor {
 }
 
 /// 迁移文件信息
+///
+/// 存储迁移文件的基本信息，用于扫描和管理迁移文件
 #[derive(Debug, Clone)]
 pub struct MigrationFile {
     /// 版本号
-    pub version: u32,
+    pub(crate) version: u32,
     /// 描述
-    pub description: String,
+    pub(crate) description: String,
     /// 文件路径
-    pub file_path: PathBuf,
+    pub(crate) file_path: PathBuf,
     /// 文件内容
-    pub content: String,
+    pub(crate) content: String,
+}
+
+impl MigrationFile {
+    /// 获取迁移版本号
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    /// 获取迁移描述
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// 获取文件路径
+    pub fn file_path(&self) -> &PathBuf {
+        &self.file_path
+    }
+
+    /// 获取文件内容
+    pub fn content(&self) -> &str {
+        &self.content
+    }
 }
 
 /// 自动迁移执行器
