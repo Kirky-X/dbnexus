@@ -48,10 +48,12 @@ pub trait ShardingStrategy: Send + Sync {
 /// 年分片策略
 /// 按年份划分，如 2024 年对应 shard_id = 2024 % total_shards
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct YearlyStrategy;
 
 impl YearlyStrategy {
     /// 创建新的年分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -90,10 +92,12 @@ impl ShardingStrategy for YearlyStrategy {
 /// 月分片策略
 /// 按年月划分，如 2024年1月对应 shard_id = (2024 * 12 + 1) % total_shards
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct MonthlyStrategy;
 
 impl MonthlyStrategy {
     /// 创建新的月分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -131,10 +135,12 @@ impl ShardingStrategy for MonthlyStrategy {
 /// 日分片策略
 /// 按日期划分
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct DailyStrategy;
 
 impl DailyStrategy {
-    /// 创建新的日分片策略实例
+    /// 创建新的天分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -172,10 +178,12 @@ impl ShardingStrategy for DailyStrategy {
 /// 哈希分片策略
 /// 使用一致性哈希将数据均匀分布到各分片
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct HashStrategy;
 
 impl HashStrategy {
     /// 创建新的哈希分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }

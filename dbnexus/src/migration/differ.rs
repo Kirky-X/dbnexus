@@ -461,6 +461,7 @@ ALTER TABLE {} DROP COLUMN {};",
 /// Rust 实体解析器
 ///
 /// 用于解析 Rust 实体定义源代码，提取数据库表结构信息
+#[allow(dead_code)]
 pub(crate) struct RustEntityParser;
 
 impl RustEntityParser {
@@ -477,6 +478,7 @@ impl RustEntityParser {
     /// # Returns
     ///
     /// 解析后的表结构定义
+    #[allow(dead_code)]
     pub fn parse_entity(entity_code: &str, table_name: &str) -> Result<Table, String> {
         // 简化实现：解析 sea-orm 属性
         // 实际实现需要完整的 Rust 解析器 (syn/quote)
@@ -757,6 +759,7 @@ impl RustEntityParser {
     /// # Returns
     ///
     /// 创建表的 SQL 语句
+    #[allow(dead_code)]
     pub fn generate_migration_sql(
         entity_code: &str,
         table_name: &str,

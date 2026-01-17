@@ -203,6 +203,7 @@ impl CacheStrategy for LruStrategy {
 
 /// TTLAware 缓存策略 - 包装其他策略，提供 TTL 功能
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct TtlAwareStrategy<S: CacheStrategy> {
     inner: S,
     /// 默认 TTL
@@ -211,6 +212,7 @@ pub(crate) struct TtlAwareStrategy<S: CacheStrategy> {
 
 impl<S: CacheStrategy> TtlAwareStrategy<S> {
     /// 创建带 TTL 的策略
+    #[allow(dead_code)]
     pub(crate) fn new(inner: S, ttl_seconds: u64) -> Self {
         Self {
             inner,
@@ -250,7 +252,7 @@ impl<S: CacheStrategy> CacheStrategy for TtlAwareStrategy<S> {
 
 /// 缓存统计信息
 #[derive(Debug, Default)]
-pub(crate) struct CacheStats {
+pub struct CacheStats {
     /// 命中次数
     hits: Arc<std::sync::atomic::AtomicU64>,
     /// 未命中次数
@@ -265,7 +267,8 @@ pub(crate) struct CacheStats {
 
 impl CacheStats {
     /// 创建新的统计信息
-    pub(crate) fn new() -> Self {
+    #[allow(dead_code)]
+    pub fn new() -> Self {
         Self {
             hits: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             misses: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -276,7 +279,7 @@ impl CacheStats {
     }
 
     /// 获取命中率
-    pub(crate) fn hit_rate(&self) -> f64 {
+    pub fn hit_rate(&self) -> f64 {
         let hits = self.hits.load(std::sync::atomic::Ordering::Relaxed);
         let misses = self.misses.load(std::sync::atomic::Ordering::Relaxed);
         let total = hits + misses;
@@ -284,27 +287,27 @@ impl CacheStats {
     }
 
     /// 增加命中计数
-    pub(crate) fn record_hit(&self) {
+    pub fn record_hit(&self) {
         self.hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加未命中计数
-    pub(crate) fn record_miss(&self) {
+    pub fn record_miss(&self) {
         self.misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加设置计数
-    pub(crate) fn record_set(&self) {
+    pub fn record_set(&self) {
         self.sets.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加删除计数
-    pub(crate) fn record_delete(&self) {
+    pub fn record_delete(&self) {
         self.deletes.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 增加过期清除计数
-    pub(crate) fn record_expiration(&self) {
+    pub fn record_expiration(&self) {
         self.expirations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
