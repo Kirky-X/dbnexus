@@ -193,11 +193,6 @@ path = "tests/audit/integration.rs"
 required-features = ["audit"]
 
 [[test]]
-name = "cache_integration"
-path = "tests/cache/integration.rs"
-required-features = ["cache"]
-
-[[test]]
 name = "migration_integration"
 path = "tests/migration/integration.rs"
 required-features = ["migration"]

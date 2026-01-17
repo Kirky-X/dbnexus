@@ -1005,7 +1005,7 @@ impl ConfigCorrector {
     /// # Returns
     ///
     /// 数据库支持的最大连接数
-    pub async fn query_database_max_connections(
+    pub(crate) async fn query_database_max_connections(
         connection: &sea_orm::DatabaseConnection,
         db_type: DatabaseType,
     ) -> u32 {
@@ -1069,7 +1069,7 @@ impl ConfigCorrector {
     }
 
     /// 自动修正数据库配置
-    pub fn auto_correct(mut config: DbConfig) -> DbConfig {
+    pub(crate) fn auto_correct(mut config: DbConfig) -> DbConfig {
         // 修正 min_connections > max_connections
         if config.min_connections > config.max_connections {
             tracing::warn!(
@@ -1141,7 +1141,7 @@ impl ConfigCorrector {
     }
 
     /// 验证配置是否有效
-    pub fn validate_config(config: &DbConfig) -> Result<(), Vec<String>> {
+    pub(crate) fn validate_config(config: &DbConfig) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
         if config.url.is_empty() {
@@ -1168,7 +1168,7 @@ impl ConfigCorrector {
     }
 
     /// 从环境变量加载配置并自动修正
-    pub fn load_and_correct_from_env() -> Result<DbConfig, ConfigError> {
+    pub(crate) fn load_and_correct_from_env() -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_env()?;
         config = ConfigCorrector::auto_correct(config);
         Ok(config)
@@ -1176,14 +1176,14 @@ impl ConfigCorrector {
 
     /// 从配置文件加载配置并自动修正
     #[cfg(feature = "config-yaml")]
-    pub fn load_and_correct_from_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
+    pub(crate) fn load_and_correct_from_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_yaml_file(path)?;
         config = ConfigCorrector::auto_correct(config);
         Ok(config)
     }
 
     /// 验证配置并应用自动修正
-    pub fn validate_and_correct(config: &DbConfig) -> Result<DbConfig, Vec<String>> {
+    pub(crate) fn validate_and_correct(config: &DbConfig) -> Result<DbConfig, Vec<String>> {
         let errors = Self::validate_config(config);
         let corrected_config = Self::auto_correct(config.clone());
 
@@ -1212,7 +1212,7 @@ impl ConfigCorrector {
     /// # Returns
     ///
     /// 实际应用的配置（可能已被自动修正）
-    pub fn get_actual_config(config: &DbConfig) -> DbConfig {
+    pub(crate) fn get_actual_config(config: &DbConfig) -> DbConfig {
         Self::auto_correct(config.clone())
     }
 
@@ -1230,7 +1230,7 @@ impl ConfigCorrector {
     /// # Returns
     ///
     /// 根据数据库能力修正后的配置
-    pub async fn auto_correct_with_database_capability(
+    pub(crate) async fn auto_correct_with_database_capability(
         mut config: DbConfig,
         connection: &sea_orm::DatabaseConnection,
         db_type: DatabaseType,

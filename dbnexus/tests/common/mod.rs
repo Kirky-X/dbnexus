@@ -339,6 +339,31 @@ roles:
     Ok((pool, temp_dir))
 }
 
+/// 创建通用测试连接池（根据环境变量选择数据库类型）
+///
+/// 返回连接池和临时目录（用于自动清理，仅 SQLite 需要）
+#[allow(dead_code)]
+pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), dbnexus::DbError> {
+    let test_db_type = std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string());
+    eprintln!("DEBUG: TEST_DB_TYPE = {}", test_db_type);
+
+    match test_db_type.as_str() {
+        "postgres" | "mysql" => {
+            // PostgreSQL 和 MySQL 不需要临时目录
+            let config = get_test_config();
+            eprintln!("DEBUG: Using {} database with URL: {}", test_db_type, config.url);
+            let pool = dbnexus::DbPool::with_config(config).await?;
+            Ok((pool, None))
+        }
+        _ => {
+            // SQLite 使用文件数据库
+            eprintln!("DEBUG: Using SQLite file database");
+            let (pool, temp_dir) = create_sqlite_file_pool().await?;
+            Ok((pool, Some(temp_dir)))
+        }
+    }
+}
+
 /// 创建用于追踪测试的测试表
 ///
 /// 返回表名和临时目录

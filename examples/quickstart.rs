@@ -17,11 +17,11 @@ use dbnexus::{DbPool, DbEntity, db_crud};
 //
 // #[derive(DbEntity)] 自动将结构体映射为 Sea-ORM Entity
 // #[db_entity] 标记为 dbnexus Entity
-// #[table_name = "users")] 指定数据库表名
+// #[table_name = "users"] 指定数据库表名
 // #[db_crud] 自动生成 CRUD 方法
 #[derive(DbEntity)]
 #[db_entity]
-#[table_name = "users")]
+#[table_name = "users"]
 #[db_crud]
 struct User {
     /// 主键字段，使用 #[primary_key] 标记
