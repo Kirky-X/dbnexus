@@ -160,7 +160,8 @@ impl DbPool {
         if corrected_config.max_connections() < 100 && db_type.is_real_database() {
             info!(
                 "Database connection limit: 80% of {} = {} connections",
-                corrected_config.max_connections(), corrected_config.max_connections()
+                corrected_config.max_connections(),
+                corrected_config.max_connections()
             );
         }
 
@@ -310,7 +311,7 @@ impl DbPool {
     /// 使用配置结构体创建连接池
     ///
     /// 此方法接受一个 [`DbConfig`] 结构体，用于配置连接池的所有参数。
-    /// 与 [`with_config`] 方法功能相同，但更适合从配置结构体直接初始化。
+    /// 与 [`Self::new`] 方法功能相同，但更适合从配置结构体直接初始化。
     ///
     /// # Example
     ///

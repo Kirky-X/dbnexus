@@ -590,26 +590,31 @@ impl DbConfig {
     }
 
     /// 内部方法：设置 URL（供构建器使用）
+    #[allow(dead_code)]
     pub(crate) fn set_url(&mut self, url: String) {
         self.url = url;
     }
 
     /// 设置最大连接数（内部使用）
+    #[allow(dead_code)]
     pub(crate) fn set_max_connections(&mut self, max_connections: u32) {
         self.max_connections = max_connections;
     }
 
     /// 设置最小连接数（内部使用）
+    #[allow(dead_code)]
     pub(crate) fn set_min_connections(&mut self, min_connections: u32) {
         self.min_connections = min_connections;
     }
 
     /// 设置空闲超时（内部使用）
+    #[allow(dead_code)]
     pub(crate) fn set_idle_timeout(&mut self, idle_timeout: u64) {
         self.idle_timeout = idle_timeout;
     }
 
     /// 设置获取超时（内部使用）
+    #[allow(dead_code)]
     pub(crate) fn set_acquire_timeout(&mut self, acquire_timeout: u64) {
         self.acquire_timeout = acquire_timeout;
     }
@@ -879,8 +884,7 @@ impl DbConfig {
         }
 
         // 使用 URL 解析器进行完整验证
-        let url =
-            url::Url::parse(&self.url).map_err(|e| ConfigError::InvalidUrl("Invalid URL format".to_string()))?;
+        let url = url::Url::parse(&self.url).map_err(|_| ConfigError::InvalidUrl("Invalid URL format".to_string()))?;
 
         let protocol = url.scheme();
 
@@ -894,11 +898,13 @@ impl DbConfig {
             ));
         }
 
-        // 协议白名单验证
-        match protocol {
-            "sqlite" | "sqlite3" | "postgres" | "postgresql" | "mysql" => {}
-            "file" | "mem" if protocol.starts_with("sqlite") => {}
-            _ => return Err(ConfigError::UnsupportedProtocol),
+        // 协议白名单验证（简化为集合检查）
+        let valid_protocols = ["sqlite", "sqlite3", "postgres", "postgresql", "mysql"];
+        // 检查协议是否有效（支持特殊的 sqlite 文件/内存协议）
+        let is_valid_protocol = valid_protocols.contains(&protocol)
+            || (protocol.starts_with("sqlite") && ["file", "mem"].contains(&protocol));
+        if !is_valid_protocol {
+            return Err(ConfigError::UnsupportedProtocol);
         }
 
         // 验证主机名格式（如果有）
@@ -1274,7 +1280,10 @@ impl ConfigCorrector {
             tracing::warn!("Adjusting idle_timeout from {}s to minimum 30s", config.idle_timeout());
             config.idle_timeout = 30;
         } else if config.idle_timeout > 3600 {
-            tracing::warn!("Adjusting idle_timeout from {}s to maximum 3600s", config.idle_timeout());
+            tracing::warn!(
+                "Adjusting idle_timeout from {}s to maximum 3600s",
+                config.idle_timeout()
+            );
             config.idle_timeout = 3600;
         }
 
@@ -1575,10 +1584,7 @@ mod tests {
         assert_eq!(config.min_connections(), 5);
         assert_eq!(config.idle_timeout(), 300);
         assert_eq!(config.acquire_timeout(), 5000);
-        assert_eq!(
-            config.permissions_path(),
-            Some("/etc/dbnexus/permissions.yaml")
-        );
+        assert_eq!(config.permissions_path(), Some("/etc/dbnexus/permissions.yaml"));
         assert!(config.auto_migrate());
         assert_eq!(config.admin_role(), "superuser");
     }
@@ -1633,10 +1639,7 @@ min_connections: 5
     /// TEST-U-011: 配置验证测试 - 无效的连接数
     #[test]
     fn test_config_validation_invalid_connections() {
-        let result = DbConfigBuilder::new()
-            .url("sqlite::memory:")
-            .max_connections(0)
-            .build();
+        let result = DbConfigBuilder::new().url("sqlite::memory:").max_connections(0).build();
 
         assert!(result.is_err());
     }
