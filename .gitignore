@@ -39,6 +39,9 @@ Cargo.lock
 # Serena AI 配置
 .serena/
 
+# OpenCode 配置
+.opencode/
+
 # OpenSpec 规范驱动开发工具
 openspec/
 
