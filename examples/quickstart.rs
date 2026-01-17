@@ -16,31 +16,19 @@
 //! cargo run --example quickstart --features sqlite
 //! ```
 
-use dbnexus::{DbPool, DbEntity, db_crud};
-
-// 定义 User Entity
-//
-// #[derive(DbEntity)] 自动将结构体映射为 Sea-ORM Entity
-// #[db_entity] 标记为 dbnexus Entity
-// #[table_name = "users"] 指定数据库表名
-// #[db_crud] 自动生成 CRUD 方法
-#[derive(DbEntity)]
-#[db_entity]
-#[table_name = "users"]
-#[db_crud]
-struct User {
-    /// 主键字段，使用 #[primary_key] 标记
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
-}
+use dbnexus::{DbConfig, DbPool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化连接池（使用 SQLite 内存模式）
     // 在生产环境中，请使用实际的数据库连接字符串
-    let pool = DbPool::new("sqlite::memory:").await?;
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        permissions_path: Some("examples/permissions.yaml".to_string()),
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
+    let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 
     // 获取管理员 Session
@@ -48,34 +36,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session = pool.get_session("admin").await?;
     println!("✓ Session 获取成功 (角色: admin)");
 
+    // 检查权限配置
+    println!("📋 权限配置:");
+    println!("  - Admin role: {}", pool.config().admin_role);
+    println!("  - Permissions path: {:?}", pool.config().permissions_path);
+
+    // 创建表
+    session
+        .execute_raw_ddl(
+            "CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL
+            )",
+        )
+        .await?;
+    println!("✓ 表创建成功");
+
     // 插入用户
-    // User::insert 是由 #[db_crud] 自动生成的方法
-    let user = User {
-        id: 1,
-        name: "Alice".to_string(),
-        email: "alice@example.com".to_string(),
-    };
-    let inserted = User::insert(&session, user).await?;
-    println!("✓ 用户插入成功: {} <{}>", inserted.name, inserted.email);
+    session
+        .execute_raw("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com')")
+        .await?;
+    println!("✓ 用户插入成功: 1 <alice@example.com>");
 
     // 查询用户
-    // User::find_by_id 根据主键查找记录
-    let found = User::find_by_id(&session, 1).await?;
-    if let Some(user) = found {
-        println!("✓ 用户查询成功: {} <{}>", user.name, user.email);
-    }
+    let result = session
+        .execute_raw("SELECT id, name, email FROM users WHERE id = 1")
+        .await?;
+    println!("✓ 用户查询成功: {} 行受影响", result.rows_affected());
 
     // 更新用户
-    // User::update 更新记录
-    let mut user = found.unwrap();
-    user.email = "alice_new@example.com".to_string();
-    User::update(&session, user).await?;
+    session
+        .execute_raw("UPDATE users SET email = 'alice_new@example.com' WHERE id = 1")
+        .await?;
     println!("✓ 用户更新成功");
 
     // 删除用户
-    // User::delete 根据主键删除记录
-    User::delete(&session, 1).await?;
+    session.execute_raw("DELETE FROM users WHERE id = 1").await?;
     println!("✓ 用户删除成功");
+
+    // 删除表
+    session.execute_raw_ddl("DROP TABLE users").await?;
 
     // 获取连接池状态
     let status = pool.status();
