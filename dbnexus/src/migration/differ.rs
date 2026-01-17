@@ -458,7 +458,10 @@ ALTER TABLE {} DROP COLUMN {};",
 /// 从 Rust 实体结构体定义中解析数据库表结构，
 /// 支持从 `#[sea_orm(...)]` 属性中提取列信息
 #[derive(Debug, Clone)]
-pub struct RustEntityParser;
+/// Rust 实体解析器
+///
+/// 用于解析 Rust 实体定义源代码，提取数据库表结构信息
+pub(crate) struct RustEntityParser;
 
 impl RustEntityParser {
     /// 解析 Rust 实体定义
@@ -474,25 +477,6 @@ impl RustEntityParser {
     /// # Returns
     ///
     /// 解析后的表结构定义
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// use dbnexus::migration::RustEntityParser;
-    ///
-    /// let code = r#"
-    /// #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    /// #[sea_orm(table_name = "users")]
-    /// pub struct Model {
-    ///     #[sea_orm(primary_key)]
-    ///     pub id: i32,
-    ///     #[sea_orm(column_type = "String(255)")]
-    ///     pub name: String,
-    /// }
-    /// "#;
-    ///
-    /// let table = RustEntityParser::parse_entity(code, "users").unwrap();
-    /// ```
     pub fn parse_entity(entity_code: &str, table_name: &str) -> Result<Table, String> {
         // 简化实现：解析 sea-orm 属性
         // 实际实现需要完整的 Rust 解析器 (syn/quote)

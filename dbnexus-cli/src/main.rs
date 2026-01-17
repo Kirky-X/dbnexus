@@ -19,6 +19,90 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// 脱敏数据库连接字符串，隐藏敏感信息
+///
+/// 覆盖以下敏感字段：
+/// - username
+/// - password
+/// - 任何包含敏感信息的查询参数
+fn mask_database_url(url: &str) -> String {
+    use url::Url;
+
+    // 尝试解析 URL
+    match Url::parse(url) {
+        Ok(mut parsed) => {
+            // 脱敏 username
+            if let Some(username) = parsed.username() {
+                if !username.is_empty() {
+                    let masked_username = "*".repeat(username.len().min(8));
+                    let _ = parsed.set_username(&masked_username);
+                }
+            }
+
+            // 脱敏 password
+            if let Some(password) = parsed.password() {
+                let masked_password = "*".repeat(password.len().min(16));
+                let _ = parsed.set_password(Some(&masked_password));
+            }
+
+            // 脱敏查询参数中的敏感信息
+            let sensitive_params = ["password", "token", "secret", "key", "credential", "auth"];
+            let mut modified = false;
+            if let Some(query) = parsed.query() {
+                let mut new_pairs = Vec::new();
+                for pair in query.split('&') {
+                    let mut parts = pair.splitn(2, '=');
+                    if let Some(key) = parts.next() {
+                        let value = parts.next().unwrap_or("");
+                        let key_lower = key.to_lowercase();
+                        if sensitive_params.iter().any(|s| key_lower.contains(s)) {
+                            // 脱敏敏感参数值
+                            let masked_value = "*".repeat(value.len().min(16));
+                            new_pairs.push(format!("{}={}", key, masked_value));
+                            modified = true;
+                        } else {
+                            new_pairs.push(pair.to_string());
+                        }
+                    }
+                }
+                if modified {
+                    let _ = parsed.set_query(Some(&new_pairs.join("&")));
+                }
+            }
+
+            parsed.to_string()
+        }
+        Err(_) => {
+            // URL 解析失败，进行简单脱敏
+            // 尝试隐藏 @ 符号前后的敏感信息
+            if let Some(at_pos) = url.find('@') {
+                let before_at = &url[..at_pos];
+                let after_at = url[at_pos..].to_string();
+
+                // 检查是否包含凭证信息
+                if before_at.contains(':') || before_at.contains('@') {
+                    // 格式可能是 user:pass@host 或 user@host
+                    let masked_before = if let Some(colon_pos) = before_at.find(':') {
+                        // user:pass -> user:******
+                        let user = &before_at[..colon_pos];
+                        format!("{}:******", user)
+                    } else {
+                        // user@host -> user@host (仅隐藏 pass)
+                        before_at.to_string()
+                    };
+                    format!("{}{}", masked_before, after_at)
+                } else {
+                    // 没有凭证信息，保持原样
+                    url.to_string()
+                }
+            } else {
+                // 没有 @ 符号，保持原样（可能是 SQLite 等本地文件路径）
+                url.to_string()
+            }
+        }
+    }
+}
+
 /// CLI 配置
 #[derive(Parser)]
 #[command(name = "dbnexus-migrate")]
@@ -185,6 +269,8 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    迁移状态查看                              ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
+
+    println!("\n🔗 数据库连接: {}", mask_database_url(database_url));
 
     // 测试数据库连接
     let pool = match DbPool::new(database_url).await {
@@ -880,8 +966,11 @@ fn list_migrations(migrations_dir: &PathBuf) -> Result<(), DbError> {
 /// 只返回已知支持的数据库类型，不支持时返回错误
 fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbError> {
     // 尝试解析 URL
-    let url =
-        url::Url::parse(database_url).map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
+    let url_parse_result = url::Url::parse(database_url).map_err(|_e| {
+        // 脱敏 URL 后再显示在错误消息中
+        let masked_url = mask_database_url(database_url);
+        DbError::Config(format!("Invalid database URL format: {}", masked_url))
+    })?;
 
     // 获取协议scheme
     let scheme = url.scheme().to_lowercase();
@@ -900,14 +989,4 @@ fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbE
     }
 }
 
-/// 隐藏数据库 URL 中的敏感信息
-fn mask_database_url(url: &str) -> String {
-    url::Url::parse(url)
-        .map(|mut url| {
-            if let Some(password) = url.password() {
-                url.set_password(Some(&"*".repeat(password.len()))).ok();
-            }
-            url.to_string()
-        })
-        .unwrap_or_else(|_| url.to_string())
-}
+/// 隐藏数据库 URL 中的敏感信息（已迁移到文件顶部）

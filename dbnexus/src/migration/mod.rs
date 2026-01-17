@@ -12,7 +12,11 @@ mod executor;
 mod schema;
 mod types;
 
-pub use differ::*;
-pub use executor::*;
-pub use schema::*;
-pub use types::*;
+// 精确导出公共 API，避免过度暴露内部实现
+pub use differ::{MigrationCommand, MigrationDirection, MigrationPlan, SchemaDiffer, SqlGenerator};
+pub use executor::{MigrationExecutor, MigrationFile, MigrationFileParser};
+pub use schema::{
+    Column, ColumnType, ForeignKey, ForeignKeyAction, Index, Migration, MigrationHistory, MigrationVersion, Schema,
+    Table,
+};
+pub use types::{ColumnChange, TableChange};
