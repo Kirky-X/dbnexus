@@ -15,7 +15,7 @@
 use dbnexus::metrics::{LatencyHistogram, MetricsCollector};
 use std::time::Duration;
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 /// TEST-METRICS-001: 创建指标收集器测试

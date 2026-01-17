@@ -124,6 +124,8 @@ async fn test_dbpool_from_config() {
 #[cfg(feature = "sqlite")]
 async fn test_dbpool_new() {
     let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    // 获取 session 以确保连接已建立
+    let _session = pool.get_session("admin").await.unwrap();
     let status = pool.status();
     assert!(status.total >= 1);
 }
