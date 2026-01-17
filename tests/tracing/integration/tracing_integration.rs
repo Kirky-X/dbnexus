@@ -42,7 +42,7 @@ fn sanitize_sql_string(input: &str) -> String {
     input.replace('\'', "''")
 }
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 /// TEST-TRACING-001: 追踪初始化测试

@@ -10,7 +10,7 @@
 use dbnexus::DbPool;
 use std::time::Duration;
 
-#[path = "../common/mod.rs"]
+#[path = "../../common/mod.rs"]
 mod common;
 
 /// TEST-I-001: 连接健康检查测试

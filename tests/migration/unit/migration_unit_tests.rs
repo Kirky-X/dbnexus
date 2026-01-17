@@ -3,53 +3,17 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! 迁移集成测试
+//! Migration 模块单元测试
 //!
-//! 测试数据库迁移功能的各个组件：执行器、文件解析、SQL生成、Schema差异检测等
+//! 测试数据库迁移的独立组件：Schema、SQL生成、类型转换等（无需数据库连接）
 
-use dbnexus::DbPool;
 use dbnexus::config::DatabaseType;
 use dbnexus::migration::{
-    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory, Schema,
+    Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema,
     SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 
-#[path = "../common/mod.rs"]
-mod common;
-
-fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
-    match db_type {
-        DatabaseType::Sqlite => format!(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
-            table_name
-        ),
-        DatabaseType::Postgres => format!(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='{}'",
-            table_name
-        ),
-        DatabaseType::MySql => format!(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name='{}'",
-            table_name
-        ),
-    }
-}
-
-/// TEST-M-001: 迁移执行器创建测试
-#[tokio::test]
-async fn test_migration_executor_creation() {
-    let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let connection = session.connection().expect("Failed to get connection").clone();
-
-    let executor = MigrationExecutor::new(connection, DatabaseType::Sqlite);
-
-    // 通过生成的SQL验证数据库类型
-    let test_sql = executor.sql_generator.generate_drop_table_sql("test");
-    assert!(test_sql.contains("DROP TABLE test"));
-}
-
-/// TEST-M-002: 迁移历史创建测试
+/// TEST-M-U-001: 迁移历史创建测试
 #[test]
 fn test_migration_history_creation() {
     let history = MigrationHistory::new();
@@ -58,7 +22,7 @@ fn test_migration_history_creation() {
     assert_eq!(history.get_latest_version(), None);
 }
 
-/// TEST-M-003: 迁移历史添加测试
+/// TEST-M-U-002: 迁移历史添加测试
 #[test]
 fn test_migration_history_add() {
     let mut history = MigrationHistory::new();
@@ -78,7 +42,7 @@ fn test_migration_history_add() {
     assert!(!history.is_version_applied(2));
 }
 
-/// TEST-M-004: 迁移历史排序测试
+/// TEST-M-U-003: 迁移历史排序测试
 #[test]
 fn test_migration_history_sorted() {
     let mut history = MigrationHistory::new();
@@ -111,7 +75,7 @@ fn test_migration_history_sorted() {
     assert_eq!(history.applied_migrations[2].version, 3);
 }
 
-/// TEST-M-005: 迁移文件解析测试
+/// TEST-M-U-004: 迁移文件解析测试
 #[test]
 fn test_migration_file_parser_basic() {
     let content = r#"-- Migration: create_users_table
@@ -139,7 +103,7 @@ DROP TABLE users;
     assert!(full_content.contains("CREATE TABLE"));
 }
 
-/// TEST-M-006: 迁移文件解析 - 无描述
+/// TEST-M-U-005: 迁移文件解析 - 无描述
 #[test]
 fn test_migration_file_parser_no_description() {
     let content = r#"-- UP
@@ -158,7 +122,7 @@ DROP TABLE users;
     assert_eq!(description, "Migration");
 }
 
-/// TEST-M-007: 迁移文件语法验证 - 有效SQL
+/// TEST-M-U-006: 迁移文件语法验证 - 有效SQL
 #[test]
 fn test_migration_file_valid_syntax() {
     let content = r#"-- Migration: create_table
@@ -172,7 +136,7 @@ DROP TABLE test;
     assert!(result.is_ok());
 }
 
-/// TEST-M-008: 迁移文件语法验证 - 无效SQL
+/// TEST-M-U-007: 迁移文件语法验证 - 无效SQL
 #[test]
 fn test_migration_file_invalid_syntax() {
     let content = r#"-- Migration: invalid
@@ -184,7 +148,7 @@ No SQL statements here
     assert!(result.is_err());
 }
 
-/// TEST-M-009: SQL生成器创建测试
+/// TEST-M-U-008: SQL生成器创建测试
 #[test]
 fn test_sql_generator_creation() {
     let pg_gen = SqlGenerator::new(DatabaseType::Postgres);
@@ -196,7 +160,7 @@ fn test_sql_generator_creation() {
     assert_eq!(sqlite_gen.db_type, DatabaseType::Sqlite);
 }
 
-/// TEST-M-010: 创建表SQL生成测试
+/// TEST-M-U-009: 创建表SQL生成测试
 #[test]
 fn test_create_table_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -240,7 +204,7 @@ fn test_create_table_sql_generation() {
     assert!(sql.contains("PRIMARY KEY (id)"));
 }
 
-/// TEST-M-011: 删除表SQL生成测试
+/// TEST-M-U-010: 删除表SQL生成测试
 #[test]
 fn test_drop_table_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Sqlite);
@@ -250,7 +214,7 @@ fn test_drop_table_sql_generation() {
     assert_eq!(sql, "DROP TABLE test_table;");
 }
 
-/// TEST-M-012: 添加列SQL生成测试
+/// TEST-M-U-011: 添加列SQL生成测试
 #[test]
 fn test_add_column_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -272,7 +236,7 @@ fn test_add_column_sql_generation() {
     assert!(sql.contains("age INTEGER"));
 }
 
-/// TEST-M-013: 创建索引SQL生成测试
+/// TEST-M-U-012: 创建索引SQL生成测试
 #[test]
 fn test_create_index_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::MySql);
@@ -293,7 +257,7 @@ fn test_create_index_sql_generation() {
     assert!(sql.contains("email"));
 }
 
-/// TEST-M-014: Schema创建测试
+/// TEST-M-U-013: Schema创建测试
 #[test]
 fn test_schema_creation() {
     let schema = Schema::new(DatabaseType::Postgres);
@@ -302,7 +266,7 @@ fn test_schema_creation() {
     assert!(schema.tables.is_empty());
 }
 
-/// TEST-M-015: Schema表操作测试
+/// TEST-M-U-014: Schema表操作测试
 #[test]
 fn test_schema_table_operations() {
     let mut schema = Schema::new(DatabaseType::Sqlite);
@@ -326,7 +290,7 @@ fn test_schema_table_operations() {
     assert_eq!(retrieved.unwrap().name, "users");
 }
 
-/// TEST-M-016: Schema差异检测 - 新增表
+/// TEST-M-U-015: Schema差异检测 - 新增表
 #[test]
 fn test_schema_diff_new_table() {
     let old_schema = Schema::new(DatabaseType::Postgres);
@@ -365,7 +329,7 @@ fn test_schema_diff_new_table() {
     }
 }
 
-/// TEST-M-017: Schema差异检测 - 删除表
+/// TEST-M-U-016: Schema差异检测 - 删除表
 #[test]
 fn test_schema_diff_drop_table() {
     let mut old_schema = Schema::new(DatabaseType::Postgres);
@@ -394,7 +358,7 @@ fn test_schema_diff_drop_table() {
     }
 }
 
-/// TEST-M-018: Schema差异检测 - 修改表
+/// TEST-M-U-017: Schema差异检测 - 修改表
 #[test]
 fn test_schema_diff_alter_table() {
     let mut old_schema = Schema::new(DatabaseType::Postgres);
@@ -465,7 +429,7 @@ fn test_schema_diff_alter_table() {
     }
 }
 
-/// TEST-M-019: 列类型SQL生成测试
+/// TEST-M-U-018: 列类型SQL生成测试
 #[test]
 fn test_column_type_to_sql() {
     let pg = SqlGenerator::new(DatabaseType::Postgres);
@@ -496,7 +460,7 @@ fn test_column_type_to_sql() {
     assert_eq!(sqlite.generate_column_def(&ColumnType::Json), "TEXT");
 }
 
-/// TEST-M-020: 迁移创建测试
+/// TEST-M-U-019: 迁移创建测试
 #[test]
 fn test_migration_creation() {
     let migration = Migration::new(1, "test_migration".to_string());
@@ -507,137 +471,33 @@ fn test_migration_creation() {
     assert!(migration.sql.is_none());
 }
 
-/// TEST-M-021: 迁移应用测试
-/// 这个测试验证迁移执行器的基本创建和SQL生成，而不是完整应用
-#[tokio::test]
-async fn test_migration_apply() {
-    let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let _connection = session.connection().expect("Failed to get connection").clone();
+/// TEST-M-U-020: 迁移历史获取待应用迁移测试
+#[test]
+fn test_migration_history_pending() {
+    let mut history = MigrationHistory::new();
 
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+    // 添加已应用的迁移
+    history.add_migration(dbnexus::migration::MigrationVersion {
+        version: 1,
+        description: "v1".to_string(),
+        applied_at: time::OffsetDateTime::now_utc(),
+        file_path: "v1.sql".to_string(),
+    });
 
-    let executor = MigrationExecutor::new(_connection, db_type);
+    let all_migrations = vec![
+        Migration::new(1, "v1".to_string()),
+        Migration::new(2, "v2".to_string()),
+        Migration::new(3, "v3".to_string()),
+    ];
 
-    // 验证执行器可以创建
-    assert!(executor.sql_generator.db_type == db_type);
+    let pending = history.get_pending_migrations(&all_migrations);
 
-    // 直接执行SQL来创建表（不通过迁移历史）
-    let create_result = session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
-        .await;
-    if create_result.is_err() {
-        eprintln!("CREATE TABLE error: {:?}", create_result);
-    }
-    assert!(create_result.is_ok(), "Table should be created successfully");
-
-    // 验证表已创建
-    let check_sql = table_exists_check_sql(db_type, "test_table");
-    let check_result = session.execute_raw_ddl(&check_sql).await;
-    if check_result.is_err() {
-        eprintln!("SELECT error: {:?}", check_result);
-    }
-    assert!(check_result.is_ok());
+    assert_eq!(pending.len(), 2);
+    assert_eq!(pending[0].version, 2);
+    assert_eq!(pending[1].version, 3);
 }
 
-/// TEST-M-022: 迁移历史表创建测试
-#[tokio::test]
-async fn test_migration_history_table_creation() {
-    let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let _connection = session.connection().expect("Failed to get connection").clone();
-
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
-
-    let _executor = MigrationExecutor::new(_connection, db_type);
-
-    // 验证迁移历史表已创建
-    let check_sql = table_exists_check_sql(db_type, "dbnexus_migrations");
-    let check_result = session.execute_raw_ddl(&check_sql).await;
-    assert!(check_result.is_ok());
-}
-
-/// TEST-M-023: 完整迁移流程测试
-/// 这个测试验证SQL生成和表创建功能，而不是完整迁移系统
-#[tokio::test]
-async fn test_full_migration_workflow() {
-    let config = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    let _connection = session.connection().expect("Failed to get connection").clone();
-
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
-
-    let generator = SqlGenerator::new(db_type);
-
-    let users_table_name = common::generate_test_table_name("users");
-    let posts_table_name = common::generate_test_table_name("posts");
-
-    // 生成创建 users 表的 SQL
-    let users_table = Table {
-        name: users_table_name.clone(),
-        columns: vec![Column {
-            name: "id".to_string(),
-            column_type: ColumnType::Integer,
-            is_primary_key: true,
-            is_nullable: false,
-            has_default: false,
-            default_value: None,
-            is_auto_increment: false,
-            comment: None,
-        }],
-        primary_key_columns: vec!["id".to_string()],
-        indexes: vec![],
-        foreign_keys: vec![],
-        comment: None,
-    };
-
-    let users_sql = generator.generate_create_table_sql(&users_table);
-    assert!(users_sql.contains(&format!("CREATE TABLE {}", users_table_name)));
-
-    // 直接执行 SQL 创建表
-    let create_users = session.execute_raw_ddl(&users_sql).await;
-    assert!(create_users.is_ok(), "Users table should be created");
-
-    // 生成创建 posts 表的 SQL
-    let posts_table = Table {
-        name: posts_table_name.clone(),
-        columns: vec![Column {
-            name: "id".to_string(),
-            column_type: ColumnType::Integer,
-            is_primary_key: true,
-            is_nullable: false,
-            has_default: false,
-            default_value: None,
-            is_auto_increment: false,
-            comment: None,
-        }],
-        primary_key_columns: vec!["id".to_string()],
-        indexes: vec![],
-        foreign_keys: vec![],
-        comment: None,
-    };
-
-    let posts_sql = generator.generate_create_table_sql(&posts_table);
-    assert!(posts_sql.contains(&format!("CREATE TABLE {}", posts_table_name)));
-
-    // 直接执行 SQL 创建表
-    let create_posts = session.execute_raw_ddl(&posts_sql).await;
-    assert!(create_posts.is_ok(), "Posts table should be created");
-
-    // 验证两个表都存在
-    let check_users_sql = table_exists_check_sql(db_type, &users_table_name);
-    let check_posts_sql = table_exists_check_sql(db_type, &posts_table_name);
-    let check_users = session.execute_raw_ddl(&check_users_sql).await;
-    let check_posts = session.execute_raw_ddl(&check_posts_sql).await;
-
-    assert!(check_users.is_ok(), "Users table should exist");
-    assert!(check_posts.is_ok(), "Posts table should exist");
-}
-
-/// TEST-M-024: 迁移文件解析与生成测试
+/// TEST-M-U-021: 迁移文件解析与生成测试
 #[test]
 fn test_migration_parse_and_generate() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -665,30 +525,4 @@ fn test_migration_parse_and_generate() {
 
     assert!(sql.contains("CREATE TABLE test"));
     assert!(sql.contains("id INTEGER"));
-}
-
-/// TEST-M-025: 迁移历史获取待应用迁移测试
-#[test]
-fn test_migration_history_pending() {
-    let mut history = MigrationHistory::new();
-
-    // 添加已应用的迁移
-    history.add_migration(dbnexus::migration::MigrationVersion {
-        version: 1,
-        description: "v1".to_string(),
-        applied_at: time::OffsetDateTime::now_utc(),
-        file_path: "v1.sql".to_string(),
-    });
-
-    let all_migrations = vec![
-        Migration::new(1, "v1".to_string()),
-        Migration::new(2, "v2".to_string()),
-        Migration::new(3, "v3".to_string()),
-    ];
-
-    let pending = history.get_pending_migrations(&all_migrations);
-
-    assert_eq!(pending.len(), 2);
-    assert_eq!(pending[0].version, 2);
-    assert_eq!(pending[1].version, 3);
 }
