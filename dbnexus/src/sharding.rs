@@ -631,4 +631,58 @@ mod tests {
         assert_eq!(router.all_shards().len(), 4);
         assert_eq!(router.strategy_name(), "yearly");
     }
+
+    // ============================================================================
+    // 策略工厂函数测试 - 从 tests/sharding/integration.rs 移动到这里
+    // ============================================================================
+
+    #[test]
+    fn test_strategy_factory_invalid_name() {
+        let invalid_strategy = create_strategy("invalid_strategy_name");
+        let default_strategy = create_strategy("default");
+
+        let test_time = Utc::now();
+
+        let shard1 = invalid_strategy.calculate(test_time, 12);
+        let shard2 = default_strategy.calculate(test_time, 12);
+
+        assert_eq!(shard1, shard2, "Invalid strategy should fall back to default");
+    }
+
+    #[test]
+    fn test_strategy_factory_aliases() {
+        let test_time = Utc::now();
+
+        let yearly1 = create_strategy("yearly");
+        let yearly2 = create_strategy("year");
+        let monthly1 = create_strategy("monthly");
+        let monthly2 = create_strategy("month");
+        let daily1 = create_strategy("daily");
+        let daily2 = create_strategy("day");
+
+        let y1 = yearly1.calculate(test_time, 12);
+        let y2 = yearly2.calculate(test_time, 12);
+        let m1 = monthly1.calculate(test_time, 100);
+        let m2 = monthly2.calculate(test_time, 100);
+        let d1 = daily1.calculate(test_time, 365);
+        let d2 = daily2.calculate(test_time, 365);
+
+        assert_eq!(y1, y2, "'year' should alias to 'yearly'");
+        assert_eq!(m1, m2, "'month' should alias to 'monthly'");
+        assert_eq!(d1, d2, "'day' should alias to 'daily'");
+    }
+
+    #[test]
+    fn test_strategy_factory_case_insensitive() {
+        let test_time = Utc::now();
+
+        let variants = vec!["YEARLY", "Yearly", "yEaRlY"];
+        let base_shard = create_strategy("yearly").calculate(test_time, 12);
+
+        for variant in variants {
+            let strategy = create_strategy(variant);
+            let shard = strategy.calculate(test_time, 12);
+            assert_eq!(shard, base_shard, "'{}' should work like 'yearly'", variant);
+        }
+    }
 }

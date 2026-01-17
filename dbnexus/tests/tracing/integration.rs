@@ -51,9 +51,7 @@ mod common;
 #[tokio::test]
 async fn test_tracing_initialization() {
     // 使用真实数据库创建连接池
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     let session = pool.get_session("admin").await.expect("Get session");
     drop(session);
@@ -72,9 +70,7 @@ async fn test_tracing_initialization() {
 #[tokio::test]
 async fn test_context_injection() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 模拟追踪头注入
     let trace_id = "0af7651916cd43dd8448eb211c80319c";
@@ -144,9 +140,7 @@ async fn test_context_extraction() {
 #[tokio::test]
 async fn test_context_injection_extraction_consistency() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 生成有效的追踪上下文
     let original_trace_id = "0af7651916cd43dd8448eb211c80319c";
@@ -180,9 +174,7 @@ async fn test_context_injection_extraction_consistency() {
 #[tokio::test]
 async fn test_empty_context_handling() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // Act - 测试空 headers 处理
     let empty_headers: HashMap<String, String> = HashMap::new();
@@ -206,12 +198,8 @@ async fn test_empty_context_handling() {
 #[tokio::test]
 async fn test_multiple_tracing_init() {
     // Arrange
-    let (pool1, _temp_dir1) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create first pool");
-    let (pool2, _temp_dir2) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create second pool");
+    let (pool1, _temp_dir1) = common::create_test_pool().await.expect("Failed to create first pool");
+    let (pool2, _temp_dir2) = common::create_test_pool().await.expect("Failed to create second pool");
 
     let session1 = pool1.get_session("admin").await.expect("First pool session");
     let session2 = pool2.get_session("admin").await.expect("Second pool session");
@@ -234,9 +222,7 @@ async fn test_init_otlp_tracing() {
     let _invalid_endpoint = "http://invalid-endpoint:4317";
 
     // 验证数据库操作仍能正常工作（追踪初始化不应影响核心功能）
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 核心功能应该正常工作
     common::test_pool_with_trace_context(&pool).await;
@@ -255,9 +241,7 @@ async fn test_init_otlp_tracing() {
 #[tokio::test]
 async fn test_unknown_exporter_fallback() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // Act - 使用默认配置验证功能正常
     common::test_pool_with_trace_context(&pool).await;
@@ -310,9 +294,7 @@ async fn test_trace_headers_content() {
 #[tokio::test]
 async fn test_tracing_scope() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // Act - 在作用域内执行操作
     let result = async {
@@ -333,9 +315,7 @@ async fn test_tracing_scope() {
 #[tokio::test]
 async fn test_tracing_cleanup() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     let session = pool.get_session("admin").await.expect("Get session");
     drop(session);
@@ -361,9 +341,7 @@ async fn test_tracing_cleanup() {
 #[tokio::test]
 async fn test_concurrent_context_injection() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
     let num_tasks = 10;
 
     // Act
@@ -390,9 +368,7 @@ async fn test_concurrent_context_injection() {
 #[tokio::test]
 async fn test_trace_context_persistence() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 创建测试表
     let (table_name, _table_temp) = common::create_tracing_test_table(&pool).await;
@@ -419,7 +395,7 @@ async fn test_tracing_init_performance() {
     // Act - 创建多个连接池
     let start = std::time::Instant::now();
     let pool_results: Vec<Result<_, _>> =
-        futures::future::join_all((0..5).map(|_| common::create_sqlite_file_pool())).await;
+        futures::future::join_all((0..5).map(|_| async { common::create_test_pool().await })).await;
     let elapsed = start.elapsed();
 
     // Assert - 功能验证
@@ -458,9 +434,7 @@ async fn test_tracing_init_performance() {
 #[tokio::test]
 async fn test_trace_propagation_with_db_operations() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 创建测试表
     let (table_name, _table_temp) = common::create_tracing_test_table(&pool).await;
@@ -504,9 +478,7 @@ async fn test_trace_propagation_with_db_operations() {
 #[tokio::test]
 async fn test_multi_request_trace_consistency() {
     // Arrange
-    let (pool, _temp_dir) = common::create_sqlite_file_pool()
-        .await
-        .expect("Failed to create test pool");
+    let (pool, _temp_dir_opt) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 创建测试表
     let (table_name, _table_temp) = common::create_tracing_test_table(&pool).await;
