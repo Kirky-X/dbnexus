@@ -38,6 +38,7 @@
 #![doc(html_root_url = "https://docs.rs/dbnexus/0.1")]
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
+#![allow(dead_code)] // 允许未使用的公共 API 和预留功能
 
 // ============================================================================
 // 编译期数据库特性互斥检查
