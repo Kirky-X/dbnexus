@@ -576,7 +576,7 @@ sequenceDiagram
 
 | Macro | Purpose |
 |--------|---------|
-| `#[db_entity]` | Map struct to database table |
+| `#[derive(DbEntity)]` | Map struct to database table |
 | `#[db_crud]` | Generate CRUD methods |
 | `#[db_permission]` | Generate permission checks |
 | `#[db_cache]` | Generate cache annotations |
@@ -587,7 +587,6 @@ sequenceDiagram
 **Input:**
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]

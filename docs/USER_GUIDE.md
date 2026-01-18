@@ -47,7 +47,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = "0.1"
+dbnexus = "0.1.1"
 tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -57,10 +57,10 @@ Select the features you need:
 
 ```toml
 # SQLite with basic features
-dbnexus = { version = "0.1", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.1.1", features = ["sqlite", "permission", "sql-parser"] }
 
 # PostgreSQL with enterprise features
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,7 +69,7 @@ dbnexus = { version = "0.1", features = [
 ] }
 
 # Minimal for embedded
-dbnexus = { version = "0.1", default-features = false, features = ["minimal"] }
+dbnexus = { version = "0.1.1", default-features = false, features = ["minimal"] }
 ```
 
 See [README.md](README.md#feature-flags) for complete feature list.
@@ -80,13 +80,13 @@ Choose one database driver:
 
 ```toml
 # SQLite (default)
-dbnexus = { version = "0.1", features = ["sqlite"] }
+dbnexus = { version = "0.1.1", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1", features = ["postgres"] }
+dbnexus = { version = "0.1.1", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1", features = ["mysql"] }
+dbnexus = { version = "0.1.1", features = ["mysql"] }
 ```
 
 **Important:** Only one database driver can be enabled at a time.
@@ -227,7 +227,6 @@ Define a struct that maps to a database table:
 use dbnexus::{DbEntity, db_crud};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 pub struct User {
@@ -253,7 +252,6 @@ Add role-based access control:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
@@ -270,7 +268,6 @@ Specify allowed operations:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(
@@ -290,7 +287,6 @@ Enable caching for read operations:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_cache]
@@ -307,7 +303,6 @@ Enable audit logging for all operations:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_audit]
@@ -324,7 +319,6 @@ pub struct User {
 use dbnexus::{DbEntity, db_crud, db_permission, db_cache, db_audit};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "orders"]
 #[db_crud]
 #[db_permission(
@@ -537,7 +531,6 @@ roles:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
@@ -691,7 +684,6 @@ Enable caching for read-heavy operations:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "products"]
 #[db_crud]
 #[db_cache]
@@ -715,7 +707,7 @@ Enable Prometheus metrics:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1"
+version = "0.1.1"
 features = ["metrics"]
 ```
 
@@ -745,7 +737,7 @@ Enable audit logging:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1"
+version = "0.1.1"
 features = ["audit"]
 ```
 
@@ -753,7 +745,6 @@ Audit logging is automatic with `#[db_audit]`:
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "sensitive_data"]
 #[db_crud]
 #[db_audit]
@@ -774,7 +765,7 @@ Enable OpenTelemetry tracing:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1"
+version = "0.1.1"
 features = ["tracing"]
 ```
 
@@ -1052,7 +1043,6 @@ use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 use chrono::Utc;
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
