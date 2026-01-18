@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 |------|------|----------|
 | <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | Minimal for embedded devices |
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `config-yaml`, `regex`, `lru` | Microservice setup |
-| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | All enterprise features | Full enterprise features |
+| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | All enterprise features except database drivers | Full enterprise features |
 
 ---
 
@@ -381,7 +381,7 @@ dbnexus = { version = "0.1.1", features = [
 <tr>
 <td width="50%" style="padding: 16px; border-radius:8px; border:1px solid #E2E8F0; vertical-align:top;">
 
-#### 📝 Configuration
+#### 📝 Advanced Configuration
 
 ```rust
 use dbnexus::{DbPool, config::DbConfigBuilder};
@@ -394,7 +394,7 @@ let config = DbConfigBuilder::new()
     .acquire_timeout(5000)
     .build()?;
 
-let pool = DbPool::try_from_config(config).await?;
+let pool = DbPool::with_config(config).await?;
 ```
 
 </td>
