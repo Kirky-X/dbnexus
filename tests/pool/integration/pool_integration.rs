@@ -7,7 +7,10 @@
 //!
 //! 测试连接池的创建、管理、连接健康检查等功能
 
-use dbnexus::DbPool;
+use dbnexus::{
+    DbPool,
+    config::{ConfigLoader, DbConfig},
+};
 use std::time::Duration;
 
 #[path = "../../common/mod.rs"]
@@ -71,7 +74,7 @@ async fn test_validate_and_recreate_connections() {
         .expect("TEST-I-003: Failed to get session to initialize pool");
 
     let status = pool.status();
-    assert!(status.total >= config.min_connections as u32);
+    assert!(status.total >= config.min_connections() as u32);
 }
 
 /// TEST-I-004: 连接池状态测试
@@ -121,7 +124,7 @@ async fn test_pool_status_after_operations() {
     assert!(
         final_status.total >= config.min_connections as u32,
         "Should have at least {} total connections after release",
-        config.min_connections
+        config.min_connections()
     );
     // 初始化连接仍在使用中，所以 active = 1
     assert_eq!(
@@ -194,7 +197,7 @@ async fn test_health_check_after_heavy_usage() {
 
     // 模拟使用（使用较小数量，避免超出连接池限制）
     let mut sessions = Vec::new();
-    let num_sessions = std::cmp::min(5, pool.config().max_connections as usize);
+    let num_sessions = std::cmp::min(5, pool.config().max_connections() as usize);
 
     for i in 0..num_sessions {
         match pool.get_session(&format!("test_role_{}", i)).await {
@@ -290,7 +293,7 @@ async fn test_connection_acquire_with_small_pool() {
 
     let db_config = common::get_test_config();
     let config = DbConfig {
-        url: db_config.url,
+        url: db_config.url_sanitized(),
         max_connections: 2,
         min_connections: 1,
         idle_timeout: 300,
@@ -410,10 +413,10 @@ async fn test_config_url_validation() {
     ];
 
     for yaml in valid_configs {
-        let result = DbConfig::from_yaml_str(yaml);
+        let result = ConfigLoader::from_yaml_str(yaml);
         assert!(result.is_ok(), "URL config should be valid: {}", yaml);
         let config = result.unwrap();
-        assert!(!config.url.is_empty(), "URL should not be empty");
+        assert!(!config.url_sanitized().is_empty(), "URL should not be empty");
     }
 
     // 无效 URL - 这些应该解析失败
@@ -427,7 +430,7 @@ async fn test_config_url_validation() {
     for (idx, url) in invalid_urls.iter().enumerate() {
         // 使用 from_env 风格的测试方式
         let yaml = format!("url: '{}'\nmax_connections: 10\nmin_connections: 1", url);
-        let result = DbConfig::from_yaml_str(&yaml);
+        let result = ConfigLoader::from_yaml_str(&yaml);
 
         // 这些无效 URL 应该导致解析或验证失败
         assert!(result.is_err(), "Test {}: '{}' should be invalid", idx, url);

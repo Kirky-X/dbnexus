@@ -14,15 +14,15 @@
 //! - `tracing/`: 追踪测试
 //! - `cross_cutting/`: 横切关注点测试
 
+pub mod audit;
+pub mod cache;
 pub mod common;
 pub mod core;
-pub mod pool;
+pub mod cross_cutting;
+pub mod global_index;
+pub mod metrics;
 pub mod migration;
 pub mod permission;
-pub mod audit;
-pub mod metrics;
-pub mod cache;
+pub mod pool;
 pub mod sharding;
-pub mod global_index;
 pub mod tracing;
-pub mod cross_cutting;
