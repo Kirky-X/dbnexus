@@ -716,10 +716,10 @@ sequenceDiagram
     Session->>Cache: 5. Cache invalidation (if enabled)
     Session->>Audit: 6. Audit log (if enabled)
 
-    Session->>Session: 7. commit_transaction()
+    Session->>Session: 7. commit()
     Session-->>App: 8. Return success
 
-    Note over Session: If error:<br/>rollback_transaction()
+    Note over Session: If error:<br/>rollback()
 ```
 
 ---
@@ -955,4 +955,4 @@ This architecture enables DBNexus to scale from embedded devices to enterprise d
 For more details on specific components, see:
 - [API Reference](API_REFERENCE.md)
 - [User Guide](USER_GUIDE.md)
-- [Feature Documentation](FEATURES.md)
+- [Rust Docs](https://docs.rs/dbnexus)

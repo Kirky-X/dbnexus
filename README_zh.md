@@ -142,6 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🔀 | **数据分片** | 支持分片策略（`sharding` 特性） |
 | 🌐 | **全局索引** | 跨分片查询（`global-index` 特性） |
 | 💾 | **缓存** | LRU 缓存支持（`cache` 特性） |
+| 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
 
 </td>
 </tr>
@@ -311,6 +312,7 @@ dbnexus = { version = "0.1.1", features = [
     "audit",           # 审计日志
     "migration",       # 数据库迁移
     "sharding",        # 数据分片
+    "permission-engine" # 高级权限引擎
 ] }
 
 # 配置
@@ -575,7 +577,7 @@ make docker-down
 
 <div align="center" style="margin: 24px 0;">
 
-欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解指南。
+欢迎贡献！请查看仓库获取贡献指南。
 
 </div>
 
