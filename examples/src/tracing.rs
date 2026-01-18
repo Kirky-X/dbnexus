@@ -64,12 +64,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 初始化数据库连接池
     println!("\n2️⃣ 初始化数据库连接池");
     println!("------------------------------------------");
-    let config = DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("src/permissions.yaml".to_string()),
-        admin_role: "admin".to_string(),
-        ..Default::default()
-    };
+    let config = DbConfigBuilder::new()
+        .url("sqlite:file::memory:?cache=shared")
+        .permissions_path("src/permissions.yaml")
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 

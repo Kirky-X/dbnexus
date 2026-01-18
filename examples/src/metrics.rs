@@ -54,13 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let current_dir = std::env::current_dir()?;
     let permissions_path = current_dir.join("src/permissions.yaml");
     println!("  权限配置路径: {}", permissions_path.display());
-    
-    let config = DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some(permissions_path.to_string_lossy().to_string()),
-        admin_role: "admin".to_string(),
-        ..Default::default()
-    };
+
+    let config = DbConfigBuilder::new()
+        .url("sqlite:file::memory:?cache=shared")
+        .permissions_path(permissions_path.to_string_lossy().to_string())
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 

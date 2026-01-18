@@ -35,29 +35,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .expect("Failed to build config");
 
-    println!("   URL: {}", config.url);
-    println!("   Max connections: {}", config.max_connections);
-    println!("   Min connections: {}", config.min_connections);
+    println!("   URL: {}", config.url_sanitized());
+    println!("   Max connections: {}", config.max_connections());
+    println!("   Min connections: {}", config.min_connections());
 
-    // 示例 2: 使用结构体创建配置
-    println!("\n2. 使用配置结构体:");
-    let config = dbnexus::DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        max_connections: 10,
-        min_connections: 2,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    // 示例 2: 使用构建器创建配置
+    println!("\n2. 使用配置构建器:");
+    let config = DbConfigBuilder::new()
+        .url("sqlite:file::memory:?cache=shared")
+        .max_connections(10)
+        .min_connections(2)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
 
-    println!("   URL: {}", config.url);
-    println!("   Max connections: {}", config.max_connections);
+    println!("   URL: {}", config.url_sanitized());
+    println!("   Max connections: {}", config.max_connections());
 
     // 示例 3: 使用 try_from_config 初始化连接池
     println!("\n3. 使用 try_from_config 初始化连接池:");
