@@ -57,16 +57,17 @@ DBNexus provides a **declarative** database access approach:
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity)]
-#[table_name = "users"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
+pub struct User {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
+    pub email: String,
 }
 
 #[tokio::main]
@@ -169,6 +170,8 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 dbnexus = "0.1.1"
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
+sea-orm = { version = "2.0.0-rc.27", features = ["macros"] }
 ```
 
 ### <span id="basic-usage">💡 Basic Usage</span>
@@ -187,15 +190,16 @@ dbnexus = "0.1.1"
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity)]
-#[table_name = "users"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
+pub struct User {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
+    pub email: String,
 }
 ```
 
@@ -247,15 +251,16 @@ println!("Found {} users", users.len());
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity)]
-#[table_name = "users"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
+pub struct User {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
 }
 
 // Admin can access
