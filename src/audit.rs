@@ -83,9 +83,10 @@ impl Default for AuditOperation {
 }
 
 /// 审计事件严重级别
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AuditSeverity {
     /// 信息
+    #[default]
     Info,
     /// 低
     Low,
@@ -109,16 +110,11 @@ impl fmt::Display for AuditSeverity {
     }
 }
 
-impl Default for AuditSeverity {
-    fn default() -> Self {
-        AuditSeverity::Info
-    }
-}
-
 /// 审计结果
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AuditResult {
     /// 成功
+    #[default]
     Success,
     /// 失败
     Failure,
@@ -136,12 +132,6 @@ impl fmt::Display for AuditResult {
             AuditResult::Partial => write!(f, "PARTIAL"),
             AuditResult::Unknown => write!(f, "UNKNOWN"),
         }
-    }
-}
-
-impl Default for AuditResult {
-    fn default() -> Self {
-        AuditResult::Success
     }
 }
 
@@ -359,21 +349,18 @@ impl AuditEvent {
         let fields = sensitive_fields.unwrap_or(default_sensitive);
 
         // 尝试解析 JSON
-        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
-            if let serde_json::Value::Object(obj) = json_value {
-                let mut sanitized = obj.clone();
-                for field in &fields {
-                    if let Some(value) = sanitized.remove(field) {
-                        // 记录原始值类型但不记录内容
-                        tracing::debug!("Sensitive field '{}' redacted in audit log", field);
-                    }
+        if let Ok(serde_json::Value::Object(mut obj)) = serde_json::from_str::<serde_json::Value>(value) {
+            for field in &fields {
+                if let Some(_value) = obj.remove(field) {
+                    // 记录原始值类型但不记录内容
+                    tracing::debug!("Sensitive field '{}' redacted in audit log", field);
                 }
-                // 脱敏后的值替换为占位符
-                for field in &fields {
-                    sanitized.insert(field.clone(), serde_json::Value::String("***REDACTED***".to_string()));
-                }
-                return serde_json::to_string(&sanitized).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string());
             }
+            // 脱敏后的值替换为占位符
+            for field in &fields {
+                obj.insert(field.clone(), serde_json::Value::String("***REDACTED***".to_string()));
+            }
+            return serde_json::to_string(&obj).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string());
         }
         // 非 JSON 值，检查是否包含敏感关键字
         let lower = value.to_lowercase();
@@ -1435,15 +1422,15 @@ impl AuditEventBuilder {
         AuditEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
-            operation: self.operation.unwrap_or_else(|| {
-                panic!("AuditEventBuilder: operation is required")
-            }),
-            entity_type: self.entity_type.unwrap_or_else(|| {
-                panic!("AuditEventBuilder: entity_type is required")
-            }),
-            entity_id: self.entity_id.unwrap_or_else(|| {
-                panic!("AuditEventBuilder: entity_id is required")
-            }),
+            operation: self
+                .operation
+                .unwrap_or_else(|| panic!("AuditEventBuilder: operation is required")),
+            entity_type: self
+                .entity_type
+                .unwrap_or_else(|| panic!("AuditEventBuilder: entity_type is required")),
+            entity_id: self
+                .entity_id
+                .unwrap_or_else(|| panic!("AuditEventBuilder: entity_id is required")),
             user_id: self.user_id.unwrap_or_default(),
             user_role: self.user_role.unwrap_or_default(),
             client_ip: self.client_ip.unwrap_or_default(),
