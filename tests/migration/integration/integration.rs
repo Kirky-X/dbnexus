@@ -516,7 +516,7 @@ async fn test_migration_apply() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+    let db_type = DatabaseType::parse_database_type(&pool.config().url_sanitized());
 
     let _executor = MigrationExecutor::new(_connection, db_type);
 
@@ -552,7 +552,7 @@ async fn test_migration_history_table_creation() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+    let db_type = DatabaseType::parse_database_type(&pool.config().url_sanitized());
 
     let _executor = MigrationExecutor::new(_connection, db_type);
 
@@ -571,7 +571,7 @@ async fn test_full_migration_workflow() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let _connection = session.connection().expect("Failed to get connection").clone();
 
-    let db_type = DatabaseType::parse_database_type(pool.config().url.as_str());
+    let db_type = DatabaseType::parse_database_type(&pool.config().url_sanitized());
 
     let generator = SqlGenerator::new(db_type);
 
