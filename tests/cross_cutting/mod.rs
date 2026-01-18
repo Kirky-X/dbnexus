@@ -2,6 +2,6 @@
 //!
 //! 横切关注点测试
 
-pub mod integration;
-pub mod cli;
 pub mod benchmarks;
+pub mod cli;
+pub mod integration;
