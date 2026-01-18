@@ -9,6 +9,7 @@
 //! 包括数据库特定SQL生成、连接健康检查、Schema差异等
 
 use dbnexus::DbPool;
+use dbnexus::config::DbConfigBuilder;
 use dbnexus::config::DatabaseType;
 use dbnexus::config::DbConfig;
 use dbnexus::migration::{ColumnType, SqlGenerator};
@@ -22,7 +23,7 @@ async fn test_sqlite_connection() {
     let config = common::get_test_config();
 
     // 如果配置不是SQLite，跳过此测试
-    if !config.url.starts_with("sqlite") {
+    if !config.url_sanitized().starts_with("sqlite") {
         return;
     }
 
@@ -168,7 +169,7 @@ async fn test_migration_table_creation() {
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 创建迁移历史表（使用 execute_raw_ddl）
-    let create_sql = match config.url.as_str() {
+    let create_sql = match config.url_sanitized() {
         url if url.starts_with("sqlite") => {
             "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
                 version INTEGER PRIMARY KEY,
@@ -200,7 +201,7 @@ async fn test_migration_table_creation() {
     assert!(result.is_ok(), "Migration table should be created successfully");
 
     // 验证表存在（使用 execute_raw_ddl 执行查询）
-    let verify_sql = match config.url.as_str() {
+    let verify_sql = match config.url_sanitized() {
         url if url.starts_with("sqlite") => {
             "SELECT name FROM sqlite_master WHERE type='table' AND name='dbnexus_migrations'"
         }
@@ -275,55 +276,43 @@ fn test_cross_database_type_mapping() {
 #[test]
 fn test_multi_database_config() {
     // 测试不同数据库的配置解析
-    let sqlite_config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let sqlite_config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(10)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build()
+        .expect("Failed to build sqlite config");
 
-    let postgres_config = DbConfig {
-        url: "postgres://localhost/test".to_string(),
-        max_connections: 20,
-        min_connections: 5,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let postgres_config = DbConfigBuilder::new()
+        .url("postgres://localhost/test")
+        .max_connections(20)
+        .min_connections(5)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build()
+        .expect("Failed to build postgres config");
 
-    let mysql_config = DbConfig {
-        url: "mysql://localhost/test".to_string(),
-        max_connections: 15,
-        min_connections: 3,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let mysql_config = DbConfigBuilder::new()
+        .url("mysql://localhost/test")
+        .max_connections(15)
+        .min_connections(3)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build()
+        .expect("Failed to build mysql config");
 
     // 验证配置有效
-    assert!(sqlite_config.url.starts_with("sqlite"));
-    assert!(postgres_config.url.starts_with("postgres"));
-    assert!(mysql_config.url.starts_with("mysql"));
+    assert!(sqlite_config.url_sanitized().starts_with("sqlite"));
+    assert!(postgres_config.url_sanitized().starts_with("postgres"));
+    assert!(mysql_config.url_sanitized().starts_with("mysql"));
 }
 
 /// TEST-MDB-013: 连接池状态跨数据库测试
@@ -368,8 +357,12 @@ roles:
     let perm_file = temp_dir.path().join("test_permissions.yaml");
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -406,11 +399,11 @@ async fn test_connection_parameter_handling() {
 
     // 验证池配置正确应用
     let pool_config = pool.config();
-    assert!(pool_config.max_connections >= 1);
-    assert!(pool_config.min_connections >= 1);
-    assert!(pool_config.min_connections <= pool_config.max_connections);
-    assert!(pool_config.idle_timeout >= 30);
-    assert!(pool_config.acquire_timeout >= 1000);
+    assert!(pool_config.max_connections() >= 1);
+    assert!(pool_config.min_connections() >= 1);
+    assert!(pool_config.min_connections() <= pool_config.max_connections());
+    assert!(pool_config.idle_timeout() >= 30);
+    assert!(pool_config.acquire_timeout() >= 1000);
 }
 
 /// TEST-MDB-016: 事务跨数据库兼容性测试
@@ -522,18 +515,18 @@ async fn test_database_config_compatibility() {
 
     // 验证连接限制
     assert!(
-        pool_config.max_connections >= pool_config.min_connections,
+        pool_config.max_connections() >= pool_config.min_connections(),
         "max_connections should be >= min_connections"
     );
 
     // 验证超时设置合理
     assert!(
-        pool_config.idle_timeout >= 30 && pool_config.idle_timeout <= 3600,
+        pool_config.idle_timeout() >= 30 && pool_config.idle_timeout() <= 3600,
         "idle_timeout should be between 30 and 3600 seconds"
     );
 
     assert!(
-        pool_config.acquire_timeout >= 1000 && pool_config.acquire_timeout <= 60000,
+        pool_config.acquire_timeout() >= 1000 && pool_config.acquire_timeout() <= 60000,
         "acquire_timeout should be between 1000 and 60000 milliseconds"
     );
 }

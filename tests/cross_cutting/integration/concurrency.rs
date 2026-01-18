@@ -9,6 +9,7 @@
 //! 并发数据库操作、连接池压力测试和竞争条件测试
 
 use dbnexus::DbPool;
+use dbnexus::config::DbConfigBuilder;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -124,7 +125,6 @@ async fn test_concurrent_health_checks() {
 #[cfg(feature = "sqlite")]
 async fn test_concurrent_database_operations() {
     // 使用带权限配置的测试配置，允许 DDL 操作
-    let mut config = common::get_test_config();
     // 创建临时权限配置文件，允许 admin 执行所有操作
     let temp_dir = tempfile::TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("test_permissions.yaml");
@@ -140,7 +140,12 @@ roles:
           - delete
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
@@ -334,7 +339,6 @@ async fn test_concurrent_role_sessions() {
 #[tokio::test]
 async fn test_concurrent_transactions() {
     // 使用带权限配置的测试配置
-    let mut config = common::get_test_config();
     // 创建临时权限配置文件，允许 admin 执行所有操作
     let temp_dir = tempfile::TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("test_permissions.yaml");
@@ -350,7 +354,12 @@ roles:
           - delete
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
@@ -401,24 +410,16 @@ roles:
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_capacity_boundary() {
-    use dbnexus::config::DbConfig;
-
     // 创建小容量连接池
-    let config = common::get_test_config();
-    let pool_config = DbConfig {
-        url: config.url,
-        max_connections: 3,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 3000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let pool_config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(3)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(3000)
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
 
     let pool = DbPool::with_config(pool_config).await.expect("Failed to create pool");
     let pool = Arc::new(pool);
