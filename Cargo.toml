@@ -225,92 +225,87 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [[test]]
 name = "core_config_integration"
-path = "tests/core/config_integration.rs"
+path = "tests/core/integration/config_integration.rs"
 required-features = ["config-yaml", "permission"]
 
 [[test]]
 name = "core_entity_integration"
-path = "tests/core/entity_integration.rs"
+path = "tests/core/integration/entity_integration.rs"
 required-features = ["macros"]
 
 [[test]]
 name = "core_sql_parser_integration"
-path = "tests/core/sql_parser_integration.rs"
+path = "tests/core/integration/sql_parser_integration.rs"
 required-features = ["sql-parser"]
 
 [[test]]
-name = "core_pool_integration"
-path = "tests/core/pool_integration.rs"
-required-features = ["config-yaml", "permission"]
-
-[[test]]
 name = "core_session_transaction"
-path = "tests/core/session_transaction.rs"
+path = "tests/core/integration/session_transaction.rs"
 required-features = ["permission"]
 
 [[test]]
 name = "core_permission_integration"
-path = "tests/core/permission_integration.rs"
+path = "tests/core/integration/permission_integration.rs"
 required-features = ["permission"]
 
 [[test]]
 name = "audit_integration"
-path = "tests/audit/integration.rs"
+path = "tests/audit/integration/audit_integration.rs"
 required-features = ["audit"]
 
 [[test]]
 name = "migration_integration"
-path = "tests/migration/integration.rs"
+path = "tests/migration/integration/integration.rs"
 required-features = ["migration"]
 
 [[test]]
 name = "migration_auto_migrate"
-path = "tests/migration/auto_migrate.rs"
+path = "tests/migration/integration/auto_migrate.rs"
 required-features = ["auto-migrate"]
 
 [[test]]
 name = "sharding_integration"
-path = "tests/sharding/integration.rs"
+path = "tests/sharding/integration/sharding_integration.rs"
 required-features = ["sharding"]
 
 [[test]]
 name = "global_index_integration"
-path = "tests/global_index/integration.rs"
+path = "tests/global_index/integration/global_index_integration.rs"
 required-features = ["global-index", "sqlite"]
 
 [[test]]
 name = "metrics_integration"
-path = "tests/metrics/integration.rs"
+path = "tests/metrics/integration/metrics_integration.rs"
 required-features = ["metrics"]
 
 [[test]]
 name = "tracing_integration"
-path = "tests/tracing/integration.rs"
+path = "tests/tracing/integration/tracing_integration.rs"
 required-features = ["tracing"]
 
 [[test]]
 name = "permission_engine_integration"
-path = "tests/permission_engine/integration.rs"
+path = "tests/permission/integration/permission_engine_integration.rs"
 required-features = ["permission-engine"]
 
 [[test]]
 name = "cross_cutting_benchmarks"
-path = "tests/cross_cutting/benchmarks.rs"
+path = "tests/cross_cutting/benchmarks/benchmarks.rs"
 required-features = ["permission"]
 
 [[test]]
 name = "cross_cutting_cli"
-path = "tests/cross_cutting/cli.rs"
+path = "tests/cross_cutting/cli/cli_integration.rs"
 required-features = ["cli-tests"]
 
 [[test]]
 name = "cross_cutting_concurrency"
-path = "tests/cross_cutting/concurrency.rs"
+path = "tests/cross_cutting/integration/concurrency.rs"
 required-features = ["permission"]
 
 [[test]]
 name = "cross_cutting_multi_db"
-path = "tests/cross_cutting/multi_db.rs"
+path = "tests/cross_cutting/integration/multi_db.rs"
 required-features = ["migration"]
 
 [[bench]]
