@@ -10,7 +10,7 @@
 #![cfg(feature = "auto-migrate")]
 
 use dbnexus::DbPool;
-use dbnexus::config::DbConfig;
+use dbnexus::config::{DbConfig, DbConfigBuilder};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -18,17 +18,15 @@ use tempfile::TempDir;
 /// TEST-AM-001: 自动迁移配置创建测试
 #[tokio::test]
 async fn test_auto_migrate_config_creation() {
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        migrations_dir: Some(PathBuf::from("./migrations")),
-        auto_migrate: true,
-        migration_timeout: 120,
-        ..Default::default()
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .migrations_dir("./migrations")
+        .auto_migrate(true)
+        .migration_timeout(120)
+        .build().expect("Failed to build config");
 
-    assert!(config.auto_migrate);
-    assert_eq!(config.migration_timeout, 120);
-    assert!(config.migrations_dir.is_some());
+    assert!(config.auto_migrate());
+    assert_eq!(config.migration_timeout(), 120);
+    assert!(config.migrations_dir().is_some());
 }
 
 /// TEST-AM-002: 迁移文件扫描测试（使用内存数据库）
@@ -73,20 +71,14 @@ DROP TABLE orders;
         .expect("Failed to write migration file 2");
 
     // 使用内存数据库
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build().expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
@@ -102,13 +94,11 @@ DROP TABLE orders;
 /// TEST-AM-003: 迁移超时配置测试
 #[tokio::test]
 async fn test_migration_timeout_config() {
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        migration_timeout: 300,
-        ..Default::default()
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .migration_timeout(300)
+        .build().expect("Failed to build config");
 
-    assert_eq!(config.migration_timeout, 300);
+    assert_eq!(config.migration_timeout(), 300);
     assert_eq!(config.migration_timeout_duration().as_secs(), 300);
 }
 
@@ -118,20 +108,14 @@ async fn test_migration_timeout_config() {
 async fn test_empty_migrations_directory() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build().expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
@@ -145,20 +129,14 @@ async fn test_empty_migrations_directory() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_nonexistent_migrations_directory() {
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build().expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
@@ -185,10 +163,10 @@ async fn test_migration_config_from_env() {
 
     let config = DbConfig::from_env().expect("Failed to create config from env");
 
-    assert!(config.auto_migrate);
-    assert!(config.migrations_dir.is_some());
-    assert_eq!(config.migrations_dir.unwrap(), PathBuf::from("/custom/migrations"));
-    assert_eq!(config.migration_timeout, 120);
+    assert!(config.auto_migrate());
+    assert!(config.migrations_dir().is_some());
+    assert_eq!(config.migrations_dir().unwrap(), PathBuf::from("/custom/migrations"));
+    assert_eq!(config.migration_timeout(), 120);
 
     unsafe {
         std::env::remove_var("DATABASE_URL");
@@ -234,20 +212,14 @@ DROP TABLE table_2;
     fs::write(temp_dir.path().join("1_first.sql"), migration_v1).expect("Failed to write v1");
     fs::write(temp_dir.path().join("2_second.sql"), migration_v2).expect("Failed to write v2");
 
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new().url("sqlite::memory:")
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .admin_role("admin")
+        .migration_timeout(60)
+        .build().expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
