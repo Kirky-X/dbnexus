@@ -56,8 +56,8 @@ tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
 Select the features you need:
 
 ```toml
-# SQLite with basic features
-dbnexus = { version = "0.1.1", features = ["sqlite", "permission", "sql-parser"] }
+# Minimal for embedded devices
+dbnexus = { version = "0.1.1", default-features = false, features = ["minimal"] }
 
 # PostgreSQL with enterprise features
 dbnexus = { version = "0.1.1", features = [
@@ -68,8 +68,8 @@ dbnexus = { version = "0.1.1", features = [
     "audit"
 ] }
 
-# Minimal for embedded
-dbnexus = { version = "0.1.1", default-features = false, features = ["minimal"] }
+# SQLite with basic features
+dbnexus = { version = "0.1.1", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 See [README.md](README.md#feature-flags) for complete feature list.
@@ -153,7 +153,7 @@ admin_role: admin
 use dbnexus::config::ConfigLoader;
 
 let config = ConfigLoader::from_yaml_file("dbnexus.yaml")?;
-let pool = DbPool::try_from_config(config).await?;
+let pool = DbPool::with_config(config).await?;
 ```
 
 #### TOML Configuration
@@ -177,7 +177,7 @@ admin_role = "admin"
 use dbnexus::config::ConfigLoader;
 
 let config = ConfigLoader::from_toml_file("dbnexus.toml")?;
-let pool = DbPool::try_from_config(config).await?;
+let pool = DbPool::with_config(config).await?;
 ```
 
 ### Using the Builder Pattern
@@ -197,7 +197,7 @@ let config = DbConfigBuilder::new()
     .admin_role("admin")
     .build()?;
 
-let pool = DbPool::try_from_config(config).await?;
+let pool = DbPool::with_config(config).await?;
 ```
 
 ### Configuration Parameters
@@ -241,10 +241,15 @@ pub struct User {
 **Required Attributes:**
 
 - `#[derive(DbEntity)]` - Enables DBNexus entity features
-- `#[db_entity]` - Marks struct as database entity
 - `#[table_name = "..."]` - Specifies table name
-- `#[db_crud]` - Generates CRUD methods
 - `#[primary_key]` - Marks primary key field
+
+**Optional Attributes:**
+
+- `#[db_crud]` - Generates CRUD methods
+- `#[db_permission(...)]` - Adds permission control
+- `#[db_cache]` - Enables caching (requires `cache` feature)
+- `#[db_audit]` - Enables audit logging (requires `audit` feature)
 
 ### Entity with Permission Control
 
