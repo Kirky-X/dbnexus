@@ -327,7 +327,11 @@ pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), db
         "postgres" | "mysql" => {
             // PostgreSQL 和 MySQL 不需要临时目录
             let config = get_test_config();
-            eprintln!("DEBUG: Using {} database with URL: {}", test_db_type, config.url_sanitized());
+            eprintln!(
+                "DEBUG: Using {} database with URL: {}",
+                test_db_type,
+                config.url_sanitized()
+            );
             let pool = dbnexus::DbPool::with_config(config).await?;
             Ok((pool, None))
         }

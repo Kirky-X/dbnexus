@@ -7,10 +7,7 @@
 //!
 //! 测试连接池的创建、管理、连接健康检查等功能
 
-use dbnexus::{
-    DbPool,
-    DbConfig,
-};
+use dbnexus::{DbConfig, DbPool};
 use std::time::Duration;
 
 #[path = "../../common/mod.rs"]

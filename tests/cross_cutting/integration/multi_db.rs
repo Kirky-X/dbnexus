@@ -9,9 +9,9 @@
 //! 包括数据库特定SQL生成、连接健康检查、Schema差异等
 
 use dbnexus::DbPool;
-use dbnexus::config::DbConfigBuilder;
 use dbnexus::config::DatabaseType;
 use dbnexus::config::DbConfig;
+use dbnexus::config::DbConfigBuilder;
 use dbnexus::migration::{ColumnType, SqlGenerator};
 
 #[path = "../../common/mod.rs"]
