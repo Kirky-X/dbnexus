@@ -7,6 +7,7 @@
 
 use dbnexus::DbError;
 use dbnexus::DbPool;
+use dbnexus::config::DbConfigBuilder;
 #[cfg(feature = "permission")]
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig};
 use tempfile::TempDir;
@@ -169,8 +170,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -196,8 +201,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -231,8 +240,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -267,8 +280,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).unwrap();
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.unwrap();
     let session = pool.get_session("admin").await.unwrap();
 
@@ -311,8 +328,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -340,8 +361,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -389,8 +414,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -413,8 +442,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -456,8 +489,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -491,8 +528,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -530,8 +571,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -569,8 +614,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -607,8 +656,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -631,8 +684,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -655,8 +712,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -684,8 +745,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -727,8 +792,12 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let mut config = common::get_test_config();
-    config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path(perm_file.to_string_lossy().as_ref())
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
