@@ -477,41 +477,14 @@ println!("{}", metrics.export_prometheus());
 
 <div align="center">
 
-![DBNexus Architecture](resource/DBNexus.png)
-
 </div>
 
-```
-┌─────────────────────────────────────────────────┐
-│              应用层                              │
-│     (使用 DbPool 和 Session 的代码)              │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│           DBNexus API 层                     │
-│   - DbPool, Session                          │
-│   - 权限检查                                │
-│   - 事务管理                                 │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│           功能模块                             │
-│   - Config, Permission, Metrics            │
-│   - Migration, Sharding, Audit             │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│           连接池层                             │
-│   - 连接生命周期管理                          │
-│   - 健康检查                                 │
-│   - RAII 保证                                  │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│         Sea-ORM / SQLx                        │
-│   - 数据库驱动                                │
-│   - 查询构建器                                │
-└───────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[应用层<br/>使用 DbPool 和 Session 的代码] --> B[DBNexus API 层<br/>DbPool, Session<br/>权限检查<br/>事务管理]
+    B --> C[功能模块<br/>Config, Permission, Metrics<br/>Migration, Sharding, Audit]
+    C --> D[连接池层<br/>连接生命周期管理<br/>健康检查<br/>RAII 保证]
+    D --> E[Sea-ORM / SQLx<br/>数据库驱动<br/>查询构建器]
 ```
 
 查看 [ARCHITECTURE.md](ARCHITECTURE.md) 获取详细的架构文档。
