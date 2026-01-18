@@ -37,15 +37,15 @@ docker-logs: ## 查看数据库日志
 # 测试相关
 test-sqlite: ## 运行 SQLite 测试
 	@echo "运行 SQLite 测试..."
-	TEST_DB_TYPE=sqlite cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,all-optional"
+	TEST_DB_TYPE=sqlite cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,config-yaml,config-toml,all-optional"
 
 test-postgres: ## 运行 PostgreSQL 测试
 	@echo "运行 PostgreSQL 测试..."
-	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,all-optional"
+	TEST_DB_TYPE=postgres DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,config-yaml,config-toml,all-optional" -- --test-threads=1
 
 test-mysql: ## 运行 MySQL 测试
 	@echo "运行 MySQL 测试..."
-	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,all-optional"
+	TEST_DB_TYPE=mysql DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test cargo test -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,config-yaml,config-toml,all-optional" -- --test-threads=1
 
 test-all: ## 运行所有数据库测试
 	@echo "运行所有数据库测试..."
