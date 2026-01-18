@@ -70,8 +70,10 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // 生成代码 - 只添加方法，不重新定义结构体
+    // 生成代码 - 保留原始结构体定义并添加方法
     let expanded = quote! {
+        #input
+
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// 获取表名
             pub fn table_name() -> &'static str {
@@ -137,6 +139,21 @@ fn extract_primary_key(data: &syn::Data) -> String {
                         return ident.to_string();
                     }
                 }
+            }
+        }
+    }
+    String::new()
+}
+
+/// 从结构体属性中提取 db_permission 宏的参数
+fn extract_permission_args(attrs: &[syn::Attribute]) -> String {
+    for attr in attrs {
+        // 检查是否是 db_permission 属性
+        if attr.path().is_ident("db_permission") {
+            // 解析属性的内容
+            let meta = &attr.meta;
+            if let syn::Meta::List(meta_list) = meta {
+                return meta_list.tokens.to_string();
             }
         }
     }
@@ -425,6 +442,18 @@ fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
 /// - `123admin` (以数字开头)
 /// - `admin-user` (包含连字符)
 /// - 空字符串
+///
+/// # 使用示例
+/// ```rust,ignore
+/// #[derive(DbEntity)]
+/// #[table_name = "users")]
+/// #[db_permission(roles = ["admin", "user"], operations = ["read", "write"])]
+/// struct User {
+///     #[primary_key]
+///     id: i64,
+///     name: String,
+/// }
+/// ```
 #[proc_macro_attribute]
 #[proc_macro_error]
 pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {

@@ -27,22 +27,6 @@
 //!     .min_connections(2)
 //!     .build()
 //!     .unwrap();
-//!
-//! // 直接使用结构体
-//! let config = DbConfig {
-//!     url: "sqlite::memory:".to_string(),
-//!     max_connections: 20,
-//!     min_connections: 5,
-//!     idle_timeout: 300,
-//!     acquire_timeout: 5000,
-//!     permissions_path: None,
-//!     migrations_dir: None,
-//!     auto_migrate: false,
-//!     migration_timeout: 60,
-//!     admin_role: "admin".to_string(),
-//!     warmup_timeout: 30,
-//!     warmup_retries: 3,
-//! };
 //! ```
 
 #[cfg(any(feature = "postgres", feature = "mysql"))]
@@ -80,9 +64,10 @@ impl PoolConfig {
     /// # Example
     ///
     /// ```rust
+    /// # use dbnexus::config::PoolConfig;
     /// let config = PoolConfig::new(100, 10, 300, 5000);
     /// ```
-    pub(crate) fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
+    pub fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
         Self {
             max_connections,
             min_connections,

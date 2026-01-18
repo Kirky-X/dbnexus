@@ -316,16 +316,15 @@ impl DbPool {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::{DbPool, DbConfig};
+    /// use dbnexus::{DbPool, DbConfigBuilder};
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let config = DbConfig {
-    ///         url: "sqlite::memory:".to_string(),
-    ///         max_connections: 10,
-    ///         min_connections: 2,
-    ///         ..Default::default()
-    ///     };
+    ///     let config = DbConfigBuilder::new()
+    ///         .url("sqlite::memory:")
+    ///         .max_connections(10)
+    ///         .min_connections(2)
+    ///         .build()?;
     ///
     ///     let pool = DbPool::try_from_config(config).await?;
     ///     Ok(())
@@ -347,22 +346,15 @@ impl DbPool {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::{DbPool, DbConfig};
+    /// use dbnexus::{DbPool, DbConfigBuilder};
     ///
-    /// let config = DbConfig {
-    ///     url: "sqlite::memory:".to_string(),
-    ///     max_connections: 10,
-    ///     min_connections: 1,
-    ///     idle_timeout: 300,
-    ///     acquire_timeout: 5000,
-    ///     permissions_path: None,
-    ///     migrations_dir: None,
-    ///     auto_migrate: false,
-    ///     migration_timeout: 60,
-    ///     admin_role: "admin".to_string(),
-    ///     warmup_timeout: 30,
-    ///     warmup_retries: 3,
-    /// };
+    /// let config = DbConfigBuilder::new()
+    ///     .url("sqlite::memory:")
+    ///     .max_connections(10)
+    ///     .min_connections(1)
+    ///     .idle_timeout(300)
+    ///     .acquire_timeout(5000)
+    ///     .build()?;
     ///
     /// let pool = DbPool::try_from(&config)?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())

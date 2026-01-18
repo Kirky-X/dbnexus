@@ -125,10 +125,11 @@ impl CacheKey {
     where
         String: std::hash::Hash + std::cmp::Eq,
     {
-        use std::hash::Hasher;
-        let mut hasher = ahash::AHasher::new();
-        value.hash(&mut hasher);
-        let hash = hasher.finish();
+        use ahash::RandomState;
+        // 使用固定盐值以确保相同输入产生相同输出
+        static STATE: std::sync::LazyLock<RandomState> =
+            std::sync::LazyLock::new(|| RandomState::with_seeds(0xa1b2c3d4, 0xe5f60718, 0xf6e7d8c9, 0xb0a1b2c3));
+        let hash = STATE.hash_one(value);
         Self {
             key: format!("{}:{:016x}", table, hash),
         }

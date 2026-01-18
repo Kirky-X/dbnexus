@@ -42,10 +42,11 @@ async fn test_migration_executor_creation() {
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let connection = session.connection().expect("Failed to get connection").clone();
 
-    let _executor = MigrationExecutor::new(connection, DatabaseType::Sqlite);
+    let db_type = DatabaseType::parse_database_type(&pool.config().url_sanitized());
+    let _executor = MigrationExecutor::new(connection, db_type);
 
     // 验证执行器可以创建（通过调用公共方法验证）
-    let test_sql = SqlGenerator::new(DatabaseType::Sqlite).generate_drop_table_sql("test");
+    let test_sql = SqlGenerator::new(db_type).generate_drop_table_sql("test");
     assert!(test_sql.contains("DROP TABLE test"));
 }
 
