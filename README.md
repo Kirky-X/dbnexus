@@ -477,41 +477,14 @@ println!("{}", metrics.export_prometheus());
 
 <div align="center">
 
-![DBNexus Architecture](resource/DBNexus.png)
-
 </div>
 
-```
-┌─────────────────────────────────────────────────┐
-│           Application Layer                    │
-│  (Your code using DbPool and Session)       │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│         DBNexus API Layer                  │
-│  - DbPool, Session                        │
-│  - Permission checking                    │
-│  - Transaction management                 │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│         Feature Modules                     │
-│  - Config, Permission, Metrics            │
-│  - Migration, Sharding, Audit             │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│         Connection Pool                     │
-│  - Connection lifecycle management          │
-│  - Health checking                        │
-│  - RAII guarantees                       │
-└────────────────┬────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────┐
-│         Sea-ORM / SQLx                    │
-│  - Database drivers                       │
-│  - Query builder                        │
-└───────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[Application Layer<br/>Your code using DbPool and Session] --> B[DBNexus API Layer<br/>DbPool, Session<br/>Permission checking<br/>Transaction management]
+    B --> C[Feature Modules<br/>Config, Permission, Metrics<br/>Migration, Sharding, Audit]
+    C --> D[Connection Pool<br/>Connection lifecycle management<br/>Health checking<br/>RAII guarantees]
+    D --> E[Sea-ORM / SQLx<br/>Database drivers<br/>Query builder]
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
