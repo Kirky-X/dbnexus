@@ -142,6 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🔀 | **Data Sharding** | Support for sharding strategies (`sharding` feature) |
 | 🌐 | **Global Index** | Cross-shard queries (`global-index` feature) |
 | 💾 | **Caching** | LRU cache support (`cache` feature) |
+| 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
 
 </td>
 </tr>
@@ -311,6 +312,7 @@ dbnexus = { version = "0.1.1", features = [
     "audit",           # Audit logging
     "migration",       # Database migration
     "sharding",        # Data sharding
+    "permission-engine" # Advanced permission engine
 ] }
 
 # Configuration
@@ -575,7 +577,7 @@ make docker-down
 
 <div align="center" style="margin: 24px 0;">
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please check the repository for contribution guidelines.
 
 </div>
 
