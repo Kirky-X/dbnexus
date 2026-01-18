@@ -119,7 +119,8 @@ fn config_validation_benchmark(c: &mut Criterion) {
 
     c.bench_function("config_validation", |b| {
         b.iter(|| {
-            let config = DbConfigBuilder::new().url("sqlite::memory:")
+            let config = DbConfigBuilder::new()
+                .url("sqlite::memory:")
                 .max_connections(10)
                 .min_connections(1)
                 .idle_timeout(300)
