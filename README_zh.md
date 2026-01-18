@@ -663,6 +663,6 @@ cargo clippy --all-features
 
 ---
 
-<sub>© 2026 DBNexus Project. All rights reserved.</sub>
+<sub>© 2026 Kirky.X. All rights reserved.</sub>
 
 </div>
