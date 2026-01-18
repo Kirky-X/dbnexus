@@ -326,13 +326,18 @@ impl From<MigrationVersion> for SerializableMigrationVersion {
 
 impl From<SerializableMigrationVersion> for MigrationVersion {
     fn from(sm: SerializableMigrationVersion) -> Self {
-        let applied_at = match time::OffsetDateTime::parse(&sm.applied_at, &time::format_description::well_known::Rfc3339) {
-            Ok(dt) => dt,
-            Err(e) => {
-                tracing::warn!("Failed to parse applied_at '{}': {}, using current time", sm.applied_at, e);
-                time::OffsetDateTime::now_utc()
-            }
-        };
+        let applied_at =
+            match time::OffsetDateTime::parse(&sm.applied_at, &time::format_description::well_known::Rfc3339) {
+                Ok(dt) => dt,
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to parse applied_at '{}': {}, using current time",
+                        sm.applied_at,
+                        e
+                    );
+                    time::OffsetDateTime::now_utc()
+                }
+            };
         Self {
             version: sm.version,
             description: sm.description,
