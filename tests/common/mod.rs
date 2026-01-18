@@ -49,11 +49,14 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     let database_url = std::env::var("DATABASE_URL").ok();
 
     let url = match test_db_type.as_str() {
-        "postgres" => database_url
-            .unwrap_or_else(|| "postgres://dbnexus:dbnexus_password@localhost:15432/dbnexus_test".to_string()),
-        "mysql" => {
-            database_url.unwrap_or_else(|| "mysql://dbnexus:dbnexus_password@localhost:13306/dbnexus_test".to_string())
-        }
+        "postgres" => database_url.unwrap_or_else(|| {
+            let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+            format!("postgres://dbnexus:{}@localhost:15432/dbnexus_test", password)
+        }),
+        "mysql" => database_url.unwrap_or_else(|| {
+            let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+            format!("mysql://dbnexus:{}@localhost:13306/dbnexus_test", password)
+        }),
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
     };
 
@@ -72,7 +75,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let perm_file = temp_dir.path().join("test_permissions.yaml");
         std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
-        config.permissions_path = Some(perm_file.to_string_lossy().to_string());
+        config.set_permissions_path(perm_file.to_string_lossy().to_string());
 
         // 保存 temp_dir 以防止被删除
         let _ = temp_dir;
@@ -101,20 +104,14 @@ pub fn create_temp_migrations_dir() -> (PathBuf, TempDir) {
 /// 对于需要共享状态的测试，请使用 get_sqlite_file_config()
 #[allow(dead_code)]
 pub fn get_sqlite_memory_config() -> DbConfig {
-    DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    }
+    DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .build()
+        .expect("Failed to build SQLite memory config")
 }
 
 /// 创建测试用的SQLite文件数据库配置（推荐用于迁移测试）
@@ -125,20 +122,14 @@ pub fn get_sqlite_file_config() -> (DbConfig, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let db_path = temp_dir.path().join("test.db");
 
-    let config = DbConfig {
-        url: format!("sqlite:///{}", db_path.display()),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new()
+        .url(&format!("sqlite:///{}", db_path.display()))
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .build()
+        .expect("Failed to build SQLite file config");
 
     (config, temp_dir)
 }
@@ -146,39 +137,27 @@ pub fn get_sqlite_file_config() -> (DbConfig, TempDir) {
 /// 创建小容量连接池配置（用于测试连接耗尽场景）
 #[allow(dead_code)]
 pub fn get_small_pool_config() -> DbConfig {
-    DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 1000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    }
+    DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(2)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(1000)
+        .build()
+        .expect("Failed to build small pool config")
 }
 
 /// 创建大容量连接池配置（用于测试高并发场景）
 #[allow(dead_code)]
 pub fn get_large_pool_config() -> DbConfig {
-    DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 50,
-        min_connections: 10,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    }
+    DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(50)
+        .min_connections(10)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .build()
+        .expect("Failed to build large pool config")
 }
 
 /// 获取测试超时时间（毫秒）
@@ -320,20 +299,15 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     // 使用 sqlx 标准的 SQLite URL 格式
-    let config = DbConfig {
-        url: format!("sqlite://{}", db_path_str),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-        permissions_path: Some(perm_file.to_string_lossy().to_string()),
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new()
+        .url(&format!("sqlite://{}", db_path_str))
+        .max_connections(5)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(5000)
+        .permissions_path(&perm_file.to_string_lossy())
+        .build()
+        .expect("Failed to build tracing config");
 
     let pool = dbnexus::DbPool::with_config(config).await?;
     Ok((pool, temp_dir))

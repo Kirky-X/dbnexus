@@ -9,8 +9,8 @@
 
 use dbnexus::config::DatabaseType;
 use dbnexus::migration::{
-    Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema,
-    SchemaDiffer, SqlGenerator, Table, TableChange,
+    Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator,
+    Table, TableChange,
 };
 
 /// TEST-M-U-001: 迁移历史创建测试

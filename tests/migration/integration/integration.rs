@@ -521,7 +521,10 @@ async fn test_migration_apply() {
     let _executor = MigrationExecutor::new(_connection, db_type);
 
     // 验证执行器可以创建（通过数据库类型验证）
-    assert!(matches!(db_type, DatabaseType::Sqlite | DatabaseType::Postgres | DatabaseType::MySql));
+    assert!(matches!(
+        db_type,
+        DatabaseType::Sqlite | DatabaseType::Postgres | DatabaseType::MySql
+    ));
 
     // 直接执行SQL来创建表（不通过迁移历史）
     let create_result = session
