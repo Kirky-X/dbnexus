@@ -1,67 +1,67 @@
-# API Reference
+# API 参考
 
-Complete API documentation for DBNexus.
+DBNexus 的完整 API 文档。
 
-## Table of Contents
+## 目录
 
-- [Core Types](#core-types)
-- [Connection Pool API](#connection-pool-api)
-- [Session API](#session-api)
-- [Configuration API](#configuration-api)
-- [Permission API](#permission-api)
-- [Procedural Macros](#procedural-macros)
-- [Error Types](#error-types)
+- [核心类型](#核心类型)
+- [连接池 API](#连接池-api)
+- [会话 API](#会话-api)
+- [配置 API](#配置-api)
+- [权限 API](#权限-api)
+- [过程宏](#过程宏)
+- [错误类型](#错误类型)
 
 ---
 
-## Core Types
+## 核心类型
 
 ### `DbPool`
 
-Main connection pool manager for database connections.
+数据库连接的主连接池管理器。
 
 ```rust
 pub struct DbPool {
-    // Fields are private
+    // 字段是私有的
 }
 ```
 
-#### Methods
+#### 方法
 
 ##### `new`
 
-Creates a new connection pool with default configuration.
+使用默认配置创建新的连接池。
 
 ```rust
 pub async fn new(url: &str) -> DbResult<Self>
 ```
 
-**Parameters:**
-- `url: &str` - Database connection URL
+**参数：**
+- `url: &str` - 数据库连接 URL
 
-**Returns:**
-- `DbResult<DbPool>` - Connection pool instance
+**返回值：**
+- `DbResult<DbPool>` - 连接池实例
 
-**Example:**
+**示例：**
 ```rust
 let pool = DbPool::new("sqlite::memory:").await?;
 ```
 
 ##### `try_from_config`
 
-Creates a connection pool from explicit configuration.
+从显式配置创建连接池。
 
 ```rust
 pub async fn try_from_config(config: DbConfig) -> DbResult<Self>
 ```
 
-**Parameters:**
-- `config: DbConfig` - Database configuration
+**参数：**
+- `config: DbConfig` - 数据库配置
 
-**Returns:**
-- `DbResult<DbPool>` - Connection pool instance
+**返回值：**
+- `DbResult<DbPool>` - 连接池实例
 
-**Example:**
+**示例：**
 ```rust
 let config = DbConfigBuilder::new()
     .url("postgresql://localhost/db")
@@ -73,19 +73,19 @@ let pool = DbPool::try_from_config(config).await?;
 
 ##### `with_config`
 
-Creates a connection pool from explicit configuration (with auto-correction).
+从显式配置创建连接池（带自动修正）。
 
 ```rust
 pub async fn with_config(config: DbConfig) -> DbResult<Self>
 ```
 
-**Parameters:**
-- `config: DbConfig` - Database configuration
+**参数：**
+- `config: DbConfig` - 数据库配置
 
-**Returns:**
-- `DbResult<DbPool>` - Connection pool instance
+**返回值：**
+- `DbResult<DbPool>` - 连接池实例
 
-**Example:**
+**示例：**
 ```rust
 let config = DbConfigBuilder::new()
     .url("postgresql://localhost/db")
@@ -97,7 +97,7 @@ let pool = DbPool::with_config(config).await?;
 
 ##### `try_from`
 
-Synchronously creates an uninitiated connection pool.
+同步创建未初始化的连接池。
 
 ```rust
 pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError>
@@ -105,96 +105,96 @@ pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError>
 
 ##### `get_session`
 
-Acquires a database session with role-based access control.
+获取具有基于角色的访问控制的数据库会话。
 
 ```rust
 pub async fn get_session(&self, role: &str) -> DbResult<Session>
 ```
 
-**Parameters:**
-- `role: &str` - User role for permission checking
+**参数：**
+- `role: &str` - 用于权限检查的用户角色
 
-**Returns:**
-- `DbResult<Session>` - Database session
+**返回值：**
+- `DbResult<Session>` - 数据库会话
 
-**Errors:**
-- `DbError::Permission` - Role not in permission config
-- `DbError::ConnectionPool` - Failed to acquire connection
+**错误：**
+- `DbError::Permission` - 角色不在权限配置中
+- `DbError::ConnectionPool` - 获取连接失败
 
-**Example:**
+**示例：**
 ```rust
 let session = pool.get_session("admin").await?;
 ```
 
 ##### `status`
 
-Returns current pool status.
+返回当前池状态。
 
 ```rust
 pub fn status(&self) -> PoolStatus
 ```
 
-**Returns:**
-- `PoolStatus` - Pool status information
+**返回值：**
+- `PoolStatus` - 池状态信息
 
-**Example:**
+**示例：**
 ```rust
 let status = pool.status();
-println!("Active: {}, Idle: {}", status.active, status.idle);
+println!("活跃: {}, 空闲: {}", status.active, status.idle);
 ```
 
 ##### `clean_invalid_connections`
 
-Manually triggers connection health check and cleanup.
+手动触发连接健康检查和清理。
 
 ```rust
 pub async fn clean_invalid_connections(&self) -> u32
 ```
 
-**Returns:**
-- `u32` - Number of invalid connections removed
+**返回值：**
+- `u32` - 移除的无效连接数
 
 ---
 
 ### `Session`
 
-RAII-based database session for executing queries.
+基于 RAII 的数据库会话，用于执行查询。
 
 ```rust
 pub struct Session {
-    // Fields are private
+    // 字段是私有的
 }
 ```
 
-#### Methods
+#### 方法
 
 ##### `execute`
 
-Executes a SQL statement with permission checking.
+执行带权限检查的 SQL 语句。
 
 ```rust
 pub async fn execute(&mut self, sql: &str) -> DbResult<ExecResult>
 ```
 
-**Parameters:**
-- `sql: &str` - SQL statement to execute
+**参数：**
+- `sql: &str` - 要执行的 SQL 语句
 
-**Returns:**
-- `DbResult<ExecResult>` - Execution result
+**返回值：**
+- `DbResult<ExecResult>` - 执行结果
 
-**Errors:**
-- `DbError::Permission` - Permission denied
-- `DbError::SqlParse` - Invalid SQL syntax
-- `DbError::Database` - Database error
+**错误：**
+- `DbError::Permission` - 权限被拒绝
+- `DbError::SqlParse` - 无效的 SQL 语法
+- `DbError::Database` - 数据库错误
 
-**Example:**
+**示例：**
 ```rust
 let result = session.execute("SELECT * FROM users").await?;
 ```
 
 ##### `execute_raw`
 
-Executes SQL without permission checking (for admin operations).
+执行不带权限检查的 SQL（用于管理员操作）。
 
 ```rust
 pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>
@@ -202,16 +202,16 @@ pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>
 
 ##### `begin_transaction`
 
-Starts a database transaction.
+开始数据库事务。
 
 ```rust
 pub async fn begin_transaction(&mut self) -> DbResult<()>
 ```
 
-**Errors:**
-- `DbError::Transaction` - Already in transaction
+**错误：**
+- `DbError::Transaction` - 已在事务中
 
-**Example:**
+**示例：**
 ```rust
 session.begin_transaction().await?;
 User::insert(&session, user1).await?;
@@ -221,7 +221,7 @@ session.commit().await?;
 
 ##### `commit`
 
-Commits the current transaction.
+提交当前事务。
 
 ```rust
 pub async fn commit(&mut self) -> DbResult<()>
@@ -229,7 +229,7 @@ pub async fn commit(&mut self) -> DbResult<()>
 
 ##### `rollback`
 
-Rolls back the current transaction.
+回滚当前事务。
 
 ```rust
 pub async fn rollback(&mut self) -> DbResult<()>
@@ -237,7 +237,7 @@ pub async fn rollback(&mut self) -> DbResult<()>
 
 ##### `is_in_transaction`
 
-Checks if currently in a transaction.
+检查当前是否在事务中。
 
 ```rust
 pub fn is_in_transaction(&self) -> bool
@@ -245,7 +245,7 @@ pub fn is_in_transaction(&self) -> bool
 
 ##### `role`
 
-Returns the current session's role.
+返回当前会话的角色。
 
 ```rust
 pub fn role(&self) -> &str
@@ -255,26 +255,26 @@ pub fn role(&self) -> &str
 
 ### `PoolStatus`
 
-Connection pool status information.
+连接池状态信息。
 
 ```rust
 pub struct PoolStatus {
-    pub total: u32,      // Total connections in pool
-    pub active: u32,     // Currently active connections
-    pub idle: u32,       // Idle connections (total - active)
-    pub wait_count: u32,  // Number of times connections were waited for
-    pub borrow_count: u64, // Total number of borrows
-    pub max_active: u32, // Maximum active connections observed
+    pub total: u32,      // 池中的总连接数
+    pub active: u32,     // 当前活跃连接数
+    pub idle: u32,       // 空闲连接数（总数 - 活跃）
+    pub wait_count: u32,  // 等待连接的次数
+    pub borrow_count: u64, // 总借用次数
+    pub max_active: u32, // 观察到的最大活跃连接数
 }
 ```
 
 ---
 
-## Configuration API
+## 配置 API
 
 ### `DbConfig`
 
-Database configuration structure.
+数据库配置结构。
 
 ```rust
 pub struct DbConfig {
@@ -293,35 +293,35 @@ pub struct DbConfig {
 }
 ```
 
-**Default Values:**
+**默认值：**
 
-| Field | Default |
+| 字段 | 默认值 |
 |-------|----------|
 | `max_connections` | 20 |
 | `min_connections` | 5 |
-| `idle_timeout` | 300 (seconds) |
-| `acquire_timeout` | 5000 (milliseconds) |
+| `idle_timeout` | 300 (秒) |
+| `acquire_timeout` | 5000 (毫秒) |
 | `auto_migrate` | `false` |
-| `migration_timeout` | 60 (seconds) |
+| `migration_timeout` | 60 (秒) |
 | `admin_role` | `"admin"` |
-| `warmup_timeout` | 30 (seconds) |
+| `warmup_timeout` | 30 (秒) |
 | `warmup_retries` | 3 |
 
 ### `DbConfigBuilder`
 
-Builder for creating `DbConfig` instances.
+用于创建 `DbConfig` 实例的构建器。
 
 ```rust
 pub struct DbConfigBuilder {
-    // Internal state
+    // 内部状态
 }
 ```
 
-#### Methods
+#### 方法
 
 ##### `new`
 
-Creates a new builder with defaults.
+创建带默认值的新构建器。
 
 ```rust
 pub fn new() -> Self
@@ -329,7 +329,7 @@ pub fn new() -> Self
 
 ##### `url`
 
-Sets the database connection URL.
+设置数据库连接 URL。
 
 ```rust
 pub fn url(self, url: &str) -> Self
@@ -337,7 +337,7 @@ pub fn url(self, url: &str) -> Self
 
 ##### `max_connections`
 
-Sets maximum pool size.
+设置最大池大小。
 
 ```rust
 pub fn max_connections(self, max: u32) -> Self
@@ -345,7 +345,7 @@ pub fn max_connections(self, max: u32) -> Self
 
 ##### `min_connections`
 
-Sets minimum pool size.
+设置最小池大小。
 
 ```rust
 pub fn min_connections(self, min: u32) -> Self
@@ -353,7 +353,7 @@ pub fn min_connections(self, min: u32) -> Self
 
 ##### `idle_timeout`
 
-Sets idle connection timeout in seconds.
+设置空闲连接超时（秒）。
 
 ```rust
 pub fn idle_timeout(self, timeout: u64) -> Self
@@ -361,7 +361,7 @@ pub fn idle_timeout(self, timeout: u64) -> Self
 
 ##### `acquire_timeout`
 
-Sets connection acquisition timeout in milliseconds.
+设置连接获取超时（毫秒）。
 
 ```rust
 pub fn acquire_timeout(self, timeout: u64) -> Self
@@ -369,7 +369,7 @@ pub fn acquire_timeout(self, timeout: u64) -> Self
 
 ##### `permissions_path`
 
-Sets the path to permissions configuration file.
+设置权限配置文件的路径。
 
 ```rust
 pub fn permissions_path(self, path: &str) -> Self
@@ -377,7 +377,7 @@ pub fn permissions_path(self, path: &str) -> Self
 
 ##### `auto_migrate`
 
-Enables automatic database migration.
+启用自动数据库迁移。
 
 ```rust
 pub fn auto_migrate(self, enabled: bool) -> Self
@@ -385,7 +385,7 @@ pub fn auto_migrate(self, enabled: bool) -> Self
 
 ##### `admin_role`
 
-Sets the admin role name.
+设置管理员角色名称。
 
 ```rust
 pub fn admin_role(self, role: &str) -> Self
@@ -393,13 +393,13 @@ pub fn admin_role(self, role: &str) -> Self
 
 ##### `build`
 
-Builds the `DbConfig` instance.
+构建 `DbConfig` 实例。
 
 ```rust
 pub fn build(self) -> Result<DbConfig, ConfigError>
 ```
 
-**Example:**
+**示例：**
 ```rust
 let config = DbConfigBuilder::new()
     .url("postgresql://localhost/db")
@@ -415,37 +415,37 @@ let config = DbConfigBuilder::new()
 
 ### `ConfigLoader`
 
-Loader for reading configuration from various sources.
+用于从各种源读取配置的加载器。
 
 ```rust
 pub struct ConfigLoader;
 ```
 
-#### Methods
+#### 方法
 
 ##### `from_env`
 
-Loads configuration from environment variables.
+从环境变量加载配置。
 
 ```rust
 pub fn from_env() -> Result<DbConfig, ConfigError>
 ```
 
-**Environment Variables:**
+**环境变量：**
 
-| Variable | Type | Default | Description |
+| 变量 | 类型 | 默认值 | 描述 |
 |-----------|-------|----------|-------------|
-| `DATABASE_URL` | String | - | **Required**, database connection URL |
-| `DB_MAX_CONNECTIONS` | u32 | 20 | Maximum pool size |
-| `DB_MIN_CONNECTIONS` | u32 | 5 | Minimum pool size |
-| `DB_IDLE_TIMEOUT` | u64 | 300 | Idle timeout (seconds) |
-| `DB_ACQUIRE_TIMEOUT` | u64 | 5000 | Acquisition timeout (ms) |
-| `DB_PERMISSIONS_PATH` | String | - | Permissions config path |
-| `DB_MIGRATIONS_DIR` | String | - | Migration directory |
-| `DB_AUTO_MIGRATE` | bool | false | Enable auto-migration |
-| `DB_ADMIN_ROLE` | String | "admin" | Admin role name |
+| `DATABASE_URL` | String | - | **必需**，数据库连接 URL |
+| `DB_MAX_CONNECTIONS` | u32 | 20 | 最大池大小 |
+| `DB_MIN_CONNECTIONS` | u32 | 5 | 最小池大小 |
+| `DB_IDLE_TIMEOUT` | u64 | 300 | 空闲超时（秒） |
+| `DB_ACQUIRE_TIMEOUT` | u64 | 5000 | 获取超时（毫秒） |
+| `DB_PERMISSIONS_PATH` | String | - | 权限配置路径 |
+| `DB_MIGRATIONS_DIR` | String | - | 迁移目录 |
+| `DB_AUTO_MIGRATE` | bool | false | 启用自动迁移 |
+| `DB_ADMIN_ROLE` | String | "admin" | 管理员角色名称 |
 
-**Example:**
+**示例：**
 ```bash
 export DATABASE_URL="postgresql://localhost/db"
 export DB_MAX_CONNECTIONS=20
@@ -458,14 +458,14 @@ let config = ConfigLoader::from_env()?;
 
 ##### `from_yaml_file`
 
-Loads configuration from YAML file.
+从 YAML 文件加载配置。
 
 ```rust
 #[cfg(feature = "config-yaml")]
 pub fn from_yaml_file(path: &str) -> Result<DbConfig, ConfigError>
 ```
 
-**YAML Format:**
+**YAML 格式：**
 ```yaml
 url: "postgresql://localhost/db"
 max_connections: 20
@@ -478,14 +478,14 @@ admin_role: admin
 
 ##### `from_toml_file`
 
-Loads configuration from TOML file.
+从 TOML 文件加载配置。
 
 ```rust
 #[cfg(feature = "config-toml")]
 pub fn from_toml_file(path: &str) -> Result<DbConfig, ConfigError>
 ```
 
-**TOML Format:**
+**TOML 格式：**
 ```toml
 url = "postgresql://localhost/db"
 max_connections = 20
@@ -498,13 +498,13 @@ admin_role = "admin"
 
 ##### `from_config_files`
 
-Automatically detects and loads configuration from standard paths.
+自动检测并从标准路径加载配置。
 
 ```rust
 pub fn from_config_files() -> Result<DbConfig, ConfigError>
 ```
 
-**Search Order:**
+**搜索顺序：**
 1. `./dbnexus.yaml`
 2. `./dbnexus.toml`
 3. `./config/dbnexus.yaml`
@@ -514,36 +514,36 @@ pub fn from_config_files() -> Result<DbConfig, ConfigError>
 
 ---
 
-## Permission API
+## 权限 API
 
 ### `PermissionAction`
 
-Database operation types for permission checking.
+用于权限检查的数据库操作类型。
 
 ```rust
 pub enum PermissionAction {
-    Select,  // SELECT queries
-    Insert,  // INSERT statements
-    Update,  // UPDATE statements
-    Delete,  // DELETE statements
+    Select,  // SELECT 查询
+    Insert,  // INSERT 语句
+    Update,  // UPDATE 语句
+    Delete,  // DELETE 语句
 }
 ```
 
 ### `PermissionContext`
 
-Context for permission checking with caching and rate limiting.
+具有缓存和速率限制的权限检查上下文。
 
 ```rust
 pub struct PermissionContext {
-    // Private fields
+    // 私有字段
 }
 ```
 
-#### Methods
+#### 方法
 
 ##### `new`
 
-Creates a new permission context.
+创建新的权限上下文。
 
 ```rust
 pub fn new(role: String, cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>) -> Self
@@ -551,7 +551,7 @@ pub fn new(role: String, cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>) -
 
 ##### `with_rate_limiter`
 
-Creates a context with rate limiting enabled.
+创建启用速率限制的上下文。
 
 ```rust
 pub fn with_rate_limiter(
@@ -563,18 +563,18 @@ pub fn with_rate_limiter(
 
 ##### `check_table_access`
 
-Checks if current role can perform operation on table.
+检查当前角色是否可以对表执行操作。
 
 ```rust
 pub async fn check_table_access(&self, table: &str, action: &PermissionAction) -> bool
 ```
 
-**Returns:**
-- `bool` - `true` if allowed, `false` if denied
+**返回值：**
+- `bool` - 如果允许返回 `true`，如果拒绝返回 `false`
 
 ##### `load_policy`
 
-Loads permission configuration from YAML string.
+从 YAML 字符串加载权限配置。
 
 ```rust
 pub async fn load_policy(&self, yaml: &str) -> DbResult<()>
@@ -582,7 +582,7 @@ pub async fn load_policy(&self, yaml: &str) -> DbResult<()>
 
 ### `PermissionConfig`
 
-Permission configuration structure.
+权限配置结构。
 
 ```rust
 pub struct PermissionConfig {
@@ -590,7 +590,7 @@ pub struct PermissionConfig {
 }
 ```
 
-**YAML Format:**
+**YAML 格式：**
 ```yaml
 roles:
   admin:
@@ -617,11 +617,11 @@ roles:
           - select
 ```
 
-#### Methods
+#### 方法
 
 ##### `from_yaml`
 
-Parses permission config from YAML string.
+从 YAML 字符串解析权限配置。
 
 ```rust
 pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error>
@@ -629,7 +629,7 @@ pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error>
 
 ##### `deny_all`
 
-Creates a permission config that denies all access.
+创建拒绝所有访问的权限配置。
 
 ```rust
 pub fn deny_all() -> Self
@@ -637,66 +637,66 @@ pub fn deny_all() -> Self
 
 ---
 
-## Procedural Macros
+## 过程宏
 
 ### `#[derive(DbEntity)]`
 
-Derive macro that marks a struct as a database entity.
+将结构体标记为数据库实体的派生宏。
 
-**Required Attributes:**
+**必需属性：**
 
-| Attribute | Description | Required |
+| 属性 | 描述 | 必需 |
 |-----------|-------------|-----------|
-| `#[table_name = "..."]` | Database table name | Yes |
-| `#[primary_key]` | Marks primary key field | Yes |
+| `#[table_name = "..."]` | 数据库表名 | 是 |
+| `#[primary_key]` | 标记主键字段 | 是 |
 
-**Optional Attributes:**
+**可选属性：**
 
-| Attribute | Description | Required |
+| 属性 | 描述 | 必需 |
 |-----------|-------------|-----------|
-| `#[db_crud]` | Generate CRUD methods | No |
-| `#[db_permission(...)]` | Add permission control | No |
-| `#[db_cache]` | Enable caching (requires `cache` feature) | No |
-| `#[db_audit]` | Enable audit logging (requires `audit` feature) | No |
+| `#[db_crud]` | 生成 CRUD 方法 | 否 |
+| `#[db_permission(...)]` | 添加权限控制 | 否 |
+| `#[db_cache]` | 启用缓存（需要 `cache` 特性） | 否 |
+| `#[db_audit]` | 启用审计日志（需要 `audit` 特性） | 否 |
 
 ### `#[db_crud]`
 
-Automatically generates CRUD methods for the entity.
+自动为实体生成 CRUD 方法。
 
-**Generated Methods:**
+**生成的方法：**
 
 ```rust
 impl MyEntity {
-    // Insert a record
+    // 插入记录
     pub async fn insert(session: &Session, value: MyEntity) -> DbResult<MyEntity>;
 
-    // Find by primary key
+    // 按主键查找
     pub async fn find_by_id(session: &Session, id: i64) -> DbResult<Option<MyEntity>>;
 
-    // Find all records
+    // 查找所有记录
     pub async fn find_all(session: &Session) -> DbResult<Vec<MyEntity>>;
 
-    // Find by condition
+    // 按条件查找
     pub async fn find_by_condition(
         session: &Session,
         condition: Condition
     ) -> DbResult<Vec<MyEntity>>;
 
-    // Update a record
+    // 更新记录
     pub async fn update(session: &Session, value: MyEntity) -> DbResult<MyEntity>;
 
-    // Delete by primary key
+    // 按主键删除
     pub async fn delete(session: &Session, id: i64) -> DbResult<()>;
 
-    // Delete by condition
+    // 按条件删除
     pub async fn delete_many(session: &Session, condition: Condition) -> DbResult<u64>;
 
-    // Count records
+    // 记录计数
     pub async fn count(session: &Session) -> DbResult<u64>;
 }
 ```
 
-**Example:**
+**示例：**
 ```rust
 #[derive(DbEntity)]
 #[table_name = "users"]
@@ -708,7 +708,7 @@ struct User {
     email: String,
 }
 
-// Usage
+// 使用
 let user = User {
     id: 1,
     name: "Alice".to_string(),
@@ -721,9 +721,9 @@ let found = User::find_by_id(&session, 1).await?;
 
 ### `#[db_permission]`
 
-Declares role-based access control for the entity.
+声明实体的基于角色的访问控制。
 
-**Attributes:**
+**属性：**
 
 ```rust
 #[db_permission(
@@ -733,15 +733,15 @@ Declares role-based access control for the entity.
 )]
 ```
 
-**Parameters:**
+**参数：**
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必需 | 描述 |
 |-----------|-------|-----------|-------------|
-| `roles` | `Vec<&str>` | Yes | List of roles allowed to access this entity |
-| `operations` | `Vec<&str>` | No | List of allowed operations (SELECT, INSERT, UPDATE, DELETE) |
-| `config` | `&str` | No | Path to permissions config file for compile-time validation |
+| `roles` | `Vec<&str>` | 是 | 允许访问此实体的角色列表 |
+| `operations` | `Vec<&str>` | 否 | 允许的操作列表（SELECT, INSERT, UPDATE, DELETE） |
+| `config` | `&str` | 否 | 用于编译时验证的权限配置文件路径 |
 
-**Generated Methods:**
+**生成的方法：**
 
 ```rust
 impl MyEntity {
@@ -753,7 +753,7 @@ impl MyEntity {
 }
 ```
 
-**Example:**
+**示例：**
 ```rust
 #[derive(DbEntity)]
 #[table_name = "users"]
@@ -765,19 +765,19 @@ struct User {
     name: String,
 }
 
-// Usage
+// 使用
 let session = pool.get_session("admin").await?;
 User::find_all(&session).await?; // OK
 
 let session = pool.get_session("guest").await?;
-User::find_all(&session).await?; // Error: Permission denied
+User::find_all(&session).await?; // 错误：权限被拒绝
 ```
 
 ### `#[db_cache]`
 
-Enables caching for entity queries (requires `cache` feature).
+启用实体查询的缓存（需要 `cache` 特性）。
 
-**Generated Methods:**
+**生成的方法：**
 
 ```rust
 impl MyEntity {
@@ -788,19 +788,19 @@ impl MyEntity {
 
 ### `#[db_audit]`
 
-Enables audit logging for entity operations (requires `audit` feature).
+启用实体操作的审计日志（需要 `audit` 特性）。
 
-**Effects:**
-- All CRUD operations are logged to audit trail
-- Includes operation type, timestamp, user role, and result
+**效果：**
+- 所有 CRUD 操作都记录到审计跟踪中
+- 包括操作类型、时间戳、用户角色和结果
 
 ---
 
-## Error Types
+## 错误类型
 
 ### `DbError`
 
-Database operation errors.
+数据库操作错误。
 
 ```rust
 pub enum DbError {
@@ -818,7 +818,7 @@ pub enum DbError {
 
 ### `ConfigError`
 
-Configuration-related errors.
+配置相关错误。
 
 ```rust
 pub enum ConfigError {
@@ -835,7 +835,7 @@ pub enum ConfigError {
 
 ### `SqlParseError`
 
-SQL parsing errors.
+SQL 解析错误。
 
 ```rust
 pub struct SqlParseError {
@@ -846,11 +846,11 @@ pub struct SqlParseError {
 
 ---
 
-## Utility Types
+## 工具类型
 
 ### `ExecResult`
 
-Result of SQL execution.
+SQL 执行的结果。
 
 ```rust
 pub struct ExecResult {
@@ -861,7 +861,7 @@ pub struct ExecResult {
 
 ---
 
-## Type Aliases
+## 类型别名
 
 ```rust
 pub type DbResult<T> = Result<T, DbError>;
@@ -870,9 +870,9 @@ pub type Operation = PermissionAction;
 
 ---
 
-## Feature-Gated APIs
+## 特性门控 API
 
-### Metrics (requires `metrics` feature)
+### 指标（需要 `metrics` 特性）
 
 ```rust
 use dbnexus::metrics::MetricsCollector;
@@ -881,7 +881,7 @@ let collector = MetricsCollector::new(&pool);
 println!("{}", collector.export_prometheus());
 ```
 
-### Audit (requires `audit` feature)
+### 审计（需要 `audit` 特性）
 
 ```rust
 use dbnexus::audit::AuditLogger;
@@ -890,7 +890,7 @@ let logger = AuditLogger::new("/var/log/dbnexus/audit.log");
 logger.log_event(audit_event).await?;
 ```
 
-### Migration (requires `migration` feature)
+### 迁移（需要 `migration` 特性）
 
 ```rust
 use dbnexus::migration::MigrationExecutor;
@@ -901,7 +901,7 @@ executor.run_migrations().await?;
 
 ---
 
-For more detailed documentation, see:
-- [User Guide](USER_GUIDE.md)
-- [Architecture](ARCHITECTURE.md)
-- [Rust Docs](https://docs.rs/dbnexus)
+更多详细文档，请参见：
+- [用户指南](USER_GUIDE.md)
+- [架构](ARCHITECTURE.md)
+- [Rust 文档](https://docs.rs/dbnexus)
