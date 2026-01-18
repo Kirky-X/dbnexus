@@ -451,6 +451,8 @@ pub struct YamlPermissionProvider {
     last_refresh: RwLock<Instant>,
     /// 提供者名称
     name: String,
+    /// 角色映射表（禁止用户名直接作为角色）
+    role_mapping: RwLock<HashMap<String, Vec<String>>>,
 }
 
 impl Default for YamlPermissionProvider {
@@ -460,6 +462,7 @@ impl Default for YamlPermissionProvider {
             roles: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
             name: "yaml".to_string(),
+            role_mapping: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -568,6 +571,7 @@ impl YamlPermissionProvider {
             roles: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
             name: "yaml".to_string(),
+            role_mapping: RwLock::new(HashMap::new()),
         })
     }
 
@@ -586,6 +590,12 @@ impl YamlPermissionProvider {
         // 更新角色权限
         if let Ok(mut roles) = self.roles.write() {
             *roles = config.roles;
+        }
+
+        // 初始化角色映射（从角色定义中提取）
+        if let Ok(mut role_mapping) = self.role_mapping.write() {
+            role_mapping.clear();
+            // 可以从配置中加载角色映射，这里暂时为空
         }
 
         if let Ok(mut last_refresh) = self.last_refresh.write() {
@@ -723,9 +733,15 @@ impl PermissionProvider for YamlPermissionProvider {
 }
 
 impl YamlPermissionProvider {
-    /// 获取主体的角色列表
+    /// 获取主体的角色列表（安全版本：禁止用户名直接作为角色）
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        vec![subject.to_string()]
+        // 只返回预定义的角色映射，禁止用户名直接作为角色
+        self.role_mapping
+            .read()
+            .unwrap()
+            .get(subject)
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
@@ -742,6 +758,8 @@ pub struct RbacPermissionProvider {
     last_refresh: RwLock<Instant>,
     /// 提供者名称
     name: String,
+    /// 角色映射表（禁止用户名直接作为角色）
+    role_mapping: RwLock<HashMap<String, Vec<String>>>,
 }
 
 impl Default for RbacPermissionProvider {
@@ -752,6 +770,7 @@ impl Default for RbacPermissionProvider {
             role_hierarchy: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
             name: "rbac".to_string(),
+            role_mapping: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -792,6 +811,7 @@ impl RbacPermissionProvider {
             role_hierarchy: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
             name: "rbac".to_string(),
+            role_mapping: RwLock::new(HashMap::new()),
         }
     }
 
@@ -931,10 +951,15 @@ impl PermissionProvider for RbacPermissionProvider {
 }
 
 impl RbacPermissionProvider {
-    /// 获取主体的角色列表
+    /// 获取主体的角色列表（安全版本：禁止用户名直接作为角色）
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        // 默认情况下，用户名即角色名
-        vec![subject.to_string()]
+        // 只返回预定义的角色映射，禁止用户名直接作为角色
+        self.role_mapping
+            .read()
+            .unwrap()
+            .get(subject)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// 检查规则是否匹配
