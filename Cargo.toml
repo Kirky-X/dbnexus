@@ -52,6 +52,9 @@ lru = ">=0.12.5, <0.17"
 # Random
 rand = "0.9"
 
+# Hashing - 使用 ahash 替代 DefaultHasher，提供更好的性能和 DOS 攻击抵抗
+ahash = "0.8"
+
 # Internal packages
 dbnexus-macros = { version = "0.1.0" }
 
