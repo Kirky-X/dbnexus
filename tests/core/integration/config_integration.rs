@@ -25,8 +25,6 @@ async fn test_config_builder_basic() {
     assert_eq!(config.max_connections(), 10);
 }
 
-
-
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
