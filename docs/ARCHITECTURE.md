@@ -1,172 +1,172 @@
-# DBNexus Architecture
+# DBNexus 架构
 
-## Table of Contents
+## 目录
 
-- [Overview](#overview)
-- [Design Principles](#design-principles)
-- [System Architecture](#system-architecture)
-- [Module Architecture](#module-architecture)
-- [Core Components](#core-components)
-- [Data Flow](#data-flow)
-- [Security Architecture](#security-architecture)
-- [Performance Architecture](#performance-architecture)
-- [Scalability Architecture](#scalability-architecture)
-
----
-
-## Overview
-
-DBNexus is an enterprise-grade database abstraction layer built on top of Sea-ORM. The architecture follows a **layered design** with clear separation of concerns, enabling developers to choose exactly the features they need through feature gates.
-
-### Key Architectural Goals
-
-1. **Modularity** - Feature-gated compilation for minimal binaries
-2. **Safety** - RAII-based resource management and compile-time guarantees
-3. **Performance** - Async-first design with efficient connection pooling
-4. **Extensibility** - Pluggable components (permission engines, cache strategies)
-5. **Observability** - Built-in metrics and audit logging (optional features)
+- [概述](#概述)
+- [设计原则](#设计原则)
+- [系统架构](#系统架构)
+- [模块架构](#模块架构)
+- [核心组件](#核心组件)
+- [数据流](#数据流)
+- [安全架构](#安全架构)
+- [性能架构](#性能架构)
+- [可扩展性架构](#可扩展性架构)
 
 ---
 
-## Design Principles
+## 概述
 
-### 1. RAII Resource Management
+DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵循**分层设计**，具有清晰的关注点分离，使开发者能够通过特性门控选择他们需要的确切功能。
 
-All database connections are managed using Rust's RAII (Resource Acquisition Is Initialization) pattern:
+### 关键架构目标
+
+1. **模块化** - 特性门控编译以获得最小二进制文件
+2. **安全性** - 基于 RAII 的资源管理和编译时保证
+3. **性能** - 异步优先设计与高效连接池
+4. **可扩展性** - 可插拔组件（权限引擎、缓存策略）
+5. **可观测性** - 内置指标和审计日志（可选特性）
+
+---
+
+## 设计原则
+
+### 1. RAII 资源管理
+
+所有数据库连接都使用 Rust 的 RAII（资源获取即初始化）模式进行管理：
 
 ```rust
 {
     let session = pool.get_session("admin").await?;
-    // Use session...
-    // Connection automatically released when session is dropped
+    // 使用会话...
+    // 当会话被丢弃时连接自动释放
 }
 ```
 
-**Benefits:**
-- Automatic connection cleanup
-- No manual resource management needed
-- Exception-safe guarantee
+**优势：**
+- 自动连接清理
+- 无需手动资源管理
+- 异常安全保证
 
-### 2. Feature-Gated Architecture
+### 2. 特性门控架构
 
-Features are organized into logical groups and enabled at compile time:
+特性被组织成逻辑组并在编译时启用：
 
-**Core Features (always available):**
-- Connection pooling with RAII management
-- Basic configuration management
-- Database driver selection (SQLite, PostgreSQL, MySQL)
+**核心特性（始终可用）：**
+- 带 RAII 管理的连接池
+- 基本配置管理
+- 数据库驱动选择（SQLite、PostgreSQL、MySQL）
 
-**Optional Core Features:**
-- `permission` - Role-based access control
-- `sql-parser` - SQL parsing for permission checks
-- `macros` - Procedural macros for code generation
+**可选核心特性：**
+- `permission` - 基于角色的访问控制
+- `sql-parser` - 用于权限检查的 SQL 解析
+- `macros` - 用于代码生成的过程宏
 
-**Enterprise Features (optional):**
-- `metrics` - Prometheus metrics collection
-- `tracing` - OpenTelemetry integration
-- `audit` - Comprehensive audit logging
-- `migration` - Database migration management
-- `sharding` - Data sharding support
-- `cache` - LRU caching layer
+**企业特性（可选）：**
+- `metrics` - Prometheus 指标收集
+- `tracing` - OpenTelemetry 集成
+- `audit` - 全面审计日志
+- `migration` - 数据库迁移管理
+- `sharding` - 数据分片支持
+- `cache` - LRU 缓存层
 
-### 3. Async-First Design
+### 3. 异步优先设计
 
-All I/O operations use `async/await` with Tokio:
+所有 I/O 操作都使用带有 Tokio 的 `async/await`：
 
-- `AsyncMutex` for thread-safe state
-- `Notify` for efficient condition waiting
-- `tokio::spawn` for background tasks
+- `AsyncMutex` 用于线程安全状态
+- `Notify` 用于高效条件等待
+- `tokio::spawn` 用于后台任务
 
-### 4. Type-Safe Abstractions
+### 4. 类型安全抽象
 
-Compile-time guarantees prevent common errors:
+编译时保证防止常见错误：
 
-- **Database Driver Mutual Exclusion**: Only one database driver can be enabled
-- **Permission Verification**: Compile-time role validation
-- **Type Safety**: All database operations are type-safe
+- **数据库驱动互斥**：只能启用一个数据库驱动
+- **权限验证**：编译时角色验证
+- **类型安全**：所有数据库操作都是类型安全的
 
 ---
 
-## System Architecture
+## 系统架构
 
-### High-Level Layer Diagram
+### 高层级分层图
 
 ```mermaid
 graph TD
-    A[Application Layer<br/>Your code using DbPool and Session] --> B[DBNexus API Layer<br/>DbPool, Session<br/>Permission checking<br/>Transaction management]
-    B --> C[Feature Modules<br/>Config, Permission, Metrics<br/>Migration, Sharding, Audit]
-    C --> D[Connection Pool<br/>Connection lifecycle management<br/>Health checking<br/>RAII guarantees]
-    D --> E[Sea-ORM / SQLx<br/>Database drivers<br/>Query builder]
+    A[应用层<br/>使用 DbPool 和 Session 的代码] --> B[DBNexus API 层<br/>DbPool、Session<br/>权限检查<br/>事务管理]
+    B --> C[特性模块<br/>配置、权限、指标<br/>迁移、分片、审计]
+    C --> D[连接池<br/>连接生命周期管理<br/>健康检查<br/>RAII 保证]
+    D --> E[Sea-ORM / SQLx<br/>数据库驱动<br/>查询构建器]
 ```
 
-### Component Interaction Flow
+### 组件交互流程
 
-1. **Application** requests a session from `DbPool` with a specific role
-2. **DbPool** validates the role and creates a `Session` with database connection
-3. **Session** handles all database operations with automatic permission checking
-4. **Permission System** validates table access based on role policies
-5. **Connection** is automatically returned to pool when session is dropped
+1. **应用程序**从 `DbPool` 请求具有特定角色的会话
+2. **DbPool** 验证角色并创建带有数据库连接的 `Session`
+3. **Session** 处理所有数据库操作并进行自动权限检查
+4. **权限系统**基于角色策略验证表访问
+5. **连接**在会话被丢弃时自动返回到池中
 
-### Key Implementation Details
+### 关键实现细节
 
-- **Connection Pool**: Uses `AsyncMutex<Vec<DatabaseConnection>>` with atomic counters
-- **Permission Caching**: LRU cache for role policies to improve performance
-- **Health Checking**: Background task validates idle connections periodically
-- **RAII Management**: Connections automatically released on session drop
+- **连接池**：使用 `AsyncMutex<Vec<DatabaseConnection>>` 配合原子计数器
+- **权限缓存**：角色策略的 LRU 缓存以提高性能
+- **健康检查**：后台任务定期验证空闲连接
+- **RAII 管理**：会话丢弃时连接自动释放
 
 ---
 
-## Module Architecture
+## 模块架构
 
-### Core Modules
+### 核心模块
 
-#### 1. Configuration Module (`config.rs`)
+#### 1. 配置模块 (`config.rs`)
 
-**Responsibility:** Centralized configuration management
+**职责：**集中配置管理
 
-**Key Components:**
+**关键组件：**
 ```rust
 pub struct DbConfig {
-    pub url: String,                    // Database connection URL
-    pub max_connections: u32,           // Maximum pool size
-    pub min_connections: u32,           // Minimum pool size
-    pub idle_timeout: u64,              // Idle connection timeout
-    pub acquire_timeout: u64,           // Connection acquisition timeout
-    pub permissions_path: Option<String>, // Permission config path
-    pub migrations_dir: Option<PathBuf>, // Migration directory
-    pub auto_migrate: bool,             // Auto-migrate flag
-    pub migration_timeout: u64,         // Migration timeout
-    pub admin_role: String,             // Admin role name
+    pub url: String,                    // 数据库连接 URL
+    pub max_connections: u32,           // 最大池大小
+    pub min_connections: u32,           // 最小池大小
+    pub idle_timeout: u64,              // 空闲连接超时
+    pub acquire_timeout: u64,           // 连接获取超时
+    pub permissions_path: Option<String>, // 权限配置路径
+    pub migrations_dir: Option<PathBuf>, // 迁移目录
+    pub auto_migrate: bool,             // 自动迁移标志
+    pub migration_timeout: u64,         // 迁移超时
+    pub admin_role: String,             // 管理员角色名称
 }
 
 pub struct DbConfigBuilder {
-    // Chain API for building config
+    // 链式 API 用于构建配置
 }
 
 pub struct ConfigLoader {
-    // Load from env vars, YAML, TOML
+    // 从环境变量、YAML、TOML 加载
 }
 
 pub struct ConfigCorrector {
-    // Auto-correct invalid values
+    // 自动修正无效值
 }
 ```
 
-**Configuration Sources Priority:**
-1. Environment variables (highest)
-2. YAML/TOML config files
-3. Built-in defaults (lowest)
+**配置源优先级：**
+1. 环境变量（最高）
+2. YAML/TOML 配置文件
+3. 内置默认值（最低）
 
-**Security Features:**
-- Path traversal attack prevention
-- URL protocol whitelist
-- Configuration validation
+**安全特性：**
+- 路径遍历攻击防护
+- URL 协议白名单
+- 配置验证
 
-#### 2. Connection Pool Module (`pool/`)
+#### 2. 连接池模块 (`pool/`)
 
-**Responsibility:** Manage database connection lifecycle
+**职责：**管理数据库连接生命周期
 
-**Architecture:**
+**架构：**
 
 ```mermaid
 graph TD
@@ -191,34 +191,34 @@ graph TD
     end
 ```
 
-**Connection Acquisition Flow:**
+**连接获取流程：**
 
 ```rust
 async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
-    // 1. Try to get from idle queue
+    // 1. 尝试从空闲队列获取
     let mut idle = self.idle_connections.lock().await;
     if let Some(conn) = idle.pop() {
         self.active_count.fetch_add(1, Ordering::SeqCst);
         return Ok(conn);
     }
 
-    // 2. Check if max connections reached
+    // 2. 检查是否达到最大连接数
     if self.total_count.load(Ordering::SeqCst) >= self.config.max_connections {
         drop(idle);
         self.wait_count.fetch_add(1, Ordering::SeqCst);
         let notified = self.connection_available.notified();
-        notified.await; // Wait efficiently using Notify
-        // Retry...
+        notified.await; // 使用 Notify 高效等待
+        // 重试...
     }
 
-    // 3. Create new connection
+    // 3. 创建新连接
     let conn = self.create_connection().await?;
     self.total_count.fetch_add(1, Ordering::SeqCst);
     return Ok(conn);
 }
 ```
 
-**RAII Implementation:**
+**RAII 实现：**
 
 ```rust
 impl Drop for Session {
@@ -230,11 +230,11 @@ impl Drop for Session {
 }
 ```
 
-#### 3. Permission Module (`permission.rs`)
+#### 3. 权限模块 (`permission.rs`)
 
-**Responsibility:** Role-based access control (RBAC)
+**职责：**基于角色的访问控制（RBAC）
 
-**Architecture:**
+**架构：**
 
 ```
 PermissionContext
@@ -250,65 +250,65 @@ RolePolicy
 └── tables: Vec<TablePermission>
 
 TablePermission
-├── name: String (table name or "*")
+├── name: String (表名或 "*")
 └── operations: HashSet<PermissionAction>
 ```
 
-**Permission Check Flow:**
+**权限检查流程：**
 
 ```mermaid
 flowchart TD
-    Start[Permission Check Start] --> RateLimit[Rate limit check]
-    RateLimit -->|Exceeded| Block[Block request]
-    RateLimit -->|OK| CacheLookup[LRU cache lookup]
+    Start[权限检查开始] --> RateLimit[速率限制检查]
+    RateLimit -->|超出| Block[阻止请求]
+    RateLimit -->|OK| CacheLookup[LRU 缓存查找]
 
-    CacheLookup -->|Cache hit| ReturnCached[Return cached decision]
-    CacheLookup -->|Cache miss| LoadPolicy[Load policy from config]
+    CacheLookup -->|缓存命中| ReturnCached[返回缓存决策]
+    CacheLookup -->|缓存未命中| LoadPolicy[从配置加载策略]
 
-    LoadPolicy --> ParseYAML[Parse YAML config]
-    ParseYAML --> BuildPolicy[Build role policy map]
-    BuildPolicy --> CheckTable[Check table access]
+    LoadPolicy --> ParseYAML[解析 YAML 配置]
+    ParseYAML --> BuildPolicy[构建角色策略映射]
+    BuildPolicy --> CheckTable[检查表访问]
 
-    CheckTable --> CheckRole{Is role allowed<br/>for table?}
-    CheckRole -->|No| Deny[Deny access]
-    CheckRole -->|Yes| CheckOp{Is operation<br/>allowed?}
+    CheckTable --> CheckRole{角色是否允许<br/>访问表？}
+    CheckRole -->|否| Deny[拒绝访问]
+    CheckRole -->|是| CheckOp{操作是否<br/>允许？}
 
-    CheckOp -->|No| Deny
-    CheckOp -->|Yes| CacheDecision[Cache decision]
+    CheckOp -->|否| Deny
+    CheckOp -->|是| CacheDecision[缓存决策]
 
-    CacheDecision --> StoreCache[Store in LRU cache]
-    StoreCache --> Allow[Allow access]
+    CacheDecision --> StoreCache[存储到 LRU 缓存]
+    StoreCache --> Allow[允许访问]
 
-    ReturnCached --> End[End]
+    ReturnCached --> End[结束]
     Deny --> End
     Allow --> End
     Block --> End
 ```
 
-**Performance Optimizations:**
+**性能优化：**
 
-- **LRU Cache**: Default 256 entries, reduces config loading
-- **Rate Limiting**: 100 requests/minute, prevents abuse
-- **Async Locks**: Non-blocking for concurrent requests
+- **LRU 缓存**：默认 256 个条目，减少配置加载
+- **速率限制**：每分钟 100 个请求，防止滥用
+- **异步锁**：并发请求的非阻塞
 
-### Optional Feature Modules
+### 可选特性模块
 
-#### 4. Metrics Module (`metrics.rs`)
+#### 4. 指标模块 (`metrics.rs`)
 
-**Responsibility:** Performance metrics collection
+**职责：**性能指标收集
 
-**Metrics Tracked:**
+**跟踪的指标：**
 
-| Metric | Description |
+| 指标 | 描述 |
 |---------|-------------|
-| `pool_connections_active` | Currently active connections |
-| `pool_connections_idle` | Idle connections |
-| `pool_connections_total` | Total connections |
-| `query_latency_p50` | 50th percentile latency |
-| `query_latency_p99` | 99th percentile latency |
-| `query_throughput` | Queries per second |
+| `pool_connections_active` | 当前活跃连接 |
+| `pool_connections_idle` | 空闲连接 |
+| `pool_connections_total` | 总连接数 |
+| `query_latency_p50` | 第 50 百分位延迟 |
+| `query_latency_p99` | 第 99 百分位延迟 |
+| `query_throughput` | 每秒查询数 |
 
-**Data Structures:**
+**数据结构：**
 
 ```rust
 pub struct MetricsCollector {
@@ -327,11 +327,11 @@ pub struct LatencyPercentiles {
 }
 ```
 
-#### 5. Audit Module (`audit.rs`)
+#### 5. 审计模块 (`audit.rs`)
 
-**Responsibility:** Complete operation audit trail
+**职责：**完整操作审计跟踪
 
-**Audit Event Structure:**
+**审计事件结构：**
 
 ```rust
 pub struct AuditEvent {
@@ -349,39 +349,39 @@ pub struct AuditEvent {
 }
 ```
 
-**Audit Flow:**
+**审计流程：**
 
 ```mermaid
 flowchart TD
-    Start[Audit Flow Start] --> BeforeOp[Before operation]
+    Start[审计流程开始] --> BeforeOp[操作前]
 
-    BeforeOp --> GenUUID[Generate UUID]
-    BeforeOp --> RecordStart[Record start time]
-    BeforeOp --> LogDetails[Log request details]
+    BeforeOp --> GenUUID[生成 UUID]
+    BeforeOp --> RecordStart[记录开始时间]
+    BeforeOp --> LogDetails[记录请求详情]
 
-    GenUUID --> ExecuteOp[Execute operation]
+    GenUUID --> ExecuteOp[执行操作]
     RecordStart --> ExecuteOp
     LogDetails --> ExecuteOp
 
-    ExecuteOp --> CaptureSQL[Capture SQL and parameters]
+    ExecuteOp --> CaptureSQL[捕获 SQL 和参数]
 
-    CaptureSQL --> AfterOp[After operation]
-    AfterOp --> RecordEnd[Record end time]
-    AfterOp --> CaptureResult[Capture result<br/>success/failure]
-    AfterOp --> BuildEvent[Build AuditEvent]
-    AfterOp --> Persist[Persist to audit log]
+    CaptureSQL --> AfterOp[操作后]
+    AfterOp --> RecordEnd[记录结束时间]
+    AfterOp --> CaptureResult[捕获结果<br/>成功/失败]
+    AfterOp --> BuildEvent[构建 AuditEvent]
+    AfterOp --> Persist[持久化到审计日志]
 
-    RecordEnd --> End[Audit Flow End]
+    RecordEnd --> End[审计流程结束]
     CaptureResult --> End
     BuildEvent --> End
     Persist --> End
 ```
 
-#### 6. Cache Module (`cache.rs`)
+#### 6. 缓存模块 (`cache.rs`)
 
-**Responsibility:** Entity data caching
+**职责：**实体数据缓存
 
-**Cache Architecture:**
+**缓存架构：**
 
 ```mermaid
 graph TD
@@ -400,31 +400,31 @@ graph TD
     end
 
     subgraph CacheConfig["CacheConfig"]
-        capacity["capacity:<br/>usize<br/>(max entries)"]
-        ttl["ttl:<br/>Duration<br/>(time-to-live)"]
+        capacity["capacity:<br/>usize<br/>(最大条目数)"]
+        ttl["ttl:<br/>Duration<br/>(生存时间)"]
         cleanup_interval["cleanup_interval:<br/>Duration"]
         enabled["enabled:<br/>bool"]
     end
 ```
 
-**Cache Strategy:**
+**缓存策略：**
 
-- **LRU Eviction**: Least recently used entries are evicted first
-- **TTL Expiration**: Entries expire after configured time
-- **Write-Through**: Cache is updated on writes
+- **LRU 淘汰**：最近最少使用的条目首先被淘汰
+- **TTL 过期**：条目在配置时间后过期
+- **写透**：写入时更新缓存
 
-#### 7. Sharding Module (`sharding.rs`)
+#### 7. 分片模块 (`sharding.rs`)
 
-**Responsibility:** Data distribution across shards
+**职责：**跨分片数据分布
 
-**Sharding Strategies:**
+**分片策略：**
 
 ```rust
 pub enum ShardingStrategy {
-    Yearly,    // One shard per year
-    Monthly,    // One shard per month
-    Daily,      // One shard per day
-    Hash,       // Consistent hash sharding
+    Yearly,    // 每年一个分片
+    Monthly,    // 每月一个分片
+    Daily,      // 每日一个分片
+    Hash,       // 一致性哈希分片
 }
 
 pub trait ShardingStrategy: Send + Sync {
@@ -433,7 +433,7 @@ pub trait ShardingStrategy: Send + Sync {
 }
 ```
 
-**Example: Monthly Sharding**
+**示例：月度分片**
 
 ```rust
 impl ShardingStrategy for MonthlyStrategy {
@@ -443,11 +443,11 @@ impl ShardingStrategy for MonthlyStrategy {
 }
 ```
 
-#### 8. Global Index Module (`global_index.rs`)
+#### 8. 全局索引模块 (`global_index.rs`)
 
-**Responsibility:** Cross-shard indexing
+**职责：**跨分片索引
 
-**Global Index Architecture:**
+**全局索引架构：**
 
 ```mermaid
 graph TD
@@ -466,51 +466,51 @@ graph TD
     end
 ```
 
-**Sync Flow:**
+**同步流程：**
 
 ```mermaid
 sequenceDiagram
-    participant App as Application
-    participant ShardA as Shard A
-    participant Channel as Sync Channel
-    participant Task as Background Task
-    participant GlobalIdx as Global Index
-    participant Query as Global Query
+    participant App as 应用程序
+    participant ShardA as 分片 A
+    participant Channel as 同步通道
+    participant Task as 后台任务
+    participant GlobalIdx as 全局索引
+    participant Query as 全局查询
 
-    App->>ShardA: 1. Write operation
-    ShardA->>ShardA: Generate SyncEvent::Insert
-    ShardA->>Channel: 2. Publish to sync channel
+    App->>ShardA: 1. 写操作
+    ShardA->>ShardA: 生成 SyncEvent::Insert
+    ShardA->>Channel: 2. 发布到同步通道
 
-    Channel->>Task: Background task picks up event
-    Task->>GlobalIdx: 3. Update global index
-    GlobalIdx-->>Task: Add/Update index entry
+    Channel->>Task: 后台任务拾取事件
+    Task->>GlobalIdx: 3. 更新全局索引
+    GlobalIdx-->>Task: 添加/更新索引条目
 
-    Query->>GlobalIdx: 4. Global query
-    GlobalIdx-->>Query: Query global index
-    Query-->>ShardA: Route to correct shard(s)
+    Query->>GlobalIdx: 4. 全局查询
+    GlobalIdx-->>Query: 查询全局索引
+    Query-->>ShardA: 路由到正确分片
 ```
 
 ---
 
-## Core Components
+## 核心组件
 
-### 1. Procedural Macros System
+### 1. 过程宏系统
 
-**Purpose:** Compile-time code generation for boilerplate reduction
+**目的：**编译时代码生成以减少样板代码
 
-**Macros Provided:**
+**提供的宏：**
 
-| Macro | Purpose |
+| 宏 | 目的 |
 |--------|---------|
-| `#[derive(DbEntity)]` | Map struct to database table |
-| `#[db_crud]` | Generate CRUD methods |
-| `#[db_permission]` | Generate permission checks |
-| `#[db_cache]` | Generate cache annotations |
-| `#[db_audit]` | Generate audit annotations |
+| `#[derive(DbEntity)]` | 将结构体映射到数据库表 |
+| `#[db_crud]` | 生成 CRUD 方法 |
+| `#[db_permission]` | 生成权限检查 |
+| `#[db_cache]` | 生成缓存注解 |
+| `#[db_audit]` | 生成审计注解 |
 
-**Macro Expansion Example:**
+**宏扩展示例：**
 
-**Input:**
+**输入：**
 ```rust
 #[derive(DbEntity)]
 #[table_name = "users"]
@@ -523,16 +523,16 @@ struct User {
 }
 ```
 
-**Generated Code (simplified):**
+**生成的代码（简化）：**
 ```rust
 impl User {
-    // CRUD methods
+    // CRUD 方法
     pub async fn insert(session: &Session, value: User) -> DbResult<User> { /* ... */ }
     pub async fn find_by_id(session: &Session, id: i64) -> DbResult<Option<User>> { /* ... */ }
     pub async fn update(session: &Session, value: User) -> DbResult<User> { /* ... */ }
     pub async fn delete(session: &Session, id: i64) -> DbResult<()> { /* ... */ }
 
-    // Permission methods
+    // 权限方法
     pub const ALLOWED_ROLES: &[&str] = &["admin", "manager"];
     pub fn check_permission(ctx: &PermissionContext) -> DbResult<()> {
         if !Self::ALLOWED_ROLES.contains(&ctx.role()) {
@@ -541,64 +541,64 @@ impl User {
         Ok(())
     }
 
-    // Entity methods
+    // 实体方法
     pub const TABLE_NAME: &str = "users";
     pub const PRIMARY_KEY: &str = "id";
 }
 ```
 
-### 2. SQL Parser
+### 2. SQL 解析器
 
-**Purpose:** Extract operation type and target table from SQL
+**目的：**从 SQL 中提取操作类型和目标表
 
-**Supported Operations:**
+**支持的操作：**
 
 ```rust
 pub enum SqlOperationType {
-    Select,    // SELECT queries
-    Insert,    // INSERT statements
-    Update,    // UPDATE statements
-    Delete,    // DELETE statements
+    Select,    // SELECT 查询
+    Insert,    // INSERT 语句
+    Update,    // UPDATE 语句
+    Delete,    // DELETE 语句
     Ddl,       // CREATE/ALTER/DROP/TRUNCATE
     Dcl,       // GRANT/REVOKE
     Transaction, // BEGIN/COMMIT/ROLLBACK
-    Other,      // Everything else
+    Other,      // 其他所有
 }
 ```
 
-**Usage:**
+**使用：**
 
 ```rust
 let parser = SqlParser::new();
 let (table_name, operation) = parser.parse_operation("SELECT * FROM users WHERE id = 1")?;
 
-// Returns: ("users", SqlOperationType::Select)
+// 返回: ("users", SqlOperationType::Select)
 ```
 
-### 3. Health Check System
+### 3. 健康检查系统
 
-**Purpose:** Maintain connection pool health
+**目的：**维护连接池健康
 
-**Architecture:**
+**架构：**
 
 ```mermaid
 flowchart TD
-    Start[Background Task<br/>tokio::spawn] --> Interval[Interval tick<br/>every N seconds]
+    Start[后台任务<br/>tokio::spawn] --> Interval[间隔触发<br/>每 N 秒]
 
-    Interval --> Validate[Validate idle connections]
-    Validate --> Execute[Execute SELECT 1]
-    Execute --> CheckValid{Is valid?}
+    Interval --> Validate[验证空闲连接]
+    Validate --> Execute[执行 SELECT 1]
+    Execute --> CheckValid{是否有效？}
 
-    CheckValid -->|Yes| Keep[Keep connection]
-    CheckValid -->|No| Remove[Remove connection]
+    CheckValid -->|是| Keep[保留连接]
+    CheckValid -->|否| Remove[移除连接]
 
-    Keep --> Recreate[Recreate connections<br/>to maintain min_connections]
+    Keep --> Recreate[重新创建连接<br/>以维持 min_connections]
     Remove --> Recreate
 
     Recreate --> Interval
 ```
 
-**Health Check Implementation:**
+**健康检查实现：**
 
 ```rust
 pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::DbErr> {
@@ -616,7 +616,7 @@ pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::Db
         }
     }
 
-    // Recreate to maintain minimum
+    // 重新创建以维持最小值
     let needed = min_connections - valid_connections.len();
     for _ in 0..needed {
         let new_conn = create_connection().await?;
@@ -629,111 +629,111 @@ pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::Db
 
 ---
 
-## Data Flow
+## 数据流
 
-### Query Flow
+### 查询流
 
 ```mermaid
 sequenceDiagram
-    participant App as Application
+    participant App as 应用程序
     participant CRUD as #[db_crud]
     participant Session as Session
     participant PermCtx as PermissionContext
-    participant Parser as SQL Parser
+    participant Parser as SQL 解析器
     participant SeaORM as Sea-ORM
-    participant Audit as Audit Log
+    participant Audit as 审计日志
 
     App->>CRUD: 1. User::find_by_id(&session, 1)
-    CRUD->>CRUD: 2. Check permission
+    CRUD->>CRUD: 2. 检查权限
     CRUD->>Session: 3. check_permission("users", "SELECT")
 
     Session->>PermCtx: PermissionContext.check_table_access()
-    PermCtx->>PermCtx: Rate limit check
-    PermCtx->>PermCtx: LRU cache lookup
-    PermCtx->>PermCtx: Load policy & evaluate
-    PermCtx-->>Session: Return allow/deny
+    PermCtx->>PermCtx: 速率限制检查
+    PermCtx->>PermCtx: LRU 缓存查找
+    PermCtx->>PermCtx: 加载策略并评估
+    PermCtx-->>Session: 返回允许/拒绝
 
-    Session-->>CRUD: Permission result
-    CRUD->>SeaORM: 4. Build Sea-ORM query
+    Session-->>CRUD: 权限结果
+    CRUD->>SeaORM: 4. 构建 Sea-ORM 查询
     CRUD->>Session: 5. execute(query)
 
-    Session->>Parser: 6. SQL parser validates operation type
-    Parser-->>Session: Return validated query
+    Session->>Parser: 6. SQL 解析器验证操作类型
+    Parser-->>Session: 返回验证的查询
 
-    Session->>SeaORM: 7. Execute via Sea-ORM
-    SeaORM-->>Session: 8. Return result
-    Session-->>CRUD: Return result
-    CRUD-->>App: Return result
+    Session->>SeaORM: 7. 通过 Sea-ORM 执行
+    SeaORM-->>Session: 8. 返回结果
+    Session-->>CRUD: 返回结果
+    CRUD-->>App: 返回结果
 
-    App->>Audit: 9. Audit log entry (if enabled)
+    App->>Audit: 9. 审计日志条目（如果启用）
 ```
 
-### Write Flow (with Transaction)
+### 写流（带事务）
 
 ```mermaid
 sequenceDiagram
-    participant App as Application
+    participant App as 应用程序
     participant Session as Session
-    participant PermCtx as Permission Context
+    participant PermCtx as 权限上下文
     participant SeaORM as Sea-ORM
-    participant Cache as Cache
-    participant Audit as Audit Log
+    participant Cache as 缓存
+    participant Audit as 审计日志
 
     App->>Session: 1. User::insert(&session, user)
     Session->>Session: 2. begin_transaction()
 
-    Session->>PermCtx: 3. Permission check (INSERT on "users")
-    PermCtx-->>Session: Return allow/deny
+    Session->>PermCtx: 3. 权限检查（在 "users" 上的 INSERT）
+    PermCtx-->>Session: 返回允许/拒绝
 
-    Session->>SeaORM: 4. Insert via Sea-ORM
-    SeaORM-->>Session: Return result
+    Session->>SeaORM: 4. 通过 Sea-ORM 插入
+    SeaORM-->>Session: 返回结果
 
-    Session->>Cache: 5. Cache invalidation (if enabled)
-    Session->>Audit: 6. Audit log (if enabled)
+    Session->>Cache: 5. 缓存失效（如果启用）
+    Session->>Audit: 6. 审计日志（如果启用）
 
     Session->>Session: 7. commit()
-    Session-->>App: 8. Return success
+    Session-->>App: 8. 返回成功
 
-    Note over Session: If error:<br/>rollback()
+    Note over Session: 如果错误:<br/>rollback()
 ```
 
 ---
 
-## Security Architecture
+## 安全架构
 
-### Defense in Depth
+### 纵深防御
 
 ```mermaid
 graph TD
-    subgraph Layer1["Layer 1: Compile-time Guarantees"]
-        Unsafe[Unsafe code forbidden]
-        DriverMutual[Database driver mutual exclusion]
-        PermMacro[Permission macro validation]
+    subgraph Layer1["第 1 层：编译时保证"]
+        Unsafe[禁止不安全代码]
+        DriverMutual[数据库驱动互斥]
+        PermMacro[权限宏验证]
     end
 
-    subgraph Layer2["Layer 2: Runtime Permission Checks"]
-        RoleAccess[Role-based table access]
-        OpPerm[Operation-level permissions]
-        RateLimit[Rate limiting on permission checks]
+    subgraph Layer2["第 2 层：运行时权限检查"]
+        RoleAccess[基于角色的表访问]
+        OpPerm[操作级权限]
+        RateLimit[权限检查速率限制]
     end
 
-    subgraph Layer3["Layer 3: SQL Injection Protection"]
-        ParamQueries[Parameterized queries]
-        SQLParser[SQL parser validation]
-        DDLBlock[DDL operation blocking]
-        MultiStmt[Multi-statement prevention]
+    subgraph Layer3["第 3 层：SQL 注入防护"]
+        ParamQueries[参数化查询]
+        SQLParser[SQL 解析器验证]
+        DDLBlock[DDL 操作阻止]
+        MultiStmt[多语句预防]
     end
 
-    subgraph Layer4["Layer 4: Configuration Security"]
-        PathPrev[Path traversal prevention]
-        URLWhitelist[URL whitelist]
-        EnvSanitize[Environment variable sanitization]
+    subgraph Layer4["第 4 层：配置安全"]
+        PathPrev[路径遍历预防]
+        URLWhitelist[URL 白名单]
+        EnvSanitize[环境变量清理]
     end
 
-    subgraph Layer5["Layer 5: Audit Trail"]
-        OpLog[Complete operation logging]
-        UserTrack[User context tracking]
-        ErrorCapture[Error capture]
+    subgraph Layer5["第 5 层：审计跟踪"]
+        OpLog[完整操作日志]
+        UserTrack[用户上下文跟踪]
+        ErrorCapture[错误捕获]
     end
 
     Layer1 --> Layer2
@@ -742,26 +742,26 @@ graph TD
     Layer4 --> Layer5
 ```
 
-### Permission Model
+### 权限模型
 
 ```mermaid
 graph TD
-    subgraph PermConfig["Permission Config (YAML)"]
-        Roles[Roles]
+    subgraph PermConfig["权限配置 (YAML)"]
+        Roles[角色]
     end
 
     subgraph Admin["admin"]
-        AdminTables[tables: *<br/>all operations]
+        AdminTables[表: *<br/>所有操作]
     end
 
     subgraph Manager["manager"]
-        ManagerTables[tables: users, orders]
-        ManagerOps[operations: SELECT, INSERT, UPDATE]
+        ManagerTables[表: users, orders]
+        ManagerOps[操作: SELECT, INSERT, UPDATE]
     end
 
     subgraph User["user"]
-        UserTables[tables: users]
-        UserOps[operations: SELECT]
+        UserTables[表: users]
+        UserOps[操作: SELECT]
     end
 
     Roles --> Admin
@@ -774,20 +774,20 @@ graph TD
     User --> UserTables
     UserTables --> UserOps
 
-    subgraph Algorithm["Permission Check Algorithm"]
-        Step1[1. Get role from session]
-        Step2[2. Lookup role policy<br/>(or use cache)]
-        Step3{3. Is "*"?}
-        Step4[3a. Grant all access]
-        Step5[3b. Check operation list]
-        Step6[4. For specific table:<br/>check operation list]
-        Step7[5. Return Allow/Deny]
+    subgraph Algorithm["权限检查算法"]
+        Step1[1. 从会话获取角色]
+        Step2[2. 查找角色策略<br/>（或使用缓存）]
+        Step3{3. 是 "*"？}
+        Step4[3a. 授予所有访问]
+        Step5[3b. 检查操作列表]
+        Step6[4. 对于特定表：<br/>检查操作列表]
+        Step7[5. 返回允许/拒绝]
     end
 
     Step1 --> Step2
     Step2 --> Step3
-    Step3 -->|Yes| Step4
-    Step3 -->|No| Step5
+    Step3 -->|是| Step4
+    Step3 -->|否| Step5
     Step5 --> Step6
     Step4 --> Step7
     Step6 --> Step7
@@ -795,111 +795,111 @@ graph TD
 
 ---
 
-## Performance Architecture
+## 性能架构
 
-### Zero-Cost Abstractions
+### 零成本抽象
 
 ```rust
-// Feature-gated compilation
+// 特性门控编译
 #[cfg(feature = "metrics")]
 pub fn track_metric(&self, name: &str, value: u64) {
-    // Metrics code
+    // 指标代码
 }
 
 #[cfg(not(feature = "metrics"))]
 pub fn track_metric(&self, name: &str, value: u64) {
-    // No-op - compiled away
+    // 无操作 - 编译时移除
 }
 ```
 
-### Lock-Free Counters
+### 无锁计数器
 
 ```rust
 pub struct PoolStatus {
-    pub total: AtomicU32,      // Lock-free
-    pub active: AtomicU32,     // Lock-free
-    pub wait_count: AtomicU32,  // Lock-free
+    pub total: AtomicU32,      // 无锁
+    pub active: AtomicU32,     // 无锁
+    pub wait_count: AtomicU32,  // 无锁
 }
 ```
 
-### Asynchronous Operations
+### 异步操作
 
-- All I/O uses `async/await`
-- `AsyncMutex` for protecting shared state
-- `Notify` instead of condition variables (avoids busy waiting)
+- 所有 I/O 使用 `async/await`
+- `AsyncMutex` 用于保护共享状态
+- `Notify` 而不是条件变量（避免忙等待）
 
-### Connection Pooling
+### 连接池
 
 ```
-Strategy: Pool + LRU
+策略: 池 + LRU
 
-Benefits:
-├── Reuse connections (avoid TCP handshake)
-├── Limit maximum connections (prevent exhaustion)
-├── Maintain minimum (avoid cold starts)
-└── Health checking (remove dead connections)
+优势:
+├── 重用连接（避免 TCP 握手）
+├── 限制最大连接（防止耗尽）
+├── 维持最小值（避免冷启动）
+└── 健康检查（移除死连接）
 ```
 
 ---
 
-## Scalability Architecture
+## 可扩展性架构
 
-### Horizontal Scaling (Sharding)
+### 水平扩展（分片）
 
 ```mermaid
 flowchart TD
-    App[Application] --> ShardRouter[ShardRouter]
+    App[应用程序] --> ShardRouter[分片路由器]
 
-    ShardRouter --> Yearly[YearlyStrategy]
-    ShardRouter --> Monthly[MonthlyStrategy]
-    ShardRouter --> Hash[HashStrategy]
+    ShardRouter --> Yearly[年度策略]
+    ShardRouter --> Monthly[月度策略]
+    ShardRouter --> Hash[哈希策略]
 
     Yearly --> Shard2024[shard_2024]
     Monthly --> Shard2024_01[shard_2024_01]
     Hash --> ShardHash[shard_{hash key % N}]
 
-    App --> QueryRouting[Query Routing]
-    QueryRouting --> GlobalIndex[Global Index<br/>optional]
-    GlobalIndex --> Route[Route to correct shard]
+    App --> QueryRouting[查询路由]
+    QueryRouting --> GlobalIndex[全局索引<br/>可选]
+    GlobalIndex --> Route[路由到正确分片]
 ```
 
-### Vertical Scaling (Caching)
+### 垂直扩展（缓存）
 
 ```mermaid
 flowchart TD
-    Start[Query Request] --> CheckCache[Check Cache]
+    Start[查询请求] --> CheckCache[检查缓存]
 
-    CheckCache --> Hit{Cache Hit?}
-    Hit -->|Yes| ReturnCached[Return cached value]
-    Hit -->|No| DBQuery[Database Query]
+    CheckCache --> Hit{缓存命中？}
+    Hit -->|是| ReturnCached[返回缓存值]
+    Hit -->|否| DBQuery[数据库查询]
 
-    DBQuery --> UpdateCache[Update Cache<br/>write-through]
-    UpdateCache --> ReturnDB[Return result]
+    DBQuery --> UpdateCache[更新缓存<br/>写透]
+    UpdateCache --> ReturnDB[返回结果]
 
-    ReturnCached --> End[End]
+    ReturnCached --> End[结束]
     ReturnDB --> End
 ```
 
-### Feature-Based Scaling
+### 基于特性的扩展
 
 ```mermaid
 graph TD
-    subgraph Minimal["Minimal Deployment"]
+    subgraph Minimal["最小部署"]
         SQLite[SQLite]
         config_env[config-env]
         lru[lru]
         sql_parser[sql-parser]
     end
 
-    subgraph Microservice["Microservice Deployment"]
+    subgraph Microservice["微服务部署"]
         PostgreSQL[PostgreSQL]
         permission[permission]
         pool_health_check[pool-health-check]
         config_yaml[config-yaml]
     end
 
-    subgraph Enterprise["Enterprise Deployment"]
-        AllFeatures[All optional features]
+    subgraph Enterprise["企业部署"]
+        AllFeatures[所有可选特性]
         metrics[metrics]
         tracing[tracing]
         audit[audit]
@@ -914,20 +914,20 @@ graph TD
 
 ---
 
-## Conclusion
+## 结论
 
-DBNexus architecture is designed with:
+DBNexus 架构设计具有：
 
-1. **Modularity** - Clear separation of concerns, feature-gated
-2. **Safety** - RAII, compile-time guarantees, no unsafe code
-3. **Performance** - Async-first, lock-free where possible, efficient pooling
-4. **Security** - Multi-layer defense, RBAC, audit trail
-5. **Extensibility** - Pluggable components, trait-based design
-6. **Observability** - Metrics, tracing, audit logging built-in
+1. **模块化** - 清晰的关注点分离，特性门控
+2. **安全性** - RAII、编译时保证、无不安全代码
+3. **性能** - 异步优先、尽可能无锁、高效池化
+4. **安全性** - 多层防御、RBAC、审计跟踪
+5. **可扩展性** - 可插拔组件、基于 trait 的设计
+6. **可观测性** - 指标、跟踪、内置审计日志
 
-This architecture enables DBNexus to scale from embedded devices to enterprise deployments while maintaining simplicity and ergonomics.
+这种架构使 DBNexus 能够从嵌入式设备扩展到企业部署，同时保持简单性和人体工程学。
 
-For more details on specific components, see:
-- [API Reference](API_REFERENCE.md)
-- [User Guide](USER_GUIDE.md)
-- [Rust Docs](https://docs.rs/dbnexus)
+更多组件细节，请参见：
+- [API 参考](API_REFERENCE.md)
+- [用户指南](USER_GUIDE.md)
+- [Rust 文档](https://docs.rs/dbnexus)
