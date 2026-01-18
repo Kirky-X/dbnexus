@@ -286,7 +286,7 @@ impl DbPool {
 
         #[cfg(feature = "auto-migrate")]
         if corrected_config.auto_migrate() {
-            if let Some(ref migrations_dir) = corrected_config.migrations_dir() {
+            if let Some(migrations_dir) = corrected_config.migrations_dir() {
                 if migrations_dir.exists() {
                     info!(
                         "Auto-migrate enabled, running migrations from: {}",
@@ -1015,7 +1015,7 @@ impl DbPool {
     /// 成功应用的迁移数量
     #[cfg(feature = "auto-migrate")]
     pub async fn run_auto_migrate(&self) -> Result<u32, DbError> {
-        if let Some(ref migrations_dir) = self.inner.config.migrations_dir() {
+        if let Some(migrations_dir) = self.inner.config.migrations_dir() {
             tracing::info!("Running auto-migrate from directory: {}", migrations_dir.display());
             self.run_migrations(migrations_dir).await
         } else {
