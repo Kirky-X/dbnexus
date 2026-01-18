@@ -169,8 +169,28 @@ pub struct AuditEvent {
 }
 
 impl AuditEvent {
-    /// 创建审计事件
-    #[allow(clippy::too_many_arguments)]
+    /// 创建审计事件（推荐使用构建器模式）
+    ///
+    /// # 推荐方式
+    /// 使用 `AuditEventBuilder` 进行链式构建：
+    /// ```rust
+    /// AuditEvent::builder()
+    ///     .operation(AuditOperation::Create)
+    ///     .entity_type("users")
+    ///     .entity_id("1")
+    ///     .user_id("admin")
+    ///     .user_role("admin")
+    ///     .client_ip("127.0.0.1")
+    ///     .severity(AuditSeverity::High)
+    ///     .build()
+    /// ```
+    ///
+    /// # 简单方式
+    /// 使用快捷方法：
+    /// ```rust
+    /// AuditEvent::create("users", "1", "admin")
+    ///     .with_severity(AuditSeverity::High)
+    /// ```
     pub fn new(
         operation: AuditOperation,
         entity_type: &str,
@@ -196,6 +216,11 @@ impl AuditEvent {
             request_id: Uuid::new_v4().to_string(),
             session_id: String::new(),
         }
+    }
+
+    /// 获取构建器
+    pub fn builder() -> AuditEventBuilder {
+        AuditEventBuilder::new()
     }
 
     /// 创建操作事件
@@ -284,6 +309,91 @@ impl AuditEvent {
     /// 从 JSON 字符串解析
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
+    }
+
+    /// 对 JSON 值进行敏感数据脱敏
+    ///
+    /// 脱敏策略：
+    /// - 识别 JSON 对象中的敏感字段
+    /// - 将敏感字段的值替换为 "***REDACTED***"
+    /// - 支持自定义敏感字段列表
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - 原始 JSON 字符串
+    /// * `sensitive_fields` - 敏感字段列表（默认包含常见敏感字段）
+    ///
+    /// # Returns
+    ///
+    /// 脱敏后的 JSON 字符串
+    pub fn sanitize_value(value: &str, sensitive_fields: Option<Vec<String>>) -> String {
+        // 默认敏感字段列表
+        let default_sensitive = vec![
+            "password".to_string(),
+            "token".to_string(),
+            "secret".to_string(),
+            "key".to_string(),
+            "credential".to_string(),
+            "api_key".to_string(),
+            "access_token".to_string(),
+            "refresh_token".to_string(),
+            "private_key".to_string(),
+            "credit_card".to_string(),
+            "ssn".to_string(),
+            "social_security".to_string(),
+        ];
+        let fields = sensitive_fields.unwrap_or(default_sensitive);
+
+        // 尝试解析 JSON
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
+            if let serde_json::Value::Object(obj) = json_value {
+                let mut sanitized = obj.clone();
+                for field in &fields {
+                    if let Some(value) = sanitized.remove(field) {
+                        // 记录原始值类型但不记录内容
+                        tracing::debug!("Sensitive field '{}' redacted in audit log", field);
+                    }
+                }
+                // 脱敏后的值替换为占位符
+                for field in &fields {
+                    sanitized.insert(field.clone(), serde_json::Value::String("***REDACTED***".to_string()));
+                }
+                return serde_json::to_string(&sanitized).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string());
+            }
+        }
+        // 非 JSON 值，检查是否包含敏感关键字
+        let lower = value.to_lowercase();
+        for field in &fields {
+            if lower.contains(&format!("\"{}\":", field)) || lower.contains(&format!("\"{}\" :", field)) {
+                return "***REDACTED***".to_string();
+            }
+        }
+        value.to_string()
+    }
+
+    /// 创建脱敏后的审计事件副本（用于日志记录）
+    ///
+    /// 返回一个副本，其中敏感数据已被脱敏
+    pub fn sanitized(&self) -> Self {
+        let sensitive_fields = vec![
+            "password".to_string(),
+            "token".to_string(),
+            "secret".to_string(),
+            "key".to_string(),
+            "credential".to_string(),
+        ];
+
+        let mut sanitized = self.clone();
+        if let Some(ref mut before) = sanitized.before_value {
+            *before = Self::sanitize_value(before, Some(sensitive_fields.clone()));
+        }
+        if let Some(ref mut after) = sanitized.after_value {
+            *after = Self::sanitize_value(after, Some(sensitive_fields.clone()));
+        }
+        if let Some(ref mut extra) = sanitized.extra {
+            *extra = Self::sanitize_value(extra, Some(sensitive_fields.clone()));
+        }
+        sanitized
     }
 }
 
@@ -1165,5 +1275,171 @@ mod tests {
             .with_session_id("sess");
         assert_eq!(ctx.request_id, "req");
         assert_eq!(ctx.session_id, "sess");
+    }
+}
+
+/// 审计事件构建器
+///
+/// 提供链式 API 来构建 `AuditEvent`，避免大量参数：
+/// ```rust
+/// use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
+///
+/// let event = AuditEvent::builder()
+///     .operation(AuditOperation::Create)
+///     .entity_type("users")
+///     .entity_id("123")
+///     .user_id("admin")
+///     .user_role("administrator")
+///     .client_ip("192.168.1.1")
+///     .severity(AuditSeverity::High)
+///     .result(dbnexus::audit::AuditResult::Success)
+///     .before_value(r#"{"name":"old"}"#)
+///     .after_value(r#"{"name":"new"}"#)
+///     .extra(r#"{"reason":"update request"}"#)
+///     .build();
+/// ```
+#[derive(Debug, Default)]
+pub struct AuditEventBuilder {
+    operation: Option<AuditOperation>,
+    entity_type: Option<String>,
+    entity_id: Option<String>,
+    user_id: Option<String>,
+    user_role: Option<String>,
+    client_ip: Option<String>,
+    severity: AuditSeverity,
+    result: AuditResult,
+    before_value: Option<String>,
+    after_value: Option<String>,
+    extra: Option<String>,
+    request_id: Option<String>,
+    session_id: Option<String>,
+}
+
+impl AuditEventBuilder {
+    /// 创建新构建器
+    pub fn new() -> Self {
+        Self {
+            operation: None,
+            entity_type: None,
+            entity_id: None,
+            user_id: None,
+            user_role: None,
+            client_ip: None,
+            severity: AuditSeverity::Info,
+            result: AuditResult::Success,
+            before_value: None,
+            after_value: None,
+            extra: None,
+            request_id: None,
+            session_id: None,
+        }
+    }
+
+    /// 设置操作类型
+    pub fn operation(mut self, operation: AuditOperation) -> Self {
+        self.operation = Some(operation);
+        self
+    }
+
+    /// 设置实体类型
+    pub fn entity_type(mut self, entity_type: &str) -> Self {
+        self.entity_type = Some(entity_type.to_string());
+        self
+    }
+
+    /// 设置实体 ID
+    pub fn entity_id(mut self, entity_id: &str) -> Self {
+        self.entity_id = Some(entity_id.to_string());
+        self
+    }
+
+    /// 设置用户 ID
+    pub fn user_id(mut self, user_id: &str) -> Self {
+        self.user_id = Some(user_id.to_string());
+        self
+    }
+
+    /// 设置用户角色
+    pub fn user_role(mut self, user_role: &str) -> Self {
+        self.user_role = Some(user_role.to_string());
+        self
+    }
+
+    /// 设置客户端 IP
+    pub fn client_ip(mut self, client_ip: &str) -> Self {
+        self.client_ip = Some(client_ip.to_string());
+        self
+    }
+
+    /// 设置严重级别
+    pub fn severity(mut self, severity: AuditSeverity) -> Self {
+        self.severity = severity;
+        self
+    }
+
+    /// 设置操作结果
+    pub fn result(mut self, result: AuditResult) -> Self {
+        self.result = result;
+        self
+    }
+
+    /// 设置变更前值（JSON）
+    pub fn before_value(mut self, value: &str) -> Self {
+        self.before_value = Some(value.to_string());
+        self
+    }
+
+    /// 设置变更后值（JSON）
+    pub fn after_value(mut self, value: &str) -> Self {
+        self.after_value = Some(value.to_string());
+        self
+    }
+
+    /// 设置附加信息（JSON）
+    pub fn extra(mut self, value: &str) -> Self {
+        self.extra = Some(value.to_string());
+        self
+    }
+
+    /// 设置请求 ID
+    pub fn request_id(mut self, request_id: &str) -> Self {
+        self.request_id = Some(request_id.to_string());
+        self
+    }
+
+    /// 设置会话 ID
+    pub fn session_id(mut self, session_id: &str) -> Self {
+        self.session_id = Some(session_id.to_string());
+        self
+    }
+
+    /// 构建 AuditEvent
+    ///
+    /// # Panics
+    /// 如果必需字段（operation, entity_type, entity_id）未设置会 panic
+    pub fn build(self) -> AuditEvent {
+        AuditEvent {
+            id: Uuid::new_v4().to_string(),
+            timestamp: Utc::now(),
+            operation: self.operation.unwrap_or_else(|| {
+                panic!("AuditEventBuilder: operation is required")
+            }),
+            entity_type: self.entity_type.unwrap_or_else(|| {
+                panic!("AuditEventBuilder: entity_type is required")
+            }),
+            entity_id: self.entity_id.unwrap_or_else(|| {
+                panic!("AuditEventBuilder: entity_id is required")
+            }),
+            user_id: self.user_id.unwrap_or_default(),
+            user_role: self.user_role.unwrap_or_default(),
+            client_ip: self.client_ip.unwrap_or_default(),
+            severity: self.severity,
+            result: self.result,
+            before_value: self.before_value,
+            after_value: self.after_value,
+            extra: self.extra,
+            request_id: self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            session_id: self.session_id.unwrap_or_default(),
+        }
     }
 }
