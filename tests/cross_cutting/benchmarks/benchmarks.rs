@@ -115,25 +115,18 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
 
 /// 基准测试：配置验证
 fn config_validation_benchmark(c: &mut Criterion) {
-    use dbnexus::config::DbConfig;
+    use dbnexus::config::DbConfigBuilder;
 
     c.bench_function("config_validation", |b| {
         b.iter(|| {
-            let config = DbConfig {
-                url: "sqlite::memory:".to_string(),
-                max_connections: 10,
-                min_connections: 1,
-                idle_timeout: 300,
-                acquire_timeout: 5000,
-                permissions_path: None,
-                migrations_dir: None,
-                auto_migrate: false,
-                migration_timeout: 60,
-                admin_role: "admin".to_string(),
-                warmup_timeout: 30,
-                warmup_retries: 3,
-            };
-            black_box(config.validate())
+            let config = DbConfigBuilder::new().url("sqlite::memory:")
+                .max_connections(10)
+                .min_connections(1)
+                .idle_timeout(300)
+                .acquire_timeout(5000)
+                .admin_role("admin")
+                .build();
+            black_box(config)
         })
     });
 }
