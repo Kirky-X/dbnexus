@@ -57,7 +57,6 @@ DBNexus 提供了一种**声明式**的数据库访问方法：
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
@@ -152,8 +151,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | 预设 | 特性 | 使用场景 |
 |------|------|----------|
-| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `sqlite`, `runtime-tokio-rustls` | 嵌入式设备最小配置 |
-| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `postgres`, `permission`, `pool-health-check` | 微服务配置 |
+| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | 嵌入式设备最小配置 |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `config-yaml`, `regex`, `lru` | 微服务配置 |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | 所有企业级特性 | 完整企业功能 |
 
 ---
@@ -166,7 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dbnexus = "0.1"
+dbnexus = "0.1.1"
 ```
 
 ### <span id="basic-usage">💡 基本用法</span>
@@ -187,7 +186,6 @@ dbnexus = "0.1"
 use dbnexus::{DbPool, DbEntity, db_crud};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 struct User {
@@ -248,7 +246,6 @@ println!("找到 {} 个用户", users.len());
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
@@ -275,40 +272,40 @@ User::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.1", features = ["sqlite"] }
+dbnexus = { version = "0.1.1", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1", features = ["postgres"] }
+dbnexus = { version = "0.1.1", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1", features = ["mysql"] }
+dbnexus = { version = "0.1.1", features = ["mysql"] }
 ```
 
 ### 运行时
 
 ```toml
 # Tokio with RustLS（默认）
-dbnexus = { version = "0.1", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.1.1", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.1", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.1.1", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.1", features = ["runtime-async-std"] }
+dbnexus = { version = "0.1.1", features = ["runtime-async-std"] }
 ```
 
 ### 可选功能
 
 ```toml
 # 核心功能
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "permission",      # 权限控制
     "sql-parser",      # SQL 解析
     "macros",          # 过程宏
 ] }
 
 # 企业级功能
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "metrics",         # Prometheus 指标
     "tracing",         # 分布式追踪
     "audit",           # 审计日志
@@ -317,7 +314,7 @@ dbnexus = { version = "0.1", features = [
 ] }
 
 # 配置
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "config-yaml",     # YAML 配置支持
     "config-toml",     # TOML 配置支持
     "config-env",      # 环境变量（默认）
