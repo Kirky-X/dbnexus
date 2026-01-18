@@ -654,7 +654,7 @@ This project is licensed under **MIT**:
 
 If you find this project useful, please consider giving it a ⭐️!
 
-**Built with ❤️ by the DBNexus Team**
+**Built with ❤️ by Kirky.X**
 
 ---
 
