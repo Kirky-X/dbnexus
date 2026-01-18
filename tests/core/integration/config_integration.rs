@@ -21,35 +21,17 @@ async fn test_config_builder_basic() {
         .build()
         .unwrap();
 
-    assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 10);
+    assert_eq!(config.url_sanitized(), "sqlite::memory:");
+    assert_eq!(config.max_connections(), 10);
 }
 
-#[tokio::test]
-async fn test_config_direct() {
-    let config = DbConfig {
-        url: "sqlite::memory:".to_string(),
-        max_connections: 15,
-        min_connections: 3,
-        idle_timeout: 600,
-        acquire_timeout: 10000,
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 120,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
 
-    assert_eq!(config.max_connections, 15);
-}
 
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
     let config = DbConfig::from_yaml_str(yaml).unwrap();
-    assert_eq!(config.url, "sqlite::memory:");
+    assert_eq!(config.url_sanitized(), "sqlite::memory:");
 }
 
 #[tokio::test]
@@ -67,19 +49,19 @@ migration_timeout: 60
 admin_role: "administrator"
 "#;
     let config = DbConfig::from_yaml_str(yaml).unwrap();
-    assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
-    assert_eq!(config.idle_timeout, 300);
-    assert_eq!(config.acquire_timeout, 5000);
-    assert_eq!(config.permissions_path, Some("/path/to/permissions.yaml".to_string()));
+    assert_eq!(config.url_sanitized(), "sqlite::memory:");
+    assert_eq!(config.max_connections(), 20);
+    assert_eq!(config.min_connections(), 5);
+    assert_eq!(config.idle_timeout(), 300);
+    assert_eq!(config.acquire_timeout(), 5000);
+    assert_eq!(config.permissions_path(), Some("/path/to/permissions.yaml".as_ref()));
     assert_eq!(
-        config.migrations_dir,
-        Some(std::path::PathBuf::from("/path/to/migrations"))
+        config.migrations_dir(),
+        Some(std::path::PathBuf::from("/path/to/migrations").as_path())
     );
-    assert!(config.auto_migrate);
-    assert_eq!(config.migration_timeout, 60);
-    assert_eq!(config.admin_role, "administrator");
+    assert!(config.auto_migrate());
+    assert_eq!(config.migration_timeout(), 60);
+    assert_eq!(config.admin_role(), "administrator");
 }
 
 #[tokio::test]
@@ -117,7 +99,7 @@ async fn test_dbpool_from_config() {
         .unwrap();
 
     let pool = DbPool::try_from(&config).unwrap();
-    assert_eq!(pool.config().max_connections, 10);
+    assert_eq!(pool.config().max_connections(), 10);
 }
 
 #[tokio::test]
@@ -169,7 +151,7 @@ roles:
         .build()
         .unwrap();
 
-    assert_eq!(config.permissions_path, Some(perm_file.to_string_lossy().to_string()));
+    assert_eq!(config.permissions_path(), Some(perm_file.to_string_lossy().as_ref()));
 }
 
 #[tokio::test]
@@ -188,8 +170,8 @@ async fn test_config_with_migrations() {
         .build()
         .unwrap();
 
-    assert_eq!(config.migrations_dir, Some(migrations_dir));
-    assert!(config.auto_migrate);
+    assert_eq!(config.migrations_dir(), Some(migrations_dir.as_path()));
+    assert!(config.auto_migrate());
 }
 
 #[tokio::test]
@@ -201,8 +183,8 @@ async fn test_config_clone() {
         .unwrap();
 
     let cloned = config.clone();
-    assert_eq!(config.url, cloned.url);
-    assert_eq!(config.max_connections, cloned.max_connections);
+    assert_eq!(config.url_sanitized(), cloned.url_sanitized());
+    assert_eq!(config.max_connections(), cloned.max_connections());
 }
 
 #[tokio::test]
@@ -219,14 +201,14 @@ async fn test_config_builder_chaining() {
         .build()
         .unwrap();
 
-    assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
-    assert_eq!(config.idle_timeout, 600);
-    assert_eq!(config.acquire_timeout, 10000);
-    assert!(config.auto_migrate);
-    assert_eq!(config.migration_timeout, 120);
-    assert_eq!(config.admin_role, "superuser");
+    assert_eq!(config.url_sanitized(), "sqlite::memory:");
+    assert_eq!(config.max_connections(), 20);
+    assert_eq!(config.min_connections(), 5);
+    assert_eq!(config.idle_timeout(), 600);
+    assert_eq!(config.acquire_timeout(), 10000);
+    assert!(config.auto_migrate());
+    assert_eq!(config.migration_timeout(), 120);
+    assert_eq!(config.admin_role(), "superuser");
 }
 
 #[tokio::test]
@@ -248,13 +230,13 @@ async fn test_config_default_values() {
     let config = DbConfigBuilder::new().url("sqlite::memory:").build().unwrap();
 
     // 验证默认值
-    assert_eq!(config.max_connections, 20); // 默认值
-    assert_eq!(config.min_connections, 5); // 默认值
-    assert_eq!(config.idle_timeout, 300); // 默认值
-    assert_eq!(config.acquire_timeout, 5000); // 默认值（恢复为保守值）
-    assert!(!config.auto_migrate); // 默认值
-    assert_eq!(config.migration_timeout, 60); // 默认值
-    assert_eq!(config.admin_role, "admin"); // 默认值
+    assert_eq!(config.max_connections(), 20); // 默认值
+    assert_eq!(config.min_connections(), 5); // 默认值
+    assert_eq!(config.idle_timeout(), 300); // 默认值
+    assert_eq!(config.acquire_timeout(), 5000); // 默认值（恢复为保守值）
+    assert!(!config.auto_migrate()); // 默认值
+    assert_eq!(config.migration_timeout(), 60); // 默认值
+    assert_eq!(config.admin_role(), "admin"); // 默认值
 }
 
 // ============ 边界场景测试 ============
@@ -268,8 +250,8 @@ async fn test_config_boundary_values() {
         .min_connections(1)
         .build()
         .unwrap();
-    assert_eq!(config.max_connections, 1);
-    assert_eq!(config.min_connections, 1);
+    assert_eq!(config.max_connections(), 1);
+    assert_eq!(config.min_connections(), 1);
 
     // 测试边界值：最大允许连接数 1000
     let config = DbConfigBuilder::new()
@@ -278,7 +260,7 @@ async fn test_config_boundary_values() {
         .min_connections(1)
         .build()
         .unwrap();
-    assert_eq!(config.max_connections, 1000);
+    assert_eq!(config.max_connections(), 1000);
 }
 
 #[tokio::test]
@@ -356,8 +338,8 @@ async fn test_config_timeout_boundaries() {
         .acquire_timeout(1) // 最小获取超时
         .build()
         .unwrap();
-    assert_eq!(config.idle_timeout, 1);
-    assert_eq!(config.acquire_timeout, 1);
+    assert_eq!(config.idle_timeout(), 1);
+    assert_eq!(config.acquire_timeout(), 1);
 
     // 测试大超时值
     let config = DbConfigBuilder::new()
@@ -366,8 +348,8 @@ async fn test_config_timeout_boundaries() {
         .acquire_timeout(300000) // 5分钟
         .build()
         .unwrap();
-    assert_eq!(config.idle_timeout, 86400);
-    assert_eq!(config.acquire_timeout, 300000);
+    assert_eq!(config.idle_timeout(), 86400);
+    assert_eq!(config.acquire_timeout(), 300000);
 }
 
 #[tokio::test]
@@ -399,7 +381,7 @@ async fn test_config_admin_role_variants() {
             .admin_role(role)
             .build()
             .unwrap();
-        assert_eq!(config.admin_role, role);
+        assert_eq!(config.admin_role(), role);
     }
 }
 
@@ -412,8 +394,8 @@ async fn test_config_warmup_boundaries() {
         .warmup_retries(0) // 最小重试次数
         .build()
         .unwrap();
-    assert_eq!(config.warmup_timeout, 1);
-    assert_eq!(config.warmup_retries, 0);
+    assert_eq!(config.warmup_timeout(), 1);
+    assert_eq!(config.warmup_retries(), 0);
 
     // 测试大值
     let config = DbConfigBuilder::new()
@@ -422,6 +404,6 @@ async fn test_config_warmup_boundaries() {
         .warmup_retries(10)
         .build()
         .unwrap();
-    assert_eq!(config.warmup_timeout, 300);
-    assert_eq!(config.warmup_retries, 10);
+    assert_eq!(config.warmup_timeout(), 300);
+    assert_eq!(config.warmup_retries(), 10);
 }
