@@ -619,7 +619,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::insert(&session, user2).await?;
 
     // Commit transaction
-    session.commit_transaction().await?;
+    session.commit().await?;
 
     Ok(())
 }
@@ -632,11 +632,11 @@ session.begin_transaction().await?;
 
 match perform_operations(&session).await {
     Ok(_) => {
-        session.commit_transaction().await?;
+        session.commit().await?;
     }
     Err(e) => {
         eprintln!("Error: {}", e);
-        session.rollback_transaction().await?;
+        session.rollback().await?;
     }
 }
 ```
@@ -659,14 +659,14 @@ impl<'a> TransactionGuard<'a> {
     }
 
     pub async fn commit(self) {
-        self.session.commit_transaction().await.ok();
+        self.session.commit().await.ok();
     }
 }
 
 impl<'a> Drop for TransactionGuard<'a> {
     fn drop(&mut self) {
         if self.session.is_in_transaction() {
-            let _ = self.session.rollback_transaction().now_or_never();
+            let _ = self.session.rollback().now_or_never();
         }
     }
 }
@@ -815,7 +815,7 @@ User::insert(&session, user2).await?;
 session.begin_transaction().await?;
 User::insert(&session, user1).await?;
 User::insert(&session, user2).await?;
-session.commit_transaction().await?;
+session.commit().await?;
 // Both succeed or both fail
 ```
 
