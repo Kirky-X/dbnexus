@@ -654,7 +654,7 @@ cargo clippy --all-features
 
 如果您觉得这个项目有用，请考虑给它一个 ⭐️！
 
-**由 DBNexus 团队用 ❤️ 构建**
+**由 Kirky.X 用 ❤️ 构建**
 
 ---
 
