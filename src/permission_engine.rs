@@ -832,6 +832,13 @@ impl RbacPermissionProvider {
         }
     }
 
+    /// 将角色分配给主体（用户）
+    pub fn add_role_to_subject(&self, subject: &str, role: &str) {
+        if let Ok(mut mapping) = self.role_mapping.write() {
+            mapping.entry(subject.to_string()).or_default().push(role.to_string());
+        }
+    }
+
     /// 获取角色的所有权限（包括继承的）
     async fn get_role_permissions(&self, role: &str) -> Vec<PermissionRule> {
         let mut all_permissions = Vec::new();
@@ -1080,6 +1087,9 @@ mod tests {
             },
         );
 
+        // 将用户 "admin" 映射到角色 "admin"
+        provider.add_role_to_subject("admin", "admin");
+
         let pdp = PolicyDecisionPoint::new(provider);
 
         // 测试权限检查
@@ -1118,6 +1128,9 @@ mod tests {
                 enabled: true,
             },
         );
+
+        // 将用户 "admin" 映射到角色 "admin"
+        provider.add_role_to_subject("admin", "admin");
 
         let pdp = PolicyDecisionPoint::new(provider);
 
@@ -1160,6 +1173,9 @@ mod tests {
                 enabled: true,
             },
         );
+
+        // 将用户 "admin" 映射到角色 "admin"
+        provider.add_role_to_subject("admin", "admin");
 
         let engine = PermissionEngine::new(provider);
 

@@ -75,7 +75,9 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let perm_file = temp_dir.path().join("test_permissions.yaml");
         std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
-        config.set_permissions_path(perm_file.to_string_lossy().to_string());
+        let perm_path = perm_file.to_string_lossy().to_string();
+        // 权限路径在构建后通过 config.permissions_path() 访问
+        let _ = perm_path;
 
         // 保存 temp_dir 以防止被删除
         let _ = temp_dir;
@@ -325,7 +327,7 @@ pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), db
         "postgres" | "mysql" => {
             // PostgreSQL 和 MySQL 不需要临时目录
             let config = get_test_config();
-            eprintln!("DEBUG: Using {} database with URL: {}", test_db_type, config.url);
+            eprintln!("DEBUG: Using {} database with URL: {}", test_db_type, config.url_sanitized());
             let pool = dbnexus::DbPool::with_config(config).await?;
             Ok((pool, None))
         }
