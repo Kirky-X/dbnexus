@@ -253,8 +253,8 @@ async fn test_permission_provider_refresh() {
     );
 
     // 刷新权限缓存
-    let result = provider.refresh().await;
-    assert!(result.is_ok(), "Refresh should succeed");
+    provider.refresh().await.expect("Failed to refresh provider");
+    assert!(true, "Refresh should succeed");
 }
 
 /// TEST-PE-006: 获取允许的资源列表测试
