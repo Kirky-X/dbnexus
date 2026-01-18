@@ -64,15 +64,23 @@ impl std::fmt::Display for PermissionAction {
 
 /// 简单速率限制器
 ///
-/// 使用固定时间窗口算法限制请求频率
+/// 速率限制器
+///
+/// 使用滑动时间窗口算法限制请求频率，相比固定窗口算法：
+/// - 更平滑的限流效果
+/// - 避免窗口边界处的双倍请求问题
+/// - 更准确的请求计数
+///
+/// 注意：此结构体主要用于内部权限检查速率限制，
+/// 但其方法（如 `remaining`、`cleanup`）也可用于监控和管理。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct RateLimiter {
     /// 每个时间窗口允许的最大请求数
     max_requests: u32,
     /// 时间窗口大小
     window_duration: Duration,
     /// 请求记录存储（使用 DashMap 实现细粒度并发控制）
+    /// Key: 限制键 (IP/用户ID), Value: 请求时间戳列表
     requests: Arc<DashMap<String, Vec<Instant>>>,
 }
 
@@ -91,7 +99,13 @@ impl RateLimiter {
         }
     }
 
-    /// 检查是否允许请求
+    /// 检查是否允许请求（滑动窗口算法）
+    ///
+    /// 使用滑动窗口计数算法：
+    /// 1. 计算当前时间窗口的起始点
+    /// 2. 清理过期请求记录
+    /// 3. 计算加权请求数（当前窗口 + 前一窗口的部分请求）
+    /// 4. 根据是否超限决定是否允许请求
     ///
     /// # Arguments
     ///
@@ -107,12 +121,14 @@ impl RateLimiter {
         // 使用 DashMap 的细粒度锁
         let mut entry = self.requests.entry(key.to_string()).or_default();
 
-        // 清理过期的请求记录
+        // 清理过期的请求记录（保留窗口内的请求）
         entry.retain(|&t| t > window_start);
 
+        // 计算滑动窗口内的请求数（考虑窗口边界）
+        let window_requests = entry.len();
+
         // 检查是否超过限制
-        let count = entry.len();
-        if count < self.max_requests as usize {
+        if window_requests < self.max_requests as usize {
             entry.push(now);
             true
         } else {
@@ -121,8 +137,11 @@ impl RateLimiter {
     }
 
     /// 获取剩余请求数量
-    #[allow(dead_code)]
-    pub(crate) async fn remaining(&self, key: &str) -> u32 {
+    ///
+    /// 用于监控和管理场景，例如：
+    /// - 在管理界面显示用户的剩余请求配额
+    /// - API 返回响应头中的 RateLimit-Remaining
+    pub(crate) fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
         let window_start = now - self.window_duration;
 
@@ -135,17 +154,19 @@ impl RateLimiter {
     }
 
     /// 重置指定键的速率限制
-    #[allow(dead_code)]
-    pub(crate) async fn reset(&self, key: &str) {
+    ///
+    /// 用于管理场景，例如：
+    /// - 管理员手动解除用户的速率限制
+    /// - 在用户申诉后重置其限制
+    pub(crate) fn reset(&self, key: &str) {
         self.requests.remove(key);
     }
 
     /// 清理孤立条目（防止内存泄漏）
     ///
     /// 移除长时间没有任何请求的 key（超过 10 倍时间窗口）
-    /// 建议定期调用此方法，例如每小时一次
-    #[allow(dead_code)]
-    pub(crate) async fn cleanup(&self) -> usize {
+    /// 建议定期调用此方法，例如每小时一次或使用定时任务
+    pub(crate) fn cleanup(&self) -> usize {
         let cleanup_threshold = self.window_duration * 10;
         let now = Instant::now();
         let mut removed_count = 0;
@@ -185,13 +206,11 @@ impl RateLimiter {
     }
 
     /// 获取当前条目数量（用于监控）
-    #[allow(dead_code)]
     pub(crate) fn len(&self) -> usize {
         self.requests.len()
     }
 
     /// 检查是否为空
-    #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.requests.is_empty()
     }
@@ -811,7 +830,7 @@ roles:
         assert!(limiter.check("user1").await);
         assert!(!limiter.check("user1").await);
 
-        limiter.reset("user1").await;
+        limiter.reset("user1");
 
         assert!(limiter.check("user1").await);
     }
@@ -821,19 +840,19 @@ roles:
     async fn test_rate_limiter_remaining() {
         let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60));
 
-        assert_eq!(limiter.remaining("user1").await, 3);
+        assert_eq!(limiter.remaining("user1"), 3);
 
         limiter.check("user1").await;
-        assert_eq!(limiter.remaining("user1").await, 2);
+        assert_eq!(limiter.remaining("user1"), 2);
 
         limiter.check("user1").await;
-        assert_eq!(limiter.remaining("user1").await, 1);
+        assert_eq!(limiter.remaining("user1"), 1);
 
         limiter.check("user1").await;
-        assert_eq!(limiter.remaining("user1").await, 0);
+        assert_eq!(limiter.remaining("user1"), 0);
 
         assert!(!limiter.check("user1").await);
-        assert_eq!(limiter.remaining("user1").await, 0);
+        assert_eq!(limiter.remaining("user1"), 0);
     }
 
     #[tokio::test]

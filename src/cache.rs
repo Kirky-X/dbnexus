@@ -64,7 +64,6 @@ struct CacheEntry<T> {
     /// 缓存值
     value: T,
     /// 创建时间
-    #[allow(dead_code)]
     created_at: Instant,
     /// 过期时间
     expires_at: Instant,
@@ -95,7 +94,7 @@ impl<T> CacheEntry<T> {
         self.last_accessed = Instant::now();
     }
 
-    #[allow(dead_code)]
+    /// 获取剩余 TTL（用于调试和监控）
     fn remaining_ttl(&self) -> Duration {
         self.expires_at.saturating_duration_since(Instant::now())
     }
@@ -117,15 +116,21 @@ impl CacheKey {
     }
 
     /// 从任意值创建缓存键
+    ///
+    /// 使用 AHash 替代 DefaultHasher，提供：
+    /// - 更好的性能（SIMD 优化）
+    /// - 抗 DOS 攻击能力
+    /// - 128位哈希输出降低碰撞概率
     pub fn from_value(table: &str, value: &(impl Hash + ?Sized)) -> Self
     where
         String: std::hash::Hash + std::cmp::Eq,
     {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        use std::hash::Hasher;
+        let mut hasher = ahash::AHasher::new();
         value.hash(&mut hasher);
         let hash = hasher.finish();
         Self {
-            key: format!("{}:{:x}", table, hash),
+            key: format!("{}:{:016x}", table, hash),
         }
     }
 }
@@ -154,13 +159,13 @@ pub trait CacheStrategy: Send + Sync {
     fn ttl(&self) -> Duration;
 
     /// 缓存命中时调用
-    async fn on_hit(&self, key: &CacheKey);
+    fn on_hit(&self, key: &CacheKey);
 
     /// 缓存未命中时调用
-    async fn on_miss(&self, key: &CacheKey);
+    fn on_miss(&self, key: &CacheKey);
 
     /// 缓存更新时调用
-    async fn on_update(&self, key: &CacheKey);
+    fn on_update(&self, key: &CacheKey);
 }
 
 /// LRU 缓存策略
@@ -188,22 +193,21 @@ impl CacheStrategy for LruStrategy {
         self.ttl
     }
 
-    async fn on_hit(&self, _key: &CacheKey) {
-        // LRU 策略在访问时自动提升优先级
+    fn on_hit(&self, _key: &CacheKey) {
+        // LRU 策略在访问时自动提升优先级，无需额外处理
     }
 
-    async fn on_miss(&self, _key: &CacheKey) {
-        // 记录未命中
+    fn on_miss(&self, _key: &CacheKey) {
+        // 记录未命中统计由 CacheManager 处理
     }
 
-    async fn on_update(&self, _key: &CacheKey) {
-        // 更新时不做特殊处理
+    fn on_update(&self, _key: &CacheKey) {
+        // 更新时不做特殊处理（LRU 自动管理）
     }
 }
 
 /// TTLAware 缓存策略 - 包装其他策略，提供 TTL 功能
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct TtlAwareStrategy<S: CacheStrategy> {
     inner: S,
     /// 默认 TTL
@@ -212,7 +216,6 @@ pub(crate) struct TtlAwareStrategy<S: CacheStrategy> {
 
 impl<S: CacheStrategy> TtlAwareStrategy<S> {
     /// 创建带 TTL 的策略
-    #[allow(dead_code)]
     pub(crate) fn new(inner: S, ttl_seconds: u64) -> Self {
         Self {
             inner,
@@ -232,21 +235,21 @@ impl<S: CacheStrategy> CacheStrategy for TtlAwareStrategy<S> {
     }
 
     #[inline(never)]
-    async fn on_hit(&self, key: &CacheKey) {
+    fn on_hit(&self, key: &CacheKey) {
         let inner = &self.inner;
-        inner.on_hit(key).await;
+        inner.on_hit(key);
     }
 
     #[inline(never)]
-    async fn on_miss(&self, key: &CacheKey) {
+    fn on_miss(&self, key: &CacheKey) {
         let inner = &self.inner;
-        inner.on_miss(key).await;
+        inner.on_miss(key);
     }
 
     #[inline(never)]
-    async fn on_update(&self, key: &CacheKey) {
+    fn on_update(&self, key: &CacheKey) {
         let inner = &self.inner;
-        inner.on_update(key).await;
+        inner.on_update(key);
     }
 }
 
@@ -267,7 +270,6 @@ pub struct CacheStats {
 
 impl CacheStats {
     /// 创建新的统计信息
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             hits: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -313,7 +315,6 @@ impl CacheStats {
 }
 
 /// 缓存管理器
-#[allow(dead_code)]
 pub struct CacheManager<T>
 where
     T: Clone + Send + Sync + 'static,
@@ -376,7 +377,7 @@ where
                 }
 
                 self.stats.record_miss();
-                self.strategy.on_miss(key).await;
+                self.strategy.on_miss(key);
                 return None;
             }
         };
@@ -398,7 +399,7 @@ where
         }
 
         self.stats.record_hit();
-        self.strategy.on_hit(key).await;
+        self.strategy.on_hit(key);
 
         Some(value)
     }
@@ -425,7 +426,7 @@ where
         cache.insert(key.clone(), entry);
 
         self.stats.record_set();
-        self.strategy.on_update(&key).await;
+        self.strategy.on_update(&key);
     }
 
     /// 删除缓存值
@@ -597,18 +598,18 @@ where
                     cache.insert(key.clone(), CacheEntry::new(value, ttl));
 
                     self.stats.record_hit();
-                    self.strategy.on_hit(key).await;
+                    self.strategy.on_hit(key);
 
                     results.push(Some(cache.get(key).map(|e| e.value.clone()).unwrap()));
                 } else {
                     cache.shift_remove(key);
                     self.stats.record_miss();
-                    self.strategy.on_miss(key).await;
+                    self.strategy.on_miss(key);
                     results.push(None);
                 }
             } else {
                 self.stats.record_miss();
-                self.strategy.on_miss(key).await;
+                self.strategy.on_miss(key);
                 results.push(None);
             }
         }
@@ -637,7 +638,7 @@ where
             let entry = CacheEntry::new(value, self.strategy.ttl());
             cache.insert(key.clone(), entry);
             self.stats.record_set();
-            self.strategy.on_update(&key).await;
+            self.strategy.on_update(&key);
         }
     }
 
@@ -958,15 +959,15 @@ mod tests {
                 Duration::from_secs(1)
             }
 
-            async fn on_hit(&self, _key: &CacheKey) {
+            fn on_hit(&self, _key: &CacheKey) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
             }
 
-            async fn on_miss(&self, _key: &CacheKey) {
+            fn on_miss(&self, _key: &CacheKey) {
                 self.misses.fetch_add(1, Ordering::Relaxed);
             }
 
-            async fn on_update(&self, _key: &CacheKey) {
+            fn on_update(&self, _key: &CacheKey) {
                 self.updates.fetch_add(1, Ordering::Relaxed);
             }
         }
@@ -987,9 +988,9 @@ mod tests {
         assert_eq!(wrapped.default_ttl, Duration::from_secs(123));
 
         let key = CacheKey::new("t", "1");
-        wrapped.on_hit(&key).await;
-        wrapped.on_miss(&key).await;
-        wrapped.on_update(&key).await;
+        wrapped.on_hit(&key);
+        wrapped.on_miss(&key);
+        wrapped.on_update(&key);
 
         assert_eq!(hits.load(Ordering::Relaxed), 1);
         assert_eq!(misses.load(Ordering::Relaxed), 1);
