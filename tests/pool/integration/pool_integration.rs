@@ -9,7 +9,7 @@
 
 use dbnexus::{
     DbPool,
-    config::{ConfigLoader, DbConfig},
+    DbConfig,
 };
 use std::time::Duration;
 
@@ -93,7 +93,7 @@ async fn test_pool_status_after_operations() {
         .expect("TEST-I-004: Failed to get session to initialize pool");
 
     let initial_status = pool.status();
-    assert!(initial_status.total >= config.min_connections as u32);
+    assert!(initial_status.total >= config.min_connections() as u32);
 
     // 获取多个会话（使用安全角色 admin 和 system）
     let mut sessions = Vec::new();
@@ -122,7 +122,7 @@ async fn test_pool_status_after_operations() {
 
     let final_status = pool.status();
     assert!(
-        final_status.total >= config.min_connections as u32,
+        final_status.total >= config.min_connections() as u32,
         "Should have at least {} total connections after release",
         config.min_connections()
     );
@@ -289,23 +289,17 @@ async fn test_pool_config_boundaries() {
 #[cfg(feature = "sqlite")]
 async fn test_connection_acquire_with_small_pool() {
     // 创建一个小连接池
-    use dbnexus::config::DbConfig;
+    use dbnexus::config::DbConfigBuilder;
 
-    let db_config = common::get_test_config();
-    let config = DbConfig {
-        url: db_config.url_sanitized(),
-        max_connections: 2,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 1000, // 1000毫秒超时
-        permissions_path: None,
-        migrations_dir: None,
-        auto_migrate: false,
-        migration_timeout: 60,
-        admin_role: "admin".to_string(),
-        warmup_timeout: 30,
-        warmup_retries: 3,
-    };
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(2)
+        .min_connections(1)
+        .idle_timeout(300)
+        .acquire_timeout(1000) // 1000毫秒超时
+        .admin_role("admin")
+        .build()
+        .expect("Failed to build config");
 
     let pool = DbPool::with_config(config)
         .await
@@ -413,7 +407,7 @@ async fn test_config_url_validation() {
     ];
 
     for yaml in valid_configs {
-        let result = ConfigLoader::from_yaml_str(yaml);
+        let result = DbConfig::from_yaml_str(yaml);
         assert!(result.is_ok(), "URL config should be valid: {}", yaml);
         let config = result.unwrap();
         assert!(!config.url_sanitized().is_empty(), "URL should not be empty");
@@ -430,7 +424,7 @@ async fn test_config_url_validation() {
     for (idx, url) in invalid_urls.iter().enumerate() {
         // 使用 from_env 风格的测试方式
         let yaml = format!("url: '{}'\nmax_connections: 10\nmin_connections: 1", url);
-        let result = ConfigLoader::from_yaml_str(&yaml);
+        let result = DbConfig::from_yaml_str(&yaml);
 
         // 这些无效 URL 应该导致解析或验证失败
         assert!(result.is_err(), "Test {}: '{}' should be invalid", idx, url);
