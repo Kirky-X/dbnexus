@@ -3,7 +3,7 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-use dbnexus::{config::DbConfigBuilder, DbPool};
+use dbnexus::{DbPool, config::DbConfigBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
