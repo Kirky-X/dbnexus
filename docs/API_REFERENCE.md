@@ -647,8 +647,9 @@ pub fn deny_all() -> Self
 
 | 属性 | 描述 | 必需 |
 |-----------|-------------|-----------|
-| `#[table_name = "..."]` | 数据库表名 | 是 |
-| `#[primary_key]` | 标记主键字段 | 是 |
+| `#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]` | 启用 DBNexus 和 Sea-ORM 实体特性 | 是 |
+| `#[sea_orm(table_name = "...")]` | 数据库表名 | 是 |
+| `#[sea_orm(primary_key)]` | 标记主键字段 | 是 |
 
 **可选属性：**
 
@@ -698,14 +699,17 @@ impl MyEntity {
 
 **示例：**
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-    email: String,
+pub struct User {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
+    pub email: String,
 }
 
 // 使用
@@ -751,24 +755,10 @@ impl MyEntity {
     pub fn check_permission(ctx: &PermissionContext) -> DbResult<()>;
     pub fn check_operation(ctx: &PermissionContext, op: &PermissionAction) -> DbResult<()>;
 }
-```
-
-**示例：**
-```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
-struct User {
-    #[primary_key]
-    id: i64,
-    name: String,
-}
 
 // 使用
 let session = pool.get_session("admin").await?;
 User::find_all(&session).await?; // OK
-
 let session = pool.get_session("guest").await?;
 User::find_all(&session).await?; // 错误：权限被拒绝
 ```

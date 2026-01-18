@@ -225,12 +225,13 @@ let pool = DbPool::with_config(config).await?;
 
 ```rust
 use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity)]
-#[table_name = "users"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
@@ -240,9 +241,9 @@ pub struct User {
 
 **必需属性：**
 
-- `#[derive(DbEntity)]` - 启用 DBNexus 实体特性
-- `#[table_name = "..."]` - 指定表名
-- `#[primary_key]` - 标记主键字段
+- `#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]` - 启用 DBNexus 和 Sea-ORM 实体特性
+- `#[sea_orm(table_name = "...")]` - 指定表名
+- `#[sea_orm(primary_key)]` - 标记主键字段
 
 **可选属性：**
 
@@ -256,12 +257,15 @@ pub struct User {
 添加基于角色的访问控制：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
@@ -272,15 +276,18 @@ pub struct User {
 指定允许的操作：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(
     roles = ["admin", "manager"],
     operations = ["SELECT", "INSERT", "UPDATE"]
 )]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
@@ -291,12 +298,15 @@ pub struct User {
 为读操作启用缓存：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_cache]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
@@ -307,12 +317,15 @@ pub struct User {
 为所有操作启用审计日志：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_audit]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
@@ -322,9 +335,10 @@ pub struct User {
 
 ```rust
 use dbnexus::{DbEntity, db_crud, db_permission, db_cache, db_audit};
+use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity)]
-#[table_name = "orders"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "orders")]
 #[db_crud]
 #[db_permission(
     roles = ["admin", "sales_manager"],
@@ -333,7 +347,7 @@ use dbnexus::{DbEntity, db_crud, db_permission, db_cache, db_audit};
 #[db_cache]
 #[db_audit]
 pub struct Order {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub user_id: i64,
     pub amount: f64,
@@ -535,12 +549,15 @@ roles:
 ### 在实体上定义权限
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
+use dbnexus::{DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
@@ -688,12 +705,15 @@ impl<'a> Drop for TransactionGuard<'a> {
 为读密集型操作启用缓存：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "products"]
+use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "products")]
 #[db_crud]
 #[db_cache]
 pub struct Product {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub price: f64,
@@ -749,12 +769,15 @@ features = ["audit"]
 使用 `#[db_audit]` 自动进行审计日志：
 
 ```rust
-#[derive(DbEntity)]
-#[table_name = "sensitive_data"]
+use dbnexus::{DbEntity, db_crud};
+use sea_orm::entity::prelude::*;
+
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "sensitive_data")]
 #[db_crud]
 #[db_audit]
 pub struct SensitiveData {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub data: String,
 }
@@ -1045,14 +1068,15 @@ User::delete(&session, 1).await?;
 
 ```rust
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use sea_orm::entity::prelude::*;
 use chrono::Utc;
 
-#[derive(DbEntity)]
-#[table_name = "users"]
+#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"])]
 pub struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
