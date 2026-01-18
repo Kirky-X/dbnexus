@@ -51,7 +51,6 @@ static PATH_TRAVERSAL_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
 
 /// 额外的危险路径模式列表（用于白名单验证）
-#[allow(dead_code)]
 static DANGEROUS_PATH_PATTERNS: &[&str] = &[
     "/etc/passwd",
     "/etc/shadow",
@@ -1012,7 +1011,6 @@ pub struct PermissionEngine {
     /// 策略决策点
     pdp: PolicyDecisionPoint,
     /// 配置
-    #[allow(dead_code)]
     config: PermissionEngineConfig,
 }
 

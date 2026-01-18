@@ -66,8 +66,22 @@ pub struct PoolConfig {
 }
 
 impl PoolConfig {
-    /// 创建新的 PoolConfig
-    #[allow(dead_code)]
+    /// 创建新的连接池配置
+    ///
+    /// 用于手动构建 `PoolConfig` 实例，适用于需要自定义连接池参数的场景。
+    ///
+    /// # Arguments
+    ///
+    /// * `max_connections` - 最大连接数
+    /// * `min_connections` - 最小连接数
+    /// * `idle_timeout` - 空闲连接超时时间（秒）
+    /// * `acquire_timeout` - 获取连接超时时间（毫秒）
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let config = PoolConfig::new(100, 10, 300, 5000);
+    /// ```
     pub(crate) fn new(max_connections: u32, min_connections: u32, idle_timeout: u64, acquire_timeout: u64) -> Self {
         Self {
             max_connections,
@@ -349,94 +363,54 @@ impl DbConfigBuilder {
 /// 配置加载器
 ///
 /// 提供从多种来源加载配置的能力：
-/// - 环境变量
-/// - YAML 文件
-/// - TOML 文件
-/// - Confers 库（可选）
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct ConfigLoader;
+/// - 环境变量 - [`DbConfig::from_env()`]
+/// - YAML 文件 - [`DbConfig::from_yaml_file()`]
+/// - TOML 文件 - [`DbConfig::from_toml_file()`]
+/// - 自动检测 - [`DbConfig::from_config_files()`]
+///
+/// 使用示例：
+/// ```ignore
+/// use dbnexus::config::DbConfig;
+///
+/// // 从环境变量加载
+/// let config = DbConfig::from_env()?;
+///
+/// // 从 YAML 文件加载
+/// let config = DbConfig::from_yaml_file("config.yaml")?;
+/// ```
+#[allow(dead_code, deprecated)]
+mod _config_loader_deprecated {
+    use super::*;
 
-impl ConfigLoader {
-    /// 从环境变量加载配置
-    ///
-    /// 读取以下环境变量：
-    /// - `DATABASE_URL` - 数据库连接 URL
-    /// - `DB_MAX_CONNECTIONS` - 最大连接数
-    /// - `DB_MIN_CONNECTIONS` - 最小连接数
-    /// - `DB_IDLE_TIMEOUT` - 空闲超时（秒）
-    /// - `DB_ACQUIRE_TIMEOUT` - 获取超时（毫秒）
-    /// - `DB_PERMISSIONS_PATH` - 权限配置路径
-    /// - `DB_MIGRATIONS_DIR` - 迁移目录
-    /// - `DB_AUTO_MIGRATE` - 是否自动迁移
-    /// - `DB_MIGRATION_TIMEOUT` - 迁移超时（秒）
-    /// - `DB_ADMIN_ROLE` - 管理员角色
-    ///
-    /// # Errors
-    ///
-    /// 如果必需的环境变量缺失，返回错误
-    #[allow(dead_code)]
-    pub fn from_env() -> Result<DbConfig, ConfigError> {
-        DbConfig::from_env()
-    }
+    #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_env()` instead")]
+    pub(crate) struct ConfigLoader;
 
-    /// 从 YAML 文件加载配置
-    ///
-    /// # Errors
-    ///
-    /// 如果文件不存在或格式错误，返回错误
-    #[cfg(feature = "config-yaml")]
-    #[allow(dead_code)]
-    pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
-        DbConfig::from_yaml_file(path)
-    }
+    #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_env()` instead")]
+    impl ConfigLoader {
+        /// 从环境变量加载数据库配置
+        ///
+        /// 读取环境变量构建 `DbConfig`。
+        /// 等同于直接调用 `DbConfig::from_env()`。
+        pub fn from_env() -> Result<DbConfig, ConfigError> {
+            DbConfig::from_env()
+        }
 
-    /// 从 TOML 文件加载配置
-    ///
-    /// # Errors
-    ///
-    /// 如果文件不存在或格式错误，返回错误
-    #[cfg(feature = "config-toml")]
-    #[allow(dead_code)]
-    pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
-        DbConfig::from_toml_file(path)
-    }
+        #[cfg(feature = "config-yaml")]
+        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_yaml_file()` instead")]
+        pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
+            DbConfig::from_yaml_file(path)
+        }
 
-    /// 从配置文件自动检测并加载
-    ///
-    /// 按顺序尝试以下路径：
-    /// - `./dbnexus.yaml`
-    /// - `./dbnexus.toml`
-    /// - `./config/dbnexus.yaml`
-    /// - `./config/dbnexus.toml`
-    /// - `~/.config/dbnexus/config.yaml`
-    /// - `~/.dbnexus/config.toml`
-    ///
-    /// # Errors
-    ///
-    /// 如果未找到配置文件或格式错误，返回错误
-    #[allow(dead_code)]
-    pub fn from_config_files() -> Result<DbConfig, ConfigError> {
-        DbConfig::from_config_files()
-    }
+        #[cfg(feature = "config-toml")]
+        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_toml_file()` instead")]
+        pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
+            DbConfig::from_toml_file(path)
+        }
 
-    /// 使用 Confers 库加载配置（可选特性）
-    ///
-    /// 需要启用 `confers` 特性。
-    ///
-    /// Confers 是一个声明式配置库，支持从多种来源加载配置。
-    /// 此方法演示了与 confers 生态系统的集成。
-    #[cfg(feature = "confers")]
-    #[allow(dead_code)]
-    pub fn from_confers() -> Result<DbConfig, ConfigError> {
-        DbConfig::from_env()
-    }
-
-    /// 检查 Confers 特性是否可用
-    #[cfg(not(feature = "confers"))]
-    #[allow(dead_code)]
-    pub fn from_confers() -> Result<DbConfig, ConfigError> {
-        Err(ConfigError::InvalidFormat)
+        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_config_files()` instead")]
+        pub fn from_config_files() -> Result<DbConfig, ConfigError> {
+            DbConfig::from_config_files()
+        }
     }
 }
 
@@ -590,31 +564,26 @@ impl DbConfig {
     }
 
     /// 内部方法：设置 URL（供构建器使用）
-    #[allow(dead_code)]
     pub(crate) fn set_url(&mut self, url: String) {
         self.url = url;
     }
 
     /// 设置最大连接数（内部使用）
-    #[allow(dead_code)]
     pub(crate) fn set_max_connections(&mut self, max_connections: u32) {
         self.max_connections = max_connections;
     }
 
     /// 设置最小连接数（内部使用）
-    #[allow(dead_code)]
     pub(crate) fn set_min_connections(&mut self, min_connections: u32) {
         self.min_connections = min_connections;
     }
 
     /// 设置空闲超时（内部使用）
-    #[allow(dead_code)]
     pub(crate) fn set_idle_timeout(&mut self, idle_timeout: u64) {
         self.idle_timeout = idle_timeout;
     }
 
     /// 设置获取超时（内部使用）
-    #[allow(dead_code)]
     pub(crate) fn set_acquire_timeout(&mut self, acquire_timeout: u64) {
         self.acquire_timeout = acquire_timeout;
     }
@@ -1083,7 +1052,6 @@ impl DbConfig {
     /// - 检查路径是否在预期目录内
     /// - 检查 Windows 风格路径遍历
     /// - 检查 null 字节注入
-    #[allow(dead_code)]
     fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
         // 1. 检查 null 字节注入
         let path_str = path.to_string_lossy();
@@ -1308,7 +1276,13 @@ impl ConfigCorrector {
     }
 
     /// 验证配置是否有效
-    #[allow(dead_code)]
+    ///
+    /// 检查配置参数是否符合基本要求：
+    /// - URL 不为空
+    /// - max_connections > 0
+    /// - min_connections <= max_connections
+    /// - acquire_timeout > 0
+    /// - idle_timeout > 0
     pub(crate) fn validate_config(config: &DbConfig) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
@@ -1336,7 +1310,9 @@ impl ConfigCorrector {
     }
 
     /// 从环境变量加载配置并自动修正
-    #[allow(dead_code)]
+    ///
+    /// 组合 `DbConfig::from_env()` 和 `ConfigCorrector::auto_correct()`，
+    /// 方便一步完成配置加载和修正。
     pub(crate) fn load_and_correct_from_env() -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_env()?;
         config = ConfigCorrector::auto_correct(config);
@@ -1345,7 +1321,6 @@ impl ConfigCorrector {
 
     /// 从配置文件加载配置并自动修正
     #[cfg(feature = "config-yaml")]
-    #[allow(dead_code)]
     pub(crate) fn load_and_correct_from_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
         let mut config = DbConfig::from_yaml_file(path)?;
         config = ConfigCorrector::auto_correct(config);
@@ -1353,7 +1328,9 @@ impl ConfigCorrector {
     }
 
     /// 验证配置并应用自动修正
-    #[allow(dead_code)]
+    ///
+    /// 先验证配置有效性，然后应用自动修正。
+    /// 如果配置有错误，会返回错误信息并附带修正后的值。
     pub(crate) fn validate_and_correct(config: &DbConfig) -> Result<DbConfig, Vec<String>> {
         let errors = Self::validate_config(config);
         let corrected_config = Self::auto_correct(config.clone());
