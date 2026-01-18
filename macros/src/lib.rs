@@ -12,7 +12,7 @@
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 use proc_macro2::Span;
-use quote::{ToTokens, quote};
+use quote::quote;
 use regex::Regex;
 use syn::{DeriveInput, parse_macro_input};
 
@@ -89,31 +89,36 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
 }
 
 /// 提取 table_name 属性
+///
+/// 使用 syn 的 Meta API 安全解析属性，避免手动字符串操作
 fn extract_table_name(attrs: &[syn::Attribute]) -> String {
     for attr in attrs {
         // 首先尝试从 #[sea_orm(table_name = "...")] 中提取
         if attr.path().is_ident("sea_orm") {
-            let attr_str = attr.meta.clone().into_token_stream().to_string();
-            if let Some(table_name_start) = attr_str.find("table_name") {
-                let after_table_name = &attr_str[table_name_start..];
-                if let Some(eq_pos) = after_table_name.find('=') {
-                    let after_eq = &after_table_name[eq_pos + 1..];
-                    if let Some(quote_start) = after_eq.find('"') {
-                        if let Some(quote_end) = after_eq[quote_start + 1..].find('"') {
-                            return after_eq[quote_start + 1..quote_start + 1 + quote_end].to_string();
+            // 使用 parse_nested_meta 解析嵌套属性
+            let mut table_name = String::new();
+            let _ = attr.parse_nested_meta(|nested| {
+                if nested.path.is_ident("table_name") {
+                    // 解析值
+                    let value: syn::Expr = nested.input.parse()?;
+                    if let syn::Expr::Lit(expr_lit) = value {
+                        if let syn::Lit::Str(lit_str) = expr_lit.lit {
+                            table_name = lit_str.value();
                         }
                     }
                 }
+                Ok(())
+            });
+            if !table_name.is_empty() {
+                return table_name;
             }
         }
         // 然后尝试从 #[table_name = "...")] 中提取
         if attr.path().is_ident("table_name") {
-            let attr_str = attr.meta.clone().into_token_stream().to_string();
-            if let Some(eq_pos) = attr_str.find('=') {
-                let after_eq = &attr_str[eq_pos + 1..];
-                if let Some(quote_start) = after_eq.find('"') {
-                    if let Some(quote_end) = after_eq[quote_start + 1..].find('"') {
-                        return after_eq[quote_start + 1..quote_start + 1 + quote_end].to_string();
+            if let syn::Meta::NameValue(name_value) = &attr.meta {
+                if let syn::Expr::Lit(expr_lit) = &name_value.value {
+                    if let syn::Lit::Str(lit_str) = &expr_lit.lit {
+                        return lit_str.value();
                     }
                 }
             }
@@ -484,7 +489,12 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     // 编译时验证角色名格式
-    validate_role_names(&roles, struct_name).ok();
+    if validate_role_names(&roles, struct_name).is_err() {
+        proc_macro_error::abort!(
+            struct_name,
+            "Invalid role name(s) detected. See errors above for details."
+        );
+    }
 
     // 使用正则表达式解析 config 参数（可选，用于编译时验证）
     let config_path = if let Ok(config_re) = Regex::new(r#"config\s*=\s*"([^"]*)""#) {
