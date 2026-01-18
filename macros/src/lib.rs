@@ -9,6 +9,8 @@
 //!
 //! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能
 
+#![allow(dead_code)] // 允许未使用的辅助函数
+
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 use proc_macro2::Span;
@@ -139,21 +141,6 @@ fn extract_primary_key(data: &syn::Data) -> String {
                         return ident.to_string();
                     }
                 }
-            }
-        }
-    }
-    String::new()
-}
-
-/// 从结构体属性中提取 db_permission 宏的参数
-fn extract_permission_args(attrs: &[syn::Attribute]) -> String {
-    for attr in attrs {
-        // 检查是否是 db_permission 属性
-        if attr.path().is_ident("db_permission") {
-            // 解析属性的内容
-            let meta = &attr.meta;
-            if let syn::Meta::List(meta_list) = meta {
-                return meta_list.tokens.to_string();
             }
         }
     }
