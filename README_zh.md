@@ -2,7 +2,7 @@
 
 <a name="dbnexus"></a>
 
-<img src="resource/DBNexus.png" alt="DBNexus Logo" width="200" style="margin-bottom: 16px;">
+<img src="docs/image/logo/logo.png" alt="DBNexus Logo" width="200" style="margin-bottom: 16px;">
 
 <p>
   <!-- CI/CD 状态 -->
