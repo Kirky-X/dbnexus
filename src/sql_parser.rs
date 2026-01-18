@@ -134,7 +134,9 @@ impl SqlParser {
 
         // Check for variables that might indicate dynamic SQL
         if contains_variables(sql) {
-            return Err(SqlParseError::ContainsVariables(sql.to_string()));
+            return Err(SqlParseError::ContainsVariables(
+                "SQL contains potentially dangerous variables. Use parameterized queries instead.".to_string(),
+            ));
         }
 
         let statements = Parser::parse_sql(&self.dialect, sql).map_err(|e| SqlParseError::ParseError(e.to_string()))?;

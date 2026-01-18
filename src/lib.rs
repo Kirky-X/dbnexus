@@ -82,6 +82,11 @@ pub mod global_index;
 /// 全局索引类型导出
 #[cfg(all(feature = "global-index", feature = "with-json"))]
 pub use global_index::{GlobalIndex, IndexEntry, SyncEvent};
+/// 健康检查和可观测性模块
+///
+/// 提供连接池健康检查、熔断器模式和自动恢复机制
+#[cfg(feature = "health-check")]
+pub mod health;
 /// Metrics 收集模块
 #[cfg(feature = "metrics")]
 pub mod metrics;

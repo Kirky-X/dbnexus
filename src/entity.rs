@@ -14,7 +14,7 @@
 //! - [`EntityTrait`] - 实体 trait，由宏自动实现
 //! - [`ActiveModelTrait`] - ActiveModel trait，用于修改实体
 //! - [`Condition`] - 查询条件构建器
-//! - [`Set`] - 值设置辅助类型
+//! - `Set<T>` - 值设置辅助类型，用于构建 [`ActiveModel`]
 
 // 只暴露用户必需的类型
 pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
