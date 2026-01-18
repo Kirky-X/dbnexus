@@ -799,12 +799,21 @@ async fn parse_and_apply_migration(session: &mut dbnexus::Session, content: &str
     // 记录迁移历史
     let applied_at = chrono::Utc::now().to_rfc3339();
     let file_path = format!("migration_v{}.sql", version);
-    let insert_sql = format!(
-        "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}')",
-        version, description, applied_at, file_path
-    );
 
-    session.execute_raw(&insert_sql).await?;
+    // 使用参数化查询防止SQL注入
+    use sea_orm::{Statement, sea_strftime};
+    let backend = sea_orm::DbBackend::MySql; // 默认使用MySQL语法，PostgreSQL兼容
+    let insert_sql = Statement::from_string(
+        backend,
+        "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)".to_string(),
+    );
+    let values = vec![
+        sea_orm::Value::from(version),
+        sea_orm::Value::from(description),
+        sea_orm::Value::from(applied_at),
+        sea_orm::Value::from(file_path),
+    ];
+    session.execute(insert_sql, values).await?;
 
     Ok(())
 }
