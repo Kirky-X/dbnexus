@@ -623,7 +623,6 @@ Derive macro that marks a struct as a database entity.
 
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "table_name"]
 struct MyEntity {
     #[primary_key]
@@ -637,7 +636,8 @@ struct MyEntity {
 
 | Attribute | Description | Required |
 |-----------|-------------|-----------|
-| `#[db_entity]` | Marks struct as DBNexus entity | Yes |
+| `#[table_name = "..."]` | Database table name | Yes |
+| `#[primary_key]` | Marks primary key field | Yes |
 | `#[table_name = "..."]` | Database table name | Yes |
 | `#[primary_key]` | Marks primary key field | Yes |
 
@@ -681,7 +681,6 @@ impl MyEntity {
 **Example:**
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 struct User {
@@ -739,7 +738,6 @@ impl MyEntity {
 **Example:**
 ```rust
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
