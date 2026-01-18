@@ -925,7 +925,6 @@ impl DbPool {
     ///
     /// 此方法是异步的，使用 tokio::spawn 在后台执行，
     /// 避免阻塞调用者。
-    #[allow(dead_code)]
     pub(crate) fn release_connection(&self, conn: DatabaseConnection) {
         self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
         let inner = self.inner.clone();

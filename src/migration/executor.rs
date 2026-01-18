@@ -85,17 +85,54 @@ impl MigrationExecutor {
 
         let mut history = MigrationHistory::new();
         for row in rows {
-            let version: i64 = row.try_get("", "version").unwrap_or_default();
-            let Ok(version) = u32::try_from(version) else {
+            // 使用更安全的错误处理方式
+            let version: Result<i64, _> = row.try_get("", "version");
+            let version_val = match version {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("Failed to read migration version: {}", e);
+                    continue;
+                }
+            };
+            let Ok(version) = u32::try_from(version_val) else {
+                tracing::warn!("Invalid migration version value: {}", version_val);
                 continue;
             };
 
-            let description: String = row.try_get("", "description").unwrap_or_default();
-            let applied_at_str: String = row.try_get("", "applied_at").unwrap_or_default();
-            let applied_at =
-                time::OffsetDateTime::parse(&applied_at_str, &time::format_description::well_known::Rfc3339)
-                    .unwrap_or_else(|_| time::OffsetDateTime::now_utc());
-            let file_path: String = row.try_get("", "file_path").unwrap_or_default();
+            let description: String = match row.try_get("", "description") {
+                Ok(d) => d,
+                Err(e) => {
+                    tracing::debug!("Missing description for migration {}: {}", version, e);
+                    String::new()
+                }
+            };
+
+            let applied_at_str: String = match row.try_get("", "applied_at") {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::debug!("Missing applied_at for migration {}: {}", version, e);
+                    String::new()
+                }
+            };
+            let applied_at = if applied_at_str.is_empty() {
+                time::OffsetDateTime::now_utc()
+            } else {
+                match time::OffsetDateTime::parse(&applied_at_str, &time::format_description::well_known::Rfc3339) {
+                    Ok(dt) => dt,
+                    Err(e) => {
+                        tracing::debug!("Invalid applied_at format for migration {}: {}", version, e);
+                        time::OffsetDateTime::now_utc()
+                    }
+                }
+            };
+
+            let file_path: String = match row.try_get("", "file_path") {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::debug!("Missing file_path for migration {}: {}", version, e);
+                    String::new()
+                }
+            };
 
             history.add_migration(MigrationVersion {
                 version,
