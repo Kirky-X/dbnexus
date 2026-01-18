@@ -69,9 +69,7 @@ fn run_example(name: &str) -> ExitCode {
     println!("🚀 运行 {} 示例...\n", name);
 
     // 使用 cargo run --bin 运行指定的示例
-    let status = Command::new("cargo")
-        .args(["run", "--bin", binary_name])
-        .status();
+    let status = Command::new("cargo").args(["run", "--bin", binary_name]).status();
 
     match status {
         Ok(exit_status) => {
