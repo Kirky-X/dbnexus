@@ -216,23 +216,23 @@ pub async fn begin_transaction(&mut self) -> DbResult<()>
 session.begin_transaction().await?;
 User::insert(&session, user1).await?;
 User::insert(&session, user2).await?;
-session.commit_transaction().await?;
+session.commit().await?;
 ```
 
-##### `commit_transaction`
+##### `commit`
 
 Commits the current transaction.
 
 ```rust
-pub async fn commit_transaction(&mut self) -> DbResult<()>
+pub async fn commit(&mut self) -> DbResult<()>
 ```
 
-##### `rollback_transaction`
+##### `rollback`
 
 Rolls back the current transaction.
 
 ```rust
-pub async fn rollback_transaction(&mut self) -> DbResult<()>
+pub async fn rollback(&mut self) -> DbResult<()>
 ```
 
 ##### `is_in_transaction`
