@@ -1,13 +1,14 @@
-use dbnexus::{DbConfig, DbPool};
+use dbnexus::{config::DbConfigBuilder, DbPool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("src/permissions.yaml".to_string()),
-        admin_role: "admin".to_string(),
-        ..Default::default()
-    };
+    let config = DbConfigBuilder::new()
+        .url("sqlite:file::memory:?cache=shared")
+        .permissions_path("src/permissions.yaml")
+        .admin_role("admin")
+        .max_connections(5)
+        .min_connections(1)
+        .build()?;
     let pool = DbPool::with_config(config).await?;
 
     let session = pool.get_session("admin").await?;
