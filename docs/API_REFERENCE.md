@@ -71,6 +71,30 @@ let config = DbConfigBuilder::new()
 let pool = DbPool::try_from_config(config).await?;
 ```
 
+##### `with_config`
+
+Creates a connection pool from explicit configuration (with auto-correction).
+
+```rust
+pub async fn with_config(config: DbConfig) -> DbResult<Self>
+```
+
+**Parameters:**
+- `config: DbConfig` - Database configuration
+
+**Returns:**
+- `DbResult<DbPool>` - Connection pool instance
+
+**Example:**
+```rust
+let config = DbConfigBuilder::new()
+    .url("postgresql://localhost/db")
+    .max_connections(20)
+    .build()?;
+
+let pool = DbPool::with_config(config).await?;
+```
+
 ##### `try_from`
 
 Synchronously creates an uninitiated connection pool.
@@ -621,25 +645,19 @@ Derive macro that marks a struct as a database entity.
 
 **Required Attributes:**
 
-```rust
-#[derive(DbEntity)]
-#[table_name = "table_name"]
-struct MyEntity {
-    #[primary_key]
-    id: i64,
-    field1: String,
-    field2: i32,
-}
-```
-
-**Attributes:**
-
 | Attribute | Description | Required |
 |-----------|-------------|-----------|
 | `#[table_name = "..."]` | Database table name | Yes |
 | `#[primary_key]` | Marks primary key field | Yes |
-| `#[table_name = "..."]` | Database table name | Yes |
-| `#[primary_key]` | Marks primary key field | Yes |
+
+**Optional Attributes:**
+
+| Attribute | Description | Required |
+|-----------|-------------|-----------|
+| `#[db_crud]` | Generate CRUD methods | No |
+| `#[db_permission(...)]` | Add permission control | No |
+| `#[db_cache]` | Enable caching (requires `cache` feature) | No |
+| `#[db_audit]` | Enable audit logging (requires `audit` feature) | No |
 
 ### `#[db_crud]`
 

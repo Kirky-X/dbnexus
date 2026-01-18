@@ -16,15 +16,15 @@
 
 ## Overview
 
-DBNexus is an enterprise-grade database abstraction layer built on top of Sea-ORM. The architecture follows a **layered design** with clear separation of concerns, enabling developers to choose exactly the features they need while maintaining consistency and simplicity.
+DBNexus is an enterprise-grade database abstraction layer built on top of Sea-ORM. The architecture follows a **layered design** with clear separation of concerns, enabling developers to choose exactly the features they need through feature gates.
 
 ### Key Architectural Goals
 
 1. **Modularity** - Feature-gated compilation for minimal binaries
 2. **Safety** - RAII-based resource management and compile-time guarantees
-3. **Performance** - Zero-cost abstractions and async-first design
-4. **Extensibility** - Pluggable components (permission engines, cache strategies, etc.)
-5. **Observability** - Built-in metrics, tracing, and audit logging
+3. **Performance** - Async-first design with efficient connection pooling
+4. **Extensibility** - Pluggable components (permission engines, cache strategies)
+5. **Observability** - Built-in metrics and audit logging (optional features)
 
 ---
 
@@ -49,32 +49,25 @@ All database connections are managed using Rust's RAII (Resource Acquisition Is 
 
 ### 2. Feature-Gated Architecture
 
-Features are organized into logical groups:
+Features are organized into logical groups and enabled at compile time:
 
-```mermaid
-flowchart TD
-    subgraph Core_Features["Core Features (always available)"]
-        config[config]
-        pool[pool]
-        entity[entity]
-    end
+**Core Features (always available):**
+- Connection pooling with RAII management
+- Basic configuration management
+- Database driver selection (SQLite, PostgreSQL, MySQL)
 
-    subgraph Optional_Core_Features["Optional Core Features"]
-        permission[permission]
-        sql_parser[sql-parser]
-        macros[macros]
-    end
+**Optional Core Features:**
+- `permission` - Role-based access control
+- `sql-parser` - SQL parsing for permission checks
+- `macros` - Procedural macros for code generation
 
-    subgraph Enterprise_Features["Enterprise Features"]
-        metrics[metrics]
-        tracing[tracing]
-        audit[audit]
-        migration[migration]
-        sharding[sharding]
-        global_index[global-index]
-        cache[cache]
-    end
-```
+**Enterprise Features (optional):**
+- `metrics` - Prometheus metrics collection
+- `tracing` - OpenTelemetry integration
+- `audit` - Comprehensive audit logging
+- `migration` - Database migration management
+- `sharding` - Data sharding support
+- `cache` - LRU caching layer
 
 ### 3. Async-First Design
 
@@ -98,95 +91,53 @@ Compile-time guarantees prevent common errors:
 
 ### High-Level Layer Diagram
 
-```mermaid
-graph TB
-    subgraph Application_Layer["Application Layer"]
-        App["User code using DBNexus"]
-    end
-
-    subgraph DBNexus_API_Layer["DBNexus API Layer"]
-        DbPool[DbPool]
-        Session[Session]
-        Macros[Macros]
-        Types[Types]
-    end
-
-    subgraph Feature_Modules["Feature Modules"]
-        Config[Config]
-        Permission[Permission]
-        Parser[Parser]
-        Metrics[Metrics]
-        Audit[Audit]
-        Cache[Cache]
-        Sharding[Sharding]
-        Tracing[Tracing]
-        Migration[Migration]
-        GlobalIdx[GlobalIdx]
-        PermEng[PermEng]
-        etc[etc]
-    end
-
-    subgraph Connection_Pool_Layer["Connection Pool Layer"]
-        ConnectionQueue["Connection Queue<br/>AsyncMutex<Vec<Conn>><br/>+ Atomic Counters<br/>+ Notify"]
-    end
-
-    subgraph Sea_ORM_SQLx_Layer["Sea-ORM / SQLx Layer"]
-        DatabaseDrivers["Database Drivers<br/>PostgreSQL/MySQL/SQLite<br/>Query Builder & Type System"]
-    end
-
-    App --> DbPool
-    DbPool --> Config
-    Session --> Permission
-    Macros --> Parser
-    Types --> Metrics
-
-    Config --> ConnectionQueue
-    Permission --> ConnectionQueue
-    Parser --> ConnectionQueue
-    Metrics --> ConnectionQueue
-    Audit --> ConnectionQueue
-    Cache --> ConnectionQueue
-    Sharding --> ConnectionQueue
-    Tracing --> ConnectionQueue
-    Migration --> ConnectionQueue
-    GlobalIdx --> ConnectionQueue
-    PermEng --> ConnectionQueue
-    etc --> ConnectionQueue
-
-    ConnectionQueue --> DatabaseDrivers
+```
+┌─────────────────────────────────────────────────┐
+│              Application Layer                    │
+│     (Your code using DbPool and Session)      │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│           DBNexus API Layer                 │
+│   - DbPool, Session                        │
+│   - Permission checking                    │
+│   - Transaction management                 │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Feature Modules                     │
+│   - Config, Permission, Metrics            │
+│   - Migration, Sharding, Audit             │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Connection Pool                     │
+│   - Connection lifecycle management          │
+│   - Health checking                        │
+│   - RAII guarantees                       │
+└────────────────┬────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────┐
+│         Sea-ORM / SQLx                    │
+│   - Database drivers                       │
+│   - Query builder                        │
+└───────────────────────────────────────────┘
 ```
 
-### Component Interaction
+### Component Interaction Flow
 
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant Pool as DbPool
-    participant PermCtx1 as PermissionContext
-    participant Session as Session
-    participant Parser as SQLParser
-    participant PermCtx2 as PermissionContext
-    participant DB as Database
+1. **Application** requests a session from `DbPool` with a specific role
+2. **DbPool** validates the role and creates a `Session` with database connection
+3. **Session** handles all database operations with automatic permission checking
+4. **Permission System** validates table access based on role policies
+5. **Connection** is automatically returned to pool when session is dropped
 
-    App->>Pool: 1. pool.get_session("role")
-    Pool->>PermCtx1: 2. Permission check
-    PermCtx1-->>Pool: validate role
-    Pool-->>App: 3. Return Session
+### Key Implementation Details
 
-    App->>Session: 4. session.execute("SELECT...")
-    Session->>Parser: extract table + operation
-    Parser-->>Session: return table & operation
-
-    Session->>PermCtx2: 5. Check table permission
-    PermCtx2-->>Session: allow/deny
-
-    Session->>DB: 6. Execute query
-    DB-->>Session: return result
-    Session-->>App: return result
-
-    App-->>Pool: 7. Session dropped
-    Pool->>Pool: release connection
-```
+- **Connection Pool**: Uses `AsyncMutex<Vec<DatabaseConnection>>` with atomic counters
+- **Permission Caching**: LRU cache for role policies to improve performance
+- **Health Checking**: Background task validates idle connections periodically
+- **RAII Management**: Connections automatically released on session drop
 
 ---
 
