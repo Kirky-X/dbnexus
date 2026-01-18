@@ -579,10 +579,9 @@ cargo clippy --all-features
 
 <div align="center" style="margin: 24px 0;">
 
-This project is dual-licensed under **MIT / Apache-2.0**:
+This project is licensed under **MIT**:
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE-APACHE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
 
