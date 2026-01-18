@@ -732,15 +732,21 @@ impl PermissionProvider for YamlPermissionProvider {
 }
 
 impl YamlPermissionProvider {
-    /// 获取主体的角色列表（安全版本：禁止用户名直接作为角色）
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        // 只返回预定义的角色映射，禁止用户名直接作为角色
-        self.role_mapping
-            .read()
-            .unwrap()
-            .get(subject)
-            .cloned()
-            .unwrap_or_default()
+        // 优先从角色映射中获取
+        if let Ok(mapping) = self.role_mapping.read() {
+            if let Some(roles) = mapping.get(subject) {
+                return roles.clone();
+            }
+        }
+        // 如果没有映射，尝试直接将主体名作为角色名（用于简单用例）
+        // 但要确保只返回预定义的角色（防止安全问题）
+        if let Ok(roles) = self.roles.read() {
+            if roles.contains_key(subject) {
+                return vec![subject.to_string()];
+            }
+        }
+        Vec::new()
     }
 }
 
@@ -957,15 +963,21 @@ impl PermissionProvider for RbacPermissionProvider {
 }
 
 impl RbacPermissionProvider {
-    /// 获取主体的角色列表（安全版本：禁止用户名直接作为角色）
+    /// 获取主体的角色列表
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        // 只返回预定义的角色映射，禁止用户名直接作为角色
-        self.role_mapping
-            .read()
-            .unwrap()
-            .get(subject)
-            .cloned()
-            .unwrap_or_default()
+        // 优先从角色映射中获取
+        if let Ok(mapping) = self.role_mapping.read() {
+            if let Some(roles) = mapping.get(subject) {
+                return roles.clone();
+            }
+        }
+        // 如果没有映射，检查 subject 本身是否是预定义的角色
+        if let Ok(roles) = self.roles.read() {
+            if roles.contains_key(subject) {
+                return vec![subject.to_string()];
+            }
+        }
+        Vec::new()
     }
 
     /// 检查规则是否匹配

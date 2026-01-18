@@ -626,8 +626,10 @@ fn extract_table_name(sql: &str) -> String {
     if sql_upper.contains("FROM ") {
         if let Some(start) = sql_upper.find("FROM ") {
             let rest = &sql[start + 5..];
-            if let Some(end) = rest.find(|c| [' ', ',', ';'].contains(&c)) {
+            if let Some(end) = rest.find(|c| [' ', ',', ';', '(', ')'].contains(&c)) {
                 return rest[..end].trim().to_string();
+            } else {
+                return rest.trim().to_string();
             }
         }
     }
@@ -637,15 +639,19 @@ fn extract_table_name(sql: &str) -> String {
             let rest = &sql[start + 5..];
             if let Some(end) = rest.find(|c| [' ', '(', ';'].contains(&c)) {
                 return rest[..end].trim().to_string();
+            } else {
+                return rest.trim().to_string();
             }
         }
     }
 
-    if sql_upper.starts_with("UPDATE ") {
+    if sql_upper.contains("UPDATE ") {
         if let Some(start) = sql_upper.find("UPDATE ") {
             let rest = &sql[start + 7..];
             if let Some(end) = rest.find(|c| [' ', ';'].contains(&c)) {
                 return rest[..end].trim().to_string();
+            } else {
+                return rest.trim().to_string();
             }
         }
     }

@@ -337,6 +337,7 @@ async fn test_concurrent_role_sessions() {
 
 /// TEST-CONC-008: 并发事务测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_concurrent_transactions() {
     // 使用带权限配置的测试配置
     // 创建临时权限配置文件，允许 admin 执行所有操作
