@@ -340,6 +340,7 @@ async fn test_pool_status_across_databases() {
 
 /// TEST-MDB-014: 数据库特定功能测试
 #[tokio::test]
+#[cfg(feature = "sqlite")]
 async fn test_database_specific_features() {
     // 创建带有权限配置的测试
     let perm_content = r#"

@@ -109,6 +109,12 @@ impl fmt::Display for AuditSeverity {
     }
 }
 
+impl Default for AuditSeverity {
+    fn default() -> Self {
+        AuditSeverity::Info
+    }
+}
+
 /// 审计结果
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuditResult {
@@ -130,6 +136,12 @@ impl fmt::Display for AuditResult {
             AuditResult::Partial => write!(f, "PARTIAL"),
             AuditResult::Unknown => write!(f, "UNKNOWN"),
         }
+    }
+}
+
+impl Default for AuditResult {
+    fn default() -> Self {
+        AuditResult::Success
     }
 }
 
@@ -174,6 +186,7 @@ impl AuditEvent {
     /// # 推荐方式
     /// 使用 `AuditEventBuilder` 进行链式构建：
     /// ```rust
+    /// # use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
     /// AuditEvent::builder()
     ///     .operation(AuditOperation::Create)
     ///     .entity_type("users")
@@ -182,14 +195,15 @@ impl AuditEvent {
     ///     .user_role("admin")
     ///     .client_ip("127.0.0.1")
     ///     .severity(AuditSeverity::High)
-    ///     .build()
+    ///     .build();
     /// ```
     ///
     /// # 简单方式
     /// 使用快捷方法：
     /// ```rust
+    /// # use dbnexus::audit::{AuditEvent, AuditSeverity};
     /// AuditEvent::create("users", "1", "admin")
-    ///     .with_severity(AuditSeverity::High)
+    ///     .with_severity(AuditSeverity::High);
     /// ```
     pub fn new(
         operation: AuditOperation,
