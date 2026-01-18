@@ -6,6 +6,7 @@
 //! 权限控制集成测试
 
 use dbnexus::DbPool;
+use dbnexus::config::DbConfigBuilder;
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
 
 #[path = "../../common/mod.rs"]
@@ -30,8 +31,12 @@ roles:
     std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
 
     // 使用包含权限配置的配置
-    let mut config = common::get_test_config();
-    config.permissions_path = Some("/tmp/test_perms.yaml".to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path("/tmp/test_perms.yaml")
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     // 使用配置中定义的 admin 角色
     let session = pool.get_session("admin").await.expect("Failed to get session");
@@ -65,8 +70,12 @@ roles:
     std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
 
     // 使用包含权限配置的配置
-    let mut config = common::get_test_config();
-    config.permissions_path = Some("/tmp/test_perms.yaml".to_string());
+    let config = DbConfigBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(5)
+        .permissions_path("/tmp/test_perms.yaml")
+        .build()
+        .expect("Failed to build config");
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     // admin 角色有所有权限
     let session = pool.get_session("admin").await.expect("Failed to get session");
