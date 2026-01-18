@@ -57,7 +57,6 @@ DBNexus provides a **declarative** database access approach:
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
@@ -152,8 +151,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Preset | Features | Use Case |
 |------|------|----------|
-| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `sqlite`, `runtime-tokio-rustls` | Minimal for embedded devices |
-| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `postgres`, `permission`, `pool-health-check` | Microservice setup |
+| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | Minimal for embedded devices |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `config-yaml`, `regex`, `lru` | Microservice setup |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | All enterprise features | Full enterprise features |
 
 ---
@@ -166,7 +165,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = "0.1"
+dbnexus = "0.1.1"
 ```
 
 ### <span id="basic-usage">💡 Basic Usage</span>
@@ -187,7 +186,6 @@ dbnexus = "0.1"
 use dbnexus::{DbPool, DbEntity, db_crud};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 struct User {
@@ -248,7 +246,6 @@ println!("Found {} users", users.len());
 use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
 
 #[derive(DbEntity)]
-#[db_entity]
 #[table_name = "users"]
 #[db_crud]
 #[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
@@ -275,40 +272,40 @@ User::find_all(&session).await?; // Error: Permission denied
 
 ```toml
 # SQLite (default)
-dbnexus = { version = "0.1", features = ["sqlite"] }
+dbnexus = { version = "0.1.1", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1", features = ["postgres"] }
+dbnexus = { version = "0.1.1", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1", features = ["mysql"] }
+dbnexus = { version = "0.1.1", features = ["mysql"] }
 ```
 
 ### Runtime
 
 ```toml
 # Tokio with RustLS (default)
-dbnexus = { version = "0.1", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.1.1", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.1", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.1.1", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.1", features = ["runtime-async-std"] }
+dbnexus = { version = "0.1.1", features = ["runtime-async-std"] }
 ```
 
 ### Optional Features
 
 ```toml
 # Core features
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "permission",      # Permission control
     "sql-parser",      # SQL parsing
     "macros",          # Procedural macros
 ] }
 
 # Enterprise features
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "metrics",         # Prometheus metrics
     "tracing",         # Distributed tracing
     "audit",           # Audit logging
@@ -317,7 +314,7 @@ dbnexus = { version = "0.1", features = [
 ] }
 
 # Configuration
-dbnexus = { version = "0.1", features = [
+dbnexus = { version = "0.1.1", features = [
     "config-yaml",     # YAML config support
     "config-toml",     # TOML config support
     "config-env",      # Environment variables (default)
