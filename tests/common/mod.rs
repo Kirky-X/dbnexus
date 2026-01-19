@@ -51,11 +51,11 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     let url = match test_db_type.as_str() {
         "postgres" => database_url.unwrap_or_else(|| {
             let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
-            format!("postgres://dbnexus:{}@localhost:15432/dbnexus_test", password)
+            format!("postgres://dbnexus:{}@localhost:15433/dbnexus_test", password)
         }),
         "mysql" => database_url.unwrap_or_else(|| {
             let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
-            format!("mysql://dbnexus:{}@localhost:13306/dbnexus_test", password)
+            format!("mysql://dbnexus:{}@localhost:13308/dbnexus_test", password)
         }),
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
     };
