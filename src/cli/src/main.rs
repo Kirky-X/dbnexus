@@ -153,7 +153,21 @@ async fn create_migration(description: &str, directory: &PathBuf) -> DbResult<()
         .map_err(|e| DbError::Config(format!("无法解析时间戳: {}", e)))?
         .as_secs();
 
-    let filename = format!("{}_{}.sql", timestamp, description.replace(' ', "_"));
+    // 验证并清理描述，防止路径遍历和特殊字符攻击
+    let sanitized_description = description
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+        .collect::<String>();
+
+    if sanitized_description.is_empty() {
+        return Err(DbError::Config("迁移描述不能只包含特殊字符".to_string()));
+    }
+
+    if sanitized_description.len() > 100 {
+        return Err(DbError::Config("迁移描述过长（最大 100 字符）".to_string()));
+    }
+
+    let filename = format!("{}_{}.sql", timestamp, sanitized_description);
     let filepath = directory.join(&filename);
 
     // 创建迁移文件模板

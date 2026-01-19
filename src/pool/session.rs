@@ -226,29 +226,73 @@ impl Session {
 
             // 检测常见的 SQL 注入模式
             let dangerous_patterns = [
-                "--", // 行注释
-                "/*", // 块注释
-                "UNION ALL",
-                "UNION SELECT",
-                "DROP DATABASE",
-                "TRUNCATE TABLE",
-                "DELETE FROM",
-                "EXEC(",
-                "EXECUTE(",
-                " xp_", // SQL Server 扩展存储过程
-                " sp_", // SQL Server 存储过程
+                // 注释注入
+                ("--", "Line comment"),
+                ("/*", "Block comment"),
+                ("*/", "Block comment end"),
+                // UNION 注入
+                ("UNION ALL", "UNION injection"),
+                ("UNION SELECT", "UNION injection"),
+                ("UNION(", "UNION injection"),
+                // 数据操作危险操作
+                ("DROP DATABASE", "DROP DATABASE"),
+                ("TRUNCATE TABLE", "TRUNCATE TABLE"),
+                ("DELETE FROM", "DELETE injection"),
+                ("DELETE(", "DELETE injection"),
+                // 存储过程注入
+                ("EXEC(", "EXEC injection"),
+                ("EXECUTE(", "EXECUTE injection"),
+                (" xp_", "SQL Server extended stored procedure"),
+                (" sp_", "SQL Server stored procedure"),
+                (" xp_cmdshell", "SQL Server cmdshell"),
+                // 系统表访问
+                ("INFORMATION_SCHEMA", "System table access"),
+                ("SYSOBJECTS", "System table access (SQL Server)"),
+                ("SYSCOLUMNS", "System table access"),
+                // 十六进制编码尝试
+                ("0x", "Hex-encoded string"),
+                // 字符串拼接
+                ("||", "String concatenation"),
+                ("CONCAT(", "String concatenation function"),
+                // 时序攻击
+                ("BENCHMARK(", "Timing attack"),
+                ("SLEEP(", "Timing attack"),
+                ("PG_SLEEP", "Timing attack"),
+                // 条件注入
+                ("' OR '1'='1", "Classic SQL injection"),
+                ("' OR 1=1", "Numeric SQL injection"),
+                (" OR 1=1", "Numeric SQL injection"),
+                // 负载注入
+                ("<script>", "Script injection"),
+                ("javascript:", "JavaScript injection"),
+                ("VARCHAR", "Type conversion injection"),
             ];
 
-            for pattern in &dangerous_patterns {
+            for (pattern, description) in &dangerous_patterns {
                 if sql_upper.contains(pattern) {
                     tracing::warn!(
-                        "Rejected SQL containing' dangerous pattern '{} (potential SQL injection)",
-                        pattern
+                        "Rejected SQL containing dangerous pattern '{}' ({})",
+                        pattern,
+                        description
                     );
                     return Err(DbError::Permission(format!(
-                        "SQL statement contains forbidden pattern: {}",
-                        pattern
+                        "SQL statement contains forbidden pattern: {} ({})",
+                        pattern, description
                     )));
+                }
+            }
+
+            // 检测可疑的字符串逃逸模式
+            let escape_patterns = [("''", "Escaped single quote"), ("\\\\", "Double backslash")];
+
+            for (pattern, _) in &escape_patterns {
+                let count = sql_upper.matches(pattern).count();
+                if count > 10 {
+                    // 过多的逃逸字符可能表示注入尝试
+                    tracing::warn!("Suspicious escape pattern count: {} ({} occurrences)", pattern, count);
+                    return Err(DbError::Permission(
+                        "SQL statement contains suspicious escape patterns".to_string(),
+                    ));
                 }
             }
         }
