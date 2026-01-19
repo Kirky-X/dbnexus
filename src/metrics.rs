@@ -843,129 +843,158 @@ impl MetricsCollector {
 
     /// 导出为 Prometheus 格式
     pub fn export_prometheus(&self) -> String {
-        let mut output = String::new();
+        // 优化：预分配缓冲区，减少字符串分配
+        let mut output = String::with_capacity(2048);
         let now = time::OffsetDateTime::now_utc();
 
         let uptime_seconds = self.uptime().as_secs_f64();
         output.push_str("# TYPE dbnexus_uptime gauge\n");
-        output.push_str(&format!("dbnexus_uptime_seconds {:.3}\n", uptime_seconds));
+        use std::fmt::Write;
+        writeln!(output, "dbnexus_uptime_seconds {:.3}", uptime_seconds).unwrap();
 
         // 连接池指标
         output.push_str("# TYPE dbnexus_pool_connections gauge\n");
-        output.push_str(&format!(
-            "dbnexus_pool_connections_total {}\n",
+        writeln!(
+            output,
+            "dbnexus_pool_connections_total {}",
             self.pool_total.load(Ordering::SeqCst)
-        ));
-        output.push_str(&format!(
-            "dbnexus_pool_connections_active {}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_connections_active {}",
             self.pool_active.load(Ordering::SeqCst)
-        ));
-        output.push_str(&format!(
-            "dbnexus_pool_connections_idle {}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_connections_idle {}",
             self.pool_idle.load(Ordering::SeqCst)
-        ));
-        output.push_str(&format!(
-            "dbnexus_pool_connections_utilization {:.4}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_connections_utilization {:.4}",
             self.pool_status().utilization_rate()
-        ));
+        )
+        .unwrap();
 
         // 错误指标
         output.push_str("# TYPE dbnexus_errors counter\n");
-        output.push_str(&format!(
-            "dbnexus_connection_errors_total {}\n",
+        writeln!(
+            output,
+            "dbnexus_connection_errors_total {}",
             self.connection_errors.load(Ordering::SeqCst)
-        ));
-        output.push_str(&format!(
-            "dbnexus_query_errors_total {}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_query_errors_total {}",
             self.query_errors.load(Ordering::SeqCst)
-        ));
+        )
+        .unwrap();
 
         // 连接获取指标
         let acquire_stats = self.connection_acquire_stats();
         output.push_str("# TYPE dbnexus_connection_acquire counter\n");
-        output.push_str(&format!(
-            "dbnexus_connection_acquire_total {}\n",
+        writeln!(
+            output,
+            "dbnexus_connection_acquire_total {}",
             acquire_stats.total_attempts
-        ));
-        output.push_str(&format!(
-            "dbnexus_connection_acquire_timeout_total {}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_connection_acquire_timeout_total {}",
             acquire_stats.timeout_count
-        ));
-        output.push_str(&format!(
-            "dbnexus_connection_acquire_failure_total {}\n",
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_connection_acquire_failure_total {}",
             acquire_stats.failure_count
-        ));
+        )
+        .unwrap();
 
         // 事务指标
         let txn_stats = self.transaction_stats();
         output.push_str("# TYPE dbnexus_transactions counter\n");
-        output.push_str(&format!(
-            "dbnexus_transactions_total {}\n",
-            txn_stats.total_transactions
-        ));
-        output.push_str(&format!(
-            "dbnexus_transactions_commit_total {}\n",
-            txn_stats.commit_count
-        ));
-        output.push_str(&format!(
-            "dbnexus_transactions_rollback_total {}\n",
+        writeln!(output, "dbnexus_transactions_total {}", txn_stats.total_transactions).unwrap();
+        writeln!(output, "dbnexus_transactions_commit_total {}", txn_stats.commit_count).unwrap();
+        writeln!(
+            output,
+            "dbnexus_transactions_rollback_total {}",
             txn_stats.rollback_count
-        ));
-        output.push_str(&format!(
-            "dbnexus_transactions_failure_total {}\n",
-            txn_stats.failure_count
-        ));
-        output.push_str(&format!(
-            "dbnexus_transactions_success_rate {:.2}\n",
+        )
+        .unwrap();
+        writeln!(output, "dbnexus_transactions_failure_total {}", txn_stats.failure_count).unwrap();
+        writeln!(
+            output,
+            "dbnexus_transactions_success_rate {:.2}",
             txn_stats.success_rate
-        ));
+        )
+        .unwrap();
 
         // 查询指标
         let stats = self.all_query_stats();
         for (query_type, stat) in stats {
             let type_label = query_type.to_lowercase();
 
-            output.push_str(&format!(
-                "# TYPE dbnexus_queries_total counter\ndbnexus_queries_total{{type=\"{}\"}} {}\n",
+            // 使用 writeln! 替代 push_str + format!
+            writeln!(
+                output,
+                "# TYPE dbnexus_queries_total counter\ndbnexus_queries_total{{type=\"{}\"}} {}",
                 type_label, stat.count
-            ));
+            )
+            .unwrap();
 
             output.push_str("# TYPE dbnexus_query_throughput gauge\n");
-            output.push_str(&format!(
-                "dbnexus_query_throughput_qps{{type=\"{}\"}} {:.2}\n",
+            writeln!(
+                output,
+                "dbnexus_query_throughput_qps{{type=\"{}\"}} {:.2}",
                 type_label, stat.throughput.avg_qps
-            ));
+            )
+            .unwrap();
 
             // 延迟百分位
             output.push_str("# TYPE dbnexus_query_latency_seconds gauge\n");
-            output.push_str(&format!(
-                "dbnexus_query_latency_p50_seconds{{type=\"{}\"}} {:.6}\n",
-                type_label,
-                stat.latency_percentiles.p50().as_secs_f64()
-            ));
-            output.push_str(&format!(
-                "dbnexus_query_latency_p90_seconds{{type=\"{}\"}} {:.6}\n",
-                type_label,
-                stat.latency_percentiles.p90().as_secs_f64()
-            ));
-            output.push_str(&format!(
-                "dbnexus_query_latency_p95_seconds{{type=\"{}\"}} {:.6}\n",
-                type_label,
-                stat.latency_percentiles.p95().as_secs_f64()
-            ));
-            output.push_str(&format!(
-                "dbnexus_query_latency_p99_seconds{{type=\"{}\"}} {:.6}\n",
-                type_label,
-                stat.latency_percentiles.p99().as_secs_f64()
-            ));
+            let p50 = stat.latency_percentiles.p50().as_secs_f64();
+            let p90 = stat.latency_percentiles.p90().as_secs_f64();
+            let p95 = stat.latency_percentiles.p95().as_secs_f64();
+            let p99 = stat.latency_percentiles.p99().as_secs_f64();
+
+            writeln!(
+                output,
+                "dbnexus_query_latency_p50_seconds{{type=\"{}\"}} {:.6}",
+                type_label, p50
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "dbnexus_query_latency_p90_seconds{{type=\"{}\"}} {:.6}",
+                type_label, p90
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "dbnexus_query_latency_p95_seconds{{type=\"{}\"}} {:.6}",
+                type_label, p95
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "dbnexus_query_latency_p99_seconds{{type=\"{}\"}} {:.6}",
+                type_label, p99
+            )
+            .unwrap();
         }
 
         // 总吞吐量
         let total = self.total_throughput();
         output.push_str("# TYPE dbnexus_total_throughput gauge\n");
-        output.push_str(&format!("dbnexus_total_qps {:.2}\n", total.avg_qps));
-        output.push_str(&format!("dbnexus_total_operations {}\n", total.total_operations));
-        output.push_str(&format!("dbnexus_error_rate {:.4}\n", total.error_rate));
+        writeln!(output, "dbnexus_total_qps {:.2}", total.avg_qps).unwrap();
+        writeln!(output, "dbnexus_total_operations {}", total.total_operations).unwrap();
+        writeln!(output, "dbnexus_error_rate {:.4}", total.error_rate).unwrap();
 
         output.push_str("# TYPE dbnexus_metrics_timestamp gauge\n");
         output.push_str(&format!("dbnexus_metrics_timestamp {}\n", now.unix_timestamp()));
