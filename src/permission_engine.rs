@@ -43,6 +43,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Instant;
 
 /// 预编译的正则表达式，用于检测路径遍历攻击模式
@@ -642,27 +643,24 @@ impl PermissionProvider for YamlPermissionProvider {
         };
         let subject_roles = self.get_subject_roles(&context.subject.id);
 
-        // 优化：使用 BinaryHeap 收集和排序规则，避免完整排序开销
-        // BinaryHeap 是最大堆，pop 返回优先级最高的元素
-        use std::collections::BinaryHeap;
-
-        // 收集所有匹配的规则
-        let mut rule_heap: BinaryHeap<(i32, &PermissionRule)> = BinaryHeap::new();
+        // 优化：收集所有匹配的规则
+        let mut matched_rules: Vec<(i32, &PermissionRule)> = Vec::new();
 
         for role_name in &subject_roles {
             if let Some(rules) = roles.get(role_name) {
                 for rule in rules {
                     if rule.enabled && self.matches_rule(rule, context) {
-                        // 直接推入 BinaryHeap，自动按优先级排序
-                        rule_heap.push((rule.priority, rule));
+                        matched_rules.push((rule.priority, rule));
                     }
                 }
             }
         }
 
+        // 按优先级从高到低排序
+        matched_rules.sort_by(|a, b| b.0.cmp(&a.0));
+
         // 评估规则：按优先级从高到低，一旦找到决策立即返回
-        // BinaryHeap.pop 返回优先级最高的规则，避免完整排序
-        while let Some((_, rule)) = rule_heap.pop() {
+        for (_, rule) in matched_rules {
             // 检查 Allow 规则（优先级最高）
             if rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All) {
                 return PermissionDecision::Allow;
