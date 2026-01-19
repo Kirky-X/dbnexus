@@ -128,17 +128,15 @@ fn sanitize_default_value(default: &str) -> String {
     // 确保默认值被引号包围
     let trimmed = default.trim();
 
-    if trimmed.starts_with('\'') && trimmed.ends_with('\'') {
-        trimmed.to_string()
-    } else if trimmed.starts_with('(') && trimmed.ends_with(')') {
-        trimmed.to_string()
-    } else if trimmed.parse::<i128>().is_ok()
+    if (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        || (trimmed.starts_with('(') && trimmed.ends_with(')'))
+        || trimmed.parse::<i128>().is_ok()
         || trimmed.parse::<f64>().is_ok()
         || trimmed.to_uppercase() == "NULL"
         || trimmed.to_uppercase() == "CURRENT_TIMESTAMP"
         || trimmed.to_uppercase() == "NOW()"
     {
-        // 数字、NULL 和函数不需要引号
+        // 已经有引号、是函数、数字、NULL 或时间戳，不需要额外引号
         trimmed.to_string()
     } else {
         // 其他情况添加单引号
