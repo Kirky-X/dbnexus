@@ -36,13 +36,13 @@
 //! ```
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::Instant;
 
 /// 预编译的正则表达式，用于检测路径遍历攻击模式
@@ -297,8 +297,8 @@ impl CachedDecision {
 pub struct PolicyDecisionPoint {
     /// 权限提供者
     provider: Arc<dyn PermissionProvider>,
-    /// 缓存（包含时间戳）
-    cache: RwLock<HashMap<String, CachedDecision>>,
+    /// 缓存（使用 DashMap 实现细粒度锁）
+    cache: DashMap<String, CachedDecision>,
     /// 缓存配置
     cache_ttl_seconds: u64,
     /// 是否启用缓存
@@ -310,7 +310,7 @@ impl PolicyDecisionPoint {
     pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
         Self {
             provider,
-            cache: RwLock::new(HashMap::new()),
+            cache: DashMap::new(),
             cache_ttl_seconds: 300, // 5 分钟
             cache_enabled: true,
         }
@@ -320,7 +320,7 @@ impl PolicyDecisionPoint {
     pub fn with_cache(provider: Arc<dyn PermissionProvider>, cache_ttl_seconds: u64) -> Self {
         Self {
             provider,
-            cache: RwLock::new(HashMap::new()),
+            cache: DashMap::new(),
             cache_ttl_seconds,
             cache_enabled: true,
         }
@@ -389,18 +389,16 @@ impl PolicyDecisionPoint {
     /// 刷新缓存
     pub async fn refresh_cache(&self) {
         self.provider.refresh().await.ok();
-        if let Ok(mut cache) = self.cache.write() {
-            cache.clear();
-        }
+        // DashMap 清空
+        self.cache.clear();
     }
 
     /// 启用/禁用缓存
     pub fn set_cache_enabled(&mut self, enabled: bool) {
         self.cache_enabled = enabled;
         if !enabled {
-            if let Ok(mut cache) = self.cache.write() {
-                cache.clear();
-            }
+            // DashMap 清空
+            self.cache.clear();
         }
     }
 
@@ -420,12 +418,11 @@ impl PolicyDecisionPoint {
 
     /// 获取缓存的决策（带 TTL 检查）
     fn get_cached_decision(&self, key: &str) -> Option<PermissionDecision> {
-        if let Ok(cache) = self.cache.read() {
-            if let Some(cached) = cache.get(key) {
-                // 检查是否过期
-                if !cached.is_expired(self.cache_ttl_seconds) {
-                    return Some(cached.decision.clone());
-                }
+        // DashMap 直接读取，无需锁
+        if let Some(cached) = self.cache.get(key) {
+            // 检查是否过期
+            if !cached.is_expired(self.cache_ttl_seconds) {
+                return Some(cached.decision.clone());
             }
         }
         None
@@ -433,9 +430,8 @@ impl PolicyDecisionPoint {
 
     /// 更新缓存（带时间戳）
     fn update_cache(&self, key: &str, decision: PermissionDecision) {
-        if let Ok(mut cache) = self.cache.write() {
-            cache.insert(key.to_string(), CachedDecision::new(decision));
-        }
+        // DashMap 直接写入，无需锁
+        self.cache.insert(key.to_string(), CachedDecision::new(decision));
     }
 }
 
@@ -646,27 +642,32 @@ impl PermissionProvider for YamlPermissionProvider {
         };
         let subject_roles = self.get_subject_roles(&context.subject.id);
 
-        // 按优先级排序规则
-        let mut matching_rules: Vec<&PermissionRule> = Vec::new();
+        // 优化：使用 BinaryHeap 收集和排序规则，避免完整排序开销
+        // BinaryHeap 是最大堆，pop 返回优先级最高的元素
+        use std::collections::BinaryHeap;
+
+        // 收集所有匹配的规则
+        let mut rule_heap: BinaryHeap<(i32, &PermissionRule)> = BinaryHeap::new();
 
         for role_name in &subject_roles {
             if let Some(rules) = roles.get(role_name) {
                 for rule in rules {
                     if rule.enabled && self.matches_rule(rule, context) {
-                        matching_rules.push(rule);
+                        // 直接推入 BinaryHeap，自动按优先级排序
+                        rule_heap.push((rule.priority, rule));
                     }
                 }
             }
         }
 
-        // 按优先级排序
-        matching_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
-
-        // 评估规则
-        for rule in matching_rules {
+        // 评估规则：按优先级从高到低，一旦找到决策立即返回
+        // BinaryHeap.pop 返回优先级最高的规则，避免完整排序
+        while let Some((_, rule)) = rule_heap.pop() {
+            // 检查 Allow 规则（优先级最高）
             if rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All) {
                 return PermissionDecision::Allow;
             }
+            // 检查 Deny 规则
             if rule.deny.contains(&context.action) || rule.deny.contains(&PermissionAction::All) {
                 return PermissionDecision::Deny;
             }

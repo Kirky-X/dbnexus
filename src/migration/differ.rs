@@ -10,6 +10,141 @@
 use super::schema::*;
 use super::types::*;
 use crate::config::DatabaseType;
+use regex::Regex;
+use std::sync::LazyLock;
+
+/// 验证 SQL 标识符（表名、列名等）
+///
+/// # Arguments
+///
+/// * `identifier` - 要验证的标识符
+/// * `identifier_type` - 标识符类型描述（用于错误信息）
+///
+/// # Returns
+///
+/// 验证通过返回标识符，失败返回错误
+fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<String, String> {
+    if identifier.is_empty() {
+        return Err(format!("{} 不能为空", identifier_type));
+    }
+
+    if identifier.len() > 64 {
+        return Err(format!("{} 长度不能超过 64 个字符", identifier_type));
+    }
+
+    // 验证标识符格式：只允许字母、数字、下划线，且不能以数字开头
+    static IDENTIFIER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap());
+
+    if !IDENTIFIER_REGEX.is_match(identifier) {
+        return Err(format!(
+            "{} '{}' 包含无效字符，只允许字母、数字和下划线，且不能以数字开头",
+            identifier_type, identifier
+        ));
+    }
+
+    // 检查保留关键字
+    let reserved_keywords = [
+        "select",
+        "insert",
+        "update",
+        "delete",
+        "drop",
+        "create",
+        "alter",
+        "table",
+        "index",
+        "from",
+        "where",
+        "and",
+        "or",
+        "not",
+        "null",
+        "primary",
+        "key",
+        "foreign",
+        "references",
+        "constraint",
+        "default",
+        "unique",
+        "check",
+        "into",
+        "values",
+        "set",
+        "join",
+        "left",
+        "right",
+        "inner",
+        "outer",
+    ];
+
+    if reserved_keywords.contains(&identifier.to_lowercase().as_str()) {
+        return Err(format!(
+            "{} '{}' 是 SQL 保留关键字，不允许使用",
+            identifier_type, identifier
+        ));
+    }
+
+    Ok(identifier.to_string())
+}
+
+/// 清理默认值，移除可能的 SQL 注入载荷
+fn sanitize_default_value(default: &str) -> String {
+    // 如果默认值包含可疑模式，返回安全的默认值
+    let suspicious_patterns = [
+        "select",
+        "insert",
+        "update",
+        "delete",
+        "drop",
+        "create",
+        "alter",
+        "exec",
+        "execute",
+        "xp_",
+        "sp_",
+        "--",
+        "/*",
+        "*/",
+        "chr(",
+        "char(",
+        "concat",
+        "union",
+        "benchmark",
+        "sleep",
+    ];
+
+    let upper_default = default.to_uppercase();
+
+    for pattern in &suspicious_patterns {
+        if upper_default.contains(pattern) {
+            tracing::warn!(
+                "Suspicious pattern detected in default value: '{}', sanitizing",
+                default
+            );
+            return "'***SANITIZED***'".to_string();
+        }
+    }
+
+    // 确保默认值被引号包围
+    let trimmed = default.trim();
+
+    if trimmed.starts_with('\'') && trimmed.ends_with('\'') {
+        trimmed.to_string()
+    } else if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        trimmed.to_string()
+    } else if trimmed.parse::<i128>().is_ok()
+        || trimmed.parse::<f64>().is_ok()
+        || trimmed.to_uppercase() == "NULL"
+        || trimmed.to_uppercase() == "CURRENT_TIMESTAMP"
+        || trimmed.to_uppercase() == "NOW()"
+    {
+        // 数字、NULL 和函数不需要引号
+        trimmed.to_string()
+    } else {
+        // 其他情况添加单引号
+        format!("'{}'", trimmed.replace('\'', "''"))
+    }
+}
 
 /// 迁移计划
 pub struct MigrationPlan {
@@ -256,7 +391,16 @@ impl SqlGenerator {
 
     /// 生成创建表的 SQL
     pub fn generate_create_table_sql(&self, table: &Table) -> String {
-        let mut sql = format!("CREATE TABLE {} (\n", table.name);
+        // 验证表名
+        let table_name = match validate_sql_identifier(&table.name, "表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let mut sql = format!("CREATE TABLE {} (\n", table_name);
 
         let column_defs: Vec<String> = table
             .columns
@@ -266,10 +410,21 @@ impl SqlGenerator {
 
         sql.push_str(&column_defs.join(",\n"));
 
-        // 添加主键约束
+        // 添加主键约束（已验证的列名）
         if !table.primary_key_columns.is_empty() {
             sql.push_str(",\n");
-            sql.push_str(&format!("    PRIMARY KEY ({})", table.primary_key_columns.join(", ")));
+            let pk_columns: Vec<String> = table
+                .primary_key_columns
+                .iter()
+                .map(|col| match validate_sql_identifier(col, "主键列名") {
+                    Ok(validated) => validated,
+                    Err(e) => {
+                        tracing::error!("Invalid primary key column: {}", e);
+                        "***INVALID***".to_string()
+                    }
+                })
+                .collect();
+            sql.push_str(&format!("    PRIMARY KEY ({})", pk_columns.join(", ")));
         }
 
         sql.push_str("\n);");
@@ -293,7 +448,16 @@ impl SqlGenerator {
 
     /// 生成列定义
     fn generate_column_definition(&self, column: &Column, _pk_columns: &[String]) -> String {
-        let mut def = format!("    {} {}", column.name, column.column_type.to_sql(self.db_type));
+        // 验证列名
+        let column_name = match validate_sql_identifier(&column.name, "列名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid column name: {}", e);
+                return format!("    -- 错误: {}\n", e);
+            }
+        };
+
+        let mut def = format!("    {} {}", column_name, column.column_type.to_sql(self.db_type));
 
         // 自增列不需要指定
         if column.is_auto_increment && column.is_primary_key {
@@ -309,7 +473,8 @@ impl SqlGenerator {
         }
 
         if let Some(default) = &column.default_value {
-            def.push_str(&format!(" DEFAULT {}", default));
+            let sanitized_default = sanitize_default_value(default);
+            def.push_str(&format!(" DEFAULT {}", sanitized_default));
         }
 
         // 主键列如果有自增，不需要单独 PRIMARY KEY
@@ -322,21 +487,93 @@ impl SqlGenerator {
 
     /// 生成创建索引的 SQL
     pub fn generate_create_index_sql(&self, index: &Index) -> String {
+        // 验证索引名
+        let index_name = match validate_sql_identifier(&index.name, "索引名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid index name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        // 验证表名
+        let table_name = match validate_sql_identifier(&index.table_name, "表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid table name in index: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        // 验证列名
+        let validated_columns: Vec<String> = index
+            .columns
+            .iter()
+            .map(|col| match validate_sql_identifier(col, "索引列名") {
+                Ok(name) => name,
+                Err(e) => {
+                    tracing::error!("Invalid index column: {}", e);
+                    "***INVALID***".to_string()
+                }
+            })
+            .collect();
+
         let unique = if index.is_unique { "UNIQUE " } else { "" };
         format!(
             "CREATE {}INDEX {} ON {} ({})",
             unique,
-            index.name,
-            index.table_name,
-            index.columns.join(", ")
+            index_name,
+            table_name,
+            validated_columns.join(", ")
         )
     }
 
     /// 生成添加外键的 SQL
     fn generate_add_foreign_key_sql(&self, fk: &ForeignKey) -> String {
+        // 验证所有标识符
+        let table_name = match validate_sql_identifier(&fk.table_name, "外键表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid foreign key table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let constraint_name = match validate_sql_identifier(&fk.name, "外键约束名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid foreign key constraint name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let column_name = match validate_sql_identifier(&fk.column_name, "外键列名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid foreign key column: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let referenced_table_name = match validate_sql_identifier(&fk.referenced_table_name, "外键引用表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid referenced table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let referenced_column_name = match validate_sql_identifier(&fk.referenced_column_name, "外键引用列名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid referenced column: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
         let mut sql = format!(
             "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({})",
-            fk.table_name, fk.name, fk.column_name, fk.referenced_table_name, fk.referenced_column_name
+            table_name, constraint_name, column_name, referenced_table_name, referenced_column_name
         );
 
         if let Some(on_delete) = &fk.on_delete {
@@ -353,30 +590,73 @@ impl SqlGenerator {
 
     /// 生成删除表的 SQL
     pub fn generate_drop_table_sql(&self, table_name: &str) -> String {
-        format!("DROP TABLE {};", table_name)
+        let validated_name = match validate_sql_identifier(table_name, "表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+        format!("DROP TABLE {};", validated_name)
     }
 
     /// 生成添加列的 SQL
     pub fn generate_add_column_sql(&self, table_name: &str, column: &Column) -> String {
+        // 验证表名
+        let validated_table_name = match validate_sql_identifier(table_name, "表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
         let col_def = self.generate_column_definition(column, &Vec::new());
-        format!("ALTER TABLE {} ADD {};", table_name, col_def.trim_start_matches("    "))
+        format!(
+            "ALTER TABLE {} ADD {};",
+            validated_table_name,
+            col_def.trim_start_matches("    ")
+        )
     }
 
     /// 生成删除列的 SQL
     pub fn generate_drop_column_sql(&self, table_name: &str, column_name: &str) -> String {
+        // 验证表名和列名
+        let validated_table_name = match validate_sql_identifier(table_name, "表名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid table name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
+        let validated_column_name = match validate_sql_identifier(column_name, "列名") {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::error!("Invalid column name: {}", e);
+                return format!("-- 错误: {}\n", e);
+            }
+        };
+
         match self.db_type {
             DatabaseType::MySql => {
-                format!("ALTER TABLE {} DROP COLUMN {};", table_name, column_name)
+                format!(
+                    "ALTER TABLE {} DROP COLUMN {};",
+                    validated_table_name, validated_column_name
+                )
             }
             DatabaseType::Postgres => {
-                format!("ALTER TABLE {} DROP COLUMN {};", table_name, column_name)
+                format!(
+                    "ALTER TABLE {} DROP COLUMN {};",
+                    validated_table_name, validated_column_name
+                )
             }
             DatabaseType::Sqlite => {
                 // SQLite 不支持直接删除列，需要重建表
                 format!(
                     "-- SQLite 不支持直接删除列，请手动重建表 {}
-ALTER TABLE {} DROP COLUMN {};",
-                    table_name, table_name, column_name
+ ALTER TABLE {} DROP COLUMN {};",
+                    validated_table_name, validated_table_name, validated_column_name
                 )
             }
         }

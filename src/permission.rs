@@ -171,17 +171,18 @@ impl RateLimiter {
         let now = Instant::now();
         let mut removed_count = 0;
 
-        // 收集需要清理的键
+        // 优化：先收集需要删除的键，避免在迭代过程中修改 DashMap
+        // 由于 DashMap 的迭代器生命周期问题，需要 clone key
         let keys_to_remove: Vec<String> = self
             .requests
             .iter()
             .filter_map(|entry| {
-                let key = entry.key();
+                let key = entry.key(); // &str
                 // 获取最新时间戳
                 let latest = entry.value().iter().max();
                 match latest {
-                    Some(&t) if now - t > cleanup_threshold => Some(key.clone()),
-                    None => Some(key.clone()), // 空列表也清理
+                    Some(&t) if now - t > cleanup_threshold => Some(key.to_string()),
+                    None => Some(key.to_string()), // 空列表也清理
                     _ => None,
                 }
             })

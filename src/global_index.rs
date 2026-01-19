@@ -470,31 +470,42 @@ impl GlobalIndex {
 
     /// 更新缓存 - 维护倒排索引
     ///
-    /// 优化：同时更新主索引和倒排索引
+    /// 优化：减少 clone 操作，复用 entry 中的值
     /// 倒排索引使得删除操作从 O(n*k) 降到 O(1)
     async fn update_cache(&self, entry: &IndexEntry) {
+        // 预先借用值，减少 clone
+        let table_name = &entry.table_name;
+        let index_key = &entry.index_key;
+        let index_value = &entry.index_value;
+        let record_id = &entry.record_id;
+
         let mut cache = self.cache.write().await;
         let mut reverse_index = self.reverse_index.write().await;
 
-        let table_cache = cache.entry(entry.table_name.clone()).or_insert_with(HashMap::new);
-        let key_cache = table_cache.entry(entry.index_key.clone()).or_insert_with(HashMap::new);
+        // 使用 entry API 获取或创建嵌套结构
+        let table_cache = cache.entry(table_name.clone()).or_default();
+        let key_cache = table_cache.entry(index_key.clone()).or_default();
+        let entries = key_cache.entry(index_value.clone()).or_default();
 
-        let entries = key_cache.entry(entry.index_value.clone()).or_insert_with(Vec::new);
-
-        // 检查是否已存在
-        if !entries.iter().any(|e| e.record_id == entry.record_id) {
-            entries.push(entry.clone());
+        // 检查是否已存在，避免重复
+        if !entries.iter().any(|e| e.record_id == *record_id) {
+            // 只 clone 必要的字段
+            entries.push(IndexEntry {
+                table_name: table_name.clone(),
+                record_id: record_id.clone(),
+                shard_id: entry.shard_id,
+                index_key: index_key.clone(),
+                index_value: index_value.clone(),
+            });
 
             // 更新倒排索引 - O(1)
+            // 复用 IndexLocation 的字段，避免重复 clone
             let location = IndexLocation {
-                table_name: entry.table_name.clone(),
-                index_key: entry.index_key.clone(),
-                index_value: entry.index_value.clone(),
+                table_name: table_name.clone(),
+                index_key: index_key.clone(),
+                index_value: index_value.clone(),
             };
-            reverse_index
-                .entry(entry.record_id.clone())
-                .or_insert_with(Vec::new)
-                .push(location);
+            reverse_index.entry(record_id.clone()).or_default().push(location);
         }
     }
 

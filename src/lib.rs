@@ -72,6 +72,13 @@ pub mod config;
 /// 错误类型定义
 pub use crate::config::DbResult;
 pub use config::{ConfigError, DatabaseType, DbConfig, DbConfigBuilder, DbError, PoolConfig};
+
+/// 统一错误模块（渐进式重构）
+pub mod error;
+pub use error::{AuditError, MigrationError};
+pub use error::{ConfigError as ConfigErrorNew, DbError as DbErrorNew, PermissionError, PoolError};
+pub use error::{ConfigResult as ConfigResultNew, DbResult as DbResultNew, PermissionResult, PoolResult};
+
 /// 实体转换模块
 pub mod entity;
 // 生成的权限角色模块（由 build.rs 自动生成，内部使用）
