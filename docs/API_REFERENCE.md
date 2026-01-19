@@ -413,17 +413,9 @@ let config = DbConfigBuilder::new()
     .build()?;
 ```
 
-### `ConfigLoader`
+### `DbConfig` 配置加载方法
 
-用于从各种源读取配置的加载器。
-
-```rust
-pub struct ConfigLoader;
-```
-
-#### 方法
-
-##### `from_env`
+#### `from_env`
 
 从环境变量加载配置。
 
@@ -453,16 +445,16 @@ export DB_ADMIN_ROLE=admin
 ```
 
 ```rust
-let config = ConfigLoader::from_env()?;
+let config = DbConfig::from_env()?;
 ```
 
-##### `from_yaml_file`
+#### `from_yaml_file`
 
 从 YAML 文件加载配置。
 
 ```rust
 #[cfg(feature = "config-yaml")]
-pub fn from_yaml_file(path: &str) -> Result<DbConfig, ConfigError>
+pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError>
 ```
 
 **YAML 格式：**
@@ -476,13 +468,13 @@ auto_migrate: true
 admin_role: admin
 ```
 
-##### `from_toml_file`
+#### `from_toml_file`
 
 从 TOML 文件加载配置。
 
 ```rust
 #[cfg(feature = "config-toml")]
-pub fn from_toml_file(path: &str) -> Result<DbConfig, ConfigError>
+pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError>
 ```
 
 **TOML 格式：**
@@ -496,7 +488,7 @@ auto_migrate = true
 admin_role = "admin"
 ```
 
-##### `from_config_files`
+#### `from_config_files`
 
 自动检测并从标准路径加载配置。
 

@@ -12,8 +12,14 @@
 //! - [`DbConfig`] - 数据库配置结构体
 //! - [`DbConfigBuilder`] - 配置构建器（链式API）
 //! - [`PoolConfig`] - 连接池配置
-//! - [`ConfigLoader`] - 配置加载器（支持多种来源）
 //! - [`ConfigError`] - 配置相关错误类型
+//!
+//! # 配置加载方式
+//!
+//! - [`DbConfig::from_env()`] - 从环境变量加载
+//! - [`DbConfig::from_yaml_file()`] - 从 YAML 文件加载（需要 `config-yaml` 特性）
+//! - [`DbConfig::from_toml_file()`] - 从 TOML 文件加载（需要 `config-toml` 特性）
+//! - [`DbConfig::from_config_files()`] - 自动检测配置文件
 //!
 //! # 示例
 //!
@@ -342,60 +348,6 @@ impl DbConfigBuilder {
 
         config.validate()?;
         Ok(config)
-    }
-}
-
-/// 配置加载器
-///
-/// 提供从多种来源加载配置的能力：
-/// - 环境变量 - [`DbConfig::from_env()`]
-/// - YAML 文件 - [`DbConfig::from_yaml_file()`]
-/// - TOML 文件 - [`DbConfig::from_toml_file()`]
-/// - 自动检测 - [`DbConfig::from_config_files()`]
-///
-/// 使用示例：
-/// ```ignore
-/// use dbnexus::config::DbConfig;
-///
-/// // 从环境变量加载
-/// let config = DbConfig::from_env()?;
-///
-/// // 从 YAML 文件加载
-/// let config = DbConfig::from_yaml_file("config.yaml")?;
-/// ```
-#[allow(dead_code, deprecated)]
-mod _config_loader_deprecated {
-    use super::*;
-
-    #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_env()` instead")]
-    pub(crate) struct ConfigLoader;
-
-    #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_env()` instead")]
-    impl ConfigLoader {
-        /// 从环境变量加载数据库配置
-        ///
-        /// 读取环境变量构建 `DbConfig`。
-        /// 等同于直接调用 `DbConfig::from_env()`。
-        pub fn from_env() -> Result<DbConfig, ConfigError> {
-            DbConfig::from_env()
-        }
-
-        #[cfg(feature = "config-yaml")]
-        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_yaml_file()` instead")]
-        pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
-            DbConfig::from_yaml_file(path)
-        }
-
-        #[cfg(feature = "config-toml")]
-        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_toml_file()` instead")]
-        pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError> {
-            DbConfig::from_toml_file(path)
-        }
-
-        #[deprecated(since = "0.1.0", note = "Use `DbConfig::from_config_files()` instead")]
-        pub fn from_config_files() -> Result<DbConfig, ConfigError> {
-            DbConfig::from_config_files()
-        }
     }
 }
 
