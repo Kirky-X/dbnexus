@@ -143,10 +143,6 @@ pub struct DbConfigBuilder {
     // 链式 API 用于构建配置
 }
 
-pub struct ConfigLoader {
-    // 从环境变量、YAML、TOML 加载
-}
-
 pub struct ConfigCorrector {
     // 自动修正无效值
 }
