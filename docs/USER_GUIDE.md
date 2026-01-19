@@ -150,9 +150,9 @@ admin_role: admin
 #### 加载 YAML 配置
 
 ```rust
-use dbnexus::config::ConfigLoader;
+use dbnexus::config::DbConfig;
 
-let config = ConfigLoader::from_yaml_file("dbnexus.yaml")?;
+let config = DbConfig::from_yaml_file("dbnexus.yaml")?;
 let pool = DbPool::with_config(config).await?;
 ```
 
@@ -174,9 +174,9 @@ admin_role = "admin"
 
 ```rust
 #[cfg(feature = "config-toml")]
-use dbnexus::config::ConfigLoader;
+use dbnexus::config::DbConfig;
 
-let config = ConfigLoader::from_toml_file("dbnexus.toml")?;
+let config = DbConfig::from_toml_file("dbnexus.toml")?;
 let pool = DbPool::with_config(config).await?;
 ```
 
