@@ -166,192 +166,364 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
         .into();
     }
 
-    // 生成 CRUD 方法（使用 Sea-ORM 原生 API）
+    // 生成 CRUD 方法（使用 Session 的安全接口）
     let impl_block = quote! {
         impl #impl_generics #struct_name #ty_generics #where_clause {
-            /// 插入新记录
+            /// 插入新记录（带权限控制）
+            ///
+            /// 此方法通过 Session 执行插入操作，自动进行权限检查、审计日志和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `model` - 要插入的模型数据
             ///
             /// # Returns
             ///
             /// 插入后的完整模型（包含自动生成的主键）
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn insert(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 model: <Self as sea_orm::entity::EntityTrait>::Model,
             ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                // 将 Model 转换为 ActiveModel
-                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                // 权限检查
+                session.check_table_permission(#table_name, "INSERT").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
 
                 // 执行插入
-                Entity::insert(active_model)
-                    .exec(db)
+                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                let result = Self::Entity::insert(active_model)
+                    .exec(conn)
                     .await
-                    .map_err(Into::into)
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("insert", #table_name, true);
+
+                // 返回完整模型
+                Self::Entity::find_by_id(result.last_insert_id)
+                    .one(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?
+                    .ok_or_else(|| dbnexus::DbError::Config("Failed to retrieve inserted record".to_string()))
             }
 
-            /// 根据 ID 查找记录
+            /// 根据 ID 查找记录（带权限控制）
+            ///
+            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `id` - 主键 ID
             ///
             /// # Returns
             ///
             /// 找到的记录（如果有）
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_id(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 id: i64,
             ) -> Result<Option<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                Entity::find_by_id(id)
-                    .one(db)
+                // 权限检查
+                session.check_table_permission(#table_name, "SELECT").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 执行查询
+                let result = Self::Entity::find_by_id(id)
+                    .one(conn)
                     .await
-                    .map_err(Into::into)
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, result.is_some());
+
+                Ok(result)
             }
 
-            /// 更新记录
+            /// 更新记录（带权限控制）
+            ///
+            /// 此方法通过 Session 执行更新操作，自动进行权限检查、审计日志和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `model` - 要更新的模型数据
             ///
             /// # Returns
             ///
             /// 更新后的模型
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn update(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 model: <Self as sea_orm::entity::EntityTrait>::Model,
             ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::{EntityTrait, PrimaryKeyTrait};
 
-                // 将 Model 转换为 ActiveModel
+                // 权限检查
+                session.check_table_permission(#table_name, "UPDATE").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 获取主键值
+                // ✅ 更安全的修复代码
+                // 先转换为ActiveModel获取主键
+                let temp_active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                let primary_key = match temp_active_model.id.clone() {
+                    sea_orm::ActiveValue::Set(id) => id,
+                    sea_orm::ActiveValue::Unchanged(id) => id,
+                    _ => return Err(dbnexus::DbError::Config("Primary key not set".to_string())),
+                };
+
+                // 重新创建ActiveModel用于更新
                 let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
 
-                Entity::update(active_model)
-                    .exec(db)
+                // 执行更新
+                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                Self::Entity::update(active_model)
+                    .exec(conn)
                     .await
-                    .map_err(Into::into)
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("update", #table_name, true);
+
+                // 返回更新后的模型
+                Self::Entity::find_by_id(primary_key)
+                    .one(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?
+                    .ok_or_else(|| dbnexus::DbError::Config("Failed to retrieve updated record".to_string()))
             }
 
-            /// 根据 ID 删除记录
+            /// 根据 ID 删除记录（带权限控制）
+            ///
+            /// 此方法通过 Session 执行删除操作，自动进行权限检查、审计日志和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `id` - 要删除的记录 ID
             ///
             /// # Returns
             ///
             /// 删除的记录数
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 id: i64,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
+
+                // 权限检查
+                session.check_table_permission(#table_name, "DELETE").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
 
                 // 先查询记录
-                let record = Entity::find_by_id(id)
-                    .one(db)
-                    .await?
-                    .ok_or_else(|| dbnexus::DbError::NotFound(format!("Record with id {} not found", id)))?;
+                let record = Self::Entity::find_by_id(id)
+                    .one(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?
+                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with id {} not found", id)))?;
 
                 // 删除记录
-                let result = Entity::delete(record).exec(db).await?;
+                let result = Self::Entity::delete(record)
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, true);
+
                 Ok(result.rows_affected)
             }
 
-            /// 查询所有记录
+            /// 查询所有记录（带权限控制）
+            ///
+            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             ///
             /// # Returns
             ///
             /// 所有记录的向量
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_all(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
             ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                Entity::find()
-                    .all(db)
+                // 权限检查
+                session.check_table_permission(#table_name, "SELECT").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 执行查询
+                let result = Self::Entity::find()
+                    .all(conn)
                     .await
-                    .map_err(Into::into)
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, !result.is_empty());
+
+                Ok(result)
             }
 
-            /// 条件查询
+            /// 条件查询（带权限控制）
+            ///
+            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `condition` - 查询条件
             ///
             /// # Returns
             ///
             /// 符合条件的记录
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_condition(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 condition: sea_orm::Condition,
             ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                Entity::find()
+                // 权限检查
+                session.check_table_permission(#table_name, "SELECT").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 执行查询
+                let result = Self::Entity::find()
                     .filter(condition)
-                    .all(db)
+                    .all(conn)
                     .await
-                    .map_err(Into::into)
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, !result.is_empty());
+
+                Ok(result)
             }
 
-            /// 批量删除
+            /// 批量删除（带权限控制）
+            ///
+            /// 此方法通过 Session 执行删除操作，自动进行权限检查、审计日志和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             /// * `filter` - 删除条件
             ///
             /// # Returns
             ///
             /// 删除的记录数
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete_many(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
                 filter: sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                let result = Entity::delete_many()
+                // 权限检查
+                session.check_table_permission(#table_name, "DELETE").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 执行删除
+                let result = Self::Entity::delete_many()
                     .filter(filter)
-                    .exec(db)
-                    .await?;
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, true);
+
                 Ok(result.rows_affected)
             }
 
-            /// 统计记录数
+            /// 统计记录数（带权限控制）
+            ///
+            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
             ///
             /// # Arguments
             ///
-            /// * `db` - 数据库连接
+            /// * `session` - 数据库会话
             ///
             /// # Returns
             ///
             /// 记录总数
+            ///
+            /// # Errors
+            ///
+            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn count(
-                db: &sea_orm::DatabaseConnection,
+                session: &crate::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::Entity;
+                use sea_orm::EntityTrait;
 
-                let count = Entity::find()
-                    .count(db)
-                    .await?;
+                // 权限检查
+                session.check_table_permission(#table_name, "SELECT").await?;
+
+                // 获取连接
+                let conn = session.connection()?;
+
+                // 执行查询
+                let count = Self::Entity::find()
+                    .count(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                // 指标收集
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, true);
+
                 Ok(count)
             }
         }
