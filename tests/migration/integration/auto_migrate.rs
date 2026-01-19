@@ -164,6 +164,13 @@ async fn test_nonexistent_migrations_directory() {
 /// TEST-AM-006: 环境变量迁移配置测试
 #[tokio::test]
 async fn test_migration_config_from_env() {
+    // 保存原始环境变量值
+    let original_database_url = std::env::var("DATABASE_URL").ok();
+    let original_migrations_dir = std::env::var("DB_MIGRATIONS_DIR").ok();
+    let original_auto_migrate = std::env::var("DB_AUTO_MIGRATE").ok();
+    let original_migration_timeout = std::env::var("DB_MIGRATION_TIMEOUT").ok();
+
+    // 设置测试环境变量
     unsafe {
         std::env::set_var("DATABASE_URL", "sqlite::memory:");
         std::env::set_var("DB_MIGRATIONS_DIR", "/custom/migrations");
@@ -171,18 +178,39 @@ async fn test_migration_config_from_env() {
         std::env::set_var("DB_MIGRATION_TIMEOUT", "120");
     }
 
-    let config = DbConfig::from_env().expect("Failed to create config from env");
+    // 执行测试逻辑，确保在任何情况下都清理环境变量
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let config = DbConfig::from_env().expect("Failed to create config from env");
 
-    assert!(config.auto_migrate());
-    assert!(config.migrations_dir().is_some());
-    assert_eq!(config.migrations_dir().unwrap(), PathBuf::from("/custom/migrations"));
-    assert_eq!(config.migration_timeout(), 120);
+        assert!(config.auto_migrate());
+        assert!(config.migrations_dir().is_some());
+        assert_eq!(config.migrations_dir().unwrap(), PathBuf::from("/custom/migrations"));
+        assert_eq!(config.migration_timeout(), 120);
+    }));
 
+    // 恢复原始环境变量
     unsafe {
-        std::env::remove_var("DATABASE_URL");
-        std::env::remove_var("DB_MIGRATIONS_DIR");
-        std::env::remove_var("DB_AUTO_MIGRATE");
-        std::env::remove_var("DB_MIGRATION_TIMEOUT");
+        match original_database_url {
+            Some(val) => std::env::set_var("DATABASE_URL", val),
+            None => std::env::remove_var("DATABASE_URL"),
+        }
+        match original_migrations_dir {
+            Some(val) => std::env::set_var("DB_MIGRATIONS_DIR", val),
+            None => std::env::remove_var("DB_MIGRATIONS_DIR"),
+        }
+        match original_auto_migrate {
+            Some(val) => std::env::set_var("DB_AUTO_MIGRATE", val),
+            None => std::env::remove_var("DB_AUTO_MIGRATE"),
+        }
+        match original_migration_timeout {
+            Some(val) => std::env::set_var("DB_MIGRATION_TIMEOUT", val),
+            None => std::env::remove_var("DB_MIGRATION_TIMEOUT"),
+        }
+    }
+
+    // 如果测试失败，重新触发panic
+    if let Err(e) = result {
+        std::panic::resume_unwind(e);
     }
 }
 
