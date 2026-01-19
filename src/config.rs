@@ -745,24 +745,7 @@ impl DbConfig {
     #[cfg(feature = "config-yaml")]
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path.as_ref())?;
-
-        // 尝试直接解析为 DbConfig
-        if let Ok(config) = serde_yaml::from_str::<DbConfig>(&content) {
-            if !config.url.is_empty() {
-                return Ok(config);
-            }
-        }
-
-        // 尝试解析为带有 database 前缀的格式
-        #[derive(Debug, serde::Deserialize)]
-        struct ConfigWrapper {
-            database: DbConfig,
-        }
-
-        let wrapper: ConfigWrapper = serde_yaml::from_str(&content).map_err(|_| ConfigError::InvalidFormat)?;
-
-        wrapper.database.validate()?;
-        Ok(wrapper.database)
+        Self::from_yaml_str(&content)
     }
 
     /// 从 TOML 文件加载配置
