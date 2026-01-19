@@ -141,10 +141,10 @@ impl DbPool {
         let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
 
         // 创建初始连接以查询数据库能力
-        let db_type = crate::config::DatabaseType::parse_database_type(corrected_config.url());
+        let db_type = crate::config::DatabaseType::parse_database_type(&corrected_config.url_sanitized());
 
         // 创建连接并应用数据库能力修正
-        let connection = sea_orm::Database::connect(corrected_config.url())
+        let connection = sea_orm::Database::connect(corrected_config.url_for_connection())
             .await
             .map_err(DbError::Connection)?;
 
@@ -529,7 +529,7 @@ impl DbPool {
     ///
     /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
-        let conn = sea_orm::Database::connect(config.url()).await?;
+        let conn = sea_orm::Database::connect(config.url_for_connection()).await?;
         Ok(conn)
     }
 
@@ -549,8 +549,8 @@ impl DbPool {
     ///
     /// 如果连接有效返回 `true`，否则返回 `false`
     pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
-        let health_query = Self::get_health_check_query(self.inner.config.url());
-        let backend = Self::get_database_backend(self.inner.config.url());
+        let health_query = Self::get_health_check_query(&self.inner.config.url_sanitized());
+        let backend = Self::get_database_backend(&self.inner.config.url_sanitized());
 
         // 创建带超时的健康检查
         let result = timeout(
@@ -638,8 +638,8 @@ impl DbPool {
         let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
 
-        let health_query = Self::get_health_check_query(config.url());
-        let backend = Self::get_database_backend(config.url());
+        let health_query = Self::get_health_check_query(&config.url_sanitized());
+        let backend = Self::get_database_backend(&config.url_sanitized());
         let mut removed_count = 0;
 
         // 保留有效连接
@@ -691,8 +691,8 @@ impl DbPool {
         let config = &self.inner.config;
         let mut recreated_count = 0;
 
-        let health_query = Self::get_health_check_query(config.url());
-        let backend = Self::get_database_backend(config.url());
+        let health_query = Self::get_health_check_query(&config.url_sanitized());
+        let backend = Self::get_database_backend(&config.url_sanitized());
 
         // 手动分区连接为有效和无效两组
         let mut valid_connections: Vec<DatabaseConnection> = Vec::new();
@@ -1037,7 +1037,7 @@ impl DbPool {
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
         use crate::migration::MigrationExecutor;
 
-        let db_type = crate::DatabaseType::parse_database_type(self.inner.config.url());
+        let db_type = crate::DatabaseType::parse_database_type(&self.inner.config.url_sanitized());
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;

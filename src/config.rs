@@ -464,8 +464,16 @@ impl DbConfig {
     ///
     /// # Warning
     ///
-    /// 此方法返回原始 URL，可能包含敏感信息（如密码）。
-    /// 建议在日志输出时使用 [`Self::url_sanitized`] 进行脱敏。
+    /// ⚠️ **安全风险**：此方法返回原始 URL，可能包含敏感信息（如密码）。
+    /// 强烈建议在日志输出时使用 [`Self::url_sanitized`] 进行脱敏。
+    ///
+    /// # Deprecated
+    ///
+    /// 使用 [`Self::url_sanitized`] 替代，此方法将在未来版本中移除。
+    #[deprecated(
+        since = "0.1.1",
+        note = "Use url_sanitized() for logging to prevent credential leakage"
+    )]
     pub(crate) fn url(&self) -> &str {
         &self.url
     }
@@ -491,6 +499,19 @@ impl DbConfig {
     /// ```
     pub fn url_sanitized(&self) -> String {
         sanitize_url_for_logging(&self.url)
+    }
+
+    /// 获取数据库 URL（原始值，包含密码）
+    ///
+    /// 此方法仅供库内部使用，用于数据库连接。
+    /// 不会触发弃用警告，因为这是受控的内部使用。
+    ///
+    /// # Note
+    ///
+    /// 外部调用者应使用 [`Self::url_sanitized`] 进行日志输出。
+    #[doc(hidden)]
+    pub(crate) fn url_for_connection(&self) -> &str {
+        &self.url
     }
 
     /// 获取最大连接数
@@ -640,7 +661,16 @@ impl DbConfig {
     ///
     /// 如果必需的环境变量缺失或格式错误，返回错误
     pub fn from_env() -> Result<Self, ConfigError> {
+        const MAX_URL_LENGTH: usize = 2048;
+        const MAX_ROLE_LENGTH: usize = 64;
+        const MAX_PATH_LENGTH: usize = 512;
+
         let url = std::env::var("DATABASE_URL").map_err(|_| ConfigError::MissingField)?;
+
+        // URL 长度限制，防止 DoS 攻击
+        if url.len() > MAX_URL_LENGTH {
+            return Err(ConfigError::InvalidFormat);
+        }
 
         let max_connections = std::env::var("DB_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "20".to_string())
@@ -662,6 +692,13 @@ impl DbConfig {
             .parse()
             .map_err(|_| ConfigError::InvalidFormat)?;
 
+        let admin_role = std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string());
+
+        // 角色名长度限制
+        if admin_role.len() > MAX_ROLE_LENGTH {
+            return Err(ConfigError::InvalidFormat);
+        }
+
         Ok(Self {
             url,
             max_connections,
@@ -678,7 +715,7 @@ impl DbConfig {
                 .unwrap_or_else(|_| "60".to_string())
                 .parse()
                 .unwrap_or(60),
-            admin_role: std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string()),
+            admin_role,
             warmup_timeout: std::env::var("DB_WARMUP_TIMEOUT")
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
