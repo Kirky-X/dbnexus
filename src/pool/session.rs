@@ -621,6 +621,40 @@ impl Session {
             metrics.record_connection_error();
         }
     }
+
+    /// 检查表级权限
+    ///
+    /// 此方法为 ORM 操作提供权限检查，确保所有实体操作都经过权限验证
+    pub async fn check_table_permission(&self, table_name: &str, operation: &str) -> DbResult<()> {
+        #[cfg(feature = "permission")]
+        {
+            let action = match operation {
+                "INSERT" => PermissionAction::Insert,
+                "SELECT" => PermissionAction::Select,
+                "UPDATE" => PermissionAction::Update,
+                "DELETE" => PermissionAction::Delete,
+                _ => return Err(DbError::Permission(format!("Unknown operation: {}", operation))),
+            };
+
+            if !self.permission_ctx.check_table_access(table_name, &action).await {
+                return Err(DbError::Permission(format!(
+                    "Permission denied for {} on {}",
+                    operation, table_name
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// 记录指标
+    #[cfg(feature = "metrics")]
+    pub fn record_metric(&self, operation: &str, table_name: &str, success: bool) {
+        if let Some(metrics) = &self.metrics_collector {
+            // 使用表名的哈希值作为 bytes 参数
+            let bytes = Some(table_name.len() as u64);
+            metrics.record_query(operation, std::time::Duration::from_millis(0), success, bytes);
+        }
+    }
 }
 
 #[cfg(feature = "permission")]
