@@ -26,7 +26,7 @@ anyhow = "1.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
+serde_yaml = "0.9.34-deprecated"
 serde_json = "1.0"
 
 # Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
@@ -313,7 +313,6 @@ path = "tests/cross_cutting/integration/multi_db.rs"
 required-features = ["migration"]
 
 [[bench]]
-name = "benchmarks"
-path = "tests/benchmarks/mod.rs"
-harness = true
-required-features = ["permission", "sql-parser", "cache", "audit"]
+name = "permission_bench"
+path = "benches/permission_bench.rs"
+harness = false
