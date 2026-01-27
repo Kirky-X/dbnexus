@@ -5,5 +5,8 @@
 
 //! Migration 模块集成测试
 
+#[cfg(feature = "migration")]
 pub mod auto_migrate;
+
+#[cfg(feature = "migration")]
 pub mod integration;

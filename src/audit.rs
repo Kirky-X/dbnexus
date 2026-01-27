@@ -158,6 +158,8 @@ pub struct AuditEvent {
     pub severity: AuditSeverity,
     /// 操作结果
     pub result: AuditResult,
+    /// 错误信息（如果操作失败）
+    pub error_message: Option<String>,
     /// 变更前的值（JSON）
     pub before_value: Option<String>,
     /// 变更后的值（JSON）
@@ -168,6 +170,21 @@ pub struct AuditEvent {
     pub request_id: String,
     /// 会话 ID
     pub session_id: String,
+    /// 追踪上下文
+    pub trace_context: Option<TraceContext>,
+}
+
+/// 追踪上下文（用于分布式追踪）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TraceContext {
+    /// 追踪 ID
+    pub trace_id: String,
+    /// 跨度 ID
+    pub span_id: String,
+    /// 父跨度 ID
+    pub parent_span_id: Option<String>,
+    /// 追踪标志
+    pub trace_flags: u8,
 }
 
 impl AuditEvent {
@@ -214,17 +231,45 @@ impl AuditEvent {
             client_ip: client_ip.to_string(),
             severity: AuditSeverity::Info,
             result: AuditResult::Success,
+            error_message: None,
             before_value: None,
             after_value: None,
             extra: None,
             request_id: Uuid::new_v4().to_string(),
             session_id: String::new(),
+            trace_context: None,
         }
     }
 
     /// 获取构建器
     pub fn builder() -> AuditEventBuilder {
         AuditEventBuilder::new()
+    }
+
+    /// 创建带错误的审计事件
+    pub fn with_error(
+        operation: AuditOperation,
+        entity_type: &str,
+        entity_id: &str,
+        user_id: &str,
+        error: &str,
+    ) -> Self {
+        let mut event = Self::new(operation, entity_type, entity_id, user_id, "", "");
+        event.error_message = Some(error.to_string());
+        event.result = AuditResult::Failure;
+        event.severity = AuditSeverity::High;
+        event
+    }
+
+    /// 设置追踪上下文
+    pub fn with_trace_context(mut self, trace_id: &str, span_id: &str) -> Self {
+        self.trace_context = Some(TraceContext {
+            trace_id: trace_id.to_string(),
+            span_id: span_id.to_string(),
+            parent_span_id: None,
+            trace_flags: 1,
+        });
+        self
     }
 
     /// 创建操作事件
@@ -1436,11 +1481,13 @@ impl AuditEventBuilder {
             client_ip: self.client_ip.unwrap_or_default(),
             severity: self.severity,
             result: self.result,
+            error_message: None,
             before_value: self.before_value,
             after_value: self.after_value,
             extra: self.extra,
             request_id: self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             session_id: self.session_id.unwrap_or_default(),
+            trace_context: None,
         }
     }
 }

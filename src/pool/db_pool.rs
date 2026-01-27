@@ -14,12 +14,91 @@ use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
 use tokio::time::timeout;
 use tracing::info;
+
+/// 连接获取超时警告阈值（毫秒）
+const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
+
+/// 连接生命周期追踪
+#[derive(Debug)]
+pub struct ConnectionLifecycle {
+    /// 连接创建时间
+    pub created_at: Instant,
+    /// 最后活跃时间
+    pub last_active_at: Instant,
+    /// 获取次数
+    pub acquire_count: AtomicU64,
+    /// 释放次数
+    pub release_count: AtomicU64,
+    /// 错误次数
+    pub error_count: AtomicU64,
+}
+
+impl ConnectionLifecycle {
+    /// 创建新的连接生命周期追踪器
+    pub fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            created_at: now,
+            last_active_at: now,
+            acquire_count: AtomicU64::new(0),
+            release_count: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+        }
+    }
+
+    /// 记录连接获取
+    pub fn record_acquire(&mut self) {
+        self.acquire_count.fetch_add(1, Ordering::SeqCst);
+        self.last_active_at = Instant::now();
+    }
+
+    /// 记录连接释放
+    pub fn record_release(&mut self) {
+        self.release_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录连接错误
+    pub fn record_error(&mut self) {
+        self.error_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 获取连接使用时间
+    pub fn usage_duration(&self) -> Duration {
+        Instant::now().duration_since(self.created_at)
+    }
+
+    /// 获取连接空闲时间
+    pub fn idle_duration(&self) -> Duration {
+        Instant::now().duration_since(self.last_active_at)
+    }
+
+    /// 获取获取/释放比率（检测连接泄露）
+    pub fn acquire_release_ratio(&self) -> f64 {
+        let acquire = self.acquire_count.load(Ordering::SeqCst);
+        let release = self.release_count.load(Ordering::SeqCst);
+        if release == 0 {
+            if acquire == 0 {
+                1.0
+            } else {
+                f64::INFINITY // 可能的连接泄露
+            }
+        } else {
+            acquire as f64 / release as f64
+        }
+    }
+}
+
+impl Default for ConnectionLifecycle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 use super::Session;
 use crate::config::{ConfigError, DbConfig, DbConfigBuilder, DbError, DbResult};
@@ -314,7 +393,9 @@ impl DbPool {
     /// 与 [`Self::new`] 方法功能相同，但更适合从配置结构体直接初始化。
     ///
     /// # Example
-    ///
+    #[cfg_attr(
+        feature = "sqlite",
+        doc = r###"
     /// ```rust
     /// use dbnexus::{DbPool, DbConfigBuilder};
     ///
@@ -330,6 +411,17 @@ impl DbPool {
     ///     Ok(())
     /// }
     /// ```
+    "###
+    )]
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        doc = r###"
+    /// ```rust,ignore
+    /// // 此文档测试需要 sqlite 特性
+    /// // 在使用其他数据库时，请参考相应的文档和示例
+    /// ```
+    "###
+    )]
     ///
     /// # Errors
     ///

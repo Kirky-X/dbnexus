@@ -61,7 +61,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
     };
 
     // 使用 DbConfigBuilder 构建配置
-    let mut config = DbConfigBuilder::new()
+    let config = DbConfigBuilder::new()
         .url(&url)
         .max_connections(5)
         .min_connections(1)

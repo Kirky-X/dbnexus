@@ -53,52 +53,28 @@ async fn test_parse_delete() {
 }
 
 #[tokio::test]
-async fn test_parse_create_table() {
+async fn test_ddl_blocked() {
+    // DDL operations are now blocked for security
     let parser = SqlParser::new();
-    let result = parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
-    assert!(result.is_ok());
-    let parsed = result.unwrap();
-    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
-    assert_eq!(parsed.table_name, Some("users".to_string()));
-}
 
-#[tokio::test]
-async fn test_parse_drop_table() {
+    // CREATE TABLE should be blocked
+    let result = parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
+    assert!(result.is_err());
+
+    // DROP TABLE should be blocked
     let parser = SqlParser::new();
     let result = parser.parse_single("DROP TABLE users");
-    assert!(result.is_ok());
-    let parsed = result.unwrap();
-    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
-    assert_eq!(parsed.table_name, Some("users".to_string()));
-}
+    assert!(result.is_err());
 
-#[tokio::test]
-async fn test_parse_alter_table() {
+    // ALTER TABLE should be blocked
     let parser = SqlParser::new();
     let result = parser.parse_single("ALTER TABLE users ADD COLUMN email VARCHAR(255)");
-    assert!(result.is_ok());
-    let parsed = result.unwrap();
-    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
-    assert_eq!(parsed.table_name, Some("users".to_string()));
-}
+    assert!(result.is_err());
 
-#[tokio::test]
-async fn test_parse_truncate() {
+    // TRUNCATE should be blocked
     let parser = SqlParser::new();
     let result = parser.parse_single("TRUNCATE TABLE users");
-    assert!(result.is_ok());
-    let parsed = result.unwrap();
-    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
-    assert_eq!(parsed.table_name, Some("users".to_string()));
-}
-
-#[tokio::test]
-async fn test_parse_create_index() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("CREATE INDEX idx_name ON users(name)");
-    assert!(result.is_ok());
-    let parsed = result.unwrap();
-    assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
+    assert!(result.is_err());
 }
 
 #[tokio::test]
@@ -235,6 +211,8 @@ async fn test_variables_inside_string_literals_not_detected() {
 
 #[tokio::test]
 async fn test_is_ddl_operation() {
+    // is_ddl_operation still detects DDL patterns for logging/filtering
+    // but parse_single now blocks DDL operations
     assert!(is_ddl_operation("CREATE TABLE users (id INT)"));
     assert!(is_ddl_operation("DROP TABLE users"));
     assert!(is_ddl_operation("ALTER TABLE users ADD COLUMN name VARCHAR(255)"));
@@ -244,6 +222,16 @@ async fn test_is_ddl_operation() {
     assert!(!is_ddl_operation("INSERT INTO users (name) VALUES ('test')"));
     assert!(!is_ddl_operation("UPDATE users SET name = 'test'"));
     assert!(!is_ddl_operation("DELETE FROM users WHERE id = 1"));
+}
+
+#[tokio::test]
+async fn test_ddl_operations_blocked() {
+    // DDL operations should be blocked by parse_single
+    let parser = SqlParser::new();
+
+    // CREATE INDEX should be blocked
+    let result = parser.parse_single("CREATE INDEX idx_name ON users(name)");
+    assert!(result.is_err());
 }
 
 #[tokio::test]

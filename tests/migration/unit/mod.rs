@@ -5,4 +5,5 @@
 
 //! Migration 模块单元测试
 
+#[cfg(feature = "migration")]
 pub mod migration_unit_tests;
