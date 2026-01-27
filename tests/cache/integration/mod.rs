@@ -4,3 +4,6 @@
 // See LICENSE file in the project root for full license information.
 
 //! Cache 集成测试
+
+#[cfg(feature = "cache")]
+pub mod cache_integration;

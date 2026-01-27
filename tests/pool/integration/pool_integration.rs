@@ -7,7 +7,7 @@
 //!
 //! 测试连接池的创建、管理、连接健康检查等功能
 
-use dbnexus::{DbConfig, DbPool};
+use dbnexus::DbPool;
 use std::time::Duration;
 
 #[path = "../../common/mod.rs"]
@@ -390,6 +390,7 @@ async fn test_connection_reuse_with_health_checks() {
 ///
 /// 验证配置验证器能正确检测无效的 URL 格式
 #[tokio::test]
+#[cfg(feature = "config-yaml")]
 async fn test_config_url_validation() {
     use dbnexus::config::DbConfig;
 
