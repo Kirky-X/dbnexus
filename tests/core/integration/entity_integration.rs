@@ -9,6 +9,7 @@
 
 use dbnexus::DbPool;
 use dbnexus::entity::Condition;
+use dbnexus::permission::{PermissionConfig, RolePolicy, TablePermission};
 use sea_orm::ActiveValue;
 
 fn get_database_url() -> Option<String> {
@@ -187,4 +188,198 @@ async fn test_entity_integration_with_sql_operations() {
     assert!(session.is_in_transaction());
     session.rollback().await.unwrap();
     assert!(!session.is_in_transaction());
+}
+
+// ============================================================================
+// 完整 CRUD 操作集成测试（使用权限配置）
+// ============================================================================
+
+const CRUD_TEST_TABLE: &str = "crud_entity_test";
+
+/// 获取包含完整权限的测试配置
+fn get_test_config_with_all_permissions() -> dbnexus::config::DbConfig {
+    use dbnexus::config::DbConfigBuilder;
+    use std::fs;
+
+    let url = get_database_url().unwrap_or("sqlite::memory:".to_string());
+
+    let perm_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - SELECT
+          - INSERT
+          - UPDATE
+          - DELETE
+"#;
+
+    let perm_file = "/tmp/entity_crud_test_perms.yaml";
+    fs::write(perm_file, perm_content).expect("Failed to write permissions");
+
+    DbConfigBuilder::new()
+        .url(&url)
+        .max_connections(5)
+        .permissions_path(perm_file)
+        .build()
+        .expect("Failed to build config")
+}
+
+/// 创建测试表
+async fn setup_crud_test_table(pool: &DbPool) {
+    let session = pool.get_session("admin").await.unwrap();
+    session
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
+            CRUD_TEST_TABLE
+        ))
+        .await
+        .unwrap();
+}
+
+/// 清理测试表
+async fn cleanup_crud_test_table(pool: &DbPool) {
+    let session = pool.get_session("admin").await.unwrap();
+    let _ = session
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", CRUD_TEST_TABLE))
+        .await;
+}
+
+#[tokio::test]
+async fn test_entity_crud_full_operations() {
+    let config = get_test_config_with_all_permissions();
+    let pool = DbPool::with_config(config).await.unwrap();
+    setup_crud_test_table(&pool).await;
+
+    // Get session and load permissions BEFORE using it
+    let session = pool.get_session("admin").await.unwrap();
+
+    // Load permissions into this session's context
+    let perm_config = PermissionConfig {
+        roles: [(
+            "admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".to_string(),
+                    operations: vec![
+                        dbnexus::permission::PermissionAction::Select,
+                        dbnexus::permission::PermissionAction::Insert,
+                        dbnexus::permission::PermissionAction::Update,
+                        dbnexus::permission::PermissionAction::Delete,
+                    ],
+                }],
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .await
+        .expect("Failed to load permissions");
+
+    // CRITICAL: Use the SAME session that has permissions loaded
+    // Do NOT get a new session after loading permissions!
+
+    // CREATE
+    let create = session
+        .execute_raw(&format!(
+            "INSERT INTO {} (name, email, age) VALUES ('CRUD Test', 'crud@test.com', 25)",
+            CRUD_TEST_TABLE
+        ))
+        .await;
+    assert!(create.is_ok(), "INSERT failed: {:?}", create.err());
+
+    // READ
+    let read = session
+        .execute_raw(&format!("SELECT * FROM {} WHERE name = 'CRUD Test'", CRUD_TEST_TABLE))
+        .await;
+    assert!(read.is_ok(), "SELECT failed: {:?}", read.err());
+
+    // UPDATE
+    let update = session
+        .execute_raw(&format!(
+            "UPDATE {} SET age = 30 WHERE name = 'CRUD Test'",
+            CRUD_TEST_TABLE
+        ))
+        .await;
+    assert!(update.is_ok(), "UPDATE failed: {:?}", update.err());
+
+    // DELETE
+    let delete = session
+        .execute_raw(&format!("DELETE FROM {} WHERE name = 'CRUD Test'", CRUD_TEST_TABLE))
+        .await;
+    assert!(delete.is_ok(), "DELETE failed: {:?}", delete.err());
+
+    cleanup_crud_test_table(&pool).await;
+}
+
+#[tokio::test]
+async fn test_entity_transaction_with_permissions() {
+    let config = get_test_config_with_all_permissions();
+    let pool = DbPool::with_config(config).await.unwrap();
+    setup_crud_test_table(&pool).await;
+
+    // Get session and load permissions BEFORE using it
+    let mut session = pool.get_session("admin").await.unwrap();
+
+    // Load permissions into this session's context
+    let perm_config = PermissionConfig {
+        roles: [(
+            "admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".to_string(),
+                    operations: vec![
+                        dbnexus::permission::PermissionAction::Select,
+                        dbnexus::permission::PermissionAction::Insert,
+                        dbnexus::permission::PermissionAction::Update,
+                        dbnexus::permission::PermissionAction::Delete,
+                    ],
+                }],
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .await
+        .expect("Failed to load permissions");
+
+    // CRITICAL: Use the SAME session that has permissions loaded
+
+    // Commit test
+    session.begin_transaction().await.unwrap();
+    session
+        .execute_raw(&format!(
+            "INSERT INTO {} (name, email) VALUES ('TX Commit', 'tx@test.com')",
+            CRUD_TEST_TABLE
+        ))
+        .await
+        .expect("INSERT in transaction failed");
+    session.commit().await.unwrap();
+
+    let after_commit = session
+        .execute_raw(&format!("SELECT COUNT(*) FROM {}", CRUD_TEST_TABLE))
+        .await;
+    assert!(after_commit.is_ok(), "SELECT COUNT failed: {:?}", after_commit.err());
+
+    // Rollback test
+    session.begin_transaction().await.unwrap();
+    session
+        .execute_raw(&format!(
+            "INSERT INTO {} (name, email) VALUES ('TX Rollback', 'rollback@test.com')",
+            CRUD_TEST_TABLE
+        ))
+        .await
+        .expect("INSERT before rollback failed");
+    session.rollback().await.unwrap();
+
+    cleanup_crud_test_table(&pool).await;
 }

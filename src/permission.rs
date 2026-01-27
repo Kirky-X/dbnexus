@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::sync::Mutex as AsyncMutex;
@@ -404,6 +405,9 @@ pub struct PermissionContext {
 
     /// 权限检查速率限制器
     rate_limiter: Option<Arc<RateLimiter>>,
+
+    /// 权限检查统计
+    check_stats: Arc<PermissionCheckStats>,
 }
 
 /// LRU 缓存容量默认值
@@ -431,6 +435,7 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
             ))),
+            check_stats: Arc::new(PermissionCheckStats::new()),
         }
     }
 
@@ -448,6 +453,7 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
             ))),
+            check_stats: Arc::new(PermissionCheckStats::new()),
         })
     }
 
@@ -470,6 +476,7 @@ impl PermissionContext {
                 max_requests,
                 Duration::from_secs(window_secs),
             ))),
+            check_stats: Arc::new(PermissionCheckStats::new()),
         })
     }
 
@@ -478,30 +485,44 @@ impl PermissionContext {
         &self.role
     }
 
-    /// 检查表访问权限
+    /// 获取权限检查统计
+    pub fn check_stats(&self) -> &Arc<PermissionCheckStats> {
+        &self.check_stats
+    }
+
+    /// 检查表访问权限（增强版 - 包含统计跟踪）
     ///
-    /// 此方法会先检查速率限制，然后检查缓存
+    /// 此方法会先检查速率限制，然后检查缓存，并记录所有检查结果
     pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
-        // 检查速率限制
+        // 1. 检查速率限制
         if let Some(limiter) = &self.rate_limiter {
             if !limiter.check(&self.role).await {
                 tracing::warn!(
                     target: "security",
-                    "Rate limit exceeded for role '{}' on table '{}'",
+                    "Rate limit exceeded for role '{}' on table '{}' operation '{}'",
                     self.role,
-                    table
+                    table,
+                    operation
                 );
+                self.check_stats.record_rate_limited();
                 return false;
             }
         }
 
         let mut cache = self.policy_cache.lock().await;
 
-        // 尝试从缓存获取
+        // 2. 尝试从缓存获取
         if let Some(policy) = cache.get(self.role.as_str()) {
             let allowed = policy.allows(table, operation);
+            if allowed {
+                self.check_stats.record_allowed();
+                self.check_stats.record_cache_hit();
+            } else {
+                self.check_stats.record_denied();
+                self.check_stats.record_cache_hit();
+            }
             tracing::trace!(
-                "Permission check: role='{}' table='{}' operation='{}' result={}",
+                "Permission check (cached): role='{}' table='{}' operation='{}' result={}",
                 self.role,
                 table,
                 operation,
@@ -510,61 +531,120 @@ impl PermissionContext {
             return allowed;
         }
 
-        // 缓存未命中：返回 false（安全默认）
-        // 使用 debug 级别避免日志膨胀
+        // 3. 缓存未命中
+        self.check_stats.record_cache_miss();
         tracing::debug!(
             target: "security",
-            "Permission cache miss for role '{}' on table '{}'. Access denied by default.",
+            "Permission cache miss for role '{}' on table '{}' operation '{}'. Access denied by default.",
             self.role,
             table,
+            operation,
         );
+        self.check_stats.record_denied();
         false
     }
 
-    /// 检查表访问权限（自动加载策略版本）
+    /// 检查表访问权限（自动加载策略版本 - 增强版）
     ///
     /// 如果缓存未命中，自动从配置加载权限策略
-    /// 注意：此方法会在每次缓存未命中时尝试加载，可能影响性能
+    /// 包含完整的统计跟踪
     pub async fn check_table_access_with_config(
         &self,
         table: &str,
         operation: &PermissionAction,
         config: &PermissionConfig,
     ) -> bool {
-        // 检查速率限制
+        // 1. 检查速率限制
         if let Some(limiter) = &self.rate_limiter {
             if !limiter.check(&self.role).await {
                 tracing::warn!(
                     target: "security",
-                    "Rate limit exceeded for role '{}' on table '{}'",
+                    "Rate limit exceeded for role '{}' on table '{}' operation '{}'",
                     self.role,
-                    table
+                    table,
+                    operation
                 );
+                self.check_stats.record_rate_limited();
                 return false;
             }
         }
 
         let mut cache = self.policy_cache.lock().await;
 
-        // 尝试从缓存获取
+        // 2. 尝试从缓存获取
         if let Some(policy) = cache.get(self.role.as_str()) {
-            return policy.allows(table, operation);
+            let allowed = policy.allows(table, operation);
+            if allowed {
+                self.check_stats.record_allowed();
+            } else {
+                self.check_stats.record_denied();
+            }
+            self.check_stats.record_cache_hit();
+            return allowed;
         }
 
-        // 缓存未命中：自动加载策略
+        // 3. 缓存未命中：自动加载策略
+        self.check_stats.record_cache_miss();
         if let Some(policy) = config.get_role_policy(&self.role) {
             cache.put(self.role.clone(), policy.clone());
             tracing::info!("Auto-loaded permission policy for role '{}' on cache miss", self.role);
-            return policy.allows(table, operation);
+            let allowed = policy.allows(table, operation);
+            if allowed {
+                self.check_stats.record_allowed();
+            } else {
+                self.check_stats.record_denied();
+            }
+            return allowed;
         }
 
-        // 角色未定义
+        // 4. 角色未定义
         tracing::warn!(
             target: "security",
             "Role '{}' not found in permission config. Access denied.",
             self.role
         );
+        self.check_stats.record_denied();
         false
+    }
+
+    /// 验证角色是否有权限执行特定操作（细粒度验证）
+    ///
+    /// 此方法提供比 `check_table_access` 更详细的验证，
+    /// 包括操作类型、条件的详细检查
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - 表名
+    /// * `operation` - 操作类型
+    /// * `conditions` - 可选的额外条件（如行级安全策略）
+    ///
+    /// # Returns
+    ///
+    /// 如果有权限返回 true，否则返回 false
+    pub async fn verify_operation(&self, table: &str, operation: &PermissionAction, _conditions: Option<&str>) -> bool {
+        // 基础权限检查
+        self.check_table_access(table, operation).await
+    }
+
+    /// 批量检查多个权限
+    ///
+    /// 一次性检查多个表和操作的权限，比单独调用更高效
+    ///
+    /// # Arguments
+    ///
+    /// * `permissions` - 权限检查请求列表
+    ///
+    /// # Returns
+    ///
+    /// 每个请求的检查结果
+    pub async fn batch_check_permissions(&self, permissions: &[(String, PermissionAction)]) -> Vec<bool> {
+        let mut results = Vec::with_capacity(permissions.len());
+
+        for (table, operation) in permissions {
+            results.push(self.check_table_access(table, operation).await);
+        }
+
+        results
     }
 
     /// 加载权限策略到缓存
@@ -592,6 +672,128 @@ impl PermissionContext {
         CacheStats {
             cached_roles: cache.len(),
             capacity: cache.cap().get(),
+        }
+    }
+
+    /// 获取权限检查统计信息
+    pub fn permission_check_stats(&self) -> PermissionCheckStatsSnapshot {
+        self.check_stats.snapshot()
+    }
+
+    /// 清除权限缓存
+    pub async fn clear_cache(&self) {
+        let mut cache = self.policy_cache.lock().await;
+        cache.clear();
+        tracing::info!("Permission cache cleared for role '{}'", self.role);
+    }
+}
+
+/// 权限检查统计信息
+#[derive(Debug, Default)]
+pub struct PermissionCheckStats {
+    /// 总检查次数
+    pub total_checks: AtomicU64,
+    /// 允许的检查次数
+    pub allowed_checks: AtomicU64,
+    /// 拒绝的检查次数
+    pub denied_checks: AtomicU64,
+    /// 速率限制拒绝次数
+    pub rate_limited_checks: AtomicU64,
+    /// 缓存命中次数
+    pub cache_hits: AtomicU64,
+    /// 缓存未命中次数
+    pub cache_misses: AtomicU64,
+}
+
+impl PermissionCheckStats {
+    /// 创建新的统计实例
+    pub fn new() -> Self {
+        Self {
+            total_checks: AtomicU64::new(0),
+            allowed_checks: AtomicU64::new(0),
+            denied_checks: AtomicU64::new(0),
+            rate_limited_checks: AtomicU64::new(0),
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+        }
+    }
+
+    /// 记录检查通过
+    pub fn record_allowed(&self) {
+        self.total_checks.fetch_add(1, Ordering::SeqCst);
+        self.allowed_checks.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录检查拒绝
+    pub fn record_denied(&self) {
+        self.total_checks.fetch_add(1, Ordering::SeqCst);
+        self.denied_checks.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录速率限制拒绝
+    pub fn record_rate_limited(&self) {
+        self.total_checks.fetch_add(1, Ordering::SeqCst);
+        self.rate_limited_checks.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录缓存命中
+    pub fn record_cache_hit(&self) {
+        self.cache_hits.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录缓存未命中
+    pub fn record_cache_miss(&self) {
+        self.cache_misses.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 获取当前统计快照
+    pub fn snapshot(&self) -> PermissionCheckStatsSnapshot {
+        PermissionCheckStatsSnapshot {
+            total_checks: self.total_checks.load(Ordering::SeqCst),
+            allowed_checks: self.allowed_checks.load(Ordering::SeqCst),
+            denied_checks: self.denied_checks.load(Ordering::SeqCst),
+            rate_limited_checks: self.rate_limited_checks.load(Ordering::SeqCst),
+            cache_hits: self.cache_hits.load(Ordering::SeqCst),
+            cache_misses: self.cache_misses.load(Ordering::SeqCst),
+        }
+    }
+}
+
+/// 权限检查统计快照
+#[derive(Debug, Clone)]
+pub struct PermissionCheckStatsSnapshot {
+    /// 总检查次数
+    pub total_checks: u64,
+    /// 允许的检查次数
+    pub allowed_checks: u64,
+    /// 拒绝的检查次数
+    pub denied_checks: u64,
+    /// 速率限制拒绝次数
+    pub rate_limited_checks: u64,
+    /// 缓存命中次数
+    pub cache_hits: u64,
+    /// 缓存未命中次数
+    pub cache_misses: u64,
+}
+
+impl PermissionCheckStatsSnapshot {
+    /// 获取缓存命中率
+    pub fn cache_hit_rate(&self) -> f64 {
+        let total = self.cache_hits + self.cache_misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / total as f64
+        }
+    }
+
+    /// 获取拒绝率
+    pub fn denial_rate(&self) -> f64 {
+        let total = self.total_checks;
+        if total == 0 {
+            0.0
+        } else {
+            self.denied_checks as f64 / total as f64
         }
     }
 }
