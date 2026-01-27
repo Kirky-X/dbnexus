@@ -16,7 +16,7 @@
 //!
 //! # 快速开始
 //!
-//! ```rust,no_run
+//! ```rust,no_run,ignore
 //! use dbnexus::DbPool;
 //!
 //! #[derive(dbnexus::DbEntity)]

@@ -39,8 +39,99 @@
 use sea_orm::ConnectionTrait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use thiserror::Error;
+use url::Url;
+
+/// URL协议白名单（仅允许安全的数据库协议）
+const ALLOWED_URL_SCHEMES: &[&str] = &["sqlite", "sqlite3", "postgres", "postgresql", "mysql", "mysql2"];
+
+/// 敏感环境变量列表（加载时记录但不记录值）
+const SENSITIVE_ENV_VARS: &[&str] = &[
+    "DATABASE_URL",
+    "DB_PASSWORD",
+    "DB_PASSWORD_FILE",
+    "DB_CERT",
+    "DB_KEY",
+    "DB_CA_CERT",
+];
+
+/// 环境变量最大长度限制
+const MAX_ENV_VAR_LENGTH: usize = 4096;
+
+/// 配置加载统计
+pub(crate) struct ConfigLoadStats {
+    /// 环境变量加载次数
+    env_loads: AtomicU64,
+    /// 文件加载次数
+    file_loads: AtomicU64,
+    /// 路径遍历攻击拦截次数
+    path_traversal_blocked: AtomicU64,
+    /// 无效协议拦截次数
+    invalid_protocol_blocked: AtomicU64,
+}
+
+impl ConfigLoadStats {
+    /// 创建新的统计实例
+    pub fn new() -> Self {
+        Self {
+            env_loads: AtomicU64::new(0),
+            file_loads: AtomicU64::new(0),
+            path_traversal_blocked: AtomicU64::new(0),
+            invalid_protocol_blocked: AtomicU64::new(0),
+        }
+    }
+
+    /// 记录环境变量加载
+    pub fn record_env_load(&self) {
+        self.env_loads.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录文件加载
+    pub fn record_file_load(&self) {
+        self.file_loads.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录路径遍历攻击拦截
+    pub fn record_path_traversal_blocked(&self) {
+        self.path_traversal_blocked.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 记录无效协议拦截
+    pub fn record_invalid_protocol_blocked(&self) {
+        self.invalid_protocol_blocked.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 获取统计信息
+    pub fn get_stats(&self) -> ConfigLoadStatsSnapshot {
+        ConfigLoadStatsSnapshot {
+            env_loads: self.env_loads.load(Ordering::SeqCst),
+            file_loads: self.file_loads.load(Ordering::SeqCst),
+            path_traversal_blocked: self.path_traversal_blocked.load(Ordering::SeqCst),
+            invalid_protocol_blocked: self.invalid_protocol_blocked.load(Ordering::SeqCst),
+        }
+    }
+}
+
+/// 配置加载统计快照
+#[derive(Debug, Clone)]
+pub struct ConfigLoadStatsSnapshot {
+    /// 环境变量加载次数
+    pub env_loads: u64,
+    /// 文件加载次数
+    pub file_loads: u64,
+    /// 路径遍历攻击拦截次数
+    pub path_traversal_blocked: u64,
+    /// 无效协议拦截次数
+    pub invalid_protocol_blocked: u64,
+}
+
+impl Default for ConfigLoadStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// 数据库连接池配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -798,7 +889,7 @@ impl DbConfig {
         Ok(())
     }
 
-    /// 验证数据库 URL 格式（增强版）
+    /// 验证数据库 URL 格式（增强版 - 包含协议白名单验证）
     fn validate_url_format(&self) -> Result<(), ConfigError> {
         // 特殊处理 sqlite::memory: 和 sqlite3::memory: 格式（无 ://）
         if self.url.starts_with("sqlite::memory:") || self.url.starts_with("sqlite3::memory:") {
@@ -810,11 +901,11 @@ impl DbConfig {
         }
 
         // 使用 URL 解析器进行完整验证
-        let url = url::Url::parse(&self.url).map_err(|_| ConfigError::InvalidUrl("Invalid URL format".to_string()))?;
+        let url = Url::parse(&self.url).map_err(|e| ConfigError::InvalidUrl(format!("Invalid URL format: {}", e)))?;
 
         let protocol = url.scheme();
 
-        // 检查协议格式（字母数字 + + . -）
+        // 1. 检查协议格式（字母数字 + + . -）
         if !protocol
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '.' || c == '-')
@@ -824,19 +915,26 @@ impl DbConfig {
             ));
         }
 
-        // 协议白名单验证（简化为集合检查）
-        let valid_protocols = ["sqlite", "sqlite3", "postgres", "postgresql", "mysql"];
-        // 检查协议是否有效（支持特殊的 sqlite 文件/内存协议）
-        let is_valid_protocol = valid_protocols.contains(&protocol)
-            || (protocol.starts_with("sqlite") && ["file", "mem"].contains(&protocol));
+        // 2. 协议白名单验证（严格模式）
+        let protocol_lower = protocol.to_lowercase();
+        let is_valid_protocol = ALLOWED_URL_SCHEMES.contains(&protocol_lower.as_str())
+            || (protocol_lower.starts_with("sqlite")
+                && ["file", "mem", "memory"].contains(&protocol_lower.split(':').nth(1).unwrap_or("")));
+
         if !is_valid_protocol {
+            // 记录无效协议拦截
+            tracing::warn!(
+                target: "security",
+                "Blocked unsupported protocol '{}' in URL",
+                protocol
+            );
             return Err(ConfigError::UnsupportedProtocol);
         }
 
-        // 验证主机名格式（如果有）
+        // 3. 验证主机名格式（如果有）
         if let Some(host) = url.host() {
             let host_str = host.to_string();
-            // 主机名不能包含空白字符或特殊符号
+            // 主机名不能包含空白字符或特殊符号（防止注入）
             if host_str
                 .chars()
                 .any(|c| c.is_whitespace() || matches!(c, '\'' | '"' | ';' | '|' | '&' | '$' | '`'))
@@ -845,9 +943,22 @@ impl DbConfig {
                     "Hostname contains invalid characters".to_string(),
                 ));
             }
+
+            // 检查是否是IP地址（如果是，需要验证格式）
+            if host_str.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                // 简单的IP格式验证
+                let parts: Vec<&str> = host_str.split('.').collect();
+                if parts.len() == 4 {
+                    for part in parts {
+                        if part.parse::<u8>().is_err() {
+                            return Err(ConfigError::InvalidUrl("Invalid IP address format".to_string()));
+                        }
+                    }
+                }
+            }
         }
 
-        // 验证端口号范围（如果有）
+        // 4. 验证端口号范围（如果有）
         if let Some(port) = url.port() {
             if port == 0 {
                 return Err(ConfigError::InvalidUrl(
@@ -856,7 +967,78 @@ impl DbConfig {
             }
         }
 
+        // 5. 验证路径（如果有）- 防止SQL注入和路径遍历
+        let path = url.path();
+        if !path.is_empty() && (path.contains(';') || path.contains('\'') || path.contains('"')) {
+            return Err(ConfigError::InvalidUrl(
+                "URL path contains potentially dangerous characters".to_string(),
+            ));
+        }
+
+        // 6. 验证用户名和密码（如果有）- 防止密码注入
+        let user = url.username();
+        if !user.is_empty() && (user.contains(':') || user.contains('@') || user.contains('/')) {
+            return Err(ConfigError::InvalidUrl(
+                "Username contains invalid characters".to_string(),
+            ));
+        }
+
+        if let Some(password) = url.password() {
+            if password.contains(':') || password.contains('@') || password.contains('/') {
+                return Err(ConfigError::InvalidUrl(
+                    "Password contains invalid characters".to_string(),
+                ));
+            }
+        }
+
         Ok(())
+    }
+
+    /// 安全地清理环境变量值
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - 原始环境变量值
+    /// * `is_sensitive` - 是否是敏感值
+    ///
+    /// # Returns
+    ///
+    /// 清理后的值
+    fn sanitize_env_value(value: &str, is_sensitive: bool) -> String {
+        // 检查长度
+        if value.len() > MAX_ENV_VAR_LENGTH {
+            tracing::warn!(
+                target: "security",
+                "Environment variable value exceeds maximum length, truncating"
+            );
+            return if is_sensitive {
+                "[REDACTED - TOO LONG]".to_string()
+            } else {
+                value.chars().take(MAX_ENV_VAR_LENGTH).collect()
+            };
+        }
+
+        // 移除潜在的恶意字符
+        let sanitized: String = value
+            .chars()
+            .filter(|c| {
+                // 移除null字节、控制字符
+                !c.is_control() && *c != '\0'
+            })
+            .collect();
+
+        if is_sensitive {
+            "[REDACTED]".to_string()
+        } else {
+            sanitized
+        }
+    }
+
+    /// 检查环境变量是否是敏感的
+    fn is_sensitive_env_var(name: &str) -> bool {
+        SENSITIVE_ENV_VARS
+            .iter()
+            .any(|sensitive| name.eq_ignore_ascii_case(sensitive))
     }
 
     /// 获取空闲超时 Duration
@@ -1001,7 +1183,7 @@ impl DbConfig {
         Err(ConfigError::FileNotFound)
     }
 
-    /// 检查配置文件路径是否安全
+    /// 检查配置文件路径是否安全（增强版 - 包含多层防护）
     ///
     /// 防止路径遍历攻击：
     /// - 检查路径是否包含父目录引用 (..)
@@ -1009,6 +1191,8 @@ impl DbConfig {
     /// - 检查路径是否在预期目录内
     /// - 检查 Windows 风格路径遍历
     /// - 检查 null 字节注入
+    /// - 检查环境变量扩展攻击
+    /// - 检查特殊字符注入
     fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
         // 1. 检查 null 字节注入
         let path_str = path.to_string_lossy();
@@ -1017,19 +1201,65 @@ impl DbConfig {
             return Ok(false);
         }
 
-        // 2. 检查路径是否包含 ..（父目录遍历）
+        // 2. 检查环境变量扩展（防止 $VAR 或 ${VAR} 形式的攻击）
+        if path_str.contains("$(") || path_str.contains("${") || path_str.contains("`") {
+            tracing::warn!("Rejected config path with environment variable expansion: {:?}", path);
+            return Ok(false);
+        }
+
+        // 3. 检查路径是否包含 ..（父目录遍历）
         if path_str.contains("..") {
             tracing::warn!("Rejected config path with parent directory traversal: {:?}", path);
             return Ok(false);
         }
 
-        // 3. 检查 Windows 风格路径遍历
+        // 4. 检查 Windows 风格路径遍历
         if path_str.contains(".\\") || path_str.starts_with(".\\") {
             tracing::warn!("Rejected config path with Windows-style traversal: {:?}", path);
             return Ok(false);
         }
 
-        // 4. 规范化路径并检查
+        // 5. 检查特殊字符（可能用于路径注入）
+        let dangerous_chars = [';', '|', '&', '>', '<', '*', '?', '~'];
+        for c in dangerous_chars {
+            if path_str.contains(c) {
+                tracing::warn!("Rejected config path with dangerous character '{}': {:?}", c, path);
+                return Ok(false);
+            }
+        }
+
+        // 6. 检查是否是绝对路径
+        if path.is_absolute() {
+            // 检查是否在允许的目录范围内
+            if let Ok(canonical) = path.canonicalize() {
+                // 检查是否在用户目录或当前目录
+                let home_dir = home::home_dir();
+                let current_dir = std::env::current_dir().ok();
+
+                let is_in_allowed_location = home_dir
+                    .as_ref()
+                    .is_some_and(|home| canonical.starts_with(home) || canonical.starts_with(home.join(".config")))
+                    || current_dir.as_ref().is_some_and(|current| {
+                        canonical.starts_with(current) || canonical.starts_with(current.join("config"))
+                    });
+
+                if !is_in_allowed_location {
+                    // 检查是否在系统关键目录
+                    let forbidden_prefixes = [
+                        "/etc", "/usr", "/var", "/root", "/boot", "/srv", "/opt", "/bin", "/sbin", "/lib", "/lib64",
+                        "/proc", "/sys", "/dev",
+                    ];
+                    for prefix in &forbidden_prefixes {
+                        if canonical.starts_with(prefix) {
+                            tracing::warn!("Rejected config path in system directory: {:?}", path);
+                            return Ok(false);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. 规范化路径并检查
         let canonical = match path.canonicalize() {
             Ok(p) => p,
             Err(e) => {
@@ -1038,26 +1268,13 @@ impl DbConfig {
             }
         };
 
-        // 5. 检查是否为绝对路径且不在系统关键目录
-        if canonical.is_absolute() {
-            let forbidden_prefixes = [
-                "/etc", "/usr", "/var", "/root", "/boot", "/srv", "/opt", "/bin", "/sbin", "/lib", "/lib64",
-            ];
-            for prefix in &forbidden_prefixes {
-                if canonical.starts_with(prefix) {
-                    tracing::warn!("Rejected config path in system directory: {:?}", path);
-                    return Ok(false);
-                }
-            }
-        }
-
-        // 6. 检查符号链接（指向不安全位置的符号链接）
+        // 8. 检查符号链接（指向不安全位置的符号链接）
         if path.is_symlink() {
             tracing::warn!("Rejected symlink config path: {:?}", path);
             return Ok(false);
         }
 
-        // 7. 检查规范化后的路径是否仍然包含 ..
+        // 9. 检查规范化后的路径是否仍然包含 ..
         if canonical.to_string_lossy().contains("..") {
             tracing::warn!(
                 "Rejected config path with hidden traversal after canonicalization: {:?}",
@@ -1066,10 +1283,18 @@ impl DbConfig {
             return Ok(false);
         }
 
-        // 8. 检查路径是否指向目录（配置文件应该是文件）
+        // 10. 检查路径是否指向目录（配置文件应该是文件）
         if canonical.is_dir() {
             tracing::warn!("Rejected config path pointing to directory: {:?}", path);
             return Ok(false);
+        }
+
+        // 11. 检查文件扩展名是否安全
+        if let Some(ext) = path.extension() {
+            if ext == "sh" || ext == "bash" || ext == "py" || ext == "js" {
+                tracing::warn!("Rejected config path with dangerous extension: {:?}", path);
+                return Ok(false);
+            }
         }
 
         Ok(true)

@@ -93,10 +93,12 @@ default = [
 runtime-tokio-rustls = [
     "sea-orm/runtime-tokio-rustls",
     "tokio/rt-multi-thread",
+    "tokio/fs",
 ]
 runtime-tokio-native-tls = [
     "sea-orm/runtime-tokio-native-tls",
     "tokio/rt-multi-thread",
+    "tokio/fs",
 ]
 runtime-async-std = [
     "sea-orm/runtime-async-std",
@@ -235,7 +237,7 @@ required-features = ["config-yaml", "permission"]
 [[test]]
 name = "core_entity_integration"
 path = "tests/core/integration/entity_integration.rs"
-required-features = ["macros"]
+required-features = ["macros", "sqlite"]
 
 [[test]]
 name = "core_sql_parser_integration"
@@ -316,3 +318,10 @@ required-features = ["migration"]
 name = "permission_bench"
 path = "benches/permission_bench.rs"
 harness = false
+
+# tests/mod.rs 需要 sqlite 特性才能正确运行
+# 因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
+[[test]]
+name = "mod"
+path = "tests/mod.rs"
+required-features = ["sqlite"]
