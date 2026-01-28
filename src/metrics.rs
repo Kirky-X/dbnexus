@@ -17,6 +17,103 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+use thiserror::Error;
+
+// ============================================================================
+// MetricsCollector Trait Interface
+// ============================================================================
+
+/// 指标收集器错误类型
+#[derive(Debug, Error)]
+pub enum MetricsError {
+    /// 导出失败
+    #[error("Export failed: {0}")]
+    ExportError(String),
+
+    /// 收集器未初始化
+    #[error("Collector not initialized")]
+    NotInitialized,
+
+    /// 未知错误
+    #[error("Unknown metrics error: {0}")]
+    Unknown(String),
+}
+
+/// 指标收集器 trait 接口
+///
+/// 定义性能指标收集的通用接口，便于测试和替换实现。
+/// 所有实现必须支持 `Send + Sync` 以便在多线程环境中使用。
+///
+/// # Example
+///
+/// ```ignore
+/// use std::sync::Arc;
+/// use dbnexus::metrics::MetricsCollectorTrait;
+///
+/// // 使用 trait 对象进行动态分发
+/// let collector: Arc<dyn MetricsCollectorTrait> = Arc::new(MetricsCollector::new());
+///
+/// // 或者在测试中使用 mock 实现
+/// struct MockMetrics;
+/// impl MetricsCollectorTrait for MockMetrics {
+///     fn record_query(&self, duration: Duration) {}
+///     fn record_connection(&self, duration: Duration) {}
+/// }
+/// ```
+pub trait MetricsCollectorTrait: Send + Sync {
+    /// 记录查询延迟
+    ///
+    /// # Arguments
+    ///
+    /// * `duration` - 查询执行耗时
+    fn record_query(&self, duration: Duration);
+
+    /// 记录连接获取延迟
+    ///
+    /// # Arguments
+    ///
+    /// * `duration` - 连接获取耗时
+    fn record_connection(&self, duration: Duration);
+
+    /// 记录事务执行时间
+    ///
+    /// # Arguments
+    ///
+    /// * `duration` - 事务执行耗时
+    /// * `success` - 事务是否成功提交
+    fn record_transaction(&self, duration: Duration, success: bool);
+
+    /// 记录连接池使用情况
+    ///
+    /// # Arguments
+    ///
+    /// * `total` - 总连接数
+    /// * `active` - 活跃连接数
+    /// * `idle` - 空闲连接数
+    fn record_pool_usage(&self, total: u32, active: u32, idle: u32);
+
+    /// 获取查询统计
+    fn query_stats(&self) -> QueryStats;
+
+    /// 获取连接获取统计
+    fn connection_stats(&self) -> ConnectionAcquireStats;
+
+    /// 获取连接池指标
+    fn pool_metrics(&self) -> PoolMetrics;
+
+    /// 获取事务统计
+    fn transaction_stats(&self) -> TransactionStats;
+
+    /// 导出 Prometheus 格式指标
+    ///
+    /// # Returns
+    ///
+    /// 返回 Prometheus 格式的指标字符串
+    fn export_prometheus(&self) -> String;
+
+    /// 清空所有统计
+    fn clear(&self);
+}
 
 /// 最大延迟样本数（滑动窗口大小）
 const MAX_LATENCY_SAMPLES: usize = 10000;
@@ -195,6 +292,15 @@ pub struct HistogramStats {
     pub buckets: Vec<HistogramBucket>,
 }
 
+impl Default for HistogramStats {
+    fn default() -> Self {
+        Self {
+            total_samples: 0,
+            buckets: Vec::new(),
+        }
+    }
+}
+
 /// 吞吐量统计
 #[derive(Debug, Clone)]
 pub struct ThroughputStats {
@@ -212,6 +318,19 @@ pub struct ThroughputStats {
     pub window_qps: f64,
 }
 
+impl Default for ThroughputStats {
+    fn default() -> Self {
+        Self {
+            total_operations: 0,
+            success_count: 0,
+            failure_count: 0,
+            error_rate: 0.0,
+            avg_qps: 0.0,
+            window_qps: 0.0,
+        }
+    }
+}
+
 /// 查询统计信息（增强版）
 #[derive(Debug, Clone)]
 pub struct QueryStats {
@@ -225,6 +344,18 @@ pub struct QueryStats {
     pub histogram: HistogramStats,
     /// 吞吐量统计
     pub throughput: ThroughputStats,
+}
+
+impl Default for QueryStats {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            error_count: 0,
+            latency_percentiles: LatencyPercentiles::default(),
+            histogram: HistogramStats::default(),
+            throughput: ThroughputStats::default(),
+        }
+    }
 }
 
 impl QueryStats {
@@ -811,6 +942,11 @@ impl MetricsCollector {
         self.transaction.read().stats()
     }
 
+    /// 获取事务统计（内部方法，用于 trait 实现）
+    pub fn transaction_stats_inner(&self) -> TransactionStats {
+        self.transaction.read().stats()
+    }
+
     /// 获取运行时长
     pub fn uptime(&self) -> Duration {
         self.start_time.elapsed()
@@ -839,6 +975,11 @@ impl MetricsCollector {
 
         let mut txn = self.transaction.write();
         *txn = TransactionMetricsInner::new();
+    }
+
+    /// 重置所有指标（内部方法，用于 trait 实现）
+    pub fn clear_all_inner(&self) {
+        self.reset();
     }
 
     /// 导出为 Prometheus 格式
@@ -1000,6 +1141,75 @@ impl MetricsCollector {
         output.push_str(&format!("dbnexus_metrics_timestamp {}\n", now.unix_timestamp()));
 
         output
+    }
+
+    /// 导出为 Prometheus 格式（内部方法，用于 trait 实现）
+    pub fn export_prometheus_inner(&self) -> String {
+        self.export_prometheus()
+    }
+}
+
+// ============================================================================
+// MetricsCollector Trait Implementation
+// ============================================================================
+
+impl MetricsCollectorTrait for MetricsCollector {
+    fn record_query(&self, duration: Duration) {
+        self.record_query("default", duration, true, None);
+    }
+
+    fn record_connection(&self, duration: Duration) {
+        let start = Instant::now();
+        if duration.as_millis() < 100 {
+            self.record_connection_acquire_success();
+        } else if duration.as_millis() < 1000 {
+            self.record_connection_acquire_timeout();
+        } else {
+            self.record_connection_acquire_failure();
+        }
+        let _ = start;
+    }
+
+    fn record_transaction(&self, duration: Duration, success: bool) {
+        let _ = duration;
+        if success {
+            self.record_transaction_commit();
+        } else {
+            self.record_transaction_failure();
+        }
+    }
+
+    fn record_pool_usage(&self, total: u32, active: u32, idle: u32) {
+        self.update_pool_status(total, active, idle);
+    }
+
+    fn query_stats(&self) -> QueryStats {
+        self.get_query_stats("default").unwrap_or_else(|| QueryStats::default())
+    }
+
+    fn connection_stats(&self) -> ConnectionAcquireStats {
+        self.connection_acquire_stats()
+    }
+
+    fn pool_metrics(&self) -> PoolMetrics {
+        let stats = self.pool_status();
+        PoolMetrics {
+            total: stats.total as u64,
+            active: stats.active as u64,
+            idle: stats.idle as u64,
+        }
+    }
+
+    fn transaction_stats(&self) -> TransactionStats {
+        self.transaction_stats_inner()
+    }
+
+    fn export_prometheus(&self) -> String {
+        self.export_prometheus_inner()
+    }
+
+    fn clear(&self) {
+        self.clear_all_inner();
     }
 }
 

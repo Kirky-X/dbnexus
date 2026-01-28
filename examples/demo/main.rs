@@ -58,6 +58,7 @@ fn run_example(name: &str) -> ExitCode {
         "sharding" => "sharding",
         "migration" => "migration",
         "global_index" => "global_index",
+        "entity_basic" => "entity_basic",
         _ => {
             eprintln!("❌ 未知的示例名称: {}", name);
             eprintln!("\n可用的示例:");
@@ -99,6 +100,7 @@ fn show_interactive_menu() -> ExitCode {
     println!("  4. transactions     - 事务管理示例");
     println!("  5. sql_parser       - SQL 解析器示例");
     println!("  6. permission_engine - 权限引擎示例");
+    println!("  7. entity_basic     - 实体操作基础");
     println!();
 
     println!("🏢 企业功能示例:");
@@ -116,9 +118,10 @@ fn show_interactive_menu() -> ExitCode {
 
     println!("🔧 其他:");
     println!("  0. 退出");
+    println!("  cli                - CLI 使用指南 (Markdown)");
     println!();
 
-    print!("请选择要运行的示例 (0-13): ");
+    print!("请选择要运行的示例 (0-14): ");
     use std::io::Write;
     std::io::stdout().flush().unwrap();
 
@@ -136,13 +139,14 @@ fn show_interactive_menu() -> ExitCode {
         "4" => run_example("transactions"),
         "5" => run_example("sql_parser"),
         "6" => run_example("permission_engine"),
-        "7" => run_example("metrics"),
-        "8" => run_example("tracing"),
-        "9" => run_example("audit"),
-        "10" => run_example("cache"),
-        "11" => run_example("sharding"),
-        "12" => run_example("migration"),
-        "13" => run_example("global_index"),
+        "7" => run_example("entity_basic"),
+        "8" => run_example("metrics"),
+        "9" => run_example("tracing"),
+        "10" => run_example("audit"),
+        "11" => run_example("cache"),
+        "12" => run_example("sharding"),
+        "13" => run_example("migration"),
+        "14" => run_example("global_index"),
         _ => {
             println!("❌ 无效的选择，请重新运行程序");
             ExitCode::FAILURE
@@ -158,6 +162,7 @@ fn list_examples() {
     println!("    - transactions");
     println!("    - sql_parser");
     println!("    - permission_engine");
+    println!("    - entity_basic");
     println!("  企业功能:");
     println!("    - metrics");
     println!("    - tracing");
