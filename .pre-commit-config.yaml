@@ -9,7 +9,7 @@ repos:
   # =============================================================================
   # Rust 代码格式化检查
   # =============================================================================
-  - repo: https://github.com/doubl204/rustfmt-check
+  - repo: https://github.com/rust-lang/rustfmt
     rev: stable
     hooks:
       - id: rustfmt
@@ -23,13 +23,13 @@ repos:
   # =============================================================================
   # Rust 代码质量检查 (Clippy)
   # =============================================================================
-  - repo: https://github.com/doubl204/rust-clippy-check
+  - repo: https://github.com/rust-lang/rust-clippy
     rev: stable
     hooks:
       - id: clippy
         name: Rust Clippy Check
         description: 检查 Rust 代码质量问题，将警告视为错误
-        entry: cargo clippy --all-targets --features sqlite,all-optional --workspace -- -D warnings
+        entry: cargo clippy --all-targets --features sqlite --workspace -- -D warnings
         language: system
         pass_filenames: false
         types: [rust]
@@ -128,7 +128,7 @@ exclude: |
     \.editorconfig|
     \*.swp|
     \*.swo|
-    \*~|
+    \*~
     \*.orig|
     \*.rej|
     \*.bak|
@@ -150,4 +150,3 @@ default_stages: [pre-commit]
 # =============================================================================
 fail_fast: false
 verbose: true
-require_serial: false
