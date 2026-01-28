@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X
 //
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
+// Licensed under MIT License
+// See LICENSE file in project root for full license information.
 
 //! 迁移执行器
 //!
@@ -9,6 +9,7 @@
 
 use super::differ::SqlGenerator;
 use super::schema::*;
+use super::sql_reverser::SqlReverser;
 use crate::config::DatabaseType;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
@@ -35,10 +36,10 @@ impl MigrationExecutor {
         }
     }
 
-    /// 获取数据库连接的不可变引用
+    /// 获取数据库连接的不可变引用（仅内部使用）
     ///
-    /// 返回数据库连接的只读引用，用于执行查询操作
-    pub fn connection(&self) -> &sea_orm::DatabaseConnection {
+    /// 返回数据库连接的只读引用，用于执行迁移操作
+    pub(crate) fn connection(&self) -> &sea_orm::DatabaseConnection {
         &self.connection
     }
 
@@ -591,8 +592,42 @@ impl MigrationExecutor {
     }
 
     /// 回滚指定版本的迁移
+    ///
+    /// 使用 SqlReverser 生成回滚 SQL 并执行
     pub async fn rollback_migration(&mut self, version: u32) -> Result<(), crate::config::DbError> {
-        // 使用参数化查询防止 SQL 注入
+        // 查找要回滚的迁移
+        let migration = match self.history.applied_migrations.iter().find(|m| m.version == version) {
+            Some(m) => m.clone(),
+            None => {
+                return Err(crate::config::DbError::MigrationNotFound(version));
+            }
+        };
+
+        // 生成回滚 SQL
+        let reverser = SqlReverser::new();
+        let down_sql = match reverser.reverse(&migration.up_sql) {
+            Ok(sql) => sql,
+            Err(e) => {
+                tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
+                return Err(crate::config::DbError::MigrationRollbackFailed(e));
+            }
+        };
+
+        // 开始事务
+        let txn: sea_orm::DatabaseTransaction = self
+            .connection
+            .begin()
+            .await
+            .map_err(crate::config::DbError::Connection)?;
+
+        // 执行回滚 SQL
+        if !down_sql.is_empty() {
+            txn.execute_unprepared(&down_sql)
+                .await
+                .map_err(crate::config::DbError::Connection)?;
+        }
+
+        // 从历史记录中删除
         let backend = match self.sql_generator.db_type {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
@@ -604,12 +639,6 @@ impl MigrationExecutor {
             vec![version.into()],
         );
 
-        let txn: sea_orm::DatabaseTransaction = self
-            .connection
-            .begin()
-            .await
-            .map_err(crate::config::DbError::Connection)?;
-
         txn.execute_raw(delete_sql)
             .await
             .map_err(crate::config::DbError::Connection)?;
@@ -619,6 +648,7 @@ impl MigrationExecutor {
         // 从历史记录中移除
         self.history.applied_migrations.retain(|m| m.version != version);
 
+        tracing::info!("Successfully rolled back migration v{}", version);
         Ok(())
     }
 }

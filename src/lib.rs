@@ -66,6 +66,10 @@ pub mod audit;
 /// 缓存模块
 #[cfg(feature = "cache")]
 pub mod cache;
+
+/// 缓存 trait 接口和错误类型
+#[cfg(feature = "cache")]
+pub use cache::{Cache, CacheError, CacheManager, MemoryCache};
 /// 配置管理模块
 pub mod config;
 
@@ -76,8 +80,8 @@ pub use config::{ConfigError, DatabaseType, DbConfig, DbConfigBuilder, DbError, 
 /// 统一错误模块（渐进式重构）
 pub mod error;
 pub use error::{AuditError, MigrationError};
-pub use error::{ConfigError as ConfigErrorNew, DbError as DbErrorNew, PermissionError, PoolError};
 pub use error::{ConfigResult as ConfigResultNew, DbResult as DbResultNew, PermissionResult, PoolResult};
+pub use error::{DbError as DbErrorNew, PermissionError, PoolError};
 
 /// 实体转换模块
 pub mod entity;
@@ -98,12 +102,20 @@ pub mod health;
 /// Metrics 收集模块
 #[cfg(feature = "metrics")]
 pub mod metrics;
+
+/// MetricsCollector trait 接口
+#[cfg(feature = "metrics")]
+pub use metrics::MetricsCollectorTrait;
 /// Migration 模块
 #[cfg(feature = "migration")]
 pub mod migration;
 /// 权限控制模块
 #[cfg(feature = "permission")]
 pub mod permission;
+
+/// 权限提供者 trait 接口和实现
+#[cfg(feature = "permission")]
+pub use permission::{MemoryPermissionProvider, PermissionProvider, PermissionProviderError, YamlPermissionProvider};
 /// SQL 解析模块
 ///
 /// 提供 SQL 语句解析和操作类型分类功能。
@@ -156,8 +168,9 @@ pub mod permission_engine;
 #[cfg(feature = "permission-engine")]
 pub use permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
-    PermissionEngine, PermissionEngineConfig, PermissionProvider, PermissionResource, PermissionRule,
-    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role, YamlPermissionProvider,
+    PermissionEngine, PermissionEngineConfig, PermissionProvider as EnginePermissionProvider, PermissionResource,
+    PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
+    YamlPermissionProvider as EngineYamlPermissionProvider,
 };
 /// 连接池管理模块
 pub mod pool;
@@ -174,6 +187,10 @@ pub mod tracing;
 pub use crate::pool::DbPool;
 pub use crate::pool::Session;
 pub use crate::pool::{ConnectionPool, DatabaseSession};
+
+// DI-related exports
+pub use crate::pool::DbPoolBuilder;
+pub use crate::pool::DbPoolDependencies;
 
 /// 过程宏重新导出
 #[cfg(feature = "macros")]
