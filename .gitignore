@@ -35,6 +35,10 @@ Cargo.lock
 
 # Claude AI 配置
 .claude/
+CLAUDE.md
+
+# Qoder AI 配置
+.qoder/
 
 # Serena AI 配置
 .serena/
@@ -132,6 +136,9 @@ docs/task.md
 docs/tdd.md
 docs/test.md
 docs/uat.md
+
+# 项目计划文档
+docs/plans/
 
 # Pre-commit 日志
 .git/pre-commit-*.log
