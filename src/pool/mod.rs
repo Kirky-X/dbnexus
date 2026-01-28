@@ -27,7 +27,6 @@ pub use sea_orm::{ConnectionTrait, TransactionTrait};
 use crate::config::{DbConfig, DbResult};
 use async_trait::async_trait;
 use sea_orm::ExecResult;
-use std::sync::Arc;
 
 /// 连接池抽象 trait
 ///
