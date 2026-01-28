@@ -81,10 +81,10 @@ impl PermissionProvider for RbacProvider {
         match self.roles.get(role) {
             Some(policy) => {
                 for table_perm in &policy.tables {
-                    if table_perm.name == "*" || table_perm.name == table {
-                        if table_perm.operations.contains(&operation) {
-                            return Ok(true);
-                        }
+                    if (table_perm.name == "*" || table_perm.name == table)
+                        && table_perm.operations.contains(&operation)
+                    {
+                        return Ok(true);
                     }
                 }
                 Ok(false)
