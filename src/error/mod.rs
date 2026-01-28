@@ -69,33 +69,14 @@ pub enum PermissionError {
     RateLimited,
 }
 
-/// 配置错误
-#[derive(Debug, thiserror::Error)]
-pub enum ConfigError {
-    /// 缺少必需字段
-    #[error("Missing required field: {0}")]
-    MissingField(&'static str),
-
-    /// 格式错误
-    #[error("Invalid format for field: {0}")]
-    InvalidFormat(String),
-
-    /// 文件未找到
-    #[error("Configuration file not found")]
-    FileNotFound,
-
-    /// 文件读取错误
-    #[error("Failed to read configuration file: {0}")]
-    FileReadError(String),
-
-    /// URL 格式错误
-    #[error("Invalid database URL format: {0}")]
-    InvalidUrl(String),
-
-    /// 不支持的数据库协议
-    #[error("Unsupported database protocol")]
-    UnsupportedProtocol,
-}
+/// 结果类型别名
+pub type DbResult<T> = Result<T, DbError>;
+/// 权限检查结果
+pub type PermissionResult<T> = Result<T, PermissionError>;
+/// 连接池操作结果
+pub type PoolResult<T> = Result<T, PoolError>;
+/// 配置操作结果
+pub type ConfigResult<T> = Result<T, crate::config::ConfigError>;
 
 /// 迁移错误
 #[derive(Debug, thiserror::Error)]
@@ -138,14 +119,6 @@ pub enum AuditError {
 }
 
 /// 结果类型别名
-pub type DbResult<T> = Result<T, DbError>;
-/// 连接池操作结果
-pub type PoolResult<T> = Result<T, PoolError>;
-/// 权限检查结果
-pub type PermissionResult<T> = Result<T, PermissionError>;
-/// 配置操作结果
-pub type ConfigResult<T> = Result<T, ConfigError>;
-/// 迁移操作结果
 pub type MigrationResult<T> = Result<T, MigrationError>;
 /// 审计操作结果
 pub type AuditResult<T> = Result<T, AuditError>;

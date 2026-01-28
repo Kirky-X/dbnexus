@@ -1,11 +1,14 @@
 // Copyright (c) 2026 Kirky.X
 //
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
+// Licensed under MIT License
+// See LICENSE file in project root for full license information.
 
 //! 权限控制模块
 //!
 //! 提供基于角色的表级权限控制功能
+
+pub mod advanced;
+pub mod rbac;
 
 use dashmap::DashMap;
 use lru::LruCache;
@@ -17,6 +20,218 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::sync::Mutex as AsyncMutex;
+
+// ============================================================================
+// PermissionProvider Trait Interface
+// ============================================================================
+
+/// 权限提供者错误类型
+#[derive(Debug, Error)]
+pub enum PermissionProviderError {
+    /// 角色未找到
+    #[error("Role '{0}' not found")]
+    RoleNotFound(String),
+
+    /// 配置加载失败
+    #[error("Failed to load config: {0}")]
+    LoadError(String),
+
+    /// 权限检查失败
+    #[error("Permission check failed: {0}")]
+    CheckError(String),
+
+    /// 未知错误
+    #[error("Unknown error: {0}")]
+    Unknown(String),
+}
+
+/// 权限提供者 trait 接口
+///
+/// 定义权限配置的通用接口，便于测试和替换实现。
+/// 所有实现必须支持 `Send + Sync` 以便在多线程环境中使用。
+///
+/// # Example
+///
+/// ```ignore
+/// use std::sync::Arc;
+/// use dbnexus::permission::PermissionProvider;
+///
+/// // 使用 trait 对象进行动态分发
+/// let provider: Arc<dyn PermissionProvider> = Arc::new(YamlPermissionProvider::new());
+///
+/// // 或者在测试中使用 mock 实现
+/// struct MockProvider;
+/// impl PermissionProvider for MockProvider {
+///     fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
+///         Some(RolePolicy::default())
+///     }
+/// }
+/// ```
+pub trait PermissionProvider: Send + Sync {
+    /// 获取角色策略
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - 角色名称
+    ///
+    /// # Returns
+    ///
+    /// 返回角色的权限策略，如果角色不存在则返回 None
+    fn get_role_policy(&self, role: &str) -> Option<RolePolicy>;
+
+    /// 检查权限
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - 角色名称
+    /// * `table` - 表名
+    /// * `operation` - 操作类型
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(true)` - 有权限
+    /// - `Ok(false)` - 无权限
+    /// - `Err(_)` - 检查失败
+    fn check_access(
+        &self,
+        role: &str,
+        table: &str,
+        operation: PermissionAction,
+    ) -> Result<bool, PermissionProviderError>;
+
+    /// 获取所有角色名称
+    ///
+    /// # Returns
+    ///
+    /// 返回所有已配置的角色名称
+    fn get_roles(&self) -> Vec<String>;
+
+    /// 检查角色是否存在
+    fn has_role(&self, role: &str) -> bool {
+        self.get_role_policy(role).is_some()
+    }
+
+    /// 刷新配置（如果支持动态加载）
+    #[allow(async_fn_in_trait)]
+    async fn refresh(&mut self) -> Result<(), PermissionProviderError> {
+        Ok(())
+    }
+}
+
+/// YAML 文件权限提供者
+///
+/// 从 YAML 文件加载权限配置
+#[derive(Debug, Clone)]
+pub struct YamlPermissionProvider {
+    /// 权限配置
+    config: Arc<PermissionConfig>,
+    /// 配置文件路径
+    path: Option<String>,
+}
+
+impl YamlPermissionProvider {
+    /// 创建新的 YAML 权限提供者
+    pub fn new(path: &str) -> Self {
+        let config = if let Ok(content) = std::fs::read_to_string(path) {
+            PermissionConfig::from_yaml(&content).unwrap_or_default()
+        } else {
+            PermissionConfig::deny_all()
+        };
+
+        Self {
+            config: Arc::new(config),
+            path: Some(path.to_string()),
+        }
+    }
+
+    /// 从配置创建
+    pub fn from_config(config: PermissionConfig) -> Self {
+        Self {
+            config: Arc::new(config),
+            path: None,
+        }
+    }
+}
+
+impl PermissionProvider for YamlPermissionProvider {
+    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
+        self.config.get_role_policy(role).cloned()
+    }
+
+    fn check_access(
+        &self,
+        role: &str,
+        table: &str,
+        operation: PermissionAction,
+    ) -> Result<bool, PermissionProviderError> {
+        Ok(self.config.check_access(role, table, operation))
+    }
+
+    fn get_roles(&self) -> Vec<String> {
+        self.config.roles.keys().cloned().collect()
+    }
+
+    async fn refresh(&mut self) -> Result<(), PermissionProviderError> {
+        if let Some(ref path) = self.path {
+            match std::fs::read_to_string(path) {
+                Ok(content) => match PermissionConfig::from_yaml(&content) {
+                    Ok(config) => {
+                        self.config = Arc::new(config);
+                        Ok(())
+                    }
+                    Err(e) => Err(PermissionProviderError::LoadError(e.to_string())),
+                },
+                Err(e) => Err(PermissionProviderError::LoadError(e.to_string())),
+            }
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// 内存权限提供者
+///
+/// 允许程序化配置权限
+#[derive(Debug, Default, Clone)]
+pub struct MemoryPermissionProvider {
+    config: Arc<PermissionConfig>,
+}
+
+impl MemoryPermissionProvider {
+    /// 创建新的内存权限提供者
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 添加角色策略
+    pub fn add_role(&mut self, role: &str, policy: RolePolicy) {
+        Arc::make_mut(&mut self.config).roles.insert(role.to_string(), policy);
+    }
+
+    /// 移除角色
+    pub fn remove_role(&mut self, role: &str) -> bool {
+        Arc::make_mut(&mut self.config).roles.remove(role).is_some()
+    }
+}
+
+impl PermissionProvider for MemoryPermissionProvider {
+    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
+        self.config.get_role_policy(role).cloned()
+    }
+
+    fn check_access(
+        &self,
+        role: &str,
+        table: &str,
+        operation: PermissionAction,
+    ) -> Result<bool, PermissionProviderError> {
+        Ok(self.config.check_access(role, table, operation))
+    }
+
+    fn get_roles(&self) -> Vec<String> {
+        self.config.roles.keys().cloned().collect()
+    }
+}
 
 /// 权限相关错误类型
 #[derive(Debug, Error)]
@@ -1132,3 +1347,13 @@ roles:
         );
     }
 }
+
+// ============================================================================
+// Public API Re-exports
+// ============================================================================
+
+// Re-export AdvancedRbacProvider for easy access
+pub use self::advanced::AdvancedRbacProvider;
+
+// Re-export RbacProvider for easy access
+pub use self::rbac::RbacProvider;

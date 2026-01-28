@@ -185,11 +185,25 @@ impl Session {
             .unwrap_or(false)
     }
 
-    /// 获取连接引用
-    pub fn connection(&mut self) -> Result<&mut DatabaseConnection, DbError> {
+    /// 获取连接引用（仅内部宏和测试使用）
+    ///
+    /// 用户应通过 Entity 的 CRUD 方法进行数据库操作，不应直接调用此方法
+    pub(crate) fn connection(&mut self) -> Result<&mut DatabaseConnection, DbError> {
         self.connection
             .as_mut()
             .ok_or_else(|| DbError::Config("Connection not available".to_string()))
+    }
+
+    /// 创建迁移执行器（仅内部使用）
+    ///
+    /// 用于迁移功能，将底层连接包装成 MigrationExecutor
+    #[cfg(feature = "migration")]
+    pub(crate) fn create_migration_executor(
+        &mut self,
+        db_type: crate::config::DatabaseType,
+    ) -> Result<super::MigrationExecutor, DbError> {
+        let conn = self.connection()?.clone();
+        Ok(super::MigrationExecutor::new(conn, db_type))
     }
 
     /// 执行原始 SQL（带权限检查）

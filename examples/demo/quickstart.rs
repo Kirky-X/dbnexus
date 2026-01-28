@@ -8,15 +8,38 @@
 //! 展示 dbnexus 的基本使用方法，包括：
 //! - 定义 Entity 并自动生成 CRUD 方法
 //! - 创建数据库连接池
-//! - 获取 Session 执行数据库操作
+//! - 通过 Entity API 执行数据库操作（不暴露 connection）
 //!
 //! # 运行示例
 //!
 //! ```bash
 //! cargo run --example quickstart --features sqlite
-//! ```
+//!
 
 use dbnexus::{DbConfig, DbPool};
+use sea_orm::entity::prelude::*;
+
+// ============================================
+// 定义用户实体（使用 Sea-ORM 宏）
+// ============================================
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[sea_orm(table_name = "users")]
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+}
+
+impl Entity for Entity {}
+
+// 为 Entity 添加 CRUD 方法（自动生成 insert, find_by_id, update, delete 等）
+db_crud!(Entity);
+
+// ============================================
+// 主函数
+// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,30 +76,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("✓ 表创建成功");
 
-    // 插入用户
-    session
-        .execute_raw("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com')")
-        .await?;
-    println!("✓ 用户插入成功: 1 <alice@example.com>");
+    // ============================================
+    // 使用 Entity API 进行 CRUD 操作
+    // ============================================
+    println!("\n📋 使用 Entity API 进行 CRUD 操作:");
 
-    // 查询用户
-    let result = session
-        .execute_raw("SELECT id, name, email FROM users WHERE id = 1")
-        .await?;
-    println!("✓ 用户查询成功: {} 行受影响", result.rows_affected());
+    // ----------------------------------------------------
+    // 插入用户 - 使用 Entity::insert()
+    // ----------------------------------------------------
+    let user = Model {
+        id: 0, // 主键由数据库自动生成
+        name: "Alice".to_string(),
+        email: "alice@example.com".to_string(),
+    };
+    let inserted_user = Entity::insert(&session, user).await?;
+    println!("  ✓ INSERT: 插入用户 'Alice' (id={})", inserted_user.id);
 
-    // 更新用户
-    session
-        .execute_raw("UPDATE users SET email = 'alice_new@example.com' WHERE id = 1")
-        .await?;
-    println!("✓ 用户更新成功");
+    // ----------------------------------------------------
+    // 查询用户 - 使用 Entity::find_by_id()
+    // ----------------------------------------------------
+    let user_found = Entity::find_by_id(&session, inserted_user.id).await?;
+    println!(
+        "  ✓ SELECT: 查询用户 'Alice' (id={}, email={})",
+        user_found.id, user_found.email
+    );
 
-    // 删除用户
-    session.execute_raw("DELETE FROM users WHERE id = 1").await?;
-    println!("✓ 用户删除成功");
+    // ----------------------------------------------------
+    // 更新用户 - 使用 ActiveModel::save()
+    // ----------------------------------------------------
+    let mut active_model: sea_orm::ActiveModel = user_found.into();
+    active_model.email = sea_orm::Set("alice_new@example.com".to_string());
+    let updated_user = active_model.save(&session).await?;
+    println!("  ✓ UPDATE: 更新用户邮箱 (id={})", updated_user.id.unwrap());
 
-    // 删除表
+    // ----------------------------------------------------
+    // 删除用户 - 使用 ActiveModel::delete()
+    // ----------------------------------------------------
+    let user_to_delete = Entity::find_by_id(&session, inserted_user.id).await?.unwrap();
+    let _: sea_orm::ActiveModel = user_to_delete.delete(&session).await?;
+    println!("  ✓ DELETE: 删除用户 'Alice' (id={})", user_to_delete.id);
+
+    // ============================================
+    // 使用 execute_raw_ddl 进行 DDL 操作（这是合理的使用场景）
+    // ============================================
     session.execute_raw_ddl("DROP TABLE users").await?;
+    println!("\n✓ DDL 操作完成（删除表）");
 
     // 获取连接池状态
     let status = pool.status();
@@ -86,6 +130,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\n✨ 示例运行完成！");
+    println!("\n📚 关键点:");
+    println!("  1. Session 不暴露 connection，用户无法直接访问底层连接");
+    println!("  2. 所有 CRUD 操作通过 Entity API 进行");
+    println!("  3. execute_raw_ddl 用于 DDL 操作（合理的使用场景）");
+    println!("  4. 权限控制和指标收集由宏自动处理");
 
     Ok(())
+}
+
+// 配置构建器辅助函数
+fn db_config_builder() -> dbnexus::config::DbConfigBuilder {
+    dbnexus::config::DbConfigBuilder::new()
 }
