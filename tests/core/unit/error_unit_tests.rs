@@ -7,7 +7,8 @@
 //!
 //! 测试 DbError, PoolError, PermissionError, ConfigError, MigrationError, AuditError
 
-use dbnexus::error::{AuditError, ConfigError, DbError, MigrationError, PermissionError, PoolError};
+use dbnexus::ConfigError;
+use dbnexus::error::{AuditError, DbError, MigrationError, PermissionError, PoolError};
 
 // ============================================================================
 // DbError 测试
@@ -125,14 +126,14 @@ fn test_permission_error_display_variants() {
 
 #[test]
 fn test_config_error_missing_field() {
-    let error = ConfigError::MissingField("url");
-    assert_eq!(format!("{error}"), "Missing required field: url");
+    let error = ConfigError::MissingField;
+    assert_eq!(format!("{error}"), "Missing required configuration field");
 }
 
 #[test]
 fn test_config_error_invalid_format() {
-    let error = ConfigError::InvalidFormat("timeout value".to_string());
-    assert_eq!(format!("{error}"), "Invalid format for field: timeout value");
+    let error = ConfigError::InvalidFormat;
+    assert_eq!(format!("{error}"), "Invalid configuration format");
 }
 
 #[test]
@@ -143,11 +144,8 @@ fn test_config_error_file_not_found() {
 
 #[test]
 fn test_config_error_file_read_error() {
-    let error = ConfigError::FileReadError("/etc/dbnexus.yaml".to_string());
-    assert_eq!(
-        format!("{error}"),
-        "Failed to read configuration file: /etc/dbnexus.yaml"
-    );
+    let error = ConfigError::IoError;
+    assert_eq!(format!("{error}"), "Configuration file I/O error");
 }
 
 #[test]
@@ -164,17 +162,17 @@ fn test_config_error_unsupported_protocol() {
 
 #[test]
 fn test_config_error_variants() {
-    let missing = ConfigError::MissingField("max_connections");
-    let invalid = ConfigError::InvalidFormat("boolean".to_string());
+    let missing = ConfigError::MissingField;
+    let invalid = ConfigError::InvalidFormat;
     let not_found = ConfigError::FileNotFound;
-    let read_error = ConfigError::FileReadError("config.yml".to_string());
+    let read_error = ConfigError::IoError;
     let invalid_url = ConfigError::InvalidUrl("ftp://localhost".to_string());
     let unsupported = ConfigError::UnsupportedProtocol;
 
-    assert!(format!("{missing}").contains("max_connections"));
-    assert!(format!("{invalid}").contains("boolean"));
+    assert!(format!("{missing}").contains("Missing"));
+    assert!(format!("{invalid}").contains("Invalid"));
     assert!(format!("{not_found}").contains("file"));
-    assert!(format!("{read_error}").contains("config.yml"));
+    assert!(format!("{read_error}").contains("I/O"));
     assert!(format!("{invalid_url}").contains("ftp://localhost"));
     assert!(format!("{unsupported}").contains("protocol"));
 }
@@ -399,7 +397,7 @@ fn test_error_with_empty_message() {
 #[test]
 fn test_error_with_long_message() {
     let long_message = "a".repeat(1000);
-    let error = ConfigError::InvalidFormat(long_message.clone());
+    let error = ConfigError::InvalidUrl(long_message.clone());
     let display = format!("{error}");
 
     assert!(display.contains(&long_message));
@@ -415,7 +413,7 @@ fn test_error_with_special_characters() {
 
 #[test]
 fn test_error_with_unicode() {
-    let error = ConfigError::InvalidFormat("错误消息".to_string());
+    let error = ConfigError::InvalidUrl("错误消息".to_string());
     let display = format!("{error}");
 
     assert!(display.contains("错误消息"));

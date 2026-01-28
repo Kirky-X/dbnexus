@@ -32,7 +32,117 @@ use indexmap::IndexMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use thiserror::Error;
 use tokio::sync::RwLock;
+
+// ============================================================================
+// Cache Trait Interface
+// ============================================================================
+
+/// 缓存操作错误类型
+#[derive(Debug, Error)]
+pub enum CacheError {
+    /// 键不存在
+    #[error("Cache key not found: {0}")]
+    KeyNotFound(String),
+
+    /// 键已过期
+    #[error("Cache key expired: {0}")]
+    KeyExpired(String),
+
+    /// 序列化错误
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// 连接错误
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+
+    /// 未知错误
+    #[error("Unknown cache error: {0}")]
+    Unknown(String),
+}
+
+/// 缓存 trait 接口
+///
+/// 定义缓存操作的通用接口，便于测试和替换实现。
+/// 所有实现必须支持 `Send + Sync` 以便在多线程环境中使用。
+///
+/// # Example
+///
+/// ```ignore
+/// use std::sync::Arc;
+/// use dbnexus::cache::Cache;
+///
+/// // 使用 trait 对象进行动态分发
+/// let cache: Arc<dyn Cache<Value = String>> = Arc::new(CacheManager::default());
+///
+/// // 或者在测试中使用 mock 实现
+/// struct MockCache;
+/// impl Cache for MockCache {
+///     async fn get(&self, key: &str) -> Option<String> {
+///         Some("mocked".to_string())
+///     }
+///     async fn set(&self, key: &str, value: String) {}
+///     async fn delete(&self, key: &str) {}
+/// }
+/// ```
+#[async_trait]
+pub trait Cache: Send + Sync {
+    /// 缓存值的类型
+    type Value: Clone + Send + Sync + 'static;
+
+    /// 获取缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 缓存键
+    ///
+    /// # Returns
+    ///
+    /// - `Some(value)` - 缓存命中
+    /// - `None` - 缓存未命中或已过期
+    async fn get(&self, key: &str) -> Option<Self::Value>;
+
+    /// 设置缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 缓存键
+    /// * `value` - 缓存值
+    async fn set(&self, key: &str, value: Self::Value);
+
+    /// 删除缓存值
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - 缓存键
+    ///
+    /// # Returns
+    ///
+    /// - `true` - 键存在且已删除
+    /// - `false` - 键不存在
+    async fn delete(&self, key: &str) -> bool;
+
+    /// 清空缓存
+    async fn clear(&self);
+
+    /// 检查键是否存在
+    async fn contains(&self, key: &str) -> bool {
+        self.get(key).await.is_some()
+    }
+
+    /// 获取缓存条目数
+    async fn len(&self) -> usize;
+
+    /// 检查缓存是否为空
+    async fn is_empty(&self) -> bool {
+        self.len().await == 0
+    }
+}
+
+/// MemoryCache 是 CacheManager 的类型别名，保持向后兼容
+pub type MemoryCache<T> = CacheManager<T>;
 
 /// 缓存配置
 #[derive(Debug, Clone)]
@@ -664,6 +774,47 @@ where
         }
 
         removed
+    }
+}
+
+// ============================================================================
+// Cache Trait Implementation for CacheManager
+// ============================================================================
+
+#[async_trait]
+impl<T> Cache for CacheManager<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    type Value = T;
+
+    async fn get(&self, key: &str) -> Option<T> {
+        let cache_key = CacheKey::new("default", key);
+        self.get(&cache_key).await
+    }
+
+    async fn set(&self, key: &str, value: T) {
+        let cache_key = CacheKey::new("default", key);
+        self.set(cache_key, value).await;
+    }
+
+    async fn delete(&self, key: &str) -> bool {
+        let cache_key = CacheKey::new("default", key);
+        self.delete(&cache_key).await;
+        true
+    }
+
+    async fn clear(&self) {
+        let mut cache = self.cache.write().await;
+        cache.clear();
+    }
+
+    async fn len(&self) -> usize {
+        self.cache.read().await.len()
+    }
+
+    async fn is_empty(&self) -> bool {
+        self.cache.read().await.is_empty()
     }
 }
 

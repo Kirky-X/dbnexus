@@ -86,7 +86,7 @@ default = [
     "permission",
     "sql-parser",
     "macros",
-    "config-env",  # 环境变量配置，默认启用
+    "config-env",
 ]
 
 # Async runtime (互斥)
@@ -157,7 +157,20 @@ cli-tests = []
 minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "lru", "regex", "sql-parser"]
 
 # 微服务基础配置（连接池 + 权限 + SQL 解析 + PostgreSQL + 健康检查）
-microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "pool-health-check", "config-yaml", "regex", "lru"]
+# 注意：不继承 default 特性，需要明确指定所有依赖
+microservice = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "permission",
+    "sql-parser",
+    "config-env",
+    "pool-health-check",
+    "config-yaml",
+    "regex",
+    "lru",
+    "macros",
+    "cache",
+]
 
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
 all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]

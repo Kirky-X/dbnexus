@@ -224,8 +224,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
         }
     };
 
-    let connection = session.connection()?.clone();
-    let mut executor = MigrationExecutor::new(connection, db_type);
+    let mut executor = session.create_migration_executor(db_type)?;
 
     if let Err(e) = executor.load_history().await {
         println!("\n⚠️  无法加载迁移历史: {}", e);
@@ -451,8 +450,7 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
 
     // 创建迁移执行器
     let mut session = pool.get_session("admin").await?;
-    let connection = session.connection()?.clone();
-    let mut executor = MigrationExecutor::new(connection, db_type);
+    let mut executor = session.create_migration_executor(db_type)?;
 
     // 加载迁移历史
     executor.load_history().await?;
