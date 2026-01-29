@@ -14,7 +14,7 @@ proc-macro = true
 
 [dependencies]
 # Proc macro dependencies
-syn = { version = "2.0.112", features = ["full", "extra-traits"] }
+syn = { version = "2.0.114", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
 proc-macro-error = "1"

@@ -907,7 +907,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_clear() {
         let config = CacheConfig::default();
-        let mut cache = CacheManager::<String>::new(config);
+        let cache = CacheManager::<String>::new(config);
 
         let key = CacheKey::new("users", "1");
         cache.set(key.clone(), "test".to_string()).await;
