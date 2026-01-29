@@ -28,6 +28,9 @@ use crate::config::{DbConfig, DbResult};
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
+#[cfg(feature = "metrics")]
+use std::sync::Arc;
+
 /// 连接池抽象 trait
 ///
 /// 定义连接池的通用接口，便于测试和替换实现
