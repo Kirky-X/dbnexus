@@ -378,7 +378,11 @@ async fn test_trace_context_persistence() {
     let result = common::verify_db_operation_with_trace(&pool, &table_name, trace_id).await;
 
     // Assert
-    assert!(result.is_ok(), "Database operation with trace should succeed");
+    assert!(
+        result.is_ok(),
+        "Database operation with trace should succeed: {:?}",
+        result.err()
+    );
 
     // 清理
     common::cleanup_tracing_test_table(&pool, &table_name).await;
@@ -457,7 +461,11 @@ async fn test_trace_propagation_with_db_operations() {
             safe_table_name, safe_trace_id
         ))
         .await;
-    assert!(insert_result.is_ok(), "Insert should succeed");
+    assert!(
+        insert_result.is_ok(),
+        "Insert should succeed: {:?}",
+        insert_result.err()
+    );
 
     // 查询验证
     let select_result = session
@@ -466,7 +474,11 @@ async fn test_trace_propagation_with_db_operations() {
             safe_table_name, safe_trace_id
         ))
         .await;
-    assert!(select_result.is_ok(), "Select should succeed");
+    assert!(
+        select_result.is_ok(),
+        "Select should succeed: {:?}",
+        select_result.err()
+    );
 
     // 清理
     common::cleanup_tracing_test_table(&pool, &table_name).await;
@@ -513,7 +525,7 @@ async fn test_multi_request_trace_consistency() {
     // Assert - 所有操作都成功
     for (i, result) in results.into_iter().enumerate() {
         let inner = result.expect(format!("Task {} should complete", i).as_str());
-        assert!(inner.is_ok(), "Operation {} should succeed", i);
+        assert!(inner.is_ok(), "Operation {} should succeed: {:?}", i, inner.err());
     }
 
     // 验证所有记录使用相同的追踪ID

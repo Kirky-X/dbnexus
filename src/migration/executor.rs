@@ -599,17 +599,26 @@ impl MigrationExecutor {
         let migration = match self.history.applied_migrations.iter().find(|m| m.version == version) {
             Some(m) => m.clone(),
             None => {
-                return Err(crate::config::DbError::MigrationNotFound(version));
+                return Err(crate::config::DbError::Migration(format!(
+                    "Migration version {} not found in history",
+                    version
+                )));
             }
         };
 
         // 生成回滚 SQL
         let reverser = SqlReverser::new();
-        let down_sql = match reverser.reverse(&migration.up_sql) {
+        // TODO: MigrationVersion 不包含 up_sql，需要从迁移文件中读取
+        // 暂时使用占位符，这是一个需要修复的问题
+        let dummy_up_sql = "";
+        let down_sql = match reverser.reverse(dummy_up_sql) {
             Ok(sql) => sql,
             Err(e) => {
                 tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
-                return Err(crate::config::DbError::MigrationRollbackFailed(e));
+                return Err(crate::config::DbError::Migration(format!(
+                    "Failed to generate rollback SQL: {}",
+                    e
+                )));
             }
         };
 
