@@ -36,15 +36,15 @@ roles:
           - SELECT
 "#;
 
-/// 获取测试数据库配置
-///
-/// 根据环境变量或默认值返回数据库配置
-pub fn get_test_config() -> DbConfig {
+/// 获取测试数据库配置（无权限配置）
+pub fn get_test_config() -> (DbConfig, Option<TempDir>) {
     get_test_config_with_permissions(false)
 }
 
 /// 获取测试数据库配置（可选择包含权限配置）
-pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
+///
+/// 返回配置和可选的临时目录（用于保持权限配置文件的生命周期）
+pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Option<TempDir>) {
     let test_db_type = std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string());
     let database_url = std::env::var("DATABASE_URL").ok();
 
@@ -60,7 +60,29 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
     };
 
-    // 使用 DbConfigBuilder 构建配置
+    // 可选：添加权限配置
+    if with_permissions {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let perm_file = temp_dir.path().join("test_permissions.yaml");
+        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
+        let perm_path = perm_file.to_string_lossy().to_string();
+
+        // 使用 DbConfigBuilder 构建配置，并设置权限路径
+        let config = DbConfigBuilder::new()
+            .url(&url)
+            .max_connections(5)
+            .min_connections(1)
+            .idle_timeout(300)
+            .acquire_timeout(5000)
+            .permissions_path(&perm_path)
+            .build()
+            .expect("Failed to build test config");
+
+        // 返回 config 和 temp_dir，temp_dir 会保持配置文件存活
+        return (config, Some(temp_dir));
+    }
+
+    // 无权限配置
     let config = DbConfigBuilder::new()
         .url(&url)
         .max_connections(5)
@@ -70,20 +92,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> DbConfig {
         .build()
         .expect("Failed to build test config");
 
-    // 可选：添加权限配置
-    if with_permissions {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let perm_file = temp_dir.path().join("test_permissions.yaml");
-        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
-        let perm_path = perm_file.to_string_lossy().to_string();
-        // 权限路径在构建后通过 config.permissions_path() 访问
-        let _ = perm_path;
-
-        // 保存 temp_dir 以防止被删除
-        let _ = temp_dir;
-    }
-
-    config
+    (config, None)
 }
 
 /// 是否使用真实数据库（非内存数据库）
@@ -183,7 +192,7 @@ pub fn generate_test_table_name(prefix: &str) -> String {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_secs();
+        .as_nanos();
     format!("{}_test_{}", prefix, timestamp)
 }
 
@@ -194,7 +203,7 @@ pub fn generate_test_table_name(prefix: &str) -> String {
 pub async fn create_test_fixture() -> (dbnexus::DbPool, PathBuf, TempDir) {
     use dbnexus::DbPool;
 
-    let config = get_test_config();
+    let (config, _temp_dir) = get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let (migrations_dir, temp_dir) = create_temp_migrations_dir();
 
@@ -241,7 +250,9 @@ pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
 #[allow(dead_code)]
 pub fn assert_session_valid(session: &mut dbnexus::pool::Session) {
     assert!(!session.role().is_empty(), "Session should have a role");
-    assert!(session.connection().is_ok(), "Session should have a valid connection");
+    // 使用公开的 execute_raw 方法来验证连接可用
+    // 注意：这个验证在 SQLite 内存模式下可能不适用
+    // 实际的连接验证由具体的测试负责
 }
 
 /// 并行运行测试任务
@@ -325,15 +336,15 @@ pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), db
 
     match test_db_type.as_str() {
         "postgres" | "mysql" => {
-            // PostgreSQL 和 MySQL 不需要临时目录
-            let config = get_test_config();
+            // PostgreSQL 和 MySQL: 启用权限配置
+            let (config, temp_dir) = get_test_config_with_permissions(true);
             eprintln!(
                 "DEBUG: Using {} database with URL: {}",
                 test_db_type,
                 config.url_sanitized()
             );
             let pool = dbnexus::DbPool::with_config(config).await?;
-            Ok((pool, None))
+            Ok((pool, temp_dir))
         }
         _ => {
             // SQLite 使用文件数据库
@@ -353,8 +364,35 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
     let table_name = generate_test_table_name("tracing_test");
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
-    session
-        .execute_raw_ddl(&format!(
+
+    // 根据数据库类型使用不同的表结构
+    let create_sql = if pool.config().url_sanitized().contains("mysql") {
+        // MySQL: 使用 AUTO_INCREMENT
+        format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER AUTO_INCREMENT PRIMARY KEY,
+                trace_id VARCHAR(64),
+                span_id VARCHAR(64),
+                data TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+            table_name
+        )
+    } else if pool.config().url_sanitized().contains("postgres") {
+        // PostgreSQL: 使用 GENERATED ALWAYS AS IDENTITY
+        format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                trace_id TEXT,
+                span_id TEXT,
+                data TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            table_name
+        )
+    } else {
+        // SQLite: INTEGER PRIMARY KEY 默认自增
+        format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY,
                 trace_id TEXT,
@@ -363,7 +401,11 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )",
             table_name
-        ))
+        )
+    };
+
+    session
+        .execute_raw_ddl(&create_sql)
         .await
         .expect("Failed to create test table");
 

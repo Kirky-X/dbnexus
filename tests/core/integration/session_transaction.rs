@@ -18,7 +18,7 @@ mod common;
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_role() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
     assert_eq!(session.role(), "admin");
@@ -27,7 +27,7 @@ async fn test_session_role() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_permission_ctx() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
     let ctx = session.permission_ctx();
@@ -37,7 +37,7 @@ async fn test_session_permission_ctx() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_mark_write() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     session.mark_write();
@@ -47,7 +47,7 @@ async fn test_session_mark_write() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_begin() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     assert!(!session.is_in_transaction());
@@ -58,7 +58,7 @@ async fn test_transaction_begin() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_commit() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
@@ -70,7 +70,7 @@ async fn test_transaction_commit() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_rollback() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
@@ -82,7 +82,7 @@ async fn test_transaction_rollback() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_double_begin_error() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
@@ -93,7 +93,7 @@ async fn test_transaction_double_begin_error() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_commit_without_begin_error() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let result = session.commit().await;
@@ -103,7 +103,7 @@ async fn test_transaction_commit_without_begin_error() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_transaction_rollback_without_begin_error() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     let result = session.rollback().await;
@@ -113,7 +113,7 @@ async fn test_transaction_rollback_without_begin_error() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_should_use_master_in_transaction() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
@@ -123,7 +123,7 @@ async fn test_should_use_master_in_transaction() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_execute_raw_ddl_admin_only() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
     let admin_session = pool.get_session("admin").await.expect("Failed to get session");
@@ -142,7 +142,7 @@ async fn test_execute_raw_ddl_admin_only() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_execute_raw_denies_ddl() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -303,7 +303,7 @@ roles:
 #[tokio::test]
 #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
 async fn test_execute_denies_ddl() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -384,7 +384,7 @@ roles:
 #[tokio::test]
 #[cfg(all(feature = "sqlite", feature = "permission"))]
 async fn test_commit_clears_last_write() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -458,7 +458,7 @@ roles:
 #[tokio::test]
 #[cfg(all(feature = "sqlite", feature = "permission", feature = "sql-parser"))]
 async fn test_execute_with_operation_denies_ddl() {
-    let config = common::get_test_config();
+    let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
