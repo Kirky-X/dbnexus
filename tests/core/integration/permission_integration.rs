@@ -13,7 +13,7 @@ use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RoleP
 mod common;
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_context_role() {
     // 创建测试权限配置文件
@@ -30,9 +30,16 @@ roles:
 "#;
     std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
 
-    // 使用包含权限配置的配置
+    // 使用包含权限配置的配置 - 根据特性选择正确的连接字符串
+    #[cfg(feature = "sqlite")]
+    let url = "sqlite::memory:";
+    #[cfg(feature = "postgres")]
+    let url = "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test";
+    #[cfg(feature = "mysql")]
+    let url = "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test";
+
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(url)
         .max_connections(5)
         .permissions_path("/tmp/test_perms.yaml")
         .build()
@@ -52,7 +59,7 @@ roles:
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_check() {
     // 创建测试权限配置文件
@@ -69,9 +76,16 @@ roles:
 "#;
     std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
 
-    // 使用包含权限配置的配置
+    // 使用包含权限配置的配置 - 根据特性选择正确的连接字符串
+    #[cfg(feature = "sqlite")]
+    let url = "sqlite::memory:";
+    #[cfg(feature = "postgres")]
+    let url = "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test";
+    #[cfg(feature = "mysql")]
+    let url = "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test";
+
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(url)
         .max_connections(5)
         .permissions_path("/tmp/test_perms.yaml")
         .build()

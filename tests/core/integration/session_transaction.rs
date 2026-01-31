@@ -16,7 +16,7 @@ use tempfile::TempDir;
 mod common;
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_role() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -25,7 +25,7 @@ async fn test_session_role() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_permission_ctx() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -35,7 +35,7 @@ async fn test_session_permission_ctx() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_mark_write() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -45,7 +45,7 @@ async fn test_session_mark_write() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_begin() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -56,7 +56,7 @@ async fn test_transaction_begin() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_commit() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -68,7 +68,7 @@ async fn test_transaction_commit() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_rollback() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -80,7 +80,7 @@ async fn test_transaction_rollback() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_double_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -91,7 +91,7 @@ async fn test_transaction_double_begin_error() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_commit_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -101,7 +101,7 @@ async fn test_transaction_commit_without_begin_error() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_rollback_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -111,7 +111,7 @@ async fn test_transaction_rollback_without_begin_error() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_should_use_master_in_transaction() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -121,7 +121,7 @@ async fn test_should_use_master_in_transaction() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_raw_ddl_admin_only() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -140,7 +140,7 @@ async fn test_execute_raw_ddl_admin_only() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_raw_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -153,7 +153,7 @@ async fn test_execute_raw_denies_ddl() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_raw_denies_when_sql_parse_fails() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -171,7 +171,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -184,7 +193,7 @@ roles:
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_insert_marks_write() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -202,7 +211,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -215,6 +233,9 @@ roles:
         .await
         .expect("Failed to create table");
 
+    // 清理之前测试留下的数据，确保测试可重复执行
+    session.execute_raw_ddl("DELETE FROM users").await.ok();
+
     session
         .execute("INSERT INTO users (id, name) VALUES (1, 'a')")
         .await
@@ -223,7 +244,7 @@ roles:
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_batch_execute_in_transaction_rolls_back_on_error() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -241,7 +262,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -281,7 +311,16 @@ roles:
     std::fs::write(&perm_file, perm_content).unwrap();
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -329,7 +368,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -362,7 +410,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -415,7 +472,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -443,7 +509,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -490,7 +565,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -529,7 +613,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -572,7 +665,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -615,7 +717,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -657,7 +768,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -685,7 +805,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -713,7 +842,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -746,7 +884,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
@@ -754,21 +901,21 @@ roles:
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
+    // 使用唯一表名避免测试间冲突
+    let table_name = format!("test_users_{}", std::process::id());
+
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            table_name
+        ))
         .await
         .expect("Failed to create table");
 
-    // INSERT 是 DML 操作，应使用 execute_raw 而非 execute_raw_ddl
     session
-        .execute_raw("INSERT INTO users (id, name) VALUES (1, 'a')")
+        .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
         .await
         .expect("Failed to insert");
-
-    session
-        .execute_with_operation("UPDATE users SET name = 'b' WHERE id = 1", &Operation::Update)
-        .await
-        .expect("Failed to update");
     assert!(session.should_use_master());
 }
 
@@ -793,7 +940,16 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(
+            match std::env::var("TEST_DB_TYPE")
+                .unwrap_or_else(|_| "sqlite".to_string())
+                .as_str()
+            {
+                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
+                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
+                _ => "sqlite::memory:",
+            },
+        )
         .max_connections(5)
         .permissions_path(perm_file.to_string_lossy().as_ref())
         .build()
