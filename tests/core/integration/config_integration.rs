@@ -98,7 +98,7 @@ async fn test_dbpool_from_config() {
 }
 
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_new() {
     let pool = DbPool::new("sqlite::memory:").await.unwrap();
     let _session = pool.get_session("admin").await.unwrap();
