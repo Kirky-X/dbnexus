@@ -188,10 +188,16 @@ impl Session {
     /// 获取连接引用（仅内部宏和测试使用）
     ///
     /// 用户应通过 Entity 的 CRUD 方法进行数据库操作，不应直接调用此方法
+    ///
+    /// # 安全性
+    ///
+    /// 此方法确保连接在使用前是可用的。如果连接已被释放（不应发生），
+    /// 将返回错误。Session 的生命周期管理确保连接始终可用。
     pub(crate) fn connection(&mut self) -> Result<&mut DatabaseConnection, DbError> {
-        self.connection
-            .as_mut()
-            .ok_or_else(|| DbError::Config("Connection not available".to_string()))
+        self.connection.as_mut().ok_or_else(|| {
+            tracing::error!("Connection accessed after being released - this indicates a lifecycle bug");
+            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+        })
     }
 
     /// 创建迁移执行器（仅内部使用）
@@ -771,28 +777,28 @@ fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
 // 实现 DatabaseSession trait
 #[async_trait]
 impl super::DatabaseSession for Session {
-    async fn execute(&mut self, sql: &str) -> DbResult<ExecResult> {
-        self.execute(sql).await
+    async fn execute(&mut self, sql: &str) -> crate::DbResult<ExecResult> {
+        Ok(self.execute(sql).await?)
     }
 
-    async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
-        self.execute_raw(sql).await
+    async fn execute_raw(&self, sql: &str) -> crate::DbResult<ExecResult> {
+        Ok(self.execute_raw(sql).await?)
     }
 
-    async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
-        self.execute_raw_ddl(sql).await
+    async fn execute_raw_ddl(&self, sql: &str) -> crate::DbResult<ExecResult> {
+        Ok(self.execute_raw_ddl(sql).await?)
     }
 
-    async fn begin_transaction(&mut self) -> DbResult<()> {
-        self.begin_transaction().await
+    async fn begin_transaction(&mut self) -> crate::DbResult<()> {
+        Ok(self.begin_transaction().await?)
     }
 
-    async fn commit(&mut self) -> DbResult<()> {
-        self.commit().await
+    async fn commit(&mut self) -> crate::DbResult<()> {
+        Ok(self.commit().await?)
     }
 
-    async fn rollback(&mut self) -> DbResult<()> {
-        self.rollback().await
+    async fn rollback(&mut self) -> crate::DbResult<()> {
+        Ok(self.rollback().await?)
     }
 
     fn role(&self) -> &str {

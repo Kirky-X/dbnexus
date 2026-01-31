@@ -513,14 +513,6 @@ impl DbConfig {
     /// # Deprecated
     ///
     /// 使用 [`Self::url_sanitized`] 替代，此方法将在未来版本中移除。
-    #[deprecated(
-        since = "0.1.1",
-        note = "Use url_sanitized() for logging to prevent credential leakage"
-    )]
-    pub(crate) fn url(&self) -> &str {
-        &self.url
-    }
-
     /// 获取数据库 URL（脱敏版本）
     ///
     /// 隐藏密码等敏感信息，用于日志输出。
@@ -1301,6 +1293,13 @@ impl DbConfig {
     }
 }
 
+// 类型别名（用于向后兼容）
+/// DbConfig 的别名，用于向后兼容
+pub type DbnexusConfig = DbConfig;
+
+/// DbConfigBuilder 的别名，用于向后兼容
+pub type DbnexusConfigBuilder = DbConfigBuilder;
+
 /// 配置自动修正器
 #[derive(Debug, Clone)]
 pub struct ConfigCorrector;
@@ -1597,6 +1596,15 @@ impl ConfigCorrector {
 
 /// 数据库操作结果类型
 pub type DbResult<T> = Result<T, DbError>;
+
+/// 从 error::DbError 转换到 config::DbError
+impl From<crate::error::DbError> for DbError {
+    fn from(err: crate::error::DbError) -> Self {
+        // 提取内部的 sea_orm::DbErr
+        let inner_err = err.inner().clone();
+        Self::Connection(inner_err)
+    }
+}
 
 /// 数据库错误
 #[derive(Debug, Error)]

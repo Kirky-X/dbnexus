@@ -10,8 +10,8 @@
 use dbnexus::DbPool;
 use dbnexus::config::DatabaseType;
 use dbnexus::migration::{
-    Column, ColumnType, Index, MigrationFileParser, MigrationHistory, Schema,
-    SchemaDiffer, SqlGenerator, Table, TableChange,
+    Column, ColumnType, Index, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator, Table,
+    TableChange,
 };
 
 #[path = "../../common/mod.rs"]
