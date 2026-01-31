@@ -33,7 +33,7 @@ async fn test_auto_migrate_config_creation() {
 
 /// TEST-AM-002: 迁移文件扫描测试（使用内存数据库）
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_migration_file_scanning() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
@@ -110,7 +110,7 @@ async fn test_migration_timeout_config() {
 
 /// TEST-AM-004: 空迁移目录测试
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_empty_migrations_directory() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
@@ -135,7 +135,7 @@ async fn test_empty_migrations_directory() {
 
 /// TEST-AM-005: 不存在目录测试
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_nonexistent_migrations_directory() {
     let config = DbConfigBuilder::new()
         .url("sqlite::memory:")
@@ -216,7 +216,7 @@ async fn test_migration_config_from_env() {
 
 /// TEST-AM-007: 迁移版本排序测试（使用内存数据库）
 #[tokio::test]
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_migration_version_sorting() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
