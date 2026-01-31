@@ -228,16 +228,19 @@ roles:
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
+    // 使用唯一表名避免测试间冲突
+    let table_name = format!("test_users_{}", std::process::id());
+
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            table_name
+        ))
         .await
         .expect("Failed to create table");
 
-    // 清理之前测试留下的数据，确保测试可重复执行
-    session.execute_raw_ddl("DELETE FROM users").await.ok();
-
     session
-        .execute("INSERT INTO users (id, name) VALUES (1, 'a')")
+        .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
         .await
         .expect("Failed to insert");
     assert!(session.should_use_master());
