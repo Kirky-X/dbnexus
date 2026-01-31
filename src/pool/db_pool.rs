@@ -7,11 +7,9 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
+#[cfg(feature = "oxcache")]
+use crate::cache::oxcache_adapter::{AsyncCache, OxcacheAdapter};
 use async_trait::async_trait;
-#[cfg(feature = "permission")]
-use lru::LruCache;
-#[cfg(feature = "permission")]
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -20,6 +18,16 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::interval;
 use tokio::time::timeout;
 use tracing::info;
+
+// 为未启用oxcache特性的场景定义AsyncCache trait
+#[cfg(not(feature = "oxcache"))]
+#[async_trait]
+pub trait AsyncCache<K, V> {
+    async fn get(&self, key: &K) -> Option<V>;
+    async fn set(&self, key: K, value: V);
+    async fn remove(&self, key: &K) -> Option<V>;
+    async fn len(&self) -> usize;
+}
 
 /// 连接获取超时警告阈值（毫秒）
 const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
@@ -136,9 +144,9 @@ pub(crate) struct DbPoolInner {
     /// 总连接数
     pub(super) total_count: AtomicU32,
 
-    /// 权限策略 LRU 缓存（使用 tokio 异步锁）
+    /// 权限策略缓存（完全使用 oxcache，线程安全，无需额外锁）
     #[cfg(feature = "permission")]
-    pub(crate) policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
+    pub(crate) policy_cache: Arc<dyn AsyncCache<String, RolePolicy>>,
 
     /// 权限配置（懒加载，使用 tokio 异步锁）
     #[cfg(feature = "permission")]
@@ -214,6 +222,95 @@ impl DbPool {
         Self::with_config(config).await
     }
 
+    /// 使用confers配置创建连接池（DI模式）
+    ///
+    /// 此方法允许功能组件层（inklog, limiteron）注入配置好的confers实例，
+    /// 实现依赖注入架构。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - confers配置实例
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(DbPool)` - 配置好的连接池实例
+    /// * `Err(DbError)` - 配置无效或连接失败
+    ///
+    /// # Configuration Keys
+    ///
+    /// 从confers读取以下配置项（如果不存在则使用默认值）：
+    ///
+    /// - `dbnexus.url`: 数据库连接URL（必需）
+    /// - `dbnexus.max_connections`: 最大连接数（默认20）
+    /// - `dbnexus.min_connections`: 最小连接数（默认5）
+    /// - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
+    /// - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
+    /// - `dbnexus.admin_role`: 管理员角色（默认"admin"）
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::DbPool;
+    /// use std::sync::Arc;
+    ///
+    /// // 假设已有confers配置实例
+    /// let config: Arc<dyn ConfersConfig> = /* ... */;
+    ///
+    /// // 使用confers配置创建连接池
+    /// let pool = DbPool::with_confers(config).await?;
+    /// ```
+    ///
+    /// # Features
+    ///
+    /// 此方法仅在启用 `confers` feature 时可用。
+    #[cfg(feature = "confers")]
+    pub async fn with_confers(config: Arc<dyn confers::ConfersConfig>) -> DbResult<Self> {
+        use crate::config::DbConfigBuilder;
+
+        // 从confers读取URL（必需）
+        let url = config
+            .get_string("dbnexus.url")
+            .ok_or_else(|| DbError::Config("dbnexus.url is required".to_string()))?;
+
+        // 从confers读取其他配置（使用默认值）
+        let max_connections = config
+            .get_int("dbnexus.max_connections")
+            .map(|v| v as u32)
+            .unwrap_or(20);
+
+        let min_connections = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
+
+        let idle_timeout = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
+
+        let acquire_timeout = config
+            .get_int("dbnexus.acquire_timeout")
+            .map(|v| v as u64)
+            .unwrap_or(5000);
+
+        let admin_role = config
+            .get_string("dbnexus.admin_role")
+            .unwrap_or_else(|| "admin".to_string());
+
+        tracing::info!(
+            "Creating DbPool with confers: url={}, max_connections={}",
+            url,
+            max_connections
+        );
+
+        // 使用DbConfigBuilder创建配置
+        let db_config = DbConfigBuilder::new()
+            .url(&url)
+            .max_connections(max_connections)
+            .min_connections(min_connections)
+            .idle_timeout(idle_timeout)
+            .acquire_timeout(acquire_timeout)
+            .admin_role(&admin_role)
+            .build()
+            .map_err(|e| DbError::Config(format!("Config validation failed: {:?}", e)))?;
+
+        Self::with_config(db_config).await
+    }
+
     /// 使用配置创建连接池（带自动修正）
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
         // 使用配置修正器自动修正配置
@@ -244,14 +341,75 @@ impl DbPool {
             );
         }
 
+        // 创建权限策略缓存（使用 trait object 以符合 DI 规范）
         #[cfg(feature = "permission")]
-        let policy_cache = Arc::new(AsyncMutex::new(LruCache::new(
-            NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
-        )));
+        // 创建权限策略缓存（使用 trait object 以符合 DI 规范）
+        #[cfg(all(feature = "permission", feature = "oxcache"))]
+        let cache: OxcacheAdapter<String, RolePolicy> = OxcacheAdapter::new(4096)
+            .await
+            .map_err(|e| crate::config::DbError::Config(format!("Failed to create policy cache: {}", e)))?;
+        #[cfg(all(feature = "permission", feature = "oxcache"))]
+        let policy_cache: Arc<dyn AsyncCache<String, RolePolicy>> = Arc::new(cache);
 
-        // 加载权限配置（如果指定了路径）
+        // 为未启用permission特性的场景提供默认值
+        #[cfg(not(feature = "permission"))]
+        let policy_cache: Arc<dyn AsyncCache<String, ()>> = {
+            // 创建一个空的占位符实现，以便编译通过
+            struct PlaceholderCache;
+            #[cfg(not(feature = "oxcache"))]
+            #[async_trait]
+            impl AsyncCache<String, ()> for PlaceholderCache {
+                async fn get(&self, _key: &String) -> Option<()> {
+                    None
+                }
+                async fn set(&self, _key: String, _value: ()) {}
+                async fn remove(&self, _key: &String) -> Option<()> {
+                    None
+                }
+                async fn len(&self) -> usize {
+                    0
+                }
+            }
+            Arc::new(PlaceholderCache)
+        };
+
+        // 为启用permission但未启用oxcache特性的场景提供默认值
+        #[cfg(all(feature = "permission", not(feature = "oxcache")))]
+        let policy_cache: Arc<dyn AsyncCache<String, RolePolicy>> = {
+            // 创建一个空的占位符实现，以便编译通过
+            struct PlaceholderCache;
+            #[cfg(not(feature = "oxcache"))]
+            #[async_trait]
+            impl AsyncCache<String, RolePolicy> for PlaceholderCache {
+                async fn get(&self, _key: &String) -> Option<RolePolicy> {
+                    None
+                }
+                async fn set(&self, _key: String, _value: RolePolicy) {}
+                async fn remove(&self, _key: &String) -> Option<RolePolicy> {
+                    None
+                }
+                async fn len(&self) -> usize {
+                    0
+                }
+            }
+            Arc::new(PlaceholderCache)
+        };
+
+        // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
         #[cfg(feature = "permission")]
         let permission_config = Self::load_permission_config(&corrected_config).await;
+
+        // 预加载权限策略到缓存（如果存在权限配置）
+        #[cfg(feature = "permission")]
+        if let Some(ref perm_config) = permission_config {
+            for (role_name, policy) in &perm_config.roles {
+                policy_cache.set(role_name.clone(), policy.clone()).await;
+                tracing::debug!("Preloaded permission policy for role '{}'", role_name);
+            }
+        }
+
+        #[cfg(not(feature = "permission"))]
+        let permission_config = None::<std::option::Option<String>>; // 使用通用类型占位
 
         let pool = Self {
             inner: Arc::new(DbPoolInner {
@@ -354,11 +512,13 @@ impl DbPool {
             let permission_config_guard = pool.inner.permission_config.lock().await;
 
             if let Some(ref config) = *permission_config_guard {
-                let mut cache = pool.inner.policy_cache.lock().await;
-                for (role, policy) in &config.roles {
-                    cache.put(role.clone(), policy.clone());
+                #[cfg(feature = "permission")]
+                {
+                    for (role, policy) in &config.roles {
+                        pool.inner.policy_cache.set(role.clone(), policy.clone()).await;
+                    }
+                    info!("Loaded permission policies for {} roles", config.roles.len());
                 }
-                info!("Loaded permission policies for {} roles", config.roles.len());
             }
             drop(permission_config_guard);
         }
@@ -430,10 +590,13 @@ impl DbPool {
         Self::with_config(config).await
     }
 
-    /// 使用配置引用同步创建连接池
+    /// 使用配置引用同步创建连接池（简化版本）
     ///
     /// 此方法是同步的，不会创建数据库连接。
     /// 实际的连接池创建和连接验证在首次获取连接时进行。
+    ///
+    /// 注意：此方法不会初始化权限缓存功能（需要异步初始化）。
+    /// 如果需要完整的异步权限缓存功能，请使用 `with_config()` 异步方法。
     ///
     /// # Example
     ///
@@ -455,6 +618,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果配置验证失败，返回错误
+    #[cfg(not(feature = "permission"))]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
         config.validate()?;
         Ok(Self {
@@ -464,11 +628,58 @@ impl DbPool {
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
-                #[cfg(feature = "permission")]
-                policy_cache: Arc::new(AsyncMutex::new(LruCache::new(
-                    NonZeroUsize::new(4096).expect("LRU cache size must be non-zero"),
-                ))),
-                #[cfg(feature = "permission")]
+                health_check_shutdown: Arc::new(Notify::new()),
+                admin_role: config.admin_role().to_string(),
+                #[cfg(feature = "metrics")]
+                metrics_collector: None,
+                wait_count: AtomicU32::new(0),
+                borrow_count: AtomicU64::new(0),
+                max_active: AtomicU32::new(0),
+            }),
+        })
+    }
+
+    /// 使用配置引用同步创建连接池（简化版本，带权限但不初始化缓存）
+    ///
+    /// 此方法是同步的，不会创建数据库连接。
+    /// 实际的连接池创建和连接验证在首次获取连接时进行。
+    ///
+    /// 注意：此方法不会初始化权限缓存（需要异步初始化）。
+    /// 如果需要完整的异步权限缓存功能，请使用 `with_config()` 异步方法。
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dbnexus::{DbPool, DbConfigBuilder};
+    ///
+    /// let config = DbConfigBuilder::new()
+    ///     .url("sqlite::memory:")
+    ///     .max_connections(10)
+    ///     .min_connections(1)
+    ///     .idle_timeout(300)
+    ///     .acquire_timeout(5000)
+    ///     .build()?;
+    ///
+    /// let pool = DbPool::try_from(&config)?;
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// 如果配置验证失败，返回错误
+    #[cfg(feature = "permission")]
+    pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
+        use crate::cache::oxcache_adapter::SyncCacheAdapter;
+        config.validate()?;
+        // try_from 是同步简化版本，使用同步缓存适配器
+        Ok(Self {
+            inner: Arc::new(DbPoolInner {
+                config: config.clone_config(),
+                idle_connections: AsyncMutex::new(Vec::new()),
+                connection_available: Notify::new(),
+                active_count: AtomicU32::new(0),
+                total_count: AtomicU32::new(0),
+                policy_cache: Arc::new(SyncCacheAdapter::new(256)),
                 permission_config: Arc::new(AsyncMutex::new(None)),
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role().to_string(),

@@ -7,9 +7,6 @@
 //!
 //! 注意: 此测试文件中的部分测试需要内部 API，已暂时跳过
 
-use dbnexus::DbPool;
-use std::time::Duration;
-
 #[path = "../../common/mod.rs"]
 mod common;
 

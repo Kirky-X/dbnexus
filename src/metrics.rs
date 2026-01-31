@@ -284,21 +284,12 @@ pub struct HistogramBucket {
 }
 
 /// 直方图统计
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HistogramStats {
     /// 总样本数
     pub total_samples: u64,
     /// 桶统计
     pub buckets: Vec<HistogramBucket>,
-}
-
-impl Default for HistogramStats {
-    fn default() -> Self {
-        Self {
-            total_samples: 0,
-            buckets: Vec::new(),
-        }
-    }
 }
 
 /// 吞吐量统计
@@ -332,7 +323,7 @@ impl Default for ThroughputStats {
 }
 
 /// 查询统计信息（增强版）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct QueryStats {
     /// 查询次数
     pub count: u64,
@@ -344,18 +335,6 @@ pub struct QueryStats {
     pub histogram: HistogramStats,
     /// 吞吐量统计
     pub throughput: ThroughputStats,
-}
-
-impl Default for QueryStats {
-    fn default() -> Self {
-        Self {
-            count: 0,
-            error_count: 0,
-            latency_percentiles: LatencyPercentiles::default(),
-            histogram: HistogramStats::default(),
-            throughput: ThroughputStats::default(),
-        }
-    }
 }
 
 impl QueryStats {
@@ -1184,7 +1163,7 @@ impl MetricsCollectorTrait for MetricsCollector {
     }
 
     fn query_stats(&self) -> QueryStats {
-        self.get_query_stats("default").unwrap_or_else(|| QueryStats::default())
+        self.get_query_stats("default").unwrap_or_default()
     }
 
     fn connection_stats(&self) -> ConnectionAcquireStats {
@@ -1192,12 +1171,7 @@ impl MetricsCollectorTrait for MetricsCollector {
     }
 
     fn pool_metrics(&self) -> PoolMetrics {
-        let stats = self.pool_status();
-        PoolMetrics {
-            total: stats.total as u64,
-            active: stats.active as u64,
-            idle: stats.idle as u64,
-        }
+        self.pool_status()
     }
 
     fn transaction_stats(&self) -> TransactionStats {

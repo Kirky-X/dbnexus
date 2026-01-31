@@ -1,11 +1,13 @@
 // Copyright (c) 2026 Kirky.X
 //
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
+// Licensed under MIT License
+// See LICENSE file in project root for full license information.
 
 //! 统一错误类型模块
 //!
 //! 定义 DBNexus 项目中所有错误类型的统一接口。
+
+use crate::config::DbError as ConfigDbError;
 
 /// 数据库操作错误
 #[derive(Debug, thiserror::Error)]
@@ -21,6 +23,43 @@ impl DbError {
     /// 获取内部错误引用
     pub fn inner(&self) -> &sea_orm::DbErr {
         &self.0
+    }
+}
+
+// 从 config::DbError 转换到 error::DbError
+impl From<ConfigDbError> for DbError {
+    fn from(err: ConfigDbError) -> Self {
+        match err {
+            ConfigDbError::Connection(db_err) => Self(db_err),
+            ConfigDbError::Config(msg) => Self(sea_orm::DbErr::Custom(format!("Configuration error: {}", msg))),
+            ConfigDbError::Permission(msg) => Self(sea_orm::DbErr::Custom(format!("Permission denied: {}", msg))),
+            ConfigDbError::Transaction(msg) => Self(sea_orm::DbErr::Custom(format!("Transaction error: {}", msg))),
+            ConfigDbError::Migration(msg) => Self(sea_orm::DbErr::Custom(format!("Migration error: {}", msg))),
+        }
+    }
+}
+
+// 从 config::ConfigError 转换到 error::DbError
+impl From<crate::config::ConfigError> for DbError {
+    fn from(err: crate::config::ConfigError) -> Self {
+        Self(sea_orm::DbErr::Custom(format!(
+            "Configuration error: {}",
+            err
+        )))
+    }
+}
+
+/// 从字符串创建 DbError
+impl From<String> for DbError {
+    fn from(msg: String) -> Self {
+        Self(sea_orm::DbErr::Custom(msg))
+    }
+}
+
+/// 从 &str 创建 DbError  
+impl From<&str> for DbError {
+    fn from(msg: &str) -> Self {
+        Self(sea_orm::DbErr::Custom(msg.to_string()))
     }
 }
 
@@ -122,3 +161,50 @@ pub enum AuditError {
 pub type MigrationResult<T> = Result<T, MigrationError>;
 /// 审计操作结果
 pub type AuditResult<T> = Result<T, AuditError>;
+
+// ============================================================================
+// 错误辅助函数
+// ============================================================================
+
+/// 安全地格式化错误消息
+///
+/// 避免在错误消息中暴露敏感信息
+#[cfg(feature = "regex")]
+pub fn safe_error_message(error: &str) -> String {
+    // 使用 regex 移除可能的敏感信息
+    let sensitive_patterns = [
+        r"(?i)(password|passwd|pwd)[=:]\S+",
+        r"(?i)(api_key|apikey|secret|token)[=:]\S+",
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+    ];
+
+    let mut result = error.to_string();
+    for pattern in &sensitive_patterns {
+        if let Ok(re) = regex::Regex::new(pattern) {
+            result = re.replace_all(&result, "[REDACTED]").to_string();
+        }
+    }
+
+    result
+}
+
+/// 安全地格式化错误消息（无 regex 版本）
+#[cfg(not(feature = "regex"))]
+pub fn safe_error_message(error: &str) -> String {
+    // 简单处理：检查常见敏感关键词
+    let lower = error.to_lowercase();
+    if lower.contains("password") || lower.contains("api_key") || lower.contains("secret") {
+        "[REDACTED]".to_string()
+    } else {
+        error.to_string()
+    }
+}
+
+/// 获取错误的根本原因
+pub fn root_cause<E: std::error::Error>(error: &E) -> &dyn std::error::Error {
+    let mut current = error as &dyn std::error::Error;
+    while let Some(source) = current.source() {
+        current = source;
+    }
+    current
+}

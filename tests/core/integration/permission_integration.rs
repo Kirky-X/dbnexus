@@ -181,8 +181,9 @@ async fn test_permission_cache_miss_behavior() {
     use dbnexus::permission::PermissionContext;
 
     // 创建权限上下文（不预加载策略）
-    let ctx =
-        PermissionContext::with_cache_size("test_role".to_string(), 256).expect("Failed to create permission context");
+    let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256)
+        .await
+        .expect("Failed to create permission context");
 
     // 缓存未命中应该返回 false（拒绝访问）
     let result = ctx.check_table_access("users", &Operation::Select).await;
@@ -209,8 +210,9 @@ async fn test_permission_check_with_auto_load() {
     };
 
     // 创建权限上下文
-    let ctx =
-        PermissionContext::with_cache_size("test_role".to_string(), 256).expect("Failed to create permission context");
+    let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256)
+        .await
+        .expect("Failed to create permission context");
 
     // 使用 auto_load 版本（缓存未命中时会自动加载）
     let result = ctx

@@ -272,48 +272,76 @@ pub struct PoolStatus {
 
 ## 配置 API
 
+基于 [confers](https://crates.io/crates/confique) 库实现的配置管理 API。
+
 ### `DbConfig`
 
-数据库配置结构。
+数据库配置结构，通过 confers 派生宏实现。
 
 ```rust
+#[cfg_attr(feature = "confers", derive(Config))]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct DbConfig {
+    #[cfg_attr(feature = "confers", config(env = "DATABASE_URL"))]
     pub url: String,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_MAX_CONNECTIONS, env = "DB_MAX_CONNECTIONS"))]
     pub max_connections: u32,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_MIN_CONNECTIONS, env = "DB_MIN_CONNECTIONS"))]
     pub min_connections: u32,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_IDLE_TIMEOUT, env = "DB_IDLE_TIMEOUT"))]
     pub idle_timeout: u64,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_ACQUIRE_TIMEOUT, env = "DB_ACQUIRE_TIMEOUT"))]
     pub acquire_timeout: u64,
+    
+    #[cfg_attr(feature = "confers", config(env = "DB_PERMISSIONS_PATH"))]
     pub permissions_path: Option<String>,
+    
+    #[cfg_attr(feature = "confers", config(env = "DB_MIGRATIONS_DIR"))]
     pub migrations_dir: Option<PathBuf>,
+    
+    #[cfg_attr(feature = "confers", config(default = false, env = "DB_AUTO_MIGRATE"))]
     pub auto_migrate: bool,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_MIGRATION_TIMEOUT, env = "DB_MIGRATION_TIMEOUT"))]
     pub migration_timeout: u64,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_ADMIN_ROLE, env = "DB_ADMIN_ROLE"))]
     pub admin_role: String,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_TIMEOUT, env = "DB_WARMUP_TIMEOUT"))]
     pub warmup_timeout: u64,
+    
+    #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_RETRIES, env = "DB_WARMUP_RETRIES"))]
     pub warmup_retries: u32,
 }
 ```
 
 **默认值：**
 
-| 字段 | 默认值 |
-|-------|----------|
-| `max_connections` | 20 |
-| `min_connections` | 5 |
-| `idle_timeout` | 300 (秒) |
-| `acquire_timeout` | 5000 (毫秒) |
-| `auto_migrate` | `false` |
-| `migration_timeout` | 60 (秒) |
-| `admin_role` | `"admin"` |
-| `warmup_timeout` | 30 (秒) |
-| `warmup_retries` | 3 |
+| 字段 | 默认值 | 环境变量 |
+|-------|----------|------------|
+| `max_connections` | 20 | `DB_MAX_CONNECTIONS` |
+| `min_connections` | 5 | `DB_MIN_CONNECTIONS` |
+| `idle_timeout` | 300 (秒) | `DB_IDLE_TIMEOUT` |
+| `acquire_timeout` | 5000 (毫秒) | `DB_ACQUIRE_TIMEOUT` |
+| `auto_migrate` | `false` | `DB_AUTO_MIGRATE` |
+| `migration_timeout` | 60 (秒) | `DB_MIGRATION_TIMEOUT` |
+| `admin_role` | `"admin"` | `DB_ADMIN_ROLE` |
+| `warmup_timeout` | 30 (秒) | `DB_WARMUP_TIMEOUT` |
+| `warmup_retries` | 3 | `DB_WARMUP_RETRIES` |
 
 ### `DbConfigBuilder`
 
-用于创建 `DbConfig` 实例的构建器。
+基于 confers 库的配置构建器，提供链式 API 用于构建 `DbConfig` 实例。
 
 ```rust
+#[cfg(feature = "confers")]
 pub struct DbConfigBuilder {
-    // 内部状态
+    builder: confique::Builder<'static, DbConfig>,
 }
 ```
 
@@ -321,74 +349,101 @@ pub struct DbConfigBuilder {
 
 ##### `new`
 
-创建带默认值的新构建器。
+创建新的构建器实例。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn new() -> Self
 ```
 
 ##### `url`
 
-设置数据库连接 URL。
+设置数据库连接 URL（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn url(self, url: &str) -> Self
 ```
 
 ##### `max_connections`
 
-设置最大池大小。
+设置最大池大小（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn max_connections(self, max: u32) -> Self
 ```
 
 ##### `min_connections`
 
-设置最小池大小。
+设置最小池大小（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn min_connections(self, min: u32) -> Self
 ```
 
 ##### `idle_timeout`
 
-设置空闲连接超时（秒）。
+设置空闲连接超时（秒）（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn idle_timeout(self, timeout: u64) -> Self
 ```
 
 ##### `acquire_timeout`
 
-设置连接获取超时（毫秒）。
+设置连接获取超时（毫秒）（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn acquire_timeout(self, timeout: u64) -> Self
 ```
 
 ##### `permissions_path`
 
-设置权限配置文件的路径。
+设置权限配置文件的路径（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn permissions_path(self, path: &str) -> Self
 ```
 
 ##### `auto_migrate`
 
-启用自动数据库迁移。
+启用自动数据库迁移（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn auto_migrate(self, enabled: bool) -> Self
 ```
 
 ##### `admin_role`
 
-设置管理员角色名称。
+设置管理员角色名称（通过环境变量传递给 confers）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn admin_role(self, role: &str) -> Self
+```
+
+##### `file`
+
+添加配置文件源（confers 特性）。
+
+```rust
+#[cfg(feature = "confers")]
+pub fn file<P: AsRef<Path>>(self, path: P) -> Self
+```
+
+##### `env`
+
+启用环境变量加载（confers 特性）。
+
+```rust
+#[cfg(feature = "confers")]
+pub fn env(self) -> Self
 ```
 
 ##### `build`
@@ -396,11 +451,13 @@ pub fn admin_role(self, role: &str) -> Self
 构建 `DbConfig` 实例。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn build(self) -> Result<DbConfig, ConfigError>
 ```
 
 **示例：**
 ```rust
+#[cfg(feature = "confers")]
 let config = DbConfigBuilder::new()
     .url("postgresql://localhost/db")
     .max_connections(20)
@@ -417,9 +474,10 @@ let config = DbConfigBuilder::new()
 
 #### `from_env`
 
-从环境变量加载配置。
+从环境变量加载配置（基于 confers 实现）。
 
 ```rust
+#[cfg(feature = "confers")]
 pub fn from_env() -> Result<DbConfig, ConfigError>
 ```
 
@@ -436,6 +494,9 @@ pub fn from_env() -> Result<DbConfig, ConfigError>
 | `DB_MIGRATIONS_DIR` | String | - | 迁移目录 |
 | `DB_AUTO_MIGRATE` | bool | false | 启用自动迁移 |
 | `DB_ADMIN_ROLE` | String | "admin" | 管理员角色名称 |
+| `DB_MIGRATION_TIMEOUT` | u64 | 60 | 迁移超时（秒） |
+| `DB_WARMUP_TIMEOUT` | u64 | 30 | 预热超时（秒） |
+| `DB_WARMUP_RETRIES` | u32 | 3 | 预热重试次数 |
 
 **示例：**
 ```bash
@@ -445,37 +506,53 @@ export DB_ADMIN_ROLE=admin
 ```
 
 ```rust
+#[cfg(feature = "confers")]
 let config = DbConfig::from_env()?;
 ```
 
-#### `from_yaml_file`
+#### `from_file`
 
-从 YAML 文件加载配置。
-
-```rust
-#[cfg(feature = "config-yaml")]
-pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError>
-```
-
-**YAML 格式：**
-```yaml
-url: "postgresql://localhost/db"
-max_connections: 20
-min_connections: 5
-idle_timeout: 300
-acquire_timeout: 5000
-auto_migrate: true
-admin_role: admin
-```
-
-#### `from_toml_file`
-
-从 TOML 文件加载配置。
+从配置文件加载配置（基于 confers 实现）。
 
 ```rust
-#[cfg(feature = "config-toml")]
-pub fn from_toml_file(path: impl AsRef<Path>) -> Result<DbConfig, ConfigError>
+#[cfg(feature = "confers")]
+pub fn from_file<P: AsRef<Path>>(path: P) -> Result<DbConfig, ConfigError>
 ```
+
+**支持格式：** TOML, YAML, JSON (取决于启用的 confers 特性)
+
+**示例：**
+```toml
+# config.toml
+url = "postgresql://localhost/db"
+max_connections = 20
+min_connections = 5
+idle_timeout = 300
+acquire_timeout = 5000
+auto_migrate = true
+admin_role = "admin"
+```
+
+#### `builder`
+
+获取 confers 构建器用于多源配置加载。
+
+```rust
+#[cfg(feature = "confers")]
+pub fn builder() -> confique::Builder<'static, Self>
+```
+
+**示例：**
+```rust
+#[cfg(feature = "confers")]
+let config = DbConfig::builder()
+    .env()
+    .file("config.toml")
+    .load()?;
+```
+
+> **注意**：原有的 `from_yaml_file` 和 `from_toml_file` 方法已被移除，
+> 请使用 `from_file` 方法配合相应的 confers 特性。
 
 **TOML 格式：**
 ```toml

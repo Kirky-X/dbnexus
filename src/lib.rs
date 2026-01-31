@@ -63,19 +63,22 @@ compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', 
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
-/// 缓存模块
-#[cfg(feature = "cache")]
+/// 缓存模块（基于 oxcache）
+#[cfg(feature = "oxcache")]
 pub mod cache;
 
-/// 缓存 trait 接口和错误类型
-#[cfg(feature = "cache")]
-pub use cache::{Cache, CacheError, CacheManager, MemoryCache};
+/// 缓存配置和类型导出
+#[cfg(feature = "oxcache")]
+pub use cache::{AsyncCache, CacheConfig, CacheKey, CacheValue, OxcacheAdapter, create_memory_cache};
 /// 配置管理模块
 pub mod config;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
-pub use config::{ConfigError, DatabaseType, DbConfig, DbConfigBuilder, DbError, PoolConfig};
+pub use config::{
+    ConfigError, DatabaseType, DbConfig, DbConfig as DbnexusConfig, DbConfigBuilder,
+    DbConfigBuilder as DbnexusConfigBuilder, DbError, PoolConfig,
+};
 
 /// 统一错误模块（渐进式重构）
 pub mod error;

@@ -26,7 +26,7 @@ anyhow = "1.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9.34-deprecated"
+serde_yaml = "0.9.34"
 serde_json = "1.0"
 
 # Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
@@ -45,9 +45,7 @@ tokio-test = "0.4"
 # Metrics
 prometheus = "0.14"
 
-# Caching
-# 注意：需要 >=0.16.3 以修复 RUSTSEC-2026-0002 (IterMut unsoundness)
-lru = ">=0.12.5, <0.17"
+# Caching - 基于 oxcache 的缓存系统
 
 # Random
 rand = "0.9"
@@ -110,9 +108,12 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # Core features (可选，用于最小化部署)
-permission = ["dashmap", "lru", "serde_yaml"]
+permission = ["dashmap", "serde_yaml", "oxcache"]
 sql-parser = ["sqlparser", "regex", "once_cell"]
 macros = ["dbnexus-macros"]
+
+# Oxcache 缓存特性
+oxcache = ["dep:oxcache", "dep:moka"]
 
 # Config features (配置文件支持)
 config-yaml = ["serde_yaml", "regex"]
@@ -130,7 +131,6 @@ auto-migrate = ["migration"]
 sharding = ["twox-hash", "chrono", "futures"]
 global-index = ["sha2", "chrono", "sea-orm/with-json"]
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
-cache = ["uuid", "indexmap"]
 audit = ["chrono", "uuid"]
 permission-engine = []
 health-check = []  # 健康检查模块（内置，无需外部依赖）
@@ -154,26 +154,10 @@ cli-tests = []
 
 # Preset configurations (预设配置)
 # 嵌入式设备最小配置（仅连接池 + 环境变量配置 + SQLite）
-minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "lru", "regex", "sql-parser"]
-
-# 微服务基础配置（连接池 + 权限 + SQL 解析 + PostgreSQL + 健康检查）
-# 注意：不继承 default 特性，需要明确指定所有依赖
-microservice = [
-    "runtime-tokio-rustls",
-    "postgres",
-    "permission",
-    "sql-parser",
-    "config-env",
-    "pool-health-check",
-    "config-yaml",
-    "regex",
-    "lru",
-    "macros",
-    "cache",
-]
+minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "regex", "sql-parser"]
 
 # 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "cache", "audit", "permission-engine", "confers"]
+all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "audit", "permission-engine", "confers"]
 
 [dependencies]
 # Workspace dependencies
@@ -189,7 +173,6 @@ time = { workspace = true }
 prometheus = { workspace = true, optional = true }
 toml = { version = "0.9.10", optional = true }
 parking_lot = "0.12"
-lru = { workspace = true, optional = true }
 home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 http = { version = "1.0", optional = true }
@@ -206,7 +189,9 @@ url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.0", optional = true, features = ["v4"] }
 indexmap = { version = "2.0", optional = true }
-confers = { version = "0.1", optional = true, default-features = false }
+confers = { path = "/home/project/confers", optional = true, default-features = false, features = ["cli"] }
+oxcache = { path = "/home/project/oxcache", optional = true, default-features = false, features = ["minimal", "moka"] }
+moka = { version = "0.12", optional = true, default-features = false, features = ["sync"] }
 
 # External dependencies
 regex = { version = "1.0", optional = true }

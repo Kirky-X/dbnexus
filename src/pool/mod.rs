@@ -24,12 +24,19 @@ use crate::metrics::MetricsCollectorTrait;
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
-use crate::config::{DbConfig, DbResult};
+use crate::config::DbResult;
+use crate::config::DbnexusConfig;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
 #[cfg(feature = "metrics")]
 use std::sync::Arc;
+
+#[cfg(feature = "oxcache")]
+use std::sync::Arc;
+
+#[cfg(feature = "oxcache")]
+use crate::cache::oxcache_adapter::AsyncCache;
 
 /// 连接池抽象 trait
 ///
@@ -59,7 +66,7 @@ pub trait ConnectionPool: Send + Sync {
     /// # Returns
     ///
     /// 返回连接池配置
-    fn config(&self) -> &DbConfig;
+    fn config(&self) -> &DbnexusConfig;
 }
 
 /// 数据库会话抽象 trait
@@ -76,7 +83,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute(&mut self, sql: &str) -> DbResult<ExecResult>;
+    async fn execute(&mut self, sql: &str) -> crate::config::DbResult<ExecResult>;
 
     /// 执行原始 SQL（不带权限检查）
     ///
@@ -87,7 +94,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>;
+    async fn execute_raw(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
 
     /// 执行原始 DDL（仅限管理员）
     ///
@@ -98,28 +105,28 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult>;
+    async fn execute_raw_ddl(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
 
     /// 开始事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn begin_transaction(&mut self) -> DbResult<()>;
+    async fn begin_transaction(&mut self) -> crate::config::DbResult<()>;
 
     /// 提交事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn commit(&mut self) -> DbResult<()>;
+    async fn commit(&mut self) -> crate::config::DbResult<()>;
 
     /// 回滚事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn rollback(&mut self) -> DbResult<()>;
+    async fn rollback(&mut self) -> crate::config::DbResult<()>;
 
     /// 获取角色
     ///
@@ -170,7 +177,7 @@ pub struct DbPoolBuilder {
     /// 数据库连接 URL（可选，如果未提供则需要 config）
     url: Option<String>,
     /// 数据库配置（可选，如果提供了 url 则自动创建）
-    config: Option<DbConfig>,
+    config: Option<DbnexusConfig>,
     /// 指标收集器（可选）
     #[cfg(feature = "metrics")]
     metrics_collector: Option<Arc<dyn MetricsCollectorTrait>>,
@@ -179,6 +186,9 @@ pub struct DbPoolBuilder {
     permission_config: Option<PermissionConfig>,
     /// 管理员角色名称（可选，默认使用配置中的值）
     admin_role: Option<String>,
+    /// 缓存实例（用于查询结果缓存）
+    #[cfg(feature = "oxcache")]
+    cache: Option<Arc<dyn AsyncCache<String, serde_json::Value>>>,
 }
 
 impl DbPoolBuilder {
@@ -210,7 +220,7 @@ impl DbPoolBuilder {
     /// # Returns
     ///
     /// 返回构造器自身以支持链式调用
-    pub fn config(mut self, config: DbConfig) -> Self {
+    pub fn config(mut self, config: DbnexusConfig) -> Self {
         self.config = Some(config);
         self
     }
@@ -259,6 +269,132 @@ impl DbPoolBuilder {
         self
     }
 
+    /// 使用confers配置（DI支持）
+    ///
+    /// 此方法允许从confers配置实例读取数据库配置，
+    /// 并与手动配置的参数合并。手动配置的参数优先级高于confers配置。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - confers配置实例
+    ///
+    /// # Returns
+    ///
+    /// Self for method chaining
+    ///
+    /// # Configuration Keys
+    ///
+    /// 从confers读取以下配置项（如果未手动设置）：
+    ///
+    /// - `dbnexus.url`: 数据库连接URL
+    /// - `dbnexus.max_connections`: 最大连接数（默认20）
+    /// - `dbnexus.min_connections`: 最小连接数（默认5）
+    /// - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
+    /// - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
+    /// - `dbnexus.admin_role`: 管理员角色（默认"admin"）
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::DbPool;
+    /// use std::sync::Arc;
+    ///
+    /// let config: Arc<dyn ConfersConfig> = /* ... */;
+    ///
+    /// // 使用confers配置，但覆盖max_connections
+    /// let pool = DbPool::builder()
+    ///     .with_confers(config)
+    ///     .max_connections(100)  // 覆盖confers中的配置
+    ///     .build()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Features
+    ///
+    /// 此方法仅在启用 `confers` feature 时可用。
+    #[cfg(feature = "confers")]
+    pub fn with_confers(mut self, config: Arc<dyn confers::ConfersConfig>) -> Self {
+        use crate::config::DbnexusConfigBuilder;
+
+        // 如果尚未设置URL，从confers读取
+        if self.url.is_none() && self.config.is_none() {
+            if let Some(url) = config.get_string("dbnexus.url") {
+                self.url = Some(url);
+            }
+        }
+
+        // 如果尚未设置config，从confers创建
+        if self.config.is_none() {
+            let max = config
+                .get_int("dbnexus.max_connections")
+                .map(|v| v as u32)
+                .unwrap_or(20);
+            let min = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
+            let idle = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
+            let acquire = config
+                .get_int("dbnexus.acquire_timeout")
+                .map(|v| v as u64)
+                .unwrap_or(5000);
+            let admin = config
+                .get_string("dbnexus.admin_role")
+                .unwrap_or_else(|| "admin".to_string());
+
+            if let Some(url) = &self.url {
+                let built_config = DbnexusConfigBuilder::new()
+                    .url(url)
+                    .max_connections(max)
+                    .min_connections(min)
+                    .idle_timeout(idle)
+                    .acquire_timeout(acquire)
+                    .admin_role(&admin)
+                    .build();
+
+                if let Ok(cfg) = built_config {
+                    self.config = Some(cfg);
+                }
+            }
+        }
+
+        self
+    }
+
+    /// 注入oxcache缓存实例（DI支持）
+    ///
+    /// 此方法允许注入oxcache缓存实例，用于数据库查询结果缓存。
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - oxcache缓存实例
+    ///
+    /// # Returns
+    ///
+    /// Self for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::DbPool;
+    /// use oxcache::Cache;
+    /// use std::sync::Arc;
+    ///
+    /// let cache: Cache<String, String> = /* ... */;
+    ///
+    /// let pool = DbPool::builder()
+    ///     .with_oxcache(Arc::new(cache))
+    ///     .url("postgres://...")
+    ///     .build()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Features
+    ///
+    /// 此方法仅在启用 `oxcache` feature 时可用。
+    #[cfg(feature = "oxcache")]
+    pub fn with_oxcache(mut self, cache: Arc<dyn AsyncCache<String, serde_json::Value>>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
     /// 设置最大连接数
     ///
     /// # Arguments
@@ -273,7 +409,7 @@ impl DbPoolBuilder {
             config.set_max_connections(max_connections);
         } else if let Some(ref url) = self.url {
             // 如果只有 url，创建一个默认配置然后修改
-            let config = crate::config::DbConfigBuilder::new()
+            let config = crate::config::DbnexusConfigBuilder::new()
                 .url(url)
                 .max_connections(max_connections)
                 .build()
@@ -296,7 +432,7 @@ impl DbPoolBuilder {
         if let Some(ref mut config) = self.config {
             config.set_min_connections(min_connections);
         } else if let Some(ref url) = self.url {
-            let config = crate::config::DbConfigBuilder::new()
+            let config = crate::config::DbnexusConfigBuilder::new()
                 .url(url)
                 .min_connections(min_connections)
                 .build()
@@ -321,7 +457,7 @@ impl DbPoolBuilder {
             config
         } else if let Some(url) = self.url {
             // 从 url 创建默认配置
-            crate::config::DbConfigBuilder::new()
+            crate::config::DbnexusConfigBuilder::new()
                 .url(&url)
                 .max_connections(20)
                 .min_connections(5)
@@ -329,13 +465,12 @@ impl DbPoolBuilder {
                 .acquire_timeout(5000)
                 .admin_role(self.admin_role.as_deref().unwrap_or("admin"))
                 .build()
-                .map_err(|e| {
-                    crate::config::DbError::Connection(sea_orm::DbErr::Custom(format!("Config error: {:?}", e)))
-                })?
+                .map_err(|e| crate::error::DbError::new(sea_orm::DbErr::Custom(format!("Config error: {:?}", e))))?
         } else {
-            return Err(crate::config::DbError::Connection(sea_orm::DbErr::Custom(
+            return Err(crate::error::DbError::new(sea_orm::DbErr::Custom(
                 "Either url or config must be provided".to_string(),
-            )));
+            ))
+            .into());
         };
 
         // 创建 pool
@@ -386,7 +521,7 @@ impl std::fmt::Debug for DbPoolBuilder {
 #[derive(Clone, Default)]
 pub struct DbPoolDependencies {
     /// 数据库配置（必需）
-    pub config: DbConfig,
+    pub config: DbnexusConfig,
     /// 指标收集器（可选）
     #[cfg(feature = "metrics")]
     pub metrics_collector: Option<Arc<dyn MetricsCollectorTrait>>,
@@ -395,11 +530,14 @@ pub struct DbPoolDependencies {
     pub permission_config: Option<PermissionConfig>,
     /// 管理员角色（可选）
     pub admin_role: Option<String>,
+    /// 缓存实例（用于查询结果缓存）
+    #[cfg(feature = "oxcache")]
+    pub cache: Option<Arc<dyn AsyncCache<String, serde_json::Value>>>,
 }
 
 impl DbPoolDependencies {
     /// 设置数据库配置
-    pub fn with_config(mut self, config: DbConfig) -> Self {
+    pub fn with_config(mut self, config: DbnexusConfig) -> Self {
         self.config = config;
         self
     }
@@ -421,6 +559,34 @@ impl DbPoolDependencies {
     /// 设置管理员角色
     pub fn with_admin_role(mut self, role: &str) -> Self {
         self.admin_role = Some(role.to_string());
+        self
+    }
+
+    /// 注入oxcache缓存实例（DI支持）
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - oxcache缓存实例
+    ///
+    /// # Returns
+    ///
+    /// Self for method chaining
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::pool::DbPoolDependencies;
+    /// use oxcache::Cache;
+    /// use std::sync::Arc;
+    ///
+    /// let cache: Cache<String, String> = /* ... */;
+    ///
+    /// let deps = DbPoolDependencies::new()
+    ///     .with_cache(Arc::new(cache));
+    /// ```
+    #[cfg(feature = "oxcache")]
+    pub fn with_cache(mut self, cache: Arc<dyn AsyncCache<String, serde_json::Value>>) -> Self {
+        self.cache = Some(cache);
         self
     }
 }
