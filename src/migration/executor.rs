@@ -606,12 +606,28 @@ impl MigrationExecutor {
             }
         };
 
+        let up_sql = match tokio::fs::read_to_string(&migration.file_path).await {
+            Ok(content) => {
+                // 提取 UP SQL（在 -- DOWN 之前的部分）
+                if let Some(down_pos) = content.find("-- DOWN") {
+                    content[..down_pos].to_string()
+                } else {
+                    // 如果没有 -- DOWN 标记，使用整个文件内容
+                    content
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to read migration file {}: {}", migration.file_path, e);
+                return Err(crate::config::DbError::Migration(format!(
+                    "Failed to read migration file: {}",
+                    e
+                )));
+            }
+        };
+
         // 生成回滚 SQL
         let reverser = SqlReverser::new();
-        // TODO: MigrationVersion 不包含 up_sql，需要从迁移文件中读取
-        // 暂时使用占位符，这是一个需要修复的问题
-        let dummy_up_sql = "";
-        let down_sql = match reverser.reverse(dummy_up_sql) {
+        let down_sql = match reverser.reverse(&up_sql) {
             Ok(sql) => sql,
             Err(e) => {
                 tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
