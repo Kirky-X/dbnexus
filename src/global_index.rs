@@ -28,7 +28,6 @@ pub const SYNC_STATUS_FAILED: &str = "failed";
 /// 全局索引条目实体
 ///
 /// 使用 sea-orm 2.0 的新实体格式
-#[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "global_index")]
 pub struct Model {
@@ -44,6 +43,8 @@ pub struct Model {
     pub last_modified: String,
     pub sync_status: String,
 }
+
+impl sea_orm::ActiveModelBehavior for ActiveModel {}
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}

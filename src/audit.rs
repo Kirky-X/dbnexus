@@ -1467,15 +1467,18 @@ impl AuditEventBuilder {
         AuditEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
-            operation: self
-                .operation
-                .unwrap_or_else(|| panic!("AuditEventBuilder: operation is required")),
-            entity_type: self
-                .entity_type
-                .unwrap_or_else(|| panic!("AuditEventBuilder: entity_type is required")),
-            entity_id: self
-                .entity_id
-                .unwrap_or_else(|| panic!("AuditEventBuilder: entity_id is required")),
+            operation: self.operation.unwrap_or_else(|| {
+                tracing::error!("AuditEventBuilder: operation is required");
+                "UNKNOWN_OPERATION".to_string()
+            }),
+            entity_type: self.entity_type.unwrap_or_else(|| {
+                tracing::error!("AuditEventBuilder: entity_type is required");
+                "UNKNOWN_ENTITY_TYPE".to_string()
+            }),
+            entity_id: self.entity_id.unwrap_or_else(|| {
+                tracing::error!("AuditEventBuilder: entity_id is required");
+                "UNKNOWN_ENTITY_ID".to_string()
+            }),
             user_id: self.user_id.unwrap_or_default(),
             user_role: self.user_role.unwrap_or_default(),
             client_ip: self.client_ip.unwrap_or_default(),

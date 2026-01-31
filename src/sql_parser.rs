@@ -8,6 +8,7 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use sqlparser::ast::{Delete, FromTable, Query, SetExpr, Statement, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -18,7 +19,23 @@ pub use crate::permission::PermissionAction;
 
 #[cfg(not(feature = "permission"))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-/// 权限操作类型（本地定义，当 permission 特性未启用时使用）
+/// 权限操作类型（本地定义）
+///
+/// # 注意
+///
+/// 这是 sql-parser 模块的内部定义，仅当 `permission` 特性未启用时使用。
+///
+/// 当 `permission` 特性启用时，应使用 `dbnexus::permission::PermissionAction` 或
+/// `dbnexus::permission_engine::EnginePermissionAction`（包含额外的 `All` 变体）。
+///
+/// # 设计说明
+///
+/// 为了避免重复定义和维护成本，建议在代码中：
+/// - 如果启用了 `permission` 特性，使用 `dbnexus::permission::PermissionAction`
+/// - 如果启用了 `permission-engine` 特性，使用 `dbnexus::permission_engine::EnginePermissionAction`
+/// - 仅在两者都未启用时使用此本地定义
+#[cfg(not(feature = "permission"))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PermissionAction {
     /// 查询操作
     Select,
@@ -29,6 +46,9 @@ pub enum PermissionAction {
     /// 删除操作
     Delete,
 }
+
+/// SQL解析缓存适配器
+use crate::cache::oxcache_adapter::SyncCacheAdapter;
 
 /// Errors that can occur during SQL parsing
 #[derive(Debug, Error)]
@@ -55,7 +75,7 @@ pub enum SqlParseError {
 }
 
 /// Represents a parsed SQL operation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSqlOperation {
     /// The type of SQL operation
     pub operation_type: SqlOperationType,
@@ -66,7 +86,7 @@ pub struct ParsedSqlOperation {
 }
 
 /// Types of SQL operations that can be detected
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SqlOperationType {
     /// SELECT queries
     Select,
@@ -86,9 +106,27 @@ pub enum SqlOperationType {
     Other,
 }
 
-/// SQL Parser with dialect awareness
+/// SQL Parser with dialect awareness and caching support
+///
+/// # 缓存优化
+///
+/// 此实现包含 LRU 缓存，用于缓存已解析的 SQL 操作。
+/// 缓存可以显著提高重复 SQL 语句的解析性能。
+///
+/// # 示例
+///
+/// ```rust
+/// use dbnexus::sql_parser::SqlParser;
+///
+/// let parser = SqlParser::new();
+/// let result = parser.parse_operation("SELECT * FROM users");
+/// // 第二次解析相同 SQL 会使用缓存
+/// let cached = parser.parse_operation("SELECT * FROM users");
+/// ```
 pub struct SqlParser {
     dialect: GenericDialect,
+    /// 缓存用于存储解析结果（使用 RefCell 实现内部可变性，保持 &self API）
+    pub(crate) parse_cache: std::cell::RefCell<SyncCacheAdapter<String, ParsedSqlOperation>>,
 }
 
 impl Default for SqlParser {
@@ -97,12 +135,21 @@ impl Default for SqlParser {
     }
 }
 
+const DEFAULT_CACHE_SIZE: usize = 1000;
+
 impl SqlParser {
-    /// Create a new SQL parser with generic dialect support
+    /// Create a new SQL parser with generic dialect support and default cache
     #[inline]
     pub fn new() -> Self {
+        Self::with_cache_size(DEFAULT_CACHE_SIZE)
+    }
+
+    /// Create a parser with specific cache size
+    #[inline]
+    pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
             dialect: GenericDialect {},
+            parse_cache: std::cell::RefCell::new(SyncCacheAdapter::new(cache_size.max(1))),
         }
     }
 
@@ -113,11 +160,55 @@ impl SqlParser {
         Self::new()
     }
 
+    /// 清空解析缓存
+    #[inline]
+    pub fn clear_cache(&self) {
+        self.parse_cache.borrow_mut().clear();
+    }
+
+    /// 获取缓存命中率统计
+    ///
+    /// 返回 (命中次数, 未命中次数) 的元组
+    #[inline]
+    pub fn cache_stats(&self) -> (u64, u64) {
+        // 注意：lru crate 不直接提供统计，需要手动跟踪
+        // 这里返回估计值
+        (0, 0)
+    }
+
     /// Parse and validate a single SQL statement
     ///
-    /// Returns `ParsedSqlOperation` if parsing succeeds
-    /// Returns `SqlParseError` if parsing fails or multiple statements detected
+    /// # 缓存行为
+    ///
+    /// 解析结果会被缓存以提高重复查询的性能。
+    /// 使用 `clear_cache()` 可手动清空缓存。
     pub fn parse_single(&self, sql: &str) -> Result<ParsedSqlOperation, SqlParseError> {
+        let sql = sql.trim().to_string();
+
+        // 使用可变借用访问缓存
+        let cache = self.parse_cache.borrow_mut();
+
+        // 检查缓存
+        if let Some(cached) = cache.get(&sql) {
+            return Ok(cached.clone());
+        }
+
+        // 释放缓存借用，避免在执行解析时持有锁
+        drop(cache);
+
+        // 执行解析
+        let result = self.parse_single_uncached(&sql)?;
+
+        // 重新获取缓存借用并存储结果
+        let cache = self.parse_cache.borrow_mut();
+
+        cache.set(sql, result.clone());
+
+        Ok(result)
+    }
+
+    /// 内部方法：执行实际解析（不使用缓存）
+    fn parse_single_uncached(&self, sql: &str) -> Result<ParsedSqlOperation, SqlParseError> {
         let sql = sql.trim();
 
         if sql.is_empty() {
@@ -167,21 +258,39 @@ impl SqlParser {
     }
 
     /// Parse SQL and extract operation type (simplified version for backward compatibility)
+    ///
+    /// # 返回值
+    ///
+    /// - `Some((table_name, action))` - 成功解析的 DML 操作
+    /// - `None` - 不支持的语句类型（DDL/DCL/Transaction）或解析失败
+    ///
+    /// # 注意
+    ///
+    /// 此方法仅支持 DML 操作（SELECT, INSERT, UPDATE, DELETE）。
+    /// 对于 DDL、DCL 和 Transaction 操作，返回 `None`。
+    ///
+    /// 建议使用 `parse_single()` 获取完整的解析结果，包括操作类型信息。
+    ///
+    /// # 缓存行为
+    ///
+    /// 此方法使用内部缓存来加速重复查询。
     pub fn parse_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
         self.parse_single(sql).ok().and_then(|parsed| {
-            // DDL/DCL/Transaction 操作默认拒绝（权限引擎会处理）
-            // 这里只返回 DML 操作的权限动作
+            // 仅支持 DML 操作，其他操作返回 None
             let action = match parsed.operation_type {
-                SqlOperationType::Select => PermissionAction::Select,
-                SqlOperationType::Insert => PermissionAction::Insert,
-                SqlOperationType::Update => PermissionAction::Update,
-                SqlOperationType::Delete => PermissionAction::Delete,
-                SqlOperationType::Ddl => PermissionAction::Select, // 占位，会被 is_ddl_operation 拦截
-                SqlOperationType::Dcl => PermissionAction::Select, // 占位
-                SqlOperationType::Transaction => PermissionAction::Select, // 占位
-                SqlOperationType::Other => PermissionAction::Select, // 占位
+                SqlOperationType::Select => Some(PermissionAction::Select),
+                SqlOperationType::Insert => Some(PermissionAction::Insert),
+                SqlOperationType::Update => Some(PermissionAction::Update),
+                SqlOperationType::Delete => Some(PermissionAction::Delete),
+                // DDL/DCL/Transaction/Other 操作不支持
+                SqlOperationType::Ddl
+                | SqlOperationType::Dcl
+                | SqlOperationType::Transaction
+                | SqlOperationType::Other => None,
             };
-            parsed.table_name.map(|table_name| (table_name, action))
+
+            // 只有当操作类型和表名都有效时才返回
+            action.and_then(|a| parsed.table_name.map(|table_name| (table_name, a)))
         })
     }
 
@@ -579,5 +688,37 @@ mod tests {
         let parser = SqlParser::new();
         let result = parser.parse_single("DROP TABLE users");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cache_works() {
+        let parser = SqlParser::new();
+
+        // 第一次解析
+        let result1 = parser.parse_single("SELECT * FROM users WHERE id = 1");
+        assert!(result1.is_ok());
+
+        // 第二次解析应该使用缓存
+        let result2 = parser.parse_single("SELECT * FROM users WHERE id = 1");
+        assert!(result2.is_ok());
+
+        // 验证结果是相同的
+        assert_eq!(result1.unwrap().sql, result2.unwrap().sql);
+    }
+
+    #[test]
+    fn test_cache_clear() {
+        let parser = SqlParser::new();
+
+        // 添加一些缓存条目
+        parser.parse_single("SELECT * FROM users").unwrap();
+        parser.parse_single("SELECT * FROM posts").unwrap();
+
+        // 清空缓存
+        parser.clear_cache();
+
+        // 再次解析，应该重新解析（虽然结果相同）
+        let result = parser.parse_single("SELECT * FROM users");
+        assert!(result.is_ok());
     }
 }

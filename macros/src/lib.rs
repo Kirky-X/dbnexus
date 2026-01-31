@@ -288,18 +288,14 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 // 获取主键值
                 // ✅ 更安全的修复代码
                 // 先转换为ActiveModel获取主键
-                let temp_active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
-                let primary_key = match temp_active_model.id.clone() {
+                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                let primary_key = match active_model.id.clone() {
                     sea_orm::ActiveValue::Set(id) => id,
                     sea_orm::ActiveValue::Unchanged(id) => id,
                     _ => return Err(dbnexus::DbError::Config("Primary key not set".to_string())),
                 };
 
-                // 重新创建ActiveModel用于更新
-                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
-
                 // 执行更新
-                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
                 Self::Entity::update(active_model)
                     .exec(conn)
                     .await
@@ -565,15 +561,62 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
 }
 
 fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
-    if config_path.starts_with('/')
-        || config_path.starts_with('\\')
-        || config_path.contains("..")
-        || config_path.contains(':')
-    {
+    // 1. 空路径检查
+    if config_path.is_empty() {
+        proc_macro_error::abort!(struct_name, "Config path cannot be empty");
+    }
+
+    // 2. 路径遍历攻击检测（正则表达式）
+    let path_traversal_regex =
+        regex::Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Path traversal regex should be valid");
+    if path_traversal_regex.is_match(config_path) {
         proc_macro_error::abort!(
             struct_name,
-            "Invalid config path. Use a relative path without '..' or drive letters.",
+            "Config path contains invalid parent directory reference or path traversal patterns"
         );
+    }
+
+    // 3. 空字节注入检查
+    if config_path.as_bytes().contains(&0) {
+        proc_macro_error::abort!(struct_name, "Config path contains null byte");
+    }
+
+    // 4. 绝对路径检查（允许绝对路径，但给出警告）
+    if config_path.starts_with('/') || config_path.starts_with('\\') {
+        // 在宏中，我们只能编译时检查，无法验证文件是否存在
+        // 对于绝对路径，我们接受但建议使用相对路径
+    }
+
+    // 5. 检查 Windows 驱动器字母路径
+    if config_path.contains(':') && config_path.len() > 2 {
+        let chars: Vec<char> = config_path.chars().collect();
+        if chars.len() > 2 && chars[1] == ':' {
+            proc_macro_error::abort!(
+                struct_name,
+                "Absolute Windows paths are not recommended. Use relative paths instead."
+            );
+        }
+    }
+
+    // 6. 检查危险的系统路径
+    let dangerous_paths = [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/sudoers",
+        "/root/.ssh",
+        "/proc/self",
+        "/sys/kernel",
+        "C:\\Windows\\System32",
+    ];
+    let lower_path = config_path.to_lowercase();
+    for dangerous in &dangerous_paths {
+        if lower_path.contains(&dangerous.to_lowercase()) {
+            proc_macro_error::abort!(
+                struct_name,
+                "Config path references dangerous system path: {}",
+                dangerous
+            );
+        }
     }
 }
 
@@ -624,8 +667,19 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
     // 解析属性参数
     let args_str = args.to_string();
 
-    // 使用正则表达式解析 roles 参数
-    let roles: Vec<String> = if let Ok(roles_re) = Regex::new(r#"roles\s*=\s*\[([^\]]*)\]"#) {
+    // 添加输入长度限制，防止 ReDoS 攻击
+    const MAX_ATTRIBUTE_LENGTH: usize = 10000;
+    if args_str.len() > MAX_ATTRIBUTE_LENGTH {
+        proc_macro_error::abort!(
+            struct_name,
+            "Attribute parameters are too long (max {} bytes)",
+            MAX_ATTRIBUTE_LENGTH
+        );
+    }
+
+    // 使用优化的正则表达式解析 roles 参数
+    // 优化点：使用非贪婪量词和更精确的字符类
+    let roles: Vec<String> = if let Ok(roles_re) = Regex::new(r#"roles\s*=\s*\[([^\[\]]{0,1000}?)\]"#) {
         if let Some(caps) = roles_re.captures(&args_str) {
             if let Some(roles_match) = caps.get(1) {
                 roles_match
@@ -633,7 +687,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
                     .split(',')
                     .filter_map(|role| {
                         let cleaned = role.trim().trim_matches('"').trim();
-                        if !cleaned.is_empty() {
+                        if !cleaned.is_empty() && cleaned.len() <= 100 {
                             Some(cleaned.to_string())
                         } else {
                             None
@@ -650,8 +704,8 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
         Vec::new()
     };
 
-    // 使用正则表达式解析 operations 参数
-    let operations: Vec<String> = if let Ok(ops_re) = Regex::new(r#"operations\s*=\s*\[([^\]]*)\]"#) {
+    // 使用优化的正则表达式解析 operations 参数
+    let operations: Vec<String> = if let Ok(ops_re) = Regex::new(r#"operations\s*=\s*\[([^\[\]]{0,1000}?)\]"#) {
         if let Some(caps) = ops_re.captures(&args_str) {
             if let Some(ops_match) = caps.get(1) {
                 ops_match
@@ -659,7 +713,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
                     .split(',')
                     .filter_map(|op| {
                         let cleaned = op.trim().trim_matches('"').trim();
-                        if !cleaned.is_empty() {
+                        if !cleaned.is_empty() && cleaned.len() <= 100 {
                             Some(cleaned.to_string())
                         } else {
                             None

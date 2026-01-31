@@ -37,6 +37,7 @@
 
 use async_trait::async_trait;
 use dashmap::DashMap;
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// 预编译的正则表达式，用于检测路径遍历攻击模式
 /// 使用 once_cell 确保线程安全的单次初始化
@@ -292,6 +293,13 @@ impl CachedDecision {
     }
 }
 
+/// 速率限制器条目
+#[derive(Debug, Clone)]
+struct RateLimitEntry {
+    count: u32,
+    window_start: Instant,
+}
+
 /// 策略决策点
 /// 统一处理权限决策，支持多种权限提供者
 #[derive(Debug)]
@@ -304,16 +312,25 @@ pub struct PolicyDecisionPoint {
     cache_ttl_seconds: u64,
     /// 是否启用缓存
     cache_enabled: bool,
+    /// 速率限制：最大请求数（每分钟）
+    rate_limit_max_requests: u32,
+    /// 速率限制：时间窗口（秒）
+    rate_limit_window_seconds: u32,
+    /// 速率限制器存储
+    rate_limit_store: DashMap<String, RateLimitEntry>,
 }
 
 impl PolicyDecisionPoint {
-    /// 创建策略决策点（默认 TTL 5 分钟）
+    /// 创建策略决策点（默认 TTL 5 分钟，速率限制 100 请求/分钟）
     pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
         Self {
             provider,
             cache: DashMap::new(),
             cache_ttl_seconds: 300, // 5 分钟
             cache_enabled: true,
+            rate_limit_max_requests: 100,  // 默认每分钟 100 次请求
+            rate_limit_window_seconds: 60, // 1 分钟窗口
+            rate_limit_store: DashMap::new(),
         }
     }
 
@@ -324,11 +341,59 @@ impl PolicyDecisionPoint {
             cache: DashMap::new(),
             cache_ttl_seconds,
             cache_enabled: true,
+            rate_limit_max_requests: 100,
+            rate_limit_window_seconds: 60,
+            rate_limit_store: DashMap::new(),
         }
     }
 
-    /// 检查权限（带 TTL 缓存）
+    /// 创建带速率限制配置的策略决策点
+    pub fn with_rate_limit(provider: Arc<dyn PermissionProvider>, max_requests: u32, window_seconds: u32) -> Self {
+        Self {
+            provider,
+            cache: DashMap::new(),
+            cache_ttl_seconds: 300,
+            cache_enabled: true,
+            rate_limit_max_requests: max_requests,
+            rate_limit_window_seconds: window_seconds,
+            rate_limit_store: DashMap::new(),
+        }
+    }
+
+    /// 检查速率限制
+    fn check_rate_limit(&self, subject_id: &str) -> bool {
+        let key = subject_id.to_string();
+        let now = Instant::now();
+        let window_duration = Duration::from_secs(self.rate_limit_window_seconds as u64);
+
+        // 获取或创建速率限制条目
+        let mut entry = self.rate_limit_store.entry(key.clone()).or_insert(RateLimitEntry {
+            count: 0,
+            window_start: now,
+        });
+
+        // 检查窗口是否过期
+        if now.duration_since(entry.window_start) >= window_duration {
+            entry.count = 0;
+            entry.window_start = now;
+        }
+
+        // 检查是否超过限制
+        if entry.count >= self.rate_limit_max_requests {
+            false
+        } else {
+            entry.count += 1;
+            true
+        }
+    }
+
+    /// 检查权限（带 TTL 缓存和速率限制）
     pub async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
+        // 检查速率限制
+        if !self.check_rate_limit(&context.subject.id) {
+            return PermissionDecision::Deny;
+        }
+
         // 生成缓存键
         let cache_key = self.generate_cache_key(context);
 
@@ -989,6 +1054,15 @@ impl RbacPermissionProvider {
         }
         true
     }
+
+    /// 检查角色是否存在
+    pub fn has_role(&self, role: &str) -> bool {
+        if let Ok(roles) = self.roles.read() {
+            roles.contains_key(role) || self.get_subject_roles(role).contains(&role.to_string())
+        } else {
+            false
+        }
+    }
 }
 
 /// 权限引擎配置
@@ -1207,5 +1281,148 @@ mod tests {
         assert_eq!(context.resource.name, "users");
         assert_eq!(context.action, PermissionAction::Select);
         assert!(context.attributes.contains_key("ip"));
+    }
+
+    #[tokio::test]
+    async fn test_policy_decision_point_with_rate_limit() {
+        let provider = Arc::new(RbacPermissionProvider::new());
+
+        // 添加角色
+        provider.add_role(Role {
+            name: "admin".to_string(),
+            description: "管理员角色".to_string(),
+            enabled: true,
+            extends: vec![],
+        });
+
+        // 添加权限规则
+        provider.add_permission(
+            "admin",
+            PermissionRule {
+                name: "admin_select".to_string(),
+                priority: 100,
+                subject: "*".to_string(),
+                resource: "users".to_string(),
+                allow: vec![PermissionAction::Select],
+                deny: vec![],
+                condition: None,
+                enabled: true,
+            },
+        );
+
+        // 将用户 "admin" 映射到角色 "admin"
+        provider.add_role_to_subject("admin", "admin");
+
+        // 创建带速率限制的 PDP
+        let pdp = PolicyDecisionPoint::with_rate_limit(provider, 10, 60);
+
+        // 前 10 次请求应该成功
+        for i in 0..10 {
+            let result = pdp.check("admin", "users", "SELECT").await;
+            assert_eq!(result, PermissionDecision::Allow, "Request {} should be allowed", i);
+        }
+
+        // 第 11 次请求应该被速率限制
+        let result = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(result, PermissionDecision::Deny);
+    }
+
+    #[tokio::test]
+    async fn test_permission_subject_creation() {
+        // 测试用户主体
+        let user = PermissionSubject::user("test_user");
+        assert_eq!(user.id, "test_user");
+        assert_eq!(user.subject_type, SubjectType::User);
+
+        // 测试角色主体
+        let role = PermissionSubject::role("admin");
+        assert_eq!(role.id, "admin");
+        assert_eq!(role.subject_type, SubjectType::Role);
+    }
+
+    #[tokio::test]
+    async fn test_permission_resource_creation() {
+        // 测试基本资源
+        let resource = PermissionResource::new("users");
+        assert_eq!(resource.name, "users");
+        assert_eq!(resource.resource_type, "table");
+
+        // 测试带类型的资源
+        let resource_with_type = PermissionResource::with_type("logs", "log");
+        assert_eq!(resource_with_type.name, "logs");
+        assert_eq!(resource_with_type.resource_type, "log");
+    }
+
+    #[tokio::test]
+    async fn test_permission_decision_types() {
+        assert_eq!(PermissionDecision::Allow, PermissionDecision::Allow);
+        assert_eq!(PermissionDecision::Deny, PermissionDecision::Deny);
+        assert_eq!(PermissionDecision::NotApplicable, PermissionDecision::NotApplicable);
+
+        let error_decision = PermissionDecision::Error("Test error".to_string());
+        assert!(matches!(error_decision, PermissionDecision::Error(msg) if msg == "Test error"));
+    }
+
+    #[tokio::test]
+    async fn test_role_creation() {
+        let role = Role {
+            name: "test_role".to_string(),
+            description: "测试角色".to_string(),
+            enabled: true,
+            extends: vec!["base_role".to_string()],
+        };
+
+        assert_eq!(role.name, "test_role");
+        assert_eq!(role.description, "测试角色");
+        assert!(role.enabled);
+        assert_eq!(role.extends.len(), 1);
+        assert_eq!(role.extends[0], "base_role");
+    }
+
+    #[tokio::test]
+    async fn test_permission_rule_creation() {
+        let rule = PermissionRule {
+            name: "test_rule".to_string(),
+            priority: 50,
+            subject: "admin".to_string(),
+            resource: "users".to_string(),
+            allow: vec![PermissionAction::Select, PermissionAction::Insert],
+            deny: vec![PermissionAction::Delete],
+            condition: Some("active = true".to_string()),
+            enabled: true,
+        };
+
+        assert_eq!(rule.name, "test_rule");
+        assert_eq!(rule.priority, 50);
+        assert_eq!(rule.allow.len(), 2);
+        assert_eq!(rule.deny.len(), 1);
+        assert!(rule.enabled);
+        assert!(rule.condition.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_role_hierarchy() {
+        let provider = RbacPermissionProvider::new();
+
+        // 添加角色及其继承
+        let base_role = Role {
+            name: "base_user".to_string(),
+            description: "基础用户角色".to_string(),
+            enabled: true,
+            extends: vec![],
+        };
+        provider.add_role(base_role);
+
+        let child_role = Role {
+            name: "premium_user".to_string(),
+            description: "高级用户角色".to_string(),
+            enabled: true,
+            extends: vec!["base_user".to_string()],
+        };
+        provider.add_role(child_role.clone());
+
+        // 验证角色存在
+        assert!(provider.has_role("base_user"));
+        assert!(provider.has_role("premium_user"));
     }
 }

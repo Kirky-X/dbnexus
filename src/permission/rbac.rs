@@ -22,10 +22,44 @@ pub struct RbacProvider {
 
 impl RbacProvider {
     /// 创建新的RBAC提供者
+    ///
+    /// 注意：默认不创建任何角色，需要显式配置所有权限。
+    /// 这遵循最小权限原则，避免意外授予过宽的访问权限。
+    ///
+    /// # 示例
+    ///
+    /// ```ignore
+    /// let provider = RbacProvider::new();
+    /// provider.add_role("admin".to_string(), RolePolicy {
+    ///     tables: vec![
+    ///         TablePermission {
+    ///             name: "users".to_string(),
+    ///             operations: vec![
+    ///                 PermissionAction::Select,
+    ///                 PermissionAction::Insert,
+    ///                 PermissionAction::Update,
+    ///                 PermissionAction::Delete,
+    ///             ],
+    ///         },
+    ///         TablePermission {
+    ///             name: "posts".to_string(),
+    ///             operations: vec![PermissionAction::Select],
+    ///         },
+    ///     ],
+    /// });
+    /// ```
     pub fn new() -> Self {
         let roles = DashMap::new();
+        Self { roles: Arc::new(roles) }
+    }
 
-        // 添加默认管理员角色（完全访问权限）
+    /// 创建带有默认管理员角色的RBAC提供者
+    ///
+    /// 警告：此方法创建的管理员角色具有通配符权限，仅建议在开发/测试环境中使用。
+    /// 生产环境应使用 `new()` 并显式配置所需的权限。
+    pub fn with_default_admin() -> Self {
+        let roles = DashMap::new();
+
         roles.insert(
             "admin".to_string(),
             RolePolicy {
@@ -37,17 +71,6 @@ impl RbacProvider {
                         PermissionAction::Update,
                         PermissionAction::Delete,
                     ],
-                }],
-            },
-        );
-
-        // 添加只读角色
-        roles.insert(
-            "readonly".to_string(),
-            RolePolicy {
-                tables: vec![TablePermission {
-                    name: "*".to_string(),
-                    operations: vec![PermissionAction::Select],
                 }],
             },
         );
