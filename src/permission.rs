@@ -10,7 +10,7 @@
 pub mod advanced;
 pub mod rbac;
 
-use crate::cache::oxcache_adapter::{AsyncCache, OxcacheAdapter};
+use crate::cache::{AsyncCache, Cache};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -642,7 +642,7 @@ pub struct PermissionContext {
     role: String,
 
     /// 权限策略缓存（完全使用 oxcache，线程安全）
-    policy_cache: Arc<dyn AsyncCache<String, RolePolicy>>,
+    policy_cache: Arc<Cache<String, RolePolicy>>,
 
     /// 权限检查速率限制器
     rate_limiter: Option<Arc<RateLimiter>>,
@@ -694,14 +694,14 @@ impl PermissionContext {
     ///
     /// 如果 `cache_capacity` 为 0，返回 `InvalidCacheCapacity` 错误
     pub async fn with_cache_size(role: String, cache_capacity: usize) -> Result<Self, PermissionError> {
-        let policy_cache = Arc::new(
-            OxcacheAdapter::new(cache_capacity)
-                .await
-                .map_err(|_| PermissionError::InvalidCacheCapacity)?,
-        );
+        let policy_cache: AsyncCache<RolePolicy> = Cache::builder()
+            .capacity(cache_capacity as u64)
+            .build()
+            .await
+            .map_err(|_| PermissionError::InvalidCacheCapacity)?;
         Ok(Self {
             role,
-            policy_cache,
+            policy_cache: Arc::new(policy_cache),
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
@@ -721,14 +721,14 @@ impl PermissionContext {
         max_requests: u32,
         window_secs: u64,
     ) -> Result<Self, PermissionError> {
-        let policy_cache = Arc::new(
-            OxcacheAdapter::new(cache_capacity)
-                .await
-                .map_err(|_| PermissionError::InvalidCacheCapacity)?,
-        );
+        let policy_cache: AsyncCache<RolePolicy> = Cache::builder()
+            .capacity(cache_capacity as u64)
+            .build()
+            .await
+            .map_err(|_| PermissionError::InvalidCacheCapacity)?;
         Ok(Self {
             role,
-            policy_cache,
+            policy_cache: Arc::new(policy_cache),
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 max_requests,
                 Duration::from_secs(window_secs),
@@ -752,9 +752,11 @@ impl PermissionContext {
     /// 此方法为需要同步创建权限上下文的场景提供便利，例如在 Session 初始化过程中。
     /// 使用默认的缓存大小和速率限制配置。
     pub fn new_with_defaults(role: String) -> Self {
+        let cache =
+            tokio::runtime::Handle::current().block_on(async { Cache::builder().capacity(256).build().await.unwrap() });
         Self {
             role,
-            policy_cache: Arc::new(crate::cache::oxcache_adapter::SyncCacheAdapter::new(256)),
+            policy_cache: Arc::new(cache),
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
@@ -766,7 +768,7 @@ impl PermissionContext {
     /// 创建新的权限上下文（使用指定的缓存实例）
     ///
     /// 此方法允许外部传入已创建的缓存实例，用于测试和高级使用场景。
-    pub fn new(role: String, policy_cache: Arc<dyn AsyncCache<String, RolePolicy>>) -> Self {
+    pub fn new(role: String, policy_cache: Arc<Cache<String, RolePolicy>>) -> Self {
         Self {
             role,
             policy_cache,
@@ -798,7 +800,7 @@ impl PermissionContext {
         }
 
         // 2. 尝试从缓存获取
-        if let Some(policy) = self.policy_cache.get(&self.role).await {
+        if let Ok(Some(policy)) = self.policy_cache.get(&self.role).await {
             let allowed = policy.allows(table, operation);
             if allowed {
                 self.check_stats.record_allowed();
@@ -826,149 +828,6 @@ impl PermissionContext {
             table,
             operation,
         );
-        self.check_stats.record_denied();
-        false
-    }
-
-    /// 检查表访问权限（自动加载策略版本 - 增强版）
-    ///
-    /// 如果缓存未命中，自动从配置加载权限策略
-    /// 包含完整的统计跟踪
-    pub async fn check_table_access_with_config(
-        &self,
-        table: &str,
-        operation: &PermissionAction,
-        config: &PermissionConfig,
-    ) -> bool {
-        // 1. 检查速率限制
-        if let Some(limiter) = &self.rate_limiter {
-            if !limiter.check(&self.role).await {
-                tracing::warn!(
-                    target: "security",
-                    "Rate limit exceeded for role '{}' on table '{}' operation '{}'",
-                    self.role,
-                    table,
-                    operation
-                );
-                self.check_stats.record_rate_limited();
-                return false;
-            }
-        }
-
-        // 2. 尝试从缓存获取
-        if let Some(policy) = self.policy_cache.get(&self.role).await {
-            let allowed = policy.allows(table, operation);
-            if allowed {
-                self.check_stats.record_allowed();
-            } else {
-                self.check_stats.record_denied();
-            }
-            self.check_stats.record_cache_hit();
-            return allowed;
-        }
-
-        // 3. 缓存未命中：自动加载策略
-        self.check_stats.record_cache_miss();
-        if let Some(policy) = config.get_role_policy(&self.role) {
-            self.policy_cache.set(self.role.clone(), policy.clone()).await;
-            tracing::info!("Auto-loaded permission policy for role '{}' on cache miss", self.role);
-            let allowed = policy.allows(table, operation);
-            if allowed {
-                self.check_stats.record_allowed();
-            } else {
-                self.check_stats.record_denied();
-            }
-            return allowed;
-        }
-
-        // 4. 角色未定义
-        // 注意：日志中记录角色名称用于调试，但在生产环境应考虑脱敏
-        tracing::warn!(
-            target: "security",
-            "Role '{}' not found in permission config. Access denied.",
-            self.role
-        );
-
-        // 审计日志：记录角色验证失败（用于安全分析）
-        tracing::debug!(
-            target: "audit",
-            "Permission check failed: role='{}', table={}, action={}, result=denied",
-            self.role, table, operation
-        );
-
-        self.check_stats.record_denied();
-        false
-    }
-
-    /// 检查表访问权限（自动加载策略版本 - 增强版）
-    ///
-    /// 如果缓存未命中，自动从配置加载权限策略
-    /// 包含完整的统计跟踪
-    #[cfg(not(feature = "oxcache"))]
-    pub async fn check_table_access_with_config(
-        &self,
-        table: &str,
-        operation: &PermissionAction,
-        config: &PermissionConfig,
-    ) -> bool {
-        // 1. 检查速率限制
-        if let Some(limiter) = &self.rate_limiter {
-            if !limiter.check(&self.role).await {
-                tracing::warn!(
-                    target: "security",
-                    "Rate limit exceeded for role '{}' on table '{}' operation '{}'",
-                    self.role,
-                    table,
-                    operation
-                );
-                self.check_stats.record_rate_limited();
-                return false;
-            }
-        }
-
-        let mut cache = self.policy_cache.lock().await;
-
-        // 2. 尝试从缓存获取
-        if let Some(policy) = cache.get(self.role.as_str()) {
-            let allowed = policy.allows(table, operation);
-            if allowed {
-                self.check_stats.record_allowed();
-            } else {
-                self.check_stats.record_denied();
-            }
-            self.check_stats.record_cache_hit();
-            return allowed;
-        }
-
-        // 3. 缓存未命中：自动加载策略
-        self.check_stats.record_cache_miss();
-        if let Some(policy) = config.get_role_policy(&self.role) {
-            cache.put(self.role.clone(), policy.clone());
-            tracing::info!("Auto-loaded permission policy for role '{}' on cache miss", self.role);
-            let allowed = policy.allows(table, operation);
-            if allowed {
-                self.check_stats.record_allowed();
-            } else {
-                self.check_stats.record_denied();
-            }
-            return allowed;
-        }
-
-        // 4. 角色未定义
-        // 注意：日志中记录角色名称用于调试，但在生产环境应考虑脱敏
-        tracing::warn!(
-            target: "security",
-            "Role '{}' not found in permission config. Access denied.",
-            self.role
-        );
-
-        // 审计日志：记录角色验证失败（用于安全分析）
-        tracing::debug!(
-            target: "audit",
-            "Permission check failed: role='{}', table={}, action={}, result=denied",
-            self.role, table, operation
-        );
-
         self.check_stats.record_denied();
         false
     }
@@ -1022,7 +881,7 @@ impl PermissionContext {
     /// 如果加载失败，返回错误信息
     pub async fn load_policy(&self, config: &PermissionConfig) -> Result<(), String> {
         if let Some(policy) = config.get_role_policy(&self.role) {
-            self.policy_cache.set(self.role.clone(), policy.clone()).await;
+            let _ = self.policy_cache.set(&self.role, policy).await;
             tracing::info!("Loaded permission policy for role '{}'", self.role);
             Ok(())
         } else {
@@ -1036,14 +895,14 @@ impl PermissionContext {
     /// 获取缓存统计信息
     pub async fn cache_stats(&self) -> CacheStats {
         CacheStats {
-            cached_roles: self.policy_cache.len(),
-            capacity: self.policy_cache.capacity(),
+            cached_roles: self.policy_cache.len().await.unwrap_or(0) as usize,
+            capacity: self.policy_cache.capacity().await.unwrap_or(0) as usize,
         }
     }
 
     /// 清除权限缓存
     pub async fn clear_cache(&self) {
-        self.policy_cache.clear().await;
+        let _ = self.policy_cache.clear().await;
         tracing::info!("Permission cache cleared for role '{}'", self.role);
     }
 }
@@ -1245,10 +1104,9 @@ roles:
 
     /// TEST-U-013: PermissionContext 创建和访问测试
     #[tokio::test]
-    #[cfg(feature = "oxcache")]
     async fn test_permission_context_creation() {
-        let cache = Arc::new(OxcacheAdapter::new(256).await.unwrap());
-        let ctx = PermissionContext::new("admin".to_string(), cache);
+        let cache: AsyncCache<RolePolicy> = Cache::builder().capacity(256).build().await.unwrap();
+        let ctx = PermissionContext::new("admin".to_string(), Arc::new(cache));
 
         assert_eq!(ctx.role(), "admin");
     }
@@ -1420,7 +1278,6 @@ roles:
     }
 
     #[tokio::test]
-    #[cfg(feature = "oxcache")]
     async fn test_permission_context_load_policy_then_check_access() {
         let config = PermissionConfig {
             roles: [(
@@ -1446,33 +1303,8 @@ roles:
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "oxcache"))]
-    async fn test_permission_context_load_policy_then_check_access() {
-        let config = PermissionConfig {
-            roles: [(
-                "test_role".to_string(),
-                RolePolicy {
-                    tables: vec![TablePermission {
-                        name: "users".to_string(),
-                        operations: vec![PermissionAction::Select],
-                    }],
-                },
-            )]
-            .into_iter()
-            .collect(),
-        };
-
-        let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256).unwrap();
-        ctx.load_policy(&config).await.unwrap();
-
-        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
-        assert!(!ctx.check_table_access("users", &PermissionAction::Delete).await);
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "oxcache")]
     async fn test_permission_context_check_table_access_with_config_role_missing_denies() {
-        let config = PermissionConfig {
+        let _config = PermissionConfig {
             roles: [(
                 "defined_role".to_string(),
                 RolePolicy {
@@ -1489,39 +1321,11 @@ roles:
         let ctx = PermissionContext::with_cache_size("missing_role".to_string(), 256)
             .await
             .unwrap();
-        assert!(
-            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
+        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "oxcache"))]
-    async fn test_permission_context_check_table_access_with_config_role_missing_denies() {
-        let config = PermissionConfig {
-            roles: [(
-                "defined_role".to_string(),
-                RolePolicy {
-                    tables: vec![TablePermission {
-                        name: "users".to_string(),
-                        operations: vec![PermissionAction::Select],
-                    }],
-                },
-            )]
-            .into_iter()
-            .collect(),
-        };
-
-        let ctx = PermissionContext::with_cache_size("missing_role".to_string(), 256).unwrap();
-        assert!(
-            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "oxcache")]
-    async fn test_permission_context_check_table_access_with_config_rate_limited_denies() {
+    async fn test_permission_context_check_table_access_rate_limited_denies() {
         let config = PermissionConfig {
             roles: [(
                 "test_role".to_string(),
@@ -1540,43 +1344,13 @@ roles:
             .await
             .unwrap();
 
-        assert!(
-            ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
-        assert!(
-            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
-    }
+        // Load policy first
+        ctx.load_policy(&config).await.unwrap();
 
-    #[tokio::test]
-    #[cfg(not(feature = "oxcache"))]
-    async fn test_permission_context_check_table_access_with_config_rate_limited_denies() {
-        let config = PermissionConfig {
-            roles: [(
-                "test_role".to_string(),
-                RolePolicy {
-                    tables: vec![TablePermission {
-                        name: "users".to_string(),
-                        operations: vec![PermissionAction::Select],
-                    }],
-                },
-            )]
-            .into_iter()
-            .collect(),
-        };
-
-        let ctx = PermissionContext::with_cache_size_and_rate_limit("test_role".to_string(), 256, 1, 60).unwrap();
-
-        assert!(
-            ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
-        assert!(
-            !ctx.check_table_access_with_config("users", &PermissionAction::Select, &config)
-                .await
-        );
+        // First request should succeed
+        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
+        // Second request should be rate limited
+        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
     }
 }
 
