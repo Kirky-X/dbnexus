@@ -42,10 +42,7 @@ impl From<ConfigDbError> for DbError {
 // 从 config::ConfigError 转换到 error::DbError
 impl From<crate::config::ConfigError> for DbError {
     fn from(err: crate::config::ConfigError) -> Self {
-        Self(sea_orm::DbErr::Custom(format!(
-            "Configuration error: {}",
-            err
-        )))
+        Self(sea_orm::DbErr::Custom(format!("Configuration error: {}", err)))
     }
 }
 

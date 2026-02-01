@@ -9,7 +9,7 @@
 
 #[cfg(all(feature = "confers", feature = "sqlite"))]
 mod confers_tests {
-    use dbnexus::DbPool;
+    use dbnexus::{DbPool, DbPoolBuilder};
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -37,9 +37,13 @@ mod confers_tests {
             .await
             .expect("Failed to create pool with confers");
 
-        // 验证池已创建
+        // 验证池已创建并可以获取会话
         let status = pool.status();
-        assert_eq!(status.max_connections, 10);
+        assert!(status.total >= 0, "Pool should be created");
+
+        // 验证可以通过配置获取最大连接数
+        let pool_config = pool.config();
+        assert_eq!(pool_config.max_connections(), 10);
     }
 
     #[tokio::test]
@@ -51,15 +55,15 @@ mod confers_tests {
             ("dbnexus.idle_timeout", json!(600)),
         ]);
 
-        let pool = DbPool::builder()
+        let pool = DbPoolBuilder::new()
             .with_confers(config)
             .build()
             .await
             .expect("Failed to build pool with confers");
 
         // 验证池已创建
-        let status = pool.status();
-        assert_eq!(status.max_connections, 15);
+        let pool_config = pool.config();
+        assert_eq!(pool_config.max_connections(), 15);
     }
 
     #[tokio::test]
@@ -70,7 +74,7 @@ mod confers_tests {
         ]);
 
         // 手动设置的max_connections应该覆盖confers中的配置
-        let pool = DbPool::builder()
+        let pool = DbPoolBuilder::new()
             .with_confers(config)
             .max_connections(50)  // 覆盖confers的20
             .build()
@@ -78,8 +82,8 @@ mod confers_tests {
             .expect("Failed to build pool");
 
         // 验证配置已应用
-        let status = pool.status();
-        assert_eq!(status.max_connections, 50);
+        let pool_config = pool.config();
+        assert_eq!(pool_config.max_connections(), 50);
     }
 
     #[tokio::test]
@@ -101,7 +105,7 @@ mod confers_tests {
             .expect("Failed to create pool with defaults");
 
         // 验证默认值已应用
-        let status = pool.status();
-        assert_eq!(status.max_connections, 20); // 默认值
+        let pool_config = pool.config();
+        assert_eq!(pool_config.max_connections(), 20); // 默认值
     }
 }

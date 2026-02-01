@@ -7,8 +7,7 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-#[cfg(feature = "oxcache")]
-use crate::cache::oxcache_adapter::{AsyncCache, OxcacheAdapter};
+use crate::cache::{AsyncCache, Cache};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -18,16 +17,6 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::interval;
 use tokio::time::timeout;
 use tracing::info;
-
-// 为未启用oxcache特性的场景定义AsyncCache trait
-#[cfg(not(feature = "oxcache"))]
-#[async_trait]
-pub trait AsyncCache<K, V> {
-    async fn get(&self, key: &K) -> Option<V>;
-    async fn set(&self, key: K, value: V);
-    async fn remove(&self, key: &K) -> Option<V>;
-    async fn len(&self) -> usize;
-}
 
 /// 连接获取超时警告阈值（毫秒）
 const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
@@ -146,7 +135,7 @@ pub(crate) struct DbPoolInner {
 
     /// 权限策略缓存（完全使用 oxcache，线程安全，无需额外锁）
     #[cfg(feature = "permission")]
-    pub(crate) policy_cache: Arc<dyn AsyncCache<String, RolePolicy>>,
+    pub(crate) policy_cache: Arc<Cache<String, RolePolicy>>,
 
     /// 权限配置（懒加载，使用 tokio 异步锁）
     #[cfg(feature = "permission")]
@@ -343,57 +332,17 @@ impl DbPool {
 
         // 创建权限策略缓存（使用 trait object 以符合 DI 规范）
         #[cfg(feature = "permission")]
-        // 创建权限策略缓存（使用 trait object 以符合 DI 规范）
-        #[cfg(all(feature = "permission", feature = "oxcache"))]
-        let cache: OxcacheAdapter<String, RolePolicy> = OxcacheAdapter::new(4096)
+        let cache: AsyncCache<RolePolicy> = AsyncCache::builder()
+            .capacity(4096)
+            .build()
             .await
             .map_err(|e| crate::config::DbError::Config(format!("Failed to create policy cache: {}", e)))?;
-        #[cfg(all(feature = "permission", feature = "oxcache"))]
-        let policy_cache: Arc<dyn AsyncCache<String, RolePolicy>> = Arc::new(cache);
+        #[cfg(feature = "permission")]
+        let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(cache);
 
         // 为未启用permission特性的场景提供默认值
         #[cfg(not(feature = "permission"))]
-        let policy_cache: Arc<dyn AsyncCache<String, ()>> = {
-            // 创建一个空的占位符实现，以便编译通过
-            struct PlaceholderCache;
-            #[cfg(not(feature = "oxcache"))]
-            #[async_trait]
-            impl AsyncCache<String, ()> for PlaceholderCache {
-                async fn get(&self, _key: &String) -> Option<()> {
-                    None
-                }
-                async fn set(&self, _key: String, _value: ()) {}
-                async fn remove(&self, _key: &String) -> Option<()> {
-                    None
-                }
-                async fn len(&self) -> usize {
-                    0
-                }
-            }
-            Arc::new(PlaceholderCache)
-        };
-
-        // 为启用permission但未启用oxcache特性的场景提供默认值
-        #[cfg(all(feature = "permission", not(feature = "oxcache")))]
-        let policy_cache: Arc<dyn AsyncCache<String, RolePolicy>> = {
-            // 创建一个空的占位符实现，以便编译通过
-            struct PlaceholderCache;
-            #[cfg(not(feature = "oxcache"))]
-            #[async_trait]
-            impl AsyncCache<String, RolePolicy> for PlaceholderCache {
-                async fn get(&self, _key: &String) -> Option<RolePolicy> {
-                    None
-                }
-                async fn set(&self, _key: String, _value: RolePolicy) {}
-                async fn remove(&self, _key: &String) -> Option<RolePolicy> {
-                    None
-                }
-                async fn len(&self) -> usize {
-                    0
-                }
-            }
-            Arc::new(PlaceholderCache)
-        };
+        let policy_cache: Arc<Cache<String, ()>> = Arc::new(Cache::builder().capacity(256).build().await.unwrap());
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
         #[cfg(feature = "permission")]
@@ -403,7 +352,7 @@ impl DbPool {
         #[cfg(feature = "permission")]
         if let Some(ref perm_config) = permission_config {
             for (role_name, policy) in &perm_config.roles {
-                policy_cache.set(role_name.clone(), policy.clone()).await;
+                let _ = policy_cache.set(role_name, policy).await;
                 tracing::debug!("Preloaded permission policy for role '{}'", role_name);
             }
         }
@@ -515,7 +464,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 {
                     for (role, policy) in &config.roles {
-                        pool.inner.policy_cache.set(role.clone(), policy.clone()).await;
+                        let _ = pool.inner.policy_cache.set(role, policy).await;
                     }
                     info!("Loaded permission policies for {} roles", config.roles.len());
                 }
@@ -669,9 +618,15 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(feature = "permission")]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        use crate::cache::oxcache_adapter::SyncCacheAdapter;
         config.validate()?;
-        // try_from 是同步简化版本，使用同步缓存适配器
+        // try_from 是同步简化版本，需要阻塞等待异步缓存构建
+        let policy_cache = tokio::runtime::Handle::current().block_on(async {
+            Cache::builder()
+                .capacity(256)
+                .build()
+                .await
+                .expect("Failed to create policy cache")
+        });
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone_config(),
@@ -679,7 +634,7 @@ impl DbPool {
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
-                policy_cache: Arc::new(SyncCacheAdapter::new(256)),
+                policy_cache: Arc::new(policy_cache),
                 permission_config: Arc::new(AsyncMutex::new(None)),
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role().to_string(),
