@@ -48,7 +48,7 @@ pub enum PermissionAction {
 }
 
 /// SQL解析缓存适配器
-use crate::cache::oxcache_adapter::SyncCacheAdapter;
+use moka::sync::Cache as MokaCache;
 
 /// Errors that can occur during SQL parsing
 #[derive(Debug, Error)]
@@ -126,7 +126,7 @@ pub enum SqlOperationType {
 pub struct SqlParser {
     dialect: GenericDialect,
     /// 缓存用于存储解析结果（使用 RefCell 实现内部可变性，保持 &self API）
-    pub(crate) parse_cache: std::cell::RefCell<SyncCacheAdapter<String, ParsedSqlOperation>>,
+    pub(crate) parse_cache: std::cell::RefCell<MokaCache<String, ParsedSqlOperation>>,
 }
 
 impl Default for SqlParser {
@@ -149,7 +149,7 @@ impl SqlParser {
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
             dialect: GenericDialect {},
-            parse_cache: std::cell::RefCell::new(SyncCacheAdapter::new(cache_size.max(1))),
+            parse_cache: std::cell::RefCell::new(MokaCache::new(cache_size.max(1) as u64)),
         }
     }
 
@@ -163,7 +163,7 @@ impl SqlParser {
     /// 清空解析缓存
     #[inline]
     pub fn clear_cache(&self) {
-        self.parse_cache.borrow_mut().clear();
+        self.parse_cache.borrow_mut().invalidate_all();
     }
 
     /// 获取缓存命中率统计
@@ -202,7 +202,7 @@ impl SqlParser {
         // 重新获取缓存借用并存储结果
         let cache = self.parse_cache.borrow_mut();
 
-        cache.set(sql, result.clone());
+        cache.insert(sql, result.clone());
 
         Ok(result)
     }

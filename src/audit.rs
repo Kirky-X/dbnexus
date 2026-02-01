@@ -1469,7 +1469,7 @@ impl AuditEventBuilder {
             timestamp: Utc::now(),
             operation: self.operation.unwrap_or_else(|| {
                 tracing::error!("AuditEventBuilder: operation is required");
-                "UNKNOWN_OPERATION".to_string()
+                AuditOperation::Other("UNKNOWN_OPERATION".to_string())
             }),
             entity_type: self.entity_type.unwrap_or_else(|| {
                 tracing::error!("AuditEventBuilder: entity_type is required");

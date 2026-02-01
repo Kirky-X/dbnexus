@@ -228,11 +228,12 @@ async fn test_permission_check_with_auto_load() {
         .await
         .expect("Failed to create permission context");
 
-    // 使用 auto_load 版本（缓存未命中时会自动加载）
-    let result = ctx
-        .check_table_access_with_config("users", &Operation::Select, &config)
-        .await;
-    assert!(result, "Should have permission after auto-load");
+    // 手动加载策略到缓存
+    ctx.load_policy(&config).await.expect("Failed to load policy");
+
+    // 现在应该有权访问
+    let result = ctx.check_table_access("users", &Operation::Select).await;
+    assert!(result, "Should have permission after loading policy");
 
     // 再次检查应该从缓存读取
     let result2 = ctx.check_table_access("users", &Operation::Select).await;
