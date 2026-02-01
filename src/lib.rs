@@ -64,12 +64,10 @@ compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', 
 #[cfg(feature = "audit")]
 pub mod audit;
 /// 缓存模块（基于 oxcache）
-#[cfg(feature = "oxcache")]
 pub mod cache;
 
 /// 缓存配置和类型导出
-#[cfg(feature = "oxcache")]
-pub use cache::{AsyncCache, CacheConfig, CacheKey, CacheValue, OxcacheAdapter, create_memory_cache};
+pub use cache::{AsyncCache, Cache, CacheBuilder, CacheConfig, CacheKey, create_cache, create_cache_with_ttl};
 /// 配置管理模块
 pub mod config;
 

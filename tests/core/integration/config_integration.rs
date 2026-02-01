@@ -8,7 +8,7 @@
 //! 基于 confers 库的配置构建、加载和验证功能测试
 
 use dbnexus::{
-    DbPool,
+    DbPool, DbPoolBuilder,
     config::{DatabaseType, DbConfigBuilder},
 };
 
@@ -92,7 +92,9 @@ async fn test_dbpool_from_config() {
             .build()
             .unwrap();
 
-        let pool = DbPool::try_from(&config).unwrap();
+        // try_from uses block_on which can't be called from within a tokio runtime
+        // So we use the async version instead and pass config directly
+        let pool = DbPoolBuilder::new().config(config).build().await.unwrap();
         assert_eq!(pool.config().max_connections(), 10);
     }
 }

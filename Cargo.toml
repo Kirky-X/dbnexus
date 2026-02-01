@@ -108,12 +108,9 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # Core features (可选，用于最小化部署)
-permission = ["dashmap", "serde_yaml", "oxcache"]
+permission = ["dashmap", "serde_yaml"]
 sql-parser = ["sqlparser", "regex", "once_cell"]
 macros = ["dbnexus-macros"]
-
-# Oxcache 缓存特性
-oxcache = ["dep:oxcache", "dep:moka"]
 
 # Config features (配置文件支持)
 config-yaml = ["serde_yaml", "regex"]
@@ -190,8 +187,8 @@ async-trait = "0.1"
 uuid = { version = "1.0", optional = true, features = ["v4"] }
 indexmap = { version = "2.0", optional = true }
 confers = { path = "/home/project/confers", optional = true, default-features = false, features = ["cli"] }
-oxcache = { path = "/home/project/oxcache", optional = true, default-features = false, features = ["minimal", "moka"] }
-moka = { version = "0.12", optional = true, default-features = false, features = ["sync"] }
+oxcache = { path = "/home/project/oxcache", default-features = false, features = ["minimal", "moka", "serialization"] }
+moka = { version = "0.12", default-features = false, features = ["sync"] }
 
 # External dependencies
 regex = { version = "1.0", optional = true }

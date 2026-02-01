@@ -29,14 +29,9 @@ use crate::config::DbnexusConfig;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
-#[cfg(feature = "metrics")]
 use std::sync::Arc;
 
-#[cfg(feature = "oxcache")]
-use std::sync::Arc;
-
-#[cfg(feature = "oxcache")]
-use crate::cache::oxcache_adapter::AsyncCache;
+use crate::cache::Cache;
 
 /// 连接池抽象 trait
 ///
@@ -187,8 +182,7 @@ pub struct DbPoolBuilder {
     /// 管理员角色名称（可选，默认使用配置中的值）
     admin_role: Option<String>,
     /// 缓存实例（用于查询结果缓存）
-    #[cfg(feature = "oxcache")]
-    cache: Option<Arc<dyn AsyncCache<String, serde_json::Value>>>,
+    cache: Option<Arc<Cache<String, serde_json::Value>>>,
 }
 
 impl DbPoolBuilder {
@@ -384,13 +378,30 @@ impl DbPoolBuilder {
     ///     .url("postgres://...")
     ///     .build()
     ///     .await?;
+    /// 注入oxcache缓存实例（DI支持）
+    ///
+    /// 此方法允许注入oxcache缓存实例，用于数据库查询结果缓存。
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - oxcache缓存实例
+    ///
+    /// # Returns
+    ///
+    /// 返回构造器自身以支持链式调用
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use dbnexus::DbPool;
+    /// use oxcache::Cache;
+    ///
+    /// let cache: Cache<String, String> = /* ... */;
+    /// let pool = DbPool::new()
+    ///     .with_oxcache(Arc::new(cache))
+    ///     .await?;
     /// ```
-    ///
-    /// # Features
-    ///
-    /// 此方法仅在启用 `oxcache` feature 时可用。
-    #[cfg(feature = "oxcache")]
-    pub fn with_oxcache(mut self, cache: Arc<dyn AsyncCache<String, serde_json::Value>>) -> Self {
+    pub fn with_oxcache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
         self.cache = Some(cache);
         self
     }
@@ -531,8 +542,7 @@ pub struct DbPoolDependencies {
     /// 管理员角色（可选）
     pub admin_role: Option<String>,
     /// 缓存实例（用于查询结果缓存）
-    #[cfg(feature = "oxcache")]
-    pub cache: Option<Arc<dyn AsyncCache<String, serde_json::Value>>>,
+    pub cache: Option<Arc<Cache<String, serde_json::Value>>>,
 }
 
 impl DbPoolDependencies {
@@ -584,8 +594,7 @@ impl DbPoolDependencies {
     /// let deps = DbPoolDependencies::new()
     ///     .with_cache(Arc::new(cache));
     /// ```
-    #[cfg(feature = "oxcache")]
-    pub fn with_cache(mut self, cache: Arc<dyn AsyncCache<String, serde_json::Value>>) -> Self {
+    pub fn with_cache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
         self.cache = Some(cache);
         self
     }
