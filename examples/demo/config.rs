@@ -46,10 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 示例 2: 从环境变量加载配置
         println!("\n2. 从环境变量加载配置:");
-        std::env::set_var("DATABASE_URL", "sqlite:file::memory:?cache=shared");
-        std::env::set_var("DB_MAX_CONNECTIONS", "15");
-        std::env::set_var("DB_ADMIN_ROLE", "administrator");
-        
+        unsafe {
+            std::env::set_var("DATABASE_URL", "sqlite:file::memory:?cache=shared");
+            std::env::set_var("DB_MAX_CONNECTIONS", "15");
+            std::env::set_var("DB_ADMIN_ROLE", "administrator");
+        }
+
         let config = DbConfig::from_env()?;
         println!("   URL: {}", config.url_sanitized());
         println!("   Max connections: {}", config.max_connections());
@@ -57,12 +59,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 示例 3: 多源配置合并
         println!("\n3. 多源配置合并 (环境变量 + 默认值):");
-        std::env::set_var("DB_MAX_CONNECTIONS", "25");
-        // DB_MIN_CONNECTIONS 未设置，将使用默认值
-        
-        let config = DbConfig::builder()
-            .env()
-            .load()?;
+        unsafe {
+            std::env::set_var("DB_MAX_CONNECTIONS", "25");
+            std::env::remove_var("DB_MIN_CONNECTIONS");
+        }
+
+        let config = DbConfig::from_env()?;
         println!("   Max connections: {}", config.max_connections());
         println!("   Min connections: {}", config.min_connections()); // 应该是默认值 5
 
@@ -86,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .build()
             .unwrap();
 
-        let pool = DbPool::try_from(&config)?;
+        let pool = tokio::task::spawn_blocking(move || DbPool::try_from(&config)).await??;
         println!("   连接池同步创建成功!");
         println!("   池状态: {:?}", pool.status());
     }

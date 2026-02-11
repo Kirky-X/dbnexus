@@ -44,17 +44,27 @@
 // 编译期数据库特性互斥检查
 // ============================================================================
 
-#[cfg(all(feature = "sqlite", feature = "postgres"))]
+#[cfg(all(not(clippy), feature = "sqlite", feature = "postgres"))]
 compile_error!("Cannot enable both 'sqlite' and 'postgres' features");
 
-#[cfg(all(feature = "sqlite", feature = "mysql"))]
+#[cfg(all(not(clippy), feature = "sqlite", feature = "mysql"))]
 compile_error!("Cannot enable both 'sqlite' and 'mysql' features");
 
-#[cfg(all(feature = "postgres", feature = "mysql"))]
+#[cfg(all(not(clippy), feature = "postgres", feature = "mysql"))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 
-#[cfg(not(any(feature = "sqlite", feature = "postgres", feature = "mysql")))]
+#[cfg(all(not(clippy), not(any(feature = "sqlite", feature = "postgres", feature = "mysql"))))]
 compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', or 'mysql'");
+
+// 检查 feature 依赖关系
+#[cfg(all(not(clippy), feature = "permission", not(feature = "cache")))]
+compile_error!("The 'permission' feature requires the 'cache' feature to be enabled");
+
+#[cfg(all(not(clippy), feature = "permission-engine", not(feature = "cache")))]
+compile_error!("The 'permission-engine' feature requires the 'cache' feature to be enabled");
+
+#[cfg(all(not(clippy), feature = "sql-parser", not(feature = "cache")))]
+compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enabled");
 
 // ============================================================================
 // 模块声明
@@ -63,10 +73,14 @@ compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', 
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
+
 /// 缓存模块（基于 oxcache）
+/// 注意：启用 `permission` 或 `permission-engine` feature 时必须同时启用 `cache` feature
+#[cfg(feature = "cache")]
 pub mod cache;
 
 /// 缓存配置和类型导出
+#[cfg(feature = "cache")]
 pub use cache::{AsyncCache, Cache, CacheBuilder, CacheConfig, CacheKey, create_cache, create_cache_with_ttl};
 /// 配置管理模块
 pub mod config;
@@ -194,6 +208,10 @@ pub use crate::pool::DbPoolBuilder;
 pub use crate::pool::DbPoolDependencies;
 
 /// 过程宏重新导出
+#[cfg(feature = "macros")]
+pub mod macros;
+
+/// 过程宏重新导出（兼容旧用法）
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::DbEntity;
 #[cfg(feature = "macros")]

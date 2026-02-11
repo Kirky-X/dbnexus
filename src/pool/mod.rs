@@ -24,6 +24,9 @@ use crate::metrics::MetricsCollectorTrait;
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
+#[cfg(feature = "confers")]
+use confers::core::config_trait::ConfersConfig;
+
 use crate::config::DbResult;
 use crate::config::DbnexusConfig;
 use async_trait::async_trait;
@@ -307,7 +310,7 @@ impl DbPoolBuilder {
     ///
     /// 此方法仅在启用 `confers` feature 时可用。
     #[cfg(feature = "confers")]
-    pub fn with_confers(mut self, config: Arc<dyn confers::ConfersConfig>) -> Self {
+    pub fn with_confers(mut self, config: Arc<dyn ConfersConfig>) -> Self {
         use crate::config::DbnexusConfigBuilder;
 
         // 如果尚未设置URL，从confers读取

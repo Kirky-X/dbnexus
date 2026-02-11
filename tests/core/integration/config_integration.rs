@@ -12,6 +12,9 @@ use dbnexus::{
     config::{DatabaseType, DbConfigBuilder},
 };
 
+#[path = "../../common/mod.rs"]
+mod common;
+
 #[cfg(feature = "confers")]
 use dbnexus::config::DbConfig;
 
@@ -85,8 +88,9 @@ async fn test_database_type_is_real() {
 async fn test_dbpool_from_config() {
     #[cfg(feature = "confers")]
     {
+        let url = common::get_test_database_url();
         let config = DbConfigBuilder::new()
-            .url("sqlite::memory:")
+            .url(&url)
             .max_connections(10)
             .min_connections(3)
             .build()
@@ -102,7 +106,8 @@ async fn test_dbpool_from_config() {
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_new() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let (config, _temp_dir) = common::get_test_config();
+    let pool = DbPool::with_config(config).await.unwrap();
     let _session = pool.get_session("admin").await.unwrap();
     let status = pool.status();
     assert!(status.total >= 1);

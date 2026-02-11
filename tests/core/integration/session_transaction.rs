@@ -25,7 +25,10 @@ async fn test_session_role() {
 }
 
 #[tokio::test]
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
 async fn test_session_permission_ctx() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -150,6 +153,23 @@ async fn test_execute_raw_denies_ddl() {
         .execute_raw("CREATE TABLE IF NOT EXISTS ddl_blocked (id INTEGER PRIMARY KEY)")
         .await;
     assert!(matches!(result, Err(DbError::Permission(_))));
+}
+
+#[tokio::test]
+#[cfg(all(
+    any(feature = "sqlite", feature = "postgres", feature = "mysql"),
+    not(feature = "sql-parser")
+))]
+async fn test_execute_raw_requires_sql_parser_feature() {
+    let (config, _temp_dir) = common::get_test_config();
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    let result = session.execute_raw("SELECT 1").await;
+    assert!(matches!(
+        result,
+        Err(DbError::Permission(msg)) if msg.contains("sql-parser")
+    ));
 }
 
 #[tokio::test]

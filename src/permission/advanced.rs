@@ -455,9 +455,9 @@ mod tests {
         provider.add_role_inheritance("child".to_string(), vec!["parent1".to_string(), "parent2".to_string()]);
 
         let inherited = provider.get_inherited_roles("child");
-        assert!(inherited.contains(&"child".to_string()));
-        assert!(inherited.contains(&"parent1".to_string()));
-        assert!(inherited.contains(&"parent2".to_string()));
+        assert!(inherited.iter().any(|role| role == "child"));
+        assert!(inherited.iter().any(|role| role == "parent1"));
+        assert!(inherited.iter().any(|role| role == "parent2"));
         assert_eq!(inherited.len(), 3);
     }
 

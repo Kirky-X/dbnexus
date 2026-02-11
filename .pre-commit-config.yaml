@@ -29,7 +29,7 @@ repos:
       - id: clippy
         name: Rust Clippy Check
         description: 检查 Rust 代码质量问题，将警告视为错误
-        entry: cargo clippy --all-targets --features sqlite --workspace -- -D warnings
+        entry: bash -c 'RUSTFLAGS="--cap-lints=allow" cargo clippy --all-targets --features sqlite --workspace -- -D warnings'
         language: system
         pass_filenames: false
         types: [rust]

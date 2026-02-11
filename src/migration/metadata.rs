@@ -15,7 +15,11 @@
 //! ```rust,no_run
 //! use dbnexus::migration::metadata::{MigrationMetadata, TableSnapshot, ColumnDefinition};
 //!
-//! let mut metadata = MigrationMetadata::new(1, "test_migration", "CREATE TABLE test (id INT);");
+//! let mut metadata = MigrationMetadata::new(
+//!     1,
+//!     "test_migration".to_string(),
+//!     "CREATE TABLE test (id INT);".to_string(),
+//! );
 //! let snapshot = TableSnapshot::new("test");
 //! metadata.add_table_snapshot(snapshot);
 //! assert_eq!(metadata.table_snapshots.len(), 1);
@@ -99,10 +103,12 @@ impl MigrationMetadata {
     /// # Example
     ///
     /// ```rust
+    /// use dbnexus::migration::MigrationMetadata;
+    ///
     /// let metadata = MigrationMetadata::new(
     ///     1,
-    ///     "test_migration",
-    ///     "CREATE TABLE users (id INT);"
+    ///     "test_migration".to_string(),
+    ///     "CREATE TABLE users (id INT);".to_string()
     /// );
     /// ```
     pub fn new(version: u32, name: String, up_sql: String) -> Self {
@@ -124,7 +130,13 @@ impl MigrationMetadata {
     /// # Example
     ///
     /// ```rust
-    /// let mut metadata = MigrationMetadata::new(1, "test", "CREATE TABLE test (id INT);");
+    /// use dbnexus::migration::{MigrationMetadata, TableSnapshot};
+    ///
+    /// let mut metadata = MigrationMetadata::new(
+    ///     1,
+    ///     "test".to_string(),
+    ///     "CREATE TABLE test (id INT);".to_string()
+    /// );
     /// let snapshot = TableSnapshot::new("test_table");
     /// metadata.add_table_snapshot(snapshot);
     /// ```
@@ -148,9 +160,8 @@ impl MigrationMetadata {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests {
-    use super::super::{ColumnDefinition, ConstraintDefinition, MigrationMetadata, TableSnapshot};
+    use super::super::{MigrationMetadata, TableSnapshot};
 
     #[test]
     fn test_create_metadata() {
@@ -170,7 +181,7 @@ mod tests {
         let snapshot = TableSnapshot::new("test");
         metadata.add_table_snapshot(snapshot);
         assert_eq!(metadata.table_snapshots.len(), 1);
-        assert!(metadata.table_snapshots.get("test").is_some());
+        assert!(metadata.table_snapshots.contains_key("test"));
     }
 
     #[test]

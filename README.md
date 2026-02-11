@@ -155,9 +155,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Preset | Features | Use Case |
 |------|------|----------|
-| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | Minimal for embedded devices |
-| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `config-yaml`, `regex`, `lru` | Microservice setup |
-| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | All enterprise features except database drivers | Full enterprise features |
+| <span style="color:#166534; padding:4px 8px; border-radius:4px;">embedded</span> | `runtime-tokio-rustls`, `sqlite`, `config-env` | Ultra-minimal for embedded/edge devices |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
+| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-yaml`, `data-management`, `security`, `observability` | Monolithic application |
+| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine`, `confers` | Full enterprise features |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | All optional features without database drivers | All enterprise features (manual database selection) |
 
 ---
 
@@ -276,57 +278,87 @@ User::find_all(&session).await?; // Error: Permission denied
 
 ## <span id="feature-flags">🎨 Feature Flags</span>
 
+### ⚠️ BREAKING CHANGE in v0.2.0
+
+**All users must update their Cargo.toml:** 
+
+**Version 0.1.x → 0.2.0 is a breaking change.** The `cache` feature is no longer enabled by default, and several features now explicitly require `cache` to be enabled.
+
 ### Database Drivers (choose one)
 
 ```toml
-# SQLite (default)
-dbnexus = { version = "0.1.1", features = ["sqlite"] }
+# SQLite
+dbnexus = { version = "0.2", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1.1", features = ["postgres"] }
+dbnexus = { version = "0.2", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1.1", features = ["mysql"] }
+dbnexus = { version = "0.2", features = ["mysql"] }
 ```
 
-### Runtime
+### Core Features
 
 ```toml
-# Tokio with RustLS (default)
-dbnexus = { version = "0.1.1", features = ["runtime-tokio-rustls"] }
+# Permission control (REQUIRES cache feature)
+dbnexus = { version = "0.2", features = ["permission", "cache"] }
 
-# Tokio with Native TLS
-dbnexus = { version = "0.1.1", features = ["runtime-tokio-native-tls"] }
+# SQL parsing (REQUIRES cache feature)
+dbnexus = { version = "0.2", features = ["sql-parser", "cache"] }
 
-# AsyncStd
-dbnexus = { version = "0.1.1", features = ["runtime-async-std"] }
+# Procedural macros
+dbnexus = { version = "0.2", features = ["macros"] }
+
+# Caching (required by permission and sql-parser)
+dbnexus = { version = "0.2", features = ["cache"] }
+```
+
+### Using Presets (Recommended)
+
+```toml
+# Embedded/Edge devices (minimal)
+dbnexus = { version = "0.2", features = ["embedded"] }
+
+# Microservices
+dbnexus = { version = "0.2", features = ["microservice"] }
+
+# Monolithic applications
+dbnexus = { version = "0.2", features = ["monolith"] }
+
+# Enterprise (all features)
+dbnexus = { version = "0.2", features = ["enterprise"] }
 ```
 
 ### Optional Features
 
 ```toml
-# Core features
-dbnexus = { version = "0.1.1", features = [
-    "permission",      # Permission control
-    "sql-parser",      # SQL parsing
-    "macros",          # Procedural macros
-] }
+# Observability (metrics + tracing + health-check)
+dbnexus = { version = "0.2", features = ["observability"] }
 
-# Enterprise features
-dbnexus = { version = "0.1.1", features = [
+# Data management (migration + sharding + global-index)
+dbnexus = { version = "0.2", features = ["data-management"] }
+
+# Security (audit + permission-engine)
+dbnexus = { version = "0.2", features = ["security"] }
+
+# Individual features
+dbnexus = { version = "0.2", features = [
     "metrics",         # Prometheus metrics
     "tracing",         # Distributed tracing
     "audit",           # Audit logging
     "migration",       # Database migration
     "sharding",        # Data sharding
-    "permission-engine" # Advanced permission engine
+    "permission-engine" # Advanced permission engine (requires cache)
 ] }
+```
 
-# Configuration
-dbnexus = { version = "0.1.1", features = [
+### Configuration
+
+```toml
+dbnexus = { version = "0.2", features = [
     "config-yaml",     # YAML config support
     "config-toml",     # TOML config support
-    "config-env",      # Environment variables (default)
+    "config-env",      # Environment variables
 ] }
 ```
 

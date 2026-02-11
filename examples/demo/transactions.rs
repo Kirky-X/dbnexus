@@ -15,7 +15,7 @@
 //! cargo run --example transactions --features sqlite
 //! ```
 
-use dbnexus::{config::DbConfigBuilder, DbPool};
+use dbnexus::{DbConfigBuilder, DbPool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,14 +23,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
 
     // 初始化连接池（带权限配置）
-    let config = DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("src/permissions.yaml".to_string()),
-        admin_role: "admin".to_string(),
-        max_connections: 1,
-        acquire_timeout: 30,
-        ..Default::default()
-    };
+    let config = DbConfigBuilder::new()
+        .url("sqlite:file::memory:?cache=shared")
+        .permissions_path("examples/demo/permissions.yaml")
+        .admin_role("admin")
+        .max_connections(1)
+        .min_connections(1)
+        .acquire_timeout(30)
+        .build()?;
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功\n");
 
@@ -83,7 +83,7 @@ async fn setup_test_data(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>
 
     // 使用事务创建账户
     session.begin_transaction().await?;
-    
+
     session
         .execute_raw("INSERT INTO accounts (id, name, balance) VALUES (1, 'Alice', 1000.0)")
         .await?;
@@ -93,7 +93,7 @@ async fn setup_test_data(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>
         .execute_raw("INSERT INTO accounts (id, name, balance) VALUES (2, 'Bob', 500.0)")
         .await?;
     println!("  ✓ 创建账户: Bob (余额: $500)");
-    
+
     session.commit().await?;
 
     Ok(())
@@ -194,7 +194,7 @@ async fn verify_final_balances(pool: &DbPool) -> Result<(), Box<dyn std::error::
 
     // 验证账户可以通过查询访问（不依赖 rows_affected）
     println!("  ✓ 可以访问账户数据");
-    
+
     // 尝试查询余额
     let result = session.execute_raw("SELECT balance FROM accounts WHERE id = 1").await;
     match result {

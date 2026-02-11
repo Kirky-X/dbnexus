@@ -6,7 +6,6 @@
 //! 权限控制集成测试
 
 use dbnexus::DbPool;
-use dbnexus::config::DbConfigBuilder;
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
 
 #[path = "../../common/mod.rs"]
@@ -16,7 +15,12 @@ mod common;
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_context_role() {
-    // 创建测试权限配置文件
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    // 使用配置中定义的 admin 角色
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    // 加载权限策略到缓存
+    let perm_path = pool.config().permissions_path().expect("Missing permissions path");
     let perm_content = r#"
 roles:
   admin:
@@ -28,27 +32,8 @@ roles:
           - update
           - delete
 "#;
-    std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
-
-    // 使用包含权限配置的配置 - 根据特性选择正确的连接字符串
-    #[cfg(feature = "sqlite")]
-    let url = "sqlite::memory:";
-    #[cfg(feature = "postgres")]
-    let url = "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test";
-    #[cfg(feature = "mysql")]
-    let url = "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test";
-
-    let config = DbConfigBuilder::new()
-        .url(url)
-        .max_connections(5)
-        .permissions_path("/tmp/test_perms.yaml")
-        .build()
-        .expect("Failed to build config");
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    // 使用配置中定义的 admin 角色
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    // 加载权限策略到缓存
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
+    std::fs::write(perm_path, perm_content).expect("Failed to write permissions file");
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(perm_path).unwrap()).unwrap();
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -62,7 +47,12 @@ roles:
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 #[allow(clippy::unwrap_used)]
 async fn test_permission_check() {
-    // 创建测试权限配置文件
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    // admin 角色有所有权限
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    // 加载权限策略到缓存
+    let perm_path = pool.config().permissions_path().expect("Missing permissions path");
     let perm_content = r#"
 roles:
   admin:
@@ -74,27 +64,8 @@ roles:
           - update
           - delete
 "#;
-    std::fs::write("/tmp/test_perms.yaml", perm_content).expect("Failed to write permissions file");
-
-    // 使用包含权限配置的配置 - 根据特性选择正确的连接字符串
-    #[cfg(feature = "sqlite")]
-    let url = "sqlite::memory:";
-    #[cfg(feature = "postgres")]
-    let url = "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test";
-    #[cfg(feature = "mysql")]
-    let url = "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test";
-
-    let config = DbConfigBuilder::new()
-        .url(url)
-        .max_connections(5)
-        .permissions_path("/tmp/test_perms.yaml")
-        .build()
-        .expect("Failed to build config");
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    // admin 角色有所有权限
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    // 加载权限策略到缓存
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string("/tmp/test_perms.yaml").unwrap()).unwrap();
+    std::fs::write(perm_path, perm_content).expect("Failed to write permissions file");
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(perm_path).unwrap()).unwrap();
     session
         .permission_ctx()
         .load_policy(&perm_config)

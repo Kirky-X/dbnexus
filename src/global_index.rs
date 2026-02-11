@@ -10,10 +10,12 @@
 //! - 不带时间条件的查询
 //! - binlog/CDC 风格的变更捕获
 
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+#![allow(missing_docs)]
+
+use sea_orm::ActiveValue::Set;
+use sea_orm::Database;
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue, Database, QueryOrder, QuerySelect};
+use sea_orm::sea_query::OnConflict;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -156,12 +158,11 @@ impl GlobalIndex {
             updated_at: Set(chrono::Utc::now().to_rfc3339()),
             last_modified: Set(chrono::Utc::now().to_rfc3339()),
             sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
-            ..Default::default()
         };
 
         Entity::insert(model)
             .on_conflict(
-                sea_orm::OnConflict::columns([Column::Id])
+                OnConflict::columns([Column::Id])
                     .update_columns([
                         Column::TableName,
                         Column::RecordId,

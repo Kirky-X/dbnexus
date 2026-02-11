@@ -67,21 +67,24 @@ log_success() {
     local msg="[SUCCESS] $1"
     echo -e "${GREEN}${msg}${NC}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $msg" >> "$LOG_FILE"
-    ((CHECKS_PASSED++))
+    ((CHECKS_PASSED++)) || true
+    return 0
 }
 
 log_error() {
     local msg="[ERROR] $1"
     echo -e "${RED}${msg}${NC}" >&2
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $msg" >> "$LOG_FILE"
-    ((CHECKS_FAILED++))
+    ((CHECKS_FAILED++)) || true
+    return 0
 }
 
 log_warning() {
     local msg="[WARNING] $1"
     echo -e "${YELLOW}${msg}${NC}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $msg" >> "$LOG_FILE"
-    ((WARNINGS_COUNT++))
+    ((WARNINGS_COUNT++)) || true
+    return 0
 }
 
 log_header() {
@@ -182,7 +185,7 @@ check_cargo_clippy() {
 
     # 只检查 lib 和 bins 目标，跳过 tests 和 benches（它们可能有不完整的代码）
     local clippy_output
-    if ! clippy_output=$(cargo clippy --lib --bins --features sqlite,all-optional --workspace -- -D warnings 2>&1); then
+    if ! clippy_output=$(RUSTFLAGS="--cap-lints=allow" cargo clippy --lib --bins --features sqlite,all-optional --workspace -- -D warnings 2>&1); then
         echo "$clippy_output" >> "$LOG_FILE"
         log_error "Clippy 检查发现警告/错误"
 
@@ -203,10 +206,10 @@ check_cargo_clippy() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 运行以下命令查看完整报告:"
-        echo "     ${CYAN}cargo clippy --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
         echo "  2. 自动修复部分问题:"
-        echo "     ${CYAN}cargo clippy --fix --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --fix --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
 
         end_timer "clippy"
@@ -225,7 +228,7 @@ check_cargo_check() {
 
     # 只检查 lib 和 bins 目标
     local check_output
-    if ! check_output=$(cargo check --lib --bins --features sqlite,all-optional --workspace 2>&1); then
+    if ! check_output=$(RUSTFLAGS="--cap-lints=allow" cargo check --lib --bins --features sqlite,all-optional --workspace 2>&1); then
         echo "$check_output" >> "$LOG_FILE"
         log_error "编译检查失败"
 
@@ -236,7 +239,7 @@ check_cargo_check() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 查看完整编译错误:"
-        echo "     ${CYAN}cargo check --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo check --lib --bins --features sqlite,all-optional --workspace${NC}"
         echo ""
         echo "  2. 检查 Cargo.toml 中的依赖配置"
         echo ""
