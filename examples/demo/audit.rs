@@ -17,14 +17,15 @@
 //! cargo run --example audit --features sqlite,audit
 //! ```
 
-use dbnexus::{DbConfig, DbPool};
 use dbnexus::audit::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity,
     MemoryAuditStorage,
 };
+use dbnexus::{DbConfigBuilder, DbPool};
 use std::sync::Arc;
 
 /// 定义 User 结构体（简化版，用于演示）
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct User {
     id: i64,
@@ -34,6 +35,7 @@ struct User {
 }
 
 /// 定义 Order 结构体
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct Order {
     id: i64,
@@ -68,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("------------------------------------------");
     let config = DbConfigBuilder::new()
         .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("src/permissions.yaml")
+        .permissions_path("examples/demo/permissions.yaml")
         .admin_role("admin")
         .build()
         .expect("Failed to build config");

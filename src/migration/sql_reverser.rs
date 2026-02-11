@@ -22,6 +22,8 @@ impl SqlReverser {
     /// # Example
     ///
     /// ```rust
+    /// use dbnexus::migration::SqlReverser;
+    ///
     /// let reverser = SqlReverser::new();
     /// ```
     pub fn new() -> Self {
@@ -44,6 +46,8 @@ impl SqlReverser {
     /// # Example
     ///
     /// ```rust
+    /// use dbnexus::migration::SqlReverser;
+    ///
     /// let reverser = SqlReverser::new();
     /// let up_sql = "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255));";
     /// let down_sql = reverser.reverse(up_sql).unwrap();

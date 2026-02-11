@@ -26,6 +26,74 @@ pub struct MigrationExecutor {
     pub(crate) history: MigrationHistory,
 }
 
+fn build_placeholder_list(backend: sea_orm::DbBackend, count: usize) -> String {
+    match backend {
+        sea_orm::DbBackend::Postgres => (1..=count)
+            .map(|index| format!("${}", index))
+            .collect::<Vec<_>>()
+            .join(", "),
+        _ => std::iter::repeat_n("?", count).collect::<Vec<_>>().join(", "),
+    }
+}
+
+fn build_migration_insert_sql(backend: sea_orm::DbBackend) -> String {
+    match backend {
+        sea_orm::DbBackend::Postgres => {
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ($1, $2, CAST($3 AS TIMESTAMP), $4)".to_string()
+        }
+        _ => format!(
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({})",
+            build_placeholder_list(backend, 4)
+        ),
+    }
+}
+
+fn sql_escape_single_quotes(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+fn format_mysql_applied_at(applied_at: time::OffsetDateTime) -> String {
+    let applied_at = applied_at.to_offset(time::UtcOffset::UTC);
+    match time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]") {
+        Ok(format) => applied_at.format(&format).unwrap_or_else(|_| applied_at.to_string()),
+        Err(_) => applied_at.to_string(),
+    }
+}
+
+fn format_applied_at_for_backend(backend: sea_orm::DbBackend, applied_at: time::OffsetDateTime) -> String {
+    match backend {
+        sea_orm::DbBackend::MySql => format_mysql_applied_at(applied_at),
+        _ => applied_at.to_string(),
+    }
+}
+
+fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
+    let format_with_subseconds =
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]").ok();
+    if let Some(format) = format_with_subseconds {
+        if let Ok(dt) = time::PrimitiveDateTime::parse(value, &format) {
+            return Some(dt.assume_utc());
+        }
+    }
+
+    let format_without_subseconds =
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").ok();
+    if let Some(format) = format_without_subseconds {
+        if let Ok(dt) = time::PrimitiveDateTime::parse(value, &format) {
+            return Some(dt.assume_utc());
+        }
+    }
+
+    None
+}
+
+fn parse_applied_at_for_db(db_type: DatabaseType, value: &str) -> Option<time::OffsetDateTime> {
+    match db_type {
+        DatabaseType::MySql => parse_mysql_applied_at(value),
+        _ => time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok(),
+    }
+}
+
 impl MigrationExecutor {
     /// 创建新的迁移执行器
     pub fn new(connection: sea_orm::DatabaseConnection, db_type: DatabaseType) -> Self {
@@ -33,6 +101,38 @@ impl MigrationExecutor {
             connection,
             sql_generator: SqlGenerator::new(db_type),
             history: MigrationHistory::new(),
+        }
+    }
+
+    /// 构建迁移历史插入语句（原始 SQL 字符串）
+    ///
+    /// 根据数据库后端格式化 `applied_at` 并转义文本字段，返回可直接执行的 INSERT 语句。
+    pub fn build_history_insert_sql_raw(
+        &self,
+        version: u32,
+        description: &str,
+        applied_at: time::OffsetDateTime,
+        file_path: &str,
+    ) -> String {
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+        };
+
+        let applied_at_value = format_applied_at_for_backend(backend, applied_at);
+        let desc_esc = sql_escape_single_quotes(description);
+        let path_esc = sql_escape_single_quotes(file_path);
+
+        match backend {
+            sea_orm::DbBackend::Postgres => format!(
+                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', CAST('{}' AS TIMESTAMP), '{}')",
+                version, desc_esc, applied_at_value, path_esc
+            ),
+            _ => format!(
+                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}')",
+                version, desc_esc, applied_at_value, path_esc
+            ),
         }
     }
 
@@ -118,10 +218,10 @@ impl MigrationExecutor {
             let applied_at = if applied_at_str.is_empty() {
                 time::OffsetDateTime::now_utc()
             } else {
-                match time::OffsetDateTime::parse(&applied_at_str, &time::format_description::well_known::Rfc3339) {
-                    Ok(dt) => dt,
-                    Err(e) => {
-                        tracing::debug!("Invalid applied_at format for migration {}: {}", version, e);
+                match parse_applied_at_for_db(self.sql_generator.db_type, &applied_at_str) {
+                    Some(dt) => dt,
+                    None => {
+                        tracing::debug!("Invalid applied_at format for migration {}", version);
                         time::OffsetDateTime::now_utc()
                     }
                 }
@@ -213,14 +313,14 @@ impl MigrationExecutor {
 
         // 插入到迁移历史表（使用参数化查询防止 SQL 注入）
         // 使用 Statement::from_sql_and_values 进行参数化查询
-        let insert_sql =
-            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
-
         let backend = match self.sql_generator.db_type {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
         };
+
+        let insert_sql = build_migration_insert_sql(backend);
+        let applied_at_value = format_applied_at_for_backend(backend, version_record.applied_at);
 
         let stmt = sea_orm::Statement::from_sql_and_values(
             backend,
@@ -228,7 +328,7 @@ impl MigrationExecutor {
             vec![
                 migration.version.into(),
                 migration.description.clone().into(),
-                version_record.applied_at.to_string().into(),
+                applied_at_value.into(),
                 version_record.file_path.clone().into(),
             ],
         );
@@ -488,20 +588,20 @@ impl MigrationExecutor {
         // 记录迁移历史（使用参数化查询防止 SQL 注入）
         let applied_at = time::OffsetDateTime::now_utc();
 
-        let insert_sql =
-            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)";
         let backend = match self.sql_generator.db_type {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
         };
+        let insert_sql = build_migration_insert_sql(backend);
+        let applied_at_value = format_applied_at_for_backend(backend, applied_at);
         let stmt = sea_orm::Statement::from_sql_and_values(
             backend,
             insert_sql.to_string(),
             vec![
                 migration_file.version.into(),
                 migration_file.description.clone().into(),
-                applied_at.to_string().into(),
+                applied_at_value.into(),
                 migration_file.file_path.to_string_lossy().into(),
             ],
         );
@@ -524,35 +624,41 @@ impl MigrationExecutor {
         Ok(())
     }
 
+    #[allow(missing_docs)]
+    pub async fn apply_migration_file_public(
+        &mut self,
+        migration_file: &MigrationFile,
+    ) -> Result<(), crate::config::DbError> {
+        self.apply_migration_file(migration_file).await
+    }
+
     /// 从迁移文件中提取 UP SQL
     fn extract_up_sql(content: &str) -> &str {
-        // 查找 UP 标记之后的内容
-        let up_marker = content
-            .find("-- UP:")
-            .or(content.find("-- up:"))
-            .or(content.find("UP:"));
-        let down_marker = content
-            .find("-- DOWN:")
-            .or(content.find("-- down:"))
-            .or(content.find("DOWN:"));
+        fn find_marker_line(content: &str, markers: &[&str]) -> Option<(usize, usize)> {
+            for marker in markers {
+                if let Some(pos) = content.find(marker) {
+                    let line_start = content[..pos].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+                    let line_end = content[pos..]
+                        .find('\n')
+                        .map(|idx| pos + idx + 1)
+                        .unwrap_or(content.len());
+                    return Some((line_start, line_end));
+                }
+            }
+            None
+        }
+
+        let up_marker = find_marker_line(content, &["-- UP:", "-- up:", "-- UP", "-- up", "UP:", "UP"]);
+        let down_marker = find_marker_line(
+            content,
+            &["-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN"],
+        );
 
         match (up_marker, down_marker) {
-            (Some(up_pos), Some(down_pos)) if down_pos > up_pos => {
-                // UP 标记在 DOWN 标记之前，提取 UP 部分
-                &content[up_pos + 5..down_pos]
-            }
-            (Some(up_pos), _) => {
-                // 只有 UP 标记（或 DOWN 在 UP 之前），提取 UP 标记之后的所有内容
-                &content[up_pos + 5..]
-            }
-            (None, Some(down_pos)) => {
-                // 如果没有 UP 标记但有 DOWN 标记，返回 DOWN 之前的内容
-                &content[..down_pos]
-            }
-            (None, None) => {
-                // 如果没有标记，返回整个内容
-                content
-            }
+            (Some((_, up_end)), Some((down_start, _))) if down_start > up_end => &content[up_end..down_start],
+            (Some((_, up_end)), _) => &content[up_end..],
+            (None, Some((down_start, _))) => &content[..down_start],
+            (None, None) => content,
         }
         .trim()
     }
@@ -660,7 +766,10 @@ impl MigrationExecutor {
         };
         let delete_sql = sea_orm::Statement::from_sql_and_values(
             backend,
-            "DELETE FROM dbnexus_migrations WHERE version = ?".to_string(),
+            format!(
+                "DELETE FROM dbnexus_migrations WHERE version = {}",
+                build_placeholder_list(backend, 1)
+            ),
             vec![version.into()],
         );
 

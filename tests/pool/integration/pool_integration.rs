@@ -1,102 +1,142 @@
 // Copyright (c) 2026 Kirky.X
-//
 // Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
-//! 连接池集成测试
-//!
-//! 注意: 此测试文件中的部分测试需要内部 API，已暂时跳过
 
 #[path = "../../common/mod.rs"]
 mod common;
 
-/// TEST-I-001: 连接健康检查测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_connection_health_check() {
-    // 通过公开 API 验证连接可用性
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let _session = pool.get_session("admin").await.expect("Failed");
+    assert!(pool.status().total >= 1);
 }
 
-/// TEST-I-002: 清理无效连接测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_clean_invalid_connections() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let _session = pool.get_session("admin").await.expect("Failed to get session");
+    let status = pool.status();
+    eprintln!("Pool: total={}, active={}, idle={}", status.total, status.active, status.idle);
+    assert!(status.total >= 1, "Pool should have connections");
 }
 
-/// TEST-I-003: 验证和重建连接测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_validate_and_recreate_connections() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let _session = pool.get_session("admin").await.expect("Failed");
+    assert!(pool.status().total >= 1);
 }
 
-/// TEST-I-004: 操作后的连接池状态测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_pool_status_after_operations() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    for i in 0..5 {
+        let _session = pool.get_session("admin").await.expect("Failed");
+        let _table_name = format!("status_test_{}", i);
+    }
+    let status = pool.status();
+    assert_eq!(status.total, status.active + status.idle);
 }
 
-/// TEST-I-005: 顺序健康检查测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_sequential_health_checks() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    for i in 0..10 {
+        let _session = pool.get_session("admin").await.expect("Failed");
+        assert!(pool.status().active >= 1, "Iteration {}", i);
+    }
 }
 
-/// TEST-I-006: 健康检查超时处理测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_health_check_timeout_handling() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    for _ in 0..20 {
+        let _session = pool.get_session("admin").await.expect("Failed");
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(pool.status().total >= 1);
 }
 
-/// TEST-I-007: 重度使用后的健康检查测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_health_check_after_heavy_usage() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let pool = std::sync::Arc::new(pool);
+    let mut handles = Vec::new();
+    for _ in 0..20 {
+        let pool = pool.clone();
+        handles.push(tokio::spawn(async move {
+            pool.get_session("admin").await.ok()
+        }));
+    }
+    let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
+    let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
+    eprintln!("Heavy usage: {} sessions", count);
+    assert!(pool.status().total >= 1);
 }
 
-/// TEST-I-008: 并发健康检查测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_concurrent_health_checks() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let pool = std::sync::Arc::new(pool);
+    let mut handles = Vec::new();
+    for _ in 0..10 {
+        let pool = pool.clone();
+        handles.push(tokio::spawn(async move {
+            pool.get_session("admin").await.ok()
+        }));
+    }
+    let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
+    let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
+    eprintln!("Concurrent: {}/10", count);
+    assert!(count >= 5);
 }
 
-/// TEST-I-009: 连接池配置边界测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
+#[cfg(feature = "postgres")]
 async fn test_pool_config_boundaries() {
-    // 实际测试由其他测试覆盖
+    let url = common::get_test_database_url();
+    for max_conn in [1, 5, 10] {
+        let config = dbnexus::config::DbConfigBuilder::new()
+            .url(&url)
+            .max_connections(max_conn)
+            .build().expect("Failed");
+        let pool = tokio::time::timeout(std::time::Duration::from_secs(10), dbnexus::DbPool::with_config(config))
+            .await.expect("timeout").expect("create");
+        let _session = pool.get_session("admin").await.expect("Failed");
+        let status = pool.status();
+        assert!(status.total <= max_conn, "Pool should not exceed max");
+    }
 }
 
-/// TEST-I-010: 小型连接池的连接获取测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_connection_acquire_with_small_pool() {
-    // 实际测试由其他测试覆盖
+    let url = common::get_test_database_url();
+    let config = dbnexus::config::DbConfigBuilder::new()
+        .url(&url)
+        .max_connections(2)
+        .min_connections(1)
+        .acquire_timeout(5000)
+        .build().expect("Failed");
+    let pool = dbnexus::DbPool::with_config(config).await.expect("Failed");
+    let pool = std::sync::Arc::new(pool);
+    let mut handles = Vec::new();
+    for i in 0..5 {
+        let pool = pool.clone();
+        handles.push(tokio::spawn(async move {
+            pool.get_session("admin").await.ok()
+        }));
+    }
+    let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
+    let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
+    eprintln!("Small pool: {}/5", count);
+    assert!(count >= 2);
 }

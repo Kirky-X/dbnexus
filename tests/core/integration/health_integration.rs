@@ -212,8 +212,8 @@ mod health_tests {
 
         let pool = DbPool::new(&url).await.unwrap();
         let status = pool.status();
-        assert!(status.total >= 0);
-        assert!(status.active >= 0);
+        let _ = status.total;
+        let _ = status.active;
     }
 
     // ============================================================================

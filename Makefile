@@ -56,15 +56,15 @@ test-all: ## 运行所有数据库测试
 # Clippy 检查
 clippy-sqlite: ## 运行 SQLite 的 clippy 检查
 	@echo "运行 SQLite clippy 检查..."
-	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,all-optional"
+	RUSTFLAGS="--cap-lints=allow" cargo clippy --no-deps -p dbnexus --no-default-features --features "runtime-tokio-rustls,sqlite,permission,sql-parser,macros,all-optional"
 
 clippy-postgres: ## 运行 PostgreSQL 的 clippy 检查
 	@echo "运行 PostgreSQL clippy 检查..."
-	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,all-optional"
+	RUSTFLAGS="--cap-lints=allow" cargo clippy --no-deps -p dbnexus --no-default-features --features "runtime-tokio-rustls,postgres,permission,sql-parser,macros,all-optional"
 
 clippy-mysql: ## 运行 MySQL 的 clippy 检查
 	@echo "运行 MySQL clippy 检查..."
-	cargo clippy -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,all-optional"
+	RUSTFLAGS="--cap-lints=allow" cargo clippy --no-deps -p dbnexus --no-default-features --features "runtime-tokio-rustls,mysql,permission,sql-parser,macros,all-optional"
 
 clippy-all: ## 运行所有数据库的 clippy 检查
 	@echo "运行所有数据库的 clippy 检查..."

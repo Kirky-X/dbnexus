@@ -1185,7 +1185,7 @@ impl DbConfig {
     /// - 检查 null 字节注入
     /// - 检查环境变量扩展攻击
     /// - 检查特殊字符注入
-    fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
+    pub(crate) fn is_safe_config_path(path: &Path) -> Result<bool, ConfigError> {
         // 1. 检查 null 字节注入
         let path_str = path.to_string_lossy();
         if path_str.contains('\0') {

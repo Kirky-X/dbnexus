@@ -10,7 +10,6 @@ ignore = [
     # unmaintained 警告（这些是上游依赖，无法直接解决）
     "RUSTSEC-2025-0052",  # async-std (sqlx 依赖)
     "RUSTSEC-2024-0384",  # instant (sqlx 依赖)
-    "RUSTSEC-2025-0123",  # opentelemetry-jaeger (tracing 特性)
     "RUSTSEC-2024-0387",  # opentelemetry_api (tracing 特性)
 ]
 

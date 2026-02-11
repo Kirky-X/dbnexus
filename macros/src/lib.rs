@@ -12,7 +12,7 @@
 #![allow(dead_code)] // 允许未使用的辅助函数
 
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error2::proc_macro_error;
 use proc_macro2::Span;
 use quote::quote;
 use regex::Regex;
@@ -148,19 +148,44 @@ fn extract_primary_key(data: &syn::Data) -> String {
 }
 
 #[proc_macro_attribute]
-pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // 提取表名（用于权限检查）
-    let table_name = extract_table_name(&input.attrs);
+    // 支持在宏参数中显式指定表名：#[db_crud(table_name = "...")]
+    let explicit_table_name = {
+        let args = proc_macro2::TokenStream::from(args);
+        let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
+        let parsed = syn::parse::Parser::parse(&parser, args.into()).unwrap_or_default();
+        let mut value: Option<String> = None;
+        for meta in parsed {
+            if let syn::Meta::NameValue(nv) = meta {
+                if nv.path.is_ident("table_name") {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s), ..
+                    }) = nv.value
+                    {
+                        value = Some(s.value());
+                        break;
+                    }
+                }
+            }
+        }
+        value
+    };
+
+    // 提取表名（用于权限检查）：优先使用宏参数，其次从属性解析
+    let table_name = match explicit_table_name {
+        Some(v) => v,
+        None => extract_table_name(&input.attrs),
+    };
 
     // 验证表名是否存在
     if table_name.is_empty() {
         return syn::Error::new(
             struct_name.span(),
-            "#[db_crud] requires #[table_name = \"...\"] or #[sea_orm(table_name = \"...\")] attribute on the entity",
+            "#[db_crud] requires table_name. Provide #[sea_orm(table_name = \"...\")] on the entity or use #[db_crud(table_name = \"...\")]",
         )
         .to_compile_error()
         .into();
@@ -186,9 +211,9 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn insert(
-                session: &crate::pool::Session,
-                model: <Self as sea_orm::entity::EntityTrait>::Model,
-            ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
+                session: &::dbnexus::pool::Session,
+                model: Self,
+            ) -> Result<Self, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
                 // 权限检查
@@ -198,8 +223,8 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行插入
-                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
-                let result = Self::Entity::insert(active_model)
+                let active_model: ActiveModel = model.into();
+                let result = Entity::insert(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -209,7 +234,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 session.record_metric("insert", #table_name, true);
 
                 // 返回完整模型
-                Self::Entity::find_by_id(result.last_insert_id)
+                Entity::find_by_id(result.last_insert_id)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?
@@ -233,9 +258,9 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_id(
-                session: &crate::pool::Session,
+                session: &::dbnexus::pool::Session,
                 id: i64,
-            ) -> Result<Option<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+            ) -> Result<Option<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
                 // 权限检查
@@ -245,7 +270,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行查询
-                let result = Self::Entity::find_by_id(id)
+                let result = Entity::find_by_id(id)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -274,10 +299,10 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn update(
-                session: &crate::pool::Session,
-                model: <Self as sea_orm::entity::EntityTrait>::Model,
-            ) -> Result<<Self as sea_orm::entity::EntityTrait>::Model, dbnexus::DbError> {
-                use sea_orm::{EntityTrait, PrimaryKeyTrait};
+                session: &::dbnexus::pool::Session,
+                model: Self,
+            ) -> Result<Self, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
 
                 // 权限检查
                 session.check_table_permission(#table_name, "UPDATE").await?;
@@ -288,7 +313,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 // 获取主键值
                 // ✅ 更安全的修复代码
                 // 先转换为ActiveModel获取主键
-                let active_model: <Self as sea_orm::entity::EntityTrait>::ActiveModel = model.into();
+                let active_model: ActiveModel = model.into();
                 let primary_key = match active_model.id.clone() {
                     sea_orm::ActiveValue::Set(id) => id,
                     sea_orm::ActiveValue::Unchanged(id) => id,
@@ -296,7 +321,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 };
 
                 // 执行更新
-                Self::Entity::update(active_model)
+                Entity::update(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -306,7 +331,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 session.record_metric("update", #table_name, true);
 
                 // 返回更新后的模型
-                Self::Entity::find_by_id(primary_key)
+                Entity::find_by_id(primary_key)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?
@@ -330,7 +355,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete(
-                session: &crate::pool::Session,
+                session: &::dbnexus::pool::Session,
                 id: i64,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -342,14 +367,15 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 先查询记录
-                let record = Self::Entity::find_by_id(id)
+                let record = Entity::find_by_id(id)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?
                     .ok_or_else(|| dbnexus::DbError::Config(format!("Record with id {} not found", id)))?;
 
                 // 删除记录
-                let result = Self::Entity::delete(record)
+                let active_model: ActiveModel = record.into();
+                let result = Entity::delete(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -377,8 +403,8 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_all(
-                session: &crate::pool::Session,
-            ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+                session: &::dbnexus::pool::Session,
+            ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
                 // 权限检查
@@ -388,7 +414,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行查询
-                let result = Self::Entity::find()
+                let result = Entity::find()
                     .all(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -417,9 +443,9 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_condition(
-                session: &crate::pool::Session,
+                session: &::dbnexus::pool::Session,
                 condition: sea_orm::Condition,
-            ) -> Result<Vec<<Self as sea_orm::entity::EntityTrait>::Model>, dbnexus::DbError> {
+            ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
                 // 权限检查
@@ -429,7 +455,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行查询
-                let result = Self::Entity::find()
+                let result = Entity::find()
                     .filter(condition)
                     .all(conn)
                     .await
@@ -459,7 +485,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete_many(
-                session: &crate::pool::Session,
+                session: &::dbnexus::pool::Session,
                 filter: sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -471,7 +497,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行删除
-                let result = Self::Entity::delete_many()
+                let result = Entity::delete_many()
                     .filter(filter)
                     .exec(conn)
                     .await
@@ -500,7 +526,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn count(
-                session: &crate::pool::Session,
+                session: &::dbnexus::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
@@ -511,7 +537,7 @@ pub fn db_crud(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 // 执行查询
-                let count = Self::Entity::find()
+                let count = Entity::find()
                     .count(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -543,7 +569,7 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
 
     for role in roles {
         if !role_name_pattern.is_match(role) {
-            proc_macro_error::abort!(
+            proc_macro_error2::abort!(
                 struct_name,
                 format!(
                     "Invalid role name '{}'. Role names must:\n\
@@ -563,14 +589,14 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
 fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
     // 1. 空路径检查
     if config_path.is_empty() {
-        proc_macro_error::abort!(struct_name, "Config path cannot be empty");
+        proc_macro_error2::abort!(struct_name, "Config path cannot be empty");
     }
 
     // 2. 路径遍历攻击检测（正则表达式）
     let path_traversal_regex =
         regex::Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Path traversal regex should be valid");
     if path_traversal_regex.is_match(config_path) {
-        proc_macro_error::abort!(
+        proc_macro_error2::abort!(
             struct_name,
             "Config path contains invalid parent directory reference or path traversal patterns"
         );
@@ -578,7 +604,7 @@ fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
 
     // 3. 空字节注入检查
     if config_path.as_bytes().contains(&0) {
-        proc_macro_error::abort!(struct_name, "Config path contains null byte");
+        proc_macro_error2::abort!(struct_name, "Config path contains null byte");
     }
 
     // 4. 绝对路径检查（允许绝对路径，但给出警告）
@@ -591,7 +617,7 @@ fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
     if config_path.contains(':') && config_path.len() > 2 {
         let chars: Vec<char> = config_path.chars().collect();
         if chars.len() > 2 && chars[1] == ':' {
-            proc_macro_error::abort!(
+            proc_macro_error2::abort!(
                 struct_name,
                 "Absolute Windows paths are not recommended. Use relative paths instead."
             );
@@ -611,7 +637,7 @@ fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
     let lower_path = config_path.to_lowercase();
     for dangerous in &dangerous_paths {
         if lower_path.contains(&dangerous.to_lowercase()) {
-            proc_macro_error::abort!(
+            proc_macro_error2::abort!(
                 struct_name,
                 "Config path references dangerous system path: {}",
                 dangerous
@@ -670,7 +696,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
     // 添加输入长度限制，防止 ReDoS 攻击
     const MAX_ATTRIBUTE_LENGTH: usize = 10000;
     if args_str.len() > MAX_ATTRIBUTE_LENGTH {
-        proc_macro_error::abort!(
+        proc_macro_error2::abort!(
             struct_name,
             "Attribute parameters are too long (max {} bytes)",
             MAX_ATTRIBUTE_LENGTH
@@ -732,7 +758,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // 编译时验证角色名格式
     if validate_role_names(&roles, struct_name).is_err() {
-        proc_macro_error::abort!(
+        proc_macro_error2::abort!(
             struct_name,
             "Invalid role name(s) detected. See errors above for details."
         );

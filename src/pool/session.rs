@@ -193,8 +193,8 @@ impl Session {
     ///
     /// 此方法确保连接在使用前是可用的。如果连接已被释放（不应发生），
     /// 将返回错误。Session 的生命周期管理确保连接始终可用。
-    pub(crate) fn connection(&mut self) -> Result<&mut DatabaseConnection, DbError> {
-        self.connection.as_mut().ok_or_else(|| {
+    pub fn connection(&self) -> Result<&DatabaseConnection, DbError> {
+        self.connection.as_ref().ok_or_else(|| {
             tracing::error!("Connection accessed after being released - this indicates a lifecycle bug");
             DbError::Config("Connection not available - Session may have been invalidated".to_string())
         })
@@ -226,149 +226,50 @@ impl Session {
 
         #[cfg(not(feature = "sql-parser"))]
         {
-            // 当 sql-parser 特性未启用时，执行基本的 SQL 注入防护检查
-            let sql_upper = sql.trim().to_uppercase();
-
-            // 检测多语句执行（SQL 注入常用技术）
-            if let Some(semi_colon_pos) = sql_upper.find(';') {
-                // 检查分号后是否有非空内容
-                let after_semicolon = sql_upper[semi_colon_pos + 1..].trim();
-                if !after_semicolon.is_empty() {
-                    tracing::warn!(
-                        "Rejected SQL with multiple statements (potential SQL injection): {}",
-                        sql
-                    );
-                    return Err(DbError::Permission(
-                        "Multiple SQL statements not allowed in this context".to_string(),
-                    ));
-                }
-            }
-
-            // 检测常见的 SQL 注入模式
-            let dangerous_patterns = [
-                // 注释注入
-                ("--", "Line comment"),
-                ("/*", "Block comment"),
-                ("*/", "Block comment end"),
-                // UNION 注入
-                ("UNION ALL", "UNION injection"),
-                ("UNION SELECT", "UNION injection"),
-                ("UNION(", "UNION injection"),
-                // 数据操作危险操作
-                ("DROP DATABASE", "DROP DATABASE"),
-                ("TRUNCATE TABLE", "TRUNCATE TABLE"),
-                ("DELETE FROM", "DELETE injection"),
-                ("DELETE(", "DELETE injection"),
-                // 存储过程注入
-                ("EXEC(", "EXEC injection"),
-                ("EXECUTE(", "EXECUTE injection"),
-                (" xp_", "SQL Server extended stored procedure"),
-                (" sp_", "SQL Server stored procedure"),
-                (" xp_cmdshell", "SQL Server cmdshell"),
-                // 系统表访问
-                ("INFORMATION_SCHEMA", "System table access"),
-                ("SYSOBJECTS", "System table access (SQL Server)"),
-                ("SYSCOLUMNS", "System table access"),
-                // 十六进制编码尝试
-                ("0x", "Hex-encoded string"),
-                // 字符串拼接
-                ("||", "String concatenation"),
-                ("CONCAT(", "String concatenation function"),
-                // 时序攻击
-                ("BENCHMARK(", "Timing attack"),
-                ("SLEEP(", "Timing attack"),
-                ("PG_SLEEP", "Timing attack"),
-                // 条件注入
-                ("' OR '1'='1", "Classic SQL injection"),
-                ("' OR 1=1", "Numeric SQL injection"),
-                (" OR 1=1", "Numeric SQL injection"),
-                // 负载注入
-                ("<script>", "Script injection"),
-                ("javascript:", "JavaScript injection"),
-                ("VARCHAR", "Type conversion injection"),
-            ];
-
-            for (pattern, description) in &dangerous_patterns {
-                if sql_upper.contains(pattern) {
-                    tracing::warn!(
-                        "Rejected SQL containing dangerous pattern '{}' ({})",
-                        pattern,
-                        description
-                    );
-                    return Err(DbError::Permission(format!(
-                        "SQL statement contains forbidden pattern: {} ({})",
-                        pattern, description
-                    )));
-                }
-            }
-
-            // 检测可疑的字符串逃逸模式
-            let escape_patterns = [("''", "Escaped single quote"), ("\\\\", "Double backslash")];
-
-            for (pattern, _) in &escape_patterns {
-                let count = sql_upper.matches(pattern).count();
-                if count > 10 {
-                    // 过多的逃逸字符可能表示注入尝试
-                    tracing::warn!("Suspicious escape pattern count: {} ({} occurrences)", pattern, count);
-                    return Err(DbError::Permission(
-                        "SQL statement contains suspicious escape patterns".to_string(),
-                    ));
-                }
-            }
+            let _ = sql;
+            return Err(DbError::Permission(
+                "execute_raw requires the sql-parser feature to be enabled".to_string(),
+            ));
         }
 
-        #[cfg(all(feature = "sql-parser", feature = "permission"))]
+        #[cfg(feature = "sql-parser")]
         {
-            // 解析 SQL 操作类型和表名
-            let parser = SqlParser::new();
-            if let Some((table_name, action)) = parser.parse_operation(sql) {
-                if table_name.is_empty() || is_invalid_table_name(&table_name) {
+            #[cfg(all(feature = "sql-parser", feature = "permission"))]
+            {
+                // 解析 SQL 操作类型和表名
+                let parser = SqlParser::new();
+                if let Some((table_name, action)) = parser.parse_operation(sql) {
+                    if table_name.is_empty() || is_invalid_table_name(&table_name) {
+                        return Err(DbError::Permission(
+                            "Failed to extract table name for permission checking".to_string(),
+                        ));
+                    }
+                    // 检查权限
+                    if !self.permission_ctx.check_table_access(&table_name, &action).await {
+                        return Err(DbError::Permission(format!(
+                            "Permission denied for {} on {}",
+                            action, table_name
+                        )));
+                    }
+                } else {
+                    // 解析失败，拒绝执行
                     return Err(DbError::Permission(
-                        "Failed to extract table name for permission checking".to_string(),
+                        "Failed to parse SQL statement for permission checking".to_string(),
                     ));
                 }
-                // 检查权限
-                if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                    return Err(DbError::Permission(format!(
-                        "Permission denied for {} on {}",
-                        action, table_name
-                    )));
-                }
-            } else {
-                // 解析失败，拒绝执行
-                return Err(DbError::Permission(
-                    "Failed to parse SQL statement for permission checking".to_string(),
-                ));
-            }
-        }
-
-        #[cfg(all(feature = "permission", not(feature = "sql-parser")))]
-        {
-            let (table_name, action) = parse_table_and_action(sql);
-            if table_name.is_empty() {
-                return Err(DbError::Permission(
-                    "Failed to extract table name for permission checking".to_string(),
-                ));
             }
 
-            if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                return Err(DbError::Permission(format!(
-                    "Permission denied for {} on {}",
-                    action, table_name
-                )));
+            if let Some(tx) = self.transaction.as_ref() {
+                return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
             }
+
+            let conn = self
+                .connection
+                .as_ref()
+                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+
+            conn.execute_unprepared(sql).await.map_err(DbError::Connection)
         }
-
-        if let Some(tx) = self.transaction.as_ref() {
-            return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
-        }
-
-        let conn = self
-            .connection
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
-
-        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
     }
 
     /// 执行 DDL 操作（允许创建表、删除表等操作）

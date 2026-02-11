@@ -15,7 +15,7 @@
 //! cargo run --example permissions --features sqlite,permission
 //! ```
 
-use dbnexus::{DbConfig, DbPool};
+use dbnexus::{DbConfigBuilder, DbPool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化连接池（带权限配置）
     let config = DbConfigBuilder::new()
         .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("src/permissions.yaml")
+        .permissions_path("examples/demo/permissions.yaml")
         .admin_role("admin")
         .build()
         .expect("Failed to build config");
