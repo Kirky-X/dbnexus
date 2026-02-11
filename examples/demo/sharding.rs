@@ -22,6 +22,7 @@ use dbnexus::sharding::{ShardConfig, ShardRouter};
 use std::collections::HashMap;
 
 /// 定义 Order Entity（用于分片演示）
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct Order {
     id: i64,
@@ -31,6 +32,7 @@ struct Order {
 }
 
 /// 定义 Log Entity（日志数据，适合按时间分片）
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct LogEntry {
     id: i64,

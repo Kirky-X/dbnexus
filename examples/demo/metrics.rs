@@ -17,11 +17,11 @@
 //! cargo run --example metrics --features "sqlite,metrics"
 //! ```
 
-use dbnexus::{DbConfig, DbPool, metrics::MetricsCollector};
-use std::path::Path;
+use dbnexus::{DbConfigBuilder, DbPool, metrics::MetricsCollector};
 use std::time::Duration;
 
 /// 定义 User 结构体（用于演示指标收集）
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct User {
     id: i64,
@@ -30,6 +30,7 @@ struct User {
 }
 
 /// 定义 Product 结构体（用于演示不同查询类型的指标）
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct Product {
     id: i64,
@@ -51,13 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 初始化数据库连接池
     println!("\n2️⃣ 初始化数据库连接池");
     println!("------------------------------------------");
-    let current_dir = std::env::current_dir()?;
-    let permissions_path = current_dir.join("src/permissions.yaml");
-    println!("  权限配置路径: {}", permissions_path.display());
-
     let config = DbConfigBuilder::new()
         .url("sqlite:file::memory:?cache=shared")
-        .permissions_path(permissions_path.to_string_lossy().to_string())
+        .permissions_path("examples/demo/permissions.yaml")
         .admin_role("admin")
         .build()
         .expect("Failed to build config");
@@ -343,7 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  {}", "=".repeat(60));
 
     // 打印前 50 行（避免输出过长）
-    for (i, line) in prometheus_output.lines().take(50).enumerate() {
+    for (_i, line) in prometheus_output.lines().take(50).enumerate() {
         println!("  {}", line);
     }
 

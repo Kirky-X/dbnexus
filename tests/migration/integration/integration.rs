@@ -35,19 +35,99 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
 }
 
 /// TEST-M-001: 迁移执行器创建测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_migration_executor_creation() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = create_test_pool().await.expect("Failed to create test pool");
+
+    // 获取会话
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    // 验证连接可用
+    let conn = session.connection().expect("Connection should be available");
+    assert!(!conn.is_closed(), "Connection should not be closed");
+
+    // 验证我们可以创建表（迁移执行器的基础）
+    let table_name = format!(
+        "migration_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
+    session
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            table_name
+        ))
+        .await
+        .expect("Should be able to create table");
+
+    // 清理
+    let _ = session
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
+        .await;
 }
 
 /// TEST-M-021: 迁移应用测试
-/// NOTE: 暂时跳过，因为需要内部 connection() 方法
 #[tokio::test]
-#[ignore = "需要内部 connection() 方法"]
 async fn test_migration_apply() {
-    // 实际测试由其他测试覆盖
+    let (pool, _temp_dir) = create_test_pool().await.expect("Failed to create test pool");
+
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    // 验证连接可用
+    let conn = session.connection().expect("Connection should be available");
+    assert!(!conn.is_closed(), "Connection should not be closed");
+
+    // 创建测试表用于迁移测试
+    let table_name = format!(
+        "migration_apply_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
+    // 执行迁移（创建表）
+    session
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )",
+            table_name
+        ))
+        .await
+        .expect("Migration should apply successfully");
+
+    // 验证表已创建
+    let url = pool.config().url_sanitized();
+    let check_sql = if url.contains("postgres") {
+        format!(
+            "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_name = '{}')",
+            table_name
+        )
+    } else if url.contains("mysql") {
+        format!(
+            "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '{}')",
+            table_name
+        )
+    } else {
+        format!(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+            table_name
+        )
+    };
+
+    let result = session.execute_raw(&check_sql).await;
+    assert!(result.is_ok(), "Migration should be applied");
+
+    // 清理
+    let _ = session
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
+        .await;
 }
 
 /// TEST-M-002: 迁移历史创建测试

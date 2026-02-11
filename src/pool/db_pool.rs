@@ -7,8 +7,13 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-use crate::cache::{AsyncCache, Cache};
+#[cfg(feature = "permission")]
+use crate::cache::AsyncCache;
+#[cfg(feature = "permission")]
+use crate::cache::Cache;
 use async_trait::async_trait;
+#[cfg(feature = "confers")]
+use confers::core::config_trait::ConfersConfig;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -253,7 +258,7 @@ impl DbPool {
     ///
     /// 此方法仅在启用 `confers` feature 时可用。
     #[cfg(feature = "confers")]
-    pub async fn with_confers(config: Arc<dyn confers::ConfersConfig>) -> DbResult<Self> {
+    pub async fn with_confers(config: Arc<dyn ConfersConfig>) -> DbResult<Self> {
         use crate::config::DbConfigBuilder;
 
         // 从confers读取URL（必需）
@@ -339,10 +344,6 @@ impl DbPool {
             .map_err(|e| crate::config::DbError::Config(format!("Failed to create policy cache: {}", e)))?;
         #[cfg(feature = "permission")]
         let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(cache);
-
-        // 为未启用permission特性的场景提供默认值
-        #[cfg(not(feature = "permission"))]
-        let policy_cache: Arc<Cache<String, ()>> = Arc::new(Cache::builder().capacity(256).build().await.unwrap());
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
         #[cfg(feature = "permission")]
@@ -552,6 +553,9 @@ impl DbPool {
     /// ```rust
     /// use dbnexus::{DbPool, DbConfigBuilder};
     ///
+    /// let runtime = tokio::runtime::Runtime::new()?;
+    /// let _guard = runtime.enter();
+    ///
     /// let config = DbConfigBuilder::new()
     ///     .url("sqlite::memory:")
     ///     .max_connections(10)
@@ -600,6 +604,9 @@ impl DbPool {
     ///
     /// ```rust
     /// use dbnexus::{DbPool, DbConfigBuilder};
+    ///
+    /// let runtime = tokio::runtime::Runtime::new()?;
+    /// let _guard = runtime.enter();
     ///
     /// let config = DbConfigBuilder::new()
     ///     .url("sqlite::memory:")
@@ -1201,7 +1208,6 @@ impl DbPool {
             });
         } else {
             inner.total_count.fetch_sub(1, Ordering::SeqCst);
-            drop(conn);
         }
     }
 

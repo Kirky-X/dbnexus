@@ -18,7 +18,7 @@
 //! cargo run --example sql_parser --features "sqlite,sql-parser"
 //! ```
 
-use dbnexus::sql_parser::{SqlOperationType, SqlParser};
+use dbnexus::sql_parser::SqlParser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -215,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (name, query) in error_cases {
         match parser.parse_single(query) {
-            Ok(parsed) => {
+            Ok(_parsed) => {
                 println!("  ✗ {}: 应该失败但成功了", name);
             }
             Err(e) => {

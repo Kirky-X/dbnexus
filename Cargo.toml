@@ -18,7 +18,7 @@ categories = ["database", "asynchronous"]
 
 [workspace.dependencies]
 # Async runtime
-tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1.42", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
 
 # Error handling
 thiserror = "2.0"
@@ -47,14 +47,8 @@ prometheus = "0.14"
 
 # Caching - 基于 oxcache 的缓存系统
 
-# Random
-rand = "0.9"
-
-# Hashing - 使用 ahash 替代 DefaultHasher，提供更好的性能和 DOS 攻击抵抗
-ahash = "0.8"
-
 # Internal packages
-dbnexus-macros = { version = "0.1.0" }
+dbnexus-macros = { path = "macros" }
 
 [workspace.lints.rust]
 
@@ -79,15 +73,15 @@ description = "An enterprise-grade database abstraction layer for Rust with buil
 
 [features]
 default = [
-    "sqlite",
     "runtime-tokio-rustls",
+    "sqlite",
     "permission",
     "sql-parser",
     "macros",
     "config-env",
 ]
 
-# Async runtime (互斥)
+# === 运行时 (互斥 - 必须且只能选一个) ===
 runtime-tokio-rustls = [
     "sea-orm/runtime-tokio-rustls",
     "tokio/rt-multi-thread",
@@ -102,59 +96,93 @@ runtime-async-std = [
     "sea-orm/runtime-async-std",
 ]
 
-# Database drivers (互斥 - 必须且只能选一个)
+# === 数据库驱动 (互斥 - 必须且只能选一个) ===
 sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros"]
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
-# Core features (可选，用于最小化部署)
-permission = ["dashmap", "serde_yaml"]
-sql-parser = ["sqlparser", "regex", "once_cell"]
+# === 核心功能 (可选) ===
+permission = ["dashmap", "serde_yaml", "cache"]
+sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
 macros = ["dbnexus-macros"]
+cache = ["oxcache"]  # 缓存功能，使 oxcache 变为可选
 
-# Config features (配置文件支持)
-config-yaml = ["serde_yaml", "regex"]
-config-toml = ["toml", "regex"]
-config-env = ["regex"]  # 环境变量配置
+# === 配置支持 ===
+config-yaml = ["serde_yaml"]
+config-toml = ["toml"]
+config-env = []  # 环境变量配置（无额外依赖）
 
-# Pool features (连接池高级功能)
-pool-health-check = []
-pool-warmup = ["futures"]
+# === 连接池增强 ===
+pool-health-check = []  # 连接池健康检查（无额外依赖）
+pool-warmup = ["futures"]  # 连接池预热
 
-# Optional features (可选功能)
-metrics = ["prometheus"]
-migration = []
-auto-migrate = ["migration"]
-sharding = ["twox-hash", "chrono", "futures"]
-global-index = ["sha2", "chrono", "sea-orm/with-json"]
-with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
-audit = ["chrono", "uuid"]
-permission-engine = []
-health-check = []  # 健康检查模块（内置，无需外部依赖）
+# === 可观测性 ===
+observability = ["metrics", "tracing", "health-check"]
+metrics = ["prometheus"]  # Prometheus metrics 导出
 tracing = [
     "tracing-subscriber",
     "tracing-opentelemetry",
     "opentelemetry-otlp",
-    "opentelemetry-jaeger",
     "opentelemetry",
     "opentelemetry_sdk",
     "chrono",
-    "http",
-    "tower",
-    "once_cell",
 ]
-confers = ["dep:confers"]
+health-check = []  # 健康检查模块（内置，无额外依赖）
 
-# Development features (开发测试专用)
+# === 数据管理 ===
+data-management = ["migration", "auto-migrate", "sharding", "global-index"]
+migration = ["sqlparser"]  # 数据库迁移
+auto-migrate = ["migration"]  # 自动迁移
+sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
+global-index = ["chrono", "with-json"]  # 全局索引
+with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
+
+# === 安全与合规 ===
+security = ["audit", "permission-engine"]
+audit = ["chrono", "uuid"]  # 审计日志
+permission-engine = ["dashmap", "serde_yaml", "cache"]  # 高级权限引擎
+
+# === 高级配置 ===
+confers = ["dep:confers"]  # 使用 confers 库进行高级配置管理
+
+# === 开发工具 ===
 dev = []
+dev-full = ["dev", "bench", "test-utils"]
+bench = ["criterion"]  # 性能测试相关依赖
+test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
-# Preset configurations (预设配置)
-# 嵌入式设备最小配置（仅连接池 + 环境变量配置 + SQLite）
-minimal = ["runtime-tokio-rustls", "sqlite", "config-env", "regex", "sql-parser"]
+# === 预设配置 ===
+# 嵌入式/边缘设备 - 超轻量配置
+embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]
 
-# 启用所有可选功能（不包括数据库特性，因为数据库特性互斥）
-all-optional = ["metrics", "migration", "auto-migrate", "tracing", "sharding", "global-index", "audit", "permission-engine", "confers"]
+# 微服务 - 优化的配置
+microservice = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "permission",
+    "sql-parser",
+    "config-env",
+    "observability",
+]
+
+# 单体应用 - 完整配置
+monolith = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "permission",
+    "sql-parser",
+    "config-yaml",
+    "data-management",
+    "security",
+    "observability",
+]
+
+# 企业级 - 全功能配置
+enterprise = ["postgres", "monolith", "permission-engine", "confers"]
+
+# 所有可选功能（不包括数据库驱动）
+all-optional = ["cache", "observability", "data-management", "security", "confers"]
 
 [dependencies]
 # Workspace dependencies
@@ -172,34 +200,32 @@ toml = { version = "0.9.10", optional = true }
 parking_lot = "0.12"
 home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
-http = { version = "1.0", optional = true }
-tower = { version = "0.5", optional = true }
+opentelemetry-otlp = { version = "0.17.0", optional = true, default-features = false, features = ["grpc-tonic", "trace"] }
 tracing-opentelemetry = { version = "0.27", optional = true }
 opentelemetry = { version = "0.24.0", optional = true }
-opentelemetry-otlp = { version = "0.17.0", optional = true }
-opentelemetry-jaeger = { version = "0.22.0", optional = true }
 opentelemetry_sdk = { version = "0.24.0", optional = true }
 once_cell = { version = "1.20", optional = true }
 twox-hash = { version = "2.1", optional = true }
-sha2 = { version = "0.10", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.0", optional = true, features = ["v4"] }
-indexmap = { version = "2.0", optional = true }
-confers = { path = "/home/project/confers", optional = true, default-features = false, features = ["cli"] }
-oxcache = { path = "/home/project/oxcache", default-features = false, features = ["minimal", "moka", "serialization"] }
-moka = { version = "0.12", default-features = false, features = ["sync"] }
+confers = { path = "/home/project/confers", optional = true, default-features = false, features = ["derive"] }
+criterion = { version = "0.5", optional = true }
 
 # External dependencies
 regex = { version = "1.0", optional = true }
 sqlparser = { version = "0.47", optional = true }
-rand = "0.8"
 futures = { version = "0.3", optional = true }
 dashmap = { version = "5.5", optional = true }
-ahash = "0.8"
+moka = { version = "0.12", default-features = false, features = ["sync"] }
+oxcache = { path = "/home/project/oxcache", optional = true, default-features = false, features = ["minimal", "moka", "serialization", "redis", "futures", "database", "confers", "dashmap", "sqlite"] }
 
 # Internal dependencies
 dbnexus-macros = { workspace = true, optional = true }
+
+# Testing utilities (also in dev-dependencies)
+assert_cmd = { version = "2.0", optional = true }
+tempfile = { version = "3.10", optional = true }
 
 tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
 
@@ -213,9 +239,7 @@ criterion = "0.5"
 futures = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
-indexmap = "2.0"
 twox-hash = "2.1"
-sha2 = "0.10"
 
 [lints]
 workspace = true
@@ -224,10 +248,45 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[[test]]
-name = "core_config_integration"
-path = "tests/core/integration/config_integration.rs"
-required-features = ["config-yaml", "permission"]
+[[example]]
+name = "quickstart"
+path = "examples/demo/quickstart.rs"
+
+[[example]]
+name = "config"
+path = "examples/demo/config.rs"
+
+[[example]]
+name = "permissions"
+path = "examples/demo/permissions.rs"
+
+[[example]]
+name = "transactions"
+path = "examples/demo/transactions.rs"
+
+[[example]]
+name = "sql_parser"
+path = "examples/demo/sql_parser.rs"
+
+[[example]]
+name = "metrics"
+path = "examples/demo/metrics.rs"
+
+[[example]]
+name = "tracing"
+path = "examples/demo/tracing.rs"
+
+[[example]]
+name = "audit"
+path = "examples/demo/audit.rs"
+
+[[example]]
+name = "cache"
+path = "examples/demo/cache.rs"
+
+[[example]]
+name = "sharding"
+path = "examples/demo/sharding.rs"
 
 [[test]]
 name = "core_entity_integration"
@@ -268,11 +327,6 @@ required-features = ["auto-migrate"]
 name = "sharding_integration"
 path = "tests/sharding/integration/sharding_integration.rs"
 required-features = ["sharding"]
-
-[[test]]
-name = "global_index_integration"
-path = "tests/global_index/integration/global_index_integration.rs"
-required-features = ["global-index", "sqlite"]
 
 [[test]]
 name = "metrics_integration"

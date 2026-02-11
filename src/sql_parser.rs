@@ -17,8 +17,6 @@ use thiserror::Error;
 #[cfg(feature = "permission")]
 pub use crate::permission::PermissionAction;
 
-#[cfg(not(feature = "permission"))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// 权限操作类型（本地定义）
 ///
 /// # 注意
