@@ -6,7 +6,13 @@
 //! 缓存模块
 //!
 //! 基于 oxcache 的高性能缓存系统
+//!
+//! # Feature Requirements
+//!
+//! 此模块需要启用 `cache` feature。如果启用了 `permission` 或 `permission-engine` feature，
+//! 则必须同时启用 `cache` feature，否则会导致编译错误。
 
+#[cfg(feature = "cache")]
 pub use oxcache::Cache;
 pub use oxcache::CacheBuilder;
 pub use oxcache::traits::Cacheable;
@@ -97,7 +103,7 @@ mod tests {
         let cache = create_cache::<String>(100).await.unwrap();
 
         // Test set and get
-        cache.set(&"key1".to_string(), &"value1".to_string()).await;
+        cache.set(&"key1".to_string(), &"value1".to_string()).await.unwrap();
         let result = cache.get(&"key1".to_string()).await.unwrap();
         assert_eq!(result, Some("value1".to_string()));
     }
@@ -106,8 +112,8 @@ mod tests {
     async fn test_cache_overwrite() {
         let cache = create_cache::<String>(10).await.unwrap();
 
-        cache.set(&"key".to_string(), &"value1".to_string()).await;
-        cache.set(&"key".to_string(), &"value2".to_string()).await;
+        cache.set(&"key".to_string(), &"value1".to_string()).await.unwrap();
+        cache.set(&"key".to_string(), &"value2".to_string()).await.unwrap();
 
         let result = cache.get(&"key".to_string()).await.unwrap();
         assert_eq!(result, Some("value2".to_string()));
@@ -117,13 +123,13 @@ mod tests {
     async fn test_cache_clear() {
         let cache = create_cache::<String>(10).await.unwrap();
 
-        cache.set(&"key1".to_string(), &"value1".to_string()).await;
-        cache.set(&"key2".to_string(), &"value2".to_string()).await;
+        cache.set(&"key1".to_string(), &"value1".to_string()).await.unwrap();
+        cache.set(&"key2".to_string(), &"value2".to_string()).await.unwrap();
 
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_some());
         assert!(cache.get(&"key2".to_string()).await.unwrap().is_some());
 
-        cache.clear().await;
+        cache.clear().await.unwrap();
 
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
         assert!(cache.get(&"key2".to_string()).await.unwrap().is_none());

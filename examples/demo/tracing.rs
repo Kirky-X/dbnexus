@@ -17,13 +17,14 @@
 //! cargo run --example tracing --features "sqlite,tracing"
 //! ```
 
-use dbnexus::{DbConfig, DbPool};
 use dbnexus::tracing::{extract, inject};
+use dbnexus::{DbConfigBuilder, DbPool};
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
 use tracing_subscriber::{EnvFilter, prelude::*};
 
 /// 定义 User 结构体（用于演示追踪）
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct User {
     id: i64,
@@ -32,6 +33,7 @@ struct User {
 }
 
 /// 定义 Order 结构体（用于演示跨服务追踪）
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 struct Order {
     id: i64,
@@ -66,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------------------");
     let config = DbConfigBuilder::new()
         .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("src/permissions.yaml")
+        .permissions_path("examples/demo/permissions.yaml")
         .admin_role("admin")
         .build()
         .expect("Failed to build config");

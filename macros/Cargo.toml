@@ -17,7 +17,7 @@ proc-macro = true
 syn = { version = "2.0.114", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
-proc-macro-error = "1"
+proc-macro-error2 = "2.0.1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 regex = "1"
@@ -25,7 +25,8 @@ regex = "1"
 [dev-dependencies]
 trybuild = "1"
 tokio-test = { workspace = true }
-dbnexus = { path = "..", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "global-index", "with-json", "sharding"] }
+dbnexus = { path = "..", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros"] }
+sea-orm = { workspace = true, default-features = false, features = ["macros"] }
 
 [lints]
 workspace = true

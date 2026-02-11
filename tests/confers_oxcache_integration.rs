@@ -39,7 +39,7 @@ mod confers_tests {
 
         // 验证池已创建并可以获取会话
         let status = pool.status();
-        assert!(status.total >= 0, "Pool should be created");
+        assert!(status.total > 0, "Pool should have connections");
 
         // 验证可以通过配置获取最大连接数
         let pool_config = pool.config();

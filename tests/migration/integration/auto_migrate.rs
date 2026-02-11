@@ -10,10 +10,21 @@
 #![cfg(feature = "auto-migrate")]
 
 use dbnexus::DbPool;
-use dbnexus::config::{DbConfig, DbConfigBuilder};
+use dbnexus::config::{DatabaseType, DbConfig, DbConfigBuilder};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
+
+#[path = "../../common/mod.rs"]
+mod common;
+
+fn id_column_definition(db_type: DatabaseType) -> &'static str {
+    match db_type {
+        DatabaseType::Sqlite => "INTEGER PRIMARY KEY",
+        DatabaseType::Postgres => "INTEGER PRIMARY KEY",
+        DatabaseType::MySql => "INT PRIMARY KEY",
+    }
+}
 
 /// TEST-AM-001: 自动迁移配置创建测试
 #[tokio::test]
@@ -37,35 +48,43 @@ async fn test_auto_migrate_config_creation() {
 async fn test_migration_file_scanning() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
+    let url = common::get_test_database_url();
+    let db_type = DatabaseType::parse_database_type(&url);
+    let id_column = id_column_definition(db_type);
+
     // 创建测试迁移文件
-    let migration_content_1 = r#"-- Migration: create_users_table
+    let migration_content_1 = format!(
+        r#"-- Migration: create_users_table
 -- Version: 1
 
--- UP
+-- UP:
 CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id {id_column},
     name TEXT NOT NULL,
     email TEXT
 );
 
--- DOWN
+-- DOWN:
 DROP TABLE users;
-"#;
+"#
+    );
 
-    let migration_content_2 = r#"-- Migration: create_orders_table
+    let migration_content_2 = format!(
+        r#"-- Migration: create_orders_table
 -- Version: 2
 
--- UP
+-- UP:
 CREATE TABLE orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id {id_column},
     user_id INTEGER NOT NULL,
     total DECIMAL(10, 2) NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- DOWN
+-- DOWN:
 DROP TABLE orders;
-"#;
+"#
+    );
 
     fs::write(temp_dir.path().join("1_create_users_table.sql"), migration_content_1)
         .expect("Failed to write migration file 1");
@@ -74,7 +93,7 @@ DROP TABLE orders;
 
     // 使用内存数据库
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(&url)
         .max_connections(5)
         .min_connections(1)
         .idle_timeout(300)
@@ -85,6 +104,38 @@ DROP TABLE orders;
         .expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
+        .await
+        .expect("Failed to drop migrations table");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_1")
+        .await
+        .expect("Failed to drop table_1");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_2")
+        .await
+        .expect("Failed to drop table_2");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_3")
+        .await
+        .expect("Failed to drop table_3");
+
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
+        .await
+        .expect("Failed to drop migrations table");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS users")
+        .await
+        .expect("Failed to drop users table");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS orders")
+        .await
+        .expect("Failed to drop orders table");
 
     let migrations = pool
         .run_migrations(temp_dir.path())
@@ -114,8 +165,9 @@ async fn test_migration_timeout_config() {
 async fn test_empty_migrations_directory() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
+    let url = common::get_test_database_url();
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(&url)
         .max_connections(5)
         .min_connections(1)
         .idle_timeout(300)
@@ -137,8 +189,9 @@ async fn test_empty_migrations_directory() {
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_nonexistent_migrations_directory() {
+    let url = common::get_test_database_url();
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(&url)
         .max_connections(5)
         .min_connections(1)
         .idle_timeout(300)
@@ -220,30 +273,40 @@ async fn test_migration_config_from_env() {
 async fn test_migration_version_sorting() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
+    let url = common::get_test_database_url();
+    let db_type = DatabaseType::parse_database_type(&url);
+    let id_column = id_column_definition(db_type);
+
     // 创建乱序的迁移文件
-    let migration_v3 = r#"-- Migration: third
+    let migration_v3 = format!(
+        r#"-- Migration: third
 -- Version: 3
--- UP
-CREATE TABLE table_3 (id INTEGER PRIMARY KEY);
--- DOWN
+-- UP:
+CREATE TABLE table_3 (id {id_column});
+-- DOWN:
 DROP TABLE table_3;
-"#;
+"#
+    );
 
-    let migration_v1 = r#"-- Migration: first
+    let migration_v1 = format!(
+        r#"-- Migration: first
 -- Version: 1
--- UP
-CREATE TABLE table_1 (id INTEGER PRIMARY KEY);
--- DOWN
+-- UP:
+CREATE TABLE table_1 (id {id_column});
+-- DOWN:
 DROP TABLE table_1;
-"#;
+"#
+    );
 
-    let migration_v2 = r#"-- Migration: second
+    let migration_v2 = format!(
+        r#"-- Migration: second
 -- Version: 2
--- UP
-CREATE TABLE table_2 (id INTEGER PRIMARY KEY);
--- DOWN
+-- UP:
+CREATE TABLE table_2 (id {id_column});
+-- DOWN:
 DROP TABLE table_2;
-"#;
+"#
+    );
 
     // 乱序写入
     fs::write(temp_dir.path().join("3_third.sql"), migration_v3).expect("Failed to write v3");
@@ -251,7 +314,7 @@ DROP TABLE table_2;
     fs::write(temp_dir.path().join("2_second.sql"), migration_v2).expect("Failed to write v2");
 
     let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
+        .url(&url)
         .max_connections(5)
         .min_connections(1)
         .idle_timeout(300)
@@ -262,6 +325,24 @@ DROP TABLE table_2;
         .expect("Failed to build config");
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
+        .await
+        .expect("Failed to drop migrations table");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_1")
+        .await
+        .expect("Failed to drop table_1");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_2")
+        .await
+        .expect("Failed to drop table_2");
+    session
+        .execute_raw_ddl("DROP TABLE IF EXISTS table_3")
+        .await
+        .expect("Failed to drop table_3");
 
     // 运行迁移（内存数据库不支持幂等性测试）
     let applied = pool

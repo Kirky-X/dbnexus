@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_migration(from_schema, to_schema, output, description).await?;
         }
         Commands::List => {
-            list_migrations(&cli.migrations_dir)?;
+            list_migrations(&cli.database_url, &cli.migrations_dir).await?;
         }
     }
 
@@ -264,8 +264,11 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     }
 
     // 扫描本地迁移文件
-    let local_migrations = scan_migration_files(migrations_dir)?;
-    let pending_count = local_migrations.len().saturating_sub(applied_count);
+    let local_migrations = executor.scan_migrations(migrations_dir)?;
+    let pending_count = local_migrations
+        .iter()
+        .filter(|m| !executor.history.is_version_applied(m.version()))
+        .count();
 
     println!("\n📦 本地迁移文件: {} 个", local_migrations.len());
     println!("⏳ 待应用的迁移: {} 个", pending_count);
@@ -277,7 +280,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
 
         let pending: Vec<_> = local_migrations
             .iter()
-            .filter(|m| !applied_versions.contains(&m.version))
+            .filter(|m| !applied_versions.contains(&m.version()))
             .collect();
 
         if !pending.is_empty() {
@@ -286,8 +289,8 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
                 println!(
                     "   [{:2}] v{:6} - {}",
                     idx + 1,
-                    migration.version,
-                    migration.description
+                    migration.version(),
+                    migration.description()
                 );
             }
         } else {
@@ -326,7 +329,7 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
 
     // 获取会话以验证连接
     match pool.get_session("admin").await {
-        Ok(mut session) => {
+        Ok(session) => {
             let _conn = session.connection()?.clone();
             drop(session);
 
@@ -367,34 +370,37 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_
     println!("\n📊 数据库类型: {}", db_type);
     println!("📁 迁移目录: {}", migrations_dir.display());
 
+    // 创建迁移执行器
+    let mut session = pool.get_session("admin").await?;
+    let mut executor = session.create_migration_executor(db_type)?;
+
     // 扫描迁移文件
-    let migrations = scan_migration_files(migrations_dir)?;
+    let migrations = executor.scan_migrations(migrations_dir)?;
 
     if migrations.is_empty() {
         println!("\n⚠️  迁移目录中没有找到迁移文件");
         return Ok(());
     }
 
-    // 创建迁移执行器
-    let mut session = pool.get_session("admin").await?;
-
-    // 加载迁移历史（需要通过 session 执行查询）
-    let applied_versions = load_applied_migrations(&mut session).await?;
+    // 加载迁移历史并获取已应用版本
+    executor.load_history().await?;
+    let applied_versions: std::collections::HashSet<u32> =
+        executor.history.applied_migrations.iter().map(|m| m.version).collect();
 
     // 筛选待应用的迁移
     let mut to_apply: Vec<_> = migrations
         .iter()
-        .filter(|m| !applied_versions.contains(&m.version))
+        .filter(|m| !applied_versions.contains(&m.version()))
         .filter(|m| {
             if let Some(target) = target_version {
-                m.version <= target
+                m.version() <= target
             } else {
                 true
             }
         })
         .collect();
 
-    to_apply.sort_by_key(|m| m.version);
+    to_apply.sort_by_key(|m| m.version());
 
     if to_apply.is_empty() {
         println!("\n✓ 没有待应用的迁移");
@@ -412,21 +418,16 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_
     let mut success_count = 0;
 
     for migration in &to_apply {
-        print!("   正在应用 v{} - {} ... ", migration.version, migration.description);
+        print!("   正在应用 v{} - {} ... ", migration.version(), migration.description());
 
-        match std::fs::read_to_string(&migration.file_path) {
-            Ok(content) => match parse_and_apply_migration(&mut session, &content, migration.version).await {
-                Ok(_) => {
-                    println!("✓");
-                    success_count += 1;
-                }
-                Err(e) => {
-                    println!("❌ 失败: {}", e);
-                    return Err(e);
-                }
-            },
+        match executor.apply_migration_file_public(migration).await {
+            Ok(_) => {
+                println!("✓");
+                success_count += 1;
+            }
             Err(e) => {
-                println!("❌ 无法读取文件: {}", e);
+                println!("❌ 失败: {}", e);
+                return Err(e);
             }
         }
     }
@@ -568,84 +569,6 @@ async fn rollback_migration(
     Ok(())
 }
 
-/// 扫描迁移目录中的文件
-fn scan_migration_files(dir: &PathBuf) -> Result<Vec<MigrationInfo>, DbError> {
-    let mut migrations = Vec::new();
-
-    if !dir.exists() {
-        return Ok(migrations);
-    }
-
-    let entries = fs::read_dir(dir).map_err(|e| DbError::Config(format!("读取目录失败: {}", e)))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| DbError::Config(format!("读取条目失败: {}", e)))?;
-        let path = entry.path();
-
-        if path.is_file() && path.extension().map(|e| e == "sql").unwrap_or(false) {
-            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some((version, description)) = parse_migration_filename(filename) {
-                    migrations.push(MigrationInfo {
-                        version,
-                        description,
-                        file_path: path.clone(),
-                    });
-                }
-            }
-        }
-    }
-
-    // 按版本号排序
-    migrations.sort_by_key(|m| m.version);
-
-    Ok(migrations)
-}
-
-/// 解析迁移文件名（增强安全版本）
-///
-/// 格式: {version}_{description}.sql
-/// version 必须是纯数字
-/// description 只允许字母、数字、下划线、中文
-fn parse_migration_filename(filename: &str) -> Option<(u32, String)> {
-    // 检查文件扩展名
-    if !filename.ends_with(".sql") {
-        return None;
-    }
-
-    // 移除 .sql 扩展名
-    let base_name = filename.trim_end_matches(".sql");
-
-    // 查找第一个下划线来分离 version 和 description
-    let underscore_pos = base_name.find('_')?;
-    let version_str = &base_name[..underscore_pos];
-    let description = &base_name[underscore_pos + 1..];
-
-    // 验证 version 是纯数字
-    let version = version_str.parse::<u32>().ok()?;
-
-    // 验证 description 格式（只允许安全字符）
-    if description.is_empty() {
-        return None;
-    }
-
-    // 检查是否只包含允许的字符：字母、数字、下划线、中文
-    for c in description.chars() {
-        if !c.is_alphanumeric() && c != '_' && !c.is_ascii() {
-            // 允许非ASCII字符（主要是中文），但不允许特殊符号
-            return None;
-        }
-    }
-
-    Some((version, description.to_string()))
-}
-
-/// 迁移文件信息
-#[derive(Debug, Clone)]
-struct MigrationInfo {
-    version: u32,
-    description: String,
-    file_path: PathBuf,
-}
 
 /// 生成迁移文件
 async fn generate_migration(
@@ -758,29 +681,14 @@ fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<Di
     })
 }
 
-/// 从 session 加载已应用的迁移版本
-async fn load_applied_migrations(session: &mut dbnexus::Session) -> Result<std::collections::HashSet<u32>, DbError> {
-    let versions = std::collections::HashSet::new();
-
-    // 确保迁移历史表存在
-    let create_table_sql = "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
-        version INTEGER PRIMARY KEY,
-        description TEXT NOT NULL,
-        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        file_path TEXT
-    )";
-
-    session.execute_raw(create_table_sql).await?;
-
-    // 查询已应用的迁移（使用简单的字符串匹配）
-    // 注意：这里简化处理，完整实现需要处理查询结果
-    // 对于测试目的，我们假设这个函数在 status 命令中不会被严格使用
-
-    Ok(versions)
-}
 
 /// 解析并应用迁移
-async fn parse_and_apply_migration(session: &mut dbnexus::Session, content: &str, version: u32) -> DbResult<()> {
+async fn parse_and_apply_migration(
+    session: &mut dbnexus::Session,
+    executor: &mut MigrationExecutor,
+    content: &str,
+    version: u32,
+) -> DbResult<()> {
     // 解析迁移内容
     let (description, _full_content) =
         MigrationFileParser::parse_migration_file(content).unwrap_or(("Migration".to_string(), content.to_string()));
@@ -808,24 +716,10 @@ async fn parse_and_apply_migration(session: &mut dbnexus::Session, content: &str
         session.execute_raw(&up_sql).await?;
     }
 
-    // 记录迁移历史
-    let applied_at = chrono::Utc::now().to_rfc3339();
+    let applied_at = time::OffsetDateTime::now_utc();
     let file_path = format!("migration_v{}.sql", version);
-
-    // 使用参数化查询防止SQL注入
-    use sea_orm::{Statement, sea_strftime};
-    let backend = sea_orm::DbBackend::MySql; // 默认使用MySQL语法，PostgreSQL兼容
-    let insert_sql = Statement::from_string(
-        backend,
-        "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)".to_string(),
-    );
-    let values = vec![
-        sea_orm::Value::from(version),
-        sea_orm::Value::from(description),
-        sea_orm::Value::from(applied_at),
-        sea_orm::Value::from(file_path),
-    ];
-    session.execute(insert_sql, values).await?;
+    let insert_sql = executor.build_history_insert_sql_raw(version, &description, applied_at, &file_path);
+    session.execute_raw(&insert_sql).await?;
 
     Ok(())
 }
@@ -865,12 +759,17 @@ fn extract_sql_section(content: &str, section: &str) -> Result<String, DbError> 
 }
 
 /// 列出所有迁移文件
-fn list_migrations(migrations_dir: &PathBuf) -> Result<(), DbError> {
+async fn list_migrations(database_url: &str, migrations_dir: &PathBuf) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    迁移文件列表                              ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
 
-    let migrations = scan_migration_files(migrations_dir)?;
+    let pool = DbPool::new(database_url).await?;
+    let db_type = detect_database_type(database_url)?;
+    let mut session = pool.get_session("admin").await?;
+    let executor = session.create_migration_executor(db_type)?;
+
+    let migrations = executor.scan_migrations(migrations_dir)?;
 
     if migrations.is_empty() {
         println!("\n⚠️  迁移目录中没有找到迁移文件");
@@ -885,8 +784,8 @@ fn list_migrations(migrations_dir: &PathBuf) -> Result<(), DbError> {
         println!(
             "   [{:2}] v{:6} - {}",
             idx + 1,
-            migration.version,
-            migration.description
+            migration.version(),
+            migration.description()
         );
     }
 

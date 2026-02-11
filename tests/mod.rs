@@ -19,15 +19,20 @@
 //! - `tracing/`: 追踪测试
 //! - `cross_cutting/`: 横切关注点测试
 
+#[cfg(feature = "audit")]
 pub mod audit;
 pub mod cache;
 pub mod common;
 pub mod core;
 pub mod cross_cutting;
-pub mod global_index;
+#[cfg(feature = "metrics")]
 pub mod metrics;
+#[cfg(feature = "migration")]
 pub mod migration;
+#[cfg(feature = "permission")]
 pub mod permission;
 pub mod pool;
+#[cfg(feature = "sharding")]
 pub mod sharding;
+#[cfg(feature = "tracing")]
 pub mod tracing;

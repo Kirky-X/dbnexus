@@ -10,6 +10,7 @@
 pub mod advanced;
 pub mod rbac;
 
+#[cfg(feature = "cache")]
 use crate::cache::{AsyncCache, Cache};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -1027,6 +1028,16 @@ pub struct CacheStats {
     pub capacity: usize,
 }
 
+// ============================================================================
+// Public API Re-exports
+// ============================================================================
+
+// Re-export AdvancedRbacProvider for easy access
+pub use self::advanced::AdvancedRbacProvider;
+
+// Re-export RbacProvider for easy access
+pub use self::rbac::RbacProvider;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1353,13 +1364,3 @@ roles:
         assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
     }
 }
-
-// ============================================================================
-// Public API Re-exports
-// ============================================================================
-
-// Re-export AdvancedRbacProvider for easy access
-pub use self::advanced::AdvancedRbacProvider;
-
-// Re-export RbacProvider for easy access
-pub use self::rbac::RbacProvider;

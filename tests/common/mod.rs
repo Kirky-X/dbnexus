@@ -9,7 +9,6 @@
 
 use dbnexus::config::{DbConfig, DbConfigBuilder};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// 测试用的权限配置内容
@@ -19,36 +18,28 @@ roles:
     tables:
       - name: "*"
         operations:
-          - SELECT
-          - INSERT
-          - UPDATE
-          - DELETE
+          - select
+          - insert
+          - update
+          - delete
   user:
     tables:
       - name: "users"
         operations:
-          - SELECT
-          - INSERT
+          - select
+          - insert
   test_role:
     tables:
       - name: "*"
         operations:
-          - SELECT
+          - select
 "#;
 
-/// 获取测试数据库配置（无权限配置）
-pub fn get_test_config() -> (DbConfig, Option<TempDir>) {
-    get_test_config_with_permissions(false)
-}
-
-/// 获取测试数据库配置（可选择包含权限配置）
-///
-/// 返回配置和可选的临时目录（用于保持权限配置文件的生命周期）
-pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Option<TempDir>) {
+pub fn get_test_database_url() -> String {
     let test_db_type = std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string());
     let database_url = std::env::var("DATABASE_URL").ok();
 
-    let url = match test_db_type.as_str() {
+    match test_db_type.as_str() {
         "postgres" => database_url.unwrap_or_else(|| {
             let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
             format!("postgres://dbnexus:{}@localhost:15433/dbnexus_test", password)
@@ -58,7 +49,21 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
             format!("mysql://dbnexus:{}@localhost:13308/dbnexus_test", password)
         }),
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
-    };
+    }
+}
+
+/// 获取测试数据库配置（无权限配置）
+#[allow(dead_code)]
+pub fn get_test_config() -> (DbConfig, Option<TempDir>) {
+    get_test_config_with_permissions(false)
+}
+
+/// 获取测试数据库配置（可选择包含权限配置）
+///
+/// 返回配置和可选的临时目录（用于保持权限配置文件的生命周期）
+#[allow(dead_code)]
+pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Option<TempDir>) {
+    let url = get_test_database_url();
 
     // 可选：添加权限配置
     if with_permissions {
@@ -95,97 +100,6 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
     (config, None)
 }
 
-/// 是否使用真实数据库（非内存数据库）
-#[allow(dead_code)]
-pub fn is_real_database() -> bool {
-    std::env::var("TEST_DB_TYPE").unwrap_or_else(|_| "sqlite".to_string()) != "sqlite"
-}
-
-/// 创建测试用的临时迁移目录
-///
-/// 返回临时目录路径和清理句柄
-#[allow(dead_code)]
-pub fn create_temp_migrations_dir() -> (PathBuf, TempDir) {
-    let temp_dir = TempDir::new().expect("Failed to create temp migrations directory");
-    let path = temp_dir.path().to_path_buf();
-    (path, temp_dir)
-}
-
-/// 创建测试用的SQLite内存数据库配置（注意：每个连接是独立的数据库）
-/// 对于需要共享状态的测试，请使用 get_sqlite_file_config()
-#[allow(dead_code)]
-pub fn get_sqlite_memory_config() -> DbConfig {
-    DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(5)
-        .min_connections(1)
-        .idle_timeout(300)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build SQLite memory config")
-}
-
-/// 创建测试用的SQLite文件数据库配置（推荐用于迁移测试）
-///
-/// 返回配置和临时目录
-#[allow(dead_code)]
-pub fn get_sqlite_file_config() -> (DbConfig, TempDir) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let db_path = temp_dir.path().join("test.db");
-
-    let config = DbConfigBuilder::new()
-        .url(&format!("sqlite:///{}", db_path.display()))
-        .max_connections(5)
-        .min_connections(1)
-        .idle_timeout(300)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build SQLite file config");
-
-    (config, temp_dir)
-}
-
-/// 创建小容量连接池配置（用于测试连接耗尽场景）
-#[allow(dead_code)]
-pub fn get_small_pool_config() -> DbConfig {
-    DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(2)
-        .min_connections(1)
-        .idle_timeout(300)
-        .acquire_timeout(1000)
-        .build()
-        .expect("Failed to build small pool config")
-}
-
-/// 创建大容量连接池配置（用于测试高并发场景）
-#[allow(dead_code)]
-pub fn get_large_pool_config() -> DbConfig {
-    DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(50)
-        .min_connections(10)
-        .idle_timeout(300)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build large pool config")
-}
-
-/// 获取测试超时时间（毫秒）
-#[allow(dead_code)]
-pub fn get_test_timeout_ms() -> u64 {
-    std::env::var("TEST_TIMEOUT_MS")
-        .unwrap_or_else(|_| "30000".to_string())
-        .parse()
-        .unwrap_or(30000)
-}
-
-/// 等待指定时间（用于测试中的同步）
-#[allow(dead_code)]
-pub async fn wait_for_ms(ms: u64) {
-    tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
-}
-
 /// 生成测试用的表名（避免测试间的冲突）
 #[allow(dead_code)]
 pub fn generate_test_table_name(prefix: &str) -> String {
@@ -194,20 +108,6 @@ pub fn generate_test_table_name(prefix: &str) -> String {
         .unwrap()
         .as_nanos();
     format!("{}_test_{}", prefix, timestamp)
-}
-
-/// 创建测试夹具 - 包含连接池和临时迁移目录
-///
-/// 返回池、迁移目录路径和临时目录清理句柄
-#[allow(dead_code)]
-pub async fn create_test_fixture() -> (dbnexus::DbPool, PathBuf, TempDir) {
-    use dbnexus::DbPool;
-
-    let (config, _temp_dir) = get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let (migrations_dir, temp_dir) = create_temp_migrations_dir();
-
-    (pool, migrations_dir, temp_dir)
 }
 
 /// 清理测试表
@@ -558,7 +458,7 @@ pub async fn verify_db_operation_with_trace(
 }
 
 /// 验证表名安全性（白名单验证）
-fn validate_table_name(table_name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub(crate) fn validate_table_name(table_name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // 只允许字母、数字、下划线
     if !table_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return Err(Box::new(std::io::Error::new(
@@ -577,6 +477,6 @@ fn validate_table_name(table_name: &str) -> Result<String, Box<dyn std::error::E
 }
 
 /// 清理 SQL 字符串（转义单引号）
-fn sanitize_sql_string(input: &str) -> String {
+pub(crate) fn sanitize_sql_string(input: &str) -> String {
     input.replace('\'', "''")
 }

@@ -24,7 +24,7 @@ pub mod schema;
 pub mod sql_reverser;
 pub mod types;
 
-pub use column_changes::*;
+pub use column_changes::ColumnChangeType;
 pub use differ::*;
 pub use executor::*;
 pub use metadata::*;

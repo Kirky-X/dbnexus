@@ -11,6 +11,8 @@ pub mod entity_integration;
 #[cfg(feature = "health-check")]
 pub mod health_integration;
 
+#[cfg(feature = "permission")]
 pub mod permission_integration;
 pub mod session_transaction;
+#[cfg(feature = "sql-parser")]
 pub mod sql_parser_integration;
