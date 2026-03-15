@@ -8,16 +8,14 @@
 //! 提供数据库连接池的创建、管理和自动修正功能
 
 #[cfg(feature = "permission")]
-use crate::cache::AsyncCache;
-#[cfg(feature = "permission")]
 use crate::cache::Cache;
 use async_trait::async_trait;
-#[cfg(feature = "confers")]
-use confers::core::config_trait::ConfersConfig;
+// #[cfg(feature = "confers")]
+// use confers::core::config_trait::ConfersConfig;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex as AsyncMutex, Notify};
+use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
 use tokio::time::timeout;
@@ -25,6 +23,12 @@ use tracing::info;
 
 /// 连接获取超时警告阈值（毫秒）
 const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
+
+/// 健康检查 SQL 查询语句
+///
+/// 用于验证数据库连接是否仍然有效。
+/// 所有支持的数据库类型（SQLite、PostgreSQL、MySQL）都支持此查询。
+const HEALTH_CHECK_QUERY: &str = "SELECT 1";
 
 /// 连接生命周期追踪
 #[derive(Debug)]
@@ -126,6 +130,9 @@ pub(crate) struct DbPoolInner {
     /// 配置
     pub(crate) config: DbConfig,
 
+    /// 信号量控制最大连接数（优化锁竞争）
+    connection_semaphore: Arc<Semaphore>,
+
     /// 空闲连接队列
     idle_connections: AsyncMutex<Vec<DatabaseConnection>>,
 
@@ -167,16 +174,24 @@ pub(crate) struct DbPoolInner {
 }
 
 impl DbPool {
+    /// 更新最大活跃连接数（使用 CAS 操作避免竞态条件）
+    ///
+    /// 此方法使用 compare_exchange 循环确保原子性地更新 max_active，
+    /// 只有当新值大于当前值时才更新。
     fn update_max_active(&self, active: u32) {
-        let mut current = self.inner.max_active.load(Ordering::Relaxed);
+        // 使用 Acquire 语义确保看到最新的值
+        let mut current = self.inner.max_active.load(Ordering::Acquire);
         while active > current {
             match self
                 .inner
                 .max_active
-                .compare_exchange(current, active, Ordering::SeqCst, Ordering::Relaxed)
+                .compare_exchange(current, active, Ordering::SeqCst, Ordering::Acquire)
             {
                 Ok(_) => return,
-                Err(observed) => current = observed,
+                Err(observed) => {
+                    // CAS 失败，使用观察到的值重试
+                    current = observed;
+                }
             }
         }
     }
@@ -216,94 +231,86 @@ impl DbPool {
         Self::with_config(config).await
     }
 
-    /// 使用confers配置创建连接池（DI模式）
-    ///
-    /// 此方法允许功能组件层（inklog, limiteron）注入配置好的confers实例，
-    /// 实现依赖注入架构。
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - confers配置实例
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(DbPool)` - 配置好的连接池实例
-    /// * `Err(DbError)` - 配置无效或连接失败
-    ///
-    /// # Configuration Keys
-    ///
-    /// 从confers读取以下配置项（如果不存在则使用默认值）：
-    ///
-    /// - `dbnexus.url`: 数据库连接URL（必需）
-    /// - `dbnexus.max_connections`: 最大连接数（默认20）
-    /// - `dbnexus.min_connections`: 最小连接数（默认5）
-    /// - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
-    /// - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
-    /// - `dbnexus.admin_role`: 管理员角色（默认"admin"）
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use dbnexus::DbPool;
-    /// use std::sync::Arc;
-    ///
-    /// // 假设已有confers配置实例
-    /// let config: Arc<dyn ConfersConfig> = /* ... */;
-    ///
-    /// // 使用confers配置创建连接池
-    /// let pool = DbPool::with_confers(config).await?;
-    /// ```
-    ///
-    /// # Features
-    ///
-    /// 此方法仅在启用 `confers` feature 时可用。
-    #[cfg(feature = "confers")]
-    pub async fn with_confers(config: Arc<dyn ConfersConfig>) -> DbResult<Self> {
-        use crate::config::DbConfigBuilder;
-
-        // 从confers读取URL（必需）
-        let url = config
-            .get_string("dbnexus.url")
-            .ok_or_else(|| DbError::Config("dbnexus.url is required".to_string()))?;
-
-        // 从confers读取其他配置（使用默认值）
-        let max_connections = config
-            .get_int("dbnexus.max_connections")
-            .map(|v| v as u32)
-            .unwrap_or(20);
-
-        let min_connections = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
-
-        let idle_timeout = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
-
-        let acquire_timeout = config
-            .get_int("dbnexus.acquire_timeout")
-            .map(|v| v as u64)
-            .unwrap_or(5000);
-
-        let admin_role = config
-            .get_string("dbnexus.admin_role")
-            .unwrap_or_else(|| "admin".to_string());
-
-        tracing::info!(
-            "Creating DbPool with confers: url={}, max_connections={}",
-            url,
-            max_connections
-        );
-
-        // 使用DbConfigBuilder创建配置
-        let db_config = DbConfigBuilder::new()
-            .url(&url)
-            .max_connections(max_connections)
-            .min_connections(min_connections)
-            .idle_timeout(idle_timeout)
-            .acquire_timeout(acquire_timeout)
-            .admin_role(&admin_role)
-            .build()
-            .map_err(|e| DbError::Config(format!("Config validation failed: {:?}", e)))?;
-
-        Self::with_config(db_config).await
-    }
+    // 使用confers配置创建连接池（DI模式）
+    //
+    // 此方法允许功能组件层（inklog, limiteron）注入配置好的confers实例，
+    // 实现依赖注入架构。
+    //
+    // Arguments:
+    // * `config` - confers配置实例
+    //
+    // Returns:
+    // * `Ok(DbPool)` - 配置好的连接池实例
+    // * `Err(DbError)` - 配置无效或连接失败
+    //
+    // Configuration Keys:
+    // 从confers读取以下配置项（如果不存在则使用默认值）：
+    // - `dbnexus.url`: 数据库连接URL（必需）
+    // - `dbnexus.max_connections`: 最大连接数（默认20）
+    // - `dbnexus.min_connections`: 最小连接数（默认5）
+    // - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
+    // - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
+    // - `dbnexus.admin_role`: 管理员角色（默认"admin"）
+    //
+    // Example:
+    // ```rust,ignore
+    // use dbnexus::DbPool;
+    // use std::sync::Arc;
+    //
+    // // 假设已有confers配置实例
+    // let config: Arc<dyn ConfersConfig> = /* ... */;
+    //
+    // // 使用confers配置创建连接池
+    // let pool = DbPool::with_confers(config).await?;
+    // ```
+    //
+    // Features: 此方法仅在启用 `confers` feature 时可用。
+    // #[cfg(feature = "confers")]
+    // pub async fn with_confers(config: Arc<dyn ConfersConfig>) -> DbResult<Self> {
+    //     use crate::config::DbConfigBuilder;
+    //     // 从confers读取URL（必需）
+    //     let url = config
+    //         .get_string("dbnexus.url")
+    //         .ok_or_else(|| DbError::Config("dbnexus.url is required".to_string()))?;
+    //
+    //     // 从confers读取其他配置（使用默认值）
+    //     let max_connections = config
+    //         .get_int("dbnexus.max_connections")
+    //         .map(|v| v as u32)
+    //         .unwrap_or(20);
+    //
+    //     let min_connections = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
+    //
+    //     let idle_timeout = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
+    //
+    //     let acquire_timeout = config
+    //         .get_int("dbnexus.acquire_timeout")
+    //         .map(|v| v as u64)
+    //         .unwrap_or(5000);
+    //
+    //     let admin_role = config
+    //         .get_string("dbnexus.admin_role")
+    //         .unwrap_or_else(|| "admin".to_string());
+    //
+    //     tracing::info!(
+    //         "Creating DbPool with confers: url={}, max_connections={}",
+    //         url,
+    //         max_connections
+    //     );
+    //
+    //     // 使用DbConfigBuilder创建配置
+    //     let db_config = DbConfigBuilder::new()
+    //         .url(&url)
+    //         .max_connections(max_connections)
+    //         .min_connections(min_connections)
+    //         .idle_timeout(idle_timeout)
+    //         .acquire_timeout(acquire_timeout)
+    //         .admin_role(&admin_role)
+    //         .build()
+    //         .map_err(|e| DbError::Config(format!("Config validation failed: {:?}", e)))?;
+    //
+    //     Self::with_config(db_config).await
+    // }
 
     /// 使用配置创建连接池（带自动修正）
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
@@ -335,15 +342,13 @@ impl DbPool {
             );
         }
 
-        // 创建权限策略缓存（使用 trait object 以符合 DI 规范）
+        // 创建权限策略缓存（使用配置化的缓存容量）
         #[cfg(feature = "permission")]
-        let cache: AsyncCache<RolePolicy> = AsyncCache::builder()
-            .capacity(4096)
-            .build()
-            .await
-            .map_err(|e| crate::config::DbError::Config(format!("Failed to create policy cache: {}", e)))?;
-        #[cfg(feature = "permission")]
-        let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(cache);
+        let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(
+            Cache::builder()
+                .max_capacity(corrected_config.policy_cache_capacity())
+                .build()
+        );
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
         #[cfg(feature = "permission")]
@@ -353,7 +358,7 @@ impl DbPool {
         #[cfg(feature = "permission")]
         if let Some(ref perm_config) = permission_config {
             for (role_name, policy) in &perm_config.roles {
-                let _ = policy_cache.set(role_name, policy).await;
+                let _ = policy_cache.insert(role_name.clone(), policy.clone()).await;
                 tracing::debug!("Preloaded permission policy for role '{}'", role_name);
             }
         }
@@ -364,6 +369,7 @@ impl DbPool {
         let pool = Self {
             inner: Arc::new(DbPoolInner {
                 config: corrected_config.clone(),
+                connection_semaphore: Arc::new(Semaphore::new(corrected_config.max_connections() as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -465,7 +471,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 {
                     for (role, policy) in &config.roles {
-                        let _ = pool.inner.policy_cache.set(role, policy).await;
+                        let _ = pool.inner.policy_cache.insert(role.clone(), policy.clone()).await;
                     }
                     info!("Loaded permission policies for {} roles", config.roles.len());
                 }
@@ -577,6 +583,7 @@ impl DbPool {
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone_config(),
+                connection_semaphore: Arc::new(Semaphore::new(config.max_connections() as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -625,18 +632,17 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(feature = "permission")]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        config.validate()?;
-        // try_from 是同步简化版本，需要阻塞等待异步缓存构建
-        let policy_cache = tokio::runtime::Handle::current().block_on(async {
-            Cache::builder()
-                .capacity(256)
-                .build()
-                .await
-                .expect("Failed to create policy cache")
-        });
+        crate::config::validate_config(config)?;
+        // try_from 是同步简化版本
+        // 使用配置化的缓存容量
+        let cache_capacity = config.policy_cache_capacity();
+        let policy_cache: Cache<String, RolePolicy> = Cache::builder()
+            .max_capacity(cache_capacity)
+            .build();
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone_config(),
+                connection_semaphore: Arc::new(Semaphore::new(config.max_connections() as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -814,13 +820,12 @@ impl DbPool {
     ///
     /// 如果连接有效返回 `true`，否则返回 `false`
     pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
-        let health_query = Self::get_health_check_query(&self.inner.config.url_sanitized());
         let backend = Self::get_database_backend(&self.inner.config.url_sanitized());
 
         // 创建带超时的健康检查
         let result = timeout(
             Duration::from_secs(5),
-            conn.execute_raw(sea_orm::Statement::from_string(backend, health_query.to_string())),
+            conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
         )
         .await;
 
@@ -868,27 +873,45 @@ impl DbPool {
         }
     }
 
-    /// 获取健康检查查询语句
+    /// 验证空闲连接的有效性
     ///
-    /// 根据数据库类型返回对应的健康检查 SQL 语句。
-    /// 所有支持的数据库类型都使用简单的 `SELECT 1` 查询，
-    /// 这是一个轻量级的查询，用于验证连接是否仍然有效。
+    /// 遍历空闲连接池，对每个连接执行健康检查，
+    /// 将连接分区为有效和无效两组。
     ///
     /// # Arguments
     ///
-    /// * `url` - 数据库连接 URL
+    /// * `idle` - 空闲连接队列的可变引用
+    /// * `config` - 数据库配置
     ///
     /// # Returns
     ///
-    /// 对应数据库类型的健康检查 SQL 语句
-    fn get_health_check_query(url: &str) -> &'static str {
-        match Self::get_database_backend(url) {
-            sea_orm::DatabaseBackend::Sqlite => "SELECT 1",
-            sea_orm::DatabaseBackend::Postgres => "SELECT 1",
-            sea_orm::DatabaseBackend::MySql => "SELECT 1",
-            // 处理未来可能新增的数据库类型
-            _ => "SELECT 1",
+    /// 返回元组 (有效连接列表, 无效连接数量)
+    async fn validate_idle_connections(
+        idle: &mut Vec<DatabaseConnection>,
+        config: &DbConfig,
+    ) -> (Vec<DatabaseConnection>, usize) {
+        let backend = Self::get_database_backend(&config.url_sanitized());
+
+        let mut valid_connections: Vec<DatabaseConnection> = Vec::with_capacity(idle.len());
+        let mut invalid_count = 0;
+
+        for conn in idle.drain(..) {
+            // 执行健康检查（带超时）
+            let is_valid = timeout(
+                Duration::from_secs(2),
+                conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
+            )
+            .await
+            .is_ok_and(|result| result.is_ok());
+
+            if is_valid {
+                valid_connections.push(conn);
+            } else {
+                invalid_count += 1;
+            }
         }
+
+        (valid_connections, invalid_count)
     }
 
     /// 清理无效连接
@@ -903,36 +926,15 @@ impl DbPool {
         let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
 
-        let health_query = Self::get_health_check_query(&config.url_sanitized());
-        let backend = Self::get_database_backend(&config.url_sanitized());
-        let mut removed_count = 0;
-
-        // 保留有效连接
-        let mut valid_connections: Vec<DatabaseConnection> = Vec::with_capacity(idle.len());
-
-        for conn in idle.drain(..) {
-            // 执行健康检查（带超时）
-            let is_valid = timeout(
-                Duration::from_secs(2),
-                conn.execute_raw(sea_orm::Statement::from_string(backend, health_query.to_string())),
-            )
-            .await
-            .is_ok_and(|result| result.is_ok());
-
-            if is_valid {
-                valid_connections.push(conn);
-            } else {
-                removed_count += 1;
-            }
-        }
+        // 使用辅助方法验证连接
+        let (valid_connections, removed_count) = Self::validate_idle_connections(&mut idle, config).await;
 
         // 重建空闲连接队列
         idle.extend(valid_connections);
 
         // 更新总连接数
-        self.inner.total_count.fetch_sub(removed_count as u32, Ordering::SeqCst);
-
         if removed_count > 0 {
+            self.inner.total_count.fetch_sub(removed_count as u32, Ordering::SeqCst);
             tracing::info!(
                 "Cleaned {} invalid connections from pool (remaining idle: {})",
                 removed_count,
@@ -954,37 +956,17 @@ impl DbPool {
     pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::DbErr> {
         let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
+
+        // 使用辅助方法验证连接
+        let (valid_connections, invalid_count) = Self::validate_idle_connections(&mut idle, config).await;
+
         let mut recreated_count = 0;
 
-        let health_query = Self::get_health_check_query(&config.url_sanitized());
-        let backend = Self::get_database_backend(&config.url_sanitized());
-
-        // 手动分区连接为有效和无效两组
-        let mut valid_connections: Vec<DatabaseConnection> = Vec::new();
-        let mut invalid_connections: Vec<DatabaseConnection> = Vec::new();
-
-        for conn in idle.drain(..) {
-            let is_valid = timeout(
-                Duration::from_secs(2),
-                conn.execute_raw(sea_orm::Statement::from_string(backend, health_query.to_string())),
-            )
-            .await
-            .is_ok_and(|result| result.is_ok());
-
-            if is_valid {
-                valid_connections.push(conn);
-            } else {
-                invalid_connections.push(conn);
-            }
-        }
-
-        let invalid_count = invalid_connections.len();
         if invalid_count > 0 {
             // 更新总连接数
             self.inner.total_count.fetch_sub(invalid_count as u32, Ordering::SeqCst);
 
             // 重建空闲队列（只保留有效连接）
-            idle.clear();
             idle.extend(valid_connections);
 
             tracing::warn!("Found {} invalid connections, removed from pool", invalid_count);
@@ -1021,22 +1003,64 @@ impl DbPool {
         Ok(recreated_count as u32)
     }
 
+    /// 解析健康检查间隔配置
+    ///
+    /// 从环境变量 `DB_HEALTH_CHECK_INTERVAL` 读取间隔值（秒），
+    /// 并限制在 5-300 秒范围内。超出范围的值会触发警告日志。
+    ///
+    /// # Returns
+    ///
+    /// 返回解析后的间隔秒数，默认为 30 秒。
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // 如果环境变量未设置，返回默认值 30
+    /// std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    /// assert_eq!(DbPool::parse_health_check_interval(), 30);
+    ///
+    /// // 如果环境变量设置为有效值，返回该值
+    /// std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60");
+    /// assert_eq!(DbPool::parse_health_check_interval(), 60);
+    ///
+    /// // 如果环境变量值超出范围，返回限制后的值
+    /// std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000");
+    /// assert_eq!(DbPool::parse_health_check_interval(), 300);
+    /// std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    /// ```
+    #[cfg(feature = "pool-health-check")]
+    pub fn parse_health_check_interval() -> u64 {
+        std::env::var("DB_HEALTH_CHECK_INTERVAL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .map(|v: u64| {
+                let clamped = v.clamp(5, 300);
+                if v != clamped {
+                    tracing::warn!(
+                        "DB_HEALTH_CHECK_INTERVAL value {} is out of range [5, 300], clamped to {}",
+                        v,
+                        clamped
+                    );
+                }
+                clamped
+            })
+            .unwrap_or(30)
+    }
+
     /// 启动后台连接健康检查任务
     ///
     /// 该任务会定期检查所有空闲连接的健康状态，
     /// 自动移除无效连接并重建新连接以维持最小连接数。
     ///
     /// 健康检查间隔默认为 30 秒，可通过环境变量 `DB_HEALTH_CHECK_INTERVAL` 配置（秒）。
+    /// 间隔值会被限制在 5-300 秒范围内，超出范围的值会触发警告日志。
     #[cfg(feature = "pool-health-check")]
     fn start_background_health_check(&self) {
         let pool = self.clone();
         let shutdown = self.inner.health_check_shutdown.clone();
 
-        // 从环境变量获取健康检查间隔，默认为 30 秒
-        let interval_secs = std::env::var("DB_HEALTH_CHECK_INTERVAL")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(30);
+        // 使用辅助函数解析健康检查间隔
+        let interval_secs = Self::parse_health_check_interval();
 
         tracing::info!(
             "Starting background health check task with interval: {} seconds",
@@ -1081,11 +1105,21 @@ impl DbPool {
     /// 从池中获取连接
     ///
     /// 实现连接获取逻辑，包括：
-    /// 1. 尝试从空闲连接队列获取
-    /// 2. 如果队列为空且未达到最大连接数，创建新连接
-    /// 3. 如果已达到最大连接数，等待其他连接释放（带超时）
+    /// 1. 获取信号量许可（控制最大并发数）
+    /// 2. 尝试从空闲连接队列获取
+    /// 3. 如果队列为空，创建新连接
     ///
-    /// 使用异步条件变量（Notify）实现高效的等待机制，避免忙等待。
+    /// ## 锁竞争优化策略
+    ///
+    /// 使用信号量（Semaphore）替代部分锁逻辑，减少锁竞争：
+    /// - 信号量在获取锁之前就控制并发数量，实现更公平的等待机制
+    /// - 锁持有时间最小化：仅在操作空闲队列时持有锁
+    /// - 创建新连接时不持有锁，避免阻塞其他操作
+    ///
+    /// ## 信号量许可管理
+    ///
+    /// - 获取连接时：`permit.forget()` 消耗许可（连接被借出）
+    /// - 释放连接时：`add_permits(1)` 归还许可（连接归还池中）
     ///
     /// # Returns
     ///
@@ -1095,74 +1129,52 @@ impl DbPool {
     ///
     /// 如果获取连接超时或创建连接失败，返回错误
     async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
-        // 使用锁保护整个连接获取流程，避免竞争条件
-        let mut idle = self.inner.idle_connections.lock().await;
+        // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
+        // 信号量提供公平的等待队列，避免惊群效应
+        let timeout_duration = self.inner.config.acquire_timeout_duration();
+        let permit = timeout(
+            timeout_duration,
+            self.inner.connection_semaphore.acquire(),
+        )
+        .await
+        .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?
+        .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?;
 
-        // 尝试从空闲队列获取
-        if !idle.is_empty() {
-            let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
-            self.update_max_active(active);
-            self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
-            return idle.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-            });
+        // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间）
+        // 使用独立作用域确保锁尽快释放
+        {
+            let mut idle = self.inner.idle_connections.lock().await;
+            if let Some(conn) = idle.pop() {
+                // 更新统计计数
+                let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
+                self.update_max_active(active);
+                self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
+                // 忘记许可，因为连接被借出（release_connection 会归还）
+                permit.forget();
+                return Ok(conn);
+            }
+            // 锁在此处释放
         }
 
-        // 检查是否达到最大连接数（在持有锁的情况下）
-        if self.inner.total_count.load(Ordering::SeqCst) >= self.inner.config.max_connections() {
-            // 等待空闲连接（使用条件变量替代忙等待）
-            let timeout_duration = self.inner.config.acquire_timeout_duration();
-            self.inner.wait_count.fetch_add(1, Ordering::SeqCst);
-
-            // 释放锁并等待通知
-            drop(idle);
-
-            let result = timeout(timeout_duration, async {
-                let mut idle = self.inner.idle_connections.lock().await;
-                while idle.is_empty() {
-                    let notified = self.inner.connection_available.notified();
-                    drop(idle);
-                    notified.await;
-                    idle = self.inner.idle_connections.lock().await;
-                }
-                idle.pop()
-            })
-            .await;
-
-            return match result {
-                Ok(Some(conn)) => {
-                    let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
-                    self.update_max_active(active);
-                    self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
-                    Ok(conn)
-                }
-                Ok(None) => Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                    sea_orm::ConnAcquireErr::Timeout,
-                ))),
-                Err(_) => Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                    sea_orm::ConnAcquireErr::Timeout,
-                ))),
-            };
-        }
-
-        // 创建新连接（在持有锁的情况下，确保不会超过最大连接数）
-        // 先增加 total_count，确保原子性
+        // 步骤 3: 创建新连接（不持有锁，避免阻塞其他操作）
+        // 先更新计数，再创建连接
         self.inner.total_count.fetch_add(1, Ordering::SeqCst);
         let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_max_active(active);
 
-        // 释放锁后再创建连接（避免阻塞其他操作）
-        drop(idle);
-
         match Self::create_connection(&self.inner.config).await {
             Ok(conn) => {
                 self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
+                // 忘记许可，因为连接被借出
+                permit.forget();
                 Ok(conn)
             }
             Err(e) => {
-                // 创建失败，回滚计数
+                // 创建失败，回滚计数并释放许可
                 self.inner.total_count.fetch_sub(1, Ordering::SeqCst);
                 self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
+                // 释放许可（drop 会自动释放）
+                drop(permit);
                 Err(e)
             }
         }
@@ -1180,22 +1192,29 @@ impl DbPool {
     ///
     /// # Note
     ///
-    /// 此方法是异步的，使用 tokio::spawn 在后台执行，
-    /// 避免阻塞调用者。
+    /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
+    /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
     pub(crate) fn release_connection(&self, conn: DatabaseConnection) {
         self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
         let inner = self.inner.clone();
 
+        // 尝试快速路径：非阻塞获取锁
         if let Ok(mut idle) = inner.idle_connections.try_lock() {
             if idle.len() < inner.config.max_connections() as usize {
                 idle.push(conn);
                 inner.connection_available.notify_one();
+                // 归还信号量许可
+                inner.connection_semaphore.add_permits(1);
             } else {
+                // 空闲队列已满，丢弃连接
                 inner.total_count.fetch_sub(1, Ordering::SeqCst);
+                // 归还信号量许可
+                inner.connection_semaphore.add_permits(1);
             }
             return;
         }
 
+        // 异步路径：在 tokio 运行时中执行
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::spawn(async move {
                 let mut idle = inner.idle_connections.lock().await;
@@ -1203,11 +1222,17 @@ impl DbPool {
                     idle.push(conn);
                     inner.connection_available.notify_one();
                 } else {
+                    // 空闲队列已满，丢弃连接
                     inner.total_count.fetch_sub(1, Ordering::SeqCst);
                 }
+                // 归还信号量许可
+                inner.connection_semaphore.add_permits(1);
             });
         } else {
+            // 没有 tokio 运行时，丢弃连接
             inner.total_count.fetch_sub(1, Ordering::SeqCst);
+            // 归还信号量许可
+            inner.connection_semaphore.add_permits(1);
         }
     }
 

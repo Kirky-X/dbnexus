@@ -10,8 +10,17 @@
 use super::{PermissionAction, PermissionProvider, PermissionProviderError, RolePolicy, TablePermission};
 
 use dashmap::DashMap;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
+
+/// 最大继承深度限制
+///
+/// 防止深度继承链导致栈溢出或性能下降。
+/// 当继承链深度超过此限制时，将记录警告日志并停止继续遍历。
+const MAX_INHERITANCE_DEPTH: usize = 10;
+
+/// 默认继承角色缓存容量
+const DEFAULT_INHERITED_ROLES_CACHE_CAPACITY: usize = 1000;
 
 /// 高级 RBAC 权限提供者
 ///
@@ -30,8 +39,17 @@ pub struct AdvancedRbacProvider {
 }
 
 impl AdvancedRbacProvider {
-    /// 创建新的高级 RBAC 提供者
+    /// 创建新的高级 RBAC 提供者（使用默认缓存容量）
     pub fn new() -> Self {
+        Self::with_cache_capacity(DEFAULT_INHERITED_ROLES_CACHE_CAPACITY)
+    }
+
+    /// 创建新的高级 RBAC 提供者（使用自定义缓存容量）
+    ///
+    /// # Arguments
+    ///
+    /// * `cache_capacity` - 继承角色缓存的最大条目数
+    pub fn with_cache_capacity(cache_capacity: usize) -> Self {
         let roles = DashMap::new();
         let role_hierarchy = DashMap::new();
         let inherited_roles_cache = DashMap::new();
@@ -82,8 +100,22 @@ impl AdvancedRbacProvider {
             roles: Arc::new(roles),
             role_hierarchy: Arc::new(role_hierarchy),
             inherited_roles_cache: Arc::new(inherited_roles_cache),
-            cache_capacity: 1000,
+            cache_capacity,
         }
+    }
+
+    /// 从 DbConfig 创建高级 RBAC 提供者
+    ///
+    /// 使用配置化的缓存容量。
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - 数据库配置引用
+    pub fn from_config(config: &crate::config::DbConfig) -> Self {
+        // 使用 policy_cache_capacity 作为继承角色缓存的容量
+        // 这是一个合理的默认值，因为角色数量通常远小于权限策略数量
+        let cache_capacity = config.policy_cache_capacity() as usize;
+        Self::with_cache_capacity(cache_capacity)
     }
 
     /// 添加角色策略
@@ -129,7 +161,7 @@ impl AdvancedRbacProvider {
 
     /// 获取角色的所有继承角色（包括自身）
     ///
-    /// 使用深度优先搜索遍历角色继承图，返回所有可继承的父角色。
+    /// 使用广度优先搜索（BFS）迭代遍历角色继承图，返回所有可继承的父角色。
     /// 结果会被缓存以提高性能。
     ///
     /// # Arguments
@@ -139,18 +171,38 @@ impl AdvancedRbacProvider {
     /// # Returns
     ///
     /// 所有继承角色的集合（包括自身）
-    fn get_inherited_roles(&self, role: &str) -> HashSet<String> {
+    pub fn get_inherited_roles(&self, role: &str) -> HashSet<String> {
         // 检查缓存
         if let Some(cached) = self.inherited_roles_cache.get(role) {
             return cached.clone();
         }
 
-        // 计算所有继承角色
+        // 使用 BFS 迭代方式计算所有继承角色
         let mut inherited = HashSet::new();
-        inherited.insert(role.to_string());
+        let mut queue = VecDeque::new();
+        queue.push_back((role.to_string(), 0));
 
-        // 递归获取父角色
-        self.collect_parent_roles(role, &mut inherited);
+        while let Some((current, depth)) = queue.pop_front() {
+            // 检查深度限制
+            if depth > MAX_INHERITANCE_DEPTH {
+                tracing::warn!(
+                    "Role inheritance depth exceeded maximum limit ({}) for role '{}', stopping traversal",
+                    MAX_INHERITANCE_DEPTH,
+                    role
+                );
+                continue;
+            }
+
+            // 只有当角色尚未被收集时才处理
+            if inherited.insert(current.clone()) {
+                // 获取当前角色的父角色并加入队列
+                if let Some(parents) = self.role_hierarchy.get(&current) {
+                    for parent in parents.iter() {
+                        queue.push_back((parent.clone(), depth + 1));
+                    }
+                }
+            }
+        }
 
         // 缓存结果
         if self.inherited_roles_cache.len() < self.cache_capacity {
@@ -158,18 +210,6 @@ impl AdvancedRbacProvider {
         }
 
         inherited
-    }
-
-    /// 递归收集父角色
-    fn collect_parent_roles(&self, role: &str, collected: &mut HashSet<String>) {
-        if let Some(parents) = self.role_hierarchy.get(role) {
-            for parent in parents.iter() {
-                if !collected.contains(parent) {
-                    collected.insert(parent.clone());
-                    self.collect_parent_roles(parent, collected);
-                }
-            }
-        }
     }
 
     /// 检查角色是否有继承关系
@@ -643,5 +683,108 @@ mod tests {
                 .check_access("manager", "third_table", PermissionAction::Delete)
                 .unwrap()
         );
+    }
+
+    /// TEST-ADV-016: 继承深度限制 - 深度在限制内
+    #[test]
+    fn test_inheritance_depth_within_limit() {
+        let provider = AdvancedRbacProvider::new();
+
+        // 创建 10 层继承链（深度 = 10，正好在限制内）
+        // level_0 -> level_1 -> ... -> level_9 -> admin
+        for i in 0..10 {
+            provider.add_role(
+                format!("level_{}", i),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: format!("table_{}", i),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            );
+
+            if i == 0 {
+                provider.add_role_inheritance(format!("level_{}", i), vec!["admin".to_string()]);
+            } else {
+                provider.add_role_inheritance(format!("level_{}", i), vec![format!("level_{}", i - 1)]);
+            }
+        }
+
+        // level_9 应该能够继承 admin 的权限（深度 = 10，在限制内）
+        assert!(
+            provider
+                .check_access("level_9", "users", PermissionAction::Select)
+                .unwrap()
+        );
+    }
+
+    /// TEST-ADV-017: 继承深度限制 - 超过限制
+    #[test]
+    fn test_inheritance_depth_exceeds_limit() {
+        let provider = AdvancedRbacProvider::new();
+
+        // 创建 12 层继承链（深度超过限制）
+        // level_0 -> level_1 -> ... -> level_11 -> admin
+        for i in 0..12 {
+            provider.add_role(
+                format!("deep_{}", i),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: format!("table_{}", i),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            );
+
+            if i == 0 {
+                provider.add_role_inheritance(format!("deep_{}", i), vec!["admin".to_string()]);
+            } else {
+                provider.add_role_inheritance(format!("deep_{}", i), vec![format!("deep_{}", i - 1)]);
+            }
+        }
+
+        // deep_11 的继承链深度为 12，超过限制 10
+        // 应该只能继承到深度 10 的角色，不会崩溃
+        let result = provider.check_access("deep_11", "users", PermissionAction::Select);
+        assert!(result.is_ok());
+    }
+
+    /// TEST-ADV-018: get_inherited_roles 返回自身
+    #[test]
+    fn test_get_inherited_roles_returns_self() {
+        let provider = AdvancedRbacProvider::new();
+
+        // 没有继承关系的角色应该只返回自身
+        let inherited = provider.get_inherited_roles("admin");
+        assert!(inherited.contains("admin"));
+        assert_eq!(inherited.len(), 1);
+    }
+
+    /// TEST-ADV-019: 循环继承不导致无限循环（迭代方式）
+    #[test]
+    fn test_circular_inheritance_no_infinite_loop_iterative() {
+        let provider = AdvancedRbacProvider::new();
+
+        // 创建一个复杂的循环继承结构
+        provider.add_role_inheritance("a".to_string(), vec!["b".to_string()]);
+        provider.add_role_inheritance("b".to_string(), vec!["c".to_string()]);
+        provider.add_role_inheritance("c".to_string(), vec!["d".to_string()]);
+        provider.add_role_inheritance("d".to_string(), vec!["a".to_string()]);
+
+        // 添加权限
+        provider.add_role(
+            "a".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "test_table".to_string(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
+
+        // 应该能够处理循环而不陷入无限循环
+        let result = provider.check_access("a", "test_table", PermissionAction::Select);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
     }
 }
