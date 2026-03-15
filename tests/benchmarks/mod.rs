@@ -3,44 +3,41 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! 性能基准测试套ite
+//! 性能基准测试套件
 //!
 //! 使用 Criterion 进行全面的性能基准测试
 //! 运行: cargo bench
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use dbnexus::{
-    config::DbConfigBuilder,
-    sql_parser::{SqlOperationType, SqlParser},
-};
+use dbnexus::sql_parser::{SqlOperationType, SqlParser};
 use std::time::Duration;
 
 /// 数据库配置基准
 fn bench_db_config_building(c: &mut Criterion) {
     c.bench_function("db_config_build_basic", |b| {
         b.iter(|| {
-            let _ = DbConfigBuilder::new()
-                .url("sqlite::memory:")
-                .max_connections(10)
-                .min_connections(1)
-                .build()
-                .unwrap();
+            let _ = dbnexus::config::DbConfig {
+                url: "sqlite::memory:".to_string(),
+                max_connections: 10,
+                min_connections: 1,
+                ..Default::default()
+            };
         })
     });
 
     c.bench_function("db_config_build_full", |b| {
         b.iter(|| {
-            let _ = DbConfigBuilder::new()
-                .url("postgresql://user:pass@localhost:5432/db")
-                .max_connections(100)
-                .min_connections(5)
-                .idle_timeout(300)
-                .acquire_timeout(5000)
-                .permissions_path("./permissions.yaml")
-                .migrations_dir("./migrations")
-                .auto_migrate(true)
-                .build()
-                .unwrap();
+            let _ = dbnexus::config::DbConfig {
+                url: "postgresql://user:pass@localhost:5432/db".to_string(),
+                max_connections: 100,
+                min_connections: 5,
+                idle_timeout: 300,
+                acquire_timeout: 5000,
+                permissions_path: Some("./permissions.yaml".to_string()),
+                migrations_dir: Some("./migrations".to_string()),
+                auto_migrate: true,
+                ..Default::default()
+            };
         })
     });
 }
@@ -77,10 +74,10 @@ fn bench_sql_parsing(c: &mut Criterion) {
     c.bench_function("sql_parse_complex_select", |b| {
         b.iter(|| {
             let _ = black_box(parser.parse_single(
-                "SELECT u.id, u.name, o.total 
-                 FROM users u 
-                 LEFT JOIN orders o ON u.id = o.user_id 
-                 WHERE u.status = 'active' 
+                "SELECT u.id, u.name, o.total
+                 FROM users u
+                 LEFT JOIN orders o ON u.id = o.user_id
+                 WHERE u.status = 'active'
                  AND o.created_at > '2024-01-01'
                  ORDER BY o.total DESC
                  LIMIT 100",

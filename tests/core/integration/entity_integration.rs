@@ -198,7 +198,6 @@ const CRUD_TEST_TABLE: &str = "crud_entity_test";
 
 /// 获取包含完整权限的测试配置
 fn get_test_config_with_all_permissions() -> dbnexus::config::DbConfig {
-    use dbnexus::config::DbConfigBuilder;
     use std::fs;
 
     let url = get_database_url().unwrap_or("sqlite::memory:".to_string());
@@ -218,12 +217,13 @@ roles:
     let perm_file = "/tmp/entity_crud_test_perms.yaml";
     fs::write(perm_file, perm_content).expect("Failed to write permissions");
 
-    DbConfigBuilder::new()
-        .url(&url)
-        .max_connections(5)
-        .permissions_path(perm_file)
-        .build()
-        .expect("Failed to build config")
+    dbnexus::config::DbConfig {
+        url,
+        max_connections: 5,
+        admin_role: "admin".to_string(),
+        permissions_path: Some(perm_file.to_string()),
+        ..Default::default()
+    }
 }
 
 /// 创建测试表
