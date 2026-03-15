@@ -21,7 +21,7 @@ use dbnexus::audit::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity,
     MemoryAuditStorage,
 };
-use dbnexus::{DbConfigBuilder, DbPool};
+use dbnexus::{DbConfig, DbPool};
 use std::sync::Arc;
 
 /// 定义 User 结构体（简化版，用于演示）
@@ -68,12 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 3. 初始化数据库连接池
     println!("\n3️⃣ 初始化数据库连接池");
     println!("------------------------------------------");
-    let config = DbConfigBuilder::new()
-        .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("examples/demo/permissions.yaml")
-        .admin_role("admin")
-        .build()
-        .expect("Failed to build config");
+    let config = DbConfig {
+        url: "sqlite:file::memory:?cache=shared".to_string(),
+        permissions_path: Some("examples/demo/permissions.yaml".to_string()),
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 

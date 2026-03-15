@@ -16,7 +16,7 @@
 //! cargo run --example quickstart --features sqlite
 //!
 
-use dbnexus::{DbConfigBuilder, DbPool, db_crud};
+use dbnexus::{DbConfig, DbPool, db_crud};
 use sea_orm::Condition;
 use sea_orm::entity::prelude::*;
 
@@ -53,12 +53,12 @@ impl ActiveModelBehavior for ActiveModel {}
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化连接池（使用 SQLite 内存模式）
     // 在生产环境中，请使用实际的数据库连接字符串
-    let config = DbConfigBuilder::new()
-        .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("examples/demo/permissions.yaml")
-        .admin_role("admin")
-        .build()
-        .expect("Failed to build config");
+    let config = DbConfig {
+        url: "sqlite:file::memory:?cache=shared".to_string(),
+        permissions_path: Some("examples/demo/permissions.yaml".to_string()),
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 
@@ -69,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 检查权限配置
     println!("📋 权限配置:");
-    println!("  - Admin role: {}", pool.config().admin_role());
-    println!("  - Permissions path: {:?}", pool.config().permissions_path());
+    println!("  - Admin role: {}", pool.config().admin_role);
+    println!("  - Permissions path: {:?}", pool.config().permissions_path);
 
     // 创建表
     session
@@ -183,10 +183,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("     - Entity::count() - 统计数量");
 
     Ok(())
-}
-
-// 配置构建器辅助函数
-#[allow(dead_code)]
-fn db_config_builder() -> dbnexus::config::DbConfigBuilder {
-    dbnexus::config::DbConfigBuilder::new()
 }
