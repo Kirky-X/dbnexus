@@ -20,7 +20,7 @@ async fn test_permission_context_role() {
     // 使用配置中定义的 admin 角色
     let session = pool.get_session("admin").await.expect("Failed to get session");
     // 加载权限策略到缓存
-    let perm_path = pool.config().permissions_path().expect("Missing permissions path");
+    let perm_path = pool.config().permissions_path.clone().expect("Missing permissions path");
     let perm_content = r#"
 roles:
   admin:
@@ -32,8 +32,8 @@ roles:
           - update
           - delete
 "#;
-    std::fs::write(perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(perm_path).unwrap()).unwrap();
+    std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_path).unwrap()).unwrap();
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -52,7 +52,7 @@ async fn test_permission_check() {
     // admin 角色有所有权限
     let session = pool.get_session("admin").await.expect("Failed to get session");
     // 加载权限策略到缓存
-    let perm_path = pool.config().permissions_path().expect("Missing permissions path");
+    let perm_path = pool.config().permissions_path.as_ref().expect("Missing permissions path").clone();
     let perm_content = r#"
 roles:
   admin:
@@ -64,8 +64,8 @@ roles:
           - update
           - delete
 "#;
-    std::fs::write(perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(perm_path).unwrap()).unwrap();
+    std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
+    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_path).unwrap()).unwrap();
     session
         .permission_ctx()
         .load_policy(&perm_config)

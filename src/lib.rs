@@ -80,15 +80,14 @@ pub mod cache;
 
 /// 缓存配置和类型导出
 #[cfg(feature = "cache")]
-pub use cache::{AsyncCache, CacheBuilder, CacheConfig, CacheKey, create_cache, create_cache_with_ttl};
+pub use cache::{AsyncCache, CacheBuilder, CacheKey, create_cache, create_cache_with_ttl};
 /// 配置管理模块
 pub mod config;
 
 /// 错误类型定义
 pub use crate::config::DbResult;
 pub use config::{
-    ConfigError, DatabaseType, DbConfig, DbConfig as DbnexusConfig, DbConfigBuilder,
-    DbConfigBuilder as DbnexusConfigBuilder, DbError, PoolConfig,
+    ConfigError, DatabaseType, DbConfig, DbConfig as DbnexusConfig, DbError, PoolConfig,
 };
 
 /// 统一错误模块（渐进式重构）

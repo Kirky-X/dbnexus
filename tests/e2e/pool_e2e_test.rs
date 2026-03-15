@@ -15,8 +15,8 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .max_connections(5)
-            .build()
+            max_connections: 5,
+
             .await?;
 
         // Verify pool is created
@@ -32,8 +32,8 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .max_connections(3)
-            .build()
+            max_connections: 3,
+
             .await?;
 
         // Acquire a connection
@@ -56,7 +56,7 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .build()
+
             .await?;
 
         let mut session = pool.acquire().await?;
@@ -96,7 +96,7 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .build()
+
             .await?;
 
         let mut session = pool.acquire().await?;
@@ -135,7 +135,7 @@ mod tests {
                 path: ":memory:".to_string(),
             })
             .min_idle_connections(0)
-            .build()
+
             .await?;
 
         // Acquire session in a block
@@ -158,9 +158,9 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .max_connections(1)
+            max_connections: 1,
             .acquire_timeout(Duration::from_secs(1))
-            .build()
+
             .await?;
 
         // Acquire the only connection
@@ -185,7 +185,7 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .build()
+
             .await?;
 
         let mut session = pool.acquire().await?;
@@ -221,7 +221,7 @@ mod tests {
             .database(Database::Sqlite {
                 path: ":memory:".to_string(),
             })
-            .build()
+
             .await?;
 
         // Check pool health
