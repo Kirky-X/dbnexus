@@ -80,7 +80,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute(&mut self, sql: &str) -> crate::config::DbResult<ExecResult>;
+    async fn execute(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
 
     /// 执行原始 SQL（不带权限检查）
     ///
@@ -109,21 +109,21 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn begin_transaction(&mut self) -> crate::config::DbResult<()>;
+    async fn begin_transaction(&self) -> crate::config::DbResult<()>;
 
     /// 提交事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn commit(&mut self) -> crate::config::DbResult<()>;
+    async fn commit(&self) -> crate::config::DbResult<()>;
 
     /// 回滚事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn rollback(&mut self) -> crate::config::DbResult<()>;
+    async fn rollback(&self) -> crate::config::DbResult<()>;
 
     /// 获取角色
     ///
@@ -137,7 +137,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回是否在事务中
-    fn is_in_transaction(&self) -> bool;
+    async fn is_in_transaction(&self) -> bool;
 }
 
 // ============================================================================

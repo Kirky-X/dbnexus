@@ -41,9 +41,9 @@ async fn test_session_permission_ctx() {
 async fn test_session_mark_write() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    session.mark_write();
-    assert!(session.should_use_master());
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    session.mark_write().await;
+    assert!(session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -51,10 +51,10 @@ async fn test_session_mark_write() {
 async fn test_transaction_begin() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
-    assert!(!session.is_in_transaction());
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    assert!(!session.is_in_transaction().await);
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -62,11 +62,11 @@ async fn test_transaction_begin() {
 async fn test_transaction_commit() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
     session.commit().await.expect("Failed to commit transaction");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -74,11 +74,11 @@ async fn test_transaction_commit() {
 async fn test_transaction_rollback() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
     session.rollback().await.expect("Failed to rollback transaction");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -86,7 +86,7 @@ async fn test_transaction_rollback() {
 async fn test_transaction_double_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
     let result = session.begin_transaction().await;
     assert!(result.is_err());
@@ -97,7 +97,7 @@ async fn test_transaction_double_begin_error() {
 async fn test_transaction_commit_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let result = session.commit().await;
     assert!(result.is_err());
 }
@@ -107,7 +107,7 @@ async fn test_transaction_commit_without_begin_error() {
 async fn test_transaction_rollback_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let result = session.rollback().await;
     assert!(result.is_err());
 }
@@ -117,9 +117,9 @@ async fn test_transaction_rollback_without_begin_error() {
 async fn test_should_use_master_in_transaction() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.should_use_master());
+    assert!(session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -241,7 +241,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 使用唯一表名避免测试间冲突
     let table_name = format!("test_users_{}", std::process::id());
@@ -258,7 +258,7 @@ roles:
         .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
         .await
         .expect("Failed to insert");
-    assert!(session.should_use_master());
+    assert!(session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -293,7 +293,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -307,7 +307,7 @@ roles:
         ])
         .await;
     assert!(result.is_err());
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -358,7 +358,7 @@ roles:
 async fn test_execute_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session
         .execute("CREATE TABLE IF NOT EXISTS ddl_blocked_2 (id INTEGER PRIMARY KEY)")
@@ -395,7 +395,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session
         .execute_with_operation("SELECT 1 FROM orders", &Operation::Select)
@@ -435,7 +435,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)")
@@ -453,14 +453,14 @@ roles:
 async fn test_commit_clears_last_write() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    session.mark_write();
-    assert!(session.should_use_master());
+    session.mark_write().await;
+    assert!(session.should_use_master().await);
 
     session.begin_transaction().await.expect("Failed to begin transaction");
     session.commit().await.expect("Failed to commit transaction");
-    assert!(!session.should_use_master());
+    assert!(!session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -495,7 +495,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session.execute("SELECT 1").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -530,7 +530,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM orders").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -541,7 +541,7 @@ roles:
 async fn test_execute_with_operation_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session
         .execute_with_operation(
@@ -584,7 +584,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -595,7 +595,7 @@ roles:
         .execute_with_operation("INSERT INTO users (id, name) VALUES (1, 'a')", &Operation::Insert)
         .await
         .expect("Failed to insert");
-    assert!(session.should_use_master());
+    assert!(session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -630,7 +630,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -680,7 +680,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -695,7 +695,7 @@ roles:
         .await
         .expect("Expected batch transaction to succeed");
     assert_eq!(results.len(), 2);
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -730,7 +730,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -814,7 +814,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM \"\"").await;
     assert!(matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name")));
@@ -849,7 +849,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let result = session
         .execute_with_operation("SELECT 1 FROM orders ", &Operation::Select)
@@ -889,7 +889,7 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 使用唯一表名避免测试间冲突
     let table_name = format!("test_users_{}", std::process::id());
@@ -906,7 +906,7 @@ roles:
         .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
         .await
         .expect("Failed to insert");
-    assert!(session.should_use_master());
+    assert!(session.should_use_master().await);
 }
 
 #[tokio::test]
@@ -943,11 +943,11 @@ roles:
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    let sess: &mut dyn DatabaseSession = &mut session;
+    let sess: &dyn DatabaseSession = &session;
     assert_eq!(sess.role(), "admin");
-    assert!(!sess.is_in_transaction());
+    assert!(!sess.is_in_transaction().await);
 
     sess.execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
         .await
@@ -958,7 +958,7 @@ roles:
     sess.execute_raw("SELECT * FROM users").await.expect("Failed to select");
 
     sess.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(sess.is_in_transaction());
+    assert!(sess.is_in_transaction().await);
     sess.rollback().await.expect("Failed to rollback");
-    assert!(!sess.is_in_transaction());
+    assert!(!sess.is_in_transaction().await);
 }
