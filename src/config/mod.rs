@@ -29,6 +29,6 @@
 mod types;
 
 pub use types::{
-    CacheConfig, ConfigError, DatabaseType, DbConfig, DbConfig as DbnexusConfig, DbError,
+    CacheConfig, ConfigError, DatabaseType, DbConfig, DbError,
     DbResult, PoolConfig,
 };

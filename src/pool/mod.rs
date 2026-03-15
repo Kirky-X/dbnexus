@@ -26,11 +26,7 @@ use crate::metrics::MetricsCollectorTrait;
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
-// #[cfg(feature = "confers")]
-// use confers::core::config_trait::ConfersConfig;
-
 use crate::config::DbResult;
-use crate::config::DbnexusConfig;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
@@ -67,7 +63,7 @@ pub trait ConnectionPool: Send + Sync {
     /// # Returns
     ///
     /// 返回连接池配置
-    fn config(&self) -> &DbnexusConfig;
+    fn config(&self) -> &DbConfig;
 }
 
 /// 数据库会话抽象 trait
@@ -178,7 +174,7 @@ pub struct DbPoolBuilder {
     /// 数据库连接 URL（可选，如果未提供则需要 config）
     url: Option<String>,
     /// 数据库配置（可选，如果提供了 url 则自动创建）
-    config: Option<DbnexusConfig>,
+    config: Option<DbConfig>,
     /// 指标收集器（可选）
     #[cfg(feature = "metrics")]
     metrics_collector: Option<Arc<dyn MetricsCollectorTrait>>,
@@ -221,7 +217,7 @@ impl DbPoolBuilder {
     /// # Returns
     ///
     /// 返回构造器自身以支持链式调用
-    pub fn config(mut self, config: DbnexusConfig) -> Self {
+    pub fn config(mut self, config: DbConfig) -> Self {
         self.config = Some(config);
         self
     }
@@ -273,88 +269,6 @@ impl DbPoolBuilder {
         }
         self
     }
-
-    // 使用confers配置（DI支持）
-    //
-    // 此方法允许从confers配置实例读取数据库配置，
-    // 并与手动配置的参数合并。手动配置的参数优先级高于confers配置。
-    //
-    // Arguments:
-    // * `config` - confers配置实例
-    //
-    // Returns:
-    // Self for method chaining
-    //
-    // Configuration Keys:
-    // 从confers读取以下配置项（如果不存在则使用默认值）：
-    // - `dbnexus.url`: 数据库连接URL（必需）
-    // - `dbnexus.max_connections`: 最大连接数（默认20）
-    // - `dbnexus.min_connections`: 最小连接数（默认5）
-    // - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
-    // - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
-    // - `dbnexus.admin_role`: 管理员角色（默认"admin"）
-    //
-    // Example:
-    // ```rust,ignore
-    // use dbnexus::DbPool;
-    // use std::sync::Arc;
-    //
-    // let config: Arc<dyn ConfersConfig> = /* ... */;
-    //
-    // // 使用confers配置，但覆盖max_connections
-    // let pool = DbPool::builder()
-    //     .with_confers(config)
-    //     .max_connections(100)  // 覆盖confers中的配置
-    //     .build()
-    //     .await?;
-    // ```
-    //
-    // Features: 此方法仅在启用 `confers` feature 时可用。
-    // #[cfg(feature = "confers")]
-    // pub fn with_confers(mut self, config: Arc<dyn ConfersConfig>) -> Self {
-    //     use crate::config::DbnexusConfigBuilder;
-    //
-    //     // 如果尚未设置URL，从confers读取
-    //     if self.url.is_none() && self.config.is_none() {
-    //         if let Some(url) = config.get_string("dbnexus.url") {
-    //             self.url = Some(url);
-    //         }
-    //     }
-    //
-    //     // 如果尚未设置config，从confers创建
-    //     if self.config.is_none() {
-    //         let max = config
-    //             .get_int("dbnexus.max_connections")
-    //             .map(|v| v as u32)
-    //             .unwrap_or(20);
-    //         let min = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
-    //         let idle = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
-    //         let acquire = config
-    //             .get_int("dbnexus.acquire_timeout")
-    //             .map(|v| v as u64)
-    //             .unwrap_or(5000);
-    //         let admin = config
-    //             .get_string("dbnexus.admin_role")
-    //             .unwrap_or_else(|| "admin".to_string());
-    //
-    //         if let Some(url) = &self.url {
-    //             let built_config = DbnexusConfigBuilder::new()
-    //                 .url(url)
-    //                 .max_connections(max)
-    //                 .min_connections(min)
-    //                 .idle_timeout(idle)
-    //                 .acquire_timeout(acquire)
-    //                 .admin_role(&admin)
-    //                 .build();
-    //
-    //             if let Ok(cfg) = built_config {
-    //                 self.config = Some(cfg);
-    //             }
-    //         }
-    //     }
-    //
-    //     self
-    // }
 
     /// 注入oxcache缓存实例（DI支持）
     ///
@@ -511,7 +425,7 @@ impl std::fmt::Debug for DbPoolBuilder {
 #[derive(Clone, Default)]
 pub struct DbPoolDependencies {
     /// 数据库配置（必需）
-    pub config: DbnexusConfig,
+    pub config: DbConfig,
     /// 指标收集器（可选）
     #[cfg(feature = "metrics")]
     pub metrics_collector: Option<Arc<dyn MetricsCollectorTrait>>,
@@ -527,7 +441,7 @@ pub struct DbPoolDependencies {
 
 impl DbPoolDependencies {
     /// 设置数据库配置
-    pub fn with_config(mut self, config: DbnexusConfig) -> Self {
+    pub fn with_config(mut self, config: DbConfig) -> Self {
         self.config = config;
         self
     }
