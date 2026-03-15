@@ -28,6 +28,18 @@ enum PermissionAction {
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
+use tokio::sync::Mutex;
+
+/// Session 内部可变状态
+///
+/// 使用 Mutex 包装需要内部可变性的字段，支持 `&self` 方法签名
+struct SessionState {
+    /// 事务对象（用于真实的事务管理）
+    transaction: Option<DatabaseTransaction>,
+
+    /// 最后写操作时间（用于读写分离）
+    last_write: Option<Instant>,
+}
 
 /// Session 结构
 pub struct Session {
@@ -43,15 +55,12 @@ pub struct Session {
     /// 角色
     role: String,
 
-    /// 最后写操作时间（用于读写分离）
-    last_write: Option<Instant>,
-
     /// 权限上下文
     #[cfg(feature = "permission")]
     permission_ctx: PermissionContext,
 
-    /// 事务对象（用于真实的事务管理）
-    transaction: Option<DatabaseTransaction>,
+    /// 内部可变状态（事务和写操作时间）
+    state: Mutex<SessionState>,
 
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
@@ -77,10 +86,12 @@ impl Session {
             pool,
             pool_inner,
             role,
-            last_write: None,
             #[cfg(feature = "permission")]
             permission_ctx,
-            transaction: None,
+            state: Mutex::new(SessionState {
+                transaction: None,
+                last_write: None,
+            }),
             #[cfg(feature = "metrics")]
             metrics_collector: metrics,
         }
@@ -98,8 +109,9 @@ impl Session {
     }
 
     /// 标记为写操作
-    pub fn mark_write(&mut self) {
-        self.last_write = Some(Instant::now());
+    pub async fn mark_write(&self) {
+        let mut state = self.state.lock().await;
+        state.last_write = Some(Instant::now());
     }
 
     /// 检查权限
@@ -116,13 +128,15 @@ impl Session {
     }
 
     /// 是否在事务中
-    pub fn is_in_transaction(&self) -> bool {
-        self.transaction.is_some()
+    pub async fn is_in_transaction(&self) -> bool {
+        let state = self.state.lock().await;
+        state.transaction.is_some()
     }
 
     /// 开始事务
-    pub async fn begin_transaction(&mut self) -> Result<(), DbError> {
-        if self.is_in_transaction() {
+    pub async fn begin_transaction(&self) -> Result<(), DbError> {
+        let mut state = self.state.lock().await;
+        if state.transaction.is_some() {
             return Err(DbError::Transaction("Already in transaction".to_string()));
         }
 
@@ -136,13 +150,14 @@ impl Session {
             .await
             .map_err(|e| DbError::Transaction(format!("Failed to begin transaction: {}", e)))?;
 
-        self.transaction = Some(transaction);
+        state.transaction = Some(transaction);
         Ok(())
     }
 
     /// 提交事务
-    pub async fn commit(&mut self) -> Result<(), DbError> {
-        let transaction = self
+    pub async fn commit(&self) -> Result<(), DbError> {
+        let mut state = self.state.lock().await;
+        let transaction = state
             .transaction
             .take()
             .ok_or_else(|| DbError::Transaction("No active transaction to commit".to_string()))?;
@@ -150,17 +165,18 @@ impl Session {
             .commit()
             .await
             .map_err(|e| DbError::Transaction(e.to_string()))?;
-        self.last_write = None;
+        state.last_write = None;
         Ok(())
     }
 
     /// 回滚事务
-    pub async fn rollback(&mut self) -> Result<(), DbError> {
-        if !self.is_in_transaction() {
+    pub async fn rollback(&self) -> Result<(), DbError> {
+        let mut state = self.state.lock().await;
+        if state.transaction.is_none() {
             return Err(DbError::Transaction("Not in transaction".to_string()));
         }
 
-        let transaction = self
+        let transaction = state
             .transaction
             .take()
             .ok_or_else(|| DbError::Transaction("No active transaction to rollback".to_string()))?;
@@ -173,14 +189,16 @@ impl Session {
     }
 
     /// 是否应该使用主库（基于读写分离配置）
-    pub fn should_use_master(&self) -> bool {
+    pub async fn should_use_master(&self) -> bool {
+        let state = self.state.lock().await;
         // 如果在事务中，必须使用主库
-        if self.is_in_transaction() {
+        if state.transaction.is_some() {
             return true;
         }
 
         // 如果配置了读写分离且有写操作，使用主库
-        self.last_write
+        state
+            .last_write
             .map(|t| t.elapsed() < Duration::from_secs(5))
             .unwrap_or(false)
     }
@@ -205,7 +223,7 @@ impl Session {
     /// 用于迁移功能，将底层连接包装成 MigrationExecutor
     #[cfg(feature = "migration")]
     pub(crate) fn create_migration_executor(
-        &mut self,
+        &self,
         db_type: crate::config::DatabaseType,
     ) -> Result<super::MigrationExecutor, DbError> {
         let conn = self.connection()?.clone();
@@ -259,7 +277,7 @@ impl Session {
                 }
             }
 
-            if let Some(tx) = self.transaction.as_ref() {
+            if let Some(tx) = self.state.lock().await.transaction.as_ref() {
                 return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
             }
 
@@ -348,7 +366,7 @@ impl Session {
     }
 
     /// 执行 SQL（带权限检查和操作类型）
-    pub async fn execute(&mut self, sql: &str) -> DbResult<ExecResult> {
+    pub async fn execute(&self, sql: &str) -> DbResult<ExecResult> {
         let start = Instant::now();
 
         #[cfg(feature = "sql-parser")]
@@ -408,7 +426,7 @@ impl Session {
                 action,
                 PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
             ) {
-                self.mark_write();
+                self.mark_write().await;
             }
         }
 
@@ -417,7 +435,7 @@ impl Session {
 
     /// 执行 SQL 并指定操作类型
     #[cfg(feature = "permission")]
-    pub async fn execute_with_operation(&mut self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
+    pub async fn execute_with_operation(&self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
         let start = Instant::now();
 
         #[cfg(feature = "sql-parser")]
@@ -458,7 +476,7 @@ impl Session {
                 operation,
                 PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
             ) {
-                self.mark_write();
+                self.mark_write().await;
             }
         }
 
@@ -474,7 +492,7 @@ impl Session {
     /// # Returns
     ///
     /// 返回执行结果列表
-    pub async fn batch_execute(&mut self, sqls: Vec<&str>) -> DbResult<Vec<DbResult<ExecResult>>> {
+    pub async fn batch_execute(&self, sqls: Vec<&str>) -> DbResult<Vec<DbResult<ExecResult>>> {
         let mut results = Vec::new();
 
         for sql in sqls {
@@ -496,7 +514,7 @@ impl Session {
     /// # Returns
     ///
     /// 返回执行结果列表，任一失败则返回错误
-    pub async fn batch_execute_in_transaction(&mut self, sqls: Vec<&str>) -> DbResult<Vec<ExecResult>> {
+    pub async fn batch_execute_in_transaction(&self, sqls: Vec<&str>) -> DbResult<Vec<ExecResult>> {
         self.begin_transaction().await?;
 
         let mut results = Vec::new();
@@ -678,7 +696,7 @@ fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
 // 实现 DatabaseSession trait
 #[async_trait]
 impl super::DatabaseSession for Session {
-    async fn execute(&mut self, sql: &str) -> crate::DbResult<ExecResult> {
+    async fn execute(&self, sql: &str) -> crate::DbResult<ExecResult> {
         Ok(self.execute(sql).await?)
     }
 
@@ -690,15 +708,15 @@ impl super::DatabaseSession for Session {
         Ok(self.execute_raw_ddl(sql).await?)
     }
 
-    async fn begin_transaction(&mut self) -> crate::DbResult<()> {
+    async fn begin_transaction(&self) -> crate::DbResult<()> {
         Ok(self.begin_transaction().await?)
     }
 
-    async fn commit(&mut self) -> crate::DbResult<()> {
+    async fn commit(&self) -> crate::DbResult<()> {
         Ok(self.commit().await?)
     }
 
-    async fn rollback(&mut self) -> crate::DbResult<()> {
+    async fn rollback(&self) -> crate::DbResult<()> {
         Ok(self.rollback().await?)
     }
 
@@ -706,7 +724,7 @@ impl super::DatabaseSession for Session {
         self.role()
     }
 
-    fn is_in_transaction(&self) -> bool {
-        self.is_in_transaction()
+    async fn is_in_transaction(&self) -> bool {
+        self.is_in_transaction().await
     }
 }
