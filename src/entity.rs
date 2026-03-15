@@ -19,8 +19,3 @@
 // 只暴露用户必需的类型
 pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
 pub use sea_orm::{Condition, Set};
-
-// 内部实现细节，不对外暴露
-#[allow(unused)]
-#[cfg(feature = "macros")]
-pub(crate) use sea_orm::entity::prelude::{ActiveModelBehavior, Iden, RelationTrait};

@@ -22,7 +22,7 @@ mod types;
 // ============================================================================
 
 // 从 types.rs 重导出
-pub use types::{Operation, PermissionAction, PermissionConfig, PermissionError, RolePolicy, TablePermission};
+pub use types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy, TablePermission};
 
 // 从 provider.rs 重导出
 pub use provider::{
@@ -64,7 +64,7 @@ mod tests {
     fn test_public_api_accessible() {
         // 验证所有公共类型都可以访问
         let _action = PermissionAction::Select;
-        let _operation: Operation = PermissionAction::Insert;
+        let _operation: PermissionAction = PermissionAction::Insert;
 
         // 验证 Display 实现
         assert_eq!(PermissionAction::Select.to_string(), "SELECT");
