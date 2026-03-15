@@ -288,6 +288,22 @@ path = "examples/demo/cache.rs"
 name = "sharding"
 path = "examples/demo/sharding.rs"
 
+[[example]]
+name = "migration"
+path = "examples/demo/migration.rs"
+
+[[example]]
+name = "health"
+path = "examples/demo/health.rs"
+
+[[example]]
+name = "permission_engine"
+path = "examples/demo/permission_engine.rs"
+
+[[example]]
+name = "global_index"
+path = "examples/demo/global_index.rs"
+
 [[test]]
 name = "core_entity_integration"
 path = "tests/core/integration/entity_integration.rs"
