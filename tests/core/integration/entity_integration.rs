@@ -81,17 +81,17 @@ async fn test_entity_with_session() {
     };
 
     let pool = DbPool::new(&url).await.unwrap();
-    let mut session = pool.get_session("admin").await.unwrap();
+    let session = pool.get_session("admin").await.unwrap();
 
     // 验证 session 可以正常工作
     assert_eq!(session.role(), "admin");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 
     // 测试事务功能
     session.begin_transaction().await.unwrap();
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
     session.commit().await.unwrap();
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 #[tokio::test]
@@ -177,17 +177,17 @@ async fn test_entity_integration_with_sql_operations() {
     };
 
     let pool = DbPool::new(&url).await.unwrap();
-    let mut session = pool.get_session("admin").await.unwrap();
+    let session = pool.get_session("admin").await.unwrap();
 
     // 验证 session 可以正常工作
     assert_eq!(session.role(), "admin");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 
     // 测试事务功能
     session.begin_transaction().await.unwrap();
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
     session.rollback().await.unwrap();
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 // ============================================================================
@@ -324,7 +324,7 @@ async fn test_entity_transaction_with_permissions() {
     setup_crud_test_table(&pool).await;
 
     // Get session and load permissions BEFORE using it
-    let mut session = pool.get_session("admin").await.unwrap();
+    let session = pool.get_session("admin").await.unwrap();
 
     // Load permissions into this session's context
     let perm_config = PermissionConfig {

@@ -692,8 +692,18 @@ pub struct AuditLogger {
 }
 
 impl AuditLogger {
-    /// 创建审计日志器
-    pub fn new(config: AuditConfig, storage: Arc<dyn AuditStorage>) -> Self {
+    /// 创建带默认配置的审计日志器
+    pub fn new() -> Self {
+        Self::with_default_storage()
+    }
+
+    /// 获取构建器
+    pub fn builder() -> AuditLoggerBuilder {
+        AuditLoggerBuilder::new()
+    }
+
+    /// 创建带自定义配置和存储的审计日志器
+    pub fn with_config(config: AuditConfig, storage: Arc<dyn AuditStorage>) -> Self {
         Self {
             config,
             storage,
@@ -703,9 +713,17 @@ impl AuditLogger {
 
     /// 创建带默认配置的审计日志器
     pub fn with_default_storage() -> Self {
-        Self::new(AuditConfig::default(), Arc::new(MemoryAuditStorage::new(10000)))
+        Self::with_config(AuditConfig::default(), Arc::new(MemoryAuditStorage::new(10000)))
     }
+}
 
+impl Default for AuditLogger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AuditLogger {
     /// 设置告警回调
     pub fn set_alert_callback<F>(&mut self, callback: F)
     where
@@ -1120,7 +1138,7 @@ mod tests {
     async fn test_audit_logger_helpers_and_alert_disabled() {
         let storage = Arc::new(MemoryAuditStorage::new(10));
 
-        let logger = AuditLogger::new(
+        let logger = AuditLogger::with_config(
             AuditConfig {
                 enabled: false,
                 alert_operations: vec![AuditOperation::Delete],
@@ -1144,7 +1162,7 @@ mod tests {
     #[tokio::test]
     async fn test_audit_log_create_none_branch_and_cleanup_success() {
         let storage = Arc::new(MemoryAuditStorage::new(10));
-        let logger = AuditLogger::new(AuditConfig::default(), storage.clone());
+        let logger = AuditLogger::with_config(AuditConfig::default(), storage.clone());
 
         logger.log_create("t", "1", "u", None).await.unwrap();
 
@@ -1160,7 +1178,7 @@ mod tests {
     #[tokio::test]
     async fn test_audit_sanitize_base64_non_string_values() {
         let storage = Arc::new(MemoryAuditStorage::new(10));
-        let logger = AuditLogger::new(AuditConfig::default(), storage);
+        let logger = AuditLogger::with_config(AuditConfig::default(), storage);
 
         let event = AuditEvent::create("t", "1", "u").with_after_value(r#"{"count":1,"name":"x"}"#);
         logger.log(event).await.unwrap();
@@ -1174,7 +1192,7 @@ mod tests {
     async fn test_audit_logger() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
         let config = AuditConfig::default();
-        let logger = AuditLogger::new(config, storage);
+        let logger = AuditLogger::with_config(config, storage);
 
         let event = AuditEvent::create("users", "1", "admin");
         logger.log(event).await.unwrap();
@@ -1193,7 +1211,7 @@ mod tests {
     async fn test_audit_sanitization() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
         let config = AuditConfig::default();
-        let logger = AuditLogger::new(config, storage);
+        let logger = AuditLogger::with_config(config, storage);
 
         let event =
             AuditEvent::create("users", "1", "admin").with_after_value(r#"{"password": "secret123", "name": "test"}"#);
@@ -1265,7 +1283,7 @@ mod tests {
     #[tokio::test]
     async fn test_audit_query_filters_all_fields_and_cleanup() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
-        let logger = AuditLogger::new(AuditConfig::default(), storage.clone());
+        let logger = AuditLogger::with_config(AuditConfig::default(), storage.clone());
 
         let now = Utc::now();
         let mut e1 = AuditEvent::create("users", "1", "u1")
@@ -1308,7 +1326,7 @@ mod tests {
     async fn test_audit_logger_disabled_and_alert_callback() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
 
-        let disabled_logger = AuditLogger::new(
+        let disabled_logger = AuditLogger::with_config(
             AuditConfig {
                 enabled: false,
                 ..Default::default()
@@ -1342,7 +1360,7 @@ mod tests {
         let storage = Arc::new(MemoryAuditStorage::new(100));
         let mut config = AuditConfig::default();
         config.sensitive_fields.push("user.password".to_string());
-        let logger = AuditLogger::new(config, storage);
+        let logger = AuditLogger::with_config(config, storage);
 
         let after_value = r#"{"password":"p","_password":"p2","data":"c2VjcmV0","user.password":"v"}"#;
         let event = AuditEvent::create("users", "1", "admin").with_after_value(after_value);
@@ -1364,7 +1382,7 @@ mod tests {
     #[tokio::test]
     async fn test_audit_logger_cleanup_invalid_date_calculation() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
-        let logger = AuditLogger::new(AuditConfig::default(), storage);
+        let logger = AuditLogger::with_config(AuditConfig::default(), storage);
         let result = logger.cleanup(i64::MAX).await;
         assert!(result.is_err());
     }
@@ -1749,5 +1767,66 @@ impl AuditEventBuilder {
             session_id: self.session_id.unwrap_or_default(),
             trace_context: None,
         }
+    }
+}
+
+/// 审计日志器构建器
+///
+/// 提供链式 API 来构建 `AuditLogger`：
+/// ```rust
+/// use std::sync::Arc;
+/// use dbnexus::audit::{AuditLogger, AuditLoggerBuilder, MemoryAuditStorage, AuditConfig};
+///
+/// let storage = Arc::new(MemoryAuditStorage::new(1000));
+/// let logger = AuditLogger::builder()
+///     .storage(storage)
+///     .config(AuditConfig::default())
+///     .build();
+/// ```
+pub struct AuditLoggerBuilder {
+    config: AuditConfig,
+    storage: Option<Arc<dyn AuditStorage>>,
+}
+
+impl fmt::Debug for AuditLoggerBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuditLoggerBuilder")
+            .field("config", &self.config)
+            .field("storage", &self.storage.as_ref().map(|_| "Arc<dyn AuditStorage>"))
+            .finish()
+    }
+}
+
+impl Default for AuditLoggerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AuditLoggerBuilder {
+    /// 创建新构建器
+    pub fn new() -> Self {
+        Self {
+            config: AuditConfig::default(),
+            storage: None,
+        }
+    }
+
+    /// 设置存储后端
+    pub fn storage(mut self, storage: Arc<dyn AuditStorage>) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
+    /// 设置配置
+    pub fn config(mut self, config: AuditConfig) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// 构建 AuditLogger
+    pub fn build(self) -> AuditLogger {
+        let storage = self.storage.unwrap_or_else(|| Arc::new(MemoryAuditStorage::new(10000)));
+        AuditLogger::with_config(self.config, storage)
     }
 }

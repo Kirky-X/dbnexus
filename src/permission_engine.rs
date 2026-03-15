@@ -333,6 +333,105 @@ pub struct PolicyDecisionPoint {
     rate_limit_store: DashMap<String, RateLimitEntry>,
 }
 
+/// PolicyDecisionPoint 构建器
+///
+/// 支持部分依赖注入和自定义配置
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use std::sync::Arc;
+/// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+///
+/// let provider = Arc::new(RbacPermissionProvider::new());
+/// let pdp = PolicyDecisionPoint::builder()
+///     .provider(provider)
+///     .cache_ttl_seconds(600)
+///     .rate_limit(200, 60)
+///     .build();
+/// ```
+pub struct PolicyDecisionPointBuilder {
+    provider: Option<Arc<dyn PermissionProvider>>,
+    cache_ttl_seconds: Option<u64>,
+    cache_enabled: Option<bool>,
+    rate_limit_max_requests: Option<u32>,
+    rate_limit_window_seconds: Option<u32>,
+}
+
+impl PolicyDecisionPointBuilder {
+    /// 创建新的构建器
+    fn new() -> Self {
+        Self {
+            provider: None,
+            cache_ttl_seconds: None,
+            cache_enabled: None,
+            rate_limit_max_requests: None,
+            rate_limit_window_seconds: None,
+        }
+    }
+
+    /// 设置权限提供者
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - 权限提供者实例
+    pub fn provider(mut self, provider: Arc<dyn PermissionProvider>) -> Self {
+        self.provider = Some(provider);
+        self
+    }
+
+    /// 设置缓存 TTL（秒）
+    ///
+    /// # Arguments
+    ///
+    /// * `seconds` - 缓存过期时间（秒）
+    pub fn cache_ttl_seconds(mut self, seconds: u64) -> Self {
+        self.cache_ttl_seconds = Some(seconds);
+        self
+    }
+
+    /// 设置是否启用缓存
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - 是否启用缓存
+    pub fn cache_enabled(mut self, enabled: bool) -> Self {
+        self.cache_enabled = Some(enabled);
+        self
+    }
+
+    /// 设置速率限制
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - 时间窗口内最大请求数
+    /// * `window_seconds` - 时间窗口（秒）
+    pub fn rate_limit(mut self, max_requests: u32, window_seconds: u32) -> Self {
+        self.rate_limit_max_requests = Some(max_requests);
+        self.rate_limit_window_seconds = Some(window_seconds);
+        self
+    }
+
+    /// 构建策略决策点
+    ///
+    /// # Panics
+    ///
+    /// 如果未设置权限提供者，将 panic
+    pub fn build(self) -> PolicyDecisionPoint {
+        let provider = self.provider.expect("Provider is required for PolicyDecisionPoint");
+
+        PolicyDecisionPoint {
+            provider,
+            cache: DashMap::new(),
+            cache_ttl_seconds: self.cache_ttl_seconds.unwrap_or(300), // 默认 5 分钟
+            cache_enabled: self.cache_enabled.unwrap_or(true),
+            rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(100), // 默认每分钟 100 次
+            rate_limit_window_seconds: self.rate_limit_window_seconds.unwrap_or(60), // 默认 1 分钟窗口
+            rate_limit_store: DashMap::new(),
+        }
+    }
+}
+
 impl PolicyDecisionPoint {
     /// 创建策略决策点（默认 TTL 5 分钟，速率限制 100 请求/分钟）
     pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
@@ -345,6 +444,43 @@ impl PolicyDecisionPoint {
             rate_limit_window_seconds: 60, // 1 分钟窗口
             rate_limit_store: DashMap::new(),
         }
+    }
+
+    /// 创建构建器
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+    ///
+    /// let provider = Arc::new(RbacPermissionProvider::new());
+    /// let pdp = PolicyDecisionPoint::builder()
+    ///     .provider(provider)
+    ///     .cache_ttl_seconds(600)
+    ///     .build();
+    /// ```
+    pub fn builder() -> PolicyDecisionPointBuilder {
+        PolicyDecisionPointBuilder::new()
+    }
+
+    /// 完全依赖注入：由调用方提供权限提供者
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - 权限提供者实例
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+    ///
+    /// let provider = Arc::new(RbacPermissionProvider::new());
+    /// let pdp = PolicyDecisionPoint::with_dependencies(provider);
+    /// ```
+    pub fn with_dependencies(provider: Arc<dyn PermissionProvider>) -> Self {
+        Self::new(provider)
     }
 
     /// 创建带缓存配置的策略决策点

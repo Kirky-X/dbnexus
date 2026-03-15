@@ -826,18 +826,18 @@ async fn test_session_transaction_state() {
         .await
         .expect("Failed to create pool");
 
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 初始不在事务中
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 
     // 开始事务
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
 
     // 提交事务
     session.commit().await.expect("Failed to commit transaction");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 /// TEST-U-POOL-033: 测试 Session 事务回滚
@@ -850,15 +850,15 @@ async fn test_session_transaction_rollback() {
         .await
         .expect("Failed to create pool");
 
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 开始事务
     session.begin_transaction().await.expect("Failed to begin transaction");
-    assert!(session.is_in_transaction());
+    assert!(session.is_in_transaction().await);
 
     // 回滚事务
     session.rollback().await.expect("Failed to rollback transaction");
-    assert!(!session.is_in_transaction());
+    assert!(!session.is_in_transaction().await);
 }
 
 /// TEST-U-POOL-034: 测试 Session 重复开始事务失败
@@ -871,7 +871,7 @@ async fn test_session_double_begin_transaction() {
         .await
         .expect("Failed to create pool");
 
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 开始事务
     session.begin_transaction().await.expect("Failed to begin transaction");
@@ -891,7 +891,7 @@ async fn test_session_commit_without_transaction() {
         .await
         .expect("Failed to create pool");
 
-    let mut session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 没有事务时提交应该失败
     let result = session.commit().await;
