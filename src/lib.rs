@@ -87,7 +87,7 @@ pub mod config;
 /// 错误类型定义
 pub use crate::config::DbResult;
 pub use config::{
-    ConfigError, DatabaseType, DbConfig, DbConfig as DbnexusConfig, DbError, PoolConfig,
+    ConfigError, DatabaseType, DbConfig, DbError, PoolConfig,
 };
 
 /// 统一错误模块（渐进式重构）
@@ -153,10 +153,6 @@ pub use sql_parser::PermissionAction;
 /// - [`PermissionContext`] - 权限检查上下文
 #[cfg(feature = "permission")]
 pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
-
-/// Operation 是 PermissionAction 的别名，用于简化使用
-#[cfg(feature = "permission")]
-pub type Operation = permission::PermissionAction;
 
 /// 可插拔权限引擎模块
 #[cfg(feature = "permission-engine")]

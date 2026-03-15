@@ -10,8 +10,6 @@
 #[cfg(feature = "permission")]
 use crate::cache::Cache;
 use async_trait::async_trait;
-// #[cfg(feature = "confers")]
-// use confers::core::config_trait::ConfersConfig;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -224,87 +222,6 @@ impl DbPool {
         };
         Self::with_config(config).await
     }
-
-    // 使用confers配置创建连接池（DI模式）
-    //
-    // 此方法允许功能组件层（inklog, limiteron）注入配置好的confers实例，
-    // 实现依赖注入架构。
-    //
-    // Arguments:
-    // * `config` - confers配置实例
-    //
-    // Returns:
-    // * `Ok(DbPool)` - 配置好的连接池实例
-    // * `Err(DbError)` - 配置无效或连接失败
-    //
-    // Configuration Keys:
-    // 从confers读取以下配置项（如果不存在则使用默认值）：
-    // - `dbnexus.url`: 数据库连接URL（必需）
-    // - `dbnexus.max_connections`: 最大连接数（默认20）
-    // - `dbnexus.min_connections`: 最小连接数（默认5）
-    // - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
-    // - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
-    // - `dbnexus.admin_role`: 管理员角色（默认"admin"）
-    //
-    // Example:
-    // ```rust,ignore
-    // use dbnexus::DbPool;
-    // use std::sync::Arc;
-    //
-    // // 假设已有confers配置实例
-    // let config: Arc<dyn ConfersConfig> = /* ... */;
-    //
-    // // 使用confers配置创建连接池
-    // let pool = DbPool::with_confers(config).await?;
-    // ```
-    //
-    // Features: 此方法仅在启用 `confers` feature 时可用。
-    // #[cfg(feature = "confers")]
-    // pub async fn with_confers(config: Arc<dyn ConfersConfig>) -> DbResult<Self> {
-    //     use crate::config::DbConfigBuilder;
-    //     // 从confers读取URL（必需）
-    //     let url = config
-    //         .get_string("dbnexus.url")
-    //         .ok_or_else(|| DbError::Config("dbnexus.url is required".to_string()))?;
-    //
-    //     // 从confers读取其他配置（使用默认值）
-    //     let max_connections = config
-    //         .get_int("dbnexus.max_connections")
-    //         .map(|v| v as u32)
-    //         .unwrap_or(20);
-    //
-    //     let min_connections = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
-    //
-    //     let idle_timeout = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
-    //
-    //     let acquire_timeout = config
-    //         .get_int("dbnexus.acquire_timeout")
-    //         .map(|v| v as u64)
-    //         .unwrap_or(5000);
-    //
-    //     let admin_role = config
-    //         .get_string("dbnexus.admin_role")
-    //         .unwrap_or_else(|| "admin".to_string());
-    //
-    //     tracing::info!(
-    //         "Creating DbPool with confers: url={}, max_connections={}",
-    //         url,
-    //         max_connections
-    //     );
-    //
-    //     // 使用DbConfigBuilder创建配置
-    //     let db_config = DbConfigBuilder::new()
-    //         .url(&url)
-    //         .max_connections(max_connections)
-    //         .min_connections(min_connections)
-    //         .idle_timeout(idle_timeout)
-    //         .acquire_timeout(acquire_timeout)
-    //         .admin_role(&admin_role)
-    //         .build()
-    //         .map_err(|e| DbError::Config(format!("Config validation failed: {:?}", e)))?;
-    //
-    //     Self::with_config(db_config).await
-    // }
 
     /// 使用配置创建连接池
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
