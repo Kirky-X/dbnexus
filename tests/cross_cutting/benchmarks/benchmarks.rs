@@ -107,7 +107,7 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
     c.bench_function("database_url_parse", |b| {
         b.iter(|| {
             for url in &urls {
-                black_box(dbnexus::config::DatabaseType::parse_database_type(url));
+                black_box(dbnexus::config::DatabaseType::from_url(url));
             }
         })
     });
@@ -115,18 +115,17 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
 
 /// 基准测试：配置验证
 fn config_validation_benchmark(c: &mut Criterion) {
-    use dbnexus::config::DbConfigBuilder;
-
     c.bench_function("config_validation", |b| {
         b.iter(|| {
-            let config = DbConfigBuilder::new()
-                .url("sqlite::memory:")
-                .max_connections(10)
-                .min_connections(1)
-                .idle_timeout(300)
-                .acquire_timeout(5000)
-                .admin_role("admin")
-                .build();
+            let config = dbnexus::config::DbConfig {
+                url: "sqlite::memory:".to_string(),
+                max_connections: 10,
+                min_connections: 1,
+                idle_timeout: 300,
+                acquire_timeout: 5000,
+                admin_role: "admin".to_string(),
+                ..Default::default()
+            };
             black_box(config)
         })
     });

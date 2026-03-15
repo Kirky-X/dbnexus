@@ -14,13 +14,13 @@ use std::time::Duration;
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_semaphore_permit_return_basic() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(2)
-        .min_connections(1)
-        .acquire_timeout(2000)
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 2,
+        min_connections: 1,
+        acquire_timeout: 2000,
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)
@@ -44,13 +44,13 @@ async fn test_semaphore_permit_return_basic() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_semaphore_permit_return_concurrent() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(5)
-        .min_connections(1)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 5,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)
@@ -92,13 +92,13 @@ async fn test_semaphore_permit_return_concurrent() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_no_deadlock_high_concurrency() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(3)
-        .min_connections(1)
-        .acquire_timeout(10000) // 较长超时以确保不会因超时而失败
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 3,
+        min_connections: 1,
+        acquire_timeout: 10000, // 较长超时以确保不会因超时而失败
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)
@@ -150,13 +150,13 @@ async fn test_no_deadlock_high_concurrency() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_semaphore_permit_reuse_after_max() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(2)
-        .min_connections(1)
-        .acquire_timeout(3000)
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 2,
+        min_connections: 1,
+        acquire_timeout: 3000,
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)
@@ -194,13 +194,13 @@ async fn test_semaphore_permit_reuse_after_max() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_stress_rapid_acquire_release() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(10)
-        .min_connections(1)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 10,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)
@@ -240,13 +240,13 @@ async fn test_pool_stress_rapid_acquire_release() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_semaphore_fairness() {
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(2)
-        .min_connections(1)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 2,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        ..Default::default()
+    };
 
     let pool = Arc::new(
         dbnexus::DbPool::with_config(config)

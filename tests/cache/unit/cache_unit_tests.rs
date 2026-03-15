@@ -25,7 +25,7 @@ mod cache_tests {
     where
         V: Send + Sync + 'static,
     {
-        CacheBuilder::new(capacity).build()
+        CacheBuilder::new(capacity)
     }
 
     fn create_test_cache_with_ttl<V>(capacity: u64, ttl: Duration) -> Cache<String, V>
@@ -34,7 +34,7 @@ mod cache_tests {
     {
         CacheBuilder::new(capacity)
             .time_to_live(ttl)
-            .build()
+
     }
 
     // ============================================================================

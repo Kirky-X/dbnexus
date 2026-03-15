@@ -7,9 +7,25 @@
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
-use dbnexus::config::{DbConfig, DbConfigBuilder};
+use dbnexus::config::DbConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
+
+/// 脱敏 URL，隐藏密码
+fn sanitize_url(url: &str) -> String {
+    // 简单的 URL 脱敏：替换密码部分为 ****
+    if let Some(at_pos) = url.find('@') {
+        if let Some(proto_end) = url.find("://") {
+            let proto = &url[..proto_end + 3];
+            let rest = &url[at_pos..];
+            if let Some(colon_pos) = url[proto_end + 3..at_pos].find(':') {
+                let user = &url[proto_end + 3..proto_end + 3 + colon_pos];
+                return format!("{}{}:****{}", proto, user, rest);
+            }
+        }
+    }
+    url.to_string()
+}
 
 /// 测试用的权限配置内容
 static TEST_PERMISSIONS_CONTENT: &str = r#"
@@ -72,30 +88,32 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
         std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
         let perm_path = perm_file.to_string_lossy().to_string();
 
-        // 使用 DbConfigBuilder 构建配置，并设置权限路径
-        let config = DbConfigBuilder::new()
-            .url(&url)
-            .max_connections(5)
-            .min_connections(1)
-            .idle_timeout(300)
-            .acquire_timeout(5000)
-            .permissions_path(&perm_path)
-            .build()
-            .expect("Failed to build test config");
+        // 使用结构体字面量构建配置
+        let config = dbnexus::config::DbConfig {
+            url,
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+            admin_role: "admin".to_string(),
+            permissions_path: Some(perm_path),
+            ..Default::default()
+        };
 
         // 返回 config 和 temp_dir，temp_dir 会保持配置文件存活
         return (config, Some(temp_dir));
     }
 
     // 无权限配置
-    let config = DbConfigBuilder::new()
-        .url(&url)
-        .max_connections(5)
-        .min_connections(1)
-        .idle_timeout(300)
-        .acquire_timeout(5000)
-        .build()
-        .expect("Failed to build test config");
+    let config = dbnexus::config::DbConfig {
+        url,
+        max_connections: 5,
+        min_connections: 1,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
 
     (config, None)
 }
@@ -212,15 +230,15 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     // 使用 sqlx 标准的 SQLite URL 格式
-    let config = DbConfigBuilder::new()
-        .url(&format!("sqlite://{}", db_path_str))
-        .max_connections(5)
-        .min_connections(1)
-        .idle_timeout(300)
-        .acquire_timeout(5000)
-        .permissions_path(&perm_file.to_string_lossy())
-        .build()
-        .expect("Failed to build tracing config");
+    let config = dbnexus::config::DbConfig {
+        url: format!("sqlite://{}", db_path_str),
+        max_connections: 5,
+        min_connections: 1,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
 
     let pool = dbnexus::DbPool::with_config(config).await?;
     Ok((pool, temp_dir))
@@ -241,7 +259,7 @@ pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), db
             eprintln!(
                 "DEBUG: Using {} database with URL: {}",
                 test_db_type,
-                config.url_sanitized()
+                sanitize_url(&config.url)
             );
             let pool = dbnexus::DbPool::with_config(config).await?;
             Ok((pool, temp_dir))
@@ -266,7 +284,7 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 根据数据库类型使用不同的表结构
-    let create_sql = if pool.config().url_sanitized().contains("mysql") {
+    let create_sql = if pool.config().url.contains("mysql") {
         // MySQL: 使用 AUTO_INCREMENT
         format!(
             "CREATE TABLE IF NOT EXISTS {} (
@@ -278,7 +296,7 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
             )",
             table_name
         )
-    } else if pool.config().url_sanitized().contains("postgres") {
+    } else if pool.config().url.contains("postgres") {
         // PostgreSQL: 使用 GENERATED ALWAYS AS IDENTITY
         format!(
             "CREATE TABLE IF NOT EXISTS {} (

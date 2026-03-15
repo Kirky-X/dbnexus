@@ -43,7 +43,7 @@ mod confers_tests {
 
         // 验证可以通过配置获取最大连接数
         let pool_config = pool.config();
-        assert_eq!(pool_config.max_connections(), 10);
+        assert_eq!(pool_config.max_connections, 10);
     }
 
     #[tokio::test]
@@ -57,13 +57,12 @@ mod confers_tests {
 
         let pool = DbPoolBuilder::new()
             .with_confers(config)
-            .build()
             .await
             .expect("Failed to build pool with confers");
 
         // 验证池已创建
         let pool_config = pool.config();
-        assert_eq!(pool_config.max_connections(), 15);
+        assert_eq!(pool_config.max_connections, 15);
     }
 
     #[tokio::test]
@@ -74,16 +73,22 @@ mod confers_tests {
         ]);
 
         // 手动设置的max_connections应该覆盖confers中的配置
+        // 注意：DbPoolBuilder 不支持直接覆盖字段，需要使用 config() 方法
+        let override_config = dbnexus::config::DbConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 50, // 覆盖confers的20
+            ..Default::default()
+        };
+
         let pool = DbPoolBuilder::new()
             .with_confers(config)
-            .max_connections(50)  // 覆盖confers的20
-            .build()
+            .config(override_config)
             .await
             .expect("Failed to build pool");
 
         // 验证配置已应用
         let pool_config = pool.config();
-        assert_eq!(pool_config.max_connections(), 50);
+        assert_eq!(pool_config.max_connections, 50);
     }
 
     #[tokio::test]
@@ -106,6 +111,6 @@ mod confers_tests {
 
         // 验证默认值已应用
         let pool_config = pool.config();
-        assert_eq!(pool_config.max_connections(), 20); // 默认值
+        assert_eq!(pool_config.max_connections, 20); // 默认值
     }
 }
