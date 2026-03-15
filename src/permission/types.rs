@@ -56,9 +56,6 @@ impl std::fmt::Display for PermissionAction {
     }
 }
 
-/// Operation 是 PermissionAction 的别名，用于简化使用
-pub type Operation = PermissionAction;
-
 /// 表权限配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TablePermission {
