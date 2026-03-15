@@ -260,7 +260,7 @@ impl std::fmt::Display for DatabaseType {
 /// | `dbnexus.permissions_path` | `permissions_path` | None |
 /// | `dbnexus.migrations_dir` | `migrations_dir` | None |
 /// | `dbnexus.auto_migrate` | `auto_migrate` | false |
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbConfig {
     /// 数据库连接 URL
     pub url: String,
@@ -312,6 +312,26 @@ pub struct DbConfig {
     /// 缓存配置
     #[serde(default)]
     pub cache_config: CacheConfig,
+}
+
+impl Default for DbConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            max_connections: default_max_connections(),
+            min_connections: default_min_connections(),
+            idle_timeout: default_idle_timeout(),
+            acquire_timeout: default_acquire_timeout(),
+            permissions_path: None,
+            migrations_dir: None,
+            auto_migrate: false,
+            migration_timeout: default_migration_timeout(),
+            admin_role: default_admin_role(),
+            warmup_timeout: default_warmup_timeout(),
+            warmup_retries: default_warmup_retries(),
+            cache_config: CacheConfig::default(),
+        }
+    }
 }
 
 fn default_admin_role() -> String { "admin".to_string() }
