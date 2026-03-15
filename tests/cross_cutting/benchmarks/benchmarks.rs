@@ -21,7 +21,7 @@
 //! 这些测试设计用于性能验证，实际延迟会因硬件和环境而异。
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use dbnexus::permission::{Operation, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use std::time::{Duration, Instant};
 
 #[path = "../../common/mod.rs"]
@@ -59,31 +59,31 @@ fn role_policy_check_benchmark(c: &mut Criterion) {
         tables: vec![
             TablePermission {
                 name: "users".to_string(),
-                operations: vec![Operation::Select, Operation::Insert, Operation::Update],
+                operations: vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update],
             },
             TablePermission {
                 name: "orders".to_string(),
-                operations: vec![Operation::Select, Operation::Insert],
+                operations: vec![PermissionAction::Select, PermissionAction::Insert],
             },
         ],
     };
 
     c.bench_function("role_policy_check", |b| {
         b.iter(|| {
-            black_box(policy.allows("users", &Operation::Select));
-            black_box(policy.allows("users", &Operation::Delete));
-            black_box(policy.allows("orders", &Operation::Insert));
+            black_box(policy.allows("users", &PermissionAction::Select));
+            black_box(policy.allows("users", &PermissionAction::Delete));
+            black_box(policy.allows("orders", &PermissionAction::Insert));
         })
     });
 }
 
-/// 基准测试：Operation 显示转换
+/// 基准测试：PermissionAction 显示转换
 fn operation_display_benchmark(c: &mut Criterion) {
     let operations = vec![
-        Operation::Select,
-        Operation::Insert,
-        Operation::Update,
-        Operation::Delete,
+        PermissionAction::Select,
+        PermissionAction::Insert,
+        PermissionAction::Update,
+        PermissionAction::Delete,
     ];
 
     c.bench_function("operation_display", |b| {
