@@ -24,8 +24,8 @@ use crate::metrics::MetricsCollectorTrait;
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
-#[cfg(feature = "confers")]
-use confers::core::config_trait::ConfersConfig;
+// #[cfg(feature = "confers")]
+// use confers::core::config_trait::ConfersConfig;
 
 use crate::config::DbResult;
 use crate::config::DbnexusConfig;
@@ -34,6 +34,7 @@ use sea_orm::ExecResult;
 
 use std::sync::Arc;
 
+#[cfg(feature = "cache")]
 use crate::cache::Cache;
 
 /// 连接池抽象 trait
@@ -185,6 +186,7 @@ pub struct DbPoolBuilder {
     /// 管理员角色名称（可选，默认使用配置中的值）
     admin_role: Option<String>,
     /// 缓存实例（用于查询结果缓存）
+    #[cfg(feature = "cache")]
     cache: Option<Arc<Cache<String, serde_json::Value>>>,
 }
 
@@ -262,125 +264,96 @@ impl DbPoolBuilder {
     ///
     /// 返回构造器自身以支持链式调用
     pub fn admin_role(mut self, admin_role: &str) -> Self {
-        self.admin_role = Some(admin_role.to_string());
+        if let Some(ref mut config) = self.config {
+            config.set_admin_role(admin_role.to_string());
+        } else {
+            self.admin_role = Some(admin_role.to_string());
+        }
         self
     }
 
-    /// 使用confers配置（DI支持）
-    ///
-    /// 此方法允许从confers配置实例读取数据库配置，
-    /// 并与手动配置的参数合并。手动配置的参数优先级高于confers配置。
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - confers配置实例
-    ///
-    /// # Returns
-    ///
-    /// Self for method chaining
-    ///
-    /// # Configuration Keys
-    ///
-    /// 从confers读取以下配置项（如果未手动设置）：
-    ///
-    /// - `dbnexus.url`: 数据库连接URL
-    /// - `dbnexus.max_connections`: 最大连接数（默认20）
-    /// - `dbnexus.min_connections`: 最小连接数（默认5）
-    /// - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
-    /// - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
-    /// - `dbnexus.admin_role`: 管理员角色（默认"admin"）
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use dbnexus::DbPool;
-    /// use std::sync::Arc;
-    ///
-    /// let config: Arc<dyn ConfersConfig> = /* ... */;
-    ///
-    /// // 使用confers配置，但覆盖max_connections
-    /// let pool = DbPool::builder()
-    ///     .with_confers(config)
-    ///     .max_connections(100)  // 覆盖confers中的配置
-    ///     .build()
-    ///     .await?;
-    /// ```
-    ///
-    /// # Features
-    ///
-    /// 此方法仅在启用 `confers` feature 时可用。
-    #[cfg(feature = "confers")]
-    pub fn with_confers(mut self, config: Arc<dyn ConfersConfig>) -> Self {
-        use crate::config::DbnexusConfigBuilder;
+    // 使用confers配置（DI支持）
+    //
+    // 此方法允许从confers配置实例读取数据库配置，
+    // 并与手动配置的参数合并。手动配置的参数优先级高于confers配置。
+    //
+    // Arguments:
+    // * `config` - confers配置实例
+    //
+    // Returns:
+    // Self for method chaining
+    //
+    // Configuration Keys:
+    // 从confers读取以下配置项（如果不存在则使用默认值）：
+    // - `dbnexus.url`: 数据库连接URL（必需）
+    // - `dbnexus.max_connections`: 最大连接数（默认20）
+    // - `dbnexus.min_connections`: 最小连接数（默认5）
+    // - `dbnexus.idle_timeout`: 空闲超时秒数（默认300）
+    // - `dbnexus.acquire_timeout`: 获取超时毫秒数（默认5000）
+    // - `dbnexus.admin_role`: 管理员角色（默认"admin"）
+    //
+    // Example:
+    // ```rust,ignore
+    // use dbnexus::DbPool;
+    // use std::sync::Arc;
+    //
+    // let config: Arc<dyn ConfersConfig> = /* ... */;
+    //
+    // // 使用confers配置，但覆盖max_connections
+    // let pool = DbPool::builder()
+    //     .with_confers(config)
+    //     .max_connections(100)  // 覆盖confers中的配置
+    //     .build()
+    //     .await?;
+    // ```
+    //
+    // Features: 此方法仅在启用 `confers` feature 时可用。
+    // #[cfg(feature = "confers")]
+    // pub fn with_confers(mut self, config: Arc<dyn ConfersConfig>) -> Self {
+    //     use crate::config::DbnexusConfigBuilder;
+    //
+    //     // 如果尚未设置URL，从confers读取
+    //     if self.url.is_none() && self.config.is_none() {
+    //         if let Some(url) = config.get_string("dbnexus.url") {
+    //             self.url = Some(url);
+    //         }
+    //     }
+    //
+    //     // 如果尚未设置config，从confers创建
+    //     if self.config.is_none() {
+    //         let max = config
+    //             .get_int("dbnexus.max_connections")
+    //             .map(|v| v as u32)
+    //             .unwrap_or(20);
+    //         let min = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
+    //         let idle = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
+    //         let acquire = config
+    //             .get_int("dbnexus.acquire_timeout")
+    //             .map(|v| v as u64)
+    //             .unwrap_or(5000);
+    //         let admin = config
+    //             .get_string("dbnexus.admin_role")
+    //             .unwrap_or_else(|| "admin".to_string());
+    //
+    //         if let Some(url) = &self.url {
+    //             let built_config = DbnexusConfigBuilder::new()
+    //                 .url(url)
+    //                 .max_connections(max)
+    //                 .min_connections(min)
+    //                 .idle_timeout(idle)
+    //                 .acquire_timeout(acquire)
+    //                 .admin_role(&admin)
+    //                 .build();
+    //
+    //             if let Ok(cfg) = built_config {
+    //                 self.config = Some(cfg);
+    //             }
+    //         }
+    //     }
+    //
+    //     self
+    // }
 
-        // 如果尚未设置URL，从confers读取
-        if self.url.is_none() && self.config.is_none() {
-            if let Some(url) = config.get_string("dbnexus.url") {
-                self.url = Some(url);
-            }
-        }
-
-        // 如果尚未设置config，从confers创建
-        if self.config.is_none() {
-            let max = config
-                .get_int("dbnexus.max_connections")
-                .map(|v| v as u32)
-                .unwrap_or(20);
-            let min = config.get_int("dbnexus.min_connections").map(|v| v as u32).unwrap_or(5);
-            let idle = config.get_int("dbnexus.idle_timeout").map(|v| v as u64).unwrap_or(300);
-            let acquire = config
-                .get_int("dbnexus.acquire_timeout")
-                .map(|v| v as u64)
-                .unwrap_or(5000);
-            let admin = config
-                .get_string("dbnexus.admin_role")
-                .unwrap_or_else(|| "admin".to_string());
-
-            if let Some(url) = &self.url {
-                let built_config = DbnexusConfigBuilder::new()
-                    .url(url)
-                    .max_connections(max)
-                    .min_connections(min)
-                    .idle_timeout(idle)
-                    .acquire_timeout(acquire)
-                    .admin_role(&admin)
-                    .build();
-
-                if let Ok(cfg) = built_config {
-                    self.config = Some(cfg);
-                }
-            }
-        }
-
-        self
-    }
-
-    /// 注入oxcache缓存实例（DI支持）
-    ///
-    /// 此方法允许注入oxcache缓存实例，用于数据库查询结果缓存。
-    ///
-    /// # Arguments
-    ///
-    /// * `cache` - oxcache缓存实例
-    ///
-    /// # Returns
-    ///
-    /// Self for method chaining
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use dbnexus::DbPool;
-    /// use oxcache::Cache;
-    /// use std::sync::Arc;
-    ///
-    /// let cache: Cache<String, String> = /* ... */;
-    ///
-    /// let pool = DbPool::builder()
-    ///     .with_oxcache(Arc::new(cache))
-    ///     .url("postgres://...")
-    ///     .build()
-    ///     .await?;
     /// 注入oxcache缓存实例（DI支持）
     ///
     /// 此方法允许注入oxcache缓存实例，用于数据库查询结果缓存。
@@ -404,6 +377,7 @@ impl DbPoolBuilder {
     ///     .with_oxcache(Arc::new(cache))
     ///     .await?;
     /// ```
+    #[cfg(feature = "cache")]
     pub fn with_oxcache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
         self.cache = Some(cache);
         self
@@ -545,6 +519,7 @@ pub struct DbPoolDependencies {
     /// 管理员角色（可选）
     pub admin_role: Option<String>,
     /// 缓存实例（用于查询结果缓存）
+    #[cfg(feature = "cache")]
     pub cache: Option<Arc<Cache<String, serde_json::Value>>>,
 }
 
@@ -597,6 +572,7 @@ impl DbPoolDependencies {
     /// let deps = DbPoolDependencies::new()
     ///     .with_cache(Arc::new(cache));
     /// ```
+    #[cfg(feature = "cache")]
     pub fn with_cache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
         self.cache = Some(cache);
         self

@@ -5,30 +5,30 @@
 
 //! 缓存模块
 //!
-//! 基于 oxcache 的高性能缓存系统
+//! 基于 moka 的高性能缓存系统
 //!
 //! # Feature Requirements
 //!
-//! 此模块需要启用 `cache` feature。如果启用了 `permission` 或 `permission-engine` feature，
-//! 则必须同时启用 `cache` feature，否则会导致编译错误。
+//! 此模块需要启用 `cache` feature。
 
 #[cfg(feature = "cache")]
-pub use oxcache::Cache;
-pub use oxcache::CacheBuilder;
-pub use oxcache::traits::Cacheable;
+pub use moka::future::Cache;
+#[cfg(feature = "cache")]
+pub use moka::future::CacheBuilder;
 
 // ============================================================================
 // 缓存类型别名
 // ============================================================================
 
 /// 异步缓存类型（固定使用 String 作为键类型）
-pub type AsyncCache<V> = oxcache::Cache<String, V>;
+#[cfg(feature = "cache")]
+pub type AsyncCache<V> = moka::future::Cache<String, V>;
 
 /// 缓存配置
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
     /// 最大容量
-    pub capacity: usize,
+    pub capacity: u64,
     /// TTL（秒）
     pub ttl: Option<u64>,
 }
@@ -44,12 +44,12 @@ impl Default for CacheConfig {
 
 impl CacheConfig {
     /// 创建新配置
-    pub fn new(capacity: usize, ttl: Option<u64>) -> Self {
+    pub fn new(capacity: u64, ttl: Option<u64>) -> Self {
         Self { capacity, ttl }
     }
 
     /// 设置容量
-    pub fn capacity(mut self, capacity: usize) -> Self {
+    pub fn capacity(mut self, capacity: u64) -> Self {
         self.capacity = capacity;
         self
     }
@@ -74,23 +74,27 @@ impl CacheKey for String {
 }
 
 /// 创建新的异步缓存
-pub async fn create_cache<V>(capacity: usize) -> Result<AsyncCache<V>, Box<dyn std::error::Error>>
+#[cfg(feature = "cache")]
+pub async fn create_cache<V>(capacity: u64) -> Result<AsyncCache<V>, Box<dyn std::error::Error + Send + Sync>>
 where
-    V: Cacheable,
+    V: Clone + Send + Sync + 'static,
 {
-    let cache = AsyncCache::builder().capacity(capacity as u64).build().await?;
+    let cache = CacheBuilder::new(capacity).build();
     Ok(cache)
 }
 
 /// 创建带TTL的异步缓存
+#[cfg(feature = "cache")]
 pub async fn create_cache_with_ttl<V>(
-    capacity: usize,
+    capacity: u64,
     ttl: std::time::Duration,
-) -> Result<AsyncCache<V>, Box<dyn std::error::Error>>
+) -> Result<AsyncCache<V>, Box<dyn std::error::Error + Send + Sync>>
 where
-    V: Cacheable,
+    V: Clone + Send + Sync + 'static,
 {
-    let cache = AsyncCache::builder().capacity(capacity as u64).ttl(ttl).build().await?;
+    let cache = CacheBuilder::new(capacity)
+        .time_to_live(ttl)
+        .build();
     Ok(cache)
 }
 
@@ -103,8 +107,8 @@ mod tests {
         let cache = create_cache::<String>(100).await.unwrap();
 
         // Test set and get
-        cache.set(&"key1".to_string(), &"value1".to_string()).await.unwrap();
-        let result = cache.get(&"key1".to_string()).await.unwrap();
+        cache.insert("key1".to_string(), "value1".to_string()).await;
+        let result = cache.get(&"key1".to_string()).await;
         assert_eq!(result, Some("value1".to_string()));
     }
 
@@ -112,26 +116,26 @@ mod tests {
     async fn test_cache_overwrite() {
         let cache = create_cache::<String>(10).await.unwrap();
 
-        cache.set(&"key".to_string(), &"value1".to_string()).await.unwrap();
-        cache.set(&"key".to_string(), &"value2".to_string()).await.unwrap();
+        cache.insert("key".to_string(), "value1".to_string()).await;
+        cache.insert("key".to_string(), "value2".to_string()).await;
 
-        let result = cache.get(&"key".to_string()).await.unwrap();
+        let result = cache.get(&"key".to_string()).await;
         assert_eq!(result, Some("value2".to_string()));
     }
 
     #[tokio::test]
-    async fn test_cache_clear() {
+    async fn test_cache_invalidate() {
         let cache = create_cache::<String>(10).await.unwrap();
 
-        cache.set(&"key1".to_string(), &"value1".to_string()).await.unwrap();
-        cache.set(&"key2".to_string(), &"value2".to_string()).await.unwrap();
+        cache.insert("key1".to_string(), "value1".to_string()).await;
+        cache.insert("key2".to_string(), "value2".to_string()).await;
 
-        assert!(cache.get(&"key1".to_string()).await.unwrap().is_some());
-        assert!(cache.get(&"key2".to_string()).await.unwrap().is_some());
+        assert!(cache.get(&"key1".to_string()).await.is_some());
+        assert!(cache.get(&"key2".to_string()).await.is_some());
 
-        cache.clear().await.unwrap();
+        cache.invalidate(&"key1".to_string()).await;
 
-        assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
-        assert!(cache.get(&"key2".to_string()).await.unwrap().is_none());
+        assert!(cache.get(&"key1".to_string()).await.is_none());
+        assert!(cache.get(&"key2".to_string()).await.is_some());
     }
 }

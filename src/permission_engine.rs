@@ -35,7 +35,7 @@
 //! }
 //! ```
 
-use crate::config::DbConfig;
+use crate::config::is_safe_config_path;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -541,7 +541,7 @@ impl YamlPermissionProvider {
             return Err("Config path contains invalid parent directory reference".to_string());
         }
 
-        let is_safe = DbConfig::is_safe_config_path(path).map_err(|e| e.to_string())?;
+        let is_safe = is_safe_config_path(path).map_err(|e: crate::config::ConfigError| e.to_string())?;
         if !is_safe {
             return Err("Config path failed safety validation".to_string());
         }

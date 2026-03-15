@@ -1,0 +1,5 @@
+error: Missing #[table_name = "..."] attribute on the struct
+ --> tests/ui/db_entity_missing_table_name.rs:5:8
+  |
+5 | struct User {
+  |        ^^^^
