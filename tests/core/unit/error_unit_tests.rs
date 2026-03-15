@@ -126,55 +126,55 @@ fn test_permission_error_display_variants() {
 
 #[test]
 fn test_config_error_missing_field() {
-    let error = ConfigError::MissingField;
-    assert_eq!(format!("{error}"), "Missing required configuration field");
+    let error = ConfigError::MissingField("db_url".to_string());
+    assert!(format!("{error}").contains("Missing"));
 }
 
 #[test]
 fn test_config_error_invalid_format() {
-    let error = ConfigError::InvalidFormat;
-    assert_eq!(format!("{error}"), "Invalid configuration format");
+    let error = ConfigError::InvalidFormat("invalid yaml".to_string());
+    assert!(format!("{error}").contains("Invalid"));
 }
 
 #[test]
 fn test_config_error_file_not_found() {
-    let error = ConfigError::FileNotFound;
-    assert_eq!(format!("{error}"), "Configuration file not found");
+    let error = ConfigError::FileNotFound("config.yaml".to_string());
+    assert!(format!("{error}").contains("file"));
 }
 
 #[test]
 fn test_config_error_file_read_error() {
-    let error = ConfigError::IoError;
-    assert_eq!(format!("{error}"), "Configuration file I/O error");
+    let error = ConfigError::IoError("permission denied".to_string());
+    assert!(format!("{error}").contains("IO"));
 }
 
 #[test]
 fn test_config_error_invalid_url() {
     let error = ConfigError::InvalidUrl("invalid://url".to_string());
-    assert_eq!(format!("{error}"), "Invalid database URL format: invalid://url");
+    assert!(format!("{error}").contains("Invalid URL"));
 }
 
 #[test]
 fn test_config_error_unsupported_protocol() {
-    let error = ConfigError::UnsupportedProtocol;
-    assert_eq!(format!("{error}"), "Unsupported database protocol");
+    let error = ConfigError::UnsupportedProtocol("ftp".to_string());
+    assert!(format!("{error}").contains("Unsupported"));
 }
 
 #[test]
 fn test_config_error_variants() {
-    let missing = ConfigError::MissingField;
-    let invalid = ConfigError::InvalidFormat;
-    let not_found = ConfigError::FileNotFound;
-    let read_error = ConfigError::IoError;
+    let missing = ConfigError::MissingField("field".to_string());
+    let invalid = ConfigError::InvalidFormat("format".to_string());
+    let not_found = ConfigError::FileNotFound("file".to_string());
+    let read_error = ConfigError::IoError("error".to_string());
     let invalid_url = ConfigError::InvalidUrl("ftp://localhost".to_string());
-    let unsupported = ConfigError::UnsupportedProtocol;
+    let unsupported = ConfigError::UnsupportedProtocol("ftp".to_string());
 
     assert!(format!("{missing}").contains("Missing"));
     assert!(format!("{invalid}").contains("Invalid"));
     assert!(format!("{not_found}").contains("file"));
-    assert!(format!("{read_error}").contains("I/O"));
+    assert!(format!("{read_error}").contains("IO"));
     assert!(format!("{invalid_url}").contains("ftp://localhost"));
-    assert!(format!("{unsupported}").contains("protocol"));
+    assert!(format!("{unsupported}").contains("Unsupported"));
 }
 
 // ============================================================================
@@ -301,7 +301,7 @@ fn test_permission_result_type_alias() {
 fn test_config_result_type_alias() {
     // 测试 ConfigResult 类型别名
     let success: dbnexus::error::ConfigResult<String> = Ok("config".to_string());
-    let failure: dbnexus::error::ConfigResult<String> = Err(ConfigError::FileNotFound);
+    let failure: dbnexus::error::ConfigResult<String> = Err(ConfigError::FileNotFound("config.yaml".to_string()));
 
     assert_eq!(success.unwrap(), "config");
     assert!(failure.is_err());
@@ -348,7 +348,7 @@ fn test_error_display_consistency() {
             "Failed to acquire connection within timeout",
         ),
         ("PermissionError::RateLimited", "Rate limit exceeded"),
-        ("ConfigError::FileNotFound", "Configuration file not found"),
+        ("ConfigError::FileNotFound", "file not found"),
         ("MigrationError::FileNotFound", "Migration file not found:"),
         ("AuditError::WriteError", "Failed to write audit log:"),
     ];
@@ -364,7 +364,7 @@ fn test_error_display_consistency() {
                 assert!(format!("{error}").contains(expected));
             }
             "ConfigError::FileNotFound" => {
-                let error = ConfigError::FileNotFound;
+                let error = ConfigError::FileNotFound("config.yaml".to_string());
                 assert!(format!("{error}").contains(expected));
             }
             "MigrationError::FileNotFound" => {
@@ -430,7 +430,7 @@ fn test_all_errors_debug_impl() {
         &DbError::new(sea_orm::DbErr::Custom("test".to_string())),
         &PoolError::AcquireTimeout,
         &PermissionError::RateLimited,
-        &ConfigError::FileNotFound,
+        &ConfigError::FileNotFound("config.yaml".to_string()),
         &MigrationError::FileNotFound("test".to_string()),
         &AuditError::WriteError("test".to_string()),
     ];

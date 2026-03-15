@@ -104,10 +104,11 @@ async fn test_concurrent_health_checks() {
 async fn test_pool_config_boundaries() {
     let url = common::get_test_database_url();
     for max_conn in [1, 5, 10] {
-        let config = dbnexus::config::DbConfigBuilder::new()
-            .url(&url)
-            .max_connections(max_conn)
-            .build().expect("Failed");
+        let config = dbnexus::config::DbConfig {
+            url: url.clone(),
+            max_connections: max_conn,
+            ..Default::default()
+        };
         let pool = tokio::time::timeout(std::time::Duration::from_secs(10), dbnexus::DbPool::with_config(config))
             .await.expect("timeout").expect("create");
         let _session = pool.get_session("admin").await.expect("Failed");
@@ -120,12 +121,13 @@ async fn test_pool_config_boundaries() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_connection_acquire_with_small_pool() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfigBuilder::new()
-        .url(&url)
-        .max_connections(2)
-        .min_connections(1)
-        .acquire_timeout(5000)
-        .build().expect("Failed");
+    let config = dbnexus::config::DbConfig {
+        url,
+        max_connections: 2,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        ..Default::default()
+    };
     let pool = dbnexus::DbPool::with_config(config).await.expect("Failed");
     let pool = std::sync::Arc::new(pool);
     let mut handles = Vec::new();

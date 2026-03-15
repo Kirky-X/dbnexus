@@ -35,7 +35,6 @@
 //! }
 //! ```
 
-use crate::config::is_safe_config_path;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -51,6 +50,32 @@ use std::time::{Duration, Instant};
 /// 使用 once_cell 确保线程安全的单次初始化
 static PATH_TRAVERSAL_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
+
+/// 检查配置路径是否安全
+///
+/// 防止路径遍历攻击，确保路径不会访问预期目录之外的文件
+fn is_safe_config_path(path: &str) -> bool {
+    // 检查空路径
+    if path.is_empty() {
+        return false;
+    }
+
+    // 检查路径遍历攻击模式
+    if PATH_TRAVERSAL_REGEX.is_match(path) {
+        return false;
+    }
+
+    // 检查绝对路径是否在允许的目录内
+    let path_buf = std::path::Path::new(path);
+    if path_buf.is_absolute() {
+        // 允许的配置目录前缀
+        let allowed_prefixes = ["/etc/dbnexus/", "/opt/dbnexus/config/", "./config/", "./"];
+        return allowed_prefixes.iter().any(|prefix| path.starts_with(prefix));
+    }
+
+    // 相对路径检查
+    !path.contains("..") && !path.contains('\\')
+}
 
 /// 权限操作类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -541,8 +566,7 @@ impl YamlPermissionProvider {
             return Err("Config path contains invalid parent directory reference".to_string());
         }
 
-        let is_safe = is_safe_config_path(path).map_err(|e: crate::config::ConfigError| e.to_string())?;
-        if !is_safe {
+        if !is_safe_config_path(config_path) {
             return Err("Config path failed safety validation".to_string());
         }
 

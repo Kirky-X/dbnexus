@@ -7,7 +7,6 @@
 
 use dbnexus::DbError;
 use dbnexus::DbPool;
-use dbnexus::config::DbConfigBuilder;
 #[cfg(feature = "permission")]
 use dbnexus::permission::{PermissionAction as Operation, PermissionConfig};
 use tempfile::TempDir;
@@ -190,21 +189,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -230,21 +227,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -284,21 +279,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -333,21 +326,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).unwrap();
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.unwrap();
     let session = pool.get_session("admin").await.unwrap();
 
@@ -390,21 +381,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -432,21 +421,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -494,21 +481,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -531,21 +516,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -587,21 +570,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -635,21 +616,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -687,21 +666,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -739,21 +716,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -790,21 +765,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -827,21 +800,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -864,21 +835,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -906,21 +875,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -962,21 +929,19 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = DbConfigBuilder::new()
-        .url(
-            match std::env::var("TEST_DB_TYPE")
-                .unwrap_or_else(|_| "sqlite".to_string())
-                .as_str()
-            {
-                "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test",
-                "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test",
-                _ => "sqlite::memory:",
-            },
-        )
-        .max_connections(5)
-        .permissions_path(perm_file.to_string_lossy().as_ref())
-        .build()
-        .expect("Failed to build config");
+    let config = dbnexus::config::DbConfig {
+        url: match std::env::var("TEST_DB_TYPE")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .as_str()
+        {
+            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
+            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
+            _ => "sqlite::memory:".to_string(),
+        },
+        max_connections: 5,
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let mut session = pool.get_session("admin").await.expect("Failed to get session");
 

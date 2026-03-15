@@ -10,6 +10,8 @@
 mod db_pool;
 mod session;
 
+use crate::config::DbConfig;
+
 pub use db_pool::{DatabaseConnection, DbPool, PoolStatus};
 pub use session::Session;
 
@@ -265,7 +267,7 @@ impl DbPoolBuilder {
     /// 返回构造器自身以支持链式调用
     pub fn admin_role(mut self, admin_role: &str) -> Self {
         if let Some(ref mut config) = self.config {
-            config.set_admin_role(admin_role.to_string());
+            config.admin_role = admin_role.to_string();
         } else {
             self.admin_role = Some(admin_role.to_string());
         }
@@ -394,14 +396,14 @@ impl DbPoolBuilder {
     /// 返回构造器自身以支持链式调用
     pub fn max_connections(mut self, max_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
-            config.set_max_connections(max_connections);
+            config.max_connections = max_connections;
         } else if let Some(ref url) = self.url {
             // 如果只有 url，创建一个默认配置然后修改
-            let config = crate::config::DbnexusConfigBuilder::new()
-                .url(url)
-                .max_connections(max_connections)
-                .build()
-                .unwrap_or_default();
+            let config = DbConfig {
+                url: url.clone(),
+                max_connections,
+                ..Default::default()
+            };
             self.config = Some(config);
         }
         self
@@ -418,13 +420,13 @@ impl DbPoolBuilder {
     /// 返回构造器自身以支持链式调用
     pub fn min_connections(mut self, min_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
-            config.set_min_connections(min_connections);
+            config.min_connections = min_connections;
         } else if let Some(ref url) = self.url {
-            let config = crate::config::DbnexusConfigBuilder::new()
-                .url(url)
-                .min_connections(min_connections)
-                .build()
-                .unwrap_or_default();
+            let config = DbConfig {
+                url: url.clone(),
+                min_connections,
+                ..Default::default()
+            };
             self.config = Some(config);
         }
         self
@@ -445,15 +447,15 @@ impl DbPoolBuilder {
             config
         } else if let Some(url) = self.url {
             // 从 url 创建默认配置
-            crate::config::DbnexusConfigBuilder::new()
-                .url(&url)
-                .max_connections(20)
-                .min_connections(5)
-                .idle_timeout(300)
-                .acquire_timeout(5000)
-                .admin_role(self.admin_role.as_deref().unwrap_or("admin"))
-                .build()
-                .map_err(|e| crate::error::DbError::new(sea_orm::DbErr::Custom(format!("Config error: {:?}", e))))?
+            DbConfig {
+                url,
+                max_connections: 20,
+                min_connections: 5,
+                idle_timeout: 300,
+                acquire_timeout: 5000,
+                admin_role: self.admin_role.unwrap_or_else(|| "admin".to_string()),
+                ..Default::default()
+            }
         } else {
             return Err(crate::error::DbError::new(sea_orm::DbErr::Custom(
                 "Either url or config must be provided".to_string(),

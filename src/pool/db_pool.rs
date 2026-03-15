@@ -107,7 +107,7 @@ impl Default for ConnectionLifecycle {
 }
 
 use super::Session;
-use crate::config::{ConfigError, DbConfig, DbConfigBuilder, DbError, DbResult};
+use crate::config::{ConfigError, DbConfig, DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
@@ -218,16 +218,10 @@ impl DbPool {
     /// }
     /// ```
     pub async fn new(url: &str) -> DbResult<Self> {
-        // 使用构建器创建带默认值的配置
-        let config = DbConfigBuilder::new()
-            .url(url)
-            .max_connections(20)
-            .min_connections(5)
-            .idle_timeout(300)
-            .acquire_timeout(5000)
-            .admin_role("admin")
-            .build()
-            .map_err(|e| sea_orm::DbErr::Custom(format!("Config validation failed: {:?}", e)))?;
+        let config = DbConfig {
+            url: url.to_string(),
+            ..Default::default()
+        };
         Self::with_config(config).await
     }
 
@@ -312,47 +306,24 @@ impl DbPool {
     //     Self::with_config(db_config).await
     // }
 
-    /// 使用配置创建连接池（带自动修正）
+    /// 使用配置创建连接池
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
-        // 使用配置修正器自动修正配置
-        let corrected_config = crate::config::ConfigCorrector::auto_correct(config);
-
-        // 创建初始连接以查询数据库能力
-        let db_type = crate::config::DatabaseType::parse_database_type(&corrected_config.url_sanitized());
-
-        // 创建连接并应用数据库能力修正
-        let connection = sea_orm::Database::connect(corrected_config.url_for_connection())
+        // 创建连接
+        let _connection = sea_orm::Database::connect(&config.url)
             .await
             .map_err(DbError::Connection)?;
-
-        // 应用数据库能力修正（如果需要）
-        let corrected_config = crate::config::ConfigCorrector::auto_correct_with_database_capability(
-            corrected_config,
-            &connection,
-            db_type, // DatabaseType implements Copy, no need to clone
-        )
-        .await;
-
-        // 输出配置修正信息
-        if corrected_config.max_connections() < 100 && db_type.is_real_database() {
-            info!(
-                "Database connection limit: 80% of {} = {} connections",
-                corrected_config.max_connections(),
-                corrected_config.max_connections()
-            );
-        }
 
         // 创建权限策略缓存（使用配置化的缓存容量）
         #[cfg(feature = "permission")]
         let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(
             Cache::builder()
-                .max_capacity(corrected_config.policy_cache_capacity())
+                .max_capacity(config.cache_config.policy_cache_capacity)
                 .build()
         );
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
         #[cfg(feature = "permission")]
-        let permission_config = Self::load_permission_config(&corrected_config).await;
+        let permission_config = Self::load_permission_config(&config).await;
 
         // 预加载权限策略到缓存（如果存在权限配置）
         #[cfg(feature = "permission")]
@@ -364,12 +335,12 @@ impl DbPool {
         }
 
         #[cfg(not(feature = "permission"))]
-        let permission_config = None::<std::option::Option<String>>; // 使用通用类型占位
+        let permission_config = None::<std::option::Option<String>>;
 
         let pool = Self {
             inner: Arc::new(DbPoolInner {
-                config: corrected_config.clone(),
-                connection_semaphore: Arc::new(Semaphore::new(corrected_config.max_connections() as usize)),
+                config: config.clone(),
+                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -379,7 +350,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 permission_config: Arc::new(AsyncMutex::new(permission_config)),
                 health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: corrected_config.admin_role().to_string(),
+                admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
@@ -395,14 +366,14 @@ impl DbPool {
         // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
         #[cfg(feature = "pool-warmup")]
         {
-            let initial_connections = pool.inner.config.min_connections();
-            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout());
-            let warmup_retries = pool.inner.config.warmup_retries();
+            let initial_connections = pool.inner.config.min_connections;
+            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
+            let warmup_retries = pool.inner.config.warmup_retries;
 
             let mut connection_tasks = Vec::new();
 
             for _ in 0..initial_connections {
-                let config = corrected_config.clone();
+                let config = config.clone();
                 connection_tasks.push(async move {
                     let mut retries = 0;
                     let mut last_error = None;
@@ -456,8 +427,8 @@ impl DbPool {
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
                 successful,
                 initial_connections,
-                corrected_config.min_connections(),
-                corrected_config.max_connections(),
+                config.min_connections,
+                config.max_connections,
                 failed
             );
         }
@@ -467,21 +438,21 @@ impl DbPool {
         {
             let permission_config_guard = pool.inner.permission_config.lock().await;
 
-            if let Some(ref config) = *permission_config_guard {
+            if let Some(ref perm_config) = *permission_config_guard {
                 #[cfg(feature = "permission")]
                 {
-                    for (role, policy) in &config.roles {
+                    for (role, policy) in &perm_config.roles {
                         let _ = pool.inner.policy_cache.insert(role.clone(), policy.clone()).await;
                     }
-                    info!("Loaded permission policies for {} roles", config.roles.len());
+                    info!("Loaded permission policies for {} roles", perm_config.roles.len());
                 }
             }
             drop(permission_config_guard);
         }
 
         #[cfg(feature = "auto-migrate")]
-        if corrected_config.auto_migrate() {
-            if let Some(migrations_dir) = corrected_config.migrations_dir() {
+        if config.auto_migrate {
+            if let Some(ref migrations_dir) = config.migrations_dir {
                 if migrations_dir.exists() {
                     info!(
                         "Auto-migrate enabled, running migrations from: {}",
@@ -513,15 +484,17 @@ impl DbPool {
         feature = "sqlite",
         doc = r###"
     /// ```rust
-    /// use dbnexus::{DbPool, DbConfigBuilder};
+    /// use dbnexus::DbPool;
+    /// use dbnexus::config::DbConfig;
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let config = DbConfigBuilder::new()
-    ///         .url("sqlite::memory:")
-    ///         .max_connections(10)
-    ///         .min_connections(2)
-    ///         .build()?;
+    ///     let config = DbConfig {
+    ///         url: "sqlite::memory:".to_string(),
+    ///         max_connections: 10,
+    ///         min_connections: 2,
+    ///         ..Default::default()
+    ///     };
     ///
     ///     let pool = DbPool::try_from_config(config).await?;
     ///     Ok(())
@@ -557,18 +530,20 @@ impl DbPool {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::{DbPool, DbConfigBuilder};
+    /// use dbnexus::DbPool;
+    /// use dbnexus::config::DbConfig;
     ///
     /// let runtime = tokio::runtime::Runtime::new()?;
     /// let _guard = runtime.enter();
     ///
-    /// let config = DbConfigBuilder::new()
-    ///     .url("sqlite::memory:")
-    ///     .max_connections(10)
-    ///     .min_connections(1)
-    ///     .idle_timeout(300)
-    ///     .acquire_timeout(5000)
-    ///     .build()?;
+    /// let config = DbConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 10,
+    ///     min_connections: 1,
+    ///     idle_timeout: 300,
+    ///     acquire_timeout: 5000,
+    ///     ..Default::default()
+    /// };
     ///
     /// let pool = DbPool::try_from(&config)?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())
@@ -579,17 +554,16 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(not(feature = "permission"))]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        config.validate()?;
         Ok(Self {
             inner: Arc::new(DbPoolInner {
-                config: config.clone_config(),
-                connection_semaphore: Arc::new(Semaphore::new(config.max_connections() as usize)),
+                config: config.clone(),
+                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
                 health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: config.admin_role().to_string(),
+                admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
@@ -610,18 +584,20 @@ impl DbPool {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::{DbPool, DbConfigBuilder};
+    /// use dbnexus::DbPool;
+    /// use dbnexus::config::DbConfig;
     ///
     /// let runtime = tokio::runtime::Runtime::new()?;
     /// let _guard = runtime.enter();
     ///
-    /// let config = DbConfigBuilder::new()
-    ///     .url("sqlite::memory:")
-    ///     .max_connections(10)
-    ///     .min_connections(1)
-    ///     .idle_timeout(300)
-    ///     .acquire_timeout(5000)
-    ///     .build()?;
+    /// let config = DbConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 10,
+    ///     min_connections: 1,
+    ///     idle_timeout: 300,
+    ///     acquire_timeout: 5000,
+    ///     ..Default::default()
+    /// };
     ///
     /// let pool = DbPool::try_from(&config)?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())
@@ -632,17 +608,16 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(feature = "permission")]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        crate::config::validate_config(config)?;
         // try_from 是同步简化版本
         // 使用配置化的缓存容量
-        let cache_capacity = config.policy_cache_capacity();
+        let cache_capacity = config.cache_config.policy_cache_capacity;
         let policy_cache: Cache<String, RolePolicy> = Cache::builder()
             .max_capacity(cache_capacity)
             .build();
         Ok(Self {
             inner: Arc::new(DbPoolInner {
-                config: config.clone_config(),
-                connection_semaphore: Arc::new(Semaphore::new(config.max_connections() as usize)),
+                config: config.clone(),
+                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -650,7 +625,7 @@ impl DbPool {
                 policy_cache: Arc::new(policy_cache),
                 permission_config: Arc::new(AsyncMutex::new(None)),
                 health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: config.admin_role().to_string(),
+                admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
@@ -669,7 +644,7 @@ impl DbPool {
     #[cfg(feature = "permission")]
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
-        if let Some(ref path) = config.permissions_path() {
+        if let Some(ref path) = config.permissions_path {
             tracing::info!("Loading permission config from: {}", path);
             match tokio::fs::read_to_string(path).await {
                 Ok(content) => match PermissionConfig::from_yaml(&content) {
@@ -702,16 +677,15 @@ impl DbPool {
         self.inner.metrics_collector.as_ref()
     }
 
-    /// 获取当前应用的实际配置
+    /// 获取实际应用的配置
     ///
-    /// 返回经过自动修正后的配置副本。
-    /// 如果配置从未被修正过，则返回传入的配置。
+    /// 返回当前连接池使用的配置。
     ///
     /// # Returns
     ///
-    /// 实际应用的配置（可能已被自动修正）
-    pub fn get_actual_config(&self) -> DbConfig {
-        crate::config::ConfigCorrector::get_actual_config(&self.inner.config)
+    /// 实际应用的配置
+    pub fn get_actual_config(&self) -> &DbConfig {
+        &self.inner.config
     }
 
     /// 从池中获取 Session（带 metrics 支持）
@@ -800,7 +774,7 @@ impl DbPool {
     ///
     /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
-        let conn = sea_orm::Database::connect(config.url_for_connection()).await?;
+        let conn = sea_orm::Database::connect(&config.url).await?;
         Ok(conn)
     }
 
@@ -820,7 +794,7 @@ impl DbPool {
     ///
     /// 如果连接有效返回 `true`，否则返回 `false`
     pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
-        let backend = Self::get_database_backend(&self.inner.config.url_sanitized());
+        let backend = Self::get_database_backend(&self.inner.config.url);
 
         // 创建带超时的健康检查
         let result = timeout(
@@ -890,7 +864,7 @@ impl DbPool {
         idle: &mut Vec<DatabaseConnection>,
         config: &DbConfig,
     ) -> (Vec<DatabaseConnection>, usize) {
-        let backend = Self::get_database_backend(&config.url_sanitized());
+        let backend = Self::get_database_backend(&config.url);
 
         let mut valid_connections: Vec<DatabaseConnection> = Vec::with_capacity(idle.len());
         let mut invalid_count = 0;
@@ -973,7 +947,7 @@ impl DbPool {
 
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
-            let needed = config.min_connections().saturating_sub(current_idle as u32) as usize;
+            let needed = config.min_connections.saturating_sub(current_idle as u32) as usize;
 
             for _ in 0..needed {
                 match Self::create_connection(config).await {
@@ -1200,7 +1174,7 @@ impl DbPool {
 
         // 尝试快速路径：非阻塞获取锁
         if let Ok(mut idle) = inner.idle_connections.try_lock() {
-            if idle.len() < inner.config.max_connections() as usize {
+            if idle.len() < inner.config.max_connections as usize {
                 idle.push(conn);
                 inner.connection_available.notify_one();
                 // 归还信号量许可
@@ -1218,7 +1192,7 @@ impl DbPool {
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::spawn(async move {
                 let mut idle = inner.idle_connections.lock().await;
-                if idle.len() < inner.config.max_connections() as usize {
+                if idle.len() < inner.config.max_connections as usize {
                     idle.push(conn);
                     inner.connection_available.notify_one();
                 } else {
@@ -1304,7 +1278,7 @@ impl DbPool {
     /// 成功应用的迁移数量
     #[cfg(feature = "auto-migrate")]
     pub async fn run_auto_migrate(&self) -> Result<u32, DbError> {
-        if let Some(migrations_dir) = self.inner.config.migrations_dir() {
+        if let Some(ref migrations_dir) = self.inner.config.migrations_dir {
             tracing::info!("Running auto-migrate from directory: {}", migrations_dir.display());
             self.run_migrations(migrations_dir).await
         } else {
@@ -1326,7 +1300,7 @@ impl DbPool {
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
         use crate::migration::MigrationExecutor;
 
-        let db_type = crate::DatabaseType::parse_database_type(&self.inner.config.url_sanitized());
+        let db_type = self.inner.config.database_type();
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
