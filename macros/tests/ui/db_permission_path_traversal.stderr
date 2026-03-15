@@ -1,0 +1,29 @@
+error: Config path contains invalid parent directory reference or path traversal patterns
+ --> tests/ui/db_permission_path_traversal.rs:8:8
+  |
+8 | struct User {
+  |        ^^^^
+
+error[E0425]: cannot find type `User` in this scope
+ --> tests/ui/db_permission_path_traversal.rs:8:8
+  |
+8 | struct User {
+  |        ^^^^ not found in this scope
+
+error[E0425]: cannot find type `User` in this scope
+ --> tests/ui/db_permission_path_traversal.rs:5:20
+  |
+5 | #[derive(DbEntity, Clone, Debug)]
+  |                    ^^^^^ not found in this scope
+
+error[E0422]: cannot find struct, variant or union type `User` in this scope
+ --> tests/ui/db_permission_path_traversal.rs:5:20
+  |
+5 | #[derive(DbEntity, Clone, Debug)]
+  |                    ^^^^^ not found in this scope
+
+error[E0425]: cannot find type `User` in this scope
+ --> tests/ui/db_permission_path_traversal.rs:5:27
+  |
+5 | #[derive(DbEntity, Clone, Debug)]
+  |                           ^^^^^ not found in this scope

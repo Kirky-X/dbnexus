@@ -359,13 +359,91 @@ impl AuditEvent {
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
     }
+}
 
+/// 敏感数据脱敏最大递归深度
+const MAX_SANITIZE_DEPTH: usize = 10;
+
+/// 默认敏感字段列表
+fn default_sensitive_fields() -> Vec<String> {
+    vec![
+        "password".to_string(),
+        "token".to_string(),
+        "secret".to_string(),
+        "key".to_string(),
+        "credential".to_string(),
+        "api_key".to_string(),
+        "access_token".to_string(),
+        "refresh_token".to_string(),
+        "private_key".to_string(),
+        "credit_card".to_string(),
+        "ssn".to_string(),
+        "social_security".to_string(),
+    ]
+}
+
+/// 递归脱敏 JSON 值
+///
+/// # Arguments
+///
+/// * `value` - JSON 值
+/// * `sensitive_fields` - 敏感字段列表
+/// * `depth` - 当前递归深度
+///
+/// # Returns
+///
+/// 脱敏后的 JSON 值
+fn sanitize_json_object(
+    value: &serde_json::Value,
+    sensitive_fields: &[String],
+    depth: usize,
+) -> serde_json::Value {
+    // 防止栈溢出：超过最大深度时返回占位符
+    if depth > MAX_SANITIZE_DEPTH {
+        return serde_json::Value::String("[MAX_DEPTH_EXCEEDED]".to_string());
+    }
+
+    match value {
+        serde_json::Value::Object(obj) => {
+            let mut new_obj = serde_json::Map::new();
+            for (key, val) in obj {
+                // 检查当前字段名是否为敏感字段（不区分大小写）
+                let is_sensitive = sensitive_fields
+                    .iter()
+                    .any(|f| key.to_lowercase().contains(&f.to_lowercase()));
+
+                if is_sensitive {
+                    // 敏感字段直接替换为 [REDACTED]
+                    new_obj.insert(key.clone(), serde_json::Value::String("[REDACTED]".to_string()));
+                } else {
+                    // 非敏感字段递归处理
+                    new_obj.insert(key.clone(), sanitize_json_object(val, sensitive_fields, depth + 1));
+                }
+            }
+            serde_json::Value::Object(new_obj)
+        }
+        serde_json::Value::Array(arr) => {
+            // 数组中的每个元素递归处理
+            serde_json::Value::Array(
+                arr.iter()
+                    .map(|v| sanitize_json_object(v, sensitive_fields, depth + 1))
+                    .collect(),
+            )
+        }
+        // 其他类型（字符串、数字、布尔、null）直接克隆
+        other => other.clone(),
+    }
+}
+
+impl AuditEvent {
     /// 对 JSON 值进行敏感数据脱敏
     ///
     /// 脱敏策略：
-    /// - 识别 JSON 对象中的敏感字段
-    /// - 将敏感字段的值替换为 "***REDACTED***"
+    /// - 递归遍历 JSON 对象和数组
+    /// - 识别 JSON 中的敏感字段（包括嵌套字段）
+    /// - 将敏感字段的值替换为 "[REDACTED]"
     /// - 支持自定义敏感字段列表
+    /// - 最大递归深度为 10 层，防止栈溢出
     ///
     /// # Arguments
     ///
@@ -376,45 +454,22 @@ impl AuditEvent {
     ///
     /// 脱敏后的 JSON 字符串
     pub fn sanitize_value(value: &str, sensitive_fields: Option<Vec<String>>) -> String {
-        // 默认敏感字段列表
-        let default_sensitive = vec![
-            "password".to_string(),
-            "token".to_string(),
-            "secret".to_string(),
-            "key".to_string(),
-            "credential".to_string(),
-            "api_key".to_string(),
-            "access_token".to_string(),
-            "refresh_token".to_string(),
-            "private_key".to_string(),
-            "credit_card".to_string(),
-            "ssn".to_string(),
-            "social_security".to_string(),
-        ];
-        let fields = sensitive_fields.unwrap_or(default_sensitive);
+        let fields = sensitive_fields.unwrap_or_else(default_sensitive_fields);
 
         // 尝试解析 JSON
-        if let Ok(serde_json::Value::Object(mut obj)) = serde_json::from_str::<serde_json::Value>(value) {
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
+            let sanitized = sanitize_json_object(&json_value, &fields, 0);
+            serde_json::to_string(&sanitized).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string())
+        } else {
+            // 非 JSON 值，检查是否包含敏感关键字
+            let lower = value.to_lowercase();
             for field in &fields {
-                if let Some(_value) = obj.remove(field) {
-                    // 记录原始值类型但不记录内容
-                    tracing::debug!("Sensitive field '{}' redacted in audit log", field);
+                if lower.contains(&format!("\"{}\":", field)) || lower.contains(&format!("\"{}\" :", field)) {
+                    return "***REDACTED***".to_string();
                 }
             }
-            // 脱敏后的值替换为占位符
-            for field in &fields {
-                obj.insert(field.clone(), serde_json::Value::String("***REDACTED***".to_string()));
-            }
-            return serde_json::to_string(&obj).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string());
+            value.to_string()
         }
-        // 非 JSON 值，检查是否包含敏感关键字
-        let lower = value.to_lowercase();
-        for field in &fields {
-            if lower.contains(&format!("\"{}\":", field)) || lower.contains(&format!("\"{}\" :", field)) {
-                return "***REDACTED***".to_string();
-            }
-        }
-        value.to_string()
     }
 
     /// 创建脱敏后的审计事件副本（用于日志记录）
@@ -1321,6 +1376,208 @@ mod tests {
             .with_session_id("sess");
         assert_eq!(ctx.request_id, "req");
         assert_eq!(ctx.session_id, "sess");
+    }
+
+    #[test]
+    fn test_sanitize_value_nested_objects() {
+        // 测试嵌套对象中的敏感字段脱敏
+        let nested_json = r#"{
+            "name": "test",
+            "password": "secret123",
+            "user": {
+                "name": "john",
+                "password": "nested_secret",
+                "profile": {
+                    "token": "deep_token",
+                    "age": 30
+                }
+            }
+        }"#;
+
+        let sanitized = AuditEvent::sanitize_value(nested_json, None);
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+
+        // 验证第一层敏感字段被脱敏
+        assert_eq!(parsed["password"], "[REDACTED]");
+        // 验证嵌套对象中的敏感字段被脱敏
+        assert_eq!(parsed["user"]["password"], "[REDACTED]");
+        // 验证深层嵌套的敏感字段被脱敏
+        assert_eq!(parsed["user"]["profile"]["token"], "[REDACTED]");
+        // 验证非敏感字段保持不变
+        assert_eq!(parsed["name"], "test");
+        assert_eq!(parsed["user"]["name"], "john");
+        assert_eq!(parsed["user"]["profile"]["age"], 30);
+    }
+
+    #[test]
+    fn test_sanitize_value_nested_arrays() {
+        // 测试数组中的嵌套对象敏感字段脱敏
+        let array_json = r#"{
+            "users": [
+                {"name": "user1", "password": "pass1"},
+                {"name": "user2", "password": "pass2", "token": "tok2"}
+            ],
+            "count": 2
+        }"#;
+
+        let sanitized = AuditEvent::sanitize_value(array_json, None);
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+
+        // 验证数组中每个对象的敏感字段都被脱敏
+        assert_eq!(parsed["users"][0]["password"], "[REDACTED]");
+        assert_eq!(parsed["users"][1]["password"], "[REDACTED]");
+        assert_eq!(parsed["users"][1]["token"], "[REDACTED]");
+        // 验证非敏感字段保持不变
+        assert_eq!(parsed["users"][0]["name"], "user1");
+        assert_eq!(parsed["users"][1]["name"], "user2");
+        assert_eq!(parsed["count"], 2);
+    }
+
+    #[test]
+    fn test_sanitize_value_max_depth() {
+        // 构建一个超过最大深度的嵌套 JSON（使用非敏感字段名）
+        let mut deep_value = serde_json::Value::Object(serde_json::Map::new());
+        deep_value.as_object_mut().unwrap().insert(
+            "deep_data".to_string(),
+            serde_json::Value::String("value".to_string()),
+        );
+
+        for i in 0..12 {
+            let mut new_obj = serde_json::Map::new();
+            new_obj.insert(format!("level{}", i), deep_value);
+            deep_value = serde_json::Value::Object(new_obj);
+        }
+        let json_str = serde_json::to_string(&deep_value).unwrap();
+
+        let sanitized = AuditEvent::sanitize_value(&json_str, None);
+
+        // 验证超过最大深度时返回占位符
+        assert!(
+            sanitized.contains("[MAX_DEPTH_EXCEEDED]"),
+            "应该包含 MAX_DEPTH_EXCEEDED 标记"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_value_case_insensitive() {
+        // 测试字段名不区分大小写
+        let json = r#"{
+            "PASSWORD": "upper",
+            "Password": "mixed",
+            "api_key": "key1",
+            "API_KEY": "key2",
+            "MySecretToken": "token1"
+        }"#;
+
+        let sanitized = AuditEvent::sanitize_value(json, None);
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+
+        // 验证所有大小写变体都被脱敏
+        assert_eq!(parsed["PASSWORD"], "[REDACTED]");
+        assert_eq!(parsed["Password"], "[REDACTED]");
+        assert_eq!(parsed["api_key"], "[REDACTED]");
+        assert_eq!(parsed["API_KEY"], "[REDACTED]");
+        assert_eq!(parsed["MySecretToken"], "[REDACTED]");
+    }
+
+    #[test]
+    fn test_sanitize_value_custom_fields() {
+        // 测试自定义敏感字段
+        let json = r#"{
+            "name": "test",
+            "custom_sensitive": "should_be_redacted",
+            "password": "also_redacted"
+        }"#;
+
+        let custom_fields = vec!["custom_sensitive".to_string()];
+        let sanitized = AuditEvent::sanitize_value(json, Some(custom_fields));
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+
+        // 验证自定义字段被脱敏
+        assert_eq!(parsed["custom_sensitive"], "[REDACTED]");
+        // 默认字段不在自定义列表中，不会被脱敏
+        assert_eq!(parsed["password"], "also_redacted");
+        // 非敏感字段保持不变
+        assert_eq!(parsed["name"], "test");
+    }
+
+    #[test]
+    fn test_sanitize_value_complex_nested_structure() {
+        // 测试复杂的嵌套结构
+        // 注意: 使用不包含敏感词的字段名（如 credentials 包含 credential，api_keys 包含 key）
+        let complex_json = r#"{
+            "user": {
+                "auth_data": {
+                    "password": "user_pass",
+                    "auth_list": [
+                        {"access_token": "at1", "auth_type": "bearer"},
+                        {"access_token": "at2", "auth_type": "bearer"}
+                    ]
+                },
+                "settings": {
+                    "config": {
+                        "secret": "api_secret",
+                        "name": "production"
+                    }
+                }
+            },
+            "metadata": {
+                "count": 10,
+                "tags": ["tag1", "tag2"]
+            }
+        }"#;
+
+        let sanitized = AuditEvent::sanitize_value(complex_json, None);
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+
+        // 验证多层嵌套中的敏感字段都被脱敏
+        assert_eq!(parsed["user"]["auth_data"]["password"], "[REDACTED]");
+        assert_eq!(parsed["user"]["auth_data"]["auth_list"][0]["access_token"], "[REDACTED]");
+        assert_eq!(parsed["user"]["auth_data"]["auth_list"][1]["access_token"], "[REDACTED]");
+        assert_eq!(parsed["user"]["settings"]["config"]["secret"], "[REDACTED]");
+        // 验证非敏感字段保持不变
+        assert_eq!(parsed["user"]["auth_data"]["auth_list"][0]["auth_type"], "bearer");
+        assert_eq!(parsed["user"]["settings"]["config"]["name"], "production");
+        assert_eq!(parsed["metadata"]["count"], 10);
+        assert_eq!(parsed["metadata"]["tags"], serde_json::json!(["tag1", "tag2"]));
+    }
+
+    #[test]
+    fn test_sanitize_value_non_json() {
+        // 测试非 JSON 字符串
+        let non_json = "This is just a string with \"password\": value";
+        let sanitized = AuditEvent::sanitize_value(non_json, None);
+        assert_eq!(sanitized, "***REDACTED***");
+
+        // 测试不包含敏感关键字的非 JSON 字符串
+        let safe_string = "This is a safe string";
+        let sanitized = AuditEvent::sanitize_value(safe_string, None);
+        assert_eq!(sanitized, safe_string);
+    }
+
+    #[test]
+    fn test_sanitize_value_empty_and_null() {
+        // 测试空对象
+        let empty_obj = "{}";
+        let sanitized = AuditEvent::sanitize_value(empty_obj, None);
+        assert_eq!(sanitized, "{}");
+
+        // 测试空数组
+        let empty_arr = "[]";
+        let sanitized = AuditEvent::sanitize_value(empty_arr, None);
+        assert_eq!(sanitized, "[]");
+
+        // 测试 null 值
+        let null_val = "null";
+        let sanitized = AuditEvent::sanitize_value(null_val, None);
+        assert_eq!(sanitized, "null");
+
+        // 测试包含 null 值的对象
+        let with_null = r#"{"password": null, "name": "test"}"#;
+        let sanitized = AuditEvent::sanitize_value(with_null, None);
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+        assert_eq!(parsed["password"], "[REDACTED]");
+        assert_eq!(parsed["name"], "test");
     }
 }
 

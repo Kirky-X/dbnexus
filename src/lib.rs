@@ -57,8 +57,8 @@ compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', or 'mysql'");
 
 // 检查 feature 依赖关系
-#[cfg(all(not(clippy), feature = "permission", not(feature = "cache")))]
-compile_error!("The 'permission' feature requires the 'cache' feature to be enabled");
+#[cfg(all(not(clippy), feature = "permission-with-cache", not(feature = "cache")))]
+compile_error!("The 'permission-with-cache' feature requires the 'cache' feature to be enabled");
 
 #[cfg(all(not(clippy), feature = "permission-engine", not(feature = "cache")))]
 compile_error!("The 'permission-engine' feature requires the 'cache' feature to be enabled");
@@ -74,14 +74,13 @@ compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enab
 #[cfg(feature = "audit")]
 pub mod audit;
 
-/// 缓存模块（基于 oxcache）
-/// 注意：启用 `permission` 或 `permission-engine` feature 时必须同时启用 `cache` feature
+/// 缓存模块（基于 moka）
 #[cfg(feature = "cache")]
 pub mod cache;
 
 /// 缓存配置和类型导出
 #[cfg(feature = "cache")]
-pub use cache::{AsyncCache, Cache, CacheBuilder, CacheConfig, CacheKey, create_cache, create_cache_with_ttl};
+pub use cache::{AsyncCache, CacheBuilder, CacheConfig, CacheKey, create_cache, create_cache_with_ttl};
 /// 配置管理模块
 pub mod config;
 
