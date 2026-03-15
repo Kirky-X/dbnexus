@@ -17,7 +17,7 @@
 //! cargo run --example metrics --features "sqlite,metrics"
 //! ```
 
-use dbnexus::{DbConfigBuilder, DbPool, metrics::MetricsCollector};
+use dbnexus::{DbConfig, DbPool, metrics::MetricsCollector};
 use std::time::Duration;
 
 /// 定义 User 结构体（用于演示指标收集）
@@ -52,12 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 初始化数据库连接池
     println!("\n2️⃣ 初始化数据库连接池");
     println!("------------------------------------------");
-    let config = DbConfigBuilder::new()
-        .url("sqlite:file::memory:?cache=shared")
-        .permissions_path("examples/demo/permissions.yaml")
-        .admin_role("admin")
-        .build()
-        .expect("Failed to build config");
+    let config = DbConfig {
+        url: "sqlite:file::memory:?cache=shared".to_string(),
+        permissions_path: Some("examples/demo/permissions.yaml".to_string()),
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
 
