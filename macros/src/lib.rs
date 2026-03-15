@@ -44,7 +44,7 @@ use syn::{DeriveInput, parse_macro_input};
 /// - `#[sea_orm(primary_key)]` on primary key field
 #[proc_macro_derive(DbEntity, attributes(table_name, primary_key))]
 pub fn derive_db_entity(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
+    let mut input = parse_macro_input!(input as DeriveInput);
 
     let struct_name = &input.ident;
     let generics = &input.generics;
@@ -52,8 +52,8 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
     // 提取表名
     let table_name = extract_table_name(&input.attrs);
 
-    // 提取主键字段名
-    let primary_key_name = extract_primary_key(&input.data);
+    // 提取主键字段名并移除 primary_key 属性
+    let primary_key_name = extract_primary_key_and_remove(&mut input.data);
 
     if table_name.is_empty() {
         return syn::Error::new(
@@ -72,10 +72,8 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // 生成代码 - 保留原始结构体定义并添加方法
+    // 生成代码 - derive 宏只添加 impl 块，不输出原始结构体
     let expanded = quote! {
-        #input
-
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// 获取表名
             pub fn table_name() -> &'static str {
@@ -131,7 +129,39 @@ fn extract_table_name(attrs: &[syn::Attribute]) -> String {
     String::new()
 }
 
-/// 提取主键字段名
+/// 提取主键字段名并移除 primary_key 属性
+fn extract_primary_key_and_remove(data: &mut syn::Data) -> String {
+    if let syn::Data::Struct(s) = data {
+        let mut primary_key_name = String::new();
+        for field in &mut s.fields {
+            // 检查是否有 primary_key 属性或 sea_orm(primary_key) 属性
+            for attr in &field.attrs {
+                // 检查 #[primary_key]
+                if attr.path().is_ident("primary_key") {
+                    if let Some(ident) = &field.ident {
+                        primary_key_name = ident.to_string();
+                        break;
+                    }
+                }
+                // 检查 #[sea_orm(primary_key)]
+                if attr.path().is_ident("sea_orm") {
+                    let _ = attr.parse_nested_meta(|nested| {
+                        if nested.path.is_ident("primary_key") {
+                            if let Some(ident) = &field.ident {
+                                primary_key_name = ident.to_string();
+                            }
+                        }
+                        Ok(())
+                    });
+                }
+            }
+        }
+        return primary_key_name;
+    }
+    String::new()
+}
+
+/// 提取主键字段名（保留原函数供其他地方使用）
 fn extract_primary_key(data: &syn::Data) -> String {
     if let syn::Data::Struct(s) = data {
         for field in &s.fields {

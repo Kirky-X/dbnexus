@@ -6,6 +6,7 @@
 //! Core 模块集成测试
 
 pub mod config_integration;
+pub mod dbnexus_integration;
 pub mod entity_integration;
 
 #[cfg(feature = "health-check")]

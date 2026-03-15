@@ -4,3 +4,5 @@
 // See LICENSE file in the project root for full license information.
 
 //! Metrics 单元测试
+
+pub mod metrics_unit_tests;

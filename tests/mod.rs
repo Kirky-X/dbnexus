@@ -18,6 +18,7 @@
 //! - `global_index/`: 全局索引测试
 //! - `tracing/`: 追踪测试
 //! - `cross_cutting/`: 横切关注点测试
+//! - `health/`: 健康检查测试
 
 #[cfg(feature = "audit")]
 pub mod audit;
@@ -25,6 +26,8 @@ pub mod cache;
 pub mod common;
 pub mod core;
 pub mod cross_cutting;
+#[cfg(feature = "health-check")]
+pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 #[cfg(feature = "migration")]
@@ -34,5 +37,7 @@ pub mod permission;
 pub mod pool;
 #[cfg(feature = "sharding")]
 pub mod sharding;
+#[cfg(feature = "global-index")]
+pub mod global_index;
 #[cfg(feature = "tracing")]
 pub mod tracing;
