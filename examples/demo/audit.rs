@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n2️⃣ 创建审计日志记录器");
     println!("------------------------------------------");
     let storage = Arc::new(MemoryAuditStorage::new(10000));
-    let audit_logger = AuditLogger::new(audit_config, storage);
+    let audit_logger = AuditLogger::with_config(audit_config, storage);
     println!("✓ 审计日志记录器创建成功");
 
     // 3. 初始化数据库连接池
