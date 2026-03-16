@@ -88,10 +88,28 @@ impl GlobalIndex {
     /// 创建新的全局索引管理器
     pub async fn new(db_url: &str) -> Result<Self, sea_orm::DbErr> {
         let db = Database::connect(db_url).await?;
+
+        Self::create_table_if_not_exists(&db).await?;
+
         Ok(Self {
             pool: Arc::new(db),
             sync_cache: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    /// 创建全局索引表（如果不存在）
+    async fn create_table_if_not_exists(db: &sea_orm::DbConn) -> Result<(), sea_orm::DbErr> {
+        use sea_orm::Schema;
+
+        let builder = db.get_database_backend();
+        let schema = Schema::new(builder);
+
+        let mut create_table_stmt = schema.create_table_from_entity(Entity);
+        create_table_stmt.if_not_exists();
+
+        db.execute(&create_table_stmt).await?;
+
+        Ok(())
     }
 
     /// 通过索引查询记录
