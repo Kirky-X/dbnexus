@@ -9,8 +9,8 @@
 
 use chrono::Utc;
 use dbnexus::audit::{
-    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity,
-    AuditStorage, MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity, AuditStorage,
+    MemoryAuditStorage,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,7 +35,7 @@ async fn test_audit_log_rotation_on_capacity() {
         alert_operations: vec![],
         alert_severity: AuditSeverity::High,
     };
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 写入超过容量的日志
     for i in 0..10 {
@@ -55,7 +55,7 @@ async fn test_audit_log_rotation_on_capacity() {
 async fn test_audit_manual_rotation() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 写入当前时间的日志
     for i in 0..5 {
@@ -87,23 +87,20 @@ async fn test_audit_manual_rotation() {
 async fn test_audit_rotation_retain_high_severity() {
     let storage = Arc::new(MemoryAuditStorage::new(10));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 写入普通日志直到接近容量
     for i in 0..8 {
-        let event = AuditEvent::create("normal", &i.to_string(), "user")
-            .with_severity(AuditSeverity::Info);
+        let event = AuditEvent::create("normal", &i.to_string(), "user").with_severity(AuditSeverity::Info);
         logger.log(event).await.unwrap();
     }
 
     // 写入高优先级日志
-    let critical_event = AuditEvent::create("critical", "1", "admin")
-        .with_severity(AuditSeverity::Critical);
+    let critical_event = AuditEvent::create("critical", "1", "admin").with_severity(AuditSeverity::Critical);
     logger.log(critical_event).await.unwrap();
 
     // 再写入一条普通日志触发轮转
-    let last_event = AuditEvent::create("normal", "last", "user")
-        .with_severity(AuditSeverity::Info);
+    let last_event = AuditEvent::create("normal", "last", "user").with_severity(AuditSeverity::Info);
     logger.log(last_event).await.unwrap();
 
     // 验证高优先级日志存在
@@ -126,7 +123,7 @@ async fn test_audit_rotation_retain_high_severity() {
 async fn test_audit_sanitize_json_sensitive_fields() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let event = AuditEvent::create("users", "1", "admin")
         .with_after_value(r#"{"username": "test", "password": "secret123", "email": "test@example.com"}"#);
@@ -171,11 +168,11 @@ async fn test_audit_sanitize_non_json_sensitive_fields() {
 async fn test_audit_sanitize_base64_values() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // Base64 编码的 "secret" 是 "c2VjcmV0"
-    let event = AuditEvent::create("secrets", "1", "admin")
-        .with_after_value(r#"{"token": "c2VjcmV0", "name": "test"}"#);
+    let event =
+        AuditEvent::create("secrets", "1", "admin").with_after_value(r#"{"token": "c2VjcmV0", "name": "test"}"#);
 
     logger.log(event).await.unwrap();
 
@@ -203,9 +200,11 @@ async fn test_audit_sanitize_custom_fields() {
     let input = r#"{"api_key": "key123", "jwt_token": "token456", "data": "normal"}"#;
     let sanitized = AuditEvent::sanitize_value(input, Some(custom_fields));
 
+    // 验证敏感字段被脱敏（JSON 中值为 "[REDACTED]"）
     assert!(
-        sanitized.contains("***REDACTED***"),
-        "Custom sensitive fields should be redacted"
+        sanitized.contains("[REDACTED]"),
+        "Custom sensitive fields should be redacted, got: {}",
+        sanitized
     );
     assert!(
         sanitized.contains("data") && sanitized.contains("normal"),
@@ -221,7 +220,7 @@ async fn test_audit_sanitize_nested_fields() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let mut config = AuditConfig::default();
     config.sensitive_fields.push("user.password".to_string());
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let event = AuditEvent::create("users", "1", "admin")
         .with_after_value(r#"{"user": {"name": "test", "password": "secret"}}"#);
@@ -251,7 +250,7 @@ async fn test_audit_sanitize_nested_fields() {
 async fn test_audit_storage_compression_ratio() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 写入大量重复模式的日志
     for i in 0..500 {
@@ -279,7 +278,7 @@ async fn test_audit_storage_compression_ratio() {
 async fn test_audit_cleanup_efficiency() {
     let storage = Arc::new(MemoryAuditStorage::new(10000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 写入大量日志
     for i in 0..1000 {
@@ -287,17 +286,11 @@ async fn test_audit_cleanup_efficiency() {
         logger.log(event).await.unwrap();
     }
 
-    // 全部标记为旧日志
-    let old_time = Utc::now() - chrono::Duration::days(30);
+    // 使用未来时间作为清理阈值，这样刚创建的事件都会被清理
+    let future_time = Utc::now() + chrono::Duration::days(1);
 
-    // 批量更新时间为过去
-    let mut events = storage
-        .query(&AuditQueryFilters::default())
-        .await
-        .unwrap();
-
-    // 验证清理操作成功
-    let removed = logger.cleanup(1).await.unwrap();
+    // 验证清理操作成功（清理所有刚创建的事件）
+    let removed = storage.cleanup(&future_time).await.unwrap();
     assert_eq!(removed, 1000, "All logs should be cleaned up");
 }
 
@@ -312,7 +305,7 @@ async fn test_audit_cleanup_efficiency() {
 async fn test_audit_export_json_format() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let event = AuditEvent::create("users", "123", "admin")
         .with_user("administrator", "192.168.1.1")
@@ -340,7 +333,7 @@ async fn test_audit_export_json_format() {
 async fn test_audit_batch_export() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 创建多个事件
     let mut events = Vec::new();
@@ -372,8 +365,8 @@ async fn test_audit_batch_export() {
 /// 验证导出时敏感数据被正确脱敏。
 #[tokio::test]
 async fn test_audit_export_with_sanitization() {
-    let event = AuditEvent::create("users", "1", "admin")
-        .with_after_value(r#"{"password": "secret", "data": "public"}"#);
+    let event =
+        AuditEvent::create("users", "1", "admin").with_after_value(r#"{"password": "secret", "data": "public"}"#);
 
     // 获取脱敏后的副本
     let sanitized = event.sanitized();
@@ -418,7 +411,7 @@ async fn test_audit_event_id_uniqueness() {
 async fn test_audit_timestamp_ordering() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let mut previous_time = Utc::now();
 
@@ -471,7 +464,7 @@ async fn test_audit_required_fields() {
 async fn test_audit_log_integrity_checksum() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 创建并记录事件
     let event = AuditEvent::create("integrity_test", "1", "admin")
@@ -490,10 +483,7 @@ async fn test_audit_log_integrity_checksum() {
     assert_eq!(results.len(), 1, "Should find the logged event");
 
     let stored_json = results[0].to_json().unwrap();
-    assert_eq!(
-        original_json, stored_json,
-        "Stored event should match original"
-    );
+    assert_eq!(original_json, stored_json, "Stored event should match original");
 }
 
 // ============================================================================
@@ -507,7 +497,7 @@ async fn test_audit_log_integrity_checksum() {
 async fn test_audit_async_concurrent_write() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = Arc::new(AuditLogger::new(config, storage.clone()));
+    let logger = Arc::new(AuditLogger::with_config(config, storage.clone()));
 
     // 并发写入多个事件
     let mut handles = Vec::new();
@@ -541,7 +531,7 @@ async fn test_audit_async_write_error_handling() {
         enabled: false,
         ..Default::default()
     };
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     // 即使存储被禁用，写入也不应该 panic
     let result = logger.log(AuditEvent::create("test", "1", "admin")).await;
@@ -559,7 +549,7 @@ async fn test_audit_async_write_error_handling() {
 async fn test_audit_async_write_ordering() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = Arc::new(AuditLogger::with_config(config, storage.clone()));
 
     let mut handles = Vec::new();
 
@@ -598,7 +588,7 @@ async fn test_audit_async_write_ordering() {
 async fn test_audit_high_throughput_writes() {
     let storage = Arc::new(MemoryAuditStorage::new(5000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let start_time = std::time::Instant::now();
 
@@ -639,7 +629,7 @@ async fn test_audit_event_builder() {
         .before_value(r#"{"name": "Old Name"}"#)
         .after_value(r#"{"name": "New Name"}"#)
         .extra(r#"{"reason": "Name change request"}"#)
-        ;
+        .build();
 
     assert_eq!(event.operation, AuditOperation::Update);
     assert_eq!(event.entity_type, "users");
@@ -659,8 +649,7 @@ async fn test_audit_event_builder() {
 /// 验证审计事件可以包含分布式追踪上下文。
 #[tokio::test]
 async fn test_audit_trace_context() {
-    let event = AuditEvent::create("test", "1", "admin")
-        .with_trace_context("trace-123", "span-456");
+    let event = AuditEvent::create("test", "1", "admin").with_trace_context("trace-123", "span-456");
 
     assert!(event.trace_context.is_some());
     let trace = event.trace_context.unwrap();
@@ -692,7 +681,11 @@ fn test_audit_config_defaults() {
     let config = AuditConfig::default();
 
     assert!(config.enabled, "Should be enabled by default");
-    assert_eq!(config.max_file_size, 10 * 1024 * 1024, "Default max file size should be 10MB");
+    assert_eq!(
+        config.max_file_size,
+        10 * 1024 * 1024,
+        "Default max file size should be 10MB"
+    );
     assert_eq!(config.retention_count, 7, "Default retention should be 7 days");
     assert!(config.sensitive_fields.contains(&"password".to_string()));
     assert!(config.sensitive_fields.contains(&"token".to_string()));
@@ -706,7 +699,7 @@ fn test_audit_config_defaults() {
 async fn test_audit_sanitize_json_array() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let event = AuditEvent::create("users", "1", "admin")
         .with_after_value(r#"[{"name": "user1", "password": "pass1"}, {"name": "user2", "password": "pass2"}]"#);

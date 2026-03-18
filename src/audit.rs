@@ -393,11 +393,7 @@ fn default_sensitive_fields() -> Vec<String> {
 /// # Returns
 ///
 /// 脱敏后的 JSON 值
-fn sanitize_json_object(
-    value: &serde_json::Value,
-    sensitive_fields: &[String],
-    depth: usize,
-) -> serde_json::Value {
+fn sanitize_json_object(value: &serde_json::Value, sensitive_fields: &[String], depth: usize) -> serde_json::Value {
     // 防止栈溢出：超过最大深度时返回占位符
     if depth > MAX_SANITIZE_DEPTH {
         return serde_json::Value::String("[MAX_DEPTH_EXCEEDED]".to_string());
@@ -464,7 +460,12 @@ impl AuditEvent {
             // 非 JSON 值，检查是否包含敏感关键字
             let lower = value.to_lowercase();
             for field in &fields {
+                // 检查 JSON 格式: "field":
                 if lower.contains(&format!("\"{}\":", field)) || lower.contains(&format!("\"{}\" :", field)) {
+                    return "***REDACTED***".to_string();
+                }
+                // 检查非 JSON 格式: field:
+                if lower.contains(&format!("{}:", field)) {
                     return "***REDACTED***".to_string();
                 }
             }
@@ -1455,10 +1456,10 @@ mod tests {
     fn test_sanitize_value_max_depth() {
         // 构建一个超过最大深度的嵌套 JSON（使用非敏感字段名）
         let mut deep_value = serde_json::Value::Object(serde_json::Map::new());
-        deep_value.as_object_mut().unwrap().insert(
-            "deep_data".to_string(),
-            serde_json::Value::String("value".to_string()),
-        );
+        deep_value
+            .as_object_mut()
+            .unwrap()
+            .insert("deep_data".to_string(), serde_json::Value::String("value".to_string()));
 
         for i in 0..12 {
             let mut new_obj = serde_json::Map::new();
@@ -1550,8 +1551,14 @@ mod tests {
 
         // 验证多层嵌套中的敏感字段都被脱敏
         assert_eq!(parsed["user"]["auth_data"]["password"], "[REDACTED]");
-        assert_eq!(parsed["user"]["auth_data"]["auth_list"][0]["access_token"], "[REDACTED]");
-        assert_eq!(parsed["user"]["auth_data"]["auth_list"][1]["access_token"], "[REDACTED]");
+        assert_eq!(
+            parsed["user"]["auth_data"]["auth_list"][0]["access_token"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            parsed["user"]["auth_data"]["auth_list"][1]["access_token"],
+            "[REDACTED]"
+        );
         assert_eq!(parsed["user"]["settings"]["config"]["secret"], "[REDACTED]");
         // 验证非敏感字段保持不变
         assert_eq!(parsed["user"]["auth_data"]["auth_list"][0]["auth_type"], "bearer");
