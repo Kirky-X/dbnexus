@@ -10,21 +10,23 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::config::{DbError, DbResult};
+use crate::error::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
 use crate::permission::{PermissionAction, PermissionContext};
 use crate::pool::db_pool::{DatabaseConnection, DbPool, DbPoolInner};
+use crate::security::{DdlGuard, DdlValidationResult};
 #[cfg(feature = "sql-parser")]
 use crate::sql_parser::{SqlParser, is_ddl_operation};
 use async_trait::async_trait;
 
+#[cfg(all(not(feature = "permission"), feature = "sql-parser"))]
+use crate::sql_parser::PermissionAction;
+
+// 编译时检查：必须启用 permission 或 sql-parser feature 之一
 #[cfg(not(any(feature = "permission", feature = "sql-parser")))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PermissionAction {
-    Select,
-}
+compile_error!("Either 'permission' or 'sql-parser' feature must be enabled for Session functionality");
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
@@ -315,45 +317,21 @@ impl Session {
             )));
         }
 
-        // DDL 操作白名单验证（防止危险操作）
-        let sql_upper = sql.trim().to_uppercase();
-
-        // 禁止的危险操作
-        let forbidden_patterns = [
-            "DROP DATABASE",
-            "TRUNCATE TABLE", // 可选：完全禁止 TRUNCATE
-            "DROP ALL",
-            "DELETE FROM",
-        ];
-
-        for pattern in &forbidden_patterns {
-            if sql_upper.contains(pattern) {
-                return Err(DbError::Permission(format!(
-                    "DDL operation not allowed: contains forbidden pattern '{}'",
-                    pattern
-                )));
+        // DDL 安全验证（基于 AST 解析，防止注入绕过）
+        let guard = DdlGuard::new();
+        match guard.validate(sql) {
+            Ok(DdlValidationResult::Allowed) => {
+                // 通过验证，继续执行
             }
-        }
-
-        // 只允许特定的 DDL 操作和 SELECT 查询（用于验证）
-        let allowed_prefixes = [
-            "CREATE TABLE",
-            "ALTER TABLE",
-            "DROP TABLE",
-            "CREATE INDEX",
-            "DROP INDEX",
-            "CREATE VIEW",
-            "DROP VIEW",
-            "SELECT", // 允许 SELECT 用于验证查询
-        ];
-
-        let is_allowed = allowed_prefixes.iter().any(|prefix| sql_upper.starts_with(prefix));
-
-        if !is_allowed {
-            return Err(DbError::Permission(format!(
-                "DDL operation not allowed: {}. Allowed operations: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE INDEX, DROP INDEX, CREATE VIEW, DROP VIEW, SELECT",
-                sql_upper.split_whitespace().next().unwrap_or("UNKNOWN")
-            )));
+            Ok(DdlValidationResult::Forbidden(reason)) => {
+                return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
+            }
+            Ok(DdlValidationResult::ParseError(error)) => {
+                return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
+            }
+            Err(error) => {
+                return Err(DbError::Config(format!("DDL validation error: {}", error)));
+            }
         }
 
         // 执行 SQL
