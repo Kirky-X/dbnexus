@@ -33,6 +33,9 @@ pub use provider::{
 // 从 stats.rs 重导出
 pub use stats::{CacheStats, PermissionCheckStats, PermissionCheckStatsSnapshot};
 
+// 从 rate_limiter.rs 重导出
+pub use rate_limiter::RateLimiter;
+
 // 从 context.rs 重导出（需要 cache feature）
 #[cfg(feature = "cache")]
 pub use context::{PermissionContext, PermissionContextBuilder};
