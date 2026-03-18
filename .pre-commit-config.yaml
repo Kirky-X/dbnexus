@@ -10,4 +10,5 @@ repos:
   - id: mixed-line-ending
     args: ['--fix=lf']
   - id: detect-private-key
+    exclude: ^scripts/pre-commit-check\.sh$  # 排除安全检查脚本（包含检测模式字符串，非真实私钥）
   - id: check-merge-conflict
