@@ -97,22 +97,19 @@ fn extract_table_name(attrs: &[syn::Attribute]) -> String {
     for attr in attrs {
         // 首先尝试从 #[sea_orm(table_name = "...")] 中提取
         if attr.path().is_ident("sea_orm") {
-            // 使用 parse_nested_meta 解析嵌套属性
-            let mut table_name = String::new();
-            let _ = attr.parse_nested_meta(|nested| {
-                if nested.path.is_ident("table_name") {
-                    // 解析值
-                    let value: syn::Expr = nested.input.parse()?;
-                    if let syn::Expr::Lit(expr_lit) = value {
-                        if let syn::Lit::Str(lit_str) = expr_lit.lit {
-                            table_name = lit_str.value();
+            // 使用 parse_args_with 解析 #[sea_orm(table_name = "users")] 的参数
+            let values: Result<syn::punctuated::Punctuated<syn::MetaNameValue, syn::Token![,]>, _> =
+                attr.parse_args_with(syn::punctuated::Punctuated::parse_terminated);
+            if let Ok(values) = values {
+                for nv in values {
+                    if nv.path.is_ident("table_name") {
+                        if let syn::Expr::Lit(expr_lit) = &nv.value {
+                            if let syn::Lit::Str(lit_str) = &expr_lit.lit {
+                                return lit_str.value();
+                            }
                         }
                     }
                 }
-                Ok(())
-            });
-            if !table_name.is_empty() {
-                return table_name;
             }
         }
         // 然后尝试从 #[table_name = "...")] 中提取
@@ -224,6 +221,9 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
     // 生成 CRUD 方法（使用 Session 的安全接口）
     let impl_block = quote! {
         impl #impl_generics #struct_name #ty_generics #where_clause {
+            /// CRUD 操作对应的表名
+            pub const CRUD_TABLE_NAME: &'static str = #table_name;
+
             /// 插入新记录（带权限控制）
             ///
             /// 此方法通过 Session 执行插入操作，自动进行权限检查、审计日志和指标收集
@@ -863,7 +863,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 检查角色是否有权限执行特定操作
             pub fn check_operation(
                 ctx: &dbnexus::permission::PermissionContext,
-                operation: &dbnexus::permission::Operation,
+                operation: &dbnexus::permission::PermissionAction,
             ) -> Result<(), dbnexus::DbError> {
                 let role = ctx.role();
                 if !Self::ALLOWED_ROLES.contains(&role) {
@@ -879,7 +879,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
                     if !Self::ALLOWED_OPERATIONS.contains(&op_str.as_str()) {
                         return Err(dbnexus::DbError::Permission(format!(
                             "Operation '{}' is not allowed for role '{}' on entity '{}'. Allowed operations: {:?}",
-                            operation,
+                            op_str,
                             role,
                             Self::table_name(),
                             Self::ALLOWED_OPERATIONS
@@ -911,7 +911,7 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
     let ttl = if let Ok(ttl_re) = Regex::new(r#"ttl\s*=\s*(\d+)"#) {
         if let Some(caps) = ttl_re.captures(&args_str) {
             if let Some(ttl_match) = caps.get(1) {
-                ttl_match.as_str().parse().unwrap_or(300)
+                ttl_match.as_str().parse::<i64>().unwrap_or(300i64) as u64
             } else {
                 300
             }
@@ -941,7 +941,7 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
     let max_capacity = if let Ok(cap_re) = Regex::new(r#"max_capacity\s*=\s*(\d+)"#) {
         if let Some(caps) = cap_re.captures(&args_str) {
             if let Some(cap_match) = caps.get(1) {
-                cap_match.as_str().parse().unwrap_or(10000)
+                cap_match.as_str().parse::<usize>().unwrap_or(10000)
             } else {
                 10000
             }
@@ -953,6 +953,8 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
+        #input
+
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// 缓存 TTL（秒）
             pub const CACHE_TTL: u64 = #ttl;
@@ -967,17 +969,15 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
             pub const CACHE_ENABLED: bool = true;
 
             /// 获取缓存键
-            pub fn cache_key(id: &i64) -> dbnexus::cache::CacheKey {
-                dbnexus::cache::make_cache_key(Self::table_name(), &id.to_string())
+            pub fn cache_key(id: &i64) -> String {
+                format!("{}:{}", Self::table_name(), id)
             }
 
             /// 获取缓存配置
             pub fn cache_config() -> dbnexus::cache::CacheConfig {
                 dbnexus::cache::CacheConfig {
-                    max_capacity: Self::CACHE_MAX_CAPACITY,
-                    default_ttl: Self::CACHE_TTL,
-                    cleanup_interval: 60,
-                    enable_stats: true,
+                    capacity: Self::CACHE_MAX_CAPACITY as u64,
+                    ttl: Some(Self::CACHE_TTL),
                 }
             }
         }
@@ -1006,10 +1006,28 @@ pub fn db_audit(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
+    // 解析 table_name 参数
+    let audit_table_name = if let Ok(table_re) = Regex::new(r#"table_name\s*=\s*"([^"]*)""#) {
+        table_re
+            .captures(&args_str)
+            .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
+            .unwrap_or_else(|| format!("{}_audit", struct_name))
+    } else {
+        format!("{}_audit", struct_name)
+    };
+
     let expanded = quote! {
+        #input
+
         impl #impl_generics #struct_name #ty_generics #where_clause {
+            /// 审计表名
+            pub const AUDIT_TABLE_NAME: &'static str = #audit_table_name;
+
             /// 审计的操作列表
             pub const AUDIT_OPERATIONS: &'static [&'static str] = &["CREATE", "UPDATE", "DELETE"];
+
+            /// 需要审计的角色列表（默认与 db_permission 的 ALLOWED_ROLES 一致）
+            pub const AUDIT_ROLES: &'static [&'static str] = &["admin", "manager"];
 
             /// 是否记录变更值
             pub const AUDIT_LOG_VALUES: bool = #log_values;
