@@ -11,9 +11,7 @@ async fn test_concurrent_connection_acquire() {
     let mut handles = Vec::new();
     for _ in 0..10 {
         let pool = pool.clone();
-        handles.push(tokio::spawn(async move {
-            pool.get_session("admin").await.ok()
-        }));
+        handles.push(tokio::spawn(async move { pool.get_session("admin").await.ok() }));
     }
     let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
     let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();

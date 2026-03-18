@@ -59,7 +59,11 @@ fn role_policy_check_benchmark(c: &mut Criterion) {
         tables: vec![
             TablePermission {
                 name: "users".to_string(),
-                operations: vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update],
+                operations: vec![
+                    PermissionAction::Select,
+                    PermissionAction::Insert,
+                    PermissionAction::Update,
+                ],
             },
             TablePermission {
                 name: "orders".to_string(),

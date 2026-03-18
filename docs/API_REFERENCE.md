@@ -284,37 +284,37 @@ pub struct PoolStatus {
 pub struct DbConfig {
     #[cfg_attr(feature = "confers", config(env = "DATABASE_URL"))]
     pub url: String,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_MAX_CONNECTIONS, env = "DB_MAX_CONNECTIONS"))]
     pub max_connections: u32,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_MIN_CONNECTIONS, env = "DB_MIN_CONNECTIONS"))]
     pub min_connections: u32,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_IDLE_TIMEOUT, env = "DB_IDLE_TIMEOUT"))]
     pub idle_timeout: u64,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_ACQUIRE_TIMEOUT, env = "DB_ACQUIRE_TIMEOUT"))]
     pub acquire_timeout: u64,
-    
+
     #[cfg_attr(feature = "confers", config(env = "DB_PERMISSIONS_PATH"))]
     pub permissions_path: Option<String>,
-    
+
     #[cfg_attr(feature = "confers", config(env = "DB_MIGRATIONS_DIR"))]
     pub migrations_dir: Option<PathBuf>,
-    
+
     #[cfg_attr(feature = "confers", config(default = false, env = "DB_AUTO_MIGRATE"))]
     pub auto_migrate: bool,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_MIGRATION_TIMEOUT, env = "DB_MIGRATION_TIMEOUT"))]
     pub migration_timeout: u64,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_ADMIN_ROLE, env = "DB_ADMIN_ROLE"))]
     pub admin_role: String,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_TIMEOUT, env = "DB_WARMUP_TIMEOUT"))]
     pub warmup_timeout: u64,
-    
+
     #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_RETRIES, env = "DB_WARMUP_RETRIES"))]
     pub warmup_retries: u32,
 }
