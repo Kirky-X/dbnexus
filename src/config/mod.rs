@@ -28,7 +28,4 @@
 
 mod types;
 
-pub use types::{
-    CacheConfig, ConfigError, DatabaseType, DbConfig, DbError,
-    DbResult, PoolConfig,
-};
+pub use types::{CacheConfig, ConfigError, DatabaseType, DbConfig, DbError, DbResult, PoolConfig};
