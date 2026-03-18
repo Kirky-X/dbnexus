@@ -7,10 +7,7 @@
 //!
 //! 覆盖 DbPool 初始化、连接、关闭和 DbPoolBuilder 构建等功能测试
 
-use dbnexus::{
-    DbPool, DbPoolBuilder,
-    config::DatabaseType,
-};
+use dbnexus::{DbPool, DbPoolBuilder, config::DatabaseType};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -741,7 +738,10 @@ async fn test_pool_warmup() {
 
 /// TEST-DBNEXUS-035: 连接池清理无效连接测试
 #[tokio::test]
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+#[cfg(all(
+    any(feature = "sqlite", feature = "postgres", feature = "mysql"),
+    feature = "pool-health-check"
+))]
 async fn test_clean_invalid_connections() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -756,7 +756,10 @@ async fn test_clean_invalid_connections() {
 
 /// TEST-DBNEXUS-036: 连接池验证并重建连接测试
 #[tokio::test]
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+#[cfg(all(
+    any(feature = "sqlite", feature = "postgres", feature = "mysql"),
+    feature = "pool-health-check"
+))]
 async fn test_validate_and_recreate_connections() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -882,7 +885,10 @@ async fn test_config_optional_fields() {
         ..Default::default()
     };
 
-    assert_eq!(config.permissions_path, Some("/etc/dbnexus/permissions.yaml".to_string()));
+    assert_eq!(
+        config.permissions_path,
+        Some("/etc/dbnexus/permissions.yaml".to_string())
+    );
     assert!(config.migrations_dir.is_some());
     assert!(config.auto_migrate);
 }
