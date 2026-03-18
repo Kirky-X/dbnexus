@@ -7,12 +7,12 @@
 //!
 //! 提供权限检查的上下文环境。
 
-#[cfg(feature = "cache")]
-use crate::cache::{AsyncCache, Cache};
 use super::provider::PermissionProvider;
 use super::rate_limiter::RateLimiter;
 use super::stats::{CacheStats, PermissionCheckStats};
 use super::types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy};
+#[cfg(feature = "cache")]
+use crate::cache::{AsyncCache, Cache};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -74,7 +74,10 @@ impl std::fmt::Debug for PermissionContextBuilder {
             .field("role", &self.role)
             .field("cache_capacity", &self.cache_capacity)
             .field("rate_limit", &self.rate_limit)
-            .field("permission_provider", &self.permission_provider.as_ref().map(|_| "PermissionProvider"))
+            .field(
+                "permission_provider",
+                &self.permission_provider.as_ref().map(|_| "PermissionProvider"),
+            )
             .finish()
     }
 }
@@ -148,12 +151,10 @@ impl PermissionContextBuilder {
     ///
     /// 构建好的 `PermissionContext` 实例
     pub async fn build(self) -> Result<PermissionContext, PermissionError> {
-        let policy_cache: AsyncCache<RolePolicy> = Cache::builder()
-            .max_capacity(self.cache_capacity as u64)
-            .build();
+        let policy_cache: AsyncCache<RolePolicy> = Cache::builder().max_capacity(self.cache_capacity as u64).build();
 
         let rate_limiter = self.rate_limit.map(|(max_requests, window_secs)| {
-            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs)))
+            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000))
         });
 
         Ok(PermissionContext {
@@ -174,14 +175,11 @@ impl PermissionContextBuilder {
     ///
     /// 构建好的 `PermissionContext` 实例
     pub fn build_sync(self) -> PermissionContext {
-        let cache = tokio::runtime::Handle::current().block_on(async {
-            Cache::builder()
-                .max_capacity(self.cache_capacity as u64)
-                .build()
-        });
+        let cache = tokio::runtime::Handle::current()
+            .block_on(async { Cache::builder().max_capacity(self.cache_capacity as u64).build() });
 
         let rate_limiter = self.rate_limit.map(|(max_requests, window_secs)| {
-            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs)))
+            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000))
         });
 
         PermissionContext {
@@ -267,6 +265,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
@@ -292,6 +291,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 max_requests,
                 Duration::from_secs(window_secs),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
@@ -377,6 +377,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
@@ -393,8 +394,8 @@ impl PermissionContext {
     /// * `config` - 数据库配置引用
     pub fn new_with_config(role: String, config: &crate::config::DbConfig) -> Self {
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
-        let cache =
-            tokio::runtime::Handle::current().block_on(async { Cache::builder().max_capacity(cache_capacity as u64).build() });
+        let cache = tokio::runtime::Handle::current()
+            .block_on(async { Cache::builder().max_capacity(cache_capacity as u64).build() });
         Self {
             role,
             policy_cache: Arc::new(cache),
@@ -402,6 +403,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
@@ -419,6 +421,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
@@ -441,6 +444,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
@@ -471,6 +475,7 @@ impl PermissionContext {
             rate_limiter: Some(Arc::new(RateLimiter::new(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+                10000,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
@@ -990,7 +995,7 @@ mod tests {
     /// TEST-U-039: PermissionContext 使用 DbConfig 配置化缓存容量
     #[tokio::test]
     async fn test_permission_context_with_config() {
-        use crate::config::{DbConfig, CacheConfig};
+        use crate::config::{CacheConfig, DbConfig};
 
         // 创建自定义缓存容量配置
         let config = DbConfig {
@@ -1015,7 +1020,7 @@ mod tests {
     /// TEST-U-040: PermissionContext 同步版本使用 DbConfig 配置
     #[test]
     fn test_permission_context_new_with_config() {
-        use crate::config::{DbConfig, CacheConfig};
+        use crate::config::{CacheConfig, DbConfig};
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
@@ -1063,7 +1068,7 @@ mod tests {
     /// TEST-U-043: PermissionContext 配置化缓存容量与速率限制组合测试
     #[tokio::test]
     async fn test_permission_context_with_config_and_rate_limit() {
-        use crate::config::{DbConfig, CacheConfig};
+        use crate::config::{CacheConfig, DbConfig};
 
         // 创建自定义缓存容量配置
         let config = DbConfig {
