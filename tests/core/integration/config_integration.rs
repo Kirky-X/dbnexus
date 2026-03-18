@@ -7,10 +7,7 @@
 //!
 //! 基于 confers 库的配置构建、加载和验证功能测试
 
-use dbnexus::{
-    DbPool, DbPoolBuilder,
-    config::DatabaseType,
-};
+use dbnexus::{DbPool, DbPoolBuilder, config::DatabaseType};
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -61,14 +58,8 @@ acquire_timeout: 5000
 
 #[tokio::test]
 async fn test_database_type() {
-    assert_eq!(
-        DatabaseType::from_url("sqlite::memory:"),
-        DatabaseType::Sqlite
-    );
-    assert_eq!(
-        DatabaseType::from_url("sqlite:///path/to/db"),
-        DatabaseType::Sqlite
-    );
+    assert_eq!(DatabaseType::from_url("sqlite::memory:"), DatabaseType::Sqlite);
+    assert_eq!(DatabaseType::from_url("sqlite:///path/to/db"), DatabaseType::Sqlite);
     assert_eq!(DatabaseType::from_url("postgres://localhost"), DatabaseType::Postgres);
     assert_eq!(DatabaseType::from_url("postgresql://localhost"), DatabaseType::Postgres);
     assert_eq!(DatabaseType::from_url("mysql://localhost"), DatabaseType::MySql);

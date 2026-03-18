@@ -26,6 +26,8 @@ pub mod cache;
 pub mod common;
 pub mod core;
 pub mod cross_cutting;
+#[cfg(feature = "global-index")]
+pub mod global_index;
 #[cfg(feature = "health-check")]
 pub mod health;
 #[cfg(feature = "metrics")]
@@ -35,9 +37,9 @@ pub mod migration;
 #[cfg(feature = "permission")]
 pub mod permission;
 pub mod pool;
+#[cfg(feature = "sql-parser")]
+pub mod security;
 #[cfg(feature = "sharding")]
 pub mod sharding;
-#[cfg(feature = "global-index")]
-pub mod global_index;
 #[cfg(feature = "tracing")]
 pub mod tracing;

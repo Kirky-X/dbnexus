@@ -18,4 +18,7 @@ pub mod advanced_rbac_unit_tests;
 pub mod pdp_unit_tests;
 
 #[cfg(feature = "permission")]
+pub mod rate_limiter_unit_tests;
+
+#[cfg(feature = "permission")]
 pub mod rbac_unit_tests;
