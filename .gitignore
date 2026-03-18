@@ -38,6 +38,7 @@ logs/
 .trae/
 .sisyphus/
 .claude/
+openspec/
 
 # =============================================================================
 # Environment & Secrets
