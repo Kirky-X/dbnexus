@@ -18,9 +18,8 @@
 //! ```
 
 use dbnexus::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider,
-    PermissionResource, PermissionRule, PermissionSubject, PolicyDecisionPoint,
-    RbacPermissionProvider, Role, YamlPermissionProvider,
+    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
+    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role, YamlPermissionProvider,
 };
 use dbnexus::{DbConfig, DbPool};
 use std::sync::Arc;
@@ -89,7 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------------------");
 
     let roles = vec!["admin", "manager", "viewer"];
-    let actions = vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update, PermissionAction::Delete];
+    let actions = vec![
+        PermissionAction::Select,
+        PermissionAction::Insert,
+        PermissionAction::Update,
+        PermissionAction::Delete,
+    ];
 
     for role in roles {
         println!("\n  角色: {}", role);
@@ -133,36 +137,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // 添加权限规则
-    rbac_provider.add_permission("admin", PermissionRule {
-        name: "admin-all".to_string(),
-        priority: 100,
-        subject: "admin".to_string(),
-        resource: "*".to_string(),
-        allow: vec![PermissionAction::All],
-        deny: vec![],
-        condition: None,
-        enabled: true,
-    });
-    rbac_provider.add_permission("editor", PermissionRule {
-        name: "editor-articles".to_string(),
-        priority: 50,
-        subject: "editor".to_string(),
-        resource: "articles".to_string(),
-        allow: vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update],
-        deny: vec![],
-        condition: None,
-        enabled: true,
-    });
-    rbac_provider.add_permission("viewer", PermissionRule {
-        name: "viewer-articles".to_string(),
-        priority: 10,
-        subject: "viewer".to_string(),
-        resource: "articles".to_string(),
-        allow: vec![PermissionAction::Select],
-        deny: vec![],
-        condition: None,
-        enabled: true,
-    });
+    rbac_provider.add_permission(
+        "admin",
+        PermissionRule {
+            name: "admin-all".to_string(),
+            priority: 100,
+            subject: "admin".to_string(),
+            resource: "*".to_string(),
+            allow: vec![PermissionAction::All],
+            deny: vec![],
+            condition: None,
+            enabled: true,
+        },
+    );
+    rbac_provider.add_permission(
+        "editor",
+        PermissionRule {
+            name: "editor-articles".to_string(),
+            priority: 50,
+            subject: "editor".to_string(),
+            resource: "articles".to_string(),
+            allow: vec![
+                PermissionAction::Select,
+                PermissionAction::Insert,
+                PermissionAction::Update,
+            ],
+            deny: vec![],
+            condition: None,
+            enabled: true,
+        },
+    );
+    rbac_provider.add_permission(
+        "viewer",
+        PermissionRule {
+            name: "viewer-articles".to_string(),
+            priority: 10,
+            subject: "viewer".to_string(),
+            resource: "articles".to_string(),
+            allow: vec![PermissionAction::Select],
+            deny: vec![],
+            condition: None,
+            enabled: true,
+        },
+    );
 
     println!("✓ RBAC 权限提供者创建成功");
     println!("  提供者名称: {}", rbac_provider.name());

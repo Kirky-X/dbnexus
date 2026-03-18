@@ -92,9 +92,7 @@ pub async fn create_cache_with_ttl<V>(
 where
     V: Clone + Send + Sync + 'static,
 {
-    let cache = CacheBuilder::new(capacity)
-        .time_to_live(ttl)
-        .build();
+    let cache = CacheBuilder::new(capacity).time_to_live(ttl).build();
     Ok(cache)
 }
 
