@@ -42,60 +42,63 @@
 //! }
 //! ```
 
-use crate::config::DbError as ConfigDbError;
-
 // ============================================================================
 // 子错误类型定义
 // ============================================================================
 
 /// 数据库操作错误
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct DbError(#[from] sea_orm::DbErr);
+pub enum DbError {
+    /// 数据库连接错误
+    #[error(transparent)]
+    Connection(#[from] sea_orm::DbErr),
 
-impl DbError {
-    /// 创建新的数据库错误
-    pub fn new(error: sea_orm::DbErr) -> Self {
-        Self(error)
-    }
+    /// 配置错误
+    #[error("Configuration error: {0}")]
+    Config(String),
 
-    /// 获取内部错误引用
-    pub fn inner(&self) -> &sea_orm::DbErr {
-        &self.0
-    }
+    /// 权限错误
+    #[error("Permission denied: {0}")]
+    Permission(String),
+
+    /// 事务错误
+    #[error("Transaction error: {0}")]
+    Transaction(String),
+
+    /// 迁移错误
+    #[error("Migration error: {0}")]
+    Migration(String),
 }
 
-// 从 config::DbError 转换到 error::DbError
-impl From<ConfigDbError> for DbError {
-    fn from(err: ConfigDbError) -> Self {
-        match err {
-            ConfigDbError::Connection(db_err) => Self(db_err),
-            ConfigDbError::Config(msg) => Self(sea_orm::DbErr::Custom(format!("Configuration error: {}", msg))),
-            ConfigDbError::Permission(msg) => Self(sea_orm::DbErr::Custom(format!("Permission denied: {}", msg))),
-            ConfigDbError::Transaction(msg) => Self(sea_orm::DbErr::Custom(format!("Transaction error: {}", msg))),
-            ConfigDbError::Migration(msg) => Self(sea_orm::DbErr::Custom(format!("Migration error: {}", msg))),
+impl DbError {
+    /// 从 sea_orm::DbErr 创建数据库连接错误
+    pub fn new(error: sea_orm::DbErr) -> Self {
+        Self::Connection(error)
+    }
+
+    /// 获取错误消息
+    pub fn message(&self) -> String {
+        match self {
+            DbError::Connection(e) => e.to_string(),
+            DbError::Config(msg) => msg.clone(),
+            DbError::Permission(msg) => msg.clone(),
+            DbError::Transaction(msg) => msg.clone(),
+            DbError::Migration(msg) => msg.clone(),
         }
     }
 }
 
-// 从 config::ConfigError 转换到 error::DbError
-impl From<crate::config::ConfigError> for DbError {
-    fn from(err: crate::config::ConfigError) -> Self {
-        Self(sea_orm::DbErr::Custom(format!("Configuration error: {}", err)))
-    }
-}
-
-/// 从字符串创建 DbError
+/// 从字符串创建 DbError::Config
 impl From<String> for DbError {
     fn from(msg: String) -> Self {
-        Self(sea_orm::DbErr::Custom(msg))
+        Self::Config(msg)
     }
 }
 
-/// 从 &str 创建 DbError
+/// 从 &str 创建 DbError::Config
 impl From<&str> for DbError {
     fn from(msg: &str) -> Self {
-        Self(sea_orm::DbErr::Custom(msg.to_string()))
+        Self::Config(msg.to_string())
     }
 }
 
@@ -241,13 +244,6 @@ pub enum DbNexusError {
 // 额外的 From 实现
 // ============================================================================
 
-/// 从 config::DbError 转换到 DbNexusError
-impl From<ConfigDbError> for DbNexusError {
-    fn from(err: ConfigDbError) -> Self {
-        DbNexusError::Database(DbError::from(err))
-    }
-}
-
 /// 从 sea_orm::DbErr 转换到 DbNexusError
 impl From<sea_orm::DbErr> for DbNexusError {
     fn from(err: sea_orm::DbErr) -> Self {
@@ -366,21 +362,37 @@ mod tests {
     fn test_db_error_creation() {
         let db_err = sea_orm::DbErr::Custom("test error".to_string());
         let error = DbError::new(db_err);
-        assert!(error.inner().to_string().contains("test error"));
+        assert!(matches!(error, DbError::Connection(_)));
     }
 
     /// 测试从 String 创建 DbError
     #[test]
     fn test_db_error_from_string() {
         let error: DbError = "custom error message".into();
-        assert!(error.inner().to_string().contains("custom error message"));
+        assert!(matches!(error, DbError::Config(msg) if msg == "custom error message"));
     }
 
     /// 测试从 &str 创建 DbError
     #[test]
     fn test_db_error_from_str() {
         let error: DbError = "str error".into();
-        assert!(error.inner().to_string().contains("str error"));
+        assert!(matches!(error, DbError::Config(msg) if msg == "str error"));
+    }
+
+    /// 测试 DbError 各变体
+    #[test]
+    fn test_db_error_variants() {
+        let config_err = DbError::Config("config issue".to_string());
+        assert!(matches!(config_err, DbError::Config(_)));
+
+        let perm_err = DbError::Permission("access denied".to_string());
+        assert!(matches!(perm_err, DbError::Permission(_)));
+
+        let tx_err = DbError::Transaction("tx failed".to_string());
+        assert!(matches!(tx_err, DbError::Transaction(_)));
+
+        let mig_err = DbError::Migration("migration failed".to_string());
+        assert!(matches!(mig_err, DbError::Migration(_)));
     }
 
     /// 测试 PoolError 显示
