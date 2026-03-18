@@ -51,6 +51,7 @@ fn run_example(name: &str) -> ExitCode {
         "transactions" => "transactions",
         "sql_parser" => "sql_parser",
         "permission_engine" => "permission_engine",
+        "entity_basic" => "entity_basic",
         "metrics" => "metrics",
         "tracing" => "tracing",
         "audit" => "audit",
@@ -58,7 +59,7 @@ fn run_example(name: &str) -> ExitCode {
         "sharding" => "sharding",
         "migration" => "migration",
         "global_index" => "global_index",
-        "entity_basic" => "entity_basic",
+        "macro_usage" => "macro_usage",
         _ => {
             eprintln!("❌ 未知的示例名称: {}", name);
             eprintln!("\n可用的示例:");
@@ -104,24 +105,24 @@ fn show_interactive_menu() -> ExitCode {
     println!();
 
     println!("🏢 企业功能示例:");
-    println!("  7. metrics          - Prometheus 指标监控");
-    println!("  8. tracing          - OpenTelemetry 分布式追踪");
-    println!("  9. audit            - 审计日志");
+    println!("  8. metrics          - Prometheus 指标监控");
+    println!("  9. tracing          - OpenTelemetry 分布式追踪");
+    println!("  10. audit           - 审计日志");
     println!();
 
     println!("🚀 高级功能示例:");
-    println!("  10. cache           - 缓存使用");
-    println!("  11. sharding        - 分片管理");
-    println!("  12. migration       - 数据库迁移");
-    println!("  13. global_index    - 全局索引");
+    println!("  11. cache           - 缓存使用");
+    println!("  12. sharding        - 分片管理");
+    println!("  13. migration       - 数据库迁移");
+    println!("  14. global_index    - 全局索引");
+    println!("  15. macro_usage     - 宏使用完整示例");
     println!();
 
     println!("🔧 其他:");
     println!("  0. 退出");
-    println!("  cli                - CLI 使用指南 (Markdown)");
     println!();
 
-    print!("请选择要运行的示例 (0-14): ");
+    print!("请选择要运行的示例 (0-15): ");
     use std::io::Write;
     std::io::stdout().flush().unwrap();
 
@@ -147,6 +148,7 @@ fn show_interactive_menu() -> ExitCode {
         "12" => run_example("sharding"),
         "13" => run_example("migration"),
         "14" => run_example("global_index"),
+        "15" => run_example("macro_usage"),
         _ => {
             println!("❌ 无效的选择，请重新运行程序");
             ExitCode::FAILURE
@@ -172,4 +174,5 @@ fn list_examples() {
     println!("    - sharding");
     println!("    - migration");
     println!("    - global_index");
+    println!("    - macro_usage");
 }
