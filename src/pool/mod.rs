@@ -26,7 +26,7 @@ use crate::metrics::MetricsCollectorTrait;
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
-use crate::config::DbResult;
+use crate::error::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
