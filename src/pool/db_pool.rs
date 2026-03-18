@@ -10,6 +10,8 @@
 #[cfg(feature = "permission")]
 use crate::cache::Cache;
 use async_trait::async_trait;
+#[cfg(feature = "pool-health-check")]
+use futures::future::join_all;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -105,7 +107,8 @@ impl Default for ConnectionLifecycle {
 }
 
 use super::Session;
-use crate::config::{ConfigError, DbConfig, DbError, DbResult};
+use crate::config::{ConfigError, DbConfig};
+use crate::error::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
@@ -235,7 +238,7 @@ impl DbPool {
         let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(
             Cache::builder()
                 .max_capacity(config.cache_config.policy_cache_capacity)
-                .build()
+                .build(),
         );
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
@@ -342,11 +345,7 @@ impl DbPool {
 
             info!(
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
-                successful,
-                initial_connections,
-                config.min_connections,
-                config.max_connections,
-                failed
+                successful, initial_connections, config.min_connections, config.max_connections, failed
             );
         }
 
@@ -528,9 +527,7 @@ impl DbPool {
         // try_from 是同步简化版本
         // 使用配置化的缓存容量
         let cache_capacity = config.cache_config.policy_cache_capacity;
-        let policy_cache: Cache<String, RolePolicy> = Cache::builder()
-            .max_capacity(cache_capacity)
-            .build();
+        let policy_cache: Cache<String, RolePolicy> = Cache::builder().max_capacity(cache_capacity).build();
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
@@ -764,10 +761,14 @@ impl DbPool {
         }
     }
 
-    /// 验证空闲连接的有效性
+    #[cfg(feature = "pool-health-check")]
+    /// 验证空闲连接的有效性（并行版本）
     ///
-    /// 遍历空闲连接池，对每个连接执行健康检查，
+    /// 遍历空闲连接池，对每个连接并发执行健康检查，
     /// 将连接分区为有效和无效两组。
+    ///
+    /// 使用 `futures::future::join_all()` 并行验证所有连接，
+    /// 显著减少大量连接时的总等待时间。
     ///
     /// # Arguments
     ///
@@ -783,28 +784,37 @@ impl DbPool {
     ) -> (Vec<DatabaseConnection>, usize) {
         let backend = Self::get_database_backend(&config.url);
 
-        let mut valid_connections: Vec<DatabaseConnection> = Vec::with_capacity(idle.len());
-        let mut invalid_count = 0;
+        // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
+        let connections: Vec<DatabaseConnection> = idle.drain(..).collect();
 
-        for conn in idle.drain(..) {
-            // 执行健康检查（带超时）
-            let is_valid = timeout(
-                Duration::from_secs(2),
-                conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
-            )
-            .await
-            .is_ok_and(|result| result.is_ok());
+        // 并行执行所有健康检查
+        let check_futures: Vec<_> = connections
+            .into_iter()
+            .map(|conn| async {
+                let is_valid = timeout(
+                    Duration::from_secs(2),
+                    conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
+                )
+                .await
+                .is_ok_and(|result| result.is_ok());
+                (conn, is_valid)
+            })
+            .collect();
 
-            if is_valid {
-                valid_connections.push(conn);
-            } else {
-                invalid_count += 1;
-            }
-        }
+        let results: Vec<(DatabaseConnection, bool)> = futures::future::join_all(check_futures).await;
+
+        // 分区为有效和无效连接（先计算 invalid_count，再转移所有权）
+        let invalid_count = results.iter().filter(|(_, is_valid)| !*is_valid).count();
+
+        let valid_connections: Vec<DatabaseConnection> = results
+            .into_iter()
+            .filter_map(|(conn, is_valid)| if is_valid { Some(conn) } else { None })
+            .collect();
 
         (valid_connections, invalid_count)
     }
 
+    #[cfg(feature = "pool-health-check")]
     /// 清理无效连接
     ///
     /// 遍历空闲连接池，验证每个连接的有效性，
@@ -836,6 +846,7 @@ impl DbPool {
         removed_count as u32
     }
 
+    #[cfg(feature = "pool-health-check")]
     /// 验证并重新创建无效连接
     ///
     /// 检查所有空闲连接的健康状态，自动替换无效连接。
@@ -1023,13 +1034,10 @@ impl DbPool {
         // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
         // 信号量提供公平的等待队列，避免惊群效应
         let timeout_duration = self.inner.config.acquire_timeout_duration();
-        let permit = timeout(
-            timeout_duration,
-            self.inner.connection_semaphore.acquire(),
-        )
-        .await
-        .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?
-        .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?;
+        let permit = timeout(timeout_duration, self.inner.connection_semaphore.acquire())
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?;
 
         // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间）
         // 使用独立作用域确保锁尽快释放
