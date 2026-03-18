@@ -18,8 +18,7 @@
 //! ```
 
 use dbnexus::health::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState,
-    HealthCheckResult, HealthStatus, PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthCheckResult, HealthStatus, PoolHealthMetrics,
 };
 use dbnexus::{DbConfig, DbPool};
 use std::time::Duration;

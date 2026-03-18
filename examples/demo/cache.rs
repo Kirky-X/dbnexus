@@ -121,7 +121,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let short_ttl_key = "product:1".to_string();
     let product_json = r#"{"id":1,"name":"Limited Product","price":99.99}"#;
     let short_cache = create_cache_with_ttl::<String>(10, Duration::from_secs(2)).await?;
-    short_cache.insert(short_ttl_key.clone(), product_json.to_string()).await;
+    short_cache
+        .insert(short_ttl_key.clone(), product_json.to_string())
+        .await;
     println!("  ✓ 设置短期缓存（2秒 TTL）");
 
     // 立即获取（应该命中）
