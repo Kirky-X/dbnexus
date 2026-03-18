@@ -19,7 +19,7 @@ use std::time::Duration;
 async fn test_audit_query_multiple_conditions() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..100 {
         let event = AuditEvent::create("users", &i.to_string(), "admin");
@@ -39,7 +39,7 @@ async fn test_audit_query_multiple_conditions() {
 async fn test_audit_query_time_range() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let base_time = Utc::now();
 
@@ -61,7 +61,7 @@ async fn test_audit_query_time_range() {
 async fn test_audit_query_empty_conditions() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..10 {
         let event = AuditEvent::create("test", &i.to_string(), "test_user");
@@ -80,7 +80,7 @@ async fn test_audit_query_empty_conditions() {
 async fn test_audit_query_pagination() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..50 {
         let event = AuditEvent::create("paged", &i.to_string(), "admin");
@@ -125,7 +125,7 @@ async fn test_audit_storage_write_read() {
 async fn test_audit_storage_json_serialization() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let event = AuditEvent::create("users", "123", "admin");
     let _ = logger.log(event.clone()).await;
@@ -144,7 +144,7 @@ async fn test_audit_storage_json_serialization() {
 async fn test_audit_batch_operations() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let batch_size = 100;
     let mut events = Vec::new();
@@ -173,7 +173,7 @@ async fn test_audit_batch_operations() {
 async fn test_audit_storage_capacity_limit() {
     let storage = Arc::new(MemoryAuditStorage::new(50));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..100 {
         let event = AuditEvent::create("capacity_test", &i.to_string(), "admin");
@@ -199,7 +199,7 @@ async fn test_audit_storage_capacity_limit() {
 async fn test_audit_all_event_types() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let _ = logger.log(AuditEvent::create("test", "1", "user")).await;
     let _ = logger.log(AuditEvent::read("test", "1", "user")).await;
@@ -240,7 +240,7 @@ async fn test_audit_all_event_types() {
 async fn test_audit_query_timestamp_range() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..20 {
         let event = AuditEvent::create("timestamp_test", &i.to_string(), "admin");
@@ -263,7 +263,7 @@ async fn test_audit_query_timestamp_range() {
 async fn test_audit_query_by_user() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     for i in 0..10 {
         let event = AuditEvent::create("users", &i.to_string(), "alice");
@@ -294,7 +294,7 @@ async fn test_audit_query_by_user() {
 async fn test_audit_operation_results() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig::default();
-    let logger = AuditLogger::new(config, storage.clone());
+    let logger = AuditLogger::with_config(config, storage.clone());
 
     let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::audit::AuditResult::Success);
     let _ = logger.log(success_event).await;
