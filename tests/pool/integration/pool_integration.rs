@@ -18,7 +18,10 @@ async fn test_clean_invalid_connections() {
     let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
     let _session = pool.get_session("admin").await.expect("Failed to get session");
     let status = pool.status();
-    eprintln!("Pool: total={}, active={}, idle={}", status.total, status.active, status.idle);
+    eprintln!(
+        "Pool: total={}, active={}, idle={}",
+        status.total, status.active, status.idle
+    );
     assert!(status.total >= 1, "Pool should have connections");
 }
 
@@ -71,9 +74,7 @@ async fn test_health_check_after_heavy_usage() {
     let mut handles = Vec::new();
     for _ in 0..20 {
         let pool = pool.clone();
-        handles.push(tokio::spawn(async move {
-            pool.get_session("admin").await.ok()
-        }));
+        handles.push(tokio::spawn(async move { pool.get_session("admin").await.ok() }));
     }
     let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
     let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
@@ -89,9 +90,7 @@ async fn test_concurrent_health_checks() {
     let mut handles = Vec::new();
     for _ in 0..10 {
         let pool = pool.clone();
-        handles.push(tokio::spawn(async move {
-            pool.get_session("admin").await.ok()
-        }));
+        handles.push(tokio::spawn(async move { pool.get_session("admin").await.ok() }));
     }
     let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
     let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
@@ -110,7 +109,9 @@ async fn test_pool_config_boundaries() {
             ..Default::default()
         };
         let pool = tokio::time::timeout(std::time::Duration::from_secs(10), dbnexus::DbPool::with_config(config))
-            .await.expect("timeout").expect("create");
+            .await
+            .expect("timeout")
+            .expect("create");
         let _session = pool.get_session("admin").await.expect("Failed");
         let status = pool.status();
         assert!(status.total <= max_conn, "Pool should not exceed max");
@@ -133,9 +134,7 @@ async fn test_connection_acquire_with_small_pool() {
     let mut handles = Vec::new();
     for i in 0..5 {
         let pool = pool.clone();
-        handles.push(tokio::spawn(async move {
-            pool.get_session("admin").await.ok()
-        }));
+        handles.push(tokio::spawn(async move { pool.get_session("admin").await.ok() }));
     }
     let results: Vec<Result<Option<_>, _>> = futures::future::join_all(handles).await;
     let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();

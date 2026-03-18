@@ -30,7 +30,10 @@ async fn test_semaphore_permit_return_basic() {
 
     // 获取并释放连接多次，验证许可正确归还
     for i in 0..10 {
-        let session = pool.get_session("admin").await.expect(&format!("Failed to get session on iteration {}", i));
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect(&format!("Failed to get session on iteration {}", i));
         drop(session);
         // 给异步释放一点时间
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -82,8 +85,14 @@ async fn test_semaphore_permit_return_concurrent() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let status = pool.status();
-    assert_eq!(status.active, 0, "All sessions should be released after concurrent operations");
-    assert!(status.borrow_count >= iterations as u64, "All borrows should be counted");
+    assert_eq!(
+        status.active, 0,
+        "All sessions should be released after concurrent operations"
+    );
+    assert!(
+        status.borrow_count >= iterations as u64,
+        "All borrows should be counted"
+    );
 }
 
 /// 测试无死锁 - 高并发获取释放
@@ -135,7 +144,11 @@ async fn test_no_deadlock_high_concurrency() {
         let success_count = results.iter().filter(|r| *r.as_ref().unwrap_or(&false)).count();
 
         // 验证至少有部分任务成功（连接池可用）
-        assert!(success_count >= 1, "Round {}: At least some tasks should succeed", round);
+        assert!(
+            success_count >= 1,
+            "Round {}: At least some tasks should succeed",
+            round
+        );
 
         // 等待所有释放完成
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -176,7 +189,10 @@ async fn test_semaphore_permit_reuse_after_max() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // 应该可以获取新连接（信号量许可已归还）
-    let session3 = pool.get_session("admin").await.expect("Should be able to get new connection after release");
+    let session3 = pool
+        .get_session("admin")
+        .await
+        .expect("Should be able to get new connection after release");
 
     let status = pool.status();
     assert_eq!(status.active, 2, "Should have 2 active connections again");
@@ -232,7 +248,10 @@ async fn test_pool_stress_rapid_acquire_release() {
     assert!(success_count > 0, "At least some operations should succeed");
 
     // 验证连接池仍然可用
-    let session = pool.get_session("admin").await.expect("Pool should still be usable after stress test");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Pool should still be usable after stress test");
     drop(session);
 }
 
