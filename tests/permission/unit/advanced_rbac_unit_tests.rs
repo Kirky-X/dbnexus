@@ -12,9 +12,7 @@
 //! - 权限冲突解决
 //! - 缓存机制
 
-use dbnexus::permission::{
-    AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission,
-};
+use dbnexus::permission::{AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission};
 
 // ============================================================================
 // 角色继承链解析测试
@@ -29,10 +27,26 @@ fn test_single_level_inheritance() {
     provider.add_role_inheritance("manager".to_string(), vec!["admin".to_string()]);
 
     // Manager 应该继承 admin 的所有权限
-    assert!(provider.check_access("manager", "users", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("manager", "users", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("manager", "users", PermissionAction::Update).unwrap());
-    assert!(provider.check_access("manager", "users", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("manager", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("manager", "users", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("manager", "users", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("manager", "users", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-002: 多层继承链 - 三层继承
@@ -66,7 +80,11 @@ fn test_multi_level_inheritance_chain() {
         RolePolicy {
             tables: vec![TablePermission {
                 name: "top_table".to_string(),
-                operations: vec![PermissionAction::Select, PermissionAction::Insert, PermissionAction::Update],
+                operations: vec![
+                    PermissionAction::Select,
+                    PermissionAction::Insert,
+                    PermissionAction::Update,
+                ],
             }],
         },
     );
@@ -76,9 +94,21 @@ fn test_multi_level_inheritance_chain() {
     provider.add_role_inheritance("top".to_string(), vec!["intermediate".to_string()]);
 
     // top 应该继承所有父角色的权限
-    assert!(provider.check_access("top", "common", PermissionAction::Select).unwrap()); // from base
-    assert!(provider.check_access("top", "intermediate_table", PermissionAction::Insert).unwrap()); // from intermediate
-    assert!(provider.check_access("top", "top_table", PermissionAction::Update).unwrap()); // from top
+    assert!(
+        provider
+            .check_access("top", "common", PermissionAction::Select)
+            .unwrap()
+    ); // from base
+    assert!(
+        provider
+            .check_access("top", "intermediate_table", PermissionAction::Insert)
+            .unwrap()
+    ); // from intermediate
+    assert!(
+        provider
+            .check_access("top", "top_table", PermissionAction::Update)
+            .unwrap()
+    ); // from top
 }
 
 /// TEST-ADV-U-003: 深层继承链 - 五层继承
@@ -99,10 +129,7 @@ fn test_deep_inheritance_chain() {
         );
 
         if i > 0 {
-            provider.add_role_inheritance(
-                format!("level_{}", i),
-                vec![format!("level_{}", i - 1)],
-            );
+            provider.add_role_inheritance(format!("level_{}", i), vec![format!("level_{}", i - 1)]);
         }
     }
 
@@ -163,9 +190,21 @@ fn test_multiple_inheritance() {
     );
 
     // combined 应该继承所有父角色的权限
-    assert!(provider.check_access("combined", "table_a", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("combined", "table_b", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("combined", "table_c", PermissionAction::Update).unwrap());
+    assert!(
+        provider
+            .check_access("combined", "table_a", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("combined", "table_b", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("combined", "table_c", PermissionAction::Update)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-005: 菱形继承结构
@@ -222,13 +261,32 @@ fn test_diamond_inheritance() {
     // 设置继承关系
     provider.add_role_inheritance("parent_a".to_string(), vec!["grandparent".to_string()]);
     provider.add_role_inheritance("parent_b".to_string(), vec!["grandparent".to_string()]);
-    provider.add_role_inheritance("child".to_string(), vec!["parent_a".to_string(), "parent_b".to_string()]);
+    provider.add_role_inheritance(
+        "child".to_string(),
+        vec!["parent_a".to_string(), "parent_b".to_string()],
+    );
 
     // child 应该继承所有祖先的权限（grandparent 只计算一次）
-    assert!(provider.check_access("child", "gp_table", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("child", "a_table", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("child", "b_table", PermissionAction::Update).unwrap());
-    assert!(provider.check_access("child", "child_table", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("child", "gp_table", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("child", "a_table", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("child", "b_table", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("child", "child_table", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 // ============================================================================
@@ -362,10 +420,26 @@ fn test_permission_merging() {
     provider.add_role_inheritance("combined".to_string(), vec!["reader".to_string(), "writer".to_string()]);
 
     // combined 应该拥有所有合并的权限
-    assert!(provider.check_access("combined", "shared_table", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("combined", "shared_table", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("combined", "shared_table", PermissionAction::Update).unwrap());
-    assert!(!provider.check_access("combined", "shared_table", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("combined", "shared_table", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("combined", "shared_table", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("combined", "shared_table", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("combined", "shared_table", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-010: 权限优先级 - 子角色权限覆盖父角色
@@ -402,9 +476,21 @@ fn test_child_permission_override() {
     provider.add_role_inheritance("child".to_string(), vec!["parent".to_string()]);
 
     // 子角色应该拥有自己的权限（更宽）
-    assert!(provider.check_access("child", "users", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("child", "users", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("child", "users", PermissionAction::Update).unwrap());
+    assert!(
+        provider
+            .check_access("child", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("child", "users", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("child", "users", PermissionAction::Update)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-011: 通配符权限继承
@@ -429,8 +515,16 @@ fn test_wildcard_permission_inheritance() {
     provider.add_role_inheritance("limited".to_string(), vec!["admin".to_string()]);
 
     // limited 应该继承 admin 的通配符权限
-    assert!(provider.check_access("limited", "any_table", PermissionAction::Delete).unwrap());
-    assert!(provider.check_access("limited", "specific_table", PermissionAction::Select).unwrap());
+    assert!(
+        provider
+            .check_access("limited", "any_table", PermissionAction::Delete)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("limited", "specific_table", PermissionAction::Select)
+            .unwrap()
+    );
 }
 
 // ============================================================================
@@ -446,7 +540,9 @@ fn test_inheritance_cache_basic() {
     assert_eq!(provider.cache_size(), 0);
 
     // 执行权限检查会填充缓存
-    provider.check_access("admin", "users", PermissionAction::Select).unwrap();
+    provider
+        .check_access("admin", "users", PermissionAction::Select)
+        .unwrap();
 
     // 缓存应该有内容
     assert!(provider.cache_size() > 0);
@@ -458,7 +554,9 @@ fn test_cache_clear() {
     let provider = AdvancedRbacProvider::new();
 
     // 填充缓存
-    provider.check_access("admin", "users", PermissionAction::Select).unwrap();
+    provider
+        .check_access("admin", "users", PermissionAction::Select)
+        .unwrap();
     assert!(provider.cache_size() > 0);
 
     // 清除缓存
@@ -475,7 +573,9 @@ fn test_cache_invalidation_on_role_add() {
     provider.add_role_inheritance("child".to_string(), vec!["admin".to_string()]);
 
     // 触发缓存填充
-    provider.check_access("child", "users", PermissionAction::Select).unwrap();
+    provider
+        .check_access("child", "users", PermissionAction::Select)
+        .unwrap();
     assert!(provider.cache_size() > 0);
 
     // 添加角色应该清除相关缓存
@@ -499,7 +599,9 @@ fn test_cache_invalidation_on_inheritance_add() {
     let provider = AdvancedRbacProvider::new();
 
     // 触发缓存填充
-    provider.check_access("admin", "users", PermissionAction::Select).unwrap();
+    provider
+        .check_access("admin", "users", PermissionAction::Select)
+        .unwrap();
 
     // 添加继承关系应该清除相关缓存
     provider.add_role_inheritance("new_child".to_string(), vec!["admin".to_string()]);
@@ -536,10 +638,7 @@ fn test_get_direct_parents() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加继承关系
-    provider.add_role_inheritance(
-        "child".to_string(),
-        vec!["parent1".to_string(), "parent2".to_string()],
-    );
+    provider.add_role_inheritance("child".to_string(), vec!["parent1".to_string(), "parent2".to_string()]);
 
     // 获取直接父角色
     let parents = provider.get_direct_parents("child");
@@ -590,8 +689,16 @@ fn test_set_role_inheritances_batch() {
     assert!(provider.has_inheritance("role_c"));
 
     // 验证权限继承
-    assert!(provider.check_access("role_c", "users", PermissionAction::Insert).unwrap()); // from role_a -> admin
-    assert!(provider.check_access("role_c", "users", PermissionAction::Select).unwrap()); // from role_b -> readonly
+    assert!(
+        provider
+            .check_access("role_c", "users", PermissionAction::Insert)
+            .unwrap()
+    ); // from role_a -> admin
+    assert!(
+        provider
+            .check_access("role_c", "users", PermissionAction::Select)
+            .unwrap()
+    ); // from role_b -> readonly
 }
 
 // ============================================================================
@@ -604,10 +711,26 @@ fn test_default_admin_role() {
     let provider = AdvancedRbacProvider::new();
 
     // admin 应该有所有权限
-    assert!(provider.check_access("admin", "any_table", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("admin", "any_table", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("admin", "any_table", PermissionAction::Update).unwrap());
-    assert!(provider.check_access("admin", "any_table", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("admin", "any_table", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "any_table", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "any_table", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "any_table", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-021: 默认 readonly 角色权限
@@ -616,10 +739,26 @@ fn test_default_readonly_role() {
     let provider = AdvancedRbacProvider::new();
 
     // readonly 应该只有 SELECT 权限
-    assert!(provider.check_access("readonly", "users", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("readonly", "users", PermissionAction::Insert).unwrap());
-    assert!(!provider.check_access("readonly", "users", PermissionAction::Update).unwrap());
-    assert!(!provider.check_access("readonly", "users", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("readonly", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("readonly", "users", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("readonly", "users", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("readonly", "users", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-022: 默认 readwrite 角色权限
@@ -628,10 +767,26 @@ fn test_default_readwrite_role() {
     let provider = AdvancedRbacProvider::new();
 
     // readwrite 应该有 SELECT, INSERT, UPDATE 权限
-    assert!(provider.check_access("readwrite", "users", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("readwrite", "users", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("readwrite", "users", PermissionAction::Update).unwrap());
-    assert!(!provider.check_access("readwrite", "users", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("readwrite", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("readwrite", "users", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("readwrite", "users", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("readwrite", "users", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-ADV-U-023: get_roles 方法
@@ -651,8 +806,16 @@ fn test_undefined_role_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 未定义的角色应该没有任何权限
-    assert!(!provider.check_access("undefined", "users", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("undefined", "users", PermissionAction::Insert).unwrap());
+    assert!(
+        !provider
+            .check_access("undefined", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("undefined", "users", PermissionAction::Insert)
+            .unwrap()
+    );
 }
 
 // ============================================================================
@@ -675,9 +838,7 @@ fn test_concurrent_inheritance_resolution() {
     // 启动多个线程进行并发权限检查
     for _ in 0..10 {
         let p = provider.clone();
-        let handle = thread::spawn(move || {
-            p.check_access("manager", "users", PermissionAction::Select).unwrap()
-        });
+        let handle = thread::spawn(move || p.check_access("manager", "users", PermissionAction::Select).unwrap());
         handles.push(handle);
     }
 
@@ -718,10 +879,7 @@ fn test_concurrent_role_and_inheritance_add() {
     for i in 0..5 {
         let p = provider.clone();
         let handle = thread::spawn(move || {
-            p.add_role_inheritance(
-                format!("concurrent_role_{}", i),
-                vec!["admin".to_string()],
-            );
+            p.add_role_inheritance(format!("concurrent_role_{}", i), vec!["admin".to_string()]);
         });
         handles.push(handle);
     }

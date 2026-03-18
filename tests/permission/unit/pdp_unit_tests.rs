@@ -14,8 +14,8 @@
 
 #[cfg(feature = "permission-engine")]
 use dbnexus::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource,
-    PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
+    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
+    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
 };
 
 #[cfg(feature = "permission-engine")]
@@ -117,16 +117,32 @@ async fn test_pdp_check_allow() {
 
     // admin_user 应该被允许所有操作
     let result = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin_user should be allowed SELECT on users");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin_user should be allowed SELECT on users"
+    );
 
     let result = pdp.check("admin_user", "orders", "INSERT").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin_user should be allowed INSERT on orders");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin_user should be allowed INSERT on orders"
+    );
 
     let result = pdp.check("admin_user", "products", "UPDATE").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin_user should be allowed UPDATE on products");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin_user should be allowed UPDATE on products"
+    );
 
     let result = pdp.check("admin_user", "logs", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin_user should be allowed DELETE on logs");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin_user should be allowed DELETE on logs"
+    );
 }
 
 /// TEST-PDP-U-002: 基本权限检查 - 拒绝
@@ -138,7 +154,11 @@ async fn test_pdp_check_deny() {
 
     // normal_user 不应该被允许删除 users
     let result = pdp.check("normal_user", "users", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Deny, "normal_user should be denied DELETE on users");
+    assert_eq!(
+        result,
+        PermissionDecision::Deny,
+        "normal_user should be denied DELETE on users"
+    );
 }
 
 /// TEST-PDP-U-003: 基本权限检查 - 不适用
@@ -150,7 +170,11 @@ async fn test_pdp_check_not_applicable() {
 
     // normal_user 对 orders 表没有定义权限，默认拒绝
     let result = pdp.check("normal_user", "orders", "SELECT").await;
-    assert_eq!(result, PermissionDecision::NotApplicable, "normal_user should be NotApplicable for SELECT on orders (no permission defined)");
+    assert_eq!(
+        result,
+        PermissionDecision::NotApplicable,
+        "normal_user should be NotApplicable for SELECT on orders (no permission defined)"
+    );
 }
 
 /// TEST-PDP-U-004: 未知操作返回错误
@@ -162,7 +186,10 @@ async fn test_pdp_check_unknown_action() {
 
     // 未知操作应该返回 Error
     let result = pdp.check("admin_user", "users", "UNKNOWN").await;
-    assert!(matches!(result, PermissionDecision::Error(_)), "Unknown action should return Error");
+    assert!(
+        matches!(result, PermissionDecision::Error(_)),
+        "Unknown action should return Error"
+    );
 }
 
 // ============================================================================
@@ -252,7 +279,11 @@ async fn test_pdp_cache_hit() {
 
     // 第二次检查应该从缓存获取
     let result2 = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result2, PermissionDecision::Allow, "Second check (cached) should succeed");
+    assert_eq!(
+        result2,
+        PermissionDecision::Allow,
+        "Second check (cached) should succeed"
+    );
 }
 
 /// TEST-PDP-U-010: 缓存刷新
@@ -270,7 +301,11 @@ async fn test_pdp_cache_refresh() {
 
     // 再次检查应该重新计算
     let result = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "Check after cache refresh should succeed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "Check after cache refresh should succeed"
+    );
 }
 
 /// TEST-PDP-U-011: 禁用缓存
@@ -285,7 +320,11 @@ async fn test_pdp_cache_disabled() {
 
     // 检查仍然应该工作
     let result = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "Check with cache disabled should still work");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "Check with cache disabled should still work"
+    );
 }
 
 /// TEST-PDP-U-012: 自定义缓存 TTL
@@ -296,7 +335,11 @@ async fn test_pdp_custom_cache_ttl() {
     let pdp = PolicyDecisionPoint::with_cache(provider, 60); // 60 秒 TTL
 
     let result = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "Check with custom TTL should succeed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "Check with custom TTL should succeed"
+    );
 }
 
 // ============================================================================
@@ -314,7 +357,11 @@ async fn test_pdp_rate_limit_basic() {
     for _ in 0..5 {
         let result = pdp.check("test_user", "users", "SELECT").await;
         // test_user 没有定义权限，所以返回 NotApplicable
-        assert_eq!(result, PermissionDecision::NotApplicable, "test_user has no permissions, should be NotApplicable");
+        assert_eq!(
+            result,
+            PermissionDecision::NotApplicable,
+            "test_user has no permissions, should be NotApplicable"
+        );
     }
 }
 
@@ -332,7 +379,11 @@ async fn test_pdp_rate_limit_exceeded() {
 
     // 第 4 次请求应该被速率限制拒绝
     let result = pdp.check("limited_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Deny, "Rate limit exceeded should return Deny");
+    assert_eq!(
+        result,
+        PermissionDecision::Deny,
+        "Rate limit exceeded should return Deny"
+    );
 }
 
 /// TEST-PDP-U-015: 速率限制 - 不同用户独立计数
@@ -349,7 +400,11 @@ async fn test_pdp_rate_limit_different_users() {
     // 用户 B 应该仍然可以请求
     let result = pdp.check("user_b", "users", "SELECT").await;
     // user_b 没有定义权限，所以返回 NotApplicable
-    assert_eq!(result, PermissionDecision::NotApplicable, "user_b has no permissions, should be NotApplicable");
+    assert_eq!(
+        result,
+        PermissionDecision::NotApplicable,
+        "user_b has no permissions, should be NotApplicable"
+    );
 }
 
 // ============================================================================
@@ -461,7 +516,11 @@ async fn test_pdp_rule_priority() {
 
     // 高优先级的拒绝规则应该生效
     let result = pdp.check("test_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Deny, "High priority deny rule should take effect");
+    assert_eq!(
+        result,
+        PermissionDecision::Deny,
+        "High priority deny rule should take effect"
+    );
 }
 
 /// TEST-PDP-U-019: Allow 和 Deny 冲突 - Deny 优先
@@ -513,7 +572,10 @@ async fn test_pdp_allow_deny_conflict() {
     // 按规则顺序，先遇到的规则生效
     let result = pdp.check("conflict_user", "users", "SELECT").await;
     // 结果取决于规则评估顺序，但应该是 Allow 或 Deny 之一
-    assert!(matches!(result, PermissionDecision::Allow | PermissionDecision::Deny), "Result should be either Allow or Deny based on rule evaluation order");
+    assert!(
+        matches!(result, PermissionDecision::Allow | PermissionDecision::Deny),
+        "Result should be either Allow or Deny based on rule evaluation order"
+    );
 }
 
 /// TEST-PDP-U-020: 禁用的规则不生效
@@ -550,7 +612,11 @@ async fn test_pdp_disabled_rule() {
 
     // 禁用的规则不应该生效
     let result = pdp.check("test_user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::NotApplicable, "Disabled rule should not take effect, should be NotApplicable");
+    assert_eq!(
+        result,
+        PermissionDecision::NotApplicable,
+        "Disabled rule should not take effect, should be NotApplicable"
+    );
 }
 
 // ============================================================================
@@ -596,7 +662,11 @@ async fn test_pdp_wildcard_resource() {
 
     // admin_user 有通配符权限，应该可以访问任何表
     let result = pdp.check("admin_user", "any_unknown_table", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin_user with wildcard permission should be allowed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin_user with wildcard permission should be allowed"
+    );
 }
 
 /// TEST-PDP-U-024: 通配符主体匹配
@@ -633,7 +703,11 @@ async fn test_pdp_wildcard_subject() {
 
     // 任何用户都应该能访问
     let result = pdp.check("any_user", "public_table", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "any_user should be allowed to access public_table");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "any_user should be allowed to access public_table"
+    );
 }
 
 // ============================================================================
@@ -673,10 +747,7 @@ fn test_permission_action_serialization() {
 fn test_permission_decision_equality() {
     assert_eq!(PermissionDecision::Allow, PermissionDecision::Allow);
     assert_eq!(PermissionDecision::Deny, PermissionDecision::Deny);
-    assert_eq!(
-        PermissionDecision::NotApplicable,
-        PermissionDecision::NotApplicable
-    );
+    assert_eq!(PermissionDecision::NotApplicable, PermissionDecision::NotApplicable);
     assert_ne!(PermissionDecision::Allow, PermissionDecision::Deny);
 }
 
@@ -713,7 +784,11 @@ async fn test_pdp_concurrent_check() {
 
     for handle in handles {
         let result = handle.await.unwrap();
-        assert_eq!(result, PermissionDecision::Allow, "Concurrent check should return Allow for admin_user");
+        assert_eq!(
+            result,
+            PermissionDecision::Allow,
+            "Concurrent check should return Allow for admin_user"
+        );
     }
 }
 
@@ -738,6 +813,10 @@ async fn test_pdp_concurrent_cache_access() {
 
     for handle in handles {
         let result = handle.await.unwrap();
-        assert_eq!(result, PermissionDecision::Allow, "Concurrent cache access check should return Allow for admin_user");
+        assert_eq!(
+            result,
+            PermissionDecision::Allow,
+            "Concurrent cache access check should return Allow for admin_user"
+        );
     }
 }

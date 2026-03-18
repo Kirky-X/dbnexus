@@ -34,7 +34,7 @@ roles:
       allow: ["select", "insert", "update", "delete"]
       deny: []
       enabled: true
-  
+
   manager:
     - name: "manager_users"
       priority: 0
@@ -50,7 +50,7 @@ roles:
       allow: ["select", "insert", "update", "delete"]
       deny: []
       enabled: true
-  
+
   user:
     - name: "user_select_users"
       priority: 0
@@ -66,7 +66,7 @@ roles:
       allow: ["select"]
       deny: []
       enabled: true
-  
+
   guest:
     - name: "guest_select_products"
       priority: 0

@@ -12,8 +12,7 @@
 //! - 边界条件和错误处理
 
 use dbnexus::permission::{
-    PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy,
-    TablePermission,
+    PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy, TablePermission,
 };
 
 // ============================================================================
@@ -286,11 +285,31 @@ fn test_rbac_wildcard_table_matching() {
     );
 
     // 通配符应该匹配任何表名
-    assert!(provider.check_access("admin", "users", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("admin", "orders", PermissionAction::Insert).unwrap());
-    assert!(provider.check_access("admin", "products", PermissionAction::Update).unwrap());
-    assert!(provider.check_access("admin", "logs", PermissionAction::Delete).unwrap());
-    assert!(provider.check_access("admin", "any_table_name", PermissionAction::Select).unwrap());
+    assert!(
+        provider
+            .check_access("admin", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "orders", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "products", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "logs", PermissionAction::Delete)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("admin", "any_table_name", PermissionAction::Select)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-012: 混合通配符和精确表名
@@ -315,12 +334,28 @@ fn test_rbac_mixed_wildcard_and_exact() {
     );
 
     // users 表应该有 SELECT 和 INSERT 权限
-    assert!(provider.check_access("mixed_role", "users", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("mixed_role", "users", PermissionAction::Insert).unwrap());
+    assert!(
+        provider
+            .check_access("mixed_role", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("mixed_role", "users", PermissionAction::Insert)
+            .unwrap()
+    );
 
     // 其他表只有 SELECT 权限
-    assert!(provider.check_access("mixed_role", "orders", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("mixed_role", "orders", PermissionAction::Insert).unwrap());
+    assert!(
+        provider
+            .check_access("mixed_role", "orders", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("mixed_role", "orders", PermissionAction::Insert)
+            .unwrap()
+    );
 }
 
 // ============================================================================
@@ -343,8 +378,16 @@ fn test_rbac_empty_operations() {
     );
 
     // 空操作列表意味着没有任何权限
-    assert!(!provider.check_access("empty_ops", "users", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("empty_ops", "users", PermissionAction::Insert).unwrap());
+    assert!(
+        !provider
+            .check_access("empty_ops", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("empty_ops", "users", PermissionAction::Insert)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-014: 空表权限列表
@@ -352,13 +395,14 @@ fn test_rbac_empty_operations() {
 fn test_rbac_empty_tables() {
     let provider = RbacProvider::new();
 
-    provider.add_role(
-        "empty_tables".to_string(),
-        RolePolicy { tables: vec![] },
-    );
+    provider.add_role("empty_tables".to_string(), RolePolicy { tables: vec![] });
 
     // 空表列表意味着没有任何权限
-    assert!(!provider.check_access("empty_tables", "users", PermissionAction::Select).unwrap());
+    assert!(
+        !provider
+            .check_access("empty_tables", "users", PermissionAction::Select)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-015: 多表权限检查
@@ -391,17 +435,45 @@ fn test_rbac_multiple_table_permissions() {
     );
 
     // users 表
-    assert!(provider.check_access("multi_table", "users", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("multi_table", "users", PermissionAction::Insert).unwrap());
+    assert!(
+        provider
+            .check_access("multi_table", "users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("multi_table", "users", PermissionAction::Insert)
+            .unwrap()
+    );
 
     // orders 表
-    assert!(provider.check_access("multi_table", "orders", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("multi_table", "orders", PermissionAction::Insert).unwrap());
-    assert!(!provider.check_access("multi_table", "orders", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("multi_table", "orders", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("multi_table", "orders", PermissionAction::Insert)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("multi_table", "orders", PermissionAction::Delete)
+            .unwrap()
+    );
 
     // products 表
-    assert!(provider.check_access("multi_table", "products", PermissionAction::Update).unwrap());
-    assert!(!provider.check_access("multi_table", "products", PermissionAction::Delete).unwrap());
+    assert!(
+        provider
+            .check_access("multi_table", "products", PermissionAction::Update)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("multi_table", "products", PermissionAction::Delete)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-016: 角色名称大小写敏感
@@ -441,8 +513,16 @@ fn test_rbac_table_name_case_sensitive() {
     );
 
     // 表名应该区分大小写
-    assert!(provider.check_access("user", "Users", PermissionAction::Select).unwrap());
-    assert!(!provider.check_access("user", "users", PermissionAction::Select).unwrap());
+    assert!(
+        provider
+            .check_access("user", "Users", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        !provider
+            .check_access("user", "users", PermissionAction::Select)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-018: 特殊字符表名
@@ -471,9 +551,21 @@ fn test_rbac_special_character_table_names() {
     );
 
     // 特殊字符表名应该正常工作
-    assert!(provider.check_access("special", "user_data", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("special", "order-items", PermissionAction::Select).unwrap());
-    assert!(provider.check_access("special", "table.with.dots", PermissionAction::Select).unwrap());
+    assert!(
+        provider
+            .check_access("special", "user_data", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("special", "order-items", PermissionAction::Select)
+            .unwrap()
+    );
+    assert!(
+        provider
+            .check_access("special", "table.with.dots", PermissionAction::Select)
+            .unwrap()
+    );
 }
 
 /// TEST-RBAC-U-019: has_role 方法测试
