@@ -114,7 +114,7 @@ config-toml = ["toml"]
 config-env = []  # 环境变量配置（无额外依赖）
 
 # === 连接池增强 ===
-pool-health-check = []  # 连接池健康检查（无额外依赖）
+pool-health-check = ["futures"]  # 连接池健康检查
 pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
@@ -304,6 +304,16 @@ path = "examples/demo/permission_engine.rs"
 name = "global_index"
 path = "examples/demo/global_index.rs"
 
+[[example]]
+name = "entity_basic"
+path = "examples/demo/entity_basic.rs"
+required-features = ["macros", "sqlite"]
+
+[[example]]
+name = "macro_usage"
+path = "examples/demo/macro_usage.rs"
+required-features = ["macros", "sqlite"]
+
 [[test]]
 name = "core_entity_integration"
 path = "tests/core/integration/entity_integration.rs"
@@ -395,6 +405,12 @@ harness = false
 name = "mod"
 path = "tests/mod.rs"
 required-features = ["sqlite"]
+
+# Security tests - SQL injection detection tests
+[[test]]
+name = "security_unit_tests"
+path = "tests/security/unit/sql_injection_tests.rs"
+required-features = ["sql-parser"]
 
 [dev-dependencies.testcontainers]
 version = "0.23"
