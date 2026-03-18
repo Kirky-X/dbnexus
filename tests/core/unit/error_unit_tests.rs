@@ -24,11 +24,12 @@ fn test_db_error_creation() {
 }
 
 #[test]
-fn test_db_error_inner() {
+fn test_db_error_message() {
     let io_error = sea_orm::DbErr::Custom("Connection failed".to_string());
     let db_error = DbError::new(io_error.clone());
 
-    assert_eq!(format!("{}", db_error.inner()), format!("{}", io_error));
+    // DbError 使用 message() 方法获取错误消息
+    assert!(db_error.message().contains("Connection failed"));
 }
 
 #[test]

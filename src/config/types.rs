@@ -89,10 +89,18 @@ pub struct CacheConfig {
     pub default_ttl: u64,
 }
 
-fn default_policy_cache_capacity() -> u64 { 4096 }
-fn default_sql_parse_cache_capacity() -> u64 { 1000 }
-fn default_query_cache_capacity() -> u64 { 10000 }
-fn default_cache_ttl() -> u64 { 300 }
+fn default_policy_cache_capacity() -> u64 {
+    4096
+}
+fn default_sql_parse_cache_capacity() -> u64 {
+    1000
+}
+fn default_query_cache_capacity() -> u64 {
+    10000
+}
+fn default_cache_ttl() -> u64 {
+    300
+}
 
 impl Default for CacheConfig {
     fn default() -> Self {
@@ -117,18 +125,10 @@ impl CacheConfig {
         use confers::ConfigProviderExt;
 
         Ok(Self {
-            policy_cache_capacity: provider
-                .get_uint("dbnexus.cache.policy_capacity")
-                .unwrap_or(4096),
-            sql_parse_cache_capacity: provider
-                .get_uint("dbnexus.cache.sql_parse_capacity")
-                .unwrap_or(1000),
-            query_cache_capacity: provider
-                .get_uint("dbnexus.cache.query_capacity")
-                .unwrap_or(10000),
-            default_ttl: provider
-                .get_uint("dbnexus.cache.default_ttl")
-                .unwrap_or(300),
+            policy_cache_capacity: provider.get_uint("dbnexus.cache.policy_capacity").unwrap_or(4096),
+            sql_parse_cache_capacity: provider.get_uint("dbnexus.cache.sql_parse_capacity").unwrap_or(1000),
+            query_cache_capacity: provider.get_uint("dbnexus.cache.query_capacity").unwrap_or(10000),
+            default_ttl: provider.get_uint("dbnexus.cache.default_ttl").unwrap_or(300),
         })
     }
 }
@@ -157,10 +157,18 @@ pub struct PoolConfig {
     pub acquire_timeout: u64,
 }
 
-fn default_max_connections() -> u32 { 20 }
-fn default_min_connections() -> u32 { 5 }
-fn default_idle_timeout() -> u64 { 300 }
-fn default_acquire_timeout() -> u64 { 5000 }
+fn default_max_connections() -> u32 {
+    20
+}
+fn default_min_connections() -> u32 {
+    5
+}
+fn default_idle_timeout() -> u64 {
+    300
+}
+fn default_acquire_timeout() -> u64 {
+    5000
+}
 
 impl Default for PoolConfig {
     fn default() -> Self {
@@ -334,10 +342,18 @@ impl Default for DbConfig {
     }
 }
 
-fn default_admin_role() -> String { "admin".to_string() }
-fn default_migration_timeout() -> u64 { 60 }
-fn default_warmup_timeout() -> u64 { 30 }
-fn default_warmup_retries() -> u32 { 3 }
+fn default_admin_role() -> String {
+    "admin".to_string()
+}
+fn default_migration_timeout() -> u64 {
+    60
+}
+fn default_warmup_timeout() -> u64 {
+    30
+}
+fn default_warmup_retries() -> u32 {
+    3
+}
 
 impl DbConfig {
     /// 从 confers ConfigProvider 加载配置
@@ -356,40 +372,20 @@ impl DbConfig {
         use confers::ConfigProviderExt;
 
         Ok(Self {
-            url: provider
-                .get_string("dbnexus.url")
-                .ok_or(ConfigError::MissingUrl)?,
-            max_connections: provider
-                .get_uint("dbnexus.max_connections")
-                .unwrap_or(20) as u32,
-            min_connections: provider
-                .get_uint("dbnexus.min_connections")
-                .unwrap_or(5) as u32,
-            idle_timeout: provider
-                .get_uint("dbnexus.idle_timeout")
-                .unwrap_or(300),
-            acquire_timeout: provider
-                .get_uint("dbnexus.acquire_timeout")
-                .unwrap_or(5000),
+            url: provider.get_string("dbnexus.url").ok_or(ConfigError::MissingUrl)?,
+            max_connections: provider.get_uint("dbnexus.max_connections").unwrap_or(20) as u32,
+            min_connections: provider.get_uint("dbnexus.min_connections").unwrap_or(5) as u32,
+            idle_timeout: provider.get_uint("dbnexus.idle_timeout").unwrap_or(300),
+            acquire_timeout: provider.get_uint("dbnexus.acquire_timeout").unwrap_or(5000),
             permissions_path: provider.get_string("dbnexus.permissions_path"),
-            migrations_dir: provider
-                .get_string("dbnexus.migrations_dir")
-                .map(PathBuf::from),
-            auto_migrate: provider
-                .get_bool("dbnexus.auto_migrate")
-                .unwrap_or(false),
-            migration_timeout: provider
-                .get_uint("dbnexus.migration_timeout")
-                .unwrap_or(60),
+            migrations_dir: provider.get_string("dbnexus.migrations_dir").map(PathBuf::from),
+            auto_migrate: provider.get_bool("dbnexus.auto_migrate").unwrap_or(false),
+            migration_timeout: provider.get_uint("dbnexus.migration_timeout").unwrap_or(60),
             admin_role: provider
                 .get_string("dbnexus.admin_role")
                 .unwrap_or_else(|| "admin".to_string()),
-            warmup_timeout: provider
-                .get_uint("dbnexus.warmup_timeout")
-                .unwrap_or(30),
-            warmup_retries: provider
-                .get_uint("dbnexus.warmup_retries")
-                .unwrap_or(3) as u32,
+            warmup_timeout: provider.get_uint("dbnexus.warmup_timeout").unwrap_or(30),
+            warmup_retries: provider.get_uint("dbnexus.warmup_retries").unwrap_or(3) as u32,
             cache_config: CacheConfig::from_confers(provider)?,
         })
     }
@@ -421,35 +417,9 @@ impl DbConfig {
 }
 
 /// 数据库操作结果类型
-pub type DbResult<T> = Result<T, DbError>;
+#[deprecated(since = "0.1.3", note = "Use crate::error::DbResult instead")]
+pub type DbResult<T> = crate::error::DbResult<T>;
 
 /// 数据库错误
-#[derive(Debug, Error)]
-pub enum DbError {
-    /// 连接错误
-    #[error("Connection error: {0}")]
-    Connection(#[from] sea_orm::DbErr),
-
-    /// 配置错误
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    /// 权限错误
-    #[error("Permission denied: {0}")]
-    Permission(String),
-
-    /// 事务错误
-    #[error("Transaction error: {0}")]
-    Transaction(String),
-
-    /// 迁移错误
-    #[error("Migration error: {0}")]
-    Migration(String),
-}
-
-impl From<crate::error::DbError> for DbError {
-    fn from(err: crate::error::DbError) -> Self {
-        let inner_err = err.inner().clone();
-        Self::Connection(inner_err)
-    }
-}
+#[deprecated(since = "0.1.3", note = "Use crate::error::DbError instead")]
+pub type DbError = crate::error::DbError;
