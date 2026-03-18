@@ -70,6 +70,9 @@ compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enab
 // 模块声明
 // ============================================================================
 
+/// 安全模块
+pub mod security;
+
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
@@ -84,16 +87,15 @@ pub use cache::{AsyncCache, CacheBuilder, CacheKey, create_cache, create_cache_w
 /// 配置管理模块
 pub mod config;
 
+pub use crate::error::DbError;
 /// 错误类型定义
-pub use crate::config::DbResult;
-pub use config::{
-    ConfigError, DatabaseType, DbConfig, DbError, PoolConfig,
-};
+pub use crate::error::DbResult;
+pub use config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
 
 /// 统一错误模块（渐进式重构）
 pub mod error;
 pub use error::{AuditError, MigrationError};
-pub use error::{ConfigResult as ConfigResultNew, DbResult as DbResultNew, PermissionResult, PoolResult};
+pub use error::{ConfigResult, PermissionResult, PoolResult};
 pub use error::{DbError as DbErrorNew, PermissionError, PoolError};
 
 /// 实体转换模块
