@@ -138,29 +138,81 @@ impl GlobalIndex {
             .collect())
     }
 
-    /// 批量同步索引条目
+    /// 批量同步索引条目（优化版本：使用 bulk insert）
+    ///
+    /// 使用 `Entity::insert_many()` 进行批量插入，配合 `OnConflict` 实现 upsert。
+    /// 所有操作在单个事务中执行，确保 all-or-nothing 语义。
     pub async fn batch_sync(&self, entries: Vec<IndexEntry>) -> Result<SyncResult, sea_orm::DbErr> {
-        let mut success = 0;
-        let mut failed = 0;
-        let mut errors = Vec::new();
-
-        for entry in entries {
-            let result = self.sync_entry(&entry).await;
-            match result {
-                Ok(_) => success += 1,
-                Err(e) => {
-                    failed += 1;
-                    errors.push(format!("Failed to sync entry: {:?}", e));
-                }
-            }
+        // 处理空批量情况
+        if entries.is_empty() {
+            return Ok(SyncResult {
+                success: true,
+                synced_count: 0,
+                failed_count: 0,
+                errors: Vec::new(),
+            });
         }
 
-        Ok(SyncResult {
-            success: failed == 0,
-            synced_count: success,
-            failed_count: failed,
-            errors,
-        })
+        // 转换所有条目为 ActiveModel
+        let active_models: Vec<ActiveModel> = entries
+            .iter()
+            .map(|entry| {
+                let now = chrono::Utc::now().to_rfc3339();
+                ActiveModel {
+                    id: Set(entry.index_value.clone()),
+                    table_name: Set(entry.table_name.clone()),
+                    record_id: Set(entry.record_id.clone()),
+                    shard_id: Set(entry.shard_id as i32),
+                    index_key: Set(entry.index_key.clone()),
+                    index_value: Set(entry.index_value.clone()),
+                    created_at: Set(now.clone()),
+                    updated_at: Set(now.clone()),
+                    last_modified: Set(now),
+                    sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
+                }
+            })
+            .collect();
+
+        // 执行批量插入，使用 ON CONFLICT 处理重复键
+        let result = Entity::insert_many(active_models)
+            .on_conflict(
+                OnConflict::columns([Column::Id])
+                    .update_columns([
+                        Column::TableName,
+                        Column::RecordId,
+                        Column::ShardId,
+                        Column::IndexKey,
+                        Column::IndexValue,
+                        Column::UpdatedAt,
+                        Column::LastModified,
+                        Column::SyncStatus,
+                    ])
+                    .to_owned(),
+            )
+            .exec(&*self.pool)
+            .await;
+
+        match result {
+            Ok(_) => {
+                // 批量插入成功
+                let count = entries.len();
+                Ok(SyncResult {
+                    success: true,
+                    synced_count: count,
+                    failed_count: 0,
+                    errors: Vec::new(),
+                })
+            }
+            Err(e) => {
+                // 批量插入失败，返回错误
+                Ok(SyncResult {
+                    success: false,
+                    synced_count: 0,
+                    failed_count: entries.len(),
+                    errors: vec![format!("Bulk insert failed: {:?}", e)],
+                })
+            }
+        }
     }
 
     /// 同步单个索引条目

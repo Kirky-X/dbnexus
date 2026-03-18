@@ -179,12 +179,18 @@ async fn test_query_different_tables() {
     global_index.batch_sync(entries).await.unwrap();
 
     // 查询 orders 表
-    let orders = global_index.query_by_index("orders", "user_id", "user_123").await.unwrap();
+    let orders = global_index
+        .query_by_index("orders", "user_id", "user_123")
+        .await
+        .unwrap();
     assert_eq!(orders.len(), 1);
     assert_eq!(orders[0].table_name, "orders");
 
     // 查询 products 表
-    let products = global_index.query_by_index("products", "user_id", "user_123").await.unwrap();
+    let products = global_index
+        .query_by_index("products", "user_id", "user_123")
+        .await
+        .unwrap();
     assert_eq!(products.len(), 1);
     assert_eq!(products[0].table_name, "products");
 }
@@ -214,11 +220,17 @@ async fn test_query_different_index_keys() {
     global_index.batch_sync(entries).await.unwrap();
 
     // 按 email 查询
-    let by_email = global_index.query_by_index("users", "email", "test@example.com").await.unwrap();
+    let by_email = global_index
+        .query_by_index("users", "email", "test@example.com")
+        .await
+        .unwrap();
     assert_eq!(by_email.len(), 1);
 
     // 按 phone 查询
-    let by_phone = global_index.query_by_index("users", "phone", "1234567890").await.unwrap();
+    let by_phone = global_index
+        .query_by_index("users", "phone", "1234567890")
+        .await
+        .unwrap();
     assert_eq!(by_phone.len(), 1);
 }
 
@@ -254,7 +266,10 @@ async fn test_index_update() {
     global_index.batch_sync(vec![updated_entry]).await.unwrap();
 
     // 查询验证更新
-    let result = global_index.query_by_index("orders", "user_id", "user_123").await.unwrap();
+    let result = global_index
+        .query_by_index("orders", "user_id", "user_123")
+        .await
+        .unwrap();
 
     // 由于使用 upsert，应该只有一条记录
     assert_eq!(result.len(), 1);
@@ -342,7 +357,10 @@ async fn test_index_nonexistent_query() {
     global_index.batch_sync(vec![entry]).await.unwrap();
 
     // 查询不存在的索引值
-    let result = global_index.query_by_index("orders", "user_id", "nonexistent").await.unwrap();
+    let result = global_index
+        .query_by_index("orders", "user_id", "nonexistent")
+        .await
+        .unwrap();
 
     assert!(result.is_empty(), "Should return empty for nonexistent index value");
 }
@@ -353,7 +371,9 @@ async fn test_index_nonexistent_table_query() {
     let global_index = GlobalIndex::new("sqlite::memory:").await.unwrap();
 
     // 查询不存在的表
-    let result = global_index.query_by_index("nonexistent_table", "some_key", "some_value").await;
+    let result = global_index
+        .query_by_index("nonexistent_table", "some_key", "some_value")
+        .await;
 
     assert!(result.is_ok(), "Query should succeed for nonexistent table");
     assert!(result.unwrap().is_empty(), "Should return empty for nonexistent table");
@@ -406,10 +426,16 @@ async fn test_multi_shard_sync() {
     assert_eq!(result.synced_count, 4);
 
     // 验证跨分片查询
-    let user_123_orders = global_index.query_by_index("orders", "user_id", "user_123").await.unwrap();
+    let user_123_orders = global_index
+        .query_by_index("orders", "user_id", "user_123")
+        .await
+        .unwrap();
     assert_eq!(user_123_orders.len(), 3);
 
-    let user_456_orders = global_index.query_by_index("orders", "user_id", "user_456").await.unwrap();
+    let user_456_orders = global_index
+        .query_by_index("orders", "user_id", "user_456")
+        .await
+        .unwrap();
     assert_eq!(user_456_orders.len(), 1);
 }
 
@@ -480,7 +506,10 @@ async fn test_index_consistency_basic() {
 
     // 多次查询应该返回一致结果
     for _ in 0..5 {
-        let result = global_index.query_by_index("orders", "user_id", "user_123").await.unwrap();
+        let result = global_index
+            .query_by_index("orders", "user_id", "user_123")
+            .await
+            .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].record_id, "order_1");
     }
@@ -648,7 +677,10 @@ async fn test_unicode_index_values() {
 
     global_index.batch_sync(vec![entry.clone()]).await.unwrap();
 
-    let result = global_index.query_by_index("用户表", "邮箱", "用户@例子.测试").await.unwrap();
+    let result = global_index
+        .query_by_index("用户表", "邮箱", "用户@例子.测试")
+        .await
+        .unwrap();
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].record_id, "记录_001");
@@ -671,7 +703,10 @@ async fn test_json_index_value() {
 
     global_index.batch_sync(vec![entry]).await.unwrap();
 
-    let result = global_index.query_by_index("configs", "settings", json_value).await.unwrap();
+    let result = global_index
+        .query_by_index("configs", "settings", json_value)
+        .await
+        .unwrap();
 
     assert_eq!(result.len(), 1);
 }
@@ -691,7 +726,10 @@ async fn test_max_shard_id() {
 
     global_index.batch_sync(vec![entry.clone()]).await.unwrap();
 
-    let result = global_index.query_by_index("max_shard_test", "test", "max_shard").await.unwrap();
+    let result = global_index
+        .query_by_index("max_shard_test", "test", "max_shard")
+        .await
+        .unwrap();
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].shard_id, u32::MAX);
@@ -807,13 +845,19 @@ async fn test_query_performance() {
     let start = std::time::Instant::now();
 
     for _ in 0..100 {
-        let _ = global_index.query_by_index("perf_test", "category", "cat_50").await.unwrap();
+        let _ = global_index
+            .query_by_index("perf_test", "category", "cat_50")
+            .await
+            .unwrap();
     }
 
     let duration = start.elapsed();
 
     // 查询应该在合理时间内完成
-    assert!(duration.as_millis() < 5000, "Queries should complete in reasonable time");
+    assert!(
+        duration.as_millis() < 5000,
+        "Queries should complete in reasonable time"
+    );
 }
 
 /// TEST-GIDX-INT-030: 连接复用测试

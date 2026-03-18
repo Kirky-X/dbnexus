@@ -262,7 +262,10 @@ async fn test_pool_max_connections_limit() {
     })
     .await;
 
-    assert!(result.is_err() || result.unwrap().is_err(), "Expected timeout or error when exceeding max connections");
+    assert!(
+        result.is_err() || result.unwrap().is_err(),
+        "Expected timeout or error when exceeding max connections"
+    );
 
     // 释放连接
     drop(sessions);
@@ -384,7 +387,10 @@ async fn test_pool_acquire_timeout() {
 
     // 应该在超时时间附近返回错误
     assert!(result.is_err(), "Expected timeout error");
-    assert!(elapsed >= Duration::from_millis(400), "Should wait at least close to timeout");
+    assert!(
+        elapsed >= Duration::from_millis(400),
+        "Should wait at least close to timeout"
+    );
     assert!(elapsed < Duration::from_secs(2), "Should not wait too long");
 }
 
@@ -436,10 +442,7 @@ fn test_pool_timeout_duration_conversion() {
         ..Default::default()
     };
 
-    assert_eq!(
-        config.acquire_timeout_duration(),
-        Duration::from_millis(3000)
-    );
+    assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(3000));
 }
 
 // ============================================================================
@@ -468,7 +471,10 @@ async fn test_pool_session_auto_release() {
 
     let final_status = pool.status();
     assert_eq!(final_status.active, 0, "Session should be auto-released");
-    assert!(final_status.idle >= initial_status.idle, "Connection should be returned to idle pool");
+    assert!(
+        final_status.idle >= initial_status.idle,
+        "Connection should be returned to idle pool"
+    );
 }
 
 /// TEST-U-POOL-018: 测试连接泄漏检测 - borrow_count 追踪
@@ -550,11 +556,19 @@ async fn test_pool_status_consistency() {
     // 多次获取和释放连接
     for _ in 0..10 {
         let status = pool.status();
-        assert_eq!(status.total, status.active + status.idle, "Status invariant should hold");
+        assert_eq!(
+            status.total,
+            status.active + status.idle,
+            "Status invariant should hold"
+        );
 
         let session = pool.get_session("admin").await.expect("Failed to get session");
         let status = pool.status();
-        assert_eq!(status.total, status.active + status.idle, "Status invariant should hold after acquire");
+        assert_eq!(
+            status.total,
+            status.active + status.idle,
+            "Status invariant should hold after acquire"
+        );
 
         drop(session);
     }
@@ -878,7 +892,10 @@ async fn test_session_double_begin_transaction() {
 
     // 再次开始事务应该失败
     let result = session.begin_transaction().await;
-    assert!(result.is_err(), "Should fail when beginning transaction while already in one");
+    assert!(
+        result.is_err(),
+        "Should fail when beginning transaction while already in one"
+    );
 }
 
 /// TEST-U-POOL-035: 测试 Session 无事务时提交失败
@@ -895,7 +912,10 @@ async fn test_session_commit_without_transaction() {
 
     // 没有事务时提交应该失败
     let result = session.commit().await;
-    assert!(result.is_err(), "Should fail when committing without active transaction");
+    assert!(
+        result.is_err(),
+        "Should fail when committing without active transaction"
+    );
 }
 
 // ============================================================================
@@ -954,11 +974,26 @@ fn test_url_sanitization_no_password() {
 fn test_database_type_parsing() {
     use dbnexus::config::DatabaseType;
 
-    assert_eq!(DatabaseType::parse_database_type("postgres://localhost/db"), DatabaseType::Postgres);
-    assert_eq!(DatabaseType::parse_database_type("postgresql://localhost/db"), DatabaseType::Postgres);
-    assert_eq!(DatabaseType::parse_database_type("mysql://localhost/db"), DatabaseType::MySql);
-    assert_eq!(DatabaseType::parse_database_type("sqlite::memory:"), DatabaseType::Sqlite);
-    assert_eq!(DatabaseType::parse_database_type("sqlite3://file.db"), DatabaseType::Sqlite);
+    assert_eq!(
+        DatabaseType::parse_database_type("postgres://localhost/db"),
+        DatabaseType::Postgres
+    );
+    assert_eq!(
+        DatabaseType::parse_database_type("postgresql://localhost/db"),
+        DatabaseType::Postgres
+    );
+    assert_eq!(
+        DatabaseType::parse_database_type("mysql://localhost/db"),
+        DatabaseType::MySql
+    );
+    assert_eq!(
+        DatabaseType::parse_database_type("sqlite::memory:"),
+        DatabaseType::Sqlite
+    );
+    assert_eq!(
+        DatabaseType::parse_database_type("sqlite3://file.db"),
+        DatabaseType::Sqlite
+    );
 }
 
 /// TEST-U-POOL-040: 测试数据库类型显示
@@ -1023,7 +1058,9 @@ fn test_pool_config_defaults() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_default() {
     // 清理环境变量
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 30, "默认健康检查间隔应为 30 秒");
@@ -1035,13 +1072,17 @@ fn test_health_check_interval_default() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_zero() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "0"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "0");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 5, "健康检查间隔 0 应被限制为最小值 5 秒");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-045: 测试健康检查间隔 - 下边界值 5
@@ -1050,13 +1091,17 @@ fn test_health_check_interval_lower_bound_zero() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_five() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "5"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "5");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 5, "健康检查间隔 5 应保持不变");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-046: 测试健康检查间隔 - 上边界值 300
@@ -1065,13 +1110,17 @@ fn test_health_check_interval_lower_bound_five() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_300() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "300"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "300");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 300, "健康检查间隔 300 应保持不变");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-047: 测试健康检查间隔 - 超出上边界值 1000
@@ -1080,13 +1129,17 @@ fn test_health_check_interval_upper_bound_300() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_exceeded() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 300, "健康检查间隔 1000 应被限制为最大值 300 秒");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-048: 测试健康检查间隔 - 有效中间值
@@ -1095,13 +1148,17 @@ fn test_health_check_interval_upper_bound_exceeded() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_valid_middle_value() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 60, "健康检查间隔 60 应保持不变");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-049: 测试健康检查间隔 - 无效字符串
@@ -1110,13 +1167,17 @@ fn test_health_check_interval_valid_middle_value() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_invalid_string() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "invalid"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "invalid");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 30, "无效字符串应使用默认值 30 秒");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-050: 测试健康检查间隔 - 边界内值 1
@@ -1125,13 +1186,17 @@ fn test_health_check_interval_invalid_string() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_below_minimum() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 5, "健康检查间隔 1 应被限制为最小值 5 秒");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 /// TEST-U-POOL-051: 测试健康检查间隔 - 边界内值 301
@@ -1140,13 +1205,17 @@ fn test_health_check_interval_below_minimum() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_above_maximum() {
-    unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "301"); }
+    unsafe {
+        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "301");
+    }
 
     let interval = dbnexus::DbPool::parse_health_check_interval();
     assert_eq!(interval, 300, "健康检查间隔 301 应被限制为最大值 300 秒");
 
     // 清理
-    unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    unsafe {
+        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    }
 }
 
 // ============================================================================
