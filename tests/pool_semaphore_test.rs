@@ -33,7 +33,7 @@ async fn test_semaphore_permit_return_basic() {
         let session = pool
             .get_session("admin")
             .await
-            .expect(&format!("Failed to get session on iteration {}", i));
+            .unwrap_or_else(|_| panic!("Failed to get session on iteration {}", i));
         drop(session);
         // 给异步释放一点时间
         tokio::time::sleep(Duration::from_millis(10)).await;

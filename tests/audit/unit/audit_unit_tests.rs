@@ -152,7 +152,7 @@ async fn test_audit_sanitize_json_sensitive_fields() {
 /// 验证非 JSON 格式的敏感数据也能被正确识别和脱敏。
 #[tokio::test]
 async fn test_audit_sanitize_non_json_sensitive_fields() {
-    let event = AuditEvent::create("test", "1", "admin");
+    let _event = AuditEvent::create("test", "1", "admin");
 
     // 测试包含敏感关键字的非 JSON 值
     let sensitive_input = "password: my_secret_password, username: test";
@@ -193,7 +193,7 @@ async fn test_audit_sanitize_base64_values() {
 /// 验证可以使用自定义的敏感字段列表进行脱敏。
 #[tokio::test]
 async fn test_audit_sanitize_custom_fields() {
-    let event = AuditEvent::create("test", "1", "admin");
+    let _event = AuditEvent::create("test", "1", "admin");
 
     // 使用自定义敏感字段
     let custom_fields = vec!["api_key".to_string(), "jwt_token".to_string()];
