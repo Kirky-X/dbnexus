@@ -80,7 +80,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
+    async fn execute(&self, sql: &str) -> DbResult<ExecResult>;
 
     /// 执行原始 SQL（不带权限检查）
     ///
@@ -91,7 +91,7 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute_raw(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
+    async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>;
 
     /// 执行原始 DDL（仅限管理员）
     ///
@@ -102,28 +102,28 @@ pub trait DatabaseSession: Send + Sync {
     /// # Returns
     ///
     /// 返回执行结果
-    async fn execute_raw_ddl(&self, sql: &str) -> crate::config::DbResult<ExecResult>;
+    async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult>;
 
     /// 开始事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn begin_transaction(&self) -> crate::config::DbResult<()>;
+    async fn begin_transaction(&self) -> DbResult<()>;
 
     /// 提交事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn commit(&self) -> crate::config::DbResult<()>;
+    async fn commit(&self) -> DbResult<()>;
 
     /// 回滚事务
     ///
     /// # Returns
     ///
     /// 返回成功或错误
-    async fn rollback(&self) -> crate::config::DbResult<()>;
+    async fn rollback(&self) -> DbResult<()>;
 
     /// 获取角色
     ///
@@ -373,8 +373,7 @@ impl DbPoolBuilder {
         } else {
             return Err(crate::error::DbError::new(sea_orm::DbErr::Custom(
                 "Either url or config must be provided".to_string(),
-            ))
-            .into());
+            )));
         };
 
         // 创建 pool

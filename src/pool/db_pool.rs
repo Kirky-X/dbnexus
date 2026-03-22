@@ -10,8 +10,6 @@
 #[cfg(feature = "permission")]
 use crate::cache::Cache;
 use async_trait::async_trait;
-#[cfg(feature = "pool-health-check")]
-use futures::future::join_all;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -785,7 +783,7 @@ impl DbPool {
         let backend = Self::get_database_backend(&config.url);
 
         // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
-        let connections: Vec<DatabaseConnection> = idle.drain(..).collect();
+        let connections: Vec<DatabaseConnection> = std::mem::take(idle);
 
         // 并行执行所有健康检查
         let check_futures: Vec<_> = connections
@@ -1186,7 +1184,7 @@ impl DbPool {
     ///
     /// # async fn example(pool: &DbPool) {
     /// let config = pool.config();
-    /// println!("Max connections: {}", config.max_connections());
+    /// println!("Max connections: {}", config.max_connections);
     /// # }
     /// ```
     pub fn config(&self) -> &DbConfig {

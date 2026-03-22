@@ -689,7 +689,6 @@ impl YamlPermissionProvider {
     /// 如果路径无效或不在允许的目录内，返回错误
     pub fn new(config_path: &str) -> Result<Self, String> {
         // 验证配置文件路径安全性
-        let path = std::path::Path::new(config_path);
 
         // 1. 检查空路径
         if config_path.is_empty() {
