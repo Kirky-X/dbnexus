@@ -274,7 +274,8 @@ fn test_db_result_type_alias() {
     let error = sea_orm::DbErr::Custom("Error".to_string());
     let failure: dbnexus::error::DbResult<i32> = Err(DbError::new(error));
 
-    assert_eq!(success.unwrap(), 42);
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some(42));
     assert!(failure.is_err());
 }
 
@@ -284,7 +285,8 @@ fn test_pool_result_type_alias() {
     let success: dbnexus::error::PoolResult<String> = Ok("connection".to_string());
     let failure: dbnexus::error::PoolResult<String> = Err(PoolError::PoolExhausted);
 
-    assert_eq!(success.unwrap(), "connection");
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some("connection".to_string()));
     assert!(failure.is_err());
 }
 
@@ -294,7 +296,8 @@ fn test_permission_result_type_alias() {
     let success: dbnexus::error::PermissionResult<bool> = Ok(true);
     let failure: dbnexus::error::PermissionResult<bool> = Err(PermissionError::RateLimited);
 
-    assert_eq!(success.unwrap(), true);
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some(true));
     assert!(failure.is_err());
 }
 
@@ -304,7 +307,8 @@ fn test_config_result_type_alias() {
     let success: dbnexus::error::ConfigResult<String> = Ok("config".to_string());
     let failure: dbnexus::error::ConfigResult<String> = Err(ConfigError::FileNotFound("config.yaml".to_string()));
 
-    assert_eq!(success.unwrap(), "config");
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some("config".to_string()));
     assert!(failure.is_err());
 }
 
@@ -314,7 +318,8 @@ fn test_migration_result_type_alias() {
     let success: dbnexus::error::MigrationResult<u32> = Ok(5);
     let failure: dbnexus::error::MigrationResult<u32> = Err(MigrationError::FileNotFound("001.sql".to_string()));
 
-    assert_eq!(success.unwrap(), 5);
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some(5));
     assert!(failure.is_err());
 }
 
@@ -324,7 +329,8 @@ fn test_audit_result_type_alias() {
     let success: dbnexus::error::AuditResult<String> = Ok("logged".to_string());
     let failure: dbnexus::error::AuditResult<String> = Err(AuditError::WriteError("IO".to_string()));
 
-    assert_eq!(success.unwrap(), "logged");
+    assert!(success.is_ok());
+    assert_eq!(success.ok(), Some("logged".to_string()));
     assert!(failure.is_err());
 }
 

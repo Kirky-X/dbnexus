@@ -14,9 +14,8 @@
 //! - 高基数标签检测测试
 
 use dbnexus::metrics::{
-    LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics, QueryStats,
+    LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics,
 };
-use std::collections::HashMap;
 use std::time::Duration;
 
 // ============================================================================
