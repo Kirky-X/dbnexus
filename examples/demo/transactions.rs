@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn setup_test_data(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
 
     // 创建表
     session
@@ -101,7 +101,7 @@ async fn setup_test_data(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>
 }
 
 async fn test_successful_transaction(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
 
     // 开始事务
     session.begin_transaction().await?;
@@ -149,7 +149,7 @@ async fn test_successful_transaction(pool: &DbPool) -> Result<(), Box<dyn std::e
 }
 
 async fn test_failed_transaction(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
 
     // 开始事务
     session.begin_transaction().await?;

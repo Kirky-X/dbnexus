@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 4. 创建测试数据
     println!("\n4️⃣ 创建测试数据");
     println!("------------------------------------------");
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
 
     // 创建表
     session
