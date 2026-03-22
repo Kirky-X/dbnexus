@@ -53,6 +53,8 @@ dbnexus-macros = { path = "macros" }
 [workspace.lints.rust]
 
 [workspace.lints.clippy]
+# 允许测试中多次引用 common 模块
+duplicate_mod = "allow"
 
 [workspace.metadata.docs.rs]
 all-features = true
@@ -248,72 +250,6 @@ workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[[example]]
-name = "quickstart"
-path = "examples/demo/quickstart.rs"
-
-[[example]]
-name = "config"
-path = "examples/demo/config.rs"
-
-[[example]]
-name = "permissions"
-path = "examples/demo/permissions.rs"
-
-[[example]]
-name = "transactions"
-path = "examples/demo/transactions.rs"
-
-[[example]]
-name = "sql_parser"
-path = "examples/demo/sql_parser.rs"
-
-[[example]]
-name = "metrics"
-path = "examples/demo/metrics.rs"
-
-[[example]]
-name = "tracing"
-path = "examples/demo/tracing.rs"
-
-[[example]]
-name = "audit"
-path = "examples/demo/audit.rs"
-
-[[example]]
-name = "cache"
-path = "examples/demo/cache.rs"
-
-[[example]]
-name = "sharding"
-path = "examples/demo/sharding.rs"
-
-[[example]]
-name = "migration"
-path = "examples/demo/migration.rs"
-
-[[example]]
-name = "health"
-path = "examples/demo/health.rs"
-
-[[example]]
-name = "permission_engine"
-path = "examples/demo/permission_engine.rs"
-
-[[example]]
-name = "global_index"
-path = "examples/demo/global_index.rs"
-
-[[example]]
-name = "entity_basic"
-path = "examples/demo/entity_basic.rs"
-required-features = ["macros", "sqlite"]
-
-[[example]]
-name = "macro_usage"
-path = "examples/demo/macro_usage.rs"
-required-features = ["macros", "sqlite"]
-
 [[test]]
 name = "core_entity_integration"
 path = "tests/core/integration/entity_integration.rs"
@@ -376,7 +312,7 @@ required-features = ["permission-engine"]
 
 [[test]]
 name = "cross_cutting_benchmarks"
-path = "tests/cross_cutting/benchmarks/benchmarks.rs"
+path = "tests/cross_cutting/benchmarks/bench.rs"
 required-features = ["permission"]
 
 [[test]]
