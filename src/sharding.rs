@@ -300,7 +300,7 @@ impl ShardRouter {
     /// - 使用 FuturesUnordered 并行创建所有分片连接池
     /// - 显著减少启动时间（从 O(n) 串行到 O(1) 并行）
     /// - 保持错误处理和日志记录
-    pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::config::DbError> {
+    pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::error::DbError> {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
         // 收集所有分片信息
@@ -333,7 +333,7 @@ impl ShardRouter {
         let mut pool_stream = stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
 
         // 收集结果
-        let mut results: Vec<(u32, String, Result<crate::pool::DbPool, crate::config::DbError>)> = Vec::new();
+        let mut results: Vec<(u32, String, Result<crate::pool::DbPool, crate::error::DbError>)> = Vec::new();
 
         while let Some(result) = pool_stream.next().await {
             results.push(result);
@@ -403,9 +403,9 @@ impl ShardRouter {
     }
 
     /// 为分片设置连接池（动态添加）
-    pub fn set_pool(&mut self, shard_id: u32, pool: Arc<crate::pool::DbPool>) -> Result<(), crate::config::DbError> {
+    pub fn set_pool(&mut self, shard_id: u32, pool: Arc<crate::pool::DbPool>) -> Result<(), crate::error::DbError> {
         if !self.shards.contains_key(&shard_id) {
-            return Err(crate::config::DbError::Config(format!(
+            return Err(crate::error::DbError::Config(format!(
                 "Shard {} not registered",
                 shard_id
             )));
@@ -464,7 +464,7 @@ impl ShardRouter {
     }
 
     /// 获取指定分片的 Session
-    pub async fn get_session(&self, shard_id: u32) -> Result<Option<crate::pool::Session>, crate::config::DbError> {
+    pub async fn get_session(&self, shard_id: u32) -> Result<Option<crate::pool::Session>, crate::error::DbError> {
         if let Some(pool) = self.pools.get(&shard_id) {
             let session = pool.get_session("default").await?;
             Ok(Some(session))
@@ -477,7 +477,7 @@ impl ShardRouter {
     pub async fn get_session_for_timestamp(
         &self,
         timestamp: DateTime<Utc>,
-    ) -> Result<Option<crate::pool::Session>, crate::config::DbError> {
+    ) -> Result<Option<crate::pool::Session>, crate::error::DbError> {
         let shard_id = self.strategy.calculate(timestamp, self.total_shards);
         self.get_session(shard_id).await
     }
