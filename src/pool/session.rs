@@ -18,11 +18,10 @@ use crate::permission::{PermissionAction, PermissionContext};
 use crate::pool::db_pool::{DatabaseConnection, DbPool, DbPoolInner};
 use crate::security::{DdlGuard, DdlValidationResult};
 #[cfg(feature = "sql-parser")]
-use crate::sql_parser::{SqlParser, is_ddl_operation};
+use crate::sql_parser::is_ddl_operation;
+#[cfg(all(feature = "sql-parser", feature = "permission"))]
+use crate::sql_parser::SqlParser;
 use async_trait::async_trait;
-
-#[cfg(all(not(feature = "permission"), feature = "sql-parser"))]
-use crate::sql_parser::PermissionAction;
 
 // 编译时检查：必须启用 permission 或 sql-parser feature 之一
 #[cfg(not(any(feature = "permission", feature = "sql-parser")))]
@@ -542,21 +541,21 @@ impl Session {
     /// 检查表级权限
     ///
     /// 此方法为 ORM 操作提供权限检查，确保所有实体操作都经过权限验证
-    pub async fn check_table_permission(&self, table_name: &str, operation: &str) -> DbResult<()> {
+    pub async fn check_table_permission(&self, _table_name: &str, _operation: &str) -> DbResult<()> {
         #[cfg(feature = "permission")]
         {
-            let action = match operation {
+            let action = match _operation {
                 "INSERT" => PermissionAction::Insert,
                 "SELECT" => PermissionAction::Select,
                 "UPDATE" => PermissionAction::Update,
                 "DELETE" => PermissionAction::Delete,
-                _ => return Err(DbError::Permission(format!("Unknown operation: {}", operation))),
+                _ => return Err(DbError::Permission(format!("Unknown operation: {}", _operation))),
             };
 
-            if !self.permission_ctx.check_table_access(table_name, &action).await {
+            if !self.permission_ctx.check_table_access(_table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",
-                    operation, table_name
+                    _operation, _table_name
                 )));
             }
         }
