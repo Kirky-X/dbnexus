@@ -38,6 +38,7 @@ logs/
 .trae/
 .sisyphus/
 .claude/
+.opencode/
 openspec/
 
 # =============================================================================
@@ -87,7 +88,6 @@ npm-debug.log*
 # =============================================================================
 # AGENTS.md - AI assistant rules
 # .iflow/ - iFlow configuration
-# .opencode/ - OpenCode configuration
 # .qoder/ - Qoder configuration
 # openspec/ - OpenSpec specifications
 # CHANGELOG.md - Change history
