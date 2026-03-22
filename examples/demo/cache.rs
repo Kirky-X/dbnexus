@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("------------------------------------------");
     // 使用 String 类型
     let user_cache = create_cache::<String>(1000).await?;
-    let product_cache = create_cache::<String>(100).await?;
+    let _product_cache = create_cache::<String>(100).await?;
     println!("✓ 缓存创建成功");
 
     // 3. 初始化数据库连接池
