@@ -7,12 +7,8 @@
 //!
 //! 注意: 部分测试需要内部 API，已暂时跳过
 
-use dbnexus::DbPool;
 use dbnexus::config::DatabaseType;
-use dbnexus::migration::{
-    Column, ColumnType, Index, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator, Table,
-    TableChange,
-};
+use dbnexus::migration::MigrationHistory;
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -37,7 +33,7 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
 /// TEST-M-001: 迁移执行器创建测试
 #[tokio::test]
 async fn test_migration_executor_creation() {
-    let (pool, _temp_dir) = create_test_pool().await.expect("Failed to create test pool");
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
 
     // 获取会话
     let session = pool.get_session("admin").await.expect("Failed to get session");
@@ -72,7 +68,7 @@ async fn test_migration_executor_creation() {
 /// TEST-M-021: 迁移应用测试
 #[tokio::test]
 async fn test_migration_apply() {
-    let (pool, _temp_dir) = create_test_pool().await.expect("Failed to create test pool");
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 

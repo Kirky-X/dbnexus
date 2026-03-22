@@ -7,7 +7,7 @@
 //!
 //! 基于 confers 库的配置构建、加载和验证功能测试
 
-use dbnexus::{DbPool, DbPoolBuilder, config::DatabaseType};
+use dbnexus::{DbPool, config::DatabaseType};
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -36,7 +36,7 @@ async fn test_config_builder_basic() {
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
-    let config = DbConfig::from_yaml_str(yaml).unwrap();
+    let config = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
 }
 
@@ -50,7 +50,7 @@ min_connections: 5
 idle_timeout: 300
 acquire_timeout: 5000
 "#;
-    let config = DbConfig::from_yaml_str(yaml).unwrap();
+    let config = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
     assert_eq!(config.max_connections, 20);
     assert_eq!(config.min_connections, 5);
@@ -179,7 +179,7 @@ async fn test_config_invalid_yaml() {
 #[tokio::test]
 async fn test_config_missing_required_field() {
     let yaml = r#"max_connections: 10"#;
-    let result = DbConfig::from_yaml_str(yaml);
+    let result = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml);
     assert!(result.is_err());
 }
 
