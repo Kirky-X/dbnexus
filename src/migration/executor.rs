@@ -11,6 +11,7 @@ use super::differ::SqlGenerator;
 use super::schema::*;
 use super::sql_reverser::SqlReverser;
 use crate::config::DatabaseType;
+use crate::error::DbError;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
 
@@ -151,7 +152,7 @@ impl MigrationExecutor {
     }
 
     /// 读取数据库中的迁移历史
-    pub async fn load_history(&mut self) -> Result<(), crate::config::DbError> {
+    pub async fn load_history(&mut self) -> Result<(), DbError> {
         // 确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
@@ -181,7 +182,7 @@ impl MigrationExecutor {
             self.connection
                 .query_all(&query)
                 .await
-                .map_err(crate::config::DbError::Connection)?
+                .map_err(DbError::Connection)?
         };
 
         let mut history = MigrationHistory::new();
@@ -248,7 +249,7 @@ impl MigrationExecutor {
     }
 
     /// 确保迁移历史表存在
-    async fn ensure_migration_table_exists(&self) -> Result<(), crate::config::DbError> {
+    async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
         // 这里需要执行创建迁移历史表的 SQL
         let create_table_sql = match self.sql_generator.db_type {
             DatabaseType::Postgres => {
@@ -280,12 +281,12 @@ impl MigrationExecutor {
         self.connection
             .execute_unprepared(create_table_sql)
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
         Ok(())
     }
 
     /// 应用单个迁移
-    pub async fn apply_migration(&mut self, migration: &Migration) -> Result<(), crate::config::DbError> {
+    pub async fn apply_migration(&mut self, migration: &Migration) -> Result<(), DbError> {
         // 生成迁移 SQL
         let sql = self.sql_generator.generate_migration_sql(migration);
 
@@ -294,13 +295,13 @@ impl MigrationExecutor {
             .connection
             .begin()
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
 
         // 执行迁移 SQL
         if !sql.is_empty() {
             txn.execute_unprepared(&sql)
                 .await
-                .map_err(crate::config::DbError::Connection)?;
+                .map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史
@@ -335,9 +336,9 @@ impl MigrationExecutor {
 
         txn.execute_raw(stmt)
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
         // 提交事务
-        txn.commit().await.map_err(crate::config::DbError::Connection)?;
+        txn.commit().await.map_err(DbError::Connection)?;
 
         self.history.add_migration(version_record);
 
@@ -422,7 +423,7 @@ impl MigrationExecutor {
     /// # Returns
     ///
     /// 扫描到的迁移文件列表（按版本号排序）
-    pub fn scan_migrations(&self, dir: &std::path::Path) -> Result<Vec<MigrationFile>, crate::config::DbError> {
+    pub fn scan_migrations(&self, dir: &std::path::Path) -> Result<Vec<MigrationFile>, DbError> {
         let mut migrations = Vec::new();
 
         if !dir.exists() {
@@ -431,18 +432,18 @@ impl MigrationExecutor {
         }
 
         let entries = std::fs::read_dir(dir)
-            .map_err(|e| crate::config::DbError::Config(format!("Failed to read migration directory: {}", e)))?;
+            .map_err(|e| DbError::Config(format!("Failed to read migration directory: {}", e)))?;
 
         for entry in entries {
             let entry =
-                entry.map_err(|e| crate::config::DbError::Config(format!("Failed to read migration entry: {}", e)))?;
+                entry.map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_file() && path.extension().map(|e| e == "sql").unwrap_or(false) {
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                     if let Some((version, description)) = Self::parse_filename(filename) {
                         let content = std::fs::read_to_string(&path).map_err(|e| {
-                            crate::config::DbError::Config(format!("Failed to read migration file: {}", e))
+                            DbError::Config(format!("Failed to read migration file: {}", e))
                         })?;
 
                         migrations.push(MigrationFile {
@@ -486,7 +487,7 @@ impl MigrationExecutor {
     /// # Returns
     ///
     /// 成功应用的迁移数量
-    pub async fn run_migrations(&mut self, dir: &std::path::Path) -> Result<u32, crate::config::DbError> {
+    pub async fn run_migrations(&mut self, dir: &std::path::Path) -> Result<u32, DbError> {
         // 扫描迁移文件
         let migration_files = self.scan_migrations(dir)?;
 
@@ -544,7 +545,7 @@ impl MigrationExecutor {
     }
 
     /// 检查迁移是否已应用（通过查询数据库）
-    async fn is_migration_applied(&self, version: u32) -> Result<bool, crate::config::DbError> {
+    async fn is_migration_applied(&self, version: u32) -> Result<bool, DbError> {
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
@@ -560,14 +561,14 @@ impl MigrationExecutor {
             self.connection
                 .query_one(&query)
                 .await
-                .map_err(crate::config::DbError::Connection)?
+                .map_err(DbError::Connection)?
         };
 
         Ok(row.is_some())
     }
 
     /// 应用单个迁移文件
-    async fn apply_migration_file(&mut self, migration_file: &MigrationFile) -> Result<(), crate::config::DbError> {
+    async fn apply_migration_file(&mut self, migration_file: &MigrationFile) -> Result<(), DbError> {
         // 解析迁移文件内容
         let sql = Self::extract_up_sql(&migration_file.content);
 
@@ -576,13 +577,13 @@ impl MigrationExecutor {
             .connection
             .begin()
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
 
         // 执行迁移 SQL
         if !sql.is_empty() {
             txn.execute_unprepared(sql)
                 .await
-                .map_err(crate::config::DbError::Connection)?;
+                .map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史（使用参数化查询防止 SQL 注入）
@@ -608,10 +609,10 @@ impl MigrationExecutor {
 
         txn.execute_raw(stmt)
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
 
         // 提交事务
-        txn.commit().await.map_err(crate::config::DbError::Connection)?;
+        txn.commit().await.map_err(DbError::Connection)?;
 
         // 添加到历史记录
         self.history.add_migration(MigrationVersion {
@@ -628,7 +629,7 @@ impl MigrationExecutor {
     pub async fn apply_migration_file_public(
         &mut self,
         migration_file: &MigrationFile,
-    ) -> Result<(), crate::config::DbError> {
+    ) -> Result<(), DbError> {
         self.apply_migration_file(migration_file).await
     }
 
@@ -664,7 +665,7 @@ impl MigrationExecutor {
     }
 
     /// 回滚所有迁移
-    pub async fn rollback_all(&mut self) -> Result<u32, crate::config::DbError> {
+    pub async fn rollback_all(&mut self) -> Result<u32, DbError> {
         self.load_history().await?;
 
         let applied = &self.history.applied_migrations;
@@ -700,12 +701,12 @@ impl MigrationExecutor {
     /// 回滚指定版本的迁移
     ///
     /// 使用 SqlReverser 生成回滚 SQL 并执行
-    pub async fn rollback_migration(&mut self, version: u32) -> Result<(), crate::config::DbError> {
+    pub async fn rollback_migration(&mut self, version: u32) -> Result<(), DbError> {
         // 查找要回滚的迁移
         let migration = match self.history.applied_migrations.iter().find(|m| m.version == version) {
             Some(m) => m.clone(),
             None => {
-                return Err(crate::config::DbError::Migration(format!(
+                return Err(DbError::Migration(format!(
                     "Migration version {} not found in history",
                     version
                 )));
@@ -724,7 +725,7 @@ impl MigrationExecutor {
             }
             Err(e) => {
                 tracing::error!("Failed to read migration file {}: {}", migration.file_path, e);
-                return Err(crate::config::DbError::Migration(format!(
+                return Err(DbError::Migration(format!(
                     "Failed to read migration file: {}",
                     e
                 )));
@@ -737,7 +738,7 @@ impl MigrationExecutor {
             Ok(sql) => sql,
             Err(e) => {
                 tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
-                return Err(crate::config::DbError::Migration(format!(
+                return Err(DbError::Migration(format!(
                     "Failed to generate rollback SQL: {}",
                     e
                 )));
@@ -749,13 +750,13 @@ impl MigrationExecutor {
             .connection
             .begin()
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
 
         // 执行回滚 SQL
         if !down_sql.is_empty() {
             txn.execute_unprepared(&down_sql)
                 .await
-                .map_err(crate::config::DbError::Connection)?;
+                .map_err(DbError::Connection)?;
         }
 
         // 从历史记录中删除
@@ -775,9 +776,9 @@ impl MigrationExecutor {
 
         txn.execute_raw(delete_sql)
             .await
-            .map_err(crate::config::DbError::Connection)?;
+            .map_err(DbError::Connection)?;
 
-        txn.commit().await.map_err(crate::config::DbError::Connection)?;
+        txn.commit().await.map_err(DbError::Connection)?;
 
         // 从历史记录中移除
         self.history.applied_migrations.retain(|m| m.version != version);
