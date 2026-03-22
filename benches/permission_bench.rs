@@ -9,7 +9,7 @@
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use dbnexus::DbPool;
-use dbnexus::config::{DbConfigBuilder, PoolConfig};
+use dbnexus::config::DbConfig;
 use tokio::runtime::Runtime;
 
 fn bench_connection_pool_creation(c: &mut Criterion) {
@@ -25,12 +25,12 @@ fn bench_connection_pool_creation(c: &mut Criterion) {
 fn bench_connection_pool_with_config(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    let config = DbConfigBuilder::new()
-        .url("sqlite::memory:")
-        .max_connections(10)
-        .min_connections(1)
-        .build()
-        .unwrap();
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 10,
+        min_connections: 1,
+        ..Default::default()
+    };
 
     c.bench_function("pool_creation_with_config", |b| {
         b.iter(|| {
@@ -56,14 +56,14 @@ fn bench_pool_status(c: &mut Criterion) {
 fn bench_config_building(c: &mut Criterion) {
     c.bench_function("config_builder", |b| {
         b.iter(|| {
-            let config = DbConfigBuilder::new()
-                .url("postgresql://user:pass@localhost/db")
-                .max_connections(20)
-                .min_connections(5)
-                .idle_timeout(300)
-                .acquire_timeout(5000)
-                .build()
-                .unwrap();
+            let config = DbConfig {
+                url: "postgresql://user:pass@localhost/db".to_string(),
+                max_connections: 20,
+                min_connections: 5,
+                idle_timeout: 300,
+                acquire_timeout: 5000,
+                ..Default::default()
+            };
             black_box(config);
         })
     });
@@ -72,7 +72,7 @@ fn bench_config_building(c: &mut Criterion) {
 fn bench_pool_config(c: &mut Criterion) {
     c.bench_function("pool_config_default", |b| {
         b.iter(|| {
-            let config = PoolConfig::default();
+            let config = dbnexus::config::PoolConfig::default();
             black_box(config);
         })
     });
