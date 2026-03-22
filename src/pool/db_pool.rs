@@ -17,7 +17,6 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
 use tokio::time::timeout;
-use tracing::info;
 
 /// 连接获取超时警告阈值（毫秒）
 const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
@@ -252,9 +251,6 @@ impl DbPool {
             }
         }
 
-        #[cfg(not(feature = "permission"))]
-        let permission_config = None::<std::option::Option<String>>;
-
         let pool = Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
@@ -341,7 +337,7 @@ impl DbPool {
                 }
             }
 
-            info!(
+            tracing::info!(
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
                 successful, initial_connections, config.min_connections, config.max_connections, failed
             );
@@ -358,7 +354,7 @@ impl DbPool {
                     for (role, policy) in &perm_config.roles {
                         let _ = pool.inner.policy_cache.insert(role.clone(), policy.clone()).await;
                     }
-                    info!("Loaded permission policies for {} roles", perm_config.roles.len());
+                    tracing::info!("Loaded permission policies for {} roles", perm_config.roles.len());
                 }
             }
             drop(permission_config_guard);
@@ -368,12 +364,12 @@ impl DbPool {
         if config.auto_migrate {
             if let Some(ref migrations_dir) = config.migrations_dir {
                 if migrations_dir.exists() {
-                    info!(
+                    tracing::info!(
                         "Auto-migrate enabled, running migrations from: {}",
                         migrations_dir.display()
                     );
                     let applied = pool.run_migrations(migrations_dir).await?;
-                    info!("Auto-migrate completed: {} migrations applied", applied);
+                    tracing::info!("Auto-migrate completed: {} migrations applied", applied);
                 } else {
                     tracing::warn!(
                         "Auto-migrate enabled but migrations directory does not exist: {}",
