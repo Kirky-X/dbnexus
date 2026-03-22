@@ -340,7 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  {}", "=".repeat(60));
 
     // 打印前 50 行（避免输出过长）
-    for (_i, line) in prometheus_output.lines().take(50).enumerate() {
+    for line in prometheus_output.lines().take(50) {
         println!("  {}", line);
     }
 
