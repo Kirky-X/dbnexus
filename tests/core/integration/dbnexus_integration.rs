@@ -691,7 +691,7 @@ async fn test_session_lifecycle() {
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
 
     // 获取会话前
-    let status_before = pool.status();
+    let _status_before = pool.status();
 
     let status_during = {
         let _session = pool.get_session("admin").await.expect("Failed to get session");
@@ -747,7 +747,7 @@ async fn test_clean_invalid_connections() {
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
 
     // 清理无效连接（应该正常执行，即使没有无效连接）
-    let removed = pool.clean_invalid_connections().await;
+    let _removed = pool.clean_invalid_connections().await;
 
     // 清理后连接池状态应该正常
     let status = pool.status();

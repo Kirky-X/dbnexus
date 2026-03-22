@@ -221,7 +221,7 @@ async fn test_rate_limiter_lru_eviction_order() {
     // 验证被驱逐的桶（user_2/user_3/user_4 中之一）重新访问时会重新创建
     // 驱逐后，user_2 的令牌应已耗尽（因为之前 check 消耗了 1 个）
     // 注意：由于 refill 机制，令牌可能被补充，因此用 check 是否成功来验证
-    let was_evicted = !limiter.check("user_2").await;
+    let _was_evicted = !limiter.check("user_2").await;
     // user_2 可能被驱逐也可能没有（取决于 LRU 算法精确性）
     // 关键是 user_0 和 user_1 必须仍然存在（最近访问）
     assert!(
@@ -253,7 +253,7 @@ async fn test_rate_limiter_evicted_key_reuse() {
     // 由于不知道哪个键被驱逐，我们尝试访问 user_0
     // 如果它被驱逐，应该获得满桶（10 tokens）
     // 如果它未被驱逐，应该剩余 < 10 tokens
-    let remaining = limiter.remaining("user_0");
+    let _remaining = limiter.remaining("user_0");
 
     // 无论如何，访问应该成功
     assert!(limiter.check("user_0").await, "Evicted key should be reusable");

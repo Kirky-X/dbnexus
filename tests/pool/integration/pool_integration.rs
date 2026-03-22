@@ -132,7 +132,7 @@ async fn test_connection_acquire_with_small_pool() {
     let pool = dbnexus::DbPool::with_config(config).await.expect("Failed");
     let pool = std::sync::Arc::new(pool);
     let mut handles = Vec::new();
-    for i in 0..5 {
+    for _ in 0..5 {
         let pool = pool.clone();
         handles.push(tokio::spawn(async move { pool.get_session("admin").await.ok() }));
     }
