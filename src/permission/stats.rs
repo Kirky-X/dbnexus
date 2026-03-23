@@ -24,6 +24,8 @@ pub struct PermissionCheckStats {
     pub cache_hits: AtomicU64,
     /// 缓存未命中次数
     pub cache_misses: AtomicU64,
+    /// 缓存击穿事件数（stampede）
+    pub stampede_events: AtomicU64,
 }
 
 impl PermissionCheckStats {
@@ -36,6 +38,7 @@ impl PermissionCheckStats {
             rate_limited_checks: AtomicU64::new(0),
             cache_hits: AtomicU64::new(0),
             cache_misses: AtomicU64::new(0),
+            stampede_events: AtomicU64::new(0),
         }
     }
 
@@ -67,6 +70,11 @@ impl PermissionCheckStats {
         self.cache_misses.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// 记录缓存击穿事件（stampede）
+    pub fn record_stampede(&self) {
+        self.stampede_events.fetch_add(1, Ordering::SeqCst);
+    }
+
     /// 获取当前统计快照
     pub fn snapshot(&self) -> PermissionCheckStatsSnapshot {
         PermissionCheckStatsSnapshot {
@@ -76,6 +84,7 @@ impl PermissionCheckStats {
             rate_limited_checks: self.rate_limited_checks.load(Ordering::SeqCst),
             cache_hits: self.cache_hits.load(Ordering::SeqCst),
             cache_misses: self.cache_misses.load(Ordering::SeqCst),
+            stampede_events: self.stampede_events.load(Ordering::SeqCst),
         }
     }
 }
@@ -95,6 +104,8 @@ pub struct PermissionCheckStatsSnapshot {
     pub cache_hits: u64,
     /// 缓存未命中次数
     pub cache_misses: u64,
+    /// 缓存击穿事件数
+    pub stampede_events: u64,
 }
 
 impl PermissionCheckStatsSnapshot {
