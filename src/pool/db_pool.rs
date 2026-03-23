@@ -19,15 +19,22 @@ use tokio::time::interval;
 use tokio::time::timeout;
 
 /// 连接获取超时警告阈值（毫秒）
+///
+/// 预留未来使用：用于在获取连接超时时输出警告
+#[allow(dead_code)]
 const ACQUIRE_TIMEOUT_WARNING_THRESHOLD_MS: u64 = 3000;
 
 /// 健康检查 SQL 查询语句
 ///
 /// 用于验证数据库连接是否仍然有效。
 /// 所有支持的数据库类型（SQLite、PostgreSQL、MySQL）都支持此查询。
+#[allow(dead_code)]
 const HEALTH_CHECK_QUERY: &str = "SELECT 1";
 
 /// 连接生命周期追踪
+///
+/// 预留未来使用：用于追踪连接的生命周期指标（创建时间、活跃时间、获取/释放次数等）
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ConnectionLifecycle {
     /// 连接创建时间
@@ -42,6 +49,7 @@ pub struct ConnectionLifecycle {
     pub error_count: AtomicU64,
 }
 
+#[allow(dead_code)]
 impl ConnectionLifecycle {
     /// 创建新的连接生命周期追踪器
     pub fn new() -> Self {
@@ -339,7 +347,11 @@ impl DbPool {
 
             tracing::info!(
                 "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
-                successful, initial_connections, config.min_connections, config.max_connections, failed
+                successful,
+                initial_connections,
+                config.min_connections,
+                config.max_connections,
+                failed
             );
         }
 
