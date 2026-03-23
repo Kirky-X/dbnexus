@@ -191,7 +191,12 @@ async fn test_rbac_permission_provider() {
             priority: 0,
             subject: "admin".to_string(),
             resource: "*".to_string(),
-            allow: vec![PermissionAction::All],
+            allow: vec![
+                PermissionAction::Select,
+                PermissionAction::Insert,
+                PermissionAction::Update,
+                PermissionAction::Delete,
+            ],
             deny: vec![],
             condition: None,
             enabled: true,
@@ -202,7 +207,16 @@ async fn test_rbac_permission_provider() {
     let ctx = PermissionContext::new(
         Subject::role("admin"),
         PermissionResource::new("any_table"),
-        PermissionAction::All,
+        PermissionAction::Select,
+    );
+    let decision = provider.check_permission(&ctx).await;
+    assert_eq!(decision, PermissionDecision::Allow);
+
+    // admin should also be able to DELETE
+    let ctx = PermissionContext::new(
+        Subject::role("admin"),
+        PermissionResource::new("any_table"),
+        PermissionAction::Delete,
     );
     let decision = provider.check_permission(&ctx).await;
     assert_eq!(decision, PermissionDecision::Allow);
