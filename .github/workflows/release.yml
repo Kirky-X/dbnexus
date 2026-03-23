@@ -249,16 +249,16 @@ jobs:
             ls release-assets/ | while read f; do
               echo "- ${f}"
             done
-          } > CHANGELOG.md
+          } > docs/CHANGELOG.md
 
-          cat CHANGELOG.md
+          cat docs/CHANGELOG.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
           name: Release v${{ needs.validate.outputs.version }}
-          body_path: CHANGELOG.md
+          body_path: docs/CHANGELOG.md
           files: release-assets/*
           draft: false
           prerelease: false
