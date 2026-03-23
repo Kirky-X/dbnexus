@@ -52,6 +52,7 @@ pub(crate) struct YearlyStrategy;
 
 impl YearlyStrategy {
     /// 创建新的年分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -94,6 +95,7 @@ pub(crate) struct MonthlyStrategy;
 
 impl MonthlyStrategy {
     /// 创建新的月分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -135,6 +137,7 @@ pub(crate) struct DailyStrategy;
 
 impl DailyStrategy {
     /// 创建新的天分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
@@ -176,6 +179,7 @@ pub(crate) struct HashStrategy;
 
 impl HashStrategy {
     /// 创建新的哈希分片策略实例
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self
     }
