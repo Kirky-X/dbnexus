@@ -138,12 +138,11 @@ impl GlobalIndex {
             .collect())
     }
 
-    /// 批量同步索引条目（优化版本：使用 bulk insert）
+    /// 批量同步索引条目（分批插入以避免 SQLite 参数限制）
     ///
-    /// 使用 `Entity::insert_many()` 进行批量插入，配合 `OnConflict` 实现 upsert。
-    /// 所有操作在单个事务中执行，确保 all-or-nothing 语义。
+    /// 将大量条目分成每批最多 500 条进行插入，配合 `OnConflict` 实现 upsert。
+    /// 即使部分批次失败，已成功的批次仍会持久化（部分成功语义）。
     pub async fn batch_sync(&self, entries: Vec<IndexEntry>) -> Result<SyncResult, sea_orm::DbErr> {
-        // 处理空批量情况
         if entries.is_empty() {
             return Ok(SyncResult {
                 success: true,
@@ -153,72 +152,80 @@ impl GlobalIndex {
             });
         }
 
-        // 转换所有条目为 ActiveModel
-        let active_models: Vec<ActiveModel> = entries
-            .iter()
-            .map(|entry| {
-                let now = chrono::Utc::now().to_rfc3339();
-                ActiveModel {
-                    id: Set(entry.index_value.clone()),
-                    table_name: Set(entry.table_name.clone()),
-                    record_id: Set(entry.record_id.clone()),
-                    shard_id: Set(entry.shard_id as i32),
-                    index_key: Set(entry.index_key.clone()),
-                    index_value: Set(entry.index_value.clone()),
-                    created_at: Set(now.clone()),
-                    updated_at: Set(now.clone()),
-                    last_modified: Set(now),
-                    sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
+        let chunk_size = 500;
+        let mut all_errors: Vec<String> = Vec::new();
+        let mut total_synced = 0usize;
+        let total = entries.len();
+
+        for (batch_idx, chunk) in entries.chunks(chunk_size).enumerate() {
+            let active_models: Vec<ActiveModel> = chunk
+                .iter()
+                .map(|entry| {
+                    let now = chrono::Utc::now().to_rfc3339();
+                    let id =
+                        format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
+                    ActiveModel {
+                        id: Set(id),
+                        table_name: Set(entry.table_name.clone()),
+                        record_id: Set(entry.record_id.clone()),
+                        shard_id: Set(entry.shard_id as i32),
+                        index_key: Set(entry.index_key.clone()),
+                        index_value: Set(entry.index_value.clone()),
+                        created_at: Set(now.clone()),
+                        updated_at: Set(now.clone()),
+                        last_modified: Set(now),
+                        sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
+                    }
+                })
+                .collect();
+
+            match Entity::insert_many(active_models)
+                .on_conflict(
+                    OnConflict::columns([Column::Id])
+                        .update_columns([
+                            Column::TableName,
+                            Column::RecordId,
+                            Column::ShardId,
+                            Column::IndexKey,
+                            Column::IndexValue,
+                            Column::UpdatedAt,
+                            Column::LastModified,
+                            Column::SyncStatus,
+                        ])
+                        .to_owned(),
+                )
+                .exec(&*self.pool)
+                .await
+            {
+                Ok(_) => {
+                    total_synced += chunk.len();
                 }
-            })
-            .collect();
-
-        // 执行批量插入，使用 ON CONFLICT 处理重复键
-        let result = Entity::insert_many(active_models)
-            .on_conflict(
-                OnConflict::columns([Column::Id])
-                    .update_columns([
-                        Column::TableName,
-                        Column::RecordId,
-                        Column::ShardId,
-                        Column::IndexKey,
-                        Column::IndexValue,
-                        Column::UpdatedAt,
-                        Column::LastModified,
-                        Column::SyncStatus,
-                    ])
-                    .to_owned(),
-            )
-            .exec(&*self.pool)
-            .await;
-
-        match result {
-            Ok(_) => {
-                // 批量插入成功
-                let count = entries.len();
-                Ok(SyncResult {
-                    success: true,
-                    synced_count: count,
-                    failed_count: 0,
-                    errors: Vec::new(),
-                })
-            }
-            Err(e) => {
-                // 批量插入失败，返回错误
-                Ok(SyncResult {
-                    success: false,
-                    synced_count: 0,
-                    failed_count: entries.len(),
-                    errors: vec![format!("Bulk insert failed: {:?}", e)],
-                })
+                Err(e) => {
+                    all_errors.push(format!(
+                        "Batch {} (entries {}-{}) failed: {:?}",
+                        batch_idx,
+                        batch_idx * chunk_size,
+                        (batch_idx + 1) * chunk_size - 1,
+                        e
+                    ));
+                }
             }
         }
+
+        let failed_count = total.saturating_sub(total_synced);
+        Ok(SyncResult {
+            success: all_errors.is_empty(),
+            synced_count: total_synced,
+            failed_count,
+            errors: all_errors,
+        })
     }
 
     /// 同步单个索引条目
     async fn sync_entry(&self, entry: &IndexEntry) -> Result<(), sea_orm::DbErr> {
+        let id = format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
         let model = ActiveModel {
-            id: Set(entry.index_value.clone()),
+            id: Set(id),
             table_name: Set(entry.table_name.clone()),
             record_id: Set(entry.record_id.clone()),
             shard_id: Set(entry.shard_id as i32),

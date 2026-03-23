@@ -492,6 +492,7 @@ impl HealthChecker {
                 snapshot.created as f64 / (snapshot.created + snapshot.failed) as f64 * 100.0
             ))
         } else if snapshot.total == 0 {
+            recommendations.push("请确保数据库连接池已正确初始化".to_string());
             HealthStatus::Unhealthy("无可用连接".to_string())
         } else if cb_status.state == CircuitBreakerState::Open {
             recommendations.push("等待熔断器恢复".to_string());
