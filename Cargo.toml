@@ -34,7 +34,7 @@ sea-orm = { version = "2.0.0-rc.37", default-features = false }
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
 # Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
@@ -229,11 +229,13 @@ dbnexus-macros = { workspace = true, optional = true }
 assert_cmd = { version = "2.2", optional = true }
 tempfile = { version = "3.27", optional = true }
 
-tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
+# Optional tracing-subscriber: required by the `tracing` feature.
+# Note: `json` feature pulls in tracing-serde which can cause issues with async-trait.
+tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter", "json", "fmt"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 assert_cmd = "2.2"
 predicates = "3.1"
 tempfile = "3.27"

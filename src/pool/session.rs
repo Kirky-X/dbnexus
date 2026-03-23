@@ -235,6 +235,7 @@ impl Session {
     /// 执行原始 SQL（带权限检查）
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
+        #[cfg(feature = "sql-parser")]
         {
             // 检查是否为 DDL 操作
             if is_ddl_operation(sql) {
