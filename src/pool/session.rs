@@ -17,10 +17,10 @@ use crate::metrics::MetricsCollector;
 use crate::permission::{PermissionAction, PermissionContext};
 use crate::pool::db_pool::{DatabaseConnection, DbPool, DbPoolInner};
 use crate::security::{DdlGuard, DdlValidationResult};
-#[cfg(feature = "sql-parser")]
-use crate::sql_parser::is_ddl_operation;
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::sql_parser::SqlParser;
+#[cfg(feature = "sql-parser")]
+use crate::sql_parser::is_ddl_operation;
 use async_trait::async_trait;
 
 // 编译时检查：必须启用 permission 或 sql-parser feature 之一
@@ -222,6 +222,7 @@ impl Session {
     /// 创建迁移执行器（仅内部使用）
     ///
     /// 用于迁移功能，将底层连接包装成 MigrationExecutor
+    #[allow(dead_code)]
     #[cfg(feature = "migration")]
     pub(crate) fn create_migration_executor(
         &self,
@@ -530,7 +531,8 @@ impl Session {
         // No-op when metrics feature is disabled
     }
 
-    /// 记录连接错误
+    /// 记录连接错误（预留功能）
+    #[allow(dead_code)]
     #[cfg(feature = "metrics")]
     fn record_connection_error(&self) {
         if let Some(metrics) = &self.metrics_collector {

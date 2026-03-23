@@ -735,12 +735,13 @@ impl SqlGenerator {
 ///
 /// 从 Rust 实体结构体定义中解析数据库表结构，
 /// 支持从 `#[sea_orm(...)]` 属性中提取列信息
-#[derive(Debug, Clone)]
 /// Rust 实体解析器
 ///
 /// 用于解析 Rust 实体定义源代码，提取数据库表结构信息
+#[allow(dead_code)]
 pub(crate) struct RustEntityParser;
 
+#[allow(dead_code)]
 impl RustEntityParser {
     /// 解析 Rust 实体定义
     ///

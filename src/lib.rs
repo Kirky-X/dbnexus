@@ -38,7 +38,8 @@
 #![doc(html_root_url = "https://docs.rs/dbnexus/0.1")]
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
-#![allow(dead_code)] // 允许未使用的公共 API 和预留功能
+// 注意: 移除了 `#![allow(dead_code)]` 以恢复编译时警告
+// 未使用的代码应该显式标记或在具体位置添加 `#[allow(dead_code)]`
 
 // ============================================================================
 // 编译期数据库特性互斥检查
