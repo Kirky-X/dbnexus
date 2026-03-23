@@ -8,7 +8,7 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
-use dbnexus::migration::{MigrationExecutor, MigrationFileParser};
+use dbnexus::migration::{MigrationExecutor, MigrationFile, MigrationFileParser};
 #[cfg(feature = "sql-parser")]
 use dbnexus::sql_parser::{SqlOperationType, SqlParser};
 use dbnexus::{
@@ -716,10 +716,14 @@ async fn parse_and_apply_migration(
         session.execute_raw(&up_sql).await?;
     }
 
-    let applied_at = time::OffsetDateTime::now_utc();
     let file_path = format!("migration_v{}.sql", version);
-    let insert_sql = executor.build_history_insert_sql_raw(version, &description, applied_at, &file_path);
-    session.execute_raw(&insert_sql).await?;
+    let migration_file = MigrationFile::new(
+        version,
+        description,
+        std::path::PathBuf::from(&file_path),
+        String::new(), // SQL 已在上面执行，content 为空
+    );
+    executor.apply_migration_file_public(&migration_file).await?;
 
     Ok(())
 }
