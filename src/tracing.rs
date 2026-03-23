@@ -20,9 +20,9 @@
 //! ```rust
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     dbnexus::tracing::init_default()?;
-//!     // 之后所有 dbnexus::info!() 等宏都会输出到 stdout
-//!     let pool = DbPool::new("sqlite::memory:").await?;
+//!     let _ = dbnexus::tracing::init_default()
+//!         .map_err(|e| println!("日志初始化失败: {}", e));
+//!     // 之后所有 tracing::info!() 等宏都会输出到 stdout
 //!     Ok(())
 //! }
 //! ```
@@ -34,10 +34,10 @@
 //! ```rust
 //! use dbnexus::tracing::TracingBuilder;
 //!
-//! TracingBuilder::new()
+//! let _ = TracingBuilder::new()
 //!     .with_json()                          // JSON 结构化输出
-//!     .with_level("dbnexus=debug,info")     // 自定义日志级别
-//!     .init()?;
+//!     .with_level("dbnexus=debug,info")   // 自定义日志级别
+//!     .init();
 //! ```
 //!
 //! # OpenTelemetry 分布式追踪
@@ -52,7 +52,8 @@
 //!     TracingBuilder::new()
 //!         .with_level("info")
 //!         .with_otlp("otlp", "http://localhost:4317")
-//!         .init()?;
+//!         .init()
+//!         .map_err(|e| eprintln!("日志初始化失败: {}", e));
 //!
 //!     tracing::info!("追踪已启用");
 //!     Ok(())
@@ -86,10 +87,10 @@ const DEFAULT_LOG_LEVEL: &str = "warn";
 /// ```rust
 /// use dbnexus::tracing::TracingBuilder;
 ///
-/// TracingBuilder::new()
+/// let _ = TracingBuilder::new()
 ///     .with_fmt()
 ///     .with_level("dbnexus=debug")
-///     .init()?;
+///     .init();
 /// ```
 #[derive(Default)]
 pub struct TracingBuilder {
@@ -154,9 +155,12 @@ impl TracingBuilder {
     /// # Example
     ///
     /// ```rust,no_run
+    /// use dbnexus::tracing::TracingBuilder;
+    ///
     /// TracingBuilder::new()
     ///     .with_otlp("otlp", "http://localhost:4317")
-    ///     .init()?;
+    ///     .init()
+    ///     .map_err(|e| eprintln!("日志初始化失败: {}", e));
     /// ```
     #[cfg(feature = "tracing")]
     pub fn with_otlp(self, exporter: &str, endpoint: &str) -> Self {
@@ -176,7 +180,7 @@ impl TracingBuilder {
     ///
     /// 注意：当 `with_otlp()` 一起使用时，OpenTelemetry tracer 会被初始化并注册到全局，
     /// 但 OTel layer 需要在单独的 subscriber 初始化中配置（详见模块文档）。
-    pub fn init(self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    pub fn init(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let level = self
             .level
             .clone()
@@ -252,12 +256,13 @@ impl TracingBuilder {
 /// ```rust
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     dbnexus::tracing::init_default()?;
+///     let _ = dbnexus::tracing::init_default()
+///         .map_err(|e| println!("日志初始化失败: {}", e));
 ///     tracing::info!("DBNexus 日志系统已初始化");
 ///     Ok(())
 /// }
 /// ```
-pub fn init_default() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn init_default() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     TracingBuilder::new().with_fmt().init()
 }
 
@@ -287,7 +292,8 @@ impl Drop for TracingGuard {
 /// ```rust,no_run
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     dbnexus::tracing::init_default()?;
+///     let _ = dbnexus::tracing::init_default()
+///         .map_err(|e| println!("日志初始化失败: {}", e));
 ///
 ///     // 启用 OTLP 分布式追踪
 ///     let _guard = dbnexus::tracing::init("otlp", "http://localhost:4317").await?;
