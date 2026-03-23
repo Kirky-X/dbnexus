@@ -9,7 +9,6 @@
 
 use super::differ::SqlGenerator;
 use super::schema::*;
-use super::sql_reverser::SqlReverser;
 use crate::config::DatabaseType;
 use crate::error::DbError;
 use sea_orm::{ConnectionTrait, TransactionTrait};
@@ -108,6 +107,10 @@ impl MigrationExecutor {
     /// 构建迁移历史插入语句（原始 SQL 字符串）
     ///
     /// 根据数据库后端格式化 `applied_at` 并转义文本字段，返回可直接执行的 INSERT 语句。
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use MigrationExecutor::apply_migration_file_public with MigrationFile::new instead"
+    )]
     pub fn build_history_insert_sql_raw(
         &self,
         version: u32,
@@ -140,6 +143,7 @@ impl MigrationExecutor {
     /// 获取数据库连接的不可变引用（仅内部使用）
     ///
     /// 返回数据库连接的只读引用，用于执行迁移操作
+    #[allow(dead_code)]
     pub(crate) fn connection(&self) -> &sea_orm::DatabaseConnection {
         &self.connection
     }
@@ -179,10 +183,7 @@ impl MigrationExecutor {
 
             query.order_by(Alias::new("version"), Order::Asc);
 
-            self.connection
-                .query_all(&query)
-                .await
-                .map_err(DbError::Connection)?
+            self.connection.query_all(&query).await.map_err(DbError::Connection)?
         };
 
         let mut history = MigrationHistory::new();
@@ -291,17 +292,11 @@ impl MigrationExecutor {
         let sql = self.sql_generator.generate_migration_sql(migration);
 
         // 开始事务
-        let txn = self
-            .connection
-            .begin()
-            .await
-            .map_err(DbError::Connection)?;
+        let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
         // 执行迁移 SQL
         if !sql.is_empty() {
-            txn.execute_unprepared(&sql)
-                .await
-                .map_err(DbError::Connection)?;
+            txn.execute_unprepared(&sql).await.map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史
@@ -334,9 +329,7 @@ impl MigrationExecutor {
             ],
         );
 
-        txn.execute_raw(stmt)
-            .await
-            .map_err(DbError::Connection)?;
+        txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
         // 提交事务
         txn.commit().await.map_err(DbError::Connection)?;
 
@@ -388,6 +381,23 @@ pub struct MigrationFile {
 }
 
 impl MigrationFile {
+    /// 创建新的迁移文件信息
+    ///
+    /// # Arguments
+    ///
+    /// * `version` - 迁移版本号
+    /// * `description` - 迁移描述
+    /// * `file_path` - 迁移文件路径
+    /// * `content` - 迁移文件内容（SQL 语句）
+    pub fn new(version: u32, description: String, file_path: PathBuf, content: String) -> Self {
+        Self {
+            version,
+            description,
+            file_path,
+            content,
+        }
+    }
+
     /// 获取迁移版本号
     pub fn version(&self) -> u32 {
         self.version
@@ -435,16 +445,14 @@ impl MigrationExecutor {
             .map_err(|e| DbError::Config(format!("Failed to read migration directory: {}", e)))?;
 
         for entry in entries {
-            let entry =
-                entry.map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
+            let entry = entry.map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_file() && path.extension().map(|e| e == "sql").unwrap_or(false) {
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                     if let Some((version, description)) = Self::parse_filename(filename) {
-                        let content = std::fs::read_to_string(&path).map_err(|e| {
-                            DbError::Config(format!("Failed to read migration file: {}", e))
-                        })?;
+                        let content = std::fs::read_to_string(&path)
+                            .map_err(|e| DbError::Config(format!("Failed to read migration file: {}", e)))?;
 
                         migrations.push(MigrationFile {
                             version,
@@ -491,13 +499,8 @@ impl MigrationExecutor {
         // 扫描迁移文件
         let migration_files = self.scan_migrations(dir)?;
 
-        // 直接从数据库检查哪些迁移已应用
-        let mut applied_versions = std::collections::HashSet::new();
-        for migration_file in &migration_files {
-            if self.is_migration_applied(migration_file.version).await? {
-                applied_versions.insert(migration_file.version);
-            }
-        }
+        // 批量加载所有已应用的版本（消除 N+1 查询）
+        let applied_versions = self.load_applied_versions().await?;
 
         let pending: Vec<_> = migration_files
             .into_iter()
@@ -544,24 +547,48 @@ impl MigrationExecutor {
         Ok(applied_count)
     }
 
+    /// 批量加载所有已应用的迁移版本（消除 N+1 查询）
+    ///
+    /// 在 `run_migrations` 开始时调用，一次性加载所有已应用的版本。
+    /// 避免对每个迁移文件单独调用 `is_migration_applied` 导致的 N+1 查询问题。
+    async fn load_applied_versions(&self) -> Result<std::collections::HashSet<u32>, DbError> {
+        // 先确保迁移历史表存在
+        self.ensure_migration_table_exists().await?;
+
+        use sea_orm::sea_query::{Alias, Query};
+
+        let mut query = Query::select();
+        query.column(Alias::new("version"));
+        query.from(Alias::new("dbnexus_migrations"));
+
+        let rows = self.connection.query_all(&query).await.map_err(DbError::Connection)?;
+
+        let mut applied_versions = std::collections::HashSet::new();
+        for row in rows {
+            if let Ok(version) = row.try_get::<i64>("", "version") {
+                applied_versions.insert(version as u32);
+            }
+        }
+
+        Ok(applied_versions)
+    }
+
     /// 检查迁移是否已应用（通过查询数据库）
+    #[allow(dead_code)]
     async fn is_migration_applied(&self, version: u32) -> Result<bool, DbError> {
         // 先确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
         let row = {
-            use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
+            use sea_orm::sea_query::{Alias, Expr, Query};
 
             let mut query = Query::select();
             query.expr(Expr::cust("1"));
             query.from(Alias::new("dbnexus_migrations"));
-            query.and_where(Expr::col(Alias::new("version")).eq(version));
+            query.and_where(Expr::cust(format!("version = {}", version)));
             query.limit(1);
 
-            self.connection
-                .query_one(&query)
-                .await
-                .map_err(DbError::Connection)?
+            self.connection.query_one(&query).await.map_err(DbError::Connection)?
         };
 
         Ok(row.is_some())
@@ -573,17 +600,11 @@ impl MigrationExecutor {
         let sql = Self::extract_up_sql(&migration_file.content);
 
         // 开始事务
-        let txn = self
-            .connection
-            .begin()
-            .await
-            .map_err(DbError::Connection)?;
+        let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
         // 执行迁移 SQL
         if !sql.is_empty() {
-            txn.execute_unprepared(sql)
-                .await
-                .map_err(DbError::Connection)?;
+            txn.execute_unprepared(sql).await.map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史（使用参数化查询防止 SQL 注入）
@@ -607,9 +628,7 @@ impl MigrationExecutor {
             ],
         );
 
-        txn.execute_raw(stmt)
-            .await
-            .map_err(DbError::Connection)?;
+        txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
 
         // 提交事务
         txn.commit().await.map_err(DbError::Connection)?;
@@ -626,10 +645,7 @@ impl MigrationExecutor {
     }
 
     #[allow(missing_docs)]
-    pub async fn apply_migration_file_public(
-        &mut self,
-        migration_file: &MigrationFile,
-    ) -> Result<(), DbError> {
+    pub async fn apply_migration_file_public(&mut self, migration_file: &MigrationFile) -> Result<(), DbError> {
         self.apply_migration_file(migration_file).await
     }
 
@@ -664,8 +680,9 @@ impl MigrationExecutor {
         .trim()
     }
 
-    /// 回滚所有迁移
-    pub async fn rollback_all(&mut self) -> Result<u32, DbError> {
+    /// 回滚所有迁移（预留功能，尚未在 API 中暴露）
+    #[allow(dead_code)]
+    pub(crate) async fn rollback_all(&mut self) -> Result<u32, DbError> {
         self.load_history().await?;
 
         let applied = &self.history.applied_migrations;
@@ -698,10 +715,12 @@ impl MigrationExecutor {
         Ok(rollback_count)
     }
 
-    /// 回滚指定版本的迁移
+    /// 回滚指定版本的迁移（预留功能）
     ///
     /// 使用 SqlReverser 生成回滚 SQL 并执行
-    pub async fn rollback_migration(&mut self, version: u32) -> Result<(), DbError> {
+    #[allow(dead_code)]
+    pub(crate) async fn rollback_migration(&mut self, version: u32) -> Result<(), DbError> {
+        use super::sql_reverser::SqlReverser;
         // 查找要回滚的迁移
         let migration = match self.history.applied_migrations.iter().find(|m| m.version == version) {
             Some(m) => m.clone(),
@@ -725,10 +744,7 @@ impl MigrationExecutor {
             }
             Err(e) => {
                 tracing::error!("Failed to read migration file {}: {}", migration.file_path, e);
-                return Err(DbError::Migration(format!(
-                    "Failed to read migration file: {}",
-                    e
-                )));
+                return Err(DbError::Migration(format!("Failed to read migration file: {}", e)));
             }
         };
 
@@ -738,25 +754,16 @@ impl MigrationExecutor {
             Ok(sql) => sql,
             Err(e) => {
                 tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
-                return Err(DbError::Migration(format!(
-                    "Failed to generate rollback SQL: {}",
-                    e
-                )));
+                return Err(DbError::Migration(format!("Failed to generate rollback SQL: {}", e)));
             }
         };
 
         // 开始事务
-        let txn: sea_orm::DatabaseTransaction = self
-            .connection
-            .begin()
-            .await
-            .map_err(DbError::Connection)?;
+        let txn: sea_orm::DatabaseTransaction = self.connection.begin().await.map_err(DbError::Connection)?;
 
         // 执行回滚 SQL
         if !down_sql.is_empty() {
-            txn.execute_unprepared(&down_sql)
-                .await
-                .map_err(DbError::Connection)?;
+            txn.execute_unprepared(&down_sql).await.map_err(DbError::Connection)?;
         }
 
         // 从历史记录中删除
@@ -774,9 +781,7 @@ impl MigrationExecutor {
             vec![version.into()],
         );
 
-        txn.execute_raw(delete_sql)
-            .await
-            .map_err(DbError::Connection)?;
+        txn.execute_raw(delete_sql).await.map_err(DbError::Connection)?;
 
         txn.commit().await.map_err(DbError::Connection)?;
 
