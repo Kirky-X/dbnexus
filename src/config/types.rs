@@ -356,6 +356,64 @@ fn default_warmup_retries() -> u32 {
 }
 
 impl DbConfig {
+    /// 从环境变量加载配置
+    ///
+    /// 支持的环境变量：
+    /// - `DATABASE_URL`: 数据库连接 URL（必需）
+    /// - `DB_MAX_CONNECTIONS`: 最大连接数（默认 20）
+    /// - `DB_MIN_CONNECTIONS`: 最小连接数（默认 5）
+    /// - `DB_IDLE_TIMEOUT`: 空闲超时秒数（默认 300）
+    /// - `DB_ACQUIRE_TIMEOUT`: 获取连接超时毫秒数（默认 5000）
+    /// - `DB_ADMIN_ROLE`: 管理员角色名（默认 "admin"）
+    /// - `DB_PERMISSIONS_PATH`: 权限配置文件路径
+    /// - `DB_MIGRATIONS_DIR`: 迁移文件目录
+    /// - `DB_AUTO_MIGRATE`: 是否启用自动迁移（默认 false）
+    /// - `DB_MIGRATION_TIMEOUT`: 迁移超时秒数（默认 60）
+    #[cfg(feature = "config-env")]
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let url = std::env::var("DATABASE_URL").map_err(|_| ConfigError::MissingUrl)?;
+
+        Ok(Self {
+            url,
+            max_connections: std::env::var("DB_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20),
+            min_connections: std::env::var("DB_MIN_CONNECTIONS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5),
+            idle_timeout: std::env::var("DB_IDLE_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(300),
+            acquire_timeout: std::env::var("DB_ACQUIRE_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5000),
+            admin_role: std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string()),
+            permissions_path: std::env::var("DB_PERMISSIONS_PATH").ok(),
+            migrations_dir: std::env::var("DB_MIGRATIONS_DIR").ok().map(PathBuf::from),
+            auto_migrate: std::env::var("DB_AUTO_MIGRATE")
+                .ok()
+                .map(|s| s.to_lowercase() == "true")
+                .unwrap_or(false),
+            migration_timeout: std::env::var("DB_MIGRATION_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(60),
+            warmup_timeout: std::env::var("DB_WARMUP_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(30),
+            warmup_retries: std::env::var("DB_WARMUP_RETRIES")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3),
+            cache_config: CacheConfig::default(),
+        })
+    }
+
     /// 从 confers ConfigProvider 加载配置
     ///
     /// # Example
@@ -415,11 +473,3 @@ impl DbConfig {
         &self.cache_config
     }
 }
-
-/// 数据库操作结果类型
-#[deprecated(since = "0.1.3", note = "Use crate::error::DbResult instead")]
-pub type DbResult<T> = crate::error::DbResult<T>;
-
-/// 数据库错误
-#[deprecated(since = "0.1.3", note = "Use crate::error::DbError instead")]
-pub type DbError = crate::error::DbError;
