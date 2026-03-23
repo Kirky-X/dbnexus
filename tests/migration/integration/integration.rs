@@ -161,7 +161,8 @@ async fn test_migration_executor_first_run() {
         file,
         "-- UP\nCREATE TABLE test_first_run_{} (id INTEGER PRIMARY KEY);",
         table_suffix
-    ).expect("Failed to write migration file");
+    )
+    .expect("Failed to write migration file");
     drop(file);
 
     // 创建迁移执行器
