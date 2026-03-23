@@ -245,7 +245,7 @@ async fn test_circuit_breaker_half_open_failure_returns_to_open() {
 #[tokio::test]
 async fn test_circuit_breaker_half_open_failure_rate_threshold() {
     let config = CircuitBreakerConfig {
-        failure_threshold: 10,
+        failure_threshold: 2,
         success_threshold: 2,
         timeout_ms: 50,
         window_size: 10,
