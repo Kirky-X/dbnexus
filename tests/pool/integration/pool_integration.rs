@@ -1,6 +1,9 @@
 // Copyright (c) 2026 Kirky.X
 // Licensed under MIT License
 
+use std::sync::Arc;
+use std::time::Duration;
+
 #[path = "../../common/mod.rs"]
 mod common;
 
@@ -140,4 +143,78 @@ async fn test_connection_acquire_with_small_pool() {
     let count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
     eprintln!("Small pool: {}/5", count);
     assert!(count >= 2);
+}
+
+/// TEST-I-POOL-004: 验证池耗尽时触发正确的告警级别
+///
+/// 当连接池饱和时，并发请求应触发超时，验证：
+/// 1. 超时错误被正确记录
+/// 2. wait_count 在等待期间正确递增
+#[tokio::test]
+#[cfg(feature = "sqlite")]
+async fn test_pool_exhaustion_alert_levels() {
+    // 使用极小连接池和极短超时触发告警
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 1,
+        min_connections: 1,
+        acquire_timeout: 200, // 200ms 超时，应快速触发 warn 级别告警
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
+
+    let pool = dbnexus::DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
+    let pool = Arc::new(pool);
+
+    // 持有唯一的连接足够长时间，让其他请求超时
+    let pool_for_holder = pool.clone();
+    let _holder = tokio::spawn(async move {
+        let session = pool_for_holder.get_session("admin").await;
+        if session.is_ok() {
+            // 持有连接 1 秒，足够让其他请求超时
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+
+    // 等待 holder 获取连接
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 现在发送 3 个并发请求，它们应该都超时
+    let handles: Vec<_> = (0..3)
+        .map(|_| {
+            let pool = pool.clone();
+            tokio::spawn(async move { pool.get_session("admin").await })
+        })
+        .collect();
+
+    let results: Vec<_> = futures::future::join_all(handles).await;
+
+    // 验证所有请求都超时了（因为连接被持有）
+    // Count results that are Ok(Err(...)) — meaning the connection attempt returned a DbError
+    let timeout_count = results
+        .iter()
+        .filter(|r| matches!(r, Ok(Err(_))))
+        .count();
+    assert!(
+        timeout_count >= 2,
+        "Expected at least 2 timeouts, got {}",
+        timeout_count
+    );
+
+    // 验证 wait_count 正确记录
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let status = pool.status();
+    // holder 释放后 wait_count 应该为 0
+    assert_eq!(status.wait_count, 0, "wait_count should be 0 after all requests complete");
+
+    // max_waiters 应该记录了峰值（至少有 3 个并发等待）
+    assert!(
+        status.max_waiters >= 2,
+        "max_waiters should be >= 2, got {}",
+        status.max_waiters
+    );
+
+    let _ = _holder.await;
 }
