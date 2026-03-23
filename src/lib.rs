@@ -13,6 +13,7 @@
 //! - **权限控制**: 声明式宏自动生成权限检查代码
 //! - **连接池管理**: 动态配置修正与健康检查
 //! - **监控指标**: Prometheus 指标导出
+//! - **日志系统**: tracing 结构化日志与 OpenTelemetry 分布式追踪
 //!
 //! # 快速开始
 //!
@@ -33,9 +34,40 @@
 //!     let session = pool.get_session("admin").await?;
 //!     Ok(())
 //! }
+//! # 日志系统
+//!
+//! DBNexus 使用 `tracing` 框架进行结构化日志和分布式追踪。
+//!
+//! ## 初始化日志
+//!
+//! 在应用入口点调用一次即可启用日志输出：
+//!
+//! ```rust,no_run,ignore
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     dbnexus::tracing::init_default()?;
+//!     tracing::info!("DBNexus 日志系统已初始化");
+//!     Ok(())
+//! }
 //! ```
-
-#![doc(html_root_url = "https://docs.rs/dbnexus/0.1")]
+//!
+//! ## 进阶配置
+//!
+//! 使用 `TracingBuilder` 精确控制输出格式和日志级别：
+//!
+//! ```rust,no_run,ignore
+//! use dbnexus::tracing::TracingBuilder;
+//!
+//! TracingBuilder::new()
+//!     .with_json()                           // JSON 结构化输出
+//!     .with_level("dbnexus=debug,info")    // 自定义日志级别
+//!     .init()?;
+//! ```
+//!
+//! ## 分布式追踪（OpenTelemetry）
+//!
+//! 需要分布式追踪时，启用 `tracing` 特性并参考 `dbnexus::tracing` 模块文档。
+//!
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 // 注意: 移除了 `#![allow(dead_code)]` 以恢复编译时警告
