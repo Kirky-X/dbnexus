@@ -20,7 +20,7 @@
 //! async fn example(provider: &dyn confers::ConfigProvider) {
 //!     // 从 confers 配置创建 DbConfig
 //!     let config = DbConfig::from_confers(provider).expect("Failed to load config");
-//!     
+//!
 //!     // 使用配置创建连接池
 //!     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
 //! }
