@@ -10,7 +10,8 @@
 #![cfg(feature = "auto-migrate")]
 
 use dbnexus::DbPool;
-use dbnexus::config::{DatabaseType, DbConfig};
+use dbnexus::DbConfig;
+use dbnexus::config::DatabaseType;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -190,6 +191,7 @@ async fn test_nonexistent_migrations_directory() {
 
 /// TEST-AM-006: 环境变量迁移配置测试
 #[tokio::test]
+#[cfg(feature = "config-env")]
 async fn test_migration_config_from_env() {
     // 保存原始环境变量值
     let original_database_url = std::env::var("DATABASE_URL").ok();
