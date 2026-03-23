@@ -107,6 +107,10 @@ compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enab
 /// 安全模块
 pub mod security;
 
+/// 认证模块（JWT + 密码哈希）
+#[cfg(feature = "authentication")]
+pub mod authentication;
+
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
