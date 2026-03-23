@@ -22,7 +22,7 @@ use std::time::Duration;
 /// TEST-RATELIMITER-U-001: 单次令牌获取
 #[tokio::test]
 async fn test_rate_limiter_single_acquire() {
-    let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000);
+    let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
 
     // 单次获取应该成功
     assert!(limiter.check("user1").await, "First acquire should succeed");
@@ -34,7 +34,7 @@ async fn test_rate_limiter_single_acquire() {
 /// TEST-RATELIMITER-U-002: 令牌耗尽测试
 #[tokio::test]
 async fn test_rate_limiter_exhaustion() {
-    let limiter = RateLimiter::new(3, Duration::from_secs(60), 10000);
+    let limiter = RateLimiter::new(3, Duration::from_secs(60), 10000, 3);
 
     // 消耗所有令牌
     assert!(limiter.check("user1").await, "1st acquire should succeed");
@@ -54,7 +54,7 @@ async fn test_rate_limiter_exhaustion() {
 /// TEST-RATELIMITER-U-003: 不同键独立计数
 #[tokio::test]
 async fn test_rate_limiter_independent_keys() {
-    let limiter = RateLimiter::new(2, Duration::from_secs(60), 10000);
+    let limiter = RateLimiter::new(2, Duration::from_secs(60), 10000, 2);
 
     // user1 获取令牌
     assert!(limiter.check("user1").await);
@@ -76,7 +76,7 @@ async fn test_rate_limiter_independent_keys() {
 /// 验证高并发场景下的正确性，50 个并发任务竞争同一个键。
 #[tokio::test]
 async fn test_rate_limiter_concurrent_50_tasks() {
-    let limiter = Arc::new(RateLimiter::new(100, Duration::from_secs(1), 10000));
+    let limiter = Arc::new(RateLimiter::new(100, Duration::from_secs(1), 10000, 100));
     let mut handles = vec![];
 
     // 启动 50 个并发任务，每个尝试获取 10 次令牌
@@ -121,7 +121,7 @@ async fn test_rate_limiter_concurrent_50_tasks() {
 /// 验证多个键在并发场景下的独立性。
 #[tokio::test]
 async fn test_rate_limiter_concurrent_multiple_keys() {
-    let limiter = Arc::new(RateLimiter::new(50, Duration::from_secs(1), 10000));
+    let limiter = Arc::new(RateLimiter::new(50, Duration::from_secs(1), 10000, 50));
     let mut handles = vec![];
 
     // 启动 50 个并发任务，每个任务使用不同的键
@@ -165,7 +165,7 @@ async fn test_rate_limiter_concurrent_multiple_keys() {
 #[tokio::test]
 async fn test_rate_limiter_bucket_eviction() {
     // 创建限制为 10 个桶的 RateLimiter
-    let limiter = RateLimiter::new(100, Duration::from_secs(60), 10);
+    let limiter = RateLimiter::new(100, Duration::from_secs(60), 10, 100);
 
     // 创建 10 个桶（达到限制）
     for i in 0..10 {
@@ -194,7 +194,7 @@ async fn test_rate_limiter_bucket_eviction() {
 /// 验证驱逐的是最久未访问的桶。
 #[tokio::test]
 async fn test_rate_limiter_lru_eviction_order() {
-    let limiter = RateLimiter::new(100, Duration::from_secs(60), 5);
+    let limiter = RateLimiter::new(100, Duration::from_secs(60), 5, 100);
 
     // 创建 5 个桶
     for i in 0..5 {
@@ -239,7 +239,7 @@ async fn test_rate_limiter_lru_eviction_order() {
 /// 验证被驱逐的键重新访问时会创建新桶。
 #[tokio::test]
 async fn test_rate_limiter_evicted_key_reuse() {
-    let limiter = RateLimiter::new(10, Duration::from_secs(60), 3);
+    let limiter = RateLimiter::new(10, Duration::from_secs(60), 3, 10);
 
     // 创建 3 个桶（达到限制）
     limiter.check("user_0").await;
@@ -267,7 +267,7 @@ async fn test_rate_limiter_evicted_key_reuse() {
 /// 验证高并发场景下驱逐操作的安全性。
 #[tokio::test]
 async fn test_rate_limiter_concurrent_eviction_safety() {
-    let limiter = Arc::new(RateLimiter::new(100, Duration::from_secs(1), 10));
+    let limiter = Arc::new(RateLimiter::new(100, Duration::from_secs(1), 10, 100));
     let mut handles = vec![];
 
     // 启动 20 个并发任务，每个任务使用不同的键
@@ -312,7 +312,7 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
 /// TEST-RATELIMITER-U-010: max_buckets = 1 的极端情况
 #[tokio::test]
 async fn test_rate_limiter_max_buckets_one() {
-    let limiter = RateLimiter::new(10, Duration::from_secs(60), 1);
+    let limiter = RateLimiter::new(10, Duration::from_secs(60), 1, 10);
 
     // 创建第一个桶
     assert!(limiter.check("user_0").await);
@@ -333,7 +333,7 @@ async fn test_rate_limiter_max_buckets_one() {
 /// TEST-RATELIMITER-U-011: 重置功能
 #[tokio::test]
 async fn test_rate_limiter_reset() {
-    let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000);
+    let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
 
     // 消耗所有令牌
     for _ in 0..5 {
@@ -353,7 +353,7 @@ async fn test_rate_limiter_reset() {
 /// TEST-RATELIMITER-U-012: cleanup 方法测试
 #[tokio::test]
 async fn test_rate_limiter_cleanup() {
-    let limiter = RateLimiter::new(10, Duration::from_secs(1), 10000);
+    let limiter = RateLimiter::new(10, Duration::from_secs(1), 10000, 10);
 
     // 创建一些桶
     limiter.check("user1").await;
