@@ -495,6 +495,7 @@ impl MigrationExecutor {
     /// # Returns
     ///
     /// 成功应用的迁移数量
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(dir = %dir.display())))]
     pub async fn run_migrations(&mut self, dir: &std::path::Path) -> Result<u32, DbError> {
         // 扫描迁移文件
         let migration_files = self.scan_migrations(dir)?;
