@@ -7,8 +7,8 @@
 //!
 //! 提供基于令牌桶算法的速率限制功能。
 
-use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::Duration;
@@ -34,6 +34,8 @@ pub struct RateLimiter {
     buckets: Arc<DashMap<String, TokenBucket>>,
     /// 最大桶数量限制（防止内存泄漏）
     max_buckets: usize,
+    /// 突发容量（桶的初始/最大令牌数，可以大于 max_requests）
+    burst_capacity: u32,
 }
 
 /// 令牌桶实现
@@ -175,16 +177,49 @@ impl RateLimiter {
     ///
     /// # Arguments
     ///
-    /// * `max_requests` - 每个时间窗口允许的最大请求数
+    /// * `max_requests` - 每个时间窗口允许的最大请求数（也作为默认突发容量）
     /// * `window_duration` - 时间窗口大小
     /// * `max_buckets` - 最大桶数量限制（防止内存泄漏）
-    pub fn new(max_requests: u32, window_duration: Duration, max_buckets: usize) -> Self {
+    /// * `burst_capacity` - 突发容量（桶的最大令牌数），默认为 max_requests
+    pub fn new(
+        max_requests: u32,
+        window_duration: Duration,
+        max_buckets: usize,
+        burst_capacity: u32,
+    ) -> Self {
         Self {
             max_requests,
             window_duration,
             buckets: Arc::new(DashMap::new()),
             max_buckets,
+            burst_capacity,
         }
+    }
+
+    /// 创建新的速率限制器（使用默认突发容量 = max_requests）
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - 每个时间窗口允许的最大请求数
+    /// * `window_duration` - 时间窗口大小
+    /// * `max_buckets` - 最大桶数量限制（防止内存泄漏）
+    pub fn with_defaults(max_requests: u32, window_duration: Duration, max_buckets: usize) -> Self {
+        Self::new(max_requests, window_duration, max_buckets, max_requests)
+    }
+
+    /// 动态更新配置（适用于需要运行时调整限制的场景）
+    ///
+    /// 注意：此方法只更新 RateLimiter 的配置，不影响已创建的 TokenBucket。
+    /// 已存在的桶会继续使用创建时的参数，直到被驱逐后重建。
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - 新的每个时间窗口允许的最大请求数
+    /// * `window_duration` - 新的时间窗口大小
+    pub fn update_config(&mut self, max_requests: u32, window_duration: Duration) {
+        self.max_requests = max_requests;
+        self.window_duration = window_duration;
+        // burst_capacity 保持不变
     }
 
     /// 检查是否允许请求（令牌桶算法）
@@ -226,8 +261,8 @@ impl RateLimiter {
                 entry.get().try_consume()
             }
             Entry::Vacant(entry) => {
-                // 桶不存在：创建新桶并插入
-                let bucket = TokenBucket::new(self.max_requests as u64, refill_rate);
+                // 桶不存在：创建新桶并插入（使用 burst_capacity 作为初始/最大令牌数）
+                let bucket = TokenBucket::new(self.burst_capacity as u64, refill_rate);
                 bucket.touch();
                 let consumed = bucket.try_consume();
                 entry.insert(bucket);
@@ -344,7 +379,7 @@ impl RateLimiter {
 /// 默认速率限制配置
 impl Default for RateLimiter {
     fn default() -> Self {
-        Self::new(100, Duration::from_secs(60), 10000)
+        Self::new(100, Duration::from_secs(60), 10000, 100)
     }
 }
 
@@ -355,7 +390,7 @@ mod tests {
     /// TEST-U-019: 速率限制器测试 - 基本功能
     #[tokio::test]
     async fn test_rate_limiter_basic() {
-        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000, 3);
 
         // 前3个请求应该允许
         assert!(limiter.check("user1").await);
@@ -369,7 +404,7 @@ mod tests {
     /// TEST-U-020: 速率限制器测试 - 不同键独立计数
     #[tokio::test]
     async fn test_rate_limiter_different_keys() {
-        let limiter = RateLimiter::new(2, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(2, std::time::Duration::from_secs(60), 10000, 2);
 
         assert!(limiter.check("user1").await);
         assert!(limiter.check("user1").await);
@@ -383,7 +418,7 @@ mod tests {
     /// TEST-U-021: 速率限制器测试 - 重置功能
     #[tokio::test]
     async fn test_rate_limiter_reset() {
-        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000, 1);
 
         assert!(limiter.check("user1").await);
         assert!(!limiter.check("user1").await);
@@ -396,7 +431,7 @@ mod tests {
     /// TEST-U-022: 速率限制器测试 - 剩余请求计数
     #[tokio::test]
     async fn test_rate_limiter_remaining() {
-        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000, 3);
 
         assert_eq!(limiter.remaining("user1"), 3);
 
@@ -419,7 +454,7 @@ mod tests {
     #[tokio::test]
     async fn test_token_bucket_refill() {
         // 创建速率限制器：每秒填充 10 个令牌，最大 10 个
-        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(1), 10000);
+        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(1), 10000, 10);
 
         // 消耗所有令牌
         for _ in 0..10 {
@@ -444,7 +479,7 @@ mod tests {
     #[tokio::test]
     async fn test_token_bucket_burst() {
         // 创建速率限制器：每秒填充 5 个令牌，最大 20 个
-        let limiter = RateLimiter::new(20, std::time::Duration::from_secs(4), 10000);
+        let limiter = RateLimiter::new(20, std::time::Duration::from_secs(4), 10000, 20);
 
         // 等待桶填满（初始就是满的）
         assert_eq!(limiter.remaining("user1"), 20);
@@ -464,7 +499,7 @@ mod tests {
     /// 验证令牌桶在高并发场景下的正确性。
     #[tokio::test]
     async fn test_token_bucket_concurrent_safety() {
-        let limiter = Arc::new(RateLimiter::new(100, std::time::Duration::from_secs(1), 10000));
+        let limiter = Arc::new(RateLimiter::new(100, std::time::Duration::from_secs(1), 10000, 100));
         let mut handles = vec![];
 
         // 启动 10 个并发任务，每个尝试获取 15 个令牌
@@ -501,7 +536,7 @@ mod tests {
     /// 验证单个键在高并发竞争下的正确性。
     #[tokio::test]
     async fn test_token_bucket_single_key_concurrent() {
-        let limiter = Arc::new(RateLimiter::new(50, std::time::Duration::from_secs(1), 10000));
+        let limiter = Arc::new(RateLimiter::new(50, std::time::Duration::from_secs(1), 10000, 50));
         let mut handles = vec![];
 
         // 启动 10 个并发任务，竞争同一个键
@@ -540,7 +575,7 @@ mod tests {
     #[tokio::test]
     async fn test_token_bucket_cleanup() {
         // 创建速率限制器：窗口 1 秒
-        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(1), 10000);
+        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(1), 10000, 10);
 
         // 创建一些条目
         limiter.check("user1").await;
@@ -567,7 +602,7 @@ mod tests {
     /// 验证令牌桶操作的时间复杂度为 O(1)。
     #[tokio::test]
     async fn test_token_bucket_o1_complexity() {
-        let limiter = RateLimiter::new(1000, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(1000, std::time::Duration::from_secs(60), 10000, 1000);
 
         // 创建大量条目
         for i in 0..1000 {
@@ -599,7 +634,7 @@ mod tests {
     #[tokio::test]
     async fn test_token_bucket_precise_limiting() {
         // 创建速率限制器：每秒 5 个请求
-        let limiter = RateLimiter::new(5, std::time::Duration::from_secs(1), 10000);
+        let limiter = RateLimiter::new(5, std::time::Duration::from_secs(1), 10000, 5);
 
         // 精确测试：应该允许 5 个请求，拒绝第 6 个
         for i in 1..=5 {
@@ -617,7 +652,7 @@ mod tests {
     /// 验证重置后令牌桶恢复到初始状态。
     #[tokio::test]
     async fn test_token_bucket_reset_state() {
-        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(10, std::time::Duration::from_secs(60), 10000, 10);
 
         // 消耗所有令牌
         for _ in 0..10 {
@@ -639,7 +674,7 @@ mod tests {
     /// 测试无 panic、无数据竞争、令牌计数准确。
     #[tokio::test]
     async fn test_token_bucket_high_concurrent_stress() {
-        let limiter = Arc::new(RateLimiter::new(200, std::time::Duration::from_secs(1), 10000));
+        let limiter = Arc::new(RateLimiter::new(200, std::time::Duration::from_secs(1), 10000, 200));
         let mut handles = vec![];
 
         // 启动 60 个并发任务，每个尝试获取 5 个令牌（共 300 次请求）
@@ -682,19 +717,25 @@ mod tests {
     /// 当 tokens 为 0 时，fetch_sub 返回 0，应该拒绝请求并归还令牌。
     #[tokio::test]
     async fn test_token_bucket_fetch_sub_precision() {
-        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000, 1);
 
         // 第一次请求：tokens 从 1 变为 0，fetch_sub 返回 1，应该允许
         assert!(limiter.check("precision_user").await, "First request should be allowed");
         assert_eq!(limiter.remaining("precision_user"), 0);
 
         // 第二次请求：tokens 为 0，fetch_sub 返回 0，应该拒绝并归还令牌
-        assert!(!limiter.check("precision_user").await, "Second request should be denied");
+        assert!(
+            !limiter.check("precision_user").await,
+            "Second request should be denied"
+        );
         // 归还令牌后 tokens 应该仍为 0（不能为负数）
         assert_eq!(limiter.remaining("precision_user"), 0);
 
         // 再次请求应该仍然被拒绝
-        assert!(!limiter.check("precision_user").await, "Third request should still be denied");
+        assert!(
+            !limiter.check("precision_user").await,
+            "Third request should still be denied"
+        );
         assert_eq!(limiter.remaining("precision_user"), 0);
     }
 
@@ -703,7 +744,7 @@ mod tests {
     /// 验证在令牌数接近边界值时的精确行为。
     #[tokio::test]
     async fn test_token_bucket_boundary_precision() {
-        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000);
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000, 3);
 
         // 消耗令牌直到耗尽
         assert!(limiter.check("boundary_user").await);
