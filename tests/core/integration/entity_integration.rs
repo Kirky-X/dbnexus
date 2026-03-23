@@ -229,11 +229,30 @@ roles:
 /// 创建测试表
 async fn setup_crud_test_table(pool: &DbPool) {
     let session = pool.get_session("admin").await.unwrap();
-    session
-        .execute_raw_ddl(&format!(
+    
+    // 先删除表（如果存在），以确保使用正确的结构
+    let _ = session
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", CRUD_TEST_TABLE))
+        .await;
+    
+    // MySQL需要使用AUTO_INCREMENT，而SQLite/PostgreSQL使用INTEGER PRIMARY KEY即可
+    let create_sql = if cfg!(feature = "mysql") {
+        eprintln!("Using MySQL CREATE TABLE syntax");
+        format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), age INT)",
+            CRUD_TEST_TABLE
+        )
+    } else {
+        eprintln!("Using SQLite/PostgreSQL CREATE TABLE syntax");
+        format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
             CRUD_TEST_TABLE
-        ))
+        )
+    };
+    
+    eprintln!("CREATE SQL: {}", create_sql);
+    session
+        .execute_raw_ddl(&create_sql)
         .await
         .unwrap();
 }
