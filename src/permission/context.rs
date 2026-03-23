@@ -13,8 +13,11 @@ use super::stats::{CacheStats, PermissionCheckStats};
 use super::types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy};
 #[cfg(feature = "cache")]
 use crate::cache::{AsyncCache, Cache};
+use dashmap::DashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use tokio::sync::Mutex as TokioMutex;
 
 /// 权限检查速率限制默认值
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
@@ -154,7 +157,7 @@ impl PermissionContextBuilder {
         let policy_cache: AsyncCache<RolePolicy> = Cache::builder().max_capacity(self.cache_capacity as u64).build();
 
         let rate_limiter = self.rate_limit.map(|(max_requests, window_secs)| {
-            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000))
+            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000, max_requests))
         });
 
         Ok(PermissionContext {
@@ -164,6 +167,7 @@ impl PermissionContextBuilder {
             rate_limiter,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: self.permission_provider,
+            in_flight: DashMap::new(),
         })
     }
 
@@ -179,7 +183,7 @@ impl PermissionContextBuilder {
             .block_on(async { Cache::builder().max_capacity(self.cache_capacity as u64).build() });
 
         let rate_limiter = self.rate_limit.map(|(max_requests, window_secs)| {
-            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000))
+            Arc::new(RateLimiter::new(max_requests, Duration::from_secs(window_secs), 10000, max_requests))
         });
 
         PermissionContext {
@@ -189,6 +193,7 @@ impl PermissionContextBuilder {
             rate_limiter,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: self.permission_provider,
+            in_flight: DashMap::new(),
         }
     }
 }
@@ -216,6 +221,17 @@ pub struct PermissionContext {
 
     /// 权限提供者（用于缓存未命中时重新加载策略）
     permission_provider: Option<Arc<dyn PermissionProvider>>,
+
+    /// 请求合并 in_flight map（防止缓存击穿）
+    in_flight: DashMap<String, Arc<InFlightEntry>>,
+}
+
+/// 单flight entry：保存加载结果和通知器
+struct InFlightEntry {
+    /// 加载结果（使用 tokio Mutex 保护，lock().await 会 park follower）
+    result: TokioMutex<Option<RolePolicy>>,
+    /// leader 是否已完成（用于 follower 检测）
+    done: Arc<AtomicBool>,
 }
 
 #[cfg(feature = "cache")]
@@ -266,9 +282,11 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
+            in_flight: DashMap::new(),
         })
     }
 
@@ -292,9 +310,11 @@ impl PermissionContext {
                 max_requests,
                 Duration::from_secs(window_secs),
                 10000,
+                max_requests,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
+            in_flight: DashMap::new(),
         })
     }
 
@@ -378,9 +398,11 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
+            in_flight: DashMap::new(),
         }
     }
 
@@ -404,9 +426,11 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
+            in_flight: DashMap::new(),
         }
     }
 
@@ -422,9 +446,11 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
+            in_flight: DashMap::new(),
         }
     }
 
@@ -445,9 +471,11 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
+            in_flight: DashMap::new(),
         }
     }
 
@@ -476,10 +504,112 @@ impl PermissionContext {
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
                 Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
                 10000,
+                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             ))),
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
+            in_flight: DashMap::new(),
         }
+    }
+
+    /// 执行实际的策略加载（不含缓存写入）
+    fn do_load_policy(&self) -> Option<RolePolicy> {
+        if let Some(provider) = &self.permission_provider {
+            if let Some(policy) = provider.get_role_policy(&self.role) {
+                tracing::info!(
+                    target: "security",
+                    "Loaded permission policy for role '{}'",
+                    self.role
+                );
+                return Some(policy);
+            } else {
+                tracing::warn!(
+                    target: "security",
+                    "Role '{}' not found in permission provider",
+                    self.role
+                );
+            }
+        } else {
+            tracing::debug!(
+                target: "security",
+                "No permission provider configured for role '{}'",
+                self.role
+            );
+        }
+        None
+    }
+
+    /// 使用请求合并（singleflight）方式加载策略
+    ///
+    /// 使用 tokio::sync::Mutex：
+    /// - lock().await 会 park 任务直到锁可用（正确等待）
+    /// - 第一个获得锁的任务为 leader，执行实际加载
+    /// - leader 在锁内设置 done = true 后释放锁
+    /// - follower park 在 lock().await，唤醒后检测 done = true 并跳过重新加载
+    /// - stampede 计数器在 follower 检测到 done = true 时递增（thundering herd 发生）
+    async fn get_or_load_policy_coalesced(&self) -> Option<RolePolicy> {
+        // Step 1: 快速路径 - 缓存命中
+        if let Some(policy) = self.policy_cache.get(&self.role).await {
+            return Some(policy);
+        }
+
+        // Step 2: 获取或创建 in_flight entry
+        let entry = self
+            .in_flight
+            .entry(self.role.clone())
+            .or_insert_with(|| {
+                Arc::new(InFlightEntry {
+                    result: TokioMutex::new(None),
+                    done: Arc::new(AtomicBool::new(false)),
+                })
+            });
+
+        // Step 3: 获得锁
+        let mut guard = entry.result.lock().await;
+
+        // Step 4: 检查 done 标志
+        if entry.done.load(Ordering::SeqCst) {
+            // Follower: leader 已完成，检测到 thundering herd
+            self.check_stats.record_stampede();
+            let leader_result = (*guard).clone();
+            if let Some(policy) = leader_result {
+                // Leader 成功加载，返回结果
+                drop(guard);
+                self.check_stats.record_cache_hit();
+                return Some(policy);
+            }
+            // Leader 加载失败（无 provider 等），重置 done 并重新尝试
+            // 这是处理 set_permission_provider 后动态提供者的关键路径
+            entry.done.store(false, Ordering::SeqCst);
+            drop(guard);
+            // 重新进入加载流程（递归入口点）
+            // 注意：in_flight entry 仍然存在，但 done=false，所以会走 leader 路径
+        } else {
+            // Step 5: Leader: 获得锁且 done = false，开始加载
+            let result = self.do_load_policy();
+            *guard = result.clone();
+
+            // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
+            entry.done.store(true, Ordering::SeqCst);
+
+            // 释放锁
+            drop(guard);
+
+            // 异步缓存插入
+            if let Some(ref policy) = result {
+                self.policy_cache.insert(self.role.clone(), policy.clone()).await;
+            }
+
+            return result;
+        }
+
+        // 重新加载（仅当 leader 失败后重置 done 的 follower 路径）
+        // 以 leader 身份重新尝试
+        let result = self.do_load_policy();
+        if let Some(ref policy) = result {
+            self.policy_cache.insert(self.role.clone(), policy.clone()).await;
+        }
+        result
     }
 
     /// 设置权限提供者
@@ -537,6 +667,7 @@ impl PermissionContext {
     /// 2. 缓存未命中时尝试重新加载策略
     /// 3. 重新加载成功后重新检查权限
     /// 4. 重新加载失败时安全地拒绝访问
+    #[cfg_attr(feature = "tracing", tracing::instrument(fields(table = %table, operation = ?operation)))]
     pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
         // 1. 检查速率限制
         if let Some(limiter) = &self.rate_limiter {
@@ -574,12 +705,11 @@ impl PermissionContext {
                 allowed
             }
             None => {
-                // 缓存未命中，尝试重新加载策略
+                // 缓存未命中，使用 stampede-protected 加载
                 self.check_stats.record_cache_miss();
 
-                if self.try_reload_policy().await {
-                    // 重新加载成功，重新检查权限
-                    if let Some(policy) = self.policy_cache.get(&self.role).await {
+                match self.get_or_load_policy_coalesced().await {
+                    Some(policy) => {
                         let allowed = policy.allows(table, operation);
                         if allowed {
                             self.check_stats.record_allowed();
@@ -587,26 +717,26 @@ impl PermissionContext {
                             self.check_stats.record_denied();
                         }
                         tracing::trace!(
-                            "Permission check (reloaded): role='{}' table='{}' operation='{}' result={}",
+                            "Permission check (loaded): role='{}' table='{}' operation='{}' result={}",
                             self.role,
                             table,
                             operation,
                             allowed
                         );
-                        return allowed;
+                        allowed
+                    }
+                    None => {
+                        tracing::warn!(
+                            target: "security",
+                            "Permission policy cache miss for role '{}' on table '{}' operation '{}'. Access denied for security.",
+                            self.role,
+                            table,
+                            operation
+                        );
+                        self.check_stats.record_denied();
+                        false
                     }
                 }
-
-                // 加载失败，安全地拒绝
-                tracing::warn!(
-                    target: "security",
-                    "Permission policy cache miss for role '{}' on table '{}' operation '{}'. Access denied for security.",
-                    self.role,
-                    table,
-                    operation
-                );
-                self.check_stats.record_denied();
-                false
             }
         }
     }
@@ -677,6 +807,16 @@ impl PermissionContext {
             cached_roles: self.policy_cache.entry_count() as usize,
             capacity: self.cache_capacity,
         }
+    }
+
+    /// 获取缓存指标（命中率、未命中数、击穿事件数、缓存条目数）
+    pub async fn get_cache_metrics(&self) -> (f64, u64, u64, usize) {
+        let snapshot = self.check_stats.snapshot();
+        let hit_rate = snapshot.cache_hit_rate();
+        let miss_count = snapshot.cache_misses;
+        let stampede_count = snapshot.stampede_events;
+        let cache_size = self.policy_cache.entry_count() as usize;
+        (hit_rate, miss_count, stampede_count, cache_size)
     }
 
     /// 清除权限缓存
@@ -1093,5 +1233,123 @@ mod tests {
         // 验证缓存容量
         let stats = ctx.cache_stats().await;
         assert_eq!(stats.capacity, 4096);
+    }
+
+    /// TEST-U-052: 缓存击穿防护 - 并发请求触发 stampede 保护
+    #[tokio::test]
+    async fn test_cache_stampede_counter_increments() {
+        use crate::permission::types::TablePermission;
+
+        let config = PermissionConfig {
+            roles: [(
+                "reports_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "reports".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let provider = Arc::new(MemoryPermissionProvider::new());
+        provider
+            .add_role("reports_role", config.roles.get("reports_role").unwrap().clone())
+            .await;
+
+        let cache: AsyncCache<RolePolicy> = Cache::builder().max_capacity(256).build();
+        let ctx = PermissionContext::new_with_provider(
+            "reports_role".to_string(),
+            Arc::new(cache),
+            provider,
+        );
+
+        // 初始状态：stampede 计数为 0
+        let initial = ctx.check_stats.snapshot();
+        assert_eq!(initial.stampede_events, 0);
+
+        // 第一次访问：清除缓存 + 检查（无并发，无击穿）
+        ctx.clear_cache().await;
+        let _ = ctx.check_table_access("reports", &PermissionAction::Select).await;
+
+        let after_first = ctx.check_stats.snapshot();
+        assert_eq!(after_first.stampede_events, 0, "Single request should not count as stampede");
+
+        // 第二次访问：并发 10 个请求（会触发击穿）
+        ctx.clear_cache().await;
+        let mut handles = Vec::new();
+        for _ in 0..10 {
+            let ctx_clone = ctx.clone();
+            handles.push(tokio::spawn(async move {
+                ctx_clone
+                    .check_table_access("reports", &PermissionAction::Select)
+                    .await
+            }));
+        }
+        let results = futures::future::join_all(handles).await;
+        for r in results {
+            assert!(r.is_ok_and(|v| v));
+        }
+
+        // 验证：stampede 事件数应该 > 0（说明击穿防护触发了）
+        let after_concurrent = ctx.check_stats.snapshot();
+        assert!(
+            after_concurrent.stampede_events > 0,
+            "Concurrent requests should trigger stampede protection, got {} events",
+            after_concurrent.stampede_events
+        );
+    }
+
+    /// TEST-U-053: 缓存击穿防护 - get_cache_metrics 返回正确指标
+    #[tokio::test]
+    async fn test_get_cache_metrics() {
+        let config = PermissionConfig {
+            roles: [(
+                "admin".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "*".to_string(),
+                        operations: vec![
+                            PermissionAction::Select,
+                            PermissionAction::Insert,
+                            PermissionAction::Update,
+                            PermissionAction::Delete,
+                        ],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let provider = Arc::new(MemoryPermissionProvider::new());
+        provider
+            .add_role("admin", config.roles.get("admin").unwrap().clone())
+            .await;
+
+        let cache: AsyncCache<RolePolicy> = Cache::builder().max_capacity(256).build();
+        let ctx = PermissionContext::new_with_provider("admin".to_string(), Arc::new(cache), provider);
+
+        // 执行一些访问以产生指标
+        ctx.clear_cache().await;
+        ctx.check_table_access("users", &PermissionAction::Select).await;
+        ctx.check_table_access("users", &PermissionAction::Select).await;
+        ctx.check_table_access("orders", &PermissionAction::Select).await;
+
+        let (hit_rate, miss_count, _stampede_count, _cache_size) = ctx.get_cache_metrics().await;
+
+        // 第一次 Select 产生缓存未命中，后续两次命中
+        // 缓存命中率应大于 0（至少有后续命中）
+        assert!(
+            hit_rate > 0.0,
+            "Should have cache hit rate > 0 after previous access"
+        );
+        // 至少有一次未命中（首次访问触发加载）
+        assert!(
+            miss_count >= 1,
+            "Should have at least 1 cache miss for the first access"
+        );
     }
 }
