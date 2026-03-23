@@ -98,3 +98,7 @@ npm-debug.log*
 # 测试产生的迁移文件
 *_test_migration.sql
 di.md
+.qoder
+
+# 测试环境配置
+docker-compose.yml
