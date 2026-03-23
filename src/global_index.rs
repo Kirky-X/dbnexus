@@ -81,6 +81,7 @@ pub struct SyncResult {
 /// 全局索引管理器
 pub struct GlobalIndex {
     pool: Arc<sea_orm::DbConn>,
+    #[allow(dead_code)]
     sync_cache: Arc<RwLock<HashMap<String, Vec<IndexEntry>>>>,
 }
 
@@ -222,6 +223,7 @@ impl GlobalIndex {
     }
 
     /// 同步单个索引条目
+    #[allow(dead_code)]
     async fn sync_entry(&self, entry: &IndexEntry) -> Result<(), sea_orm::DbErr> {
         let id = format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
         let model = ActiveModel {
