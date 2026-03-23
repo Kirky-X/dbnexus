@@ -31,7 +31,7 @@ fn id_column_definition(db_type: DatabaseType) -> &'static str {
 async fn test_auto_migrate_config_creation() {
     let config = dbnexus::config::DbConfig {
         url: "sqlite::memory:".to_string(),
-        migrations_dir: Some("./migrations".to_string()),
+        migrations_dir: Some(PathBuf::from("./migrations")),
         auto_migrate: true,
         migration_timeout: 120,
         ..Default::default()
@@ -52,20 +52,25 @@ async fn test_migration_file_scanning() {
     let db_type = DatabaseType::parse_database_type(&url);
     let id_column = id_column_definition(db_type);
 
-    // 创建测试迁移文件
+    // 创建测试迁移文件（使用唯一表名避免冲突）
+    let table_suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
     let migration_content_1 = format!(
         r#"-- Migration: create_users_table
 -- Version: 1
 
 -- UP:
-CREATE TABLE users (
+CREATE TABLE users_{table_suffix} (
     id {id_column},
     name TEXT NOT NULL,
     email TEXT
 );
 
 -- DOWN:
-DROP TABLE users;
+DROP TABLE users_{table_suffix};
 "#
     );
 
@@ -74,7 +79,7 @@ DROP TABLE users;
 -- Version: 2
 
 -- UP:
-CREATE TABLE orders (
+CREATE TABLE orders_{table_suffix} (
     id {id_column},
     user_id INTEGER NOT NULL,
     total DECIMAL(10, 2) NOT NULL,
@@ -82,7 +87,7 @@ CREATE TABLE orders (
 );
 
 -- DOWN:
-DROP TABLE orders;
+DROP TABLE orders_{table_suffix};
 "#
     );
 
@@ -105,44 +110,13 @@ DROP TABLE orders;
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
-        .await
-        .expect("Failed to drop migrations table");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_1")
-        .await
-        .expect("Failed to drop table_1");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_2")
-        .await
-        .expect("Failed to drop table_2");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_3")
-        .await
-        .expect("Failed to drop table_3");
-
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
-        .await
-        .expect("Failed to drop migrations table");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS users")
-        .await
-        .expect("Failed to drop users table");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS orders")
-        .await
-        .expect("Failed to drop orders table");
-
+    // 运行迁移（不手动删除表，让迁移系统处理）
     let migrations = pool
         .run_migrations(temp_dir.path())
         .await
         .expect("Failed to run migrations");
 
-    // 验证迁移已应用（内存数据库不支持幂等性测试，因为每次连接都是新的数据库）
+    // 验证迁移已应用
     assert_eq!(migrations, 2, "Should have applied 2 migrations");
 }
 
@@ -277,14 +251,20 @@ async fn test_migration_version_sorting() {
     let db_type = DatabaseType::parse_database_type(&url);
     let id_column = id_column_definition(db_type);
 
+    // 使用唯一表名避免冲突
+    let table_suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
     // 创建乱序的迁移文件
     let migration_v3 = format!(
         r#"-- Migration: third
 -- Version: 3
 -- UP:
-CREATE TABLE table_3 (id {id_column});
+CREATE TABLE table_3_{table_suffix} (id {id_column});
 -- DOWN:
-DROP TABLE table_3;
+DROP TABLE table_3_{table_suffix};
 "#
     );
 
@@ -292,9 +272,9 @@ DROP TABLE table_3;
         r#"-- Migration: first
 -- Version: 1
 -- UP:
-CREATE TABLE table_1 (id {id_column});
+CREATE TABLE table_1_{table_suffix} (id {id_column});
 -- DOWN:
-DROP TABLE table_1;
+DROP TABLE table_1_{table_suffix};
 "#
     );
 
@@ -302,9 +282,9 @@ DROP TABLE table_1;
         r#"-- Migration: second
 -- Version: 2
 -- UP:
-CREATE TABLE table_2 (id {id_column});
+CREATE TABLE table_2_{table_suffix} (id {id_column});
 -- DOWN:
-DROP TABLE table_2;
+DROP TABLE table_2_{table_suffix};
 "#
     );
 
@@ -326,25 +306,7 @@ DROP TABLE table_2;
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS dbnexus_migrations")
-        .await
-        .expect("Failed to drop migrations table");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_1")
-        .await
-        .expect("Failed to drop table_1");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_2")
-        .await
-        .expect("Failed to drop table_2");
-    session
-        .execute_raw_ddl("DROP TABLE IF EXISTS table_3")
-        .await
-        .expect("Failed to drop table_3");
-
-    // 运行迁移（内存数据库不支持幂等性测试）
+    // 运行迁移（不手动删除表，让迁移系统处理）
     let applied = pool
         .run_migrations(temp_dir.path())
         .await
