@@ -128,6 +128,7 @@ mod tests {
             rate_limited_checks: 5,
             cache_hits: 90,
             cache_misses: 10,
+            stampede_events: 0,
         };
 
         // 缓存命中率
