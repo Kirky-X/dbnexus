@@ -18,11 +18,14 @@ use thiserror::Error;
 #[cfg(feature = "permission")]
 pub use crate::permission::PermissionAction;
 
+#[cfg(all(feature = "permission-engine", not(feature = "permission")))]
+pub use crate::permission_engine::PermissionAction;
+
 /// 权限操作类型（本地定义）
 ///
 /// # 注意
 ///
-/// 这是 sql-parser 模块的内部定义，仅当 `permission` 特性未启用时使用。
+/// 这是 sql-parser 模块的内部定义，仅当 `permission` 和 `permission-engine` 特性均未启用时使用。
 ///
 /// 当 `permission` 特性启用时，应使用 `dbnexus::permission::PermissionAction` 或
 /// `dbnexus::permission_engine::EnginePermissionAction`（包含额外的 `All` 变体）。
@@ -33,7 +36,7 @@ pub use crate::permission::PermissionAction;
 /// - 如果启用了 `permission` 特性，使用 `dbnexus::permission::PermissionAction`
 /// - 如果启用了 `permission-engine` 特性，使用 `dbnexus::permission_engine::EnginePermissionAction`
 /// - 仅在两者都未启用时使用此本地定义
-#[cfg(not(feature = "permission"))]
+#[cfg(not(any(feature = "permission", feature = "permission-engine")))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PermissionAction {
     /// 查询操作

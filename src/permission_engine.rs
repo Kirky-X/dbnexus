@@ -35,6 +35,7 @@
 //! }
 //! ```
 
+pub use crate::permission::PermissionAction;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -75,34 +76,6 @@ fn is_safe_config_path(path: &str) -> bool {
 
     // 相对路径检查
     !path.contains("..") && !path.contains('\\')
-}
-
-/// 权限操作类型
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PermissionAction {
-    /// 查询操作
-    Select,
-    /// 插入操作
-    Insert,
-    /// 更新操作
-    Update,
-    /// 删除操作
-    Delete,
-    /// 所有操作
-    All,
-}
-
-impl std::fmt::Display for PermissionAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PermissionAction::Select => write!(f, "SELECT"),
-            PermissionAction::Insert => write!(f, "INSERT"),
-            PermissionAction::Update => write!(f, "UPDATE"),
-            PermissionAction::Delete => write!(f, "DELETE"),
-            PermissionAction::All => write!(f, "*"),
-        }
-    }
 }
 
 /// 权限资源
@@ -757,11 +730,11 @@ impl YamlPermissionProvider {
         }
 
         // 检查操作匹配（允许列表或拒绝列表）
-        let in_allow = rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All);
-        let in_deny = rule.deny.contains(&context.action) || rule.deny.contains(&PermissionAction::All);
+        let in_allow = rule.allow.contains(&context.action);
+        let in_deny = rule.deny.contains(&context.action);
 
         // 如果操作既不在 allow 也不在 deny 中，则不匹配
-        if !in_allow && !in_deny && context.action != PermissionAction::All {
+        if !in_allow && !in_deny {
             return false;
         }
 
@@ -805,11 +778,11 @@ impl PermissionProvider for YamlPermissionProvider {
         // 评估规则：按优先级从高到低，一旦找到决策立即返回
         for (_, rule) in matched_rules {
             // 检查 Allow 规则（优先级最高）
-            if rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All) {
+            if rule.allow.contains(&context.action) {
                 return PermissionDecision::Allow;
             }
             // 检查 Deny 规则
-            if rule.deny.contains(&context.action) || rule.deny.contains(&PermissionAction::All) {
+            if rule.deny.contains(&context.action) {
                 return PermissionDecision::Deny;
             }
         }
@@ -1046,10 +1019,10 @@ impl PermissionProvider for RbacPermissionProvider {
         // 评估规则
         for rule in all_rules {
             if rule.enabled && self.matches_rule(&rule, context) {
-                if rule.allow.contains(&context.action) || rule.allow.contains(&PermissionAction::All) {
+                if rule.allow.contains(&context.action) {
                     return PermissionDecision::Allow;
                 }
-                if rule.deny.contains(&context.action) || rule.deny.contains(&PermissionAction::All) {
+                if rule.deny.contains(&context.action) {
                     return PermissionDecision::Deny;
                 }
             }
@@ -1173,7 +1146,8 @@ impl Default for PermissionEngineConfig {
 pub struct PermissionEngine {
     /// 策略决策点
     pdp: PolicyDecisionPoint,
-    /// 配置
+    /// 配置（预留未来使用）
+    #[allow(dead_code)]
     config: PermissionEngineConfig,
 }
 
