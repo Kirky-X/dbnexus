@@ -11,10 +11,10 @@
 //!
 //! 这些类型由 `#[derive(DbEntity)]` 宏自动生成，用户需要使用它们来定义实体。
 //!
-//! - [`EntityTrait`] - 实体 trait，由宏自动实现
-//! - [`ActiveModelTrait`] - ActiveModel trait，用于修改实体
-//! - [`Condition`] - 查询条件构建器
-//! - `Set<T>` - 值设置辅助类型，用于构建 [`ActiveModel`]
+//! - [`sea_orm::EntityTrait`] - 实体 trait，由宏自动实现
+//! - [`sea_orm::ActiveModelTrait`] - ActiveModel trait，用于修改实体
+//! - [`sea_orm::Condition`] - 查询条件构建器
+//! - `Set<T>` - 值设置辅助类型，用于构建 `ActiveModel`
 
 // 只暴露用户必需的类型
 pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
