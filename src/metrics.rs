@@ -381,6 +381,16 @@ pub struct ConnectionAcquireStats {
     pub failure_count: u64,
     /// 超时率
     pub timeout_rate: f64,
+    /// 慢获取次数（>3s）
+    pub slow_acquires: u64,
+    /// 警告级超时次数（3s-5s）
+    pub timeout_warn: u64,
+    /// 错误级超时次数（5s-10s）
+    pub timeout_error: u64,
+    /// 严重级超时次数（>=10s）
+    pub timeout_critical: u64,
+    /// 连接获取延迟直方图
+    pub acquire_histogram: HistogramStats,
 }
 
 /// 事务统计
@@ -598,6 +608,14 @@ struct ConnectionAcquireMetricsInner {
     success_count: AtomicU64,
     timeout_count: AtomicU64,
     failure_count: AtomicU64,
+    /// 慢获取计数（>3s 警告阈值）
+    slow_acquires: AtomicU64,
+    /// 分级超时计数 (warn/error/critical)
+    timeout_warn: AtomicU64,
+    timeout_error: AtomicU64,
+    timeout_critical: AtomicU64,
+    /// 连接获取延迟直方图（100ms, 500ms, 1s, 3s, 5s, 10s buckets）
+    acquire_duration: LatencyHistogram,
 }
 
 impl ConnectionAcquireMetricsInner {
@@ -607,6 +625,11 @@ impl ConnectionAcquireMetricsInner {
             success_count: AtomicU64::new(0),
             timeout_count: AtomicU64::new(0),
             failure_count: AtomicU64::new(0),
+            slow_acquires: AtomicU64::new(0),
+            timeout_warn: AtomicU64::new(0),
+            timeout_error: AtomicU64::new(0),
+            timeout_critical: AtomicU64::new(0),
+            acquire_duration: LatencyHistogram::new(vec![100, 500, 1000, 3000, 5000, 10000]),
         }
     }
 
@@ -625,6 +648,30 @@ impl ConnectionAcquireMetricsInner {
         self.failure_count.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// 记录连接获取延迟
+    fn record_acquire_duration(&self, duration: Duration) {
+        self.total_attempts.fetch_add(1, Ordering::SeqCst);
+        self.success_count.fetch_add(1, Ordering::SeqCst);
+        self.acquire_duration.record(duration);
+        // 慢获取阈值: 3000ms
+        if duration.as_millis() as u64 >= 3000 {
+            self.slow_acquires.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// 记录分级超时（warn/error/critical）
+    fn record_timeout_level(&self, elapsed_ms: u64) {
+        self.total_attempts.fetch_add(1, Ordering::SeqCst);
+        self.timeout_count.fetch_add(1, Ordering::SeqCst);
+        if elapsed_ms >= 10000 {
+            self.timeout_critical.fetch_add(1, Ordering::SeqCst);
+        } else if elapsed_ms >= 5000 {
+            self.timeout_error.fetch_add(1, Ordering::SeqCst);
+        } else {
+            self.timeout_warn.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
     fn stats(&self) -> ConnectionAcquireStats {
         let total = self.total_attempts.load(Ordering::SeqCst);
         ConnectionAcquireStats {
@@ -637,6 +684,11 @@ impl ConnectionAcquireMetricsInner {
             } else {
                 0.0
             },
+            slow_acquires: self.slow_acquires.load(Ordering::SeqCst),
+            timeout_warn: self.timeout_warn.load(Ordering::SeqCst),
+            timeout_error: self.timeout_error.load(Ordering::SeqCst),
+            timeout_critical: self.timeout_critical.load(Ordering::SeqCst),
+            acquire_histogram: self.acquire_duration.stats(),
         }
     }
 }
@@ -996,6 +1048,16 @@ impl MetricsCollector {
         self.connection_acquire.write().record_failure();
     }
 
+    /// 记录连接获取延迟（成功时调用）
+    pub fn record_connection_acquire_duration(&self, duration: Duration) {
+        self.connection_acquire.write().record_acquire_duration(duration);
+    }
+
+    /// 记录分级超时（根据耗时判断级别）
+    pub fn record_connection_timeout_level(&self, elapsed_ms: u64) {
+        self.connection_acquire.write().record_timeout_level(elapsed_ms);
+    }
+
     /// 获取连接获取统计
     pub fn connection_acquire_stats(&self) -> ConnectionAcquireStats {
         self.connection_acquire.read().stats()
@@ -1133,6 +1195,63 @@ impl MetricsCollector {
             output,
             "dbnexus_connection_acquire_failure_total {}",
             acquire_stats.failure_count
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_connection_acquire_slow_total {}",
+            acquire_stats.slow_acquires
+        )
+        .unwrap();
+
+        // 分级超时指标（带级别标签）
+        output.push_str("# TYPE dbnexus_connection_timeout_total counter\n");
+        writeln!(
+            output,
+            "dbnexus_connection_timeout_total{{level=\"warn\"}} {}",
+            acquire_stats.timeout_warn
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_connection_timeout_total{{level=\"error\"}} {}",
+            acquire_stats.timeout_error
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_connection_timeout_total{{level=\"critical\"}} {}",
+            acquire_stats.timeout_critical
+        )
+        .unwrap();
+
+        // 连接获取延迟直方图
+        output.push_str("# TYPE dbnexus_pool_acquire_duration_seconds histogram\n");
+        for bucket in &acquire_stats.acquire_histogram.buckets {
+            writeln!(
+                output,
+                "dbnexus_pool_acquire_duration_seconds_bucket{{le=\"{}}} {}",
+                bucket.boundary_ms as f64 / 1000.0,
+                bucket.cumulative_count
+            )
+            .unwrap();
+        }
+        writeln!(
+            output,
+            "dbnexus_pool_acquire_duration_seconds_bucket{{le=\"+Inf\"}} {}",
+            acquire_stats.acquire_histogram.total_samples
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_acquire_duration_seconds_sum {}",
+            0.0
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_acquire_duration_seconds_count {}",
+            acquire_stats.acquire_histogram.total_samples
         )
         .unwrap();
 
