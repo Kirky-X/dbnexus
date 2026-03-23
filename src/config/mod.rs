@@ -11,7 +11,7 @@
 //!
 //! - [`DbConfig`] - 数据库配置结构体
 //! - [`PoolConfig`] - 连接池配置
-//! - [`CacheConfig`] - 缓存配置
+//! - `CacheConfig` - 缓存配置
 //! - [`ConfigError`] - 配置相关错误类型
 //!
 //! # 使用方式
