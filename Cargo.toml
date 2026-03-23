@@ -145,6 +145,7 @@ with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 security = ["audit", "permission-engine"]
 audit = ["chrono", "uuid"]  # 审计日志
 permission-engine = ["dashmap", "serde_yaml", "cache"]  # 高级权限引擎
+authentication = ["jsonwebtoken", "bcrypt", "crossbeam"]  # JWT 认证系统
 
 # === 高级配置 ===
 confers = ["dep:confers"]  # 使用 confers 库进行配置管理
@@ -222,6 +223,14 @@ sqlparser = { version = "0.47", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "5.5", optional = true }
 moka = { version = "0.12", optional = true, default-features = false, features = ["sync", "future"] }
+
+# Authentication dependencies
+jsonwebtoken = { version = "9", optional = true }
+bcrypt = { version = "0.16", optional = true }
+
+crossbeam = { version = "0.8", optional = true }
+unicode-normalization = "0.1"
+validator = { version = "0.18", features = ["derive"], optional = true }
 
 # Internal packages
 dbnexus-macros = { workspace = true, optional = true }
