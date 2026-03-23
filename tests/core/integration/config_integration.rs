@@ -171,7 +171,7 @@ async fn test_config_builder_chaining() {
 #[tokio::test]
 async fn test_config_invalid_yaml() {
     let invalid_yaml = r#"url: "sqlite::memory:" invalid syntax"#;
-    let result = DbConfig::from_yaml_str(invalid_yaml);
+    let result = serde_yaml::from_str::<dbnexus::config::DbConfig>(invalid_yaml);
     assert!(result.is_err());
 }
 
