@@ -258,10 +258,17 @@ fn test_histogram_cumulative_count() {
 
     let stats = histogram.stats();
 
-    // 验证累积计数
+    // 验证累积计数（直方图累积计数必须严格单调非递减）
     for (i, bucket) in stats.buckets.iter().enumerate() {
         if i < stats.buckets.len() - 1 {
-            assert!(bucket.cumulative_count <= bucket.count + stats.buckets[i + 1].count);
+            assert!(
+                bucket.cumulative_count <= stats.buckets[i + 1].cumulative_count,
+                "bucket[{}] cumulative_count {} > bucket[{}] cumulative_count {}",
+                i,
+                bucket.cumulative_count,
+                i + 1,
+                stats.buckets[i + 1].cumulative_count
+            );
         }
     }
 }
