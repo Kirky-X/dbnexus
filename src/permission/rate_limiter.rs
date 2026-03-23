@@ -7,6 +7,7 @@
 //!
 //! 提供基于令牌桶算法的速率限制功能。
 
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
@@ -211,39 +212,28 @@ impl RateLimiter {
             self.max_requests as u64
         };
 
-        let key_owned = key.to_string();
-
-        // 检查是否需要 LRU 驱逐
-        if self.buckets.len() >= self.max_buckets && !self.buckets.contains_key(&key_owned) {
+        // 检查是否需要 LRU 驱逐（在 entry() 之前检查，避免在持有 entry 时删除）
+        if self.buckets.len() >= self.max_buckets && !self.buckets.contains_key(key) {
             // 执行 LRU 驱逐：移除最长时间未访问的桶
             self.evict_lru_bucket();
         }
 
-        // 获取或创建令牌桶：先尝试获取已有桶
-        let bucket_opt = self.buckets.get(&key_owned);
-
-        if let Some(bucket) = bucket_opt {
-            // 桶已存在：直接更新 LRU 时间戳并消费令牌
-            bucket.touch();
-            return bucket.try_consume();
-        }
-
-        // 桶不存在：插入新桶
-        let bucket = TokenBucket::new(self.max_requests as u64, refill_rate);
-        bucket.touch();
-        let consumed = bucket.try_consume();
-
-        // 尝试插入桶（可能因并发竞争而失败，此时使用已有桶）
-        let old_bucket = self.buckets.insert(key_owned.clone(), bucket);
-        if old_bucket.is_some() {
-            // 桶已被其他线程插入，丢弃新桶，使用已有桶
-            if let Some(existing) = self.buckets.get(&key_owned) {
-                existing.touch();
-                return existing.try_consume();
+        // 使用 entry() API 实现原子的 get-or-insert 操作
+        match self.buckets.entry(key.to_string()) {
+            Entry::Occupied(entry) => {
+                // 桶已存在：直接更新 LRU 时间戳并消费令牌
+                entry.get().touch();
+                entry.get().try_consume()
+            }
+            Entry::Vacant(entry) => {
+                // 桶不存在：创建新桶并插入
+                let bucket = TokenBucket::new(self.max_requests as u64, refill_rate);
+                bucket.touch();
+                let consumed = bucket.try_consume();
+                entry.insert(bucket);
+                consumed
             }
         }
-
-        consumed
     }
 
     /// 获取剩余请求数量
@@ -641,5 +631,94 @@ mod tests {
         // 验证重置后状态（条目被移除，remaining 返回最大值）
         assert_eq!(limiter.remaining("user1"), 10);
         assert!(limiter.check("user1").await);
+    }
+
+    /// TEST-U-039: 令牌桶高并发压力测试（50+ 并发任务）
+    ///
+    /// 验证令牌桶在 50+ 并发任务同时调用 check 时的正确性和稳定性。
+    /// 测试无 panic、无数据竞争、令牌计数准确。
+    #[tokio::test]
+    async fn test_token_bucket_high_concurrent_stress() {
+        let limiter = Arc::new(RateLimiter::new(200, std::time::Duration::from_secs(1), 10000));
+        let mut handles = vec![];
+
+        // 启动 60 个并发任务，每个尝试获取 5 个令牌（共 300 次请求）
+        for _ in 0..60 {
+            let limiter_clone = limiter.clone();
+            let handle = tokio::spawn(async move {
+                let mut success_count = 0;
+                for _ in 0..5 {
+                    if limiter_clone.check("stress_user").await {
+                        success_count += 1;
+                    }
+                }
+                success_count
+            });
+            handles.push(handle);
+        }
+
+        // 等待所有任务完成
+        let results: Vec<u32> = futures::future::join_all(handles)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
+
+        // 总成功次数应该等于桶容量（200）
+        let total_success: u32 = results.iter().sum();
+        assert_eq!(total_success, 200, "Total success should equal bucket capacity");
+
+        // 剩余令牌应该为 0
+        assert_eq!(limiter.remaining("stress_user"), 0);
+
+        // 验证无 panic：所有任务都应正常完成
+        assert_eq!(results.len(), 60);
+    }
+
+    /// TEST-U-040: TokenBucket fetch_sub 精度损失测试
+    ///
+    /// 验证 fetch_sub 返回值判断逻辑正确处理令牌耗尽情况。
+    /// 当 tokens 从 1 变为 0 时，fetch_sub 返回 1，应该允许请求。
+    /// 当 tokens 为 0 时，fetch_sub 返回 0，应该拒绝请求并归还令牌。
+    #[tokio::test]
+    async fn test_token_bucket_fetch_sub_precision() {
+        let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000);
+
+        // 第一次请求：tokens 从 1 变为 0，fetch_sub 返回 1，应该允许
+        assert!(limiter.check("precision_user").await, "First request should be allowed");
+        assert_eq!(limiter.remaining("precision_user"), 0);
+
+        // 第二次请求：tokens 为 0，fetch_sub 返回 0，应该拒绝并归还令牌
+        assert!(!limiter.check("precision_user").await, "Second request should be denied");
+        // 归还令牌后 tokens 应该仍为 0（不能为负数）
+        assert_eq!(limiter.remaining("precision_user"), 0);
+
+        // 再次请求应该仍然被拒绝
+        assert!(!limiter.check("precision_user").await, "Third request should still be denied");
+        assert_eq!(limiter.remaining("precision_user"), 0);
+    }
+
+    /// TEST-U-041: TokenBucket 边界值精度测试
+    ///
+    /// 验证在令牌数接近边界值时的精确行为。
+    #[tokio::test]
+    async fn test_token_bucket_boundary_precision() {
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000);
+
+        // 消耗令牌直到耗尽
+        assert!(limiter.check("boundary_user").await);
+        assert_eq!(limiter.remaining("boundary_user"), 2);
+
+        assert!(limiter.check("boundary_user").await);
+        assert_eq!(limiter.remaining("boundary_user"), 1);
+
+        assert!(limiter.check("boundary_user").await);
+        assert_eq!(limiter.remaining("boundary_user"), 0);
+
+        // 在边界值 0 处反复请求，验证不会出现负数或错误的允许
+        for _ in 0..5 {
+            assert!(!limiter.check("boundary_user").await);
+            assert_eq!(limiter.remaining("boundary_user"), 0);
+        }
     }
 }
