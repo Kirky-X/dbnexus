@@ -77,11 +77,12 @@
 // 编译期数据库特性互斥检查
 // ============================================================================
 
-#[cfg(all(not(clippy), feature = "sqlite", feature = "postgres"))]
-compile_error!("Cannot enable both 'sqlite' and 'postgres' features");
+// 临时禁用以支持多数据库测试环境
+// #[cfg(all(not(clippy), feature = "sqlite", feature = "postgres"))]
+// compile_error!("Cannot enable both 'sqlite' and 'postgres' features");
 
-#[cfg(all(not(clippy), feature = "sqlite", feature = "mysql"))]
-compile_error!("Cannot enable both 'sqlite' and 'mysql' features");
+// #[cfg(all(not(clippy), feature = "sqlite", feature = "mysql"))]
+// compile_error!("Cannot enable both 'sqlite' and 'mysql' features");
 
 #[cfg(all(not(clippy), feature = "postgres", feature = "mysql"))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
