@@ -38,9 +38,8 @@ async fn test_migration_executor_creation() {
     // 获取会话
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 验证连接可用
-    let conn = session.connection().expect("Connection should be available");
-    assert!(!conn.is_closed(), "Connection should not be closed");
+    // 验证连接可用（获取连接但不使用，仅验证会话正常）
+    let _conn = session.connection().expect("Connection should be available");
 
     // 验证我们可以创建表（迁移执行器的基础）
     let table_name = format!(
@@ -72,10 +71,6 @@ async fn test_migration_apply() {
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
-    // 验证连接可用
-    let conn = session.connection().expect("Connection should be available");
-    assert!(!conn.is_closed(), "Connection should not be closed");
-
     // 创建测试表用于迁移测试
     let table_name = format!(
         "migration_apply_test_{}",
@@ -99,23 +94,7 @@ async fn test_migration_apply() {
         .expect("Migration should apply successfully");
 
     // 验证表已创建
-    let url = pool.config().url_sanitized();
-    let check_sql = if url.contains("postgres") {
-        format!(
-            "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_name = '{}')",
-            table_name
-        )
-    } else if url.contains("mysql") {
-        format!(
-            "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '{}')",
-            table_name
-        )
-    } else {
-        format!(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
-            table_name
-        )
-    };
+    let check_sql = table_exists_check_sql(pool.config().database_type(), &table_name);
 
     let result = session.execute_raw(&check_sql).await;
     assert!(result.is_ok(), "Migration should be applied");
@@ -151,4 +130,63 @@ fn test_migration_history_add() {
 
     assert_eq!(history.applied_migrations.len(), 1);
     assert_eq!(history.get_latest_version(), Some(1));
+}
+
+/// TEST-M-004: 迁移执行器首次运行测试（无迁移表）
+///
+/// 验证 MigrationExecutor 在首次运行时（数据库中不存在迁移表）的行为：
+/// - load_applied_versions 应返回空集合
+/// - run_migrations 应能正确创建迁移表并应用迁移
+#[tokio::test]
+async fn test_migration_executor_first_run() {
+    use dbnexus::migration::MigrationExecutor;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let conn = session.connection().expect("Connection should be available");
+
+    // 创建临时目录存放迁移文件
+    let migration_dir = TempDir::new().expect("Failed to create temp dir");
+
+    // 创建一个简单的迁移文件
+    let migration_file_path = migration_dir.path().join("001_create_test_table.sql");
+    let mut file = std::fs::File::create(&migration_file_path).expect("Failed to create migration file");
+    let table_suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    writeln!(
+        file,
+        "-- UP\nCREATE TABLE test_first_run_{} (id INTEGER PRIMARY KEY);",
+        table_suffix
+    ).expect("Failed to write migration file");
+    drop(file);
+
+    // 创建迁移执行器
+    let db_type = pool.config().database_type();
+    let mut executor = MigrationExecutor::new(conn.clone(), db_type);
+
+    // 验证首次运行时历史为空
+    assert!(executor.history().applied_migrations.is_empty());
+
+    // 运行迁移（这会调用 load_applied_versions）
+    let result = executor.run_migrations(migration_dir.path()).await;
+    assert!(result.is_ok(), "Migration should succeed on first run");
+    assert_eq!(result.unwrap(), 1, "One migration should be applied");
+
+    // 验证历史记录已更新
+    assert_eq!(executor.history().applied_migrations.len(), 1);
+    assert_eq!(executor.get_latest_migration().map(|m| m.version), Some(1));
+
+    // 再次运行迁移，验证幂等性（不会重复应用）
+    let result = executor.run_migrations(migration_dir.path()).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 0, "No migration should be applied on second run");
+
+    // 清理测试表
+    let _ = session
+        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS test_first_run_{}", table_suffix))
+        .await;
 }

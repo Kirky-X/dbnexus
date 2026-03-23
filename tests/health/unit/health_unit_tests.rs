@@ -13,8 +13,8 @@ use std::time::Duration;
 
 // 导入健康检查模块
 use dbnexus::health::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState,
-    HealthChecker, HealthStatus, PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
+    PoolHealthMetrics,
 };
 
 // ============================================================================
