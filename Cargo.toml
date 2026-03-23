@@ -2,6 +2,7 @@
 members = [
     ".",
     "macros",
+    "src/cli",
 ]
 resolver = "2"
 
@@ -134,7 +135,7 @@ health-check = []  # 健康检查模块（内置，无额外依赖）
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
-migration = ["sqlparser"]  # 数据库迁移
+migration = ["sqlparser", "regex"]  # 数据库迁移
 auto-migrate = ["migration"]  # 自动迁移
 sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
 global-index = ["chrono", "with-json"]  # 全局索引
@@ -244,6 +245,8 @@ futures = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.22", features = ["v4"] }
 twox-hash = "2.1"
+# dbnexus-cli binary: workspace member, enables cargo_bin() in integration tests
+dbnexus-cli = { path = "src/cli" }
 
 [lints]
 workspace = true
@@ -285,7 +288,7 @@ required-features = ["audit"]
 [[test]]
 name = "migration_integration"
 path = "tests/migration/integration/integration.rs"
-required-features = ["migration"]
+required-features = ["migration", "auto-migrate"]
 
 [[test]]
 name = "migration_auto_migrate"

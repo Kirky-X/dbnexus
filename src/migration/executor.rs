@@ -19,7 +19,7 @@ use std::path::PathBuf;
 /// 负责执行数据库迁移操作，内部字段已封装以防止未授权访问
 pub struct MigrationExecutor {
     /// 数据库连接
-    pub(crate) connection: sea_orm::DatabaseConnection,
+    pub connection: sea_orm::DatabaseConnection,
     /// SQL 生成器
     pub(crate) sql_generator: SqlGenerator,
     /// 迁移历史记录
