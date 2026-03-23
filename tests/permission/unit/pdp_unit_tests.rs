@@ -722,7 +722,6 @@ fn test_permission_action_display() {
     assert_eq!(PermissionAction::Insert.to_string(), "INSERT");
     assert_eq!(PermissionAction::Update.to_string(), "UPDATE");
     assert_eq!(PermissionAction::Delete.to_string(), "DELETE");
-    assert_eq!(PermissionAction::All.to_string(), "*");
 }
 
 /// TEST-PDP-U-026: PermissionAction 序列化

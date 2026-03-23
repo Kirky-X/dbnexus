@@ -12,8 +12,8 @@ use dbnexus::migration::{MigrationExecutor, MigrationFile, MigrationFileParser};
 #[cfg(feature = "sql-parser")]
 use dbnexus::sql_parser::{SqlOperationType, SqlParser};
 use dbnexus::{
-    DbPool, DbResult,
-    config::{DatabaseType as MigrationDatabaseType, DbError},
+    DbPool, DbResult, DbError,
+    config::DatabaseType as MigrationDatabaseType,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -232,14 +232,14 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
         return Ok(());
     }
 
-    let applied_count = executor.history.applied_migrations.len();
+    let applied_count = executor.history().applied_migrations.len();
     println!("\n✅ 已应用的迁移: {} 个", applied_count);
 
     if applied_count > 0 {
         // 显示最新迁移信息
-        if let Some(latest_version) = executor.history.get_latest_version() {
+        if let Some(latest_version) = executor.history().get_latest_version() {
             if let Some(latest_migration) = executor
-                .history
+                .history()
                 .applied_migrations
                 .iter()
                 .find(|m| m.version == latest_version)
@@ -253,7 +253,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
 
         // 显示所有已应用迁移
         println!("\n   迁移历史详情:");
-        for (idx, migration) in executor.history.applied_migrations.iter().enumerate() {
+        for (idx, migration) in executor.history().applied_migrations.iter().enumerate() {
             println!(
                 "   [{:2}] v{:6} - {}",
                 idx + 1,
@@ -267,7 +267,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     let local_migrations = executor.scan_migrations(migrations_dir)?;
     let pending_count = local_migrations
         .iter()
-        .filter(|m| !executor.history.is_version_applied(m.version()))
+        .filter(|m| !executor.history().is_version_applied(m.version()))
         .count();
 
     println!("\n📦 本地迁移文件: {} 个", local_migrations.len());
@@ -276,7 +276,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     if !local_migrations.is_empty() {
         // 显示待应用的迁移
         let applied_versions: std::collections::HashSet<u32> =
-            executor.history.applied_migrations.iter().map(|m| m.version).collect();
+            executor.history().applied_migrations.iter().map(|m| m.version).collect();
 
         let pending: Vec<_> = local_migrations
             .iter()
@@ -385,7 +385,7 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_
     // 加载迁移历史并获取已应用版本
     executor.load_history().await?;
     let applied_versions: std::collections::HashSet<u32> =
-        executor.history.applied_migrations.iter().map(|m| m.version).collect();
+        executor.history().applied_migrations.iter().map(|m| m.version).collect();
 
     // 筛选待应用的迁移
     let mut to_apply: Vec<_> = migrations
@@ -456,7 +456,7 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
     // 加载迁移历史
     executor.load_history().await?;
 
-    let applied_migrations = &executor.history.applied_migrations;
+    let applied_migrations = &executor.history().applied_migrations;
 
     if applied_migrations.is_empty() {
         println!("\n⚠️  没有已应用的迁移可以回滚");
