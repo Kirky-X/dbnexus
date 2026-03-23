@@ -8,5 +8,7 @@
 //! 提供数据库操作的安全验证功能。
 
 mod ddl_guard;
+mod sensitive;
 
 pub use ddl_guard::{DdlGuard, DdlValidationResult};
+pub use sensitive::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
