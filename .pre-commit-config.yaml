@@ -12,3 +12,13 @@ repos:
   - id: detect-private-key
     exclude: ^scripts/pre-commit-check\.sh$  # 排除安全检查脚本（包含检测模式字符串，非真实私钥）
   - id: check-merge-conflict
+
+# 禁止直接提交到 main 分支
+- repo: local
+  hooks:
+  - id: no-commit-to-main
+    name: No commit to main branch
+    entry: scripts/no-commit-to-main.sh
+    language: script
+    pass_filenames: false
+    always_run: true
