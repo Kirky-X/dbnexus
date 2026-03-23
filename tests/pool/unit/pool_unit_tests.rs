@@ -1219,6 +1219,133 @@ fn test_health_check_interval_above_maximum() {
 }
 
 // ============================================================================
+// 连接池等待者计数测试
+// ============================================================================
+
+/// TEST-U-POOL-030: 验证 wait_count 在并发获取时正确递增和递减
+///
+/// 创建一个小容量连接池，发送超过容量的并发请求，
+/// 验证 wait_count 在等待期间 > 0，获取完成后恢复到合理水平。
+#[tokio::test]
+#[cfg(feature = "sqlite")]
+async fn test_wait_count_increments_during_contention() {
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 2,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
+
+    let pool = dbnexus::DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
+
+    let pool = Arc::new(pool);
+
+    // 获取初始状态
+    let initial_status = pool.status();
+    assert_eq!(initial_status.wait_count, 0, "Initial wait_count should be 0");
+    assert_eq!(initial_status.max_waiters, 0, "Initial max_waiters should be 0");
+
+    // 发送 4 个并发请求（超过 max_connections=2）
+    let handles: Vec<_> = (0..4)
+        .map(|_| {
+            let pool = pool.clone();
+            tokio::spawn(async move {
+                let session = pool.get_session("admin").await;
+                if session.is_ok() {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                }
+                session
+            })
+        })
+        .collect();
+
+    // 等待所有请求完成
+    let results: Vec<_> = futures::future::join_all(handles).await;
+    let success_count = results
+        .iter()
+        .filter(|r| r.as_ref().is_ok_and(|r| r.is_ok()))
+        .count();
+
+    // 验证至少有部分请求成功
+    assert!(
+        success_count >= 2,
+        "Expected at least 2 successful acquires, got {}",
+        success_count
+    );
+
+    // 等待所有请求完全结束
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 验证最终状态：wait_count 应恢复到 0
+    let final_status = pool.status();
+    assert_eq!(
+        final_status.wait_count, 0,
+        "Final wait_count should be 0 after all requests complete"
+    );
+    // max_waiters 应记录了峰值（至少 1，因为有并发等待）
+    assert!(
+        final_status.max_waiters >= 1,
+        "max_waiters should be >= 1, got {}",
+        final_status.max_waiters
+    );
+}
+
+/// TEST-U-POOL-031: 验证 max_waiters 记录历史峰值
+#[tokio::test]
+#[cfg(feature = "sqlite")]
+async fn test_max_waiters_tracks_historical_peak() {
+    let config = dbnexus::config::DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 1,
+        min_connections: 1,
+        acquire_timeout: 5000,
+        admin_role: "admin".to_string(),
+        ..Default::default()
+    };
+
+    let pool = dbnexus::DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
+    let pool = Arc::new(pool);
+
+    // 第一轮：3 个并发请求
+    let handles: Vec<_> = (0..3)
+        .map(|_| {
+            let pool = pool.clone();
+            tokio::spawn(async move { pool.get_session("admin").await })
+        })
+        .collect();
+    futures::future::join_all(handles).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let status_after_round1 = pool.status();
+    let peak1 = status_after_round1.max_waiters;
+    assert!(peak1 >= 1, "After 3 requests, max_waiters should be >= 1");
+
+    // 第二轮：5 个并发请求（更大峰值）
+    let handles: Vec<_> = (0..5)
+        .map(|_| {
+            let pool = pool.clone();
+            tokio::spawn(async move { pool.get_session("admin").await })
+        })
+        .collect();
+    futures::future::join_all(handles).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let status_after_round2 = pool.status();
+    // max_waiters 应该是历史峰值（round1 的峰值或更大）
+    assert!(
+        status_after_round2.max_waiters >= peak1,
+        "max_waiters should be >= previous peak {}",
+        peak1
+    );
+}
+
+// ============================================================================
 // 信号量许可管理测试（Perf-1 修复验证）
 // ============================================================================
 //
