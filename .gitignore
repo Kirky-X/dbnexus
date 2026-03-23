@@ -94,3 +94,7 @@ npm-debug.log*
 # Makefile - Build commands
 # rustfmt.toml - Code formatting
 # .cargo/config.toml - Cargo configuration
+
+# 测试产生的迁移文件
+*_test_migration.sql
+di.md
