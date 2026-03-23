@@ -172,6 +172,9 @@ pub(crate) struct DbPoolInner {
     /// 等待计数
     pub(super) wait_count: AtomicU32,
 
+    /// 最大等待计数（历史峰值）
+    pub(super) max_waiters: AtomicU32,
+
     /// 借用计数
     pub(super) borrow_count: AtomicU64,
 
@@ -223,6 +226,7 @@ impl DbPool {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(url), fields(url_len = url.len())))]
     pub async fn new(url: &str) -> DbResult<Self> {
         let config = DbConfig {
             url: url.to_string(),
@@ -232,6 +236,7 @@ impl DbPool {
     }
 
     /// 使用配置创建连接池
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(config), fields(url_len = config.url.len())))]
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
         // 创建连接
         let _connection = sea_orm::Database::connect(&config.url)
@@ -276,6 +281,7 @@ impl DbPool {
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
+                max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
             }),
@@ -489,6 +495,7 @@ impl DbPool {
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
+                max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
             }),
@@ -549,6 +556,7 @@ impl DbPool {
                 #[cfg(feature = "metrics")]
                 metrics_collector: None,
                 wait_count: AtomicU32::new(0),
+                max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
             }),
@@ -617,6 +625,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果角色未在权限配置中定义，返回错误
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(role = %role)))]
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
         // 验证角色名称
         #[cfg(feature = "permission")]
@@ -1013,9 +1022,19 @@ impl DbPool {
     /// 从池中获取连接
     ///
     /// 实现连接获取逻辑，包括：
-    /// 1. 获取信号量许可（控制最大并发数）
-    /// 2. 尝试从空闲连接队列获取
-    /// 3. 如果队列为空，创建新连接
+    /// 1. 记录等待者计数（wait_count），追踪当前等待获取连接的协程数
+    /// 2. 追踪历史最大等待者峰值（max_waiters）
+    /// 3. 获取信号量许可（控制最大并发数），带超时保护
+    /// 4. 尝试从空闲连接队列获取，队列为空则创建新连接
+    ///
+    /// ## 等待计数与告警
+    ///
+    /// - 每次进入获取流程时 `wait_count += 1`，无论最终成功或超时都 `wait_count -= 1`
+    /// - `max_waiters` 记录历史最大并发等待者数量（CAS 更新）
+    /// - 获取超时后根据等待时长触发分级告警：
+    ///   - ≥3s：warn 级别
+    ///   - ≥5s：error 级别
+    ///   - ≥10s：critical 级别
     ///
     /// ## 锁竞争优化策略
     ///
@@ -1035,15 +1054,72 @@ impl DbPool {
     ///
     /// # Errors
     ///
-    /// 如果获取连接超时或创建连接失败，返回错误
+    /// 如果获取连接超时（池耗尽）或创建连接失败，返回错误
     async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
+        // 步骤 0: 记录等待计数
+        let waiters = self.inner.wait_count.fetch_add(1, Ordering::SeqCst) + 1;
+        self.update_max_waiters(waiters);
+
         // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
         // 信号量提供公平的等待队列，避免惊群效应
         let timeout_duration = self.inner.config.acquire_timeout_duration();
-        let permit = timeout(timeout_duration, self.inner.connection_semaphore.acquire())
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout)))?;
+        let start = Instant::now();
+        let acquire_result = timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
+
+        // wait_count 递减（无论成功或失败）
+        self.inner.wait_count.fetch_sub(1, Ordering::SeqCst);
+
+        let permit = match acquire_result {
+            Ok(Ok(p)) => {
+                // 记录获取延迟和慢获取
+                #[cfg(feature = "metrics")]
+                if let Some(ref collector) = self.inner.metrics_collector {
+                    collector.record_connection_acquire_duration(start.elapsed());
+                }
+                p
+            }
+            Ok(Err(_)) => {
+                // permit error - shouldn't happen with tokio semaphore
+                return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                    sea_orm::ConnAcquireErr::Timeout,
+                )));
+            }
+            Err(_) => {
+                // Timeout - 分级告警
+                let elapsed_ms = start.elapsed().as_millis() as u64;
+                #[cfg(feature = "metrics")]
+                if let Some(ref collector) = self.inner.metrics_collector {
+                    collector.record_connection_timeout_level(elapsed_ms);
+                }
+
+                // 分级日志告警
+                if elapsed_ms >= 10_000 {
+                    tracing::error!(
+                        target: "pool",
+                        "CRITICAL: connection acquire timeout {}ms (waiters={}) - pool exhaustion",
+                        elapsed_ms,
+                        waiters
+                    );
+                } else if elapsed_ms >= 5_000 {
+                    tracing::error!(
+                        target: "pool",
+                        "ERROR: connection acquire timeout {}ms (waiters={}) - pool pressure high",
+                        elapsed_ms,
+                        waiters
+                    );
+                } else {
+                    tracing::warn!(
+                        target: "pool",
+                        "WARN: connection acquire timeout {}ms (waiters={}) - pool pressure",
+                        elapsed_ms,
+                        waiters
+                    );
+                }
+                return Err(DbError::Connection(
+                    sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout),
+                ));
+            }
+        };
 
         // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间）
         // 使用独立作用域确保锁尽快释放
@@ -1081,6 +1157,23 @@ impl DbPool {
                 // 释放许可（drop 会自动释放）
                 drop(permit);
                 Err(e)
+            }
+        }
+    }
+
+    /// 更新最大等待者计数（使用 CAS 避免竞态条件）
+    fn update_max_waiters(&self, current_waiters: u32) {
+        let mut current = self.inner.max_waiters.load(Ordering::Acquire);
+        while current_waiters > current {
+            match self
+                .inner
+                .max_waiters
+                .compare_exchange(current, current_waiters, Ordering::SeqCst, Ordering::Acquire)
+            {
+                Ok(_) => return,
+                Err(observed) => {
+                    current = observed;
+                }
             }
         }
     }
@@ -1164,6 +1257,7 @@ impl DbPool {
         let total = self.inner.total_count.load(Ordering::SeqCst);
         let active = self.inner.active_count.load(Ordering::SeqCst);
         let wait_count = self.inner.wait_count.load(Ordering::SeqCst);
+        let max_waiters = self.inner.max_waiters.load(Ordering::SeqCst);
         let borrow_count = self.inner.borrow_count.load(Ordering::SeqCst);
         let max_active = self.inner.max_active.load(Ordering::SeqCst);
 
@@ -1172,8 +1266,45 @@ impl DbPool {
             active,
             idle: total.saturating_sub(active),
             wait_count,
+            max_waiters,
             borrow_count,
             max_active,
+        }
+    }
+
+    /// 获取连接池告警指标
+    ///
+    /// 从 metrics_collector（如果启用）获取告警相关指标，包括：
+    /// - `slow_acquires`：获取时长超过 1s 的次数
+    /// - `timeout_errors`：获取超时总次数（warn + error + critical 之和）
+    /// - `critical_timeouts`：严重超时（≥10s）次数
+    /// - `wait_count`：当前正在等待获取连接的协程数
+    /// - `max_waiters`：历史最大并发等待者峰值
+    ///
+    /// # Returns
+    ///
+    /// 连接池告警指标（始终返回有效值，metrics 未启用时所有计数为 0）
+    #[cfg(feature = "metrics")]
+    pub fn pool_metrics(&self) -> PoolMetrics {
+        let wait_count = self.inner.wait_count.load(Ordering::SeqCst);
+        let max_waiters = self.inner.max_waiters.load(Ordering::SeqCst);
+        if let Some(ref collector) = self.inner.metrics_collector {
+            let stats = collector.connection_acquire_stats();
+            PoolMetrics {
+                slow_acquires: stats.slow_acquires,
+                timeout_errors: stats.timeout_warn + stats.timeout_error + stats.timeout_critical,
+                critical_timeouts: stats.timeout_critical,
+                wait_count,
+                max_waiters,
+            }
+        } else {
+            PoolMetrics {
+                slow_acquires: 0,
+                timeout_errors: 0,
+                critical_timeouts: 0,
+                wait_count,
+                max_waiters,
+            }
         }
     }
 
@@ -1259,6 +1390,24 @@ impl Drop for DbPool {
     }
 }
 
+/// 连接池告警指标（用于分级告警和监控）
+///
+/// 包含所有与连接池告警相关的指标，用于告警规则配置和监控告警。
+#[cfg(feature = "metrics")]
+#[derive(Debug, Clone)]
+pub struct PoolMetrics {
+    /// 慢获取次数（>3s）
+    pub slow_acquires: u64,
+    /// 超时总次数
+    pub timeout_errors: u64,
+    /// 严重级超时次数（>=10s）
+    pub critical_timeouts: u64,
+    /// 当前等待者数量
+    pub wait_count: u32,
+    /// 最大等待者数量（历史峰值）
+    pub max_waiters: u32,
+}
+
 /// 连接池状态
 #[derive(Debug, Clone)]
 pub struct PoolStatus {
@@ -1271,8 +1420,11 @@ pub struct PoolStatus {
     /// 空闲连接数
     pub idle: u32,
 
-    /// 等待连接的请求数
+    /// 当前等待连接的请求数
     pub wait_count: u32,
+
+    /// 最大等待计数（历史峰值）
+    pub max_waiters: u32,
 
     /// 借用次数
     pub borrow_count: u64,
