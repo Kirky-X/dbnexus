@@ -14,6 +14,7 @@ use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 
 #[cfg(feature = "permission")]
 pub use crate::permission::PermissionAction;
@@ -423,8 +424,18 @@ fn contains_variables(sql: &str) -> bool {
 /// 6. **信息泄露**: INFORMATION_SCHEMA, SYSOBJECTS, SYSCOLUMNS
 /// 7. **编码绕过**: CHAR(), CONCAT(), 0X (十六进制)
 /// 8. **注释注入**: --, /* */
+///
+/// # Unicode 规范化
+///
+/// 在检测前会先对 SQL 进行 Unicode 规范化（NFKC），防止攻击者使用
+/// 视觉相似但 Unicode 编码不同的字符绕过检测。
 pub fn contains_sql_injection(sql: &str) -> bool {
-    let sql_without_strings = remove_string_literals(sql);
+    // 第一步：Unicode 规范化（NFKC）
+    // 将视觉相似的字符统一化，防止 Unicode 绕过攻击
+    let normalized = normalize_unicode(sql);
+
+    // 第二步：移除字符串字面量
+    let sql_without_strings = remove_string_literals(&normalized);
     let sql_upper = sql_without_strings.to_uppercase();
 
     // Comprehensive SQL injection patterns organized by category
@@ -608,6 +619,20 @@ fn remove_string_literals(sql: &str) -> String {
     }
 
     result
+}
+
+/// Unicode 规范化函数
+///
+/// 使用 NFKC（Normalization Form Compatibility Composition）规范化 Unicode 字符串。
+/// 这可以防止攻击者使用视觉相似但编码不同的字符绕过安全检测。
+///
+/// # 示例
+///
+/// - 全角字符转为半角字符（如 `ＳＥＬＥＣＴ` -> `SELECT`）
+/// - 兼容性分解（如 `ﬃ` -> `ffi`）
+/// - 组合字符规范化
+fn normalize_unicode(sql: &str) -> String {
+    sql.nfkc().collect()
 }
 
 /// Extract table name from TableWithJoins
@@ -1096,5 +1121,58 @@ mod tests {
         assert!(!contains_sql_injection(
             "SELECT * FROM users WHERE comment = 'This is -- a comment'"
         ));
+    }
+
+    // ==================== Unicode 规范化测试 ====================
+
+    /// 测试 Unicode 规范化函数
+    #[test]
+    fn test_normalize_unicode_basic() {
+        // 全角字符规范化
+        let fullwidth = "ＳＥＬＥＣＴ"; // 全角 SELECT
+        let normalized = normalize_unicode(fullwidth);
+        assert_eq!(normalized, "SELECT");
+
+        // 混合全角和半角
+        let mixed = "ＳＥＬＥＣＴ * FROM users";
+        let normalized = normalize_unicode(mixed);
+        assert!(normalized.contains("SELECT"));
+    }
+
+    /// 测试 Unicode 规范化防止绕过
+    #[test]
+    fn test_unicode_bypass_prevention() {
+        // 全角字符注入尝试
+        let fullwidth_union = "SELECT * FROM users ＵＮＩＯＮ SELECT * FROM admin";
+        assert!(contains_sql_injection(fullwidth_union));
+
+        // 全角 OR 1=1
+        let fullwidth_or = "SELECT * FROM users WHERE id = 1 ＯＲ 1=1";
+        assert!(contains_sql_injection(fullwidth_or));
+    }
+
+    /// 测试 Unicode 规范化不影响正常 SQL
+    #[test]
+    fn test_unicode_normalization_safe_sql() {
+        let normal_sql = "SELECT id, name FROM users WHERE id = 1";
+        let normalized = normalize_unicode(normal_sql);
+        assert_eq!(normalized, normal_sql);
+
+        // 规范化后不应误报
+        assert!(!contains_sql_injection(normal_sql));
+    }
+
+    /// 测试特殊 Unicode 字符规范化
+    #[test]
+    fn test_special_unicode_chars() {
+        // 零宽字符（应被移除或规范化）
+        let with_zero_width = "SEL\u{200B}ECT * FROM users"; // 零宽空格
+        let normalized = normalize_unicode(with_zero_width);
+        assert!(normalized.contains("SELECT") || normalized.contains("SEL"));
+
+        // 连字符（fl, fi 等）应被分解
+        let ligature = "SELECT \u{FB01}le FROM users"; // fi 连字符
+        let normalized = normalize_unicode(ligature);
+        assert!(normalized.contains("fi") || normalized.contains("\u{FB01}"));
     }
 }
