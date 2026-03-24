@@ -106,7 +106,7 @@ async fn test_concurrent_health_checks() {
 async fn test_pool_config_boundaries() {
     let url = common::get_test_database_url();
     for max_conn in [1, 5, 10] {
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: url.clone(),
             max_connections: max_conn,
             ..Default::default()
@@ -125,7 +125,7 @@ async fn test_pool_config_boundaries() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_connection_acquire_with_small_pool() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 2,
         min_connections: 1,
@@ -154,7 +154,7 @@ async fn test_connection_acquire_with_small_pool() {
 #[cfg(feature = "sqlite")]
 async fn test_pool_exhaustion_alert_levels() {
     // 使用极小连接池和极短超时触发告警
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
