@@ -974,10 +974,12 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 获取缓存配置
-            pub fn cache_config() -> dbnexus::cache::CacheConfig {
-                dbnexus::cache::CacheConfig {
-                    capacity: Self::CACHE_MAX_CAPACITY as u64,
-                    ttl: Some(Self::CACHE_TTL),
+            pub fn cache_config() -> dbnexus::config::CacheConfig {
+                dbnexus::config::CacheConfig {
+                    policy_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
+                    sql_parse_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
+                    query_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
+                    default_ttl: Self::CACHE_TTL,
                 }
             }
         }
