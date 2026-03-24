@@ -16,6 +16,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
+
+/// SQL语句最大长度（10KB）
+const MAX_SQL_LENGTH: usize = 10_000;
+
+/// 表名最大长度（128字符）
+const MAX_TABLE_NAME_LENGTH: usize = 128;
+
+/// 查询最大嵌套深度（防止复杂度攻击）
+const MAX_QUERY_DEPTH: usize = 10;
+
 #[cfg(feature = "permission")]
 pub use crate::permission::PermissionAction;
 
@@ -233,10 +243,25 @@ impl SqlParser {
             return Err(SqlParseError::EmptyStatement);
         }
 
+        // 验证SQL长度限制
+        if sql.len() > MAX_SQL_LENGTH {
+            return Err(SqlParseError::ParseError(
+                format!("SQL statement exceeds maximum length of {} bytes", MAX_SQL_LENGTH)
+            ));
+        }
+
         // Check for multiple statements (basic detection)
         if sql.contains(';') {
             // Allow SET statements with multiple assignments
             if !sql.starts_with("SET ") {
+
+        // 检查查询深度（防止复杂度攻击）
+        let depth = estimate_query_depth(sql);
+        if depth > MAX_QUERY_DEPTH {
+            return Err(SqlParseError::ParseError(
+                format!("Query depth {} exceeds maximum allowed depth of {}", depth, MAX_QUERY_DEPTH)
+            ));
+        }
                 return Err(SqlParseError::MultipleStatements);
             }
         }
@@ -361,6 +386,16 @@ impl SqlParser {
             // Add more statement types as needed
             _ => (SqlOperationType::Other, None),
         };
+
+
+        // 验证表名长度
+        if let Some(ref table) = table_name {
+            if table.len() > MAX_TABLE_NAME_LENGTH {
+                return Err(SqlParseError::ParseError(
+                    format!("Table name exceeds maximum length of {} characters", MAX_TABLE_NAME_LENGTH)
+                ));
+            }
+        }
 
         Ok(ParsedSqlOperation {
             operation_type,
@@ -1175,4 +1210,25 @@ mod tests {
         let normalized = normalize_unicode(ligature);
         assert!(normalized.contains("fi") || normalized.contains("\u{FB01}"));
     }
+}
+
+/// 估算查询深度（简化版，通过嵌套括号）
+fn estimate_query_depth(sql: &str) -> usize {
+    let mut depth: usize = 1;
+    let mut max_depth: usize = 1;
+
+    for char in sql.chars() {
+        match char {
+            '(' => {
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+
+    max_depth
 }
