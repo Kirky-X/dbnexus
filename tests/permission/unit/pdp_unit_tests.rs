@@ -13,7 +13,7 @@
 //! - 批量检查
 
 #[cfg(feature = "permission-engine")]
-use dbnexus::permission_engine::{
+use dbnexus::{
     PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
     PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
 };
