@@ -8,8 +8,7 @@
 //! 运行: cargo bench --bench permission_bench --features "sqlite permission"
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use dbnexus::DbPool;
-use dbnexus::config::DbConfig;
+use dbnexus::{DbPool, DbConfig, PoolConfig};
 use tokio::runtime::Runtime;
 
 fn bench_connection_pool_creation(c: &mut Criterion) {
@@ -72,7 +71,7 @@ fn bench_config_building(c: &mut Criterion) {
 fn bench_pool_config(c: &mut Criterion) {
     c.bench_function("pool_config_default", |b| {
         b.iter(|| {
-            let config = dbnexus::config::PoolConfig::default();
+            let config = PoolConfig::default();
             black_box(config);
         })
     });
