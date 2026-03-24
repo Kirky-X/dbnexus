@@ -15,8 +15,8 @@ use dbnexus::sql_parser::{SqlOperationType, SqlParser, is_ddl_operation};
 
 #[tokio::test]
 async fn test_parse_select() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("SELECT * FROM users WHERE id = 1");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SELECT * FROM users WHERE id = 1").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -24,8 +24,8 @@ async fn test_parse_select() {
 
 #[tokio::test]
 async fn test_parse_insert() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("INSERT INTO users (name) VALUES ('test')");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("INSERT INTO users (name) VALUES ('test')").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Insert);
@@ -34,8 +34,8 @@ async fn test_parse_insert() {
 
 #[tokio::test]
 async fn test_parse_update() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("UPDATE users SET name = 'test' WHERE id = 1");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("UPDATE users SET name = 'test' WHERE id = 1").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Update);
@@ -44,8 +44,8 @@ async fn test_parse_update() {
 
 #[tokio::test]
 async fn test_parse_delete() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("DELETE FROM users WHERE id = 1");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("DELETE FROM users WHERE id = 1").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Delete);
@@ -55,32 +55,32 @@ async fn test_parse_delete() {
 #[tokio::test]
 async fn test_ddl_blocked() {
     // DDL operations are now blocked for security
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
     // CREATE TABLE should be blocked
     let result = parser.parse_single("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 
     // DROP TABLE should be blocked
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("DROP TABLE users");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 
     // ALTER TABLE should be blocked
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("ALTER TABLE users ADD COLUMN email VARCHAR(255)");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 
     // TRUNCATE should be blocked
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("TRUNCATE TABLE users");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_parse_grant() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("GRANT ALL PRIVILEGES ON users TO user1");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("GRANT ALL PRIVILEGES ON users TO user1").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
@@ -88,8 +88,8 @@ async fn test_parse_grant() {
 
 #[tokio::test]
 async fn test_parse_revoke() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("REVOKE ALL PRIVILEGES ON users FROM user1");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("REVOKE ALL PRIVILEGES ON users FROM user1").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
@@ -97,19 +97,19 @@ async fn test_parse_revoke() {
 
 #[tokio::test]
 async fn test_parse_transaction() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
-    let result = parser.parse_single("START TRANSACTION");
+    let result = parser.parse_single("START TRANSACTION").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Transaction);
 
-    let result = parser.parse_single("COMMIT");
+    let result = parser.parse_single("COMMIT").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Transaction);
 
-    let result = parser.parse_single("ROLLBACK");
+    let result = parser.parse_single("ROLLBACK").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Transaction);
@@ -117,8 +117,8 @@ async fn test_parse_transaction() {
 
 #[tokio::test]
 async fn test_parse_select_with_joins() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -126,10 +126,11 @@ async fn test_parse_select_with_joins() {
 
 #[tokio::test]
 async fn test_parse_insert_with_multiple_values() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single(
         "INSERT INTO users (name, email) VALUES ('user1', 'user1@test.com'), ('user2', 'user2@test.com')",
-    );
+    )
+    .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Insert);
@@ -137,9 +138,10 @@ async fn test_parse_insert_with_multiple_values() {
 
 #[tokio::test]
 async fn test_parse_update_with_subquery() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser
-        .parse_single("UPDATE users SET status = 'active' WHERE id IN (SELECT user_id FROM orders WHERE total > 100)");
+        .parse_single("UPDATE users SET status = 'active' WHERE id IN (SELECT user_id FROM orders WHERE total > 100)")
+        .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Update);
@@ -147,9 +149,9 @@ async fn test_parse_update_with_subquery() {
 
 #[tokio::test]
 async fn test_parse_delete_with_join() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result =
-        parser.parse_single("DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')");
+        parser.parse_single("DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Delete);
@@ -157,46 +159,46 @@ async fn test_parse_delete_with_join() {
 
 #[tokio::test]
 async fn test_multiple_statements_rejected() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("SELECT * FROM users; SELECT * FROM posts");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_empty_statement_rejected() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_whitespace_only_statement_rejected() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single("   ");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_variables_detected() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
     // 测试 @variable
     let result = parser.parse_single("SELECT * FROM users WHERE id = @userId");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 
     // 测试 :variable
     let result = parser.parse_single("SELECT * FROM users WHERE id = :userId");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 
     // 测试 $variable
     let result = parser.parse_single("SELECT * FROM users WHERE id = $userId");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_set_variable_with_semicolon_allowed() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("SET sql_mode = 'STRICT_ALL_TABLES';");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SET sql_mode = 'STRICT_ALL_TABLES';").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
@@ -204,8 +206,8 @@ async fn test_set_variable_with_semicolon_allowed() {
 
 #[tokio::test]
 async fn test_variables_inside_string_literals_not_detected() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("SELECT '@userId' AS v");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SELECT '@userId' AS v").await;
     assert!(result.is_ok());
 }
 
@@ -227,46 +229,54 @@ async fn test_is_ddl_operation() {
 #[tokio::test]
 async fn test_ddl_operations_blocked() {
     // DDL operations should be blocked by parse_single
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
     // CREATE INDEX should be blocked
     let result = parser.parse_single("CREATE INDEX idx_name ON users(name)");
-    assert!(result.is_err());
+    assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_parse_operation_mapping() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
     // 测试 SELECT 映射到 Select
-    let result = parser.parse_operation("SELECT * FROM users");
-    assert!(result.is_some());
-    let (_sql, action) = result.unwrap();
+    let result = parser.parse_operation_async("SELECT * FROM users").await;
+    assert!(result.is_ok());
+    let inner = result.unwrap();
+    assert!(inner.is_some());
+    let (_sql, action) = inner.unwrap();
     assert_eq!(action, PermissionAction::Select);
 
     // 测试 INSERT 映射到 Insert
-    let result = parser.parse_operation("INSERT INTO users (name) VALUES ('test')");
-    assert!(result.is_some());
-    let (_sql, action) = result.unwrap();
+    let result = parser.parse_operation_async("INSERT INTO users (name) VALUES ('test')").await;
+    assert!(result.is_ok());
+    let inner = result.unwrap();
+    assert!(inner.is_some());
+    let (_sql, action) = inner.unwrap();
     assert_eq!(action, PermissionAction::Insert);
 
     // 测试 UPDATE 映射到 Update
-    let result = parser.parse_operation("UPDATE users SET name = 'test'");
-    assert!(result.is_some());
-    let (_sql, action) = result.unwrap();
+    let result = parser.parse_operation_async("UPDATE users SET name = 'test'").await;
+    assert!(result.is_ok());
+    let inner = result.unwrap();
+    assert!(inner.is_some());
+    let (_sql, action) = inner.unwrap();
     assert_eq!(action, PermissionAction::Update);
 
     // 测试 DELETE 映射到 Delete
-    let result = parser.parse_operation("DELETE FROM users WHERE id = 1");
-    assert!(result.is_some());
-    let (_sql, action) = result.unwrap();
+    let result = parser.parse_operation_async("DELETE FROM users WHERE id = 1").await;
+    assert!(result.is_ok());
+    let inner = result.unwrap();
+    assert!(inner.is_some());
+    let (_sql, action) = inner.unwrap();
     assert_eq!(action, PermissionAction::Delete);
 }
 
 #[tokio::test]
 async fn test_parser_with_dialect() {
-    let parser = SqlParser::with_dialect("postgres");
-    let result = parser.parse_single("SELECT * FROM users");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SELECT * FROM users").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -274,10 +284,10 @@ async fn test_parser_with_dialect() {
 
 #[tokio::test]
 async fn test_complex_select_query() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     let result = parser.parse_single(
         "SELECT u.id, u.name, COUNT(p.id) as post_count FROM users u LEFT JOIN posts p ON u.id = p.user_id WHERE u.active = 1 GROUP BY u.id, u.name HAVING COUNT(p.id) > 0 ORDER BY post_count DESC LIMIT 10",
-    );
+    ).await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -285,8 +295,8 @@ async fn test_complex_select_query() {
 
 #[tokio::test]
 async fn test_set_variable_statement() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("SET sql_mode = 'STRICT_TRANS_TABLES'");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("SET sql_mode = 'STRICT_TRANS_TABLES'").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     // SET 语句应该被识别为 Other 或 Ddl
@@ -298,8 +308,8 @@ async fn test_set_variable_statement() {
 
 #[tokio::test]
 async fn test_parsed_sql_operation_fields() {
-    let parser = SqlParser::new();
-    let result = parser.parse_single("INSERT INTO users (name, email) VALUES ('test', 'test@test.com')");
+    let parser = SqlParser::new().await;
+    let result = parser.parse_single("INSERT INTO users (name, email) VALUES ('test', 'test@test.com')").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
 
@@ -314,16 +324,16 @@ async fn test_parsed_sql_operation_fields() {
 
 #[tokio::test]
 async fn test_case_insensitive_keywords() {
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
 
     // 测试小写关键字
-    let result = parser.parse_single("select * from users");
+    let result = parser.parse_single("select * from users").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
 
     // 测试混合大小写
-    let result = parser.parse_single("Select * From Users");
+    let result = parser.parse_single("Select * From Users").await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
