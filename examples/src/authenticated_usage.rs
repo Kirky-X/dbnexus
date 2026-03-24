@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = DbConfig {
         url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("examples/demo/permissions.yaml".to_string()),
+        permissions_path: Some("examples/src/permissions.yaml".to_string()),
         admin_role: "admin".to_string(),
         ..Default::default()
     };
