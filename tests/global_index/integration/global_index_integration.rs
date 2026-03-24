@@ -13,7 +13,7 @@
 //! - 跨分片索引同步测试
 //! - 索引一致性检查测试
 
-use dbnexus::global_index::{GlobalIndex, IndexEntry};
+use dbnexus::{GlobalIndex, IndexEntry};
 
 /// 获取测试数据库 URL
 fn get_database_url() -> String {
