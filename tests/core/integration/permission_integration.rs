@@ -6,7 +6,7 @@
 //! 权限控制集成测试
 
 use dbnexus::DbPool;
-use dbnexus::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -172,7 +172,7 @@ roles:
 
 #[tokio::test]
 async fn test_permission_cache_miss_behavior() {
-    use dbnexus::permission::PermissionContext;
+    use dbnexus::access::permission::PermissionContext;
 
     // 创建权限上下文（不预加载策略）
     let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256)
@@ -186,7 +186,7 @@ async fn test_permission_cache_miss_behavior() {
 
 #[tokio::test]
 async fn test_permission_check_with_auto_load() {
-    use dbnexus::permission::PermissionContext;
+    use dbnexus::access::permission::PermissionContext;
 
     // 创建权限配置
     let config = PermissionConfig {
@@ -204,7 +204,7 @@ async fn test_permission_check_with_auto_load() {
     };
 
     // 创建权限上下文
-    let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256)
+    let ctx: PermissionContext = PermissionContext::with_cache_size("test_role".to_string(), 256)
         .await
         .expect("Failed to create permission context");
 

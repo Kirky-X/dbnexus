@@ -7,9 +7,21 @@
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
-use dbnexus::config::DbConfig;
+use dbnexus::foundation::config::DbConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
+
+#[cfg(feature = "permission-engine")]
+async fn join_all<F>(handles: Vec<tokio::task::JoinHandle<F>>) -> Vec<F>
+where
+    F: Send,
+{
+    let mut results = Vec::new();
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+    results
+}
 
 /// 脱敏 URL，隐藏密码
 fn sanitize_url(url: &str) -> String {
@@ -89,7 +101,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
         let perm_path = perm_file.to_string_lossy().to_string();
 
         // 使用结构体字面量构建配置
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::foundation::config::DbConfig {
             url,
             max_connections: 5,
             min_connections: 1,
@@ -105,7 +117,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
     }
 
     // 无权限配置
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::foundation::config::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -132,7 +144,7 @@ pub fn generate_test_table_name(prefix: &str) -> String {
 ///
 /// 在指定的会话上删除测试表
 #[allow(dead_code)]
-pub async fn cleanup_test_table(session: &mut dbnexus::pool::Session, table_name: &str) {
+pub async fn cleanup_test_table(session: &mut dbnexus::database::pool::Session, table_name: &str) {
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
@@ -142,7 +154,7 @@ pub async fn cleanup_test_table(session: &mut dbnexus::pool::Session, table_name
 ///
 /// 在指定的会话上创建简单的测试表
 #[allow(dead_code)]
-pub async fn create_test_table(session: &mut dbnexus::pool::Session, table_name: &str) {
+pub async fn create_test_table(session: &mut dbnexus::database::pool::Session, table_name: &str) {
     session
         .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, data TEXT)",
@@ -166,7 +178,7 @@ pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
 
 /// 测试断言帮助 - 验证会话有效
 #[allow(dead_code)]
-pub fn assert_session_valid(session: &mut dbnexus::pool::Session) {
+pub fn assert_session_valid(session: &mut dbnexus::database::pool::Session) {
     assert!(!session.role().is_empty(), "Session should have a role");
     // 使用公开的 execute_raw 方法来验证连接可用
     // 注意：这个验证在 SQLite 内存模式下可能不适用
@@ -176,13 +188,23 @@ pub fn assert_session_valid(session: &mut dbnexus::pool::Session) {
 /// 并行运行测试任务
 ///
 /// 辅助函数，用于在测试中并行运行多个异步任务
+#[cfg(feature = "permission-engine")]
 #[allow(dead_code)]
 pub async fn run_parallel_tasks<F, T>(tasks: Vec<F>) -> Vec<T>
 where
-    F: std::future::Future<Output = T> + Send,
-    T: Send,
+    F: std::future::Future<Output = T> + Send + 'static,
+    T: Send + 'static,
 {
-    futures::future::join_all(tasks).await
+    let mut handles = Vec::new();
+    for task in tasks {
+        handles.push(tokio::spawn(task));
+    }
+    
+    let mut results = Vec::new();
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+    results
 }
 
 // ============================================================================
@@ -230,7 +252,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     // 使用 sqlx 标准的 SQLite URL 格式
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::foundation::config::DbConfig {
         url: format!("sqlite://{}", db_path_str),
         max_connections: 5,
         min_connections: 1,
@@ -431,7 +453,7 @@ pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: 
         handles.push(handle);
     }
 
-    futures::future::join_all(handles).await;
+    join_all(handles).await;
 
     let success = success_count.load(Ordering::SeqCst);
     (success, num_tasks - success)

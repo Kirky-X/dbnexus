@@ -278,7 +278,7 @@ required-features = ["permission"]
 [[test]]
 name = "core_permission_integration"
 path = "tests/core/integration/permission_integration.rs"
-required-features = ["permission"]
+required-features = ["permission", "cache", "test-utils", "permission-engine"]
 
 [[test]]
 name = "audit_integration"
