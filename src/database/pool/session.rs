@@ -118,6 +118,11 @@ impl Session {
     /// 检查权限
     #[cfg(feature = "permission")]
     pub async fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
+        // Admin 角色绕过权限检查（拥有完全控制权）
+        if self.role == self.pool_inner.admin_role {
+            return Ok(());
+        }
+        
         if self.permission_ctx.check_table_access(table, operation).await {
             Ok(())
         } else {
@@ -267,7 +272,13 @@ impl Session {
                             ));
                         }
                         // 检查权限
-                        if !self.permission_ctx.check_table_access(&table_name, &action).await {
+                        // Admin 角色绕过权限检查
+
+                        if self.role == self.pool_inner.admin_role {
+
+                            // admin 有完全权限，跳过检查
+
+                        } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                             return Err(DbError::Permission(format!(
                                 "Permission denied for {} on {}",
                                 action, table_name
@@ -378,7 +389,13 @@ impl Session {
                             "Failed to extract table name for permission checking".to_string(),
                         ));
                     }
-                    if !self.permission_ctx.check_table_access(&table_name, &action).await {
+                    // Admin 角色绕过权限检查
+
+                    if self.role == self.pool_inner.admin_role {
+
+                        // admin 有完全权限，跳过检查
+
+                    } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                         return Err(DbError::Permission(format!(
                             "Permission denied for {} on {}",
                             action, table_name
@@ -418,7 +435,13 @@ impl Session {
                     "Failed to extract table name for permission checking".to_string(),
                 ));
             }
-            if !self.permission_ctx.check_table_access(&table_name, &action).await {
+            // Admin 角色绕过权限检查
+
+            if self.role == self.pool_inner.admin_role {
+
+                // admin 有完全权限，跳过检查
+
+            } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",
                     action, table_name
@@ -600,7 +623,16 @@ impl Session {
                 _ => return Err(DbError::Permission(format!("Unknown operation: {}", _operation))),
             };
 
-            if !self.permission_ctx.check_table_access(_table_name, &action).await {
+            // Admin 角色绕过权限检查
+
+
+            if self.role == self.pool_inner.admin_role {
+
+
+                // admin 有完全权限，跳过检查
+
+
+            } else if !self.permission_ctx.check_table_access(_table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",
                     _operation, _table_name

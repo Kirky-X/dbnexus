@@ -25,10 +25,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化连接池（带权限配置）
     let config = DbConfig {
         url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("examples/src/permissions.yaml".to_string()),
+        permissions_path: Some("src/permissions.yaml".to_string()),
         admin_role: "admin".to_string(),
         ..Default::default()
     };
+    
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功\n");
 
