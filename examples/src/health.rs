@@ -17,7 +17,7 @@
 //! cargo run --example health --features "sqlite,health-check"
 //! ```
 
-use dbnexus::health::{
+use dbnexus::observability::health::{
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthCheckResult, HealthStatus, PoolHealthMetrics,
 };
 use dbnexus::{DbConfig, DbPool};

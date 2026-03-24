@@ -17,7 +17,7 @@
 //! cargo run --example metrics --features "sqlite,metrics"
 //! ```
 
-use dbnexus::{DbConfig, DbPool, metrics::MetricsCollector};
+use dbnexus::{DbConfig, DbPool, observability::metrics::MetricsCollector};
 use std::time::Duration;
 
 /// 定义 User 结构体（用于演示指标收集）

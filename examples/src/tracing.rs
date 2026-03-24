@@ -17,7 +17,7 @@
 //! cargo run --example tracing --features "sqlite,tracing"
 //! ```
 
-use dbnexus::tracing::{extract, inject};
+use dbnexus::observability::tracing::{extract, inject, init};
 use dbnexus::{DbConfig, DbPool};
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------------------");
 
     // 使用 stdout 导出器（用于演示）
-    let _tracing_guard = dbnexus::tracing::init("stdout", "unused").await?;
+    let _tracing_guard = init("stdout", "unused").await?;
     println!("✓ OpenTelemetry 追踪初始化成功");
 
     // 初始化 tracing subscriber
@@ -172,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("     - 服务名: dbnexus");
 
     println!("\n  📝 初始化代码:");
-    println!("     let guard = dbnexus::tracing::init(\"otlp\", \"http://localhost:4317\").await?;");
+    println!("     let guard = init(\"otlp\", \"http://localhost:4317\").await?;");
 
     // 9. 演示 Jaeger 集成
     println!("\n9️⃣ 演示 Jaeger 集成");

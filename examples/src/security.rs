@@ -15,7 +15,7 @@
 //! cargo run --example security --features "sqlite"
 //! ```
 
-use dbnexus::security::{DdlGuard, DdlValidationResult, MaskType, SensitiveMasker};
+use dbnexus::access::security::{DdlGuard, DdlValidationResult, MaskType, SensitiveMasker};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

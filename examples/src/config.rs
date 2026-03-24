@@ -15,7 +15,7 @@
 //! cargo run --example config --features sqlite
 //! ```
 
-use dbnexus::{DbPool, config::DbConfig};
+use dbnexus::{DbPool, DbConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
