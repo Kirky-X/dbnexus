@@ -9,7 +9,8 @@
 
 #[cfg(feature = "cache")]
 mod cache_tests {
-    use dbnexus::cache::{CacheConfig, create_cache};
+    use dbnexus::config::CacheConfig;
+    use dbnexus::cache::{OxcacheBackend, CacheBackend};
 
     // ============================================================================
     // CacheConfig 测试
@@ -19,23 +20,33 @@ mod cache_tests {
     fn test_cache_config_default() {
         let config = CacheConfig::default();
 
-        assert_eq!(config.capacity, 1000);
-        assert_eq!(config.ttl, None);
+        assert_eq!(config.policy_cache_capacity, 4096);
+        assert_eq!(config.sql_parse_cache_capacity, 1000);
+        assert_eq!(config.query_cache_capacity, 10000);
+        assert_eq!(config.default_ttl, 300);
     }
 
     #[test]
     fn test_cache_config_new() {
-        let config = CacheConfig::new(500, Some(60));
+        let config = CacheConfig {
+            policy_cache_capacity: 500,
+            sql_parse_cache_capacity: 500,
+            query_cache_capacity: 500,
+            default_ttl: 60,
+        };
 
-        assert_eq!(config.capacity, 500);
-        assert_eq!(config.ttl, Some(60));
+        assert_eq!(config.policy_cache_capacity, 500);
+        assert_eq!(config.default_ttl, 60);
     }
 
     #[test]
     fn test_cache_config_builder() {
-        let config = CacheConfig::new(1000, None).capacity(500);
+        let config = CacheConfig {
+            policy_cache_capacity: 500,
+            ..Default::default()
+        };
 
-        assert_eq!(config.capacity, 500);
+        assert_eq!(config.policy_cache_capacity, 500);
     }
 
     #[test]
@@ -113,7 +124,7 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_basic_operations() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key: String = "users:1".to_string();
 
@@ -122,7 +133,7 @@ mod cache_tests {
         assert!(result.is_none());
 
         // 设置值
-        cache.insert(key.clone(), "Alice".to_string()).await;
+        cache.set(&key, "Alice".to_string(), None).await.unwrap();
 
         // 获取值
         let value = cache.get(&key).await;
@@ -135,10 +146,10 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_set_and_get() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key: String = "counter:1".to_string();
-        cache.insert(key.clone(), "test_value".to_string()).await;
+        cache.set(&key, "test_value".to_string(), None).await.unwrap();
 
         let value = cache.get(&key).await;
         assert_eq!(value, Some("test_value".to_string()));
@@ -146,7 +157,7 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_get_missing_key() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key: String = "data:key".to_string();
         let result = cache.get(&key).await;
@@ -155,44 +166,44 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_overwrite() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key1: String = "test:1".to_string();
         let key2: String = "test:2".to_string();
 
-        cache.insert(key1.clone(), "value1".to_string()).await;
-        cache.insert(key2.clone(), "value2".to_string()).await;
+        cache.set(&key1, "value1".to_string(), None).await.unwrap();
+        cache.set(&key2, "value2".to_string(), None).await.unwrap();
 
         assert_eq!(cache.get(&key1).await, Some("value1".to_string()));
         assert_eq!(cache.get(&key2).await, Some("value2".to_string()));
 
         // 覆盖 key1
-        cache.insert(key1.clone(), "value1_updated".to_string()).await;
+        cache.set(&key1, "value1_updated".to_string(), None).await.unwrap();
         assert_eq!(cache.get(&key1).await, Some("value1_updated".to_string()));
     }
 
     #[tokio::test]
     async fn test_cache_delete() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key: String = "temp:data".to_string();
-        cache.insert(key.clone(), "temporary".to_string()).await;
+        cache.set(&key, "temporary".to_string(), None).await.unwrap();
 
         assert!(cache.get(&key).await.is_some());
 
         // 删除
-        cache.invalidate(&key).await;
+        cache.delete(&key).await.unwrap();
         assert!(cache.get(&key).await.is_none());
     }
 
     #[tokio::test]
     async fn test_cache_capacity_limit() {
-        let cache = create_cache::<String>(3).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(3).await.unwrap();
 
         // 插入多个项目
         for i in 0..5 {
             let key: String = format!("items:{}", i);
-            cache.insert(key.clone(), format!("value{}", i)).await;
+            cache.set(&key, format!("value{}", i), None).await.unwrap();
         }
 
         // 由于容量限制，早期项目可能被驱逐
@@ -213,7 +224,7 @@ mod cache_tests {
     #[tokio::test]
     async fn test_cache_concurrent_access() {
         use std::sync::Arc;
-        let cache = Arc::new(create_cache::<String>(100).await.unwrap());
+        let cache = Arc::new(OxcacheBackend::with_capacity(100).await.unwrap());
 
         let mut handles = vec![];
 
@@ -222,7 +233,7 @@ mod cache_tests {
             let cache_clone = Arc::clone(&cache);
             let handle = tokio::spawn(async move {
                 let key: String = format!("concurrent:{}", i);
-                cache_clone.insert(key.clone(), i.to_string()).await;
+                cache_clone.set(&key, i.to_string(), None).await.unwrap();
             });
             handles.push(handle);
         }
@@ -242,10 +253,10 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_none_values() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key: String = "users:1".to_string();
-        cache.insert(key.clone(), "Alice".to_string()).await;
+        cache.set(&key, "Alice".to_string(), None).await.unwrap();
 
         let value = cache.get(&key).await;
         assert_eq!(value, Some("Alice".to_string()));
@@ -262,12 +273,12 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_option_handling() {
-        let cache = create_cache::<String>(100).await.unwrap();
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
         let key1: String = "opt:some".to_string();
         let key2: String = "opt:none".to_string();
 
-        cache.insert(key1.clone(), "some_value".to_string()).await;
+        cache.set(&key1, "some_value".to_string(), None).await.unwrap();
 
         let some_value = cache.get(&key1).await;
         let none_value = cache.get(&key2).await;
@@ -282,26 +293,33 @@ mod cache_tests {
 
     #[tokio::test]
     async fn test_cache_with_custom_config() {
-        let config = CacheConfig::new(100, Some(60));
-        let _cache = create_cache::<String>(config.capacity).await.unwrap();
+        let config = CacheConfig {
+            policy_cache_capacity: 100,
+            sql_parse_cache_capacity: 100,
+            query_cache_capacity: 100,
+            default_ttl: 60,
+        };
+        let _cache = OxcacheBackend::with_capacity(config.policy_cache_capacity).await.unwrap();
 
         // 缓存已创建，可以进行操作测试
     }
 
     #[tokio::test]
     async fn test_cache_different_types() {
-        let string_cache = create_cache::<String>(100).await.unwrap();
-        let vec_cache = create_cache::<Vec<u8>>(100).await.unwrap();
+        // OxcacheBackend 只支持 String 类型的键值对
+        // 使用不同的键来模拟不同类型的数据存储
+        let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
-        let key: String = "test:key".to_string();
+        let key1: String = "string:key".to_string();
+        let key2: String = "json:key".to_string();
 
-        string_cache.insert(key.clone(), "string_value".to_string()).await;
-        vec_cache.insert(key.clone(), vec![1, 2, 3, 4]).await;
+        cache.set(&key1, "string_value".to_string(), None).await.unwrap();
+        cache.set(&key2, r#"{"data": 123}"#.to_string(), None).await.unwrap();
 
-        let string_value = string_cache.get(&key).await;
-        let vec_value = vec_cache.get(&key).await;
+        let string_value = cache.get(&key1).await;
+        let json_value = cache.get(&key2).await;
 
         assert_eq!(string_value, Some("string_value".to_string()));
-        assert_eq!(vec_value, Some(vec![1, 2, 3, 4]));
+        assert_eq!(json_value, Some(r#"{"data": 123}"#.to_string()));
     }
 }

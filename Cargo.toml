@@ -109,7 +109,7 @@ permission = ["dashmap", "serde_yaml"]  # 权限控制（不依赖缓存）
 permission-with-cache = ["permission", "cache"]  # 权限控制（带缓存）
 sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
 macros = ["dbnexus-macros"]
-cache = ["moka"]  # 缓存功能
+cache = ["oxcache"]  # 缓存功能（基于 oxcache）
 
 # === 配置支持 ===
 config-yaml = ["serde_yaml"]
@@ -148,7 +148,8 @@ permission-engine = ["dashmap", "serde_yaml", "cache"]  # 高级权限引擎
 authentication = ["jsonwebtoken", "bcrypt", "crossbeam"]  # JWT 认证系统
 
 # === 高级配置 ===
-confers = ["dep:confers"]  # 使用 confers 库进行配置管理
+# confers 配置框架始终启用 - 所有配置通过 confers 管理
+confers = []  # 配置管理（通过 confers 框架）
 
 # === 开发工具 ===
 dev = []
@@ -214,7 +215,7 @@ twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.22", optional = true, features = ["v4"] }
-confers = { path = "../confers", optional = true }
+confers = { path = "../confers" }
 criterion = { version = "0.5", optional = true }
 
 # External dependencies
@@ -222,7 +223,8 @@ regex = { version = "1.0", optional = true }
 sqlparser = { version = "0.47", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "5.5", optional = true }
-moka = { version = "0.12", optional = true, default-features = false, features = ["sync", "future"] }
+# Cache via oxcache - moka is used internally by oxcache as L1 backend
+oxcache = { path = "../oxcache", optional = true }
 
 # Authentication dependencies
 jsonwebtoken = { version = "9", optional = true }

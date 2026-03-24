@@ -33,7 +33,7 @@ use sea_orm::ExecResult;
 use std::sync::Arc;
 
 #[cfg(feature = "cache")]
-use crate::cache::Cache;
+use oxcache::Cache;
 
 /// 连接池抽象 trait
 ///

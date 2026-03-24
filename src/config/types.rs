@@ -27,6 +27,10 @@ pub enum ConfigError {
     #[error("Missing required configuration: dbnexus.url")]
     MissingUrl,
 
+    /// 无效缓存容量
+    #[error("Invalid cache capacity: {0}")]
+    InvalidCacheCapacity(String),
+
     /// 无效值
     #[error("Invalid configuration value for '{key}': {message}")]
     InvalidValue {
