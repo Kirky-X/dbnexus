@@ -21,7 +21,7 @@
 //! 这些测试设计用于性能验证，实际延迟会因硬件和环境而异。
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use dbnexus::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use std::time::{Duration, Instant};
 
 #[path = "../../common/mod.rs"]
@@ -111,7 +111,7 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
     c.bench_function("database_url_parse", |b| {
         b.iter(|| {
             for url in &urls {
-                black_box(dbnexus::config::DatabaseType::from_url(url));
+                black_box(dbnexus::DatabaseType::from_url(url));
             }
         })
     });
@@ -121,7 +121,7 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
 fn config_validation_benchmark(c: &mut Criterion) {
     c.bench_function("config_validation", |b| {
         b.iter(|| {
-            let config = dbnexus::config::DbConfig {
+            let config = dbnexus::DbConfig {
                 url: "sqlite::memory:".to_string(),
                 max_connections: 10,
                 min_connections: 1,
