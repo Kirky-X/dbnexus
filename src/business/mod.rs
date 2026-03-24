@@ -8,6 +8,7 @@
 //! 提供业务相关功能
 
 // 单文件模块
+#[cfg(feature = "audit")]
 pub mod audit;
 
 // Re-exports
