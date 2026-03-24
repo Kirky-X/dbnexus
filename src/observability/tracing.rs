@@ -60,19 +60,26 @@
 //! }
 //! ```
 
+#[cfg(feature = "tracing")]
 use opentelemetry::KeyValue;
+#[cfg(feature = "tracing")]
 use opentelemetry::global;
+#[cfg(feature = "tracing")]
 use opentelemetry_otlp::WithExportConfig;
+#[cfg(feature = "tracing")]
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 #[cfg(feature = "tracing")]
 use std::collections::HashMap;
+#[cfg(feature = "tracing")]
 use tracing_subscriber::fmt::format::FmtSpan;
+#[cfg(feature = "tracing")]
 use tracing_subscriber::{EnvFilter, fmt};
 
 #[cfg(feature = "tracing")]
 use opentelemetry_sdk::trace::TracerProvider;
 
 /// 默认日志级别，当 `RUST_LOG` 未设置时使用。
+#[allow(dead_code)]
 const DEFAULT_LOG_LEVEL: &str = "warn";
 
 /// 日志订阅者构建器
@@ -92,6 +99,7 @@ const DEFAULT_LOG_LEVEL: &str = "warn";
 ///     .with_level("dbnexus=debug")
 ///     .init();
 /// ```
+#[cfg(feature = "tracing")]
 #[derive(Default)]
 pub struct TracingBuilder {
     output_format: OutputFormat,
@@ -100,6 +108,7 @@ pub struct TracingBuilder {
 }
 
 /// 日志输出格式枚举。
+#[cfg(feature = "tracing")]
 #[derive(Default, Clone, Copy)]
 enum OutputFormat {
     /// 漂亮打印格式（默认）
@@ -110,12 +119,14 @@ enum OutputFormat {
 }
 
 /// OpenTelemetry 配置。
+#[cfg(feature = "tracing")]
 #[derive(Clone)]
 struct OtlpConfig {
     exporter: String,
     endpoint: String,
 }
 
+#[cfg(feature = "tracing")]
 impl TracingBuilder {
     /// 创建一个新的 `TracingBuilder`，默认配置为：
     /// - fmt 输出到 stdout
@@ -265,6 +276,7 @@ impl TracingBuilder {
 ///     Ok(())
 /// }
 /// ```
+#[cfg(feature = "tracing")]
 pub fn init_default() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     TracingBuilder::new().with_fmt().init()
 }
@@ -274,10 +286,12 @@ pub fn init_default() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 // ============================================================================
 
 /// 追踪初始化结果
+#[cfg(feature = "tracing")]
 pub struct TracingGuard {
     _provider: TracerProvider,
 }
 
+#[cfg(feature = "tracing")]
 impl Drop for TracingGuard {
     fn drop(&mut self) {
         global::shutdown_tracer_provider();
@@ -304,6 +318,7 @@ impl Drop for TracingGuard {
 ///     Ok(())
 /// }
 /// ```
+#[cfg(feature = "tracing")]
 pub async fn init(exporter: &str, endpoint: &str) -> Result<TracingGuard, String> {
     let provider: TracerProvider = match exporter.to_lowercase().as_str() {
         "otlp" => init_otlp(endpoint).await?,
@@ -320,6 +335,7 @@ pub async fn init(exporter: &str, endpoint: &str) -> Result<TracingGuard, String
 }
 
 /// 使用 OTLP 初始化追踪
+#[cfg(feature = "tracing")]
 async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
     let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
@@ -336,6 +352,7 @@ async fn init_otlp(endpoint: &str) -> Result<TracerProvider, String> {
 }
 
 /// 使用标准输出初始化追踪
+#[cfg(feature = "tracing")]
 fn init_stdout() -> Result<TracerProvider, String> {
     let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new("service.name", "dbnexus")]);
 
@@ -352,6 +369,7 @@ fn init_stdout() -> Result<TracerProvider, String> {
 }
 
 /// 从 HashMap 注入追踪上下文
+#[cfg(feature = "tracing")]
 pub fn inject(headers: &mut HashMap<String, String>) {
     global::get_text_map_propagator(|propagator| {
         propagator.inject(headers);
@@ -359,6 +377,7 @@ pub fn inject(headers: &mut HashMap<String, String>) {
 }
 
 /// 从 HashMap 提取追踪上下文
+#[cfg(feature = "tracing")]
 pub fn extract(headers: &HashMap<String, String>) {
     global::get_text_map_propagator(|propagator| {
         let _ = propagator.extract(headers);
