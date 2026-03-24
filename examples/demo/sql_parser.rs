@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. 创建 SQL 解析器
     println!("\n1️⃣ 创建 SQL 解析器");
     println!("------------------------------------------");
-    let parser = SqlParser::new();
+    let parser = SqlParser::new().await;
     println!("✓ SQL 解析器创建成功");
 
     // 2. 解析 SELECT 语句
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in select_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in insert_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in update_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in delete_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in ddl_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in dcl_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -188,7 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transaction_queries = vec!["START TRANSACTION", "COMMIT", "ROLLBACK"];
 
     for query in transaction_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ SQL: {}", query);
                 println!("    操作类型: {:?}", parsed.operation_type);
@@ -214,7 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (name, query) in error_cases {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(_parsed) => {
                 println!("  ✗ {}: 应该失败但成功了", name);
             }
@@ -257,7 +257,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for query in complex_queries {
-        match parser.parse_single(query) {
+        match parser.parse_single(query).await {
             Ok(parsed) => {
                 println!("  ✓ 复杂查询解析成功");
                 println!("    操作类型: {:?}", parsed.operation_type);

@@ -144,7 +144,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             priority: 100,
             subject: "admin".to_string(),
             resource: "*".to_string(),
-            allow: vec![PermissionAction::All],
+            // admin 拥有所有基本操作权限
+            allow: vec![
+                PermissionAction::Select,
+                PermissionAction::Insert,
+                PermissionAction::Update,
+                PermissionAction::Delete,
+            ],
             deny: vec![],
             condition: None,
             enabled: true,
