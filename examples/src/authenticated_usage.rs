@@ -20,8 +20,8 @@
 
 use dbnexus::{
     DbConfig, DbPool,
-    authentication::{
-        AuthenticationManager, AuthCredentials, PasswordHasher, User,
+    access::authentication::{
+        AuthenticationManager, AuthCredentials, AuthResult, PasswordHasher, User,
     }
 };
 
