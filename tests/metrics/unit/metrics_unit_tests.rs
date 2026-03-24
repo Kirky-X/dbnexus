@@ -13,7 +13,7 @@
 //! - 指标基数控制测试
 //! - 高基数标签检测测试
 
-use dbnexus::metrics::{LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics};
+use dbnexus::{LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics};
 use std::time::Duration;
 
 // ============================================================================

@@ -7,7 +7,7 @@
 //!
 //! 专门测试小写变体的注入模式，验证 `contains_sql_injection` 函数的大小写不敏感行为。
 
-use dbnexus::sql_parser::contains_sql_injection;
+use dbnexus::contains_sql_injection;
 
 // ============================================================================
 // 小写变体测试 - 任务 1.4 要求
@@ -322,7 +322,7 @@ fn test_false_positives_lowercase() {
 // ============================================================================
 
 #[cfg(feature = "sql-parser")]
-use dbnexus::security::{DdlGuard, DdlValidationResult};
+use dbnexus::{DdlGuard, DdlValidationResult};
 
 /// 测试 DDL Guard 与 SQL 注入检测的边界
 #[cfg(feature = "sql-parser")]
