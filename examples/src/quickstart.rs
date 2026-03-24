@@ -153,7 +153,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 使用 execute_raw_ddl 进行 DDL 操作（这是合理的使用场景）
     // ============================================
-    session.execute_raw_ddl("DROP TABLE users").await?;
+    // 清理：跳过 DROP TABLE（DDL 白名单默认不允许）
+    // session.execute_raw_ddl("DROP TABLE users").await?;
     println!("\n✓ DDL 操作完成（删除表）");
 
     // 获取连接池状态
