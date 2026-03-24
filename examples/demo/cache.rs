@@ -6,7 +6,7 @@
 //! 缓存使用示例
 //!
 //! 展示如何使用 dbnexus 缓存功能：
-//! - 创建缓存实例
+//! - 创建缓存实例 (OxcacheBackend)
 //! - 基本缓存操作（插入、获取、删除）
 //! - TTL 过期
 //!
@@ -16,7 +16,7 @@
 //! cargo run --example cache --features "sqlite,permission,cache"
 //! ```
 
-use dbnexus::cache::{CacheConfig, create_cache, create_cache_with_ttl};
+use dbnexus::cache::{CacheBackend, OxcacheBackend};
 use dbnexus::{DbConfig, DbPool};
 use std::time::Duration;
 
@@ -25,21 +25,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("💾 DBNexus 缓存使用示例\n");
     println!("========================================");
 
-    // 1. 创建缓存配置
-    println!("\n1️⃣ 创建缓存配置");
+    // 1. 创建缓存实例
+    println!("\n1️⃣ 创建缓存实例");
     println!("------------------------------------------");
-    let cache_config = CacheConfig::new(1000, Some(300));
-    println!("✓ 缓存配置创建成功");
-    println!("  - 最大容量: {}", cache_config.capacity);
-    println!("  - 默认 TTL: {} 秒", cache_config.ttl.unwrap_or_default());
-
-    // 2. 创建缓存
-    println!("\n2️⃣ 创建缓存");
-    println!("------------------------------------------");
-    // 使用 String 类型
-    let user_cache = create_cache::<String>(1000).await?;
-    let _product_cache = create_cache::<String>(100).await?;
+    let user_cache = OxcacheBackend::with_capacity(1000).await?;
     println!("✓ 缓存创建成功");
+    println!("  - 容量: 1000 条");
+
+    // 2. 创建产品缓存
+    println!("\n2️⃣ 创建产品缓存");
+    println!("------------------------------------------");
+    let _product_cache = OxcacheBackend::with_capacity(100).await?;
+    println!("✓ 产品缓存创建成功");
 
     // 3. 初始化数据库连接池
     println!("\n3️⃣ 初始化数据库连接池");
@@ -82,17 +79,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     println!("  ✓ 创建 10 个测试用户");
 
-    // 5. 手动缓存操作
-    println!("\n5️⃣ 手动缓存操作");
+    // 5. 基本缓存操作
+    println!("\n5️⃣ 基本缓存操作");
     println!("------------------------------------------");
 
     // 设置缓存 - 存储用户 JSON 字符串
     let user_json = r#"{"id":1,"name":"Alice","email":"alice@example.com","role":"admin"}"#;
-    user_cache.insert("user:1".to_string(), user_json.to_string()).await;
+    user_cache.set("user:1", user_json.to_string(), None).await?;
     println!("  ✓ 设置缓存: user:1");
 
     // 获取缓存
-    let cached = user_cache.get(&"user:1".to_string()).await;
+    let cached = user_cache.get("user:1").await;
     match cached {
         Some(data) => {
             println!("  ✓ 缓存命中: {}", data);
@@ -103,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // 6. 演示缓存穿透防护
-    println!("\n6️⃣ 缓存穿透防护");
+    println!("\n6️⃣ 演示缓存穿透防护");
     println!("------------------------------------------");
 
     // 尝试获取不存在的键
@@ -117,41 +114,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n7️⃣ TTL 过期演示");
     println!("------------------------------------------");
 
-    // 设置一个短期过期的缓存
-    let short_ttl_key = "product:1".to_string();
+    // 设置一个带 TTL 的缓存
+    let short_ttl_key = "product:1";
     let product_json = r#"{"id":1,"name":"Limited Product","price":99.99}"#;
-    let short_cache = create_cache_with_ttl::<String>(10, Duration::from_secs(2)).await?;
-    short_cache
-        .insert(short_ttl_key.clone(), product_json.to_string())
-        .await;
-    println!("  ✓ 设置短期缓存（2秒 TTL）");
+    // 注意：当前 oxcache TTL 需要缓存实现支持
+    user_cache.set(short_ttl_key, product_json.to_string(), Some(Duration::from_secs(2))).await?;
+    println!("  ✓ 设置带 TTL 的缓存（2秒）");
 
     // 立即获取（应该命中）
-    let _ = short_cache.get(&short_ttl_key).await;
-    println!("  ✓ 立即获取：缓存命中");
+    let cached = user_cache.get(short_ttl_key).await;
+    match cached {
+        Some(_) => println!("  ✓ 立即获取：缓存命中"),
+        None => println!("  ✗ 立即获取：缓存未命中"),
+    }
 
     // 等待过期
-    println!("  ⏳ 等待缓存过期（2秒）...");
+    println!("  ⏳ 等待缓存过期（3秒）...");
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // 再次获取（应该未命中）
-    let expired = short_cache.get(&short_ttl_key).await;
+    // 再次获取（可能未命中，取决于 TTL 实现）
+    let expired = user_cache.get(short_ttl_key).await;
     match expired {
-        Some(_) => println!("  ✗ 缓存仍然存在（意外）"),
+        Some(_) => println!("  ⚠️  缓存仍然存在（TTL 未生效）"),
         None => println!("  ✓ 缓存已过期"),
     }
 
-    // 8. 缓存统计
-    println!("\n8️⃣ 缓存统计");
+    // 8. 缓存存在性检查
+    println!("\n8️⃣ 缓存存在性检查");
     println!("------------------------------------------");
-    println!("  用户缓存已创建");
 
-    // 9. 清空缓存
-    println!("\n9️⃣ 清空缓存");
+    let exists = user_cache.exists("user:1").await;
+    println!("  user:1 存在: {}", exists);
+
+    let exists = user_cache.exists("user:99999").await;
+    println!("  user:99999 存在: {}", exists);
+
+    // 9. 删除缓存
+    println!("\n9️⃣ 删除缓存");
     println!("------------------------------------------");
-    user_cache.invalidate_all();
-    println!("  ✓ 用户缓存已清空");
 
-    println!("\n=== 所有示例完成 ===");
+    user_cache.delete("user:1").await?;
+    println!("  ✓ 删除缓存: user:1");
+
+    let cached = user_cache.get("user:1").await;
+    match cached {
+        Some(_) => println!("  ✗ user:1 仍然存在"),
+        None => println!("  ✓ user:1 已删除"),
+    }
+
+    println!("\n========================================");
+    println!("✨ 缓存使用示例运行完成！");
+    println!("========================================\n");
+
+    println!("💡 OxcacheBackend API:");
+    println!("  - OxcacheBackend::with_capacity(n) - 创建指定容量的缓存");
+    println!("  - cache.get(key)                   - 获取缓存值");
+    println!("  - cache.set(key, value, ttl)      - 设置缓存值");
+    println!("  - cache.delete(key)                - 删除缓存");
+    println!("  - cache.exists(key)                - 检查缓存是否存在");
+
     Ok(())
 }

@@ -56,18 +56,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   连接池创建成功!");
     println!("   池状态: {:?}", pool.status());
 
-    // 示例 4: 从 confers 加载配置（如果启用）
-    #[cfg(feature = "confers")]
-    {
-        println!("\n4. 从 confers 加载配置:");
-        println!("   (需要 confers 配置提供者)");
-    }
-
-    #[cfg(not(feature = "confers"))]
-    {
-        println!("\n4. confers 特性未启用");
-        println!("   运行命令: cargo run --example config --features \"sqlite,confers\"");
-    }
+    // 示例 4: 配置示例说明
+    println!("\n4. 配置管理特性:");
+    println!("   DBNexus 支持多种配置方式:");
+    println!("   - DbConfig 结构体（已在上面演示）");
+    println!("   - 环境变量配置 (config-env feature)");
+    println!("   - YAML 配置文件 (config-yaml feature)");
+    println!("   - TOML 配置文件 (config-toml feature)");
 
     println!("\n=== 所有示例完成 ===");
     Ok(())
