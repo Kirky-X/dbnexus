@@ -9,8 +9,8 @@
 
 #[cfg(feature = "cache")]
 mod cache_tests {
+    use dbnexus::cache::{CacheBackend, OxcacheBackend};
     use dbnexus::config::CacheConfig;
-    use dbnexus::cache::{OxcacheBackend, CacheBackend};
 
     // ============================================================================
     // CacheConfig 测试
@@ -299,7 +299,9 @@ mod cache_tests {
             query_cache_capacity: 100,
             default_ttl: 60,
         };
-        let _cache = OxcacheBackend::with_capacity(config.policy_cache_capacity).await.unwrap();
+        let _cache = OxcacheBackend::with_capacity(config.policy_cache_capacity)
+            .await
+            .unwrap();
 
         // 缓存已创建，可以进行操作测试
     }
