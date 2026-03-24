@@ -12,7 +12,7 @@
 //! - 慢查询记录
 //! - 错误计数
 
-use dbnexus::metrics::{LatencyHistogram, MetricsCollector};
+use dbnexus::{LatencyHistogram, MetricsCollector};
 use std::time::Duration;
 
 #[path = "../../common/mod.rs"]
