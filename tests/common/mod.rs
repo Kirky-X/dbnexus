@@ -7,7 +7,7 @@
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
-use dbnexus::foundation::config::DbConfig;
+use dbnexus::DbConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -101,7 +101,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
         let perm_path = perm_file.to_string_lossy().to_string();
 
         // 使用结构体字面量构建配置
-        let config = dbnexus::foundation::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url,
             max_connections: 5,
             min_connections: 1,
@@ -117,7 +117,7 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
     }
 
     // 无权限配置
-    let config = dbnexus::foundation::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -144,7 +144,7 @@ pub fn generate_test_table_name(prefix: &str) -> String {
 ///
 /// 在指定的会话上删除测试表
 #[allow(dead_code)]
-pub async fn cleanup_test_table(session: &mut dbnexus::database::pool::Session, table_name: &str) {
+pub async fn cleanup_test_table(session: &mut dbnexus::Session, table_name: &str) {
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
@@ -154,7 +154,7 @@ pub async fn cleanup_test_table(session: &mut dbnexus::database::pool::Session, 
 ///
 /// 在指定的会话上创建简单的测试表
 #[allow(dead_code)]
-pub async fn create_test_table(session: &mut dbnexus::database::pool::Session, table_name: &str) {
+pub async fn create_test_table(session: &mut dbnexus::Session, table_name: &str) {
     session
         .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, data TEXT)",
@@ -178,7 +178,7 @@ pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
 
 /// 测试断言帮助 - 验证会话有效
 #[allow(dead_code)]
-pub fn assert_session_valid(session: &mut dbnexus::database::pool::Session) {
+pub fn assert_session_valid(session: &mut dbnexus::Session) {
     assert!(!session.role().is_empty(), "Session should have a role");
     // 使用公开的 execute_raw 方法来验证连接可用
     // 注意：这个验证在 SQLite 内存模式下可能不适用
@@ -252,7 +252,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     // 使用 sqlx 标准的 SQLite URL 格式
-    let config = dbnexus::foundation::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: format!("sqlite://{}", db_path_str),
         max_connections: 5,
         min_connections: 1,
@@ -435,6 +435,7 @@ pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
 /// 返回成功和失败的数量
 #[allow(dead_code)]
 pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: usize) -> (usize, usize) {
+    use futures::future::join_all;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -519,4 +520,15 @@ pub(crate) fn validate_table_name(table_name: &str) -> Result<String, Box<dyn st
 /// 清理 SQL 字符串（转义单引号）
 pub(crate) fn sanitize_sql_string(input: &str) -> String {
     input.replace('\'', "''")
+}
+
+/// 创建临时目录（用于测试）
+///
+/// 此函数需要 `test-utils` feature
+#[cfg(feature = "test-utils")]
+pub fn create_temp_dir() -> TempDir {
+    tempfile::Builder::new()
+        .prefix("dbnexus_test_")
+        .tempdir()
+        .expect("Failed to create temp directory")
 }
