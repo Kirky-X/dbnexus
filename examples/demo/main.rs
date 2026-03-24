@@ -52,6 +52,7 @@ fn run_example(name: &str) -> ExitCode {
         "sql_parser" => "sql_parser",
         "permission_engine" => "permission_engine",
         "entity_basic" => "entity_basic",
+        "security" => "security",
         "metrics" => "metrics",
         "tracing" => "tracing",
         "audit" => "audit",
@@ -102,27 +103,28 @@ fn show_interactive_menu() -> ExitCode {
     println!("  5. sql_parser       - SQL 解析器示例");
     println!("  6. permission_engine - 权限引擎示例");
     println!("  7. entity_basic     - 实体操作基础");
+    println!("  8. security         - 安全功能示例");
     println!();
 
     println!("🏢 企业功能示例:");
-    println!("  8. metrics          - Prometheus 指标监控");
-    println!("  9. tracing          - OpenTelemetry 分布式追踪");
-    println!("  10. audit           - 审计日志");
+    println!("  9.  metrics          - Prometheus 指标监控");
+    println!(" 10. tracing          - OpenTelemetry 分布式追踪");
+    println!(" 11. audit           - 审计日志");
     println!();
 
     println!("🚀 高级功能示例:");
-    println!("  11. cache           - 缓存使用");
-    println!("  12. sharding        - 分片管理");
-    println!("  13. migration       - 数据库迁移");
-    println!("  14. global_index    - 全局索引");
-    println!("  15. macro_usage     - 宏使用完整示例");
+    println!(" 12. cache           - 缓存使用");
+    println!(" 13. sharding        - 分片管理");
+    println!(" 14. migration       - 数据库迁移");
+    println!(" 15. global_index    - 全局索引");
+    println!(" 16. macro_usage     - 宏使用完整示例");
     println!();
 
     println!("🔧 其他:");
     println!("  0. 退出");
     println!();
 
-    print!("请选择要运行的示例 (0-15): ");
+    print!("请选择要运行的示例 (0-16): ");
     use std::io::Write;
     std::io::stdout().flush().unwrap();
 
@@ -141,14 +143,15 @@ fn show_interactive_menu() -> ExitCode {
         "5" => run_example("sql_parser"),
         "6" => run_example("permission_engine"),
         "7" => run_example("entity_basic"),
-        "8" => run_example("metrics"),
-        "9" => run_example("tracing"),
-        "10" => run_example("audit"),
-        "11" => run_example("cache"),
-        "12" => run_example("sharding"),
-        "13" => run_example("migration"),
-        "14" => run_example("global_index"),
-        "15" => run_example("macro_usage"),
+        "8" => run_example("security"),
+        "9" => run_example("metrics"),
+        "10" => run_example("tracing"),
+        "11" => run_example("audit"),
+        "12" => run_example("cache"),
+        "13" => run_example("sharding"),
+        "14" => run_example("migration"),
+        "15" => run_example("global_index"),
+        "16" => run_example("macro_usage"),
         _ => {
             println!("❌ 无效的选择，请重新运行程序");
             ExitCode::FAILURE
@@ -165,6 +168,7 @@ fn list_examples() {
     println!("    - sql_parser");
     println!("    - permission_engine");
     println!("    - entity_basic");
+    println!("    - security");
     println!("  企业功能:");
     println!("    - metrics");
     println!("    - tracing");
