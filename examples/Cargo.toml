@@ -8,79 +8,79 @@ rust-version = "1.85"
 
 [[bin]]
 name = "quickstart"
-path = "demo/quickstart.rs"
+path = "src/quickstart.rs"
 
 [[bin]]
 name = "config"
-path = "demo/config.rs"
+path = "src/config.rs"
 
 [[bin]]
 name = "permissions"
-path = "demo/permissions.rs"
+path = "src/permissions.rs"
 
 [[bin]]
 name = "transactions"
-path = "demo/transactions.rs"
+path = "src/transactions.rs"
 
 [[bin]]
 name = "sql_parser"
-path = "demo/sql_parser.rs"
+path = "src/sql_parser.rs"
 
 [[bin]]
 name = "permission_engine"
-path = "demo/permission_engine.rs"
+path = "src/permission_engine.rs"
 
 [[bin]]
 name = "entity_basic"
-path = "demo/entity_basic.rs"
+path = "src/entity_basic.rs"
 
 [[bin]]
 name = "security"
-path = "demo/security.rs"
+path = "src/security.rs"
 
 [[bin]]
 name = "metrics"
-path = "demo/metrics.rs"
+path = "src/metrics.rs"
 
 [[bin]]
 name = "tracing"
-path = "demo/tracing.rs"
+path = "src/tracing.rs"
 
 [[bin]]
 name = "audit"
-path = "demo/audit.rs"
+path = "src/audit.rs"
 
 [[bin]]
 name = "cache"
-path = "demo/cache.rs"
+path = "src/cache.rs"
 
 [[bin]]
 name = "sharding"
-path = "demo/sharding.rs"
+path = "src/sharding.rs"
 
 [[bin]]
 name = "migration"
-path = "demo/migration.rs"
+path = "src/migration.rs"
 
 [[bin]]
 name = "global_index"
-path = "demo/global_index.rs"
+path = "src/global_index.rs"
 
 [[bin]]
 name = "macro_usage"
-path = "demo/macro_usage.rs"
+path = "src/macro_usage.rs"
 
 [[bin]]
 name = "authenticated_usage"
-path = "demo/authenticated_usage.rs"
+path = "src/authenticated_usage.rs"
 
 [[bin]]
 name = "health"
-path = "demo/health.rs"
+path = "src/health.rs"
 
 [[bin]]
 name = "demo"
-path = "demo/main.rs"
+path = "src/main.rs"
 
 [dependencies]
 dbnexus = { path = "..", features = [

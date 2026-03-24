@@ -81,6 +81,27 @@ cargo run --example sql_parser --features "sqlite,sql-parser"
 cargo run --example permission_engine --features "sqlite,permission-engine"
 ```
 
+### [entity_basic.rs](entity_basic.rs)
+实体操作基础示例，展示 DbEntity 和 db_crud 宏的使用：
+- 使用 #[derive(DbEntity, DeriveEntityModel)] 定义实体
+- 使用 #[db_crud] 自动生成 CRUD 方法
+- 执行 insert / find_by_id / update / delete / find_all 操作
+
+```bash
+cargo run --example entity_basic --features sqlite,macros
+```
+
+### [security.rs](security.rs)
+安全功能示例，展示 DDL 安全守卫和敏感数据脱敏：
+- DdlGuard: DDL 语句安全验证，防止 DROP DATABASE/TRUNCATE 等危险操作
+- SensitiveMasker: 敏感数据脱敏，支持手机号、邮箱、身份证、银行卡、姓名、地址
+- SQL 注入防护测试
+- 错误处理和边界情况
+
+```bash
+cargo run --example security --features sqlite
+```
+
 ## 企业功能
 
 ### [metrics.rs](metrics.rs)
