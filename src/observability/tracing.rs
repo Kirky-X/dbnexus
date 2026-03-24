@@ -384,6 +384,7 @@ pub fn extract(headers: &HashMap<String, String>) {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,6 +451,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tracing_init_and_propagation() {
+        use std::collections::HashMap;
         let mut headers = HashMap::new();
         headers.insert("x-test".to_string(), "1".to_string());
 
