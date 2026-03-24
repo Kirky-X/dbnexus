@@ -10,6 +10,7 @@
 pub mod cache;
 
 // 单文件模块
+#[cfg(feature = "global-index")]
 pub mod global_index;
 
 // Re-exports

@@ -11,8 +11,11 @@ pub mod permission;
 pub mod security;
 
 // 单文件模块
+#[cfg(feature = "authentication")]
 pub mod authentication;
+#[cfg(feature = "permission-engine")]
 pub mod permission_engine;
+#[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
 // Re-exports: security

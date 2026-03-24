@@ -8,8 +8,8 @@
 //! 测试实体类型重导出和与 sea-orm 的集成
 
 use dbnexus::DbPool;
-use dbnexus::entity::Condition;
-use dbnexus::permission::{PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::foundation::entity::Condition;
+use dbnexus::access::permission::{PermissionConfig, RolePolicy, TablePermission, PermissionAction};
 use sea_orm::ActiveValue;
 
 fn get_database_url() -> Option<String> {
@@ -197,7 +197,7 @@ async fn test_entity_integration_with_sql_operations() {
 const CRUD_TEST_TABLE: &str = "crud_entity_test";
 
 /// 获取包含完整权限的测试配置
-fn get_test_config_with_all_permissions() -> dbnexus::config::DbConfig {
+fn get_test_config_with_all_permissions() -> dbnexus::foundation::config::DbConfig {
     use std::fs;
 
     let url = get_database_url().unwrap_or("sqlite::memory:".to_string());
@@ -217,7 +217,7 @@ roles:
     let perm_file = "/tmp/entity_crud_test_perms.yaml";
     fs::write(perm_file, perm_content).expect("Failed to write permissions");
 
-    dbnexus::config::DbConfig {
+    dbnexus::foundation::config::DbConfig {
         url,
         max_connections: 5,
         admin_role: "admin".to_string(),
@@ -286,10 +286,10 @@ async fn test_entity_crud_full_operations() {
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
-                        dbnexus::permission::PermissionAction::Select,
-                        dbnexus::permission::PermissionAction::Insert,
-                        dbnexus::permission::PermissionAction::Update,
-                        dbnexus::permission::PermissionAction::Delete,
+                        PermissionAction::Select,
+                        PermissionAction::Insert,
+                        PermissionAction::Update,
+                        PermissionAction::Delete,
                     ],
                 }],
             },
@@ -357,10 +357,10 @@ async fn test_entity_transaction_with_permissions() {
                 tables: vec![TablePermission {
                     name: "*".to_string(),
                     operations: vec![
-                        dbnexus::permission::PermissionAction::Select,
-                        dbnexus::permission::PermissionAction::Insert,
-                        dbnexus::permission::PermissionAction::Update,
-                        dbnexus::permission::PermissionAction::Delete,
+                        PermissionAction::Select,
+                        PermissionAction::Insert,
+                        PermissionAction::Update,
+                        PermissionAction::Delete,
                     ],
                 }],
             },
