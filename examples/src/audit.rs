@@ -17,7 +17,7 @@
 //! cargo run --example audit --features sqlite,audit
 //! ```
 
-use dbnexus::audit::{
+use dbnexus::business::audit::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity,
     MemoryAuditStorage,
 };

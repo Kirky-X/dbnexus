@@ -16,7 +16,7 @@
 //! cargo run --example global_index --features "sqlite,global-index,macros"
 //! ```
 
-use dbnexus::global_index::{GlobalIndex, IndexEntry};
+use dbnexus::storage::global_index::{GlobalIndex, IndexEntry};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

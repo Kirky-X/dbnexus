@@ -17,7 +17,7 @@
 //! cargo run --example permission_engine --features "sqlite,permission-engine,cache"
 //! ```
 
-use dbnexus::permission_engine::{
+use dbnexus::access::permission_engine::{
     PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
     PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role, YamlPermissionProvider,
 };

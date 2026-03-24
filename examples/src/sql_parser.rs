@@ -18,7 +18,7 @@
 //! cargo run --example sql_parser --features "sqlite,sql-parser"
 //! ```
 
-use dbnexus::sql_parser::SqlParser;
+use dbnexus::access::sql_parser::SqlParser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -316,12 +316,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// 模拟权限检查函数
-fn check_permission(user: &str, table: &str, action: &dbnexus::sql_parser::PermissionAction) -> bool {
+fn check_permission(user: &str, table: &str, action: &dbnexus::PermissionAction) -> bool {
     // 简化的权限检查逻辑
     match action {
-        dbnexus::sql_parser::PermissionAction::Select => true,
-        dbnexus::sql_parser::PermissionAction::Insert => table != "users",
-        dbnexus::sql_parser::PermissionAction::Update => user == "admin" || table == "users",
-        dbnexus::sql_parser::PermissionAction::Delete => user == "admin",
+        dbnexus::PermissionAction::Select => true,
+        dbnexus::PermissionAction::Insert => table != "users",
+        dbnexus::PermissionAction::Update => user == "admin" || table == "users",
+        dbnexus::PermissionAction::Delete => user == "admin",
     }
 }

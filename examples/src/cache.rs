@@ -16,7 +16,7 @@
 //! cargo run --example cache --features "sqlite,permission,cache"
 //! ```
 
-use dbnexus::cache::{CacheBackend, OxcacheBackend};
+use dbnexus::storage::cache::{CacheBackend, OxcacheBackend};
 use dbnexus::{DbConfig, DbPool};
 use std::time::Duration;
 
