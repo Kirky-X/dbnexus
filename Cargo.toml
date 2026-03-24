@@ -250,8 +250,6 @@ tokio-test = { workspace = true }
 assert_cmd = "2.2"
 predicates = "3.1"
 criterion = "0.5"
-# dbnexus-cli binary: workspace member, enables cargo_bin() in integration tests
-dbnexus-cli = { path = "src/tools/cli" }
 
 [lints]
 workspace = true
