@@ -11,7 +11,7 @@
 //! - 通配符匹配
 //! - 边界条件和错误处理
 
-use dbnexus::permission::{
+use dbnexus::access::permission::{
     PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy, TablePermission,
 };
 
