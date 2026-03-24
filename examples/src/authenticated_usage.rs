@@ -21,7 +21,7 @@
 use dbnexus::{
     DbConfig, DbPool,
     access::authentication::{
-        AuthenticationManager, AuthCredentials, AuthResult, PasswordHasher, User,
+        AuthenticationManager, AuthCredentials, PasswordHasher, User,
     }
 };
 
