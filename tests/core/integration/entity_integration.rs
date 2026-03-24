@@ -235,15 +235,22 @@ async fn setup_crud_test_table(pool: &DbPool) {
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", CRUD_TEST_TABLE))
         .await;
 
-    // MySQL需要使用AUTO_INCREMENT，而SQLite/PostgreSQL使用INTEGER PRIMARY KEY即可
+    // MySQL需要使用AUTO_INCREMENT，PostgreSQL需要使用GENERATED ALWAYS AS IDENTITY
+    // 而SQLite使用INTEGER PRIMARY KEY即可（SQLite的INTEGER PRIMARY KEY是自增的）
     let create_sql = if cfg!(feature = "mysql") {
         eprintln!("Using MySQL CREATE TABLE syntax");
         format!(
             "CREATE TABLE IF NOT EXISTS {} (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), age INT)",
             CRUD_TEST_TABLE
         )
+    } else if cfg!(feature = "postgres") {
+        eprintln!("Using PostgreSQL CREATE TABLE syntax");
+        format!(
+            "CREATE TABLE IF NOT EXISTS {} (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
+            CRUD_TEST_TABLE
+        )
     } else {
-        eprintln!("Using SQLite/PostgreSQL CREATE TABLE syntax");
+        eprintln!("Using SQLite CREATE TABLE syntax");
         format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
             CRUD_TEST_TABLE
