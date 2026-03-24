@@ -9,7 +9,7 @@
 //! 分片重平衡、分片热点检测、分片故障转移等场景
 
 use chrono::{TimeZone, Utc};
-use dbnexus::sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
+use dbnexus::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // ============================================================================
 // 哈希分片算法测试
