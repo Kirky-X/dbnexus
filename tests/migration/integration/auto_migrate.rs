@@ -9,8 +9,8 @@
 
 #![cfg(feature = "auto-migrate")]
 
-use dbnexus::DbPool;
 use dbnexus::DbConfig;
+use dbnexus::DbPool;
 use dbnexus::config::DatabaseType;
 use std::fs;
 use std::path::PathBuf;

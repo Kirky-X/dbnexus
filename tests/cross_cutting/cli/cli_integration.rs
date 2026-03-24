@@ -139,10 +139,7 @@ DROP TABLE test_table;
     /// TEST-CLI-009: CLI 生成命令帮助测试
     #[test]
     fn test_cli_generate_help() {
-        cli_command()
-            .args(["generate", "--help"])
-            .assert()
-            .success();
+        cli_command().args(["generate", "--help"]).assert().success();
     }
 
     /// TEST-CLI-010: CLI 向下命令带版本测试
@@ -222,9 +219,7 @@ DROP TABLE test_table_{};
                 i, i, i, i
             );
             std::fs::write(
-                temp_dir
-                    .path()
-                    .join(format!("170000000{}_test_migration_{}.sql", i, i)),
+                temp_dir.path().join(format!("170000000{}_test_migration_{}.sql", i, i)),
                 migration_content,
             )
             .expect("Failed to write migration file");

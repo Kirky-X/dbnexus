@@ -258,10 +258,7 @@ async fn setup_crud_test_table(pool: &DbPool) {
     };
 
     eprintln!("CREATE SQL: {}", create_sql);
-    session
-        .execute_raw_ddl(&create_sql)
-        .await
-        .unwrap();
+    session.execute_raw_ddl(&create_sql).await.unwrap();
 }
 
 /// 清理测试表

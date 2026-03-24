@@ -193,10 +193,7 @@ async fn test_pool_exhaustion_alert_levels() {
 
     // 验证所有请求都超时了（因为连接被持有）
     // Count results that are Ok(Err(...)) — meaning the connection attempt returned a DbError
-    let timeout_count = results
-        .iter()
-        .filter(|r| matches!(r, Ok(Err(_))))
-        .count();
+    let timeout_count = results.iter().filter(|r| matches!(r, Ok(Err(_)))).count();
     assert!(
         timeout_count >= 2,
         "Expected at least 2 timeouts, got {}",
@@ -207,7 +204,10 @@ async fn test_pool_exhaustion_alert_levels() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     let status = pool.status();
     // holder 释放后 wait_count 应该为 0
-    assert_eq!(status.wait_count, 0, "wait_count should be 0 after all requests complete");
+    assert_eq!(
+        status.wait_count, 0,
+        "wait_count should be 0 after all requests complete"
+    );
 
     // max_waiters 应该记录了峰值（至少有 3 个并发等待）
     assert!(
