@@ -138,8 +138,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let affected = Model::delete(&session, inserted.id).await?;
     println!("  ✓ 删除: id={}, 影响 {} 行", inserted.id, affected);
 
-    // 清理
-    session.execute_raw_ddl("DROP TABLE products").await?;
+    // 清理 (跳过 DROP TABLE，因为 DDL 白名单默认不允许删除表)
+    // session.execute_raw_ddl("DROP TABLE products").await?;
 
     println!("\n========================================");
     println!("✨ 宏使用完整示例完成！");
