@@ -105,7 +105,7 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "serde_yaml"]  # 权限控制（不依赖缓存）
+permission = ["dashmap", "serde_yaml", "futures"]  # 权限控制（不依赖缓存）
 permission-with-cache = ["permission", "cache"]  # 权限控制（带缓存）
 sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
 macros = ["dbnexus-macros"]
@@ -144,7 +144,7 @@ with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
 audit = ["chrono", "uuid"]  # 审计日志
-permission-engine = ["dashmap", "serde_yaml", "cache"]  # 高级权限引擎
+permission-engine = ["dashmap", "serde_yaml", "cache", "test-utils", "futures"]  # 高级权限引擎
 authentication = ["jsonwebtoken", "bcrypt", "crossbeam"]  # JWT 认证系统
 
 # === 高级配置 ===
@@ -348,7 +348,13 @@ harness = false
 [[test]]
 name = "mod"
 path = "tests/mod.rs"
-required-features = ["sqlite"]
+required-features = ["sqlite", "test-utils", "futures"]
+
+# Pool semaphore test
+[[test]]
+name = "pool_semaphore_test"
+path = "tests/pool_semaphore_test.rs"
+required-features = ["sqlite", "futures"]
 
 # Security tests - SQL injection detection tests
 [[test]]
