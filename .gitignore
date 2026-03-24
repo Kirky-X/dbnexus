@@ -91,7 +91,6 @@ npm-debug.log*
 # .qoder/ - Qoder configuration
 # openspec/ - OpenSpec specifications
 # CHANGELOG.md - Change history
-# Makefile - Build commands
 # rustfmt.toml - Code formatting
 # .cargo/config.toml - Cargo configuration
 
@@ -102,3 +101,6 @@ di.md
 
 # 测试环境配置
 docker-compose.yml
+
+# 本地开发工具
+Makefile
