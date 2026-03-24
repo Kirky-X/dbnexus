@@ -241,7 +241,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn insert(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -288,7 +288,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_id(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 id: i64,
             ) -> Result<Option<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -329,7 +329,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn update(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -385,7 +385,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 id: i64,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -433,7 +433,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_all(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
@@ -473,7 +473,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_condition(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 condition: sea_orm::Condition,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -515,7 +515,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete_many(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
                 filter: sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
@@ -556,7 +556,7 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn count(
-                session: &::dbnexus::pool::Session,
+                session: &::dbnexus::database::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
@@ -847,7 +847,7 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 检查角色是否有权限访问此实体
-            pub fn check_permission(ctx: &dbnexus::permission::PermissionContext) -> Result<(), dbnexus::DbError> {
+            pub fn check_permission(ctx: &dbnexus::access::permission::PermissionContext) -> Result<(), dbnexus::DbError> {
                 let role = ctx.role();
                 if !Self::ALLOWED_ROLES.contains(&role) {
                     return Err(dbnexus::DbError::Permission(format!(
@@ -862,8 +862,8 @@ pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
 
             /// 检查角色是否有权限执行特定操作
             pub fn check_operation(
-                ctx: &dbnexus::permission::PermissionContext,
-                operation: &dbnexus::permission::PermissionAction,
+                ctx: &dbnexus::access::permission::PermissionContext,
+                operation: &dbnexus::access::permission::PermissionAction,
             ) -> Result<(), dbnexus::DbError> {
                 let role = ctx.role();
                 if !Self::ALLOWED_ROLES.contains(&role) {
@@ -974,8 +974,8 @@ pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 获取缓存配置
-            pub fn cache_config() -> dbnexus::config::CacheConfig {
-                dbnexus::config::CacheConfig {
+            pub fn cache_config() -> dbnexus::foundation::config::CacheConfig {
+                dbnexus::foundation::config::CacheConfig {
                     policy_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
                     sql_parse_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
                     query_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,

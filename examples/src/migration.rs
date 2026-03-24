@@ -16,7 +16,7 @@
 //! cargo run --example migration --features "sqlite,migration"
 //! ```
 
-use dbnexus::migration::ColumnChangeType;
+use dbnexus::database::migration::ColumnChangeType;
 use dbnexus::{DbConfig, DbPool};
 
 #[tokio::main]
