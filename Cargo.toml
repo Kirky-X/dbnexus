@@ -247,15 +247,9 @@ tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 assert_cmd = "2.2"
 predicates = "3.1"
-tempfile = "3.27"
 criterion = "0.5"
-futures = "0.3"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.22", features = ["v4"] }
-twox-hash = "2.1"
 # dbnexus-cli binary: workspace member, enables cargo_bin() in integration tests
 dbnexus-cli = { path = "src/tools/cli" }
 
