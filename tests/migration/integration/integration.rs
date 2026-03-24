@@ -7,8 +7,8 @@
 //!
 //! 注意: 部分测试需要内部 API，已暂时跳过
 
-use dbnexus::config::DatabaseType;
-use dbnexus::migration::MigrationHistory;
+use dbnexus::DatabaseType;
+use dbnexus::MigrationHistory;
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -119,7 +119,7 @@ fn test_migration_history_creation() {
 fn test_migration_history_add() {
     let mut history = MigrationHistory::new();
 
-    let migration = dbnexus::migration::MigrationVersion {
+    let migration = dbnexus::MigrationVersion {
         version: 1,
         description: "Initial migration".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
@@ -139,7 +139,7 @@ fn test_migration_history_add() {
 /// - run_migrations 应能正确创建迁移表并应用迁移
 #[tokio::test]
 async fn test_migration_executor_first_run() {
-    use dbnexus::migration::MigrationExecutor;
+    use dbnexus::MigrationExecutor;
     use std::io::Write;
     use tempfile::TempDir;
 
