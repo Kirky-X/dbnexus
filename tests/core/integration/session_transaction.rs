@@ -8,7 +8,7 @@
 use dbnexus::DbError;
 use dbnexus::DbPool;
 #[cfg(feature = "permission")]
-use dbnexus::permission::{PermissionAction as Operation, PermissionConfig};
+use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig};
 use tempfile::TempDir;
 
 #[path = "../../common/mod.rs"]
@@ -189,7 +189,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -227,7 +227,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -279,7 +279,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -316,9 +316,10 @@ roles:
 async fn test_check_permission_denied_returns_permission_error() {
     let temp_dir = TempDir::new().unwrap();
     let perm_file = temp_dir.path().join("permissions.yaml");
+    // 使用非 admin 角色以避免权限检查被绕过
     let perm_content = r#"
 roles:
-  admin:
+  test_user:
     tables:
       - name: "users"
         operations:
@@ -326,7 +327,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).unwrap();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -337,10 +338,12 @@ roles:
         },
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
-    let session = pool.get_session("admin").await.unwrap();
+    // 使用非 admin 角色进行权限测试
+    let session = pool.get_session("test_user").await.unwrap();
 
     let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_file).unwrap()).unwrap();
     session.permission_ctx().load_policy(&perm_config).await.unwrap();
@@ -381,7 +384,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -421,7 +424,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -481,7 +484,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -506,9 +509,10 @@ roles:
 async fn test_execute_denied_by_permission() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
+    // 使用非 admin 角色以避免权限检查被绕过
     let perm_content = r#"
 roles:
-  admin:
+  test_user:
     tables:
       - name: "users"
         operations:
@@ -516,7 +520,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -527,10 +531,12 @@ roles:
         },
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    // 使用非 admin 角色进行权限测试
+    let session = pool.get_session("test_user").await.expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM orders").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -570,7 +576,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -616,7 +622,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -666,7 +672,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -716,7 +722,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -765,7 +771,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -800,7 +806,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -835,7 +841,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -875,7 +881,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()
@@ -912,7 +918,7 @@ roles:
 #[tokio::test]
 #[cfg(all(feature = "sqlite", feature = "permission"))]
 async fn test_session_trait_methods_work() {
-    use dbnexus::pool::DatabaseSession;
+    use dbnexus::DatabaseSession;
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -929,7 +935,7 @@ roles:
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: match std::env::var("TEST_DB_TYPE")
             .unwrap_or_else(|_| "sqlite".to_string())
             .as_str()

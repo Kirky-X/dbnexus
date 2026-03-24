@@ -7,7 +7,7 @@
 //!
 //! 覆盖 DbPool 初始化、连接、关闭和 DbPoolBuilder 构建等功能测试
 
-use dbnexus::{DbPool, DbPoolBuilder, config::DatabaseType};
+use dbnexus::{DbPool, DbPoolBuilder, DatabaseType};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -37,7 +37,7 @@ async fn test_dbpool_new_basic() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_with_config() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 10,
         min_connections: 2,
@@ -62,7 +62,7 @@ async fn test_dbpool_with_config() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_try_from_config() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -85,7 +85,7 @@ async fn test_dbpool_try_from_config() {
 ))]
 async fn test_dbpool_try_from_sync() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -101,7 +101,10 @@ async fn test_dbpool_try_from_sync() {
     assert_eq!(status.idle, 0);
 }
 
-/// TEST-DBNEXUS-005: DbPool::try_from() 同步初始化测试（带权限特性）
+/// TEST-DBNEXUS-005: DbPool 初始化测试（带权限特性）
+///
+/// 注意：此测试使用 with_config 而非 try_from，
+/// 因为 try_from 使用 block_on 无法在 tokio 异步测试环境中运行
 #[tokio::test]
 #[cfg(all(
     feature = "permission",
@@ -109,14 +112,14 @@ async fn test_dbpool_try_from_sync() {
 ))]
 async fn test_dbpool_try_from_with_permission() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
         ..Default::default()
     };
 
-    let pool = DbPool::try_from(&config).expect("Failed to create DbPool with try_from");
+    let pool = DbPool::with_config(config).await.expect("Failed to create DbPool with with_config");
 
     // 验证权限缓存已初始化
     let status = pool.status();
@@ -200,7 +203,7 @@ async fn test_pool_health_check() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_config_access() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 15,
         min_connections: 3,
@@ -314,7 +317,7 @@ async fn test_pool_clone_and_drop() {
 async fn test_builder_basic() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         ..Default::default()
     };
@@ -336,7 +339,7 @@ async fn test_builder_basic() {
 async fn test_builder_chaining() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 25,
         min_connections: 5,
@@ -361,7 +364,7 @@ async fn test_builder_chaining() {
 async fn test_builder_with_config() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 30,
         min_connections: 10,
@@ -390,7 +393,7 @@ async fn test_builder_with_config() {
 async fn test_builder_override_config() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 20,
         min_connections: 5,
@@ -398,7 +401,7 @@ async fn test_builder_override_config() {
     };
 
     // 使用 config 但覆盖 max_connections
-    let override_config = dbnexus::config::DbConfig {
+    let override_config = dbnexus::DbConfig {
         max_connections: 50,
         ..config
     };
@@ -444,7 +447,7 @@ async fn test_builder_missing_url_and_config() {
 /// TEST-DBNEXUS-020: DbPoolBuilder Debug 实现测试
 #[test]
 fn test_builder_debug() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 10,
         admin_role: "admin".to_string(),
@@ -591,7 +594,7 @@ async fn test_pool_get_actual_config() {
     let url = common::get_test_database_url();
 
     // 使用可能被修正的配置
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 10,
         min_connections: 5,
@@ -642,7 +645,7 @@ async fn test_empty_role_handling() {
 async fn test_config_validation_failure() {
     // min > max 应该失败 - DbConfig 结构体不会在创建时验证
     // 验证会在 DbPool 创建时进行
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         min_connections: 10,
@@ -657,7 +660,7 @@ async fn test_config_validation_failure() {
 #[tokio::test]
 async fn test_config_boundary_values() {
     // 最大连接数边界
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1000,
         min_connections: 1,
@@ -668,7 +671,7 @@ async fn test_config_boundary_values() {
     assert_eq!(config.min_connections, 1);
 
     // 超过最大值 - DbConfig 结构体不会在创建时验证
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1001,
         min_connections: 1,
@@ -719,7 +722,7 @@ async fn test_session_lifecycle() {
 async fn test_pool_warmup() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 10,
         min_connections: 3,
@@ -818,7 +821,7 @@ async fn test_pool_status_fields() {
 /// TEST-DBNEXUS-039: 配置 Duration 转换测试
 #[tokio::test]
 async fn test_config_duration_conversion() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         idle_timeout: 300,
         acquire_timeout: 5000,
@@ -835,7 +838,7 @@ async fn test_config_duration_conversion() {
 #[tokio::test]
 async fn test_config_url_access() {
     // 带密码的 URL
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "postgres://user:secret_password@localhost:5432/mydb".to_string(),
         ..Default::default()
     };
@@ -845,7 +848,7 @@ async fn test_config_url_access() {
     assert!(config.url.contains("postgres://"));
 
     // SQLite 内存数据库
-    let sqlite_config = dbnexus::config::DbConfig {
+    let sqlite_config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
@@ -856,7 +859,7 @@ async fn test_config_url_access() {
 /// TEST-DBNEXUS-041: 配置克隆测试
 #[tokio::test]
 async fn test_config_clone() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 15,
         min_connections: 3,
@@ -877,7 +880,7 @@ async fn test_config_clone() {
 async fn test_config_optional_fields() {
     use std::path::PathBuf;
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         permissions_path: Some("/etc/dbnexus/permissions.yaml".to_string()),
         migrations_dir: Some(PathBuf::from("/var/migrations")),
@@ -896,7 +899,7 @@ async fn test_config_optional_fields() {
 /// TEST-DBNEXUS-043: 配置默认可选字段测试
 #[tokio::test]
 async fn test_config_default_optional_fields() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
@@ -947,7 +950,7 @@ async fn test_multithreaded_access() {
 async fn test_pool_stress() {
     let url = common::get_test_database_url();
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,

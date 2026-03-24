@@ -7,18 +7,18 @@
 //!
 //! 基于 confers 库的配置构建、加载和验证功能测试
 
-use dbnexus::{DbPool, config::DatabaseType};
+use dbnexus::{DbPool, DatabaseType, DbConfig};
 
 #[path = "../../common/mod.rs"]
 mod common;
 
 #[cfg(feature = "confers")]
-use dbnexus::config::DbConfig;
+use DbConfig;
 
 #[tokio::test]
 async fn test_config_builder_basic() {
     #[cfg(feature = "confers")]
-    let config = dbnexus::config::DbConfig {
+    let config = DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 10,
         min_connections: 2,
@@ -36,7 +36,7 @@ async fn test_config_builder_basic() {
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
-    let config = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml).unwrap();
+    let config = serde_yaml::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
 }
 
@@ -50,7 +50,7 @@ min_connections: 5
 idle_timeout: 300
 acquire_timeout: 5000
 "#;
-    let config = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml).unwrap();
+    let config = serde_yaml::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
     assert_eq!(config.max_connections, 20);
     assert_eq!(config.min_connections, 5);
@@ -82,7 +82,7 @@ async fn test_dbpool_from_config() {
     #[cfg(feature = "confers")]
     {
         let url = common::get_test_database_url();
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url,
             max_connections: 10,
             min_connections: 3,
@@ -111,7 +111,7 @@ async fn test_config_validation() {
     #[cfg(feature = "confers")]
     {
         // min > max 应该验证失败
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 5,
             min_connections: 10,
@@ -128,7 +128,7 @@ async fn test_config_validation() {
 async fn test_config_clone() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 10,
             ..Default::default()
@@ -144,7 +144,7 @@ async fn test_config_clone() {
 async fn test_config_builder_chaining() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 20,
             min_connections: 5,
@@ -171,7 +171,7 @@ async fn test_config_builder_chaining() {
 #[tokio::test]
 async fn test_config_invalid_yaml() {
     let invalid_yaml = r#"url: "sqlite::memory:" invalid syntax"#;
-    let result = serde_yaml::from_str::<dbnexus::config::DbConfig>(invalid_yaml);
+    let result = serde_yaml::from_str::<DbConfig>(invalid_yaml);
     assert!(result.is_err());
 }
 
@@ -179,7 +179,7 @@ async fn test_config_invalid_yaml() {
 #[tokio::test]
 async fn test_config_missing_required_field() {
     let yaml = r#"max_connections: 10"#;
-    let result = serde_yaml::from_str::<dbnexus::config::DbConfig>(yaml);
+    let result = serde_yaml::from_str::<DbConfig>(yaml);
     assert!(result.is_err());
 }
 
@@ -187,7 +187,7 @@ async fn test_config_missing_required_field() {
 async fn test_config_default_values() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
@@ -206,7 +206,7 @@ async fn test_config_default_values() {
 async fn test_config_boundary_values() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 1,
             min_connections: 1,
@@ -215,7 +215,7 @@ async fn test_config_boundary_values() {
         assert_eq!(config.max_connections, 1);
         assert_eq!(config.min_connections, 1);
 
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 1000,
             min_connections: 1,
@@ -231,7 +231,7 @@ async fn test_config_boundary_rejection() {
     {
         // 注意：DbConfig 结构体不会在创建时验证，这些值会被接受
         // 验证会在 DbPool 创建时进行
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 1001,
             ..Default::default()
@@ -239,7 +239,7 @@ async fn test_config_boundary_rejection() {
         // 配置已创建，值被设置
         assert_eq!(config.max_connections, 1001);
 
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 200,
             min_connections: 101,
@@ -256,7 +256,7 @@ async fn test_config_invalid_urls() {
     #[cfg(feature = "confers")]
     {
         // 空URL - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "".to_string(),
             ..Default::default()
         };
@@ -264,7 +264,7 @@ async fn test_config_invalid_urls() {
         assert_eq!(config.url, "");
 
         // 无效URL格式 - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "invalid://test".to_string(),
             ..Default::default()
         };
@@ -277,7 +277,7 @@ async fn test_config_invalid_urls() {
 async fn test_config_timeout_boundaries() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             idle_timeout: 1,
             acquire_timeout: 1,
@@ -286,7 +286,7 @@ async fn test_config_timeout_boundaries() {
         assert_eq!(config.idle_timeout, 1);
         assert_eq!(config.acquire_timeout, 1);
 
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             idle_timeout: 86400,
             acquire_timeout: 300000,
@@ -301,7 +301,7 @@ async fn test_config_timeout_boundaries() {
 async fn test_config_url_access() {
     #[cfg(feature = "confers")]
     {
-        let config = dbnexus::config::DbConfig {
+        let config = DbConfig {
             url: "postgres://user:password@localhost:5432/mydb".to_string(),
             ..Default::default()
         };
@@ -310,7 +310,7 @@ async fn test_config_url_access() {
         assert!(config.url.contains("postgres://"));
         assert!(config.url.contains("password"));
 
-        let mem_config = dbnexus::config::DbConfig {
+        let mem_config = DbConfig {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
@@ -325,7 +325,7 @@ async fn test_config_admin_role_variants() {
         let test_roles = vec!["admin", "administrator", "root", "superuser"];
 
         for role in test_roles {
-            let config = dbnexus::config::DbConfig {
+            let config = DbConfig {
                 url: "sqlite::memory:".to_string(),
                 admin_role: role.to_string(),
                 ..Default::default()
