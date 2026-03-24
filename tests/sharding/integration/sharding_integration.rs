@@ -8,7 +8,7 @@
 //! 测试分片模块的时间边界、哈希分布均匀性、路由器高级功能等
 
 use chrono::{TimeZone, Utc};
-use dbnexus::sharding::{ShardConfig, ShardRouter};
+use dbnexus::{ShardConfig, ShardRouter};
 use std::sync::Arc;
 
 fn get_database_url() -> Option<String> {

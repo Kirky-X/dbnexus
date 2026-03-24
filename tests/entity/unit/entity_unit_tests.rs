@@ -7,7 +7,7 @@
 //!
 //! 测试 entity 模块导出的类型是否正确可用
 
-use dbnexus::entity::{ActiveModelTrait, Condition, EntityTrait};
+use dbnexus::{ActiveModelTrait, Condition, EntityTrait};
 use sea_orm::ActiveValue;
 
 /// 测试 Condition 类型是否正确导出
