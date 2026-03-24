@@ -625,6 +625,28 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果角色未在权限配置中定义，返回错误
+    /// # 安全警告
+    ///
+    /// 此方法接受角色字符串参数，调用者应确保：
+    /// - 已通过其他方式验证用户身份（如JWT Token、API Key等）
+    /// - 角色字符串来自可信来源，而非直接的用户输入
+    /// - 在生产环境中不要硬编码角色字符串
+    /// - 建议结合 `dbnexus::authentication::AuthenticationManager` 使用
+    ///
+    /// # 示例
+    ///
+    /// ```rust,no_run,ignore
+    /// use dbnexus::{DbPool, authentication::AuthenticationManager};
+    ///
+    /// // 安全用法：先验证Token，再从Token中提取角色
+    /// let auth_manager = AuthenticationManager::new(&jwt_secret);
+    /// let claims = auth_manager.verify_token(token)?;
+    /// let session = pool.get_session(&claims.role).await?;
+    ///
+    /// // 不安全用法：直接使用用户输入
+    /// // let session = pool.get_session(user_input_role).await?; // 不要这样做！
+    /// ```
+    ///
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(role = %role)))]
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
         // 验证角色名称

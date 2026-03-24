@@ -111,6 +111,13 @@ pub mod security;
 #[cfg(feature = "authentication")]
 pub mod authentication;
 
+/// 认证类型导出
+#[cfg(feature = "authentication")]
+pub use authentication::{
+    AuthenticationManager, AuthCredentials, AuthError, AuthResult,
+    JwtClaims, User, TokenType, PasswordHasher, JwtManager
+};
+
 /// 审计日志模块
 #[cfg(feature = "audit")]
 pub mod audit;
