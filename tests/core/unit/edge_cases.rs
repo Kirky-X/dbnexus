@@ -20,7 +20,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_empty_url() {
         // 空URL - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "".to_string(),
             ..Default::default()
         };
@@ -31,7 +31,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_invalid_url_format() {
         // 无效URL格式 - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "not-a-valid-url".to_string(),
             ..Default::default()
         };
@@ -42,7 +42,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_zero_connections() {
         // 零连接数 - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 0,
             ..Default::default()
@@ -54,7 +54,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_negative_connections() {
         // 负数连接数 - u32 类型不支持负数，这里测试最小值
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 0,
             ..Default::default()
@@ -66,7 +66,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_max_connections() {
         // 超大连接数 - 配置会被创建
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 10000,
             ..Default::default()
@@ -78,7 +78,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_zero_timeout() {
         // 零超时 - 配置会被创建
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
             acquire_timeout: 0,
             idle_timeout: 0,
@@ -92,7 +92,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_max_timeout() {
         // 最大超时 - 配置会被创建
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
             acquire_timeout: u64::MAX,
             idle_timeout: u64::MAX,
@@ -106,7 +106,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_invalid_database_type() {
         // 不支持的数据库类型 - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "oracle://user:pass@localhost/db".to_string(),
             ..Default::default()
         };
@@ -117,7 +117,7 @@ mod config_boundary_tests {
     #[tokio::test]
     async fn test_invalid_hostname() {
         // 无效主机名 - 配置会被创建，但 DbPool 创建时会失败
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "postgresql://invalid-hostname-that-does-not-exist/db".to_string(),
             ..Default::default()
         };
@@ -128,7 +128,7 @@ mod config_boundary_tests {
 
 #[cfg(test)]
 mod sql_parser_boundary_tests {
-    use dbnexus::sql_parser::{SqlOperationType, SqlParser};
+    use dbnexus::{SqlOperationType, SqlParser};
 
     #[tokio::test]
     async fn test_empty_sql() {
@@ -200,7 +200,7 @@ mod sql_parser_boundary_tests {
 
 #[cfg(test)]
 mod permission_boundary_tests {
-    use dbnexus::permission_engine::{
+    use dbnexus::{
         PermissionAction, PermissionContext, PermissionDecision, PermissionEngine, PermissionResource,
         PermissionSubject, RbacPermissionProvider,
     };
@@ -294,7 +294,7 @@ mod permission_boundary_tests {
 
 #[cfg(test)]
 mod string_boundary_tests {
-    use dbnexus::cache::Cache;
+    use dbnexus::Cache;
 
     #[tokio::test]
     async fn test_empty_cache_key() {
@@ -333,7 +333,7 @@ mod string_boundary_tests {
 
 #[cfg(test)]
 mod time_boundary_tests {
-    use dbnexus::metrics::MetricsCollector;
+    use dbnexus::MetricsCollector;
     use std::time::Duration;
 
     #[tokio::test]
@@ -465,7 +465,7 @@ mod path_traversal_tests {
 
         for path in malicious_paths {
             // 配置会被创建，路径验证在 DbPool 创建时进行
-            let config = dbnexus::config::DbConfig {
+            let config = dbnexus::DbConfig {
                 url: format!("sqlite:///{}/test.db", path),
                 ..Default::default()
             };
@@ -480,7 +480,7 @@ mod path_traversal_tests {
 
         for url in malicious_urls {
             // 配置会被创建
-            let config = dbnexus::config::DbConfig {
+            let config = dbnexus::DbConfig {
                 url: url.to_string(),
                 ..Default::default()
             };
@@ -491,7 +491,7 @@ mod path_traversal_tests {
 
     #[tokio::test]
     async fn test_symlink_attack() {
-        let config = dbnexus::config::DbConfig {
+        let config = dbnexus::DbConfig {
             url: "sqlite:///path/to/symlink.db".to_string(),
             ..Default::default()
         };
@@ -501,7 +501,7 @@ mod path_traversal_tests {
 
 #[cfg(test)]
 mod sql_injection_tests {
-    use dbnexus::permission_engine::{PermissionEngine, RbacPermissionProvider};
+    use dbnexus::{PermissionEngine, RbacPermissionProvider};
     use std::sync::Arc;
 
     #[tokio::test]
@@ -529,8 +529,8 @@ mod sql_injection_tests {
         for input in malicious_inputs {
             let result = engine.check(input, "users", "SELECT").await;
             match result {
-                dbnexus::permission_engine::PermissionDecision::Deny => {}
-                dbnexus::permission_engine::PermissionDecision::NotApplicable => {}
+                dbnexus::PermissionDecision::Deny => {}
+                dbnexus::PermissionDecision::NotApplicable => {}
                 _ => {
                     panic!("SQL injection attempt should be denied: {}", input);
                 }
@@ -541,7 +541,7 @@ mod sql_injection_tests {
 
 #[cfg(test)]
 mod xss_tests {
-    use dbnexus::audit::sanitize_for_log;
+    use dbnexus::sanitize_for_log;
 
     #[test]
     fn test_xss_patterns() {

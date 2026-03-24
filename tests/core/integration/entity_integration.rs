@@ -9,7 +9,7 @@
 
 use dbnexus::DbPool;
 use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
-use dbnexus::foundation::entity::Condition;
+use dbnexus::Condition;
 use sea_orm::ActiveValue;
 
 fn get_database_url() -> Option<String> {
@@ -197,7 +197,7 @@ async fn test_entity_integration_with_sql_operations() {
 const CRUD_TEST_TABLE: &str = "crud_entity_test";
 
 /// 获取包含完整权限的测试配置
-fn get_test_config_with_all_permissions() -> dbnexus::foundation::config::DbConfig {
+fn get_test_config_with_all_permissions() -> dbnexus::DbConfig {
     use std::fs;
 
     let url = get_database_url().unwrap_or("sqlite::memory:".to_string());
@@ -217,7 +217,7 @@ roles:
     let perm_file = "/tmp/entity_crud_test_perms.yaml";
     fs::write(perm_file, perm_content).expect("Failed to write permissions");
 
-    dbnexus::foundation::config::DbConfig {
+    dbnexus::DbConfig {
         url,
         max_connections: 5,
         admin_role: "admin".to_string(),

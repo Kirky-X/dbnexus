@@ -8,7 +8,7 @@
 //! 测试 DbError, PoolError, PermissionError, ConfigError, MigrationError, AuditError
 
 use dbnexus::ConfigError;
-use dbnexus::error::{AuditError, DbError, MigrationError, PermissionError, PoolError};
+use dbnexus::{AuditError, DbError, MigrationError, PermissionError, PoolError};
 
 // ============================================================================
 // DbError 测试
@@ -270,9 +270,9 @@ fn test_audit_error_all_variants() {
 #[test]
 fn test_db_result_type_alias() {
     // 测试 DbResult 类型别名
-    let success: dbnexus::error::DbResult<i32> = Ok(42);
+    let success: dbnexus::DbResult<i32> = Ok(42);
     let error = sea_orm::DbErr::Custom("Error".to_string());
-    let failure: dbnexus::error::DbResult<i32> = Err(DbError::new(error));
+    let failure: dbnexus::DbResult<i32> = Err(DbError::new(error));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some(42));
@@ -282,8 +282,8 @@ fn test_db_result_type_alias() {
 #[test]
 fn test_pool_result_type_alias() {
     // 测试 PoolResult 类型别名
-    let success: dbnexus::error::PoolResult<String> = Ok("connection".to_string());
-    let failure: dbnexus::error::PoolResult<String> = Err(PoolError::PoolExhausted);
+    let success: dbnexus::PoolResult<String> = Ok("connection".to_string());
+    let failure: dbnexus::PoolResult<String> = Err(PoolError::PoolExhausted);
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some("connection".to_string()));
@@ -293,8 +293,8 @@ fn test_pool_result_type_alias() {
 #[test]
 fn test_permission_result_type_alias() {
     // 测试 PermissionResult 类型别名
-    let success: dbnexus::error::PermissionResult<bool> = Ok(true);
-    let failure: dbnexus::error::PermissionResult<bool> = Err(PermissionError::RateLimited);
+    let success: dbnexus::PermissionResult<bool> = Ok(true);
+    let failure: dbnexus::PermissionResult<bool> = Err(PermissionError::RateLimited);
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some(true));
@@ -304,8 +304,8 @@ fn test_permission_result_type_alias() {
 #[test]
 fn test_config_result_type_alias() {
     // 测试 ConfigResult 类型别名
-    let success: dbnexus::error::ConfigResult<String> = Ok("config".to_string());
-    let failure: dbnexus::error::ConfigResult<String> = Err(ConfigError::FileNotFound("config.yaml".to_string()));
+    let success: dbnexus::ConfigResult<String> = Ok("config".to_string());
+    let failure: dbnexus::ConfigResult<String> = Err(ConfigError::FileNotFound("config.yaml".to_string()));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some("config".to_string()));
@@ -315,19 +315,20 @@ fn test_config_result_type_alias() {
 #[test]
 fn test_migration_result_type_alias() {
     // 测试 MigrationResult 类型别名
-    let success: dbnexus::error::MigrationResult<u32> = Ok(5);
-    let failure: dbnexus::error::MigrationResult<u32> = Err(MigrationError::FileNotFound("001.sql".to_string()));
+    let success: dbnexus::MigrationResult<u32> = Ok(5);
+    let failure: dbnexus::MigrationResult<u32> = Err(MigrationError::FileNotFound("001.sql".to_string()));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some(5));
     assert!(failure.is_err());
 }
 
+#[cfg(feature = "audit")]
 #[test]
 fn test_audit_result_type_alias() {
     // 测试 AuditResult 类型别名
-    let success: dbnexus::error::AuditResult<String> = Ok("logged".to_string());
-    let failure: dbnexus::error::AuditResult<String> = Err(AuditError::WriteError("IO".to_string()));
+    let success: dbnexus::AuditResult<String> = Ok("logged".to_string());
+    let failure: dbnexus::AuditResult<String> = Err(AuditError::WriteError("IO".to_string()));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some("logged".to_string()));
