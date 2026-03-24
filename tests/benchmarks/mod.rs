@@ -9,14 +9,14 @@
 //! 运行: cargo bench
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use dbnexus::sql_parser::{SqlOperationType, SqlParser};
+use dbnexus::{sql_parser::{SqlOperationType, SqlParser}, DbConfig};
 use std::time::Duration;
 
 /// 数据库配置基准
 fn bench_db_config_building(c: &mut Criterion) {
     c.bench_function("db_config_build_basic", |b| {
         b.iter(|| {
-            let _ = dbnexus::config::DbConfig {
+            let _ = DbConfig {
                 url: "sqlite::memory:".to_string(),
                 max_connections: 10,
                 min_connections: 1,
@@ -27,7 +27,7 @@ fn bench_db_config_building(c: &mut Criterion) {
 
     c.bench_function("db_config_build_full", |b| {
         b.iter(|| {
-            let _ = dbnexus::config::DbConfig {
+            let _ = DbConfig {
                 url: "postgresql://user:pass@localhost:5432/db".to_string(),
                 max_connections: 100,
                 min_connections: 5,
