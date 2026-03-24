@@ -118,7 +118,9 @@ async fn test_parse_transaction() {
 #[tokio::test]
 async fn test_parse_select_with_joins() {
     let parser = SqlParser::new().await;
-    let result = parser.parse_single("SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id").await;
+    let result = parser
+        .parse_single("SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id")
+        .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -127,10 +129,9 @@ async fn test_parse_select_with_joins() {
 #[tokio::test]
 async fn test_parse_insert_with_multiple_values() {
     let parser = SqlParser::new().await;
-    let result = parser.parse_single(
-        "INSERT INTO users (name, email) VALUES ('user1', 'user1@test.com'), ('user2', 'user2@test.com')",
-    )
-    .await;
+    let result = parser
+        .parse_single("INSERT INTO users (name, email) VALUES ('user1', 'user1@test.com'), ('user2', 'user2@test.com')")
+        .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Insert);
@@ -150,8 +151,9 @@ async fn test_parse_update_with_subquery() {
 #[tokio::test]
 async fn test_parse_delete_with_join() {
     let parser = SqlParser::new().await;
-    let result =
-        parser.parse_single("DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')").await;
+    let result = parser
+        .parse_single("DELETE FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'cancelled')")
+        .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Delete);
@@ -249,7 +251,9 @@ async fn test_parse_operation_mapping() {
     assert_eq!(action, PermissionAction::Select);
 
     // 测试 INSERT 映射到 Insert
-    let result = parser.parse_operation_async("INSERT INTO users (name) VALUES ('test')").await;
+    let result = parser
+        .parse_operation_async("INSERT INTO users (name) VALUES ('test')")
+        .await;
     assert!(result.is_ok());
     let inner = result.unwrap();
     assert!(inner.is_some());
@@ -309,7 +313,9 @@ async fn test_set_variable_statement() {
 #[tokio::test]
 async fn test_parsed_sql_operation_fields() {
     let parser = SqlParser::new().await;
-    let result = parser.parse_single("INSERT INTO users (name, email) VALUES ('test', 'test@test.com')").await;
+    let result = parser
+        .parse_single("INSERT INTO users (name, email) VALUES ('test', 'test@test.com')")
+        .await;
     assert!(result.is_ok());
     let parsed = result.unwrap();
 
