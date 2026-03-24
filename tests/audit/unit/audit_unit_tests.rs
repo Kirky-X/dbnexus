@@ -8,7 +8,7 @@
 //! 测试审计日志的核心功能，包括日志轮转、敏感数据脱敏、压缩存储、导出、完整性校验和异步写入。
 
 use chrono::Utc;
-use dbnexus::audit::{
+use dbnexus::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity, AuditStorage,
     MemoryAuditStorage,
 };
@@ -662,7 +662,7 @@ async fn test_audit_trace_context() {
 /// 验证审计上下文的创建和使用。
 #[tokio::test]
 async fn test_audit_context() {
-    let ctx = dbnexus::audit::AuditContext::new("user123", "admin", "10.0.0.1")
+    let ctx = dbnexus::AuditContext::new("user123", "admin", "10.0.0.1")
         .with_request_id("req-001")
         .with_session_id("sess-001");
 

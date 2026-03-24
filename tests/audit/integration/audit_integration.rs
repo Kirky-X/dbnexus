@@ -8,7 +8,7 @@
 //! 测试审计模块的查询组合、存储后端、告警系统、配置等高级功能
 
 use chrono::Utc;
-use dbnexus::audit::{
+use dbnexus::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditStorage, MemoryAuditStorage,
 };
 use std::sync::Arc;
@@ -296,10 +296,10 @@ async fn test_audit_operation_results() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::audit::AuditResult::Success);
+    let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::AuditResult::Success);
     let _ = logger.log(success_event).await;
 
-    let failure_event = AuditEvent::create("test", "2", "admin").with_result(dbnexus::audit::AuditResult::Failure);
+    let failure_event = AuditEvent::create("test", "2", "admin").with_result(dbnexus::AuditResult::Failure);
     let _ = logger.log(failure_event).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -313,11 +313,11 @@ async fn test_audit_operation_results() {
 
     let success_count = results
         .iter()
-        .filter(|e| e.result == dbnexus::audit::AuditResult::Success)
+        .filter(|e| e.result == dbnexus::AuditResult::Success)
         .count();
     let failure_count = results
         .iter()
-        .filter(|e| e.result == dbnexus::audit::AuditResult::Failure)
+        .filter(|e| e.result == dbnexus::AuditResult::Failure)
         .count();
 
     assert_eq!(success_count, 1, "Should have one success");
