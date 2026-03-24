@@ -11,13 +11,12 @@
 //! - PolicyDecisionPoint 策略决策
 //! - 权限缓存和刷新
 
-use dbnexus::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
-    PermissionSubject as Subject, PolicyDecisionPoint, RbacPermissionProvider, Role, YamlPermissionProvider,
+use dbnexus::{
+    EnginePermissionProvider, PermissionAction, PermissionDecision, PermissionRule, PolicyDecisionPoint,
+    RbacPermissionProvider, Role, EngineYamlPermissionProvider,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -80,74 +79,57 @@ roles:
 /// TEST-PE-001: YAML 权限提供者创建测试
 #[tokio::test]
 async fn test_yaml_permission_provider_creation() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+    let provider = EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
         .expect("Failed to create YAML provider");
 
-    assert_eq!(provider.name(), "yaml");
+    // 使用 PolicyDecisionPoint 来验证权限提供者功能
+    let pdp = PolicyDecisionPoint::new(Arc::new(provider));
+
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
+
+    let result = pdp.check("admin", "users", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
 }
 
 /// TEST-PE-002: YAML 权限检查测试
 #[tokio::test]
 async fn test_yaml_permission_check() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
+    let pdp = PolicyDecisionPoint::new(provider);
 
-    // 加载配置
-    provider.refresh().await.expect("Failed to refresh provider");
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // admin 可以访问所有操作
-    let ctx = PermissionContext::new(
-        Subject::role("admin"),
-        PermissionResource::new("users"),
-        PermissionAction::Select,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    let result = pdp.check("admin", "users", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
 
-    let ctx = PermissionContext::new(
-        Subject::role("admin"),
-        PermissionResource::new("orders"),
-        PermissionAction::Delete,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    let result = pdp.check("admin", "orders", "DELETE").await;
+    assert_eq!(result, PermissionDecision::Allow);
 
     // user 不能 DELETE users
-    let ctx = PermissionContext::new(
-        Subject::role("user"),
-        PermissionResource::new("users"),
-        PermissionAction::Delete,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Deny);
+    let result = pdp.check("user", "users", "DELETE").await;
+    assert_eq!(result, PermissionDecision::Deny);
 
     // user 可以 SELECT users
-    let ctx = PermissionContext::new(
-        Subject::role("user"),
-        PermissionResource::new("users"),
-        PermissionAction::Select,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    let result = pdp.check("user", "users", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
 
     // guest 不能访问 users
-    let ctx = PermissionContext::new(
-        Subject::role("guest"),
-        PermissionResource::new("users"),
-        PermissionAction::Select,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::NotApplicable);
+    let result = pdp.check("guest", "users", "SELECT").await;
+    assert_eq!(result, PermissionDecision::NotApplicable);
 }
 
 /// TEST-PE-003: RBAC 权限提供者测试
@@ -203,41 +185,34 @@ async fn test_rbac_permission_provider() {
         },
     );
 
-    // admin 应该拥有所有权限
-    let ctx = PermissionContext::new(
-        Subject::role("admin"),
-        PermissionResource::new("any_table"),
-        PermissionAction::Select,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    // 使用 PolicyDecisionPoint 测试
+    let pdp = PolicyDecisionPoint::new(provider);
 
-    // admin should also be able to DELETE
-    let ctx = PermissionContext::new(
-        Subject::role("admin"),
-        PermissionResource::new("any_table"),
-        PermissionAction::Delete,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    // admin 应该拥有所有权限
+    let result = pdp.check("admin", "any_table", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
+
+    let result = pdp.check("admin", "any_table", "DELETE").await;
+    assert_eq!(result, PermissionDecision::Allow);
 }
 
 /// TEST-PE-004: PolicyDecisionPoint 测试
 #[tokio::test]
 async fn test_policy_decision_point() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
             .expect("Failed to create YAML provider"),
     );
 
-    // 加载配置
-    provider.refresh().await.expect("Failed to refresh provider");
-
     let pdp = PolicyDecisionPoint::new(provider);
+
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // 测试 admin 的权限
     let result = pdp.check("admin", "users", "SELECT").await;
@@ -257,41 +232,44 @@ async fn test_policy_decision_point() {
 /// TEST-PE-005: 权限提供者刷新测试
 #[tokio::test]
 async fn test_permission_provider_refresh() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
+    let pdp = PolicyDecisionPoint::new(provider);
 
     // 刷新权限缓存
-    provider.refresh().await.expect("Failed to refresh provider");
-    // 验证刷新成功（通过检查是否可以获取权限配置）
+    pdp.refresh_cache().await;
+
+    // 验证刷新成功（通过检查权限是否正常工作）
+    let result = pdp.check("admin", "users", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
 }
 
 /// TEST-PE-006: 获取允许的资源列表测试
 #[tokio::test]
 async fn test_get_allowed_resources() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
+    let pdp = PolicyDecisionPoint::new(provider);
 
-    // 加载配置
-    provider.refresh().await.expect("Failed to refresh provider");
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // admin 可以访问所有资源
-    let resources = provider.get_allowed_resources("admin").await;
+    let resources = pdp.get_allowed_resources("admin").await;
     assert!(!resources.is_empty());
 
     // user 只能访问特定资源
-    let resources = provider.get_allowed_resources("user").await;
+    let resources = pdp.get_allowed_resources("user").await;
     assert!(resources.iter().any(|r| r.name == "users"));
     assert!(!resources.iter().any(|r| r.name == "orders"));
 }
@@ -299,17 +277,17 @@ async fn test_get_allowed_resources() {
 /// TEST-PE-007: 获取允许的操作列表测试
 #[tokio::test]
 async fn test_get_allowed_actions() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
+    let pdp = PolicyDecisionPoint::new(provider.clone());
 
-    // 加载配置
-    provider.refresh().await.expect("Failed to refresh provider");
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // admin 对 users 有所有操作权限
     let actions = provider.get_allowed_actions("admin", "users").await;
@@ -327,44 +305,37 @@ async fn test_get_allowed_actions() {
 /// TEST-PE-008: 通配符资源匹配测试
 #[tokio::test]
 async fn test_wildcard_resource_matching() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
+    let pdp = PolicyDecisionPoint::new(provider);
 
-    // 加载配置
-    provider.refresh().await.expect("Failed to refresh provider");
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // admin 可以访问任意表
-    let ctx = PermissionContext::new(
-        Subject::role("admin"),
-        PermissionResource::new("any_unknown_table"),
-        PermissionAction::Select,
-    );
-    let decision = provider.check_permission(&ctx).await;
-    assert_eq!(decision, PermissionDecision::Allow);
+    let result = pdp.check("admin", "any_unknown_table", "SELECT").await;
+    assert_eq!(result, PermissionDecision::Allow);
 }
 
 /// TEST-PE-009: 多提供者优先级测试
 #[tokio::test]
 async fn test_multiple_providers_priority() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let yaml_provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
-
-    // 加载配置
-    yaml_provider.refresh().await.expect("Failed to refresh provider");
-
+    let yaml_provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
     let pdp = PolicyDecisionPoint::new(yaml_provider);
+
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
 
     // 测试决策点
     let result = pdp.check("manager", "users", "UPDATE").await;
@@ -377,15 +348,13 @@ async fn test_multiple_providers_priority() {
 /// TEST-PE-010: 权限决策延迟测试
 #[tokio::test]
 async fn test_permission_decision_latency() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    // 创建临时目录和文件
+    let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = Arc::new(
-        YamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"),
-    );
-
+    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"));
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 执行多次权限检查以测试延迟

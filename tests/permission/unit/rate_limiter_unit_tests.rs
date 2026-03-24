@@ -11,7 +11,7 @@
 //! - 并发获取（50 任务）
 //! - 桶驱逐（达到最大容量时）
 
-use dbnexus::permission::RateLimiter;
+use dbnexus::access::permission::RateLimiter;
 use std::sync::Arc;
 use std::time::Duration;
 
