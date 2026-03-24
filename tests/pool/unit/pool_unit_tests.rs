@@ -21,7 +21,7 @@ use std::time::Duration;
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_builder_basic_initialization() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 10,
         min_connections: 2,
@@ -67,7 +67,7 @@ async fn test_pool_builder_default_values() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_builder_chained_configuration() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 15,
         min_connections: 3,
@@ -88,7 +88,7 @@ async fn test_pool_builder_chained_configuration() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_config_min_equals_max() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         min_connections: 5,
@@ -109,7 +109,7 @@ async fn test_pool_config_min_equals_max() {
 /// 注意：DbConfig 结构体不会在创建时验证，验证会在 DbPool 创建时进行。
 #[test]
 fn test_pool_config_validation_min_greater_than_max() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         min_connections: 10,
@@ -125,7 +125,7 @@ fn test_pool_config_validation_min_greater_than_max() {
 /// 验证 max_connections = 0 时配置值被设置。
 #[test]
 fn test_pool_config_validation_zero_max_connections() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 0,
         ..Default::default()
@@ -140,7 +140,7 @@ fn test_pool_config_validation_zero_max_connections() {
 /// 验证 URL 为空时配置值被设置。
 #[test]
 fn test_pool_config_validation_empty_url() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "".to_string(),
         ..Default::default()
     };
@@ -232,7 +232,7 @@ async fn test_pool_status_structure() {
 #[cfg(feature = "sqlite")]
 async fn test_pool_max_connections_limit() {
     let max_connections = 3;
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections,
         min_connections: 1,
@@ -281,7 +281,7 @@ async fn test_pool_max_connections_limit() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_connection_reuse() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 2,
         min_connections: 1,
@@ -309,7 +309,7 @@ async fn test_pool_connection_reuse() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_concurrent_connection_acquire() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         min_connections: 1,
@@ -360,7 +360,7 @@ async fn test_pool_concurrent_connection_acquire() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_acquire_timeout() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
@@ -400,7 +400,7 @@ async fn test_pool_acquire_timeout() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_timeout_then_release() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
@@ -436,7 +436,7 @@ async fn test_pool_timeout_then_release() {
 /// 验证配置的 acquire_timeout 正确转换为 Duration。
 #[test]
 fn test_pool_timeout_duration_conversion() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         acquire_timeout: 3000,
         ..Default::default()
@@ -512,7 +512,7 @@ async fn test_pool_borrow_count_tracking() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_max_active_tracking() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         ..Default::default()
@@ -642,7 +642,7 @@ async fn test_connection_lifecycle_borrow_tracking() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_max_active_tracking() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 5,
         ..Default::default()
@@ -678,7 +678,7 @@ async fn test_connection_lifecycle_max_active_tracking() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_wait_tracking() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
@@ -719,7 +719,7 @@ async fn test_connection_lifecycle_wait_tracking() {
 /// 验证配置的默认值在合理范围内。
 #[test]
 fn test_pool_config_default_values_reasonable() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
@@ -743,7 +743,7 @@ fn test_pool_config_default_values_reasonable() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_single_connection() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
@@ -774,7 +774,7 @@ async fn test_pool_single_connection() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_large_connection_pool() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 100,
         min_connections: 10,
@@ -927,7 +927,7 @@ async fn test_session_commit_without_transaction() {
 /// 验证 URL 包含密码时，可以通过字段访问获取。
 #[test]
 fn test_url_sanitization_with_password() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "postgres://user:secret_password@localhost:5432/mydb".to_string(),
         ..Default::default()
     };
@@ -942,7 +942,7 @@ fn test_url_sanitization_with_password() {
 /// 验证 SQLite 内存数据库 URL 不被修改。
 #[test]
 fn test_url_sanitization_sqlite_memory() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
@@ -955,7 +955,7 @@ fn test_url_sanitization_sqlite_memory() {
 /// 验证无密码 URL 正确处理。
 #[test]
 fn test_url_sanitization_no_password() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "postgres://user@localhost:5432/mydb".to_string(),
         ..Default::default()
     };
@@ -972,7 +972,7 @@ fn test_url_sanitization_no_password() {
 /// 验证 DatabaseType 正确解析各种 URL。
 #[test]
 fn test_database_type_parsing() {
-    use dbnexus::config::DatabaseType;
+    use dbnexus::DatabaseType;
 
     assert_eq!(
         DatabaseType::parse_database_type("postgres://localhost/db"),
@@ -1001,7 +1001,7 @@ fn test_database_type_parsing() {
 /// 验证 DatabaseType 的 Display 实现。
 #[test]
 fn test_database_type_display() {
-    use dbnexus::config::DatabaseType;
+    use dbnexus::DatabaseType;
 
     assert_eq!(DatabaseType::Postgres.to_string(), "postgres");
     assert_eq!(DatabaseType::MySql.to_string(), "mysql");
@@ -1017,7 +1017,7 @@ fn test_database_type_display() {
 /// 验证 PoolConfig 正确创建和访问。
 #[test]
 fn test_pool_config_creation() {
-    use dbnexus::config::PoolConfig;
+    use dbnexus::PoolConfig;
 
     let config = PoolConfig {
         max_connections: 100,
@@ -1037,7 +1037,7 @@ fn test_pool_config_creation() {
 /// 验证 PoolConfig 默认值合理。
 #[test]
 fn test_pool_config_defaults() {
-    use dbnexus::config::PoolConfig;
+    use dbnexus::PoolConfig;
 
     let config = PoolConfig::default();
 
@@ -1229,7 +1229,7 @@ fn test_health_check_interval_above_maximum() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_wait_count_increments_during_contention() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 2,
         min_connections: 1,
@@ -1295,7 +1295,7 @@ async fn test_wait_count_increments_during_contention() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_max_waiters_tracks_historical_peak() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         min_connections: 1,
