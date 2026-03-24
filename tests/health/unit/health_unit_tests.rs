@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 // 导入健康检查模块
-use dbnexus::health::{
+use dbnexus::{
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
     PoolHealthMetrics,
 };
