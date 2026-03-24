@@ -133,16 +133,17 @@ mod generated_roles;
 // ============================================================================
 
 // Foundation 导出
-pub use crate::foundation::config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
+pub use crate::foundation::config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
+pub use crate::foundation::entity::{ActiveModelTrait, Condition, EntityTrait, Set};
 pub use crate::foundation::error::DbError;
 pub use crate::foundation::error::DbResult;
-pub use crate::foundation::error::{AuditError, MigrationError};
+pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
 pub use crate::foundation::error::{DbError as DbErrorNew, PermissionError, PoolError};
 
 // Database 导出
 #[cfg(feature = "migration")]
-pub use crate::database::migration::MigrationExecutor;
+pub use crate::database::migration::{MigrationExecutor, MigrationHistory, MigrationVersion};
 pub use crate::database::pool::DbPool;
 pub use crate::database::pool::DbPoolBuilder;
 pub use crate::database::pool::DbPoolDependencies;
@@ -170,10 +171,18 @@ pub use crate::access::authentication::{
 #[cfg(feature = "sql-parser")]
 pub use crate::access::sql_parser::SqlParser;
 
-#[cfg(all(feature = "sql-parser", not(feature = "permission")))]
-pub use crate::access::sql_parser::PermissionAction;
+#[cfg(feature = "sql-parser")]
+pub use crate::access::sql_parser::SqlOperationType;
+
+#[cfg(feature = "sql-parser")]
+pub use crate::access::sql_parser::is_ddl_operation;
+
+#[cfg(feature = "sql-parser")]
+pub use crate::access::sql_parser::contains_sql_injection;
 
 #[cfg(feature = "permission-engine")]
+// Access Control 导出
+#[cfg(feature = "permission")]
 pub use crate::access::permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
     PermissionEngine, PermissionEngineConfig, PermissionProvider as EnginePermissionProvider, PermissionResource,
@@ -182,11 +191,17 @@ pub use crate::access::permission_engine::{
 };
 
 // Observability 导出
-#[cfg(feature = "health-check")]
-pub use crate::observability::health::{CircuitBreaker, HealthChecker, HealthStatus, PoolHealthMetrics};
-
 #[cfg(feature = "metrics")]
-pub use crate::observability::metrics::MetricsCollectorTrait;
+pub use crate::observability::metrics::{
+    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles,
+    MetricsCollector, MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig,
+    SlowQueryRecord, ThroughputStats, TransactionStats,
+};
+#[cfg(feature = "health-check")]
+pub use crate::observability::health::{
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker,
+    HealthStatus, PoolHealthMetrics,
+};
 
 // Tracing 导出
 #[cfg(feature = "tracing")]
@@ -197,11 +212,14 @@ pub use crate::observability::tracing::{TracingBuilder, init_default};
 pub use crate::storage::cache::{CacheBackend, CacheError, CacheKey, CacheResult, OxcacheBackend};
 
 #[cfg(all(feature = "global-index", feature = "with-json"))]
-pub use crate::storage::global_index::{GlobalIndex, IndexEntry, SyncEvent};
+pub use crate::storage::global_index::{GlobalIndex, IndexEntry, SyncEvent, SyncResult, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED};
 
 // Business 导出
 #[cfg(feature = "audit")]
-pub use crate::business::audit::{AuditConfig, AuditContext, AuditEvent, AuditLogger, AuditLoggerBuilder};
+pub use crate::business::audit::{
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder,
+    AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity, AuditStorage, MemoryAuditStorage,
+};
 
 // Tools 导出
 #[cfg(feature = "macros")]
