@@ -199,7 +199,7 @@ where
     for task in tasks {
         handles.push(tokio::spawn(task));
     }
-    
+
     let mut results = Vec::new();
     for handle in handles {
         results.push(handle.await.unwrap());

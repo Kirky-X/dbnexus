@@ -6,7 +6,7 @@
 //! 权限控制集成测试
 
 use dbnexus::DbPool;
-use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
+use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
 
 #[path = "../../common/mod.rs"]
 mod common;
