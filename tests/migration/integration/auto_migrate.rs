@@ -11,7 +11,7 @@
 
 use dbnexus::DbConfig;
 use dbnexus::DbPool;
-use dbnexus::config::DatabaseType;
+use dbnexus::DatabaseType;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -30,7 +30,7 @@ fn id_column_definition(db_type: DatabaseType) -> &'static str {
 /// TEST-AM-001: 自动迁移配置创建测试
 #[tokio::test]
 async fn test_auto_migrate_config_creation() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         migrations_dir: Some(PathBuf::from("./migrations")),
         auto_migrate: true,
@@ -98,7 +98,7 @@ DROP TABLE orders_{table_suffix};
         .expect("Failed to write migration file 2");
 
     // 使用内存数据库
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -124,7 +124,7 @@ DROP TABLE orders_{table_suffix};
 /// TEST-AM-003: 迁移超时配置测试
 #[tokio::test]
 async fn test_migration_timeout_config() {
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
         migration_timeout: 300,
         ..Default::default()
@@ -141,7 +141,7 @@ async fn test_empty_migrations_directory() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -165,7 +165,7 @@ async fn test_empty_migrations_directory() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_nonexistent_migrations_directory() {
     let url = common::get_test_database_url();
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
@@ -295,7 +295,7 @@ DROP TABLE table_2_{table_suffix};
     fs::write(temp_dir.path().join("1_first.sql"), migration_v1).expect("Failed to write v1");
     fs::write(temp_dir.path().join("2_second.sql"), migration_v2).expect("Failed to write v2");
 
-    let config = dbnexus::config::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         min_connections: 1,
