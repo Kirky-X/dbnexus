@@ -10,8 +10,8 @@
 
 #[cfg(feature = "cache")]
 mod cache_tests {
-    use dbnexus::cache::CacheConfig;
-    use dbnexus::cache::CacheKey;
+    use dbnexus::CacheConfig;
+    use dbnexus::CacheKey;
     use moka::sync::Cache;
     use moka::sync::CacheBuilder;
     use std::sync::Arc;

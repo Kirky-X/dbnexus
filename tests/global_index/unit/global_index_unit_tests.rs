@@ -7,7 +7,7 @@
 //!
 //! 测试 IndexEntry、SyncEvent、SyncResult 等基础数据结构
 
-use dbnexus::global_index::{
+use dbnexus::{
     IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
 };
 
