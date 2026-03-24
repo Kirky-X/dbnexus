@@ -1265,10 +1265,7 @@ async fn test_wait_count_increments_during_contention() {
 
     // 等待所有请求完成
     let results: Vec<_> = futures::future::join_all(handles).await;
-    let success_count = results
-        .iter()
-        .filter(|r| r.as_ref().is_ok_and(|r| r.is_ok()))
-        .count();
+    let success_count = results.iter().filter(|r| r.as_ref().is_ok_and(|r| r.is_ok())).count();
 
     // 验证至少有部分请求成功
     assert!(

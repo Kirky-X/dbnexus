@@ -67,7 +67,7 @@
 //! ## 分布式追踪（OpenTelemetry）
 //!
 //! 需要分布式追踪时，启用 `tracing` 特性并参考 `dbnexus::tracing` 模块文档。
-//!
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 // 注意: 移除了 `#![allow(dead_code)]` 以恢复编译时警告
@@ -104,155 +104,106 @@ compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enab
 // 模块声明
 // ============================================================================
 
-/// 安全模块
-pub mod security;
+/// Foundation 模块 - 错误类型、配置、类型定义
+pub mod foundation;
 
-/// 认证模块（JWT + 密码哈希）
-#[cfg(feature = "authentication")]
-pub mod authentication;
+/// Database 模块 - 连接池、迁移、分片
+pub mod database;
 
-/// 认证类型导出
-#[cfg(feature = "authentication")]
-pub use authentication::{
-    AuthenticationManager, AuthCredentials, AuthError, AuthResult,
-    JwtClaims, User, TokenType, PasswordHasher, JwtManager
-};
+/// Access 模块 - 安全、权限、认证
+pub mod access;
 
-/// 审计日志模块
-#[cfg(feature = "audit")]
-pub mod audit;
+/// Observability 模块 - 健康检查、指标、追踪
+pub mod observability;
 
-/// 缓存模块（基于 oxcache）
-#[cfg(feature = "cache")]
-pub mod cache;
+/// Storage 模块 - 缓存、全局索引
+pub mod storage;
 
-/// 缓存配置和类型导出
-#[cfg(feature = "cache")]
-pub use cache::{CacheBackend, CacheError, CacheResult, CacheKey, OxcacheBackend};
-/// 配置管理模块
-pub mod config;
+/// Business 模块 - 审计等业务功能
+pub mod business;
 
-pub use crate::error::DbError;
-/// 错误类型定义
-pub use crate::error::DbResult;
-pub use config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
+/// Tools 模块 - 过程宏、CLI
+pub mod tools;
 
-/// 统一错误模块（渐进式重构）
-pub mod error;
-pub use error::{AuditError, MigrationError};
-pub use error::{ConfigResult, PermissionResult, PoolResult};
-pub use error::{DbError as DbErrorNew, PermissionError, PoolError};
-
-/// 实体转换模块
-pub mod entity;
 // 生成的权限角色模块（由 build.rs 自动生成，内部使用）
 mod generated_roles;
-/// 全局索引模块
-#[cfg(all(feature = "global-index", feature = "with-json"))]
-pub mod global_index;
 
-/// 全局索引类型导出
-#[cfg(all(feature = "global-index", feature = "with-json"))]
-pub use global_index::{GlobalIndex, IndexEntry, SyncEvent};
-/// 健康检查和可观测性模块
-///
-/// 提供连接池健康检查、熔断器模式和自动恢复机制
-#[cfg(feature = "health-check")]
-pub mod health;
-/// Metrics 收集模块
-#[cfg(feature = "metrics")]
-pub mod metrics;
+// ============================================================================
+// 公共 API 导出（保持向后兼容）
+// ============================================================================
 
-/// MetricsCollector trait 接口
-#[cfg(feature = "metrics")]
-pub use metrics::MetricsCollectorTrait;
-/// Migration 模块
+// Foundation 导出
+pub use crate::foundation::config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
+pub use crate::foundation::error::DbError;
+pub use crate::foundation::error::DbResult;
+pub use crate::foundation::error::{AuditError, MigrationError};
+pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
+pub use crate::foundation::error::{DbError as DbErrorNew, PermissionError, PoolError};
+
+// Database 导出
 #[cfg(feature = "migration")]
-pub mod migration;
-/// 权限控制模块
-#[cfg(feature = "permission")]
-pub mod permission;
+pub use crate::database::migration::MigrationExecutor;
+pub use crate::database::pool::DbPool;
+pub use crate::database::pool::DbPoolBuilder;
+pub use crate::database::pool::DbPoolDependencies;
+pub use crate::database::pool::Session;
+pub use crate::database::pool::{ConnectionPool, DatabaseSession};
+#[cfg(feature = "sharding")]
+pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy};
 
-/// 权限提供者 trait 接口和实现
+// Access 导出
+pub use crate::access::security::{DdlGuard, DdlValidationResult};
+pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
+
 #[cfg(feature = "permission")]
-pub use permission::{MemoryPermissionProvider, PermissionProvider, PermissionProviderError, YamlPermissionProvider};
-/// SQL 解析模块
-///
-/// 提供 SQL 语句解析和操作类型分类功能。
-/// 该模块中的类型主要用于内部权限检查逻辑。
+pub use crate::access::permission::{
+    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionContext, PermissionProvider,
+    PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
+};
+
+#[cfg(feature = "authentication")]
+pub use crate::access::authentication::{
+    AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager, PasswordHasher, TokenType,
+    User,
+};
+
 #[cfg(feature = "sql-parser")]
-pub mod sql_parser;
+pub use crate::access::sql_parser::SqlParser;
 
-/// PermissionAction 类型导出（当 permission 特性未启用时，从 sql_parser 导出）
 #[cfg(all(feature = "sql-parser", not(feature = "permission")))]
-pub use sql_parser::PermissionAction;
+pub use crate::access::sql_parser::PermissionAction;
 
-/// 基础权限类型（简单 RBAC）
-///
-/// 提供基于角色的表级权限控制，适合基本使用场景。
-///
-/// # 类型说明
-///
-/// - [`PermissionAction`] - 权限操作类型（Select, Insert, Update, Delete）
-/// - [`TablePermission`] - 表级权限配置
-/// - [`RolePolicy`] - 角色策略
-/// - [`PermissionConfig`] - 权限配置
-/// - [`PermissionContext`] - 权限检查上下文
-#[cfg(feature = "permission")]
-pub use permission::{PermissionAction, PermissionConfig, PermissionContext, RolePolicy, TablePermission};
-
-/// 可插拔权限引擎模块
 #[cfg(feature = "permission-engine")]
-pub mod permission_engine;
-
-/// 权限引擎类型导出
-///
-/// 提供高级权限引擎，支持多种权限提供者实现。
-/// 当启用 `permission-engine` 特性时可用。
-///
-/// # 与基础权限类型的区别
-///
-/// - [`EnginePermissionAction`] 包含额外的 `All` 变体
-/// - [`PermissionEngineContext`] 包含更丰富的上下文信息
-/// - 提供 [`PolicyDecisionPoint`] 策略决策点
-/// - 支持 [`YamlPermissionProvider`] 和 [`RbacPermissionProvider`]
-///
-/// # 使用建议
-///
-/// - 简单场景：使用基础权限类型（无需启用特性）
-/// - 复杂场景：启用 `permission-engine` 特性并使用权限引擎
-#[cfg(feature = "permission-engine")]
-pub use permission_engine::{
+pub use crate::access::permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
     PermissionEngine, PermissionEngineConfig, PermissionProvider as EnginePermissionProvider, PermissionResource,
     PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
     YamlPermissionProvider as EngineYamlPermissionProvider,
 };
-/// 连接池管理模块
-pub mod pool;
-/// 分片管理模块
-#[cfg(feature = "sharding")]
-pub mod sharding;
-/// 分布式追踪模块
+
+// Observability 导出
+#[cfg(feature = "health-check")]
+pub use crate::observability::health::{CircuitBreaker, HealthChecker, HealthStatus, PoolHealthMetrics};
+
+#[cfg(feature = "metrics")]
+pub use crate::observability::metrics::MetricsCollectorTrait;
+
+// Tracing 导出
 #[cfg(feature = "tracing")]
-pub mod tracing;
+pub use crate::observability::tracing::{TracingBuilder, init_default};
 
-// Sea-ORM 类型重导出（通过 entity 子模块访问）
-// 注意：不再直接导出 sea_orm，用户应使用 dbnexus 提供的抽象层
+// Storage 导出
+#[cfg(feature = "cache")]
+pub use crate::storage::cache::{CacheBackend, CacheError, CacheKey, CacheResult, OxcacheBackend};
 
-pub use crate::pool::DbPool;
-pub use crate::pool::Session;
-pub use crate::pool::{ConnectionPool, DatabaseSession};
+#[cfg(all(feature = "global-index", feature = "with-json"))]
+pub use crate::storage::global_index::{GlobalIndex, IndexEntry, SyncEvent};
 
-// DI-related exports
-pub use crate::pool::DbPoolBuilder;
-pub use crate::pool::DbPoolDependencies;
+// Business 导出
+#[cfg(feature = "audit")]
+pub use crate::business::audit::{AuditConfig, AuditContext, AuditEvent, AuditLogger, AuditLoggerBuilder};
 
-/// 过程宏重新导出
-#[cfg(feature = "macros")]
-pub mod macros;
-
-/// 过程宏重新导出（兼容旧用法）
+// Tools 导出
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::DbEntity;
 #[cfg(feature = "macros")]
