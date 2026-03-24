@@ -122,13 +122,13 @@ pub use authentication::{
 #[cfg(feature = "audit")]
 pub mod audit;
 
-/// 缓存模块（基于 moka）
+/// 缓存模块（基于 oxcache）
 #[cfg(feature = "cache")]
 pub mod cache;
 
 /// 缓存配置和类型导出
 #[cfg(feature = "cache")]
-pub use cache::{AsyncCache, CacheBuilder, CacheKey, create_cache, create_cache_with_ttl};
+pub use cache::{CacheBackend, CacheError, CacheResult, CacheKey, OxcacheBackend};
 /// 配置管理模块
 pub mod config;
 

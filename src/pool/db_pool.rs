@@ -8,7 +8,9 @@
 //! 提供数据库连接池的创建、管理和自动修正功能
 
 #[cfg(feature = "permission")]
-use crate::cache::Cache;
+use oxcache::Cache;
+#[cfg(feature = "permission")]
+use crate::permission::RolePolicy;
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -117,7 +119,7 @@ use crate::error::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::metrics::MetricsCollector;
 #[cfg(feature = "permission")]
-use crate::permission::{PermissionConfig, RolePolicy};
+use crate::permission::PermissionConfig;
 
 // 导入 Sea-ORM 的连接 trait
 use sea_orm::ConnectionTrait;
@@ -151,7 +153,7 @@ pub(crate) struct DbPoolInner {
     /// 总连接数
     pub(super) total_count: AtomicU32,
 
-    /// 权限策略缓存（完全使用 oxcache，线程安全，无需额外锁）
+    /// 权限策略缓存（直接使用 oxcache）
     #[cfg(feature = "permission")]
     pub(crate) policy_cache: Arc<Cache<String, RolePolicy>>,
 
@@ -243,12 +245,16 @@ impl DbPool {
             .await
             .map_err(DbError::Connection)?;
 
-        // 创建权限策略缓存（使用配置化的缓存容量）
+        // 创建权限策略缓存（使用 oxcache 后端）
         #[cfg(feature = "permission")]
-        let policy_cache: Arc<Cache<String, RolePolicy>> = Arc::new(
+        let policy_cache = Arc::new(
             Cache::builder()
-                .max_capacity(config.cache_config.policy_cache_capacity)
-                .build(),
+                .capacity(config.cache_config.policy_cache_capacity)
+                .build()
+                .await
+                .map_err(|_e| DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                    sea_orm::ConnAcquireErr::Timeout,
+                )))?,
         );
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
@@ -259,7 +265,7 @@ impl DbPool {
         #[cfg(feature = "permission")]
         if let Some(ref perm_config) = permission_config {
             for (role_name, policy) in &perm_config.roles {
-                let _ = policy_cache.insert(role_name.clone(), policy.clone()).await;
+                let _ = policy_cache.set(role_name, policy).await;
                 tracing::debug!("Preloaded permission policy for role '{}'", role_name);
             }
         }
@@ -370,7 +376,7 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 {
                     for (role, policy) in &perm_config.roles {
-                        let _ = pool.inner.policy_cache.insert(role.clone(), policy.clone()).await;
+                        let _ = pool.inner.policy_cache.set(role, policy).await;
                     }
                     tracing::info!("Loaded permission policies for {} roles", perm_config.roles.len());
                 }
@@ -538,9 +544,15 @@ impl DbPool {
     #[cfg(feature = "permission")]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
         // try_from 是同步简化版本
-        // 使用配置化的缓存容量
-        let cache_capacity = config.cache_config.policy_cache_capacity;
-        let policy_cache: Cache<String, RolePolicy> = Cache::builder().max_capacity(cache_capacity).build();
+        // 使用 block_on 来创建异步缓存
+        let policy_cache = tokio::runtime::Handle::current()
+            .block_on(async {
+                Cache::builder()
+                    .capacity(config.cache_config.policy_cache_capacity)
+                    .build()
+                    .await
+            })
+            .map_err(|_| ConfigError::InvalidCacheCapacity("Failed to create policy cache".to_string()))?;
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
