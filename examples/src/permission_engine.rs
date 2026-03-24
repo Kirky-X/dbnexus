@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------------------");
     let config = DbConfig {
         url: "sqlite:file::memory:?cache=shared".to_string(),
-        permissions_path: Some("examples/demo/permissions.yaml".to_string()),
+        permissions_path: Some("examples/src/permissions.yaml".to_string()),
         admin_role: "admin".to_string(),
         ..Default::default()
     };
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 创建 YAML 权限提供者
     println!("\n2️⃣ 创建 YAML 权限提供者");
     println!("------------------------------------------");
-    let yaml_provider = YamlPermissionProvider::new("examples/demo/permissions.yaml")?;
+    let yaml_provider = YamlPermissionProvider::new("examples/src/permissions.yaml")?;
     println!("✓ YAML 权限提供者创建成功");
     println!("  提供者名称: {}", yaml_provider.name());
 
