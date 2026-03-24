@@ -7,8 +7,8 @@
 //!
 //! 测试数据库迁移的独立组件：Schema、SQL生成、类型转换等（无需数据库连接）
 
-use dbnexus::config::DatabaseType;
-use dbnexus::migration::{
+use dbnexus::DatabaseType;
+use dbnexus::{
     Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator,
     Table, TableChange,
 };
@@ -27,7 +27,7 @@ fn test_migration_history_creation() {
 fn test_migration_history_add() {
     let mut history = MigrationHistory::new();
 
-    let migration = dbnexus::migration::MigrationVersion {
+    let migration = dbnexus::MigrationVersion {
         version: 1,
         description: "Initial migration".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
@@ -48,21 +48,21 @@ fn test_migration_history_sorted() {
     let mut history = MigrationHistory::new();
 
     // 添加乱序的版本
-    history.add_migration(dbnexus::migration::MigrationVersion {
+    history.add_migration(dbnexus::MigrationVersion {
         version: 3,
         description: "Third".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
         file_path: "v3.sql".to_string(),
     });
 
-    history.add_migration(dbnexus::migration::MigrationVersion {
+    history.add_migration(dbnexus::MigrationVersion {
         version: 1,
         description: "First".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
         file_path: "v1.sql".to_string(),
     });
 
-    history.add_migration(dbnexus::migration::MigrationVersion {
+    history.add_migration(dbnexus::MigrationVersion {
         version: 2,
         description: "Second".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
@@ -477,7 +477,7 @@ fn test_migration_history_pending() {
     let mut history = MigrationHistory::new();
 
     // 添加已应用的迁移
-    history.add_migration(dbnexus::migration::MigrationVersion {
+    history.add_migration(dbnexus::MigrationVersion {
         version: 1,
         description: "v1".to_string(),
         applied_at: time::OffsetDateTime::now_utc(),
