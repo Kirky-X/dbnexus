@@ -96,6 +96,29 @@ where
     Ok(cache)
 }
 
+/// 缓存统计信息
+#[derive(Debug, Clone, Default)]
+pub struct CacheStats {
+    /// 缓存命中次数
+    pub hits: u64,
+    /// 缓存未命中次数
+    pub misses: u64,
+    /// 缓存条目数
+    pub entry_count: u64,
+}
+
+impl CacheStats {
+    /// 计算缓存命中率
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.hits as f64 / total as f64
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +158,25 @@ mod tests {
 
         assert!(cache.get(&"key1".to_string()).await.is_none());
         assert!(cache.get(&"key2".to_string()).await.is_some());
+    }
+
+    #[test]
+    fn test_cache_stats_hit_rate() {
+        let stats = CacheStats {
+            hits: 80,
+            misses: 20,
+            entry_count: 100,
+        };
+        assert!((stats.hit_rate() - 0.8).abs() < 0.001);
+
+        let empty_stats = CacheStats::default();
+        assert_eq!(empty_stats.hit_rate(), 0.0);
+
+        let all_hits = CacheStats {
+            hits: 100,
+            misses: 0,
+            entry_count: 100,
+        };
+        assert_eq!(all_hits.hit_rate(), 1.0);
     }
 }
