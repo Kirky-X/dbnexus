@@ -1,0 +1,128 @@
+[package]
+name = "dbnexus-examples"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+
+[workspace]
+
+[[bin]]
+name = "quickstart"
+path = "demo/quickstart.rs"
+
+[[bin]]
+name = "config"
+path = "demo/config.rs"
+
+[[bin]]
+name = "permissions"
+path = "demo/permissions.rs"
+
+[[bin]]
+name = "transactions"
+path = "demo/transactions.rs"
+
+[[bin]]
+name = "sql_parser"
+path = "demo/sql_parser.rs"
+
+[[bin]]
+name = "permission_engine"
+path = "demo/permission_engine.rs"
+
+[[bin]]
+name = "entity_basic"
+path = "demo/entity_basic.rs"
+
+[[bin]]
+name = "security"
+path = "demo/security.rs"
+
+[[bin]]
+name = "metrics"
+path = "demo/metrics.rs"
+
+[[bin]]
+name = "tracing"
+path = "demo/tracing.rs"
+
+[[bin]]
+name = "audit"
+path = "demo/audit.rs"
+
+[[bin]]
+name = "cache"
+path = "demo/cache.rs"
+
+[[bin]]
+name = "sharding"
+path = "demo/sharding.rs"
+
+[[bin]]
+name = "migration"
+path = "demo/migration.rs"
+
+[[bin]]
+name = "global_index"
+path = "demo/global_index.rs"
+
+[[bin]]
+name = "macro_usage"
+path = "demo/macro_usage.rs"
+
+[[bin]]
+name = "authenticated_usage"
+path = "demo/authenticated_usage.rs"
+
+[[bin]]
+name = "health"
+path = "demo/health.rs"
+
+[[bin]]
+name = "demo"
+path = "demo/main.rs"
+
+[dependencies]
+dbnexus = { path = "..", features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "permission",
+    "permission-engine",
+    "sql-parser",
+    "macros",
+    "config-yaml",
+    "cache",
+    "sharding",
+    "global-index",
+    "with-json",
+    "metrics",
+    "tracing",
+    "audit",
+    "migration",
+    "health-check",
+    "authentication",
+] }
+
+# Async runtime
+tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "time"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Database
+sea-orm = { version = "2.0.0-rc.37", default-features = false, features = ["runtime-tokio-rustls", "sqlx-sqlite", "macros"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+tracing-opentelemetry = "0.26"
+
+# Metrics
+prometheus = "0.14"
+
+[features]
+default = []
