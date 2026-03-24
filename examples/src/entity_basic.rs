@@ -76,7 +76,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("--- INSERT ---");
     let user = Model {
-        id: 0, // 自增主键
+        id: 1, // 主键
         username: "alice".to_string(),
         email: "alice@example.com".to_string(),
         active: true,
@@ -85,7 +85,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ 插入用户: id={}, username=alice", inserted.id);
 
     let user2 = Model {
-        id: 0,
+        id: 2,
         username: "bob".to_string(),
         email: "bob@example.com".to_string(),
         active: true,
@@ -143,7 +143,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ 剩余用户数: {}", remaining.len());
 
     // 清理
-    session.execute_raw_ddl("DROP TABLE users").await?;
+    // 清理 (跳过 DROP TABLE，因为 DDL 白名单默认不允许删除表)
+    // session.execute_raw_ddl("DROP TABLE users").await?;
 
     println!("\n========================================");
     println!("✨ 实体 CRUD 示例完成！");
