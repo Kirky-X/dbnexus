@@ -14,7 +14,7 @@
 //!
 //! ```rust,ignore
 //! use confers::ConfigProvider;
-//! use dbnexus::config::DbConfig;
+//! use dbnexus::DbConfig;
 //! use dbnexus::DbPool;
 //!
 //! async fn example(provider: &dyn confers::ConfigProvider) {
