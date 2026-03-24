@@ -18,7 +18,7 @@
 //! ```
 
 use chrono::{DateTime, Datelike, TimeZone, Utc};
-use dbnexus::sharding::{ShardConfig, ShardRouter};
+use dbnexus::database::sharding::{ShardConfig, ShardRouter};
 use std::collections::HashMap;
 
 /// 定义 Order Entity（用于分片演示）
