@@ -8,8 +8,8 @@
 //! 测试实体类型重导出和与 sea-orm 的集成
 
 use dbnexus::DbPool;
+use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use dbnexus::foundation::entity::Condition;
-use dbnexus::access::permission::{PermissionConfig, RolePolicy, TablePermission, PermissionAction};
 use sea_orm::ActiveValue;
 
 fn get_database_url() -> Option<String> {
