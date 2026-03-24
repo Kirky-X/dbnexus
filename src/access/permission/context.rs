@@ -855,6 +855,8 @@ mod tests {
     use super::*;
     use crate::access::permission::provider::MemoryPermissionProvider;
     use crate::access::permission::types::TablePermission;
+    #[cfg(feature = "permission-engine")]
+    use futures;
 
     /// 创建测试用缓存的辅助函数
     async fn create_test_cache() -> Arc<Cache<String, RolePolicy>> {

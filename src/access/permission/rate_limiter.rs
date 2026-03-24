@@ -381,6 +381,8 @@ impl Default for RateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "permission-engine")]
+    use futures;
 
     /// TEST-U-019: 速率限制器测试 - 基本功能
     #[tokio::test]
