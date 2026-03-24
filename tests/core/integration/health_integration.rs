@@ -10,7 +10,7 @@
 #[cfg(feature = "health-check")]
 mod health_tests {
     use dbnexus::DbPool;
-    use dbnexus::health::{
+    use dbnexus::{
         CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus, PoolHealthMetrics,
     };
     use std::sync::Arc;
