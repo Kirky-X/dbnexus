@@ -11,6 +11,7 @@ pub mod migration;
 pub mod pool;
 
 // 单文件模块
+#[cfg(feature = "sharding")]
 pub mod sharding;
 
 // Re-exports
