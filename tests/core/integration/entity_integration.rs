@@ -12,6 +12,17 @@ use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy
 use dbnexus::Condition;
 use sea_orm::ActiveValue;
 
+/// 根据数据库 URL 判断数据库类型
+fn detect_db_type_from_url(url: &str) -> &'static str {
+    if url.starts_with("postgres") || url.starts_with("postgresql") {
+        "postgres"
+    } else if url.starts_with("mysql") {
+        "mysql"
+    } else {
+        "sqlite"
+    }
+}
+
 fn get_database_url() -> Option<String> {
     if let Ok(url) = std::env::var("DATABASE_URL") {
         return Some(url);
@@ -19,6 +30,16 @@ fn get_database_url() -> Option<String> {
 
     if cfg!(feature = "sqlite") {
         return Some("sqlite::memory:".to_string());
+    }
+
+    if cfg!(feature = "postgres") {
+        let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+        return Some(format!("postgres://dbnexus:{}@localhost:15433/dbnexus_test", password));
+    }
+
+    if cfg!(feature = "mysql") {
+        let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+        return Some(format!("mysql://dbnexus:{}@localhost:13308/dbnexus_test", password));
     }
 
     None
@@ -235,26 +256,30 @@ async fn setup_crud_test_table(pool: &DbPool) {
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", CRUD_TEST_TABLE))
         .await;
 
-    // MySQL需要使用AUTO_INCREMENT，PostgreSQL需要使用GENERATED ALWAYS AS IDENTITY
-    // 而SQLite使用INTEGER PRIMARY KEY即可（SQLite的INTEGER PRIMARY KEY是自增的）
-    let create_sql = if cfg!(feature = "mysql") {
-        eprintln!("Using MySQL CREATE TABLE syntax");
-        format!(
-            "CREATE TABLE IF NOT EXISTS {} (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), age INT)",
-            CRUD_TEST_TABLE
-        )
-    } else if cfg!(feature = "postgres") {
-        eprintln!("Using PostgreSQL CREATE TABLE syntax");
-        format!(
-            "CREATE TABLE IF NOT EXISTS {} (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
-            CRUD_TEST_TABLE
-        )
-    } else {
-        eprintln!("Using SQLite CREATE TABLE syntax");
-        format!(
-            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
-            CRUD_TEST_TABLE
-        )
+    // 使用运行时检测而非编译时 cfg! 来决定 SQL 语法
+    let db_type = detect_db_type_from_url(pool.config().url.as_str());
+    let create_sql = match db_type {
+        "mysql" => {
+            eprintln!("Using MySQL CREATE TABLE syntax");
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), age INT)",
+                CRUD_TEST_TABLE
+            )
+        }
+        "postgres" => {
+            eprintln!("Using PostgreSQL CREATE TABLE syntax");
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
+                CRUD_TEST_TABLE
+            )
+        }
+        _ => {
+            eprintln!("Using SQLite CREATE TABLE syntax");
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER)",
+                CRUD_TEST_TABLE
+            )
+        }
     };
 
     eprintln!("CREATE SQL: {}", create_sql);
