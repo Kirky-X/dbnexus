@@ -296,10 +296,10 @@ async fn test_audit_operation_results() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::AuditResult::Success);
+    let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::AuditStatus::Success);
     let _ = logger.log(success_event).await;
 
-    let failure_event = AuditEvent::create("test", "2", "admin").with_result(dbnexus::AuditResult::Failure);
+    let failure_event = AuditEvent::create("test", "2", "admin").with_result(dbnexus::AuditStatus::Failure);
     let _ = logger.log(failure_event).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -313,11 +313,11 @@ async fn test_audit_operation_results() {
 
     let success_count = results
         .iter()
-        .filter(|e| e.result == dbnexus::AuditResult::Success)
+        .filter(|e| e.result == dbnexus::AuditStatus::Success)
         .count();
     let failure_count = results
         .iter()
-        .filter(|e| e.result == dbnexus::AuditResult::Failure)
+        .filter(|e| e.result == dbnexus::AuditStatus::Failure)
         .count();
 
     assert_eq!(success_count, 1, "Should have one success");

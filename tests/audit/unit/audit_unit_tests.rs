@@ -9,7 +9,7 @@
 
 use chrono::Utc;
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity, AuditStorage,
+    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage,
     MemoryAuditStorage,
 };
 use std::sync::Arc;
@@ -310,7 +310,7 @@ async fn test_audit_export_json_format() {
     let event = AuditEvent::create("users", "123", "admin")
         .with_user("administrator", "192.168.1.1")
         .with_severity(AuditSeverity::High)
-        .with_result(AuditResult::Success);
+        .with_result(AuditStatus::Success);
 
     logger.log(event.clone()).await.unwrap();
 
@@ -444,7 +444,7 @@ async fn test_audit_required_fields() {
     let event = AuditEvent::create("users", "123", "admin")
         .with_user("administrator", "10.0.0.1")
         .with_severity(AuditSeverity::High)
-        .with_result(AuditResult::Success);
+        .with_result(AuditStatus::Success);
 
     // 验证必需字段存在且非空
     assert!(!event.id.is_empty(), "ID should not be empty");
@@ -453,7 +453,7 @@ async fn test_audit_required_fields() {
     assert!(!event.user_id.is_empty(), "User ID should not be empty");
     assert!(!event.request_id.is_empty(), "Request ID should not be empty");
     assert_eq!(event.operation, AuditOperation::Create);
-    assert_eq!(event.result, AuditResult::Success);
+    assert_eq!(event.result, AuditStatus::Success);
     assert_eq!(event.severity, AuditSeverity::High);
 }
 
@@ -625,7 +625,7 @@ async fn test_audit_event_builder() {
         .user_role("administrator")
         .client_ip("192.168.1.100")
         .severity(AuditSeverity::High)
-        .result(AuditResult::Success)
+        .result(AuditStatus::Success)
         .before_value(r#"{"name": "Old Name"}"#)
         .after_value(r#"{"name": "New Name"}"#)
         .extra(r#"{"reason": "Name change request"}"#)
@@ -638,7 +638,7 @@ async fn test_audit_event_builder() {
     assert_eq!(event.user_role, "administrator");
     assert_eq!(event.client_ip, "192.168.1.100");
     assert_eq!(event.severity, AuditSeverity::High);
-    assert_eq!(event.result, AuditResult::Success);
+    assert_eq!(event.result, AuditStatus::Success);
     assert!(event.before_value.is_some());
     assert!(event.after_value.is_some());
     assert!(event.extra.is_some());
