@@ -22,8 +22,6 @@ mysql = ["dbnexus/mysql"]
 # Re-export dbnexus features for conditional compilation
 sql-parser = ["dbnexus/sql-parser"]
 permission = ["dbnexus/permission"]
-config-yaml = ["dbnexus/config-yaml"]
-config-toml = ["dbnexus/config-toml"]
 config-env = ["dbnexus/config-env"]
 audit = ["dbnexus/audit"]
 metrics = ["dbnexus/metrics"]
@@ -34,9 +32,8 @@ dbnexus = { version = "0.1.0", path = "../../..", default-features = false, feat
 sea-orm = { workspace = true, default-features = false, features = ["runtime-tokio-rustls"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 tokio = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
-toml = "0.9.10"
-time = { version = "0.3", features = ["formatting", "parsing"] }
+serde = { workspace = true }
+toml = { version = "^1.1" }
+time = { workspace = true }
 chrono = { version = "0.4", features = ["std"] }
-url = "2.4"
+url = { version = "2.5" }
