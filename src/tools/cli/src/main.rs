@@ -8,10 +8,10 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
-use dbnexus::migration::{MigrationExecutor, MigrationFile, MigrationFileParser};
+use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
 #[cfg(feature = "sql-parser")]
 use dbnexus::sql_parser::{SqlOperationType, SqlParser};
-use dbnexus::{DbError, DbPool, DbResult, config::DatabaseType as MigrationDatabaseType};
+use dbnexus::{DbError, DbPool, DbResult, DatabaseType as MigrationDatabaseType};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -213,7 +213,7 @@ async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<(
     println!("📁 迁移目录: {}", migrations_dir.display());
 
     // 加载迁移历史
-    let mut session = match pool.get_session("admin").await {
+    let session = match pool.get_session("admin").await {
         Ok(session) => session,
         Err(e) => {
             println!("\n❌ 无法获取数据库会话: {}", e);
@@ -372,7 +372,7 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_
     println!("📁 迁移目录: {}", migrations_dir.display());
 
     // 创建迁移执行器
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
     let mut executor = session.create_migration_executor(db_type)?;
 
     // 扫描迁移文件
@@ -459,7 +459,7 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
     println!("\n📊 数据库类型: {}", db_type);
 
     // 创建迁移执行器
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
     let mut executor = session.create_migration_executor(db_type)?;
 
     // 加载迁移历史
@@ -555,7 +555,7 @@ async fn rollback_migration(
     version: u32,
     db_type: MigrationDatabaseType,
 ) -> DbResult<()> {
-    use sea_orm::{ConnectionTrait, TransactionTrait};
+    use sea_orm::{ConnectionTrait, DatabaseTransaction, TransactionTrait};
 
     // 使用参数化查询防止 SQL 注入
     let backend = match db_type {
@@ -569,7 +569,9 @@ async fn rollback_migration(
         vec![version.into()],
     );
 
-    let txn: sea_orm::DatabaseTransaction = executor.connection.begin().await.map_err(DbError::Connection)?;
+    // 开始事务并执行回滚
+    let conn = &executor.connection;
+    let txn: DatabaseTransaction = TransactionTrait::begin(conn).await.map_err(DbError::Connection)?;
 
     txn.execute_raw(delete_sql).await.map_err(DbError::Connection)?;
 
@@ -777,7 +779,7 @@ async fn list_migrations(database_url: &str, migrations_dir: &PathBuf) -> DbResu
 
     let pool = DbPool::new(database_url).await?;
     let db_type = detect_database_type(database_url)?;
-    let mut session = pool.get_session("admin").await?;
+    let session = pool.get_session("admin").await?;
     let executor = session.create_migration_executor(db_type)?;
 
     let migrations = executor.scan_migrations(migrations_dir)?;
