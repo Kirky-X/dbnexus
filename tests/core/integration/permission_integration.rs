@@ -4,12 +4,22 @@
 // See LICENSE file in the project root for full license information.
 
 //! 权限控制集成测试
+//!
+//! 配置解析通过 confers 库
 
 use dbnexus::DbPool;
 use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::foundation::config::ConfigError;
 
 #[path = "../../common/mod.rs"]
 mod common;
+
+/// 使用 serde_json 直接解析 JSON 配置（测试用）
+#[cfg(feature = "confers")]
+fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
+    serde_json::from_str(json)
+        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+}
 
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
@@ -26,18 +36,21 @@ async fn test_permission_context_role() {
         .clone()
         .expect("Missing permissions path");
     let perm_content = r#"
-roles:
-  admin:
-    tables:
-      - name: "*"
-        operations:
-          - select
-          - insert
-          - update
-          - delete
+{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    }
+  }
+}
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_path).unwrap()).unwrap();
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -63,18 +76,21 @@ async fn test_permission_check() {
         .expect("Missing permissions path")
         .clone();
     let perm_content = r#"
-roles:
-  admin:
-    tables:
-      - name: "*"
-        operations:
-          - select
-          - insert
-          - update
-          - delete
+{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    }
+  }
+}
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_path).unwrap()).unwrap();
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -145,26 +161,33 @@ fn test_permission_config_deny_all() {
     assert!(!config.check_access("any_role", "any_table", Operation::Delete));
 }
 
+#[cfg(feature = "confers")]
 #[test]
 fn test_permission_config_from_yaml() {
-    let yaml = r#"
-roles:
-  admin:
-    tables:
-      - name: "*"
-        operations:
-          - select
-          - insert
-          - update
-          - delete
-  user:
-    tables:
-      - name: "users"
-        operations:
-          - select
+    let json = r#"
+{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    },
+    "user": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select"]
+        }
+      ]
+    }
+  }
+}
 "#;
 
-    let config = PermissionConfig::from_yaml(yaml).expect("Should parse YAML");
+    let config = parse_json_config(json).expect("Should parse JSON");
     assert!(config.roles.contains_key("admin"));
     assert!(config.roles.contains_key("user"));
     assert!(config.check_access("admin", "any_table", Operation::Select));
