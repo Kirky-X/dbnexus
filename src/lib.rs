@@ -143,7 +143,10 @@ pub use crate::foundation::error::{DbError as DbErrorNew, PermissionError, PoolE
 
 // Database 导出
 #[cfg(feature = "migration")]
-pub use crate::database::migration::{MigrationExecutor, MigrationHistory, MigrationVersion};
+pub use crate::database::migration::{
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory,
+    MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+};
 pub use crate::database::pool::DbPool;
 pub use crate::database::pool::DbPoolBuilder;
 pub use crate::database::pool::DbPoolDependencies;
@@ -157,8 +160,15 @@ pub use crate::access::security::{DdlGuard, DdlValidationResult};
 pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(feature = "permission")]
+#[cfg(not(feature = "permission-engine"))]
 pub use crate::access::permission::{
     MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionContext, PermissionProvider,
+    PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
+};
+
+#[cfg(all(feature = "permission", feature = "permission-engine"))]
+pub use crate::access::permission::{
+    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionProvider,
     PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
 };
 
@@ -218,8 +228,11 @@ pub use crate::storage::global_index::{GlobalIndex, IndexEntry, SyncEvent, SyncR
 #[cfg(feature = "audit")]
 pub use crate::business::audit::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder,
-    AuditOperation, AuditQueryFilters, AuditResult, AuditSeverity, AuditStorage, MemoryAuditStorage,
+    AuditOperation, AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
+// AuditResult 类型别名
+#[cfg(feature = "audit")]
+pub use crate::foundation::error::AuditResult;
 
 // Tools 导出
 #[cfg(feature = "macros")]
