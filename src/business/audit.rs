@@ -137,7 +137,6 @@ impl fmt::Display for AuditStatus {
 
 
 /// AuditResult 的类型别名（向后兼容）
-
 pub type AuditResult = AuditStatus;
 /// 审计事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
