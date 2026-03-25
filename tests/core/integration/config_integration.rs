@@ -6,14 +6,18 @@
 //! 配置管理模块集成测试
 //!
 //! 基于 confers 库的配置构建、加载和验证功能测试
+//!
+//! # 测试说明
+//!
+//! - `#[cfg(feature = "confers")]` 测试：验证 DbConfig 结构体及其 confers 集成
+//! - `#[cfg(feature = "config-yaml")]` 测试：验证 DbConfig 的 serde Deserialize 实现
+//!   注意：confers 在底层使用相同的 serde 基础设施进行反序列化
+//!   这些测试确保 serde Deserialize trait 正确实现
 
-use dbnexus::{DbPool, DatabaseType, DbConfig};
+use dbnexus::{DbPool, DbPoolBuilder, DatabaseType, DbConfig};
 
 #[path = "../../common/mod.rs"]
 mod common;
-
-#[cfg(feature = "confers")]
-use DbConfig;
 
 #[tokio::test]
 async fn test_config_builder_basic() {

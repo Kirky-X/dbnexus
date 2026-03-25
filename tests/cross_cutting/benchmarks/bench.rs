@@ -10,6 +10,8 @@
 //! - 配置解析性能
 //! - Operation 显示转换
 //!
+//! 配置解析通过 confers 库
+
 //! # 运行基准测试
 //!
 //! ```bash
@@ -22,33 +24,45 @@
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::foundation::config::ConfigError;
 use std::time::{Duration, Instant};
 
 #[path = "../../common/mod.rs"]
 mod common;
 
+/// 使用 serde_json 直接解析 JSON 配置（测试用）
+#[cfg(feature = "confers")]
+fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
+    serde_json::from_str(json)
+        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+}
+
 /// 基准测试：权限配置加载（同步）
+#[cfg(feature = "confers")]
 fn permission_config_load_benchmark(c: &mut Criterion) {
     c.bench_function("permission_config_load", |b| {
         b.iter(|| {
-            let perm_content = r#"
-roles:
-  admin:
-    tables:
-      - name: "*"
-        operations:
-          - SELECT
-          - INSERT
-          - UPDATE
-          - DELETE
-  user:
-    tables:
-      - name: "users"
-        operations:
-          - SELECT
-          - INSERT
-"#;
-            black_box(PermissionConfig::from_yaml(perm_content).unwrap())
+            let perm_content = r#"{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    },
+    "user": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select", "insert"]
+        }
+      ]
+    }
+  }
+}"#;
+            black_box(parse_json_config(perm_content).unwrap())
         })
     });
 }

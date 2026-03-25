@@ -4,15 +4,25 @@
 // See LICENSE file in the project root for full license information.
 
 //! Session 和事务集成测试
+//!
+//! 配置解析通过 confers 库
 
 use dbnexus::DbError;
 use dbnexus::DbPool;
 #[cfg(feature = "permission")]
 use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig};
+use dbnexus::foundation::config::ConfigError;
 use tempfile::TempDir;
 
 #[path = "../../common/mod.rs"]
 mod common;
+
+/// 使用 serde_json 直接解析 JSON 配置（测试用）
+#[cfg(feature = "confers")]
+fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
+    serde_json::from_str(json)
+        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+}
 
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
@@ -317,14 +327,26 @@ async fn test_check_permission_denied_returns_permission_error() {
     let temp_dir = TempDir::new().unwrap();
     let perm_file = temp_dir.path().join("permissions.yaml");
     // 使用非 admin 角色以避免权限检查被绕过
-    let perm_content = r#"
-roles:
-  test_user:
-    tables:
-      - name: "users"
-        operations:
-          - select
-"#;
+    let perm_content = r#"{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    },
+    "test_user": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select"]
+        }
+      ]
+    }
+  }
+}"#;
     std::fs::write(&perm_file, perm_content).unwrap();
 
     let config = dbnexus::DbConfig {
@@ -345,7 +367,7 @@ roles:
     // 使用非 admin 角色进行权限测试
     let session = pool.get_session("test_user").await.unwrap();
 
-    let perm_config = PermissionConfig::from_yaml(&std::fs::read_to_string(&perm_file).unwrap()).unwrap();
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_file).unwrap()).expect("Failed to parse permission JSON");
     session.permission_ctx().load_policy(&perm_config).await.unwrap();
 
     let result = session.check_permission("orders", &Operation::Select).await;
@@ -411,17 +433,18 @@ roles:
 async fn test_execute_with_operation_allows_when_permitted() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
-    let perm_content = r#"
-roles:
-  admin:
-    tables:
-      - name: "users"
-        operations:
-          - select
-          - insert
-          - update
-          - delete
-"#;
+    let perm_content = r#"{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    }
+  }
+}"#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
@@ -435,6 +458,7 @@ roles:
         },
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        admin_role: "admin".to_string(),
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
@@ -510,14 +534,26 @@ async fn test_execute_denied_by_permission() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
     // 使用非 admin 角色以避免权限检查被绕过
-    let perm_content = r#"
-roles:
-  test_user:
-    tables:
-      - name: "users"
-        operations:
-          - select
-"#;
+    let perm_content = r#"{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    },
+    "test_user": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select"]
+        }
+      ]
+    }
+  }
+}"#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
@@ -563,17 +599,18 @@ async fn test_execute_with_operation_denies_ddl() {
 async fn test_execute_with_operation_insert_marks_write() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
-    let perm_content = r#"
-roles:
-  admin:
-    tables:
-      - name: "*"
-        operations:
-          - select
-          - insert
-          - update
-          - delete
-"#;
+    let perm_content = r#"{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "*",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    }
+  }
+}"#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
@@ -587,6 +624,7 @@ roles:
         },
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
+        admin_role: "admin".to_string(),
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
