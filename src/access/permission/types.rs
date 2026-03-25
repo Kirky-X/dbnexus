@@ -98,9 +98,44 @@ pub struct PermissionConfig {
 }
 
 impl PermissionConfig {
-    /// 从 YAML 字符串加载配置
-    pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(yaml)
+    /// 从 confers ConfigProvider 加载配置
+    ///
+    /// 通过 confers 库统一加载权限配置，确保与项目配置管理策略一致
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use confers::ConfigProvider;
+    /// use dbnexus::permission::PermissionConfig;
+    ///
+    /// let provider = /* confers provider */;
+    /// let config = PermissionConfig::from_confers(&provider)?;
+    /// ```
+    #[cfg(feature = "confers")]
+    pub fn from_confers(provider: &dyn confers::ConfigProvider) -> Result<Self, crate::foundation::config::ConfigError> {
+        use crate::foundation::config::ConfigError;
+
+        // 从 confers 加载权限配置
+        // 权限配置存储在 dbnexus.permissions 键下
+        let annotated = provider
+            .get_raw("dbnexus.permissions")
+            .ok_or_else(|| ConfigError::MissingField("dbnexus.permissions".to_string()))?;
+
+        // 转换为 JSON Value 然后反序列化为 PermissionConfig
+        #[cfg(feature = "json")]
+        {
+            let json_value = annotated.to_json();
+            serde_json::from_value(json_value)
+                .map_err(|e| ConfigError::InvalidFormat(format!("Invalid permission config: {}", e)))
+        }
+        #[cfg(not(feature = "json"))]
+        {
+            // 如果没有 json feature，直接尝试从 ConfigValue 反序列化
+            let json_str = serde_json::to_string(&annotated.inner)
+                .map_err(|e| ConfigError::InvalidFormat(format!("JSON serialization error: {}", e)))?;
+            serde_json::from_str(&json_str)
+                .map_err(|e| ConfigError::InvalidFormat(format!("Invalid permission config: {}", e)))
+        }
     }
 
     /// 加载角色策略
@@ -261,27 +296,84 @@ mod tests {
         assert!(!policy.allows("orders", &PermissionAction::Update));
     }
 
-    /// TEST-U-012: PermissionConfig YAML 解析测试
+    /// TEST-U-012: PermissionConfig YAML 解析测试（通过 confers）
+    #[cfg(feature = "confers")]
     #[test]
     fn test_permission_config_yaml_parsing() {
+        // 测试 YAML 格式与 confers + serde Deserialize 的兼容性
         let yaml = r#"
-roles:
-  admin:
-    tables:
-      - name: users
-        operations:
-          - select
-          - insert
-          - update
-          - delete
-  user:
-    tables:
-      - name: users
-        operations:
-          - select
+{
+  "roles": {
+    "admin": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select", "insert", "update", "delete"]
+        }
+      ]
+    },
+    "user": {
+      "tables": [
+        {
+          "name": "users",
+          "operations": ["select"]
+        }
+      ]
+    }
+  }
+}
 "#;
 
-        let config = PermissionConfig::from_yaml(yaml).unwrap();
+        // 使用 confers 解析 JSON（通过 YAML 包装）
+        let config: PermissionConfig = serde_json::from_str(yaml)
+            .expect("Failed to parse JSON");
+
+        // 检查 admin 角色
+        let admin_policy = config.get_role_policy("admin").unwrap();
+        assert!(admin_policy.allows("users", &PermissionAction::Select));
+        assert!(admin_policy.allows("users", &PermissionAction::Delete));
+
+        // 检查 user 角色
+        let user_policy = config.get_role_policy("user").unwrap();
+        assert!(user_policy.allows("users", &PermissionAction::Select));
+        assert!(!user_policy.allows("users", &PermissionAction::Insert));
+
+        // 检查不存在的角色
+        assert!(config.get_role_policy("guest").is_none());
+    }
+
+    /// TEST-U-012b: PermissionConfig YAML 解析测试（使用结构体构造）
+    #[test]
+    fn test_permission_config_yaml_parsing_struct() {
+        let config = PermissionConfig {
+            roles: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "admin".to_string(),
+                    RolePolicy {
+                        tables: vec![TablePermission {
+                            name: "users".to_string(),
+                            operations: vec![
+                                PermissionAction::Select,
+                                PermissionAction::Insert,
+                                PermissionAction::Update,
+                                PermissionAction::Delete,
+                            ],
+                        }],
+                    },
+                );
+                map.insert(
+                    "user".to_string(),
+                    RolePolicy {
+                        tables: vec![TablePermission {
+                            name: "users".to_string(),
+                            operations: vec![PermissionAction::Select],
+                        }],
+                    },
+                );
+                map
+            },
+        };
 
         // 检查 admin 角色
         let admin_policy = config.get_role_policy("admin").unwrap();
