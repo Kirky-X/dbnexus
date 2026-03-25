@@ -190,7 +190,7 @@ monolith = [
 enterprise = ["postgres", "monolith", "permission-engine"]
 
 # 所有可选功能（不包括数据库驱动）
-all-optional = ["cache", "observability", "data-management", "security"]
+all-optional = ["cache", "observability", "data-management", "security", "migration"]
 
 [dependencies]
 # Workspace dependencies

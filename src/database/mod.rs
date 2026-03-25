@@ -7,6 +7,7 @@
 //!
 //! 提供数据库连接管理、迁移、分片等功能
 
+#[cfg(feature = "migration")]
 pub mod migration;
 pub mod pool;
 
