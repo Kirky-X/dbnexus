@@ -693,26 +693,49 @@ impl YamlPermissionProvider {
     }
 
     /// 加载配置
+    #[cfg(feature = "confers")]
     async fn load_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use serde::Deserialize;
+
         let content = tokio::fs::read_to_string(&self.config_path).await?;
 
-        // 解析 YAML 配置
+        // 解析配置
         #[derive(Debug, Deserialize)]
         struct YamlConfig {
             roles: HashMap<String, Vec<PermissionRule>>,
         }
 
-        let config: YamlConfig = serde_yaml::from_str(&content)?;
+        // 直接使用 JSON 解析（绕过 confers 的键路径展平问题）
+        #[cfg(feature = "json")]
+        {
+            let config: YamlConfig = serde_json::from_str(&content)?;
 
-        // 更新角色权限
-        if let Ok(mut roles) = self.roles.write() {
-            *roles = config.roles;
+            // 更新角色权限
+            if let Ok(mut roles) = self.roles.write() {
+                *roles = config.roles;
+            }
+        }
+        #[cfg(not(feature = "json"))]
+        {
+            // 如果没有 json feature，使用 serde_yaml_ng 直接解析
+            #[cfg(feature = "yaml")]
+            {
+                let config: YamlConfig = serde_yaml_ng::from_str(&content)?;
+
+                // 更新角色权限
+                if let Ok(mut roles) = self.roles.write() {
+                    *roles = config.roles;
+                }
+            }
+            #[cfg(not(feature = "yaml"))]
+            {
+                return Err("Cannot parse permission config: neither JSON nor YAML support available".into());
+            }
         }
 
         // 初始化角色映射（从角色定义中提取）
         if let Ok(mut role_mapping) = self.role_mapping.write() {
             role_mapping.clear();
-            // 可以从配置中加载角色映射，这里暂时为空
         }
 
         if let Ok(mut last_refresh) = self.last_refresh.write() {
@@ -720,6 +743,11 @@ impl YamlPermissionProvider {
         }
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "confers"))]
+    async fn load_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Err("Confers support not enabled. Enable 'confers' feature.".into())
     }
 
     /// 检查规则是否匹配
