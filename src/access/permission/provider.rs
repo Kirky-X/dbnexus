@@ -115,8 +115,8 @@ pub trait RefreshablePermissionProvider: PermissionProvider {
 pub struct YamlPermissionProvider {
     /// 权限配置
     config: Arc<PermissionConfig>,
-    /// 配置文件路径
-    path: Option<String>,
+    /// 配置文件路径（保留用于将来实现）
+    #[allow(dead_code)] path: Option<String>,
 }
 
 impl YamlPermissionProvider {
