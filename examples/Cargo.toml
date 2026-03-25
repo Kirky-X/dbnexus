@@ -100,7 +100,7 @@ dbnexus = { path = "..", features = [
     "audit",
     "migration",
     "health-check",
-    "authentication",
+    # "authentication",  # 暂时禁用，jsonwebtoken 10.0.0 有编译问题
 ] }
 
 # Async runtime
