@@ -144,7 +144,7 @@ pub use crate::foundation::error::{DbError as DbErrorNew, PermissionError, PoolE
 // Database 导出
 #[cfg(feature = "migration")]
 pub use crate::database::migration::{
-    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFileParser, MigrationHistory,
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser, MigrationHistory,
     MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use crate::database::pool::DbPool;
