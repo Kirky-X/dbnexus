@@ -7,6 +7,7 @@
 //!
 //! 提供身份认证、权限控制、SQL 安全等功能
 
+#[cfg(feature = "permission")]
 pub mod permission;
 pub mod security;
 
