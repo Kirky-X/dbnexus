@@ -110,9 +110,9 @@ impl fmt::Display for AuditSeverity {
     }
 }
 
-/// 审计结果
+/// 审计状态枚举
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub enum AuditResult {
+pub enum AuditStatus {
     /// 成功
     #[default]
     Success,
@@ -124,17 +124,21 @@ pub enum AuditResult {
     Unknown,
 }
 
-impl fmt::Display for AuditResult {
+impl fmt::Display for AuditStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuditResult::Success => write!(f, "SUCCESS"),
-            AuditResult::Failure => write!(f, "FAILURE"),
-            AuditResult::Partial => write!(f, "PARTIAL"),
-            AuditResult::Unknown => write!(f, "UNKNOWN"),
+            AuditStatus::Success => write!(f, "SUCCESS"),
+            AuditStatus::Failure => write!(f, "FAILURE"),
+            AuditStatus::Partial => write!(f, "PARTIAL"),
+            AuditStatus::Unknown => write!(f, "UNKNOWN"),
         }
     }
 }
 
+
+/// AuditResult 的类型别名（向后兼容）
+
+pub type AuditResult = AuditStatus;
 /// 审计事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -156,8 +160,8 @@ pub struct AuditEvent {
     pub client_ip: String,
     /// 事件严重级别
     pub severity: AuditSeverity,
-    /// 操作结果
-    pub result: AuditResult,
+    /// 操作结果状态
+    pub result: AuditStatus,
     /// 错误信息（如果操作失败）
     pub error_message: Option<String>,
     /// 变更前的值（JSON）
@@ -230,7 +234,7 @@ impl AuditEvent {
             user_role: user_role.to_string(),
             client_ip: client_ip.to_string(),
             severity: AuditSeverity::Info,
-            result: AuditResult::Success,
+            result: AuditStatus::Success,
             error_message: None,
             before_value: None,
             after_value: None,
@@ -256,7 +260,7 @@ impl AuditEvent {
     ) -> Self {
         let mut event = Self::new(operation, entity_type, entity_id, user_id, "", "");
         event.error_message = Some(error.to_string());
-        event.result = AuditResult::Failure;
+        event.result = AuditStatus::Failure;
         event.severity = AuditSeverity::High;
         event
     }
@@ -309,7 +313,7 @@ impl AuditEvent {
     }
 
     /// 设置结果
-    pub fn with_result(mut self, result: AuditResult) -> Self {
+    pub fn with_result(mut self, result: AuditStatus) -> Self {
         self.result = result;
         self
     }
@@ -576,7 +580,7 @@ pub struct AuditQueryFilters {
     /// 严重级别
     pub severity: Option<AuditSeverity>,
     /// 结果
-    pub result: Option<AuditResult>,
+    pub result: Option<AuditStatus>,
 }
 
 /// 内存审计存储（默认实现）
@@ -1082,7 +1086,7 @@ mod tests {
     async fn test_audit_event_setters_and_default_storage() {
         let event = AuditEvent::create("users", "1", "admin")
             .with_user("role", "127.0.0.1")
-            .with_result(AuditResult::Failure)
+            .with_result(AuditStatus::Failure)
             .with_severity(AuditSeverity::High)
             .with_extra("x")
             .with_before_value("b")
@@ -1092,7 +1096,7 @@ mod tests {
 
         assert_eq!(event.user_role, "role");
         assert_eq!(event.client_ip, "127.0.0.1");
-        assert_eq!(event.result, AuditResult::Failure);
+        assert_eq!(event.result, AuditStatus::Failure);
         assert_eq!(event.severity, AuditSeverity::High);
         assert_eq!(event.extra.as_deref(), Some("x"));
         assert_eq!(event.before_value.as_deref(), Some("b"));
@@ -1109,7 +1113,7 @@ mod tests {
     fn test_audit_event_json_roundtrip() {
         let event = AuditEvent::create("users", "1", "admin")
             .with_user("role", "127.0.0.1")
-            .with_result(AuditResult::Success)
+            .with_result(AuditStatus::Success)
             .with_severity(AuditSeverity::Medium)
             .with_extra("x")
             .with_before_value("b")
@@ -1256,10 +1260,10 @@ mod tests {
         assert_eq!(AuditSeverity::High.to_string(), "HIGH");
         assert_eq!(AuditSeverity::Critical.to_string(), "CRITICAL");
 
-        assert_eq!(AuditResult::Success.to_string(), "SUCCESS");
-        assert_eq!(AuditResult::Failure.to_string(), "FAILURE");
-        assert_eq!(AuditResult::Partial.to_string(), "PARTIAL");
-        assert_eq!(AuditResult::Unknown.to_string(), "UNKNOWN");
+        assert_eq!(AuditStatus::Success.to_string(), "SUCCESS");
+        assert_eq!(AuditStatus::Failure.to_string(), "FAILURE");
+        assert_eq!(AuditStatus::Partial.to_string(), "PARTIAL");
+        assert_eq!(AuditStatus::Unknown.to_string(), "UNKNOWN");
     }
 
     #[tokio::test]
@@ -1290,7 +1294,7 @@ mod tests {
         let mut e1 = AuditEvent::create("users", "1", "u1")
             .with_user("admin", "10.0.0.1")
             .with_severity(AuditSeverity::Low)
-            .with_result(AuditResult::Success)
+            .with_result(AuditStatus::Success)
             .with_request_id("r1")
             .with_session_id("s1");
         e1.timestamp = now - chrono::Duration::minutes(10);
@@ -1298,7 +1302,7 @@ mod tests {
         let mut e2 = AuditEvent::delete("orders", "9", "u2")
             .with_user("system", "10.0.0.2")
             .with_severity(AuditSeverity::High)
-            .with_result(AuditResult::Failure);
+            .with_result(AuditStatus::Failure);
         e2.timestamp = now;
 
         logger.log(e1.clone()).await.unwrap();
@@ -1311,7 +1315,7 @@ mod tests {
             start_time: Some(now - chrono::Duration::minutes(5)),
             end_time: Some(now + chrono::Duration::minutes(1)),
             severity: Some(AuditSeverity::High),
-            result: Some(AuditResult::Failure),
+            result: Some(AuditStatus::Failure),
         };
 
         let filtered = logger.query(&filters).await.unwrap();
@@ -1620,7 +1624,7 @@ mod tests {
 ///     .user_role("administrator")
 ///     .client_ip("192.168.1.1")
 ///     .severity(AuditSeverity::High)
-///     .result(dbnexus::audit::AuditResult::Success)
+///     .result(dbnexus::audit::AuditStatus::Success)
 ///     .before_value(r#"{"name":"old"}"#)
 ///     .after_value(r#"{"name":"new"}"#)
 ///     .extra(r#"{"reason":"update request"}"#)
@@ -1635,7 +1639,7 @@ pub struct AuditEventBuilder {
     user_role: Option<String>,
     client_ip: Option<String>,
     severity: AuditSeverity,
-    result: AuditResult,
+    result: AuditStatus,
     before_value: Option<String>,
     after_value: Option<String>,
     extra: Option<String>,
@@ -1654,7 +1658,7 @@ impl AuditEventBuilder {
             user_role: None,
             client_ip: None,
             severity: AuditSeverity::Info,
-            result: AuditResult::Success,
+            result: AuditStatus::Success,
             before_value: None,
             after_value: None,
             extra: None,
@@ -1706,7 +1710,7 @@ impl AuditEventBuilder {
     }
 
     /// 设置操作结果
-    pub fn result(mut self, result: AuditResult) -> Self {
+    pub fn result(mut self, result: AuditStatus) -> Self {
         self.result = result;
         self
     }
