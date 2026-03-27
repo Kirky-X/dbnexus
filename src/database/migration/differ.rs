@@ -117,10 +117,6 @@ fn sanitize_default_value(default: &str) -> String {
 
     for pattern in &suspicious_patterns {
         if upper_default.contains(pattern) {
-            tracing::warn!(
-                "Suspicious pattern detected in default value: '{}', sanitizing",
-                default
-            );
             return "'***SANITIZED***'".to_string();
         }
     }
@@ -393,7 +389,6 @@ impl SqlGenerator {
         let table_name = match validate_sql_identifier(&table.name, "表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -417,7 +412,6 @@ impl SqlGenerator {
                 .map(|col| match validate_sql_identifier(col, "主键列名") {
                     Ok(validated) => validated,
                     Err(e) => {
-                        tracing::error!("Invalid primary key column: {}", e);
                         "***INVALID***".to_string()
                     }
                 })
@@ -450,7 +444,6 @@ impl SqlGenerator {
         let column_name = match validate_sql_identifier(&column.name, "列名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid column name: {}", e);
                 return format!("    -- 错误: {}\n", e);
             }
         };
@@ -489,7 +482,6 @@ impl SqlGenerator {
         let index_name = match validate_sql_identifier(&index.name, "索引名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid index name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -498,7 +490,6 @@ impl SqlGenerator {
         let table_name = match validate_sql_identifier(&index.table_name, "表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid table name in index: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -510,7 +501,6 @@ impl SqlGenerator {
             .map(|col| match validate_sql_identifier(col, "索引列名") {
                 Ok(name) => name,
                 Err(e) => {
-                    tracing::error!("Invalid index column: {}", e);
                     "***INVALID***".to_string()
                 }
             })
@@ -532,7 +522,6 @@ impl SqlGenerator {
         let table_name = match validate_sql_identifier(&fk.table_name, "外键表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid foreign key table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -540,7 +529,6 @@ impl SqlGenerator {
         let constraint_name = match validate_sql_identifier(&fk.name, "外键约束名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid foreign key constraint name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -548,7 +536,6 @@ impl SqlGenerator {
         let column_name = match validate_sql_identifier(&fk.column_name, "外键列名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid foreign key column: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -556,7 +543,6 @@ impl SqlGenerator {
         let referenced_table_name = match validate_sql_identifier(&fk.referenced_table_name, "外键引用表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid referenced table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -564,7 +550,6 @@ impl SqlGenerator {
         let referenced_column_name = match validate_sql_identifier(&fk.referenced_column_name, "外键引用列名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid referenced column: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -591,7 +576,6 @@ impl SqlGenerator {
         let validated_name = match validate_sql_identifier(table_name, "表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -604,7 +588,6 @@ impl SqlGenerator {
         let validated_table_name = match validate_sql_identifier(table_name, "表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -623,7 +606,6 @@ impl SqlGenerator {
         let validated_table_name = match validate_sql_identifier(table_name, "表名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid table name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };
@@ -631,7 +613,6 @@ impl SqlGenerator {
         let validated_column_name = match validate_sql_identifier(column_name, "列名") {
             Ok(name) => name,
             Err(e) => {
-                tracing::error!("Invalid column name: {}", e);
                 return format!("-- 错误: {}\n", e);
             }
         };

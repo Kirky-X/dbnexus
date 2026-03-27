@@ -546,25 +546,8 @@ impl PermissionContext {
     fn do_load_policy(&self) -> Option<RolePolicy> {
         if let Some(provider) = &self.permission_provider {
             if let Some(policy) = provider.get_role_policy(&self.role) {
-                tracing::info!(
-                    target: "security",
-                    "Loaded permission policy for role '{}'",
-                    self.role
-                );
                 return Some(policy);
-            } else {
-                tracing::warn!(
-                    target: "security",
-                    "Role '{}' not found in permission provider",
-                    self.role
-                );
             }
-        } else {
-            tracing::debug!(
-                target: "security",
-                "No permission provider configured for role '{}'",
-                self.role
-            );
         }
         None
     }
@@ -659,25 +642,8 @@ impl PermissionContext {
         if let Some(provider) = &self.permission_provider {
             if let Some(policy) = provider.get_role_policy(&self.role) {
                 self.policy_cache.set(&self.role, &policy).await.ok();
-                tracing::info!(
-                    target: "security",
-                    "Successfully reloaded permission policy for role '{}'",
-                    self.role
-                );
                 return true;
-            } else {
-                tracing::warn!(
-                    target: "security",
-                    "Role '{}' not found in permission provider during reload",
-                    self.role
-                );
             }
-        } else {
-            tracing::debug!(
-                target: "security",
-                "No permission provider configured for role '{}'",
-                self.role
-            );
         }
         false
     }
@@ -694,18 +660,10 @@ impl PermissionContext {
     /// 2. 缓存未命中时尝试重新加载策略
     /// 3. 重新加载成功后重新检查权限
     /// 4. 重新加载失败时安全地拒绝访问
-    #[cfg_attr(feature = "tracing", tracing::instrument(fields(table = %table, operation = ?operation)))]
     pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
         // 1. 检查速率限制
         if let Some(limiter) = &self.rate_limiter {
             if !limiter.check(&self.role).await {
-                tracing::warn!(
-                    target: "security",
-                    "Rate limit exceeded for role '{}' on table '{}' operation '{}'",
-                    self.role,
-                    table,
-                    operation
-                );
                 self.check_stats.record_rate_limited();
                 return false;
             }
@@ -721,13 +679,6 @@ impl PermissionContext {
                 self.check_stats.record_denied();
             }
             self.check_stats.record_cache_hit();
-            tracing::trace!(
-                "Permission check (cached): role='{}' table='{}' operation='{}' result={}",
-                self.role,
-                table,
-                operation,
-                allowed
-            );
             return allowed;
         }
 
@@ -742,23 +693,9 @@ impl PermissionContext {
                 } else {
                     self.check_stats.record_denied();
                 }
-                tracing::trace!(
-                    "Permission check (loaded): role='{}' table='{}' operation='{}' result={}",
-                    self.role,
-                    table,
-                    operation,
-                    allowed
-                );
                 allowed
             }
             None => {
-                tracing::warn!(
-                    target: "security",
-                    "Permission policy cache miss for role '{}' on table '{}' operation '{}'. Access denied for security.",
-                    self.role,
-                    table,
-                    operation
-                );
                 self.check_stats.record_denied();
                 false
             }
@@ -815,12 +752,10 @@ impl PermissionContext {
     pub async fn load_policy(&self, config: &PermissionConfig) -> Result<(), String> {
         if let Some(policy) = config.get_role_policy(&self.role) {
             self.policy_cache.set(&self.role, policy).await.ok();
-            tracing::info!("Loaded permission policy for role '{}'", self.role);
             Ok(())
         } else {
             // 不在错误消息中包含角色名称，防止信息泄露
             // 角色名称记录在调试级别日志中
-            tracing::debug!("Role '{}' not found in permission config", self.role);
             Err("Role not found in permission config".to_string())
         }
     }
@@ -846,7 +781,6 @@ impl PermissionContext {
     /// 清除权限缓存
     pub async fn clear_cache(&self) {
         self.policy_cache.clear().await.ok();
-        tracing::info!("Permission cache cleared for role '{}'", self.role);
     }
 }
 

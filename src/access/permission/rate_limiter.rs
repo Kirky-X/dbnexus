@@ -360,12 +360,6 @@ impl RateLimiter {
         // 删除找到的桶
         if let Some(key) = oldest_key {
             if self.buckets.remove(&key).is_some() {
-                tracing::warn!(
-                    rate_limiter.evicted_key = %key,
-                    rate_limiter.last_access_ms = oldest_access,
-                    rate_limiter.current_buckets = self.buckets.len(),
-                    "RateLimiter: LRU bucket evicted due to max_buckets limit"
-                );
             }
         }
     }
