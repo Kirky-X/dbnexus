@@ -34,8 +34,23 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use thiserror::Error;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+/// AuditEventBuilder 构建错误
+#[derive(Debug, Error)]
+pub enum BuildError {
+    /// 缺少必需字段 operation
+    #[error("operation is required")]
+    OperationRequired,
+    /// 缺少必需字段 entity_type
+    #[error("entity_type is required")]
+    EntityTypeRequired,
+    /// 缺少必需字段 entity_id
+    #[error("entity_id is required")]
+    EntityIdRequired,
+}
 
 /// 审计操作类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -196,7 +211,8 @@ impl AuditEvent {
     /// 使用 `AuditEventBuilder` 进行链式构建：
     /// ```rust
     /// # use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
-    /// AuditEvent::builder()
+    /// # fn example() -> Result<(), dbnexus::audit::BuildError> {
+    /// let event = AuditEvent::builder()
     ///     .operation(AuditOperation::Create)
     ///     .entity_type("users")
     ///     .entity_id("1")
@@ -204,7 +220,9 @@ impl AuditEvent {
     ///     .user_role("admin")
     ///     .client_ip("127.0.0.1")
     ///     .severity(AuditSeverity::High)
-    ///     .build();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # 简单方式
@@ -1006,12 +1024,6 @@ impl AuditLogger {
         if let Some(callback) = &self.alert_callback {
             callback(event);
         }
-
-        let msg = format!(
-            "[AUDIT ALERT] {} - {} {} on {} by user {}",
-            event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
-        );
-        tracing::warn!("{}", msg);
     }
 }
 
@@ -1614,6 +1626,7 @@ mod tests {
 /// ```rust
 /// use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
 ///
+/// # fn example() -> Result<(), dbnexus::audit::BuildError> {
 /// let event = AuditEvent::builder()
 ///     .operation(AuditOperation::Create)
 ///     .entity_type("users")
@@ -1626,7 +1639,9 @@ mod tests {
 ///     .before_value(r#"{"name":"old"}"#)
 ///     .after_value(r#"{"name":"new"}"#)
 ///     .extra(r#"{"reason":"update request"}"#)
-///     .build();
+///     .build()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Default)]
 pub struct AuditEventBuilder {
@@ -1745,24 +1760,25 @@ impl AuditEventBuilder {
 
     /// 构建 AuditEvent
     ///
-    /// # Panics
-    /// 如果必需字段（operation, entity_type, entity_id）未设置会 panic
-    pub fn build(self) -> AuditEvent {
-        AuditEvent {
+    /// # Errors
+    /// 如果必需字段（operation, entity_type, entity_id）未设置则返回错误
+    pub fn build(self) -> Result<AuditEvent, BuildError> {
+        if self.operation.is_none() {
+            return Err(BuildError::OperationRequired);
+        }
+        if self.entity_type.is_none() {
+            return Err(BuildError::EntityTypeRequired);
+        }
+        if self.entity_id.is_none() {
+            return Err(BuildError::EntityIdRequired);
+        }
+
+        Ok(AuditEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
-            operation: self.operation.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: operation is required");
-                AuditOperation::Other("UNKNOWN_OPERATION".to_string())
-            }),
-            entity_type: self.entity_type.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: entity_type is required");
-                "UNKNOWN_ENTITY_TYPE".to_string()
-            }),
-            entity_id: self.entity_id.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: entity_id is required");
-                "UNKNOWN_ENTITY_ID".to_string()
-            }),
+            operation: self.operation.unwrap(),
+            entity_type: self.entity_type.unwrap(),
+            entity_id: self.entity_id.unwrap(),
             user_id: self.user_id.unwrap_or_default(),
             user_role: self.user_role.unwrap_or_default(),
             client_ip: self.client_ip.unwrap_or_default(),
@@ -1775,7 +1791,7 @@ impl AuditEventBuilder {
             request_id: self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             session_id: self.session_id.unwrap_or_default(),
             trace_context: None,
-        }
+        })
     }
 }
 

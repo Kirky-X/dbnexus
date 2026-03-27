@@ -629,7 +629,8 @@ async fn test_audit_event_builder() {
         .before_value(r#"{"name": "Old Name"}"#)
         .after_value(r#"{"name": "New Name"}"#)
         .extra(r#"{"reason": "Name change request"}"#)
-        .build();
+        .build()
+        .expect("build should succeed with all required fields");
 
     assert_eq!(event.operation, AuditOperation::Update);
     assert_eq!(event.entity_type, "users");

@@ -228,7 +228,6 @@ impl DbPool {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(url), fields(url_len = url.len())))]
     pub async fn new(url: &str) -> DbResult<Self> {
         let config = DbConfig {
             url: url.to_string(),
@@ -238,7 +237,6 @@ impl DbPool {
     }
 
     /// 使用配置创建连接池
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(config), fields(url_len = config.url.len())))]
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
         // 创建连接
         let _connection = sea_orm::Database::connect(&config.url)
@@ -266,7 +264,6 @@ impl DbPool {
         if let Some(ref perm_config) = permission_config {
             for (role_name, policy) in &perm_config.roles {
                 let _ = policy_cache.set(role_name, policy).await;
-                tracing::debug!("Preloaded permission policy for role '{}'", role_name);
             }
         }
 
@@ -350,21 +347,11 @@ impl DbPool {
                         pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
                         successful += 1;
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to create initial connection: {}", e);
+                    Err(_e) => {
                         failed += 1;
                     }
                 }
             }
-
-            tracing::info!(
-                "Connection pool initialized: {}/{} connections (min: {}, max: {}), {} failed",
-                successful,
-                initial_connections,
-                config.min_connections,
-                config.max_connections,
-                failed
-            );
         }
 
         // 加载权限策略到缓存
@@ -378,7 +365,6 @@ impl DbPool {
                     for (role, policy) in &perm_config.roles {
                         let _ = pool.inner.policy_cache.set(role, policy).await;
                     }
-                    tracing::info!("Loaded permission policies for {} roles", perm_config.roles.len());
                 }
             }
             drop(permission_config_guard);
@@ -388,20 +374,10 @@ impl DbPool {
         if config.auto_migrate {
             if let Some(ref migrations_dir) = config.migrations_dir {
                 if migrations_dir.exists() {
-                    tracing::info!(
-                        "Auto-migrate enabled, running migrations from: {}",
-                        migrations_dir.display()
-                    );
                     let applied = pool.run_migrations(migrations_dir).await?;
-                    tracing::info!("Auto-migrate completed: {} migrations applied", applied);
                 } else {
-                    tracing::warn!(
-                        "Auto-migrate enabled but migrations directory does not exist: {}",
-                        migrations_dir.display()
-                    );
+                    // migrations directory does not exist, skip migration
                 }
-            } else {
-                tracing::warn!("Auto-migrate enabled but migrations_dir not configured");
             }
         }
 
@@ -588,27 +564,22 @@ impl DbPool {
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
-            tracing::info!("Loading permission config from: {}", path);
             match tokio::fs::read_to_string(path).await {
                 Ok(content) => match Self::parse_permission_yaml(&content, path) {
                     Ok(perm_config) => {
-                        tracing::info!("Successfully loaded permission config from: {}", path);
                         return Some(perm_config);
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to parse permission config from '{}': {}", path, e);
+                    Err(_e) => {
                         return None;
                     }
                 },
-                Err(e) => {
-                    tracing::warn!("Failed to read permission config from '{}': {}", path, e);
+                Err(_e) => {
                     return None;
                 }
             }
         }
 
         // 没有配置权限文件
-        tracing::debug!("No permission config path specified");
         None
     }
 
@@ -616,7 +587,6 @@ impl DbPool {
     #[cfg(feature = "permission")]
     #[cfg(not(feature = "confers"))]
     async fn load_permission_config(_config: &DbConfig) -> Option<PermissionConfig> {
-        tracing::warn!("Permission config loading requires 'confers' feature");
         None
     }
 
@@ -701,7 +671,6 @@ impl DbPool {
     /// // let session = pool.get_session(user_input_role).await?; // 不要这样做！
     /// ```
     ///
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(role = %role)))]
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
         // 验证角色名称
         #[cfg(feature = "permission")]
@@ -730,21 +699,14 @@ impl DbPool {
             // 只允许预定义的安全角色，防止未授权访问
             let safe_roles = ["admin", "system"];
             if !safe_roles.contains(&role) {
-                tracing::warn!(
-                    "Role '{}' is not allowed without explicit permission configuration",
-                    role
-                );
                 return Err(DbError::Permission(format!(
                     "Role '{}' is not allowed without explicit permission configuration. Allowed roles: {}",
                     role,
                     safe_roles.join(", ")
                 )));
             }
-            tracing::debug!("No permission config configured, allowing safe role '{}'", role);
             return Ok(());
         }
-
-        tracing::debug!("Permission config present, checking role '{}'", role);
 
         // 检查角色是否存在
         if permission_config
@@ -752,7 +714,6 @@ impl DbPool {
             .is_some_and(|c| c.get_role_policy(role).is_none())
         {
             // 角色不存在
-            tracing::warn!("Unknown role '{}' requested, falling back to deny_all policy", role);
             return Err(DbError::Permission(format!(
                 "Role '{}' is not defined in permission configuration",
                 role
@@ -809,18 +770,9 @@ impl DbPool {
         .await;
 
         match result {
-            Ok(Ok(_)) => {
-                tracing::debug!("Connection health check passed");
-                true
-            }
-            Ok(Err(e)) => {
-                tracing::warn!("Connection health check failed: {}", e);
-                false
-            }
-            Err(_) => {
-                tracing::warn!("Connection health check timed out");
-                false
-            }
+            Ok(Ok(_)) => true,
+            Ok(Err(_e)) => false,
+            Err(_) => false,
         }
     }
 
@@ -927,11 +879,6 @@ impl DbPool {
         // 更新总连接数
         if removed_count > 0 {
             self.inner.total_count.fetch_sub(removed_count as u32, Ordering::SeqCst);
-            tracing::info!(
-                "Cleaned {} invalid connections from pool (remaining idle: {})",
-                removed_count,
-                idle.len()
-            );
         }
 
         removed_count as u32
@@ -962,8 +909,6 @@ impl DbPool {
             // 重建空闲队列（只保留有效连接）
             idle.extend(valid_connections);
 
-            tracing::warn!("Found {} invalid connections, removed from pool", invalid_count);
-
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
             let needed = config.min_connections.saturating_sub(current_idle as u32) as usize;
@@ -976,17 +921,9 @@ impl DbPool {
                         recreated_count += 1;
                     }
                     Err(e) => {
-                        tracing::error!("Failed to recreate connection: {}", e);
                         return Err(sea_orm::DbErr::Custom(format!("Failed to recreate connections: {}", e)));
                     }
                 }
-            }
-
-            if recreated_count > 0 {
-                tracing::info!(
-                    "Recreated {} connections to maintain minimum pool size",
-                    recreated_count
-                );
             }
         } else {
             // 没有无效连接，恢复有效连接到池中
@@ -1026,17 +963,7 @@ impl DbPool {
         std::env::var("DB_HEALTH_CHECK_INTERVAL")
             .ok()
             .and_then(|v| v.parse().ok())
-            .map(|v: u64| {
-                let clamped = v.clamp(5, 300);
-                if v != clamped {
-                    tracing::warn!(
-                        "DB_HEALTH_CHECK_INTERVAL value {} is out of range [5, 300], clamped to {}",
-                        v,
-                        clamped
-                    );
-                }
-                clamped
-            })
+            .map(|v: u64| v.clamp(5, 300))
             .unwrap_or(30)
     }
 
@@ -1055,11 +982,6 @@ impl DbPool {
         // 使用辅助函数解析健康检查间隔
         let interval_secs = Self::parse_health_check_interval();
 
-        tracing::info!(
-            "Starting background health check task with interval: {} seconds",
-            interval_secs
-        );
-
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(interval_secs));
 
@@ -1067,27 +989,9 @@ impl DbPool {
                 tokio::select! {
                     _ = interval.tick() => {
                         // 执行连接健康检查
-                        match pool.validate_and_recreate_connections().await {
-                            Ok(recreated) => {
-                                if recreated > 0 {
-                                    tracing::info!(
-                                        "Background health check: recreated {} connections",
-                                        recreated
-                                    );
-                                } else {
-                                    tracing::debug!("Background health check: all connections healthy");
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Background health check failed: {}",
-                                    e
-                                );
-                            }
-                        }
+                        let _ = pool.validate_and_recreate_connections().await;
                     }
                     _ = shutdown.notified() => {
-                        tracing::info!("Background health check task shutting down");
                         break;
                     }
                 }
@@ -1139,7 +1043,11 @@ impl DbPool {
         // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
         // 信号量提供公平的等待队列，避免惊群效应
         let timeout_duration = self.inner.config.acquire_timeout_duration();
+
+        // 仅在启用 metrics 时需要记录开始时间
+        #[cfg(feature = "metrics")]
         let start = Instant::now();
+
         let acquire_result = timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
 
         // wait_count 递减（无论成功或失败）
@@ -1161,36 +1069,15 @@ impl DbPool {
                 )));
             }
             Err(_) => {
-                // Timeout - 分级告警
-                let elapsed_ms = start.elapsed().as_millis() as u64;
+                // Timeout - 记录超时指标
                 #[cfg(feature = "metrics")]
-                if let Some(ref collector) = self.inner.metrics_collector {
-                    collector.record_connection_timeout_level(elapsed_ms);
+                {
+                    let elapsed_ms = start.elapsed().as_millis() as u64;
+                    if let Some(ref collector) = self.inner.metrics_collector {
+                        collector.record_connection_timeout_level(elapsed_ms);
+                    }
                 }
 
-                // 分级日志告警
-                if elapsed_ms >= 10_000 {
-                    tracing::error!(
-                        target: "pool",
-                        "CRITICAL: connection acquire timeout {}ms (waiters={}) - pool exhaustion",
-                        elapsed_ms,
-                        waiters
-                    );
-                } else if elapsed_ms >= 5_000 {
-                    tracing::error!(
-                        target: "pool",
-                        "ERROR: connection acquire timeout {}ms (waiters={}) - pool pressure high",
-                        elapsed_ms,
-                        waiters
-                    );
-                } else {
-                    tracing::warn!(
-                        target: "pool",
-                        "WARN: connection acquire timeout {}ms (waiters={}) - pool pressure",
-                        elapsed_ms,
-                        waiters
-                    );
-                }
                 return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                     sea_orm::ConnAcquireErr::Timeout,
                 )));
@@ -1417,10 +1304,8 @@ impl DbPool {
     #[cfg(feature = "auto-migrate")]
     pub async fn run_auto_migrate(&self) -> Result<u32, DbError> {
         if let Some(ref migrations_dir) = self.inner.config.migrations_dir {
-            tracing::info!("Running auto-migrate from directory: {}", migrations_dir.display());
             self.run_migrations(migrations_dir).await
         } else {
-            tracing::warn!("Auto-migrate enabled but migrations_dir not configured");
             Ok(0)
         }
     }
@@ -1462,7 +1347,6 @@ impl Drop for DbPool {
     fn drop(&mut self) {
         // 通知后台健康检查任务关闭
         self.inner.health_check_shutdown.notify_one();
-        tracing::info!("DbPool dropped, shutdown signal sent to background health check task");
     }
 }
 
