@@ -80,6 +80,10 @@ path = "src/health.rs"
 name = "demo"
 path = "src/main.rs"
 
+[[bin]]
+name = "dependency_injection"
+path = "src/dependency_injection.rs"
+
 [dependencies]
 dbnexus = { path = "..", features = [
     "runtime-tokio-rustls",
