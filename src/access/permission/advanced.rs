@@ -185,11 +185,6 @@ impl AdvancedRbacProvider {
         while let Some((current, depth)) = queue.pop_front() {
             // 检查深度限制
             if depth > MAX_INHERITANCE_DEPTH {
-                tracing::warn!(
-                    "Role inheritance depth exceeded maximum limit ({}) for role '{}', stopping traversal",
-                    MAX_INHERITANCE_DEPTH,
-                    role
-                );
                 continue;
             }
 
