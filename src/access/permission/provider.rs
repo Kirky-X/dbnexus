@@ -139,7 +139,7 @@ impl YamlPermissionProvider {
             match Self::parse_yaml_content(&content, path) {
                 Ok(cfg) => cfg,
                 Err(e) => {
-                    tracing::warn!("Failed to parse permission config from {}: {}, using deny_all", path, e);
+                    // 解析失败，使用默认拒绝策略
                     PermissionConfig::deny_all()
                 }
             }
