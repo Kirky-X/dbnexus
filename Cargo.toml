@@ -231,6 +231,7 @@ tokio-test = { workspace = true }
 assert_cmd = "2.2"
 predicates = "3.1"
 criterion = "0.5"
+tempfile = "3.27"
 
 [lints]
 workspace = true
@@ -254,7 +255,7 @@ required-features = ["sql-parser"]
 [[test]]
 name = "core_session_transaction"
 path = "tests/core/integration/session_transaction.rs"
-required-features = ["permission"]
+required-features = ["permission", "confers"]
 
 [[test]]
 name = "core_permission_integration"
@@ -299,7 +300,7 @@ required-features = ["permission-engine"]
 [[test]]
 name = "cross_cutting_benchmarks"
 path = "tests/cross_cutting/benchmarks/bench.rs"
-required-features = ["permission"]
+required-features = ["permission", "confers"]
 
 [[test]]
 name = "cross_cutting_cli"

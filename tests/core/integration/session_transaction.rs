@@ -320,7 +320,7 @@ roles:
 }
 
 #[tokio::test]
-#[cfg(all(feature = "sqlite", feature = "permission"))]
+#[cfg(all(feature = "sqlite", feature = "permission", feature = "confers"))]
 #[allow(clippy::unwrap_used)]
 async fn test_check_permission_denied_returns_permission_error() {
     let temp_dir = TempDir::new().unwrap();
