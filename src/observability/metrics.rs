@@ -119,7 +119,7 @@ pub trait MetricsCollectorTrait: Send + Sync {
 const MAX_LATENCY_SAMPLES: usize = 10000;
 
 /// 延迟百分位数据
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LatencyPercentiles {
     /// P50 延迟（纳秒）
     pub p50_ns: u64,
@@ -271,7 +271,7 @@ impl LatencyHistogram {
 }
 
 /// 直方图桶统计
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HistogramBucket {
     /// 桶边界（毫秒）
     pub boundary_ms: u64,
@@ -284,7 +284,7 @@ pub struct HistogramBucket {
 }
 
 /// 直方图统计
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct HistogramStats {
     /// 总样本数
     pub total_samples: u64,
@@ -293,7 +293,7 @@ pub struct HistogramStats {
 }
 
 /// 吞吐量统计
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ThroughputStats {
     /// 总操作数
     pub total_operations: u64,
@@ -323,7 +323,7 @@ impl Default for ThroughputStats {
 }
 
 /// 查询统计信息（增强版）
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct QueryStats {
     /// 查询次数
     pub count: u64,
@@ -369,7 +369,7 @@ pub struct SlowQueryRecord {
 }
 
 /// 连接获取统计
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ConnectionAcquireStats {
     /// 总尝试次数
     pub total_attempts: u64,
@@ -394,7 +394,7 @@ pub struct ConnectionAcquireStats {
 }
 
 /// 事务统计
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TransactionStats {
     /// 总事务数
     pub total_transactions: u64,
@@ -409,7 +409,7 @@ pub struct TransactionStats {
 }
 
 /// 连接池指标
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PoolMetrics {
     /// 总连接数
     pub total: u64,
@@ -1536,7 +1536,7 @@ mod tests {
         assert_eq!(stats.count, 0);
 
         let conn_stats = mock.connection_stats();
-        assert_eq!(conn_stats.total, 0);
+        assert_eq!(conn_stats.total_attempts, 0);
 
         mock.clear();
     }
@@ -1550,13 +1550,8 @@ mod tests {
         let mock = MockMetrics::new();
         _assert_impl_trait(&mock);
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// TEST-U-040: 延迟百分位计算测试
+    // ========== Latency Percentiles Tests ==========
     #[test]
     fn test_latency_percentiles() {
         let collector = MetricsCollector::new();
