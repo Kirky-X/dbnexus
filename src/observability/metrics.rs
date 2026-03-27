@@ -369,7 +369,7 @@ pub struct SlowQueryRecord {
 }
 
 /// 连接获取统计
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionAcquireStats {
     /// 总尝试次数
     pub total_attempts: u64,
@@ -394,7 +394,7 @@ pub struct ConnectionAcquireStats {
 }
 
 /// 事务统计
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TransactionStats {
     /// 总事务数
     pub total_transactions: u64,
@@ -409,7 +409,7 @@ pub struct TransactionStats {
 }
 
 /// 连接池指标
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PoolMetrics {
     /// 总连接数
     pub total: u64,
@@ -1398,6 +1398,157 @@ impl MetricsCollectorTrait for MetricsCollector {
 
     fn clear(&self) {
         self.clear_all_inner();
+    }
+}
+
+// ============================================================================
+// MockMetrics - 用于测试的 Mock 实现
+// ============================================================================
+
+/// Mock 指标收集器
+///
+/// 用于测试的指标收集器实现，所有操作都是无操作（no-op）。
+/// 这个实现可用于单元测试和集成测试，避免依赖真实的指标收集逻辑。
+///
+/// # Example
+///
+/// ```rust
+/// use std::sync::Arc;
+/// use dbnexus::metrics::{MetricsCollectorTrait, MockMetrics};
+///
+/// // 在测试中使用 MockMetrics
+/// let mock: Arc<dyn MetricsCollectorTrait> = Arc::new(MockMetrics::new());
+/// mock.record_query(std::time::Duration::from_millis(10));
+/// mock.record_connection(std::time::Duration::from_millis(5));
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct MockMetrics {
+    _private: (),
+}
+
+impl MockMetrics {
+    /// 创建新的 MockMetrics
+    pub fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl MetricsCollectorTrait for MockMetrics {
+    fn record_query(&self, _duration: Duration) {
+        // No-op: Mock 实现不记录任何指标
+    }
+
+    fn record_connection(&self, _duration: Duration) {
+        // No-op: Mock 实现不记录任何指标
+    }
+
+    fn record_transaction(&self, _duration: Duration, _success: bool) {
+        // No-op: Mock 实现不记录任何指标
+    }
+
+    fn record_pool_usage(&self, _total: u32, _active: u32, _idle: u32) {
+        // No-op: Mock 实现不记录任何指标
+    }
+
+    fn query_stats(&self) -> QueryStats {
+        QueryStats::default()
+    }
+
+    fn connection_stats(&self) -> ConnectionAcquireStats {
+        ConnectionAcquireStats::default()
+    }
+
+    fn pool_metrics(&self) -> PoolMetrics {
+        PoolMetrics::default()
+    }
+
+    fn transaction_stats(&self) -> TransactionStats {
+        TransactionStats::default()
+    }
+
+    fn export_prometheus(&self) -> String {
+        String::new()
+    }
+
+    fn clear(&self) {
+        // No-op: Mock 实现没有状态需要清除
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// TEST-U-047: MockMetrics 基本功能测试
+    #[test]
+    fn test_mock_metrics_basic() {
+        let mock = MockMetrics::new();
+
+        // 测试所有方法都可以调用而不panic
+        mock.record_query(Duration::from_millis(10));
+        mock.record_connection(Duration::from_millis(5));
+        mock.record_transaction(Duration::from_millis(100), true);
+        mock.record_pool_usage(10, 5, 5);
+
+        // 测试返回默认值的统计
+        assert_eq!(mock.query_stats(), QueryStats::default());
+        assert_eq!(mock.connection_stats(), ConnectionAcquireStats::default());
+        assert_eq!(mock.pool_metrics(), PoolMetrics::default());
+        assert_eq!(mock.transaction_stats(), TransactionStats::default());
+
+        // 测试 Prometheus 导出返回空字符串
+        assert_eq!(mock.export_prometheus(), String::new());
+
+        // 测试 clear 不 panic
+        mock.clear();
+    }
+
+    /// TEST-U-048: MockMetrics Clone 测试
+    #[test]
+    fn test_mock_metrics_clone() {
+        let mock1 = MockMetrics::new();
+        let mock2 = mock1.clone();
+
+        // 两个实例应该可以独立使用
+        mock1.record_query(Duration::from_millis(10));
+        mock2.record_query(Duration::from_millis(20));
+
+        // 都应该正常工作
+        assert_eq!(mock1.export_prometheus(), String::new());
+        assert_eq!(mock2.export_prometheus(), String::new());
+    }
+
+    /// TEST-U-049: MockMetrics 作为 trait 对象使用
+    #[test]
+    fn test_mock_metrics_trait_object() {
+        use std::sync::Arc;
+
+        // 验证 MockMetrics 可以作为 trait 对象使用
+        let mock: Arc<dyn MetricsCollectorTrait> = Arc::new(MockMetrics::new());
+
+        mock.record_query(Duration::from_millis(10));
+        mock.record_connection(Duration::from_millis(5));
+        mock.record_transaction(Duration::from_millis(100), false);
+        mock.record_pool_usage(10, 5, 5);
+
+        // 验证返回的统计是默认值
+        let stats = mock.query_stats();
+        assert_eq!(stats.count, 0);
+
+        let conn_stats = mock.connection_stats();
+        assert_eq!(conn_stats.total, 0);
+
+        mock.clear();
+    }
+
+    /// TEST-U-050: MockMetrics 与 MetricsCollector Trait 兼容性测试
+    #[test]
+    fn test_mock_metrics_trait_compatibility() {
+        // 验证 MockMetrics 实现了所有 MetricsCollectorTrait 的方法
+        fn _assert_impl_trait(_mock: &dyn MetricsCollectorTrait) {}
+
+        let mock = MockMetrics::new();
+        _assert_impl_trait(&mock);
     }
 }
 
