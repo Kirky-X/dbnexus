@@ -9,8 +9,8 @@
 
 #[cfg(feature = "cache")]
 mod cache_tests {
-    use dbnexus::{CacheBackend, OxcacheBackend};
     use dbnexus::CacheConfig;
+    use dbnexus::{CacheBackend, OxcacheBackend};
 
     // ============================================================================
     // CacheConfig 测试

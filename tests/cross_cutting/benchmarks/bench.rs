@@ -33,8 +33,7 @@ mod common;
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
 #[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
-    serde_json::from_str(json)
-        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+    serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 /// 基准测试：权限配置加载（同步）

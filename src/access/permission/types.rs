@@ -112,7 +112,9 @@ impl PermissionConfig {
     /// let config = PermissionConfig::from_confers(&provider)?;
     /// ```
     #[cfg(feature = "confers")]
-    pub fn from_confers(provider: &dyn confers::ConfigProvider) -> Result<Self, crate::foundation::config::ConfigError> {
+    pub fn from_confers(
+        provider: &dyn confers::ConfigProvider,
+    ) -> Result<Self, crate::foundation::config::ConfigError> {
         use crate::foundation::config::ConfigError;
 
         // 从 confers 加载权限配置
@@ -325,8 +327,7 @@ mod tests {
 "#;
 
         // 使用 confers 解析 JSON（通过 YAML 包装）
-        let config: PermissionConfig = serde_json::from_str(yaml)
-            .expect("Failed to parse JSON");
+        let config: PermissionConfig = serde_json::from_str(yaml).expect("Failed to parse JSON");
 
         // 检查 admin 角色
         let admin_policy = config.get_role_policy("admin").unwrap();

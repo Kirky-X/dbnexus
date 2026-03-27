@@ -14,7 +14,7 @@
 //!   注意：confers 在底层使用相同的 serde 基础设施进行反序列化
 //!   这些测试确保 serde Deserialize trait 正确实现
 
-use dbnexus::{DbPool, DbPoolBuilder, DatabaseType, DbConfig};
+use dbnexus::{DatabaseType, DbConfig, DbPool, DbPoolBuilder};
 
 #[path = "../../common/mod.rs"]
 mod common;
