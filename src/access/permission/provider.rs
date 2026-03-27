@@ -138,7 +138,7 @@ impl YamlPermissionProvider {
             // 使用 confers 解析 YAML 配置
             match Self::parse_yaml_content(&content, path) {
                 Ok(cfg) => cfg,
-                Err(e) => {
+                Err(_e) => {
                     // 解析失败，使用默认拒绝策略
                     PermissionConfig::deny_all()
                 }

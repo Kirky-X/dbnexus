@@ -42,9 +42,7 @@ path = "src/security.rs"
 name = "metrics"
 path = "src/metrics.rs"
 
-[[bin]]
-name = "tracing"
-path = "src/tracing.rs"
+# tracing binary 已移除 - tracing 模块已从 dbnexus 中删除
 
 [[bin]]
 name = "audit"
@@ -96,7 +94,7 @@ dbnexus = { path = "..", features = [
     "global-index",
     "with-json",
     "metrics",
-    "tracing",
+    # tracing feature 已从 dbnexus 移除
     "audit",
     "migration",
     "health-check",
