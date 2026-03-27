@@ -192,7 +192,7 @@ impl MigrationExecutor {
             let version: Result<i64, _> = row.try_get("", "version");
             let version_val = match version {
                 Ok(v) => v,
-                Err(e) => {
+                Err(_e) => {
                     continue;
                 }
             };
@@ -202,12 +202,12 @@ impl MigrationExecutor {
 
             let description: String = match row.try_get("", "description") {
                 Ok(d) => d,
-                Err(e) => String::new(),
+                Err(_e) => String::new(),
             };
 
             let applied_at_str: String = match row.try_get("", "applied_at") {
                 Ok(s) => s,
-                Err(e) => String::new(),
+                Err(_e) => String::new(),
             };
             let applied_at = if applied_at_str.is_empty() {
                 time::OffsetDateTime::now_utc()
@@ -220,7 +220,7 @@ impl MigrationExecutor {
 
             let file_path: String = match row.try_get("", "file_path") {
                 Ok(p) => p,
-                Err(e) => String::new(),
+                Err(_e) => String::new(),
             };
 
             history.add_migration(MigrationVersion {
