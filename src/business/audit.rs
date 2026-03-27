@@ -1011,7 +1011,6 @@ impl AuditLogger {
             "[AUDIT ALERT] {} - {} {} on {} by user {}",
             event.severity, event.operation, event.entity_id, event.entity_type, event.user_id
         );
-        tracing::warn!("{}", msg);
     }
 }
 
@@ -1752,15 +1751,12 @@ impl AuditEventBuilder {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             operation: self.operation.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: operation is required");
                 AuditOperation::Other("UNKNOWN_OPERATION".to_string())
             }),
             entity_type: self.entity_type.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: entity_type is required");
                 "UNKNOWN_ENTITY_TYPE".to_string()
             }),
             entity_id: self.entity_id.unwrap_or_else(|| {
-                tracing::error!("AuditEventBuilder: entity_id is required");
                 "UNKNOWN_ENTITY_ID".to_string()
             }),
             user_id: self.user_id.unwrap_or_default(),

@@ -490,10 +490,6 @@ fn contains_variables(sql: &str) -> bool {
 
     for pattern in PATTERNS.iter() {
         if pattern.is_match(&sql_without_strings) {
-            tracing::warn!(
-                target: "security",
-                "Dynamic SQL detected: pattern matched"
-            );
             return true;
         }
     }
@@ -623,11 +619,6 @@ pub fn contains_sql_injection(sql: &str) -> bool {
 
     for pattern in &injection_patterns {
         if sql_upper.contains(pattern) {
-            tracing::warn!(
-                target: "security",
-                "SQL injection pattern detected: {}",
-                pattern
-            );
             return true;
         }
     }
@@ -652,11 +643,6 @@ fn contains_ddl_operation(sql: &str) -> bool {
 
     for keyword in &ddl_keywords {
         if sql_upper.contains(keyword) {
-            tracing::warn!(
-                target: "security",
-                "DDL operation detected: {}",
-                keyword
-            );
             return true;
         }
     }

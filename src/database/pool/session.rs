@@ -219,7 +219,6 @@ impl Session {
     /// 将返回错误。Session 的生命周期管理确保连接始终可用。
     pub fn connection(&self) -> Result<&DatabaseConnection, DbError> {
         self.connection.as_ref().ok_or_else(|| {
-            tracing::error!("Connection accessed after being released - this indicates a lifecycle bug");
             DbError::Config("Connection not available - Session may have been invalidated".to_string())
         })
     }

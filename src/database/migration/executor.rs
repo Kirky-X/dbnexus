@@ -193,19 +193,16 @@ impl MigrationExecutor {
             let version_val = match version {
                 Ok(v) => v,
                 Err(e) => {
-                    tracing::warn!("Failed to read migration version: {}", e);
                     continue;
                 }
             };
             let Ok(version) = u32::try_from(version_val) else {
-                tracing::warn!("Invalid migration version value: {}", version_val);
                 continue;
             };
 
             let description: String = match row.try_get("", "description") {
                 Ok(d) => d,
                 Err(e) => {
-                    tracing::debug!("Missing description for migration {}: {}", version, e);
                     String::new()
                 }
             };
@@ -213,7 +210,6 @@ impl MigrationExecutor {
             let applied_at_str: String = match row.try_get("", "applied_at") {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::debug!("Missing applied_at for migration {}: {}", version, e);
                     String::new()
                 }
             };
@@ -223,7 +219,6 @@ impl MigrationExecutor {
                 match parse_applied_at_for_db(self.sql_generator.db_type, &applied_at_str) {
                     Some(dt) => dt,
                     None => {
-                        tracing::debug!("Invalid applied_at format for migration {}", version);
                         time::OffsetDateTime::now_utc()
                     }
                 }
@@ -232,7 +227,6 @@ impl MigrationExecutor {
             let file_path: String = match row.try_get("", "file_path") {
                 Ok(p) => p,
                 Err(e) => {
-                    tracing::debug!("Missing file_path for migration {}: {}", version, e);
                     String::new()
                 }
             };
@@ -437,7 +431,6 @@ impl MigrationExecutor {
         let mut migrations = Vec::new();
 
         if !dir.exists() {
-            tracing::warn!("Migration directory does not exist: {}", dir.display());
             return Ok(migrations);
         }
 
@@ -468,7 +461,6 @@ impl MigrationExecutor {
         // 按版本号排序
         migrations.sort_by_key(|m| m.version);
 
-        tracing::info!("Scanned {} migration files in {}", migrations.len(), dir.display());
 
         Ok(migrations)
     }
@@ -495,7 +487,6 @@ impl MigrationExecutor {
     /// # Returns
     ///
     /// 成功应用的迁移数量
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(dir = %dir.display())))]
     pub async fn run_migrations(&mut self, dir: &std::path::Path) -> Result<u32, DbError> {
         // 扫描迁移文件
         let migration_files = self.scan_migrations(dir)?;
@@ -509,37 +500,18 @@ impl MigrationExecutor {
             .collect();
 
         if pending.is_empty() {
-            tracing::info!("No pending migrations to apply");
             return Ok(0);
         }
 
-        tracing::info!("Found {} pending migrations", pending.len());
 
         // 应用迁移
         let mut applied_count = 0;
         for migration_file in &pending {
-            tracing::info!(
-                "Applying migration v{} - {}",
-                migration_file.version,
-                migration_file.description
-            );
-
             match self.apply_migration_file(migration_file).await {
                 Ok(_) => {
                     applied_count += 1;
-                    tracing::info!(
-                        "Successfully applied migration v{} - {}",
-                        migration_file.version,
-                        migration_file.description
-                    );
                 }
                 Err(e) => {
-                    tracing::error!(
-                        "Failed to apply migration v{} - {}: {}",
-                        migration_file.version,
-                        migration_file.description,
-                        e
-                    );
                     return Err(e);
                 }
             }
@@ -689,7 +661,6 @@ impl MigrationExecutor {
         let applied = &self.history.applied_migrations;
 
         if applied.is_empty() {
-            tracing::info!("No migrations to rollback");
             return Ok(0);
         }
 
@@ -699,15 +670,12 @@ impl MigrationExecutor {
         versions.sort_by_key(|v| std::cmp::Reverse(*v));
 
         for version in versions {
-            tracing::info!("Rolling back migration v{}", version);
 
             match self.rollback_migration(version).await {
                 Ok(_) => {
                     rollback_count += 1;
-                    tracing::info!("Successfully rolled back migration v{}", version);
                 }
                 Err(e) => {
-                    tracing::error!("Failed to rollback migration v{}: {}", version, e);
                     return Err(e);
                 }
             }
@@ -744,7 +712,6 @@ impl MigrationExecutor {
                 }
             }
             Err(e) => {
-                tracing::error!("Failed to read migration file {}: {}", migration.file_path, e);
                 return Err(DbError::Migration(format!("Failed to read migration file: {}", e)));
             }
         };
@@ -754,7 +721,6 @@ impl MigrationExecutor {
         let down_sql = match reverser.reverse(&up_sql) {
             Ok(sql) => sql,
             Err(e) => {
-                tracing::error!("Failed to generate rollback SQL for migration v{}: {}", version, e);
                 return Err(DbError::Migration(format!("Failed to generate rollback SQL: {}", e)));
             }
         };
@@ -789,7 +755,6 @@ impl MigrationExecutor {
         // 从历史记录中移除
         self.history.applied_migrations.retain(|m| m.version != version);
 
-        tracing::info!("Successfully rolled back migration v{}", version);
         Ok(())
     }
 }

@@ -359,7 +359,6 @@ impl ShardRouter {
                     );
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to create connection pool for shard {}: {}", shard_id, e);
                     router.register_shard(shard_id, name, format!("{}_{}", config.prefix, shard_id));
                 }
             }

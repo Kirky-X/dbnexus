@@ -45,8 +45,6 @@
 //! ```rust,no_run,ignore
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     dbnexus::tracing::init_default()?;
-//!     tracing::info!("DBNexus 日志系统已初始化");
 //!     Ok(())
 //! }
 //! ```
@@ -56,7 +54,6 @@
 //! 使用 `TracingBuilder` 精确控制输出格式和日志级别：
 //!
 //! ```rust,no_run,ignore
-//! use dbnexus::tracing::TracingBuilder;
 //!
 //! TracingBuilder::new()
 //!     .with_json()                           // JSON 结构化输出
@@ -215,7 +212,6 @@ pub use crate::observability::health::{
 
 // Tracing 导出
 #[cfg(feature = "tracing")]
-pub use crate::observability::tracing::{TracingBuilder, init_default};
 
 // Storage 导出
 #[cfg(feature = "cache")]
