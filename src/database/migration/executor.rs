@@ -202,33 +202,25 @@ impl MigrationExecutor {
 
             let description: String = match row.try_get("", "description") {
                 Ok(d) => d,
-                Err(e) => {
-                    String::new()
-                }
+                Err(e) => String::new(),
             };
 
             let applied_at_str: String = match row.try_get("", "applied_at") {
                 Ok(s) => s,
-                Err(e) => {
-                    String::new()
-                }
+                Err(e) => String::new(),
             };
             let applied_at = if applied_at_str.is_empty() {
                 time::OffsetDateTime::now_utc()
             } else {
                 match parse_applied_at_for_db(self.sql_generator.db_type, &applied_at_str) {
                     Some(dt) => dt,
-                    None => {
-                        time::OffsetDateTime::now_utc()
-                    }
+                    None => time::OffsetDateTime::now_utc(),
                 }
             };
 
             let file_path: String = match row.try_get("", "file_path") {
                 Ok(p) => p,
-                Err(e) => {
-                    String::new()
-                }
+                Err(e) => String::new(),
             };
 
             history.add_migration(MigrationVersion {
@@ -283,7 +275,7 @@ impl MigrationExecutor {
     /// 应用单个迁移
     pub async fn apply_migration(&mut self, migration: &Migration) -> Result<(), DbError> {
         // 生成迁移 SQL
-        let sql = self.sql_generator.generate_migration_sql(migration);
+        let sql = self.sql_generator.generate_migration_sql(migration)?;
 
         // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
@@ -461,7 +453,6 @@ impl MigrationExecutor {
         // 按版本号排序
         migrations.sort_by_key(|m| m.version);
 
-
         Ok(migrations)
     }
 
@@ -502,7 +493,6 @@ impl MigrationExecutor {
         if pending.is_empty() {
             return Ok(0);
         }
-
 
         // 应用迁移
         let mut applied_count = 0;
@@ -670,7 +660,6 @@ impl MigrationExecutor {
         versions.sort_by_key(|v| std::cmp::Reverse(*v));
 
         for version in versions {
-
             match self.rollback_migration(version).await {
                 Ok(_) => {
                     rollback_count += 1;

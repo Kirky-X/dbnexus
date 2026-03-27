@@ -754,8 +754,6 @@ impl PermissionContext {
             self.policy_cache.set(&self.role, policy).await.ok();
             Ok(())
         } else {
-            // 不在错误消息中包含角色名称，防止信息泄露
-            // 角色名称记录在调试级别日志中
             Err("Role not found in permission config".to_string())
         }
     }
