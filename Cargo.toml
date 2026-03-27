@@ -33,10 +33,6 @@ serde_json = "1.0"
 # Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
 sea-orm = { version = "2.0.0-rc.37", default-features = false }
 
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
-
 # Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
@@ -123,16 +119,8 @@ pool-health-check = ["futures"]  # 连接池健康检查
 pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
-observability = ["metrics", "tracing", "health-check"]
+observability = ["metrics", "health-check"]
 metrics = ["prometheus"]  # Prometheus metrics 导出
-tracing = [
-    "tracing-subscriber",
-    "tracing-opentelemetry",
-    "opentelemetry-otlp",
-    "opentelemetry",
-    "opentelemetry_sdk",
-    "chrono",
-]
 health-check = []  # 健康检查模块（内置，无额外依赖）
 
 # === 数据管理 ===
@@ -201,23 +189,18 @@ serde = { workspace = true }
 serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
-tracing = { workspace = true }
 time = { workspace = true }
 prometheus = { workspace = true, optional = true }
 toml = { version = "^1.1", optional = true }
 parking_lot = "0.12"
 home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
-opentelemetry-otlp = { version = "0.17.0", optional = true, default-features = false, features = ["grpc-tonic", "trace"] }
-tracing-opentelemetry = { version = "0.27", optional = true }
-opentelemetry = { version = "0.24.0", optional = true }
-opentelemetry_sdk = { version = "0.24.0", optional = true }
 once_cell = { version = "1.21", optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.22", optional = true, features = ["v4"] }
-confers = { path = "../confers", features = ["yaml"], optional = true }
+confers = { path = "/home/dev/projects/confers", features = ["yaml"], optional = true }
 criterion = { version = "0.5", optional = true }
 
 # External dependencies
@@ -226,7 +209,7 @@ sqlparser = { version = "0.47", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "~6.1", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend
-oxcache = { path = "../oxcache", optional = true }
+oxcache = { path = "/home/dev/projects/oxcache", optional = true }
 
 # Authentication dependencies
 jsonwebtoken = { version = "~10.0", optional = true }
@@ -242,10 +225,6 @@ dbnexus-macros = { workspace = true, optional = true }
 # Testing utilities (also in dev-dependencies)
 assert_cmd = { version = "2.2", optional = true }
 tempfile = { version = "3.27", optional = true }
-
-# Optional tracing-subscriber: required by the `tracing` feature.
-# Note: `json` feature pulls in tracing-serde which can cause issues with async-trait.
-tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter", "json", "fmt"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
@@ -311,11 +290,6 @@ required-features = ["sharding"]
 name = "metrics_integration"
 path = "tests/metrics/integration/metrics_integration.rs"
 required-features = ["metrics"]
-
-[[test]]
-name = "tracing_integration"
-path = "tests/tracing/integration/tracing_integration.rs"
-required-features = ["tracing"]
 
 [[test]]
 name = "permission_engine_integration"
