@@ -17,8 +17,7 @@ mod common;
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
 #[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
-    serde_json::from_str(json)
-        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+    serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 #[tokio::test]
@@ -50,7 +49,8 @@ async fn test_permission_context_role() {
 }
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
+    let perm_config =
+        parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -90,7 +90,8 @@ async fn test_permission_check() {
 }
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
+    let perm_config =
+        parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)

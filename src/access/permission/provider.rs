@@ -116,7 +116,8 @@ pub struct YamlPermissionProvider {
     /// 权限配置
     config: Arc<PermissionConfig>,
     /// 配置文件路径（保留用于将来实现）
-    #[allow(dead_code)] path: Option<String>,
+    #[allow(dead_code)]
+    path: Option<String>,
 }
 
 impl YamlPermissionProvider {
@@ -157,8 +158,7 @@ impl YamlPermissionProvider {
     #[cfg(feature = "confers")]
     #[cfg(feature = "json")]
     fn parse_json_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        serde_json::from_str(content)
-            .map_err(|e| format!("JSON parse error in '{}': {}", source, e))
+        serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
     }
 
     /// 使用 confers 解析 YAML 内容
@@ -174,8 +174,7 @@ impl YamlPermissionProvider {
             // 如果没有 json feature，使用 serde_yaml_ng 直接解析
             #[cfg(feature = "yaml")]
             {
-                serde_yaml_ng::from_str(content)
-                    .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+                serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
             }
             #[cfg(not(feature = "yaml"))]
             {
@@ -220,15 +219,13 @@ impl RefreshablePermissionProvider for YamlPermissionProvider {
     async fn refresh(&mut self) -> Result<(), PermissionProviderError> {
         if let Some(ref path) = self.path {
             match tokio::fs::read_to_string(path).await {
-                Ok(content) => {
-                    match parse_permission_yaml_async(&content, path).await {
-                        Ok(config) => {
-                            self.config = Arc::new(config);
-                            Ok(())
-                        }
-                        Err(e) => Err(PermissionProviderError::LoadError(e.to_string())),
+                Ok(content) => match parse_permission_yaml_async(&content, path).await {
+                    Ok(config) => {
+                        self.config = Arc::new(config);
+                        Ok(())
                     }
-                }
+                    Err(e) => Err(PermissionProviderError::LoadError(e.to_string())),
+                },
                 Err(e) => Err(PermissionProviderError::LoadError(e.to_string())),
             }
         } else {
@@ -258,16 +255,14 @@ async fn parse_permission_yaml_async(content: &str, source: &str) -> Result<Perm
     #[cfg(feature = "json")]
     {
         let json_value = annotated.to_json();
-        serde_json::from_value(json_value)
-            .map_err(|e| format!("Config deserialization error: {}", e))
+        serde_json::from_value(json_value).map_err(|e| format!("Config deserialization error: {}", e))
     }
     #[cfg(not(feature = "json"))]
     {
         // 如果没有 json feature，直接尝试从 ConfigValue 反序列化
-        let json_str = serde_json::to_string(&annotated.inner)
-            .map_err(|e| format!("JSON serialization error: {}", e))?;
-        serde_json::from_str(&json_str)
-            .map_err(|e| format!("Config deserialization error: {}", e))
+        let json_str =
+            serde_json::to_string(&annotated.inner).map_err(|e| format!("JSON serialization error: {}", e))?;
+        serde_json::from_str(&json_str).map_err(|e| format!("Config deserialization error: {}", e))
     }
 }
 
