@@ -61,6 +61,8 @@ fn run_example(name: &str) -> ExitCode {
         "migration" => "migration",
         "global_index" => "global_index",
         "macro_usage" => "macro_usage",
+        "dependency_injection" => "dependency_injection",
+        "di" => "dependency_injection",
         _ => {
             eprintln!("❌ 未知的示例名称: {}", name);
             eprintln!("\n可用的示例:");
@@ -118,13 +120,14 @@ fn show_interactive_menu() -> ExitCode {
     println!(" 14. migration       - 数据库迁移");
     println!(" 15. global_index    - 全局索引");
     println!(" 16. macro_usage     - 宏使用完整示例");
+    println!(" 17. dependency_injection - 依赖注入完整示例");
     println!();
 
     println!("🔧 其他:");
     println!("  0. 退出");
     println!();
 
-    print!("请选择要运行的示例 (0-16): ");
+    print!("请选择要运行的示例 (0-17): ");
     use std::io::Write;
     std::io::stdout().flush().unwrap();
 
@@ -152,6 +155,7 @@ fn show_interactive_menu() -> ExitCode {
         "14" => run_example("migration"),
         "15" => run_example("global_index"),
         "16" => run_example("macro_usage"),
+        "17" => run_example("dependency_injection"),
         _ => {
             println!("❌ 无效的选择，请重新运行程序");
             ExitCode::FAILURE
@@ -179,4 +183,5 @@ fn list_examples() {
     println!("    - migration");
     println!("    - global_index");
     println!("    - macro_usage");
+    println!("    - dependency_injection");
 }
