@@ -13,12 +13,12 @@
 //! - 批量检查
 
 #[cfg(feature = "permission-engine")]
-use dbnexus::{
-    EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource,
-    PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
-};
-#[cfg(feature = "permission-engine")]
 use dbnexus::access::permission_engine::PermissionContext;
+#[cfg(feature = "permission-engine")]
+use dbnexus::{
+    EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource, PermissionRule,
+    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
+};
 
 #[cfg(feature = "permission-engine")]
 use std::sync::Arc;

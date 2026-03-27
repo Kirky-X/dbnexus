@@ -12,8 +12,8 @@
 //! - 权限缓存和刷新
 
 use dbnexus::{
-    EnginePermissionProvider, PermissionAction, PermissionDecision, PermissionRule, PolicyDecisionPoint,
-    RbacPermissionProvider, Role, EngineYamlPermissionProvider,
+    EnginePermissionProvider, EngineYamlPermissionProvider, PermissionAction, PermissionDecision, PermissionRule,
+    PolicyDecisionPoint, RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -118,8 +118,10 @@ async fn test_yaml_permission_check() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 先刷新缓存以加载配置
@@ -250,8 +252,10 @@ async fn test_permission_provider_refresh() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 刷新权限缓存
@@ -270,8 +274,10 @@ async fn test_get_allowed_resources() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 先刷新缓存以加载配置
@@ -295,8 +301,10 @@ async fn test_get_allowed_actions() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider.clone());
 
     // 先刷新缓存以加载配置
@@ -323,8 +331,10 @@ async fn test_wildcard_resource_matching() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 先刷新缓存以加载配置
@@ -343,8 +353,10 @@ async fn test_multiple_providers_priority() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let yaml_provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let yaml_provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(yaml_provider);
 
     // 先刷新缓存以加载配置
@@ -366,8 +378,10 @@ async fn test_permission_decision_latency() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
 
-    let provider = Arc::new(EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-            .expect("Failed to create YAML provider"));
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
     let pdp = PolicyDecisionPoint::new(provider);
 
     // 执行多次权限检查以测试延迟
