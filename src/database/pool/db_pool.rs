@@ -290,6 +290,10 @@ impl DbPool {
             }),
         };
 
+        // 启动后台健康检查任务
+        #[cfg(feature = "pool-health-check")]
+        pool.start_background_health_check();
+
         // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
         #[cfg(feature = "pool-warmup")]
         {
@@ -350,9 +354,32 @@ impl DbPool {
             }
         }
 
-        // 启动后台健康检查任务
-        #[cfg(feature = "pool-health-check")]
-        pool.start_background_health_check();
+        // 加载权限策略到缓存
+        #[cfg(feature = "permission")]
+        {
+            let permission_config_guard = pool.inner.permission_config.lock().await;
+
+            if let Some(ref perm_config) = *permission_config_guard {
+                #[cfg(feature = "permission")]
+                {
+                    for (role, policy) in &perm_config.roles {
+                        let _ = pool.inner.policy_cache.set(role, policy).await;
+                    }
+                }
+            }
+            drop(permission_config_guard);
+        }
+
+        #[cfg(feature = "auto-migrate")]
+        if config.auto_migrate {
+            if let Some(ref migrations_dir) = config.migrations_dir {
+                if migrations_dir.exists() {
+                    let applied = pool.run_migrations(migrations_dir).await?;
+                } else {
+                    // migrations directory does not exist, skip migration
+                }
+            }
+        }
 
         Ok(pool)
     }
@@ -542,11 +569,11 @@ impl DbPool {
                     Ok(perm_config) => {
                         return Some(perm_config);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         return None;
                     }
                 },
-                Err(e) => {
+                Err(_e) => {
                     return None;
                 }
             }
@@ -589,6 +616,7 @@ impl DbPool {
             #[cfg(not(feature = "yaml"))]
             {
                 Err(format!(
+                    "Cannot parse permission config from '{}': neither JSON nor YAML support available",
                     source
                 ))
             }
@@ -680,7 +708,6 @@ impl DbPool {
             return Ok(());
         }
 
-
         // 检查角色是否存在
         if permission_config
             .as_ref()
@@ -743,15 +770,9 @@ impl DbPool {
         .await;
 
         match result {
-            Ok(Ok(_)) => {
-                true
-            }
-            Ok(Err(e)) => {
-                false
-            }
-            Err(_) => {
-                false
-            }
+            Ok(Ok(_)) => true,
+            Ok(Err(_e)) => false,
+            Err(_) => false,
         }
     }
 
@@ -888,7 +909,6 @@ impl DbPool {
             // 重建空闲队列（只保留有效连接）
             idle.extend(valid_connections);
 
-
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
             let needed = config.min_connections.saturating_sub(current_idle as u32) as usize;
@@ -904,9 +924,6 @@ impl DbPool {
                         return Err(sea_orm::DbErr::Custom(format!("Failed to recreate connections: {}", e)));
                     }
                 }
-            }
-
-            if recreated_count > 0 {
             }
         } else {
             // 没有无效连接，恢复有效连接到池中
@@ -946,12 +963,7 @@ impl DbPool {
         std::env::var("DB_HEALTH_CHECK_INTERVAL")
             .ok()
             .and_then(|v| v.parse().ok())
-            .map(|v: u64| {
-                let clamped = v.clamp(5, 300);
-                if v != clamped {
-                }
-                clamped
-            })
+            .map(|v: u64| v.clamp(5, 300))
             .unwrap_or(30)
     }
 
@@ -977,15 +989,7 @@ impl DbPool {
                 tokio::select! {
                     _ = interval.tick() => {
                         // 执行连接健康检查
-                        match pool.validate_and_recreate_connections().await {
-                            Ok(recreated) => {
-                                if recreated > 0 {
-                                } else {
-                                }
-                            }
-                            Err(e) => {
-                            }
-                        }
+                        let _ = pool.validate_and_recreate_connections().await;
                     }
                     _ = shutdown.notified() => {
                         break;
@@ -1039,7 +1043,11 @@ impl DbPool {
         // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
         // 信号量提供公平的等待队列，避免惊群效应
         let timeout_duration = self.inner.config.acquire_timeout_duration();
+
+        // 仅在启用 metrics 时需要记录开始时间
+        #[cfg(feature = "metrics")]
         let start = Instant::now();
+
         let acquire_result = timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
 
         // wait_count 递减（无论成功或失败）
@@ -1061,18 +1069,15 @@ impl DbPool {
                 )));
             }
             Err(_) => {
-                // Timeout - 分级告警
-                let elapsed_ms = start.elapsed().as_millis() as u64;
+                // Timeout - 记录超时指标
                 #[cfg(feature = "metrics")]
-                if let Some(ref collector) = self.inner.metrics_collector {
-                    collector.record_connection_timeout_level(elapsed_ms);
+                {
+                    let elapsed_ms = start.elapsed().as_millis() as u64;
+                    if let Some(ref collector) = self.inner.metrics_collector {
+                        collector.record_connection_timeout_level(elapsed_ms);
+                    }
                 }
 
-                // 分级日志告警
-                if elapsed_ms >= 10_000 {
-                } else if elapsed_ms >= 5_000 {
-                } else {
-                }
                 return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                     sea_orm::ConnAcquireErr::Timeout,
                 )));

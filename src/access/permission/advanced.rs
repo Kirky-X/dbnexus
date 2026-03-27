@@ -185,6 +185,7 @@ impl AdvancedRbacProvider {
         while let Some((current, depth)) = queue.pop_front() {
             // 检查深度限制
             if depth > MAX_INHERITANCE_DEPTH {
+                // 角色继承深度超过限制，停止遍历
                 continue;
             }
 

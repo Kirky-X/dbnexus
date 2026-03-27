@@ -329,7 +329,8 @@ impl From<SerializableMigrationVersion> for MigrationVersion {
         let applied_at =
             match time::OffsetDateTime::parse(&sm.applied_at, &time::format_description::well_known::Rfc3339) {
                 Ok(dt) => dt,
-                Err(e) => {
+                Err(_) => {
+                    // 解析失败，使用当前时间
                     time::OffsetDateTime::now_utc()
                 }
             };

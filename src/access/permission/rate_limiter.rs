@@ -360,6 +360,7 @@ impl RateLimiter {
         // 删除找到的桶
         if let Some(key) = oldest_key {
             if self.buckets.remove(&key).is_some() {
+                // LRU 驱逐记录（已移除 tracing）
             }
         }
     }
