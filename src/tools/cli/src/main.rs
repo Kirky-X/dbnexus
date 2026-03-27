@@ -8,10 +8,10 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
-use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
 #[cfg(feature = "sql-parser")]
 use dbnexus::sql_parser::{SqlOperationType, SqlParser};
-use dbnexus::{DbError, DbPool, DbResult, DatabaseType as MigrationDatabaseType};
+use dbnexus::{DatabaseType as MigrationDatabaseType, DbError, DbPool, DbResult};
+use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

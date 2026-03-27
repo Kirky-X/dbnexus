@@ -25,7 +25,6 @@ permission = ["dbnexus/permission"]
 config-env = ["dbnexus/config-env"]
 audit = ["dbnexus/audit"]
 metrics = ["dbnexus/metrics"]
-tracing = ["dbnexus/tracing"]
 migration = ["dbnexus/migration", "dbnexus/auto-migrate", "dbnexus/runtime-tokio-rustls", "dbnexus/permission", "dbnexus/cache"]
 all-optional = ["dbnexus/all-optional"]
 

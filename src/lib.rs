@@ -13,7 +13,6 @@
 //! - **权限控制**: 声明式宏自动生成权限检查代码
 //! - **连接池管理**: 动态配置修正与健康检查
 //! - **监控指标**: Prometheus 指标导出
-//! - **日志系统**: tracing 结构化日志与 OpenTelemetry 分布式追踪
 //!
 //! # 快速开始
 //!
@@ -34,36 +33,9 @@
 //!     let session = pool.get_session("admin").await?;
 //!     Ok(())
 //! }
-//! # 日志系统
+//! # 监控指标
 //!
-//! DBNexus 使用 `tracing` 框架进行结构化日志和分布式追踪。
-//!
-//! ## 初始化日志
-//!
-//! 在应用入口点调用一次即可启用日志输出：
-//!
-//! ```rust,no_run,ignore
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## 进阶配置
-//!
-//! 使用 `TracingBuilder` 精确控制输出格式和日志级别：
-//!
-//! ```rust,no_run,ignore
-//!
-//! TracingBuilder::new()
-//!     .with_json()                           // JSON 结构化输出
-//!     .with_level("dbnexus=debug,info")    // 自定义日志级别
-//!     .init()?;
-//! ```
-//!
-//! ## 分布式追踪（OpenTelemetry）
-//!
-//! 需要分布式追踪时，启用 `tracing` 特性并参考 `dbnexus::tracing` 模块文档。
+//! DBNexus 提供 Prometheus 指标导出功能。
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -165,8 +137,8 @@ pub use crate::access::permission::{
 
 #[cfg(all(feature = "permission", feature = "permission-engine"))]
 pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionProvider,
-    PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionProvider, PermissionProviderError,
+    RolePolicy, TablePermission, YamlPermissionProvider,
 };
 
 #[cfg(feature = "authentication")]
@@ -198,33 +170,32 @@ pub use crate::access::permission_engine::{
 };
 
 // Observability 导出
-#[cfg(feature = "metrics")]
-pub use crate::observability::metrics::{
-    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles,
-    MetricsCollector, MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig,
-    SlowQueryRecord, ThroughputStats, TransactionStats,
-};
 #[cfg(feature = "health-check")]
 pub use crate::observability::health::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker,
-    HealthStatus, PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
+    PoolHealthMetrics,
 };
-
-// Tracing 导出
-#[cfg(feature = "tracing")]
+#[cfg(feature = "metrics")]
+pub use crate::observability::metrics::{
+    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
+    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
+    TransactionStats,
+};
 
 // Storage 导出
 #[cfg(feature = "cache")]
 pub use crate::storage::cache::{CacheBackend, CacheError, CacheKey, CacheResult, OxcacheBackend};
 
 #[cfg(all(feature = "global-index", feature = "with-json"))]
-pub use crate::storage::global_index::{GlobalIndex, IndexEntry, SyncEvent, SyncResult, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED};
+pub use crate::storage::global_index::{
+    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
+};
 
 // Business 导出
 #[cfg(feature = "audit")]
 pub use crate::business::audit::{
-    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder,
-    AuditOperation, AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
+    AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
 // AuditResult 类型别名
 #[cfg(feature = "audit")]
