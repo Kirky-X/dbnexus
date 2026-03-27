@@ -384,14 +384,9 @@ impl SqlGenerator {
     }
 
     /// 生成创建表的 SQL
-    pub fn generate_create_table_sql(&self, table: &Table) -> String {
+    pub fn generate_create_table_sql(&self, table: &Table) -> Result<String, String> {
         // 验证表名
-        let table_name = match validate_sql_identifier(&table.name, "表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let table_name = validate_sql_identifier(&table.name, "表名")?;
 
         let mut sql = format!("CREATE TABLE {} (\n", table_name);
 
@@ -399,7 +394,8 @@ impl SqlGenerator {
             .columns
             .iter()
             .map(|col| self.generate_column_definition(col, &table.primary_key_columns))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e)?;
 
         sql.push_str(&column_defs.join(",\n"));
 
@@ -409,13 +405,9 @@ impl SqlGenerator {
             let pk_columns: Vec<String> = table
                 .primary_key_columns
                 .iter()
-                .map(|col| match validate_sql_identifier(col, "主键列名") {
-                    Ok(validated) => validated,
-                    Err(e) => {
-                        "***INVALID***".to_string()
-                    }
-                })
-                .collect();
+                .map(|col| validate_sql_identifier(col, "主键列名"))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e)?;
             sql.push_str(&format!("    PRIMARY KEY ({})", pk_columns.join(", ")));
         }
 
@@ -425,28 +417,23 @@ impl SqlGenerator {
         for index in &table.indexes {
             if !index.is_constraint {
                 sql.push_str("\n\n");
-                sql.push_str(&self.generate_create_index_sql(index));
+                sql.push_str(&self.generate_create_index_sql(index)?);
             }
         }
 
         // 生成外键
         for fk in &table.foreign_keys {
             sql.push_str("\n\n");
-            sql.push_str(&self.generate_add_foreign_key_sql(fk));
+            sql.push_str(&self.generate_add_foreign_key_sql(fk)?);
         }
 
-        sql
+        Ok(sql)
     }
 
     /// 生成列定义
-    fn generate_column_definition(&self, column: &Column, _pk_columns: &[String]) -> String {
+    fn generate_column_definition(&self, column: &Column, _pk_columns: &[String]) -> Result<String, String> {
         // 验证列名
-        let column_name = match validate_sql_identifier(&column.name, "列名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("    -- 错误: {}\n", e);
-            }
-        };
+        let column_name = validate_sql_identifier(&column.name, "列名")?;
 
         let mut def = format!("    {} {}", column_name, column.column_type.to_sql(self.db_type));
 
@@ -473,86 +460,43 @@ impl SqlGenerator {
             // 主键已在表级别处理
         }
 
-        def
+        Ok(def)
     }
 
     /// 生成创建索引的 SQL
-    pub fn generate_create_index_sql(&self, index: &Index) -> String {
+    pub fn generate_create_index_sql(&self, index: &Index) -> Result<String, String> {
         // 验证索引名
-        let index_name = match validate_sql_identifier(&index.name, "索引名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let index_name = validate_sql_identifier(&index.name, "索引名")?;
 
         // 验证表名
-        let table_name = match validate_sql_identifier(&index.table_name, "表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let table_name = validate_sql_identifier(&index.table_name, "表名")?;
 
         // 验证列名
         let validated_columns: Vec<String> = index
             .columns
             .iter()
-            .map(|col| match validate_sql_identifier(col, "索引列名") {
-                Ok(name) => name,
-                Err(e) => {
-                    "***INVALID***".to_string()
-                }
-            })
-            .collect();
+            .map(|col| validate_sql_identifier(col, "索引列名"))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e)?;
 
         let unique = if index.is_unique { "UNIQUE " } else { "" };
-        format!(
+        Ok(format!(
             "CREATE {}INDEX {} ON {} ({})",
             unique,
             index_name,
             table_name,
             validated_columns.join(", ")
-        )
+        ))
     }
 
     /// 生成添加外键的 SQL
-    fn generate_add_foreign_key_sql(&self, fk: &ForeignKey) -> String {
+    fn generate_add_foreign_key_sql(&self, fk: &ForeignKey) -> Result<String, String> {
         // 验证所有标识符
-        let table_name = match validate_sql_identifier(&fk.table_name, "外键表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-
-        let constraint_name = match validate_sql_identifier(&fk.name, "外键约束名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-
-        let column_name = match validate_sql_identifier(&fk.column_name, "外键列名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-
-        let referenced_table_name = match validate_sql_identifier(&fk.referenced_table_name, "外键引用表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-
-        let referenced_column_name = match validate_sql_identifier(&fk.referenced_column_name, "外键引用列名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let table_name = validate_sql_identifier(&fk.table_name, "外键表名")?;
+        let constraint_name = validate_sql_identifier(&fk.name, "外键约束名")?;
+        let column_name = validate_sql_identifier(&fk.column_name, "外键列名")?;
+        let referenced_table_name = validate_sql_identifier(&fk.referenced_table_name, "外键引用表名")?;
+        let referenced_column_name = validate_sql_identifier(&fk.referenced_column_name, "外键引用列名")?;
 
         let mut sql = format!(
             "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({})",
@@ -568,93 +512,68 @@ impl SqlGenerator {
         }
 
         sql.push(';');
-        sql
+        Ok(sql)
     }
 
     /// 生成删除表的 SQL
-    pub fn generate_drop_table_sql(&self, table_name: &str) -> String {
-        let validated_name = match validate_sql_identifier(table_name, "表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-        format!("DROP TABLE {};", validated_name)
+    pub fn generate_drop_table_sql(&self, table_name: &str) -> Result<String, String> {
+        let validated_name = validate_sql_identifier(table_name, "表名")?;
+        Ok(format!("DROP TABLE {};", validated_name))
     }
 
     /// 生成添加列的 SQL
-    pub fn generate_add_column_sql(&self, table_name: &str, column: &Column) -> String {
+    pub fn generate_add_column_sql(&self, table_name: &str, column: &Column) -> Result<String, String> {
         // 验证表名
-        let validated_table_name = match validate_sql_identifier(table_name, "表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let validated_table_name = validate_sql_identifier(table_name, "表名")?;
 
-        let col_def = self.generate_column_definition(column, &Vec::new());
-        format!(
+        let col_def = self.generate_column_definition(column, &Vec::new())?;
+        Ok(format!(
             "ALTER TABLE {} ADD {};",
             validated_table_name,
             col_def.trim_start_matches("    ")
-        )
+        ))
     }
 
     /// 生成删除列的 SQL
-    pub fn generate_drop_column_sql(&self, table_name: &str, column_name: &str) -> String {
+    pub fn generate_drop_column_sql(&self, table_name: &str, column_name: &str) -> Result<String, String> {
         // 验证表名和列名
-        let validated_table_name = match validate_sql_identifier(table_name, "表名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
-
-        let validated_column_name = match validate_sql_identifier(column_name, "列名") {
-            Ok(name) => name,
-            Err(e) => {
-                return format!("-- 错误: {}\n", e);
-            }
-        };
+        let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+        let validated_column_name = validate_sql_identifier(column_name, "列名")?;
 
         match self.db_type {
-            DatabaseType::MySql => {
-                format!(
-                    "ALTER TABLE {} DROP COLUMN {};",
-                    validated_table_name, validated_column_name
-                )
-            }
-            DatabaseType::Postgres => {
-                format!(
-                    "ALTER TABLE {} DROP COLUMN {};",
-                    validated_table_name, validated_column_name
-                )
-            }
+            DatabaseType::MySql => Ok(format!(
+                "ALTER TABLE {} DROP COLUMN {};",
+                validated_table_name, validated_column_name
+            )),
+            DatabaseType::Postgres => Ok(format!(
+                "ALTER TABLE {} DROP COLUMN {};",
+                validated_table_name, validated_column_name
+            )),
             DatabaseType::Sqlite => {
                 // SQLite 不支持直接删除列，需要重建表
-                format!(
+                Ok(format!(
                     "-- SQLite 不支持直接删除列，请手动重建表 {}
  ALTER TABLE {} DROP COLUMN {};",
                     validated_table_name, validated_table_name, validated_column_name
-                )
+                ))
             }
         }
     }
 
     /// 生成迁移的完整 SQL
-    pub fn generate_migration_sql(&self, migration: &Migration) -> String {
+    pub fn generate_migration_sql(&self, migration: &Migration) -> Result<String, String> {
         let mut sql = String::new();
 
         for change in &migration.table_changes {
             match change {
                 TableChange::CreateTable(table) => {
                     sql.push_str(&format!("-- 创建表: {}\n", table.name));
-                    sql.push_str(&self.generate_create_table_sql(table));
+                    sql.push_str(&self.generate_create_table_sql(table)?);
                     sql.push_str("\n\n");
                 }
                 TableChange::DropTable { table_name } => {
                     sql.push_str(&format!("-- 删除表: {}\n", table_name));
-                    sql.push_str(&self.generate_drop_table_sql(table_name));
+                    sql.push_str(&self.generate_drop_table_sql(table_name)?);
                     sql.push_str("\n\n");
                 }
                 TableChange::AlterTable {
@@ -671,19 +590,19 @@ impl SqlGenerator {
 
                     for col in added_columns {
                         sql.push_str(&format!("-- 添加列: {}\n", col.name));
-                        sql.push_str(&self.generate_add_column_sql(table_name, col));
+                        sql.push_str(&self.generate_add_column_sql(table_name, col)?);
                         sql.push('\n');
                     }
 
                     for col_name in removed_columns {
                         sql.push_str(&format!("-- 删除列: {}\n", col_name));
-                        sql.push_str(&self.generate_drop_column_sql(table_name, col_name));
+                        sql.push_str(&self.generate_drop_column_sql(table_name, col_name)?);
                         sql.push('\n');
                     }
 
                     for index in added_indexes {
                         sql.push_str(&format!("-- 添加索引: {}\n", index.name));
-                        sql.push_str(&self.generate_create_index_sql(index));
+                        sql.push_str(&self.generate_create_index_sql(index)?);
                         sql.push('\n');
                     }
 
@@ -694,7 +613,7 @@ impl SqlGenerator {
 
                     for fk in added_foreign_keys {
                         sql.push_str(&format!("-- 添加外键: {}\n", fk.name));
-                        sql.push_str(&self.generate_add_foreign_key_sql(fk));
+                        sql.push_str(&self.generate_add_foreign_key_sql(fk)?);
                         sql.push('\n');
                     }
 
@@ -708,7 +627,7 @@ impl SqlGenerator {
             }
         }
 
-        sql.trim_end().to_string()
+        Ok(sql.trim_end().to_string())
     }
 }
 
@@ -1025,7 +944,7 @@ impl RustEntityParser {
     ) -> Result<String, String> {
         let table = Self::parse_entity(entity_code, table_name)?;
         let generator = SqlGenerator::new(db_type);
-        Ok(generator.generate_create_table_sql(&table))
+        generator.generate_create_table_sql(&table)
     }
 }
 
@@ -1156,7 +1075,7 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table);
+        let sql = pg.generate_create_table_sql(&table).expect("Failed to generate SQL");
 
         assert!(sql.contains("CREATE TABLE users"));
         assert!(sql.contains("id INTEGER"));

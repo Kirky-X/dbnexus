@@ -794,6 +794,27 @@ pub fn is_ddl_operation(sql: &str) -> bool {
     false
 }
 
+/// 估算查询深度（简化版，通过嵌套括号）
+fn estimate_query_depth(sql: &str) -> usize {
+    let mut depth: usize = 1;
+    let mut max_depth: usize = 1;
+
+    for char in sql.chars() {
+        match char {
+            '(' => {
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+
+    max_depth
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1255,25 +1276,4 @@ mod tests {
         let normalized = normalize_unicode(ligature);
         assert!(normalized.contains("fi") || normalized.contains("\u{FB01}"));
     }
-}
-
-/// 估算查询深度（简化版，通过嵌套括号）
-fn estimate_query_depth(sql: &str) -> usize {
-    let mut depth: usize = 1;
-    let mut max_depth: usize = 1;
-
-    for char in sql.chars() {
-        match char {
-            '(' => {
-                depth += 1;
-                max_depth = max_depth.max(depth);
-            }
-            ')' => {
-                depth = depth.saturating_sub(1);
-            }
-            _ => {}
-        }
-    }
-
-    max_depth
 }
