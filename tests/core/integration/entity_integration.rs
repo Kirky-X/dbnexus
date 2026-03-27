@@ -7,9 +7,9 @@
 //!
 //! 测试实体类型重导出和与 sea-orm 的集成
 
+use dbnexus::Condition;
 use dbnexus::DbPool;
 use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
-use dbnexus::Condition;
 use sea_orm::ActiveValue;
 
 /// 根据数据库 URL 判断数据库类型

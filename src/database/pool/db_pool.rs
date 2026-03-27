@@ -590,18 +590,16 @@ impl DbPool {
         if let Some(ref path) = config.permissions_path {
             tracing::info!("Loading permission config from: {}", path);
             match tokio::fs::read_to_string(path).await {
-                Ok(content) => {
-                    match Self::parse_permission_yaml(&content, path) {
-                        Ok(perm_config) => {
-                            tracing::info!("Successfully loaded permission config from: {}", path);
-                            return Some(perm_config);
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to parse permission config from '{}': {}", path, e);
-                            return None;
-                        }
+                Ok(content) => match Self::parse_permission_yaml(&content, path) {
+                    Ok(perm_config) => {
+                        tracing::info!("Successfully loaded permission config from: {}", path);
+                        return Some(perm_config);
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse permission config from '{}': {}", path, e);
+                        return None;
+                    }
+                },
                 Err(e) => {
                     tracing::warn!("Failed to read permission config from '{}': {}", path, e);
                     return None;
@@ -626,8 +624,7 @@ impl DbPool {
     #[cfg(feature = "confers")]
     #[cfg(feature = "json")]
     fn parse_permission_json(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        serde_json::from_str(content)
-            .map_err(|e| format!("JSON parse error in '{}': {}", source, e))
+        serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
     }
 
     /// 解析权限配置
@@ -644,8 +641,7 @@ impl DbPool {
             // 如果没有 json feature，使用 serde_yaml_ng 直接解析
             #[cfg(feature = "yaml")]
             {
-                serde_yaml_ng::from_str(content)
-                    .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+                serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
             }
             #[cfg(not(feature = "yaml"))]
             {

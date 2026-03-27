@@ -20,8 +20,7 @@ mod common;
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
 #[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
-    serde_json::from_str(json)
-        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+    serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 #[tokio::test]
@@ -367,7 +366,8 @@ async fn test_check_permission_denied_returns_permission_error() {
     // 使用非 admin 角色进行权限测试
     let session = pool.get_session("test_user").await.unwrap();
 
-    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_file).unwrap()).expect("Failed to parse permission JSON");
+    let perm_config =
+        parse_json_config(&std::fs::read_to_string(&perm_file).unwrap()).expect("Failed to parse permission JSON");
     session.permission_ctx().load_policy(&perm_config).await.unwrap();
 
     let result = session.check_permission("orders", &Operation::Select).await;

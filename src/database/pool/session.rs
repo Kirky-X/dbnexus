@@ -122,7 +122,7 @@ impl Session {
         if self.role == self.pool_inner.admin_role {
             return Ok(());
         }
-        
+
         if self.permission_ctx.check_table_access(table, operation).await {
             Ok(())
         } else {
@@ -277,7 +277,6 @@ impl Session {
                         if self.role == self.pool_inner.admin_role {
 
                             // admin 有完全权限，跳过检查
-
                         } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                             return Err(DbError::Permission(format!(
                                 "Permission denied for {} on {}",
@@ -394,7 +393,6 @@ impl Session {
                     if self.role == self.pool_inner.admin_role {
 
                         // admin 有完全权限，跳过检查
-
                     } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                         return Err(DbError::Permission(format!(
                             "Permission denied for {} on {}",
@@ -440,7 +438,6 @@ impl Session {
             if self.role == self.pool_inner.admin_role {
 
                 // admin 有完全权限，跳过检查
-
             } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",
@@ -625,13 +622,9 @@ impl Session {
 
             // Admin 角色绕过权限检查
 
-
             if self.role == self.pool_inner.admin_role {
 
-
                 // admin 有完全权限，跳过检查
-
-
             } else if !self.permission_ctx.check_table_access(_table_name, &action).await {
                 return Err(DbError::Permission(format!(
                     "Permission denied for {} on {}",

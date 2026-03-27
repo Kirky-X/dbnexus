@@ -7,7 +7,7 @@
 //!
 //! 覆盖 DbPool 初始化、连接、关闭和 DbPoolBuilder 构建等功能测试
 
-use dbnexus::{DbPool, DbPoolBuilder, DatabaseType};
+use dbnexus::{DatabaseType, DbPool, DbPoolBuilder};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -119,7 +119,9 @@ async fn test_dbpool_try_from_with_permission() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create DbPool with with_config");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create DbPool with with_config");
 
     // 验证权限缓存已初始化
     let status = pool.status();
