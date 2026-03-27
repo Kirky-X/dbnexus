@@ -178,8 +178,8 @@ pub use crate::observability::health::{
 #[cfg(feature = "metrics")]
 pub use crate::observability::metrics::{
     ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
-    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
-    TransactionStats,
+    MetricsCollectorTrait, MetricsError, MockMetrics, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord,
+    ThroughputStats, TransactionStats,
 };
 
 // Storage 导出
