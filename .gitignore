@@ -40,6 +40,7 @@ logs/
 .claude/
 .opencode/
 openspec/
+docs/superpowers/
 
 # =============================================================================
 # Environment & Secrets
@@ -104,3 +105,4 @@ docker-compose.yml
 
 # 本地开发工具
 Makefile
+.gitnexus

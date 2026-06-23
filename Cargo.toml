@@ -101,8 +101,9 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml"]  # 权限控制（不依赖缓存）
-permission-with-cache = ["permission", "cache"]  # 权限控制（带缓存）
+pool = []  # 连接池基础模块（零依赖）
+permission = ["dashmap", "futures", "yaml"]  # 权限控制（dashmap 用于旧版 access/permission，yaml 用于策略解析，futures 用于测试）
+permission-with-cache = ["permission", "cache"]  # 权限控制（带缓存注入）
 sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
 macros = ["dbnexus-macros"]
 cache = ["oxcache"]  # 缓存功能（基于 oxcache）
@@ -231,6 +232,7 @@ tokio-test = { workspace = true }
 assert_cmd = "2.2"
 predicates = "3.1"
 criterion = "0.5"
+tempfile = "3.27"
 
 [lints]
 workspace = true
@@ -254,7 +256,7 @@ required-features = ["sql-parser"]
 [[test]]
 name = "core_session_transaction"
 path = "tests/core/integration/session_transaction.rs"
-required-features = ["permission"]
+required-features = ["permission", "confers"]
 
 [[test]]
 name = "core_permission_integration"
@@ -299,7 +301,7 @@ required-features = ["permission-engine"]
 [[test]]
 name = "cross_cutting_benchmarks"
 path = "tests/cross_cutting/benchmarks/bench.rs"
-required-features = ["permission"]
+required-features = ["permission", "confers"]
 
 [[test]]
 name = "cross_cutting_cli"

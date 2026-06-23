@@ -3,55 +3,19 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! DB Nexus - 企业级数据库抽象层
+//! DBNexus - 企业级数据库抽象层
 //!
-//! 基于 Sea-ORM 的高性能、高安全性 Rust 数据库访问层
-//!
-//! # 功能特性
-//!
-//! - **Session 机制**: RAII 自动管理数据库连接生命周期
-//! - **权限控制**: 声明式宏自动生成权限检查代码
-//! - **连接池管理**: 动态配置修正与健康检查
-//! - **监控指标**: Prometheus 指标导出
-//!
-//! # 快速开始
-//!
-//! ```rust,no_run,ignore
-//! use dbnexus::DbPool;
-//!
-//! #[derive(dbnexus::DbEntity)]
-//! #[table_name = "users"]
-//! struct User {
-//!     #[primary_key]
-//!     id: i64,
-//!     name: String,
-//! }
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let pool = DbPool::new("postgresql://user:pass@localhost/db").await?;
-//!     let session = pool.get_session("admin").await?;
-//!     Ok(())
-//! }
-//! # 监控指标
-//!
-//! DBNexus 提供 Prometheus 指标导出功能。
+//! 基于积木架构的分层模块设计：
+//! - **Foundation 层**: 零依赖基础模块 (pool)
+//! - **Domain 层**: 领域模块 (permission, migration, audit, auth)
+//! - **Observability 层**: 可观测模块 (metrics, health)
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
-// 注意: 移除了 `#![allow(dead_code)]` 以恢复编译时警告
-// 未使用的代码应该显式标记或在具体位置添加 `#[allow(dead_code)]`
 
 // ============================================================================
 // 编译期数据库特性互斥检查
 // ============================================================================
-
-// 临时禁用以支持多数据库测试环境
-// #[cfg(all(not(clippy), feature = "sqlite", feature = "postgres"))]
-// compile_error!("Cannot enable both 'sqlite' and 'postgres' features");
-
-// #[cfg(all(not(clippy), feature = "sqlite", feature = "mysql"))]
-// compile_error!("Cannot enable both 'sqlite' and 'mysql' features");
 
 #[cfg(all(not(clippy), feature = "postgres", feature = "mysql"))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
@@ -73,8 +37,14 @@ compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enab
 // 模块声明
 // ============================================================================
 
-/// Foundation 模块 - 错误类型、配置、类型定义
+/// 公共类型模块
+pub mod common;
+
+/// Foundation 层 - 基础模块 (旧版，保持兼容)
 pub mod foundation;
+
+/// Domain 层 - 领域模块
+pub mod domain;
 
 /// Database 模块 - 连接池、迁移、分片
 pub mod database;
@@ -82,33 +52,50 @@ pub mod database;
 /// Access 模块 - 安全、权限、认证
 pub mod access;
 
-/// Observability 模块 - 健康检查、指标、追踪
+/// Observability 层 - 可观测模块
 pub mod observability;
 
-/// Storage 模块 - 缓存、全局索引
+/// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
-/// Business 模块 - 审计等业务功能
+/// Business 模块
 pub mod business;
 
-/// Tools 模块 - 过程宏、CLI
+/// Tools 模块
 pub mod tools;
 
-// 生成的权限角色模块（由 build.rs 自动生成，内部使用）
+// 生成的权限角色模块
 mod generated_roles;
 
 // ============================================================================
-// 公共 API 导出（保持向后兼容）
+// 公共 API 导出
 // ============================================================================
 
-// Foundation 导出
-pub use crate::foundation::config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
+// Common 导出 (新架构)
+pub use crate::common::error::{DbNexusError, DbNexusResult};
+pub use crate::common::types::DatabaseType;
+
+// Foundation 导出 (旧版，保持兼容)
+pub use crate::foundation::config::{CacheConfig, ConfigError, DbConfig, PoolConfig};
 pub use crate::foundation::entity::{ActiveModelTrait, Condition, EntityTrait, Set};
 pub use crate::foundation::error::DbError;
 pub use crate::foundation::error::DbResult;
 pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
-pub use crate::foundation::error::{DbError as DbErrorNew, PermissionError, PoolError};
+
+// Foundation Pool 导出 (新架构)
+#[cfg(feature = "pool")]
+pub use crate::foundation::pool::{
+    PoolConfig as NewPoolConfig, PoolConfigError, PoolConnector, PoolError as NewPoolError, PoolStatus,
+};
+
+// Domain Permission 导出 (新架构)
+#[cfg(feature = "permission")]
+pub use crate::domain::permission::{
+    PermissionAction as DomainPermissionAction, PermissionConfig as NewPermissionConfig, PermissionConfigError,
+    PermissionError as NewPermissionError, PermissionProvider, RolePolicy as DomainRolePolicy,
+    TablePermission as DomainTablePermission,
+};
 
 // Database 导出
 #[cfg(feature = "migration")]
@@ -131,14 +118,16 @@ pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, Sen
 #[cfg(feature = "permission")]
 #[cfg(not(feature = "permission-engine"))]
 pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionContext, PermissionProvider,
-    PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionConfig, PermissionContext,
+    PermissionProvider as AccessPermissionProvider, PermissionProviderError, RolePolicy as AccessRolePolicy,
+    TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
 #[cfg(all(feature = "permission", feature = "permission-engine"))]
 pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionProvider, PermissionProviderError,
-    RolePolicy, TablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionConfig,
+    PermissionProvider as AccessPermissionProvider, PermissionProviderError, RolePolicy as AccessRolePolicy,
+    TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
 #[cfg(feature = "authentication")]
@@ -160,7 +149,6 @@ pub use crate::access::sql_parser::is_ddl_operation;
 pub use crate::access::sql_parser::contains_sql_injection;
 
 #[cfg(feature = "permission-engine")]
-// Access Control 导出
 #[cfg(feature = "permission")]
 pub use crate::access::permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
@@ -178,15 +166,12 @@ pub use crate::observability::health::{
 #[cfg(feature = "metrics")]
 pub use crate::observability::metrics::{
     ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
-    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
-    TransactionStats,
+    MetricsCollectorTrait, MetricsError, MockMetrics, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord,
+    ThroughputStats, TransactionStats,
 };
 
 // Storage 导出
-#[cfg(feature = "cache")]
-pub use crate::storage::cache::{CacheBackend, CacheError, CacheKey, CacheResult, OxcacheBackend};
-
-#[cfg(all(feature = "global-index", feature = "with-json"))]
+#[cfg(feature = "global-index")]
 pub use crate::storage::global_index::{
     GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
 };
@@ -197,18 +182,12 @@ pub use crate::business::audit::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
-// AuditResult 类型别名
 #[cfg(feature = "audit")]
 pub use crate::foundation::error::AuditResult;
 
-// Tools 导出
+// 过程宏
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::DbEntity;
+
 #[cfg(feature = "macros")]
-pub use dbnexus_macros::db_audit;
-#[cfg(feature = "macros")]
-pub use dbnexus_macros::db_cache;
-#[cfg(feature = "macros")]
-pub use dbnexus_macros::db_crud;
-#[cfg(feature = "macros")]
-pub use dbnexus_macros::db_permission;
+pub use dbnexus_macros::{db_audit, db_cache, db_crud, db_permission};
