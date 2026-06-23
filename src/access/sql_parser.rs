@@ -127,7 +127,8 @@ pub enum SqlOperationType {
 ///
 /// # 示例
 ///
-/// ```rust
+/// ```rust,ignore
+/// # // 需要 sql-parser feature
 /// use dbnexus::sql_parser::SqlParser;
 ///
 /// let parser = SqlParser::new();

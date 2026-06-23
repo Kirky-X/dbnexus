@@ -42,9 +42,7 @@ path = "src/security.rs"
 name = "metrics"
 path = "src/metrics.rs"
 
-[[bin]]
-name = "tracing"
-path = "src/tracing.rs"
+# tracing binary 已移除 - tracing 模块已从 dbnexus 中删除
 
 [[bin]]
 name = "audit"
@@ -82,6 +80,10 @@ path = "src/health.rs"
 name = "demo"
 path = "src/main.rs"
 
+[[bin]]
+name = "dependency_injection"
+path = "src/dependency_injection.rs"
+
 [dependencies]
 dbnexus = { path = "..", features = [
     "runtime-tokio-rustls",
@@ -96,7 +98,7 @@ dbnexus = { path = "..", features = [
     "global-index",
     "with-json",
     "metrics",
-    "tracing",
+    # tracing feature 已从 dbnexus 移除
     "audit",
     "migration",
     "health-check",

@@ -494,7 +494,8 @@ impl DbPool {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
+    /// # // 需要 config feature
     /// use dbnexus::DbPool;
     /// use dbnexus::config::DbConfig;
     ///
