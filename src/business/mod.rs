@@ -3,14 +3,12 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! Business 模块
+//! Business 模块（重导出）
 //!
-//! 提供业务相关功能
+//! 实际实现在 [`crate::domain::audit`]
 
-// 单文件模块
+// 重导出 domain 层的审计模块
 #[cfg(feature = "audit")]
-pub mod audit;
-
-// Re-exports
-#[cfg(feature = "audit")]
-pub use audit::{AuditConfig, AuditContext, AuditEvent, AuditLogger, AuditLoggerBuilder};
+pub use crate::domain::audit::{
+    AuditConfig, AuditContext, AuditEvent, AuditLogger, AuditLoggerBuilder, AuditOperation, AuditSeverity, AuditStatus,
+};
