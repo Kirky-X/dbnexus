@@ -358,7 +358,7 @@ impl ShardRouter {
                         Arc::new(pool),
                     );
                 }
-                Err(e) => {
+                Err(_e) => {
                     // 连接池创建失败，但仍注册分片
                     router.register_shard(shard_id, name, format!("{}_{}", config.prefix, shard_id));
                 }
