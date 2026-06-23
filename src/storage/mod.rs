@@ -5,16 +5,12 @@
 
 //! Storage 模块
 //!
-//! 提供缓存系统和全局索引等存储功能
+//! 提供全局索引等存储功能
 
-pub mod cache;
-
-// 单文件模块
 #[cfg(feature = "global-index")]
 pub mod global_index;
 
-// Re-exports
-#[cfg(feature = "cache")]
-pub use cache::{CacheBackend, CacheError, CacheKey, CacheResult, OxcacheBackend};
-#[cfg(all(feature = "global-index", feature = "with-json"))]
-pub use global_index::{GlobalIndex, IndexEntry, SyncEvent};
+#[cfg(feature = "global-index")]
+pub use global_index::{
+    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
+};
