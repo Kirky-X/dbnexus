@@ -10,5 +10,6 @@
 // 重导出 domain 层的审计模块
 #[cfg(feature = "audit")]
 pub use crate::domain::audit::{
-    AuditConfig, AuditContext, AuditEvent, AuditLogger, AuditLoggerBuilder, AuditOperation, AuditSeverity, AuditStatus,
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
+    AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
