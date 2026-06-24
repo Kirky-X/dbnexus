@@ -42,6 +42,10 @@ logs/
 openspec/
 docs/superpowers/
 
+# AI assistant config (local only)
+AGENTS.md
+CLAUDE.md
+
 # =============================================================================
 # Environment & Secrets
 # =============================================================================
@@ -68,6 +72,9 @@ tarpaulin-report.html
 *.sqlite3
 requirements.db
 
+# Database migrations
+migrations/
+
 # =============================================================================
 # Python (if applicable)
 # =============================================================================
@@ -87,7 +94,6 @@ npm-debug.log*
 # =============================================================================
 # Keep These Files (Do NOT ignore)
 # =============================================================================
-# AGENTS.md - AI assistant rules
 # .iflow/ - iFlow configuration
 # .qoder/ - Qoder configuration
 # openspec/ - OpenSpec specifications
