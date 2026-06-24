@@ -286,6 +286,136 @@ impl Migration {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::foundation::config::DatabaseType;
+
+    #[test]
+    fn column_type_to_sql_integer() {
+        assert_eq!(ColumnType::Integer.to_sql(DatabaseType::Sqlite), "INTEGER");
+        assert_eq!(ColumnType::Integer.to_sql(DatabaseType::Postgres), "INTEGER");
+        assert_eq!(ColumnType::Integer.to_sql(DatabaseType::MySql), "INTEGER");
+    }
+
+    #[test]
+    fn column_type_to_sql_string() {
+        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Sqlite), "TEXT");
+        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Postgres), "VARCHAR(255)");
+        assert_eq!(ColumnType::String(Some(64)).to_sql(DatabaseType::MySql), "VARCHAR(64)");
+    }
+
+    #[test]
+    fn column_type_to_sql_boolean() {
+        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Sqlite), "INTEGER");
+        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Postgres), "BOOLEAN");
+    }
+
+    #[test]
+    fn column_type_to_sql_json() {
+        assert_eq!(ColumnType::Json.to_sql(DatabaseType::Sqlite), "TEXT");
+        assert_eq!(ColumnType::Json.to_sql(DatabaseType::Postgres), "JSONB");
+        assert_eq!(ColumnType::Json.to_sql(DatabaseType::MySql), "JSON");
+    }
+
+    #[test]
+    fn column_type_to_sql_custom() {
+        assert_eq!(ColumnType::Custom("UUID".into()).to_sql(DatabaseType::Sqlite), "UUID");
+    }
+
+    #[test]
+    fn schema_new_empty() {
+        let s = Schema::new(DatabaseType::Sqlite);
+        assert_eq!(s.database_type, DatabaseType::Sqlite);
+        assert!(s.tables.is_empty());
+    }
+
+    #[test]
+    fn schema_add_and_get_table() {
+        let mut s = Schema::new(DatabaseType::Sqlite);
+        let table = Table {
+            name: "users".into(),
+            columns: vec![Column {
+                name: "id".into(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: true,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+        s.add_table(table);
+        assert!(s.has_table("users"));
+        assert!(s.get_table("users").is_some());
+        assert!(s.get_table("nonexistent").is_none());
+    }
+
+    #[test]
+    fn migration_new_and_add_change() {
+        let mut m = Migration::new(1, "initial".into());
+        assert_eq!(m.version, 1);
+        assert_eq!(m.description, "initial");
+        m.add_table_change(TableChange::CreateTable(Table {
+            name: "t".into(), columns: vec![], primary_key_columns: vec![],
+            indexes: vec![], foreign_keys: vec![], comment: None,
+        }));
+        assert_eq!(m.table_changes.len(), 1);
+    }
+
+    #[test]
+    fn migration_history_ordering() {
+        let mut h = MigrationHistory::new();
+        assert!(h.applied_migrations.is_empty());
+
+        let v1 = MigrationVersion {
+            version: 2, description: "v2".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m2.sql".into(),
+        };
+        let v2 = MigrationVersion {
+            version: 1, description: "v1".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m1.sql".into(),
+        };
+        h.add_migration(v1);
+        h.add_migration(v2);
+        assert_eq!(h.applied_migrations.len(), 2);
+        assert_eq!(h.get_latest_version(), Some(2));
+    }
+
+    #[test]
+    fn migration_history_pending() {
+        let mut h = MigrationHistory::new();
+        h.add_migration(MigrationVersion {
+            version: 1, description: "v1".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m1.sql".into(),
+        });
+        let all = [
+            Migration::new(1, "v1".into()),
+            Migration::new(2, "v2".into()),
+            Migration::new(3, "v3".into()),
+        ];
+        let pending = h.get_pending_migrations(&all);
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].version, 2);
+        assert_eq!(pending[1].version, 3);
+    }
+
+    #[test]
+    fn foreign_key_action_display() {
+        assert_eq!(ForeignKeyAction::Cascade.to_string(), "CASCADE");
+        assert_eq!(ForeignKeyAction::SetNull.to_string(), "SET NULL");
+        assert_eq!(ForeignKeyAction::NoAction.to_string(), "NO ACTION");
+    }
+}
+
 /// 迁移版本信息
 #[derive(Debug, Clone)]
 pub struct MigrationVersion {

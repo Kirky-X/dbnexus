@@ -90,6 +90,85 @@ impl Default for RbacProvider {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_creates_empty() {
+        let p = RbacProvider::new();
+        assert!(p.get_roles().is_empty());
+    }
+
+    #[test]
+    fn with_default_admin_creates_admin_role() {
+        let p = RbacProvider::with_default_admin();
+        assert_eq!(p.get_roles(), vec!["admin"]);
+        assert!(p.get_role_policy("admin").is_some());
+    }
+
+    #[test]
+    fn add_role_and_get_policy() {
+        let p = RbacProvider::new();
+        p.add_role("editor".into(), RolePolicy {
+            tables: vec![TablePermission {
+                name: "posts".into(),
+                operations: vec![PermissionAction::Select, PermissionAction::Insert],
+            }],
+        });
+        let policy = p.get_role_policy("editor");
+        assert!(policy.is_some());
+    }
+
+    #[test]
+    fn check_access_granted() {
+        let p = RbacProvider::new();
+        p.add_role("user".into(), RolePolicy {
+            tables: vec![TablePermission {
+                name: "articles".into(),
+                operations: vec![PermissionAction::Select],
+            }],
+        });
+        assert!(p.check_access("user", "articles", PermissionAction::Select).unwrap());
+        assert!(!p.check_access("user", "articles", PermissionAction::Insert).unwrap());
+    }
+
+    #[test]
+    fn check_access_wildcard_table_granted() {
+        let p = RbacProvider::new();
+        p.add_role("admin".into(), RolePolicy {
+            tables: vec![TablePermission {
+                name: "*".into(),
+                operations: vec![PermissionAction::Select, PermissionAction::Delete],
+            }],
+        });
+        assert!(p.check_access("admin", "any_table", PermissionAction::Select).unwrap());
+        assert!(p.check_access("admin", "any_table", PermissionAction::Delete).unwrap());
+    }
+
+    #[test]
+    fn check_access_role_not_found() {
+        let p = RbacProvider::new();
+        assert!(p.check_access("ghost", "t", PermissionAction::Select).is_err());
+    }
+
+    #[test]
+    fn get_roles_returns_all() {
+        let p = RbacProvider::new();
+        p.add_role("a".into(), RolePolicy::default());
+        p.add_role("b".into(), RolePolicy::default());
+        let mut roles = p.get_roles();
+        roles.sort();
+        assert_eq!(roles, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn default_is_empty() {
+        let p = RbacProvider::default();
+        assert!(p.get_roles().is_empty());
+    }
+}
+
 impl PermissionProvider for RbacProvider {
     fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
         self.roles.get(role).map(|p| p.clone())

@@ -130,6 +130,128 @@ impl PermissionCheckStatsSnapshot {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_stats_all_zero() {
+        let s = PermissionCheckStats::new();
+        let snap = s.snapshot();
+        assert_eq!(snap.total_checks, 0);
+        assert_eq!(snap.allowed_checks, 0);
+        assert_eq!(snap.denied_checks, 0);
+        assert_eq!(snap.rate_limited_checks, 0);
+        assert_eq!(snap.cache_hits, 0);
+        assert_eq!(snap.cache_misses, 0);
+        assert_eq!(snap.stampede_events, 0);
+    }
+
+    #[test]
+    fn record_allowed_increments() {
+        let s = PermissionCheckStats::new();
+        s.record_allowed();
+        let snap = s.snapshot();
+        assert_eq!(snap.total_checks, 1);
+        assert_eq!(snap.allowed_checks, 1);
+        assert_eq!(snap.denied_checks, 0);
+    }
+
+    #[test]
+    fn record_denied_increments() {
+        let s = PermissionCheckStats::new();
+        s.record_denied();
+        let snap = s.snapshot();
+        assert_eq!(snap.total_checks, 1);
+        assert_eq!(snap.denied_checks, 1);
+    }
+
+    #[test]
+    fn record_rate_limited_increments() {
+        let s = PermissionCheckStats::new();
+        s.record_rate_limited();
+        let snap = s.snapshot();
+        assert_eq!(snap.total_checks, 1);
+        assert_eq!(snap.rate_limited_checks, 1);
+    }
+
+    #[test]
+    fn record_cache_hit() {
+        let s = PermissionCheckStats::new();
+        s.record_cache_hit();
+        assert_eq!(s.snapshot().cache_hits, 1);
+    }
+
+    #[test]
+    fn record_cache_miss() {
+        let s = PermissionCheckStats::new();
+        s.record_cache_miss();
+        assert_eq!(s.snapshot().cache_misses, 1);
+    }
+
+    #[test]
+    fn record_stampede() {
+        let s = PermissionCheckStats::new();
+        s.record_stampede();
+        assert_eq!(s.snapshot().stampede_events, 1);
+    }
+
+    #[test]
+    fn snapshot_is_independent_copy() {
+        let s = PermissionCheckStats::new();
+        s.record_allowed();
+        let snap1 = s.snapshot();
+        s.record_allowed();
+        let snap2 = s.snapshot();
+        assert_eq!(snap1.total_checks, 1);
+        assert_eq!(snap2.total_checks, 2);
+    }
+
+    #[test]
+    fn cache_hit_rate_zero_when_no_data() {
+        let snap = PermissionCheckStatsSnapshot {
+            total_checks: 0, allowed_checks: 0, denied_checks: 0,
+            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+        };
+        assert_eq!(snap.cache_hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn cache_hit_rate_partial() {
+        let snap = PermissionCheckStatsSnapshot {
+            total_checks: 0, allowed_checks: 0, denied_checks: 0,
+            rate_limited_checks: 0, cache_hits: 3, cache_misses: 1,
+            stampede_events: 0,
+        };
+        assert!((snap.cache_hit_rate() - 0.75).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn denial_rate_zero_when_no_data() {
+        let snap = PermissionCheckStatsSnapshot {
+            total_checks: 0, allowed_checks: 0, denied_checks: 0,
+            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+        };
+        assert_eq!(snap.denial_rate(), 0.0);
+    }
+
+    #[test]
+    fn denial_rate_correct() {
+        let snap = PermissionCheckStatsSnapshot {
+            total_checks: 10, allowed_checks: 7, denied_checks: 3,
+            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+        };
+        assert!((snap.denial_rate() - 0.3).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn cache_stats_is_copy() {
+        let c = CacheStats { cached_roles: 5, capacity: 100 };
+        assert_eq!(c.cached_roles, 5);
+        assert_eq!(c.capacity, 100);
+    }
+}
+
 /// 缓存统计信息
 #[derive(Debug, Clone)]
 pub struct CacheStats {
