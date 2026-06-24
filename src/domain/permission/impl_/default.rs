@@ -69,12 +69,12 @@ impl YamlPermissionProvider {
             let policies: HashMap<String, RolePolicy> =
                 serde_yaml_ng::from_str(&content).map_err(|e| PermissionError::ParseError(e.to_string()))?;
 
-            // 如果有缓存，将策略存入缓存
-            // TODO: 待 oxcache API 稳定后实现缓存存储
+            // 将策略存入缓存
             #[cfg(feature = "cache")]
-            if let Some(_cache) = &self.cache {
-                // 缓存注入点，待 oxcache API 稳定后实现
-                let _ = _cache; // 避免未使用警告
+            if let Some(cache) = &self.cache {
+                for (role, policy) in &policies {
+                    let _ = cache.set(role, policy).await;
+                }
             }
 
             let mut guard = self.policies.write().unwrap();

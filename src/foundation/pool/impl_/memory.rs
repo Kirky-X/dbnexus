@@ -67,7 +67,8 @@ impl PoolWriter for MemoryPool {
 
     async fn get_session(&self, role: &str) -> Result<Session, PoolError> {
         let conn = self.acquire().await?;
-        Ok(Session::new(role.to_string(), conn.into_inner()))
+        let inner = conn.into_inner::<sea_orm::DatabaseConnection>().ok_or_else(|| PoolError::PoolExhausted)?;
+        Ok(Session::new(role.to_string(), inner))
     }
 }
 

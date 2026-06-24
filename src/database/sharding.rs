@@ -50,14 +50,6 @@ pub trait ShardingStrategy: Send + Sync {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct YearlyStrategy;
 
-impl YearlyStrategy {
-    /// 创建新的年分片策略实例
-    #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        Self
-    }
-}
-
 impl Default for YearlyStrategy {
     fn default() -> Self {
         Self
@@ -93,14 +85,6 @@ impl ShardingStrategy for YearlyStrategy {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MonthlyStrategy;
 
-impl MonthlyStrategy {
-    /// 创建新的月分片策略实例
-    #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        Self
-    }
-}
-
 impl Default for MonthlyStrategy {
     fn default() -> Self {
         Self
@@ -135,14 +119,6 @@ impl ShardingStrategy for MonthlyStrategy {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DailyStrategy;
 
-impl DailyStrategy {
-    /// 创建新的天分片策略实例
-    #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        Self
-    }
-}
-
 impl Default for DailyStrategy {
     fn default() -> Self {
         Self
@@ -176,14 +152,6 @@ impl ShardingStrategy for DailyStrategy {
 /// 使用一致性哈希将数据均匀分布到各分片
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct HashStrategy;
-
-impl HashStrategy {
-    /// 创建新的哈希分片策略实例
-    #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        Self
-    }
-}
 
 impl Default for HashStrategy {
     fn default() -> Self {

@@ -15,6 +15,8 @@ use oxcache::Cache;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
+#[cfg(feature = "metrics")]
+use std::time::Instant;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
