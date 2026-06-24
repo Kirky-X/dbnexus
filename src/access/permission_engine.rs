@@ -1179,9 +1179,6 @@ impl Default for PermissionEngineConfig {
 pub struct PermissionEngine {
     /// 策略决策点
     pdp: PolicyDecisionPoint,
-    /// 配置（预留未来使用）
-    #[allow(dead_code)]
-    config: PermissionEngineConfig,
 }
 
 impl PermissionEngine {
@@ -1190,7 +1187,6 @@ impl PermissionEngine {
         let config = PermissionEngineConfig::default();
         Self {
             pdp: PolicyDecisionPoint::with_cache(provider, config.cache_ttl_seconds),
-            config,
         }
     }
 
@@ -1198,7 +1194,6 @@ impl PermissionEngine {
     pub fn with_config(provider: Arc<dyn PermissionProvider>, config: PermissionEngineConfig) -> Self {
         Self {
             pdp: PolicyDecisionPoint::with_cache(provider, config.cache_ttl_seconds),
-            config,
         }
     }
 

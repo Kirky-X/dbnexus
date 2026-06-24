@@ -178,7 +178,7 @@ pub use crate::storage::global_index::{
 
 // Business 导出
 #[cfg(feature = "audit")]
-pub use crate::business::audit::{
+pub use crate::business::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
