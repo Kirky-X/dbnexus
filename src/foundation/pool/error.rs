@@ -16,7 +16,12 @@ pub enum PoolConfigError {
 
     /// 字段值无效
     #[error("invalid value for field '{field}': {reason}")]
-    InvalidValue { field: String, reason: String },
+    InvalidValue {
+        /// 字段名
+        field: String,
+        /// 无效原因
+        reason: String,
+    },
 }
 
 /// 连接池运行时错误
