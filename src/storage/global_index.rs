@@ -16,9 +16,7 @@ use sea_orm::ActiveValue::Set;
 use sea_orm::Database;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::OnConflict;
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// 同步状态：待同步
 pub const SYNC_STATUS_PENDING: &str = "pending";
@@ -81,8 +79,6 @@ pub struct SyncResult {
 /// 全局索引管理器
 pub struct GlobalIndex {
     pool: Arc<sea_orm::DbConn>,
-    #[allow(dead_code)]
-    sync_cache: Arc<RwLock<HashMap<String, Vec<IndexEntry>>>>,
 }
 
 impl GlobalIndex {
@@ -94,7 +90,6 @@ impl GlobalIndex {
 
         Ok(Self {
             pool: Arc::new(db),
-            sync_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -221,41 +216,5 @@ impl GlobalIndex {
         })
     }
 
-    /// 同步单个索引条目
-    #[allow(dead_code)]
-    async fn sync_entry(&self, entry: &IndexEntry) -> Result<(), sea_orm::DbErr> {
-        let id = format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
-        let model = ActiveModel {
-            id: Set(id),
-            table_name: Set(entry.table_name.clone()),
-            record_id: Set(entry.record_id.clone()),
-            shard_id: Set(entry.shard_id as i32),
-            index_key: Set(entry.index_key.clone()),
-            index_value: Set(entry.index_value.clone()),
-            created_at: Set(chrono::Utc::now().to_rfc3339()),
-            updated_at: Set(chrono::Utc::now().to_rfc3339()),
-            last_modified: Set(chrono::Utc::now().to_rfc3339()),
-            sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
-        };
-
-        Entity::insert(model)
-            .on_conflict(
-                OnConflict::columns([Column::Id])
-                    .update_columns([
-                        Column::TableName,
-                        Column::RecordId,
-                        Column::ShardId,
-                        Column::IndexKey,
-                        Column::IndexValue,
-                        Column::UpdatedAt,
-                        Column::LastModified,
-                        Column::SyncStatus,
-                    ])
-                    .to_owned(),
-            )
-            .exec(&*self.pool)
-            .await?;
-
-        Ok(())
     }
 }

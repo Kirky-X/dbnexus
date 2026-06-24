@@ -6,6 +6,10 @@
 //! 权限控制模块
 //!
 //! 提供基于角色的表级权限控制功能
+//!
+//! ⚠ **已弃用**：`PermissionAction`、`RolePolicy`、`TablePermission`、`PermissionConfig`、
+//! `PermissionError` 等类型已迁移到 [`crate::domain::permission`]。新代码应直接使用领域层版本。
+//! 本模块中的 `PermissionProvider` trait、`PermissionContext` 等独有类型将逐步迁移。
 
 // 子模块声明
 pub mod advanced;
