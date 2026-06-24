@@ -140,14 +140,6 @@ impl MigrationExecutor {
         }
     }
 
-    /// 获取数据库连接的不可变引用（仅内部使用）
-    ///
-    /// 返回数据库连接的只读引用，用于执行迁移操作
-    #[allow(dead_code)]
-    pub(crate) fn connection(&self) -> &sea_orm::DatabaseConnection {
-        &self.connection
-    }
-
     /// 获取迁移历史的不可变引用
     ///
     /// 返回迁移历史的只读引用，用于查看已应用的迁移
@@ -536,27 +528,6 @@ impl MigrationExecutor {
         Ok(applied_versions)
     }
 
-    /// 检查迁移是否已应用（通过查询数据库）
-    #[allow(dead_code)]
-    async fn is_migration_applied(&self, version: u32) -> Result<bool, DbError> {
-        // 先确保迁移历史表存在
-        self.ensure_migration_table_exists().await?;
-
-        let row = {
-            use sea_orm::sea_query::{Alias, Expr, Query};
-
-            let mut query = Query::select();
-            query.expr(Expr::cust("1"));
-            query.from(Alias::new("dbnexus_migrations"));
-            query.and_where(Expr::cust(format!("version = {}", version)));
-            query.limit(1);
-
-            self.connection.query_one(&query).await.map_err(DbError::Connection)?
-        };
-
-        Ok(row.is_some())
-    }
-
     /// 应用单个迁移文件
     async fn apply_migration_file(&mut self, migration_file: &MigrationFile) -> Result<(), DbError> {
         // 解析迁移文件内容
@@ -643,109 +614,6 @@ impl MigrationExecutor {
         .trim()
     }
 
-    /// 回滚所有迁移（预留功能，尚未在 API 中暴露）
-    #[allow(dead_code)]
-    pub(crate) async fn rollback_all(&mut self) -> Result<u32, DbError> {
-        self.load_history().await?;
-
-        let applied = &self.history.applied_migrations;
-
-        if applied.is_empty() {
-            return Ok(0);
-        }
-
-        let mut rollback_count = 0;
-        // 按版本号降序排序（先回滚最新的）
-        let mut versions: Vec<u32> = applied.iter().map(|m| m.version).collect();
-        versions.sort_by_key(|v| std::cmp::Reverse(*v));
-
-        for version in versions {
-            match self.rollback_migration(version).await {
-                Ok(_) => {
-                    rollback_count += 1;
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        }
-
-        Ok(rollback_count)
-    }
-
-    /// 回滚指定版本的迁移（预留功能）
-    ///
-    /// 使用 SqlReverser 生成回滚 SQL 并执行
-    #[allow(dead_code)]
-    pub(crate) async fn rollback_migration(&mut self, version: u32) -> Result<(), DbError> {
-        use super::sql_reverser::SqlReverser;
-        // 查找要回滚的迁移
-        let migration = match self.history.applied_migrations.iter().find(|m| m.version == version) {
-            Some(m) => m.clone(),
-            None => {
-                return Err(DbError::Migration(format!(
-                    "Migration version {} not found in history",
-                    version
-                )));
-            }
-        };
-
-        let up_sql = match tokio::fs::read_to_string(&migration.file_path).await {
-            Ok(content) => {
-                // 提取 UP SQL（在 -- DOWN 之前的部分）
-                if let Some(down_pos) = content.find("-- DOWN") {
-                    content[..down_pos].to_string()
-                } else {
-                    // 如果没有 -- DOWN 标记，使用整个文件内容
-                    content
-                }
-            }
-            Err(e) => {
-                return Err(DbError::Migration(format!("Failed to read migration file: {}", e)));
-            }
-        };
-
-        // 生成回滚 SQL
-        let reverser = SqlReverser::new();
-        let down_sql = match reverser.reverse(&up_sql) {
-            Ok(sql) => sql,
-            Err(e) => {
-                return Err(DbError::Migration(format!("Failed to generate rollback SQL: {}", e)));
-            }
-        };
-
-        // 开始事务
-        let txn: sea_orm::DatabaseTransaction = self.connection.begin().await.map_err(DbError::Connection)?;
-
-        // 执行回滚 SQL
-        if !down_sql.is_empty() {
-            txn.execute_unprepared(&down_sql).await.map_err(DbError::Connection)?;
-        }
-
-        // 从历史记录中删除
-        let backend = match self.sql_generator.db_type {
-            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
-            DatabaseType::MySql => sea_orm::DbBackend::MySql,
-            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
-        };
-        let delete_sql = sea_orm::Statement::from_sql_and_values(
-            backend,
-            format!(
-                "DELETE FROM dbnexus_migrations WHERE version = {}",
-                build_placeholder_list(backend, 1)
-            ),
-            vec![version.into()],
-        );
-
-        txn.execute_raw(delete_sql).await.map_err(DbError::Connection)?;
-
-        txn.commit().await.map_err(DbError::Connection)?;
-
-        // 从历史记录中移除
-        self.history.applied_migrations.retain(|m| m.version != version);
-
-        Ok(())
-    }
 }
 
 /// 迁移文件解析器

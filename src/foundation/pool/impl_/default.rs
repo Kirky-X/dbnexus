@@ -75,7 +75,7 @@ impl PoolLifecycle for DbPool {
     async fn shutdown(&self) {
         // sea-orm 的 close 需要 self，这里使用 clone 来保留引用
         let conn = self.inner.clone();
-        conn.close().await;
+        let _ = conn.close().await;
     }
 }
 

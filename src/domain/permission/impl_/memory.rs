@@ -28,30 +28,7 @@ impl MemoryPermissionProvider {
         }
     }
 
-    /// 使用配置创建
-    #[allow(dead_code)]
-    pub fn with_config(config: PermissionConfig) -> Self {
-        Self {
-            config,
-            policies: RwLock::new(HashMap::new()),
-        }
-    }
 
-    /// 添加角色策略
-    #[allow(dead_code)]
-    pub fn add_policy(&self, role: String, policy: RolePolicy) {
-        let mut guard = self.policies.write().unwrap();
-        guard.insert(role, policy);
-    }
-
-    /// 预填充策略（用于测试）
-    #[allow(dead_code)]
-    pub fn with_policies(policies: HashMap<String, RolePolicy>) -> Self {
-        Self {
-            config: PermissionConfig::default(),
-            policies: RwLock::new(policies),
-        }
-    }
 }
 
 impl Default for MemoryPermissionProvider {

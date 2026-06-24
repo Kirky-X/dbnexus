@@ -596,15 +596,6 @@ impl Session {
         // No-op when metrics feature is disabled
     }
 
-    /// 记录连接错误（预留功能）
-    #[allow(dead_code)]
-    #[cfg(feature = "metrics")]
-    fn record_connection_error(&self) {
-        if let Some(metrics) = &self.metrics_collector {
-            metrics.record_connection_error();
-        }
-    }
-
     /// 检查表级权限
     ///
     /// 此方法为 ORM 操作提供权限检查，确保所有实体操作都经过权限验证
