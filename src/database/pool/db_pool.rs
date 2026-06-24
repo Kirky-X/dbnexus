@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use oxcache::Cache;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
@@ -283,7 +283,7 @@ impl DbPool {
         if config.auto_migrate {
             if let Some(ref migrations_dir) = config.migrations_dir {
                 if migrations_dir.exists() {
-                    let applied = pool.run_migrations(migrations_dir).await?;
+                    let _applied = pool.run_migrations(migrations_dir).await?;
                 } else {
                     // migrations directory does not exist, skip migration
                 }
@@ -675,7 +675,7 @@ impl DbPool {
         // 创建带超时的健康检查
         let result = timeout(
             Duration::from_secs(5),
-            conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
+            conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
         )
         .await;
 
@@ -746,7 +746,7 @@ impl DbPool {
             .map(|conn| async {
                 let is_valid = timeout(
                     Duration::from_secs(2),
-                    conn.execute_raw(sea_orm::Statement::from_string(backend, HEALTH_CHECK_QUERY.to_string())),
+                    conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
                 )
                 .await
                 .is_ok_and(|result| result.is_ok());

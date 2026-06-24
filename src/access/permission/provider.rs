@@ -301,6 +301,102 @@ impl MemoryPermissionProvider {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::access::permission::types::TablePermission;
+
+    #[tokio::test]
+    async fn memory_provider_new_is_empty() {
+        let p = MemoryPermissionProvider::new();
+        assert!(p.get_roles().is_empty());
+    }
+
+    #[tokio::test]
+    async fn memory_provider_add_role() {
+        let p = MemoryPermissionProvider::new();
+        p.add_role("admin", RolePolicy {
+            tables: vec![TablePermission {
+                name: "*".into(),
+                operations: vec![PermissionAction::Select, PermissionAction::Insert],
+            }],
+        }).await;
+        let policy = p.get_role_policy("admin");
+        assert!(policy.is_some());
+    }
+
+    #[tokio::test]
+    async fn memory_provider_check_access() {
+        let p = MemoryPermissionProvider::new();
+        p.add_role("reader", RolePolicy {
+            tables: vec![TablePermission {
+                name: "docs".into(),
+                operations: vec![PermissionAction::Select],
+            }],
+        }).await;
+        assert!(p.check_access("reader", "docs", PermissionAction::Select).unwrap());
+        assert!(!p.check_access("reader", "docs", PermissionAction::Delete).unwrap());
+        // non-existent role returns Ok(false) from PermissionConfig, never Err
+        assert!(!p.check_access("ghost", "docs", PermissionAction::Select).unwrap());
+    }
+
+    #[tokio::test]
+    async fn memory_provider_remove_role() {
+        let p = MemoryPermissionProvider::new();
+        p.add_role("temp", RolePolicy::default()).await;
+        assert!(p.remove_role("temp").await);
+        assert!(!p.remove_role("temp").await);
+    }
+
+    #[tokio::test]
+    async fn memory_provider_get_roles() {
+        let p = MemoryPermissionProvider::new();
+        p.add_role("a", RolePolicy::default()).await;
+        p.add_role("b", RolePolicy::default()).await;
+        let mut roles = p.get_roles();
+        roles.sort();
+        assert_eq!(roles, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn yaml_provider_from_config() {
+        let mut config = PermissionConfig::default();
+        config.roles.insert("admin".into(), RolePolicy {
+            tables: vec![TablePermission {
+                name: "*".into(),
+                operations: vec![PermissionAction::Select],
+            }],
+        });
+        let p = YamlPermissionProvider::from_config(config);
+        assert!(p.get_role_policy("admin").is_some());
+        assert!(p.get_role_policy("nobody").is_none());
+    }
+
+    #[test]
+    fn yaml_provider_check_access_from_config() {
+        let mut config = PermissionConfig::default();
+        config.roles.insert("viewer".into(), RolePolicy {
+            tables: vec![TablePermission {
+                name: "reports".into(),
+                operations: vec![PermissionAction::Select],
+            }],
+        });
+        let p = YamlPermissionProvider::from_config(config);
+        assert!(p.check_access("viewer", "reports", PermissionAction::Select).unwrap());
+        assert!(!p.check_access("viewer", "reports", PermissionAction::Update).unwrap());
+        assert!(!p.check_access("viewer", "secret", PermissionAction::Select).unwrap());
+    }
+
+    #[test]
+    fn permission_provider_has_role() {
+        let mut config = PermissionConfig::default();
+        config.roles.insert("admin".into(), RolePolicy::default());
+        let p: Arc<dyn PermissionProvider> = Arc::new(YamlPermissionProvider::from_config(config));
+        assert!(p.has_role("admin"));
+        assert!(!p.has_role("nobody"));
+    }
+}
+
 impl PermissionProvider for MemoryPermissionProvider {
     fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
         // 使用 try_poll 避免阻塞，如果锁不可用则返回 None
