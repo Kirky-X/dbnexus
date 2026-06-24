@@ -64,6 +64,9 @@ pub mod business;
 /// Tools 模块
 pub mod tools;
 
+/// Kit 模块 — 基于 `trait-kit` 的统一能力管理
+pub mod kit;
+
 // 生成的权限角色模块
 mod generated_roles;
 
@@ -191,3 +194,6 @@ pub use dbnexus_macros::DbEntity;
 
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::{db_audit, db_cache, db_crud, db_permission};
+
+// Kit 导出
+pub use crate::kit::{DbNexusKit, keys::*};
