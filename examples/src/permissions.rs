@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    
+
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功\n");
 

@@ -73,4 +73,3 @@ Error: Permission("DDL operation not allowed: Statement type 'DropTable' is not 
 ❌ 测试失败的事务（余额不足）
   ✓ 更新失败，正确回滚事务: Execution Error: error returned from database: (code: 275) CHECK constraint failed: balance >= 0
 ✨ 事务示例运行完成！
-
