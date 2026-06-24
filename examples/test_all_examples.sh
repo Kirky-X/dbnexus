@@ -38,7 +38,7 @@ for example in "${examples[@]}"; do
   echo ""
   echo ">>> 测试: $example"
   echo "----------------------------------------"
-  
+
   if cargo run --bin "$example" 2>&1 | tee /tmp/${example}.log | tail -5; then
     if grep -q "warning:" /tmp/${example}.log; then
       echo "⚠️  $example 通过但有警告"
