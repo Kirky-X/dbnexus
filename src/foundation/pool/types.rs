@@ -42,6 +42,7 @@ impl Connection {
     }
 
     /// 获取内部连接引用（仅内部使用）
+    #[allow(dead_code)]
     pub(crate) fn inner<T: Any + Send + Sync>(&self) -> Option<&T> {
         self.inner.downcast_ref::<T>()
     }
@@ -73,7 +74,88 @@ impl Session {
     }
 
     /// 获取内部连接引用（仅内部使用）
+    #[allow(dead_code)]
     pub(crate) fn connection_ref<T: Any + Send + Sync>(&self) -> Option<&T> {
         self.connection.downcast_ref::<T>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pool_status_default() {
+        let status = PoolStatus::default();
+        assert_eq!(status.active_connections, 0);
+        assert_eq!(status.max_connections, 20);
+        assert_eq!(status.idle_connections, 0);
+    }
+
+    #[test]
+    fn test_pool_status_clone_serialize() {
+        let status = PoolStatus {
+            active_connections: 5,
+            max_connections: 10,
+            idle_connections: 5,
+        };
+        let cloned = status.clone();
+        assert_eq!(cloned.active_connections, 5);
+        assert_eq!(cloned.max_connections, 10);
+        assert_eq!(cloned.idle_connections, 5);
+
+        // 序列化/反序列化往返
+        let json = serde_json::to_string(&status).unwrap();
+        let deserialized: PoolStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.active_connections, 5);
+        assert_eq!(deserialized.max_connections, 10);
+        assert_eq!(deserialized.idle_connections, 5);
+    }
+
+    #[test]
+    fn test_connection_new_and_inner() {
+        let conn = Connection::new(42_i32);
+        assert_eq!(conn.inner::<i32>(), Some(&42));
+        assert_eq!(conn.inner::<String>(), None);
+    }
+
+    #[test]
+    fn test_connection_into_inner() {
+        let conn = Connection::new("hello".to_string());
+        let inner: Option<String> = conn.into_inner();
+        assert_eq!(inner, Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_connection_into_inner_wrong_type_returns_none() {
+        let conn = Connection::new(42_i32);
+        let inner: Option<String> = conn.into_inner();
+        assert_eq!(inner, None);
+    }
+
+    #[test]
+    fn test_session_new_and_connection_ref() {
+        let session = Session::new("admin".to_string(), 42_i32);
+        assert_eq!(session.role, "admin");
+        assert!(!session.in_transaction);
+        assert_eq!(session.connection_ref::<i32>(), Some(&42));
+        assert_eq!(session.connection_ref::<String>(), None);
+    }
+
+    #[test]
+    fn test_session_with_complex_type() {
+        #[derive(Debug)]
+        struct FakeConn {
+            url: String,
+        }
+
+        let fake = FakeConn {
+            url: "sqlite::memory:".to_string(),
+        };
+        let session = Session::new("user".to_string(), fake);
+        assert_eq!(session.role, "user");
+        let conn_ref = session.connection_ref::<FakeConn>();
+        assert!(conn_ref.is_some());
+        assert_eq!(conn_ref.unwrap().url, "sqlite::memory:");
     }
 }
