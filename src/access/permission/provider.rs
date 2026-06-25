@@ -301,6 +301,42 @@ impl MemoryPermissionProvider {
     }
 }
 
+impl PermissionProvider for MemoryPermissionProvider {
+    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
+        // 使用 try_poll 避免阻塞，如果锁不可用则返回 None
+        // 这是安全的，因为在权限检查的上下文中，短暂的不可接受性是可以接受的
+        if let Ok(config) = self.config.try_lock() {
+            config.get_role_policy(role).cloned()
+        } else {
+            // 锁被占用，暂时无法获取策略
+            // 在这种情况下，返回 None 比阻塞更安全
+            None
+        }
+    }
+
+    fn check_access(
+        &self,
+        role: &str,
+        table: &str,
+        operation: PermissionAction,
+    ) -> Result<bool, PermissionProviderError> {
+        if let Ok(config) = self.config.try_lock() {
+            Ok(config.check_access(role, table, operation))
+        } else {
+            // 锁被占用，暂时拒绝访问
+            Ok(false)
+        }
+    }
+
+    fn get_roles(&self) -> Vec<String> {
+        if let Ok(config) = self.config.try_lock() {
+            config.roles.keys().cloned().collect()
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,41 +430,5 @@ mod tests {
         let p: Arc<dyn PermissionProvider> = Arc::new(YamlPermissionProvider::from_config(config));
         assert!(p.has_role("admin"));
         assert!(!p.has_role("nobody"));
-    }
-}
-
-impl PermissionProvider for MemoryPermissionProvider {
-    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
-        // 使用 try_poll 避免阻塞，如果锁不可用则返回 None
-        // 这是安全的，因为在权限检查的上下文中，短暂的不可接受性是可以接受的
-        if let Ok(config) = self.config.try_lock() {
-            config.get_role_policy(role).cloned()
-        } else {
-            // 锁被占用，暂时无法获取策略
-            // 在这种情况下，返回 None 比阻塞更安全
-            None
-        }
-    }
-
-    fn check_access(
-        &self,
-        role: &str,
-        table: &str,
-        operation: PermissionAction,
-    ) -> Result<bool, PermissionProviderError> {
-        if let Ok(config) = self.config.try_lock() {
-            Ok(config.check_access(role, table, operation))
-        } else {
-            // 锁被占用，暂时拒绝访问
-            Ok(false)
-        }
-    }
-
-    fn get_roles(&self) -> Vec<String> {
-        if let Ok(config) = self.config.try_lock() {
-            config.roles.keys().cloned().collect()
-        } else {
-            Vec::new()
-        }
     }
 }
