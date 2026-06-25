@@ -554,7 +554,7 @@ fn test_percentiles_accuracy_high_cardinality() {
 
         // P50 应该约等于 500ms
         let p50_ms = stats.latency_percentiles.p50_ns / 1_000_000;
-        assert!(p50_ms >= 490 && p50_ms <= 510);
+        assert!((490..=510).contains(&p50_ms));
     }
 }
 

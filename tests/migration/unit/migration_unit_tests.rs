@@ -7,7 +7,7 @@
 //!
 //! 测试数据库迁移的独立组件：Schema、SQL生成、类型转换等（无需数据库连接）
 
-use dbnexus::DatabaseType;
+use dbnexus::foundation::DatabaseType;
 use dbnexus::{
     Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator,
     Table, TableChange,
@@ -195,7 +195,7 @@ fn test_create_table_sql_generation() {
         comment: None,
     };
 
-    let sql = generator.generate_create_table_sql(&table);
+    let sql = generator.generate_create_table_sql(&table).unwrap();
 
     assert!(sql.contains("CREATE TABLE users"));
     assert!(sql.contains("id INTEGER"));
@@ -209,7 +209,7 @@ fn test_create_table_sql_generation() {
 fn test_drop_table_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Sqlite);
 
-    let sql = generator.generate_drop_table_sql("test_table");
+    let sql = generator.generate_drop_table_sql("test_table").unwrap();
 
     assert_eq!(sql, "DROP TABLE test_table;");
 }
@@ -230,7 +230,7 @@ fn test_add_column_sql_generation() {
         comment: None,
     };
 
-    let sql = generator.generate_add_column_sql("users", &column);
+    let sql = generator.generate_add_column_sql("users", &column).unwrap();
 
     assert!(sql.contains("ALTER TABLE users ADD"));
     assert!(sql.contains("age INTEGER"));
@@ -249,7 +249,7 @@ fn test_create_index_sql_generation() {
         is_constraint: false,
     };
 
-    let sql = generator.generate_create_index_sql(&index);
+    let sql = generator.generate_create_index_sql(&index).unwrap();
 
     assert!(sql.contains("CREATE INDEX"));
     assert!(sql.contains("idx_email"));
@@ -521,7 +521,7 @@ fn test_migration_parse_and_generate() {
         comment: None,
     }));
 
-    let sql = generator.generate_migration_sql(&migration);
+    let sql = generator.generate_migration_sql(&migration).unwrap();
 
     assert!(sql.contains("CREATE TABLE test"));
     assert!(sql.contains("id INTEGER"));

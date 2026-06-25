@@ -7,7 +7,8 @@
 //!
 //! 覆盖 DbPool 初始化、连接、关闭和 DbPoolBuilder 构建等功能测试
 
-use dbnexus::{DatabaseType, DbPool, DbPoolBuilder};
+use dbnexus::foundation::DatabaseType;
+use dbnexus::{DbPool, DbPoolBuilder};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -123,9 +124,9 @@ async fn test_dbpool_try_from_with_permission() {
         .await
         .expect("Failed to create DbPool with with_config");
 
-    // 验证权限缓存已初始化
+    // 验证权限缓存已初始化（with_config 异步创建会预热 min_connections 个连接）
     let status = pool.status();
-    assert_eq!(status.total, 0);
+    assert_eq!(status.total, 1); // min_connections=1
 }
 
 // ============================================================================
@@ -737,8 +738,8 @@ async fn test_pool_warmup() {
 
     // 预热后应该有初始连接
     let status = pool.status();
-    // 注意：SQLite 内存数据库可能不会预热
-    assert!(status.total >= 0);
+    // 注意：SQLite 内存数据库可能不会预热，total 为 u32 始终 >= 0
+    let _ = status.total;
 }
 
 /// TEST-DBNEXUS-035: 连接池清理无效连接测试

@@ -9,4 +9,5 @@
 pub mod auto_migrate;
 
 #[cfg(feature = "migration")]
+#[allow(clippy::module_inception)]
 pub mod integration;
