@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use dbnexus::migration::metadata::{MigrationMetadata, TableSnapshot, ColumnDefinition};
+//! use dbnexus::database::migration::metadata::{MigrationMetadata, TableSnapshot, ColumnDefinition};
 //!
 //! let mut metadata = MigrationMetadata::new(
 //!     1,
@@ -103,7 +103,7 @@ impl MigrationMetadata {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::migration::MigrationMetadata;
+    /// use dbnexus::database::migration::MigrationMetadata;
     ///
     /// let metadata = MigrationMetadata::new(
     ///     1,
@@ -130,7 +130,7 @@ impl MigrationMetadata {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::migration::{MigrationMetadata, TableSnapshot};
+    /// use dbnexus::database::migration::{MigrationMetadata, TableSnapshot};
     ///
     /// let mut metadata = MigrationMetadata::new(
     ///     1,

@@ -54,6 +54,7 @@ fn sql_escape_single_quotes(s: &str) -> String {
 
 fn format_mysql_applied_at(applied_at: time::OffsetDateTime) -> String {
     let applied_at = applied_at.to_offset(time::UtcOffset::UTC);
+    #[allow(deprecated)]
     match time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]") {
         Ok(format) => applied_at.format(&format).unwrap_or_else(|_| applied_at.to_string()),
         Err(_) => applied_at.to_string(),
@@ -68,6 +69,7 @@ fn format_applied_at_for_backend(backend: sea_orm::DbBackend, applied_at: time::
 }
 
 fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
+    #[allow(deprecated)]
     let format_with_subseconds =
         time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]").ok();
     if let Some(format) = format_with_subseconds {
@@ -76,6 +78,7 @@ fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
         }
     }
 
+    #[allow(deprecated)]
     let format_without_subseconds =
         time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").ok();
     if let Some(format) = format_without_subseconds {
@@ -192,15 +195,9 @@ impl MigrationExecutor {
                 continue;
             };
 
-            let description: String = match row.try_get("", "description") {
-                Ok(d) => d,
-                Err(_e) => String::new(),
-            };
+            let description: String = row.try_get("", "description").unwrap_or_default();
 
-            let applied_at_str: String = match row.try_get("", "applied_at") {
-                Ok(s) => s,
-                Err(_e) => String::new(),
-            };
+            let applied_at_str: String = row.try_get("", "applied_at").unwrap_or_default();
             let applied_at = if applied_at_str.is_empty() {
                 time::OffsetDateTime::now_utc()
             } else {
@@ -210,10 +207,7 @@ impl MigrationExecutor {
                 }
             };
 
-            let file_path: String = match row.try_get("", "file_path") {
-                Ok(p) => p,
-                Err(_e) => String::new(),
-            };
+            let file_path: String = row.try_get("", "file_path").unwrap_or_default();
 
             history.add_migration(MigrationVersion {
                 version,
@@ -266,6 +260,9 @@ impl MigrationExecutor {
 
     /// 应用单个迁移
     pub async fn apply_migration(&mut self, migration: &Migration) -> Result<(), DbError> {
+        // 确保迁移历史表存在
+        self.ensure_migration_table_exists().await?;
+
         // 生成迁移 SQL
         let sql = self.sql_generator.generate_migration_sql(migration)?;
 
@@ -636,8 +633,8 @@ impl MigrationFileParser {
         // 尝试从注释中提取描述
         for line in content.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("-- Migration:") {
-                return trimmed[12..].trim().to_string();
+            if let Some(stripped) = trimmed.strip_prefix("-- Migration:") {
+                return stripped.trim().to_string();
             } else if trimmed.starts_with("/*") || trimmed.starts_with("--") {
                 continue; // 跳过其他注释行
             } else {
@@ -665,5 +662,705 @@ impl MigrationFileParser {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::migration::types::TableChange;
+
+    // =====================================================================
+    // build_placeholder_list
+    // =====================================================================
+
+    #[test]
+    fn test_build_placeholder_list_postgres() {
+        let result = build_placeholder_list(sea_orm::DbBackend::Postgres, 3);
+        assert_eq!(result, "$1, $2, $3");
+    }
+
+    #[test]
+    fn test_build_placeholder_list_postgres_single() {
+        let result = build_placeholder_list(sea_orm::DbBackend::Postgres, 1);
+        assert_eq!(result, "$1");
+    }
+
+    #[test]
+    fn test_build_placeholder_list_sqlite() {
+        let result = build_placeholder_list(sea_orm::DbBackend::Sqlite, 4);
+        assert_eq!(result, "?, ?, ?, ?");
+    }
+
+    #[test]
+    fn test_build_placeholder_list_mysql() {
+        let result = build_placeholder_list(sea_orm::DbBackend::MySql, 2);
+        assert_eq!(result, "?, ?");
+    }
+
+    #[test]
+    fn test_build_placeholder_list_zero() {
+        assert_eq!(build_placeholder_list(sea_orm::DbBackend::Postgres, 0), "");
+        assert_eq!(build_placeholder_list(sea_orm::DbBackend::Sqlite, 0), "");
+    }
+
+    // =====================================================================
+    // build_migration_insert_sql
+    // =====================================================================
+
+    #[test]
+    fn test_build_migration_insert_sql_postgres() {
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::Postgres);
+        assert!(sql.contains("INSERT INTO dbnexus_migrations"));
+        assert!(sql.contains("$1, $2, CAST($3 AS TIMESTAMP), $4"));
+    }
+
+    #[test]
+    fn test_build_migration_insert_sql_sqlite() {
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::Sqlite);
+        assert!(sql.contains("INSERT INTO dbnexus_migrations"));
+        assert!(sql.contains("?, ?, ?, ?"));
+    }
+
+    #[test]
+    fn test_build_migration_insert_sql_mysql() {
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::MySql);
+        assert!(sql.contains("INSERT INTO dbnexus_migrations"));
+        assert!(sql.contains("?, ?, ?, ?"));
+    }
+
+    // =====================================================================
+    // sql_escape_single_quotes
+    // =====================================================================
+
+    #[test]
+    fn test_sql_escape_single_quotes_no_quotes() {
+        assert_eq!(sql_escape_single_quotes("hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_sql_escape_single_quotes_single_quote() {
+        assert_eq!(sql_escape_single_quotes("it's"), "it''s");
+    }
+
+    #[test]
+    fn test_sql_escape_single_quotes_multiple_quotes() {
+        assert_eq!(sql_escape_single_quotes("'a'b'"), "''a''b''");
+    }
+
+    #[test]
+    fn test_sql_escape_single_quotes_empty() {
+        assert_eq!(sql_escape_single_quotes(""), "");
+    }
+
+    // =====================================================================
+    // format_mysql_applied_at
+    // =====================================================================
+
+    #[test]
+    fn test_format_mysql_applied_at() {
+        let dt = time::Date::from_calendar_date(2026, time::Month::June, 25)
+            .unwrap()
+            .with_hms(12, 30, 45)
+            .unwrap()
+            .assume_utc();
+        let result = format_mysql_applied_at(dt);
+        assert_eq!(result, "2026-06-25 12:30:45");
+    }
+
+    // =====================================================================
+    // format_applied_at_for_backend
+    // =====================================================================
+
+    #[test]
+    fn test_format_applied_at_for_backend_mysql() {
+        let dt = time::Date::from_calendar_date(2026, time::Month::January, 1)
+            .unwrap()
+            .with_hms(0, 0, 0)
+            .unwrap()
+            .assume_utc();
+        let result = format_applied_at_for_backend(sea_orm::DbBackend::MySql, dt);
+        assert_eq!(result, "2026-01-01 00:00:00");
+    }
+
+    #[test]
+    fn test_format_applied_at_for_backend_non_mysql() {
+        let dt = time::Date::from_calendar_date(2026, time::Month::January, 1)
+            .unwrap()
+            .with_hms(0, 0, 0)
+            .unwrap()
+            .assume_utc();
+        let result = format_applied_at_for_backend(sea_orm::DbBackend::Sqlite, dt);
+        // 非 MySQL 使用 OffsetDateTime::to_string()（Rfc3339 格式）
+        assert!(result.contains("2026-01-01"));
+    }
+
+    // =====================================================================
+    // parse_mysql_applied_at
+    // =====================================================================
+
+    #[test]
+    fn test_parse_mysql_applied_at_without_subseconds() {
+        let result = parse_mysql_applied_at("2026-06-25 12:30:45");
+        assert!(result.is_some());
+        let dt = result.unwrap();
+        assert_eq!(dt.year(), 2026);
+        assert_eq!(dt.month(), time::Month::June);
+        assert_eq!(dt.day(), 25);
+    }
+
+    #[test]
+    fn test_parse_mysql_applied_at_with_subseconds() {
+        let result = parse_mysql_applied_at("2026-06-25 12:30:45.123");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_mysql_applied_at_invalid() {
+        assert!(parse_mysql_applied_at("not a date").is_none());
+        assert!(parse_mysql_applied_at("").is_none());
+    }
+
+    // =====================================================================
+    // parse_applied_at_for_db
+    // =====================================================================
+
+    #[test]
+    fn test_parse_applied_at_for_db_mysql() {
+        let result = parse_applied_at_for_db(DatabaseType::MySql, "2026-06-25 12:30:45");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_applied_at_for_db_sqlite_rfc3339() {
+        let result = parse_applied_at_for_db(DatabaseType::Sqlite, "2026-06-25T12:30:45Z");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_applied_at_for_db_invalid() {
+        assert!(parse_applied_at_for_db(DatabaseType::Sqlite, "invalid").is_none());
+        assert!(parse_applied_at_for_db(DatabaseType::MySql, "invalid").is_none());
+    }
+
+    // =====================================================================
+    // MigrationFile
+    // =====================================================================
+
+    #[test]
+    fn test_migration_file_new_and_getters() {
+        let file = MigrationFile::new(
+            1,
+            "create_users".to_string(),
+            PathBuf::from("/migrations/001_create_users.sql"),
+            "CREATE TABLE users (id INTEGER);".to_string(),
+        );
+        assert_eq!(file.version(), 1);
+        assert_eq!(file.description(), "create_users");
+        assert_eq!(file.file_path(), &PathBuf::from("/migrations/001_create_users.sql"));
+        assert_eq!(file.content(), "CREATE TABLE users (id INTEGER);");
+    }
+
+    // =====================================================================
+    // MigrationFileParser
+    // =====================================================================
+
+    #[test]
+    fn test_migration_file_parser_valid_with_up_down() {
+        let content = "-- Migration: create users table\n-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+        let (desc, _) = result.unwrap();
+        assert_eq!(desc, "create users table");
+    }
+
+    #[test]
+    fn test_migration_file_parser_valid_with_create() {
+        let content = "CREATE TABLE users (id INTEGER);";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+        let (desc, _) = result.unwrap();
+        // 无 "-- Migration:" 注释时返回默认描述
+        assert_eq!(desc, "Migration");
+    }
+
+    #[test]
+    fn test_migration_file_parser_invalid_no_sql() {
+        let content = "-- just a comment\n-- nothing else\n";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("does not contain recognizable SQL statements"));
+    }
+
+    #[test]
+    fn test_migration_file_parser_extract_description_with_marker() {
+        let content = "-- Migration: add index on users\nCREATE INDEX idx_users_email ON users(email);";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+        let (desc, _) = result.unwrap();
+        assert_eq!(desc, "add index on users");
+    }
+
+    #[test]
+    fn test_migration_file_parser_extract_description_default() {
+        let content = "CREATE TABLE t (id INTEGER);";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+        let (desc, _) = result.unwrap();
+        assert_eq!(desc, "Migration");
+    }
+
+    #[test]
+    fn test_migration_file_parser_validate_sql_with_alter() {
+        let content = "ALTER TABLE users ADD COLUMN name TEXT;";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_migration_file_parser_validate_sql_with_drop() {
+        let content = "DROP TABLE old_table;";
+        let result = MigrationFileParser::parse_migration_file(content);
+        assert!(result.is_ok());
+    }
+
+    // =====================================================================
+    // MigrationExecutor - non-database methods (需要 sqlite 以构造执行器)
+    // =====================================================================
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_get_all_versions_empty() {
+        let executor = create_sqlite_executor().await;
+        assert!(executor.get_all_versions().is_empty());
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_get_latest_migration_empty() {
+        let executor = create_sqlite_executor().await;
+        assert!(executor.get_latest_migration().is_none());
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_is_fully_migrated_empty() {
+        let executor = create_sqlite_executor().await;
+        // 0 applied == 0 total → fully migrated
+        assert!(executor.is_fully_migrated(0));
+        assert!(!executor.is_fully_migrated(1));
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_history_empty() {
+        let executor = create_sqlite_executor().await;
+        assert!(executor.history().applied_migrations.is_empty());
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_build_history_insert_sql_raw_sqlite() {
+        let executor = create_sqlite_executor().await;
+        let dt = time::OffsetDateTime::now_utc();
+        #[allow(deprecated)]
+        let sql = executor.build_history_insert_sql_raw(1, "test migration", dt, "/path/to/file.sql");
+        assert!(sql.contains("INSERT INTO dbnexus_migrations"));
+        assert!(sql.contains("1"));
+        assert!(sql.contains("test migration"));
+        assert!(sql.contains("/path/to/file.sql"));
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_migration_executor_build_history_insert_sql_raw_escapes_quotes() {
+        let executor = create_sqlite_executor().await;
+        let dt = time::OffsetDateTime::now_utc();
+        #[allow(deprecated)]
+        let sql = executor.build_history_insert_sql_raw(1, "it's a 'test'", dt, "/path/to/file.sql");
+        // 单引号应被转义为 ''
+        assert!(sql.contains("it''s a ''test''"));
+    }
+
+    // =====================================================================
+    // MigrationExecutor - auto-migrate feature methods
+    // =====================================================================
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_parse_filename_valid() {
+        let result = MigrationExecutor::parse_filename("001_create_users.sql");
+        assert_eq!(result, Some((1, "create_users".to_string())));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_parse_filename_multi_part() {
+        let result = MigrationExecutor::parse_filename("002_add_index_to_users_table.sql");
+        assert_eq!(result, Some((2, "add_index_to_users_table".to_string())));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_parse_filename_invalid_version() {
+        let result = MigrationExecutor::parse_filename("abc_create_users.sql");
+        assert!(result.is_none());
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_parse_filename_no_underscore() {
+        // "123.sql" split('_') = ["123.sql"]，parts[0]="123.sql" 无法 parse::<u32>()
+        // 因为 "123.sql" 不是纯数字
+        let result = MigrationExecutor::parse_filename("123.sql");
+        assert!(result.is_none());
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_with_up_and_down() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let result = MigrationExecutor::extract_up_sql(content);
+        assert!(result.contains("CREATE TABLE users"));
+        assert!(!result.contains("DROP TABLE"));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_only_up() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n";
+        let result = MigrationExecutor::extract_up_sql(content);
+        assert!(result.contains("CREATE TABLE users"));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_no_markers() {
+        let content = "CREATE TABLE users (id INTEGER);";
+        let result = MigrationExecutor::extract_up_sql(content);
+        // 无标记时返回整个内容
+        assert!(result.contains("CREATE TABLE users"));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_case_insensitive_markers() {
+        let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- down:\nDROP TABLE t;\n";
+        let result = MigrationExecutor::extract_up_sql(content);
+        assert!(result.contains("CREATE TABLE t"));
+        assert!(!result.contains("DROP TABLE"));
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_only_down() {
+        let content = "-- DOWN:\nDROP TABLE users;\n";
+        let result = MigrationExecutor::extract_up_sql(content);
+        // 只有 DOWN 标记时，UP 部分为 DOWN 之前的内容（空）
+        assert!(result.is_empty());
+    }
+
+    // =====================================================================
+    // MigrationExecutor - scan_migrations (需要 auto-migrate)
+    // =====================================================================
+
+    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_scan_migrations_empty_dir() {
+        let executor = create_sqlite_executor().await;
+        let dir = tempfile::tempdir().unwrap();
+        let result = executor.scan_migrations(dir.path());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_scan_migrations_nonexistent_dir() {
+        let executor = create_sqlite_executor().await;
+        let result = executor.scan_migrations(std::path::Path::new("/nonexistent/path"));
+        // 不存在的目录返回空 Vec
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_scan_migrations_with_files() {
+        let executor = create_sqlite_executor().await;
+        let dir = tempfile::tempdir().unwrap();
+
+        // 创建迁移文件
+        std::fs::write(dir.path().join("002_add_column.sql"), "ALTER TABLE t ADD COLUMN c TEXT;")
+            .unwrap();
+        std::fs::write(dir.path().join("001_create_table.sql"), "CREATE TABLE t (id INTEGER);")
+            .unwrap();
+        // 非SQL文件应被忽略
+        std::fs::write(dir.path().join("readme.txt"), "not a migration").unwrap();
+        // 无效文件名应被忽略（无法解析版本号）
+        std::fs::write(dir.path().join("invalid.sql"), "CREATE TABLE t (id INTEGER);").unwrap();
+
+        let result = executor.scan_migrations(dir.path());
+        assert!(result.is_ok());
+        let files = result.unwrap();
+        assert_eq!(files.len(), 2);
+        // 按版本号排序
+        assert_eq!(files[0].version(), 1);
+        assert_eq!(files[0].description(), "create_table");
+        assert_eq!(files[1].version(), 2);
+        assert_eq!(files[1].description(), "add_column");
+    }
+
+    // =====================================================================
+    // MigrationExecutor - 数据库测试 (需要 sqlite feature)
+    // =====================================================================
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_ensure_migration_table_exists() {
+        let mut executor = create_sqlite_executor().await;
+        // 调用 load_history 会先 ensure_migration_table_exists
+        let result = executor.load_history().await;
+        assert!(result.is_ok());
+        // 历史应为空
+        assert!(executor.history().applied_migrations.is_empty());
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_apply_migration_creates_table() {
+        let mut executor = create_sqlite_executor().await;
+        // 先确保迁移历史表存在
+        executor.load_history().await.unwrap();
+
+        let mut migration = Migration::new(1, "create_users".into());
+        migration.add_table_change(TableChange::CreateTable(Table {
+            name: "users".into(),
+            columns: vec![
+                Column {
+                    name: "id".into(),
+                    column_type: ColumnType::Integer,
+                    is_primary_key: true,
+                    is_nullable: false,
+                    has_default: false,
+                    default_value: None,
+                    is_auto_increment: false,
+                    comment: None,
+                },
+                Column {
+                    name: "name".into(),
+                    column_type: ColumnType::String(Some(255)),
+                    is_primary_key: false,
+                    is_nullable: false,
+                    has_default: false,
+                    default_value: None,
+                    is_auto_increment: false,
+                    comment: None,
+                },
+            ],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        }));
+
+        let result = executor.apply_migration(&migration).await;
+        assert!(result.is_ok(), "apply_migration failed: {:?}", result.err());
+
+        // 验证历史记录
+        assert_eq!(executor.get_all_versions(), vec![1]);
+        assert!(executor.get_latest_migration().is_some());
+        assert_eq!(executor.get_latest_migration().unwrap().version, 1);
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_apply_migration_multiple_versions() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        // 应用第一个迁移
+        let mut m1 = Migration::new(1, "create_table".into());
+        m1.add_table_change(TableChange::CreateTable(Table {
+            name: "t1".into(),
+            columns: vec![Column {
+                name: "id".into(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: false,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        }));
+        executor.apply_migration(&m1).await.unwrap();
+
+        // 应用第二个迁移
+        let mut m2 = Migration::new(2, "add_column".into());
+        m2.add_table_change(TableChange::AlterTable {
+            table_name: "t1".into(),
+            column_changes: vec![],
+            added_columns: vec![Column {
+                name: "name".into(),
+                column_type: ColumnType::Text,
+                is_primary_key: false,
+                is_nullable: true,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: false,
+                comment: None,
+            }],
+            removed_columns: vec![],
+            added_indexes: vec![],
+            removed_indexes: vec![],
+            added_foreign_keys: vec![],
+            removed_foreign_keys: vec![],
+        });
+        executor.apply_migration(&m2).await.unwrap();
+
+        // 验证
+        assert_eq!(executor.get_all_versions(), vec![1, 2]);
+        assert_eq!(executor.get_latest_migration().unwrap().version, 2);
+        assert!(executor.is_fully_migrated(2));
+        assert!(!executor.is_fully_migrated(3));
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_load_history_after_apply() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        // 应用迁移
+        let mut m = Migration::new(1, "test".into());
+        m.add_table_change(TableChange::CreateTable(Table {
+            name: "test_table".into(),
+            columns: vec![Column {
+                name: "id".into(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: false,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        }));
+        executor.apply_migration(&m).await.unwrap();
+
+        // 创建新的执行器（模拟重启），从数据库加载历史
+        let connection = executor.connection.clone();
+        let mut executor2 = MigrationExecutor::new(connection, DatabaseType::Sqlite);
+        let result = executor2.load_history().await;
+        assert!(result.is_ok());
+        assert_eq!(executor2.get_all_versions(), vec![1]);
+        let latest = executor2.get_latest_migration().unwrap();
+        assert_eq!(latest.version, 1);
+        assert_eq!(latest.description, "test");
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[tokio::test]
+    async fn test_run_migrations_from_files() {
+        let mut executor = create_sqlite_executor().await;
+        let dir = tempfile::tempdir().unwrap();
+
+        // 创建迁移文件
+        let sql = "-- UP:\nCREATE TABLE test_table (id INTEGER PRIMARY KEY);\n";
+        std::fs::write(dir.path().join("001_create_test_table.sql"), sql).unwrap();
+
+        let result = executor.run_migrations(dir.path()).await;
+        assert!(result.is_ok(), "run_migrations failed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 1); // 1 个迁移被应用
+
+        // 再次运行应返回 0（已应用）
+        let result = executor.run_migrations(dir.path()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[tokio::test]
+    async fn test_run_migrations_empty_dir() {
+        let mut executor = create_sqlite_executor().await;
+        let dir = tempfile::tempdir().unwrap();
+
+        let result = executor.run_migrations(dir.path()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[tokio::test]
+    async fn test_get_pending_migrations() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        // 先应用版本 1
+        let mut m1 = Migration::new(1, "first".into());
+        m1.add_table_change(TableChange::CreateTable(Table {
+            name: "t1".into(),
+            columns: vec![Column {
+                name: "id".into(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: false,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        }));
+        executor.apply_migration(&m1).await.unwrap();
+
+        // 检查待应用迁移
+        let all = vec![m1, Migration::new(2, "second".into()), Migration::new(3, "third".into())];
+        let pending = executor.get_pending_migrations(&all).await;
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].version, 2);
+        assert_eq!(pending[1].version, 3);
+    }
+
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[tokio::test]
+    async fn test_apply_migration_file_public() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        let file = MigrationFile::new(
+            1,
+            "create_test".to_string(),
+            PathBuf::from("/migrations/001_create_test.sql"),
+            "CREATE TABLE test_table (id INTEGER PRIMARY KEY);".to_string(),
+        );
+
+        let result = executor.apply_migration_file_public(&file).await;
+        assert!(result.is_ok(), "apply_migration_file_public failed: {:?}", result.err());
+        assert_eq!(executor.get_all_versions(), vec![1]);
+    }
+
+    // =====================================================================
+    // 辅助函数
+    // =====================================================================
+
+    /// 创建基于 SQLite 内存数据库的 MigrationExecutor
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    async fn create_sqlite_executor() -> MigrationExecutor {
+        let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+        MigrationExecutor::new(connection, DatabaseType::Sqlite)
     }
 }
