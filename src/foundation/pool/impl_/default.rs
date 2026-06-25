@@ -80,3 +80,103 @@ impl PoolLifecycle for DbPool {
 }
 
 impl PoolConnector for DbPool {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_sqlite_config() -> PoolConfig {
+        PoolConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 10,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            idle_timeout: 300,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_connect_success() {
+        let config = make_sqlite_config();
+        let pool = DbPool::connect(config).await;
+        assert!(pool.is_ok());
+        let pool = pool.unwrap();
+        assert_eq!(pool.config.max_connections, 10);
+    }
+
+    #[tokio::test]
+    async fn test_connect_invalid_url() {
+        let config = PoolConfig {
+            url: "invalid://url".to_string(),
+            max_connections: 10,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            idle_timeout: 300,
+        };
+        let result = DbPool::connect(config).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_pool_reader_status() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let status = pool.status();
+        assert_eq!(status.max_connections, 10);
+        assert_eq!(status.active_connections, 0);
+        assert_eq!(status.idle_connections, 0);
+    }
+
+    #[tokio::test]
+    async fn test_pool_reader_connection_count() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        assert_eq!(pool.connection_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pool_writer_acquire() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let conn = pool.acquire().await;
+        assert!(conn.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pool_writer_release() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let conn = pool.acquire().await.unwrap();
+        // release 不应 panic
+        pool.release(conn).await;
+    }
+
+    #[tokio::test]
+    async fn test_pool_writer_get_session() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let session = pool.get_session("admin").await;
+        assert!(session.is_ok());
+        let session = session.unwrap();
+        assert_eq!(session.role, "admin");
+        assert!(!session.in_transaction);
+    }
+
+    #[tokio::test]
+    async fn test_pool_lifecycle_health_check() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let result = pool.health_check().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pool_lifecycle_shutdown() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        // shutdown 不应 panic
+        pool.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_pool_connector_trait_object() {
+        let pool = DbPool::connect(make_sqlite_config()).await.unwrap();
+        let connector: Box<dyn PoolConnector> = Box::new(pool);
+        // 验证可以通过 trait object 调用方法
+        let status = PoolReader::status(&*connector);
+        assert_eq!(status.max_connections, 10);
+    }
+}

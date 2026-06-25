@@ -477,3 +477,298 @@ impl DbConfig {
         &self.cache_config
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== ConfigError Display 测试 =====
+
+    #[test]
+    fn test_config_error_display_variants() {
+        assert_eq!(
+            ConfigError::MissingField("url".into()).to_string(),
+            "Missing required configuration: url"
+        );
+        assert_eq!(
+            ConfigError::MissingUrl.to_string(),
+            "Missing required configuration: dbnexus.url"
+        );
+        assert_eq!(
+            ConfigError::InvalidCacheCapacity("negative".into()).to_string(),
+            "Invalid cache capacity: negative"
+        );
+        assert_eq!(
+            ConfigError::InvalidValue {
+                key: "max".into(),
+                message: "too large".into(),
+            }
+            .to_string(),
+            "Invalid configuration value for 'max': too large"
+        );
+        assert_eq!(
+            ConfigError::InvalidFormat("yaml".into()).to_string(),
+            "Invalid configuration format: yaml"
+        );
+        assert_eq!(
+            ConfigError::FileNotFound("/tmp/cfg".into()).to_string(),
+            "Configuration file not found: /tmp/cfg"
+        );
+        assert_eq!(
+            ConfigError::IoError("read fail".into()).to_string(),
+            "IO error: read fail"
+        );
+        assert_eq!(
+            ConfigError::InvalidUrl("bad".into()).to_string(),
+            "Invalid URL: bad"
+        );
+        assert_eq!(
+            ConfigError::UnsupportedProtocol("ftp".into()).to_string(),
+            "Unsupported database protocol: ftp"
+        );
+        assert_eq!(
+            ConfigError::ParseError("syntax".into()).to_string(),
+            "Parse error: syntax"
+        );
+        assert_eq!(
+            ConfigError::ValidationError("bad value".into()).to_string(),
+            "Validation error: bad value"
+        );
+    }
+
+    // ===== CacheConfig 测试 =====
+
+    #[test]
+    fn test_cache_config_default() {
+        let cfg = CacheConfig::default();
+        assert_eq!(cfg.policy_cache_capacity, 4096);
+        assert_eq!(cfg.sql_parse_cache_capacity, 1000);
+        assert_eq!(cfg.query_cache_capacity, 10000);
+        assert_eq!(cfg.default_ttl, 300);
+    }
+
+    #[test]
+    fn test_cache_config_default_ttl_duration() {
+        let cfg = CacheConfig::default();
+        assert_eq!(cfg.default_ttl_duration(), Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_cache_config_serde_roundtrip() {
+        let cfg = CacheConfig {
+            policy_cache_capacity: 100,
+            sql_parse_cache_capacity: 200,
+            query_cache_capacity: 300,
+            default_ttl: 60,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let deserialized: CacheConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.policy_cache_capacity, 100);
+        assert_eq!(deserialized.sql_parse_cache_capacity, 200);
+        assert_eq!(deserialized.query_cache_capacity, 300);
+        assert_eq!(deserialized.default_ttl, 60);
+    }
+
+    #[test]
+    fn test_cache_config_serde_defaults_applied() {
+        // 空 JSON 应使用 serde default 函数
+        let json = r#"{}"#;
+        let cfg: CacheConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.policy_cache_capacity, 4096);
+        assert_eq!(cfg.sql_parse_cache_capacity, 1000);
+        assert_eq!(cfg.query_cache_capacity, 10000);
+        assert_eq!(cfg.default_ttl, 300);
+    }
+
+    // ===== PoolConfig 测试 =====
+
+    #[test]
+    fn test_pool_config_default() {
+        let cfg = PoolConfig::default();
+        assert_eq!(cfg.max_connections, 20);
+        assert_eq!(cfg.min_connections, 5);
+        assert_eq!(cfg.idle_timeout, 300);
+        assert_eq!(cfg.acquire_timeout, 5000);
+    }
+
+    #[test]
+    fn test_pool_config_duration_methods() {
+        let cfg = PoolConfig::default();
+        assert_eq!(cfg.idle_timeout_duration(), Duration::from_secs(300));
+        assert_eq!(
+            cfg.acquire_timeout_duration(),
+            Duration::from_millis(5000)
+        );
+    }
+
+    #[test]
+    fn test_pool_config_serde_defaults_applied() {
+        let json = r#"{}"#;
+        let cfg: PoolConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.max_connections, 20);
+        assert_eq!(cfg.min_connections, 5);
+        assert_eq!(cfg.idle_timeout, 300);
+        assert_eq!(cfg.acquire_timeout, 5000);
+    }
+
+    // ===== DatabaseType 测试 =====
+
+    #[test]
+    fn test_database_type_from_url_postgres() {
+        assert_eq!(DatabaseType::from_url("postgres://localhost/db"), DatabaseType::Postgres);
+        assert_eq!(
+            DatabaseType::from_url("postgresql://localhost/db"),
+            DatabaseType::Postgres
+        );
+        // 大小写不敏感
+        assert_eq!(DatabaseType::from_url("POSTGRES://localhost/db"), DatabaseType::Postgres);
+    }
+
+    #[test]
+    fn test_database_type_from_url_mysql() {
+        assert_eq!(DatabaseType::from_url("mysql://localhost/db"), DatabaseType::MySql);
+        assert_eq!(DatabaseType::from_url("MYSQL://localhost/db"), DatabaseType::MySql);
+    }
+
+    #[test]
+    fn test_database_type_from_url_sqlite_default() {
+        assert_eq!(DatabaseType::from_url("sqlite::memory:"), DatabaseType::Sqlite);
+        assert_eq!(DatabaseType::from_url("unknown://foo"), DatabaseType::Sqlite);
+        assert_eq!(DatabaseType::from_url(""), DatabaseType::Sqlite);
+    }
+
+    #[test]
+    fn test_database_type_parse_database_type_alias() {
+        assert_eq!(
+            DatabaseType::parse_database_type("mysql://x"),
+            DatabaseType::MySql
+        );
+    }
+
+    #[test]
+    fn test_database_type_as_str() {
+        assert_eq!(DatabaseType::Postgres.as_str(), "postgres");
+        assert_eq!(DatabaseType::MySql.as_str(), "mysql");
+        assert_eq!(DatabaseType::Sqlite.as_str(), "sqlite");
+    }
+
+    #[test]
+    fn test_database_type_is_real_database() {
+        assert!(DatabaseType::Postgres.is_real_database());
+        assert!(DatabaseType::MySql.is_real_database());
+        assert!(!DatabaseType::Sqlite.is_real_database());
+    }
+
+    #[test]
+    fn test_database_type_display() {
+        assert_eq!(DatabaseType::Postgres.to_string(), "postgres");
+        assert_eq!(DatabaseType::MySql.to_string(), "mysql");
+        assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
+    }
+
+    // ===== DbConfig 测试 =====
+
+    #[test]
+    fn test_db_config_default() {
+        let cfg = DbConfig::default();
+        assert_eq!(cfg.url, String::new());
+        assert_eq!(cfg.max_connections, 20);
+        assert_eq!(cfg.min_connections, 5);
+        assert_eq!(cfg.idle_timeout, 300);
+        assert_eq!(cfg.acquire_timeout, 5000);
+        assert_eq!(cfg.admin_role, "admin");
+        assert_eq!(cfg.migration_timeout, 60);
+        assert_eq!(cfg.warmup_timeout, 30);
+        assert_eq!(cfg.warmup_retries, 3);
+        assert!(!cfg.auto_migrate);
+        assert!(cfg.permissions_path.is_none());
+        assert!(cfg.migrations_dir.is_none());
+        assert_eq!(cfg.cache_config.policy_cache_capacity, 4096);
+    }
+
+    #[test]
+    fn test_db_config_database_type() {
+        let mut cfg = DbConfig::default();
+        cfg.url = "postgres://localhost/db".into();
+        assert_eq!(cfg.database_type(), DatabaseType::Postgres);
+
+        cfg.url = "mysql://localhost/db".into();
+        assert_eq!(cfg.database_type(), DatabaseType::MySql);
+
+        cfg.url = "sqlite::memory:".into();
+        assert_eq!(cfg.database_type(), DatabaseType::Sqlite);
+    }
+
+    #[test]
+    fn test_db_config_duration_methods() {
+        let cfg = DbConfig::default();
+        assert_eq!(cfg.idle_timeout_duration(), Duration::from_secs(300));
+        assert_eq!(
+            cfg.acquire_timeout_duration(),
+            Duration::from_millis(5000)
+        );
+        assert_eq!(cfg.migration_timeout_duration(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_db_config_cache_config_ref() {
+        let cfg = DbConfig::default();
+        let cache = cfg.cache_config();
+        assert_eq!(cache.default_ttl, 300);
+    }
+
+    #[test]
+    fn test_db_config_serde_roundtrip() {
+        let cfg = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 10,
+            min_connections: 2,
+            idle_timeout: 100,
+            acquire_timeout: 3000,
+            permissions_path: Some("/tmp/perms.yaml".into()),
+            migrations_dir: Some(PathBuf::from("/tmp/migrations")),
+            auto_migrate: true,
+            migration_timeout: 120,
+            admin_role: "root".to_string(),
+            warmup_timeout: 15,
+            warmup_retries: 5,
+            cache_config: CacheConfig {
+                policy_cache_capacity: 512,
+                sql_parse_cache_capacity: 256,
+                query_cache_capacity: 1024,
+                default_ttl: 60,
+            },
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let deserialized: DbConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.url, "sqlite::memory:");
+        assert_eq!(deserialized.max_connections, 10);
+        assert_eq!(deserialized.min_connections, 2);
+        assert_eq!(deserialized.idle_timeout, 100);
+        assert_eq!(deserialized.acquire_timeout, 3000);
+        assert_eq!(deserialized.permissions_path, Some("/tmp/perms.yaml".to_string()));
+        assert_eq!(deserialized.migrations_dir, Some(PathBuf::from("/tmp/migrations")));
+        assert!(deserialized.auto_migrate);
+        assert_eq!(deserialized.migration_timeout, 120);
+        assert_eq!(deserialized.admin_role, "root");
+        assert_eq!(deserialized.warmup_timeout, 15);
+        assert_eq!(deserialized.warmup_retries, 5);
+        assert_eq!(deserialized.cache_config.policy_cache_capacity, 512);
+    }
+
+    #[test]
+    fn test_db_config_serde_partial_uses_defaults() {
+        // 只提供 url，其他字段应使用 serde default
+        let json = r#"{"url":"sqlite::memory:"}"#;
+        let cfg: DbConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.url, "sqlite::memory:");
+        assert_eq!(cfg.max_connections, 20);
+        assert_eq!(cfg.min_connections, 5);
+        assert_eq!(cfg.admin_role, "admin");
+        assert!(!cfg.auto_migrate);
+    }
+
+    // 注意：from_env() 测试需要修改环境变量，在 Rust 2024 edition 中
+    // set_var/remove_var 为 unsafe，但 lib crate 有 #![forbid(unsafe_code)]。
+    // from_env 的覆盖率为外部测试目录（tests/）中独立 crate 的测试覆盖。
+}

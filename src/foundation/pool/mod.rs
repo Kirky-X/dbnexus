@@ -28,3 +28,76 @@ pub async fn new(config: PoolConfig) -> Result<impl PoolConnector, PoolConfigErr
 pub fn new_in_memory() -> impl PoolConnector {
     impl_::memory::MemoryPool::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_new_factory_with_valid_config() {
+        let config = PoolConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 5,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            idle_timeout: 300,
+        };
+        let pool = new(config).await;
+        assert!(pool.is_ok());
+        let pool = pool.unwrap();
+        assert_eq!(pool.status().max_connections, 5);
+    }
+
+    #[tokio::test]
+    async fn test_new_factory_with_invalid_config_fails() {
+        let config = PoolConfig {
+            url: String::new(), // 空 URL 应失败
+            max_connections: 5,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            idle_timeout: 300,
+        };
+        let result = new(config).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_new_factory_with_zero_max_connections_fails() {
+        let config = PoolConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 0,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            idle_timeout: 300,
+        };
+        let result = new(config).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_new_in_memory_factory() {
+        let pool = new_in_memory();
+        let status = pool.status();
+        assert_eq!(status.max_connections, 20);
+        assert_eq!(status.active_connections, 0);
+        assert_eq!(status.idle_connections, 20);
+    }
+
+    #[tokio::test]
+    async fn test_new_in_memory_acquire_and_release() {
+        let pool = new_in_memory();
+        let conn = pool.acquire().await;
+        assert!(conn.is_ok());
+        pool.release(conn.unwrap()).await;
+        assert_eq!(pool.connection_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_new_in_memory_health_check_and_shutdown() {
+        let pool = new_in_memory();
+        assert!(pool.health_check().await.is_ok());
+        pool.shutdown().await;
+        // shutdown 后仍可调用 status（active 被重置为 0）
+        assert_eq!(pool.status().active_connections, 0);
+    }
+}
