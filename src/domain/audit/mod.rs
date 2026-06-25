@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use dbnexus::audit::{AuditEvent, AuditLogger};
+//! use dbnexus::{AuditEvent, AuditLogger};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let logger = AuditLogger::with_default_storage();
@@ -210,8 +210,8 @@ impl AuditEvent {
     /// # 推荐方式
     /// 使用 `AuditEventBuilder` 进行链式构建：
     /// ```rust
-    /// # use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
-    /// # fn example() -> Result<(), dbnexus::audit::BuildError> {
+    /// # use dbnexus::{AuditEvent, AuditOperation, AuditSeverity};
+    /// # fn example() -> Result<(), dbnexus::domain::audit::BuildError> {
     /// let event = AuditEvent::builder()
     ///     .operation(AuditOperation::Create)
     ///     .entity_type("users")
@@ -228,7 +228,7 @@ impl AuditEvent {
     /// # 简单方式
     /// 使用快捷方法：
     /// ```rust
-    /// # use dbnexus::audit::{AuditEvent, AuditSeverity};
+    /// # use dbnexus::{AuditEvent, AuditSeverity};
     /// AuditEvent::create("users", "1", "admin")
     ///     .with_severity(AuditSeverity::High);
     /// ```
@@ -457,7 +457,7 @@ impl AuditEvent {
     /// 脱敏策略：
     /// - 递归遍历 JSON 对象和数组
     /// - 识别 JSON 中的敏感字段（包括嵌套字段）
-    /// - 将敏感字段的值替换为 "[REDACTED]"
+    /// - 将敏感字段的值替换为 "\[REDACTED\]"
     /// - 支持自定义敏感字段列表
     /// - 最大递归深度为 10 层，防止栈溢出
     ///
@@ -1624,9 +1624,9 @@ mod tests {
 ///
 /// 提供链式 API 来构建 `AuditEvent`，避免大量参数：
 /// ```rust
-/// use dbnexus::audit::{AuditEvent, AuditOperation, AuditSeverity};
+/// use dbnexus::{AuditEvent, AuditOperation, AuditSeverity};
 ///
-/// # fn example() -> Result<(), dbnexus::audit::BuildError> {
+/// # fn example() -> Result<(), dbnexus::domain::audit::BuildError> {
 /// let event = AuditEvent::builder()
 ///     .operation(AuditOperation::Create)
 ///     .entity_type("users")
@@ -1635,7 +1635,7 @@ mod tests {
 ///     .user_role("administrator")
 ///     .client_ip("192.168.1.1")
 ///     .severity(AuditSeverity::High)
-///     .result(dbnexus::audit::AuditStatus::Success)
+///     .result(dbnexus::AuditStatus::Success)
 ///     .before_value(r#"{"name":"old"}"#)
 ///     .after_value(r#"{"name":"new"}"#)
 ///     .extra(r#"{"reason":"update request"}"#)
@@ -1800,7 +1800,7 @@ impl AuditEventBuilder {
 /// 提供链式 API 来构建 `AuditLogger`：
 /// ```rust
 /// use std::sync::Arc;
-/// use dbnexus::audit::{AuditLogger, AuditLoggerBuilder, MemoryAuditStorage, AuditConfig};
+/// use dbnexus::{AuditLogger, AuditLoggerBuilder, MemoryAuditStorage, AuditConfig};
 ///
 /// let storage = Arc::new(MemoryAuditStorage::new(1000));
 /// let logger = AuditLogger::builder()

@@ -7,6 +7,8 @@
 //!
 //! 定义迁移相关的数据类型
 
+use super::schema::{Column, ForeignKey, Index, Table};
+
 /// 表变更类型
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TableChange {
@@ -100,7 +102,7 @@ pub enum ColumnChange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::migration::schema::{Column, ColumnType, ForeignKey, ForeignKeyAction, Index, Table};
+    use crate::domain::migration::schema::{Column, ColumnType, Table};
 
     fn sample_column() -> Column {
         Column {
@@ -248,5 +250,3 @@ mod tests {
         }
     }
 }
-
-use super::schema::{Column, ForeignKey, Index, Table};
