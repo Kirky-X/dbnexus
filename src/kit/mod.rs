@@ -272,3 +272,448 @@ impl std::fmt::Debug for DbNexusKit {
         f.debug_struct("DbNexusKit").finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== Mock 实现：ConnectionPool =====
+
+    struct MockConnectionPool {
+        status_value: crate::database::pool::PoolStatus,
+        config_value: crate::foundation::config::DbConfig,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::database::pool::ConnectionPool for MockConnectionPool {
+        async fn get_session(&self, _role: &str) -> crate::foundation::error::DbResult<crate::database::pool::Session> {
+            Err(crate::foundation::error::DbError::new(sea_orm::DbErr::Custom(
+                "mock not implemented".to_string(),
+            )))
+        }
+
+        fn status(&self) -> crate::database::pool::PoolStatus {
+            self.status_value.clone()
+        }
+
+        fn config(&self) -> &crate::foundation::config::DbConfig {
+            &self.config_value
+        }
+    }
+
+    // ===== Mock 实现：DatabaseSession =====
+
+    struct MockDatabaseSession {
+        role_value: String,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::database::pool::DatabaseSession for MockDatabaseSession {
+        async fn execute(&self, _sql: &str) -> crate::foundation::error::DbResult<sea_orm::ExecResult> {
+            Err(crate::foundation::error::DbError::new(sea_orm::DbErr::Custom(
+                "mock not implemented".to_string(),
+            )))
+        }
+
+        async fn execute_raw(&self, _sql: &str) -> crate::foundation::error::DbResult<sea_orm::ExecResult> {
+            Err(crate::foundation::error::DbError::new(sea_orm::DbErr::Custom(
+                "mock not implemented".to_string(),
+            )))
+        }
+
+        async fn execute_raw_ddl(&self, _sql: &str) -> crate::foundation::error::DbResult<sea_orm::ExecResult> {
+            Err(crate::foundation::error::DbError::new(sea_orm::DbErr::Custom(
+                "mock not implemented".to_string(),
+            )))
+        }
+
+        async fn begin_transaction(&self) -> crate::foundation::error::DbResult<()> {
+            Ok(())
+        }
+
+        async fn commit(&self) -> crate::foundation::error::DbResult<()> {
+            Ok(())
+        }
+
+        async fn rollback(&self) -> crate::foundation::error::DbResult<()> {
+            Ok(())
+        }
+
+        fn role(&self) -> &str {
+            &self.role_value
+        }
+
+        async fn is_in_transaction(&self) -> bool {
+            false
+        }
+    }
+
+    fn make_mock_pool() -> MockConnectionPool {
+        MockConnectionPool {
+            status_value: crate::database::pool::PoolStatus {
+                total: 10,
+                active: 5,
+                idle: 5,
+                wait_count: 0,
+                max_waiters: 0,
+                borrow_count: 0,
+                max_active: 10,
+            },
+            config_value: crate::foundation::config::DbConfig::default(),
+        }
+    }
+
+    // ===== DbNexusKit 基础测试 =====
+
+    #[test]
+    fn test_kit_new_creates_empty_kit() {
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_connection_pool());
+        assert!(!kit.has_database_session());
+    }
+
+    #[test]
+    fn test_kit_default_equals_new() {
+        let kit1 = DbNexusKit::new();
+        let kit2 = DbNexusKit::default();
+        assert!(!kit1.has_connection_pool());
+        assert!(!kit2.has_connection_pool());
+    }
+
+    #[test]
+    fn test_kit_clone_preserves_registrations() {
+        let kit = DbNexusKit::new();
+        let mock = make_mock_pool();
+        kit.provide_connection_pool(Arc::new(mock)).unwrap();
+
+        let cloned = kit.clone();
+        assert!(cloned.has_connection_pool());
+        assert!(kit.has_connection_pool());
+    }
+
+    #[test]
+    fn test_kit_debug_format() {
+        let kit = DbNexusKit::new();
+        let debug_str = format!("{:?}", kit);
+        assert!(debug_str.contains("DbNexusKit"));
+    }
+
+    // ===== ConnectionPool 能力测试 =====
+
+    #[test]
+    fn test_provide_connection_pool() {
+        let kit = DbNexusKit::new();
+        let mock = make_mock_pool();
+        assert!(!kit.has_connection_pool());
+
+        kit.provide_connection_pool(Arc::new(mock)).unwrap();
+        assert!(kit.has_connection_pool());
+    }
+
+    #[test]
+    fn test_connection_pool_get() {
+        let kit = DbNexusKit::new();
+        let mock = make_mock_pool();
+        kit.provide_connection_pool(Arc::new(mock)).unwrap();
+
+        let pool = kit.connection_pool();
+        assert!(pool.is_ok());
+        let pool = pool.unwrap();
+        assert_eq!(pool.status().total, 10);
+        assert_eq!(pool.status().active, 5);
+    }
+
+    #[test]
+    fn test_connection_pool_get_when_not_registered() {
+        let kit = DbNexusKit::new();
+        let result = kit.connection_pool();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_replace_connection_pool() {
+        let kit = DbNexusKit::new();
+        let mock1 = MockConnectionPool {
+            status_value: crate::database::pool::PoolStatus {
+                total: 5,
+                active: 2,
+                idle: 3,
+                wait_count: 0,
+                max_waiters: 0,
+                borrow_count: 0,
+                max_active: 5,
+            },
+            config_value: crate::foundation::config::DbConfig::default(),
+        };
+        let mock2 = MockConnectionPool {
+            status_value: crate::database::pool::PoolStatus {
+                total: 20,
+                active: 10,
+                idle: 10,
+                wait_count: 0,
+                max_waiters: 0,
+                borrow_count: 0,
+                max_active: 20,
+            },
+            config_value: crate::foundation::config::DbConfig::default(),
+        };
+
+        kit.provide_connection_pool(Arc::new(mock1)).unwrap();
+        assert_eq!(kit.connection_pool().unwrap().status().total, 5);
+
+        kit.replace_connection_pool(Arc::new(mock2));
+        assert_eq!(kit.connection_pool().unwrap().status().total, 20);
+    }
+
+    #[test]
+    fn test_provide_connection_pool_duplicate_fails() {
+        let kit = DbNexusKit::new();
+        let mock1 = make_mock_pool();
+        let mock2 = make_mock_pool();
+
+        kit.provide_connection_pool(Arc::new(mock1)).unwrap();
+        let result = kit.provide_connection_pool(Arc::new(mock2));
+        assert!(result.is_err());
+    }
+
+    // ===== DatabaseSession 能力测试 =====
+
+    #[test]
+    fn test_provide_database_session() {
+        let kit = DbNexusKit::new();
+        let mock = MockDatabaseSession {
+            role_value: "admin".to_string(),
+        };
+        assert!(!kit.has_database_session());
+
+        kit.provide_database_session(Arc::new(mock)).unwrap();
+        assert!(kit.has_database_session());
+    }
+
+    #[test]
+    fn test_database_session_get() {
+        let kit = DbNexusKit::new();
+        let mock = MockDatabaseSession {
+            role_value: "user".to_string(),
+        };
+        kit.provide_database_session(Arc::new(mock)).unwrap();
+
+        let session = kit.database_session();
+        assert!(session.is_ok());
+        assert_eq!(session.unwrap().role(), "user");
+    }
+
+    #[test]
+    fn test_database_session_get_when_not_registered() {
+        let kit = DbNexusKit::new();
+        let result = kit.database_session();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_replace_database_session() {
+        let kit = DbNexusKit::new();
+        let mock1 = MockDatabaseSession {
+            role_value: "user1".to_string(),
+        };
+        let mock2 = MockDatabaseSession {
+            role_value: "user2".to_string(),
+        };
+
+        kit.provide_database_session(Arc::new(mock1)).unwrap();
+        assert_eq!(kit.database_session().unwrap().role(), "user1");
+
+        kit.replace_database_session(Arc::new(mock2));
+        assert_eq!(kit.database_session().unwrap().role(), "user2");
+    }
+
+    // ===== as_inner / into_inner 测试 =====
+
+    #[test]
+    fn test_as_inner_returns_reference() {
+        let kit = DbNexusKit::new();
+        let _inner: &Kit = kit.as_inner();
+    }
+
+    #[test]
+    fn test_into_inner_consumes_kit() {
+        let kit = DbNexusKit::new();
+        let mock = make_mock_pool();
+        kit.provide_connection_pool(Arc::new(mock)).unwrap();
+
+        let inner = kit.into_inner();
+        assert!(inner.contains::<ConnectionPoolCapKey>());
+    }
+
+    // ===== Pool 能力测试（feature-gated） =====
+    // 注意：PoolConnector 包含 acquire/release/get_session 等方法，
+    // 其返回的 Connection::new 为 pub(crate)，无法在 crate 外构造 mock。
+    // 仅测试 has_pool/get_when_not_registered。
+
+    #[cfg(feature = "pool")]
+    #[test]
+    fn test_pool_get_when_not_registered_returns_error() {
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_pool());
+        let result = kit.pool();
+        assert!(result.is_err());
+    }
+
+    // ===== Permission 能力测试（feature-gated） =====
+
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_permission_capability_lifecycle() {
+        use crate::domain::permission::{
+            PermissionAction, PermissionError, PermissionProvider, RolePolicy,
+        };
+
+        struct MockPermissionProvider;
+
+        #[async_trait::async_trait]
+        impl crate::domain::permission::PermissionChecker for MockPermissionProvider {
+            async fn check(
+                &self,
+                _role: &str,
+                _table: &str,
+                _action: PermissionAction,
+            ) -> Result<bool, PermissionError> {
+                Ok(true)
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl crate::domain::permission::PolicyManager for MockPermissionProvider {
+            async fn get_policy(
+                &self,
+                _role: &str,
+            ) -> Result<Option<RolePolicy>, PermissionError> {
+                Ok(None)
+            }
+
+            async fn refresh(&self) -> Result<(), PermissionError> {
+                Ok(())
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl crate::domain::permission::PermissionLifecycle for MockPermissionProvider {
+            async fn health_check(&self) -> anyhow::Result<()> {
+                Ok(())
+            }
+
+            async fn shutdown(&self) {}
+        }
+
+        impl PermissionProvider for MockPermissionProvider {}
+
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_permission());
+
+        kit.provide_permission(Arc::new(MockPermissionProvider)).unwrap();
+        assert!(kit.has_permission());
+
+        let provider = kit.permission();
+        assert!(provider.is_ok());
+
+        kit.replace_permission(Arc::new(MockPermissionProvider));
+        assert!(kit.has_permission());
+    }
+
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_permission_get_when_not_registered_returns_error() {
+        let kit = DbNexusKit::new();
+        let result = kit.permission();
+        assert!(result.is_err());
+    }
+
+    // ===== Metrics 能力测试（feature-gated） =====
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn test_metrics_capability_lifecycle() {
+        use crate::observability::metrics::MockMetrics;
+
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_metrics_collector());
+
+        kit.provide_metrics_collector(Arc::new(MockMetrics::new()))
+            .unwrap();
+        assert!(kit.has_metrics_collector());
+
+        let collector = kit.metrics_collector();
+        assert!(collector.is_ok());
+        // 验证 trait object 可调用
+        let collector = collector.unwrap();
+        collector.record_query(std::time::Duration::from_millis(10));
+        assert_eq!(collector.query_stats().count, 0); // MockMetrics 是 no-op
+
+        kit.replace_metrics_collector(Arc::new(MockMetrics::new()));
+        assert!(kit.has_metrics_collector());
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn test_metrics_get_when_not_registered_returns_error() {
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_metrics_collector());
+        let result = kit.metrics_collector();
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn test_metrics_provide_duplicate_fails() {
+        use crate::observability::metrics::MockMetrics;
+
+        let kit = DbNexusKit::new();
+        kit.provide_metrics_collector(Arc::new(MockMetrics::new()))
+            .unwrap();
+        let result = kit.provide_metrics_collector(Arc::new(MockMetrics::new()));
+        assert!(result.is_err());
+    }
+
+    // ===== HealthChecker 能力测试（feature-gated） =====
+
+    #[cfg(feature = "health-check")]
+    #[test]
+    fn test_health_checker_capability_lifecycle() {
+        use crate::observability::health::HealthChecker;
+
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_health_checker());
+
+        let checker = Arc::new(HealthChecker::new(1000));
+        kit.provide_health_checker(checker).unwrap();
+        assert!(kit.has_health_checker());
+
+        let checker = kit.health_checker();
+        assert!(checker.is_ok());
+        let _checker = checker.unwrap();
+
+        kit.replace_health_checker(Arc::new(HealthChecker::new(2000)));
+        assert!(kit.has_health_checker());
+    }
+
+    #[cfg(feature = "health-check")]
+    #[test]
+    fn test_health_checker_get_when_not_registered_returns_error() {
+        let kit = DbNexusKit::new();
+        assert!(!kit.has_health_checker());
+        let result = kit.health_checker();
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "health-check")]
+    #[test]
+    fn test_health_checker_provide_duplicate_fails() {
+        use crate::observability::health::HealthChecker;
+
+        let kit = DbNexusKit::new();
+        kit.provide_health_checker(Arc::new(HealthChecker::new(1000)))
+            .unwrap();
+        let result = kit.provide_health_checker(Arc::new(HealthChecker::new(2000)));
+        assert!(result.is_err());
+    }
+}
