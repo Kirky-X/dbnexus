@@ -1414,7 +1414,7 @@ impl MetricsCollectorTrait for MetricsCollector {
 ///
 /// ```rust
 /// use std::sync::Arc;
-/// use dbnexus::metrics::{MetricsCollectorTrait, MockMetrics};
+/// use dbnexus::{MetricsCollectorTrait, MockMetrics};
 ///
 /// // 在测试中使用 MockMetrics
 /// let mock: Arc<dyn MetricsCollectorTrait> = Arc::new(MockMetrics::new());
