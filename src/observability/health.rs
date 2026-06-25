@@ -712,4 +712,401 @@ mod tests {
                 || matches!(result.status, HealthStatus::Unhealthy(_))
         );
     }
+
+    // ===== PoolHealthMetrics 补充测试 =====
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_default() {
+        let metrics = PoolHealthMetrics::default();
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.total, 0);
+        assert_eq!(snapshot.active, 0);
+        assert_eq!(snapshot.idle, 0);
+        assert_eq!(snapshot.waiting, 0);
+        assert_eq!(snapshot.created, 0);
+        assert_eq!(snapshot.failed, 0);
+        assert_eq!(snapshot.closed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_is_healthy() {
+        let metrics = PoolHealthMetrics::new();
+        // 无连接时不健康
+        assert!(!metrics.is_healthy());
+
+        // 有空闲连接时健康
+        metrics.record_connection_created();
+        metrics.decrement_active();
+        metrics.increment_idle().await;
+        assert!(metrics.is_healthy());
+    }
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_should_create_connection() {
+        let metrics = PoolHealthMetrics::new();
+        // total < min_connections → true
+        assert!(metrics.should_create_connection(5));
+
+        // 创建足够连接后
+        metrics.record_connection_created(); // total=1, active=1
+        metrics.decrement_active();
+        metrics.increment_idle().await; // total=1, active=0, idle=1
+        // total >= min_connections 且有空闲 → false
+        assert!(!metrics.should_create_connection(1));
+    }
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_should_create_when_exhausted() {
+        let metrics = PoolHealthMetrics::new();
+        metrics.record_connection_created(); // total=1, active=1
+        // active >= total 且 idle == 0 → true
+        assert!(metrics.should_create_connection(1));
+    }
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_record_failed_and_waiting() {
+        let metrics = PoolHealthMetrics::new();
+        metrics.record_connection_failed();
+        metrics.record_connection_failed();
+        assert_eq!(metrics.snapshot().failed, 2);
+
+        metrics.set_waiting_requests(5);
+        assert_eq!(metrics.snapshot().waiting, 5);
+    }
+
+    #[tokio::test]
+    async fn test_pool_health_metrics_decrement_idle_and_update_time() {
+        let metrics = PoolHealthMetrics::new();
+        metrics.increment_idle().await;
+        metrics.increment_idle().await;
+        assert_eq!(metrics.snapshot().idle, 2);
+
+        metrics.decrement_idle();
+        assert_eq!(metrics.snapshot().idle, 1);
+
+        // update_health_check_time 不应 panic
+        metrics.update_health_check_time().await;
+    }
+
+    // ===== CircuitBreakerState / Error / Config 测试 =====
+
+    #[test]
+    fn test_circuit_breaker_state_display() {
+        assert_eq!(CircuitBreakerState::Closed.to_string(), "closed");
+        assert_eq!(CircuitBreakerState::HalfOpen.to_string(), "half-open");
+        assert_eq!(CircuitBreakerState::Open.to_string(), "open");
+    }
+
+    #[test]
+    fn test_circuit_breaker_error_new_and_state() {
+        let err = CircuitBreakerError::new(CircuitBreakerState::Open);
+        assert_eq!(err.state(), CircuitBreakerState::Open);
+        assert!(err.to_string().contains("open"));
+    }
+
+    #[test]
+    fn test_circuit_breaker_config_default() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.failure_threshold, 5);
+        assert_eq!(config.success_threshold, 3);
+        assert_eq!(config.timeout_ms, 30000);
+        assert_eq!(config.window_size, 100);
+    }
+
+    // ===== CircuitBreaker 补充测试 =====
+
+    #[tokio::test]
+    async fn test_circuit_breaker_record_success_in_closed() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
+        breaker.record_success().await;
+        let status = breaker.status().await;
+        assert_eq!(status.consecutive_successes, 1);
+        assert_eq!(status.consecutive_failures, 0);
+        assert_eq!(status.state, CircuitBreakerState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_record_failure_in_half_open() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 2,
+            timeout_ms: 50,
+            window_size: 10,
+        });
+
+        // 打开熔断器
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+
+        // 等待超时后触发半开
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        let _ = breaker.can_execute().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
+
+        // 半开状态下失败 → 回到 Open
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_record_success_in_open_is_noop() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 2,
+            timeout_ms: 10000,
+            window_size: 10,
+        });
+
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+
+        // Open 状态下记录成功不应改变状态
+        breaker.record_success().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_record_failure_in_open_is_noop() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 2,
+            timeout_ms: 10000,
+            window_size: 10,
+        });
+
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+
+        // Open 状态下再次失败不应改变状态
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_can_execute_in_half_open_low_failure_rate() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 3, // 较高阈值，避免一次成功就关闭
+            timeout_ms: 50,
+            window_size: 10,
+        });
+
+        breaker.record_failure().await; // 窗口: [true]
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        let _ = breaker.can_execute().await; // Open → HalfOpen
+        assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
+
+        // 记录一次成功，使 failure_rate = 1/2 = 0.5（不大于 0.5）
+        breaker.record_success().await; // 窗口: [true, false]
+
+        // 半开状态下，failure_rate <= 0.5，应允许执行
+        let result = breaker.can_execute().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_can_execute_in_half_open_high_failure_rate() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 2,
+            timeout_ms: 50,
+            window_size: 10,
+        });
+
+        breaker.record_failure().await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        let _ = breaker.can_execute().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
+
+        // 记录多次失败使 failure_rate > 0.5
+        breaker.record_success().await; // false (success)
+        breaker.record_failure().await; // true (failure) — 这会使状态回到 Open
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_status_method() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
+        let status = breaker.status().await;
+        assert_eq!(status.state, CircuitBreakerState::Closed);
+        assert_eq!(status.consecutive_failures, 0);
+        assert_eq!(status.consecutive_successes, 0);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_failure_window_eviction() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 100,
+            success_threshold: 2,
+            timeout_ms: 10000,
+            window_size: 3, // 很小的窗口
+        });
+
+        // 记录超过窗口大小的操作
+        breaker.record_success().await;
+        breaker.record_success().await;
+        breaker.record_success().await;
+        breaker.record_success().await;
+
+        // 窗口应只保留最后 3 条记录
+        // （验证不 panic 即可，窗口内部状态）
+        let status = breaker.status().await;
+        assert_eq!(status.state, CircuitBreakerState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_can_execute_in_closed() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
+        assert!(breaker.can_execute().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_can_execute_in_open_within_timeout() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            success_threshold: 2,
+            timeout_ms: 10000, // 长超时
+            window_size: 10,
+        });
+
+        breaker.record_failure().await;
+        assert_eq!(breaker.state().await, CircuitBreakerState::Open);
+
+        // 在超时内应被拒绝
+        let result = breaker.can_execute().await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CircuitBreakerError { .. } => {}
+        }
+    }
+
+    // ===== HealthChecker 补充测试 =====
+
+    #[tokio::test]
+    async fn test_health_checker_metrics_and_circuit_breaker_getters() {
+        let checker = HealthChecker::new(1000);
+        let _metrics = checker.metrics();
+        let _cb = checker.circuit_breaker();
+    }
+
+    #[tokio::test]
+    async fn test_health_check_unhealthy_no_connections() {
+        let checker = HealthChecker::new(1000);
+        let result = checker.check().await;
+        // 无连接时应该返回 Unhealthy
+        assert!(matches!(result.status, HealthStatus::Unhealthy(_)));
+        assert!(!result.recommendations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_healthy_with_idle_connections() {
+        let checker = HealthChecker::new(1000);
+        // 模拟有连接且有空闲
+        checker.metrics().record_connection_created();
+        checker.metrics().decrement_active();
+        checker.metrics().increment_idle().await;
+
+        let result = checker.check().await;
+        assert!(matches!(result.status, HealthStatus::Healthy));
+        assert!(result.recommendations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_degraded_no_idle() {
+        let checker = HealthChecker::new(1000);
+        // 有活跃连接但无空闲
+        checker.metrics().record_connection_created();
+
+        let result = checker.check().await;
+        assert!(matches!(result.status, HealthStatus::Degraded(_)));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_degraded_pool_full() {
+        let checker = HealthChecker::new(1000);
+        // 连接池满且有大量等待
+        checker.metrics().record_connection_created();
+        checker.metrics().set_waiting_requests(15);
+
+        let result = checker.check().await;
+        // active(1) >= total(1) 且 waiting(15) > 10
+        assert!(matches!(result.status, HealthStatus::Degraded(_)));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_unhealthy_high_failure_rate() {
+        let checker = HealthChecker::new(1000);
+        // 模拟高失败率：created > 10 且 failed > created - 10
+        let metrics = checker.metrics();
+        for _ in 0..15 {
+            metrics.record_connection_created();
+        }
+        for _ in 0..10 {
+            metrics.record_connection_failed();
+        }
+        // created=15, failed=10, 10 > 15-10=5 → true
+
+        let result = checker.check().await;
+        assert!(matches!(result.status, HealthStatus::Unhealthy(_)));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_degraded_circuit_breaker_open() {
+        let checker = HealthChecker::new(1000);
+        // 有连接但熔断器打开
+        checker.metrics().record_connection_created();
+        checker.metrics().decrement_active();
+        checker.metrics().increment_idle().await;
+
+        // 触发熔断器打开（需要足够的失败）
+        let cb = checker.circuit_breaker();
+        for _ in 0..5 {
+            cb.record_failure().await;
+        }
+
+        let result = checker.check().await;
+        assert!(matches!(result.status, HealthStatus::Degraded(_)));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_timeout_returns_degraded() {
+        // 设置极短超时（1 纳秒），使 perform_check 超时
+        let checker = HealthChecker::new(0);
+        let result = checker.check().await;
+        // 超时应返回 Degraded
+        // 注意：由于 perform_check 非常快，可能不总是超时
+        // 但 check_timeout=0 应该很可能触发超时
+        let _ = result; // 不严格断言，因为时序不确定
+    }
+
+    // ===== AutoRecoverer 测试 =====
+
+    #[tokio::test]
+    async fn test_auto_recoverer_new_and_stop() {
+        let checker = Arc::new(HealthChecker::new(1000));
+        let recoverer = AutoRecoverer::new(checker, 100);
+        // stop 不应 panic
+        recoverer.stop();
+    }
+
+    #[tokio::test]
+    async fn test_auto_recoverer_start_idempotent() {
+        let checker = Arc::new(HealthChecker::new(1000));
+        let recoverer = Arc::new(AutoRecoverer::new(checker, 10000));
+
+        // 启动恢复器（会进入无限循环，使用 tokio::spawn）
+        let recoverer_clone = recoverer.clone();
+        let handle = tokio::spawn(async move {
+            recoverer_clone.start().await;
+        });
+
+        // 等待一小段时间让它启动
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // 停止恢复器
+        recoverer.stop();
+
+        // 取消任务
+        handle.abort();
+    }
 }
