@@ -22,7 +22,7 @@
 //! ```rust,no_run
 //! use std::sync::Arc;
 //!
-//! use dbnexus::permission_engine::{PolicyDecisionPoint, YamlPermissionProvider};
+//! use dbnexus::access::permission_engine::{PolicyDecisionPoint, YamlPermissionProvider};
 //!
 //! fn main() -> Result<(), String> {
 //!     let provider = YamlPermissionProvider::new("permissions.yaml")?;
@@ -319,7 +319,7 @@ pub struct PolicyDecisionPoint {
 ///
 /// ```rust,no_run
 /// use std::sync::Arc;
-/// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+/// use dbnexus::{PolicyDecisionPoint, RbacPermissionProvider};
 ///
 /// let provider = Arc::new(RbacPermissionProvider::new());
 /// let pdp = PolicyDecisionPoint::builder()
@@ -430,7 +430,7 @@ impl PolicyDecisionPoint {
     ///
     /// ```rust,no_run
     /// use std::sync::Arc;
-    /// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+    /// use dbnexus::{PolicyDecisionPoint, RbacPermissionProvider};
     ///
     /// let provider = Arc::new(RbacPermissionProvider::new());
     /// let pdp = PolicyDecisionPoint::builder()
@@ -452,7 +452,7 @@ impl PolicyDecisionPoint {
     ///
     /// ```rust,no_run
     /// use std::sync::Arc;
-    /// use dbnexus::permission_engine::{PolicyDecisionPoint, RbacPermissionProvider};
+    /// use dbnexus::{PolicyDecisionPoint, RbacPermissionProvider};
     ///
     /// let provider = Arc::new(RbacPermissionProvider::new());
     /// let pdp = PolicyDecisionPoint::with_dependencies(provider);
