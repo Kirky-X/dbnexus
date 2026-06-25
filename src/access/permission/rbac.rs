@@ -90,6 +90,37 @@ impl Default for RbacProvider {
     }
 }
 
+impl PermissionProvider for RbacProvider {
+    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
+        self.roles.get(role).map(|p| p.clone())
+    }
+
+    fn check_access(
+        &self,
+        role: &str,
+        table: &str,
+        operation: PermissionAction,
+    ) -> Result<bool, PermissionProviderError> {
+        match self.roles.get(role) {
+            Some(policy) => {
+                for table_perm in &policy.tables {
+                    if (table_perm.name == "*" || table_perm.name == table)
+                        && table_perm.operations.contains(&operation)
+                    {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            None => Err(PermissionProviderError::RoleNotFound(role.to_string())),
+        }
+    }
+
+    fn get_roles(&self) -> Vec<String> {
+        self.roles.iter().map(|r| r.key().clone()).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,36 +197,5 @@ mod tests {
     fn default_is_empty() {
         let p = RbacProvider::default();
         assert!(p.get_roles().is_empty());
-    }
-}
-
-impl PermissionProvider for RbacProvider {
-    fn get_role_policy(&self, role: &str) -> Option<RolePolicy> {
-        self.roles.get(role).map(|p| p.clone())
-    }
-
-    fn check_access(
-        &self,
-        role: &str,
-        table: &str,
-        operation: PermissionAction,
-    ) -> Result<bool, PermissionProviderError> {
-        match self.roles.get(role) {
-            Some(policy) => {
-                for table_perm in &policy.tables {
-                    if (table_perm.name == "*" || table_perm.name == table)
-                        && table_perm.operations.contains(&operation)
-                    {
-                        return Ok(true);
-                    }
-                }
-                Ok(false)
-            }
-            None => Err(PermissionProviderError::RoleNotFound(role.to_string())),
-        }
-    }
-
-    fn get_roles(&self) -> Vec<String> {
-        self.roles.iter().map(|r| r.key().clone()).collect()
     }
 }

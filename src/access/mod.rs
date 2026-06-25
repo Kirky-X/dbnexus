@@ -20,7 +20,9 @@ pub mod permission_engine;
 pub mod sql_parser;
 
 // Re-exports: security
-pub use security::{DdlGuard, DdlValidationResult, MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
+#[cfg(feature = "sql-parser")]
+pub use security::{DdlGuard, DdlValidationResult};
+pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 // Re-exports: permission
 #[cfg(feature = "permission")]
