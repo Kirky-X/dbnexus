@@ -113,10 +113,10 @@ fn sanitize_default_value(default: &str) -> String {
         "sleep",
     ];
 
-    let upper_default = default.to_uppercase();
+    let lower_default = default.to_lowercase();
 
     for pattern in &suspicious_patterns {
-        if upper_default.contains(pattern) {
+        if lower_default.contains(pattern) {
             return "'***SANITIZED***'".to_string();
         }
     }
@@ -394,20 +394,33 @@ impl SqlGenerator {
             .columns
             .iter()
             .map(|col| self.generate_column_definition(col, &table.primary_key_columns))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e)?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         sql.push_str(&column_defs.join(",\n"));
 
-        // 添加主键约束（已验证的列名）
-        if !table.primary_key_columns.is_empty() {
+        // 添加表级主键约束
+        // SQLite 的自增主键列已在列定义中包含 PRIMARY KEY AUTOINCREMENT，不应在表级别重复声明
+        let columns_with_inline_pk: std::collections::HashSet<&str> = if matches!(self.db_type, DatabaseType::Sqlite) {
+            table
+                .columns
+                .iter()
+                .filter(|c| c.is_auto_increment && c.is_primary_key)
+                .map(|c| c.name.as_str())
+                .collect()
+        } else {
+            std::collections::HashSet::new()
+        };
+        let table_level_pk: Vec<&String> = table
+            .primary_key_columns
+            .iter()
+            .filter(|col| !columns_with_inline_pk.contains(col.as_str()))
+            .collect();
+        if !table_level_pk.is_empty() {
             sql.push_str(",\n");
-            let pk_columns: Vec<String> = table
-                .primary_key_columns
+            let pk_columns: Vec<String> = table_level_pk
                 .iter()
                 .map(|col| validate_sql_identifier(col, "主键列名"))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e)?;
+                .collect::<Result<Vec<_>, _>>()?;
             sql.push_str(&format!("    PRIMARY KEY ({})", pk_columns.join(", ")));
         }
 
@@ -476,8 +489,7 @@ impl SqlGenerator {
             .columns
             .iter()
             .map(|col| validate_sql_identifier(col, "索引列名"))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e)?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         let unique = if index.is_unique { "UNIQUE " } else { "" };
         Ok(format!(
@@ -766,5 +778,878 @@ mod tests {
         assert!(sql.contains("name VARCHAR(255)"));
         assert!(sql.contains("NOT NULL"));
         assert!(sql.contains("PRIMARY KEY (id)"));
+    }
+
+    // ===== validate_sql_identifier 测试 =====
+
+    #[test]
+    fn test_validate_sql_identifier_empty() {
+        let result = validate_sql_identifier("", "表名");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("不能为空"));
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_too_long() {
+        let long_name = "a".repeat(65);
+        let result = validate_sql_identifier(&long_name, "表名");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("长度不能超过 64"));
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_invalid_start_with_digit() {
+        let result = validate_sql_identifier("1table", "表名");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("无效字符"));
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_invalid_chars() {
+        let result = validate_sql_identifier("table-name", "表名");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("无效字符"));
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_reserved_keyword() {
+        for kw in &["select", "INSERT", "Drop", "TABLE"] {
+            let result = validate_sql_identifier(kw, "表名");
+            assert!(result.is_err(), "应该拒绝保留关键字: {}", kw);
+            assert!(result.unwrap_err().contains("保留关键字"));
+        }
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_valid_underscore_start() {
+        let result = validate_sql_identifier("_private_table", "表名");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "_private_table");
+    }
+
+    #[test]
+    fn test_validate_sql_identifier_valid_max_length() {
+        let name = "a".repeat(64);
+        let result = validate_sql_identifier(&name, "表名");
+        assert!(result.is_ok());
+    }
+
+    // ===== sanitize_default_value 测试 =====
+
+    #[test]
+    fn test_sanitize_default_value_suspicious_select() {
+        let result = sanitize_default_value("SELECT * FROM users");
+        assert_eq!(result, "'***SANITIZED***'");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_suspicious_drop() {
+        let result = sanitize_default_value("DROP TABLE users");
+        assert_eq!(result, "'***SANITIZED***'");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_suspicious_comment() {
+        let result = sanitize_default_value("value--comment");
+        assert_eq!(result, "'***SANITIZED***'");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_null() {
+        let result = sanitize_default_value("NULL");
+        assert_eq!(result, "NULL");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_current_timestamp() {
+        let result = sanitize_default_value("CURRENT_TIMESTAMP");
+        assert_eq!(result, "CURRENT_TIMESTAMP");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_now_function() {
+        let result = sanitize_default_value("NOW()");
+        assert_eq!(result, "NOW()");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_integer() {
+        let result = sanitize_default_value("42");
+        assert_eq!(result, "42");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_float() {
+        let result = sanitize_default_value("3.14");
+        assert_eq!(result, "3.14");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_negative_integer() {
+        let result = sanitize_default_value("-100");
+        assert_eq!(result, "-100");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_quoted_string() {
+        let result = sanitize_default_value("'hello'");
+        assert_eq!(result, "'hello'");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_paren_expression() {
+        let result = sanitize_default_value("(1 + 2)");
+        assert_eq!(result, "(1 + 2)");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_plain_string_needs_quotes() {
+        let result = sanitize_default_value("hello");
+        assert_eq!(result, "'hello'");
+    }
+
+    #[test]
+    fn test_sanitize_default_value_string_with_single_quote() {
+        let result = sanitize_default_value("O'Brien");
+        assert_eq!(result, "'O''Brien'");
+    }
+
+    // ===== SchemaDiffer 测试 =====
+
+    fn make_column(name: &str, col_type: ColumnType, nullable: bool, default: Option<&str>) -> Column {
+        Column {
+            name: name.to_string(),
+            column_type: col_type,
+            is_primary_key: false,
+            is_nullable: nullable,
+            has_default: default.is_some(),
+            default_value: default.map(|s| s.to_string()),
+            is_auto_increment: false,
+            comment: None,
+        }
+    }
+
+    fn make_table(name: &str, columns: Vec<Column>) -> Table {
+        Table {
+            name: name.to_string(),
+            columns,
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        }
+    }
+
+    #[test]
+    fn test_diff_no_changes() {
+        let table = make_table("users", vec![make_column("id", ColumnType::Integer, false, None)]);
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(table.clone());
+        new_schema.add_table(table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert!(migrations.is_empty());
+    }
+
+    #[test]
+    fn test_diff_column_type_changed() {
+        let old_table = make_table("users", vec![make_column("age", ColumnType::Integer, true, None)]);
+        let new_table = make_table("users", vec![make_column("age", ColumnType::BigInteger, true, None)]);
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
+            assert!(column_changes.iter().any(|c| matches!(
+                c,
+                ColumnChange::TypeChanged { .. }
+            )));
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    #[test]
+    fn test_diff_column_nullability_changed() {
+        let old_table = make_table("users", vec![make_column("name", ColumnType::String(None), true, None)]);
+        let new_table = make_table("users", vec![make_column("name", ColumnType::String(None), false, None)]);
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
+            assert!(column_changes.iter().any(|c| matches!(
+                c,
+                ColumnChange::NullabilityChanged { new_nullable: false, .. }
+            )));
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    #[test]
+    fn test_diff_column_default_changed() {
+        let old_table = make_table("users", vec![make_column("status", ColumnType::Integer, false, Some("0"))]);
+        let new_table = make_table("users", vec![make_column("status", ColumnType::Integer, false, Some("1"))]);
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
+            assert!(column_changes.iter().any(|c| matches!(
+                c,
+                ColumnChange::DefaultChanged { .. }
+            )));
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    #[test]
+    fn test_diff_added_and_removed_columns() {
+        let old_table = make_table(
+            "users",
+            vec![
+                make_column("id", ColumnType::Integer, false, None),
+                make_column("old_col", ColumnType::Text, true, None),
+            ],
+        );
+        let new_table = make_table(
+            "users",
+            vec![
+                make_column("id", ColumnType::Integer, false, None),
+                make_column("new_col", ColumnType::Text, true, None),
+            ],
+        );
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable {
+            added_columns,
+            removed_columns,
+            ..
+        } = &migrations[0].table_changes[0] {
+            assert_eq!(added_columns.len(), 1);
+            assert_eq!(added_columns[0].name, "new_col");
+            assert_eq!(removed_columns.len(), 1);
+            assert_eq!(removed_columns[0], "old_col");
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    #[test]
+    fn test_diff_added_and_removed_indexes() {
+        let old_index = Index {
+            name: "idx_old".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["old_col".to_string()],
+            is_unique: false,
+            is_constraint: false,
+        };
+        let new_index = Index {
+            name: "idx_new".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["new_col".to_string()],
+            is_unique: true,
+            is_constraint: false,
+        };
+        let old_table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("id", ColumnType::Integer, false, None)],
+            primary_key_columns: vec![],
+            indexes: vec![old_index],
+            foreign_keys: vec![],
+            comment: None,
+        };
+        let new_table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("id", ColumnType::Integer, false, None)],
+            primary_key_columns: vec![],
+            indexes: vec![new_index],
+            foreign_keys: vec![],
+            comment: None,
+        };
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable {
+            added_indexes,
+            removed_indexes,
+            ..
+        } = &migrations[0].table_changes[0] {
+            assert_eq!(added_indexes.len(), 1);
+            assert_eq!(added_indexes[0].name, "idx_new");
+            assert_eq!(removed_indexes.len(), 1);
+            assert_eq!(removed_indexes[0], "idx_old");
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    #[test]
+    fn test_diff_added_and_removed_foreign_keys() {
+        let old_fk = ForeignKey {
+            name: "fk_old".to_string(),
+            table_name: "users".to_string(),
+            column_name: "old_id".to_string(),
+            referenced_table_name: "old_refs".to_string(),
+            referenced_column_name: "id".to_string(),
+            on_delete: None,
+            on_update: None,
+        };
+        let new_fk = ForeignKey {
+            name: "fk_new".to_string(),
+            table_name: "users".to_string(),
+            column_name: "new_id".to_string(),
+            referenced_table_name: "new_refs".to_string(),
+            referenced_column_name: "id".to_string(),
+            on_delete: Some(ForeignKeyAction::Cascade),
+            on_update: Some(ForeignKeyAction::Restrict),
+        };
+        let old_table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("id", ColumnType::Integer, false, None)],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![old_fk],
+            comment: None,
+        };
+        let new_table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("id", ColumnType::Integer, false, None)],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![new_fk],
+            comment: None,
+        };
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+        if let TableChange::AlterTable {
+            added_foreign_keys,
+            removed_foreign_keys,
+            ..
+        } = &migrations[0].table_changes[0] {
+            assert_eq!(added_foreign_keys.len(), 1);
+            assert_eq!(added_foreign_keys[0].name, "fk_new");
+            assert_eq!(removed_foreign_keys.len(), 1);
+            assert_eq!(removed_foreign_keys[0], "fk_old");
+        } else {
+            unreachable!("Expected AlterTable");
+        }
+    }
+
+    // ===== SqlGenerator 测试 =====
+
+    #[test]
+    fn test_generate_create_table_sql_with_indexes_and_fks() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let table = Table {
+            name: "orders".to_string(),
+            columns: vec![
+                make_column("id", ColumnType::Integer, false, None),
+                make_column("user_id", ColumnType::Integer, false, None),
+            ],
+            primary_key_columns: vec!["id".to_string()],
+            indexes: vec![Index {
+                name: "idx_user_id".to_string(),
+                table_name: "orders".to_string(),
+                columns: vec!["user_id".to_string()],
+                is_unique: false,
+                is_constraint: false,
+            }],
+            foreign_keys: vec![ForeignKey {
+                name: "fk_user".to_string(),
+                table_name: "orders".to_string(),
+                column_name: "user_id".to_string(),
+                referenced_table_name: "users".to_string(),
+                referenced_column_name: "id".to_string(),
+                on_delete: Some(ForeignKeyAction::Cascade),
+                on_update: None,
+            }],
+            comment: None,
+        };
+
+        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        assert!(sql.contains("CREATE TABLE orders"));
+        assert!(sql.contains("PRIMARY KEY (id)"));
+        assert!(sql.contains("CREATE INDEX idx_user_id ON orders (user_id)"));
+        assert!(sql.contains("ALTER TABLE orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)"));
+        assert!(sql.contains("ON DELETE CASCADE"));
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_unique_index() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("email", ColumnType::String(None), false, None)],
+            primary_key_columns: vec![],
+            indexes: vec![Index {
+                name: "idx_email".to_string(),
+                table_name: "users".to_string(),
+                columns: vec!["email".to_string()],
+                is_unique: true,
+                is_constraint: false,
+            }],
+            foreign_keys: vec![],
+            comment: None,
+        };
+
+        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        assert!(sql.contains("CREATE UNIQUE INDEX idx_email ON users (email)"));
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_invalid_name() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let table = Table {
+            name: "1invalid".to_string(),
+            columns: vec![],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+        let result = pg.generate_create_table_sql(&table);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_mysql_auto_increment() {
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let table = Table {
+            name: "users".to_string(),
+            columns: vec![Column {
+                name: "id".to_string(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: true,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".to_string()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+
+        let sql = mysql.generate_create_table_sql(&table).expect("SQL generation failed");
+        assert!(sql.contains("AUTO_INCREMENT"));
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_sqlite_auto_increment() {
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
+        let table = Table {
+            name: "users".to_string(),
+            columns: vec![Column {
+                name: "id".to_string(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: true,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".to_string()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+
+        let sql = sqlite.generate_create_table_sql(&table).expect("SQL generation failed");
+        assert!(sql.contains("PRIMARY KEY AUTOINCREMENT"));
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_with_default_value() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let table = Table {
+            name: "users".to_string(),
+            columns: vec![Column {
+                name: "status".to_string(),
+                column_type: ColumnType::Integer,
+                is_primary_key: false,
+                is_nullable: false,
+                has_default: true,
+                default_value: Some("0".to_string()),
+                is_auto_increment: false,
+                comment: None,
+            }],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+
+        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        assert!(sql.contains("DEFAULT 0"));
+    }
+
+    #[test]
+    fn test_generate_create_table_sql_nullable_column() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let table = Table {
+            name: "users".to_string(),
+            columns: vec![make_column("bio", ColumnType::Text, true, None)],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+
+        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        // nullable 列不应包含 NOT NULL
+        assert!(!sql.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn test_generate_create_index_sql_basic() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let index = Index {
+            name: "idx_name".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["name".to_string()],
+            is_unique: false,
+            is_constraint: false,
+        };
+
+        let sql = pg.generate_create_index_sql(&index).expect("SQL generation failed");
+        assert_eq!(sql, "CREATE INDEX idx_name ON users (name)");
+    }
+
+    #[test]
+    fn test_generate_create_index_sql_unique_multi_column() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let index = Index {
+            name: "idx_multi".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["first_name".to_string(), "last_name".to_string()],
+            is_unique: true,
+            is_constraint: false,
+        };
+
+        let sql = pg.generate_create_index_sql(&index).expect("SQL generation failed");
+        assert_eq!(sql, "CREATE UNIQUE INDEX idx_multi ON users (first_name, last_name)");
+    }
+
+    #[test]
+    fn test_generate_create_index_sql_invalid_name() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let index = Index {
+            name: "1invalid".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["name".to_string()],
+            is_unique: false,
+            is_constraint: false,
+        };
+
+        let result = pg.generate_create_index_sql(&index);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_create_index_sql_invalid_column() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let index = Index {
+            name: "idx".to_string(),
+            table_name: "users".to_string(),
+            columns: vec!["invalid-col".to_string()],
+            is_unique: false,
+            is_constraint: false,
+        };
+
+        let result = pg.generate_create_index_sql(&index);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_drop_table_sql() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let sql = pg.generate_drop_table_sql("users").expect("SQL generation failed");
+        assert_eq!(sql, "DROP TABLE users;");
+    }
+
+    #[test]
+    fn test_generate_drop_table_sql_invalid_name() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let result = pg.generate_drop_table_sql("1invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_add_column_sql() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let column = make_column("age", ColumnType::Integer, true, None);
+        let sql = pg.generate_add_column_sql("users", &column).expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ADD age INTEGER;");
+    }
+
+    #[test]
+    fn test_generate_add_column_sql_with_default() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let column = Column {
+            name: "status".to_string(),
+            column_type: ColumnType::Integer,
+            is_primary_key: false,
+            is_nullable: false,
+            has_default: true,
+            default_value: Some("0".to_string()),
+            is_auto_increment: false,
+            comment: None,
+        };
+        let sql = pg.generate_add_column_sql("users", &column).expect("SQL generation failed");
+        assert!(sql.contains("DEFAULT 0"));
+    }
+
+    #[test]
+    fn test_generate_add_column_sql_invalid_table() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let column = make_column("age", ColumnType::Integer, true, None);
+        let result = pg.generate_add_column_sql("1invalid", &column);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_drop_column_sql_mysql() {
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let sql = mysql.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users DROP COLUMN age;");
+    }
+
+    #[test]
+    fn test_generate_drop_column_sql_postgres() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let sql = pg.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users DROP COLUMN age;");
+    }
+
+    #[test]
+    fn test_generate_drop_column_sql_sqlite() {
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
+        let sql = sqlite.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        assert!(sql.contains("-- SQLite 不支持直接删除列"));
+        assert!(sql.contains("ALTER TABLE users DROP COLUMN age;"));
+    }
+
+    #[test]
+    fn test_generate_drop_column_sql_invalid_table() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let result = pg.generate_drop_column_sql("1invalid", "age");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_migration_sql_create_table() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let mut migration = Migration::new(1, "create users".to_string());
+        migration.add_table_change(TableChange::CreateTable(make_table(
+            "users",
+            vec![make_column("id", ColumnType::Integer, false, None)],
+        )));
+
+        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        assert!(sql.contains("-- 创建表: users"));
+        assert!(sql.contains("CREATE TABLE users"));
+    }
+
+    #[test]
+    fn test_generate_migration_sql_drop_table() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let mut migration = Migration::new(1, "drop users".to_string());
+        migration.add_table_change(TableChange::DropTable {
+            table_name: "users".to_string(),
+        });
+
+        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        assert!(sql.contains("-- 删除表: users"));
+        assert!(sql.contains("DROP TABLE users;"));
+    }
+
+    #[test]
+    fn test_generate_migration_sql_alter_table_full() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let mut migration = Migration::new(1, "alter users".to_string());
+        migration.add_table_change(TableChange::AlterTable {
+            table_name: "users".to_string(),
+            column_changes: vec![],
+            added_columns: vec![make_column("age", ColumnType::Integer, true, None)],
+            removed_columns: vec!["old_col".to_string()],
+            added_indexes: vec![Index {
+                name: "idx_age".to_string(),
+                table_name: "users".to_string(),
+                columns: vec!["age".to_string()],
+                is_unique: false,
+                is_constraint: false,
+            }],
+            removed_indexes: vec!["idx_old".to_string()],
+            added_foreign_keys: vec![ForeignKey {
+                name: "fk_role".to_string(),
+                table_name: "users".to_string(),
+                column_name: "role_id".to_string(),
+                referenced_table_name: "roles".to_string(),
+                referenced_column_name: "id".to_string(),
+                on_delete: Some(ForeignKeyAction::SetNull),
+                on_update: None,
+            }],
+            removed_foreign_keys: vec!["fk_old".to_string()],
+        });
+
+        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        assert!(sql.contains("-- 修改表: users"));
+        assert!(sql.contains("-- 添加列: age"));
+        assert!(sql.contains("ALTER TABLE users ADD age INTEGER;"));
+        assert!(sql.contains("-- 删除列: old_col"));
+        assert!(sql.contains("ALTER TABLE users DROP COLUMN old_col;"));
+        assert!(sql.contains("-- 添加索引: idx_age"));
+        assert!(sql.contains("CREATE INDEX idx_age ON users (age)"));
+        assert!(sql.contains("-- 删除索引: idx_old"));
+        assert!(sql.contains("DROP INDEX idx_old;"));
+        assert!(sql.contains("-- 添加外键: fk_role"));
+        assert!(sql.contains("ALTER TABLE users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id)"));
+        assert!(sql.contains("ON DELETE SET NULL"));
+        assert!(sql.contains("-- 删除外键: fk_old"));
+        assert!(sql.contains("ALTER TABLE users DROP CONSTRAINT fk_old;"));
+    }
+
+    #[test]
+    fn test_generate_migration_sql_empty() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let migration = Migration::new(1, "empty".to_string());
+
+        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        assert!(sql.is_empty());
+    }
+
+    #[test]
+    fn test_generate_migration_sql_invalid_table_in_create() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let mut migration = Migration::new(1, "bad".to_string());
+        migration.add_table_change(TableChange::CreateTable(make_table(
+            "1invalid",
+            vec![make_column("id", ColumnType::Integer, false, None)],
+        )));
+
+        let result = pg.generate_migration_sql(&migration);
+        assert!(result.is_err());
+    }
+
+    // ===== MigrationCommand / MigrationPlan 类型测试 =====
+
+    #[test]
+    fn test_migration_direction_variants() {
+        let up = MigrationDirection::Up;
+        let down = MigrationDirection::Down;
+        assert!(matches!(up, MigrationDirection::Up));
+        assert!(matches!(down, MigrationDirection::Down));
+    }
+
+    #[test]
+    fn test_migration_plan_construction() {
+        let plan = MigrationPlan {
+            migrations: vec![Migration::new(1, "v1".to_string())],
+            direction: MigrationDirection::Up,
+        };
+        assert_eq!(plan.migrations.len(), 1);
+        assert!(matches!(plan.direction, MigrationDirection::Up));
+    }
+
+    #[test]
+    fn test_migration_command_create() {
+        let cmd = MigrationCommand::Create {
+            description: "init".to_string(),
+            directory: "migrations".to_string(),
+        };
+        match cmd {
+            MigrationCommand::Create { description, directory } => {
+                assert_eq!(description, "init");
+                assert_eq!(directory, "migrations");
+            }
+            _ => panic!("expected Create"),
+        }
+    }
+
+    #[test]
+    fn test_migration_command_up_with_target() {
+        let cmd = MigrationCommand::Up { target_version: Some(5) };
+        match cmd {
+            MigrationCommand::Up { target_version: Some(5) } => {}
+            _ => panic!("expected Up with target 5"),
+        }
+    }
+
+    #[test]
+    fn test_migration_command_up_no_target() {
+        let cmd = MigrationCommand::Up { target_version: None };
+        match cmd {
+            MigrationCommand::Up { target_version: None } => {}
+            _ => panic!("expected Up with no target"),
+        }
+    }
+
+    #[test]
+    fn test_migration_command_down() {
+        let cmd = MigrationCommand::Down { target_version: Some(2) };
+        match cmd {
+            MigrationCommand::Down { target_version: Some(2) } => {}
+            _ => panic!("expected Down with target 2"),
+        }
+    }
+
+    #[test]
+    fn test_migration_command_status() {
+        let cmd = MigrationCommand::Status;
+        assert!(matches!(cmd, MigrationCommand::Status));
+    }
+
+    #[test]
+    fn test_migration_command_generate() {
+        let cmd = MigrationCommand::Generate {
+            from_schema: "old".to_string(),
+            to_schema: "new".to_string(),
+            output_file: "out.sql".to_string(),
+        };
+        match cmd {
+            MigrationCommand::Generate { from_schema, to_schema, output_file } => {
+                assert_eq!(from_schema, "old");
+                assert_eq!(to_schema, "new");
+                assert_eq!(output_file, "out.sql");
+            }
+            _ => panic!("expected Generate"),
+        }
     }
 }
