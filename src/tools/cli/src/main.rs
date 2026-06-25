@@ -9,8 +9,9 @@
 
 use clap::{Parser, Subcommand};
 #[cfg(feature = "sql-parser")]
-use dbnexus::sql_parser::{SqlOperationType, SqlParser};
-use dbnexus::{DatabaseType as MigrationDatabaseType, DbError, DbPool, DbResult};
+use dbnexus::{SqlOperationType, SqlParser};
+use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
+use dbnexus::{DbError, DbPool, DbResult};
 use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
 use std::fs;
 use std::path::PathBuf;
