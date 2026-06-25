@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```rust
-//! use dbnexus::sharding::{ShardConfig, ShardRouter};
+//! use dbnexus::{ShardConfig, ShardRouter};
 //!
 //! fn main() {
 //!     let config = ShardConfig::new("yearly", 12, "order", "postgresql://localhost/{shard}");
