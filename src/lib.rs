@@ -17,7 +17,7 @@
 // 编译期数据库特性互斥检查
 // ============================================================================
 
-#[cfg(all(not(clippy), feature = "postgres", feature = "mysql"))]
+#[cfg(all(not(clippy), feature = "postgres", feature = "mysql", not(feature = "sqlite")))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 
 #[cfg(all(not(clippy), not(any(feature = "sqlite", feature = "postgres", feature = "mysql"))))]
@@ -115,6 +115,7 @@ pub use crate::database::pool::{ConnectionPool, DatabaseSession};
 pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy};
 
 // Access 导出
+#[cfg(feature = "sql-parser")]
 pub use crate::access::security::{DdlGuard, DdlValidationResult};
 pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
