@@ -412,7 +412,192 @@ mod tests {
     fn foreign_key_action_display() {
         assert_eq!(ForeignKeyAction::Cascade.to_string(), "CASCADE");
         assert_eq!(ForeignKeyAction::SetNull.to_string(), "SET NULL");
+        assert_eq!(ForeignKeyAction::SetDefault.to_string(), "SET DEFAULT");
+        assert_eq!(ForeignKeyAction::Restrict.to_string(), "RESTRICT");
         assert_eq!(ForeignKeyAction::NoAction.to_string(), "NO ACTION");
+    }
+
+    // ===== 补充测试：覆盖未覆盖的分支 =====
+
+    #[test]
+    fn test_column_type_to_sql_big_integer() {
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Sqlite), "BIGINT");
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Postgres), "BIGINT");
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::MySql), "BIGINT");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_float_double() {
+        assert_eq!(ColumnType::Float.to_sql(DatabaseType::Postgres), "FLOAT");
+        assert_eq!(ColumnType::Double.to_sql(DatabaseType::Postgres), "DOUBLE PRECISION");
+        assert_eq!(ColumnType::Double.to_sql(DatabaseType::MySql), "DOUBLE PRECISION");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_date_time_types() {
+        assert_eq!(ColumnType::Date.to_sql(DatabaseType::Postgres), "DATE");
+        assert_eq!(ColumnType::Time.to_sql(DatabaseType::Postgres), "TIME");
+        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::Postgres), "TIMESTAMP");
+
+        // DateTime 有数据库特定行为
+        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::MySql), "DATETIME");
+        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::Postgres), "TIMESTAMP");
+        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::Sqlite), "TEXT");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_binary() {
+        assert_eq!(ColumnType::Binary.to_sql(DatabaseType::Postgres), "BLOB");
+        assert_eq!(ColumnType::Binary.to_sql(DatabaseType::Sqlite), "BLOB");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_text() {
+        assert_eq!(ColumnType::Text.to_sql(DatabaseType::Postgres), "TEXT");
+        assert_eq!(ColumnType::Text.to_sql(DatabaseType::MySql), "TEXT");
+        assert_eq!(ColumnType::Text.to_sql(DatabaseType::Sqlite), "TEXT");
+    }
+
+    #[test]
+    fn test_schema_default() {
+        let s = Schema::default();
+        assert_eq!(s.database_type, DatabaseType::Sqlite);
+        assert!(s.tables.is_empty());
+    }
+
+    #[test]
+    fn test_schema_get_table_mut() {
+        let mut s = Schema::new(DatabaseType::Sqlite);
+        let table = Table {
+            name: "users".into(),
+            columns: vec![Column {
+                name: "id".into(),
+                column_type: ColumnType::Integer,
+                is_primary_key: true,
+                is_nullable: false,
+                has_default: false,
+                default_value: None,
+                is_auto_increment: true,
+                comment: None,
+            }],
+            primary_key_columns: vec!["id".into()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
+        };
+        s.add_table(table);
+
+        // 通过 get_table_mut 修改表
+        {
+            let users = s.get_table_mut("users").expect("table should exist");
+            users.comment = Some("updated comment".to_string());
+        }
+
+        // 验证修改生效
+        let users = s.get_table("users").expect("table should exist");
+        assert_eq!(users.comment.as_deref(), Some("updated comment"));
+
+        // 不存在的表应返回 None
+        assert!(s.get_table_mut("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_migration_history_default() {
+        let h = MigrationHistory::default();
+        assert!(h.applied_migrations.is_empty());
+    }
+
+    #[test]
+    fn test_migration_history_is_version_applied() {
+        let mut h = MigrationHistory::new();
+        assert!(!h.is_version_applied(1));
+
+        h.add_migration(MigrationVersion {
+            version: 1,
+            description: "v1".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m1.sql".into(),
+        });
+
+        assert!(h.is_version_applied(1));
+        assert!(!h.is_version_applied(2));
+    }
+
+    #[test]
+    fn test_migration_history_get_latest_version_empty() {
+        let h = MigrationHistory::new();
+        assert_eq!(h.get_latest_version(), None);
+    }
+
+    #[test]
+    fn test_migration_history_get_pending_migrations_empty() {
+        let h = MigrationHistory::new();
+        let all: Vec<Migration> = vec![];
+        let pending = h.get_pending_migrations(&all);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_migration_history_get_pending_migrations_all_applied() {
+        let mut h = MigrationHistory::new();
+        h.add_migration(MigrationVersion {
+            version: 1,
+            description: "v1".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m1.sql".into(),
+        });
+        h.add_migration(MigrationVersion {
+            version: 2,
+            description: "v2".into(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "m2.sql".into(),
+        });
+
+        let all = [Migration::new(1, "v1".into()), Migration::new(2, "v2".into())];
+        let pending = h.get_pending_migrations(&all);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_serializable_migration_version_round_trip() {
+        let original = MigrationVersion {
+            version: 42,
+            description: "test migration".to_string(),
+            applied_at: time::OffsetDateTime::now_utc(),
+            file_path: "migrations/042_test.sql".to_string(),
+        };
+
+        // MigrationVersion -> SerializableMigrationVersion
+        let serializable: SerializableMigrationVersion = original.clone().into();
+        assert_eq!(serializable.version, 42);
+        assert_eq!(serializable.description, "test migration");
+        assert_eq!(serializable.file_path, "migrations/042_test.sql");
+        assert!(!serializable.applied_at.is_empty());
+
+        // SerializableMigrationVersion -> MigrationVersion (valid timestamp)
+        let restored: MigrationVersion = serializable.into();
+        assert_eq!(restored.version, 42);
+        assert_eq!(restored.description, "test migration");
+        assert_eq!(restored.file_path, "migrations/042_test.sql");
+    }
+
+    #[test]
+    fn test_serializable_migration_version_invalid_timestamp_fallback() {
+        let serializable = SerializableMigrationVersion {
+            version: 1,
+            description: "bad timestamp".to_string(),
+            applied_at: "not-a-valid-timestamp".to_string(),
+            file_path: "m1.sql".to_string(),
+        };
+
+        // 无效时间戳应该回退到当前时间
+        let restored: MigrationVersion = serializable.into();
+        assert_eq!(restored.version, 1);
+        assert_eq!(restored.description, "bad timestamp");
+        // applied_at 应该是当前时间（不为空，且能解析为有效时间）
+        let now = time::OffsetDateTime::now_utc();
+        let diff = restored.applied_at - now;
+        assert!(diff.whole_seconds().abs() < 5, "timestamp should be close to now");
     }
 }
 
