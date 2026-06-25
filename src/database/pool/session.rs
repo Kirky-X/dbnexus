@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 #[cfg(feature = "permission")]
 use crate::access::permission::{PermissionAction, PermissionContext};
+#[cfg(feature = "sql-parser")]
 use crate::access::security::{DdlGuard, DdlValidationResult};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::sql_parser::SqlParser;
@@ -338,19 +339,22 @@ impl Session {
         }
 
         // DDL 安全验证（基于 AST 解析，防止注入绕过）
-        let guard = DdlGuard::new();
-        match guard.validate(sql) {
-            Ok(DdlValidationResult::Allowed) => {
-                // 通过验证，继续执行
-            }
-            Ok(DdlValidationResult::Forbidden(reason)) => {
-                return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
-            }
-            Ok(DdlValidationResult::ParseError(error)) => {
-                return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
-            }
-            Err(error) => {
-                return Err(DbError::Config(format!("DDL validation error: {}", error)));
+        #[cfg(feature = "sql-parser")]
+        {
+            let guard = DdlGuard::new();
+            match guard.validate(sql) {
+                Ok(DdlValidationResult::Allowed) => {
+                    // 通过验证，继续执行
+                }
+                Ok(DdlValidationResult::Forbidden(reason)) => {
+                    return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
+                }
+                Ok(DdlValidationResult::ParseError(error)) => {
+                    return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
+                }
+                Err(error) => {
+                    return Err(DbError::Config(format!("DDL validation error: {}", error)));
+                }
             }
         }
 

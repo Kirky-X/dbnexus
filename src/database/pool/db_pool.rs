@@ -248,20 +248,9 @@ impl DbPool {
             // 并行执行所有连接创建任务
             let results = futures::future::join_all(connection_tasks).await;
 
-            let mut successful = 0;
-            let mut failed = 0;
-
-            for result in results {
-                match result {
-                    Ok(conn) => {
-                        pool.inner.idle_connections.lock().await.push(conn);
-                        pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
-                        successful += 1;
-                    }
-                    Err(_e) => {
-                        failed += 1;
-                    }
-                }
+            for conn in results.into_iter().flatten() {
+                pool.inner.idle_connections.lock().await.push(conn);
+                pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
             }
         }
 
@@ -857,18 +846,19 @@ impl DbPool {
     /// # Examples
     ///
     /// ```
+    /// use dbnexus::DbPool;
     /// // 如果环境变量未设置，返回默认值 30
-    /// std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    /// unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
     /// assert_eq!(DbPool::parse_health_check_interval(), 30);
     ///
     /// // 如果环境变量设置为有效值，返回该值
-    /// std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60");
+    /// unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60"); }
     /// assert_eq!(DbPool::parse_health_check_interval(), 60);
     ///
     /// // 如果环境变量值超出范围，返回限制后的值
-    /// std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000");
+    /// unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000"); }
     /// assert_eq!(DbPool::parse_health_check_interval(), 300);
-    /// std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
+    /// unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
     /// ```
     #[cfg(feature = "pool-health-check")]
     pub fn parse_health_check_interval() -> u64 {
