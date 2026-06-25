@@ -36,12 +36,6 @@ sea-orm = { version = "2.0.0-rc.37", default-features = false }
 # Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
-# Testing
-tokio-test = "0.4"
-
-# Metrics
-prometheus = "0.14"
-
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
@@ -69,6 +63,9 @@ documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
+# 禁用 examples 自动发现：examples/ 目录下存在独立的 dbnexus-examples crate（含自有 Cargo.toml），
+# 其 src/*.rs 文件不应被主包自动识别为示例。所有示例通过下方 [[example]] 显式注册。
+autoexamples = false
 
 [features]
 default = [
@@ -121,7 +118,7 @@ pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
 observability = ["metrics", "health-check"]
-metrics = ["prometheus"]  # Prometheus metrics 导出
+metrics = []  # Prometheus 格式 metrics 导出（内置实现，无需外部 crate）
 health-check = []  # 健康检查模块（内置，无额外依赖）
 
 # === 数据管理 ===
@@ -135,8 +132,8 @@ with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
 audit = ["chrono", "uuid"]  # 审计日志
-permission-engine = ["dashmap", "confers/yaml", "cache", "test-utils", "futures"]  # 高级权限引擎
-authentication = ["jsonwebtoken", "bcrypt", "crossbeam"]  # JWT 认证系统
+permission-engine = ["dashmap", "confers/yaml", "cache", "futures"]  # 高级权限引擎
+authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
 # === 高级配置 ===
 # confers 配置框架 - 所有配置通过 confers 管理
@@ -191,7 +188,6 @@ serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
-prometheus = { workspace = true, optional = true }
 toml = { version = "^1.1", optional = true }
 parking_lot = "0.12"
 home = "0.5"
@@ -214,12 +210,10 @@ oxcache = { version = "0.2.0", optional = true }
 trait-kit = "0.1.0"
 
 # Authentication dependencies
-jsonwebtoken = { version = "~10.0", optional = true }
+jsonwebtoken = { version = "~10.0", features = ["rust_crypto"], optional = true }
 bcrypt = { version = "~0.19", optional = true }
 
-crossbeam = { version = "0.8", optional = true }
 unicode-normalization = "0.1"
-validator = { version = "~0.20", features = ["derive"], optional = true }
 
 # Internal packages
 dbnexus-macros = { workspace = true, optional = true }
@@ -229,7 +223,6 @@ assert_cmd = { version = "2.2", optional = true }
 tempfile = { version = "3.27", optional = true }
 
 [dev-dependencies]
-tokio-test = { workspace = true }
 assert_cmd = "2.2"
 predicates = "3.1"
 criterion = "0.5"
@@ -252,7 +245,7 @@ required-features = ["macros", "sqlite"]
 [[test]]
 name = "core_sql_parser_integration"
 path = "tests/core/integration/sql_parser_integration.rs"
-required-features = ["sql-parser"]
+required-features = ["sql-parser", "permission"]
 
 [[test]]
 name = "core_session_transaction"
@@ -343,8 +336,221 @@ name = "security_unit_tests"
 path = "tests/security/unit/sql_injection_tests.rs"
 required-features = ["sql-parser"]
 
+# Pool 单元测试 - Session 生命周期、事务、execute_raw
+[[test]]
+name = "pool_session_unit_tests"
+path = "tests/pool/unit/session_unit_tests.rs"
+required-features = ["sqlite", "permission", "sql-parser"]
+
+# Pool 单元测试 - DbPool 构造、status、get_session 权限
+[[test]]
+name = "pool_db_pool_unit_tests"
+path = "tests/pool/unit/db_pool_unit_tests.rs"
+required-features = ["sqlite", "permission"]
+
+# Pool 单元测试 - foundation pool 模块（PoolConfig、MemoryPool）
+[[test]]
+name = "pool_foundation_unit_tests"
+path = "tests/pool/unit/foundation_pool_unit_tests.rs"
+required-features = ["futures"]
+
+# Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
+[[test]]
+name = "core_config_unit_tests"
+path = "tests/core/unit/config_unit_tests.rs"
+
+# Core 单元测试 - 公共类型（DatabaseType、DbNexusError）
+[[test]]
+name = "core_common_types_tests"
+path = "tests/core/unit/common_types_tests.rs"
+required-features = ["pool"]
+
+# Domain 单元测试 - 权限模块（PermissionConfig、RolePolicy、MemoryPermissionProvider）
+[[test]]
+name = "domain_permission_tests"
+path = "tests/domain/permission_test.rs"
+required-features = ["permission"]
+
 [dev-dependencies.testcontainers]
 version = "0.23"
 
 [dev-dependencies.testcontainers-modules]
 version = "0.11"
+
+# ============================================================================
+# 示例目标注册
+# ============================================================================
+# 注意：examples/ 目录下还包含独立的 dbnexus-examples crate（examples/Cargo.toml），
+# 该 crate 的二进制文件通过其自有 Cargo.toml 的 [[bin]] 管理，与此处 [[example]] 互不干扰。
+# autoexamples = false 已在 [package] 中设置，防止 Cargo 自动发现 examples/src/*.rs。
+
+# 基础示例
+[[example]]
+name = "basic_connection"
+path = "examples/basic_connection.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "basic_crud"
+path = "examples/basic_crud.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "basic_transaction"
+path = "examples/basic_transaction.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+# 权限控制示例
+[[example]]
+name = "permission_rbac"
+path = "examples/permission_rbac.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "permission_yaml"
+path = "examples/permission_yaml.rs"
+required-features = ["sqlite", "permission", "yaml"]
+
+[[example]]
+name = "permission_macro"
+path = "examples/permission_macro.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "permission_engine"
+path = "examples/permission_engine.rs"
+required-features = ["sqlite", "permission-engine"]
+
+# SQL 解析与安全示例
+[[example]]
+name = "sql_parser"
+path = "examples/sql_parser.rs"
+required-features = ["sql-parser"]
+
+[[example]]
+name = "sql_injection_detection"
+path = "examples/sql_injection_detection.rs"
+required-features = ["sql-parser"]
+
+[[example]]
+name = "ddl_guard"
+path = "examples/ddl_guard.rs"
+required-features = ["sql-parser"]
+
+[[example]]
+name = "sensitive_masker"
+path = "examples/sensitive_masker.rs"
+
+[[example]]
+name = "rate_limiter"
+path = "examples/rate_limiter.rs"
+required-features = ["permission"]
+
+# 配置管理示例
+[[example]]
+name = "config_env"
+path = "examples/config_env.rs"
+required-features = ["config-env"]
+
+[[example]]
+name = "config_yaml"
+path = "examples/config_yaml.rs"
+required-features = ["config-yaml"]
+
+[[example]]
+name = "config_toml"
+path = "examples/config_toml.rs"
+required-features = ["config-toml"]
+
+# 数据库集成示例
+[[example]]
+name = "database_sqlite"
+path = "examples/database_sqlite.rs"
+required-features = ["sqlite"]
+
+[[example]]
+name = "database_postgres"
+path = "examples/database_postgres.rs"
+required-features = ["postgres"]
+
+[[example]]
+name = "database_mysql"
+path = "examples/database_mysql.rs"
+required-features = ["mysql"]
+
+[[example]]
+name = "migration"
+path = "examples/migration.rs"
+required-features = ["sqlite", "migration"]
+
+[[example]]
+name = "sharding"
+path = "examples/sharding.rs"
+required-features = ["sqlite", "sharding"]
+
+[[example]]
+name = "global_index"
+path = "examples/global_index.rs"
+required-features = ["sqlite", "global-index"]
+
+# 可观测性示例
+[[example]]
+name = "metrics_prometheus"
+path = "examples/metrics_prometheus.rs"
+required-features = ["sqlite", "metrics"]
+
+[[example]]
+name = "health_check"
+path = "examples/health_check.rs"
+required-features = ["sqlite", "health-check"]
+
+[[example]]
+name = "latency_histogram"
+path = "examples/latency_histogram.rs"
+required-features = ["sqlite", "metrics"]
+
+# 认证与审计示例
+[[example]]
+name = "authentication_jwt"
+path = "examples/authentication_jwt.rs"
+required-features = ["authentication"]
+
+[[example]]
+name = "authentication_password"
+path = "examples/authentication_password.rs"
+required-features = ["authentication"]
+
+[[example]]
+name = "audit_logging"
+path = "examples/audit_logging.rs"
+required-features = ["sqlite", "audit"]
+
+# 高级特性示例
+[[example]]
+name = "macros_db_entity"
+path = "examples/macros_db_entity.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "macros_db_crud"
+path = "examples/macros_db_crud.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "macros_db_audit"
+path = "examples/macros_db_audit.rs"
+required-features = ["sqlite", "permission", "macros", "audit"]
+
+[[example]]
+name = "macros_db_cache"
+path = "examples/macros_db_cache.rs"
+required-features = ["sqlite", "permission", "macros", "cache"]
+
+[[example]]
+name = "kit_usage"
+path = "examples/kit_usage.rs"
+required-features = ["sqlite", "permission", "macros"]
+
+[[example]]
+name = "config_presets"
+path = "examples/config_presets.rs"
