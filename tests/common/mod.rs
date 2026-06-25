@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 #[cfg(feature = "permission-engine")]
+#[allow(dead_code)]
 async fn join_all<F>(handles: Vec<tokio::task::JoinHandle<F>>) -> Vec<F>
 where
     F: Send,
@@ -526,6 +527,7 @@ pub(crate) fn sanitize_sql_string(input: &str) -> String {
 ///
 /// 此函数需要 `test-utils` feature
 #[cfg(feature = "test-utils")]
+#[allow(dead_code)]
 pub fn create_temp_dir() -> TempDir {
     tempfile::Builder::new()
         .prefix("dbnexus_test_")

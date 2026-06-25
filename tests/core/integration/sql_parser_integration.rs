@@ -7,7 +7,8 @@
 //!
 //! 测试 SQL 解析、操作类型检测和权限动作映射功能
 
-use dbnexus::{PermissionAction, SqlOperationType, SqlParser, is_ddl_operation};
+use dbnexus::access::permission::PermissionAction;
+use dbnexus::{SqlOperationType, SqlParser, is_ddl_operation};
 
 #[tokio::test]
 async fn test_parse_select() {

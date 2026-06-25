@@ -12,8 +12,8 @@
 //! - 权限缓存和刷新
 
 use dbnexus::{
-    EnginePermissionProvider, EngineYamlPermissionProvider, PermissionAction, PermissionDecision, PermissionRule,
-    PolicyDecisionPoint, RbacPermissionProvider, Role,
+    EnginePermissionAction as PermissionAction, EnginePermissionProvider, EngineYamlPermissionProvider,
+    PermissionDecision, PermissionRule, PolicyDecisionPoint, RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -109,6 +109,7 @@ async fn test_pool_config_boundaries() {
         let config = dbnexus::DbConfig {
             url: url.clone(),
             max_connections: max_conn,
+            min_connections: 0, // 避免 min > max 冲突
             ..Default::default()
         };
         let pool = tokio::time::timeout(std::time::Duration::from_secs(10), dbnexus::DbPool::with_config(config))

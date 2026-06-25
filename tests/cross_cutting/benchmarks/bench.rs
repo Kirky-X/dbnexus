@@ -124,7 +124,7 @@ fn database_url_parse_benchmark(c: &mut Criterion) {
     c.bench_function("database_url_parse", |b| {
         b.iter(|| {
             for url in &urls {
-                black_box(dbnexus::DatabaseType::from_url(url));
+                black_box(dbnexus::foundation::DatabaseType::from_url(url));
             }
         })
     });

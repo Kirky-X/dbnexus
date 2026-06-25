@@ -972,7 +972,7 @@ fn test_url_sanitization_no_password() {
 /// 验证 DatabaseType 正确解析各种 URL。
 #[test]
 fn test_database_type_parsing() {
-    use dbnexus::DatabaseType;
+    use dbnexus::foundation::DatabaseType;
 
     assert_eq!(
         DatabaseType::parse_database_type("postgres://localhost/db"),
@@ -1001,7 +1001,7 @@ fn test_database_type_parsing() {
 /// 验证 DatabaseType 的 Display 实现。
 #[test]
 fn test_database_type_display() {
-    use dbnexus::DatabaseType;
+    use dbnexus::foundation::DatabaseType;
 
     assert_eq!(DatabaseType::Postgres.to_string(), "postgres");
     assert_eq!(DatabaseType::MySql.to_string(), "mysql");
