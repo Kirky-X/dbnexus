@@ -9,7 +9,7 @@
 
 use dbnexus::{
     DbPool, DbResult,
-    config::{DatabaseType, DbConfig},
+    foundation::config::{DatabaseType, DbConfig},
 };
 use std::time::Duration;
 

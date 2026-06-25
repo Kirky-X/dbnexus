@@ -41,5 +41,3 @@ pub mod pool;
 pub mod security;
 #[cfg(feature = "sharding")]
 pub mod sharding;
-#[cfg(feature = "tracing")]
-pub mod tracing;

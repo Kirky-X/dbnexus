@@ -218,10 +218,20 @@ async fn test_entity_integration_with_sql_operations() {
 const CRUD_TEST_TABLE: &str = "crud_entity_test";
 
 /// 获取包含完整权限的测试配置
-fn get_test_config_with_all_permissions() -> dbnexus::DbConfig {
-    use std::fs;
+///
+/// 返回 (DbConfig, TempDir)：TempDir 必须在测试期间保持存活，否则权限文件和数据库会被自动清理。
+/// 使用独立临时目录避免并行测试间的文件竞争。
+///
+/// 注意：使用文件型 SQLite 而非 `sqlite::memory:`，因为 sea-orm 的 `Database::connect()`
+/// 内部维护自己的连接池，每个内部连接到 `:memory:` 会创建独立的内存数据库，导致
+/// `CREATE TABLE` 在连接 A 上执行后，`INSERT` 在连接 B 上执行时找不到表。
+fn get_test_config_with_all_permissions() -> (dbnexus::DbConfig, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("Failed to create temp dir");
 
-    let url = get_database_url().unwrap_or("sqlite::memory:".to_string());
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        let db_path = dir.path().join("test.db");
+        format!("sqlite://{}?mode=rwc", db_path.display())
+    });
 
     let perm_content = r#"
 roles:
@@ -235,16 +245,18 @@ roles:
           - DELETE
 "#;
 
-    let perm_file = "/tmp/entity_crud_test_perms.yaml";
-    fs::write(perm_file, perm_content).expect("Failed to write permissions");
+    let perm_file = dir.path().join("perms.yaml");
+    std::fs::write(&perm_file, perm_content).expect("Failed to write permissions");
 
-    dbnexus::DbConfig {
+    let config = dbnexus::DbConfig {
         url,
         max_connections: 5,
         admin_role: "admin".to_string(),
-        permissions_path: Some(perm_file.to_string()),
+        permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
-    }
+    };
+
+    (config, dir)
 }
 
 /// 创建测试表
@@ -296,7 +308,7 @@ async fn cleanup_crud_test_table(pool: &DbPool) {
 
 #[tokio::test]
 async fn test_entity_crud_full_operations() {
-    let config = get_test_config_with_all_permissions();
+    let (config, _perm_dir) = get_test_config_with_all_permissions();
     let pool = DbPool::with_config(config).await.unwrap();
     setup_crud_test_table(&pool).await;
 
@@ -367,7 +379,7 @@ async fn test_entity_crud_full_operations() {
 
 #[tokio::test]
 async fn test_entity_transaction_with_permissions() {
-    let config = get_test_config_with_all_permissions();
+    let (config, _perm_dir) = get_test_config_with_all_permissions();
     let pool = DbPool::with_config(config).await.unwrap();
     setup_crud_test_table(&pool).await;
 
