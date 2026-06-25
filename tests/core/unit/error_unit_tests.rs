@@ -7,8 +7,8 @@
 //!
 //! 测试 DbError, PoolError, PermissionError, ConfigError, MigrationError, AuditError
 
-use dbnexus::ConfigError;
-use dbnexus::{AuditError, DbError, MigrationError, PermissionError, PoolError};
+use dbnexus::foundation::error::{PermissionError, PoolError};
+use dbnexus::{AuditError, ConfigError, DbError, MigrationError};
 
 // ============================================================================
 // DbError 测试

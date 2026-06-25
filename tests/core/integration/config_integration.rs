@@ -14,7 +14,8 @@
 //!   注意：confers 在底层使用相同的 serde 基础设施进行反序列化
 //!   这些测试确保 serde Deserialize trait 正确实现
 
-use dbnexus::{DatabaseType, DbConfig, DbPool, DbPoolBuilder};
+use dbnexus::foundation::DatabaseType;
+use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -40,7 +41,7 @@ async fn test_config_builder_basic() {
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
-    let config = serde_yaml::from_str::<DbConfig>(yaml).unwrap();
+    let config = serde_yaml_ng::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
 }
 
@@ -54,7 +55,7 @@ min_connections: 5
 idle_timeout: 300
 acquire_timeout: 5000
 "#;
-    let config = serde_yaml::from_str::<DbConfig>(yaml).unwrap();
+    let config = serde_yaml_ng::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
     assert_eq!(config.max_connections, 20);
     assert_eq!(config.min_connections, 5);
@@ -175,7 +176,7 @@ async fn test_config_builder_chaining() {
 #[tokio::test]
 async fn test_config_invalid_yaml() {
     let invalid_yaml = r#"url: "sqlite::memory:" invalid syntax"#;
-    let result = serde_yaml::from_str::<DbConfig>(invalid_yaml);
+    let result = serde_yaml_ng::from_str::<DbConfig>(invalid_yaml);
     assert!(result.is_err());
 }
 
@@ -183,7 +184,7 @@ async fn test_config_invalid_yaml() {
 #[tokio::test]
 async fn test_config_missing_required_field() {
     let yaml = r#"max_connections: 10"#;
-    let result = serde_yaml::from_str::<DbConfig>(yaml);
+    let result = serde_yaml_ng::from_str::<DbConfig>(yaml);
     assert!(result.is_err());
 }
 

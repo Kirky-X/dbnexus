@@ -7,7 +7,7 @@
 //!
 //! 注意: 部分测试需要内部 API，已暂时跳过
 
-use dbnexus::DatabaseType;
+use dbnexus::foundation::DatabaseType;
 use dbnexus::MigrationHistory;
 
 #[path = "../../common/mod.rs"]

@@ -338,8 +338,7 @@ fn test_sync_status_constants_uniqueness() {
 /// TEST-GIDX-018: IndexEntry 向量操作测试
 #[test]
 fn test_index_entry_vector_operations() {
-    let entries = vec![
-        IndexEntry {
+    let entries = [IndexEntry {
             table_name: "orders".to_string(),
             record_id: "order_1".to_string(),
             shard_id: 0,
@@ -359,8 +358,7 @@ fn test_index_entry_vector_operations() {
             shard_id: 2,
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
-        },
-    ];
+        }];
 
     assert_eq!(entries.len(), 3);
 
@@ -378,8 +376,7 @@ fn test_index_entry_vector_operations() {
 /// TEST-GIDX-019: IndexEntry 过滤测试
 #[test]
 fn test_index_entry_filtering() {
-    let entries = vec![
-        IndexEntry {
+    let entries = [IndexEntry {
             table_name: "orders".to_string(),
             record_id: "order_1".to_string(),
             shard_id: 0,
@@ -399,8 +396,7 @@ fn test_index_entry_filtering() {
             shard_id: 1,
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
-        },
-    ];
+        }];
 
     let orders: Vec<&IndexEntry> = entries.iter().filter(|e| e.table_name == "orders").collect();
 
@@ -414,8 +410,7 @@ fn test_index_entry_filtering() {
 /// TEST-GIDX-020: IndexEntry 排序测试
 #[test]
 fn test_index_entry_sorting() {
-    let mut entries = vec![
-        IndexEntry {
+    let mut entries = [IndexEntry {
             table_name: "orders".to_string(),
             record_id: "order_3".to_string(),
             shard_id: 2,
@@ -435,8 +430,7 @@ fn test_index_entry_sorting() {
             shard_id: 1,
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
-        },
-    ];
+        }];
 
     // 按 shard_id 排序
     entries.sort_by_key(|e| e.shard_id);
@@ -453,8 +447,7 @@ fn test_index_entry_sorting() {
 /// TEST-GIDX-021: SyncEvent 向量操作测试
 #[test]
 fn test_sync_event_vector_operations() {
-    let events = vec![
-        SyncEvent::Insert(IndexEntry {
+    let events = [SyncEvent::Insert(IndexEntry {
             table_name: "orders".to_string(),
             record_id: "order_1".to_string(),
             shard_id: 0,
@@ -474,8 +467,7 @@ fn test_sync_event_vector_operations() {
             shard_id: 1,
             index_key: "user_id".to_string(),
             index_value: "user_456".to_string(),
-        }),
-    ];
+        })];
 
     assert_eq!(events.len(), 3);
 

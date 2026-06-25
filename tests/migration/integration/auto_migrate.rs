@@ -9,7 +9,7 @@
 
 #![cfg(feature = "auto-migrate")]
 
-use dbnexus::DatabaseType;
+use dbnexus::foundation::DatabaseType;
 use dbnexus::DbConfig;
 use dbnexus::DbPool;
 use std::fs;
