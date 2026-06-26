@@ -157,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 |------|------|----------|
 | <span style="color:#166534; padding:4px 8px; border-radius:4px;">embedded</span> | `runtime-tokio-rustls`, `sqlite`, `config-env` | Ultra-minimal for embedded/edge devices |
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
-| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-yaml`, `data-management`, `security`, `observability` | Monolithic application |
+| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | Monolithic application |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
 | <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | All optional features without database drivers | All enterprise features (manual database selection) |
 
@@ -356,7 +356,7 @@ dbnexus = { version = "0.2", features = [
 
 ```toml
 dbnexus = { version = "0.2", features = [
-    "config-yaml",     # YAML config support
+    "yaml",            # YAML config support
     "config-toml",     # TOML config support
     "config-env",      # Environment variables
 ] }

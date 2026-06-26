@@ -891,7 +891,7 @@ graph TD
         PostgreSQL[PostgreSQL]
         permission[permission]
         pool_health_check[pool-health-check]
-        config_yaml[config-yaml]
+        config_yaml[yaml]
     end
 
     subgraph Enterprise["企业部署"]

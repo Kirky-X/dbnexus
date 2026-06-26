@@ -13,7 +13,7 @@
 //! # 运行示例
 //!
 //! ```bash
-//! cargo run --example config_yaml --features "config-yaml"
+//! cargo run --example config_yaml --features "yaml"
 //! ```
 
 use dbnexus::{DbConfig, DbPool};

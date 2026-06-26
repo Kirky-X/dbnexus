@@ -173,7 +173,7 @@ dbnexus = { path = "..", features = [
     "permission-engine",
     "sql-parser",
     "macros",
-    "config-yaml",
+    "yaml",
     "config-toml",
     "config-env",
     "cache",
