@@ -100,14 +100,14 @@ mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 # === 核心功能 (可选) ===
 pool = []  # 连接池基础模块（零依赖）
 permission = ["dashmap", "futures", "yaml"]  # 权限控制（dashmap 用于旧版 access/permission，yaml 用于策略解析，futures 用于测试）
-permission-with-cache = ["permission", "cache"]  # 权限控制（带缓存注入）
+# Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
+# 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
 macros = ["dbnexus-macros"]
 cache = ["oxcache"]  # 缓存功能（基于 oxcache）
 
 # === 配置支持 ===
-config-yaml = ["yaml"]
-yaml = ["serde_yaml_ng"]
+yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
 config-toml = ["toml"]
 config-env = []  # 环境变量配置（无额外依赖）
 json = []  # JSON 支持（用于直接 serde_json 反序列化）
@@ -162,7 +162,7 @@ monolith = [
     "postgres",
     "permission",
     "sql-parser",
-    "config-yaml",
+    "yaml",
     "data-management",
     "security",
     "observability",

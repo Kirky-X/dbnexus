@@ -37,7 +37,7 @@ fn main() {
     println!("│ permission  │    -     │       ✓       │     ✓      │     ✓       │");
     println!("│ sql-parser  │    -     │       ✓       │     ✓      │     ✓       │");
     println!("│ config-env  │    ✓     │       ✓       │     -      │     -       │");
-    println!("│ config-yaml │    -     │       -       │     ✓      │     ✓       │");
+    println!("│ yaml        │    -     │       -       │     ✓      │     ✓       │");
     println!("│ data-mgmt   │    -     │       -       │     ✓      │     ✓       │");
     println!("│ security    │    -     │       -       │     ✓      │     ✓       │");
     println!("│ observability│   -     │       ✓       │     ✓      │     ✓       │");
@@ -133,7 +133,7 @@ fn print_feature_status() {
         ("macros", cfg!(feature = "macros")),
         ("cache", cfg!(feature = "cache")),
         ("config-env", cfg!(feature = "config-env")),
-        ("config-yaml", cfg!(feature = "config-yaml")),
+        ("yaml", cfg!(feature = "yaml")),
         ("config-toml", cfg!(feature = "config-toml")),
         ("migration", cfg!(feature = "migration")),
         ("sharding", cfg!(feature = "sharding")),
