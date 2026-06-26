@@ -54,15 +54,15 @@ mod cache_tests {
         cache.insert("key3".to_string(), "value3".to_string());
 
         // 验证所有项都存在
-        assert!(cache.get(&"key1".to_string()).is_some());
-        assert!(cache.get(&"key2".to_string()).is_some());
-        assert!(cache.get(&"key3".to_string()).is_some());
+        assert!(cache.get(&"key1".to_string()).is_some(), "key1 should exist after initial insert");
+        assert!(cache.get(&"key2".to_string()).is_some(), "key2 should exist after initial insert");
+        assert!(cache.get(&"key3".to_string()).is_some(), "key3 should exist after initial insert");
 
         // 插入第 4 个项目，触发 LRU 淘汰
         cache.insert("key4".to_string(), "value4".to_string());
 
         // key4 一定存在
-        assert!(cache.get(&"key4".to_string()).is_some());
+        assert!(cache.get(&"key4".to_string()).is_some(), "key4 should exist after insert triggering eviction");
 
         // 至少有 3 个项目（由于 LRU，key1/key2/key3 中有一个被淘汰）
         let remaining_count = [

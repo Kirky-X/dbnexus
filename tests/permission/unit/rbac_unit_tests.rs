@@ -191,12 +191,12 @@ fn test_rbac_check_access_allowed() {
 
     // 检查允许的操作
     let result = provider.check_access("user", "users", PermissionAction::Select);
-    assert!(result.is_ok());
-    assert!(result.unwrap());
+    assert!(result.is_ok(), "check_access user SELECT users should be ok");
+    assert!(result.unwrap(), "user SELECT users should be allowed");
 
     let result = provider.check_access("user", "users", PermissionAction::Insert);
-    assert!(result.is_ok());
-    assert!(result.unwrap());
+    assert!(result.is_ok(), "check_access user INSERT users should be ok");
+    assert!(result.unwrap(), "user INSERT users should be allowed");
 }
 
 /// TEST-RBAC-U-008: 基本权限检查 - 拒绝
@@ -216,12 +216,12 @@ fn test_rbac_check_access_denied() {
 
     // 检查拒绝的操作
     let result = provider.check_access("user", "users", PermissionAction::Delete);
-    assert!(result.is_ok());
-    assert!(!result.unwrap());
+    assert!(result.is_ok(), "check_access user DELETE users should be ok");
+    assert!(!result.unwrap(), "user DELETE users should be denied");
 
     let result = provider.check_access("user", "users", PermissionAction::Update);
-    assert!(result.is_ok());
-    assert!(!result.unwrap());
+    assert!(result.is_ok(), "check_access user UPDATE users should be ok");
+    assert!(!result.unwrap(), "user UPDATE users should be denied");
 }
 
 /// TEST-RBAC-U-009: 不存在的角色权限检查
@@ -492,9 +492,9 @@ fn test_rbac_role_name_case_sensitive() {
     );
 
     // 角色名称应该区分大小写
-    assert!(provider.get_role_policy("Admin").is_some());
-    assert!(provider.get_role_policy("admin").is_none());
-    assert!(provider.get_role_policy("ADMIN").is_none());
+    assert!(provider.get_role_policy("Admin").is_some(), "exact-case Admin role policy should exist");
+    assert!(provider.get_role_policy("admin").is_none(), "lowercase admin role policy should not exist");
+    assert!(provider.get_role_policy("ADMIN").is_none(), "uppercase ADMIN role policy should not exist");
 }
 
 /// TEST-RBAC-U-017: 表名大小写敏感

@@ -201,49 +201,49 @@ mod sql_parser_boundary_tests {
 #[cfg(test)]
 mod permission_boundary_tests {
     use dbnexus::{
-        PermissionAction, PermissionContext, PermissionDecision, PermissionEngine, PermissionResource,
-        PermissionSubject, RbacPermissionProvider,
+        PermissionAction, PermissionContext, PermissionDecision, PermissionResource,
+        PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider,
     };
     use std::sync::Arc;
 
     #[tokio::test]
     async fn test_long_subject_id() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
         let long_id = "a".repeat(10_000);
-        let result = engine.check(&long_id, "users", "SELECT").await;
+        let result = pdp.check(&long_id, "users", "SELECT").await;
         assert!(matches!(result, PermissionDecision::Deny));
     }
 
     #[tokio::test]
     async fn test_long_resource_name() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
         let long_resource = "table_".to_string() + &"a".repeat(10_000);
-        let result = engine.check("admin", &long_resource, "SELECT").await;
+        let result = pdp.check("admin", &long_resource, "SELECT").await;
         assert!(matches!(result, PermissionDecision::Deny));
     }
 
     #[tokio::test]
     async fn test_invalid_action() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
-        let result = engine.check("admin", "users", "INVALID_ACTION").await;
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
+        let result = pdp.check("admin", "users", "INVALID_ACTION").await;
         assert!(matches!(result, PermissionDecision::Error(_)));
     }
 
     #[tokio::test]
     async fn test_empty_action() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
-        let result = engine.check("admin", "users", "").await;
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
+        let result = pdp.check("admin", "users", "").await;
         assert!(matches!(result, PermissionDecision::Error(_)));
     }
 
     #[tokio::test]
     async fn test_many_attributes() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
 
         let mut attributes = std::collections::HashMap::new();
         for i in 0..1000 {
@@ -256,14 +256,14 @@ mod permission_boundary_tests {
             PermissionAction::Select,
         );
 
-        let decision = engine.check_permission(&context).await;
+        let decision = pdp.check_permission(&context).await;
         assert!(matches!(decision, PermissionDecision::Allow) || matches!(decision, PermissionDecision::Deny));
     }
 
     #[tokio::test]
     async fn test_special_chars_in_subject() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
 
         let malicious_ids = vec![
             "admin' OR '1'='1",
@@ -273,7 +273,7 @@ mod permission_boundary_tests {
         ];
 
         for id in malicious_ids {
-            let result = engine.check(id, "users", "SELECT").await;
+            let result = pdp.check(id, "users", "SELECT").await;
             assert!(matches!(result, PermissionDecision::Deny));
         }
     }
@@ -281,12 +281,12 @@ mod permission_boundary_tests {
     #[tokio::test]
     async fn test_system_table_access() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
 
         let system_tables = vec!["pg_catalog", "information_schema", "mysql", "sys", "INFORMATION_SCHEMA"];
 
         for table in system_tables {
-            let result = engine.check("admin", table, "SELECT").await;
+            let result = pdp.check("admin", table, "SELECT").await;
             assert!(matches!(result, PermissionDecision::Deny));
         }
     }
@@ -391,14 +391,13 @@ mod number_boundary_tests {
 
 #[cfg(test)]
 mod concurrency_boundary_tests {
-    use dbnexus::DbPool;
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::Barrier;
 
     #[tokio::test]
     async fn test_massive_concurrent_connections() {
-        let pool = DbPool::new("sqlite::memory:").await.unwrap();
+        let pool = crate::common::make_sqlite_memory_pool().await;
         let num_tasks = 100;
         let barrier = Arc::new(Barrier::new(num_tasks));
         let pool = Arc::new(pool);
@@ -421,7 +420,7 @@ mod concurrency_boundary_tests {
 
     #[tokio::test]
     async fn test_rapid_connection_churn() {
-        let pool = DbPool::new("sqlite::memory:").await.unwrap();
+        let pool = crate::common::make_sqlite_memory_pool().await;
 
         for _ in 0..1000 {
             let session = pool.get_session("admin").await;
@@ -432,7 +431,7 @@ mod concurrency_boundary_tests {
 
     #[tokio::test]
     async fn test_timeout_boundary() {
-        let pool = DbPool::new("sqlite::memory:").await.unwrap();
+        let pool = crate::common::make_sqlite_memory_pool().await;
         let mut sessions = Vec::new();
         for _ in 0..10 {
             if let Ok(session) = pool.get_session("admin").await {
@@ -501,13 +500,13 @@ mod path_traversal_tests {
 
 #[cfg(test)]
 mod sql_injection_tests {
-    use dbnexus::{PermissionEngine, RbacPermissionProvider};
+    use dbnexus::{PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider};
     use std::sync::Arc;
 
     #[tokio::test]
     async fn test_sql_injection_patterns() {
         let provider = Arc::new(RbacPermissionProvider::new());
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
 
         let malicious_inputs = vec![
             "' OR '1'='1",
@@ -527,7 +526,7 @@ mod sql_injection_tests {
         ];
 
         for input in malicious_inputs {
-            let result = engine.check(input, "users", "SELECT").await;
+            let result = pdp.check(input, "users", "SELECT").await;
             match result {
                 dbnexus::PermissionDecision::Deny => {}
                 dbnexus::PermissionDecision::NotApplicable => {}

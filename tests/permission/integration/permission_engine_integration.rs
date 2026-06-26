@@ -91,7 +91,7 @@ const TEST_PERMISSIONS_JSON: &str = r#"{
 
 /// TEST-PE-001: YAML 权限提供者创建测试
 #[tokio::test]
-async fn test_yaml_permission_provider_creation() {
+async fn test_yaml_permission_provider_creation_succeeds() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -112,7 +112,7 @@ async fn test_yaml_permission_provider_creation() {
 
 /// TEST-PE-002: YAML 权限检查测试
 #[tokio::test]
-async fn test_yaml_permission_check() {
+async fn test_yaml_permission_check_returns_correct_decisions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -129,27 +129,27 @@ async fn test_yaml_permission_check() {
 
     // admin 可以访问所有操作
     let result = pdp.check("admin", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow);
+    assert_eq!(result, PermissionDecision::Allow, "admin SELECT users should be allowed");
 
     let result = pdp.check("admin", "orders", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Allow);
+    assert_eq!(result, PermissionDecision::Allow, "admin DELETE orders should be allowed");
 
     // user 不能 DELETE users
     let result = pdp.check("user", "users", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Deny);
+    assert_eq!(result, PermissionDecision::Deny, "user DELETE users should be denied");
 
     // user 可以 SELECT users
     let result = pdp.check("user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow);
+    assert_eq!(result, PermissionDecision::Allow, "user SELECT users should be allowed");
 
     // guest 不能访问 users
     let result = pdp.check("guest", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::NotApplicable);
+    assert_eq!(result, PermissionDecision::NotApplicable, "guest SELECT users should be NotApplicable");
 }
 
 /// TEST-PE-003: RBAC 权限提供者测试
 #[tokio::test]
-async fn test_rbac_permission_provider() {
+async fn test_rbac_permission_provider_creation_succeeds() {
     // 创建 RBAC 提供者
     let provider = Arc::new(RbacPermissionProvider::new());
 
@@ -213,7 +213,7 @@ async fn test_rbac_permission_provider() {
 
 /// TEST-PE-004: PolicyDecisionPoint 测试
 #[tokio::test]
-async fn test_policy_decision_point() {
+async fn test_policy_decision_point_returns_expected_decisions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -246,7 +246,7 @@ async fn test_policy_decision_point() {
 
 /// TEST-PE-005: 权限提供者刷新测试
 #[tokio::test]
-async fn test_permission_provider_refresh() {
+async fn test_permission_provider_refresh_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -268,7 +268,7 @@ async fn test_permission_provider_refresh() {
 
 /// TEST-PE-006: 获取允许的资源列表测试
 #[tokio::test]
-async fn test_get_allowed_resources() {
+async fn test_get_allowed_resources_returns_expected_resources() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -295,7 +295,7 @@ async fn test_get_allowed_resources() {
 
 /// TEST-PE-007: 获取允许的操作列表测试
 #[tokio::test]
-async fn test_get_allowed_actions() {
+async fn test_get_allowed_actions_returns_expected_actions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -325,7 +325,7 @@ async fn test_get_allowed_actions() {
 
 /// TEST-PE-008: 通配符资源匹配测试
 #[tokio::test]
-async fn test_wildcard_resource_matching() {
+async fn test_wildcard_resource_matching_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -347,7 +347,7 @@ async fn test_wildcard_resource_matching() {
 
 /// TEST-PE-009: 多提供者优先级测试
 #[tokio::test]
-async fn test_multiple_providers_priority() {
+async fn test_multiple_providers_priority_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
@@ -372,7 +372,7 @@ async fn test_multiple_providers_priority() {
 
 /// TEST-PE-010: 权限决策延迟测试
 #[tokio::test]
-async fn test_permission_decision_latency() {
+async fn test_permission_decision_latency_under_threshold() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
