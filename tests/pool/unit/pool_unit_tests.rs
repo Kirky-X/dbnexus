@@ -49,9 +49,7 @@ async fn test_pool_builder_basic_initialization() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_builder_default_values() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     // 验证默认值
     assert_eq!(pool.config().max_connections, 20);
@@ -159,9 +157,7 @@ fn test_pool_config_validation_empty_url() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_initial_status() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let status = pool.status();
 
@@ -177,9 +173,7 @@ async fn test_pool_initial_status() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_after_session_acquire() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
 
@@ -203,9 +197,7 @@ async fn test_pool_status_after_session_acquire() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_structure() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let status = pool.status();
 
@@ -455,9 +447,7 @@ fn test_pool_timeout_duration_conversion() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_session_auto_release() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
 
@@ -483,9 +473,7 @@ async fn test_pool_session_auto_release() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_borrow_count_tracking() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
     let initial_borrow_count = initial_status.borrow_count;
@@ -549,9 +537,7 @@ async fn test_pool_max_active_tracking() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_consistency() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     // 多次获取和释放连接
     for _ in 0..10 {
@@ -593,9 +579,7 @@ async fn test_pool_status_consistency() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_via_status() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     // 获取连接并验证状态
     {
@@ -616,9 +600,7 @@ async fn test_connection_lifecycle_via_status() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_borrow_tracking() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let initial_borrow_count = pool.status().borrow_count;
 
@@ -795,9 +777,7 @@ async fn test_pool_large_connection_pool() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_rapid_acquire_release() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     // 快速获取和释放
     for _ in 0..100 {
@@ -822,9 +802,7 @@ async fn test_pool_rapid_acquire_release() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_role() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
     assert_eq!(session.role(), "admin");
@@ -836,9 +814,7 @@ async fn test_session_role() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_transaction_state() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -860,9 +836,7 @@ async fn test_session_transaction_state() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_transaction_rollback() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -881,9 +855,7 @@ async fn test_session_transaction_rollback() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_double_begin_transaction() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -904,9 +876,7 @@ async fn test_session_double_begin_transaction() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_commit_without_transaction() {
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    let pool = crate::common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -1057,12 +1027,8 @@ fn test_pool_config_defaults() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_default() {
-    // 清理环境变量
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    // 空字符串模拟环境变量未设置
+    let interval = dbnexus::DbPool::parse_health_check_interval("");
     assert_eq!(interval, 30, "默认健康检查间隔应为 30 秒");
 }
 
@@ -1072,17 +1038,8 @@ fn test_health_check_interval_default() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_zero() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "0");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("0");
     assert_eq!(interval, 5, "健康检查间隔 0 应被限制为最小值 5 秒");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-045: 测试健康检查间隔 - 下边界值 5
@@ -1091,17 +1048,8 @@ fn test_health_check_interval_lower_bound_zero() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_five() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "5");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("5");
     assert_eq!(interval, 5, "健康检查间隔 5 应保持不变");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-046: 测试健康检查间隔 - 上边界值 300
@@ -1110,17 +1058,8 @@ fn test_health_check_interval_lower_bound_five() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_300() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "300");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("300");
     assert_eq!(interval, 300, "健康检查间隔 300 应保持不变");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-047: 测试健康检查间隔 - 超出上边界值 1000
@@ -1129,17 +1068,8 @@ fn test_health_check_interval_upper_bound_300() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_exceeded() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("1000");
     assert_eq!(interval, 300, "健康检查间隔 1000 应被限制为最大值 300 秒");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-048: 测试健康检查间隔 - 有效中间值
@@ -1148,17 +1078,8 @@ fn test_health_check_interval_upper_bound_exceeded() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_valid_middle_value() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("60");
     assert_eq!(interval, 60, "健康检查间隔 60 应保持不变");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-049: 测试健康检查间隔 - 无效字符串
@@ -1167,17 +1088,8 @@ fn test_health_check_interval_valid_middle_value() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_invalid_string() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "invalid");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("invalid");
     assert_eq!(interval, 30, "无效字符串应使用默认值 30 秒");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-050: 测试健康检查间隔 - 边界内值 1
@@ -1186,17 +1098,8 @@ fn test_health_check_interval_invalid_string() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_below_minimum() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("1");
     assert_eq!(interval, 5, "健康检查间隔 1 应被限制为最小值 5 秒");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 /// TEST-U-POOL-051: 测试健康检查间隔 - 边界内值 301
@@ -1205,17 +1108,8 @@ fn test_health_check_interval_below_minimum() {
 #[test]
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_above_maximum() {
-    unsafe {
-        std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "301");
-    }
-
-    let interval = dbnexus::DbPool::parse_health_check_interval();
+    let interval = dbnexus::DbPool::parse_health_check_interval("301");
     assert_eq!(interval, 300, "健康检查间隔 301 应被限制为最大值 300 秒");
-
-    // 清理
-    unsafe {
-        std::env::remove_var("DB_HEALTH_CHECK_INTERVAL");
-    }
 }
 
 // ============================================================================

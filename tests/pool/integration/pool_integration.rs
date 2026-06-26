@@ -30,7 +30,15 @@ async fn test_clean_invalid_connections() {
 
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-async fn test_validate_and_recreate_connections() {
+async fn test_validate_connections_succeeds() {
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
+    let _session = pool.get_session("admin").await.expect("Failed");
+    assert!(pool.status().total >= 1);
+}
+
+#[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+async fn test_recreate_connections_succeeds() {
     let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed");
     let _session = pool.get_session("admin").await.expect("Failed");
     assert!(pool.status().total >= 1);
