@@ -52,7 +52,11 @@ impl ColumnType {
         match self {
             ColumnType::Integer => "INTEGER".to_string(),
             ColumnType::BigInteger => match db_type {
-                DatabaseType::MySql => "BIGINT".to_string(),
+                // SQLite 的 INTEGER 类型本身就是 64 位（1/2/3/4/6/8 字节自动选择），
+                // BIGINT 在 SQLite 中只是 INTEGER 的类型别名（亲和性为 INTEGER）。
+                // 但 SQLite 的 AUTOINCREMENT 只允许声明为 INTEGER 的主键，
+                // 因此 SQLite 下 BigInteger 映射为 INTEGER 是语义正确的。
+                DatabaseType::Sqlite => "INTEGER".to_string(),
                 _ => "BIGINT".to_string(),
             },
             ColumnType::String(None) => match db_type {
@@ -421,7 +425,9 @@ mod tests {
 
     #[test]
     fn test_column_type_to_sql_big_integer() {
-        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Sqlite), "BIGINT");
+        // SQLite 的 BigInteger 映射为 INTEGER（SQLite 的 INTEGER 是 64 位，
+        // 且 AUTOINCREMENT 只允许 INTEGER）
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Sqlite), "INTEGER");
         assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Postgres), "BIGINT");
         assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::MySql), "BIGINT");
     }
