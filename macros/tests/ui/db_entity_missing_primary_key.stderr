@@ -1,5 +1,5 @@
-error: Missing #[primary_key] attribute on a struct field
- --> tests/ui/db_entity_missing_primary_key.rs:6:8
+error: #[db_entity] requires `primary_key = "..."` parameter
+ --> tests/ui/db_entity_missing_primary_key.rs:8:12
   |
-6 | struct User {
-  |        ^^^^
+8 | pub struct Model {
+  |            ^^^^^

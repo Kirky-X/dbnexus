@@ -1,5 +1,5 @@
-error: Missing #[table_name = "..."] attribute on the struct
- --> tests/ui/db_entity_missing_table_name.rs:5:8
+error: #[db_entity] requires `table_name = "..."` parameter
+ --> tests/ui/db_entity_missing_table_name.rs:8:12
   |
-5 | struct User {
-  |        ^^^^
+8 | pub struct Model {
+  |            ^^^^^

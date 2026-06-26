@@ -1,5 +1,0 @@
-error: #[db_crud] requires table_name. Provide #[sea_orm(table_name = "...")] on the entity or use #[db_crud(table_name = "...")]
- --> tests/ui/db_crud_missing_table_name.rs:5:8
-  |
-5 | struct User {
-  |        ^^^^
