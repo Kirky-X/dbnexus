@@ -10,7 +10,7 @@
 //! # 测试说明
 //!
 //! - 验证 DbConfig 结构体及其 serde Deserialize 实现
-//! - `#[cfg(feature = "config-yaml")]` 测试：验证 DbConfig 的 serde_yaml_ng 反序列化
+//! - `#[cfg(feature = "yaml")]` 测试：验证 DbConfig 的 serde_yaml_ng 反序列化
 
 use dbnexus::foundation::DatabaseType;
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
@@ -31,7 +31,7 @@ async fn test_config_builder_basic() {
     assert_eq!(config.max_connections, 10);
 }
 
-#[cfg(feature = "config-yaml")]
+#[cfg(feature = "yaml")]
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
@@ -39,7 +39,7 @@ async fn test_yaml_loading() {
     assert_eq!(config.url, "sqlite::memory:");
 }
 
-#[cfg(feature = "config-yaml")]
+#[cfg(feature = "yaml")]
 #[tokio::test]
 async fn test_yaml_with_all_fields() {
     let yaml = r#"
@@ -155,7 +155,7 @@ async fn test_config_builder_chaining() {
     assert_eq!(config.admin_role, "superuser");
 }
 
-#[cfg(feature = "config-yaml")]
+#[cfg(feature = "yaml")]
 #[tokio::test]
 async fn test_config_invalid_yaml() {
     let invalid_yaml = r#"url: "sqlite::memory:" invalid syntax"#;
@@ -163,7 +163,7 @@ async fn test_config_invalid_yaml() {
     assert!(result.is_err());
 }
 
-#[cfg(feature = "config-yaml")]
+#[cfg(feature = "yaml")]
 #[tokio::test]
 async fn test_config_missing_required_field() {
     let yaml = r#"max_connections: 10"#;

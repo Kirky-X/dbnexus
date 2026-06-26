@@ -23,7 +23,7 @@ regex = "1"
 
 [dev-dependencies]
 trybuild = "1"
-dbnexus = { path = "..", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "permission", "sql-parser", "cache", "config-yaml"] }
+dbnexus = { path = "..", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "permission", "sql-parser", "cache", "yaml"] }
 sea-orm = { workspace = true, default-features = false, features = ["macros"] }
 
 [lints]
