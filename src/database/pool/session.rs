@@ -127,10 +127,7 @@ impl Session {
         if self.permission_ctx.check_table_access(table, operation).await {
             Ok(())
         } else {
-            Err(DbError::Permission(format!(
-                "Permission denied for {} on {}",
-                operation, table
-            )))
+            Err(permission_denied(operation, table))
         }
     }
 
@@ -272,15 +269,10 @@ impl Session {
                         }
                         // 检查权限
                         // Admin 角色绕过权限检查
-
                         if self.role == self.pool_inner.admin_role {
-
                             // admin 有完全权限，跳过检查
                         } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                            return Err(DbError::Permission(format!(
-                                "Permission denied for {} on {}",
-                                action, table_name
-                            )));
+                            return Err(permission_denied(&action, &table_name));
                         }
                     }
                     Ok(None) => {
@@ -370,112 +362,44 @@ impl Session {
     pub async fn execute(&self, sql: &str) -> DbResult<ExecResult> {
         let start = Instant::now();
 
+        // DDL 检查（sql-parser 启用时）
         #[cfg(feature = "sql-parser")]
-        {
-            // 检查是否为 DDL 操作
-            if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in this context".to_string(),
-                ));
-            }
-        }
+        check_ddl_operation(sql)?;
 
-        #[cfg(all(feature = "permission", feature = "sql-parser"))]
+        #[cfg(feature = "permission")]
         {
-            let parser = SqlParser::new().await;
-            match parser.parse_operation_async(sql).await {
-                Ok(Some((table_name, action))) => {
+            // 解析 SQL 操作类型和表名
+            let parsed = parse_sql_for_permission(sql).await?;
+            match parsed {
+                Some((table_name, action)) => {
+                    // 表名有效性检查
                     if table_name.is_empty() || is_invalid_table_name(&table_name) {
                         return Err(DbError::Permission(
                             "Failed to extract table name for permission checking".to_string(),
                         ));
                     }
-                    // Admin 角色绕过权限检查
-
-                    if self.role == self.pool_inner.admin_role {
-
-                        // admin 有完全权限，跳过检查
-                    } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                        return Err(DbError::Permission(format!(
-                            "Permission denied for {} on {}",
-                            action, table_name
-                        )));
-                    }
+                    // 权限检查（含 admin 角色绕过）
+                    self.check_permission(&table_name, &action).await?;
                     // 执行 SQL
                     let result = self.execute_raw(sql).await?;
-
-                    // 记录指标
-                    let duration = start.elapsed();
-                    self.record_query_metrics(&format!("{:?}", action), duration, true);
-
-                    // 如果是写操作，标记
-                    if matches!(
-                        action,
-                        PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
-                    ) {
-                        self.mark_write().await;
-                    }
-
+                    // 记录指标并标记写操作
+                    self.record_metrics_and_mark_write(&action, start).await;
                     Ok(result)
                 }
-                Ok(None) | Err(_) => {
-                    // 不支持的语句类型或解析失败，但 execute 方法允许这些通过
-                    // 执行 SQL
+                None => {
+                    // 解析失败或不支持的语句类型，直接执行
+                    // （仅 sql-parser 启用时可能出现 None）
                     let result = self.execute_raw(sql).await?;
                     Ok(result)
                 }
             }
         }
 
-        #[cfg(all(feature = "permission", not(feature = "sql-parser")))]
-        {
-            let (table_name, action) = parse_table_and_action(sql);
-            if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                return Err(DbError::Permission(
-                    "Failed to extract table name for permission checking".to_string(),
-                ));
-            }
-            // Admin 角色绕过权限检查
-
-            if self.role == self.pool_inner.admin_role {
-
-                // admin 有完全权限，跳过检查
-            } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                return Err(DbError::Permission(format!(
-                    "Permission denied for {} on {}",
-                    action, table_name
-                )));
-            }
-            // 执行 SQL
-            let result = self.execute_raw(sql).await?;
-
-            // 记录指标
-            let duration = start.elapsed();
-            self.record_query_metrics(&format!("{:?}", action), duration, true);
-
-            // 如果是写操作，标记
-            if matches!(
-                action,
-                PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
-            ) {
-                self.mark_write().await;
-            }
-
-            return Ok(result);
-        }
-
-        #[cfg(all(not(feature = "permission"), feature = "sql-parser"))]
+        #[cfg(not(feature = "permission"))]
         {
             // 执行 SQL
             let result = self.execute_raw(sql).await?;
-            return Ok(result);
-        }
-
-        #[cfg(not(any(feature = "permission", feature = "sql-parser")))]
-        {
-            // 执行 SQL
-            let result = self.execute_raw(sql).await?;
-            return Ok(result);
+            Ok(result)
         }
     }
 
@@ -501,10 +425,7 @@ impl Session {
         #[cfg(feature = "permission")]
         {
             if !table_name.is_empty() && !self.permission_ctx.check_table_access(&table_name, operation).await {
-                return Err(DbError::Permission(format!(
-                    "Permission denied for {} on {}",
-                    operation, table_name
-                )));
+                return Err(permission_denied(operation, &table_name));
             }
         }
 
@@ -518,10 +439,7 @@ impl Session {
         // 如果是写操作，标记
         #[cfg(feature = "permission")]
         {
-            if matches!(
-                operation,
-                PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
-            ) {
+            if is_write_action(operation) {
                 self.mark_write().await;
             }
         }
@@ -599,6 +517,19 @@ impl Session {
         // No-op when metrics feature is disabled
     }
 
+    /// 记录查询指标并标记写操作
+    ///
+    /// 统一 execute 流程中 metrics 记录与 mark_write 逻辑，
+    /// 避免在多个 cfg 分支中重复实现。
+    #[cfg(feature = "permission")]
+    async fn record_metrics_and_mark_write(&self, action: &PermissionAction, start: Instant) {
+        let duration = start.elapsed();
+        self.record_query_metrics(&format!("{:?}", action), duration, true);
+        if is_write_action(action) {
+            self.mark_write().await;
+        }
+    }
+
     /// 检查表级权限
     ///
     /// 此方法为 ORM 操作提供权限检查，确保所有实体操作都经过权限验证
@@ -614,15 +545,10 @@ impl Session {
             };
 
             // Admin 角色绕过权限检查
-
             if self.role == self.pool_inner.admin_role {
-
                 // admin 有完全权限，跳过检查
             } else if !self.permission_ctx.check_table_access(_table_name, &action).await {
-                return Err(DbError::Permission(format!(
-                    "Permission denied for {} on {}",
-                    _operation, _table_name
-                )));
+                return Err(permission_denied(_operation, _table_name));
             }
         }
         Ok(())
@@ -673,7 +599,10 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 /// 统一 "Permission denied for {action} on {table}" 错误消息格式，
 /// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
 #[cfg(feature = "permission")]
-fn permission_denied(action: &impl std::fmt::Display, table: &impl std::fmt::Display) -> DbError {
+fn permission_denied(
+    action: &(impl std::fmt::Display + ?Sized),
+    table: &(impl std::fmt::Display + ?Sized),
+) -> DbError {
     DbError::Permission(format!("Permission denied for {} on {}", action, table))
 }
 
@@ -684,6 +613,19 @@ fn is_write_action(action: &PermissionAction) -> bool {
         action,
         PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
     )
+}
+
+/// 检查 DDL 操作，如果 SQL 为 DDL 则返回错误
+///
+/// 统一 execute / execute_raw / execute_with_operation 中的 DDL 拒绝逻辑。
+#[cfg(feature = "sql-parser")]
+fn check_ddl_operation(sql: &str) -> DbResult<()> {
+    if is_ddl_operation(sql) {
+        return Err(DbError::Permission(
+            "DDL operations are not allowed in this context".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 impl Drop for Session {
@@ -752,6 +694,29 @@ fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
     };
 
     (table_name, action)
+}
+
+/// 解析 SQL 操作类型和表名用于权限检查
+///
+/// 统一 execute 流程中的 SQL 解析入口，消除 permission+sql-parser 与
+/// permission+无 sql-parser 两个 cfg 分支的重复结构：
+/// - sql-parser 启用：返回 None 表示不支持的语句或解析失败（execute 会跳过权限检查直接执行）
+/// - sql-parser 未启用：始终返回 Some（使用简化解析器 parse_table_and_action）
+#[cfg(feature = "permission")]
+async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, PermissionAction)>> {
+    #[cfg(feature = "sql-parser")]
+    {
+        let parser = SqlParser::new().await;
+        match parser.parse_operation_async(sql).await {
+            Ok(Some((table, action))) => Ok(Some((table, action))),
+            Ok(None) => Ok(None),
+            Err(_) => Ok(None),
+        }
+    }
+    #[cfg(not(feature = "sql-parser"))]
+    {
+        Ok(Some(parse_table_and_action(sql)))
+    }
 }
 
 // 实现 DatabaseSession trait
