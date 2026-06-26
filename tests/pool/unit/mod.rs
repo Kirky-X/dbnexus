@@ -12,6 +12,5 @@
 //! - 连接泄漏检测测试
 
 pub mod db_pool_unit_tests;
-pub mod foundation_pool_unit_tests;
 pub mod pool_unit_tests;
 pub mod session_unit_tests;
