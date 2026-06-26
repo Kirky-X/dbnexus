@@ -102,7 +102,7 @@ pool = []  # 连接池基础模块（零依赖）
 permission = ["dashmap", "futures", "yaml"]  # 权限控制（dashmap 用于旧版 access/permission，yaml 用于策略解析，futures 用于测试）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
-sql-parser = ["sqlparser", "cache", "once_cell", "regex"]
+sql-parser = ["sqlparser", "cache", "once_cell", "regex", "unicode-normalization"]
 macros = ["dbnexus-macros"]
 cache = ["oxcache"]  # 缓存功能（基于 oxcache）
 
@@ -186,7 +186,6 @@ sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 toml = { version = "^1.1", optional = true }
 parking_lot = "0.12"
-home = "0.5"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 once_cell = { version = "1.21", optional = true }
 twox-hash = { version = "2.1", optional = true }
@@ -208,7 +207,7 @@ trait-kit = "0.1.0"
 jsonwebtoken = { version = "~10.0", features = ["rust_crypto"], optional = true }
 bcrypt = { version = "~0.19", optional = true }
 
-unicode-normalization = "0.1"
+unicode-normalization = { version = "0.1", optional = true }
 
 # Internal packages
 dbnexus-macros = { workspace = true, optional = true }
