@@ -975,9 +975,7 @@ mod tests {
         // 在超时内应被拒绝
         let result = breaker.can_execute().await;
         assert!(result.is_err());
-        match result.unwrap_err() {
-            CircuitBreakerError { .. } => {}
-        }
+        let _ = result.unwrap_err();
     }
 
     // ===== HealthChecker 补充测试 =====

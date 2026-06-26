@@ -5,7 +5,7 @@
 
 //! 配置管理模块
 //!
-//! 纯数据结构，配置加载由 confers 库接管
+//! 纯数据结构，配置加载通过 serde 直接反序列化
 //!
 //! # 主要类型
 //!
@@ -16,14 +16,21 @@
 //!
 //! # 使用方式
 //!
-//! 通过 confers 库加载配置，然后使用 `DbConfig::from_confers()` 创建配置实例：
+//! 通过 `serde_yaml_ng` / `serde_json` 直接反序列化创建配置实例：
 //!
 //! ```rust,ignore
-//! use confers::ConfigProvider;
 //! use dbnexus::config::DbConfig;
 //!
-//! let provider = /* confers provider */;
-//! let config = DbConfig::from_confers(&provider)?;
+//! // 从 YAML 字符串加载（需要启用 `yaml` feature）
+//! let yaml = r#"
+//! url: "sqlite::memory:"
+//! max_connections: 20
+//! "#;
+//! let config = DbConfig::from_yaml_str(yaml)?;
+//!
+//! // 从 JSON 字符串加载
+//! let json = r#"{"url":"sqlite::memory:","max_connections":20}"#;
+//! let config = DbConfig::from_json_str(json)?;
 //! ```
 
 mod types;
