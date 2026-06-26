@@ -68,14 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let storage_for_query = storage.clone();
     let logger = AuditLogger::with_config(config, storage);
 
-    // 也可通过 builder 创建（展示另一种构造方式）
-    let _logger_via_builder = AuditLogger::builder()
-        .storage(Arc::new(MemoryAuditStorage::new(500)))
-        .config(AuditConfig::default())
-        .build();
     println!("  ✓ MemoryAuditStorage 容量 = 1000");
     println!("  ✓ AuditLogger 创建成功（with_config）");
-    println!("  ✓ AuditLoggerBuilder 创建成功（builder 模式）");
 
     // ============================================
     // 3. AuditOperation 全类型展示
@@ -318,7 +312,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n📚 关键概念:");
     println!("  - AuditConfig                              - 审计配置");
     println!("  - AuditLogger::with_config(config, storage) - 创建日志器");
-    println!("  - AuditLogger::builder().storage().config() - Builder 模式");
     println!("  - MemoryAuditStorage::new(capacity)         - 内存存储");
     println!("  - AuditEventBuilder                         - 链式构建事件");
     println!("  - AuditEvent::create/read/update/delete     - 快捷构造");
