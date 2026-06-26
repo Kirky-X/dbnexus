@@ -18,6 +18,6 @@ pub mod sharding;
 // Re-exports
 #[cfg(feature = "migration")]
 pub use migration::MigrationExecutor;
-pub use pool::{ConnectionPool, DatabaseSession, DbPool, DbPoolBuilder, DbPoolDependencies, Session};
+pub use pool::{ConnectionPool, DatabaseSession, DbPool, DbPoolBuilder, Session};
 #[cfg(feature = "sharding")]
 pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy};
