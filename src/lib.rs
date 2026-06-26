@@ -68,7 +68,9 @@ mod generated_roles;
 
 // Common 导出 (新架构)
 pub use crate::common::error::{DbNexusError, DbNexusResult};
-pub use crate::common::types::DatabaseType;
+
+// DatabaseType 统一定一在 foundation::config（Task 15：合并 common::types::DatabaseType）
+pub use crate::foundation::config::DatabaseType;
 
 // Foundation 导出 (旧版，保持兼容)
 pub use crate::foundation::config::{CacheConfig, ConfigError, DbConfig, PoolConfig};
@@ -161,9 +163,13 @@ pub use crate::observability::health::{
 #[cfg(feature = "metrics")]
 pub use crate::observability::metrics::{
     ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
-    MetricsCollectorTrait, MetricsError, MockMetrics, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord,
+    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord,
     ThroughputStats, TransactionStats,
 };
+
+// MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
+#[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
+pub use crate::observability::metrics::MockMetrics;
 
 // Storage 导出
 #[cfg(feature = "global-index")]
@@ -174,7 +180,7 @@ pub use crate::storage::global_index::{
 // Business 导出（直接从 domain::audit 导出，移除 business 中间层）
 #[cfg(feature = "audit")]
 pub use crate::domain::audit::{
-    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
 #[cfg(feature = "audit")]
