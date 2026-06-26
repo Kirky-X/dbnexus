@@ -1,6 +1,6 @@
 [package]
 name = "dbnexus-examples"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 
@@ -162,6 +162,14 @@ path = "src/macros/macros_db_cache.rs"
 name = "macros_soft_delete_unique"
 path = "src/macros/macros_soft_delete_unique.rs"
 
+[[bin]]
+name = "macros_db_entity_v2"
+path = "src/macros/macros_db_entity_v2.rs"
+
+[[bin]]
+name = "macros_advanced_query"
+path = "src/macros/macros_advanced_query.rs"
+
 # ============================================================
 # Kit 统一能力管理示例 (kit/)
 # ============================================================
@@ -184,11 +192,13 @@ dbnexus = { path = "..", features = [
     "sharding",
     "global-index",
     "with-json",
+    "with-time",
     "metrics",
     "audit",
     "migration",
     "health-check",
     "authentication",
+    "validation",
 ] }
 
 # Async runtime
@@ -217,6 +227,9 @@ prometheus = "0.14"
 
 # Async trait (kit_usage 示例需要)
 async-trait = "0.1"
+
+# Validation (macros_db_entity_v2 示例需要)
+validator = { version = "0.20", features = ["derive"] }
 
 [features]
 default = []

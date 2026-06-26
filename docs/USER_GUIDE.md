@@ -47,8 +47,8 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.1.1"
-tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
+dbnexus = "0.2.0"
+tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 ```
 
 ### 2. 选择特性
@@ -57,10 +57,10 @@ tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.1.1", default-features = false, features = ["minimal"] }
+dbnexus = { version = "0.2.0", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.1.1", features = [
+dbnexus = { version = "0.2.0", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,7 +69,7 @@ dbnexus = { version = "0.1.1", features = [
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.1.1", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.2.0", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 完整特性列表请参见 [README.md](README.md#feature-flags)。
@@ -80,13 +80,13 @@ dbnexus = { version = "0.1.1", features = ["sqlite", "permission", "sql-parser"]
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.1.1", features = ["sqlite"] }
+dbnexus = { version = "0.2.0", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1.1", features = ["postgres"] }
+dbnexus = { version = "0.2.0", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1.1", features = ["mysql"] }
+dbnexus = { version = "0.2.0", features = ["mysql"] }
 ```
 
 **重要：**一次只能启用一个数据库驱动。
@@ -224,12 +224,12 @@ let pool = DbPool::with_config(config).await?;
 定义映射到数据库表的结构体：
 
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -239,31 +239,33 @@ pub struct User {
 }
 ```
 
-**必需属性：**
+**必需参数：**
 
-- `#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]` - 启用 DBNexus 和 Sea-ORM 实体特性
+- `#[db_entity(table_name = "...", primary_key = "...")]` - 统一的属性宏，生成 CRUD 方法
+- `#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]` - Sea-ORM 实体特性
 - `#[sea_orm(table_name = "...")]` - 指定表名
 - `#[sea_orm(primary_key)]` - 标记主键字段
 
-**可选属性：**
+**可选参数：**
 
-- `#[db_crud]` - 生成 CRUD 方法
-- `#[db_permission(...)]` - 添加权限控制
-- `#[db_cache]` - 启用缓存（需要 `cache` 特性）
-- `#[db_audit]` - 启用审计日志（需要 `audit` 特性）
+- `timestamps = true` - 自动管理 `created_at`/`updated_at` 字段
+- `soft_delete = true` - 自动注入 `deleted_at` 字段
+- `cache(...)` - 启用缓存（需要 `cache` 特性）
+- `audit(...)` - 启用审计日志（需要 `audit` 特性）
+- `hooks(...)` - 配置生命周期钩子函数
 
 ### 带权限控制的实体
 
 添加基于角色的访问控制：
 
 ```rust
-use dbnexus::{DbEntity, db_crud, db_permission};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+// 权限控制现在由 Session 根据权限配置文件强制执行，不再通过宏声明
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -276,16 +278,13 @@ pub struct User {
 指定允许的操作：
 
 ```rust
-use dbnexus::{DbEntity, db_crud, db_permission};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+// 操作级权限控制由 Session 根据权限配置强制执行
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(
-    roles = ["admin", "manager"],
-    operations = ["SELECT", "INSERT", "UPDATE"]
-)]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -298,13 +297,16 @@ pub struct User {
 为读操作启用缓存：
 
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(
+    table_name = "users",
+    primary_key = "id",
+    cache(ttl = 60, strategy = "lru", max_capacity = 5000)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_cache]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -317,13 +319,16 @@ pub struct User {
 为所有操作启用审计日志：
 
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(
+    table_name = "users",
+    primary_key = "id",
+    audit(table_name = "audit_log", operations = ["INSERT", "UPDATE", "DELETE"], log_values = true)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_audit]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -334,18 +339,17 @@ pub struct User {
 ### 复杂实体示例
 
 ```rust
-use dbnexus::{DbEntity, db_crud, db_permission, db_cache, db_audit};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
-#[sea_orm(table_name = "orders")]
-#[db_crud]
-#[db_permission(
-    roles = ["admin", "sales_manager"],
-    operations = ["SELECT", "INSERT", "UPDATE", "DELETE"]
+#[db_entity(
+    table_name = "orders",
+    primary_key = "id",
+    cache(ttl = 60, strategy = "lru", max_capacity = 5000),
+    audit(table_name = "audit_log", operations = ["INSERT", "UPDATE", "DELETE"], log_values = true)
 )]
-#[db_cache]
-#[db_audit]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "orders")]
 pub struct Order {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -549,13 +553,13 @@ roles:
 ### 在实体上定义权限
 
 ```rust
-use dbnexus::{DbEntity, db_crud, db_permission};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+// 权限控制现在由 Session 根据权限配置文件强制执行，不再通过宏声明
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -705,13 +709,16 @@ impl<'a> Drop for TransactionGuard<'a> {
 为读密集型操作启用缓存：
 
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(
+    table_name = "products",
+    primary_key = "id",
+    cache(ttl = 60, strategy = "lru", max_capacity = 5000)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "products")]
-#[db_crud]
-#[db_cache]
 pub struct Product {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -732,7 +739,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1.1"
+version = "0.2.0"
 features = ["metrics"]
 ```
 
@@ -762,20 +769,23 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1.1"
+version = "0.2.0"
 features = ["audit"]
 ```
 
-使用 `#[db_audit]` 自动进行审计日志：
+使用 `#[db_entity(... audit(...))]` 自动进行审计日志：
 
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(
+    table_name = "sensitive_data",
+    primary_key = "id",
+    audit(table_name = "audit_log", operations = ["INSERT", "UPDATE", "DELETE"], log_values = true)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "sensitive_data")]
-#[db_crud]
-#[db_audit]
 pub struct SensitiveData {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -793,7 +803,7 @@ SensitiveData::find_by_id(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.1.1"
+version = "0.2.0"
 features = ["tracing"]
 ```
 
@@ -1059,7 +1069,7 @@ User::delete(&session, 1).await?;
 
 3. 检查缓存大小：
    ```rust
-   #[db_cache(capacity = 100)]  // 限制缓存条目
+   #[db_entity(..., cache(max_capacity = 100))]  // 限制缓存条目
    ```
 
 ---
@@ -1067,14 +1077,13 @@ User::delete(&session, 1).await?;
 ## 示例：完整应用程序
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 use chrono::Utc;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
