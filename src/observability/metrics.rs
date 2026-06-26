@@ -768,104 +768,6 @@ impl MetricsCollector {
             start_time: Instant::now(),
         }
     }
-
-    /// 创建 Builder 用于自定义配置
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use dbnexus::metrics::MetricsCollector;
-    ///
-    /// let collector = MetricsCollector::builder()
-    ///     .slow_query_threshold_ms(500)
-    ///     .slow_query_enabled(true)
-    ///     .max_slow_queries(50)
-    ///     .build();
-    /// ```
-    pub fn builder() -> MetricsCollectorBuilder {
-        MetricsCollectorBuilder::new()
-    }
-}
-
-/// MetricsCollector 构建器
-///
-/// 支持链式配置 MetricsCollector 的各项参数。
-#[derive(Debug, Clone)]
-pub struct MetricsCollectorBuilder {
-    /// 慢查询阈值（毫秒）
-    slow_query_threshold_ms: u64,
-    /// 是否启用慢查询记录
-    slow_query_enabled: bool,
-    /// 慢查询最大记录数
-    max_slow_queries: usize,
-}
-
-impl MetricsCollectorBuilder {
-    /// 创建新的 Builder，使用默认配置
-    fn new() -> Self {
-        Self {
-            slow_query_threshold_ms: 1000,
-            slow_query_enabled: true,
-            max_slow_queries: 100,
-        }
-    }
-
-    /// 设置慢查询阈值（毫秒）
-    ///
-    /// # Arguments
-    ///
-    /// * `threshold_ms` - 慢查询阈值，超过此时间的查询将被记录
-    pub fn slow_query_threshold_ms(mut self, threshold_ms: u64) -> Self {
-        self.slow_query_threshold_ms = threshold_ms;
-        self
-    }
-
-    /// 设置是否启用慢查询记录
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - 是否启用慢查询记录
-    pub fn slow_query_enabled(mut self, enabled: bool) -> Self {
-        self.slow_query_enabled = enabled;
-        self
-    }
-
-    /// 设置慢查询最大记录数
-    ///
-    /// # Arguments
-    ///
-    /// * `max` - 最大记录数，超过此数量的旧记录将被移除
-    pub fn max_slow_queries(mut self, max: usize) -> Self {
-        self.max_slow_queries = max;
-        self
-    }
-
-    /// 构建 MetricsCollector 实例
-    pub fn build(self) -> MetricsCollector {
-        MetricsCollector {
-            query_metrics: Arc::new(RwLock::new(HashMap::new())),
-            pool_total: Arc::new(AtomicU64::new(0)),
-            pool_active: Arc::new(AtomicU64::new(0)),
-            pool_idle: Arc::new(AtomicU64::new(0)),
-            connection_errors: Arc::new(AtomicU64::new(0)),
-            query_errors: Arc::new(AtomicU64::new(0)),
-            connection_acquire: Arc::new(RwLock::new(ConnectionAcquireMetricsInner::new())),
-            transaction: Arc::new(RwLock::new(TransactionMetricsInner::new())),
-            slow_queries: Arc::new(RwLock::new(VecDeque::new())),
-            slow_query_config: Arc::new(RwLock::new(SlowQueryConfig {
-                threshold_ms: self.slow_query_threshold_ms,
-                enabled: self.slow_query_enabled,
-            })),
-            max_slow_queries: self.max_slow_queries,
-            start_time: Instant::now(),
-        }
-    }
-}
-
-impl Default for MetricsCollectorBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl MetricsCollector {
@@ -1412,7 +1314,8 @@ impl MetricsCollectorTrait for MetricsCollector {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
+/// // 注意：MockMetrics 需启用 `test-utils` feature（或在 test build 中）才可用
 /// use std::sync::Arc;
 /// use dbnexus::{MetricsCollectorTrait, MockMetrics};
 ///
@@ -1421,11 +1324,14 @@ impl MetricsCollectorTrait for MetricsCollector {
 /// mock.record_query(std::time::Duration::from_millis(10));
 /// mock.record_connection(std::time::Duration::from_millis(5));
 /// ```
+// MockMetrics 仅在测试或启用 `test-utils` feature 时编译（BREAKING: 从默认公共 API 移除）
+#[cfg(any(test, feature = "test-utils"))]
 #[derive(Debug, Clone, Default)]
 pub struct MockMetrics {
     _private: (),
 }
 
+#[cfg(any(test, feature = "test-utils"))]
 impl MockMetrics {
     /// 创建新的 MockMetrics
     pub fn new() -> Self {
@@ -1433,6 +1339,7 @@ impl MockMetrics {
     }
 }
 
+#[cfg(any(test, feature = "test-utils"))]
 impl MetricsCollectorTrait for MockMetrics {
     fn record_query(&self, _duration: Duration) {
         // No-op: Mock 实现不记录任何指标

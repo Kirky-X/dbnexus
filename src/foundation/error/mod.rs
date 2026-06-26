@@ -98,30 +98,16 @@ pub enum PoolError {
     HealthCheckFailed(String),
 }
 
-/// 权限错误
-#[derive(Debug, thiserror::Error)]
-pub enum PermissionError {
-    /// 权限被拒绝
-    #[error("Permission denied for {operation} on {resource}")]
-    Denied {
-        /// 目标资源
-        resource: String,
-        /// 操作类型
-        operation: String,
-    },
-
-    /// 角色未找到
-    #[error("Role not found: {0}")]
-    RoleNotFound(String),
-
-    /// 无效的权限配置
-    #[error("Invalid permission configuration: {0}")]
-    InvalidConfig(String),
-
-    /// 速率限制
-    #[error("Rate limit exceeded")]
-    RateLimited,
-}
+// 权限错误类型已统一到领域层。
+// 此处 re-export `domain::permission::error::PermissionError`，保持
+// `foundation::error::PermissionError` 路径可用，避免破坏既有引用路径。
+//
+// BREAKING（Task 13）：旧版 foundation 定义被删除，统一到 domain 版本：
+// - `InvalidConfig` 变体重命名为 `InvalidPolicy`
+// - 新增独有变体 `ParseError`
+// - 错误消息大小写变化（如 "Role not found" → "role not found"）
+// access::permission::types::PermissionError 保留不动，待 Phase 4 Task 18 整体删除。
+pub use crate::domain::permission::PermissionError;
 
 /// 迁移错误
 #[derive(Debug, thiserror::Error)]
