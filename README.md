@@ -56,13 +56,12 @@ DBNexus provides a **declarative** database access approach:
 | Compile-time checks | Table-level RBAC | RAII auto-management | Prometheus metrics |
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -171,9 +170,9 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = "0.1.1"
-tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
-sea-orm = { version = "2.0.0-rc.27", features = ["macros"] }
+dbnexus = "0.2.0"
+tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
+sea-orm = { version = "2.0.0-rc.37", features = ["macros"] }
 ```
 
 ### <span id="basic-usage">💡 Basic Usage</span>
@@ -191,12 +190,12 @@ sea-orm = { version = "2.0.0-rc.27", features = ["macros"] }
 **Step 1: Define Entity**
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -252,13 +251,12 @@ println!("Found {} users", users.len());
 ### <span id="permission-control">🔒 Permission Control</span>
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
