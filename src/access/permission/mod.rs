@@ -7,9 +7,11 @@
 //!
 //! 提供基于角色的表级权限控制功能
 //!
-//! ⚠ **已弃用**：`PermissionAction`、`RolePolicy`、`TablePermission`、`PermissionConfig`、
-//! `PermissionError` 等类型已迁移到 [`crate::domain::permission`]。新代码应直接使用领域层版本。
-//! 本模块中的 `PermissionProvider` trait、`PermissionContext` 等独有类型将逐步迁移。
+//! **模块定位**：本模块为权限**运行时实现层**，提供 `PermissionContext`（缓存 + 速率限制 +
+//! 缓存击穿防护）、`RateLimiter`、`RbacProvider`/`AdvancedRbacProvider`、统计等运行时能力。
+//! [`crate::domain::permission`] 为权限**领域接口层**，提供 trait 定义和配置类型。
+//! 两层互补共存，非"已弃用"关系。新代码如需运行时上下文/缓存/速率限制，使用本模块；
+//! 如仅需接口或配置类型，使用 domain::permission。
 
 // 子模块声明
 pub mod advanced;
@@ -42,7 +44,7 @@ pub use rate_limiter::RateLimiter;
 
 // 从 context.rs 重导出（需要 cache feature）
 #[cfg(feature = "cache")]
-pub use context::{PermissionContext, PermissionContextBuilder};
+pub use context::{PermissionContext};
 
 // ============================================================================
 // 内部使用（pub(crate)）
