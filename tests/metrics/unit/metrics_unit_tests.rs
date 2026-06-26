@@ -768,9 +768,9 @@ fn test_histogram_empty_stats() {
     assert!(stats.buckets.iter().all(|b| b.count == 0));
 }
 
-/// TEST-MU-041: 重置后重新记录测试
+/// TEST-MU-041: 重置清空所有指标测试
 #[test]
-fn test_reset_and_re_record() {
+fn test_reset_clears_all_metrics() {
     let collector = MetricsCollector::new();
 
     // 记录初始数据
@@ -782,6 +782,18 @@ fn test_reset_and_re_record() {
 
     // 验证已清空
     assert!(collector.get_query_stats("SELECT").is_none());
+}
+
+/// TEST-MU-041: 重置后重新记录测试
+#[test]
+fn test_re_record_after_reset_succeeds() {
+    let collector = MetricsCollector::new();
+
+    // 记录初始数据
+    collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
+
+    // 重置
+    collector.reset();
 
     // 重新记录
     collector.record_query("SELECT", Duration::from_millis(20), true, Some(200));

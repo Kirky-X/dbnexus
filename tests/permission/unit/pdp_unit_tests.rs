@@ -113,7 +113,7 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
 /// TEST-PDP-U-001: 基本权限检查 - 允许
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_check_allow() {
+async fn test_pdp_check_allow_returns_allow_decision() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -166,7 +166,7 @@ async fn test_pdp_check_deny() {
 /// TEST-PDP-U-003: 基本权限检查 - 不适用
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_check_not_applicable() {
+async fn test_pdp_check_not_applicable_returns_not_applicable() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -182,7 +182,7 @@ async fn test_pdp_check_not_applicable() {
 /// TEST-PDP-U-004: 未知操作返回错误
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_check_unknown_action() {
+async fn test_pdp_check_unknown_action_returns_default_decision() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -201,7 +201,7 @@ async fn test_pdp_check_unknown_action() {
 /// TEST-PDP-U-005: 使用 PermissionContext 检查权限
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_check_permission_with_context() {
+async fn test_pdp_check_permission_with_context_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -218,7 +218,7 @@ async fn test_pdp_check_permission_with_context() {
 /// TEST-PDP-U-006: PermissionContext 带属性
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_permission_context_with_attributes() {
+async fn test_pdp_check_permission_with_attributes_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -237,7 +237,7 @@ async fn test_pdp_permission_context_with_attributes() {
 /// TEST-PDP-U-007: PermissionSubject 类型测试
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_permission_subject_types() {
+async fn test_pdp_permission_subject_types_returns_correct_id() {
     let _provider = create_test_rbac_provider();
 
     // 用户主体
@@ -252,7 +252,7 @@ async fn test_pdp_permission_subject_types() {
 /// TEST-PDP-U-008: PermissionResource 类型测试
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_permission_resource_types() {
+async fn test_pdp_permission_resource_types_returns_correct_fields() {
     // 基本资源
     let resource = PermissionResource::new("users");
     assert_eq!(resource.name, "users");
@@ -271,7 +271,7 @@ async fn test_pdp_permission_resource_types() {
 /// TEST-PDP-U-009: 缓存命中
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_cache_hit() {
+async fn test_pdp_cache_second_check_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -291,7 +291,7 @@ async fn test_pdp_cache_hit() {
 /// TEST-PDP-U-010: 缓存刷新
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_cache_refresh() {
+async fn test_pdp_cache_refresh_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -313,7 +313,7 @@ async fn test_pdp_cache_refresh() {
 /// TEST-PDP-U-011: 禁用缓存
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_cache_disabled() {
+async fn test_pdp_cache_disabled_returns_allow() {
     let provider = create_test_rbac_provider();
     let mut pdp = PolicyDecisionPoint::new(provider);
 
@@ -332,7 +332,7 @@ async fn test_pdp_cache_disabled() {
 /// TEST-PDP-U-012: 自定义缓存 TTL
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_custom_cache_ttl() {
+async fn test_pdp_custom_cache_ttl_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::with_cache(provider, 60); // 60 秒 TTL
 
@@ -351,7 +351,7 @@ async fn test_pdp_custom_cache_ttl() {
 /// TEST-PDP-U-013: 速率限制 - 基本功能
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_rate_limit_basic() {
+async fn test_pdp_rate_limit_basic_returns_not_applicable() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::with_rate_limit(provider, 5, 60); // 每分钟 5 次
 
@@ -370,7 +370,7 @@ async fn test_pdp_rate_limit_basic() {
 /// TEST-PDP-U-014: 速率限制 - 超过限制
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_rate_limit_exceeded() {
+async fn test_pdp_rate_limit_exceeded_returns_deny() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::with_rate_limit(provider, 3, 60); // 每分钟 3 次
 
@@ -391,7 +391,7 @@ async fn test_pdp_rate_limit_exceeded() {
 /// TEST-PDP-U-015: 速率限制 - 不同用户独立计数
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_rate_limit_different_users() {
+async fn test_pdp_rate_limit_different_users_independent_count() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::with_rate_limit(provider, 2, 60); // 每分钟 2 次
 
@@ -416,7 +416,7 @@ async fn test_pdp_rate_limit_different_users() {
 /// TEST-PDP-U-016: 批量权限检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_batch_check() {
+async fn test_pdp_batch_check_returns_expected_decisions() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -455,7 +455,7 @@ async fn test_pdp_batch_check() {
 /// TEST-PDP-U-017: 空批量检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_batch_check_empty() {
+async fn test_pdp_batch_check_empty_returns_empty() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -472,7 +472,7 @@ async fn test_pdp_batch_check_empty() {
 /// TEST-PDP-U-018: 规则优先级 - 高优先级规则优先
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_rule_priority() {
+async fn test_pdp_rule_priority_high_deny_returns_deny() {
     let provider = Arc::new(RbacPermissionProvider::new());
 
     provider.add_role(Role {
@@ -528,7 +528,7 @@ async fn test_pdp_rule_priority() {
 /// TEST-PDP-U-019: Allow 和 Deny 冲突 - Deny 优先
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_allow_deny_conflict() {
+async fn test_pdp_allow_deny_conflict_returns_decision() {
     let provider = Arc::new(RbacPermissionProvider::new());
 
     provider.add_role(Role {
@@ -583,7 +583,7 @@ async fn test_pdp_allow_deny_conflict() {
 /// TEST-PDP-U-020: 禁用的规则不生效
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_disabled_rule() {
+async fn test_pdp_disabled_rule_returns_not_applicable() {
     let provider = Arc::new(RbacPermissionProvider::new());
 
     provider.add_role(Role {
@@ -628,7 +628,7 @@ async fn test_pdp_disabled_rule() {
 /// TEST-PDP-U-021: 获取允许的资源
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_get_allowed_resources() {
+async fn test_pdp_get_allowed_resources_returns_non_empty() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -639,7 +639,7 @@ async fn test_pdp_get_allowed_resources() {
 /// TEST-PDP-U-022: 获取允许的资源列表
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_get_allowed_resources_for_admin() {
+async fn test_pdp_get_allowed_resources_admin_includes_wildcard() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -657,7 +657,7 @@ async fn test_pdp_get_allowed_resources_for_admin() {
 /// TEST-PDP-U-023: 通配符资源匹配
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_wildcard_resource() {
+async fn test_pdp_wildcard_resource_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
@@ -673,7 +673,7 @@ async fn test_pdp_wildcard_resource() {
 /// TEST-PDP-U-024: 通配符主体匹配
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_wildcard_subject() {
+async fn test_pdp_wildcard_subject_returns_allow() {
     let provider = Arc::new(RbacPermissionProvider::new());
 
     provider.add_role(Role {
@@ -718,7 +718,7 @@ async fn test_pdp_wildcard_subject() {
 /// TEST-PDP-U-025: PermissionAction Display 实现
 #[cfg(feature = "permission-engine")]
 #[test]
-fn test_permission_action_display() {
+fn test_permission_action_display_returns_uppercase() {
     assert_eq!(PermissionAction::Select.to_string(), "SELECT");
     assert_eq!(PermissionAction::Insert.to_string(), "INSERT");
     assert_eq!(PermissionAction::Update.to_string(), "UPDATE");
@@ -728,7 +728,7 @@ fn test_permission_action_display() {
 /// TEST-PDP-U-026: PermissionAction 序列化
 #[cfg(feature = "permission-engine")]
 #[test]
-fn test_permission_action_serialization() {
+fn test_permission_action_serialization_roundtrips() {
     let action = PermissionAction::Select;
     let json = serde_json::to_string(&action).unwrap();
     assert_eq!(json, "\"select\"");
@@ -744,7 +744,7 @@ fn test_permission_action_serialization() {
 /// TEST-PDP-U-027: PermissionDecision 相等比较
 #[cfg(feature = "permission-engine")]
 #[test]
-fn test_permission_decision_equality() {
+fn test_permission_decision_equality_compares_correctly() {
     assert_eq!(PermissionDecision::Allow, PermissionDecision::Allow);
     assert_eq!(PermissionDecision::Deny, PermissionDecision::Deny);
     assert_eq!(PermissionDecision::NotApplicable, PermissionDecision::NotApplicable);
@@ -754,7 +754,7 @@ fn test_permission_decision_equality() {
 /// TEST-PDP-U-028: PermissionDecision 序列化
 #[cfg(feature = "permission-engine")]
 #[test]
-fn test_permission_decision_serialization() {
+fn test_permission_decision_serialization_roundtrips() {
     let decision = PermissionDecision::Allow;
     let json = serde_json::to_string(&decision).unwrap();
     assert_eq!(json, "\"Allow\"");
@@ -770,7 +770,7 @@ fn test_permission_decision_serialization() {
 /// TEST-PDP-U-029: 并发权限检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_concurrent_check() {
+async fn test_pdp_concurrent_check_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = Arc::new(PolicyDecisionPoint::new(provider));
 
@@ -795,7 +795,7 @@ async fn test_pdp_concurrent_check() {
 /// TEST-PDP-U-030: 并发缓存访问
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
-async fn test_pdp_concurrent_cache_access() {
+async fn test_pdp_concurrent_cache_access_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = Arc::new(PolicyDecisionPoint::new(provider));
 
