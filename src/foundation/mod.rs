@@ -7,10 +7,6 @@
 //!
 //! 提供错误类型、配置定义、类型重导出等基础设施
 
-// 新架构：pool 基础模块
-#[cfg(feature = "pool")]
-pub mod pool;
-
 // 旧版模块（保持兼容）
 pub mod config;
 pub mod error;
