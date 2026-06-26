@@ -24,9 +24,7 @@ compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', or 'mysql'");
 
 // 检查 feature 依赖关系
-#[cfg(all(not(clippy), feature = "permission-with-cache", not(feature = "cache")))]
-compile_error!("The 'permission-with-cache' feature requires the 'cache' feature to be enabled");
-
+// Task 21：移除 permission-with-cache 检查（该聚合 feature 已移除，用户改用 permission + cache）
 #[cfg(all(not(clippy), feature = "permission-engine", not(feature = "cache")))]
 compile_error!("The 'permission-engine' feature requires the 'cache' feature to be enabled");
 
@@ -102,7 +100,6 @@ pub use crate::database::migration::{
 };
 pub use crate::database::pool::DbPool;
 pub use crate::database::pool::DbPoolBuilder;
-pub use crate::database::pool::DbPoolDependencies;
 pub use crate::database::pool::Session;
 pub use crate::database::pool::{ConnectionPool, DatabaseSession};
 #[cfg(feature = "sharding")]
@@ -150,8 +147,8 @@ pub use crate::access::sql_parser::contains_sql_injection;
 #[cfg(feature = "permission")]
 pub use crate::access::permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
-    PermissionEngine, PermissionEngineConfig, PermissionProvider as EnginePermissionProvider, PermissionResource,
-    PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
+    PermissionProvider as EnginePermissionProvider, PermissionResource,
+    PermissionRule, PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
     YamlPermissionProvider as EngineYamlPermissionProvider,
 };
 
