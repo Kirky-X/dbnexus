@@ -5,8 +5,8 @@
 
 //! 权限引擎与策略决策点（PDP）示例
 //!
-//! 演示 `PermissionEngine` 和 `PolicyDecisionPoint` 的使用，包括：
-//! - 配置 `PermissionEngineConfig`
+//! 演示 `PolicyDecisionPoint` 的使用，包括：
+//! - 配置 `PolicyDecisionPointConfig`
 //! - 创建 `RbacPermissionProvider` 并注册角色与权限规则
 //! - 执行权限决策（`PermissionDecision`）
 //! - 展示 PDP 的 builder 模式
@@ -18,8 +18,8 @@
 //! ```
 
 use dbnexus::access::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionEngine, PermissionEngineConfig,
-    PermissionProvider, PermissionResource, PermissionRule, PermissionSubject, PolicyDecisionPoint,
+    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource,
+    PermissionRule, PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig,
     RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
@@ -115,17 +115,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ 已映射 3 个用户: alice(admin) / bob(editor) / charlie(viewer)\n");
 
     // ============================================
-    // 2. 使用 PermissionEngine 进行权限决策
+    // 2. 使用 PolicyDecisionPoint 进行权限决策
     // ============================================
-    println!("--- PermissionEngine 权限决策 ---\n");
+    println!("--- PolicyDecisionPoint 权限决策 ---\n");
 
-    let engine_config = PermissionEngineConfig {
+    let pdp_config = PolicyDecisionPointConfig {
         default_decision: PermissionDecision::Deny,
         log_denied: true,
         cache_ttl_seconds: 600,
         cache_enabled: true,
     };
-    let engine = PermissionEngine::with_config(provider.clone(), engine_config);
+    let pdp = PolicyDecisionPoint::with_config(provider.clone(), pdp_config);
 
     let test_cases = [
         // alice (admin) — 全部允许
@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (user, resource, action, expected) in test_cases {
-        let decision = engine.check_with_decision(user, resource, action).await;
+        let decision = pdp.check(user, resource, action).await;
         let mark = if decision == expected { "✔" } else { "✘" };
         println!(
             "  {} {}.{} {} → {:?} (期望 {:?})",
@@ -258,8 +258,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - provider.add_role(Role{{...}})  添加角色（支持继承）");
     println!("  - provider.add_permission(role, rule)  添加权限规则");
     println!("  - provider.add_role_to_subject(user, role)  映射用户到角色");
-    println!("  - PermissionEngine::with_config(provider, config)  创建权限引擎");
-    println!("  - engine.check_with_decision(user, res, act)  获取详细决策");
+    println!("  - PolicyDecisionPoint::with_config(provider, config)  创建带配置的策略决策点");
+    println!("  - pdp.check(user, res, act)  获取详细决策");
     println!("  - PolicyDecisionPoint::builder()...build()  Builder 模式创建 PDP");
     println!("  - PermissionContext  包含主体/资源/操作/属性/环境的上下文");
     println!("  - PermissionDecision::Allow / Deny / NotApplicable / Error");
