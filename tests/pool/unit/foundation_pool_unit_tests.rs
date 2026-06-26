@@ -23,7 +23,7 @@ use dbnexus::foundation::pool::{
 
 /// TEST-U-FPOOL-001: PoolConfig 默认值
 #[test]
-fn test_pool_config_default() {
+fn test_pool_config_default_has_expected_values() {
     let config = PoolConfig::default();
     assert_eq!(config.url, "");
     assert_eq!(config.max_connections, 20);
@@ -34,7 +34,7 @@ fn test_pool_config_default() {
 
 /// TEST-U-FPOOL-002: PoolConfig 自定义字段
 #[test]
-fn test_pool_config_custom() {
+fn test_pool_config_custom_preserves_values() {
     let config = PoolConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 50,

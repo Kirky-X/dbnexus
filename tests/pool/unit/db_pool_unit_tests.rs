@@ -19,6 +19,9 @@
 
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
 
+#[path = "../../common/mod.rs"]
+mod common;
+
 // ============================================================================
 // 构造测试
 // ============================================================================
@@ -145,7 +148,7 @@ async fn test_db_pool_status_initial() {
 /// TEST-U-DPOOL-010: status 不变量 total = active + idle
 #[tokio::test]
 async fn test_db_pool_status_invariant_total_equals_active_plus_idle() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let status = pool.status();
     assert_eq!(
         status.total,
@@ -172,7 +175,7 @@ async fn test_db_pool_config_returns_built_config() {
 /// TEST-U-DPOOL-012: get_actual_config() 应与 config() 一致
 #[tokio::test]
 async fn test_db_pool_get_actual_config() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let cfg1 = pool.config();
     let cfg2 = pool.get_actual_config();
     assert_eq!(cfg1.url, cfg2.url);
@@ -186,7 +189,7 @@ async fn test_db_pool_get_actual_config() {
 /// TEST-U-DPOOL-013: get_session("admin") 应成功
 #[tokio::test]
 async fn test_db_pool_get_session_admin() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let session = pool.get_session("admin").await;
     assert!(session.is_ok(), "admin role should always be allowed");
     let session = session.unwrap();
@@ -196,7 +199,7 @@ async fn test_db_pool_get_session_admin() {
 /// TEST-U-DPOOL-014: get_session("system") 应成功（无权限配置时安全角色）
 #[tokio::test]
 async fn test_db_pool_get_session_system() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let session = pool.get_session("system").await;
     assert!(session.is_ok(), "system role should be allowed without permission config");
 }
@@ -205,7 +208,7 @@ async fn test_db_pool_get_session_system() {
 #[cfg(feature = "permission")]
 #[tokio::test]
 async fn test_db_pool_get_session_unauthorized_role_fails() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let result = pool.get_session("guest").await;
     assert!(result.is_err(), "non-safe role should be rejected without permission config");
     // Session 不实现 Debug，用 match 代替 unwrap_err
@@ -219,7 +222,7 @@ async fn test_db_pool_get_session_unauthorized_role_fails() {
 /// TEST-U-DPOOL-016: get_session 后 session role 应匹配请求
 #[tokio::test]
 async fn test_db_pool_get_session_role_matches() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let session = pool.get_session("admin").await.unwrap();
     assert_eq!(session.role(), "admin");
     // Session 被 drop 后连接应归还
@@ -233,7 +236,7 @@ async fn test_db_pool_get_session_role_matches() {
 /// TEST-U-DPOOL-017: Clone 后的 pool 应独立可用
 #[tokio::test]
 async fn test_db_pool_clone_usable() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let cloned = pool.clone();
     // 克隆的 pool 也应能获取 session
     let session = cloned.get_session("admin").await;
@@ -243,7 +246,7 @@ async fn test_db_pool_clone_usable() {
 /// TEST-U-DPOOL-018: Clone 后 config 应相等
 #[tokio::test]
 async fn test_db_pool_clone_config_equal() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let cloned = pool.clone();
     assert_eq!(pool.config().url, cloned.config().url);
     assert_eq!(pool.config().max_connections, cloned.config().max_connections);
@@ -270,7 +273,7 @@ async fn test_db_pool_max_connections_one() {
 /// TEST-U-DPOOL-020: 串行 get_session 多次应成功（连接回收）
 #[tokio::test]
 async fn test_db_pool_serial_get_session_reuses_connection() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     for i in 0..5 {
         let session = pool.get_session("admin").await;
         assert!(session.is_ok(), "iteration {} should succeed", i);
@@ -287,7 +290,7 @@ async fn test_db_pool_serial_get_session_reuses_connection() {
 #[tokio::test]
 async fn test_db_pool_concurrent_get_session_preserves_invariants() {
     use std::sync::Arc;
-    let pool = Arc::new(DbPool::new("sqlite::memory:").await.unwrap());
+    let pool = Arc::new(common::make_sqlite_memory_pool().await);
     let max = pool.config().max_connections;
 
     let mut handles = Vec::new();
@@ -321,7 +324,7 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
 /// TEST-U-DPOOL-022: DbPool drop 不应 panic
 #[tokio::test]
 async fn test_db_pool_drop_no_panic() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     // 显式 drop，不应 panic
     drop(pool);
 }
@@ -329,7 +332,7 @@ async fn test_db_pool_drop_no_panic() {
 /// TEST-U-DPOOL-023: 带 session 的 DbPool drop 不应 panic
 #[tokio::test]
 async fn test_db_pool_drop_with_active_session_no_panic() {
-    let pool = DbPool::new("sqlite::memory:").await.unwrap();
+    let pool = common::make_sqlite_memory_pool().await;
     let _session = pool.get_session("admin").await.unwrap();
     // pool 和 session 同时超出作用域，不应 panic
     drop(pool);
