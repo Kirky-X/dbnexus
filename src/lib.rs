@@ -58,12 +58,6 @@ pub mod observability;
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
-/// Business 模块
-pub mod business;
-
-/// Tools 模块
-pub mod tools;
-
 /// Kit 模块 — 基于 `trait-kit` 的统一能力管理
 pub mod kit;
 
@@ -80,7 +74,7 @@ pub use crate::common::types::DatabaseType;
 
 // Foundation 导出 (旧版，保持兼容)
 pub use crate::foundation::config::{CacheConfig, ConfigError, DbConfig, PoolConfig};
-pub use crate::foundation::entity::{ActiveModelTrait, Condition, EntityTrait, Set};
+pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
 pub use crate::foundation::error::DbError;
 pub use crate::foundation::error::DbResult;
 pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
@@ -180,9 +174,9 @@ pub use crate::storage::global_index::{
     GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
 };
 
-// Business 导出
+// Business 导出（直接从 domain::audit 导出，移除 business 中间层）
 #[cfg(feature = "audit")]
-pub use crate::business::{
+pub use crate::domain::audit::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditLoggerBuilder, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
