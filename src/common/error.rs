@@ -10,16 +10,6 @@ use thiserror::Error;
 /// DBNexus 顶层统一错误类型
 #[derive(Debug, Error)]
 pub enum DbNexusError {
-    /// 连接池错误
-    #[cfg(feature = "pool")]
-    #[error(transparent)]
-    Pool(#[from] crate::foundation::pool::PoolError),
-
-    /// 连接池配置错误
-    #[cfg(feature = "pool")]
-    #[error(transparent)]
-    PoolConfig(#[from] crate::foundation::pool::PoolConfigError),
-
     /// 权限错误
     #[cfg(feature = "permission")]
     #[error(transparent)]

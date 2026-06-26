@@ -54,37 +54,6 @@ impl DbNexusKit {
     }
 
     // ============================================================
-    // Pool (foundation::pool::PoolConnector)
-    // ============================================================
-
-    /// 注册连接池连接器能力
-    #[cfg(feature = "pool")]
-    pub fn provide_pool(
-        &self,
-        pool: Arc<dyn crate::foundation::pool::PoolConnector>,
-    ) -> Result<(), KitError> {
-        self.inner.provide::<PoolCapKey>(pool)
-    }
-
-    /// 注册或替换连接池连接器能力
-    #[cfg(feature = "pool")]
-    pub fn replace_pool(&self, pool: Arc<dyn crate::foundation::pool::PoolConnector>) {
-        self.inner.replace::<PoolCapKey>(pool)
-    }
-
-    /// 获取连接池连接器能力
-    #[cfg(feature = "pool")]
-    pub fn pool(&self) -> Result<Arc<dyn crate::foundation::pool::PoolConnector>, KitError> {
-        self.inner.require::<PoolCapKey>()
-    }
-
-    /// 检查连接池连接器是否已注册
-    #[cfg(feature = "pool")]
-    pub fn has_pool(&self) -> bool {
-        self.inner.contains::<PoolCapKey>()
-    }
-
-    // ============================================================
     // Permission (domain::permission::PermissionProvider)
     // ============================================================
 
@@ -543,20 +512,6 @@ mod tests {
 
         let inner = kit.into_inner();
         assert!(inner.contains::<ConnectionPoolCapKey>());
-    }
-
-    // ===== Pool 能力测试（feature-gated） =====
-    // 注意：PoolConnector 包含 acquire/release/get_session 等方法，
-    // 其返回的 Connection::new 为 pub(crate)，无法在 crate 外构造 mock。
-    // 仅测试 has_pool/get_when_not_registered。
-
-    #[cfg(feature = "pool")]
-    #[test]
-    fn test_pool_get_when_not_registered_returns_error() {
-        let kit = DbNexusKit::new();
-        assert!(!kit.has_pool());
-        let result = kit.pool();
-        assert!(result.is_err());
     }
 
     // ===== Permission 能力测试（feature-gated） =====

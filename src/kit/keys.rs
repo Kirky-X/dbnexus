@@ -1,14 +1,5 @@
 use trait_kit::core::capability::CapabilityKey;
 
-/// Capability key for the foundation pool connector (`foundation::pool::PoolConnector`).
-#[cfg(feature = "pool")]
-pub struct PoolCapKey;
-#[cfg(feature = "pool")]
-impl CapabilityKey for PoolCapKey {
-    type Capability = dyn crate::foundation::pool::PoolConnector;
-    const NAME: &'static str = "dbnexus::pool";
-}
-
 /// Capability key for the domain permission provider (`domain::permission::PermissionProvider`).
 #[cfg(feature = "permission")]
 pub struct PermissionCapKey;
