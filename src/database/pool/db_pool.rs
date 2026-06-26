@@ -149,34 +149,12 @@ impl DbPool {
 
     /// 使用配置创建连接池
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
-        // 创建连接
-        let _connection = sea_orm::Database::connect(&config.url)
-            .await
-            .map_err(DbError::Connection)?;
+        // 创建连接（复用 create_connection 保持错误转换一致）
+        let _connection = Self::create_connection(&config).await?;
 
-        // 创建权限策略缓存（使用 oxcache 后端）
+        // 创建权限策略缓存并加载初始权限配置（含首次预加载）
         #[cfg(feature = "permission")]
-        let policy_cache = Arc::new(
-            Cache::builder()
-                .capacity(config.cache_config.policy_cache_capacity)
-                .build()
-                .await
-                .map_err(|_e| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-                })?,
-        );
-
-        // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
-        #[cfg(feature = "permission")]
-        let permission_config = Self::load_permission_config(&config).await;
-
-        // 预加载权限策略到缓存（如果存在权限配置）
-        #[cfg(feature = "permission")]
-        if let Some(ref perm_config) = permission_config {
-            for (role_name, policy) in &perm_config.roles {
-                let _ = policy_cache.set(role_name, policy).await;
-            }
-        }
+        let (policy_cache, permission_config) = Self::setup_permission_cache(&config).await?;
 
         let pool = Self {
             inner: Arc::new(DbPoolInner {
@@ -207,66 +185,14 @@ impl DbPool {
 
         // 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
         #[cfg(feature = "pool-warmup")]
-        {
-            let initial_connections = pool.inner.config.min_connections;
-            let warmup_timeout = Duration::from_secs(pool.inner.config.warmup_timeout);
-            let warmup_retries = pool.inner.config.warmup_retries;
+        pool.warmup_connections().await?;
 
-            let mut connection_tasks = Vec::new();
-
-            for _ in 0..initial_connections {
-                let config = config.clone();
-                connection_tasks.push(async move {
-                    let mut retries = 0;
-                    let mut last_error = None;
-
-                    while retries <= warmup_retries {
-                        match timeout(warmup_timeout, Self::create_connection(&config)).await {
-                            Ok(Ok(conn)) => return Ok(conn),
-                            Ok(Err(e)) => {
-                                last_error = Some(e);
-                                retries += 1;
-                                if retries <= warmup_retries {
-                                    tokio::time::sleep(Duration::from_millis(100)).await;
-                                }
-                            }
-                            Err(_) => {
-                                last_error = Some(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                                    sea_orm::ConnAcquireErr::Timeout,
-                                )));
-                                break;
-                            }
-                        }
-                    }
-
-                    Err(last_error.unwrap_or_else(|| {
-                        DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-                    }))
-                });
-            }
-
-            // 并行执行所有连接创建任务
-            let results = futures::future::join_all(connection_tasks).await;
-
-            for conn in results.into_iter().flatten() {
-                pool.inner.idle_connections.lock().await.push(conn);
-                pool.inner.total_count.fetch_add(1, Ordering::SeqCst);
-            }
-        }
-
-        // 加载权限策略到缓存
+        // 加载权限策略到缓存（第二次预加载，保留原行为）
         #[cfg(feature = "permission")]
         {
             let permission_config_guard = pool.inner.permission_config.lock().await;
-
-            if let Some(ref perm_config) = *permission_config_guard {
-                #[cfg(feature = "permission")]
-                {
-                    for (role, policy) in &perm_config.roles {
-                        let _ = pool.inner.policy_cache.set(role, policy).await;
-                    }
-                }
-            }
+            let perm_config_ref = permission_config_guard.as_ref();
+            preload_policy_cache(&pool.inner.policy_cache, perm_config_ref).await;
             drop(permission_config_guard);
         }
 
@@ -452,6 +378,43 @@ impl DbPool {
         })
     }
 
+    /// 构造权限策略缓存并加载初始权限配置（含首次预加载）
+    ///
+    /// 完成两件事：
+    /// 1. 用 `cache_config.policy_cache_capacity` 创建 oxcache `Cache`。
+    /// 2. 调用 [`Self::load_permission_config`] 读取权限文件，并把 `roles` 写入缓存（首次预加载）。
+    ///
+    /// 返回构造好的缓存和加载到的权限配置（若未配置文件或加载失败则为 `None`）。
+    #[cfg(feature = "permission")]
+    async fn setup_permission_cache(
+        config: &DbConfig,
+    ) -> DbResult<(Arc<Cache<String, RolePolicy>>, Option<PermissionConfig>)> {
+        // 创建权限策略缓存（使用 oxcache 后端）
+        let policy_cache = Arc::new(
+            Cache::builder()
+                .capacity(config.cache_config.policy_cache_capacity)
+                .build()
+                .await
+                .map_err(|_e| {
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                        sea_orm::ConnAcquireErr::Timeout,
+                    ))
+                })?,
+        );
+
+        // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
+        let permission_config = Self::load_permission_config(config).await;
+
+        // 预加载权限策略到缓存（如果存在权限配置）
+        if let Some(ref perm_config) = permission_config {
+            for (role_name, policy) in &perm_config.roles {
+                let _ = policy_cache.set(role_name, policy).await;
+            }
+        }
+
+        Ok((policy_cache, permission_config))
+    }
+
     /// 加载权限配置文件
     ///
     /// 通过 `serde_yaml_ng` / `serde_json` 直接解析 YAML/JSON 文件，与项目配置管理策略一致
@@ -632,6 +595,62 @@ impl DbPool {
     async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
         let conn = sea_orm::Database::connect(&config.url).await?;
         Ok(conn)
+    }
+
+    /// 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
+    ///
+    /// 并行启动 `min_connections` 个建连任务，每个任务带 `warmup_timeout` 超时
+    /// 和 `warmup_retries` 次重试。失败的任务被静默丢弃（与原 inline 行为一致）。
+    ///
+    /// 当前实现总是返回 `Ok(())`，保留原 warmup 块不向上抛错的行为。
+    #[cfg(feature = "pool-warmup")]
+    async fn warmup_connections(&self) -> DbResult<()> {
+        let initial_connections = self.inner.config.min_connections;
+        let warmup_timeout = Duration::from_secs(self.inner.config.warmup_timeout);
+        let warmup_retries = self.inner.config.warmup_retries;
+
+        let mut connection_tasks = Vec::new();
+
+        for _ in 0..initial_connections {
+            let config = self.inner.config.clone();
+            connection_tasks.push(async move {
+                let mut retries = 0;
+                let mut last_error = None;
+
+                while retries <= warmup_retries {
+                    match timeout(warmup_timeout, Self::create_connection(&config)).await {
+                        Ok(Ok(conn)) => return Ok(conn),
+                        Ok(Err(e)) => {
+                            last_error = Some(e);
+                            retries += 1;
+                            if retries <= warmup_retries {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                        }
+                        Err(_) => {
+                            last_error = Some(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                                sea_orm::ConnAcquireErr::Timeout,
+                            )));
+                            break;
+                        }
+                    }
+                }
+
+                Err(last_error.unwrap_or_else(|| {
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                }))
+            });
+        }
+
+        // 并行执行所有连接创建任务
+        let results = futures::future::join_all(connection_tasks).await;
+
+        for conn in results.into_iter().flatten() {
+            self.inner.idle_connections.lock().await.push(conn);
+            self.inner.total_count.fetch_add(1, Ordering::SeqCst);
+        }
+
+        Ok(())
     }
 
     /// 检查连接健康状态
@@ -1231,6 +1250,22 @@ impl DbPool {
         self.release_connection(connection);
 
         Ok(applied)
+    }
+}
+
+/// 把权限配置中的 `roles` 写入策略缓存
+///
+/// 用于 `with_config` 内对 `policy_cache` 的预加载（行为与原内联循环一致：
+/// 静默忽略 `set` 失败）。`perm_config` 为 `None` 时直接返回，不做任何操作。
+#[cfg(feature = "permission")]
+async fn preload_policy_cache(
+    cache: &Cache<String, RolePolicy>,
+    perm_config: Option<&PermissionConfig>,
+) {
+    if let Some(perm_config) = perm_config {
+        for (role, policy) in &perm_config.roles {
+            let _ = cache.set(role, policy).await;
+        }
     }
 }
 
