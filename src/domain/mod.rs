@@ -10,7 +10,6 @@
 #[cfg(feature = "permission")]
 pub mod permission;
 
-#[cfg(feature = "migration")]
 pub mod migration;
 
 #[cfg(feature = "audit")]
