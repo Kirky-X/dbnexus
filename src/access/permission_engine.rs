@@ -236,6 +236,53 @@ fn default_enabled() -> bool {
     true
 }
 
+/// 检查规则是否匹配当前上下文
+///
+/// 通用匹配逻辑：检查主体、资源以及操作是否在 allow/deny 列表中。
+/// 若操作既不在 allow 也不在 deny，则规则不匹配（提前过滤，避免无谓排序）。
+fn matches_rule(rule: &PermissionRule, context: &PermissionContext) -> bool {
+    // 检查主体匹配
+    if rule.subject != "*" && rule.subject != context.subject.id {
+        return false;
+    }
+
+    // 检查资源匹配
+    if rule.resource != "*" && rule.resource != context.resource.name {
+        return false;
+    }
+
+    // 检查操作匹配（允许列表或拒绝列表）
+    let in_allow = rule.allow.contains(&context.action);
+    let in_deny = rule.deny.contains(&context.action);
+
+    // 如果操作既不在 allow 也不在 deny 中，则不匹配
+    if !in_allow && !in_deny {
+        return false;
+    }
+
+    true
+}
+
+/// 获取主体的所有角色（含继承）
+///
+/// 优先从角色映射表中获取；若无映射，检查主体本身是否是预定义的角色
+/// （确保只返回预定义角色，防止安全问题）。
+fn get_subject_roles<V>(
+    mapping: &HashMap<String, Vec<String>>,
+    roles: &HashMap<String, V>,
+    subject: &str,
+) -> Vec<String> {
+    // 优先从角色映射中获取
+    if let Some(roles_list) = mapping.get(subject) {
+        return roles_list.clone();
+    }
+    // 如果没有映射，检查 subject 本身是否是预定义的角色
+    if roles.contains_key(subject) {
+        return vec![subject.to_string()];
+    }
+    Vec::new()
+}
+
 /// 权限提供者 trait
 /// 定义权限检查的标准接口
 #[async_trait]
@@ -316,6 +363,10 @@ pub struct PolicyDecisionPoint {
     rate_limit_window_seconds: u32,
     /// 速率限制器存储
     rate_limit_store: DashMap<String, RateLimitEntry>,
+    /// 默认决策（当提供者返回 NotApplicable 时使用）
+    default_decision: PermissionDecision,
+    /// 是否记录拒绝的决策到 stderr
+    log_denied: bool,
 }
 
 /// PolicyDecisionPoint 构建器
@@ -341,6 +392,8 @@ pub struct PolicyDecisionPointBuilder {
     cache_enabled: Option<bool>,
     rate_limit_max_requests: Option<u32>,
     rate_limit_window_seconds: Option<u32>,
+    default_decision: Option<PermissionDecision>,
+    log_denied: Option<bool>,
 }
 
 impl PolicyDecisionPointBuilder {
@@ -352,6 +405,8 @@ impl PolicyDecisionPointBuilder {
             cache_enabled: None,
             rate_limit_max_requests: None,
             rate_limit_window_seconds: None,
+            default_decision: None,
+            log_denied: None,
         }
     }
 
@@ -397,6 +452,26 @@ impl PolicyDecisionPointBuilder {
         self
     }
 
+    /// 设置默认决策（当提供者返回 NotApplicable 时使用）
+    ///
+    /// # Arguments
+    ///
+    /// * `decision` - 默认决策
+    pub fn default_decision(mut self, decision: PermissionDecision) -> Self {
+        self.default_decision = Some(decision);
+        self
+    }
+
+    /// 设置是否记录拒绝的决策到 stderr
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - 是否记录拒绝的决策
+    pub fn log_denied(mut self, enabled: bool) -> Self {
+        self.log_denied = Some(enabled);
+        self
+    }
+
     /// 构建策略决策点
     ///
     /// # Panics
@@ -413,6 +488,8 @@ impl PolicyDecisionPointBuilder {
             rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(DEFAULT_RATE_LIMIT_MAX_REQUESTS),
             rate_limit_window_seconds: self.rate_limit_window_seconds.unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
             rate_limit_store: DashMap::new(),
+            default_decision: self.default_decision.unwrap_or(PermissionDecision::NotApplicable),
+            log_denied: self.log_denied.unwrap_or(false),
         }
     }
 }
@@ -428,6 +505,8 @@ impl PolicyDecisionPoint {
             rate_limit_max_requests: DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
+            default_decision: PermissionDecision::NotApplicable,
+            log_denied: false,
         }
     }
 
@@ -478,6 +557,8 @@ impl PolicyDecisionPoint {
             rate_limit_max_requests: DEFAULT_RATE_LIMIT_MAX_REQUESTS,
             rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
+            default_decision: PermissionDecision::NotApplicable,
+            log_denied: false,
         }
     }
 
@@ -491,6 +572,29 @@ impl PolicyDecisionPoint {
             rate_limit_max_requests: max_requests,
             rate_limit_window_seconds: window_seconds,
             rate_limit_store: DashMap::new(),
+            default_decision: PermissionDecision::NotApplicable,
+            log_denied: false,
+        }
+    }
+
+    /// 创建带完整配置的策略决策点
+    ///
+    /// 正确应用 `PolicyDecisionPointConfig` 中的所有字段，包括：
+    /// - `default_decision`：当提供者返回 `NotApplicable` 时使用的默认决策
+    /// - `log_denied`：是否记录拒绝的决策到 stderr
+    /// - `cache_ttl_seconds`：缓存 TTL
+    /// - `cache_enabled`：是否启用缓存
+    pub fn with_config(provider: Arc<dyn PermissionProvider>, config: PolicyDecisionPointConfig) -> Self {
+        Self {
+            provider,
+            cache: DashMap::new(),
+            cache_ttl_seconds: config.cache_ttl_seconds,
+            cache_enabled: config.cache_enabled,
+            rate_limit_max_requests: DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+            rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+            rate_limit_store: DashMap::new(),
+            default_decision: config.default_decision,
+            log_denied: config.log_denied,
         }
     }
 
@@ -534,6 +638,7 @@ impl PolicyDecisionPoint {
         // 检查缓存（带 TTL 验证）
         if self.cache_enabled {
             if let Some(decision) = self.get_cached_decision(&cache_key) {
+                self.maybe_log_denied(&decision, context);
                 return decision;
             }
         }
@@ -541,12 +646,30 @@ impl PolicyDecisionPoint {
         // 获取权限决策
         let decision = self.provider.check_permission(context).await;
 
+        // 应用默认决策：当提供者返回 NotApplicable 时，使用配置的默认决策
+        let decision = match decision {
+            PermissionDecision::NotApplicable => self.default_decision.clone(),
+            other => other,
+        };
+
         // 更新缓存（带时间戳）
         if self.cache_enabled {
             self.update_cache(&cache_key, decision.clone());
         }
 
+        self.maybe_log_denied(&decision, context);
+
         decision
+    }
+
+    /// 记录拒绝的决策到 stderr（当 log_denied 为 true 且决策为 Deny 时）
+    fn maybe_log_denied(&self, decision: &PermissionDecision, context: &PermissionContext) {
+        if self.log_denied && matches!(decision, PermissionDecision::Deny) {
+            eprintln!(
+                "[permission] 拒绝访问: subject={}, resource={}, action={:?}",
+                context.subject.id, context.resource.name, context.action
+            );
+        }
     }
 
     /// 检查用户是否有权限执行操作
@@ -750,30 +873,6 @@ impl YamlPermissionProvider {
 
         Ok(())
     }
-
-    /// 检查规则是否匹配
-    fn matches_rule(&self, rule: &PermissionRule, context: &PermissionContext) -> bool {
-        // 检查主体匹配
-        if rule.subject != "*" && rule.subject != context.subject.id {
-            return false;
-        }
-
-        // 检查资源匹配
-        if rule.resource != "*" && rule.resource != context.resource.name {
-            return false;
-        }
-
-        // 检查操作匹配（允许列表或拒绝列表）
-        let in_allow = rule.allow.contains(&context.action);
-        let in_deny = rule.deny.contains(&context.action);
-
-        // 如果操作既不在 allow 也不在 deny 中，则不匹配
-        if !in_allow && !in_deny {
-            return false;
-        }
-
-        true
-    }
 }
 
 #[async_trait]
@@ -799,7 +898,7 @@ impl PermissionProvider for YamlPermissionProvider {
         for role_name in &subject_roles {
             if let Some(rules) = roles.get(role_name) {
                 for rule in rules {
-                    if rule.enabled && self.matches_rule(rule, context) {
+                    if rule.enabled && matches_rule(rule, context) {
                         matched_rules.push((rule.priority, rule));
                     }
                 }
@@ -882,20 +981,15 @@ impl PermissionProvider for YamlPermissionProvider {
 
 impl YamlPermissionProvider {
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        // 优先从角色映射中获取
-        if let Ok(mapping) = self.role_mapping.read() {
-            if let Some(roles) = mapping.get(subject) {
-                return roles.clone();
-            }
-        }
-        // 如果没有映射，尝试直接将主体名作为角色名（用于简单用例）
-        // 但要确保只返回预定义的角色（防止安全问题）
-        if let Ok(roles) = self.roles.read() {
-            if roles.contains_key(subject) {
-                return vec![subject.to_string()];
-            }
-        }
-        Vec::new()
+        let mapping = match self.role_mapping.read() {
+            Ok(m) => m,
+            Err(_) => return Vec::new(),
+        };
+        let roles = match self.roles.read() {
+            Ok(r) => r,
+            Err(_) => return Vec::new(),
+        };
+        get_subject_roles(&mapping, &roles, subject)
     }
 }
 
@@ -1052,7 +1146,7 @@ impl PermissionProvider for RbacPermissionProvider {
 
         // 评估规则
         for rule in all_rules {
-            if rule.enabled && self.matches_rule(&rule, context) {
+            if rule.enabled && matches_rule(&rule, context) {
                 if rule.allow.contains(&context.action) {
                     return PermissionDecision::Allow;
                 }
@@ -1114,30 +1208,15 @@ impl PermissionProvider for RbacPermissionProvider {
 impl RbacPermissionProvider {
     /// 获取主体的角色列表
     fn get_subject_roles(&self, subject: &str) -> Vec<String> {
-        // 优先从角色映射中获取
-        if let Ok(mapping) = self.role_mapping.read() {
-            if let Some(roles) = mapping.get(subject) {
-                return roles.clone();
-            }
-        }
-        // 如果没有映射，检查 subject 本身是否是预定义的角色
-        if let Ok(roles) = self.roles.read() {
-            if roles.contains_key(subject) {
-                return vec![subject.to_string()];
-            }
-        }
-        Vec::new()
-    }
-
-    /// 检查规则是否匹配
-    fn matches_rule(&self, rule: &PermissionRule, context: &PermissionContext) -> bool {
-        if rule.subject != "*" && rule.subject != context.subject.id {
-            return false;
-        }
-        if rule.resource != "*" && rule.resource != context.resource.name {
-            return false;
-        }
-        true
+        let mapping = match self.role_mapping.read() {
+            Ok(m) => m,
+            Err(_) => return Vec::new(),
+        };
+        let roles = match self.roles.read() {
+            Ok(r) => r,
+            Err(_) => return Vec::new(),
+        };
+        get_subject_roles(&mapping, &roles, subject)
     }
 
     /// 检查角色是否存在
@@ -1150,9 +1229,11 @@ impl RbacPermissionProvider {
     }
 }
 
-/// 权限引擎配置
+/// 策略决策点配置
+///
+/// 用于 `PolicyDecisionPoint::with_config` 构造器，正确应用所有配置字段。
 #[derive(Debug, Clone)]
-pub struct PermissionEngineConfig {
+pub struct PolicyDecisionPointConfig {
     /// 默认决策（当没有匹配规则时）
     pub default_decision: PermissionDecision,
     /// 是否记录拒绝的决策
@@ -1163,7 +1244,7 @@ pub struct PermissionEngineConfig {
     pub cache_enabled: bool,
 }
 
-impl Default for PermissionEngineConfig {
+impl Default for PolicyDecisionPointConfig {
     fn default() -> Self {
         Self {
             default_decision: PermissionDecision::Deny,
@@ -1171,52 +1252,6 @@ impl Default for PermissionEngineConfig {
             cache_ttl_seconds: 300,
             cache_enabled: true,
         }
-    }
-}
-
-/// 权限引擎
-/// 统一的权限管理入口
-#[derive(Debug)]
-pub struct PermissionEngine {
-    /// 策略决策点
-    pdp: PolicyDecisionPoint,
-}
-
-impl PermissionEngine {
-    /// 创建权限引擎
-    pub fn new(provider: Arc<dyn PermissionProvider>) -> Self {
-        let config = PermissionEngineConfig::default();
-        Self {
-            pdp: PolicyDecisionPoint::with_cache(provider, config.cache_ttl_seconds),
-        }
-    }
-
-    /// 创建带配置的权限引擎
-    pub fn with_config(provider: Arc<dyn PermissionProvider>, config: PermissionEngineConfig) -> Self {
-        Self {
-            pdp: PolicyDecisionPoint::with_cache(provider, config.cache_ttl_seconds),
-        }
-    }
-
-    /// 检查权限
-    pub async fn check(&self, subject: &str, resource: &str, action: &str) -> bool {
-        let decision = self.pdp.check(subject, resource, action).await;
-        decision == PermissionDecision::Allow
-    }
-
-    /// 检查权限（带详细决策）
-    pub async fn check_with_decision(&self, subject: &str, resource: &str, action: &str) -> PermissionDecision {
-        self.pdp.check(subject, resource, action).await
-    }
-
-    /// 获取主体可访问的资源
-    pub async fn get_allowed_resources(&self, subject: &str) -> Vec<PermissionResource> {
-        self.pdp.get_allowed_resources(subject).await
-    }
-
-    /// 刷新权限缓存
-    pub async fn refresh(&self) {
-        self.pdp.refresh_cache().await;
     }
 }
 
@@ -1341,11 +1376,11 @@ mod tests {
         // 将用户 "admin" 映射到角色 "admin"
         provider.add_role_to_subject("admin", "admin");
 
-        let engine = PermissionEngine::new(provider);
+        let pdp = PolicyDecisionPoint::new(provider);
 
         // 测试权限检查
-        let allowed = engine.check("admin", "users", "SELECT").await;
-        assert!(allowed);
+        let decision = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(decision, PermissionDecision::Allow);
     }
 
     #[tokio::test]
