@@ -454,14 +454,13 @@ impl DbPool {
 
     /// 加载权限配置文件
     ///
-    /// 通过 confers::loader::parse_yaml 解析 YAML 文件，与项目配置管理策略一致
+    /// 通过 `serde_yaml_ng` / `serde_json` 直接解析 YAML/JSON 文件，与项目配置管理策略一致
     ///
     /// # Returns
     ///
     /// - `Some(PermissionConfig)` - 成功加载的权限配置
     /// - `None` - 没有配置权限文件或加载失败，使用默认的 deny_all 策略
     #[cfg(feature = "permission")]
-    #[cfg(feature = "confers")]
     async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
@@ -484,23 +483,14 @@ impl DbPool {
         None
     }
 
-    /// 加载权限配置文件（当 confers 未启用时不可用）
-    #[cfg(feature = "permission")]
-    #[cfg(not(feature = "confers"))]
-    async fn load_permission_config(_config: &DbConfig) -> Option<PermissionConfig> {
-        None
-    }
-
-    /// 使用 JSON 直接解析权限配置（绕过 confers 的键路径展平问题）
-    #[cfg(feature = "confers")]
+    /// 使用 JSON 直接解析权限配置
     #[cfg(feature = "json")]
     fn parse_permission_json(content: &str, source: &str) -> Result<PermissionConfig, String> {
         serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
     }
 
     /// 解析权限配置
-    /// 优先使用 JSON 格式，因为 confers 的 parse_yaml 会将键路径展平导致结构不匹配
-    #[cfg(feature = "confers")]
+    /// 优先使用 JSON 格式（YAML 是 JSON 的超集，serde_yaml_ng 也能解析 JSON）
     fn parse_permission_yaml(content: &str, source: &str) -> Result<PermissionConfig, String> {
         // 直接使用 JSON 解析
         #[cfg(feature = "json")]
