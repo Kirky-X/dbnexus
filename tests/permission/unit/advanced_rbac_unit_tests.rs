@@ -22,7 +22,7 @@ use dbnexus::access::permission::{
 
 /// TEST-ADV-U-001: 单层继承 - 子角色继承父角色权限
 #[test]
-fn test_single_level_inheritance() {
+fn test_rbac_inheritance_single_level_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 设置 manager 继承 admin 的权限
@@ -32,28 +32,32 @@ fn test_single_level_inheritance() {
     assert!(
         provider
             .check_access("manager", "users", PermissionAction::Select)
-            .unwrap()
+            .unwrap(),
+        "manager should inherit admin SELECT on users"
     );
     assert!(
         provider
             .check_access("manager", "users", PermissionAction::Insert)
-            .unwrap()
+            .unwrap(),
+        "manager should inherit admin INSERT on users"
     );
     assert!(
         provider
             .check_access("manager", "users", PermissionAction::Update)
-            .unwrap()
+            .unwrap(),
+        "manager should inherit admin UPDATE on users"
     );
     assert!(
         provider
             .check_access("manager", "users", PermissionAction::Delete)
-            .unwrap()
+            .unwrap(),
+        "manager should inherit admin DELETE on users"
     );
 }
 
 /// TEST-ADV-U-002: 多层继承链 - 三层继承
 #[test]
-fn test_multi_level_inheritance_chain() {
+fn test_rbac_inheritance_multi_level_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加自定义角色
@@ -99,23 +103,26 @@ fn test_multi_level_inheritance_chain() {
     assert!(
         provider
             .check_access("top", "common", PermissionAction::Select)
-            .unwrap()
+            .unwrap(),
+        "top should inherit Select on common from base"
     ); // from base
     assert!(
         provider
             .check_access("top", "intermediate_table", PermissionAction::Insert)
-            .unwrap()
+            .unwrap(),
+        "top should inherit Insert on intermediate_table from intermediate"
     ); // from intermediate
     assert!(
         provider
             .check_access("top", "top_table", PermissionAction::Update)
-            .unwrap()
+            .unwrap(),
+        "top should have Update on top_table from itself"
     ); // from top
 }
 
 /// TEST-ADV-U-003: 深层继承链 - 五层继承
 #[test]
-fn test_deep_inheritance_chain() {
+fn test_rbac_inheritance_deep_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 创建五层继承链
@@ -151,7 +158,7 @@ fn test_deep_inheritance_chain() {
 
 /// TEST-ADV-U-004: 多重继承 - 继承多个父角色
 #[test]
-fn test_multiple_inheritance() {
+fn test_rbac_inheritance_multiple_parents_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加角色
@@ -211,7 +218,7 @@ fn test_multiple_inheritance() {
 
 /// TEST-ADV-U-005: 菱形继承结构
 #[test]
-fn test_diamond_inheritance() {
+fn test_rbac_inheritance_diamond_structure_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 创建菱形继承结构
@@ -366,7 +373,7 @@ fn test_indirect_circular_inheritance() {
 
 /// TEST-ADV-U-008: 自引用循环 A -> A
 #[test]
-fn test_self_referential_inheritance() {
+fn test_rbac_inheritance_self_reference_terminates_safely() {
     let provider = AdvancedRbacProvider::new();
 
     provider.add_role(
@@ -394,7 +401,7 @@ fn test_self_referential_inheritance() {
 
 /// TEST-ADV-U-009: 权限合并 - 多个父角色的权限合并
 #[test]
-fn test_permission_merging() {
+fn test_rbac_permissions_multiple_parents_merges_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加角色，每个角色对同一张表有不同的权限
@@ -446,7 +453,7 @@ fn test_permission_merging() {
 
 /// TEST-ADV-U-010: 权限优先级 - 子角色权限覆盖父角色
 #[test]
-fn test_child_permission_override() {
+fn test_rbac_permissions_child_role_extends_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 父角色只有 SELECT 权限
@@ -497,7 +504,7 @@ fn test_child_permission_override() {
 
 /// TEST-ADV-U-011: 通配符权限继承
 #[test]
-fn test_wildcard_permission_inheritance() {
+fn test_rbac_inheritance_wildcard_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 父角色有通配符权限
@@ -535,7 +542,7 @@ fn test_wildcard_permission_inheritance() {
 
 /// TEST-ADV-U-012: 继承缓存基本功能
 #[test]
-fn test_inheritance_cache_basic() {
+fn test_rbac_cache_first_check_populates_cache() {
     let provider = AdvancedRbacProvider::new();
 
     // 初始缓存为空
@@ -552,7 +559,7 @@ fn test_inheritance_cache_basic() {
 
 /// TEST-ADV-U-013: 缓存清除
 #[test]
-fn test_cache_clear() {
+fn test_rbac_cache_clear_empties_cache() {
     let provider = AdvancedRbacProvider::new();
 
     // 填充缓存
@@ -568,7 +575,7 @@ fn test_cache_clear() {
 
 /// TEST-ADV-U-014: 添加角色时清除相关缓存
 #[test]
-fn test_cache_invalidation_on_role_add() {
+fn test_rbac_cache_role_add_invalidates_cache() {
     let provider = AdvancedRbacProvider::new();
 
     // 设置继承
@@ -597,7 +604,7 @@ fn test_cache_invalidation_on_role_add() {
 
 /// TEST-ADV-U-015: 添加继承关系时清除缓存
 #[test]
-fn test_cache_invalidation_on_inheritance_add() {
+fn test_rbac_cache_inheritance_add_invalidates_cache() {
     let provider = AdvancedRbacProvider::new();
 
     // 触发缓存填充
@@ -620,7 +627,7 @@ fn test_cache_invalidation_on_inheritance_add() {
 
 /// TEST-ADV-U-016: has_inheritance 方法
 #[test]
-fn test_has_inheritance() {
+fn test_rbac_has_inheritance_returns_correct_bool() {
     let provider = AdvancedRbacProvider::new();
 
     // admin 默认没有继承关系
@@ -636,7 +643,7 @@ fn test_has_inheritance() {
 
 /// TEST-ADV-U-017: get_direct_parents 方法
 #[test]
-fn test_get_direct_parents() {
+fn test_rbac_get_direct_parents_returns_parents() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加继承关系
@@ -656,7 +663,7 @@ fn test_get_direct_parents() {
 
 /// TEST-ADV-U-018: remove_inheritance 方法
 #[test]
-fn test_remove_inheritance() {
+fn test_rbac_remove_inheritance_removes_link() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加继承关系
@@ -675,7 +682,7 @@ fn test_remove_inheritance() {
 
 /// TEST-ADV-U-019: set_role_inheritances 批量设置
 #[test]
-fn test_set_role_inheritances_batch() {
+fn test_rbac_set_inheritances_batch_sets_links() {
     let provider = AdvancedRbacProvider::new();
 
     // 批量设置继承关系
@@ -709,7 +716,7 @@ fn test_set_role_inheritances_batch() {
 
 /// TEST-ADV-U-020: 默认 admin 角色权限
 #[test]
-fn test_default_admin_role() {
+fn test_rbac_default_admin_role_has_all_permissions() {
     let provider = AdvancedRbacProvider::new();
 
     // admin 应该有所有权限
@@ -737,7 +744,7 @@ fn test_default_admin_role() {
 
 /// TEST-ADV-U-021: 默认 readonly 角色权限
 #[test]
-fn test_default_readonly_role() {
+fn test_rbac_default_readonly_role_has_select_only() {
     let provider = AdvancedRbacProvider::new();
 
     // readonly 应该只有 SELECT 权限
@@ -765,7 +772,7 @@ fn test_default_readonly_role() {
 
 /// TEST-ADV-U-022: 默认 readwrite 角色权限
 #[test]
-fn test_default_readwrite_role() {
+fn test_rbac_default_readwrite_role_denies_delete() {
     let provider = AdvancedRbacProvider::new();
 
     // readwrite 应该有 SELECT, INSERT, UPDATE 权限
@@ -793,7 +800,7 @@ fn test_default_readwrite_role() {
 
 /// TEST-ADV-U-023: get_roles 方法
 #[test]
-fn test_get_roles() {
+fn test_rbac_get_roles_returns_defaults() {
     let provider = AdvancedRbacProvider::new();
 
     let roles = provider.get_roles();
@@ -804,7 +811,7 @@ fn test_get_roles() {
 
 /// TEST-ADV-U-024: 未定义角色的访问
 #[test]
-fn test_undefined_role_access() {
+fn test_rbac_undefined_role_denies_access() {
     let provider = AdvancedRbacProvider::new();
 
     // 未定义的角色应该没有任何权限
@@ -826,7 +833,7 @@ fn test_undefined_role_access() {
 
 /// TEST-ADV-U-025: 并发继承解析
 #[test]
-fn test_concurrent_inheritance_resolution() {
+fn test_rbac_concurrent_check_returns_allow() {
     use std::sync::Arc;
     use std::thread;
 
@@ -852,7 +859,7 @@ fn test_concurrent_inheritance_resolution() {
 
 /// TEST-ADV-U-026: 并发添加角色和继承
 #[test]
-fn test_concurrent_role_and_inheritance_add() {
+fn test_rbac_concurrent_add_completes_safely() {
     use std::sync::Arc;
     use std::thread;
 

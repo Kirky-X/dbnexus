@@ -84,25 +84,25 @@ fn test_permission_error_denied() {
         resource: "users".to_string(),
         operation: "DELETE".to_string(),
     };
-    assert_eq!(format!("{error}"), "Permission denied for DELETE on users");
+    assert_eq!(format!("{error}"), "permission denied for DELETE on users");
 }
 
 #[test]
 fn test_permission_error_role_not_found() {
     let error = PermissionError::RoleNotFound("admin".to_string());
-    assert_eq!(format!("{error}"), "Role not found: admin");
+    assert_eq!(format!("{error}"), "role not found: admin");
 }
 
 #[test]
-fn test_permission_error_invalid_config() {
-    let error = PermissionError::InvalidConfig("Missing policy".to_string());
-    assert_eq!(format!("{error}"), "Invalid permission configuration: Missing policy");
+fn test_permission_error_invalid_policy() {
+    let error = PermissionError::InvalidPolicy("Missing policy".to_string());
+    assert_eq!(format!("{error}"), "invalid policy configuration: Missing policy");
 }
 
 #[test]
 fn test_permission_error_rate_limited() {
     let error = PermissionError::RateLimited;
-    assert_eq!(format!("{error}"), "Rate limit exceeded");
+    assert_eq!(format!("{error}"), "rate limit exceeded");
 }
 
 #[test]
@@ -112,13 +112,13 @@ fn test_permission_error_display_variants() {
         operation: "UPDATE".to_string(),
     };
     let not_found = PermissionError::RoleNotFound("guest".to_string());
-    let invalid = PermissionError::InvalidConfig("Bad YAML".to_string());
+    let invalid = PermissionError::InvalidPolicy("Bad YAML".to_string());
     let rate_limited = PermissionError::RateLimited;
 
     assert!(format!("{denied}").contains("UPDATE"));
     assert!(format!("{not_found}").contains("guest"));
     assert!(format!("{invalid}").contains("YAML"));
-    assert!(format!("{rate_limited}").contains("Rate"));
+    assert!(format!("{rate_limited}").contains("rate"));
 }
 
 // ============================================================================
@@ -355,7 +355,7 @@ fn test_error_display_consistency() {
             "PoolError::AcquireTimeout",
             "Failed to acquire connection within timeout",
         ),
-        ("PermissionError::RateLimited", "Rate limit exceeded"),
+        ("PermissionError::RateLimited", "rate limit exceeded"),
         ("ConfigError::FileNotFound", "file not found"),
         ("MigrationError::FileNotFound", "Migration file not found:"),
         ("AuditError::WriteError", "Failed to write audit log:"),
@@ -399,7 +399,7 @@ fn test_error_with_empty_message() {
         operation: "".to_string(),
     };
     let display = format!("{error}");
-    assert!(display.contains("Permission denied"));
+    assert!(display.contains("permission denied"));
 }
 
 #[test]

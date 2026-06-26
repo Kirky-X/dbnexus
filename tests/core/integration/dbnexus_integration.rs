@@ -277,10 +277,10 @@ async fn test_pool_drop_with_multiple_sessions() {
     // 验证所有资源正常释放
 }
 
-/// TEST-DBNEXUS-013: 克隆连接池后的关闭测试
+/// TEST-DBNEXUS-013: 克隆连接池测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-async fn test_pool_clone_and_drop() {
+async fn test_pool_clone_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
 
     let pool1 = DbPool::with_config(config).await.expect("Failed to create pool");
@@ -298,9 +298,17 @@ async fn test_pool_clone_and_drop() {
     let status2 = pool2.status();
     assert_eq!(status1.total, status2.total);
     assert_eq!(status1.active, status2.active);
+}
 
-    drop(session1);
-    drop(session2);
+/// TEST-DBNEXUS-013: 连接池关闭测试
+#[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+async fn test_pool_drop_succeeds() {
+    let (config, _temp_dir) = common::get_test_config();
+
+    let pool1 = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool2 = pool1.clone();
+
     drop(pool1);
 
     // pool2 仍然有效
@@ -439,9 +447,17 @@ async fn test_builder_defaults() {
     assert_eq!(pool.config().admin_role, "admin");
 }
 
-/// TEST-DBNEXUS-019: DbPoolBuilder 无 URL 或 config 错误测试
+/// TEST-DBNEXUS-019: DbPoolBuilder 缺少 URL 错误测试
 #[tokio::test]
-async fn test_builder_missing_url_and_config() {
+async fn test_builder_missing_url_fails() {
+    let result = DbPoolBuilder::new().build().await;
+
+    assert!(result.is_err());
+}
+
+/// TEST-DBNEXUS-019: DbPoolBuilder 缺少 config 错误测试
+#[tokio::test]
+async fn test_builder_missing_config_fails() {
     let result = DbPoolBuilder::new().build().await;
 
     assert!(result.is_err());
@@ -760,13 +776,29 @@ async fn test_clean_invalid_connections() {
     assert!(status.total <= pool.config().max_connections);
 }
 
-/// TEST-DBNEXUS-036: 连接池验证并重建连接测试
+/// TEST-DBNEXUS-036: 连接池验证连接测试
 #[tokio::test]
 #[cfg(all(
     any(feature = "sqlite", feature = "postgres", feature = "mysql"),
     feature = "pool-health-check"
 ))]
-async fn test_validate_and_recreate_connections() {
+async fn test_validate_connections_succeeds() {
+    let (config, _temp_dir) = common::get_test_config();
+    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+
+    // 验证并重建连接
+    let result = pool.validate_and_recreate_connections().await;
+
+    assert!(result.is_ok());
+}
+
+/// TEST-DBNEXUS-036: 连接池重建连接测试
+#[tokio::test]
+#[cfg(all(
+    any(feature = "sqlite", feature = "postgres", feature = "mysql"),
+    feature = "pool-health-check"
+))]
+async fn test_recreate_connections_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create pool");
 

@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // See LICENSE file in project root for full license information.
 
-//! common::types 与 common::error 单元测试
+//! common::error 与 DatabaseType 单元测试
 //!
 //! 覆盖：
 //! - `DatabaseType` 枚举的默认值、Display、Clone/Copy、PartialEq、Debug、Serialize/Deserialize
@@ -11,7 +11,7 @@
 //! - `DbNexusError` 各 feature gate 变体的 From 转换与 Display
 
 use dbnexus::common::error::{DbNexusError, DbNexusResult};
-use dbnexus::common::types::DatabaseType;
+use dbnexus::foundation::config::DatabaseType;
 
 // ============================================================================
 // DatabaseType 枚举测试
