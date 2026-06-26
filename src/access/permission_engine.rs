@@ -291,6 +291,13 @@ struct RateLimitEntry {
     window_start: Instant,
 }
 
+/// 默认缓存 TTL（5 分钟）
+const DEFAULT_CACHE_TTL_SECONDS: u64 = 300;
+/// 默认速率限制最大请求数（每分钟 100 次）
+const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+/// 默认速率限制窗口（1 分钟）
+const DEFAULT_RATE_LIMIT_WINDOW_SECONDS: u32 = 60;
+
 /// 策略决策点
 /// 统一处理权限决策，支持多种权限提供者
 #[derive(Debug)]
@@ -401,10 +408,10 @@ impl PolicyDecisionPointBuilder {
         PolicyDecisionPoint {
             provider,
             cache: DashMap::new(),
-            cache_ttl_seconds: self.cache_ttl_seconds.unwrap_or(300), // 默认 5 分钟
+            cache_ttl_seconds: self.cache_ttl_seconds.unwrap_or(DEFAULT_CACHE_TTL_SECONDS),
             cache_enabled: self.cache_enabled.unwrap_or(true),
-            rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(100), // 默认每分钟 100 次
-            rate_limit_window_seconds: self.rate_limit_window_seconds.unwrap_or(60), // 默认 1 分钟窗口
+            rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(DEFAULT_RATE_LIMIT_MAX_REQUESTS),
+            rate_limit_window_seconds: self.rate_limit_window_seconds.unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
             rate_limit_store: DashMap::new(),
         }
     }
@@ -416,10 +423,10 @@ impl PolicyDecisionPoint {
         Self {
             provider,
             cache: DashMap::new(),
-            cache_ttl_seconds: 300, // 5 分钟
+            cache_ttl_seconds: DEFAULT_CACHE_TTL_SECONDS,
             cache_enabled: true,
-            rate_limit_max_requests: 100,  // 默认每分钟 100 次请求
-            rate_limit_window_seconds: 60, // 1 分钟窗口
+            rate_limit_max_requests: DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+            rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
         }
     }
@@ -468,8 +475,8 @@ impl PolicyDecisionPoint {
             cache: DashMap::new(),
             cache_ttl_seconds,
             cache_enabled: true,
-            rate_limit_max_requests: 100,
-            rate_limit_window_seconds: 60,
+            rate_limit_max_requests: DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+            rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
         }
     }
@@ -479,7 +486,7 @@ impl PolicyDecisionPoint {
         Self {
             provider,
             cache: DashMap::new(),
-            cache_ttl_seconds: 300,
+            cache_ttl_seconds: DEFAULT_CACHE_TTL_SECONDS,
             cache_enabled: true,
             rate_limit_max_requests: max_requests,
             rate_limit_window_seconds: window_seconds,
