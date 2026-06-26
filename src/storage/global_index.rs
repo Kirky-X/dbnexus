@@ -25,6 +25,9 @@ pub const SYNC_STATUS_SYNCED: &str = "synced";
 /// 同步状态：同步失败
 pub const SYNC_STATUS_FAILED: &str = "failed";
 
+/// batch_sync 的默认分块大小
+const BATCH_SYNC_CHUNK_SIZE: usize = 500;
+
 /// 全局索引条目实体
 ///
 /// 使用 sea-orm 2.0 的新实体格式
@@ -148,10 +151,31 @@ impl GlobalIndex {
             });
         }
 
-        let chunk_size = 500;
-        let mut all_errors: Vec<String> = Vec::new();
-        let mut total_synced = 0usize;
         let total = entries.len();
+        let (total_synced, all_errors) = self
+            .chunk_and_upsert(&entries, BATCH_SYNC_CHUNK_SIZE)
+            .await;
+
+        let failed_count = total.saturating_sub(total_synced);
+        Ok(SyncResult {
+            success: all_errors.is_empty(),
+            synced_count: total_synced,
+            failed_count,
+            errors: all_errors,
+        })
+    }
+
+    /// 分块执行 upsert，返回 (已同步条数, 错误列表)
+    ///
+    /// 即使部分批次失败也会继续处理后续批次（部分成功语义），
+    /// 失败信息累积到返回的错误列表中。
+    async fn chunk_and_upsert(
+        &self,
+        entries: &[IndexEntry],
+        chunk_size: usize,
+    ) -> (usize, Vec<String>) {
+        let mut total_synced = 0usize;
+        let mut all_errors: Vec<String> = Vec::new();
 
         for (batch_idx, chunk) in entries.chunks(chunk_size).enumerate() {
             let active_models: Vec<ActiveModel> = chunk
@@ -207,13 +231,7 @@ impl GlobalIndex {
             }
         }
 
-        let failed_count = total.saturating_sub(total_synced);
-        Ok(SyncResult {
-            success: all_errors.is_empty(),
-            synced_count: total_synced,
-            failed_count,
-            errors: all_errors,
-        })
+        (total_synced, all_errors)
     }
 }
 
