@@ -569,8 +569,7 @@ impl DbPool {
 
         let connection = self.acquire_connection().await?;
         let pool_ref = Arc::new(self.clone());
-        #[allow(unused_mut)]
-        let mut session = Session::new(connection, pool_ref, self.inner.clone(), role.to_string());
+        let session = Session::new(connection, pool_ref, self.inner.clone(), role.to_string());
 
         Ok(session)
     }
@@ -826,8 +825,12 @@ impl DbPool {
 
     /// 解析健康检查间隔配置
     ///
-    /// 从环境变量 `DB_HEALTH_CHECK_INTERVAL` 读取间隔值（秒），
-    /// 并限制在 5-300 秒范围内。超出范围的值会触发警告日志。
+    /// 解析传入的间隔值（秒），并限制在 5-300 秒范围内。
+    /// 超出范围的值会触发警告日志。
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - 健康检查间隔配置值（由调用方从环境变量 `DB_HEALTH_CHECK_INTERVAL` 读取）
     ///
     /// # Returns
     ///
@@ -837,25 +840,21 @@ impl DbPool {
     ///
     /// ```
     /// use dbnexus::DbPool;
-    /// // 如果环境变量未设置，返回默认值 30
-    /// unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
-    /// assert_eq!(DbPool::parse_health_check_interval(), 30);
+    /// // 空字符串返回默认值 30
+    /// assert_eq!(DbPool::parse_health_check_interval(""), 30);
     ///
-    /// // 如果环境变量设置为有效值，返回该值
-    /// unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "60"); }
-    /// assert_eq!(DbPool::parse_health_check_interval(), 60);
+    /// // 有效值返回该值
+    /// assert_eq!(DbPool::parse_health_check_interval("60"), 60);
     ///
-    /// // 如果环境变量值超出范围，返回限制后的值
-    /// unsafe { std::env::set_var("DB_HEALTH_CHECK_INTERVAL", "1000"); }
-    /// assert_eq!(DbPool::parse_health_check_interval(), 300);
-    /// unsafe { std::env::remove_var("DB_HEALTH_CHECK_INTERVAL"); }
+    /// // 超出范围的值返回限制后的值
+    /// assert_eq!(DbPool::parse_health_check_interval("1000"), 300);
     /// ```
     #[cfg(feature = "pool-health-check")]
-    pub fn parse_health_check_interval() -> u64 {
-        std::env::var("DB_HEALTH_CHECK_INTERVAL")
+    pub fn parse_health_check_interval(value: &str) -> u64 {
+        value
+            .parse::<u64>()
             .ok()
-            .and_then(|v| v.parse().ok())
-            .map(|v: u64| v.clamp(5, 300))
+            .map(|v| v.clamp(5, 300))
             .unwrap_or(30)
     }
 
@@ -871,8 +870,9 @@ impl DbPool {
         let pool = self.clone();
         let shutdown = self.inner.health_check_shutdown.clone();
 
-        // 使用辅助函数解析健康检查间隔
-        let interval_secs = Self::parse_health_check_interval();
+        // 从环境变量读取健康检查间隔配置并解析
+        let env_value = std::env::var("DB_HEALTH_CHECK_INTERVAL").unwrap_or_default();
+        let interval_secs = Self::parse_health_check_interval(&env_value);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(interval_secs));
