@@ -8,9 +8,8 @@
 //! 覆盖：
 //! - `DatabaseType` 枚举的默认值、Display、Clone/Copy、PartialEq、Debug、Serialize/Deserialize
 //! - `DbNexusResult` 类型别名 Ok 路径
-//! - `DbNexusError` 各 feature gate 变体的 From 转换与 Display
 
-use dbnexus::common::error::{DbNexusError, DbNexusResult};
+use dbnexus::common::error::DbNexusResult;
 use dbnexus::foundation::config::DatabaseType;
 
 // ============================================================================
@@ -105,83 +104,4 @@ fn test_dbnexus_result_ok() {
     let result: DbNexusResult<i32> = Ok(value);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), value);
-}
-
-/// TEST-U-COMMON-010: DbNexusResult Err 路径应保持错误（需要 pool feature 构造错误）
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_result_err_is_err() {
-    use dbnexus::foundation::pool::PoolError;
-    let err: DbNexusError = PoolError::AcquireTimeout.into();
-    let result: DbNexusResult<()> = Err(err);
-    assert!(result.is_err());
-}
-
-/// TEST-U-COMMON-011: DbNexusResult ? 运算符应传播错误（需要 pool feature 提供 From 实现）
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_result_question_mark_propagation() {
-    use dbnexus::foundation::pool::PoolError;
-
-    fn inner() -> DbNexusResult<i32> {
-        let val: i32 = "123".parse().map_err(|_e: std::num::ParseIntError| {
-            DbNexusError::from(PoolError::AcquireTimeout)
-        })?;
-        Ok(val * 2)
-    }
-
-    let result = inner();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), 246);
-}
-
-// ============================================================================
-// DbNexusError 变体测试（feature gated）
-// ============================================================================
-
-/// TEST-U-COMMON-012: DbNexusError::Pool 变体 From 转换与 Display
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_error_from_pool_error() {
-    use dbnexus::foundation::pool::PoolError;
-
-    let pool_err = PoolError::AcquireTimeout;
-    let nexus_err: DbNexusError = pool_err.into();
-    assert!(matches!(nexus_err, DbNexusError::Pool(_)));
-    let msg = nexus_err.to_string();
-    assert!(msg.contains("acquire"), "Display should contain error text: {}", msg);
-}
-
-/// TEST-U-COMMON-013: DbNexusError::PoolConfig 变体 From 转换
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_error_from_pool_config_error() {
-    use dbnexus::foundation::pool::PoolConfigError;
-
-    let config_err = PoolConfigError::MissingField("url".to_string());
-    let nexus_err: DbNexusError = config_err.into();
-    assert!(matches!(nexus_err, DbNexusError::PoolConfig(_)));
-    assert!(nexus_err.to_string().contains("url"));
-}
-
-/// TEST-U-COMMON-014: DbNexusError::PoolExhausted Display 包含关键字
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_error_pool_exhausted_display() {
-    use dbnexus::foundation::pool::PoolError;
-
-    let err: DbNexusError = PoolError::PoolExhausted.into();
-    let msg = err.to_string();
-    assert!(msg.contains("exhausted") || msg.contains("pool"), "msg = {}", msg);
-}
-
-/// TEST-U-COMMON-015: DbNexusError Debug 实现应非空（需要 pool feature 构造错误）
-#[cfg(feature = "pool")]
-#[test]
-fn test_dbnexus_error_debug_non_empty() {
-    use dbnexus::foundation::pool::PoolError;
-    let err: DbNexusError = PoolError::PoolExhausted.into();
-    let debug = format!("{:?}", err);
-    assert!(!debug.is_empty());
-    assert!(debug.contains("Pool") || debug.contains("Exhausted"));
 }

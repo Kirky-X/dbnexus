@@ -178,7 +178,7 @@ fn test_db_config_clone() {
 }
 
 // ============================================================================
-// foundation::config::PoolConfig 测试（注意：与 foundation::pool::PoolConfig 不同）
+// foundation::config::PoolConfig 测试
 // ============================================================================
 
 /// TEST-U-CONFIG-014: foundation::config::PoolConfig 默认值
