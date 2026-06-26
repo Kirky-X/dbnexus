@@ -20,8 +20,8 @@
 mod permission_tests {
     use dbnexus::domain::permission::{
         new, new_in_memory, DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig,
-        PermissionConfigError, PermissionError, PermissionLifecycle, PermissionProvider,
-        PolicyManager, PolicySet, RolePolicy, TablePermission,
+        PermissionConfigError, PermissionError, PermissionLifecycle, PolicyManager, PolicySet,
+        RolePolicy, TablePermission,
     };
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -230,8 +230,10 @@ mod permission_tests {
 
     #[test]
     fn test_permission_config_validate_empty_admin_role() {
-        let mut cfg = PermissionConfig::default();
-        cfg.admin_role = String::new();
+        let cfg = PermissionConfig {
+            admin_role: String::new(),
+            ..Default::default()
+        };
         let err = cfg.validate().unwrap_err();
         assert!(
             matches!(err, PermissionConfigError::MissingField(ref f) if f == "admin_role"),
@@ -241,9 +243,11 @@ mod permission_tests {
 
     #[test]
     fn test_permission_config_validate_rate_limit_zero_when_enabled() {
-        let mut cfg = PermissionConfig::default();
-        cfg.rate_limit_enabled = true;
-        cfg.rate_limit_max_requests = 0;
+        let cfg = PermissionConfig {
+            rate_limit_enabled: true,
+            rate_limit_max_requests: 0,
+            ..Default::default()
+        };
         let err = cfg.validate().unwrap_err();
         assert!(
             matches!(err, PermissionConfigError::InvalidValue { ref field, .. } if field == "rate_limit_max_requests"),
@@ -254,9 +258,11 @@ mod permission_tests {
     #[test]
     fn test_permission_config_validate_rate_limit_ok_when_disabled() {
         // rate_limit_max_requests == 0 但 rate_limit_enabled = false 应通过
-        let mut cfg = PermissionConfig::default();
-        cfg.rate_limit_enabled = false;
-        cfg.rate_limit_max_requests = 0;
+        let cfg = PermissionConfig {
+            rate_limit_enabled: false,
+            rate_limit_max_requests: 0,
+            ..Default::default()
+        };
         assert!(cfg.validate().is_ok());
     }
 

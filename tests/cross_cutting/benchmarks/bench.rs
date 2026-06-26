@@ -10,7 +10,7 @@
 //! - 配置解析性能
 //! - Operation 显示转换
 //!
-//! 配置解析通过 confers 库
+//! 配置解析通过 serde 直接反序列化
 
 //! # 运行基准测试
 //!
@@ -31,13 +31,11 @@ use std::time::{Duration, Instant};
 mod common;
 
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
-#[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
     serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 /// 基准测试：权限配置加载（同步）
-#[cfg(feature = "confers")]
 fn permission_config_load_benchmark(c: &mut Criterion) {
     c.bench_function("permission_config_load", |b| {
         b.iter(|| {
