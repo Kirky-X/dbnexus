@@ -497,9 +497,9 @@ fn test_migration_history_pending() {
     assert_eq!(pending[1].version, 3);
 }
 
-/// TEST-M-U-021: 迁移文件解析与生成测试
+/// TEST-M-U-021: 迁移文件解析测试
 #[test]
-fn test_migration_parse_and_generate() {
+fn test_migration_parse_succeeds() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
 
     let mut migration = Migration::new(1, "test".to_string());
@@ -524,5 +524,33 @@ fn test_migration_parse_and_generate() {
     let sql = generator.generate_migration_sql(&migration).unwrap();
 
     assert!(sql.contains("CREATE TABLE test"));
+}
+
+/// TEST-M-U-021: 迁移文件生成测试
+#[test]
+fn test_migration_generate_succeeds() {
+    let generator = SqlGenerator::new(DatabaseType::Postgres);
+
+    let mut migration = Migration::new(1, "test".to_string());
+    migration.add_table_change(TableChange::CreateTable(Table {
+        name: "test".to_string(),
+        columns: vec![Column {
+            name: "id".to_string(),
+            column_type: ColumnType::Integer,
+            is_primary_key: true,
+            is_nullable: false,
+            has_default: false,
+            default_value: None,
+            is_auto_increment: false,
+            comment: None,
+        }],
+        primary_key_columns: vec!["id".to_string()],
+        indexes: vec![],
+        foreign_keys: vec![],
+        comment: None,
+    }));
+
+    let sql = generator.generate_migration_sql(&migration).unwrap();
+
     assert!(sql.contains("id INTEGER"));
 }

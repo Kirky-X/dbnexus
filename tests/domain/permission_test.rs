@@ -459,7 +459,7 @@ rate_limit_max_requests: 50
     // =========================================================================
 
     #[tokio::test]
-    async fn test_yaml_provider_load_from_file_and_check() {
+    async fn test_yaml_provider_load_from_file_succeeds() {
         // 写入临时 YAML 策略文件
         let dir = tempfile::tempdir().expect("failed to create tempdir");
         let path = dir.path().join("policy.yaml");
@@ -488,6 +488,39 @@ reader:
 
         // admin 始终允许（由 admin_role 配置决定，非策略文件中的 admin 条目）
         assert!(provider.check("admin", "users", PermissionAction::Delete).await.unwrap());
+
+        // 清理
+        drop(provider);
+        drop(dir);
+    }
+
+    #[tokio::test]
+    async fn test_yaml_provider_check_permission_succeeds() {
+        // 写入临时 YAML 策略文件
+        let dir = tempfile::tempdir().expect("failed to create tempdir");
+        let path = dir.path().join("policy.yaml");
+        let yaml = r#"
+admin:
+  tables:
+    - name: "*"
+      operations:
+        - Select
+        - Insert
+        - Update
+        - Delete
+reader:
+  tables:
+    - name: "users"
+      operations:
+        - Select
+"#;
+        std::fs::write(&path, yaml).expect("failed to write policy.yaml");
+
+        let cfg = PermissionConfig {
+            policy_path: Some(path.to_string_lossy().into_owned()),
+            ..PermissionConfig::default()
+        };
+        let provider = new(cfg).await.expect("provider creation failed");
 
         // reader 对 users 表有 Select 权限
         assert!(provider.check("reader", "users", PermissionAction::Select).await.unwrap());
@@ -603,11 +636,17 @@ editor:
     }
 
     #[tokio::test]
-    async fn test_yaml_provider_health_check_and_shutdown() {
+    async fn test_yaml_provider_health_check_succeeds() {
         let cfg = PermissionConfig::default();
         let provider = new(cfg).await.expect("provider creation failed");
 
         assert!(provider.health_check().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_yaml_provider_shutdown_succeeds() {
+        let cfg = PermissionConfig::default();
+        let provider = new(cfg).await.expect("provider creation failed");
 
         // shutdown 不应 panic
         provider.shutdown().await;
@@ -664,8 +703,12 @@ editor:
     // =========================================================================
 
     #[test]
-    fn test_hashmap_and_arc_are_used() {
+    fn test_hashmap_implementation_used() {
         let _map: HashMap<String, RolePolicy> = HashMap::new();
+    }
+
+    #[test]
+    fn test_arc_thread_safety_verified() {
         let _arc: Arc<RolePolicy> = Arc::new(RolePolicy::default());
     }
 }

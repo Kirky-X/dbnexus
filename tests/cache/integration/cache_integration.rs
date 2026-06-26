@@ -150,7 +150,18 @@ mod cache_tests {
         }
 
         #[tokio::test]
-        async fn test_cache_set_and_get() {
+        async fn test_cache_set_returns_value() {
+            let cache = OxcacheBackend::with_capacity(100).await.unwrap();
+
+            let key: String = "counter:1".to_string();
+            cache.set(&key, "test_value".to_string(), None).await.unwrap();
+
+            let value = cache.get(&key).await;
+            assert_eq!(value, Some("test_value".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_cache_get_returns_previously_set_value() {
             let cache = OxcacheBackend::with_capacity(100).await.unwrap();
 
             let key: String = "counter:1".to_string();
