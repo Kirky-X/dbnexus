@@ -56,13 +56,12 @@ DBNexus 提供了一种**声明式**的数据库访问方法：
 | 编译时检查 | 表级 RBAC | RAII 自动管理 | Prometheus 指标 |
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -169,9 +168,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dbnexus = "0.1.1"
-tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
-sea-orm = { version = "2.0.0-rc.27", features = ["macros"] }
+dbnexus = "0.2.0"
+tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
+sea-orm = { version = "2.0.0-rc.37", features = ["macros"] }
 ```
 
 ### <span id="basic-usage">💡 基本用法</span>
@@ -189,12 +188,12 @@ sea-orm = { version = "2.0.0-rc.27", features = ["macros"] }
 **步骤 1：定义实体**
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -250,13 +249,12 @@ println!("找到 {} 个用户", users.len());
 ### <span id="permission-control">🔒 权限控制</span>
 
 ```rust
-use dbnexus::{DbPool, DbEntity, db_crud, db_permission};
+use dbnexus::{DbPool, db_entity};
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT"])]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -280,40 +278,40 @@ User::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.1.1", features = ["sqlite"] }
+dbnexus = { version = "0.2.0", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.1.1", features = ["postgres"] }
+dbnexus = { version = "0.2.0", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.1.1", features = ["mysql"] }
+dbnexus = { version = "0.2.0", features = ["mysql"] }
 ```
 
 ### 运行时
 
 ```toml
 # Tokio with RustLS（默认）
-dbnexus = { version = "0.1.1", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.2.0", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.1.1", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.2.0", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.1.1", features = ["runtime-async-std"] }
+dbnexus = { version = "0.2.0", features = ["runtime-async-std"] }
 ```
 
 ### 可选功能
 
 ```toml
 # 核心功能
-dbnexus = { version = "0.1.1", features = [
+dbnexus = { version = "0.2.0", features = [
     "permission",      # 权限控制
     "sql-parser",      # SQL 解析
     "macros",          # 过程宏
 ] }
 
 # 企业级功能
-dbnexus = { version = "0.1.1", features = [
+dbnexus = { version = "0.2.0", features = [
     "metrics",         # Prometheus 指标
     "tracing",         # 分布式追踪
     "audit",           # 审计日志
@@ -323,7 +321,7 @@ dbnexus = { version = "0.1.1", features = [
 ] }
 
 # 配置
-dbnexus = { version = "0.1.1", features = [
+dbnexus = { version = "0.2.0", features = [
     "yaml",            # YAML 配置支持
     "config-toml",     # TOML 配置支持
     "config-env",      # 环境变量（默认）

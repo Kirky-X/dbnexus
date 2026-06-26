@@ -557,30 +557,46 @@ pub fn deny_all() -> Self
 
 ## 过程宏
 
-### `#[derive(DbEntity)]`
+### `#[db_entity]`
 
-将结构体标记为数据库实体的派生宏。
+统一的属性宏，将结构体标记为数据库实体并生成 CRUD 方法、缓存、审计等功能。该宏替代了之前的 `#[derive(DbEntity)]`、`#[db_crud]`、`#[db_cache]`、`#[db_audit]` 和 `#[db_permission]` 等多个独立宏。
 
-**必需属性：**
+**必需参数：**
 
-| 属性 | 描述 | 必需 |
+| 参数 | 描述 | 必需 |
 |-----------|-------------|-----------|
-| `#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]` | 启用 DBNexus 和 Sea-ORM 实体特性 | 是 |
-| `#[sea_orm(table_name = "...")]` | 数据库表名 | 是 |
-| `#[sea_orm(primary_key)]` | 标记主键字段 | 是 |
+| `table_name = "..."` | 数据库表名 | 是 |
+| `primary_key = "..."` | 主键字段名 | 是 |
 
-**可选属性：**
+**可选参数：**
 
-| 属性 | 描述 | 必需 |
+| 参数 | 描述 | 必需 |
 |-----------|-------------|-----------|
-| `#[db_crud]` | 生成 CRUD 方法 | 否 |
-| `#[db_permission(...)]` | 添加权限控制 | 否 |
-| `#[db_cache]` | 启用缓存（需要 `cache` 特性） | 否 |
-| `#[db_audit]` | 启用审计日志（需要 `audit` 特性） | 否 |
+| `timestamps = true` | 自动管理 `created_at`/`updated_at` 字段 | 否 |
+| `soft_delete = true` | 自动注入 `deleted_at` 字段 | 否 |
+| `validate` | 启用 validator crate 验证 | 否 |
+| `cache(...)` | 启用缓存（需要 `cache` 特性） | 否 |
+| `audit(...)` | 启用审计日志（需要 `audit` 特性） | 否 |
+| `hooks(...)` | 配置生命周期钩子函数 | 否 |
 
-### `#[db_crud]`
+**`cache(...)` 子参数：**
 
-自动为实体生成 CRUD 方法。
+| 参数 | 描述 | 默认值 |
+|-----------|-------------|-----------|
+| `ttl` | 缓存存活时间（秒） | 60 |
+| `strategy` | 缓存策略 | `"lru"` |
+| `max_capacity` | 最大缓存容量 | 5000 |
+
+**`audit(...)` 子参数：**
+
+| 参数 | 描述 | 默认值 |
+|-----------|-------------|-----------|
+| `table_name` | 审计日志表名 | `"audit_log"` |
+| `operations` | 审计的操作列表 | `["INSERT", "UPDATE", "DELETE"]` |
+| `roles` | 允许审计的角色列表 | - |
+| `log_values` | 是否记录字段值 | `true` |
+
+> **注意：** 权限控制不再通过宏声明，而是由 Session 在运行时根据权限配置（YAML/JSON）进行强制执行。
 
 **生成的方法：**
 
@@ -616,13 +632,16 @@ impl MyEntity {
 ```
 
 **示例：**
+
+基本用法：
+
 ```rust
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
-#[derive(DbEntity, DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud]
 pub struct User {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -641,66 +660,27 @@ let inserted = User::insert(&session, user).await?;
 let found = User::find_by_id(&session, 1).await?;
 ```
 
-### `#[db_permission]`
-
-声明实体的基于角色的访问控制。
-
-**属性：**
+启用缓存和审计：
 
 ```rust
-#[db_permission(
-    roles = ["admin", "manager"],
-    operations = ["SELECT", "INSERT", "UPDATE"],
-    config = "permissions.yaml"
+use dbnexus::db_entity;
+use sea_orm::entity::prelude::*;
+
+#[db_entity(
+    table_name = "users",
+    primary_key = "id",
+    cache(ttl = 60, strategy = "lru", max_capacity = 5000),
+    audit(table_name = "audit_log", operations = ["INSERT", "UPDATE", "DELETE"], log_values = true)
 )]
-```
-
-**参数：**
-
-| 参数 | 类型 | 必需 | 描述 |
-|-----------|-------|-----------|-------------|
-| `roles` | `Vec<&str>` | 是 | 允许访问此实体的角色列表 |
-| `operations` | `Vec<&str>` | 否 | 允许的操作列表（SELECT, INSERT, UPDATE, DELETE） |
-| `config` | `&str` | 否 | 用于编译时验证的权限配置文件路径 |
-
-**生成的方法：**
-
-```rust
-impl MyEntity {
-    pub const ALLOWED_ROLES: &[&str] = &["admin", "manager"];
-    pub const ALLOWED_OPERATIONS: &[&str] = &["SELECT", "INSERT", "UPDATE"];
-
-    pub fn check_permission(ctx: &PermissionContext) -> DbResult<()>;
-    pub fn check_operation(ctx: &PermissionContext, op: &PermissionAction) -> DbResult<()>;
-}
-
-// 使用
-let session = pool.get_session("admin").await?;
-User::find_all(&session).await?; // OK
-let session = pool.get_session("guest").await?;
-User::find_all(&session).await?; // 错误：权限被拒绝
-```
-
-### `#[db_cache]`
-
-启用实体查询的缓存（需要 `cache` 特性）。
-
-**生成的方法：**
-
-```rust
-impl MyEntity {
-    pub async fn find_cached(session: &Session, id: i64) -> DbResult<Option<MyEntity>>;
-    pub async fn invalidate_cache(session: &Session, id: i64) -> DbResult<()>;
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "users")]
+pub struct User {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub name: String,
+    pub email: String,
 }
 ```
-
-### `#[db_audit]`
-
-启用实体操作的审计日志（需要 `audit` 特性）。
-
-**效果：**
-- 所有 CRUD 操作都记录到审计跟踪中
-- 包括操作类型、时间戳、用户角色和结果
 
 ---
 

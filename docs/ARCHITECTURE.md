@@ -498,22 +498,17 @@ sequenceDiagram
 
 | 宏 | 目的 |
 |--------|---------|
-| `#[derive(DbEntity)]` | 将结构体映射到数据库表 |
-| `#[db_crud]` | 生成 CRUD 方法 |
-| `#[db_permission]` | 生成权限检查 |
-| `#[db_cache]` | 生成缓存注解 |
-| `#[db_audit]` | 生成审计注解 |
+| `#[db_entity(...)]` | 统一的属性宏，将结构体映射到数据库表并生成 CRUD 方法、缓存、审计等功能 |
 
 **宏扩展示例：**
 
 **输入：**
 ```rust
-#[derive(DbEntity)]
-#[table_name = "users"]
-#[db_crud]
-#[db_permission(roles = ["admin", "manager"])]
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "users")]
 struct User {
-    #[primary_key]
+    #[sea_orm(primary_key)]
     id: i64,
     name: String,
 }
@@ -527,15 +522,6 @@ impl User {
     pub async fn find_by_id(session: &Session, id: i64) -> DbResult<Option<User>> { /* ... */ }
     pub async fn update(session: &Session, value: User) -> DbResult<User> { /* ... */ }
     pub async fn delete(session: &Session, id: i64) -> DbResult<()> { /* ... */ }
-
-    // 权限方法
-    pub const ALLOWED_ROLES: &[&str] = &["admin", "manager"];
-    pub fn check_permission(ctx: &PermissionContext) -> DbResult<()> {
-        if !Self::ALLOWED_ROLES.contains(&ctx.role()) {
-            return Err(DbError::Permission(...));
-        }
-        Ok(())
-    }
 
     // 实体方法
     pub const TABLE_NAME: &str = "users";
@@ -632,7 +618,7 @@ pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::Db
 ```mermaid
 sequenceDiagram
     participant App as 应用程序
-    participant CRUD as #[db_crud]
+    participant CRUD as #[db_entity]
     participant Session as Session
     participant PermCtx as PermissionContext
     participant Parser as SQL 解析器

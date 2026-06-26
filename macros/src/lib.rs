@@ -747,15 +747,22 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         // === before_save 生成 ===
         let before_save_fn = if needs_before_save {
             // 验证逻辑（validate = true 时）
+            //
+            // 重要：验证步骤必须保留原始 ActiveValue 三态（Set/Unchanged/NotSet）。
+            // 错误做法是 try_into_model(self) 后 __model.into() 转回 ActiveModel，
+            // 因为 Model::into() 会把所有字段设为 Unchanged，丢失 Set 状态，
+            // 导致 UPDATE 操作不把已修改字段包含在 SQL 中。
+            //
+            // 正确做法：保留 self 作为 __this，克隆 __this 用于只读验证。
             let validate_logic = if entity_args.validate {
                 quote! {
-                    // 先验证：ActiveModel → Model → validate() → ActiveModel
+                    // 验证：克隆 ActiveModel → Model → validate()，保留原始 __this 的 ActiveValue 状态
                     use ::sea_orm::TryIntoModel;
-                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(self)
+                    let mut __this = self;
+                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(__this.clone())
                         .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
                     ::validator::Validate::validate(&__model)
                         .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
-                    let mut __this: ActiveModel = __model.into();
                 }
             } else {
                 quote! { let mut __this = self; }
