@@ -129,6 +129,7 @@ sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
 global-index = ["chrono", "with-json"]  # 全局索引
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
+validation = ["validator", "with-time"]  # 数据验证（validator crate + timestamps 依赖）
 
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
@@ -193,6 +194,7 @@ twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.22", optional = true, features = ["v4"] }
+validator = { version = "0.20", optional = true, features = ["derive"] }
 criterion = { version = "0.5", optional = true }
 
 # External dependencies
@@ -285,6 +287,21 @@ required-features = ["macros", "migration", "sqlite"]
 [[test]]
 name = "migration_timestamps"
 path = "tests/migration/integration/timestamps_test.rs"
+required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
+name = "migration_soft_delete"
+path = "tests/migration/integration/soft_delete_test.rs"
+required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
+name = "migration_validation"
+path = "tests/migration/integration/validation_test.rs"
+required-features = ["macros", "migration", "sqlite", "validation"]
+
+[[test]]
+name = "migration_hooks"
+path = "tests/migration/integration/hooks_test.rs"
 required-features = ["macros", "migration", "sqlite"]
 
 [[test]]
