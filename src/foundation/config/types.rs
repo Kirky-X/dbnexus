@@ -5,7 +5,7 @@
 
 //! 配置类型定义
 //!
-//! 纯数据结构，配置加载由 confers 库接管
+//! 纯数据结构，配置加载通过 serde 直接反序列化
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -123,17 +123,25 @@ impl CacheConfig {
         Duration::from_secs(self.default_ttl)
     }
 
-    /// 从 confers ConfigProvider 加载
-    #[cfg(feature = "confers")]
-    pub fn from_confers(provider: &dyn confers::ConfigProvider) -> Result<Self, ConfigError> {
-        use confers::ConfigProviderExt;
+    /// 从 YAML 字符串加载配置
+    ///
+    /// 使用 `serde_yaml_ng` 直接反序列化，缺失字段使用 serde 默认值。
+    ///
+    /// # Errors
+    ///
+    /// 如果 YAML 格式无效或字段类型不匹配，返回解析错误
+    #[cfg(feature = "yaml")]
+    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
+        serde_yaml_ng::from_str(yaml)
+    }
 
-        Ok(Self {
-            policy_cache_capacity: provider.get_uint("dbnexus.cache.policy_capacity").unwrap_or(4096),
-            sql_parse_cache_capacity: provider.get_uint("dbnexus.cache.sql_parse_capacity").unwrap_or(1000),
-            query_cache_capacity: provider.get_uint("dbnexus.cache.query_capacity").unwrap_or(10000),
-            default_ttl: provider.get_uint("dbnexus.cache.default_ttl").unwrap_or(300),
-        })
+    /// 从 `serde_json::Value` 加载配置
+    ///
+    /// # Errors
+    ///
+    /// 如果 JSON 结构无法反序列化为 `CacheConfig`，返回解析错误
+    pub fn from_json_value(v: serde_json::Value) -> Result<Self, serde_json::Error> {
+        serde_json::from_value(v)
     }
 }
 
@@ -257,21 +265,21 @@ impl std::fmt::Display for DatabaseType {
 
 /// 数据库配置
 ///
-/// 纯数据结构，通过 `from_confers()` 从 confers 配置中加载
+/// 纯数据结构，通过 `from_yaml_str()` / `from_json_str()` 直接反序列化加载
 ///
-/// # 配置键
+/// # 配置字段
 ///
-/// | 键 | 字段 | 默认值 |
-/// |---|------|--------|
-/// | `dbnexus.url` | `url` | **必填** |
-/// | `dbnexus.max_connections` | `max_connections` | 20 |
-/// | `dbnexus.min_connections` | `min_connections` | 5 |
-/// | `dbnexus.idle_timeout` | `idle_timeout` | 300 |
-/// | `dbnexus.acquire_timeout` | `acquire_timeout` | 5000 |
-/// | `dbnexus.admin_role` | `admin_role` | "admin" |
-/// | `dbnexus.permissions_path` | `permissions_path` | None |
-/// | `dbnexus.migrations_dir` | `migrations_dir` | None |
-/// | `dbnexus.auto_migrate` | `auto_migrate` | false |
+/// | 字段 | 默认值 |
+/// |------|--------|
+/// | `url` | **必填** |
+/// | `max_connections` | 20 |
+/// | `min_connections` | 5 |
+/// | `idle_timeout` | 300 |
+/// | `acquire_timeout` | 5000 |
+/// | `admin_role` | "admin" |
+/// | `permissions_path` | None |
+/// | `migrations_dir` | None |
+/// | `auto_migrate` | false |
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbConfig {
     /// 数据库连接 URL
@@ -418,38 +426,48 @@ impl DbConfig {
         })
     }
 
-    /// 从 confers ConfigProvider 加载配置
+    /// 从 YAML 字符串加载配置
+    ///
+    /// 使用 `serde_yaml_ng` 直接反序列化，缺失字段使用 serde 默认值。
+    /// `cache_config` 子结构通过 `#[serde(default)]` 嵌入，serde 会自动反序列化
+    /// `cache_config:` 子节点（缺失时回退到 `CacheConfig::default()`）。
     ///
     /// # Example
     ///
     /// ```rust,ignore
-    /// use confers::ConfigProvider;
     /// use dbnexus::config::DbConfig;
     ///
-    /// let provider = /* confers provider */;
-    /// let config = DbConfig::from_confers(&provider)?;
+    /// let yaml = r#"
+    /// url: "sqlite::memory:"
+    /// max_connections: 20
+    /// "#;
+    /// let config = DbConfig::from_yaml_str(yaml)?;
     /// ```
-    #[cfg(feature = "confers")]
-    pub fn from_confers(provider: &dyn confers::ConfigProvider) -> Result<Self, ConfigError> {
-        use confers::ConfigProviderExt;
+    ///
+    /// # Errors
+    ///
+    /// 如果 YAML 格式无效或字段类型不匹配，返回解析错误
+    #[cfg(feature = "yaml")]
+    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
+        serde_yaml_ng::from_str(yaml)
+    }
 
-        Ok(Self {
-            url: provider.get_string("dbnexus.url").ok_or(ConfigError::MissingUrl)?,
-            max_connections: provider.get_uint("dbnexus.max_connections").unwrap_or(20) as u32,
-            min_connections: provider.get_uint("dbnexus.min_connections").unwrap_or(5) as u32,
-            idle_timeout: provider.get_uint("dbnexus.idle_timeout").unwrap_or(300),
-            acquire_timeout: provider.get_uint("dbnexus.acquire_timeout").unwrap_or(5000),
-            permissions_path: provider.get_string("dbnexus.permissions_path"),
-            migrations_dir: provider.get_string("dbnexus.migrations_dir").map(PathBuf::from),
-            auto_migrate: provider.get_bool("dbnexus.auto_migrate").unwrap_or(false),
-            migration_timeout: provider.get_uint("dbnexus.migration_timeout").unwrap_or(60),
-            admin_role: provider
-                .get_string("dbnexus.admin_role")
-                .unwrap_or_else(|| "admin".to_string()),
-            warmup_timeout: provider.get_uint("dbnexus.warmup_timeout").unwrap_or(30),
-            warmup_retries: provider.get_uint("dbnexus.warmup_retries").unwrap_or(3) as u32,
-            cache_config: CacheConfig::from_confers(provider)?,
-        })
+    /// 从 JSON 字符串加载配置
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::config::DbConfig;
+    ///
+    /// let json = r#"{"url":"sqlite::memory:","max_connections":20}"#;
+    /// let config = DbConfig::from_json_str(json)?;
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// 如果 JSON 格式无效或字段类型不匹配，返回解析错误
+    pub fn from_json_str(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
     }
 
     /// 获取数据库类型
@@ -688,14 +706,22 @@ mod tests {
 
     #[test]
     fn test_db_config_database_type() {
-        let mut cfg = DbConfig::default();
-        cfg.url = "postgres://localhost/db".into();
+        let cfg = DbConfig {
+            url: "postgres://localhost/db".into(),
+            ..Default::default()
+        };
         assert_eq!(cfg.database_type(), DatabaseType::Postgres);
 
-        cfg.url = "mysql://localhost/db".into();
+        let cfg = DbConfig {
+            url: "mysql://localhost/db".into(),
+            ..Default::default()
+        };
         assert_eq!(cfg.database_type(), DatabaseType::MySql);
 
-        cfg.url = "sqlite::memory:".into();
+        let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
+            ..Default::default()
+        };
         assert_eq!(cfg.database_type(), DatabaseType::Sqlite);
     }
 

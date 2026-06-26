@@ -123,7 +123,7 @@ pub struct YamlPermissionProvider {
 impl YamlPermissionProvider {
     /// 创建新的 YAML 权限提供者
     ///
-    /// 通过 confers::loader::parse_yaml 解析 YAML 文件，与项目配置管理策略一致
+    /// 通过 `serde_yaml_ng` 直接解析 YAML 文件，与项目配置管理策略一致
     ///
     /// # Arguments
     ///
@@ -132,10 +132,8 @@ impl YamlPermissionProvider {
     /// # Errors
     ///
     /// 如果文件读取失败或 YAML 解析失败，返回错误
-    #[cfg(feature = "confers")]
     pub fn new(path: &str) -> Self {
         let config = if let Ok(content) = std::fs::read_to_string(path) {
-            // 使用 confers 解析 YAML 配置
             match Self::parse_yaml_content(&content, path) {
                 Ok(cfg) => cfg,
                 Err(_e) => {
@@ -154,15 +152,13 @@ impl YamlPermissionProvider {
     }
 
     /// 解析权限配置内容
-    /// 直接使用 JSON 解析（绕过 confers 的键路径展平问题）
-    #[cfg(feature = "confers")]
+    /// 直接使用 JSON 解析
     #[cfg(feature = "json")]
     fn parse_json_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
         serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
     }
 
-    /// 使用 confers 解析 YAML 内容
-    #[cfg(feature = "confers")]
+    /// 使用 `serde_yaml_ng` 解析 YAML 内容
     fn parse_yaml_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
         // 直接使用 JSON 解析
         #[cfg(feature = "json")]
@@ -215,7 +211,6 @@ impl PermissionProvider for YamlPermissionProvider {
 }
 
 impl RefreshablePermissionProvider for YamlPermissionProvider {
-    #[cfg(feature = "confers")]
     async fn refresh(&mut self) -> Result<(), PermissionProviderError> {
         if let Some(ref path) = self.path {
             match tokio::fs::read_to_string(path).await {
@@ -232,37 +227,29 @@ impl RefreshablePermissionProvider for YamlPermissionProvider {
             Ok(())
         }
     }
-
-    #[cfg(not(feature = "confers"))]
-    async fn refresh(&mut self) -> Result<(), PermissionProviderError> {
-        Err(PermissionProviderError::LoadError(
-            "Confers support not enabled".to_string(),
-        ))
-    }
 }
 
-/// 使用 confers 异步解析 YAML 内容（独立函数）
-#[cfg(feature = "confers")]
+/// 使用 `serde_yaml_ng` 异步解析 YAML 内容（独立函数）
 async fn parse_permission_yaml_async(content: &str, source: &str) -> Result<PermissionConfig, String> {
-    use confers::loader::parse_yaml;
-    use confers::value::SourceId;
-
-    let source_id = SourceId::new(source);
-    let annotated = parse_yaml(content, source_id, Some(std::path::Path::new(source)))
-        .map_err(|e| format!("YAML parse error: {}", e))?;
-
-    // 转换为 JSON Value 然后反序列化为 PermissionConfig
+    // 直接使用 JSON 解析
     #[cfg(feature = "json")]
     {
-        let json_value = annotated.to_json();
-        serde_json::from_value(json_value).map_err(|e| format!("Config deserialization error: {}", e))
+        serde_json::from_str(content).map_err(|e| format!("Config deserialization error in '{}': {}", source, e))
     }
     #[cfg(not(feature = "json"))]
     {
-        // 如果没有 json feature，直接尝试从 ConfigValue 反序列化
-        let json_str =
-            serde_json::to_string(&annotated.inner).map_err(|e| format!("JSON serialization error: {}", e))?;
-        serde_json::from_str(&json_str).map_err(|e| format!("Config deserialization error: {}", e))
+        // 如果没有 json feature，使用 serde_yaml_ng 直接解析
+        #[cfg(feature = "yaml")]
+        {
+            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+        }
+        #[cfg(not(feature = "yaml"))]
+        {
+            Err(format!(
+                "Cannot parse permission config from '{}': neither JSON nor YAML support available",
+                source
+            ))
+        }
     }
 }
 

@@ -693,7 +693,6 @@ impl YamlPermissionProvider {
     }
 
     /// 加载配置
-    #[cfg(feature = "confers")]
     async fn load_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use serde::Deserialize;
 
@@ -705,7 +704,7 @@ impl YamlPermissionProvider {
             roles: HashMap<String, Vec<PermissionRule>>,
         }
 
-        // 直接使用 JSON 解析（绕过 confers 的键路径展平问题）
+        // 直接使用 JSON 解析
         #[cfg(feature = "json")]
         {
             let config: YamlConfig = serde_json::from_str(&content)?;
@@ -743,11 +742,6 @@ impl YamlPermissionProvider {
         }
 
         Ok(())
-    }
-
-    #[cfg(not(feature = "confers"))]
-    async fn load_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        Err("Confers support not enabled. Enable 'confers' feature.".into())
     }
 
     /// 检查规则是否匹配
