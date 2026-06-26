@@ -15,10 +15,3 @@ pub mod migration;
 
 #[cfg(feature = "audit")]
 pub mod audit;
-
-// TODO: 以下模块将在后续迁移
-// #[cfg(feature = "auth")]
-// pub mod auth;
-
-// #[cfg(feature = "sql-parser")]
-// pub mod sql_parser;

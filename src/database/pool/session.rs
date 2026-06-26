@@ -240,7 +240,6 @@ impl Session {
     /// 执行原始 SQL（带权限检查）
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
-        #[cfg(feature = "sql-parser")]
         {
             // 检查是否为 DDL 操作
             if is_ddl_operation(sql) {
@@ -667,6 +666,24 @@ fn is_invalid_table_name(table_name: &str) -> bool {
     }
 
     false
+}
+
+/// 构造权限拒绝错误
+///
+/// 统一 "Permission denied for {action} on {table}" 错误消息格式，
+/// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
+#[cfg(feature = "permission")]
+fn permission_denied(action: &impl std::fmt::Display, table: &impl std::fmt::Display) -> DbError {
+    DbError::Permission(format!("Permission denied for {} on {}", action, table))
+}
+
+/// 判断是否为写操作（Insert/Update/Delete）
+#[cfg(feature = "permission")]
+fn is_write_action(action: &PermissionAction) -> bool {
+    matches!(
+        action,
+        PermissionAction::Insert | PermissionAction::Update | PermissionAction::Delete
+    )
 }
 
 impl Drop for Session {
