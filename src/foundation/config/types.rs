@@ -210,13 +210,14 @@ impl PoolConfig {
 // ============================================================================
 
 /// 数据库类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DatabaseType {
     /// PostgreSQL
     Postgres,
     /// MySQL
     MySql,
     /// SQLite
+    #[default]
     Sqlite,
 }
 
@@ -682,6 +683,23 @@ mod tests {
         assert_eq!(DatabaseType::Postgres.to_string(), "postgres");
         assert_eq!(DatabaseType::MySql.to_string(), "mysql");
         assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
+    }
+
+    #[test]
+    fn test_database_type_default_is_sqlite() {
+        let db_type = DatabaseType::default();
+        assert!(matches!(db_type, DatabaseType::Sqlite));
+    }
+
+    #[test]
+    fn test_database_type_serde_round_trip() {
+        let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql];
+        for original in cases {
+            let json = serde_json::to_string(&original).expect("serialize should succeed");
+            let restored: DatabaseType =
+                serde_json::from_str(&json).expect("deserialize should succeed");
+            assert_eq!(original, restored, "round-trip failed for {:?}", original);
+        }
     }
 
     // ===== DbConfig 测试 =====
