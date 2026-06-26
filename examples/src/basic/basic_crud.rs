@@ -5,7 +5,7 @@
 
 //! 基础 CRUD 示例
 //!
-//! 展示如何使用 DbEntity + db_crud 宏定义实体并执行 CRUD 操作：
+//! 展示如何使用 `#[db_entity(...)]` 统一属性宏定义实体并执行 CRUD 操作：
 //! - 定义 User 实体（id, name, email）
 //! - 创建连接池和 Session
 //! - 建表（CREATE TABLE）
@@ -23,7 +23,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
 // ============================================
@@ -32,14 +32,14 @@ use sea_orm::entity::prelude::*;
 
 /// 用户实体模型
 ///
-/// 使用 `#[derive(DbEntity, DeriveEntityModel)]` 同时获得：
-/// - sea-orm 的 EntityModel 实现（Entity/ActiveModel/Column 等）
+/// 使用 `#[db_entity(table_name = "users", primary_key = "id")]` 统一属性宏获得：
+/// - sea-orm 的 EntityModel 实现（Entity/ActiveModel/Column 等，由 DeriveEntityModel 生成）
 /// - dbnexus 的 `table_name()` / `primary_key_column()` 辅助方法
-///
-/// `#[db_crud(table_name = "users")]` 属性宏自动生成带权限检查的 CRUD 方法。
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+/// - 8 个带权限检查的 CRUD 方法（insert/find_by_id/update/delete/find_all/...）
+/// - `impl ActiveModelBehavior for ActiveModel`（宏自动生成，用户无需手写）
+#[db_entity(table_name = "users", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_crud(table_name = "users")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -49,8 +49,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 // ============================================
 // 主函数
@@ -154,8 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✨ 基础 CRUD 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[derive(DbEntity, DeriveEntityModel)] 定义实体模型");
-    println!("  - #[db_crud(table_name = \"...\")] 自动生成 CRUD 方法");
+    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏定义实体");
     println!("  - Model::insert(&session, model)   - 插入记录");
     println!("  - Model::find_all(&session)        - 查询所有");
     println!("  - Model::update(&session, model)   - 更新记录");

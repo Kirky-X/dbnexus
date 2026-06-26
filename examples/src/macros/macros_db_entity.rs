@@ -3,9 +3,9 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! DbEntity 宏示例
+//! db_entity 宏示例
 //!
-//! 演示 `#[derive(DbEntity)]` 派生宏的完整使用：
+//! 演示 `#[db_entity(...)]` 统一属性宏的完整使用：
 //! - 定义多个实体（User, Product, Order）使用模块隔离避免命名冲突
 //! - 展示宏生成的 `table_name()` / `primary_key_column()` 辅助方法
 //! - 通过 sea-orm `Relation` 枚举展示实体关系声明
@@ -20,7 +20,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::DbEntity;
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
 // ============================================
@@ -29,14 +29,17 @@ use sea_orm::entity::prelude::*;
 
 /// 用户实体模块
 ///
-/// 使用 `#[derive(DbEntity)]` 派生宏为 Model 添加：
+/// 使用 `#[db_entity(table_name = "users", primary_key = "id")]` 属性宏为 Model 添加：
 /// - `table_name() -> &'static str`         返回表名
 /// - `primary_key_column() -> &'static str` 返回主键列名
+/// - 8 个 CRUD 方法（insert/find_by_id/update/delete/find_all/...）
+/// - `impl ActiveModelBehavior for ActiveModel`（宏自动生成）
 mod user {
     use super::*;
 
     /// 用户实体模型
-    #[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+    #[db_entity(table_name = "users", primary_key = "id")]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
     #[sea_orm(table_name = "users")]
     pub struct Model {
         #[sea_orm(primary_key)]
@@ -45,11 +48,9 @@ mod user {
         pub email: String,
     }
 
-    /// User 实体关系（本示例暂不声明关系，关注 DbEntity 宏生成的元数据方法）
+    /// User 实体关系（本示例暂不声明关系，关注 db_entity 宏生成的元数据方法）
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 // ============================================
@@ -61,7 +62,8 @@ mod product {
     use super::*;
 
     /// 产品实体模型
-    #[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+    #[db_entity(table_name = "products", primary_key = "id")]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
     #[sea_orm(table_name = "products")]
     pub struct Model {
         #[sea_orm(primary_key)]
@@ -71,11 +73,9 @@ mod product {
         pub stock: i32,
     }
 
-    /// Product 实体关系（本示例暂不声明关系，关注 DbEntity 宏生成的元数据方法）
+    /// Product 实体关系（本示例暂不声明关系，关注 db_entity 宏生成的元数据方法）
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 // ============================================
@@ -87,7 +87,8 @@ mod order {
     use super::*;
 
     /// 订单实体模型
-    #[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+    #[db_entity(table_name = "orders", primary_key = "id")]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
     #[sea_orm(table_name = "orders")]
     pub struct Model {
         #[sea_orm(primary_key)]
@@ -98,11 +99,9 @@ mod order {
         pub total_price: f64,
     }
 
-    /// Order 实体关系（本示例暂不声明关系，关注 DbEntity 宏生成的元数据方法）
+    /// Order 实体关系（本示例暂不声明关系，关注 db_entity 宏生成的元数据方法）
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 // ============================================
@@ -112,7 +111,7 @@ mod order {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🏷️  DBNexus DbEntity 宏示例");
+    println!("🏷️  DBNexus db_entity 宏示例");
     println!("========================================\n");
 
     // ============================================
@@ -137,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- 2. 实体关系声明 ---\n");
 
-    println!("  本示例聚焦 DbEntity 宏生成的元数据方法，不声明实体关系。");
+    println!("  本示例聚焦 db_entity 宏生成的元数据方法，不声明实体关系。");
     println!("  如需声明关系，请使用 sea-orm 的 #[sea_orm(has_many/belongs_to)] 属性。");
 
     // ============================================
@@ -173,17 +172,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Order::primary_key_column()   = {} (对应 orders.id)", order::Model::primary_key_column());
 
     println!("\n========================================");
-    println!("✨ DbEntity 宏示例完成！");
+    println!("✨ db_entity 宏示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[derive(DbEntity)]                      启用 DbEntity 派生宏");
-    println!("  - #[sea_orm(table_name = \"...\")]           指定表名（DbEntity 从此属性提取）");
-    println!("  - #[sea_orm(primary_key)]                  标记主键字段（DbEntity 从此属性提取）");
+    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  启用统一属性宏");
+    println!("  - #[sea_orm(table_name = \"...\")]           指定表名（sea-orm 层）");
+    println!("  - #[sea_orm(primary_key)]                  标记主键字段（sea-orm 层）");
     println!("  - Model::table_name() -> &'static str      宏生成的表名访问器");
     println!("  - Model::primary_key_column() -> &'static str  宏生成的主键列名访问器");
     println!("  - Relation 枚举 + DeriveRelation            声明实体关系（has_many/belongs_to）");
-    println!("\n⚠️  注意: DbEntity 仅生成 table_name/primary_key_column 两个静态方法。");
-    println!("   CRUD 方法由 #[db_crud] 生成，权限校验由 #[db_permission] 生成。");
+    println!("\n⚠️  注意: db_entity 是统一属性宏，替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit。");
+    println!("   CRUD 方法、ActiveModelBehavior 均由宏自动生成，无需用户手写。");
 
     Ok(())
 }
