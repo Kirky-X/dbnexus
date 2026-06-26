@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Kirky.X
 //
-// Licensed under the MIT License.
+// Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! db_permission 宏示例
+//! db_entity 宏 permissions 子参数示例
 //!
-//! 演示 `#[db_permission]` 属性宏的使用，包括：
-//! - 定义带 `db_permission` 注解的实体
+//! 演示 `#[db_entity(..., permissions(roles = [...], operations = [...]))]` 的使用，包括：
+//! - 定义带 permissions 注解的实体
 //! - 展示宏如何自动生成 `ALLOWED_ROLES` / `ALLOWED_OPERATIONS` 常量
 //! - 使用 `check_permission` / `check_operation` 方法进行运行时权限校验
 //! - 演示不同角色的访问控制（通过 / 拒绝场景）
@@ -21,17 +21,21 @@
 mod common;
 
 use dbnexus::access::permission::{PermissionAction, PermissionContext};
-use dbnexus::{DbEntity, db_permission};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
 // ============================================
-// 定义带 db_permission 注解的实体
+// 定义带 permissions 注解的实体
 // ============================================
 
 /// 用户实体 — 仅 admin 和 manager 角色可访问，允许 SELECT/INSERT/UPDATE
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+#[db_entity(
+    table_name = "users",
+    primary_key = "id",
+    permissions(roles = ["admin", "manager"], operations = ["SELECT", "INSERT", "UPDATE"])
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT", "UPDATE"])]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -42,8 +46,6 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-impl ActiveModelBehavior for ActiveModel {}
-
 // ============================================
 // 主函数
 // ============================================
@@ -51,7 +53,7 @@ impl ActiveModelBehavior for ActiveModel {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🏷️  DBNexus db_permission 宏示例");
+    println!("🏷️  DBNexus db_entity permissions 子参数示例");
     println!("========================================\n");
 
     // ============================================
@@ -141,16 +143,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. 总结
     // ============================================
     println!("\n========================================");
-    println!("✨ db_permission 宏示例完成！");
+    println!("✨ db_entity permissions 子参数示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_permission(roles=[...], operations=[...])]  声明实体访问控制");
+    println!("  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  声明实体访问控制");
     println!("  - Model::ALLOWED_ROLES       编译期生成的角色白名单常量");
     println!("  - Model::ALLOWED_OPERATIONS  编译期生成的操作白名单常量");
     println!("  - Model::check_permission(&ctx)         校验角色是否允许访问实体");
     println!("  - Model::check_operation(&ctx, &op)     校验角色+操作是否允许");
     println!("  - PermissionContext::new_default_with_rate_limit(role)  创建权限上下文");
-    println!("\n⚠️  注意: db_permission 宏在编译期验证角色名格式，");
+    println!("\n⚠️  注意: permissions 子参数在编译期验证角色名格式，");
     println!("   无效角色名（如以数字开头、含连字符）会导致编译失败。");
 
     Ok(())

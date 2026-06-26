@@ -86,7 +86,7 @@ fn main() {
     println!("  ✓ 权限控制已启用 — 支持 RBAC 角色策略");
 
     #[cfg(feature = "macros")]
-    println!("  ✓ 过程宏已启用 — 支持 #[derive(DbEntity)] 和 #[db_crud]");
+    println!("  ✓ 过程宏已启用 — 支持 #[db_entity(...)] 统一属性宏");
 
     #[cfg(feature = "sql-parser")]
     println!("  ✓ SQL 解析已启用 — 支持 SQL 注入检测和 DDL 防护");

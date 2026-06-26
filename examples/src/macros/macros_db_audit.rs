@@ -3,9 +3,9 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! db_audit 宏示例
+//! db_entity 宏 audit 子参数示例
 //!
-//! 演示 `#[db_audit]` 属性宏生成的审计常量与审计日志集成：
+//! 演示 `#[db_entity(..., audit(...))]` 生成的审计常量与审计日志集成：
 //! - 宏生成的常量：`AUDIT_TABLE_NAME` / `AUDIT_OPERATIONS` / `AUDIT_ROLES` /
 //!   `AUDIT_LOG_VALUES` / `AUDIT_ENABLED`
 //! - 结合 `AuditLogger` 在 CRUD 操作前后记录审计事件
@@ -23,27 +23,30 @@ mod common;
 
 use dbnexus::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
-    DbEntity, MemoryAuditStorage, db_audit, db_crud,
+    MemoryAuditStorage, db_entity,
 };
 use sea_orm::entity::prelude::*;
 use std::sync::Arc;
 
 // ============================================
-// 定义 Product 实体（带 db_audit 宏）
+// 定义 Product 实体（带 audit 子参数）
 // ============================================
 
 /// 产品实体
 ///
-/// `#[db_audit(table_name = "product_audit_log", log_values = true)]` 生成审计配置常量：
+/// `#[db_entity(..., audit(table_name = "product_audit_log", log_values = true))]` 生成审计配置常量：
 /// - `AUDIT_TABLE_NAME`     审计日志表名
 /// - `AUDIT_OPERATIONS`     需要审计的操作列表
 /// - `AUDIT_ROLES`          需要审计的角色列表
 /// - `AUDIT_LOG_VALUES`     是否记录变更前后的值
 /// - `AUDIT_ENABLED`        审计是否启用
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+#[db_entity(
+    table_name = "products",
+    primary_key = "id",
+    audit(table_name = "product_audit_log", log_values = true)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "products")]
-#[db_crud(table_name = "products")]
-#[db_audit(table_name = "product_audit_log", log_values = true)]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -54,8 +57,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 // ============================================
 // 辅助函数：根据宏常量判断是否需要审计
@@ -305,10 +306,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  should_audit(\"READ\", \"admin\")     = {} (READ 不在 AUDIT_OPERATIONS)", should_audit("READ", "admin"));
 
     println!("\n========================================");
-    println!("✨ db_audit 宏示例完成！");
+    println!("✨ db_entity 宏 audit 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_audit(table_name=\"...\", log_values=true)]  生成审计配置常量");
+    println!("  - #[db_entity(..., audit(table_name=\"...\", log_values=true))]  生成审计配置常量");
     println!("  - Model::AUDIT_TABLE_NAME   审计日志表名");
     println!("  - Model::AUDIT_OPERATIONS   需要审计的操作列表 (CREATE/UPDATE/DELETE)");
     println!("  - Model::AUDIT_ROLES        需要审计的角色列表");
@@ -316,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  - Model::AUDIT_ENABLED      审计是否启用");
     println!("  - AuditLogger + AuditEvent  审计日志记录");
     println!("  - AuditQueryFilters         审计日志查询过滤");
-    println!("\n⚠️  注意: db_audit 仅生成配置常量，不自动记录审计日志。");
+    println!("\n⚠️  注意: #[db_entity] 的 audit 子参数仅生成配置常量，不自动记录审计日志。");
     println!("   开发者需在 CRUD 操作后手动调用 AuditLogger.log() 记录事件。");
     println!("   常量用于在运行时判断哪些操作/角色需要审计。");
 

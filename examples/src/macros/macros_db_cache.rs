@@ -3,9 +3,9 @@
 // Licensed under the MIT License.
 // See LICENSE file in the project root for full license information.
 
-//! db_cache 宏示例
+//! db_entity 宏 cache 子参数示例
 //!
-//! 演示 `#[db_cache]` 属性宏生成的缓存配置常量与方法：
+//! 演示 `#[db_entity(..., cache(...))]` 生成的缓存配置常量与方法：
 //! - 宏生成的常量：`CACHE_TTL` / `CACHE_STRATEGY` / `CACHE_MAX_CAPACITY` / `CACHE_ENABLED`
 //! - 宏生成的方法：`cache_key(id)` / `cache_config()`
 //! - 结合 CRUD 操作展示缓存键的生成模式
@@ -20,26 +20,29 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::{CacheConfig, DbEntity, db_cache, db_crud};
+use dbnexus::{CacheConfig, db_entity};
 use sea_orm::entity::prelude::*;
 
 // ============================================
-// 定义 Article 实体（带 db_cache 宏）
+// 定义 Article 实体（带 cache 子参数）
 // ============================================
 
 /// 文章实体
 ///
-/// `#[db_cache(ttl = 60, strategy = "lru", max_capacity = 5000)]` 生成缓存配置：
+/// `#[db_entity(..., cache(ttl = 60, strategy = "lru", max_capacity = 5000))]` 生成缓存配置：
 /// - `CACHE_TTL`           缓存 TTL（秒），默认 300
 /// - `CACHE_STRATEGY`      缓存策略名称，默认 "lru"
 /// - `CACHE_MAX_CAPACITY`  缓存最大容量，默认 10000
 /// - `CACHE_ENABLED`       缓存是否启用，始终为 true
-/// - `cache_key(id)`       生成缓存键，格式为 "{table_name}:{id}"
+/// - `cache_key(id: i64)`  生成缓存键，格式为 "{table_name}:{id}"
 /// - `cache_config()`      生成 `CacheConfig` 配置实例
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+#[db_entity(
+    table_name = "articles",
+    primary_key = "id",
+    cache(ttl = 60, strategy = "lru", max_capacity = 5000)
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "articles")]
-#[db_crud(table_name = "articles")]
-#[db_cache(ttl = 60, strategy = "lru", max_capacity = 5000)]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -50,8 +53,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 // ============================================
 // 主函数
@@ -79,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ids: Vec<i64> = vec![1, 2, 3, 100, 9999];
     println!("  生成各 ID 的缓存键:");
     for id in &ids {
-        println!("    id={:<5} → key=\"{}\"", id, Model::cache_key(id));
+        println!("    id={:<5} → key=\"{}\"", id, Model::cache_key(*id));
     }
 
     // ============================================
@@ -128,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let created = Model::insert(&session, article1).await?;
     println!("  ✓ 插入文章: id={}, title=\"{}\"", created.id, created.title);
-    println!("    缓存键: \"{}\" (可用于写入缓存)", Model::cache_key(&created.id));
+    println!("    缓存键: \"{}\" (可用于写入缓存)", Model::cache_key(created.id));
 
     let article2 = Model {
         id: 2,
@@ -138,14 +139,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let created2 = Model::insert(&session, article2).await?;
     println!("  ✓ 插入文章: id={}, title=\"{}\"", created2.id, created2.title);
-    println!("    缓存键: \"{}\"", Model::cache_key(&created2.id));
+    println!("    缓存键: \"{}\"", Model::cache_key(created2.id));
 
     // READ
     println!("\n[READ]");
     let found = Model::find_by_id(&session, 1).await?;
     if let Some(ref a) = found {
         println!("  ✓ 查询文章: id={}, title=\"{}\", author=\"{}\"", a.id, a.title, a.author);
-        println!("    缓存键: \"{}\" (可用于读取/回填缓存)", Model::cache_key(&a.id));
+        println!("    缓存键: \"{}\" (可用于读取/回填缓存)", Model::cache_key(a.id));
     }
 
     // UPDATE
@@ -156,13 +157,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..before
     }).await?;
     println!("  ✓ 更新文章: id={}, 新 title=\"{}\"", updated.id, updated.title);
-    println!("    缓存键: \"{}\" (更新后应失效缓存)", Model::cache_key(&updated.id));
+    println!("    缓存键: \"{}\" (更新后应失效缓存)", Model::cache_key(updated.id));
 
     // DELETE
     println!("\n[DELETE]");
     let deleted = Model::delete(&session, 2).await?;
     println!("  ✓ 删除文章 id=2: 影响 {} 行", deleted);
-    println!("    缓存键: \"{}\" (删除后应清除缓存)", Model::cache_key(&2));
+    println!("    缓存键: \"{}\" (删除后应清除缓存)", Model::cache_key(2));
 
     // ============================================
     // 6. 缓存键批量生成模式
@@ -170,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 6. 缓存键批量生成模式 ---\n");
     println!("  批量查询时生成缓存键列表:");
     let query_ids: Vec<i64> = vec![1, 2, 3, 4, 5];
-    let cache_keys: Vec<String> = query_ids.iter().map(Model::cache_key).collect();
+    let cache_keys: Vec<String> = query_ids.iter().map(|id| Model::cache_key(*id)).collect();
     for (id, key) in query_ids.iter().zip(cache_keys.iter()) {
         println!("    id={} → \"{}\"", id, key);
     }
@@ -192,17 +193,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n  该配置可用于初始化 oxcache::Cache 或其他缓存后端。");
 
     println!("\n========================================");
-    println!("✨ db_cache 宏示例完成！");
+    println!("✨ db_entity 宏 cache 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_cache(ttl=60, strategy=\"lru\", max_capacity=5000)]  生成缓存配置");
+    println!("  - #[db_entity(..., cache(ttl=60, strategy=\"lru\", max_capacity=5000))]  生成缓存配置");
     println!("  - Model::CACHE_TTL           缓存 TTL（秒）");
     println!("  - Model::CACHE_STRATEGY      缓存策略名称");
     println!("  - Model::CACHE_MAX_CAPACITY  缓存最大容量");
     println!("  - Model::CACHE_ENABLED       缓存是否启用");
-    println!("  - Model::cache_key(&id)      生成缓存键 \"{{table_name}}:{{id}}\"");
+    println!("  - Model::cache_key(id)       生成缓存键 \"{{table_name}}:{{id}}\"");
     println!("  - Model::cache_config()      生成 CacheConfig 实例");
-    println!("\n⚠️  注意: db_cache 仅生成配置常量和辅助方法，不自动执行缓存读写。");
+    println!("\n⚠️  注意: #[db_entity] 的 cache 子参数仅生成配置常量和辅助方法，不自动执行缓存读写。");
     println!("   开发者需在 CRUD 操作前后手动调用缓存 API 进行读写/失效。");
     println!("   常量用于统一管理缓存策略，避免硬编码。");
 

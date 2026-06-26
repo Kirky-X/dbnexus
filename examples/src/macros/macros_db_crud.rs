@@ -3,9 +3,9 @@
 // Licensed under the MIT License
 // See LICENSE file in the project root for full license information.
 
-//! db_crud 宏示例
+//! db_entity 宏 CRUD 示例
 //!
-//! 演示 `#[db_crud]` 属性宏生成的完整 CRUD 方法：
+//! 演示 `#[db_entity(...)]` 统一属性宏生成的完整 CRUD 方法：
 //! - `insert`             插入记录
 //! - `find_by_id`         按主键查询
 //! - `find_all`           查询全部
@@ -28,20 +28,20 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::{DbEntity, db_crud};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
 // ============================================
-// 定义 Product 实体（带 db_crud 宏）
+// 定义 Product 实体（带 db_entity 宏）
 // ============================================
 
 /// 产品实体
 ///
-/// `#[db_crud(table_name = "products")]` 自动生成 8 个 CRUD 方法，
+/// `#[db_entity(table_name = "products", primary_key = "id")]` 自动生成 8 个 CRUD 方法，
 /// 每个方法都通过 Session 执行权限检查、指标收集和数据库操作。
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+#[db_entity(table_name = "products", primary_key = "id")]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "products")]
-#[db_crud(table_name = "products")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -52,8 +52,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 // ============================================
 // 主函数
@@ -247,10 +245,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ 剩余记录数: {}", final_count);
 
     println!("\n========================================");
-    println!("✨ db_crud 宏示例完成！");
+    println!("✨ db_entity 宏 CRUD 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_crud(table_name = \"...\")]   自动生成 CRUD 方法");
+    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏自动生成 CRUD 方法");
     println!("  - Model::insert(&session, model)     插入记录");
     println!("  - Model::find_by_id(&session, id)    按主键查询");
     println!("  - Model::find_all(&session)          查询全部");
@@ -261,8 +259,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Model::delete_many(&session, cond) 批量删除");
     println!("  - sea_orm::Condition::all().add(...) 构建查询条件");
     println!("  - Column::Xxx.lt/gt/eq(value)        列条件运算");
-    println!("\n⚠️  注意: db_crud 生成的所有方法都通过 Session 自动执行权限检查。");
-    println!("   分页查询在 db_crud 层面通过 find_all + 手动切片实现；");
+    println!("\n⚠️  注意: #[db_entity] 生成的所有方法都通过 Session 自动执行权限检查。");
+    println!("   分页查询在 db_entity 层面通过 find_all + 手动切片实现；");
     println!("   如需 DB 层面的 offset/limit，请直接使用 sea_orm::EntityTrait。");
 
     Ok(())
