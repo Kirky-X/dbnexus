@@ -80,12 +80,6 @@ pub use crate::foundation::error::DbResult;
 pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
 
-// Foundation Pool 导出 (新架构)
-#[cfg(feature = "pool")]
-pub use crate::foundation::pool::{
-    PoolConfig as NewPoolConfig, PoolConfigError, PoolConnector, PoolError as NewPoolError, PoolStatus,
-};
-
 // Domain Permission 导出 (新架构)
 #[cfg(feature = "permission")]
 pub use crate::domain::permission::{
@@ -186,12 +180,9 @@ pub use crate::domain::audit::{
 #[cfg(feature = "audit")]
 pub use crate::foundation::error::AuditResult;
 
-// 过程宏
+// 过程宏 — 仅导出统一属性宏 `db_entity`（替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit）
 #[cfg(feature = "macros")]
-pub use dbnexus_macros::DbEntity;
-
-#[cfg(feature = "macros")]
-pub use dbnexus_macros::{db_audit, db_cache, db_crud, db_permission};
+pub use dbnexus_macros::db_entity;
 
 // Kit 导出
 pub use crate::kit::{DbNexusKit, keys::*};
