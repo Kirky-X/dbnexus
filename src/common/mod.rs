@@ -8,6 +8,5 @@
 //! 提供跨模块共享的类型和错误定义
 
 pub mod error;
-pub mod types;
 
 pub use error::{DbNexusError, DbNexusResult};
