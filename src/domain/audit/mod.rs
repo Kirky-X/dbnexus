@@ -718,11 +718,6 @@ impl AuditLogger {
         Self::with_default_storage()
     }
 
-    /// 获取构建器
-    pub fn builder() -> AuditLoggerBuilder {
-        AuditLoggerBuilder::new()
-    }
-
     /// 创建带自定义配置和存储的审计日志器
     pub fn with_config(config: AuditConfig, storage: Arc<dyn AuditStorage>) -> Self {
         Self {
@@ -1792,66 +1787,5 @@ impl AuditEventBuilder {
             session_id: self.session_id.unwrap_or_default(),
             trace_context: None,
         })
-    }
-}
-
-/// 审计日志器构建器
-///
-/// 提供链式 API 来构建 `AuditLogger`：
-/// ```rust
-/// use std::sync::Arc;
-/// use dbnexus::{AuditLogger, AuditLoggerBuilder, MemoryAuditStorage, AuditConfig};
-///
-/// let storage = Arc::new(MemoryAuditStorage::new(1000));
-/// let logger = AuditLogger::builder()
-///     .storage(storage)
-///     .config(AuditConfig::default())
-///     .build();
-/// ```
-pub struct AuditLoggerBuilder {
-    config: AuditConfig,
-    storage: Option<Arc<dyn AuditStorage>>,
-}
-
-impl fmt::Debug for AuditLoggerBuilder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("AuditLoggerBuilder")
-            .field("config", &self.config)
-            .field("storage", &self.storage.as_ref().map(|_| "Arc<dyn AuditStorage>"))
-            .finish()
-    }
-}
-
-impl Default for AuditLoggerBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AuditLoggerBuilder {
-    /// 创建新构建器
-    pub fn new() -> Self {
-        Self {
-            config: AuditConfig::default(),
-            storage: None,
-        }
-    }
-
-    /// 设置存储后端
-    pub fn storage(mut self, storage: Arc<dyn AuditStorage>) -> Self {
-        self.storage = Some(storage);
-        self
-    }
-
-    /// 设置配置
-    pub fn config(mut self, config: AuditConfig) -> Self {
-        self.config = config;
-        self
-    }
-
-    /// 构建 AuditLogger
-    pub fn build(self) -> AuditLogger {
-        let storage = self.storage.unwrap_or_else(|| Arc::new(MemoryAuditStorage::new(10000)));
-        AuditLogger::with_config(self.config, storage)
     }
 }
