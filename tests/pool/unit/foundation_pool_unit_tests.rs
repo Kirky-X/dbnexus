@@ -13,8 +13,8 @@
 //! - 并发 acquire 到达 max_connections 后报 `PoolExhausted`
 
 use dbnexus::foundation::pool::{
-    new_in_memory, PoolConfig, PoolConfigError, PoolConnector, PoolError, PoolStatus,
-    PoolLifecycle, PoolReader, PoolWriter,
+    new_in_memory, PoolConfig, PoolConfigError, PoolError, PoolStatus, PoolLifecycle, PoolReader,
+    PoolWriter,
 };
 
 // ============================================================================

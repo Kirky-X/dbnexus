@@ -5,7 +5,7 @@
 
 //! 权限控制集成测试
 //!
-//! 配置解析通过 confers 库
+//! 配置解析通过 serde 直接反序列化
 
 use dbnexus::DbPool;
 use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
@@ -15,7 +15,6 @@ use dbnexus::foundation::config::ConfigError;
 mod common;
 
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
-#[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
     serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
@@ -162,7 +161,7 @@ fn test_permission_config_deny_all() {
     assert!(!config.check_access("any_role", "any_table", Operation::Delete));
 }
 
-#[cfg(feature = "confers")]
+#[cfg(feature = "yaml")]
 #[test]
 fn test_permission_config_from_yaml() {
     let json = r#"

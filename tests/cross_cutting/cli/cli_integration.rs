@@ -7,8 +7,9 @@
 //!
 //! 测试 CLI 工具的各个命令功能：status、up、down、create、generate
 //!
-//! 这些测试使用 `cargo run -p dbnexus-cli` 而非 `cargo_bin`，
-//! 因为 dbnexus-cli 是独立子包，不在 dbnexus workspace 中。
+//! dbnexus-cli 是独立 workspace 成员（src/tools/cli/），不在主包 [[bin]] 中，
+//! 因此不能用 `Command::cargo_bin("dbnexus-cli")`（CARGO_BIN_EXE_dbnexus-cli 不会设置）。
+//! 改用 `cargo run -p dbnexus-cli --quiet --` 调用。
 
 #![allow(deprecated)]
 
@@ -19,9 +20,15 @@ mod cli_tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    /// Run the dbnexus-cli binary.
+    /// Run the dbnexus-cli binary via `cargo run -p dbnexus-cli`.
+    ///
+    /// `--quiet` 抑制 cargo 的编译输出，只保留程序自身的 stdout/stderr。
+    /// `--` 分隔 cargo 参数和程序参数。
     fn cli_command() -> Command {
-        Command::cargo_bin("dbnexus-cli").expect("cargo_bin dbnexus-cli")
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+        let mut cmd = Command::new(cargo);
+        cmd.args(["run", "-p", "dbnexus-cli", "--quiet", "--"]);
+        cmd
     }
 
     /// TEST-CLI-001: CLI 帮助命令测试

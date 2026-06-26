@@ -5,7 +5,7 @@
 
 //! Session 和事务集成测试
 //!
-//! 配置解析通过 confers 库
+//! 配置解析通过 serde 直接反序列化
 
 use dbnexus::DbError;
 use dbnexus::DbPool;
@@ -18,7 +18,6 @@ use tempfile::TempDir;
 mod common;
 
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
-#[cfg(feature = "confers")]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
     serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
@@ -320,7 +319,7 @@ roles:
 }
 
 #[tokio::test]
-#[cfg(all(feature = "sqlite", feature = "permission", feature = "confers"))]
+#[cfg(all(feature = "sqlite", feature = "permission"))]
 #[allow(clippy::unwrap_used)]
 async fn test_check_permission_denied_returns_permission_error() {
     let temp_dir = TempDir::new().unwrap();
