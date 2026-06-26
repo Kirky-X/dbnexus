@@ -11,6 +11,12 @@ use dbnexus::DbConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
+/// 创建内存 SQLite 连接池的测试 helper
+#[allow(dead_code)]
+pub async fn make_sqlite_memory_pool() -> dbnexus::DbPool {
+    dbnexus::DbPool::new("sqlite::memory:").await.expect("Failed to create test pool")
+}
+
 #[cfg(feature = "permission-engine")]
 #[allow(dead_code)]
 async fn join_all<F>(handles: Vec<tokio::task::JoinHandle<F>>) -> Vec<F>
@@ -132,13 +138,14 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
 }
 
 /// 生成测试用的表名（避免测试间的冲突）
+///
+/// 使用进程内单调递增的原子计数器，保证表名唯一且可预测。
 #[allow(dead_code)]
 pub fn generate_test_table_name(prefix: &str) -> String {
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    format!("{}_test_{}", prefix, timestamp)
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("{}_test_{}", prefix, n)
 }
 
 /// 清理测试表

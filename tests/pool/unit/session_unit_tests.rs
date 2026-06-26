@@ -19,21 +19,16 @@
 
 use dbnexus::{DbError, DbPool};
 
+#[path = "../../common/mod.rs"]
+mod common;
+
 // ============================================================================
 // 辅助函数
 // ============================================================================
 
 /// 创建 SQLite 内存连接池并返回
 async fn make_pool() -> DbPool {
-    DbPool::new("sqlite::memory:").await.expect("pool creation should succeed")
-}
-
-/// 生成唯一表名（避免测试间冲突）
-fn unique_table_name(prefix: &str) -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("{}_{}", prefix, n)
+    common::make_sqlite_memory_pool().await
 }
 
 // ============================================================================
@@ -42,7 +37,7 @@ fn unique_table_name(prefix: &str) -> String {
 
 /// TEST-U-SESS-001: role() 应返回创建时指定的角色
 #[tokio::test]
-async fn test_session_role() {
+async fn test_session_role_returns_creation_role() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
     assert_eq!(session.role(), "admin");
@@ -51,7 +46,7 @@ async fn test_session_role() {
 /// TEST-U-SESS-002: permission_ctx() 应返回与 role 一致的上下文
 #[cfg(feature = "permission")]
 #[tokio::test]
-async fn test_session_permission_ctx() {
+async fn test_session_permission_ctx_returns_context() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
     let ctx = session.permission_ctx();
@@ -155,7 +150,7 @@ async fn test_session_rollback_without_transaction_fails() {
 async fn test_session_execute_raw_ddl_admin_success() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("ddl_test");
+    let table = common::generate_test_table_name("ddl_test");
     let sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT)", table);
     let result = session.execute_raw_ddl(&sql).await;
     assert!(result.is_ok(), "admin execute_raw_ddl should succeed: {:?}", result.err());
@@ -167,7 +162,7 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
     let pool = make_pool().await;
     // system 角色在无权限配置下被允许获取 session
     let session = pool.get_session("system").await.unwrap();
-    let table = unique_table_name("ddl_fail");
+    let table = common::generate_test_table_name("ddl_fail");
     let sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY)", table);
     let result = session.execute_raw_ddl(&sql).await;
     assert!(result.is_err(), "non-admin execute_raw_ddl should fail");
@@ -184,7 +179,7 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
 async fn test_session_execute_raw_ddl_drop_table() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("drop_test");
+    let table = common::generate_test_table_name("drop_test");
     // 先创建
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
@@ -210,7 +205,7 @@ async fn test_session_execute_raw_ddl_drop_table() {
 async fn test_session_execute_raw_rejects_ddl_under_sql_parser() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("raw_ddl_reject");
+    let table = common::generate_test_table_name("raw_ddl_reject");
     let sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY)", table);
     let result = session.execute_raw(&sql).await;
     assert!(result.is_err(), "execute_raw with DDL should be rejected under sql-parser");
@@ -244,7 +239,7 @@ async fn test_session_execute_raw_requires_sql_parser_feature() {
 async fn test_session_execute_raw_select_admin_success() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("select_test");
+    let table = common::generate_test_table_name("select_test");
     // 先用 execute_raw_ddl 创建表
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, val TEXT)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
@@ -267,7 +262,7 @@ async fn test_session_execute_raw_select_admin_success() {
 async fn test_session_batch_execute_multiple_inserts() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("batch_ins");
+    let table = common::generate_test_table_name("batch_ins");
     // 先用 execute_raw_ddl 创建表
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, val TEXT)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
@@ -294,7 +289,7 @@ async fn test_session_batch_execute_multiple_inserts() {
 async fn test_session_batch_execute_in_transaction_success() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("tx_batch_ok");
+    let table = common::generate_test_table_name("tx_batch_ok");
     // 预创建表
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, val TEXT)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
@@ -317,7 +312,7 @@ async fn test_session_batch_execute_in_transaction_success() {
 async fn test_session_batch_execute_in_transaction_atomicity() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    let table = unique_table_name("tx_batch_fail");
+    let table = common::generate_test_table_name("tx_batch_fail");
     // 预创建表
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, val TEXT)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
