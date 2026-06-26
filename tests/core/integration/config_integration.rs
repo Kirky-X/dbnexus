@@ -5,14 +5,12 @@
 
 //! 配置管理模块集成测试
 //!
-//! 基于 confers 库的配置构建、加载和验证功能测试
+//! 基于 serde 的配置构建、加载和验证功能测试
 //!
 //! # 测试说明
 //!
-//! - `#[cfg(feature = "confers")]` 测试：验证 DbConfig 结构体及其 confers 集成
-//! - `#[cfg(feature = "config-yaml")]` 测试：验证 DbConfig 的 serde Deserialize 实现
-//!   注意：confers 在底层使用相同的 serde 基础设施进行反序列化
-//!   这些测试确保 serde Deserialize trait 正确实现
+//! - 验证 DbConfig 结构体及其 serde Deserialize 实现
+//! - `#[cfg(feature = "config-yaml")]` 测试：验证 DbConfig 的 serde_yaml_ng 反序列化
 
 use dbnexus::foundation::DatabaseType;
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
@@ -22,7 +20,6 @@ mod common;
 
 #[tokio::test]
 async fn test_config_builder_basic() {
-    #[cfg(feature = "confers")]
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
         max_connections: 10,
@@ -30,11 +27,8 @@ async fn test_config_builder_basic() {
         ..Default::default()
     };
 
-    #[cfg(feature = "confers")]
-    {
-        assert_eq!(config.url, "sqlite::memory:");
-        assert_eq!(config.max_connections, 10);
-    }
+    assert_eq!(config.url, "sqlite::memory:");
+    assert_eq!(config.max_connections, 10);
 }
 
 #[cfg(feature = "config-yaml")]
@@ -83,22 +77,20 @@ async fn test_database_type_is_real() {
 }
 
 #[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_from_config() {
-    #[cfg(feature = "confers")]
-    {
-        let url = common::get_test_database_url();
-        let config = DbConfig {
-            url,
-            max_connections: 10,
-            min_connections: 3,
-            ..Default::default()
-        };
+    let url = common::get_test_database_url();
+    let config = DbConfig {
+        url,
+        max_connections: 10,
+        min_connections: 3,
+        ..Default::default()
+    };
 
-        // try_from uses block_on which can't be called from within a tokio runtime
-        // So we use the async version instead and pass config directly
-        let pool = DbPoolBuilder::new().config(config).build().await.unwrap();
-        assert_eq!(pool.config().max_connections, 10);
-    }
+    // try_from uses block_on which can't be called from within a tokio runtime
+    // So we use the async version instead and pass config directly
+    let pool = DbPoolBuilder::new().config(config).build().await.unwrap();
+    assert_eq!(pool.config().max_connections, 10);
 }
 
 #[tokio::test]
@@ -113,63 +105,54 @@ async fn test_dbpool_new() {
 
 #[tokio::test]
 async fn test_config_validation() {
-    #[cfg(feature = "confers")]
-    {
-        // min > max 应该验证失败
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 5,
-            min_connections: 10,
-            ..Default::default()
-        };
+    // min > max 应该验证失败
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 5,
+        min_connections: 10,
+        ..Default::default()
+    };
 
-        // 注意：DbConfig 结构体不会在创建时验证，需要手动验证或由 DbPool 验证
-        // 这里我们检查配置已创建，但 DbPool 创建时会失败
-        assert!(config.max_connections < config.min_connections);
-    }
+    // 注意：DbConfig 结构体不会在创建时验证，需要手动验证或由 DbPool 验证
+    // 这里我们检查配置已创建，但 DbPool 创建时会失败
+    assert!(config.max_connections < config.min_connections);
 }
 
 #[tokio::test]
 async fn test_config_clone() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 10,
-            ..Default::default()
-        };
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 10,
+        ..Default::default()
+    };
 
-        let cloned = config.clone();
-        assert_eq!(config.url, cloned.url);
-        assert_eq!(config.max_connections, cloned.max_connections);
-    }
+    let cloned = config.clone();
+    assert_eq!(config.url, cloned.url);
+    assert_eq!(config.max_connections, cloned.max_connections);
 }
 
 #[tokio::test]
 async fn test_config_builder_chaining() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 20,
-            min_connections: 5,
-            idle_timeout: 600,
-            acquire_timeout: 10000,
-            auto_migrate: true,
-            migration_timeout: 120,
-            admin_role: "superuser".to_string(),
-            ..Default::default()
-        };
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 20,
+        min_connections: 5,
+        idle_timeout: 600,
+        acquire_timeout: 10000,
+        auto_migrate: true,
+        migration_timeout: 120,
+        admin_role: "superuser".to_string(),
+        ..Default::default()
+    };
 
-        assert_eq!(config.url, "sqlite::memory:");
-        assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 5);
-        assert_eq!(config.idle_timeout, 600);
-        assert_eq!(config.acquire_timeout, 10000);
-        assert!(config.auto_migrate);
-        assert_eq!(config.migration_timeout, 120);
-        assert_eq!(config.admin_role, "superuser");
-    }
+    assert_eq!(config.url, "sqlite::memory:");
+    assert_eq!(config.max_connections, 20);
+    assert_eq!(config.min_connections, 5);
+    assert_eq!(config.idle_timeout, 600);
+    assert_eq!(config.acquire_timeout, 10000);
+    assert!(config.auto_migrate);
+    assert_eq!(config.migration_timeout, 120);
+    assert_eq!(config.admin_role, "superuser");
 }
 
 #[cfg(feature = "config-yaml")]
@@ -190,152 +173,131 @@ async fn test_config_missing_required_field() {
 
 #[tokio::test]
 async fn test_config_default_values() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            ..Default::default()
-        };
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        ..Default::default()
+    };
 
-        assert_eq!(config.max_connections, 20);
-        assert_eq!(config.min_connections, 5);
-        assert_eq!(config.idle_timeout, 300);
-        assert_eq!(config.acquire_timeout, 5000);
-        assert!(!config.auto_migrate);
-        assert_eq!(config.migration_timeout, 60);
-        assert_eq!(config.admin_role, "admin");
-    }
+    assert_eq!(config.max_connections, 20);
+    assert_eq!(config.min_connections, 5);
+    assert_eq!(config.idle_timeout, 300);
+    assert_eq!(config.acquire_timeout, 5000);
+    assert!(!config.auto_migrate);
+    assert_eq!(config.migration_timeout, 60);
+    assert_eq!(config.admin_role, "admin");
 }
 
 #[tokio::test]
 async fn test_config_boundary_values() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 1,
-            min_connections: 1,
-            ..Default::default()
-        };
-        assert_eq!(config.max_connections, 1);
-        assert_eq!(config.min_connections, 1);
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 1,
+        min_connections: 1,
+        ..Default::default()
+    };
+    assert_eq!(config.max_connections, 1);
+    assert_eq!(config.min_connections, 1);
 
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 1000,
-            min_connections: 1,
-            ..Default::default()
-        };
-        assert_eq!(config.max_connections, 1000);
-    }
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 1000,
+        min_connections: 1,
+        ..Default::default()
+    };
+    assert_eq!(config.max_connections, 1000);
 }
 
 #[tokio::test]
 async fn test_config_boundary_rejection() {
-    #[cfg(feature = "confers")]
-    {
-        // 注意：DbConfig 结构体不会在创建时验证，这些值会被接受
-        // 验证会在 DbPool 创建时进行
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 1001,
-            ..Default::default()
-        };
-        // 配置已创建，值被设置
-        assert_eq!(config.max_connections, 1001);
+    // 注意：DbConfig 结构体不会在创建时验证，这些值会被接受
+    // 验证会在 DbPool 创建时进行
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 1001,
+        ..Default::default()
+    };
+    // 配置已创建，值被设置
+    assert_eq!(config.max_connections, 1001);
 
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            max_connections: 200,
-            min_connections: 101,
-            ..Default::default()
-        };
-        // 配置已创建，值被设置
-        assert_eq!(config.max_connections, 200);
-        assert_eq!(config.min_connections, 101);
-    }
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 200,
+        min_connections: 101,
+        ..Default::default()
+    };
+    // 配置已创建，值被设置
+    assert_eq!(config.max_connections, 200);
+    assert_eq!(config.min_connections, 101);
 }
 
 #[tokio::test]
 async fn test_config_invalid_urls() {
-    #[cfg(feature = "confers")]
-    {
-        // 空URL - 配置会被创建，但 DbPool 创建时会失败
-        let config = DbConfig {
-            url: "".to_string(),
-            ..Default::default()
-        };
-        // 配置已创建
-        assert_eq!(config.url, "");
+    // 空URL - 配置会被创建，但 DbPool 创建时会失败
+    let config = DbConfig {
+        url: "".to_string(),
+        ..Default::default()
+    };
+    // 配置已创建
+    assert_eq!(config.url, "");
 
-        // 无效URL格式 - 配置会被创建，但 DbPool 创建时会失败
-        let config = DbConfig {
-            url: "invalid://test".to_string(),
-            ..Default::default()
-        };
-        // 配置已创建
-        assert_eq!(config.url, "invalid://test");
-    }
+    // 无效URL格式 - 配置会被创建，但 DbPool 创建时会失败
+    let config = DbConfig {
+        url: "invalid://test".to_string(),
+        ..Default::default()
+    };
+    // 配置已创建
+    assert_eq!(config.url, "invalid://test");
 }
 
 #[tokio::test]
 async fn test_config_timeout_boundaries() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            idle_timeout: 1,
-            acquire_timeout: 1,
-            ..Default::default()
-        };
-        assert_eq!(config.idle_timeout, 1);
-        assert_eq!(config.acquire_timeout, 1);
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        idle_timeout: 1,
+        acquire_timeout: 1,
+        ..Default::default()
+    };
+    assert_eq!(config.idle_timeout, 1);
+    assert_eq!(config.acquire_timeout, 1);
 
-        let config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            idle_timeout: 86400,
-            acquire_timeout: 300000,
-            ..Default::default()
-        };
-        assert_eq!(config.idle_timeout, 86400);
-        assert_eq!(config.acquire_timeout, 300000);
-    }
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        idle_timeout: 86400,
+        acquire_timeout: 300000,
+        ..Default::default()
+    };
+    assert_eq!(config.idle_timeout, 86400);
+    assert_eq!(config.acquire_timeout, 300000);
 }
 
 #[tokio::test]
 async fn test_config_url_access() {
-    #[cfg(feature = "confers")]
-    {
-        let config = DbConfig {
-            url: "postgres://user:password@localhost:5432/mydb".to_string(),
-            ..Default::default()
-        };
+    let config = DbConfig {
+        url: "postgres://user:password@localhost:5432/mydb".to_string(),
+        ..Default::default()
+    };
 
-        // URL 可以直接访问
-        assert!(config.url.contains("postgres://"));
-        assert!(config.url.contains("password"));
+    // URL 可以直接访问
+    assert!(config.url.contains("postgres://"));
+    assert!(config.url.contains("password"));
 
-        let mem_config = DbConfig {
-            url: "sqlite::memory:".to_string(),
-            ..Default::default()
-        };
-        assert_eq!(mem_config.url, "sqlite::memory:");
-    }
+    let mem_config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        ..Default::default()
+    };
+    assert_eq!(mem_config.url, "sqlite::memory:");
 }
 
 #[tokio::test]
 async fn test_config_admin_role_variants() {
-    #[cfg(feature = "confers")]
-    {
-        let test_roles = vec!["admin", "administrator", "root", "superuser"];
+    let test_roles = vec!["admin", "administrator", "root", "superuser"];
 
-        for role in test_roles {
-            let config = DbConfig {
-                url: "sqlite::memory:".to_string(),
-                admin_role: role.to_string(),
-                ..Default::default()
-            };
-            assert_eq!(config.admin_role, role);
-        }
+    for role in test_roles {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            admin_role: role.to_string(),
+            ..Default::default()
+        };
+        assert_eq!(config.admin_role, role);
     }
 }
