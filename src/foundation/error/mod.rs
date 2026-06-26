@@ -44,6 +44,11 @@ pub enum DbError {
     /// 迁移错误
     #[error("Migration error: {0}")]
     Migration(String),
+
+    /// 数据验证错误（feature-gated: validation）
+    #[cfg(feature = "validation")]
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 impl DbError {
@@ -60,6 +65,8 @@ impl DbError {
             DbError::Permission(msg) => msg.clone(),
             DbError::Transaction(msg) => msg.clone(),
             DbError::Migration(msg) => msg.clone(),
+            #[cfg(feature = "validation")]
+            DbError::Validation(msg) => msg.clone(),
         }
     }
 }
