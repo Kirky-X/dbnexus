@@ -82,9 +82,9 @@ cargo run --example permission_engine --features "sqlite,permission-engine"
 ```
 
 ### [entity_basic.rs](entity_basic.rs)
-实体操作基础示例，展示 DbEntity 和 db_crud 宏的使用：
-- 使用 #[derive(DbEntity, DeriveEntityModel)] 定义实体
-- 使用 #[db_crud] 自动生成 CRUD 方法
+实体操作基础示例，展示 db_entity 宏的使用：
+- 使用 #[db_entity(table_name = "...", primary_key = "...")] 定义实体
+- 自动生成 CRUD 方法
 - 执行 insert / find_by_id / update / delete / find_all 操作
 
 ```bash
@@ -130,7 +130,7 @@ cargo run --example tracing --features "sqlite,tracing"
 审计日志示例：
 - 配置审计日志记录器
 - 记录 CRUD 操作审计
-- 使用 #[db_audit] 宏自动审计
+- 使用 #[db_entity(... audit(...))] 自动审计
 - 查询和导出审计日志
 
 ```bash
@@ -145,7 +145,7 @@ cargo run --example audit --features "sqlite,audit"
 - 使用 LRU 缓存策略
 - 配置 TTL 过期时间
 - 防止缓存穿透和击穿
-- 使用 #[db_cache] 宏自动缓存
+- 使用 #[db_entity(... cache(...))] 自动缓存
 
 ```bash
 cargo run --example cache --features "sqlite,cache"
