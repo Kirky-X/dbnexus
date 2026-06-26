@@ -272,57 +272,58 @@ pub struct PoolStatus {
 
 ## 配置 API
 
-基于 [confers](https://crates.io/crates/confique) 库实现的配置管理 API。
+基于 `serde` / `serde_yaml_ng` / `serde_json` 直接反序列化的配置管理 API。
 
 ### `DbConfig`
 
-数据库配置结构，通过 confers 派生宏实现。
+数据库配置结构，通过 serde 派生宏实现。
 
 ```rust
-#[cfg_attr(feature = "confers", derive(Config))]
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct DbConfig {
-    #[cfg_attr(feature = "confers", config(env = "DATABASE_URL"))]
     pub url: String,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_MAX_CONNECTIONS, env = "DB_MAX_CONNECTIONS"))]
+    #[serde(default = "default_max_connections")]
     pub max_connections: u32,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_MIN_CONNECTIONS, env = "DB_MIN_CONNECTIONS"))]
+    #[serde(default = "default_min_connections")]
     pub min_connections: u32,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_IDLE_TIMEOUT, env = "DB_IDLE_TIMEOUT"))]
+    #[serde(default = "default_idle_timeout")]
     pub idle_timeout: u64,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_ACQUIRE_TIMEOUT, env = "DB_ACQUIRE_TIMEOUT"))]
+    #[serde(default = "default_acquire_timeout")]
     pub acquire_timeout: u64,
 
-    #[cfg_attr(feature = "confers", config(env = "DB_PERMISSIONS_PATH"))]
+    #[serde(default)]
     pub permissions_path: Option<String>,
 
-    #[cfg_attr(feature = "confers", config(env = "DB_MIGRATIONS_DIR"))]
+    #[serde(default)]
     pub migrations_dir: Option<PathBuf>,
 
-    #[cfg_attr(feature = "confers", config(default = false, env = "DB_AUTO_MIGRATE"))]
+    #[serde(default)]
     pub auto_migrate: bool,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_MIGRATION_TIMEOUT, env = "DB_MIGRATION_TIMEOUT"))]
+    #[serde(default = "default_migration_timeout")]
     pub migration_timeout: u64,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_ADMIN_ROLE, env = "DB_ADMIN_ROLE"))]
+    #[serde(default = "default_admin_role")]
     pub admin_role: String,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_TIMEOUT, env = "DB_WARMUP_TIMEOUT"))]
+    #[serde(default = "default_warmup_timeout")]
     pub warmup_timeout: u64,
 
-    #[cfg_attr(feature = "confers", config(default = DEFAULT_WARMUP_RETRIES, env = "DB_WARMUP_RETRIES"))]
+    #[serde(default = "default_warmup_retries")]
     pub warmup_retries: u32,
+
+    #[serde(default)]
+    pub cache_config: CacheConfig,
 }
 ```
 
 **默认值：**
 
-| 字段 | 默认值 | 环境变量 |
+| 字段 | 默认值 | 环境变量（`from_env`） |
 |-------|----------|------------|
 | `max_connections` | 20 | `DB_MAX_CONNECTIONS` |
 | `min_connections` | 5 | `DB_MIN_CONNECTIONS` |
@@ -334,150 +335,47 @@ pub struct DbConfig {
 | `warmup_timeout` | 30 (秒) | `DB_WARMUP_TIMEOUT` |
 | `warmup_retries` | 3 | `DB_WARMUP_RETRIES` |
 
-### `DbConfigBuilder`
+### `DbConfig` 配置加载方法
 
-基于 confers 库的配置构建器，提供链式 API 用于构建 `DbConfig` 实例。
+#### `from_yaml_str`
 
-```rust
-#[cfg(feature = "confers")]
-pub struct DbConfigBuilder {
-    builder: confique::Builder<'static, DbConfig>,
-}
-```
-
-#### 方法
-
-##### `new`
-
-创建新的构建器实例。
+从 YAML 字符串加载配置（需要启用 `yaml` feature）。
 
 ```rust
-#[cfg(feature = "confers")]
-pub fn new() -> Self
-```
-
-##### `url`
-
-设置数据库连接 URL（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn url(self, url: &str) -> Self
-```
-
-##### `max_connections`
-
-设置最大池大小（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn max_connections(self, max: u32) -> Self
-```
-
-##### `min_connections`
-
-设置最小池大小（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn min_connections(self, min: u32) -> Self
-```
-
-##### `idle_timeout`
-
-设置空闲连接超时（秒）（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn idle_timeout(self, timeout: u64) -> Self
-```
-
-##### `acquire_timeout`
-
-设置连接获取超时（毫秒）（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn acquire_timeout(self, timeout: u64) -> Self
-```
-
-##### `permissions_path`
-
-设置权限配置文件的路径（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn permissions_path(self, path: &str) -> Self
-```
-
-##### `auto_migrate`
-
-启用自动数据库迁移（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn auto_migrate(self, enabled: bool) -> Self
-```
-
-##### `admin_role`
-
-设置管理员角色名称（通过环境变量传递给 confers）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn admin_role(self, role: &str) -> Self
-```
-
-##### `file`
-
-添加配置文件源（confers 特性）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn file<P: AsRef<Path>>(self, path: P) -> Self
-```
-
-##### `env`
-
-启用环境变量加载（confers 特性）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn env(self) -> Self
-```
-
-##### `build`
-
-构建 `DbConfig` 实例。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn build(self) -> Result<DbConfig, ConfigError>
+#[cfg(feature = "yaml")]
+pub fn from_yaml_str(yaml: &str) -> Result<DbConfig, serde_yaml_ng::Error>
 ```
 
 **示例：**
 ```rust
-#[cfg(feature = "confers")]
-let config = DbConfigBuilder::new()
-    .url("postgresql://localhost/db")
-    .max_connections(20)
-    .min_connections(5)
-    .idle_timeout(300)
-    .acquire_timeout(5000)
-    .permissions_path("/etc/dbnexus/permissions.yaml")
-    .auto_migrate(true)
-    .admin_role("superuser")
-    .build()?;
+#[cfg(feature = "yaml")]
+let yaml = r#"
+url: "sqlite::memory:"
+max_connections: 20
+"#;
+let config = DbConfig::from_yaml_str(yaml)?;
 ```
 
-### `DbConfig` 配置加载方法
+#### `from_json_str`
+
+从 JSON 字符串加载配置。
+
+```rust
+pub fn from_json_str(json: &str) -> Result<DbConfig, serde_json::Error>
+```
+
+**示例：**
+```rust
+let json = r#"{"url":"sqlite::memory:","max_connections":20}"#;
+let config = DbConfig::from_json_str(json)?;
+```
 
 #### `from_env`
 
-从环境变量加载配置（基于 confers 实现）。
+从环境变量加载配置（需要启用 `config-env` feature）。
 
 ```rust
-#[cfg(feature = "confers")]
+#[cfg(feature = "config-env")]
 pub fn from_env() -> Result<DbConfig, ConfigError>
 ```
 
@@ -506,55 +404,22 @@ export DB_ADMIN_ROLE=admin
 ```
 
 ```rust
-#[cfg(feature = "confers")]
+#[cfg(feature = "config-env")]
 let config = DbConfig::from_env()?;
 ```
 
-#### `from_file`
-
-从配置文件加载配置（基于 confers 实现）。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn from_file<P: AsRef<Path>>(path: P) -> Result<DbConfig, ConfigError>
+**YAML 格式示例：**
+```yaml
+url: "postgresql://localhost/db"
+max_connections: 20
+min_connections: 5
+idle_timeout: 300
+acquire_timeout: 5000
+auto_migrate: true
+admin_role: "admin"
 ```
 
-**支持格式：** TOML, YAML, JSON (取决于启用的 confers 特性)
-
-**示例：**
-```toml
-# config.toml
-url = "postgresql://localhost/db"
-max_connections = 20
-min_connections = 5
-idle_timeout = 300
-acquire_timeout = 5000
-auto_migrate = true
-admin_role = "admin"
-```
-
-#### `builder`
-
-获取 confers 构建器用于多源配置加载。
-
-```rust
-#[cfg(feature = "confers")]
-pub fn builder() -> confique::Builder<'static, Self>
-```
-
-**示例：**
-```rust
-#[cfg(feature = "confers")]
-let config = DbConfig::builder()
-    .env()
-    .file("config.toml")
-    .load()?;
-```
-
-> **注意**：原有的 `from_yaml_file` 和 `from_toml_file` 方法已被移除，
-> 请使用 `from_file` 方法配合相应的 confers 特性。
-
-**TOML 格式：**
+**TOML 格式示例：**
 ```toml
 url = "postgresql://localhost/db"
 max_connections = 20
@@ -564,22 +429,6 @@ acquire_timeout = 5000
 auto_migrate = true
 admin_role = "admin"
 ```
-
-#### `from_config_files`
-
-自动检测并从标准路径加载配置。
-
-```rust
-pub fn from_config_files() -> Result<DbConfig, ConfigError>
-```
-
-**搜索顺序：**
-1. `./dbnexus.yaml`
-2. `./dbnexus.toml`
-3. `./config/dbnexus.yaml`
-4. `./config/dbnexus.toml`
-5. `~/.config/dbnexus/config.yaml`
-6. `~/.dbnexus/config.toml`
 
 ---
 
