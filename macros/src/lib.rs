@@ -5,75 +5,628 @@
 
 //! DB Nexus 过程宏定义
 //!
-//! 提供 #[derive(DbEntity)]、#[db_crud]、#[db_permission] 三个宏
+//! 提供 `#[db_entity]` 统一属性宏，替代旧版的 `DbEntity`（derive）、`db_crud`、`db_permission`、
+//! `db_cache`、`db_audit` 五个分散宏。
 //!
-//! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能
+//! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能。
 
-#![allow(dead_code)] // 允许未使用的辅助函数
+#![allow(dead_code)] // 允许未使用的辅助函数（后续 Phase 启用）
 
 use proc_macro::TokenStream;
-use proc_macro_error2::proc_macro_error;
-use proc_macro2::Span;
-use quote::quote;
+use quote::{quote, ToTokens};
 use regex::Regex;
-use syn::{DeriveInput, parse_macro_input};
+use syn::{DeriveInput, parse_macro_input, parse::Parser, spanned::Spanned};
 
-/// DbEntity 派生宏
+// ============================================================================
+// db_entity 统一属性宏（替代 DbEntity + db_crud + db_permission + db_cache + db_audit）
+// ============================================================================
+
+/// `db_entity` 属性宏参数
 ///
-/// 用于为用户定义的 Model struct 添加辅助方法和权限控制
-/// 配合 sea-orm 2.0 的 DeriveEntityModel 使用
+/// 解析 `#[db_entity(table_name = "...", primary_key = "...", timestamps = true, ...)]` 参数
+#[derive(Default)]
+struct DbEntityArgs {
+    /// 表名（必需）
+    table_name: String,
+    /// 主键字段名（必需，修复 db_crud 硬编码 `id` 的 bug）
+    primary_key: String,
+    /// 启用自动时间戳（可选）
+    timestamps: bool,
+    /// 启用软删除（可选）
+    soft_delete: bool,
+    /// 启用数据验证（可选）
+    validate: bool,
+    /// hooks 参数已解析（可选，Phase 3 实现生成代码）
+    has_hooks: bool,
+    /// permissions 参数已解析（可选）
+    has_permissions: bool,
+    /// cache 参数已解析（可选）
+    has_cache: bool,
+    /// audit 参数已解析（可选）
+    has_audit: bool,
+    /// permissions 嵌套参数原始 token（Phase 3 实现解析）
+    permissions_tokens: Option<proc_macro2::TokenStream>,
+    /// cache 嵌套参数原始 token（Phase 3 实现解析）
+    cache_tokens: Option<proc_macro2::TokenStream>,
+    /// audit 嵌套参数原始 token（Phase 3 实现解析）
+    audit_tokens: Option<proc_macro2::TokenStream>,
+    /// hooks 嵌套参数原始 token（Phase 3 实现解析）
+    hooks_tokens: Option<proc_macro2::TokenStream>,
+}
+
+/// 解析 `db_entity` 宏参数
+///
+/// 支持的参数格式：
+/// - `table_name = "users"` （必需，字符串字面量）
+/// - `primary_key = "id"` （必需，字符串字面量）
+/// - `timestamps = true` （可选，布尔字面量）
+/// - `soft_delete = true` （可选，布尔字面量）
+/// - `validate` （可选，布尔开关，无值）
+/// - `hooks(...)` （可选，嵌套参数，Phase 3 实现）
+/// - `permissions(...)` （可选，嵌套参数）
+/// - `cache(...)` （可选，嵌套参数）
+/// - `audit(...)` （可选，嵌套参数）
+fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
+    let mut result = DbEntityArgs::default();
+
+    let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
+    let parsed = syn::parse::Parser::parse(&parser, args)?;
+
+    for meta in parsed {
+        match &meta {
+            // table_name = "..."
+            syn::Meta::NameValue(nv) if nv.path.is_ident("table_name") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    result.table_name = s.value();
+                }
+            }
+            // primary_key = "..."
+            syn::Meta::NameValue(nv) if nv.path.is_ident("primary_key") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = &nv.value
+                {
+                    result.primary_key = s.value();
+                }
+            }
+            // timestamps = true|false
+            syn::Meta::NameValue(nv) if nv.path.is_ident("timestamps") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Bool(b),
+                    ..
+                }) = &nv.value
+                {
+                    result.timestamps = b.value;
+                }
+            }
+            // soft_delete = true|false
+            syn::Meta::NameValue(nv) if nv.path.is_ident("soft_delete") => {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Bool(b),
+                    ..
+                }) = &nv.value
+                {
+                    result.soft_delete = b.value;
+                }
+            }
+            // validate （布尔开关，无值）
+            syn::Meta::Path(p) if p.is_ident("validate") => {
+                result.validate = true;
+            }
+            // hooks(...) — 嵌套参数，Phase 3 实现具体解析
+            syn::Meta::List(list) if list.path.is_ident("hooks") => {
+                result.has_hooks = true;
+                result.hooks_tokens = Some(list.tokens.clone());
+            }
+            // permissions(...) — 嵌套参数
+            syn::Meta::List(list) if list.path.is_ident("permissions") => {
+                result.has_permissions = true;
+                result.permissions_tokens = Some(list.tokens.clone());
+            }
+            // cache(...) — 嵌套参数
+            syn::Meta::List(list) if list.path.is_ident("cache") => {
+                result.has_cache = true;
+                result.cache_tokens = Some(list.tokens.clone());
+            }
+            // audit(...) — 嵌套参数
+            syn::Meta::List(list) if list.path.is_ident("audit") => {
+                result.has_audit = true;
+                result.audit_tokens = Some(list.tokens.clone());
+            }
+            _ => {
+                // 忽略未识别的参数（向前兼容，后续 Phase 实现）
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+// ============================================================================
+// 嵌套参数解析辅助函数（permissions/cache/audit 子参数）
+// ============================================================================
+
+/// 解析嵌套的 name = value 参数对，返回 (参数名, 值 token) 列表
+fn parse_nested_params(tokens: &proc_macro2::TokenStream) -> Vec<(String, proc_macro2::TokenStream)> {
+    let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
+    let parsed = match parser.parse2(tokens.clone()) {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut result = Vec::new();
+    for meta in parsed {
+        match meta {
+            syn::Meta::NameValue(nv) => {
+                if let Some(ident) = nv.path.get_ident() {
+                    result.push((ident.to_string(), nv.value.to_token_stream()));
+                }
+            }
+            syn::Meta::Path(p) => {
+                if let Some(ident) = p.get_ident() {
+                    result.push((ident.to_string(), proc_macro2::TokenStream::new()));
+                }
+            }
+            _ => {}
+        }
+    }
+    result
+}
+
+/// 从 token 中提取字符串数组（如 `["admin", "manager"]` → `vec!["admin", "manager"]`）
+fn extract_string_array(tokens: &proc_macro2::TokenStream) -> Result<Vec<String>, syn::Error> {
+    let expr: syn::Expr = syn::parse2(tokens.clone())?;
+    match expr {
+        syn::Expr::Array(arr) => {
+            let mut strings = Vec::new();
+            for elem in arr.elems {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) = elem
+                {
+                    strings.push(s.value());
+                } else {
+                    return Err(syn::Error::new(elem.span(), "Expected string literal in array"));
+                }
+            }
+            Ok(strings)
+        }
+        syn::Expr::Reference(r) => extract_string_array(&r.expr.to_token_stream()),
+        _ => Err(syn::Error::new(expr.span(), "Expected array of strings")),
+    }
+}
+
+/// 从 token 中提取字符串字面量
+fn extract_string(tokens: &proc_macro2::TokenStream) -> Result<String, syn::Error> {
+    let expr: syn::Expr = syn::parse2(tokens.clone())?;
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(s),
+            ..
+        }) => Ok(s.value()),
+        _ => Err(syn::Error::new(expr.span(), "Expected string literal")),
+    }
+}
+
+/// 从 token 中提取 u64 整数字面量
+fn extract_u64(tokens: &proc_macro2::TokenStream) -> Result<u64, syn::Error> {
+    let expr: syn::Expr = syn::parse2(tokens.clone())?;
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(i),
+            ..
+        }) => Ok(i.base10_parse()?),
+        _ => Err(syn::Error::new(expr.span(), "Expected integer literal")),
+    }
+}
+
+/// 从 token 中提取布尔字面量
+fn extract_bool(tokens: &proc_macro2::TokenStream) -> Result<bool, syn::Error> {
+    let expr: syn::Expr = syn::parse2(tokens.clone())?;
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Bool(b),
+            ..
+        }) => Ok(b.value),
+        _ => Err(syn::Error::new(expr.span(), "Expected boolean literal")),
+    }
+}
+
+/// 解析 permissions(roles = [...], operations = [...]) 嵌套参数
+struct PermissionsParams {
+    roles: Vec<String>,
+    operations: Vec<String>,
+}
+
+fn parse_permissions_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Ident) -> Result<PermissionsParams, syn::Error> {
+    let params = parse_nested_params(tokens);
+    let mut roles = Vec::new();
+    let mut operations = Vec::new();
+
+    for (name, value_tokens) in params {
+        match name.as_str() {
+            "roles" => {
+                roles = extract_string_array(&value_tokens)?;
+                validate_role_names(&roles, struct_name).map_err(|_| {
+                    syn::Error::new(struct_name.span(), "Invalid role name format in permissions()")
+                })?;
+            }
+            "operations" => {
+                operations = extract_string_array(&value_tokens)?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(PermissionsParams { roles, operations })
+}
+
+/// 解析 cache(ttl = 60, strategy = "lru", max_capacity = 5000) 嵌套参数
+struct CacheParams {
+    ttl: u64,
+    strategy: String,
+    max_capacity: usize,
+}
+
+fn parse_cache_params(tokens: &proc_macro2::TokenStream) -> Result<CacheParams, syn::Error> {
+    let params = parse_nested_params(tokens);
+    let mut ttl: u64 = 300;
+    let mut strategy = String::from("lru");
+    let mut max_capacity: usize = 10000;
+
+    for (name, value_tokens) in params {
+        match name.as_str() {
+            "ttl" => ttl = extract_u64(&value_tokens)?,
+            "strategy" => strategy = extract_string(&value_tokens)?,
+            "max_capacity" => {
+                let cap = extract_u64(&value_tokens)?;
+                max_capacity = cap as usize;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(CacheParams {
+        ttl,
+        strategy,
+        max_capacity,
+    })
+}
+
+/// 解析 audit(table_name = "...", log_values = true, operations = [...], roles = [...]) 嵌套参数
+struct AuditParams {
+    table_name: String,
+    log_values: bool,
+    operations: Vec<String>,
+    roles: Vec<String>,
+}
+
+fn parse_audit_params(
+    tokens: &proc_macro2::TokenStream,
+    struct_name: &syn::Ident,
+) -> Result<AuditParams, syn::Error> {
+    let params = parse_nested_params(tokens);
+    let mut table_name = String::new();
+    let mut log_values = true;
+    let mut operations = vec![
+        "INSERT".to_string(),
+        "UPDATE".to_string(),
+        "DELETE".to_string(),
+    ];
+    let mut roles = vec!["admin".to_string()];
+
+    for (name, value_tokens) in params {
+        match name.as_str() {
+            "table_name" => table_name = extract_string(&value_tokens)?,
+            "log_values" => log_values = extract_bool(&value_tokens)?,
+            "operations" => operations = extract_string_array(&value_tokens)?,
+            "roles" => {
+                roles = extract_string_array(&value_tokens)?;
+                validate_role_names(&roles, struct_name).map_err(|_| {
+                    syn::Error::new(struct_name.span(), "Invalid role name format in audit()")
+                })?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(AuditParams {
+        table_name,
+        log_values,
+        operations,
+        roles,
+    })
+}
+
+/// `db_entity` 统一属性宏
+///
+/// 替代 `DbEntity`（derive）+ `db_crud` + `db_permission` + `db_cache` + `db_audit` 五个分散宏。
+/// 一次解析结构体及其属性，统一生成所有能力。
+///
+/// # 必需参数
+///
+/// - `table_name = "..."` — 表名
+/// - `primary_key = "..."` — 主键字段名（修复 `db_crud` 硬编码 `id` 的 bug）
+///
+/// # 可选参数
+///
+/// - `timestamps = true` — 启用自动时间戳（Phase 3 实现）
+/// - `soft_delete = true` — 启用软删除（Phase 3 实现）
+/// - `validate` — 启用数据验证（Phase 3 实现）
+/// - `hooks(...)` — 事件钩子（Phase 3 实现）
+/// - `permissions(...)` — 权限控制
+/// - `cache(...)` — 缓存配置
+/// - `audit(...)` — 审计配置
 ///
 /// # 示例
 ///
 /// ```rust,ignore
-/// use dbnexus::DbEntity;
+/// use dbnexus::db_entity;
 /// use sea_orm::entity::prelude::*;
 ///
-/// #[derive(DbEntity)]
-/// #[sea_orm(table_name = "users")]
-/// struct User {
+/// #[db_entity(table_name = "users", primary_key = "id")]
+/// #[derive(DeriveEntityModel, DeriveModel, DeriveActiveModel)]
+/// pub struct Model {
 ///     #[sea_orm(primary_key)]
-///     id: i64,
-///     name: String,
+///     pub id: i64,
+///     pub name: String,
 /// }
 /// ```
 ///
-/// 注意：此宏依赖 sea-orm 2.0 的派生宏，用户需要同时使用：
-/// - `#[derive(DeriveEntityModel, DeriveModel, DeriveActiveModel)]`
-/// - `#[sea_orm(table_name = "...")]`
-/// - `#[sea_orm(primary_key)]` on primary key field
-#[proc_macro_derive(DbEntity, attributes(table_name, primary_key))]
-pub fn derive_db_entity(input: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(input as DeriveInput);
-
+/// # 主键字段名非 `id` 的示例
+///
+/// ```rust,ignore
+/// #[db_entity(table_name = "users", primary_key = "user_id")]
+/// pub struct Model {
+///     #[sea_orm(primary_key)]
+///     pub user_id: i64,
+///     pub name: String,
+/// }
+/// ```
+///
+/// 此时 `update` 方法会访问 `active_model.user_id` 而非 `active_model.id`。
+#[proc_macro_attribute]
+pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // 提取表名
-    let table_name = extract_table_name(&input.attrs);
+    // 解析参数
+    let entity_args = match parse_db_entity_args(args) {
+        Ok(args) => args,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
-    // 提取主键字段名并移除 primary_key 属性
-    let primary_key_name = extract_primary_key_and_remove(&mut input.data);
-
-    if table_name.is_empty() {
+    // 验证必需参数
+    if entity_args.table_name.is_empty() {
         return syn::Error::new(
             struct_name.span(),
-            "Missing #[table_name = \"...\"] attribute on the struct",
+            "#[db_entity] requires `table_name = \"...\"` parameter",
+        )
+        .to_compile_error()
+        .into();
+    }
+    if entity_args.primary_key.is_empty() {
+        return syn::Error::new(
+            struct_name.span(),
+            "#[db_entity] requires `primary_key = \"...\"` parameter",
         )
         .to_compile_error()
         .into();
     }
 
-    if primary_key_name.is_empty() {
-        return syn::Error::new(struct_name.span(), "Missing #[primary_key] attribute on a struct field")
-            .to_compile_error()
-            .into();
-    }
+    let table_name = &entity_args.table_name;
+    let primary_key_str = &entity_args.primary_key;
+    let primary_key_ident = syn::Ident::new(primary_key_str, proc_macro2::Span::call_site());
 
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    // 解析 permissions/cache/audit 嵌套参数
+    let permissions_params = if entity_args.has_permissions {
+        match entity_args.permissions_tokens.as_ref() {
+            Some(tokens) => match parse_permissions_params(tokens, struct_name) {
+                Ok(p) => Some(p),
+                Err(e) => return e.to_compile_error().into(),
+            },
+            None => None,
+        }
+    } else {
+        None
+    };
 
-    // 生成代码 - derive 宏只添加 impl 块，不输出原始结构体
+    let cache_params = if entity_args.has_cache {
+        match entity_args.cache_tokens.as_ref() {
+            Some(tokens) => match parse_cache_params(tokens) {
+                Ok(p) => Some(p),
+                Err(e) => return e.to_compile_error().into(),
+            },
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    let audit_params = if entity_args.has_audit {
+        match entity_args.audit_tokens.as_ref() {
+            Some(tokens) => match parse_audit_params(tokens, struct_name) {
+                Ok(p) => Some(p),
+                Err(e) => return e.to_compile_error().into(),
+            },
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    // 生成 permissions 常量与方法
+    let permissions_tokens = if let Some(ref p) = permissions_params {
+        let roles: Vec<&str> = p.roles.iter().map(|s| s.as_str()).collect();
+        let operations: Vec<&str> = p.operations.iter().map(|s| s.as_str()).collect();
+        quote! {
+            /// 允许访问此实体的角色白名单（编译期生成）
+            pub const ALLOWED_ROLES: &'static [&'static str] = &[#(#roles),*];
+
+            /// 允许对此实体执行的操作白名单（编译期生成）
+            pub const ALLOWED_OPERATIONS: &'static [&'static str] = &[#(#operations),*];
+
+            /// 获取允许的角色列表
+            pub fn allowed_roles() -> &'static [&'static str] {
+                Self::ALLOWED_ROLES
+            }
+
+            /// 获取允许的操作列表
+            pub fn allowed_operations() -> &'static [&'static str] {
+                Self::ALLOWED_OPERATIONS
+            }
+
+            /// 校验角色是否允许访问此实体
+            pub fn check_permission(
+                ctx: &::dbnexus::access::permission::PermissionContext,
+            ) -> Result<(), ::dbnexus::DbNexusError> {
+                let role = ctx.role();
+                if Self::ALLOWED_ROLES.contains(&role) {
+                    Ok(())
+                } else {
+                    Err(::dbnexus::DbNexusError::Permission(
+                        ::dbnexus::domain::permission::PermissionError::Denied {
+                            resource: #table_name.to_string(),
+                            operation: "access".to_string(),
+                        }
+                    ))
+                }
+            }
+
+            /// 校验角色+操作是否允许
+            pub fn check_operation(
+                ctx: &::dbnexus::access::permission::PermissionContext,
+                action: &::dbnexus::access::permission::PermissionAction,
+            ) -> Result<(), ::dbnexus::DbNexusError> {
+                Self::check_permission(ctx)?;
+                let op = action.to_string();
+                if Self::ALLOWED_OPERATIONS.contains(&op.as_str()) {
+                    Ok(())
+                } else {
+                    Err(::dbnexus::DbNexusError::Permission(
+                        ::dbnexus::domain::permission::PermissionError::Denied {
+                            resource: #table_name.to_string(),
+                            operation: op,
+                        }
+                    ))
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    // 生成 cache 常量与方法
+    let cache_tokens = if let Some(ref c) = cache_params {
+        let ttl = c.ttl;
+        let strategy = &c.strategy;
+        let max_capacity = c.max_capacity;
+        quote! {
+            /// 缓存 TTL（秒）
+            pub const CACHE_TTL: u64 = #ttl;
+
+            /// 缓存策略名称
+            pub const CACHE_STRATEGY: &'static str = #strategy;
+
+            /// 缓存最大容量
+            pub const CACHE_MAX_CAPACITY: usize = #max_capacity;
+
+            /// 缓存是否启用
+            pub const CACHE_ENABLED: bool = true;
+
+            /// 生成缓存键，格式为 "{table_name}:{id}"
+            pub fn cache_key(id: i64) -> String {
+                format!("{}:{}", #table_name, id)
+            }
+
+            /// 生成 `CacheConfig` 配置实例
+            pub fn cache_config() -> ::dbnexus::foundation::config::CacheConfig {
+                ::dbnexus::foundation::config::CacheConfig {
+                    policy_cache_capacity: #max_capacity as u64,
+                    sql_parse_cache_capacity: #max_capacity as u64,
+                    query_cache_capacity: #max_capacity as u64,
+                    default_ttl: #ttl,
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    // 生成 audit 常量
+    let audit_tokens = if let Some(ref a) = audit_params {
+        let audit_table_name = &a.table_name;
+        let audit_ops: Vec<&str> = a.operations.iter().map(|s| s.as_str()).collect();
+        let audit_roles: Vec<&str> = a.roles.iter().map(|s| s.as_str()).collect();
+        let log_values = a.log_values;
+        quote! {
+            /// 审计日志表名
+            pub const AUDIT_TABLE_NAME: &'static str = #audit_table_name;
+
+            /// 需要审计的操作列表
+            pub const AUDIT_OPERATIONS: &'static [&'static str] = &[#(#audit_ops),*];
+
+            /// 需要审计的角色列表
+            pub const AUDIT_ROLES: &'static [&'static str] = &[#(#audit_roles),*];
+
+            /// 是否记录变更前后的值
+            pub const AUDIT_LOG_VALUES: bool = #log_values;
+
+            /// 审计是否启用
+            pub const AUDIT_ENABLED: bool = true;
+        }
+    } else {
+        quote! {}
+    };
+
+    // Task 6.1-6.3: timestamps = true 时生成 ActiveModelBehavior::before_save 实现
+    //
+    // - insert=true: 设置 created_at + updated_at
+    // - insert=false: 仅设置 updated_at
+    // - 编译期类型校验：`Set(Some(now))` 中 `now: OffsetDateTime`，要求 ActiveModel 的
+    //   `created_at`/`updated_at` 字段为 `ActiveValue<Option<OffsetDateTime>>`。
+    //   若用户将字段定义为 `String`，则 `Set(Some(now))` 产生 `ActiveValue<Option<OffsetDateTime>>`，
+    //   与 `ActiveValue<Option<String>>` 类型不匹配，自然触发编译错误（Task 6.3）。
+    // - 注意：Sea-ORM 的 ActiveModelBehavior 使用 #[async_trait]，impl 块也需要标注
+    let (timestamps_attr, timestamps_impl) = if entity_args.timestamps {
+        (
+            quote! { #[::async_trait::async_trait] },
+            quote! {
+                async fn before_save<C>(
+                    mut self,
+                    db: &C,
+                    insert: bool,
+                ) -> Result<Self, ::sea_orm::DbErr>
+                where
+                    C: ::sea_orm::ConnectionTrait,
+                {
+                    let _ = db;
+                    let now = ::time::OffsetDateTime::now_utc();
+                    if insert {
+                        self.created_at = ::sea_orm::ActiveValue::Set(Some(now));
+                        self.updated_at = ::sea_orm::ActiveValue::Set(Some(now));
+                    } else {
+                        self.updated_at = ::sea_orm::ActiveValue::Set(Some(now));
+                    }
+                    Ok(self)
+                }
+            },
+        )
+    } else {
+        (quote! {}, quote! {})
+    };
+
+    // 生成 inherent 方法 + CRUD 方法 + permissions/cache/audit
     let expanded = quote! {
+        #input
+
         impl #impl_generics #struct_name #ty_generics #where_clause {
             /// 获取表名
             pub fn table_name() -> &'static str {
@@ -82,188 +635,178 @@ pub fn derive_db_entity(input: TokenStream) -> TokenStream {
 
             /// 获取主键列名
             pub fn primary_key_column() -> &'static str {
-                #primary_key_name
+                #primary_key_str
             }
-        }
-    };
 
-    TokenStream::from(expanded)
-}
-
-/// 提取 table_name 属性
-///
-/// 使用 syn 的 Meta API 安全解析属性，避免手动字符串操作
-fn extract_table_name(attrs: &[syn::Attribute]) -> String {
-    for attr in attrs {
-        // 首先尝试从 #[sea_orm(table_name = "...")] 中提取
-        if attr.path().is_ident("sea_orm") {
-            // 使用 parse_args_with 解析 #[sea_orm(table_name = "users")] 的参数
-            let values: Result<syn::punctuated::Punctuated<syn::MetaNameValue, syn::Token![,]>, _> =
-                attr.parse_args_with(syn::punctuated::Punctuated::parse_terminated);
-            if let Ok(values) = values {
-                for nv in values {
-                    if nv.path.is_ident("table_name") {
-                        if let syn::Expr::Lit(expr_lit) = &nv.value {
-                            if let syn::Lit::Str(lit_str) = &expr_lit.lit {
-                                return lit_str.value();
-                            }
-                        }
-                    }
-                }
+            /// 生成实体的数据库 Schema 定义
+            ///
+            /// 基于 `sea_orm::Schema::create_table_from_entity` 生成 `TableCreateStatement`，
+            /// 再通过 `dbnexus::domain::migration::convert_table` 转换为 dbnexus 自研的
+            /// `migration::schema::Table` 结构，可直接用于 `Migration::add_table_change`。
+            ///
+            /// # 参数
+            ///
+            /// - `backend` — 数据库后端（`DbBackend::Sqlite`/`Postgres`/`MySql`），
+            ///   影响列类型映射和默认值生成
+            ///
+            /// # 示例
+            ///
+            /// ```rust,ignore
+            /// use dbnexus::db_entity;
+            /// use sea_orm::DbBackend;
+            ///
+            /// let table = User::schema(DbBackend::Sqlite);
+            /// migration.add_table_change(TableChange::CreateTable(table));
+            /// ```
+            pub fn schema(backend: ::sea_orm::DbBackend) -> ::dbnexus::domain::migration::schema::Table {
+                use ::sea_orm::{EntityTrait, Schema};
+                let stmt = Schema::new(backend).create_table_from_entity(Entity);
+                ::dbnexus::domain::migration::convert_table(&stmt)
             }
-        }
-        // 然后尝试从 #[table_name = "...")] 中提取
-        if attr.path().is_ident("table_name") {
-            if let syn::Meta::NameValue(name_value) = &attr.meta {
-                if let syn::Expr::Lit(expr_lit) = &name_value.value {
-                    if let syn::Lit::Str(lit_str) = &expr_lit.lit {
-                        return lit_str.value();
-                    }
-                }
+
+            /// 返回 Sea-ORM 原生查询构建器（带权限检查）
+            ///
+            /// 用户可通过 `.filter()/.order_by()/.limit()` 等链式调用构建查询，
+            /// 最后通过 `.all(conn)` 或 `.one(conn)` 执行。
+            ///
+            /// # 示例
+            ///
+            /// ```rust,ignore
+            /// use sea_orm::EntityTrait;
+            ///
+            /// let select = User::query(&session).await?;
+            /// let conn = session.connection()?;
+            /// let users = select.filter(Column::Name.contains("Alice")).all(conn).await?;
+            /// ```
+            pub async fn query(
+                session: &::dbnexus::database::pool::Session,
+            ) -> Result<::sea_orm::Select<Entity>, dbnexus::DbError> {
+                use ::sea_orm::EntityTrait;
+                session.check_table_permission(#table_name, "SELECT").await?;
+                Ok(Entity::find())
             }
-        }
-    }
-    String::new()
-}
 
-/// 提取主键字段名并移除 primary_key 属性
-fn extract_primary_key_and_remove(data: &mut syn::Data) -> String {
-    if let syn::Data::Struct(s) = data {
-        let mut primary_key_name = String::new();
-        for field in &mut s.fields {
-            // 检查是否有 primary_key 属性或 sea_orm(primary_key) 属性
-            for attr in &field.attrs {
-                // 检查 #[primary_key]
-                if attr.path().is_ident("primary_key") {
-                    if let Some(ident) = &field.ident {
-                        primary_key_name = ident.to_string();
-                        break;
-                    }
-                }
-                // 检查 #[sea_orm(primary_key)]
-                if attr.path().is_ident("sea_orm") {
-                    let _ = attr.parse_nested_meta(|nested| {
-                        if nested.path.is_ident("primary_key") {
-                            if let Some(ident) = &field.ident {
-                                primary_key_name = ident.to_string();
-                            }
-                        }
-                        Ok(())
-                    });
-                }
+            /// 返回 Sea-ORM 原生分页器（带权限检查）
+            ///
+            /// # 示例
+            ///
+            /// ```rust,ignore
+            /// let paginator = User::paginate(&session, 20).await?;
+            /// let total_pages = paginator.num_pages().await?;
+            /// let page_data = paginator.fetch_page(0).await?;
+            /// ```
+            pub async fn paginate<'a>(
+                session: &'a ::dbnexus::database::pool::Session,
+                page_size: u64,
+            ) -> Result<
+                ::sea_orm::Paginator<'a, ::sea_orm::DatabaseConnection, ::sea_orm::SelectModel<Self>>,
+                dbnexus::DbError,
+            > {
+                use ::sea_orm::{EntityTrait, PaginatorTrait};
+                session.check_table_permission(#table_name, "SELECT").await?;
+                let conn = session.connection()?;
+                Ok(Entity::find().paginate(conn, page_size))
             }
-        }
-        return primary_key_name;
-    }
-    String::new()
-}
 
-/// 提取主键字段名（保留原函数供其他地方使用）
-fn extract_primary_key(data: &syn::Data) -> String {
-    if let syn::Data::Struct(s) = data {
-        for field in &s.fields {
-            for attr in &field.attrs {
-                if attr.path().is_ident("primary_key") {
-                    if let Some(ident) = &field.ident {
-                        return ident.to_string();
-                    }
-                }
+            /// 批量插入记录（带权限检查）
+            ///
+            /// 将多个 Model 转换为 ActiveModel 后调用 `Entity::insert_many`，
+            /// 返回 `InsertManyResult`（`last_insert_id` 为 `Option`）。
+            ///
+            /// # 示例
+            ///
+            /// ```rust,ignore
+            /// let models = vec![user1, user2, user3];
+            /// let result = User::insert_many(&session, models).await?;
+            /// ```
+            pub async fn insert_many(
+                session: &::dbnexus::database::pool::Session,
+                models: Vec<Self>,
+            ) -> Result<::sea_orm::InsertManyResult<ActiveModel>, dbnexus::DbError> {
+                use ::sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "INSERT").await?;
+                let conn = session.connection()?;
+
+                let active_models: Vec<ActiveModel> = models.into_iter().map(Into::into).collect();
+                let result = Entity::insert_many(active_models)
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("insert_many", #table_name, true);
+
+                Ok(result)
             }
-        }
-    }
-    String::new()
-}
 
-#[proc_macro_attribute]
-pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let struct_name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+            /// 条件批量更新（带权限检查）
+            ///
+            /// 使用 `Entity::update_many().filter().col_expr()` 链式调用，
+            /// 返回受影响的行数。
+            ///
+            /// # 示例
+            ///
+            /// ```rust,ignore
+            /// use sea_orm::ColumnTrait;
+            ///
+            /// let rows = User::update_many(
+            ///     &session,
+            ///     Column::Age.lt(18).into(),
+            ///     vec![(Column::Status, "minor".into())],
+            /// ).await?;
+            /// ```
+            pub async fn update_many(
+                session: &::dbnexus::database::pool::Session,
+                filter: ::sea_orm::Condition,
+                updates: Vec<(Column, ::sea_orm::Value)>,
+            ) -> Result<u64, dbnexus::DbError> {
+                use ::sea_orm::{EntityTrait, QueryFilter};
+                use ::sea_orm::sea_query::Expr;
 
-    // 支持在宏参数中显式指定表名：#[db_crud(table_name = "...")]
-    let explicit_table_name = {
-        let args = proc_macro2::TokenStream::from(args);
-        let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
-        let parsed = syn::parse::Parser::parse(&parser, args.into()).unwrap_or_default();
-        let mut value: Option<String> = None;
-        for meta in parsed {
-            if let syn::Meta::NameValue(nv) = meta {
-                if nv.path.is_ident("table_name") {
-                    if let syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s), ..
-                    }) = nv.value
-                    {
-                        value = Some(s.value());
-                        break;
-                    }
+                session.check_table_permission(#table_name, "UPDATE").await?;
+                let conn = session.connection()?;
+
+                let mut query = Entity::update_many().filter(filter);
+                for (col, val) in updates {
+                    query = query.col_expr(col, Expr::value(val));
                 }
+
+                let result = query
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("update_many", #table_name, result.rows_affected > 0);
+
+                Ok(result.rows_affected)
             }
-        }
-        value
-    };
 
-    // 提取表名（用于权限检查）：优先使用宏参数，其次从属性解析
-    let table_name = match explicit_table_name {
-        Some(v) => v,
-        None => extract_table_name(&input.attrs),
-    };
-
-    // 验证表名是否存在
-    if table_name.is_empty() {
-        return syn::Error::new(
-            struct_name.span(),
-            "#[db_crud] requires table_name. Provide #[sea_orm(table_name = \"...\")] on the entity or use #[db_crud(table_name = \"...\")]",
-        )
-        .to_compile_error()
-        .into();
-    }
-
-    // 生成 CRUD 方法（使用 Session 的安全接口）
-    let impl_block = quote! {
-        impl #impl_generics #struct_name #ty_generics #where_clause {
             /// CRUD 操作对应的表名
             pub const CRUD_TABLE_NAME: &'static str = #table_name;
 
             /// 插入新记录（带权限控制）
             ///
-            /// 此方法通过 Session 执行插入操作，自动进行权限检查、审计日志和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `model` - 要插入的模型数据
-            ///
-            /// # Returns
-            ///
-            /// 插入后的完整模型（包含自动生成的主键）
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
+            /// 通过 Session 执行插入操作，自动进行权限检查和指标收集
             pub async fn insert(
                 session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "INSERT").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行插入
                 let active_model: ActiveModel = model.into();
                 let result = Entity::insert(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("insert", #table_name, true);
 
-                // 返回完整模型
                 Entity::find_by_id(result.last_insert_id)
                     .one(conn)
                     .await
@@ -271,41 +814,21 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
                     .ok_or_else(|| dbnexus::DbError::Config("Failed to retrieve inserted record".to_string()))
             }
 
-            /// 根据 ID 查找记录（带权限控制）
-            ///
-            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `id` - 主键 ID
-            ///
-            /// # Returns
-            ///
-            /// 找到的记录（如果有）
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
+            /// 根据主键查找记录（带权限控制）
             pub async fn find_by_id(
                 session: &::dbnexus::database::pool::Session,
-                id: i64,
+                pk: i64,
             ) -> Result<Option<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "SELECT").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行查询
-                let result = Entity::find_by_id(id)
+                let result = Entity::find_by_id(pk)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("select", #table_name, result.is_some());
 
@@ -314,53 +837,32 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
 
             /// 更新记录（带权限控制）
             ///
-            /// 此方法通过 Session 执行更新操作，自动进行权限检查、审计日志和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `model` - 要更新的模型数据
-            ///
-            /// # Returns
-            ///
-            /// 更新后的模型
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
+            /// 使用显式 `primary_key` 参数访问主键字段，不硬编码 `id`
             pub async fn update(
                 session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "UPDATE").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 获取主键值
-                // ✅ 更安全的修复代码
-                // 先转换为ActiveModel获取主键
                 let active_model: ActiveModel = model.into();
-                let primary_key = match active_model.id.clone() {
+                // ✅ 修复 db_crud 硬编码 `id` 的 bug：使用显式 primary_key 字段名
+                let primary_key = match active_model.#primary_key_ident.clone() {
                     sea_orm::ActiveValue::Set(id) => id,
                     sea_orm::ActiveValue::Unchanged(id) => id,
                     _ => return Err(dbnexus::DbError::Config("Primary key not set".to_string())),
                 };
 
-                // 执行更新
                 Entity::update(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("update", #table_name, true);
 
-                // 返回更新后的模型
                 Entity::find_by_id(primary_key)
                     .one(conn)
                     .await
@@ -368,49 +870,28 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
                     .ok_or_else(|| dbnexus::DbError::Config("Failed to retrieve updated record".to_string()))
             }
 
-            /// 根据 ID 删除记录（带权限控制）
-            ///
-            /// 此方法通过 Session 执行删除操作，自动进行权限检查、审计日志和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `id` - 要删除的记录 ID
-            ///
-            /// # Returns
-            ///
-            /// 删除的记录数
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
+            /// 根据主键删除记录（带权限控制）
             pub async fn delete(
                 session: &::dbnexus::database::pool::Session,
-                id: i64,
+                pk: i64,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "DELETE").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 先查询记录
-                let record = Entity::find_by_id(id)
+                let record = Entity::find_by_id(pk)
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?
-                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with id {} not found", id)))?;
+                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with pk {} not found", pk)))?;
 
-                // 删除记录
                 let active_model: ActiveModel = record.into();
                 let result = Entity::delete(active_model)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("delete", #table_name, true);
 
@@ -418,38 +899,19 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 查询所有记录（带权限控制）
-            ///
-            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            ///
-            /// # Returns
-            ///
-            /// 所有记录的向量
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_all(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "SELECT").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行查询
                 let result = Entity::find()
                     .all(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("select", #table_name, !result.is_empty());
 
@@ -457,41 +919,21 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 条件查询（带权限控制）
-            ///
-            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `condition` - 查询条件
-            ///
-            /// # Returns
-            ///
-            /// 符合条件的记录
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn find_by_condition(
                 session: &::dbnexus::database::pool::Session,
                 condition: sea_orm::Condition,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "SELECT").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行查询
                 let result = Entity::find()
                     .filter(condition)
                     .all(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("select", #table_name, !result.is_empty());
 
@@ -499,41 +941,21 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 批量删除（带权限控制）
-            ///
-            /// 此方法通过 Session 执行删除操作，自动进行权限检查、审计日志和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            /// * `filter` - 删除条件
-            ///
-            /// # Returns
-            ///
-            /// 删除的记录数
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn delete_many(
                 session: &::dbnexus::database::pool::Session,
                 filter: sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "DELETE").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行删除
                 let result = Entity::delete_many()
                     .filter(filter)
                     .exec(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("delete", #table_name, true);
 
@@ -541,53 +963,50 @@ pub fn db_crud(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 统计记录数（带权限控制）
-            ///
-            /// 此方法通过 Session 执行查询操作，自动进行权限检查和指标收集
-            ///
-            /// # Arguments
-            ///
-            /// * `session` - 数据库会话
-            ///
-            /// # Returns
-            ///
-            /// 记录总数
-            ///
-            /// # Errors
-            ///
-            /// 如果权限检查失败或数据库操作失败，返回错误
             pub async fn count(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
                 use sea_orm::EntityTrait;
 
-                // 权限检查
                 session.check_table_permission(#table_name, "SELECT").await?;
-
-                // 获取连接
                 let conn = session.connection()?;
 
-                // 执行查询
                 let count = Entity::find()
                     .count(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
 
-                // 指标收集
                 #[cfg(feature = "metrics")]
                 session.record_metric("select", #table_name, true);
 
                 Ok(count)
             }
+
+            #permissions_tokens
+            #cache_tokens
+            #audit_tokens
+        }
+
+        // 宏生成 `impl ActiveModelBehavior for ActiveModel`
+        // - timestamps=true: 生成 before_save 自动设置 created_at/updated_at（Task 6.2）
+        // - timestamps=false: 空实现（保留 Sea-ORM 默认行为）
+        // 用户手写此 impl 会触发 conflicting implementations 编译错误（安全失败）
+        // - 注意：Sea-ORM 的 ActiveModelBehavior trait 标注了 #[async_trait]，
+        //   当 timestamps=true 生成 async fn before_save 时，impl 块也需要 #[async_trait]
+        #timestamps_attr
+        impl ::sea_orm::ActiveModelBehavior for ActiveModel {
+            #timestamps_impl
         }
     };
 
-    // 返回原始结构体定义加上生成的 impl 块
-    TokenStream::from(quote! {
-        #input
-        #impl_block
-    })
+    TokenStream::from(expanded)
 }
 
+// ============================================================================
+// 辅助函数（保留供 Phase 3 hooks/permissions/cache/audit 实现使用）
+// ============================================================================
+
+/// 验证角色名格式
 ///
 /// 有效的角色名必须：
 /// - 以字母或下划线开头
@@ -616,6 +1035,7 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
     Ok(())
 }
 
+/// 验证配置路径安全性
 fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
     // 1. 空路径检查
     if config_path.is_empty() {
@@ -674,370 +1094,4 @@ fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
             );
         }
     }
-}
-
-/// db_permission 属性宏
-///
-/// 声明 Entity 允许访问的角色和操作
-///
-/// # 编译时角色验证
-///
-/// 宏会在编译时验证声明的角色名格式是否正确：
-///
-/// ```rust,ignore
-/// #[derive(DbEntity)]
-/// #[db_entity]
-/// #[table_name = "users")]
-/// #[db_permission(roles = ["admin", "user"], operations = ["read", "write"])]
-/// struct User {
-///     #[primary_key]
-///     id: i64,
-///     name: String,
-/// }
-/// ```
-///
-/// 无效的角色名会导致编译错误，例如：
-/// - `123admin` (以数字开头)
-/// - `admin-user` (包含连字符)
-/// - 空字符串
-///
-/// # 使用示例
-/// ```rust,ignore
-/// #[derive(DbEntity)]
-/// #[table_name = "users")]
-/// #[db_permission(roles = ["admin", "user"], operations = ["read", "write"])]
-/// struct User {
-///     #[primary_key]
-///     id: i64,
-///     name: String,
-/// }
-/// ```
-#[proc_macro_attribute]
-#[proc_macro_error]
-pub fn db_permission(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let struct_name = &input.ident;
-    let _struct_span = struct_name.span();
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    // 解析属性参数
-    let args_str = args.to_string();
-
-    // 添加输入长度限制，防止 ReDoS 攻击
-    const MAX_ATTRIBUTE_LENGTH: usize = 10000;
-    if args_str.len() > MAX_ATTRIBUTE_LENGTH {
-        proc_macro_error2::abort!(
-            struct_name,
-            "Attribute parameters are too long (max {} bytes)",
-            MAX_ATTRIBUTE_LENGTH
-        );
-    }
-
-    // 使用优化的正则表达式解析 roles 参数
-    // 优化点：使用非贪婪量词和更精确的字符类
-    let roles: Vec<String> = if let Ok(roles_re) = Regex::new(r#"roles\s*=\s*\[([^\[\]]{0,1000}?)\]"#) {
-        if let Some(caps) = roles_re.captures(&args_str) {
-            if let Some(roles_match) = caps.get(1) {
-                roles_match
-                    .as_str()
-                    .split(',')
-                    .filter_map(|role| {
-                        let cleaned = role.trim().trim_matches('"').trim();
-                        if !cleaned.is_empty() && cleaned.len() <= 100 {
-                            Some(cleaned.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
-
-    // 使用优化的正则表达式解析 operations 参数
-    let operations: Vec<String> = if let Ok(ops_re) = Regex::new(r#"operations\s*=\s*\[([^\[\]]{0,1000}?)\]"#) {
-        if let Some(caps) = ops_re.captures(&args_str) {
-            if let Some(ops_match) = caps.get(1) {
-                ops_match
-                    .as_str()
-                    .split(',')
-                    .filter_map(|op| {
-                        let cleaned = op.trim().trim_matches('"').trim();
-                        if !cleaned.is_empty() && cleaned.len() <= 100 {
-                            Some(cleaned.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
-
-    // 编译时验证角色名格式
-    if validate_role_names(&roles, struct_name).is_err() {
-        proc_macro_error2::abort!(
-            struct_name,
-            "Invalid role name(s) detected. See errors above for details."
-        );
-    }
-
-    // 使用正则表达式解析 config 参数（可选，用于编译时验证）
-    let config_path = if let Ok(config_re) = Regex::new(r#"config\s*=\s*"([^"]*)""#) {
-        config_re
-            .captures(&args_str)
-            .and_then(|caps| caps.get(1).map(|config_match| config_match.as_str().to_string()))
-    } else {
-        None
-    };
-
-    // 生成角色和操作数组
-    let roles_array: Vec<_> = roles.iter().map(|role| quote! { #role }).collect();
-    let operations_array: Vec<_> = operations.iter().map(|op| quote! { #op }).collect();
-
-    // 如果指定了 config 文件，进行编译时角色验证
-    let validation_code = if let Some(config) = &config_path {
-        validate_config_path(config, struct_name);
-        let config_lit = syn::LitStr::new(config, Span::call_site());
-        quote! {
-            const _PERMISSIONS_CONFIG: &str = include_str!(#config_lit);
-        }
-    } else {
-        // 如果没有指定 config，跳过编译时验证
-        quote! {
-            // 未启用编译时角色验证（未指定 config 属性）
-            // 运行时验证仍然生效
-            const _SKIP_COMPILE_TIME_VALIDATION: () = ();
-        }
-    };
-
-    // 生成代码
-    let expanded = quote! {
-        #input
-
-        #validation_code
-
-        impl #impl_generics #struct_name #ty_generics #where_clause {
-            /// 允许访问此实体的角色列表
-            pub const ALLOWED_ROLES: &'static [&'static str] = &[#(#roles_array),*];
-
-            /// 允许的操作列表
-            pub const ALLOWED_OPERATIONS: &'static [&'static str] = &[#(#operations_array),*];
-
-            /// 获取允许的角色列表（用于运行时显示）
-            pub fn allowed_roles() -> Vec<&'static str> {
-                Self::ALLOWED_ROLES.to_vec()
-            }
-
-            /// 获取允许的操作列表（用于运行时显示）
-            pub fn allowed_operations() -> Vec<&'static str> {
-                Self::ALLOWED_OPERATIONS.to_vec()
-            }
-
-            /// 检查角色是否有权限访问此实体
-            pub fn check_permission(ctx: &dbnexus::access::permission::PermissionContext) -> Result<(), dbnexus::DbError> {
-                let role = ctx.role();
-                if !Self::ALLOWED_ROLES.contains(&role) {
-                    return Err(dbnexus::DbError::Permission(format!(
-                        "Role '{}' is not allowed to access entity '{}'. Allowed roles: {:?}",
-                        role,
-                        Self::table_name(),
-                        Self::ALLOWED_ROLES
-                    )));
-                }
-                Ok(())
-            }
-
-            /// 检查角色是否有权限执行特定操作
-            pub fn check_operation(
-                ctx: &dbnexus::access::permission::PermissionContext,
-                operation: &dbnexus::access::permission::PermissionAction,
-            ) -> Result<(), dbnexus::DbError> {
-                let role = ctx.role();
-                if !Self::ALLOWED_ROLES.contains(&role) {
-                    return Err(dbnexus::DbError::Permission(format!(
-                        "Role '{}' is not allowed to access entity '{}'",
-                        role,
-                        Self::table_name()
-                    )));
-                }
-
-                if !Self::ALLOWED_OPERATIONS.is_empty() {
-                    let op_str = operation.to_string();
-                    if !Self::ALLOWED_OPERATIONS.contains(&op_str.as_str()) {
-                        return Err(dbnexus::DbError::Permission(format!(
-                            "Operation '{}' is not allowed for role '{}' on entity '{}'. Allowed operations: {:?}",
-                            op_str,
-                            role,
-                            Self::table_name(),
-                            Self::ALLOWED_OPERATIONS
-                        )));
-                    }
-                }
-
-                Ok(())
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-/// db_cache 属性宏
-///
-/// 为 Entity 配置缓存策略
-#[proc_macro_attribute]
-pub fn db_cache(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let struct_name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    // 解析参数
-    let args_str = args.to_string();
-
-    // 使用正则表达式解析 ttl 参数
-    let ttl = if let Ok(ttl_re) = Regex::new(r#"ttl\s*=\s*(\d+)"#) {
-        if let Some(caps) = ttl_re.captures(&args_str) {
-            if let Some(ttl_match) = caps.get(1) {
-                ttl_match.as_str().parse::<i64>().unwrap_or(300i64) as u64
-            } else {
-                300
-            }
-        } else {
-            300
-        }
-    } else {
-        300
-    };
-
-    // 使用正则表达式解析 strategy 参数
-    let strategy = if let Ok(strat_re) = Regex::new(r#"strategy\s*=\s*"([^"]*)""#) {
-        if let Some(caps) = strat_re.captures(&args_str) {
-            if let Some(strat_match) = caps.get(1) {
-                strat_match.as_str().to_string()
-            } else {
-                "lru".to_string()
-            }
-        } else {
-            "lru".to_string()
-        }
-    } else {
-        "lru".to_string()
-    };
-
-    // 使用正则表达式解析 max_capacity 参数
-    let max_capacity = if let Ok(cap_re) = Regex::new(r#"max_capacity\s*=\s*(\d+)"#) {
-        if let Some(caps) = cap_re.captures(&args_str) {
-            if let Some(cap_match) = caps.get(1) {
-                cap_match.as_str().parse::<usize>().unwrap_or(10000)
-            } else {
-                10000
-            }
-        } else {
-            10000
-        }
-    } else {
-        10000
-    };
-
-    let expanded = quote! {
-        #input
-
-        impl #impl_generics #struct_name #ty_generics #where_clause {
-            /// 缓存 TTL（秒）
-            pub const CACHE_TTL: u64 = #ttl;
-
-            /// 缓存策略名称
-            pub const CACHE_STRATEGY: &'static str = #strategy;
-
-            /// 缓存最大容量
-            pub const CACHE_MAX_CAPACITY: usize = #max_capacity;
-
-            /// 是否启用缓存
-            pub const CACHE_ENABLED: bool = true;
-
-            /// 获取缓存键
-            pub fn cache_key(id: &i64) -> String {
-                format!("{}:{}", Self::table_name(), id)
-            }
-
-            /// 获取缓存配置
-            pub fn cache_config() -> dbnexus::foundation::config::CacheConfig {
-                dbnexus::foundation::config::CacheConfig {
-                    policy_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
-                    sql_parse_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
-                    query_cache_capacity: Self::CACHE_MAX_CAPACITY as u64,
-                    default_ttl: Self::CACHE_TTL,
-                }
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-/// db_audit 属性宏
-///
-/// 为 Entity 配置审计日志策略
-#[proc_macro_attribute]
-pub fn db_audit(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let struct_name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    // 解析参数
-    let args_str = args.to_string();
-    let mut log_values = true;
-
-    if let Some(lv_start) = args_str.find("log_values") {
-        let lv_part = &args_str[lv_start..];
-        if let Some(eq_pos) = lv_part.find('=') {
-            log_values = lv_part[eq_pos + 1..].trim().starts_with("true");
-        }
-    }
-
-    // 解析 table_name 参数
-    let audit_table_name = if let Ok(table_re) = Regex::new(r#"table_name\s*=\s*"([^"]*)""#) {
-        table_re
-            .captures(&args_str)
-            .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
-            .unwrap_or_else(|| format!("{}_audit", struct_name))
-    } else {
-        format!("{}_audit", struct_name)
-    };
-
-    let expanded = quote! {
-        #input
-
-        impl #impl_generics #struct_name #ty_generics #where_clause {
-            /// 审计表名
-            pub const AUDIT_TABLE_NAME: &'static str = #audit_table_name;
-
-            /// 审计的操作列表
-            pub const AUDIT_OPERATIONS: &'static [&'static str] = &["CREATE", "UPDATE", "DELETE"];
-
-            /// 需要审计的角色列表（默认与 db_permission 的 ALLOWED_ROLES 一致）
-            pub const AUDIT_ROLES: &'static [&'static str] = &["admin", "manager"];
-
-            /// 是否记录变更值
-            pub const AUDIT_LOG_VALUES: bool = #log_values;
-
-            /// 审计是否启用
-            pub const AUDIT_ENABLED: bool = true;
-        }
-    };
-
-    TokenStream::from(expanded)
 }
