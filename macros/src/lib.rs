@@ -36,8 +36,8 @@ struct DbEntityArgs {
     soft_delete: bool,
     /// 启用数据验证（可选）
     validate: bool,
-    /// hooks 参数已解析（可选，Phase 3 实现生成代码）
-    has_hooks: bool,
+    /// hooks 嵌套参数解析结果（可选）
+    hooks: HooksArgs,
     /// permissions 参数已解析（可选）
     has_permissions: bool,
     /// cache 参数已解析（可选）
@@ -50,8 +50,102 @@ struct DbEntityArgs {
     cache_tokens: Option<proc_macro2::TokenStream>,
     /// audit 嵌套参数原始 token（Phase 3 实现解析）
     audit_tokens: Option<proc_macro2::TokenStream>,
-    /// hooks 嵌套参数原始 token（Phase 3 实现解析）
-    hooks_tokens: Option<proc_macro2::TokenStream>,
+}
+
+/// `hooks(...)` 嵌套参数解析结果
+///
+/// 解析 `hooks(before_insert = "fn_name", after_insert = "fn_name", ...)` 参数
+/// 每个 hook 函数名以字符串字面量指定，宏生成代码时转为 ident 调用
+#[derive(Default)]
+struct HooksArgs {
+    /// `before_insert = "fn_name"` — insert 前钩子，签名 `fn(&mut ActiveModel) -> Result<(), E>`
+    before_insert: Option<String>,
+    /// `after_insert = "fn_name"` — insert 后钩子，签名 `fn(&Model) -> Result<(), E>`
+    after_insert: Option<String>,
+    /// `before_update = "fn_name"` — update 前钩子，签名 `fn(&mut ActiveModel) -> Result<(), E>`
+    before_update: Option<String>,
+    /// `after_update = "fn_name"` — update 后钩子，签名 `fn(&Model) -> Result<(), E>`
+    after_update: Option<String>,
+    /// `before_delete = "fn_name"` — delete 前钩子，签名 `fn(&mut ActiveModel) -> Result<(), E>`
+    before_delete: Option<String>,
+    /// `after_delete = "fn_name"` — delete 后钩子，签名 `fn(&Model) -> Result<(), E>`
+    after_delete: Option<String>,
+}
+
+impl HooksArgs {
+    /// 是否有任何 hook 被指定
+    fn has_any(&self) -> bool {
+        self.before_insert.is_some()
+            || self.after_insert.is_some()
+            || self.before_update.is_some()
+            || self.after_update.is_some()
+            || self.before_delete.is_some()
+            || self.after_delete.is_some()
+    }
+
+    /// 是否有 before_save 相关 hook（before_insert 或 before_update）
+    fn has_before_save_hooks(&self) -> bool {
+        self.before_insert.is_some() || self.before_update.is_some()
+    }
+
+    /// 是否有 after_save 相关 hook（after_insert 或 after_update）
+    fn has_after_save_hooks(&self) -> bool {
+        self.after_insert.is_some() || self.after_update.is_some()
+    }
+}
+
+/// 解析 `hooks(...)` 嵌套参数
+///
+/// 支持的参数格式（所有参数可选，字符串字面量）：
+/// - `before_insert = "fn_name"`
+/// - `after_insert = "fn_name"`
+/// - `before_update = "fn_name"`
+/// - `after_update = "fn_name"`
+/// - `before_delete = "fn_name"`
+/// - `after_delete = "fn_name"`
+fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::Error> {
+    let mut result = HooksArgs::default();
+
+    let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
+    let parsed = syn::parse::Parser::parse(&parser, tokens.into())?;
+
+    for meta in parsed {
+        if let syn::Meta::NameValue(nv) = meta {
+            let key = nv
+                .path
+                .get_ident()
+                .map(|i| i.to_string())
+                .unwrap_or_default();
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &nv.value
+            {
+                let value = s.value();
+                match key.as_str() {
+                    "before_insert" => result.before_insert = Some(value),
+                    "after_insert" => result.after_insert = Some(value),
+                    "before_update" => result.before_update = Some(value),
+                    "after_update" => result.after_update = Some(value),
+                    "before_delete" => result.before_delete = Some(value),
+                    "after_delete" => result.after_delete = Some(value),
+                    _ => {
+                        return Err(syn::Error::new(
+                            nv.path.span(),
+                            format!(
+                                "unknown hook parameter '{}', expected one of: \
+                                 before_insert, after_insert, before_update, after_update, \
+                                 before_delete, after_delete",
+                                key
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 /// 解析 `db_entity` 宏参数
@@ -118,10 +212,9 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             syn::Meta::Path(p) if p.is_ident("validate") => {
                 result.validate = true;
             }
-            // hooks(...) — 嵌套参数，Phase 3 实现具体解析
+            // hooks(...) — 嵌套参数解析为 HooksArgs
             syn::Meta::List(list) if list.path.is_ident("hooks") => {
-                result.has_hooks = true;
-                result.hooks_tokens = Some(list.tokens.clone());
+                result.hooks = parse_hooks_args(list.tokens.clone())?;
             }
             // permissions(...) — 嵌套参数
             syn::Meta::List(list) if list.path.is_ident("permissions") => {
@@ -393,7 +486,7 @@ fn parse_audit_params(
 /// 此时 `update` 方法会访问 `active_model.user_id` 而非 `active_model.id`。
 #[proc_macro_attribute]
 pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
+    let mut input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -424,6 +517,47 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     let table_name = &entity_args.table_name;
     let primary_key_str = &entity_args.primary_key;
     let primary_key_ident = syn::Ident::new(primary_key_str, proc_macro2::Span::call_site());
+    // PascalCase 版本用于 Column 枚举变体（如 "id" → Column::Id）
+    let primary_key_pascal = {
+        let mut pascal = String::new();
+        let mut capitalize_next = true;
+        for ch in primary_key_str.chars() {
+            if ch == '_' {
+                capitalize_next = true;
+            } else if capitalize_next {
+                pascal.extend(ch.to_uppercase());
+                capitalize_next = false;
+            } else {
+                pascal.push(ch);
+            }
+        }
+        syn::Ident::new(&pascal, proc_macro2::Span::call_site())
+    };
+
+    // Task 6.5: soft_delete = true 时自动注入 deleted_at 字段（若用户未定义）
+    //
+    // 检查 struct 是否已有 deleted_at 字段，如果没有且 soft_delete=true，则自动添加。
+    // 修改 input 会影响 #input 的输出，确保 DeriveEntityModel 能看到 deleted_at 字段。
+    let has_deleted_at_field = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(fields) => fields.named.iter().any(|f| {
+                f.ident.as_ref().map(|i| i == "deleted_at").unwrap_or(false)
+            }),
+            _ => false,
+        },
+        _ => false,
+    };
+
+    if entity_args.soft_delete && !has_deleted_at_field {
+        if let syn::Data::Struct(ref mut data) = input.data {
+            if let syn::Fields::Named(ref mut fields) = data.fields {
+                let deleted_at_field: syn::Field = syn::parse_quote! {
+                    pub deleted_at: Option<time::OffsetDateTime>
+                };
+                fields.named.push(deleted_at_field);
+            }
+        }
+    }
 
     // 解析 permissions/cache/audit 嵌套参数
     let permissions_params = if entity_args.has_permissions {
@@ -586,21 +720,108 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // Task 6.1-6.3: timestamps = true 时生成 ActiveModelBehavior::before_save 实现
+    // Task 6.2/7.4/7.6-7.8: 生成 ActiveModelBehavior 实现
     //
-    // - insert=true: 设置 created_at + updated_at
-    // - insert=false: 仅设置 updated_at
-    // - 编译期类型校验：`Set(Some(now))` 中 `now: OffsetDateTime`，要求 ActiveModel 的
-    //   `created_at`/`updated_at` 字段为 `ActiveValue<Option<OffsetDateTime>>`。
-    //   若用户将字段定义为 `String`，则 `Set(Some(now))` 产生 `ActiveValue<Option<OffsetDateTime>>`，
-    //   与 `ActiveValue<Option<String>>` 类型不匹配，自然触发编译错误（Task 6.3）。
-    // - 注意：Sea-ORM 的 ActiveModelBehavior 使用 #[async_trait]，impl 块也需要标注
-    let (timestamps_attr, timestamps_impl) = if entity_args.timestamps {
-        (
-            quote! { #[::async_trait::async_trait] },
+    // 编排顺序（before_save 内）：validate → timestamps → user_hooks（任一失败短路）
+    //
+    // before_save 生成条件：validate || timestamps || has_before_save_hooks
+    // after_save 生成条件：has_after_save_hooks
+    // before_delete 生成条件：hooks.before_delete.is_some()
+    // after_delete 生成条件：hooks.after_delete.is_some()
+    //
+    // - 验证：把 ActiveModel 转成 Model，调用 validator::Validate::validate
+    // - 时间戳：insert 设 created_at+updated_at，update 仅设 updated_at
+    // - 用户钩子：before_insert/before_update 基于 `insert` 参数分派
+    //   - before_* 签名：fn(&mut ActiveModel) -> Result<(), E>
+    //   - after_* 签名：fn(&Model) -> Result<(), E>
+    // - 编译期签名校验（Task 7.9）：由编译器在调用点检查函数存在性和签名匹配
+    let needs_before_save =
+        entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
+    let needs_after_save = entity_args.hooks.has_after_save_hooks();
+    let needs_before_delete = entity_args.hooks.before_delete.is_some();
+    let needs_after_delete = entity_args.hooks.after_delete.is_some();
+    let needs_behavior =
+        needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
+
+    let (behavior_attr, behavior_impl) = if needs_behavior {
+        // === before_save 生成 ===
+        let before_save_fn = if needs_before_save {
+            // 验证逻辑（validate = true 时）
+            let validate_logic = if entity_args.validate {
+                quote! {
+                    // 先验证：ActiveModel → Model → validate() → ActiveModel
+                    use ::sea_orm::TryIntoModel;
+                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(self)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    ::validator::Validate::validate(&__model)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    let mut __this: ActiveModel = __model.into();
+                }
+            } else {
+                quote! { let mut __this = self; }
+            };
+
+            // 时间戳逻辑（timestamps = true 时）
+            let timestamps_logic = if entity_args.timestamps {
+                quote! {
+                    let __now = ::time::OffsetDateTime::now_utc();
+                    if insert {
+                        __this.created_at = ::sea_orm::ActiveValue::Set(Some(__now));
+                        __this.updated_at = ::sea_orm::ActiveValue::Set(Some(__now));
+                    } else {
+                        __this.updated_at = ::sea_orm::ActiveValue::Set(Some(__now));
+                    }
+                }
+            } else {
+                quote! {}
+            };
+
+            // 用户钩子逻辑（Task 7.6-7.8）
+            // 编排顺序：validate → timestamps → user_hooks
+            let before_insert_ident = entity_args
+                .hooks
+                .before_insert
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+            let before_update_ident = entity_args
+                .hooks
+                .before_update
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+
+            let before_insert_call = if let Some(ref fn_ident) = before_insert_ident {
+                quote! {
+                    #fn_ident(&mut __this)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                }
+            } else {
+                quote! {}
+            };
+            let before_update_call = if let Some(ref fn_ident) = before_update_ident {
+                quote! {
+                    #fn_ident(&mut __this)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                }
+            } else {
+                quote! {}
+            };
+
+            let hooks_logic = if entity_args.hooks.has_before_save_hooks() {
+                quote! {
+                    // 用户钩子（编排顺序最后）：基于 insert 参数分派
+                    if insert {
+                        #before_insert_call
+                    } else {
+                        #before_update_call
+                    }
+                }
+            } else {
+                quote! {}
+            };
+
             quote! {
                 async fn before_save<C>(
-                    mut self,
+                    self,
                     db: &C,
                     insert: bool,
                 ) -> Result<Self, ::sea_orm::DbErr>
@@ -608,19 +829,324 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                     C: ::sea_orm::ConnectionTrait,
                 {
                     let _ = db;
-                    let now = ::time::OffsetDateTime::now_utc();
+                    #validate_logic
+                    #timestamps_logic
+                    #hooks_logic
+                    Ok(__this)
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        // === after_save 生成 ===
+        // Sea-ORM 2.0 的 after_save 签名：`fn(model: Model, db, insert) -> Result<Model, DbErr>`
+        // 注意：第一个参数是 Model（不是 self/ActiveModel），所以钩子可直接用 &model
+        let after_save_fn = if needs_after_save {
+            let after_insert_ident = entity_args
+                .hooks
+                .after_insert
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+            let after_update_ident = entity_args
+                .hooks
+                .after_update
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+
+            let after_insert_call = if let Some(ref fn_ident) = after_insert_ident {
+                quote! {
+                    #fn_ident(&model)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                }
+            } else {
+                quote! {}
+            };
+            let after_update_call = if let Some(ref fn_ident) = after_update_ident {
+                quote! {
+                    #fn_ident(&model)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                }
+            } else {
+                quote! {}
+            };
+
+            quote! {
+                async fn after_save<C>(
+                    model: Model,
+                    db: &C,
+                    insert: bool,
+                ) -> Result<Model, ::sea_orm::DbErr>
+                where
+                    C: ::sea_orm::ConnectionTrait,
+                {
+                    let _ = db;
                     if insert {
-                        self.created_at = ::sea_orm::ActiveValue::Set(Some(now));
-                        self.updated_at = ::sea_orm::ActiveValue::Set(Some(now));
+                        #after_insert_call
                     } else {
-                        self.updated_at = ::sea_orm::ActiveValue::Set(Some(now));
+                        #after_update_call
                     }
+                    Ok(model)
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        // === before_delete 生成 ===
+        let before_delete_fn = if needs_before_delete {
+            let before_delete_ident = entity_args
+                .hooks
+                .before_delete
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+
+            quote! {
+                async fn before_delete<C>(
+                    self,
+                    db: &C,
+                ) -> Result<Self, ::sea_orm::DbErr>
+                where
+                    C: ::sea_orm::ConnectionTrait,
+                {
+                    let _ = db;
+                    let mut __this = self;
+                    #before_delete_ident(&mut __this)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    Ok(__this)
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        // === after_delete 生成 ===
+        // Sea-ORM 2.0 的 after_delete 签名：`fn(self, db) -> Result<Self, DbErr>`
+        // 钩子签名：fn(&Model) -> Result<(), E>，需将 self 转为 Model
+        let after_delete_fn = if needs_after_delete {
+            let after_delete_ident = entity_args
+                .hooks
+                .after_delete
+                .as_ref()
+                .map(|s| syn::Ident::new(s, proc_macro2::Span::call_site()));
+
+            quote! {
+                async fn after_delete<C>(
+                    self,
+                    db: &C,
+                ) -> Result<Self, ::sea_orm::DbErr>
+                where
+                    C: ::sea_orm::ConnectionTrait,
+                {
+                    let _ = db;
+                    use ::sea_orm::TryIntoModel;
+                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(self.clone())
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    #after_delete_ident(&__model)
+                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
                     Ok(self)
                 }
+            }
+        } else {
+            quote! {}
+        };
+
+        (
+            quote! { #[::async_trait::async_trait] },
+            quote! {
+                #before_save_fn
+                #after_save_fn
+                #before_delete_fn
+                #after_delete_fn
             },
         )
     } else {
         (quote! {}, quote! {})
+    };
+
+    // Task 6.6-6.8: soft_delete = true 时生成条件 token
+    //
+    // - find 方法加 `WHERE deleted_at IS NULL` 过滤（Task 6.6）
+    // - delete 方法变为 `UPDATE SET deleted_at = now WHERE ... AND deleted_at IS NULL`（Task 6.7）
+    // - 新增 find_with_deleted/find_only_deleted/force_delete 方法（Task 6.8）
+    let soft_delete_filter = if entity_args.soft_delete {
+        quote! { .filter(Column::DeletedAt.is_null()) }
+    } else {
+        quote! {}
+    };
+
+    // soft_delete=true 时的 delete 方法体（Task 6.7）
+    let soft_delete_methods = if entity_args.soft_delete {
+        quote! {
+            /// 软删除：根据主键设置 deleted_at（带权限控制）
+            ///
+            /// 不物理删除记录，而是 UPDATE SET deleted_at = now WHERE pk = ? AND deleted_at IS NULL
+            pub async fn delete(
+                session: &::dbnexus::database::pool::Session,
+                pk: i64,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::{EntityTrait, QueryFilter, QuerySelect};
+                use ::sea_orm::sea_query::Expr;
+
+                session.check_table_permission(#table_name, "UPDATE").await?;
+                let conn = session.connection()?;
+
+                let now = ::time::OffsetDateTime::now_utc();
+                let result = Entity::update_many()
+                    .col_expr(Column::DeletedAt, Expr::value(Some(now)))
+                    .filter(Column::#primary_key_pascal.eq(pk))
+                    .filter(Column::DeletedAt.is_null())
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, result.rows_affected > 0);
+
+                Ok(result.rows_affected)
+            }
+
+            /// 软删除：批量设置 deleted_at（带权限控制）
+            pub async fn delete_many(
+                session: &::dbnexus::database::pool::Session,
+                filter: sea_orm::Condition,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::{EntityTrait, QueryFilter};
+                use ::sea_orm::sea_query::Expr;
+
+                session.check_table_permission(#table_name, "UPDATE").await?;
+                let conn = session.connection()?;
+
+                let now = ::time::OffsetDateTime::now_utc();
+                let result = Entity::update_many()
+                    .col_expr(Column::DeletedAt, Expr::value(Some(now)))
+                    .filter(filter)
+                    .filter(Column::DeletedAt.is_null())
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, result.rows_affected > 0);
+
+                Ok(result.rows_affected)
+            }
+
+            /// 查询所有记录（包括已软删除的）
+            pub async fn find_with_deleted(
+                session: &::dbnexus::database::pool::Session,
+            ) -> Result<Vec<Self>, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "SELECT").await?;
+                let conn = session.connection()?;
+
+                let result = Entity::find()
+                    .all(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, !result.is_empty());
+
+                Ok(result)
+            }
+
+            /// 仅查询已软删除的记录
+            pub async fn find_only_deleted(
+                session: &::dbnexus::database::pool::Session,
+            ) -> Result<Vec<Self>, dbnexus::DbError> {
+                use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+
+                session.check_table_permission(#table_name, "SELECT").await?;
+                let conn = session.connection()?;
+
+                let result = Entity::find()
+                    .filter(Column::DeletedAt.is_not_null())
+                    .all(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, !result.is_empty());
+
+                Ok(result)
+            }
+
+            /// 物理删除：根据主键永久删除记录（带权限控制）
+            pub async fn force_delete(
+                session: &::dbnexus::database::pool::Session,
+                pk: i64,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::{EntityTrait, QueryFilter};
+
+                session.check_table_permission(#table_name, "DELETE").await?;
+                let conn = session.connection()?;
+
+                let result = Entity::delete_many()
+                    .filter(Column::#primary_key_pascal.eq(pk))
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, result.rows_affected > 0);
+
+                Ok(result.rows_affected)
+            }
+        }
+    } else {
+        quote! {
+            /// 物理删除：根据主键删除记录（带权限控制）
+            pub async fn delete(
+                session: &::dbnexus::database::pool::Session,
+                pk: i64,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "DELETE").await?;
+                let conn = session.connection()?;
+
+                let record = Entity::find_by_id(pk)
+                    .one(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?
+                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with pk {} not found", pk)))?;
+
+                let active_model: ActiveModel = record.into();
+                let result = Entity::delete(active_model)
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, true);
+
+                Ok(result.rows_affected)
+            }
+
+            /// 批量删除（带权限控制）
+            pub async fn delete_many(
+                session: &::dbnexus::database::pool::Session,
+                filter: sea_orm::Condition,
+            ) -> Result<u64, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "DELETE").await?;
+                let conn = session.connection()?;
+
+                let result = Entity::delete_many()
+                    .filter(filter)
+                    .exec(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("delete", #table_name, true);
+
+                Ok(result.rows_affected)
+            }
+        }
     };
 
     // 生成 inherent 方法 + CRUD 方法 + permissions/cache/audit
@@ -815,6 +1341,8 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 根据主键查找记录（带权限控制）
+            ///
+            /// soft_delete=true 时自动过滤已软删除记录
             pub async fn find_by_id(
                 session: &::dbnexus::database::pool::Session,
                 pk: i64,
@@ -825,6 +1353,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 let result = Entity::find_by_id(pk)
+                    #soft_delete_filter
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -871,34 +1400,15 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 根据主键删除记录（带权限控制）
-            pub async fn delete(
-                session: &::dbnexus::database::pool::Session,
-                pk: i64,
-            ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
-
-                session.check_table_permission(#table_name, "DELETE").await?;
-                let conn = session.connection()?;
-
-                let record = Entity::find_by_id(pk)
-                    .one(conn)
-                    .await
-                    .map_err(dbnexus::DbError::Connection)?
-                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with pk {} not found", pk)))?;
-
-                let active_model: ActiveModel = record.into();
-                let result = Entity::delete(active_model)
-                    .exec(conn)
-                    .await
-                    .map_err(dbnexus::DbError::Connection)?;
-
-                #[cfg(feature = "metrics")]
-                session.record_metric("delete", #table_name, true);
-
-                Ok(result.rows_affected)
-            }
+            //
+            // soft_delete=true: 软删除（UPDATE SET deleted_at）
+            // soft_delete=false: 物理删除（DELETE）
+            // 具体实现由 #soft_delete_methods 条件生成
+            #soft_delete_methods
 
             /// 查询所有记录（带权限控制）
+            ///
+            /// soft_delete=true 时自动过滤已软删除记录
             pub async fn find_all(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
@@ -908,6 +1418,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 let result = Entity::find()
+                    #soft_delete_filter
                     .all(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -919,6 +1430,8 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 条件查询（带权限控制）
+            ///
+            /// soft_delete=true 时自动过滤已软删除记录
             pub async fn find_by_condition(
                 session: &::dbnexus::database::pool::Session,
                 condition: sea_orm::Condition,
@@ -930,6 +1443,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let result = Entity::find()
                     .filter(condition)
+                    #soft_delete_filter
                     .all(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -940,29 +1454,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(result)
             }
 
-            /// 批量删除（带权限控制）
-            pub async fn delete_many(
-                session: &::dbnexus::database::pool::Session,
-                filter: sea_orm::Condition,
-            ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
-
-                session.check_table_permission(#table_name, "DELETE").await?;
-                let conn = session.connection()?;
-
-                let result = Entity::delete_many()
-                    .filter(filter)
-                    .exec(conn)
-                    .await
-                    .map_err(dbnexus::DbError::Connection)?;
-
-                #[cfg(feature = "metrics")]
-                session.record_metric("delete", #table_name, true);
-
-                Ok(result.rows_affected)
-            }
-
             /// 统计记录数（带权限控制）
+            ///
+            /// soft_delete=true 时自动过滤已软删除记录
             pub async fn count(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
@@ -972,6 +1466,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 let conn = session.connection()?;
 
                 let count = Entity::find()
+                    #soft_delete_filter
                     .count(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?;
@@ -989,13 +1484,15 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 
         // 宏生成 `impl ActiveModelBehavior for ActiveModel`
         // - timestamps=true: 生成 before_save 自动设置 created_at/updated_at（Task 6.2）
-        // - timestamps=false: 空实现（保留 Sea-ORM 默认行为）
+        // - validate=true: 生成 before_save 调用 validator::Validate::validate（Task 7.4）
+        // - hooks(...): 生成 before_save/after_save/before_delete/after_delete 调用用户钩子（Task 7.6-7.8）
+        // - 无以上参数: 空实现（保留 Sea-ORM 默认行为）
         // 用户手写此 impl 会触发 conflicting implementations 编译错误（安全失败）
         // - 注意：Sea-ORM 的 ActiveModelBehavior trait 标注了 #[async_trait]，
-        //   当 timestamps=true 生成 async fn before_save 时，impl 块也需要 #[async_trait]
-        #timestamps_attr
+        //   生成任何 async fn 时，impl 块也需要 #[async_trait]
+        #behavior_attr
         impl ::sea_orm::ActiveModelBehavior for ActiveModel {
-            #timestamps_impl
+            #behavior_impl
         }
     };
 
