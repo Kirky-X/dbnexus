@@ -156,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 预设 | 特性 | 使用场景 |
 |------|------|----------|
 | <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | 嵌入式设备最小配置 |
-| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `config-yaml`, `regex`, `lru` | 微服务配置 |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `yaml`, `regex`, `lru` | 微服务配置 |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | 除数据库驱动外的所有企业级特性 | 完整企业功能 |
 
 ---
@@ -324,7 +324,7 @@ dbnexus = { version = "0.1.1", features = [
 
 # 配置
 dbnexus = { version = "0.1.1", features = [
-    "config-yaml",     # YAML 配置支持
+    "yaml",            # YAML 配置支持
     "config-toml",     # TOML 配置支持
     "config-env",      # 环境变量（默认）
 ] }
