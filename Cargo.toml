@@ -75,6 +75,7 @@ default = [
     "sql-parser",
     "macros",
     "config-env",
+    "with-time",
 ]
 
 # === 运行时 (互斥 - 必须且只能选一个) ===
@@ -98,7 +99,6 @@ postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 
 # === 核心功能 (可选) ===
-pool = []  # 连接池基础模块（零依赖）
 permission = ["dashmap", "futures", "yaml"]  # 权限控制（dashmap 用于旧版 access/permission，yaml 用于策略解析，futures 用于测试）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
@@ -128,6 +128,7 @@ auto-migrate = ["migration"]  # 自动迁移
 sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
 global-index = ["chrono", "with-json"]  # 全局索引
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
+with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
 
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
@@ -272,6 +273,21 @@ path = "tests/migration/integration/auto_migrate.rs"
 required-features = ["auto-migrate"]
 
 [[test]]
+name = "migration_schema_macro"
+path = "tests/migration/integration/schema_macro_test.rs"
+required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
+name = "migration_query_builder"
+path = "tests/migration/integration/query_builder_test.rs"
+required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
+name = "migration_timestamps"
+path = "tests/migration/integration/timestamps_test.rs"
+required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
 name = "sharding_integration"
 path = "tests/sharding/integration/sharding_integration.rs"
 required-features = ["sharding"]
@@ -354,12 +370,6 @@ name = "pool_db_pool_unit_tests"
 path = "tests/pool/unit/db_pool_unit_tests.rs"
 required-features = ["sqlite", "permission"]
 
-# Pool 单元测试 - foundation pool 模块（PoolConfig、MemoryPool）
-[[test]]
-name = "pool_foundation_unit_tests"
-path = "tests/pool/unit/foundation_pool_unit_tests.rs"
-required-features = ["futures"]
-
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
 name = "core_config_unit_tests"
@@ -369,7 +379,6 @@ path = "tests/core/unit/config_unit_tests.rs"
 [[test]]
 name = "core_common_types_tests"
 path = "tests/core/unit/common_types_tests.rs"
-required-features = ["pool"]
 
 # Domain 单元测试 - 权限模块（PermissionConfig、RolePolicy、MemoryPermissionProvider）
 [[test]]

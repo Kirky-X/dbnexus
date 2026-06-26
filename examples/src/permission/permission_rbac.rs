@@ -9,7 +9,7 @@
 //! - 创建 admin / manager / guest 三种角色策略
 //! - 定义表级权限（SELECT / INSERT / UPDATE / DELETE）
 //! - 权限检查通过和拒绝场景
-//! - 结合 `DbPool + Session` 与 `db_permission` 宏进行实体级权限校验
+//! - 结合 `DbPool + Session` 与 `#[db_entity(..., permissions(...))]` 进行实体级权限校验
 //!
 //! # 运行示例
 //!
@@ -23,20 +23,25 @@ mod common;
 use dbnexus::access::permission::{
     MemoryPermissionProvider, PermissionAction, PermissionContext, PermissionProvider, RolePolicy, TablePermission,
 };
-use dbnexus::{DbEntity, db_permission};
+use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 
 // ============================================
-// 定义 User 实体（带 db_permission 注解）
+// 定义 User 实体（带 permissions 注解）
 // ============================================
 
 /// 用户实体
 ///
-/// `#[db_permission]` 在编译期生成 `ALLOWED_ROLES` / `ALLOWED_OPERATIONS` 常量，
-/// 以及 `check_permission` / `check_operation` 方法，用于运行时权限校验。
-#[derive(Clone, Debug, PartialEq, DbEntity, DeriveEntityModel)]
+/// `#[db_entity(..., permissions(roles=[...], operations=[...]))]` 在编译期生成
+/// `ALLOWED_ROLES` / `ALLOWED_OPERATIONS` 常量，以及 `check_permission` /
+/// `check_operation` 方法，用于运行时权限校验。
+#[db_entity(
+    table_name = "users",
+    primary_key = "id",
+    permissions(roles = ["admin", "manager"], operations = ["SELECT", "INSERT", "UPDATE"])
+)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[db_permission(roles = ["admin", "manager"], operations = ["SELECT", "INSERT", "UPDATE"])]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -46,8 +51,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 // ============================================
 // 主函数
@@ -167,9 +170,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ users 表创建成功");
 
     // ============================================
-    // 4. 使用 db_permission 宏生成的权限校验
+    // 4. 使用 #[db_entity(..., permissions(...))] 宏生成的权限校验
     // ============================================
-    println!("\n--- db_permission 宏权限校验 ---\n");
+    println!("\n--- #[db_entity] permissions 权限校验 ---\n");
 
     // 宏生成的常量
     println!("  User 实体允许的角色: {:?}", Model::allowed_roles());
@@ -212,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - MemoryPermissionProvider::new()   创建内存权限提供者");
     println!("  - provider.add_role(role, policy)  添加角色策略（async）");
     println!("  - provider.check_access(role, table, op)  检查表级权限");
-    println!("  - #[db_permission(roles=[...], operations=[...])]  编译期生成权限校验方法");
+    println!("  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  编译期生成权限校验方法");
     println!("  - Model::check_permission(&ctx)    校验角色是否允许访问实体");
     println!("  - Model::check_operation(&ctx, &op) 校验角色+操作是否允许");
 
