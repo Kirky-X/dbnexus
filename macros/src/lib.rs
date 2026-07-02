@@ -13,9 +13,9 @@
 #![allow(dead_code)] // 允许未使用的辅助函数（后续 Phase 启用）
 
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use regex::Regex;
-use syn::{DeriveInput, parse_macro_input, parse::Parser, spanned::Spanned};
+use syn::{DeriveInput, parse::Parser, parse_macro_input, spanned::Spanned};
 
 // ============================================================================
 // db_entity 统一属性宏（替代 DbEntity + db_crud + db_permission + db_cache + db_audit）
@@ -111,14 +111,9 @@ fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::
 
     for meta in parsed {
         if let syn::Meta::NameValue(nv) = meta {
-            let key = nv
-                .path
-                .get_ident()
-                .map(|i| i.to_string())
-                .unwrap_or_default();
+            let key = nv.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
             if let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(s),
-                ..
+                lit: syn::Lit::Str(s), ..
             }) = &nv.value
             {
                 let value = s.value();
@@ -171,8 +166,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // table_name = "..."
             syn::Meta::NameValue(nv) if nv.path.is_ident("table_name") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s),
-                    ..
+                    lit: syn::Lit::Str(s), ..
                 }) = &nv.value
                 {
                     result.table_name = s.value();
@@ -181,8 +175,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // primary_key = "..."
             syn::Meta::NameValue(nv) if nv.path.is_ident("primary_key") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s),
-                    ..
+                    lit: syn::Lit::Str(s), ..
                 }) = &nv.value
                 {
                     result.primary_key = s.value();
@@ -191,8 +184,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // timestamps = true|false
             syn::Meta::NameValue(nv) if nv.path.is_ident("timestamps") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Bool(b),
-                    ..
+                    lit: syn::Lit::Bool(b), ..
                 }) = &nv.value
                 {
                     result.timestamps = b.value;
@@ -201,8 +193,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // soft_delete = true|false
             syn::Meta::NameValue(nv) if nv.path.is_ident("soft_delete") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Bool(b),
-                    ..
+                    lit: syn::Lit::Bool(b), ..
                 }) = &nv.value
                 {
                     result.soft_delete = b.value;
@@ -279,8 +270,7 @@ fn extract_string_array(tokens: &proc_macro2::TokenStream) -> Result<Vec<String>
             let mut strings = Vec::new();
             for elem in arr.elems {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s),
-                    ..
+                    lit: syn::Lit::Str(s), ..
                 }) = elem
                 {
                     strings.push(s.value());
@@ -300,8 +290,7 @@ fn extract_string(tokens: &proc_macro2::TokenStream) -> Result<String, syn::Erro
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Str(s),
-            ..
+            lit: syn::Lit::Str(s), ..
         }) => Ok(s.value()),
         _ => Err(syn::Error::new(expr.span(), "Expected string literal")),
     }
@@ -312,8 +301,7 @@ fn extract_u64(tokens: &proc_macro2::TokenStream) -> Result<u64, syn::Error> {
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Int(i),
-            ..
+            lit: syn::Lit::Int(i), ..
         }) => Ok(i.base10_parse()?),
         _ => Err(syn::Error::new(expr.span(), "Expected integer literal")),
     }
@@ -324,8 +312,7 @@ fn extract_bool(tokens: &proc_macro2::TokenStream) -> Result<bool, syn::Error> {
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Bool(b),
-            ..
+            lit: syn::Lit::Bool(b), ..
         }) => Ok(b.value),
         _ => Err(syn::Error::new(expr.span(), "Expected boolean literal")),
     }
@@ -337,7 +324,10 @@ struct PermissionsParams {
     operations: Vec<String>,
 }
 
-fn parse_permissions_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Ident) -> Result<PermissionsParams, syn::Error> {
+fn parse_permissions_params(
+    tokens: &proc_macro2::TokenStream,
+    struct_name: &syn::Ident,
+) -> Result<PermissionsParams, syn::Error> {
     let params = parse_nested_params(tokens);
     let mut roles = Vec::new();
     let mut operations = Vec::new();
@@ -346,9 +336,8 @@ fn parse_permissions_params(tokens: &proc_macro2::TokenStream, struct_name: &syn
         match name.as_str() {
             "roles" => {
                 roles = extract_string_array(&value_tokens)?;
-                validate_role_names(&roles, struct_name).map_err(|_| {
-                    syn::Error::new(struct_name.span(), "Invalid role name format in permissions()")
-                })?;
+                validate_role_names(&roles, struct_name)
+                    .map_err(|_| syn::Error::new(struct_name.span(), "Invalid role name format in permissions()"))?;
             }
             "operations" => {
                 operations = extract_string_array(&value_tokens)?;
@@ -400,18 +389,11 @@ struct AuditParams {
     roles: Vec<String>,
 }
 
-fn parse_audit_params(
-    tokens: &proc_macro2::TokenStream,
-    struct_name: &syn::Ident,
-) -> Result<AuditParams, syn::Error> {
+fn parse_audit_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Ident) -> Result<AuditParams, syn::Error> {
     let params = parse_nested_params(tokens);
     let mut table_name = String::new();
     let mut log_values = true;
-    let mut operations = vec![
-        "INSERT".to_string(),
-        "UPDATE".to_string(),
-        "DELETE".to_string(),
-    ];
+    let mut operations = vec!["INSERT".to_string(), "UPDATE".to_string(), "DELETE".to_string()];
     let mut roles = vec!["admin".to_string()];
 
     for (name, value_tokens) in params {
@@ -421,9 +403,8 @@ fn parse_audit_params(
             "operations" => operations = extract_string_array(&value_tokens)?,
             "roles" => {
                 roles = extract_string_array(&value_tokens)?;
-                validate_role_names(&roles, struct_name).map_err(|_| {
-                    syn::Error::new(struct_name.span(), "Invalid role name format in audit()")
-                })?;
+                validate_role_names(&roles, struct_name)
+                    .map_err(|_| syn::Error::new(struct_name.span(), "Invalid role name format in audit()"))?;
             }
             _ => {}
         }
@@ -540,9 +521,10 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     // 修改 input 会影响 #input 的输出，确保 DeriveEntityModel 能看到 deleted_at 字段。
     let has_deleted_at_field = match &input.data {
         syn::Data::Struct(data) => match &data.fields {
-            syn::Fields::Named(fields) => fields.named.iter().any(|f| {
-                f.ident.as_ref().map(|i| i == "deleted_at").unwrap_or(false)
-            }),
+            syn::Fields::Named(fields) => fields
+                .named
+                .iter()
+                .any(|f| f.ident.as_ref().map(|i| i == "deleted_at").unwrap_or(false)),
             _ => false,
         },
         _ => false,
@@ -735,13 +717,11 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     //   - before_* 签名：fn(&mut ActiveModel) -> Result<(), E>
     //   - after_* 签名：fn(&Model) -> Result<(), E>
     // - 编译期签名校验（Task 7.9）：由编译器在调用点检查函数存在性和签名匹配
-    let needs_before_save =
-        entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
+    let needs_before_save = entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
     let needs_after_save = entity_args.hooks.has_after_save_hooks();
     let needs_before_delete = entity_args.hooks.before_delete.is_some();
     let needs_after_delete = entity_args.hooks.after_delete.is_some();
-    let needs_behavior =
-        needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
+    let needs_behavior = needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
 
     let (behavior_attr, behavior_impl) = if needs_behavior {
         // === before_save 生成 ===

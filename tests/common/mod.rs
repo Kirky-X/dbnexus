@@ -14,7 +14,9 @@ use tempfile::TempDir;
 /// 创建内存 SQLite 连接池的测试 helper
 #[allow(dead_code)]
 pub async fn make_sqlite_memory_pool() -> dbnexus::DbPool {
-    dbnexus::DbPool::new("sqlite::memory:").await.expect("Failed to create test pool")
+    dbnexus::DbPool::new("sqlite::memory:")
+        .await
+        .expect("Failed to create test pool")
 }
 
 #[cfg(feature = "permission-engine")]

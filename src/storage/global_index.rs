@@ -91,9 +91,7 @@ impl GlobalIndex {
 
         Self::create_table_if_not_exists(&db).await?;
 
-        Ok(Self {
-            pool: Arc::new(db),
-        })
+        Ok(Self { pool: Arc::new(db) })
     }
 
     /// 创建全局索引表（如果不存在）
@@ -152,9 +150,7 @@ impl GlobalIndex {
         }
 
         let total = entries.len();
-        let (total_synced, all_errors) = self
-            .chunk_and_upsert(&entries, BATCH_SYNC_CHUNK_SIZE)
-            .await;
+        let (total_synced, all_errors) = self.chunk_and_upsert(&entries, BATCH_SYNC_CHUNK_SIZE).await;
 
         let failed_count = total.saturating_sub(total_synced);
         Ok(SyncResult {
@@ -169,11 +165,7 @@ impl GlobalIndex {
     ///
     /// 即使部分批次失败也会继续处理后续批次（部分成功语义），
     /// 失败信息累积到返回的错误列表中。
-    async fn chunk_and_upsert(
-        &self,
-        entries: &[IndexEntry],
-        chunk_size: usize,
-    ) -> (usize, Vec<String>) {
+    async fn chunk_and_upsert(&self, entries: &[IndexEntry], chunk_size: usize) -> (usize, Vec<String>) {
         let mut total_synced = 0usize;
         let mut all_errors: Vec<String> = Vec::new();
 
@@ -494,10 +486,7 @@ mod tests {
         assert_eq!(result.failed_count, 0);
 
         // 验证条目数
-        let queried = index
-            .query_by_index("users", "id", "599")
-            .await
-            .expect("query failed");
+        let queried = index.query_by_index("users", "id", "599").await.expect("query failed");
         assert_eq!(queried.len(), 1);
         assert_eq!(queried[0].record_id, "user_599");
     }

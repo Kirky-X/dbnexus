@@ -337,12 +337,16 @@ mod tests {
     #[tokio::test]
     async fn memory_provider_add_role() {
         let p = MemoryPermissionProvider::new();
-        p.add_role("admin", RolePolicy {
-            tables: vec![TablePermission {
-                name: "*".into(),
-                operations: vec![PermissionAction::Select, PermissionAction::Insert],
-            }],
-        }).await;
+        p.add_role(
+            "admin",
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".into(),
+                    operations: vec![PermissionAction::Select, PermissionAction::Insert],
+                }],
+            },
+        )
+        .await;
         let policy = p.get_role_policy("admin");
         assert!(policy.is_some());
     }
@@ -350,12 +354,16 @@ mod tests {
     #[tokio::test]
     async fn memory_provider_check_access() {
         let p = MemoryPermissionProvider::new();
-        p.add_role("reader", RolePolicy {
-            tables: vec![TablePermission {
-                name: "docs".into(),
-                operations: vec![PermissionAction::Select],
-            }],
-        }).await;
+        p.add_role(
+            "reader",
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "docs".into(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        )
+        .await;
         assert!(p.check_access("reader", "docs", PermissionAction::Select).unwrap());
         assert!(!p.check_access("reader", "docs", PermissionAction::Delete).unwrap());
         // non-existent role returns Ok(false) from PermissionConfig, never Err
@@ -383,12 +391,15 @@ mod tests {
     #[test]
     fn yaml_provider_from_config() {
         let mut config = PermissionConfig::default();
-        config.roles.insert("admin".into(), RolePolicy {
-            tables: vec![TablePermission {
-                name: "*".into(),
-                operations: vec![PermissionAction::Select],
-            }],
-        });
+        config.roles.insert(
+            "admin".into(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".into(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
         let p = YamlPermissionProvider::from_config(config);
         assert!(p.get_role_policy("admin").is_some());
         assert!(p.get_role_policy("nobody").is_none());
@@ -397,12 +408,15 @@ mod tests {
     #[test]
     fn yaml_provider_check_access_from_config() {
         let mut config = PermissionConfig::default();
-        config.roles.insert("viewer".into(), RolePolicy {
-            tables: vec![TablePermission {
-                name: "reports".into(),
-                operations: vec![PermissionAction::Select],
-            }],
-        });
+        config.roles.insert(
+            "viewer".into(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "reports".into(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
         let p = YamlPermissionProvider::from_config(config);
         assert!(p.check_access("viewer", "reports", PermissionAction::Select).unwrap());
         assert!(!p.check_access("viewer", "reports", PermissionAction::Update).unwrap());

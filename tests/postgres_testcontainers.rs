@@ -17,9 +17,9 @@
 #![cfg(feature = "postgres")]
 
 use dbnexus::{DbConfig, DbPool};
+use testcontainers::GenericImage;
 use testcontainers::core::{ContainerAsync, ImageExt, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::GenericImage;
 
 /// 启动一个 PostgreSQL 容器并返回 (容器, 连接 URL)。
 ///
@@ -106,9 +106,7 @@ async fn test_postgres_crud_insert() {
         .expect("Failed to create table");
 
     let result = session
-        .execute_raw(
-            "INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')",
-        )
+        .execute_raw("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
         .await
         .expect("Failed to insert");
 
@@ -172,20 +170,14 @@ async fn test_postgres_transaction_rollback() {
         .await
         .expect("Failed to create table");
 
-    session
-        .begin_transaction()
-        .await
-        .expect("Failed to begin transaction");
+    session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO accounts (email) VALUES ('bob@example.com')")
         .await
         .expect("Failed to insert in transaction");
 
-    session
-        .rollback()
-        .await
-        .expect("Failed to rollback");
+    session.rollback().await.expect("Failed to rollback");
 
     assert!(
         !session.is_in_transaction().await,
@@ -222,20 +214,14 @@ async fn test_postgres_transaction_commit() {
         .await
         .expect("Failed to create table");
 
-    session
-        .begin_transaction()
-        .await
-        .expect("Failed to begin transaction");
+    session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to insert in transaction");
 
-    session
-        .commit()
-        .await
-        .expect("Failed to commit");
+    session.commit().await.expect("Failed to commit");
 
     assert!(
         !session.is_in_transaction().await,
@@ -243,9 +229,7 @@ async fn test_postgres_transaction_commit() {
     );
 
     let conflict_result = session
-        .execute_raw(
-            "INSERT INTO orders (order_no) VALUES ('ORD-001') ON CONFLICT (order_no) DO NOTHING",
-        )
+        .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001') ON CONFLICT (order_no) DO NOTHING")
         .await
         .expect("Failed to execute conflict insert");
     assert_eq!(

@@ -335,7 +335,7 @@ required-features = ["metrics"]
 [[test]]
 name = "permission_engine_integration"
 path = "tests/permission/integration/permission_engine_integration.rs"
-required-features = ["permission-engine"]
+required-features = ["permission-engine", "test-utils"]
 
 [[test]]
 name = "cross_cutting_benchmarks"

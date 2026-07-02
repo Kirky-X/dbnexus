@@ -17,9 +17,9 @@
 #![cfg(feature = "mysql")]
 
 use dbnexus::{DbConfig, DbPool};
+use testcontainers::GenericImage;
 use testcontainers::core::{ContainerAsync, ImageExt, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::GenericImage;
 
 /// 启动一个 MySQL 容器并返回 (容器, 连接 URL)。
 ///
@@ -27,9 +27,7 @@ use testcontainers::GenericImage;
 /// 容器必须在测试期间保持存活，否则 Docker 会回收它。
 async fn setup_mysql() -> (ContainerAsync<GenericImage>, String) {
     let container = GenericImage::new("mysql", "8.0-oracle")
-        .with_wait_for(WaitFor::message_on_stdout(
-            "MySQL init process done",
-        ))
+        .with_wait_for(WaitFor::message_on_stdout("MySQL init process done"))
         .with_wait_for(WaitFor::seconds(5))
         .with_env_var("MYSQL_ROOT_PASSWORD", "root")
         .with_env_var("MYSQL_DATABASE", "dbnexus_test")
@@ -108,9 +106,7 @@ async fn test_mysql_crud_insert() {
         .expect("Failed to create table");
 
     let result = session
-        .execute_raw(
-            "INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')",
-        )
+        .execute_raw("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
         .await
         .expect("Failed to insert");
 
@@ -175,20 +171,14 @@ async fn test_mysql_transaction_rollback() {
         .await
         .expect("Failed to create table");
 
-    session
-        .begin_transaction()
-        .await
-        .expect("Failed to begin transaction");
+    session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO accounts (email) VALUES ('bob@example.com')")
         .await
         .expect("Failed to insert in transaction");
 
-    session
-        .rollback()
-        .await
-        .expect("Failed to rollback");
+    session.rollback().await.expect("Failed to rollback");
 
     assert!(
         !session.is_in_transaction().await,
@@ -226,20 +216,14 @@ async fn test_mysql_transaction_commit() {
         .await
         .expect("Failed to create table");
 
-    session
-        .begin_transaction()
-        .await
-        .expect("Failed to begin transaction");
+    session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to insert in transaction");
 
-    session
-        .commit()
-        .await
-        .expect("Failed to commit");
+    session.commit().await.expect("Failed to commit");
 
     assert!(
         !session.is_in_transaction().await,
@@ -247,9 +231,7 @@ async fn test_mysql_transaction_commit() {
     );
 
     let conflict_result = session
-        .execute_raw(
-            "INSERT IGNORE INTO orders (order_no) VALUES ('ORD-001')",
-        )
+        .execute_raw("INSERT IGNORE INTO orders (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to execute conflict insert");
     assert_eq!(

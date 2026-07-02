@@ -129,10 +129,18 @@ async fn test_yaml_permission_check_returns_correct_decisions() {
 
     // admin 可以访问所有操作
     let result = pdp.check("admin", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin SELECT users should be allowed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin SELECT users should be allowed"
+    );
 
     let result = pdp.check("admin", "orders", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Allow, "admin DELETE orders should be allowed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "admin DELETE orders should be allowed"
+    );
 
     // user 不能 DELETE users
     let result = pdp.check("user", "users", "DELETE").await;
@@ -144,7 +152,11 @@ async fn test_yaml_permission_check_returns_correct_decisions() {
 
     // guest 不能访问 users
     let result = pdp.check("guest", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::NotApplicable, "guest SELECT users should be NotApplicable");
+    assert_eq!(
+        result,
+        PermissionDecision::NotApplicable,
+        "guest SELECT users should be NotApplicable"
+    );
 }
 
 /// TEST-PE-003: RBAC 权限提供者测试
