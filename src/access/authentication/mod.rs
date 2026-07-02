@@ -54,10 +54,49 @@ impl AuthenticationManager {
         }
     }
 
-    /// 添加或更新用户
+    /// 添加或更新用户（直接插入已哈希的 User）
+    ///
+    /// 适用于测试/迁移场景。生产用户注册应使用 [`register_user`](Self::register_user)，
+    /// 后者会验证密码强度并自动哈希。
     pub async fn add_user(&self, user: User) -> AuthResult<()> {
         let mut users = self.users.write().await;
         users.insert(user.username.clone(), user);
+        Ok(())
+    }
+
+    /// 注册新用户（验证密码强度 + 哈希 + 存储）
+    ///
+    /// 与 [`add_user`](Self::add_user) 的区别：接收明文密码，内部执行
+    /// `validate_strength → hash → insert` 完整流程。适用于用户注册场景。
+    ///
+    /// # 参数
+    ///
+    /// * `username` - 用户名（同时作为内部用户 ID）
+    /// * `password` - 明文密码（需通过强度检查：≥8 字符 + 含字母 + 含数字）
+    /// * `role` - 用户角色
+    ///
+    /// # 错误
+    ///
+    /// 密码强度不足时返回 `AuthError::PasswordHash`
+    pub async fn register_user(&self, username: &str, password: &str, role: &str) -> AuthResult<()> {
+        // 1. 验证密码强度
+        self.password_hasher.validate_strength(password)?;
+
+        // 2. 哈希密码
+        let password_hash = self.password_hasher.hash(password)?;
+
+        // 3. 构造 User 并存储
+        let user = User {
+            id: username.to_string(),
+            username: username.to_string(),
+            password_hash,
+            role: role.to_string(),
+            email: None,
+            created_at: None,
+        };
+
+        let mut users = self.users.write().await;
+        users.insert(username.to_string(), user);
         Ok(())
     }
 
@@ -216,5 +255,60 @@ mod tests {
 
         let claims = manager.verify_token(&new_access_token).unwrap();
         assert_eq!(claims.username, "testuser");
+    }
+
+    // ============================================================================
+    // register_user 密码强度验证测试（diting security 修复）
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_register_user_weak_password_rejected() {
+        let manager = AuthenticationManager::new(b"secret");
+        // 太短
+        let result = manager.register_user("u1", "Short1", "user").await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "short password should be rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_register_user_no_letter_rejected() {
+        let manager = AuthenticationManager::new(b"secret");
+        // 无字母
+        let result = manager.register_user("u2", "12345678", "user").await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "password without letter should be rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_register_user_no_digit_rejected() {
+        let manager = AuthenticationManager::new(b"secret");
+        // 无数字
+        let result = manager.register_user("u3", "OnlyLetters", "user").await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "password without digit should be rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_register_user_strong_password_succeeds_and_authenticates() {
+        let manager = AuthenticationManager::new(b"secret");
+        manager.register_user("alice", "SecurePass123", "admin").await.unwrap();
+
+        // 注册后应能认证
+        let token = manager
+            .authenticate(AuthCredentials {
+                username: "alice".to_string(),
+                password: "SecurePass123".to_string(),
+            })
+            .await
+            .unwrap();
+        let claims = manager.verify_token(&token).unwrap();
+        assert_eq!(claims.username, "alice");
+        assert_eq!(claims.role, "admin");
     }
 }
