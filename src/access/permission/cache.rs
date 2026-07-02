@@ -13,6 +13,7 @@
 //! 与 `PermissionContext`（基于 oxcache）的关系：
 //! - `PermissionContext` 提供容量限制的缓存 + 速率限制 + 单飞行防护
 //! - `PermissionCache` 提供显式 TTL + SWR 后台刷新，适合需要"过期但仍可用"语义的场景
+//!
 //! 两者互补共存，不强制替换。
 
 use std::sync::Arc;
