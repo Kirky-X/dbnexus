@@ -50,7 +50,7 @@ async fn test_migration_file_scanning() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
     let url = common::get_test_database_url();
-    let db_type = DatabaseType::parse_database_type(&url);
+    let db_type = DatabaseType::parse_database_type(&url).unwrap();
     let id_column = id_column_definition(db_type);
 
     // 创建测试迁移文件（使用唯一表名避免冲突）
@@ -250,7 +250,7 @@ async fn test_migration_version_sorting() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
     let url = common::get_test_database_url();
-    let db_type = DatabaseType::parse_database_type(&url);
+    let db_type = DatabaseType::parse_database_type(&url).unwrap();
     let id_column = id_column_definition(db_type);
 
     // 使用唯一表名避免冲突

@@ -400,7 +400,7 @@ impl SqlGenerator {
 
         // 添加表级主键约束
         // SQLite 的自增主键列已在列定义中包含 PRIMARY KEY AUTOINCREMENT，不应在表级别重复声明
-        let columns_with_inline_pk: std::collections::HashSet<&str> = if matches!(self.db_type, DatabaseType::Sqlite) {
+        let columns_with_inline_pk: std::collections::HashSet<&str> = if matches!(self.db_type, DatabaseType::Sqlite | DatabaseType::DuckDb) {
             table
                 .columns
                 .iter()
@@ -455,6 +455,7 @@ impl SqlGenerator {
             match self.db_type {
                 DatabaseType::MySql => def.push_str(" AUTO_INCREMENT"),
                 DatabaseType::Sqlite => def.push_str(" PRIMARY KEY AUTOINCREMENT"),
+                DatabaseType::DuckDb => def.push_str(" PRIMARY KEY"),
                 _ => {}
             }
         }
@@ -558,6 +559,10 @@ impl SqlGenerator {
                 validated_table_name, validated_column_name
             )),
             DatabaseType::Postgres => Ok(format!(
+                "ALTER TABLE {} DROP COLUMN {};",
+                validated_table_name, validated_column_name
+            )),
+            DatabaseType::DuckDb => Ok(format!(
                 "ALTER TABLE {} DROP COLUMN {};",
                 validated_table_name, validated_column_name
             )),

@@ -94,7 +94,7 @@ async fn test_migration_apply() {
         .expect("Migration should apply successfully");
 
     // 验证表已创建
-    let check_sql = table_exists_check_sql(pool.config().database_type(), &table_name);
+    let check_sql = table_exists_check_sql(pool.config().database_type().unwrap(), &table_name);
 
     let result = session.execute_raw(&check_sql).await;
     assert!(result.is_ok(), "Migration should be applied");
@@ -166,7 +166,7 @@ async fn test_migration_executor_first_run() {
     drop(file);
 
     // 创建迁移执行器
-    let db_type = pool.config().database_type();
+    let db_type = pool.config().database_type().unwrap();
     let mut executor = MigrationExecutor::new(conn.clone(), db_type);
 
     // 验证首次运行时历史为空
