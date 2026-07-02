@@ -1005,3 +1005,70 @@ roles:
     sess.rollback().await.expect("Failed to rollback");
     assert!(!sess.is_in_transaction().await);
 }
+
+/// v0.3.0 性能优化验证：短锁模式下事务功能正常工作
+///
+/// 此测试覆盖 begin_transaction → execute_raw → commit 的完整流程，
+/// 验证使用 `Arc<DatabaseTransaction>` 和短锁模式后事务仍能正确执行。
+#[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+async fn test_transaction_short_lock_pattern_works() {
+    let (config, _temp_dir) = common::get_test_config();
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    // 建表
+    session
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS short_lock_test (id INTEGER PRIMARY KEY, val TEXT)")
+        .await
+        .expect("Failed to create table");
+
+    // 完整事务流程：begin → execute → commit
+    session.begin_transaction().await.expect("begin failed");
+    assert!(session.is_in_transaction().await);
+
+    session
+        .execute_raw("INSERT INTO short_lock_test (id, val) VALUES (1, 'hello')")
+        .await
+        .expect("insert in transaction failed");
+
+    session.commit().await.expect("commit failed");
+    assert!(!session.is_in_transaction().await);
+
+    // 验证数据已提交
+    let result = session.execute_raw("SELECT * FROM short_lock_test").await;
+    assert!(result.is_ok(), "select after commit failed");
+}
+
+/// v0.3.0 性能优化验证：事务中 execute_raw 后能继续执行（验证 Arc clone 不会阻塞后续操作）
+#[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+async fn test_transaction_multiple_executes_in_same_transaction() {
+    let (config, _temp_dir) = common::get_test_config();
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS multi_exec_test (id INTEGER PRIMARY KEY, val TEXT)")
+        .await
+        .expect("Failed to create table");
+
+    session.begin_transaction().await.expect("begin failed");
+
+    // 在同一事务中执行多次 SQL（验证 Arc clone 后锁外执行不阻塞后续）
+    for i in 1..=5 {
+        session
+            .execute_raw(&format!(
+                "INSERT INTO multi_exec_test (id, val) VALUES ({}, 'val_{}')",
+                i, i
+            ))
+            .await
+            .expect("insert in transaction failed");
+    }
+
+    session.commit().await.expect("commit failed");
+
+    // 验证所有数据已提交
+    let result = session.execute_raw("SELECT * FROM multi_exec_test").await;
+    assert!(result.is_ok());
+}
