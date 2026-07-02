@@ -92,7 +92,7 @@ mod generated_roles;
 // ============================================================================
 
 // Common 导出 (新架构)
-pub use crate::common::error::{DbNexusError, DbNexusResult};
+pub use crate::common::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
 // DatabaseType 统一定一在 foundation::config（Task 15：合并 common::types::DatabaseType）
 pub use crate::foundation::config::DatabaseType;
@@ -139,16 +139,16 @@ pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, Sen
 #[cfg(feature = "permission")]
 #[cfg(not(feature = "permission-engine"))]
 pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionConfig, PermissionContext,
-    PermissionProvider as AccessPermissionProvider, PermissionProviderError, RolePolicy as AccessRolePolicy,
-    TablePermission as AccessTablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
+    PermissionConfig, PermissionContext, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
+    RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
 #[cfg(all(feature = "permission", feature = "permission-engine"))]
 pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionConfig,
-    PermissionProvider as AccessPermissionProvider, PermissionProviderError, RolePolicy as AccessRolePolicy,
-    TablePermission as AccessTablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
+    PermissionConfig, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
+    RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
 #[cfg(feature = "authentication")]
