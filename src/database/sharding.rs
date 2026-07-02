@@ -226,7 +226,9 @@ pub struct ShardRouter {
 impl Default for ShardRouter {
     fn default() -> Self {
         Self {
-            total_shards: 0,
+            // 默认 1 个分片（单一分片）：shard_id_for_key 对任何 key 返回 0。
+            // 设为 0 会导致 `% total_shards` 除零 panic。
+            total_shards: 1,
             strategy: Box::new(YearlyStrategy),
             shards: HashMap::new(),
             pools: HashMap::new(),
@@ -471,12 +473,17 @@ impl ShardRouter {
     /// 与 [`calculate_shard`](Self::calculate_shard) 的区别：不需要时间戳参数，
     /// 适合纯键路由场景（如按 user_id 路由）。
     ///
-    /// # Panics
+    /// # 防御
     ///
-    /// 如果 `total_shards` 为 0，会触发除零 panic（由 `ShardRouter::new` 保证非 0）。
+    /// 如果 `total_shards` 为 0（不应发生，Default 保证为 1），返回 0 而非 panic。
     pub fn shard_id_for_key(&self, shard_key: &str) -> u32 {
         use std::hash::{Hash, Hasher};
         use twox_hash::XxHash64;
+
+        // 防御除零：total_shards==0 时返回 0（单一分片语义）
+        if self.total_shards == 0 {
+            return 0;
+        }
 
         let mut hasher = XxHash64::default();
         shard_key.hash(&mut hasher);

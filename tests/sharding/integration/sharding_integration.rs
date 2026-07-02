@@ -211,3 +211,25 @@ async fn test_shard_router_clone() {
     // 克隆后的路由器共享连接池 Arc 引用
     assert_eq!(router_clone.pool_count(), router.pool_count());
 }
+
+/// TEST-SHARD-INT-010: ShardRouter::default() 不除零 panic（回归测试）
+///
+/// 原实现 default total_shards=0，shard_id_for_key 的 `% total_shards` 除零 panic。
+/// 修复后 default 应为 1（单一分片），shard_id_for_key 应防御 total_shards==0。
+#[test]
+fn test_router_default_no_divide_by_zero() {
+    let router = ShardRouter::default();
+    // 任何 key 都应返回 0（单一分片），不 panic
+    let shard_id = router.shard_id_for_key("any_key");
+    assert_eq!(shard_id, 0, "default router with single shard should return 0");
+}
+
+/// TEST-SHARD-INT-011: shard_id_for_key 对不同 key 返回有效分片
+#[test]
+fn test_shard_id_for_key_within_range() {
+    let router = ShardRouter::with_strategy("hash", 8);
+    for key in &["user_1", "user_2", "order_abc", "product_xyz"] {
+        let shard_id = router.shard_id_for_key(key);
+        assert!(shard_id < 8, "shard_id {} should be < 8 for key {}", shard_id, key);
+    }
+}
