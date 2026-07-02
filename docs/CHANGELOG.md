@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-03
+
+### ⚠️ BREAKING CHANGES
+
+- **版本号升级**: workspace 版本号 `0.2.0 → 0.3.0`（含 `Cargo.toml` + `macros/Cargo.toml` + `examples/Cargo.toml`）
+- **README 重命名**: `README.md → README_EN.md`，`README_zh.md → README.md`（中文为主 README）
+- **编译期互斥规则修复**: `sqlite`/`postgres`/`mysql` 现在真正互斥（原规则允许同时启用，与文档"Must enable exactly one"矛盾）
+- **`observability` 预设修正**: 从 `["metrics", "health-check"]` 改为 `["metrics", "health-check", "tracing"]`（与 README 描述一致）
+- **`dbentity-v2-rewrite` 变更归档**: 88/88 任务完成，归档到 `openspec/changes/archive/`
+
+### Added
+
+#### 新特性
+
+- **`duckdb` feature**: DuckDB OLAP 后端支持，基于 `duckdb` crate（同步）+ `tokio::task::spawn_blocking` 桥接，作为分析只读旁路接入（绕过 sea-orm，因 sea-orm 2.0.0-rc.37 不支持 DuckDB）
+  - 新增 `DbConnection::DuckDb` 枚举变体
+  - 新增 `DuckDbConnection` 连接包装器，支持 `execute()`/`query()` 异步接口
+  - `DatabaseType::DuckDb` 支持 `duckdb:` URL 前缀解析
+- **`tracing` feature**: OpenTelemetry 分布式追踪，基于 `tracing` + `tracing-opentelemetry` + `opentelemetry-otlp`
+  - 新增 `TracingGuard::init_with_otlp()` API
+  - 集成 `tracing` 模块导出
+- **结构化错误报告**: `QueryErrorReport` 按"权限不足/注入风险/语法错误/分片冲突"分类，含修复建议
+- **连接串智能解析**: 用 `url` crate 替代 `starts_with("sqlite:")` 硬编码前缀匹配，支持标准 URI 格式
+- **权限缓存 TTL + 动态热加载**: `PermissionCache` 新增 `expire_after` + 后台异步刷新任务
+- **分片路由集成 Session**: `pool.get_session_for_shard(key, role)` 自动路由到对应分片
+
+#### 工程化护栏
+
+- `.github/dependabot.yml`: cargo + github-actions 依赖自动更新 PR
+- `.github/codeql.yml`: 语义级安全扫描工作流
+- `.editorconfig`: 跨编辑器一致性（Rust 4 空格缩进、UTF-8、LF 换行）
+- `.pre-commit-config.yaml`: 集成 cargo-fmt / cargo-clippy / cargo-deny Rust 专有 hook
+
+#### 测试覆盖
+
+- `tests/authentication/`: AuthenticationManager/JwtManager/PasswordHasher 外部测试
+- `tests/security/sensitive_masker_tests.rs`: SensitiveMasker/MaskType 外部测试（含 Unicode 安全测试）
+- `tests/kit/kit_integration_tests.rs`: DbNexusKit 外部测试
+- `benches/permission_engine_bench.rs`: 权限引擎基准测试
+- `benches/sharding_bench.rs`: 分片路由基准测试
+- `benches/metrics_bench.rs`: 指标收集基准测试
+
+### Changed
+
+- **`cache` feature 描述修正**: 从 "LRU" 改为 "oxcache（内部 moka L1 后端）"
+- **协议兼容数据库文档化**: CockroachDB/YugabyteDB/TiDB/MariaDB/Aurora 无需代码改动即可使用，在 README 中明确说明
+
+### Fixed
+
+#### 正确性修复（diting 审查）
+
+- **`mask_email` UTF-8 字节切片 panic**: 非 ASCII 本地部分（中文/emoji）按字节切片会 panic，改用 `chars()` 安全处理
+- **`ShardRouter::default()` 除零 panic**: 默认 `total_shards=0` 导致 `% total_shards` 除零，改为 `total_shards=1`（单一分片语义）+ 防御性检查
+- **`shard_id_for_key` 哈希器误用**: `shard_key.hash(&hasher)` 应为 `&mut hasher`（预存编译错误）
+- **DuckDB `permit` 提前 drop**: `execute()`/`query()` 中 permit 在 `handle.await` 前 drop，信号量在 spawn_blocking 任务完成前释放，失去并发限制作用
+- **`warmup_connections` 静默丢弃失败**: 全部失败时仍返回 `Ok(())`，改为全部失败返回 `Err` + 部分失败 warn 日志（规则 12）
+- **`validate_role_name` 静默 fail-open**: 无权限配置时静默使用安全默认策略，添加 warn 日志显性化（规则 12，CRITICAL 风险保守修复）
+
+#### 安全修复（diting 审查）
+
+- **`verify_token` 不校验 `token_type`**: refresh token 可用作 access token（权限提升风险），新增 `verify_access_token`/`verify_refresh_token` 方法额外校验 `token_type`
+- **`add_user` 无法验证密码强度**: 接收已哈希 `password_hash`，新增 `register_user(username, password, role)` 方法执行 `validate_strength → hash → insert` 完整流程
+
 ## [0.2.0] - 2026-06-27
 
 ### ⚠️ BREAKING CHANGES - ALL USERS MUST UPDATE
