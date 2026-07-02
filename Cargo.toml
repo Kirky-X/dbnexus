@@ -117,9 +117,10 @@ pool-health-check = ["futures"]  # 连接池健康检查
 pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
-observability = ["metrics", "health-check"]
+observability = ["metrics", "health-check", "tracing"]
 metrics = []  # Prometheus 格式 metrics 导出（内置实现，无需外部 crate）
 health-check = []  # 健康检查模块（内置，无额外依赖）
+tracing = ["dep:tracing", "dep:tracing-opentelemetry", "dep:tracing-subscriber", "dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
@@ -211,6 +212,14 @@ jsonwebtoken = { version = "~10.0", features = ["rust_crypto"], optional = true 
 bcrypt = { version = "~0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
+
+# Tracing / OpenTelemetry（tracing feature）
+tracing = { version = "0.1", optional = true }
+tracing-opentelemetry = { version = "0.28", optional = true }
+tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter", "fmt"] }
+opentelemetry = { version = "0.27", optional = true }
+opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", optional = true, features = ["tonic"] }
 
 # Internal packages
 dbnexus-macros = { workspace = true, optional = true }
@@ -402,6 +411,18 @@ path = "tests/core/unit/common_types_tests.rs"
 name = "domain_permission_tests"
 path = "tests/domain/permission_test.rs"
 required-features = ["permission"]
+
+# Tracing 单元测试 - TracingGuard init/重复初始化安全/TracingError Display
+[[test]]
+name = "tracing_unit_tests"
+path = "tests/tracing/unit/tracing_unit_tests.rs"
+required-features = ["tracing"]
+
+# Tracing 集成测试 - TracingGuard drop + Session span 自动创建
+[[test]]
+name = "tracing_integration"
+path = "tests/tracing/integration/tracing_integration.rs"
+required-features = ["tracing", "sqlite", "permission"]
 
 [dev-dependencies.testcontainers]
 version = "0.23"

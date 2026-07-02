@@ -10,9 +10,13 @@
 // 单文件模块
 pub mod health;
 pub mod metrics;
+#[cfg(feature = "tracing")]
+pub mod tracing;
 
 // Re-exports
 #[cfg(feature = "health-check")]
 pub use health::{CircuitBreaker, HealthChecker, HealthStatus, PoolHealthMetrics};
 #[cfg(feature = "metrics")]
 pub use metrics::{LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait};
+#[cfg(feature = "tracing")]
+pub use tracing::{TracingError, TracingGuard};
