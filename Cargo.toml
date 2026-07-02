@@ -374,6 +374,27 @@ name = "permission_bench"
 path = "benches/permission_bench.rs"
 harness = false
 
+# 权限引擎基准测试 - PermissionCache insert/get/miss（0.3.0 新增）
+[[bench]]
+name = "permission_engine_bench"
+path = "benches/permission_engine_bench.rs"
+harness = false
+required-features = ["permission"]
+
+# 分片路由基准测试 - shard_id_for_key / enforce_shard_binding（0.3.0 新增）
+[[bench]]
+name = "sharding_bench"
+path = "benches/sharding_bench.rs"
+harness = false
+required-features = ["sharding"]
+
+# 指标系统基准测试 - 百分位计算 / Prometheus 导出 / 直方图记录（0.3.0 新增）
+[[bench]]
+name = "metrics_bench"
+path = "benches/metrics_bench.rs"
+harness = false
+required-features = ["metrics"]
+
 # tests/mod.rs 需要 sqlite 特性才能正确运行
 # 因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
 [[test]]
@@ -449,6 +470,22 @@ required-features = ["tracing"]
 name = "tracing_integration"
 path = "tests/tracing/integration/tracing_integration.rs"
 required-features = ["tracing", "sqlite", "permission"]
+
+# Authentication 集成测试 - JWT 签发验证 / 密码哈希 / AuthenticationManager（0.3.0 新增）
+[[test]]
+name = "authentication_integration"
+path = "tests/authentication/integration_tests.rs"
+required-features = ["authentication"]
+
+# Security 单元测试 - SensitiveMasker 脱敏（0.3.0 新增）
+[[test]]
+name = "sensitive_masker_tests"
+path = "tests/security/sensitive_masker_tests.rs"
+
+# Kit 集成测试 - DbNexusKit capability 注册/解析/替换/并发（0.3.0 新增）
+[[test]]
+name = "kit_integration_tests"
+path = "tests/kit/kit_integration_tests.rs"
 
 [dev-dependencies.testcontainers]
 version = "0.23"

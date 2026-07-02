@@ -117,6 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 模拟过期 token：使用 1 秒过期时间生成后立即等待 2 秒
+    // verify_token 使用 leeway = 0 严格过期检查，2s 后 token 必定失效
     println!("\n  测试过期 token (1s 过期，等待 2s)...");
     let expiring_manager = JwtManager::with_expiration(secret, 1, 1);
     let expiring_token = expiring_manager.generate_token(user_id, username, role, TokenType::Access)?;
@@ -127,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  ✓ 过期 token 被正确识别: TokenExpired");
         }
         other => {
-            println!("  ⚠ 预期 TokenExpired，实际得到: {:?}（可能时钟精度问题）", other);
+            println!("  ✗ 预期 TokenExpired，实际得到: {:?}", other);
         }
     }
 
