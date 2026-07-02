@@ -72,7 +72,7 @@ fn test_db_config_database_type_postgres() {
         url: "postgres://user:pass@localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::Postgres);
+    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
 }
 
 /// TEST-U-CONFIG-004: database_type() 应正确解析 postgresql:// 前缀
@@ -82,7 +82,7 @@ fn test_db_config_database_type_postgresql_scheme() {
         url: "postgresql://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::Postgres);
+    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
 }
 
 /// TEST-U-CONFIG-005: database_type() 应正确解析 mysql URL
@@ -92,7 +92,7 @@ fn test_db_config_database_type_mysql() {
         url: "mysql://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::MySql);
+    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::MySql);
 }
 
 /// TEST-U-CONFIG-006: database_type() 应将 sqlite URL 解析为 Sqlite
@@ -102,17 +102,17 @@ fn test_db_config_database_type_sqlite() {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::Sqlite);
+    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Sqlite);
 }
 
-/// TEST-U-CONFIG-007: database_type() 应将未知协议默认为 Sqlite
+/// TEST-U-CONFIG-007: database_type() 应对未知协议返回错误（0.3.0 行为变更：不再默认 Sqlite）
 #[test]
-fn test_db_config_database_type_unknown_defaults_sqlite() {
+fn test_db_config_database_type_unknown_returns_error() {
     let config = DbConfig {
         url: "unknown://localhost".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::Sqlite);
+    assert!(config.database_type().is_err());
 }
 
 /// TEST-U-CONFIG-008: database_type() 应大小写不敏感
@@ -122,7 +122,7 @@ fn test_db_config_database_type_case_insensitive() {
         url: "POSTGRES://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type(), FoundationDatabaseType::Postgres);
+    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
 }
 
 /// TEST-U-CONFIG-009: idle_timeout_duration() 应转换为 Duration
@@ -236,37 +236,34 @@ fn test_cache_config_default_ttl_duration() {
 #[test]
 fn test_foundation_database_type_from_url() {
     assert_eq!(
-        FoundationDatabaseType::from_url("postgres://localhost"),
+        FoundationDatabaseType::from_url("postgres://localhost").unwrap(),
         FoundationDatabaseType::Postgres
     );
     assert_eq!(
-        FoundationDatabaseType::from_url("postgresql://localhost"),
+        FoundationDatabaseType::from_url("postgresql://localhost").unwrap(),
         FoundationDatabaseType::Postgres
     );
     assert_eq!(
-        FoundationDatabaseType::from_url("mysql://localhost"),
+        FoundationDatabaseType::from_url("mysql://localhost").unwrap(),
         FoundationDatabaseType::MySql
     );
     assert_eq!(
-        FoundationDatabaseType::from_url("sqlite::memory:"),
+        FoundationDatabaseType::from_url("sqlite::memory:").unwrap(),
         FoundationDatabaseType::Sqlite
     );
-    assert_eq!(
-        FoundationDatabaseType::from_url("unknown://localhost"),
-        FoundationDatabaseType::Sqlite
-    );
+    assert!(FoundationDatabaseType::from_url("unknown://localhost").is_err());
 }
 
 /// TEST-U-CONFIG-019: DatabaseType::parse_database_type() 应为 from_url() 别名
 #[test]
 fn test_foundation_database_type_parse_alias() {
     assert_eq!(
-        FoundationDatabaseType::parse_database_type("postgres://x"),
-        FoundationDatabaseType::from_url("postgres://x")
+        FoundationDatabaseType::parse_database_type("postgres://x").unwrap(),
+        FoundationDatabaseType::from_url("postgres://x").unwrap()
     );
     assert_eq!(
-        FoundationDatabaseType::parse_database_type("mysql://x"),
-        FoundationDatabaseType::from_url("mysql://x")
+        FoundationDatabaseType::parse_database_type("mysql://x").unwrap(),
+        FoundationDatabaseType::from_url("mysql://x").unwrap()
     );
 }
 

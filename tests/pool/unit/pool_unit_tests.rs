@@ -945,23 +945,23 @@ fn test_database_type_parsing() {
     use dbnexus::foundation::DatabaseType;
 
     assert_eq!(
-        DatabaseType::parse_database_type("postgres://localhost/db"),
+        DatabaseType::parse_database_type("postgres://localhost/db").unwrap(),
         DatabaseType::Postgres
     );
     assert_eq!(
-        DatabaseType::parse_database_type("postgresql://localhost/db"),
+        DatabaseType::parse_database_type("postgresql://localhost/db").unwrap(),
         DatabaseType::Postgres
     );
     assert_eq!(
-        DatabaseType::parse_database_type("mysql://localhost/db"),
+        DatabaseType::parse_database_type("mysql://localhost/db").unwrap(),
         DatabaseType::MySql
     );
     assert_eq!(
-        DatabaseType::parse_database_type("sqlite::memory:"),
+        DatabaseType::parse_database_type("sqlite::memory:").unwrap(),
         DatabaseType::Sqlite
     );
     assert_eq!(
-        DatabaseType::parse_database_type("sqlite3://file.db"),
+        DatabaseType::parse_database_type("sqlite3://file.db").unwrap(),
         DatabaseType::Sqlite
     );
 }

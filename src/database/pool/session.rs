@@ -18,7 +18,7 @@ use crate::access::security::{DdlGuard, DdlValidationResult};
 use crate::access::sql_parser::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::sql_parser::is_ddl_operation;
-use crate::database::pool::db_pool::{DatabaseConnection, DbPool, DbPoolInner};
+use crate::database::pool::db_pool::{DatabaseConnection, DbConnection, DbPool, DbPoolInner};
 use crate::foundation::error::{DbError, DbResult};
 #[cfg(feature = "metrics")]
 use crate::observability::metrics::MetricsCollector;
@@ -45,8 +45,8 @@ struct SessionState {
 
 /// Session 结构
 pub struct Session {
-    /// 数据库连接
-    connection: Option<DatabaseConnection>,
+    /// 数据库连接（统一枚举：SeaORM 或 DuckDB）
+    connection: Option<DbConnection>,
 
     /// 连接池（用于释放连接）
     pool: Arc<DbPool>,
@@ -72,7 +72,7 @@ pub struct Session {
 impl Session {
     /// 创建新的 Session
     pub(crate) fn new(
-        connection: DatabaseConnection,
+        connection: DbConnection,
         pool: Arc<DbPool>,
         pool_inner: Arc<DbPoolInner>,
         role: String,
@@ -144,10 +144,7 @@ impl Session {
             return Err(DbError::Transaction("Already in transaction".to_string()));
         }
 
-        let conn = self
-            .connection
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+        let conn = self.connection()?;
 
         let transaction = conn
             .begin()
@@ -207,9 +204,10 @@ impl Session {
             .unwrap_or(false)
     }
 
-    /// 获取连接引用（仅内部宏和测试使用）
+    /// 获取 SeaORM 连接引用（仅内部宏和测试使用）
     ///
-    /// 用户应通过 Entity 的 CRUD 方法进行数据库操作，不应直接调用此方法
+    /// 用户应通过 Entity 的 CRUD 方法进行数据库操作，不应直接调用此方法。
+    /// 此方法从 `DbConnection` 枚举中提取 SeaORM 连接，若为 DuckDB 连接则返回错误。
     ///
     /// # 安全性
     ///
@@ -218,7 +216,8 @@ impl Session {
     pub fn connection(&self) -> Result<&DatabaseConnection, DbError> {
         self.connection
             .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available - Session may have been invalidated".to_string()))
+            .ok_or_else(|| DbError::Config("Connection not available - Session may have been invalidated".to_string()))?
+            .as_sea_orm()
     }
 
     /// 创建迁移执行器（仅内部使用）
@@ -296,11 +295,7 @@ impl Session {
                 return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
             }
 
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
-
+            let conn = self.connection()?;
             conn.execute_unprepared(sql).await.map_err(DbError::Connection)
         }
     }
@@ -351,12 +346,58 @@ impl Session {
         }
 
         // 执行 SQL
+        let conn = self.connection()?;
+        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+    }
+
+    /// 执行 DuckDB 查询（仅 DuckDB 连接可用）
+    ///
+    /// 当 Session 持有 DuckDB 连接时，通过此方法执行 SQL 查询并返回结果行。
+    /// 若持有 SeaORM 连接则返回错误。
+    ///
+    /// # 参数
+    ///
+    /// * `sql` - 要执行的 SQL 查询语句（SELECT）
+    ///
+    /// # 返回
+    ///
+    /// 查询结果行列表
+    #[cfg(feature = "duckdb")]
+    pub async fn execute_duckdb(
+        &self,
+        sql: &str,
+    ) -> DbResult<Vec<crate::database::pool::DuckDbRow>> {
         let conn = self
             .connection
             .as_ref()
             .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+        let duck_conn = conn.as_duckdb()?;
+        duck_conn.query(sql).await
+    }
 
-        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+    /// 执行 DuckDB DDL/DML 语句（仅 DuckDB 连接可用）
+    ///
+    /// 当 Session 持有 DuckDB 连接时，通过此方法执行 CREATE/INSERT/UPDATE/DELETE 等语句。
+    /// 若持有 SeaORM 连接则返回错误。
+    ///
+    /// # 参数
+    ///
+    /// * `sql` - 要执行的 SQL 语句（DDL/DML）
+    ///
+    /// # 返回
+    ///
+    /// 受影响的行数信息
+    #[cfg(feature = "duckdb")]
+    pub async fn execute_duckdb_raw(
+        &self,
+        sql: &str,
+    ) -> DbResult<crate::database::pool::DuckDbExecResult> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+        let duck_conn = conn.as_duckdb()?;
+        duck_conn.execute(sql).await
     }
 
     /// 执行 SQL（带权限检查和操作类型）

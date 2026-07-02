@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - acquire_timeout(ms): {}", config.acquire_timeout);
     println!("  - admin_role        : {}", config.admin_role);
     println!("  - auto_migrate      : {}", config.auto_migrate);
-    println!("  - database_type     : {}", config.database_type());
+    println!("  - database_type     : {}", config.database_type().unwrap());
 
     println!("\n💾 缓存配置:");
     println!("  - policy_cache_capacity : {}", config.cache_config.policy_cache_capacity);

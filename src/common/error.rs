@@ -19,6 +19,10 @@ pub enum DbNexusError {
     #[cfg(feature = "permission")]
     #[error(transparent)]
     PermissionConfig(#[from] crate::domain::permission::PermissionConfigError),
+
+    /// 不支持的数据库协议
+    #[error("Unsupported database scheme in URL: {0}")]
+    UnsupportedDatabaseScheme(String),
 }
 
 /// DBNexus 统一结果类型

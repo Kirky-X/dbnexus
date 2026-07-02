@@ -75,12 +75,12 @@ fn test_database_type_serde_round_trip() {
     }
 }
 
-/// TEST-U-COMMON-008: 变体数量应为 3（防止误删变体）
+/// TEST-U-COMMON-008: 变体数量应为 4（0.3.0 新增 DuckDb，防止误删变体）
 #[test]
 fn test_database_type_variant_count() {
-    let variants = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql];
-    assert_eq!(variants.len(), 3);
-    // 确保三个变体互不相等
+    let variants = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql, DatabaseType::DuckDb];
+    assert_eq!(variants.len(), 4);
+    // 确保四个变体互不相等
     for i in 0..variants.len() {
         for j in 0..variants.len() {
             if i == j {
