@@ -19,9 +19,8 @@
 #[cfg(feature = "permission")]
 mod permission_tests {
     use dbnexus::domain::permission::{
-        new, new_in_memory, DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig,
-        PermissionConfigError, PermissionError, PermissionLifecycle, PolicyManager, PolicySet,
-        RolePolicy, TablePermission,
+        DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig, PermissionConfigError, PermissionError,
+        PermissionLifecycle, PolicyManager, PolicySet, RolePolicy, TablePermission, new, new_in_memory,
     };
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -359,8 +358,7 @@ rate_limit_max_requests: 50
     #[tokio::test]
     async fn test_memory_permission_provider_check_admin() {
         let provider = new_in_memory();
-        let result: Result<bool, PermissionError> =
-            provider.check("admin", "users", PermissionAction::Select).await;
+        let result: Result<bool, PermissionError> = provider.check("admin", "users", PermissionAction::Select).await;
         assert!(result.is_ok());
         assert!(result.unwrap(), "admin should always be allowed");
     }
@@ -368,9 +366,7 @@ rate_limit_max_requests: 50
     #[tokio::test]
     async fn test_memory_permission_provider_check_unknown_role() {
         let provider = new_in_memory();
-        let result = provider
-            .check("unknown_role", "users", PermissionAction::Select)
-            .await;
+        let result = provider.check("unknown_role", "users", PermissionAction::Select).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -487,7 +483,12 @@ reader:
         let provider = new(cfg).await.expect("provider creation failed");
 
         // admin 始终允许（由 admin_role 配置决定，非策略文件中的 admin 条目）
-        assert!(provider.check("admin", "users", PermissionAction::Delete).await.unwrap());
+        assert!(
+            provider
+                .check("admin", "users", PermissionAction::Delete)
+                .await
+                .unwrap()
+        );
 
         // 清理
         drop(provider);
@@ -523,11 +524,26 @@ reader:
         let provider = new(cfg).await.expect("provider creation failed");
 
         // reader 对 users 表有 Select 权限
-        assert!(provider.check("reader", "users", PermissionAction::Select).await.unwrap());
+        assert!(
+            provider
+                .check("reader", "users", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
         // reader 对 users 表没有 Delete 权限
-        assert!(!provider.check("reader", "users", PermissionAction::Delete).await.unwrap());
+        assert!(
+            !provider
+                .check("reader", "users", PermissionAction::Delete)
+                .await
+                .unwrap()
+        );
         // reader 对未配置的 orders 表应按 DenyAll 策略拒绝
-        assert!(!provider.check("reader", "orders", PermissionAction::Select).await.unwrap());
+        assert!(
+            !provider
+                .check("reader", "orders", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
 
         // 清理
         drop(provider);
@@ -549,7 +565,12 @@ reader:
         let provider = new(cfg).await.expect("provider creation failed");
 
         // 未知角色 + AllowAll 默认策略 → 允许
-        assert!(provider.check("guest", "any_table", PermissionAction::Select).await.unwrap());
+        assert!(
+            provider
+                .check("guest", "any_table", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
 
         drop(provider);
         drop(dir);
@@ -595,13 +616,16 @@ editor:
         let dir = tempfile::tempdir().expect("failed to create tempdir");
         let path = dir.path().join("policy.yaml");
         // 初始：editor 只能 Select
-        std::fs::write(&path, r#"
+        std::fs::write(
+            &path,
+            r#"
 editor:
   tables:
     - name: "articles"
       operations:
         - Select
-"#)
+"#,
+        )
         .expect("failed to write policy.yaml");
 
         let cfg = PermissionConfig {
@@ -611,25 +635,48 @@ editor:
         let provider = new(cfg).await.expect("provider creation failed");
 
         // 初始状态：editor 只能 Select
-        assert!(provider.check("editor", "articles", PermissionAction::Select).await.unwrap());
-        assert!(!provider.check("editor", "articles", PermissionAction::Update).await.unwrap());
+        assert!(
+            provider
+                .check("editor", "articles", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !provider
+                .check("editor", "articles", PermissionAction::Update)
+                .await
+                .unwrap()
+        );
 
         // 修改文件：editor 增加 Update 权限
-        std::fs::write(&path, r#"
+        std::fs::write(
+            &path,
+            r#"
 editor:
   tables:
     - name: "articles"
       operations:
         - Select
         - Update
-"#)
+"#,
+        )
         .expect("failed to write policy.yaml");
 
         // refresh 后应重新加载
         provider.refresh().await.expect("refresh failed");
 
-        assert!(provider.check("editor", "articles", PermissionAction::Select).await.unwrap());
-        assert!(provider.check("editor", "articles", PermissionAction::Update).await.unwrap());
+        assert!(
+            provider
+                .check("editor", "articles", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
+        assert!(
+            provider
+                .check("editor", "articles", PermissionAction::Update)
+                .await
+                .unwrap()
+        );
 
         drop(provider);
         drop(dir);
@@ -652,7 +699,12 @@ editor:
         provider.shutdown().await;
 
         // shutdown 后 admin 仍可访问
-        assert!(provider.check("admin", "users", PermissionAction::Select).await.unwrap());
+        assert!(
+            provider
+                .check("admin", "users", PermissionAction::Select)
+                .await
+                .unwrap()
+        );
     }
 
     // =========================================================================

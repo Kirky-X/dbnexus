@@ -153,7 +153,11 @@ async fn test_session_execute_raw_ddl_admin_success() {
     let table = common::generate_test_table_name("ddl_test");
     let sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT)", table);
     let result = session.execute_raw_ddl(&sql).await;
-    assert!(result.is_ok(), "admin execute_raw_ddl should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "admin execute_raw_ddl should succeed: {:?}",
+        result.err()
+    );
 }
 
 /// TEST-U-SESS-011: 非 admin 角色 execute_raw_ddl 应返回 Permission 错误
@@ -208,7 +212,10 @@ async fn test_session_execute_raw_rejects_ddl_under_sql_parser() {
     let table = common::generate_test_table_name("raw_ddl_reject");
     let sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY)", table);
     let result = session.execute_raw(&sql).await;
-    assert!(result.is_err(), "execute_raw with DDL should be rejected under sql-parser");
+    assert!(
+        result.is_err(),
+        "execute_raw with DDL should be rejected under sql-parser"
+    );
     let err = result.unwrap_err();
     assert!(
         matches!(err, DbError::Permission(ref msg) if msg.contains("DDL")),
@@ -249,7 +256,11 @@ async fn test_session_execute_raw_select_admin_success() {
     // 查询 — admin 角色应绕过权限检查
     let select_sql = format!("SELECT val FROM {} WHERE val = 'hello'", table);
     let result = session.execute_raw(&select_sql).await;
-    assert!(result.is_ok(), "admin execute_raw SELECT should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "admin execute_raw SELECT should succeed: {:?}",
+        result.err()
+    );
 }
 
 // ============================================================================
@@ -300,7 +311,11 @@ async fn test_session_batch_execute_in_transaction_success() {
     let results = session
         .batch_execute_in_transaction(vec![insert1.as_str(), insert2.as_str()])
         .await;
-    assert!(results.is_ok(), "batch in transaction should succeed: {:?}", results.err());
+    assert!(
+        results.is_ok(),
+        "batch in transaction should succeed: {:?}",
+        results.err()
+    );
     assert_eq!(results.unwrap().len(), 2);
     // 事务应已 commit
     assert!(!session.is_in_transaction().await);
@@ -339,7 +354,11 @@ async fn test_session_check_table_permission_admin_bypass() {
     let session = pool.get_session("admin").await.unwrap();
     // admin 对任意表/操作都应通过
     let result = session.check_table_permission("any_table", "SELECT").await;
-    assert!(result.is_ok(), "admin should bypass permission check: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "admin should bypass permission check: {:?}",
+        result.err()
+    );
 }
 
 // ============================================================================
@@ -375,10 +394,7 @@ async fn test_session_mark_write_affects_should_use_master() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
     session.mark_write().await;
-    assert!(
-        session.should_use_master().await,
-        "should use master after mark_write"
-    );
+    assert!(session.should_use_master().await, "should use master after mark_write");
 }
 
 // ============================================================================

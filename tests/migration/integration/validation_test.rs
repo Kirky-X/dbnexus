@@ -45,10 +45,7 @@ async fn setup() -> dbnexus::DbPool {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let table = Model::schema(DbBackend::Sqlite);
     let conn = session.connection().expect("Failed to get connection");
@@ -67,10 +64,7 @@ async fn setup() -> dbnexus::DbPool {
 #[tokio::test]
 async fn test_validate_email_invalid() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 无效邮箱 — 应该触发验证错误
@@ -84,10 +78,7 @@ async fn test_validate_email_invalid() {
     .into();
 
     let result = am.insert(conn).await;
-    assert!(
-        result.is_err(),
-        "insert with invalid email should fail validation"
-    );
+    assert!(result.is_err(), "insert with invalid email should fail validation");
 
     let err = result.unwrap_err();
     let err_msg = err.to_string();
@@ -98,10 +89,7 @@ async fn test_validate_email_invalid() {
     );
 
     // 验证记录未被插入
-    let count = Entity::find()
-        .count(conn)
-        .await
-        .expect("count should succeed");
+    let count = Entity::find().count(conn).await.expect("count should succeed");
     assert_eq!(count, 0, "no records should be inserted after validation failure");
 }
 
@@ -109,10 +97,7 @@ async fn test_validate_email_invalid() {
 #[tokio::test]
 async fn test_validate_email_valid() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 有效邮箱 — 应该通过验证
@@ -125,17 +110,11 @@ async fn test_validate_email_valid() {
     }
     .into();
 
-    let model: Model = am
-        .insert(conn)
-        .await
-        .expect("insert with valid email should succeed");
+    let model: Model = am.insert(conn).await.expect("insert with valid email should succeed");
     assert_eq!(model.id, 1);
 
     // 验证记录已插入
-    let count = Entity::find()
-        .count(conn)
-        .await
-        .expect("count should succeed");
+    let count = Entity::find().count(conn).await.expect("count should succeed");
     assert_eq!(count, 1, "1 record should be inserted");
 }
 
@@ -143,10 +122,7 @@ async fn test_validate_email_valid() {
 #[tokio::test]
 async fn test_validate_length_too_short() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // name 长度 < 2 — 应该触发验证错误
@@ -160,10 +136,7 @@ async fn test_validate_length_too_short() {
     .into();
 
     let result = am.insert(conn).await;
-    assert!(
-        result.is_err(),
-        "insert with too-short name should fail validation"
-    );
+    assert!(result.is_err(), "insert with too-short name should fail validation");
 
     let err = result.unwrap_err();
     let err_msg = err.to_string();
@@ -183,17 +156,14 @@ async fn test_validate_length_too_short() {
 #[tokio::test]
 async fn test_validation_short_circuits_timestamps() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 无效数据 — 验证应短路，timestamps 不执行
     let am: ActiveModel = Model {
         id: 1,
-        name: "X".to_string(), // 长度不足
-        email: "invalid".to_string(),       // 无效邮箱
+        name: "X".to_string(),        // 长度不足
+        email: "invalid".to_string(), // 无效邮箱
         created_at: None,
         updated_at: None,
     }
@@ -203,30 +173,21 @@ async fn test_validation_short_circuits_timestamps() {
     assert!(result.is_err(), "validation should fail");
 
     // 验证记录完全未入库（短路成功）
-    let all = Entity::find()
-        .all(conn)
-        .await
-        .expect("query should succeed");
-    assert!(
-        all.is_empty(),
-        "no records should exist after validation short-circuit"
-    );
+    let all = Entity::find().all(conn).await.expect("query should succeed");
+    assert!(all.is_empty(), "no records should exist after validation short-circuit");
 }
 
 /// Task 7.10+7.11: 多字段验证同时失败
 #[tokio::test]
 async fn test_validate_multiple_fields_fail() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // name 和 email 都无效
     let am: ActiveModel = Model {
         id: 1,
-        name: "".to_string(), // 空字符串，长度 < 2
+        name: "".to_string(),            // 空字符串，长度 < 2
         email: "no-at-sign".to_string(), // 无效邮箱
         created_at: None,
         updated_at: None,
@@ -238,20 +199,14 @@ async fn test_validate_multiple_fields_fail() {
 
     let err_msg = result.unwrap_err().to_string();
     // 至少应该有一个验证错误
-    assert!(
-        !err_msg.is_empty(),
-        "error message should contain validation details"
-    );
+    assert!(!err_msg.is_empty(), "error message should contain validation details");
 }
 
 /// Task 7.4 验证: validate + timestamps 组合 — 有效数据应设置时间戳
 #[tokio::test]
 async fn test_validate_and_timestamps_combined() {
     let pool = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 有效数据 — 验证通过后应设置 timestamps

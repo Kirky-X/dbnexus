@@ -48,7 +48,7 @@ pub use sql_parser::SqlParser;
 #[cfg(feature = "permission-engine")]
 pub use permission_engine::{
     PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
-    PermissionProvider as EnginePermissionProvider, PermissionResource,
-    PermissionRule, PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
+    PermissionProvider as EnginePermissionProvider, PermissionResource, PermissionRule, PermissionSubject,
+    PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
     YamlPermissionProvider as EngineYamlPermissionProvider,
 };

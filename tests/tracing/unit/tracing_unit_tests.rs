@@ -25,8 +25,16 @@ static TEST_MUTEX: Mutex<()> = Mutex::new(());
 fn test_tracing_error_display() {
     let err = dbnexus::TracingError::ExporterInit("connection refused".to_string());
     let msg = err.to_string();
-    assert!(msg.contains("OTLP exporter"), "ExporterInit should mention OTLP exporter: {}", msg);
-    assert!(msg.contains("connection refused"), "ExporterInit should contain detail: {}", msg);
+    assert!(
+        msg.contains("OTLP exporter"),
+        "ExporterInit should mention OTLP exporter: {}",
+        msg
+    );
+    assert!(
+        msg.contains("connection refused"),
+        "ExporterInit should contain detail: {}",
+        msg
+    );
 
     let err = dbnexus::TracingError::ProviderSetup("invalid config".to_string());
     assert!(err.to_string().contains("Tracer provider"), "ProviderSetup: {}", err);
@@ -64,7 +72,10 @@ async fn test_init_with_otlp_callable() {
         Err(e) => {
             // OTLP exporter 创建可能因 tonic 初始化失败（非 panic）—— 可接受
             // 但不应出现 panic
-            eprintln!("init_with_otlp returned error (acceptable if exporter init fails): {}", e);
+            eprintln!(
+                "init_with_otlp returned error (acceptable if exporter init fails): {}",
+                e
+            );
         }
     }
 }

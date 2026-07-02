@@ -97,11 +97,7 @@ pub struct QueryErrorReport {
 
 impl QueryErrorReport {
     /// 创建新的查询错误报告
-    pub fn new(
-        category: ErrorCategory,
-        message: impl Into<String>,
-        suggestion: impl Into<String>,
-    ) -> Self {
+    pub fn new(category: ErrorCategory, message: impl Into<String>, suggestion: impl Into<String>) -> Self {
         Self {
             category,
             message: message.into(),

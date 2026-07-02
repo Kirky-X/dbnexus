@@ -48,9 +48,7 @@ pub struct DbNexusKit {
 impl DbNexusKit {
     /// 创建一个空的 Kit
     pub fn new() -> Self {
-        Self {
-            inner: Kit::new(),
-        }
+        Self { inner: Kit::new() }
     }
 
     // ============================================================
@@ -74,9 +72,7 @@ impl DbNexusKit {
 
     /// 获取权限提供者能力
     #[cfg(feature = "permission")]
-    pub fn permission(
-        &self,
-    ) -> Result<Arc<dyn crate::domain::permission::PermissionProvider>, KitError> {
+    pub fn permission(&self) -> Result<Arc<dyn crate::domain::permission::PermissionProvider>, KitError> {
         self.inner.require::<PermissionCapKey>()
     }
 
@@ -155,18 +151,13 @@ impl DbNexusKit {
 
     /// 注册或替换指标收集器能力
     #[cfg(feature = "metrics")]
-    pub fn replace_metrics_collector(
-        &self,
-        collector: Arc<dyn crate::observability::metrics::MetricsCollectorTrait>,
-    ) {
+    pub fn replace_metrics_collector(&self, collector: Arc<dyn crate::observability::metrics::MetricsCollectorTrait>) {
         self.inner.replace::<MetricsCapKey>(collector)
     }
 
     /// 获取指标收集器能力
     #[cfg(feature = "metrics")]
-    pub fn metrics_collector(
-        &self,
-    ) -> Result<Arc<dyn crate::observability::metrics::MetricsCollectorTrait>, KitError> {
+    pub fn metrics_collector(&self) -> Result<Arc<dyn crate::observability::metrics::MetricsCollectorTrait>, KitError> {
         self.inner.require::<MetricsCapKey>()
     }
 
@@ -519,9 +510,7 @@ mod tests {
     #[cfg(feature = "permission")]
     #[test]
     fn test_permission_capability_lifecycle() {
-        use crate::domain::permission::{
-            PermissionAction, PermissionError, PermissionProvider, RolePolicy,
-        };
+        use crate::domain::permission::{PermissionAction, PermissionError, PermissionProvider, RolePolicy};
 
         struct MockPermissionProvider;
 
@@ -539,10 +528,7 @@ mod tests {
 
         #[async_trait::async_trait]
         impl crate::domain::permission::PolicyManager for MockPermissionProvider {
-            async fn get_policy(
-                &self,
-                _role: &str,
-            ) -> Result<Option<RolePolicy>, PermissionError> {
+            async fn get_policy(&self, _role: &str) -> Result<Option<RolePolicy>, PermissionError> {
                 Ok(None)
             }
 
@@ -593,8 +579,7 @@ mod tests {
         let kit = DbNexusKit::new();
         assert!(!kit.has_metrics_collector());
 
-        kit.provide_metrics_collector(Arc::new(MockMetrics::new()))
-            .unwrap();
+        kit.provide_metrics_collector(Arc::new(MockMetrics::new())).unwrap();
         assert!(kit.has_metrics_collector());
 
         let collector = kit.metrics_collector();
@@ -623,8 +608,7 @@ mod tests {
         use crate::observability::metrics::MockMetrics;
 
         let kit = DbNexusKit::new();
-        kit.provide_metrics_collector(Arc::new(MockMetrics::new()))
-            .unwrap();
+        kit.provide_metrics_collector(Arc::new(MockMetrics::new())).unwrap();
         let result = kit.provide_metrics_collector(Arc::new(MockMetrics::new()));
         assert!(result.is_err());
     }
@@ -666,8 +650,7 @@ mod tests {
         use crate::observability::health::HealthChecker;
 
         let kit = DbNexusKit::new();
-        kit.provide_health_checker(Arc::new(HealthChecker::new(1000)))
-            .unwrap();
+        kit.provide_health_checker(Arc::new(HealthChecker::new(1000))).unwrap();
         let result = kit.provide_health_checker(Arc::new(HealthChecker::new(2000)));
         assert!(result.is_err());
     }

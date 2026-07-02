@@ -7,8 +7,8 @@
 //!
 //! 注意: 部分测试需要内部 API，已暂时跳过
 
-use dbnexus::foundation::DatabaseType;
 use dbnexus::MigrationHistory;
+use dbnexus::foundation::DatabaseType;
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -25,6 +25,11 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
         ),
         DatabaseType::MySql => format!(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name='{}'",
+            table_name
+        ),
+        // DuckDB 使用 information_schema 兼容语法
+        DatabaseType::DuckDb => format!(
+            "SELECT table_name FROM information_schema.tables WHERE table_name='{}'",
             table_name
         ),
     }

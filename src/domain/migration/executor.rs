@@ -624,7 +624,6 @@ impl MigrationExecutor {
         }
         .trim()
     }
-
 }
 
 /// 迁移文件解析器
@@ -881,7 +880,8 @@ mod tests {
 
     #[test]
     fn test_migration_file_parser_valid_with_up_down() {
-        let content = "-- Migration: create users table\n-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let content =
+            "-- Migration: create users table\n-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
         let result = MigrationFileParser::parse_migration_file(content);
         assert!(result.is_ok());
         let (desc, _) = result.unwrap();
@@ -1106,10 +1106,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         // 创建迁移文件
-        std::fs::write(dir.path().join("002_add_column.sql"), "ALTER TABLE t ADD COLUMN c TEXT;")
-            .unwrap();
-        std::fs::write(dir.path().join("001_create_table.sql"), "CREATE TABLE t (id INTEGER);")
-            .unwrap();
+        std::fs::write(
+            dir.path().join("002_add_column.sql"),
+            "ALTER TABLE t ADD COLUMN c TEXT;",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("001_create_table.sql"), "CREATE TABLE t (id INTEGER);").unwrap();
         // 非SQL文件应被忽略
         std::fs::write(dir.path().join("readme.txt"), "not a migration").unwrap();
         // 无效文件名应被忽略（无法解析版本号）
@@ -1342,7 +1344,11 @@ mod tests {
         executor.apply_migration(&m1).await.unwrap();
 
         // 检查待应用迁移
-        let all = vec![m1, Migration::new(2, "second".into()), Migration::new(3, "third".into())];
+        let all = vec![
+            m1,
+            Migration::new(2, "second".into()),
+            Migration::new(3, "third".into()),
+        ];
         let pending = executor.get_pending_migrations(&all).await;
         assert_eq!(pending.len(), 2);
         assert_eq!(pending[0].version, 2);

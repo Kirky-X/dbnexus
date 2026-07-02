@@ -486,7 +486,9 @@ impl PolicyDecisionPointBuilder {
             cache_ttl_seconds: self.cache_ttl_seconds.unwrap_or(DEFAULT_CACHE_TTL_SECONDS),
             cache_enabled: self.cache_enabled.unwrap_or(true),
             rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(DEFAULT_RATE_LIMIT_MAX_REQUESTS),
-            rate_limit_window_seconds: self.rate_limit_window_seconds.unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
+            rate_limit_window_seconds: self
+                .rate_limit_window_seconds
+                .unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
             rate_limit_store: DashMap::new(),
             default_decision: self.default_decision.unwrap_or(PermissionDecision::NotApplicable),
             log_denied: self.log_denied.unwrap_or(false),

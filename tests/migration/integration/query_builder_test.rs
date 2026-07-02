@@ -15,10 +15,7 @@ use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 use sea_orm::entity::prelude::*;
-use sea_orm::{
-    ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect,
-};
+use sea_orm::{ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 
 /// 测试用实体 — 包含 age 字段以支持 update_many 测试
 #[db_entity(table_name = "users", primary_key = "id")]
@@ -40,10 +37,7 @@ async fn setup_with_seed() -> dbnexus::DbPool {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 用 schema() 建表
     let table = Model::schema(DbBackend::Sqlite);
@@ -104,10 +98,7 @@ async fn setup_with_seed() -> dbnexus::DbPool {
 #[tokio::test]
 async fn test_query_chain_filter_order_limit() {
     let pool = setup_with_seed().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 链式调用：filter(age >= 18) + order_by(age desc) + limit(2)
     let select = Model::query(&session)
@@ -133,40 +124,25 @@ async fn test_query_chain_filter_order_limit() {
 #[tokio::test]
 async fn test_paginate_fetch_page_and_counts() {
     let pool = setup_with_seed().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // page_size = 2 → 5 条记录应分为 3 页 (2,2,1)
     let paginator = Model::paginate(&session, 2)
         .await
         .expect("paginate should pass permission check");
 
-    let total_items = paginator
-        .num_items()
-        .await
-        .expect("num_items should succeed");
+    let total_items = paginator.num_items().await.expect("num_items should succeed");
     assert_eq!(total_items, 5, "total items should be 5");
 
-    let total_pages = paginator
-        .num_pages()
-        .await
-        .expect("num_pages should succeed");
+    let total_pages = paginator.num_pages().await.expect("num_pages should succeed");
     assert_eq!(total_pages, 3, "5 items / 2 per page = 3 pages");
 
     // 第 0 页：2 条
-    let page0 = paginator
-        .fetch_page(0)
-        .await
-        .expect("fetch_page(0) should succeed");
+    let page0 = paginator.fetch_page(0).await.expect("fetch_page(0) should succeed");
     assert_eq!(page0.len(), 2, "page 0 should have 2 items");
 
     // 第 2 页：1 条（最后一页）
-    let page2 = paginator
-        .fetch_page(2)
-        .await
-        .expect("fetch_page(2) should succeed");
+    let page2 = paginator.fetch_page(2).await.expect("fetch_page(2) should succeed");
     assert_eq!(page2.len(), 1, "page 2 (last) should have 1 item");
 }
 
@@ -178,10 +154,7 @@ async fn test_insert_many_batch_insert() {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 建表
     let table = Model::schema(DbBackend::Sqlite);
@@ -218,10 +191,7 @@ async fn test_insert_many_batch_insert() {
     let result = Model::insert_many(&session, new_users)
         .await
         .expect("insert_many should succeed");
-    assert!(
-        result.last_insert_id.is_some(),
-        "last_insert_id should be Some"
-    );
+    assert!(result.last_insert_id.is_some(), "last_insert_id should be Some");
 
     // 验证总行数 = 3
     let count = Entity::find()
@@ -236,11 +206,7 @@ async fn test_insert_many_batch_insert() {
             .one(session.connection().expect("conn"))
             .await
             .expect("find_by_id should succeed");
-        assert!(
-            found.is_some(),
-            "record with id={} should exist after insert_many",
-            id
-        );
+        assert!(found.is_some(), "record with id={} should exist after insert_many", id);
     }
 }
 
@@ -250,10 +216,7 @@ async fn test_insert_many_batch_insert() {
 #[tokio::test]
 async fn test_update_many_conditional_batch() {
     let pool = setup_with_seed().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 初始数据中 age < 18 的有 Bob(17) 和 Diana(16) → 2 条
     // 但我们的 Model 没有 status 字段，所以改为更新 age 字段
@@ -264,10 +227,7 @@ async fn test_update_many_conditional_batch() {
     let affected = Model::update_many(&session, filter, updates)
         .await
         .expect("update_many should succeed");
-    assert_eq!(
-        affected, 2,
-        "should update 2 records (Bob and Diana, both age < 18)"
-    );
+    assert_eq!(affected, 2, "should update 2 records (Bob and Diana, both age < 18)");
 
     // 验证 Bob 和 Diana 的 age 现在都是 0
     let conn = session.connection().expect("conn");
@@ -298,24 +258,16 @@ async fn test_update_many_conditional_batch() {
 #[tokio::test]
 async fn test_update_many_with_complex_condition() {
     let pool = setup_with_seed().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // Condition: age < 18 OR age > 28 → Bob(17), Diana(16), Charlie(30)
-    let cond = Condition::any()
-        .add(Column::Age.lt(18))
-        .add(Column::Age.gt(28));
+    let cond = Condition::any().add(Column::Age.lt(18)).add(Column::Age.gt(28));
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 100i64.into())];
 
     let affected = Model::update_many(&session, cond, updates)
         .await
         .expect("update_many should succeed");
-    assert_eq!(
-        affected, 3,
-        "should update 3 records (Bob, Diana, Charlie)"
-    );
+    assert_eq!(affected, 3, "should update 3 records (Bob, Diana, Charlie)");
 
     // 验证 age=100 的记录数 = 3
     let conn = session.connection().expect("conn");

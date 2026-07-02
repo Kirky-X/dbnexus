@@ -400,16 +400,17 @@ impl SqlGenerator {
 
         // 添加表级主键约束
         // SQLite 的自增主键列已在列定义中包含 PRIMARY KEY AUTOINCREMENT，不应在表级别重复声明
-        let columns_with_inline_pk: std::collections::HashSet<&str> = if matches!(self.db_type, DatabaseType::Sqlite | DatabaseType::DuckDb) {
-            table
-                .columns
-                .iter()
-                .filter(|c| c.is_auto_increment && c.is_primary_key)
-                .map(|c| c.name.as_str())
-                .collect()
-        } else {
-            std::collections::HashSet::new()
-        };
+        let columns_with_inline_pk: std::collections::HashSet<&str> =
+            if matches!(self.db_type, DatabaseType::Sqlite | DatabaseType::DuckDb) {
+                table
+                    .columns
+                    .iter()
+                    .filter(|c| c.is_auto_increment && c.is_primary_key)
+                    .map(|c| c.name.as_str())
+                    .collect()
+            } else {
+                std::collections::HashSet::new()
+            };
         let table_level_pk: Vec<&String> = table
             .primary_key_columns
             .iter()
@@ -647,7 +648,6 @@ impl SqlGenerator {
         Ok(sql.trim_end().to_string())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -971,10 +971,11 @@ mod tests {
         let migrations = differ.diff();
         assert_eq!(migrations.len(), 1);
         if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
-            assert!(column_changes.iter().any(|c| matches!(
-                c,
-                ColumnChange::TypeChanged { .. }
-            )));
+            assert!(
+                column_changes
+                    .iter()
+                    .any(|c| matches!(c, ColumnChange::TypeChanged { .. }))
+            );
         } else {
             unreachable!("Expected AlterTable");
         }
@@ -983,7 +984,10 @@ mod tests {
     #[test]
     fn test_diff_column_nullability_changed() {
         let old_table = make_table("users", vec![make_column("name", ColumnType::String(None), true, None)]);
-        let new_table = make_table("users", vec![make_column("name", ColumnType::String(None), false, None)]);
+        let new_table = make_table(
+            "users",
+            vec![make_column("name", ColumnType::String(None), false, None)],
+        );
         let mut old_schema = Schema::new(DatabaseType::Postgres);
         let mut new_schema = Schema::new(DatabaseType::Postgres);
         old_schema.add_table(old_table);
@@ -995,7 +999,10 @@ mod tests {
         if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
             assert!(column_changes.iter().any(|c| matches!(
                 c,
-                ColumnChange::NullabilityChanged { new_nullable: false, .. }
+                ColumnChange::NullabilityChanged {
+                    new_nullable: false,
+                    ..
+                }
             )));
         } else {
             unreachable!("Expected AlterTable");
@@ -1004,8 +1011,14 @@ mod tests {
 
     #[test]
     fn test_diff_column_default_changed() {
-        let old_table = make_table("users", vec![make_column("status", ColumnType::Integer, false, Some("0"))]);
-        let new_table = make_table("users", vec![make_column("status", ColumnType::Integer, false, Some("1"))]);
+        let old_table = make_table(
+            "users",
+            vec![make_column("status", ColumnType::Integer, false, Some("0"))],
+        );
+        let new_table = make_table(
+            "users",
+            vec![make_column("status", ColumnType::Integer, false, Some("1"))],
+        );
         let mut old_schema = Schema::new(DatabaseType::Postgres);
         let mut new_schema = Schema::new(DatabaseType::Postgres);
         old_schema.add_table(old_table);
@@ -1015,10 +1028,11 @@ mod tests {
         let migrations = differ.diff();
         assert_eq!(migrations.len(), 1);
         if let TableChange::AlterTable { column_changes, .. } = &migrations[0].table_changes[0] {
-            assert!(column_changes.iter().any(|c| matches!(
-                c,
-                ColumnChange::DefaultChanged { .. }
-            )));
+            assert!(
+                column_changes
+                    .iter()
+                    .any(|c| matches!(c, ColumnChange::DefaultChanged { .. }))
+            );
         } else {
             unreachable!("Expected AlterTable");
         }
@@ -1052,7 +1066,8 @@ mod tests {
             added_columns,
             removed_columns,
             ..
-        } = &migrations[0].table_changes[0] {
+        } = &migrations[0].table_changes[0]
+        {
             assert_eq!(added_columns.len(), 1);
             assert_eq!(added_columns[0].name, "new_col");
             assert_eq!(removed_columns.len(), 1);
@@ -1106,7 +1121,8 @@ mod tests {
             added_indexes,
             removed_indexes,
             ..
-        } = &migrations[0].table_changes[0] {
+        } = &migrations[0].table_changes[0]
+        {
             assert_eq!(added_indexes.len(), 1);
             assert_eq!(added_indexes[0].name, "idx_new");
             assert_eq!(removed_indexes.len(), 1);
@@ -1164,7 +1180,8 @@ mod tests {
             added_foreign_keys,
             removed_foreign_keys,
             ..
-        } = &migrations[0].table_changes[0] {
+        } = &migrations[0].table_changes[0]
+        {
             assert_eq!(added_foreign_keys.len(), 1);
             assert_eq!(added_foreign_keys[0].name, "fk_new");
             assert_eq!(removed_foreign_keys.len(), 1);
@@ -1420,7 +1437,9 @@ mod tests {
     fn test_generate_add_column_sql() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
         let column = make_column("age", ColumnType::Integer, true, None);
-        let sql = pg.generate_add_column_sql("users", &column).expect("SQL generation failed");
+        let sql = pg
+            .generate_add_column_sql("users", &column)
+            .expect("SQL generation failed");
         assert_eq!(sql, "ALTER TABLE users ADD age INTEGER;");
     }
 
@@ -1437,7 +1456,9 @@ mod tests {
             is_auto_increment: false,
             comment: None,
         };
-        let sql = pg.generate_add_column_sql("users", &column).expect("SQL generation failed");
+        let sql = pg
+            .generate_add_column_sql("users", &column)
+            .expect("SQL generation failed");
         assert!(sql.contains("DEFAULT 0"));
     }
 
@@ -1452,21 +1473,27 @@ mod tests {
     #[test]
     fn test_generate_drop_column_sql_mysql() {
         let mysql = SqlGenerator::new(DatabaseType::MySql);
-        let sql = mysql.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        let sql = mysql
+            .generate_drop_column_sql("users", "age")
+            .expect("SQL generation failed");
         assert_eq!(sql, "ALTER TABLE users DROP COLUMN age;");
     }
 
     #[test]
     fn test_generate_drop_column_sql_postgres() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
-        let sql = pg.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        let sql = pg
+            .generate_drop_column_sql("users", "age")
+            .expect("SQL generation failed");
         assert_eq!(sql, "ALTER TABLE users DROP COLUMN age;");
     }
 
     #[test]
     fn test_generate_drop_column_sql_sqlite() {
         let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
-        let sql = sqlite.generate_drop_column_sql("users", "age").expect("SQL generation failed");
+        let sql = sqlite
+            .generate_drop_column_sql("users", "age")
+            .expect("SQL generation failed");
         assert!(sql.contains("-- SQLite 不支持直接删除列"));
         assert!(sql.contains("ALTER TABLE users DROP COLUMN age;"));
     }
@@ -1610,9 +1637,13 @@ mod tests {
 
     #[test]
     fn test_migration_command_up_with_target() {
-        let cmd = MigrationCommand::Up { target_version: Some(5) };
+        let cmd = MigrationCommand::Up {
+            target_version: Some(5),
+        };
         match cmd {
-            MigrationCommand::Up { target_version: Some(5) } => {}
+            MigrationCommand::Up {
+                target_version: Some(5),
+            } => {}
             _ => panic!("expected Up with target 5"),
         }
     }
@@ -1628,9 +1659,13 @@ mod tests {
 
     #[test]
     fn test_migration_command_down() {
-        let cmd = MigrationCommand::Down { target_version: Some(2) };
+        let cmd = MigrationCommand::Down {
+            target_version: Some(2),
+        };
         match cmd {
-            MigrationCommand::Down { target_version: Some(2) } => {}
+            MigrationCommand::Down {
+                target_version: Some(2),
+            } => {}
             _ => panic!("expected Down with target 2"),
         }
     }
@@ -1649,7 +1684,11 @@ mod tests {
             output_file: "out.sql".to_string(),
         };
         match cmd {
-            MigrationCommand::Generate { from_schema, to_schema, output_file } => {
+            MigrationCommand::Generate {
+                from_schema,
+                to_schema,
+                output_file,
+            } => {
                 assert_eq!(from_schema, "old");
                 assert_eq!(to_schema, "new");
                 assert_eq!(output_file, "out.sql");

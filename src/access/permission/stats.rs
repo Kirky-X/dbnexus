@@ -210,8 +210,13 @@ mod tests {
     #[test]
     fn cache_hit_rate_zero_when_no_data() {
         let snap = PermissionCheckStatsSnapshot {
-            total_checks: 0, allowed_checks: 0, denied_checks: 0,
-            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+            total_checks: 0,
+            allowed_checks: 0,
+            denied_checks: 0,
+            rate_limited_checks: 0,
+            cache_hits: 0,
+            cache_misses: 0,
+            stampede_events: 0,
         };
         assert_eq!(snap.cache_hit_rate(), 0.0);
     }
@@ -219,8 +224,12 @@ mod tests {
     #[test]
     fn cache_hit_rate_partial() {
         let snap = PermissionCheckStatsSnapshot {
-            total_checks: 0, allowed_checks: 0, denied_checks: 0,
-            rate_limited_checks: 0, cache_hits: 3, cache_misses: 1,
+            total_checks: 0,
+            allowed_checks: 0,
+            denied_checks: 0,
+            rate_limited_checks: 0,
+            cache_hits: 3,
+            cache_misses: 1,
             stampede_events: 0,
         };
         assert!((snap.cache_hit_rate() - 0.75).abs() < f64::EPSILON);
@@ -229,8 +238,13 @@ mod tests {
     #[test]
     fn denial_rate_zero_when_no_data() {
         let snap = PermissionCheckStatsSnapshot {
-            total_checks: 0, allowed_checks: 0, denied_checks: 0,
-            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+            total_checks: 0,
+            allowed_checks: 0,
+            denied_checks: 0,
+            rate_limited_checks: 0,
+            cache_hits: 0,
+            cache_misses: 0,
+            stampede_events: 0,
         };
         assert_eq!(snap.denial_rate(), 0.0);
     }
@@ -238,15 +252,23 @@ mod tests {
     #[test]
     fn denial_rate_correct() {
         let snap = PermissionCheckStatsSnapshot {
-            total_checks: 10, allowed_checks: 7, denied_checks: 3,
-            rate_limited_checks: 0, cache_hits: 0, cache_misses: 0, stampede_events: 0,
+            total_checks: 10,
+            allowed_checks: 7,
+            denied_checks: 3,
+            rate_limited_checks: 0,
+            cache_hits: 0,
+            cache_misses: 0,
+            stampede_events: 0,
         };
         assert!((snap.denial_rate() - 0.3).abs() < f64::EPSILON);
     }
 
     #[test]
     fn cache_stats_is_copy() {
-        let c = CacheStats { cached_roles: 5, capacity: 100 };
+        let c = CacheStats {
+            cached_roles: 5,
+            capacity: 100,
+        };
         assert_eq!(c.cached_roles, 5);
         assert_eq!(c.capacity, 100);
     }
