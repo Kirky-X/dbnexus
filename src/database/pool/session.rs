@@ -253,8 +253,8 @@ impl Session {
         {
             #[cfg(all(feature = "sql-parser", feature = "permission"))]
             {
-                // 解析 SQL 操作类型和表名
-                let parser = SqlParser::new().await;
+                // 解析 SQL 操作类型和表名（使用全局共享单例，避免重复创建 parser + 缓存）
+                let parser = SqlParser::shared().await;
                 match parser.parse_operation_async(sql).await {
                     Ok(Some((table_name, action))) => {
                         if table_name.is_empty() || is_invalid_table_name(&table_name) {
@@ -736,7 +736,7 @@ fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
 async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, PermissionAction)>> {
     #[cfg(feature = "sql-parser")]
     {
-        let parser = SqlParser::new().await;
+        let parser = SqlParser::shared().await;
         match parser.parse_operation_async(sql).await {
             Ok(Some((table, action))) => Ok(Some((table, action))),
             Ok(None) => Ok(None),
