@@ -6,7 +6,7 @@
 //! JWT Token 管理模块
 
 use super::models::{AuthError, AuthResult, JwtClaims, TokenType};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// JWT 访问令牌默认过期时间（秒）
@@ -79,8 +79,14 @@ impl JwtManager {
     }
 
     /// 验证 JWT Token
+    ///
+    /// 使用 `leeway = 0` 严格过期检查（无宽限时间），确保 token 过期后立即失效。
+    /// 对于安全敏感的数据库中间件，严格的过期语义优于 jsonwebtoken 默认的 60 秒宽限。
+    /// 分布式时钟漂移应通过 NTP 同步解决，而非依赖 leeway。
     pub fn verify_token(&self, token: &str) -> AuthResult<JwtClaims> {
-        decode::<JwtClaims>(token, &self.decoding_key, &Validation::default())
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.leeway = 0;
+        decode::<JwtClaims>(token, &self.decoding_key, &validation)
             .map(|data| data.claims)
             .map_err(|e| match e.kind() {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
