@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sqlparser::ast::{Delete, FromTable, Query, SetExpr, Statement, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -157,11 +158,33 @@ impl Default for SqlParser {
 
 const DEFAULT_CACHE_SIZE: usize = 1000;
 
+/// 全局共享 SqlParser 单例（v0.3.0 性能优化）
+///
+/// 避免每次 SQL 执行都创建新 parser + 新缓存。首次调用时初始化，
+/// 后续调用直接返回 Arc 引用，缓存跨所有 Session/Pool 共享。
+static SHARED_PARSER: tokio::sync::OnceCell<Arc<SqlParser>> = tokio::sync::OnceCell::const_new();
+
 impl SqlParser {
     /// Create a new SQL parser with generic dialect support and default cache
     #[inline]
     pub async fn new() -> Self {
         Self::with_cache_size(DEFAULT_CACHE_SIZE).await
+    }
+
+    /// 获取全局共享的 SqlParser 实例（推荐）
+    ///
+    /// 首次调用时初始化 parser + 缓存，后续调用直接返回 Arc 引用。
+    /// 缓存跨所有 Session/DbPool 共享，避免重复创建开销。
+    ///
+    /// **性能对比**：
+    /// - `SqlParser::new().await`：每次创建新 Cache（async + 内存分配）
+    /// - `SqlParser::shared().await`：首次创建，后续 O(1) 返回 Arc clone
+    #[inline]
+    pub async fn shared() -> Arc<SqlParser> {
+        SHARED_PARSER
+            .get_or_init(|| async { Arc::new(Self::with_cache_size(DEFAULT_CACHE_SIZE).await) })
+            .await
+            .clone()
     }
 
     /// Create a parser with specific cache size
@@ -951,6 +974,37 @@ mod tests {
         // 再次解析，应该重新解析（虽然结果相同）
         let result = parser.parse_single("SELECT * FROM users").await;
         assert!(result.is_ok());
+    }
+
+    // ==================== shared() 单例测试 ====================
+
+    #[tokio::test]
+    async fn test_shared_returns_same_instance() {
+        let p1 = SqlParser::shared().await;
+        let p2 = SqlParser::shared().await;
+        // 两次 shared() 返回同一个 Arc（ptr_eq）
+        assert!(Arc::ptr_eq(&p1, &p2), "shared() should return the same instance");
+    }
+
+    #[tokio::test]
+    async fn test_shared_cache_is_shared_across_calls() {
+        let sql = "SELECT * FROM shared_cache_test WHERE id = 42";
+
+        // 第一次调用：shared parser 解析 SQL（cache miss）
+        let p1 = SqlParser::shared().await;
+        let r1 = p1.parse_single(sql).await.unwrap();
+
+        // 第二次调用：另一个 Arc 引用同一 parser，缓存命中
+        let p2 = SqlParser::shared().await;
+        let r2 = p2.parse_single(sql).await.unwrap();
+
+        // 结果一致（验证缓存共享）
+        assert_eq!(r1.operation_type, r2.operation_type);
+        assert_eq!(r1.table_name, r2.table_name);
+
+        // 验证缓存命中计数 > 0（第二次解析命中了第一次的缓存）
+        let (hits, _misses) = p2.cache_stats();
+        assert!(hits > 0, "second parse should hit cache shared across shared() calls");
     }
 
     // ==================== SQL 注入检测测试 ====================
