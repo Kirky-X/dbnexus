@@ -1,7 +1,10 @@
 // Copyright (c) 2026 Kirky.X
 //
 // Licensed under the MIT License
-// See LICENSE file in project root for full license information.
+// See LICENSE file in the project root for full license information.
+
+// 测试串行化需要持有 MutexGuard 跨 await 点（TEST_MUTEX 模式）
+#![allow(clippy::await_holding_lock)]
 
 //! Tasks 7.13-7.15: hooks 集成测试
 //!
@@ -15,8 +18,8 @@ use dbnexus::foundation::DatabaseType;
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// 测试串行化 Mutex — 防止并行测试共享静态计数器导致断言失败
 /// 每个 setup() 获取锁并持有整个测试生命周期
@@ -67,8 +70,7 @@ fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
         sea_orm::ActiveValue::Set(None) => {
             // timestamps 未执行 — 编排顺序错误
             return Err(sea_orm::DbErr::Custom(
-                "updated_at is Set(None): timestamps should have set it to Some(now) before hook"
-                    .to_string(),
+                "updated_at is Set(None): timestamps should have set it to Some(now) before hook".to_string(),
             ));
         }
         sea_orm::ActiveValue::Unchanged(_) => {
@@ -193,10 +195,7 @@ async fn setup() -> (dbnexus::DbPool, std::sync::MutexGuard<'static, ()>) {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let table = Model::schema(DbBackend::Sqlite);
     let conn = session.connection().expect("Failed to get connection");
@@ -219,10 +218,7 @@ async fn setup() -> (dbnexus::DbPool, std::sync::MutexGuard<'static, ()>) {
 #[tokio::test]
 async fn test_before_insert_and_before_update_hooks_trigger() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // === INSERT: 应触发 before_insert ===
@@ -235,9 +231,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
     }
     .into();
 
-    am.insert(conn)
-        .await
-        .expect("insert should succeed");
+    am.insert(conn).await.expect("insert should succeed");
 
     assert_eq!(
         BEFORE_INSERT_CALLS.load(Ordering::SeqCst),
@@ -260,9 +254,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
     let mut am: ActiveModel = existing.into();
     am.name = sea_orm::ActiveValue::Set("Updated Widget".to_string());
 
-    am.update(conn)
-        .await
-        .expect("update should succeed");
+    am.update(conn).await.expect("update should succeed");
 
     assert_eq!(
         BEFORE_INSERT_CALLS.load(Ordering::SeqCst),
@@ -280,10 +272,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
 #[tokio::test]
 async fn test_after_insert_hook_reads_saved_data() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     let am: ActiveModel = Model {
@@ -295,9 +284,7 @@ async fn test_after_insert_hook_reads_saved_data() {
     }
     .into();
 
-    am.insert(conn)
-        .await
-        .expect("insert should succeed");
+    am.insert(conn).await.expect("insert should succeed");
 
     // after_insert 钩子应被调用
     assert_eq!(
@@ -325,10 +312,7 @@ async fn test_after_insert_hook_reads_saved_data() {
 #[tokio::test]
 async fn test_after_update_hook_triggers_on_update() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 先 insert
@@ -340,23 +324,15 @@ async fn test_after_update_hook_triggers_on_update() {
         updated_at: None,
     }
     .into();
-    am.insert(conn)
-        .await
-        .expect("insert should succeed");
+    am.insert(conn).await.expect("insert should succeed");
 
     // update
-    let existing = Entity::find_by_id(7)
-        .one(conn)
-        .await
-        .expect("find")
-        .expect("record");
+    let existing = Entity::find_by_id(7).one(conn).await.expect("find").expect("record");
 
     let mut am: ActiveModel = existing.into();
     am.price = sea_orm::ActiveValue::Set(15.00);
 
-    am.update(conn)
-        .await
-        .expect("update should succeed");
+    am.update(conn).await.expect("update should succeed");
 
     assert_eq!(
         AFTER_INSERT_CALLS.load(Ordering::SeqCst),
@@ -377,10 +353,7 @@ async fn test_after_update_hook_triggers_on_update() {
 #[tokio::test]
 async fn test_hook_orchestration_order_timestamps_before_hooks() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     let am: ActiveModel = Model {
@@ -417,10 +390,7 @@ async fn test_hook_orchestration_order_timestamps_before_hooks() {
 #[tokio::test]
 async fn test_delete_hooks_trigger() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 先 insert 一条记录
@@ -432,26 +402,17 @@ async fn test_delete_hooks_trigger() {
         updated_at: None,
     }
     .into();
-    am.insert(conn)
-        .await
-        .expect("insert should succeed");
+    am.insert(conn).await.expect("insert should succeed");
 
     // 重置 delete 相关计数器（insert 会触发 insert 钩子，但不影响 delete 钩子）
     BEFORE_DELETE_CALLS.store(0, Ordering::SeqCst);
     AFTER_DELETE_CALLS.store(0, Ordering::SeqCst);
 
     // 删除记录 — 应触发 before_delete 和 after_delete
-    let model = Entity::find_by_id(99)
-        .one(conn)
-        .await
-        .expect("find")
-        .expect("record");
+    let model = Entity::find_by_id(99).one(conn).await.expect("find").expect("record");
 
     // Sea-ORM 的 Model::delete 会调用 ActiveModelBehavior::before_delete 和 after_delete
-    model
-        .delete(conn)
-        .await
-        .expect("delete should succeed");
+    model.delete(conn).await.expect("delete should succeed");
 
     assert_eq!(
         BEFORE_DELETE_CALLS.load(Ordering::SeqCst),
@@ -469,10 +430,7 @@ async fn test_delete_hooks_trigger() {
 #[tokio::test]
 async fn test_hook_failure_short_circuits() {
     let (pool, _guard) = setup().await;
-    let session = pool
-        .get_session("admin")
-        .await
-        .expect("Failed to get session");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // before_insert_hook 会正常成功，但我们用一个失败的钩子测试短路

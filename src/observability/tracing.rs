@@ -72,9 +72,9 @@ impl TracingGuard {
     ///
     /// # 错误
     ///
-    /// - [`TracingError::ExporterInit`]: OTLP exporter 构建失败
-    /// - [`TracingError::SubscriberSetup`]: `try_init` 失败（通常因已被其他代码设置）
-    /// - [`TracingError::AlreadyInitialized`]: 本函数已在当前进程调用过一次
+    /// - [`TracingError::ExporterInit`] — OTLP exporter 构建失败
+    /// - [`TracingError::SubscriberSetup`] — `try_init` 失败（通常因已被其他代码设置）
+    /// - [`TracingError::AlreadyInitialized`] — 本函数已在当前进程调用过一次
     pub fn init_with_otlp(endpoint: &str) -> Result<Self, TracingError> {
         // 幂等检查：已初始化则直接返回错误（不 panic）
         if TRACING_INITIALIZED.get().is_some() {
@@ -83,10 +83,10 @@ impl TracingGuard {
 
         use opentelemetry::global;
         use opentelemetry::trace::TracerProvider as OtelTracerProvider;
+        use opentelemetry_otlp::WithExportConfig;
+        use opentelemetry_sdk::Resource;
         use opentelemetry_sdk::runtime::Tokio;
         use opentelemetry_sdk::trace::TracerProvider;
-        use opentelemetry_sdk::Resource;
-        use opentelemetry_otlp::WithExportConfig;
         use tracing_opentelemetry::layer;
         use tracing_subscriber::layer::SubscriberExt;
 

@@ -141,12 +141,15 @@ mod tests {
     #[test]
     fn add_role_and_get_policy() {
         let p = RbacProvider::new();
-        p.add_role("editor".into(), RolePolicy {
-            tables: vec![TablePermission {
-                name: "posts".into(),
-                operations: vec![PermissionAction::Select, PermissionAction::Insert],
-            }],
-        });
+        p.add_role(
+            "editor".into(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "posts".into(),
+                    operations: vec![PermissionAction::Select, PermissionAction::Insert],
+                }],
+            },
+        );
         let policy = p.get_role_policy("editor");
         assert!(policy.is_some());
     }
@@ -154,12 +157,15 @@ mod tests {
     #[test]
     fn check_access_granted() {
         let p = RbacProvider::new();
-        p.add_role("user".into(), RolePolicy {
-            tables: vec![TablePermission {
-                name: "articles".into(),
-                operations: vec![PermissionAction::Select],
-            }],
-        });
+        p.add_role(
+            "user".into(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "articles".into(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
         assert!(p.check_access("user", "articles", PermissionAction::Select).unwrap());
         assert!(!p.check_access("user", "articles", PermissionAction::Insert).unwrap());
     }
@@ -167,12 +173,15 @@ mod tests {
     #[test]
     fn check_access_wildcard_table_granted() {
         let p = RbacProvider::new();
-        p.add_role("admin".into(), RolePolicy {
-            tables: vec![TablePermission {
-                name: "*".into(),
-                operations: vec![PermissionAction::Select, PermissionAction::Delete],
-            }],
-        });
+        p.add_role(
+            "admin".into(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".into(),
+                    operations: vec![PermissionAction::Select, PermissionAction::Delete],
+                }],
+            },
+        );
         assert!(p.check_access("admin", "any_table", PermissionAction::Select).unwrap());
         assert!(p.check_access("admin", "any_table", PermissionAction::Delete).unwrap());
     }

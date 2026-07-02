@@ -5,11 +5,15 @@
 yanked = "warn"
 unmaintained = "transitive"
 ignore = [
-    # rsa 漏洞来自 sqlx-mysql，仅在启用 mysql 特性时影响
-    "RUSTSEC-2023-0071",
-    # unmaintained 警告（这些是上游依赖，无法直接解决）
-    "RUSTSEC-2025-0052",  # async-std (sqlx 依赖)
-    "RUSTSEC-2024-0384",  # instant (sqlx 依赖)
+    # proc-macro-error2 unmaintained — transitive via sea-orm-macros (sea-bae)
+    # 无安全升级路径，等待 sea-orm 生态迁移
+    "RUSTSEC-2026-0173",
+    # rustls-pemfile unmaintained — transitive via bollard (testcontainers)
+    # 无安全升级路径，仅影响开发/测试依赖
+    "RUSTSEC-2025-0134",
+    # tokio-tar PAX header vulnerability — transitive via testcontainers
+    # 无安全升级路径，仅影响开发/测试依赖
+    "RUSTSEC-2025-0111",
 ]
 
 [licenses]
@@ -24,6 +28,7 @@ allow = [
     "Unicode-DFS-2016",
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
+    "BSL-1.0",
 ]
 
 [bans]

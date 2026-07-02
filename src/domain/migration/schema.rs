@@ -371,8 +371,12 @@ mod tests {
         assert_eq!(m.version, 1);
         assert_eq!(m.description, "initial");
         m.add_table_change(TableChange::CreateTable(Table {
-            name: "t".into(), columns: vec![], primary_key_columns: vec![],
-            indexes: vec![], foreign_keys: vec![], comment: None,
+            name: "t".into(),
+            columns: vec![],
+            primary_key_columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+            comment: None,
         }));
         assert_eq!(m.table_changes.len(), 1);
     }
@@ -383,12 +387,14 @@ mod tests {
         assert!(h.applied_migrations.is_empty());
 
         let v1 = MigrationVersion {
-            version: 2, description: "v2".into(),
+            version: 2,
+            description: "v2".into(),
             applied_at: time::OffsetDateTime::now_utc(),
             file_path: "m2.sql".into(),
         };
         let v2 = MigrationVersion {
-            version: 1, description: "v1".into(),
+            version: 1,
+            description: "v1".into(),
             applied_at: time::OffsetDateTime::now_utc(),
             file_path: "m1.sql".into(),
         };
@@ -402,7 +408,8 @@ mod tests {
     fn migration_history_pending() {
         let mut h = MigrationHistory::new();
         h.add_migration(MigrationVersion {
-            version: 1, description: "v1".into(),
+            version: 1,
+            description: "v1".into(),
             applied_at: time::OffsetDateTime::now_utc(),
             file_path: "m1.sql".into(),
         });

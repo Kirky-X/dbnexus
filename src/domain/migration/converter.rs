@@ -109,9 +109,7 @@
 //! | NoAction | NoAction |
 //! | SetDefault | SetDefault |
 
-use super::schema::{
-    Column, ColumnType, ForeignKey, ForeignKeyAction, Index, Table,
-};
+use super::schema::{Column, ColumnType, ForeignKey, ForeignKeyAction, Index, Table};
 use sea_orm::sea_query::{
     ColumnDef, ColumnSpec, ColumnType as SeaColumnType, Expr, ForeignKeyAction as SeaFKAction,
     ForeignKeyCreateStatement, IndexCreateStatement, StringLen, TableCreateStatement, TableRef,
@@ -123,11 +121,7 @@ use sea_orm::sea_query::{
 /// 将其字段映射到 dbnexus 内部的 `migration::schema::Table` 结构。
 pub fn convert_table(stmt: &TableCreateStatement) -> Table {
     let name = extract_table_name(stmt);
-    let columns: Vec<Column> = stmt
-        .get_columns()
-        .iter()
-        .map(convert_column)
-        .collect();
+    let columns: Vec<Column> = stmt.get_columns().iter().map(convert_column).collect();
 
     let primary_key_columns: Vec<String> = columns
         .iter()
@@ -135,11 +129,7 @@ pub fn convert_table(stmt: &TableCreateStatement) -> Table {
         .map(|c| c.name.clone())
         .collect();
 
-    let indexes: Vec<Index> = stmt
-        .get_indexes()
-        .iter()
-        .map(|idx| convert_index(idx, &name))
-        .collect();
+    let indexes: Vec<Index> = stmt.get_indexes().iter().map(|idx| convert_index(idx, &name)).collect();
 
     let foreign_keys: Vec<ForeignKey> = stmt
         .get_foreign_key_create_stmts()
@@ -324,8 +314,7 @@ fn convert_fk_action(action: SeaFKAction) -> ForeignKeyAction {
 mod tests {
     use super::*;
     use sea_orm::sea_query::{
-        ColumnDef, ForeignKey, ForeignKeyAction as SeaFKAction, Index, Table as SeaTable,
-        TableCreateStatement,
+        ColumnDef, ForeignKey, ForeignKeyAction as SeaFKAction, Index, Table as SeaTable, TableCreateStatement,
     };
 
     /// 辅助函数：创建一个简单的 users 表 `TableCreateStatement`
@@ -382,8 +371,14 @@ mod tests {
             .foreign_key(
                 ForeignKey::create()
                     .name("fk_posts_user_id")
-                    .from(sea_orm::sea_query::Alias::new("posts"), sea_orm::sea_query::Alias::new("user_id"))
-                    .to(sea_orm::sea_query::Alias::new("users"), sea_orm::sea_query::Alias::new("id"))
+                    .from(
+                        sea_orm::sea_query::Alias::new("posts"),
+                        sea_orm::sea_query::Alias::new("user_id"),
+                    )
+                    .to(
+                        sea_orm::sea_query::Alias::new("users"),
+                        sea_orm::sea_query::Alias::new("id"),
+                    )
                     .on_delete(SeaFKAction::Cascade)
                     .on_update(SeaFKAction::Restrict),
             )
@@ -426,7 +421,11 @@ mod tests {
         let stmt = make_users_stmt();
         let table = convert_table(&stmt);
 
-        let id_col = table.columns.iter().find(|c| c.name == "id").expect("id column should exist");
+        let id_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "id")
+            .expect("id column should exist");
         assert_eq!(id_col.column_type, ColumnType::Integer);
         assert!(!id_col.is_nullable);
         assert!(id_col.is_primary_key);
@@ -438,7 +437,11 @@ mod tests {
         let stmt = make_users_stmt();
         let table = convert_table(&stmt);
 
-        let name_col = table.columns.iter().find(|c| c.name == "name").expect("name column should exist");
+        let name_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "name")
+            .expect("name column should exist");
         assert_eq!(name_col.column_type, ColumnType::String(None));
         assert!(!name_col.is_nullable);
         assert!(!name_col.is_primary_key);
@@ -448,10 +451,7 @@ mod tests {
     fn test_convert_nullable_column() {
         let stmt = SeaTable::create()
             .table(sea_orm::sea_query::Alias::new("test"))
-            .col(
-                ColumnDef::new(sea_orm::sea_query::Alias::new("val"))
-                    .integer(),
-            )
+            .col(ColumnDef::new(sea_orm::sea_query::Alias::new("val")).integer())
             .to_owned();
 
         let table = convert_table(&stmt);
@@ -560,7 +560,11 @@ mod tests {
         let stmt = make_users_stmt();
         let table = convert_table(&stmt);
 
-        let age_col = table.columns.iter().find(|c| c.name == "age").expect("age column should exist");
+        let age_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "age")
+            .expect("age column should exist");
         assert!(age_col.has_default);
         assert!(age_col.default_value.is_some());
     }
@@ -574,7 +578,11 @@ mod tests {
 
         assert_eq!(table.primary_key_columns, vec!["id".to_string()]);
 
-        let id_col = table.columns.iter().find(|c| c.name == "id").expect("id column should exist");
+        let id_col = table
+            .columns
+            .iter()
+            .find(|c| c.name == "id")
+            .expect("id column should exist");
         assert!(id_col.is_primary_key);
     }
 
@@ -633,13 +641,28 @@ mod tests {
         for (sea_action, expected) in actions {
             let stmt = SeaTable::create()
                 .table(sea_orm::sea_query::Alias::new("t1"))
-                .col(ColumnDef::new(sea_orm::sea_query::Alias::new("id")).integer().not_null().primary_key())
-                .col(ColumnDef::new(sea_orm::sea_query::Alias::new("ref_id")).integer().not_null())
+                .col(
+                    ColumnDef::new(sea_orm::sea_query::Alias::new("id"))
+                        .integer()
+                        .not_null()
+                        .primary_key(),
+                )
+                .col(
+                    ColumnDef::new(sea_orm::sea_query::Alias::new("ref_id"))
+                        .integer()
+                        .not_null(),
+                )
                 .foreign_key(
                     ForeignKey::create()
                         .name("fk_test")
-                        .from(sea_orm::sea_query::Alias::new("t1"), sea_orm::sea_query::Alias::new("ref_id"))
-                        .to(sea_orm::sea_query::Alias::new("t2"), sea_orm::sea_query::Alias::new("id"))
+                        .from(
+                            sea_orm::sea_query::Alias::new("t1"),
+                            sea_orm::sea_query::Alias::new("ref_id"),
+                        )
+                        .to(
+                            sea_orm::sea_query::Alias::new("t2"),
+                            sea_orm::sea_query::Alias::new("id"),
+                        )
                         .on_delete(sea_action),
                 )
                 .to_owned();
@@ -661,7 +684,11 @@ mod tests {
         // 检查是否有名为 "idx_products_category" 的索引
         let has_idx = table.indexes.iter().any(|i| i.name == "idx_products_category");
         if has_idx {
-            let idx = table.indexes.iter().find(|i| i.name == "idx_products_category").unwrap();
+            let idx = table
+                .indexes
+                .iter()
+                .find(|i| i.name == "idx_products_category")
+                .unwrap();
             assert_eq!(idx.table_name, "products");
             assert!(idx.columns.contains(&"category".to_string()));
             assert!(!idx.is_unique);
@@ -692,7 +719,12 @@ mod tests {
         let stmt = SeaTable::create()
             .table(sea_orm::sea_query::Alias::new("test"))
             .comment("test table")
-            .col(ColumnDef::new(sea_orm::sea_query::Alias::new("id")).integer().not_null().primary_key())
+            .col(
+                ColumnDef::new(sea_orm::sea_query::Alias::new("id"))
+                    .integer()
+                    .not_null()
+                    .primary_key(),
+            )
             .to_owned();
 
         let table = convert_table(&stmt);

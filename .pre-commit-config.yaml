@@ -13,6 +13,31 @@ repos:
     exclude: ^scripts/pre-commit-check\.sh$  # 排除安全检查脚本（包含检测模式字符串，非真实私钥）
   - id: check-merge-conflict
 
+# Rust 工程化检查（local hooks，使用系统 cargo）
+- repo: local
+  hooks:
+  # 代码格式检查（不修改，仅检查）
+  - id: cargo-fmt
+    name: cargo fmt --check
+    entry: cargo fmt --all -- --check
+    language: system
+    types: [rust]
+    pass_filenames: false
+  # Clippy 严格检查（-D warnings 将所有 warning 视为 error）
+  - id: cargo-clippy
+    name: cargo clippy
+    entry: cargo clippy --all-targets --workspace -- -D warnings
+    language: system
+    types: [rust]
+    pass_filenames: false
+  # cargo-deny 许可证/漏洞/禁用依赖检查
+  - id: cargo-deny
+    name: cargo deny check
+    entry: cargo deny check license advisories bans
+    language: system
+    pass_filenames: false
+    files: ^(Cargo\.(toml|lock)|deny\.toml)$
+
 # 禁止直接提交到 main 分支
 - repo: local
   hooks:

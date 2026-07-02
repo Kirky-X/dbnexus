@@ -71,12 +71,7 @@ pub struct Session {
 
 impl Session {
     /// 创建新的 Session
-    pub(crate) fn new(
-        connection: DbConnection,
-        pool: Arc<DbPool>,
-        pool_inner: Arc<DbPoolInner>,
-        role: String,
-    ) -> Self {
+    pub(crate) fn new(connection: DbConnection, pool: Arc<DbPool>, pool_inner: Arc<DbPoolInner>, role: String) -> Self {
         #[cfg(feature = "permission")]
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
@@ -363,10 +358,7 @@ impl Session {
     ///
     /// 查询结果行列表
     #[cfg(feature = "duckdb")]
-    pub async fn execute_duckdb(
-        &self,
-        sql: &str,
-    ) -> DbResult<Vec<crate::database::pool::DuckDbRow>> {
+    pub async fn execute_duckdb(&self, sql: &str) -> DbResult<Vec<crate::database::pool::DuckDbRow>> {
         let conn = self
             .connection
             .as_ref()
@@ -388,10 +380,7 @@ impl Session {
     ///
     /// 受影响的行数信息
     #[cfg(feature = "duckdb")]
-    pub async fn execute_duckdb_raw(
-        &self,
-        sql: &str,
-    ) -> DbResult<crate::database::pool::DuckDbExecResult> {
+    pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::pool::DuckDbExecResult> {
         let conn = self
             .connection
             .as_ref()
@@ -643,10 +632,7 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 /// 统一 "Permission denied for {action} on {table}" 错误消息格式，
 /// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
 #[cfg(feature = "permission")]
-fn permission_denied(
-    action: &(impl std::fmt::Display + ?Sized),
-    table: &(impl std::fmt::Display + ?Sized),
-) -> DbError {
+fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl std::fmt::Display + ?Sized)) -> DbError {
     DbError::Permission(format!("Permission denied for {} on {}", action, table))
 }
 

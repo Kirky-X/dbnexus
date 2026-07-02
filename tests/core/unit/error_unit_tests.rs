@@ -470,7 +470,7 @@ fn test_error_category_traits() {
     let a = ErrorCategory::Permission;
     let b = a; // Copy
     assert_eq!(a, b); // PartialEq + Eq
-    let c = b.clone(); // Clone
+    let c = b; // Copy (clone on Copy type is redundant)
     assert_eq!(a, c);
 }
 
@@ -539,12 +539,7 @@ fn test_query_error_report_display_full() {
 /// TEST-U-ERR-007: Display 仅含 table 时不应输出 Operation 行
 #[test]
 fn test_query_error_report_display_table_only() {
-    let report = QueryErrorReport::new(
-        ErrorCategory::Permission,
-        "denied",
-        "grant access",
-    )
-    .with_table("accounts");
+    let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "grant access").with_table("accounts");
     let display = format!("{report}");
     assert!(display.contains("Table: accounts"));
     assert!(!display.contains("Operation:"));
@@ -581,11 +576,7 @@ fn test_query_error_report_from_permission_error() {
 /// TEST-U-ERR-010: QueryErrorReport 应实现 std::error::Error
 #[test]
 fn test_query_error_report_implements_error_trait() {
-    let report = QueryErrorReport::new(
-        ErrorCategory::InjectionRisk,
-        "test",
-        "suggestion",
-    );
+    let report = QueryErrorReport::new(ErrorCategory::InjectionRisk, "test", "suggestion");
     // 可作为 trait object 使用
     let err: &dyn std::error::Error = &report;
     assert!(err.source().is_none());
@@ -595,13 +586,9 @@ fn test_query_error_report_implements_error_trait() {
 /// TEST-U-ERR-011: Debug 实现应输出非空字符串
 #[test]
 fn test_query_error_report_debug() {
-    let report = QueryErrorReport::new(
-        ErrorCategory::ShardConflict,
-        "conflict",
-        "reroute",
-    )
-    .with_table("t")
-    .with_operation("INSERT");
+    let report = QueryErrorReport::new(ErrorCategory::ShardConflict, "conflict", "reroute")
+        .with_table("t")
+        .with_operation("INSERT");
     let debug = format!("{report:?}");
     assert!(debug.contains("ShardConflict"));
     assert!(debug.contains("conflict"));
@@ -610,13 +597,9 @@ fn test_query_error_report_debug() {
 /// TEST-U-ERR-012: Clone 实现应产生相等副本
 #[test]
 fn test_query_error_report_clone() {
-    let original = QueryErrorReport::new(
-        ErrorCategory::SyntaxError,
-        "msg",
-        "sug",
-    )
-    .with_table("t")
-    .with_operation("op");
+    let original = QueryErrorReport::new(ErrorCategory::SyntaxError, "msg", "sug")
+        .with_table("t")
+        .with_operation("op");
     let cloned = original.clone();
     assert_eq!(original.category, cloned.category);
     assert_eq!(original.message, cloned.message);

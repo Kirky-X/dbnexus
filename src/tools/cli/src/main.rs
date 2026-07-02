@@ -8,13 +8,13 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
-#[cfg(feature = "sql-parser")]
-use dbnexus::{SqlOperationType, SqlParser};
 use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::{DbError, DbPool, DbResult};
 use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
+#[cfg(feature = "sql-parser")]
+use dbnexus::{SqlOperationType, SqlParser};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// CLI 配置
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// 创建新的迁移文件
-async fn create_migration(description: &str, directory: &PathBuf) -> DbResult<()> {
+async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
     // 创建迁移目录（如果不存在）
     fs::create_dir_all(directory).map_err(|e| DbError::Config(format!("无法创建目录: {}", e)))?;
 
@@ -193,7 +193,7 @@ async fn create_migration(description: &str, directory: &PathBuf) -> DbResult<()
 }
 
 /// 显示迁移状态
-async fn show_status(database_url: &str, migrations_dir: &PathBuf) -> DbResult<()> {
+async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    迁移状态查看                              ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
@@ -361,7 +361,7 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
 }
 
 /// 运行向上的迁移（应用迁移）
-async fn run_migrations_up(database_url: &str, migrations_dir: &PathBuf, target_version: Option<u32>) -> DbResult<()> {
+async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_version: Option<u32>) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    应用迁移                                  ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
@@ -563,6 +563,12 @@ async fn rollback_migration(
         MigrationDatabaseType::Postgres => sea_orm::DbBackend::Postgres,
         MigrationDatabaseType::MySql => sea_orm::DbBackend::MySql,
         MigrationDatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+        // DuckDB 走独立连接路径，不通过 SeaORM DbBackend 执行迁移回滚
+        MigrationDatabaseType::DuckDb => {
+            return Err(DbError::Config(
+                "Migration rollback for DuckDB is not supported via SeaORM backend".to_string(),
+            ));
+        }
     };
     let delete_sql = sea_orm::Statement::from_sql_and_values(
         backend,
@@ -585,7 +591,7 @@ async fn rollback_migration(
 async fn generate_migration(
     from_schema: &Option<PathBuf>,
     to_schema: &Option<PathBuf>,
-    output: &PathBuf,
+    output: &Path,
     description: &str,
 ) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
@@ -693,6 +699,7 @@ fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<Di
 }
 
 /// 解析并应用迁移
+#[allow(dead_code)]
 async fn parse_and_apply_migration(
     session: &mut dbnexus::Session,
     executor: &mut MigrationExecutor,
@@ -739,6 +746,7 @@ async fn parse_and_apply_migration(
 }
 
 /// 提取 SQL 部分
+#[allow(dead_code)]
 fn extract_sql_section(content: &str, section: &str) -> Result<String, DbError> {
     let section_start_pattern = format!("-- {}:", section);
     let section_end_pattern = format!("-- {}", if section == "UP" { "DOWN" } else { "UP" });
@@ -773,7 +781,7 @@ fn extract_sql_section(content: &str, section: &str) -> Result<String, DbError> 
 }
 
 /// 列出所有迁移文件
-async fn list_migrations(database_url: &str, migrations_dir: &PathBuf) -> DbResult<()> {
+async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    迁移文件列表                              ║");
     println!("╚══════════════════════════════════════════════════════════════╝");

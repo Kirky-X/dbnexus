@@ -58,10 +58,22 @@ acquire_timeout: 5000
 #[tokio::test]
 async fn test_database_type() {
     assert_eq!(DatabaseType::from_url("sqlite::memory:").unwrap(), DatabaseType::Sqlite);
-    assert_eq!(DatabaseType::from_url("sqlite:///path/to/db").unwrap(), DatabaseType::Sqlite);
-    assert_eq!(DatabaseType::from_url("postgres://localhost").unwrap(), DatabaseType::Postgres);
-    assert_eq!(DatabaseType::from_url("postgresql://localhost").unwrap(), DatabaseType::Postgres);
-    assert_eq!(DatabaseType::from_url("mysql://localhost").unwrap(), DatabaseType::MySql);
+    assert_eq!(
+        DatabaseType::from_url("sqlite:///path/to/db").unwrap(),
+        DatabaseType::Sqlite
+    );
+    assert_eq!(
+        DatabaseType::from_url("postgres://localhost").unwrap(),
+        DatabaseType::Postgres
+    );
+    assert_eq!(
+        DatabaseType::from_url("postgresql://localhost").unwrap(),
+        DatabaseType::Postgres
+    );
+    assert_eq!(
+        DatabaseType::from_url("mysql://localhost").unwrap(),
+        DatabaseType::MySql
+    );
     assert_eq!(DatabaseType::Sqlite.as_str(), "sqlite");
     assert_eq!(DatabaseType::Postgres.as_str(), "postgres");
     assert_eq!(DatabaseType::MySql.as_str(), "mysql");

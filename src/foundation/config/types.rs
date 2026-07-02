@@ -244,9 +244,7 @@ impl DatabaseType {
         }
 
         let parsed = url::Url::parse(url).map_err(|_| {
-            crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!(
-                "failed to parse URL: {url}"
-            ))
+            crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!("failed to parse URL: {url}"))
         })?;
 
         match parsed.scheme() {
@@ -254,9 +252,9 @@ impl DatabaseType {
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
             "mysql" => Ok(DatabaseType::MySql),
             "duckdb" => Ok(DatabaseType::DuckDb),
-            other => Err(crate::common::error::DbNexusError::UnsupportedDatabaseScheme(
-                format!("'{other}' is not a supported database scheme"),
-            )),
+            other => Err(crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!(
+                "'{other}' is not a supported database scheme"
+            ))),
         }
     }
 
@@ -592,10 +590,7 @@ mod tests {
             ConfigError::IoError("read fail".into()).to_string(),
             "IO error: read fail"
         );
-        assert_eq!(
-            ConfigError::InvalidUrl("bad".into()).to_string(),
-            "Invalid URL: bad"
-        );
+        assert_eq!(ConfigError::InvalidUrl("bad".into()).to_string(), "Invalid URL: bad");
         assert_eq!(
             ConfigError::UnsupportedProtocol("ftp".into()).to_string(),
             "Unsupported database protocol: ftp"
@@ -669,10 +664,7 @@ mod tests {
     fn test_pool_config_duration_methods() {
         let cfg = PoolConfig::default();
         assert_eq!(cfg.idle_timeout_duration(), Duration::from_secs(300));
-        assert_eq!(
-            cfg.acquire_timeout_duration(),
-            Duration::from_millis(5000)
-        );
+        assert_eq!(cfg.acquire_timeout_duration(), Duration::from_millis(5000));
     }
 
     #[test]
@@ -689,31 +681,49 @@ mod tests {
 
     #[test]
     fn test_database_type_from_url_postgres() {
-        assert_eq!(DatabaseType::from_url("postgres://localhost/db").unwrap(), DatabaseType::Postgres);
+        assert_eq!(
+            DatabaseType::from_url("postgres://localhost/db").unwrap(),
+            DatabaseType::Postgres
+        );
         assert_eq!(
             DatabaseType::from_url("postgresql://localhost/db").unwrap(),
             DatabaseType::Postgres
         );
         // 大小写不敏感（url crate 自动处理 scheme 小写化）
-        assert_eq!(DatabaseType::from_url("POSTGRES://localhost/db").unwrap(), DatabaseType::Postgres);
+        assert_eq!(
+            DatabaseType::from_url("POSTGRES://localhost/db").unwrap(),
+            DatabaseType::Postgres
+        );
     }
 
     #[test]
     fn test_database_type_from_url_mysql() {
-        assert_eq!(DatabaseType::from_url("mysql://localhost/db").unwrap(), DatabaseType::MySql);
-        assert_eq!(DatabaseType::from_url("MYSQL://localhost/db").unwrap(), DatabaseType::MySql);
+        assert_eq!(
+            DatabaseType::from_url("mysql://localhost/db").unwrap(),
+            DatabaseType::MySql
+        );
+        assert_eq!(
+            DatabaseType::from_url("MYSQL://localhost/db").unwrap(),
+            DatabaseType::MySql
+        );
     }
 
     #[test]
     fn test_database_type_from_url_sqlite() {
         assert_eq!(DatabaseType::from_url("sqlite::memory:").unwrap(), DatabaseType::Sqlite);
-        assert_eq!(DatabaseType::from_url("sqlite://test.db").unwrap(), DatabaseType::Sqlite);
+        assert_eq!(
+            DatabaseType::from_url("sqlite://test.db").unwrap(),
+            DatabaseType::Sqlite
+        );
     }
 
     #[test]
     fn test_database_type_from_url_duckdb() {
         assert_eq!(DatabaseType::from_url("duckdb::memory:").unwrap(), DatabaseType::DuckDb);
-        assert_eq!(DatabaseType::from_url("duckdb://test.db").unwrap(), DatabaseType::DuckDb);
+        assert_eq!(
+            DatabaseType::from_url("duckdb://test.db").unwrap(),
+            DatabaseType::DuckDb
+        );
         assert_eq!(DatabaseType::from_url("duckdb:test.ddb").unwrap(), DatabaseType::DuckDb);
     }
 
@@ -783,11 +793,15 @@ mod tests {
 
     #[test]
     fn test_database_type_serde_round_trip() {
-        let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql, DatabaseType::DuckDb];
+        let cases = [
+            DatabaseType::Sqlite,
+            DatabaseType::Postgres,
+            DatabaseType::MySql,
+            DatabaseType::DuckDb,
+        ];
         for original in cases {
             let json = serde_json::to_string(&original).expect("serialize should succeed");
-            let restored: DatabaseType =
-                serde_json::from_str(&json).expect("deserialize should succeed");
+            let restored: DatabaseType = serde_json::from_str(&json).expect("deserialize should succeed");
             assert_eq!(original, restored, "round-trip failed for {:?}", original);
         }
     }
@@ -837,10 +851,7 @@ mod tests {
     fn test_db_config_duration_methods() {
         let cfg = DbConfig::default();
         assert_eq!(cfg.idle_timeout_duration(), Duration::from_secs(300));
-        assert_eq!(
-            cfg.acquire_timeout_duration(),
-            Duration::from_millis(5000)
-        );
+        assert_eq!(cfg.acquire_timeout_duration(), Duration::from_millis(5000));
         assert_eq!(cfg.migration_timeout_duration(), Duration::from_secs(60));
     }
 

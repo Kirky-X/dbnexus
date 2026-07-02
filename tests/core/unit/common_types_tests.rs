@@ -69,8 +69,7 @@ fn test_database_type_serde_round_trip() {
     let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql];
     for original in cases {
         let json = serde_json::to_string(&original).expect("serialize should succeed");
-        let restored: DatabaseType =
-            serde_json::from_str(&json).expect("deserialize should succeed");
+        let restored: DatabaseType = serde_json::from_str(&json).expect("deserialize should succeed");
         assert_eq!(original, restored, "round-trip failed for {:?}", original);
     }
 }
@@ -78,7 +77,12 @@ fn test_database_type_serde_round_trip() {
 /// TEST-U-COMMON-008: 变体数量应为 4（0.3.0 新增 DuckDb，防止误删变体）
 #[test]
 fn test_database_type_variant_count() {
-    let variants = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql, DatabaseType::DuckDb];
+    let variants = [
+        DatabaseType::Sqlite,
+        DatabaseType::Postgres,
+        DatabaseType::MySql,
+        DatabaseType::DuckDb,
+    ];
     assert_eq!(variants.len(), 4);
     // 确保四个变体互不相等
     for i in 0..variants.len() {
