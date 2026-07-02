@@ -78,11 +78,15 @@ impl JwtManager {
         encode(&Header::default(), &claims, &self.encoding_key).map_err(|e| AuthError::TokenGeneration(e.to_string()))
     }
 
-    /// 验证 JWT Token
+    /// 验证 JWT Token（不校验 token_type）
     ///
     /// 使用 `leeway = 0` 严格过期检查（无宽限时间），确保 token 过期后立即失效。
     /// 对于安全敏感的数据库中间件，严格的过期语义优于 jsonwebtoken 默认的 60 秒宽限。
     /// 分布式时钟漂移应通过 NTP 同步解决，而非依赖 leeway。
+    ///
+    /// **注意**：此方法不校验 `token_type`，调用方无法区分 Access/Refresh token。
+    /// 安全敏感场景应使用 [`verify_access_token`](Self::verify_access_token) 或
+    /// [`verify_refresh_token`](Self::verify_refresh_token)。
     pub fn verify_token(&self, token: &str) -> AuthResult<JwtClaims> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.leeway = 0;
@@ -94,14 +98,33 @@ impl JwtManager {
             })
     }
 
-    /// 刷新访问令牌
-    pub fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
-        let claims = self.verify_token(refresh_token)?;
+    /// 验证 Access Token（校验 token_type == Access）
+    ///
+    /// 在 [`verify_token`](Self::verify_token) 基础上额外校验 `token_type`，
+    /// 确保 refresh token 不能用作 access token（防止权限提升）。
+    pub fn verify_access_token(&self, token: &str) -> AuthResult<JwtClaims> {
+        let claims = self.verify_token(token)?;
+        if claims.token_type != TokenType::Access {
+            return Err(AuthError::InvalidToken);
+        }
+        Ok(claims)
+    }
 
+    /// 验证 Refresh Token（校验 token_type == Refresh）
+    ///
+    /// 在 [`verify_token`](Self::verify_token) 基础上额外校验 `token_type`，
+    /// 确保 access token 不能用作 refresh token（防止 token 混用）。
+    pub fn verify_refresh_token(&self, token: &str) -> AuthResult<JwtClaims> {
+        let claims = self.verify_token(token)?;
         if claims.token_type != TokenType::Refresh {
             return Err(AuthError::InvalidToken);
         }
+        Ok(claims)
+    }
 
+    /// 刷新访问令牌
+    pub fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
+        let claims = self.verify_refresh_token(refresh_token)?;
         self.generate_token(&claims.sub, &claims.username, &claims.role, TokenType::Access)
     }
 }
@@ -178,5 +201,57 @@ mod tests {
 
         let claims = manager.verify_token(&token).unwrap();
         assert!(claims.exp > claims.iat); // 应该有有效期
+    }
+
+    // ============================================================================
+    // verify_access_token / verify_refresh_token token_type 校验测试（diting security 修复）
+    // ============================================================================
+
+    #[test]
+    fn test_verify_access_token_accepts_access() {
+        let manager = JwtManager::new(TEST_SECRET);
+        let access_token = manager
+            .generate_token("user1", "alice", "admin", TokenType::Access)
+            .unwrap();
+        let claims = manager.verify_access_token(&access_token).unwrap();
+        assert_eq!(claims.token_type, TokenType::Access);
+    }
+
+    #[test]
+    fn test_verify_access_token_rejects_refresh() {
+        let manager = JwtManager::new(TEST_SECRET);
+        let refresh_token = manager
+            .generate_token("user1", "alice", "admin", TokenType::Refresh)
+            .unwrap();
+        // refresh token 不应用作 access token
+        let result = manager.verify_access_token(&refresh_token);
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken)),
+            "refresh token should be rejected by verify_access_token"
+        );
+    }
+
+    #[test]
+    fn test_verify_refresh_token_accepts_refresh() {
+        let manager = JwtManager::new(TEST_SECRET);
+        let refresh_token = manager
+            .generate_token("user1", "alice", "admin", TokenType::Refresh)
+            .unwrap();
+        let claims = manager.verify_refresh_token(&refresh_token).unwrap();
+        assert_eq!(claims.token_type, TokenType::Refresh);
+    }
+
+    #[test]
+    fn test_verify_refresh_token_rejects_access() {
+        let manager = JwtManager::new(TEST_SECRET);
+        let access_token = manager
+            .generate_token("user1", "alice", "admin", TokenType::Access)
+            .unwrap();
+        // access token 不应用作 refresh token
+        let result = manager.verify_refresh_token(&access_token);
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken)),
+            "access token should be rejected by verify_refresh_token"
+        );
     }
 }
