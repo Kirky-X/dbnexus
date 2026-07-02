@@ -65,7 +65,7 @@ cache_config:
     println!("  - idle_timeout (s)  : {}", config.idle_timeout);
     println!("  - acquire_timeout(ms): {}", config.acquire_timeout);
     println!("  - admin_role        : {}", config.admin_role);
-    println!("  - database_type     : {}", config.database_type());
+    println!("  - database_type     : {}", config.database_type().unwrap());
 
     // ============================================
     // 4. 创建连接池
