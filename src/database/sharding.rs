@@ -465,6 +465,114 @@ impl ShardRouter {
         self.get_session(shard_id).await
     }
 
+    /// 根据 `shard_key` 计算分片 ID（纯哈希，不依赖时间戳）
+    ///
+    /// 使用 XxHash64 对 `shard_key` 哈希后取模，映射到 `[0, total_shards)` 范围。
+    /// 与 [`calculate_shard`](Self::calculate_shard) 的区别：不需要时间戳参数，
+    /// 适合纯键路由场景（如按 user_id 路由）。
+    ///
+    /// # Panics
+    ///
+    /// 如果 `total_shards` 为 0，会触发除零 panic（由 `ShardRouter::new` 保证非 0）。
+    pub fn shard_id_for_key(&self, shard_key: &str) -> u32 {
+        use std::hash::{Hash, Hasher};
+        use twox_hash::XxHash64;
+
+        let mut hasher = XxHash64::default();
+        shard_key.hash(&mut hasher);
+        (hasher.finish() % self.total_shards as u64) as u32
+    }
+
+    /// 根据 `shard_key` 路由到分片并返回对应 Session（v0.3.0 新增）
+    ///
+    /// 内部流程：
+    /// 1. 使用 [`shard_id_for_key`](Self::shard_id_for_key) 计算 `shard_id`
+    /// 2. 从 `pools` 中获取对应分片的 `DbPool`
+    /// 3. 调用 `DbPool::get_session(role)` 获取 Session（包含权限检查）
+    ///
+    /// 跨分片查询应在执行前调用 [`enforce_shard_binding`](Self::enforce_shard_binding)
+    /// 验证 `shard_key` 与 Session 绑定的分片一致。
+    ///
+    /// # Errors
+    ///
+    /// - 如果 `shard_id` 对应的连接池未注册，返回 `DbError::Config`
+    /// - 如果权限检查失败（`role` 无访问权限），返回 `DbError::Permission`
+    pub async fn get_session_for_shard(
+        &self,
+        shard_key: &str,
+        role: &str,
+    ) -> Result<crate::database::pool::Session, crate::foundation::error::DbError> {
+        let shard_id = self.shard_id_for_key(shard_key);
+        let pool = self.pools.get(&shard_id).ok_or_else(|| {
+            crate::foundation::error::DbError::Config(format!(
+                "No pool registered for shard {} (shard_key='{}')",
+                shard_id, shard_key
+            ))
+        })?;
+        pool.get_session(role).await
+    }
+
+    /// 返回 `get_session_for_shard` 同时计算出的分片 ID（便于后续绑定检查）
+    ///
+    /// 等价于先调用 [`shard_id_for_key`](Self::shard_id_for_key) 再调用
+    /// [`get_session`](Self::get_session)，但避免重复哈希计算。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`get_session_for_shard`](Self::get_session_for_shard)
+    pub async fn get_session_for_shard_with_id(
+        &self,
+        shard_key: &str,
+        role: &str,
+    ) -> Result<(crate::database::pool::Session, u32), crate::foundation::error::DbError> {
+        let shard_id = self.shard_id_for_key(shard_key);
+        let pool = self.pools.get(&shard_id).ok_or_else(|| {
+            crate::foundation::error::DbError::Config(format!(
+                "No pool registered for shard {} (shard_key='{}')",
+                shard_id, shard_key
+            ))
+        })?;
+        let session = pool.get_session(role).await?;
+        Ok((session, shard_id))
+    }
+
+    /// 验证 `requested_shard_key` 是否映射到 `expected_shard_id`（跨分片冲突检测）
+    ///
+    /// 用于在已持有 Session（绑定到某个分片）后，执行查询前验证目标 `shard_key`
+    /// 是否属于同一分片。如果不一致，返回 `QueryErrorReport { category: ShardConflict }`。
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use dbnexus::ShardRouter;
+    ///
+    /// # async fn example(router: ShardRouter) {
+    /// let (session, shard_id) = router.get_session_for_shard_with_id("user_42", "admin").await.unwrap();
+    /// // 验证查询的 shard_key 与 session 绑定的分片一致
+    /// router.enforce_shard_binding(shard_id, "user_42").expect("same shard");
+    /// router.enforce_shard_binding(shard_id, "user_99").expect_err("different shard");
+    /// # }
+    /// ```
+    pub fn enforce_shard_binding(
+        &self,
+        expected_shard_id: u32,
+        requested_shard_key: &str,
+    ) -> Result<(), crate::common::error::QueryErrorReport> {
+        let actual_shard_id = self.shard_id_for_key(requested_shard_key);
+        if actual_shard_id == expected_shard_id {
+            Ok(())
+        } else {
+            Err(crate::common::error::QueryErrorReport::new(
+                crate::common::error::ErrorCategory::ShardConflict,
+                format!(
+                    "Cross-shard query detected: shard_key '{}' maps to shard {}, but session is bound to shard {}",
+                    requested_shard_key, actual_shard_id, expected_shard_id
+                ),
+                "Route the query to the shard that owns the shard_key, or use a separate session per shard",
+            ))
+        }
+    }
+
     /// 获取所有已初始化的分片 ID
     pub fn initialized_shards(&self) -> Vec<u32> {
         self.pools.keys().cloned().collect()

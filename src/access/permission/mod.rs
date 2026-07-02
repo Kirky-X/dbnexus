@@ -18,6 +18,7 @@ pub mod advanced;
 pub mod rbac;
 
 mod context;
+pub mod cache;
 mod provider;
 mod rate_limiter;
 mod stats;
@@ -41,6 +42,9 @@ pub use stats::{CacheStats, PermissionCheckStats, PermissionCheckStatsSnapshot};
 
 // 从 rate_limiter.rs 重导出
 pub use rate_limiter::RateLimiter;
+
+// 从 cache.rs 重导出（TTL + SWR 缓存，0.3.0 新增）
+pub use cache::{PermissionCache, PermissionCacheConfig};
 
 // 从 context.rs 重导出（需要 cache feature）
 #[cfg(feature = "cache")]

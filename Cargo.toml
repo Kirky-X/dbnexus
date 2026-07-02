@@ -323,6 +323,11 @@ path = "tests/sharding/integration/sharding_integration.rs"
 required-features = ["sharding"]
 
 [[test]]
+name = "shard_session_routing_tests"
+path = "tests/sharding/integration/shard_session_routing_tests.rs"
+required-features = ["sharding", "permission"]
+
+[[test]]
 name = "metrics_integration"
 path = "tests/metrics/integration/metrics_integration.rs"
 required-features = ["metrics"]
@@ -416,11 +421,22 @@ path = "tests/core/unit/config_unit_tests.rs"
 name = "core_common_types_tests"
 path = "tests/core/unit/common_types_tests.rs"
 
+# Core 单元测试 - 错误类型（DbError/PoolError/QueryErrorReport）
+[[test]]
+name = "error_unit_tests"
+path = "tests/core/unit/error_unit_tests.rs"
+
 # Domain 单元测试 - 权限模块（PermissionConfig、RolePolicy、MemoryPermissionProvider）
 [[test]]
 name = "domain_permission_tests"
 path = "tests/domain/permission_test.rs"
 required-features = ["permission"]
+
+# Permission 单元测试 - PermissionCache TTL + SWR（0.3.0 新增）
+[[test]]
+name = "permission_cache_ttl_tests"
+path = "tests/permission/unit/permission_cache_ttl_tests.rs"
+required-features = ["permission", "cache"]
 
 # Tracing 单元测试 - TracingGuard init/重复初始化安全/TracingError Display
 [[test]]
