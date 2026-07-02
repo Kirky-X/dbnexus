@@ -37,7 +37,11 @@ use tokio::sync::Mutex;
 /// 使用 Mutex 包装需要内部可变性的字段，支持 `&self` 方法签名
 struct SessionState {
     /// 事务对象（用于真实的事务管理）
-    transaction: Option<DatabaseTransaction>,
+    ///
+    /// v0.3.0 性能优化：使用 `Arc<DatabaseTransaction>` 而非 `DatabaseTransaction`，
+    /// 因为 sea-orm 的 `DatabaseTransaction` 未实现 `Clone`，使用 `Arc` 包装后
+    /// 可在 `execute_raw` 中短锁 clone 后锁外执行 async DB 操作，避免持锁 await。
+    transaction: Option<Arc<DatabaseTransaction>>,
 
     /// 最后写操作时间（用于读写分离）
     last_write: Option<Instant>,
@@ -133,49 +137,100 @@ impl Session {
     }
 
     /// 开始事务
+    ///
+    /// v0.3.0 性能优化：短锁模式，避免持锁期间 async DB 调用。
+    /// 流程：短锁检查 → 锁外 begin → 短锁写入（含并发冲突处理）
     pub async fn begin_transaction(&self) -> Result<(), DbError> {
-        let mut state = self.state.lock().await;
-        if state.transaction.is_some() {
-            return Err(DbError::Transaction("Already in transaction".to_string()));
+        // 短锁：检查是否已在事务中
+        {
+            let state = self.state.lock().await;
+            if state.transaction.is_some() {
+                return Err(DbError::Transaction("Already in transaction".to_string()));
+            }
         }
 
+        // 锁外：执行 async DB 操作（避免持锁 await 阻塞其他调用者）
         let conn = self.connection()?;
-
         let transaction = conn
             .begin()
             .await
             .map_err(|e| DbError::Transaction(format!("Failed to begin transaction: {}", e)))?;
 
-        state.transaction = Some(transaction);
+        // 短锁：写入 transaction（含并发冲突处理）
+        let mut state = self.state.lock().await;
+        if state.transaction.is_some() {
+            // 并发冲突：两次锁之间有其他调用已开始事务，回滚新创建的事务
+            let _ = transaction.rollback().await;
+            return Err(DbError::Transaction(
+                "Already in transaction (concurrent begin detected)".to_string(),
+            ));
+        }
+        state.transaction = Some(Arc::new(transaction));
         Ok(())
     }
 
     /// 提交事务
+    ///
+    /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 commit。
+    ///
+    /// # 并发安全
+    ///
+    /// 如果在 commit 时有其他查询正在执行（持有 transaction 的 Arc clone），
+    /// `Arc::try_unwrap` 会失败并返回错误。这是预期行为：用户不应在查询执行中提交事务。
     pub async fn commit(&self) -> Result<(), DbError> {
-        let mut state = self.state.lock().await;
-        let transaction = state
-            .transaction
-            .take()
-            .ok_or_else(|| DbError::Transaction("No active transaction to commit".to_string()))?;
+        // 短锁：take transaction
+        let transaction_arc = {
+            let mut state = self.state.lock().await;
+            state
+                .transaction
+                .take()
+                .ok_or_else(|| DbError::Transaction("No active transaction to commit".to_string()))?
+        };
+
+        // 锁外：try_unwrap 解包 Arc（如果有并发查询持有引用，会失败）
+        let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
+            DbError::Transaction("Cannot commit: transaction is in use by a concurrent query".to_string())
+        })?;
+
+        // 锁外：执行 async commit（commit 消耗 self）
         transaction
             .commit()
             .await
             .map_err(|e| DbError::Transaction(e.to_string()))?;
+
+        // 短锁：清除 last_write
+        let mut state = self.state.lock().await;
         state.last_write = None;
         Ok(())
     }
 
     /// 回滚事务
+    ///
+    /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 rollback。
+    ///
+    /// # 并发安全
+    ///
+    /// 如果在 rollback 时有其他查询正在执行（持有 transaction 的 Arc clone），
+    /// `Arc::try_unwrap` 会失败并返回错误。这是预期行为：用户不应在查询执行中回滚事务。
     pub async fn rollback(&self) -> Result<(), DbError> {
-        let mut state = self.state.lock().await;
-        if state.transaction.is_none() {
-            return Err(DbError::Transaction("Not in transaction".to_string()));
-        }
+        // 短锁：take transaction
+        let transaction_arc = {
+            let mut state = self.state.lock().await;
+            if state.transaction.is_none() {
+                return Err(DbError::Transaction("Not in transaction".to_string()));
+            }
+            state
+                .transaction
+                .take()
+                .ok_or_else(|| DbError::Transaction("No active transaction to rollback".to_string()))?
+        };
 
-        let transaction = state
-            .transaction
-            .take()
-            .ok_or_else(|| DbError::Transaction("No active transaction to rollback".to_string()))?;
+        // 锁外：try_unwrap 解包 Arc
+        let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
+            DbError::Transaction("Cannot rollback: transaction is in use by a concurrent query".to_string())
+        })?;
+
+        // 锁外：执行 async rollback（rollback 消耗 self）
         transaction
             .rollback()
             .await
@@ -286,7 +341,12 @@ impl Session {
                 }
             }
 
-            if let Some(tx) = self.state.lock().await.transaction.as_ref() {
+            // v0.3.0 性能优化：短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
+            let tx_opt: Option<Arc<DatabaseTransaction>> = {
+                let state = self.state.lock().await;
+                state.transaction.clone()
+            };
+            if let Some(tx) = tx_opt {
                 return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
             }
 
