@@ -235,6 +235,7 @@ impl Session {
     }
 
     /// 执行原始 SQL（带权限检查）
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(db.role = %self.role)))]
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
@@ -359,6 +360,7 @@ impl Session {
     }
 
     /// 执行 SQL（带权限检查和操作类型）
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(db.role = %self.role)))]
     pub async fn execute(&self, sql: &str) -> DbResult<ExecResult> {
         let start = Instant::now();
 
@@ -405,6 +407,7 @@ impl Session {
 
     /// 执行 SQL 并指定操作类型
     #[cfg(feature = "permission")]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, operation), fields(db.role = %self.role)))]
     pub async fn execute_with_operation(&self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
         let start = Instant::now();
 
