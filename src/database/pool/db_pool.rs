@@ -678,9 +678,12 @@ impl DbPool {
     /// 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
     ///
     /// 并行启动 `min_connections` 个建连任务，每个任务带 `warmup_timeout` 超时
-    /// 和 `warmup_retries` 次重试。失败的任务被静默丢弃（与原 inline 行为一致）。
+    /// 和 `warmup_retries` 次重试。
     ///
-    /// 当前实现总是返回 `Ok(())`，保留原 warmup 块不向上抛错的行为。
+    /// **失败语义（v0.3.0 修复）**：
+    /// - 全部失败：返回 `Err`（第一个错误），避免静默成功
+    /// - 部分失败：返回 `Ok`，warn 日志记录失败数量
+    /// - 全部成功：返回 `Ok`
     #[cfg(feature = "pool-warmup")]
     async fn warmup_connections(&self) -> DbResult<()> {
         let initial_connections = self.inner.config.min_connections;
@@ -723,9 +726,36 @@ impl DbPool {
         // 并行执行所有连接创建任务
         let results = futures::future::join_all(connection_tasks).await;
 
-        for conn in results.into_iter().flatten() {
-            self.inner.idle_connections.lock().await.push(conn);
-            self.inner.total_count.fetch_add(1, Ordering::SeqCst);
+        // 统计成功/失败（规则 12：失败必须显性化，不可静默丢弃）
+        let mut success_count = 0usize;
+        let mut errors: Vec<DbError> = Vec::new();
+
+        for result in results {
+            match result {
+                Ok(conn) => {
+                    self.inner.idle_connections.lock().await.push(conn);
+                    self.inner.total_count.fetch_add(1, Ordering::SeqCst);
+                    success_count += 1;
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if success_count == 0 && initial_connections > 0 {
+            // 全部失败：返回第一个错误（显性化失败，避免静默成功）
+            return Err(errors.into_iter().next().unwrap_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+            }));
+        }
+
+        if !errors.is_empty() {
+            // 部分失败：warn 日志记录（显性化，但不阻断初始化）
+            eprintln!(
+                "[warn] dbnexus::pool::warmup: warmup_connections partially failed: {}/{} connections created, {} errors",
+                success_count,
+                initial_connections,
+                errors.len()
+            );
         }
 
         Ok(())
