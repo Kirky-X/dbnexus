@@ -9,4 +9,4 @@
 
 pub mod error;
 
-pub use error::{DbNexusError, DbNexusResult};
+pub use error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};

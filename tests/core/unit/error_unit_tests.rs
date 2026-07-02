@@ -448,3 +448,179 @@ fn test_all_errors_debug_impl() {
         assert!(!debug.is_empty());
     }
 }
+
+// ============================================================================
+// QueryErrorReport 测试（v0.3.0 新增）
+// ============================================================================
+
+use dbnexus::{ErrorCategory, QueryErrorReport};
+
+/// TEST-U-ERR-001: ErrorCategory Display 应输出 PascalCase 类别名
+#[test]
+fn test_error_category_display() {
+    assert_eq!(ErrorCategory::Permission.to_string(), "Permission");
+    assert_eq!(ErrorCategory::InjectionRisk.to_string(), "InjectionRisk");
+    assert_eq!(ErrorCategory::SyntaxError.to_string(), "SyntaxError");
+    assert_eq!(ErrorCategory::ShardConflict.to_string(), "ShardConflict");
+}
+
+/// TEST-U-ERR-002: ErrorCategory 应支持 Clone/Copy/PartialEq/Eq
+#[test]
+fn test_error_category_traits() {
+    let a = ErrorCategory::Permission;
+    let b = a; // Copy
+    assert_eq!(a, b); // PartialEq + Eq
+    let c = b.clone(); // Clone
+    assert_eq!(a, c);
+}
+
+/// TEST-U-ERR-003: QueryErrorReport::new 应构造带空 table/operation 的报告
+#[test]
+fn test_query_error_report_new_basic() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::InjectionRisk,
+        "UNION-based injection detected",
+        "Use parameterized queries",
+    );
+    assert_eq!(report.category, ErrorCategory::InjectionRisk);
+    assert_eq!(report.message, "UNION-based injection detected");
+    assert_eq!(report.suggestion, "Use parameterized queries");
+    assert!(report.table.is_none());
+    assert!(report.operation.is_none());
+}
+
+/// TEST-U-ERR-004: with_table/with_operation 链式构造应正确设置字段
+#[test]
+fn test_query_error_report_builder_chaining() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::Permission,
+        "role lacks DELETE permission",
+        "Grant DELETE on the table to the role",
+    )
+    .with_table("orders")
+    .with_operation("DELETE");
+
+    assert_eq!(report.table.as_deref(), Some("orders"));
+    assert_eq!(report.operation.as_deref(), Some("DELETE"));
+}
+
+/// TEST-U-ERR-005: Display 应输出简化格式（无可选字段）
+#[test]
+fn test_query_error_report_display_minimal() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::ShardConflict,
+        "cross-shard query detected",
+        "Route the query to a single shard",
+    );
+    let display = format!("{report}");
+    assert_eq!(
+        display,
+        "[ShardConflict] cross-shard query detected\nSuggestion: Route the query to a single shard"
+    );
+}
+
+/// TEST-U-ERR-006: Display 应输出完整格式（含 table 和 operation）
+#[test]
+fn test_query_error_report_display_full() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::SyntaxError,
+        "near \"FROM\": syntax error",
+        "Check the SQL syntax near the FROM clause",
+    )
+    .with_table("users")
+    .with_operation("SELECT");
+    let display = format!("{report}");
+    assert_eq!(
+        display,
+        "[SyntaxError] near \"FROM\": syntax error\nSuggestion: Check the SQL syntax near the FROM clause\nTable: users\nOperation: SELECT"
+    );
+}
+
+/// TEST-U-ERR-007: Display 仅含 table 时不应输出 Operation 行
+#[test]
+fn test_query_error_report_display_table_only() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::Permission,
+        "denied",
+        "grant access",
+    )
+    .with_table("accounts");
+    let display = format!("{report}");
+    assert!(display.contains("Table: accounts"));
+    assert!(!display.contains("Operation:"));
+}
+
+/// TEST-U-ERR-008: From<DbNexusError> 应将 UnsupportedDatabaseScheme 映射为 SyntaxError
+#[test]
+fn test_query_error_report_from_unsupported_scheme() {
+    use dbnexus::DbNexusError;
+    let err = DbNexusError::UnsupportedDatabaseScheme("ftp://localhost".to_string());
+    let report = QueryErrorReport::from(err);
+    assert_eq!(report.category, ErrorCategory::SyntaxError);
+    assert!(report.message.contains("ftp://localhost"));
+    assert!(report.suggestion.contains("sqlite"));
+    assert!(report.suggestion.contains("duckdb"));
+}
+
+/// TEST-U-ERR-009: From<DbNexusError> 应将 Permission 错误映射为 Permission 类别
+#[cfg(feature = "permission")]
+#[test]
+fn test_query_error_report_from_permission_error() {
+    use dbnexus::DbNexusError;
+    let perm_err = dbnexus::foundation::error::PermissionError::Denied {
+        resource: "users".to_string(),
+        operation: "DELETE".to_string(),
+    };
+    let err: DbNexusError = perm_err.into();
+    let report = QueryErrorReport::from(err);
+    assert_eq!(report.category, ErrorCategory::Permission);
+    assert!(report.message.contains("users"));
+    assert!(report.message.contains("DELETE"));
+}
+
+/// TEST-U-ERR-010: QueryErrorReport 应实现 std::error::Error
+#[test]
+fn test_query_error_report_implements_error_trait() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::InjectionRisk,
+        "test",
+        "suggestion",
+    );
+    // 可作为 trait object 使用
+    let err: &dyn std::error::Error = &report;
+    assert!(err.source().is_none());
+    assert!(!err.to_string().is_empty());
+}
+
+/// TEST-U-ERR-011: Debug 实现应输出非空字符串
+#[test]
+fn test_query_error_report_debug() {
+    let report = QueryErrorReport::new(
+        ErrorCategory::ShardConflict,
+        "conflict",
+        "reroute",
+    )
+    .with_table("t")
+    .with_operation("INSERT");
+    let debug = format!("{report:?}");
+    assert!(debug.contains("ShardConflict"));
+    assert!(debug.contains("conflict"));
+}
+
+/// TEST-U-ERR-012: Clone 实现应产生相等副本
+#[test]
+fn test_query_error_report_clone() {
+    let original = QueryErrorReport::new(
+        ErrorCategory::SyntaxError,
+        "msg",
+        "sug",
+    )
+    .with_table("t")
+    .with_operation("op");
+    let cloned = original.clone();
+    assert_eq!(original.category, cloned.category);
+    assert_eq!(original.message, cloned.message);
+    assert_eq!(original.suggestion, cloned.suggestion);
+    assert_eq!(original.table, cloned.table);
+    assert_eq!(original.operation, cloned.operation);
+}
