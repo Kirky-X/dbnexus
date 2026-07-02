@@ -120,6 +120,9 @@ impl SensitiveMasker {
     }
 
     /// 邮箱脱敏：ab***@example.com
+    ///
+    /// 使用 `chars()` 而非字节切片处理本地部分，确保非 ASCII 字符（中文、emoji 等）
+    /// 不会触发字节边界 panic。
     fn mask_email(email: &str) -> SensitiveResult<String> {
         let parts: Vec<&str> = email.split('@').collect();
 
@@ -134,10 +137,11 @@ impl SensitiveMasker {
             return Err(SensitiveError::InvalidInput("Email local part is empty".to_string()));
         }
 
-        // 保留前2个字符
-        let prefix_len = local.len().min(2);
-        let prefix = &local[..prefix_len];
-        let mask_count = local.len() - prefix_len;
+        // 使用 chars() 安全处理 Unicode（避免非 ASCII 字节切片 panic）
+        let local_chars: Vec<char> = local.chars().collect();
+        let prefix_len = local_chars.len().min(2);
+        let prefix: String = local_chars[..prefix_len].iter().collect();
+        let mask_count = local_chars.len() - prefix_len;
 
         Ok(format!("{}{}@{}", prefix, "*".repeat(mask_count.max(3)), domain))
     }
