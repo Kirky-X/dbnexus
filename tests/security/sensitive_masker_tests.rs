@@ -86,6 +86,33 @@ fn test_mask_credit_card() {
     assert!(masked.contains("*"), "should contain asterisks");
 }
 
+/// TEST-MASK-008: Unicode 邮箱本地部分不 panic（回归测试）
+///
+/// `mask_email` 原实现用 `local.len()`（字节数）和 `&local[..prefix_len]`（字节切片），
+/// 对非 ASCII 本地部分（如中文、emoji）按字节切片会 panic。
+/// 修复后应使用 `chars()` 安全处理 Unicode。
+#[test]
+fn test_mask_email_unicode_local_part() {
+    // 中文本地部分（每个字符 3 字节）
+    let result = SensitiveMasker::mask("测试@example.com", MaskType::Email);
+    assert!(result.is_ok(), "unicode email should succeed: {:?}", result.err());
+    let masked = result.unwrap();
+    assert!(masked.ends_with("@example.com"), "domain should be retained");
+    assert!(masked.contains('*'), "should contain asterisks");
+
+    // 单字符中文本地部分
+    let result = SensitiveMasker::mask("测@test.com", MaskType::Email);
+    assert!(
+        result.is_ok(),
+        "single unicode char email should succeed: {:?}",
+        result.err()
+    );
+
+    // emoji 本地部分（4 字节字符）
+    let result = SensitiveMasker::mask("😀@emoji.com", MaskType::Email);
+    assert!(result.is_ok(), "emoji email should succeed: {:?}", result.err());
+}
+
 /// TEST-MASK-007: 自定义脱敏
 #[test]
 fn test_mask_custom() {
