@@ -268,6 +268,14 @@ impl LatencyHistogram {
             buckets: bucket_stats,
         }
     }
+
+    /// 原子重置所有桶计数（v0.3.0 性能优化：支持无锁 reset）
+    pub fn reset(&self) {
+        for c in &self.counts {
+            c.store(0, Ordering::SeqCst);
+        }
+        self.total.store(0, Ordering::SeqCst);
+    }
 }
 
 /// 直方图桶统计
@@ -521,10 +529,10 @@ pub struct MetricsCollector {
     /// 查询错误计数
     query_errors: Arc<AtomicU64>,
 
-    /// 连接获取指标
-    connection_acquire: Arc<RwLock<ConnectionAcquireMetricsInner>>,
-    /// 事务指标
-    transaction: Arc<RwLock<TransactionMetricsInner>>,
+    /// 连接获取指标（v0.3.0：移除 RwLock，内部全为 AtomicU64，无锁访问）
+    connection_acquire: Arc<ConnectionAcquireMetricsInner>,
+    /// 事务指标（v0.3.0：移除 RwLock，内部全为 AtomicU64，无锁访问）
+    transaction: Arc<TransactionMetricsInner>,
 
     /// 慢查询记录（最近 N 条）
     slow_queries: Arc<RwLock<VecDeque<SlowQueryRecord>>>,
@@ -691,6 +699,19 @@ impl ConnectionAcquireMetricsInner {
             acquire_histogram: self.acquire_duration.stats(),
         }
     }
+
+    /// 重置所有计数器（v0.3.0 性能优化：移除 RwLock 后用于替代 `*inner = Inner::new()`）
+    fn reset(&self) {
+        self.total_attempts.store(0, Ordering::SeqCst);
+        self.success_count.store(0, Ordering::SeqCst);
+        self.timeout_count.store(0, Ordering::SeqCst);
+        self.failure_count.store(0, Ordering::SeqCst);
+        self.slow_acquires.store(0, Ordering::SeqCst);
+        self.timeout_warn.store(0, Ordering::SeqCst);
+        self.timeout_error.store(0, Ordering::SeqCst);
+        self.timeout_critical.store(0, Ordering::SeqCst);
+        self.acquire_duration.reset();
+    }
 }
 
 struct TransactionMetricsInner {
@@ -739,6 +760,14 @@ impl TransactionMetricsInner {
             },
         }
     }
+
+    /// 重置所有事务计数器（v0.3.0 性能优化：移除 RwLock 后用于替代 `*inner = Inner::new()`）
+    fn reset(&self) {
+        self.total_transactions.store(0, Ordering::SeqCst);
+        self.commit_count.store(0, Ordering::SeqCst);
+        self.rollback_count.store(0, Ordering::SeqCst);
+        self.failure_count.store(0, Ordering::SeqCst);
+    }
 }
 
 impl Default for MetricsCollector {
@@ -757,8 +786,8 @@ impl MetricsCollector {
             pool_idle: Arc::new(AtomicU64::new(0)),
             connection_errors: Arc::new(AtomicU64::new(0)),
             query_errors: Arc::new(AtomicU64::new(0)),
-            connection_acquire: Arc::new(RwLock::new(ConnectionAcquireMetricsInner::new())),
-            transaction: Arc::new(RwLock::new(TransactionMetricsInner::new())),
+            connection_acquire: Arc::new(ConnectionAcquireMetricsInner::new()),
+            transaction: Arc::new(TransactionMetricsInner::new()),
             slow_queries: Arc::new(RwLock::new(VecDeque::new())),
             slow_query_config: Arc::new(RwLock::new(SlowQueryConfig {
                 threshold_ms: 1000,
@@ -937,57 +966,57 @@ impl MetricsCollector {
 
     /// 记录连接获取成功
     pub fn record_connection_acquire_success(&self) {
-        self.connection_acquire.write().record_success();
+        self.connection_acquire.record_success();
     }
 
     /// 记录连接获取超时
     pub fn record_connection_acquire_timeout(&self) {
-        self.connection_acquire.write().record_timeout();
+        self.connection_acquire.record_timeout();
     }
 
     /// 记录连接获取失败
     pub fn record_connection_acquire_failure(&self) {
-        self.connection_acquire.write().record_failure();
+        self.connection_acquire.record_failure();
     }
 
     /// 记录连接获取延迟（成功时调用）
     pub fn record_connection_acquire_duration(&self, duration: Duration) {
-        self.connection_acquire.write().record_acquire_duration(duration);
+        self.connection_acquire.record_acquire_duration(duration);
     }
 
     /// 记录分级超时（根据耗时判断级别）
     pub fn record_connection_timeout_level(&self, elapsed_ms: u64) {
-        self.connection_acquire.write().record_timeout_level(elapsed_ms);
+        self.connection_acquire.record_timeout_level(elapsed_ms);
     }
 
     /// 获取连接获取统计
     pub fn connection_acquire_stats(&self) -> ConnectionAcquireStats {
-        self.connection_acquire.read().stats()
+        self.connection_acquire.stats()
     }
 
     /// 记录事务提交
     pub fn record_transaction_commit(&self) {
-        self.transaction.write().record_commit();
+        self.transaction.record_commit();
     }
 
     /// 记录事务回滚
     pub fn record_transaction_rollback(&self) {
-        self.transaction.write().record_rollback();
+        self.transaction.record_rollback();
     }
 
     /// 记录事务失败
     pub fn record_transaction_failure(&self) {
-        self.transaction.write().record_failure();
+        self.transaction.record_failure();
     }
 
     /// 获取事务统计
     pub fn transaction_stats(&self) -> TransactionStats {
-        self.transaction.read().stats()
+        self.transaction.stats()
     }
 
     /// 获取事务统计（内部方法，用于 trait 实现）
     pub fn transaction_stats_inner(&self) -> TransactionStats {
-        self.transaction.read().stats()
+        self.transaction.stats()
     }
 
     /// 获取运行时长
@@ -1013,11 +1042,9 @@ impl MetricsCollector {
         let mut slow = self.slow_queries.write();
         slow.clear();
 
-        let mut acquire = self.connection_acquire.write();
-        *acquire = ConnectionAcquireMetricsInner::new();
-
-        let mut txn = self.transaction.write();
-        *txn = TransactionMetricsInner::new();
+        // v0.3.0：移除 RwLock 后改用原子 reset() 替代整体替换
+        self.connection_acquire.reset();
+        self.transaction.reset();
     }
 
     /// 重置所有指标（内部方法，用于 trait 实现）
@@ -1580,5 +1607,79 @@ mod tests {
         assert_eq!(slow.len(), 1);
         assert_eq!(slow[0].query_type, "SELECT");
         assert_eq!(slow[0].duration_ms, 100);
+    }
+
+    /// TEST-U-051: 无锁 reset 验证（v0.3.0 性能优化）
+    ///
+    /// 验证移除 RwLock 后 reset() 仍能正确清零所有计数器。
+    #[test]
+    fn test_reset_clears_all_metrics() {
+        let collector = MetricsCollector::new();
+
+        // 填充各类指标
+        collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
+        collector.record_query("INSERT", Duration::from_millis(50), false, None);
+        collector.record_connection_acquire_success();
+        collector.record_connection_acquire_timeout();
+        collector.record_connection_acquire_duration(Duration::from_millis(5));
+        collector.record_transaction_commit();
+        collector.record_transaction_rollback();
+        collector.record_connection_error();
+        collector.update_pool_status(10, 5, 5);
+
+        // 验证填充
+        assert!(collector.total_throughput().total_operations > 0);
+        assert!(collector.connection_acquire_stats().total_attempts > 0);
+        assert!(collector.transaction_stats().total_transactions > 0);
+        assert_eq!(collector.connection_error_count(), 1);
+        assert_eq!(collector.pool_status().total, 10);
+
+        // 执行 reset
+        collector.reset();
+
+        // 验证所有指标归零
+        assert_eq!(collector.total_throughput().total_operations, 0);
+        assert_eq!(collector.connection_acquire_stats().total_attempts, 0);
+        assert_eq!(collector.transaction_stats().total_transactions, 0);
+        assert_eq!(collector.connection_error_count(), 0);
+        assert_eq!(collector.pool_status().total, 0);
+        assert_eq!(collector.pool_status().active, 0);
+        assert_eq!(collector.pool_status().idle, 0);
+        assert!(collector.slow_queries().is_empty());
+    }
+
+    /// TEST-U-052: 无锁并发访问验证（v0.3.0 性能优化）
+    ///
+    /// 验证移除 RwLock 后多线程并发记录指标不会 panic 或数据竞争。
+    #[test]
+    fn test_concurrent_metrics_access() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let collector = Arc::new(MetricsCollector::new());
+        let mut handles = Vec::new();
+
+        // 4 个线程并发写 connection_acquire 和 transaction
+        for _ in 0..4 {
+            let c = collector.clone();
+            handles.push(thread::spawn(move || {
+                for _ in 0..1000 {
+                    c.record_connection_acquire_success();
+                    c.record_transaction_commit();
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // 验证总计数（无锁并发应准确累加）
+        let acquire_stats = collector.connection_acquire_stats();
+        let txn_stats = collector.transaction_stats();
+        assert_eq!(acquire_stats.success_count, 4000);
+        assert_eq!(acquire_stats.total_attempts, 4000);
+        assert_eq!(txn_stats.commit_count, 4000);
+        assert_eq!(txn_stats.total_transactions, 4000);
     }
 }
