@@ -219,23 +219,53 @@ pub enum DatabaseType {
     /// SQLite
     #[default]
     Sqlite,
+    /// DuckDB（嵌入式分析型数据库，0.3.0 新增）
+    DuckDb,
 }
 
 impl DatabaseType {
     /// 从 URL 解析数据库类型
-    pub fn from_url(url: &str) -> Self {
-        let url = url.to_lowercase();
-        if url.starts_with("postgres") || url.starts_with("postgresql") {
-            DatabaseType::Postgres
-        } else if url.starts_with("mysql") {
-            DatabaseType::MySql
-        } else {
-            DatabaseType::Sqlite
+    ///
+    /// 使用 `url` crate 解析连接串，支持 `sqlite`/`postgres`/`postgresql`/`mysql`/`duckdb` scheme。
+    /// 未知 scheme 返回 `Err(DbNexusError::UnsupportedDatabaseScheme)`。
+    ///
+    /// # Errors
+    ///
+    /// - URL 解析失败（无 scheme）
+    /// - 未知数据库协议
+    pub fn from_url(url: &str) -> Result<Self, crate::common::error::DbNexusError> {
+        // 处理 SQLite 特殊格式 sqlite::memory:
+        let lower = url.to_lowercase();
+        if lower == "sqlite::memory:" || lower.starts_with("sqlite://") {
+            return Ok(DatabaseType::Sqlite);
+        }
+        if lower.starts_with("duckdb:") {
+            return Ok(DatabaseType::DuckDb);
+        }
+
+        let parsed = url::Url::parse(url).map_err(|_| {
+            crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!(
+                "failed to parse URL: {url}"
+            ))
+        })?;
+
+        match parsed.scheme() {
+            "sqlite" => Ok(DatabaseType::Sqlite),
+            "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
+            "mysql" => Ok(DatabaseType::MySql),
+            "duckdb" => Ok(DatabaseType::DuckDb),
+            other => Err(crate::common::error::DbNexusError::UnsupportedDatabaseScheme(
+                format!("'{other}' is not a supported database scheme"),
+            )),
         }
     }
 
     /// 从 URL 解析数据库类型（别名）
-    pub fn parse_database_type(url: &str) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// 同 [`from_url`](Self::from_url)
+    pub fn parse_database_type(url: &str) -> Result<Self, crate::common::error::DbNexusError> {
         Self::from_url(url)
     }
 
@@ -245,10 +275,31 @@ impl DatabaseType {
             DatabaseType::Postgres => "postgres",
             DatabaseType::MySql => "mysql",
             DatabaseType::Sqlite => "sqlite",
+            DatabaseType::DuckDb => "duckdb",
         }
     }
 
+    /// 检查是否为嵌入式数据库（SQLite / DuckDB）
+    ///
+    /// 0.3.0 新增：取代 `is_real_database()` 的二分法，更清晰地表达数据库部署模式。
+    /// 嵌入式数据库运行在进程内，无需独立服务器；服务器端数据库（Postgres/MySQL）需要独立进程。
+    pub fn is_embedded(&self) -> bool {
+        matches!(self, DatabaseType::Sqlite | DatabaseType::DuckDb)
+    }
+
+    /// 检查是否为服务器端数据库（PostgreSQL / MySQL）
+    ///
+    /// 0.3.0 新增：与 `is_embedded()` 互补。
+    pub fn is_server_side(&self) -> bool {
+        matches!(self, DatabaseType::Postgres | DatabaseType::MySql)
+    }
+
     /// 检查是否为真实数据库（非 SQLite 内存数据库）
+    ///
+    /// # Deprecated
+    ///
+    /// 此方法语义模糊（"真实"数据库 vs "内存"数据库 vs "嵌入式"数据库），
+    /// 0.3.0 推荐使用 [`is_embedded()`](Self::is_embedded) 或 [`is_server_side()`](Self::is_server_side) 替代。
     pub fn is_real_database(&self) -> bool {
         matches!(self, DatabaseType::Postgres | DatabaseType::MySql)
     }
@@ -472,7 +523,11 @@ impl DbConfig {
     }
 
     /// 获取数据库类型
-    pub fn database_type(&self) -> DatabaseType {
+    ///
+    /// # Errors
+    ///
+    /// URL 解析失败或未知协议时返回 `DbNexusError::UnsupportedDatabaseScheme`
+    pub fn database_type(&self) -> Result<DatabaseType, crate::common::error::DbNexusError> {
         DatabaseType::from_url(&self.url)
     }
 
@@ -634,32 +689,48 @@ mod tests {
 
     #[test]
     fn test_database_type_from_url_postgres() {
-        assert_eq!(DatabaseType::from_url("postgres://localhost/db"), DatabaseType::Postgres);
+        assert_eq!(DatabaseType::from_url("postgres://localhost/db").unwrap(), DatabaseType::Postgres);
         assert_eq!(
-            DatabaseType::from_url("postgresql://localhost/db"),
+            DatabaseType::from_url("postgresql://localhost/db").unwrap(),
             DatabaseType::Postgres
         );
-        // 大小写不敏感
-        assert_eq!(DatabaseType::from_url("POSTGRES://localhost/db"), DatabaseType::Postgres);
+        // 大小写不敏感（url crate 自动处理 scheme 小写化）
+        assert_eq!(DatabaseType::from_url("POSTGRES://localhost/db").unwrap(), DatabaseType::Postgres);
     }
 
     #[test]
     fn test_database_type_from_url_mysql() {
-        assert_eq!(DatabaseType::from_url("mysql://localhost/db"), DatabaseType::MySql);
-        assert_eq!(DatabaseType::from_url("MYSQL://localhost/db"), DatabaseType::MySql);
+        assert_eq!(DatabaseType::from_url("mysql://localhost/db").unwrap(), DatabaseType::MySql);
+        assert_eq!(DatabaseType::from_url("MYSQL://localhost/db").unwrap(), DatabaseType::MySql);
     }
 
     #[test]
-    fn test_database_type_from_url_sqlite_default() {
-        assert_eq!(DatabaseType::from_url("sqlite::memory:"), DatabaseType::Sqlite);
-        assert_eq!(DatabaseType::from_url("unknown://foo"), DatabaseType::Sqlite);
-        assert_eq!(DatabaseType::from_url(""), DatabaseType::Sqlite);
+    fn test_database_type_from_url_sqlite() {
+        assert_eq!(DatabaseType::from_url("sqlite::memory:").unwrap(), DatabaseType::Sqlite);
+        assert_eq!(DatabaseType::from_url("sqlite://test.db").unwrap(), DatabaseType::Sqlite);
+    }
+
+    #[test]
+    fn test_database_type_from_url_duckdb() {
+        assert_eq!(DatabaseType::from_url("duckdb::memory:").unwrap(), DatabaseType::DuckDb);
+        assert_eq!(DatabaseType::from_url("duckdb://test.db").unwrap(), DatabaseType::DuckDb);
+        assert_eq!(DatabaseType::from_url("duckdb:test.ddb").unwrap(), DatabaseType::DuckDb);
+    }
+
+    #[test]
+    fn test_database_type_from_url_unknown_scheme_returns_error() {
+        // 未知 scheme 现在返回错误（不再默认 SQLite）
+        assert!(DatabaseType::from_url("unknown://foo").is_err());
+        // 空字符串无法解析为 URL，返回错误
+        assert!(DatabaseType::from_url("").is_err());
+        // 无 scheme 的相对路径返回错误
+        assert!(DatabaseType::from_url("/path/to/db.db").is_err());
     }
 
     #[test]
     fn test_database_type_parse_database_type_alias() {
         assert_eq!(
-            DatabaseType::parse_database_type("mysql://x"),
+            DatabaseType::parse_database_type("mysql://x").unwrap(),
             DatabaseType::MySql
         );
     }
@@ -669,6 +740,23 @@ mod tests {
         assert_eq!(DatabaseType::Postgres.as_str(), "postgres");
         assert_eq!(DatabaseType::MySql.as_str(), "mysql");
         assert_eq!(DatabaseType::Sqlite.as_str(), "sqlite");
+        assert_eq!(DatabaseType::DuckDb.as_str(), "duckdb");
+    }
+
+    #[test]
+    fn test_database_type_is_embedded() {
+        assert!(DatabaseType::Sqlite.is_embedded());
+        assert!(DatabaseType::DuckDb.is_embedded());
+        assert!(!DatabaseType::Postgres.is_embedded());
+        assert!(!DatabaseType::MySql.is_embedded());
+    }
+
+    #[test]
+    fn test_database_type_is_server_side() {
+        assert!(DatabaseType::Postgres.is_server_side());
+        assert!(DatabaseType::MySql.is_server_side());
+        assert!(!DatabaseType::Sqlite.is_server_side());
+        assert!(!DatabaseType::DuckDb.is_server_side());
     }
 
     #[test]
@@ -676,6 +764,7 @@ mod tests {
         assert!(DatabaseType::Postgres.is_real_database());
         assert!(DatabaseType::MySql.is_real_database());
         assert!(!DatabaseType::Sqlite.is_real_database());
+        assert!(!DatabaseType::DuckDb.is_real_database());
     }
 
     #[test]
@@ -683,6 +772,7 @@ mod tests {
         assert_eq!(DatabaseType::Postgres.to_string(), "postgres");
         assert_eq!(DatabaseType::MySql.to_string(), "mysql");
         assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
+        assert_eq!(DatabaseType::DuckDb.to_string(), "duckdb");
     }
 
     #[test]
@@ -693,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_database_type_serde_round_trip() {
-        let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql];
+        let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql, DatabaseType::DuckDb];
         for original in cases {
             let json = serde_json::to_string(&original).expect("serialize should succeed");
             let restored: DatabaseType =
@@ -728,19 +818,19 @@ mod tests {
             url: "postgres://localhost/db".into(),
             ..Default::default()
         };
-        assert_eq!(cfg.database_type(), DatabaseType::Postgres);
+        assert_eq!(cfg.database_type().unwrap(), DatabaseType::Postgres);
 
         let cfg = DbConfig {
             url: "mysql://localhost/db".into(),
             ..Default::default()
         };
-        assert_eq!(cfg.database_type(), DatabaseType::MySql);
+        assert_eq!(cfg.database_type().unwrap(), DatabaseType::MySql);
 
         let cfg = DbConfig {
             url: "sqlite::memory:".into(),
             ..Default::default()
         };
-        assert_eq!(cfg.database_type(), DatabaseType::Sqlite);
+        assert_eq!(cfg.database_type().unwrap(), DatabaseType::Sqlite);
     }
 
     #[test]

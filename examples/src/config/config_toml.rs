@@ -64,7 +64,7 @@ default_ttl = 300
     println!("  - idle_timeout (s)  : {}", config.idle_timeout);
     println!("  - acquire_timeout(ms): {}", config.acquire_timeout);
     println!("  - admin_role        : {}", config.admin_role);
-    println!("  - database_type     : {}", config.database_type());
+    println!("  - database_type     : {}", config.database_type().unwrap());
 
     println!("\n💾 缓存配置:");
     println!("  - policy_cache_capacity : {}", config.cache_config.policy_cache_capacity);

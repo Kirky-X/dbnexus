@@ -125,6 +125,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
         };
 
         let applied_at_value = format_applied_at_for_backend(backend, applied_at);
@@ -172,6 +173,9 @@ impl MigrationExecutor {
                     query.expr_as(Expr::cust("CAST(applied_at AS CHAR)"), Alias::new("applied_at"));
                 }
                 DatabaseType::Sqlite => {
+                    query.column(Alias::new("applied_at"));
+                }
+                DatabaseType::DuckDb => {
                     query.column(Alias::new("applied_at"));
                 }
             }
@@ -249,6 +253,14 @@ impl MigrationExecutor {
                     file_path TEXT
                 );"
             }
+            DatabaseType::DuckDb => {
+                "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    file_path TEXT
+                );"
+            }
         };
 
         self.connection
@@ -288,6 +300,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
         };
 
         let insert_sql = build_migration_insert_sql(backend);
@@ -545,6 +558,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
         };
         let insert_sql = build_migration_insert_sql(backend);
         let applied_at_value = format_applied_at_for_backend(backend, applied_at);

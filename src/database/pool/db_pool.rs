@@ -35,8 +35,67 @@ use crate::observability::metrics::MetricsCollector;
 // 导入 Sea-ORM 的连接 trait
 use sea_orm::ConnectionTrait;
 
-/// 数据库连接类型
+/// 数据库连接类型（SeaORM 原始类型别名，保留用于向后兼容）
 pub type DatabaseConnection = sea_orm::DatabaseConnection;
+
+/// 统一数据库连接枚举（0.3.0 新增）
+///
+/// 支持 SeaORM（SQLite/PostgreSQL/MySQL）和 DuckDB 两种后端连接。
+/// `DbPool` 和 `Session` 通过此枚举统一管理不同后端的连接。
+#[derive(Clone)]
+pub enum DbConnection {
+    /// SeaORM 连接（SQLite/PostgreSQL/MySQL）
+    SeaOrm(DatabaseConnection),
+    /// DuckDB 嵌入式连接（duckdb feature）
+    #[cfg(feature = "duckdb")]
+    DuckDb(crate::database::pool::DuckDbConnection),
+}
+
+impl DbConnection {
+    /// 获取 SeaORM 连接引用，若为 DuckDB 则返回错误
+    pub fn as_sea_orm(&self) -> DbResult<&DatabaseConnection> {
+        match self {
+            DbConnection::SeaOrm(conn) => Ok(conn),
+            #[cfg(feature = "duckdb")]
+            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires SeaORM connection but got DuckDb".to_string(),
+            ))),
+        }
+    }
+
+    /// 获取 DuckDB 连接引用，若为 SeaORM 则返回错误
+    #[cfg(feature = "duckdb")]
+    pub fn as_duckdb(&self) -> DbResult<&crate::database::pool::DuckDbConnection> {
+        match self {
+            DbConnection::DuckDb(conn) => Ok(conn),
+            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires DuckDb connection but got SeaOrm".to_string(),
+            ))),
+        }
+    }
+
+    /// 判断是否为 DuckDB 连接
+    pub fn is_duckdb(&self) -> bool {
+        #[cfg(feature = "duckdb")]
+        {
+            matches!(self, DbConnection::DuckDb(_))
+        }
+        #[cfg(not(feature = "duckdb"))]
+        {
+            false
+        }
+    }
+}
+
+impl std::fmt::Debug for DbConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DbConnection::SeaOrm(_) => write!(f, "DbConnection::SeaOrm(..)"),
+            #[cfg(feature = "duckdb")]
+            DbConnection::DuckDb(conn) => write!(f, "DbConnection::DuckDb({conn:?})"),
+        }
+    }
+}
 
 /// 连接池管理器
 #[derive(Clone)]
@@ -53,7 +112,7 @@ pub(crate) struct DbPoolInner {
     connection_semaphore: Arc<Semaphore>,
 
     /// 空闲连接队列
-    idle_connections: AsyncMutex<Vec<DatabaseConnection>>,
+    idle_connections: AsyncMutex<Vec<DbConnection>>,
 
     /// 连接可用通知（替代忙等待）
     connection_available: Notify,
@@ -592,9 +651,30 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果连接失败，返回数据库错误
-    async fn create_connection(config: &DbConfig) -> DbResult<DatabaseConnection> {
-        let conn = sea_orm::Database::connect(&config.url).await?;
-        Ok(conn)
+    async fn create_connection(config: &DbConfig) -> DbResult<DbConnection> {
+        let db_type = config.database_type().map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("Invalid database URL: {e}")))
+        })?;
+
+        match db_type {
+            crate::foundation::config::DatabaseType::DuckDb => {
+                #[cfg(feature = "duckdb")]
+                {
+                    let conn = crate::database::pool::DuckDbConnection::new(&config.url)?;
+                    Ok(DbConnection::DuckDb(conn))
+                }
+                #[cfg(not(feature = "duckdb"))]
+                {
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(
+                        "DuckDB feature is not enabled".to_string(),
+                    )))
+                }
+            }
+            _ => {
+                let conn = sea_orm::Database::connect(&config.url).await?;
+                Ok(DbConnection::SeaOrm(conn))
+            }
+        }
     }
 
     /// 预创建最小连接数（并行创建以提高启动速度，带超时和重试）
@@ -668,27 +748,29 @@ impl DbPool {
     /// # Returns
     ///
     /// 如果连接有效返回 `true`，否则返回 `false`
-    pub async fn check_connection_health(&self, conn: &DatabaseConnection) -> bool {
-        let backend = Self::get_database_backend(&self.inner.config.url);
-
-        // 创建带超时的健康检查
-        let result = timeout(
-            Duration::from_secs(5),
-            conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
-        )
-        .await;
-
-        match result {
-            Ok(Ok(_)) => true,
-            Ok(Err(_e)) => false,
-            Err(_) => false,
+    pub async fn check_connection_health(&self, conn: &DbConnection) -> bool {
+        match conn {
+            DbConnection::SeaOrm(sea_conn) => {
+                let backend = Self::get_database_backend(&self.inner.config.url);
+                let result = timeout(
+                    Duration::from_secs(5),
+                    sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
+                )
+                .await;
+                matches!(result, Ok(Ok(_)))
+            }
+            #[cfg(feature = "duckdb")]
+            DbConnection::DuckDb(duck_conn) => {
+                let result = timeout(Duration::from_secs(5), duck_conn.health_check()).await;
+                matches!(result, Ok(Ok(_)))
+            }
         }
     }
 
     /// 获取数据库类型
     ///
     /// 根据数据库 URL 的协议部分解析数据库类型。
-    /// 支持的数据库类型包括 SQLite、PostgreSQL 和 MySQL。
+    /// 支持的数据库类型包括 SQLite、PostgreSQL、MySQL 和 DuckDB。
     ///
     /// # Arguments
     ///
@@ -700,7 +782,8 @@ impl DbPool {
     ///
     /// # Note
     ///
-    /// 如果 URL 无法识别，默认返回 SQLite 类型
+    /// 如果 URL 无法识别，默认返回 SQLite 类型。
+    /// DuckDB 连接不使用 SeaORM 后端，此方法仅用于 SeaORM 连接。
     fn get_database_backend(url: &str) -> sea_orm::DatabaseBackend {
         if url.starts_with("sqlite:") {
             sea_orm::DatabaseBackend::Sqlite
@@ -708,6 +791,9 @@ impl DbPool {
             sea_orm::DatabaseBackend::Postgres
         } else if url.starts_with("mysql:") {
             sea_orm::DatabaseBackend::MySql
+        } else if url.starts_with("duckdb:") {
+            // DuckDB 不使用 SeaORM 后端，映射到 Sqlite 以避免 panic
+            sea_orm::DatabaseBackend::Sqlite
         } else {
             sea_orm::DatabaseBackend::Sqlite
         }
@@ -731,34 +817,44 @@ impl DbPool {
     ///
     /// 返回元组 (有效连接列表, 无效连接数量)
     async fn validate_idle_connections(
-        idle: &mut Vec<DatabaseConnection>,
+        idle: &mut Vec<DbConnection>,
         config: &DbConfig,
-    ) -> (Vec<DatabaseConnection>, usize) {
+    ) -> (Vec<DbConnection>, usize) {
         let backend = Self::get_database_backend(&config.url);
 
         // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
-        let connections: Vec<DatabaseConnection> = std::mem::take(idle);
+        let connections: Vec<DbConnection> = std::mem::take(idle);
 
         // 并行执行所有健康检查
         let check_futures: Vec<_> = connections
             .into_iter()
             .map(|conn| async {
-                let is_valid = timeout(
-                    Duration::from_secs(2),
-                    conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
-                )
-                .await
-                .is_ok_and(|result| result.is_ok());
+                let is_valid = match &conn {
+                    DbConnection::SeaOrm(sea_conn) => {
+                        timeout(
+                            Duration::from_secs(2),
+                            sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
+                        )
+                        .await
+                        .is_ok_and(|result| result.is_ok())
+                    }
+                    #[cfg(feature = "duckdb")]
+                    DbConnection::DuckDb(duck_conn) => {
+                        timeout(Duration::from_secs(2), duck_conn.health_check())
+                            .await
+                            .is_ok_and(|result| result.is_ok())
+                    }
+                };
                 (conn, is_valid)
             })
             .collect();
 
-        let results: Vec<(DatabaseConnection, bool)> = futures::future::join_all(check_futures).await;
+        let results: Vec<(DbConnection, bool)> = futures::future::join_all(check_futures).await;
 
         // 分区为有效和无效连接（先计算 invalid_count，再转移所有权）
         let invalid_count = results.iter().filter(|(_, is_valid)| !*is_valid).count();
 
-        let valid_connections: Vec<DatabaseConnection> = results
+        let valid_connections: Vec<DbConnection> = results
             .into_iter()
             .filter_map(|(conn, is_valid)| if is_valid { Some(conn) } else { None })
             .collect();
@@ -946,7 +1042,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果获取连接超时（池耗尽）或创建连接失败，返回错误
-    async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
+    async fn acquire_connection(&self) -> DbResult<DbConnection> {
         // 步骤 0: 记录等待计数
         let waiters = self.inner.wait_count.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_max_waiters(waiters);
@@ -1066,7 +1162,7 @@ impl DbPool {
     ///
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
-    pub(crate) fn release_connection(&self, conn: DatabaseConnection) {
+    pub(crate) fn release_connection(&self, conn: DbConnection) {
         self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
         let inner = self.inner.clone();
 
@@ -1234,13 +1330,13 @@ impl DbPool {
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
         use crate::database::migration::MigrationExecutor;
 
-        let db_type = self.inner.config.database_type();
+        let db_type = self.inner.config.database_type().map_err(|e| DbError::Config(e.to_string()))?;
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
 
-        // 克隆连接，因为执行器需要拥有连接
-        let connection_for_migration = connection.clone();
+        // 从 DbConnection 提取 SeaORM 连接用于迁移执行器
+        let connection_for_migration = connection.as_sea_orm()?.clone();
 
         let mut executor = MigrationExecutor::new(connection_for_migration, db_type);
 

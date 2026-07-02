@@ -490,27 +490,27 @@ fn test_builder_debug() {
 async fn test_database_type_parsing() {
     // SQLite
     assert_eq!(
-        DatabaseType::parse_database_type("sqlite::memory:"),
+        DatabaseType::parse_database_type("sqlite::memory:").unwrap(),
         DatabaseType::Sqlite
     );
     assert_eq!(
-        DatabaseType::parse_database_type("sqlite:///path/to/db"),
+        DatabaseType::parse_database_type("sqlite:///path/to/db").unwrap(),
         DatabaseType::Sqlite
     );
 
     // PostgreSQL
     assert_eq!(
-        DatabaseType::parse_database_type("postgres://localhost/db"),
+        DatabaseType::parse_database_type("postgres://localhost/db").unwrap(),
         DatabaseType::Postgres
     );
     assert_eq!(
-        DatabaseType::parse_database_type("postgresql://localhost/db"),
+        DatabaseType::parse_database_type("postgresql://localhost/db").unwrap(),
         DatabaseType::Postgres
     );
 
     // MySQL
     assert_eq!(
-        DatabaseType::parse_database_type("mysql://localhost/db"),
+        DatabaseType::parse_database_type("mysql://localhost/db").unwrap(),
         DatabaseType::MySql
     );
 }

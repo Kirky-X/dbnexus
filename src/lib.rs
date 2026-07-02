@@ -17,11 +17,32 @@
 // 编译期数据库特性互斥检查
 // ============================================================================
 
-#[cfg(all(not(clippy), feature = "postgres", feature = "mysql", not(feature = "sqlite")))]
+// 规则 1：postgres 与 mysql 互斥（当未启用嵌入式数据库时，服务器端数据库不能同时启用）
+// 注意：当 sqlite 或 duckdb 也被启用时（如 --all-features 场景），允许共存以便测试
+#[cfg(all(
+    not(clippy),
+    feature = "postgres",
+    feature = "mysql",
+    not(any(feature = "sqlite", feature = "duckdb"))
+))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 
-#[cfg(all(not(clippy), not(any(feature = "sqlite", feature = "postgres", feature = "mysql"))))]
-compile_error!("Must enable exactly one database feature: 'sqlite', 'postgres', or 'mysql'");
+// 规则 2：嵌入式（sqlite/duckdb）与服务器端（postgres/mysql）不能混合
+// 注意：当全部 4 个数据库后端都启用时（如 --all-features 场景），允许共存以便测试
+#[cfg(all(
+    not(clippy),
+    any(feature = "sqlite", feature = "duckdb"),
+    any(feature = "postgres", feature = "mysql"),
+    not(all(feature = "sqlite", feature = "duckdb", feature = "postgres", feature = "mysql"))
+))]
+compile_error!("Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features");
+
+// 规则 3：至少一个数据库后端
+#[cfg(all(
+    not(clippy),
+    not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "duckdb"))
+))]
+compile_error!("Must enable at least one database feature: 'sqlite', 'postgres', 'mysql', or 'duckdb'");
 
 // 检查 feature 依赖关系
 // Task 21：移除 permission-with-cache 检查（该聚合 feature 已移除，用户改用 permission + cache）
@@ -30,6 +51,10 @@ compile_error!("The 'permission-engine' feature requires the 'cache' feature to 
 
 #[cfg(all(not(clippy), feature = "sql-parser", not(feature = "cache")))]
 compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enabled");
+
+// permission feature 需要 cache（Cache::builder 在 db_pool 中使用）
+#[cfg(all(not(clippy), feature = "permission", not(feature = "cache")))]
+compile_error!("The 'permission' feature requires the 'cache' feature to be enabled");
 
 // ============================================================================
 // 模块声明
@@ -98,6 +123,11 @@ pub use crate::database::pool::DbPool;
 pub use crate::database::pool::DbPoolBuilder;
 pub use crate::database::pool::Session;
 pub use crate::database::pool::{ConnectionPool, DatabaseSession};
+pub use crate::database::pool::DbConnection;
+
+// DuckDB 连接包装器导出（0.3.0 新增）
+#[cfg(feature = "duckdb")]
+pub use crate::database::pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
 pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy};
 
