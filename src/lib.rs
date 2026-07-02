@@ -161,6 +161,10 @@ pub use crate::observability::metrics::{
     ThroughputStats, TransactionStats,
 };
 
+// Tracing 导出（tracing feature）
+#[cfg(feature = "tracing")]
+pub use crate::observability::tracing::{TracingError, TracingGuard};
+
 // MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
 pub use crate::observability::metrics::MockMetrics;
