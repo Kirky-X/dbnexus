@@ -153,10 +153,13 @@ impl DuckDbConnection {
             Ok(DuckDbExecResult { rows_affected })
         });
 
-        drop(permit);
-        handle
+        // permit 必须在 handle.await 之后 drop：
+        // 若提前 drop，信号量在 spawn_blocking 任务完成前释放，失去并发限制作用。
+        let result = handle
             .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        drop(permit);
+        result
     }
 
     /// 执行查询，返回结果行集合
@@ -207,10 +210,13 @@ impl DuckDbConnection {
             Ok(result)
         });
 
-        drop(permit);
-        handle
+        // permit 必须在 handle.await 之后 drop：
+        // 若提前 drop，信号量在 spawn_blocking 任务完成前释放，失去并发限制作用。
+        let result = handle
             .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        drop(permit);
+        result
     }
 
     /// 健康检查（执行 `SELECT 1`）
