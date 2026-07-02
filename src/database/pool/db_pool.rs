@@ -597,7 +597,10 @@ impl DbPool {
     /// 验证角色名称是否在权限配置中定义
     ///
     /// 仅在权限配置文件存在且成功加载时验证角色。
-    /// 如果没有配置权限文件，使用 deny_all 策略，不进行角色验证。
+    /// 如果没有配置权限文件，使用安全默认策略（仅允许 admin/system 角色）。
+    ///
+    /// **显性化（v0.3.0 修复）**：未配置权限文件时输出 warn 日志，明确说明
+    /// 正在使用安全默认策略，提醒用户配置权限文件以启用完整角色验证。
     #[cfg(feature = "permission")]
     async fn validate_role_name(&self, role: &str) -> DbResult<()> {
         // 获取权限配置锁
@@ -607,6 +610,10 @@ impl DbPool {
         if permission_config.is_none() {
             // 没有配置权限文件时，使用安全默认策略
             // 只允许预定义的安全角色，防止未授权访问
+            eprintln!(
+                "[warn] dbnexus::pool: no permission config loaded, using safe default policy (admin/system only) for role '{}'",
+                role
+            );
             let safe_roles = ["admin", "system"];
             if !safe_roles.contains(&role) {
                 return Err(DbError::Permission(format!(
