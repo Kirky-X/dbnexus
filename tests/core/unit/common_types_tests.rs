@@ -105,3 +105,82 @@ fn test_dbnexus_result_ok() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), value);
 }
+
+// ============================================================================
+// DatabaseType::from_url 边界用例测试（v0.3.0 T058 新增）
+// ============================================================================
+
+/// TEST-U-COMMON-010: 带 query 参数的 PostgreSQL URI 应正确识别为 Postgres
+#[test]
+fn test_from_url_postgres_with_query_params() {
+    let url = "postgres://user:pass@localhost:5432/mydb?sslmode=require&connect_timeout=10";
+    let db_type = DatabaseType::from_url(url).expect("postgres URL with query should parse");
+    assert_eq!(db_type, DatabaseType::Postgres);
+}
+
+/// TEST-U-COMMON-011: 带 query 参数的 MySQL URI 应正确识别为 MySql
+#[test]
+fn test_from_url_mysql_with_query_params() {
+    let url = "mysql://root:secret@127.0.0.1:3306/auth?charset=utf8mb4&parseTime=true";
+    let db_type = DatabaseType::from_url(url).expect("mysql URL with query should parse");
+    assert_eq!(db_type, DatabaseType::MySql);
+}
+
+/// TEST-U-COMMON-012: 无 scheme 的字符串应返回错误（不回退到默认值）
+#[test]
+fn test_from_url_no_scheme_returns_error() {
+    // 仅 host:port 形式，url::Url::parse 视为相对路径，无 scheme
+    let result = DatabaseType::from_url("localhost:5432");
+    assert!(
+        result.is_err(),
+        "URL without scheme should return error, got {:?}",
+        result.ok()
+    );
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Unsupported database scheme") || msg.contains("failed to parse URL"),
+        "error message should mention unsupported scheme or parse failure, got: {msg}"
+    );
+}
+
+/// TEST-U-COMMON-013: 相对路径应返回错误（不回退到 Sqlite）
+#[test]
+fn test_from_url_relative_path_returns_error() {
+    // 相对路径，url::Url::parse 视为相对 URL，无 scheme
+    let result = DatabaseType::from_url("path/to/db.sqlite");
+    assert!(
+        result.is_err(),
+        "relative path should return error, got {:?}",
+        result.ok()
+    );
+}
+
+/// TEST-U-COMMON-014: 未知 scheme 应返回 UnsupportedDatabaseScheme 错误
+#[test]
+fn test_from_url_unknown_scheme_returns_error() {
+    let result = DatabaseType::from_url("ftp://localhost/data");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("ftp") || msg.contains("not a supported database scheme"),
+        "error should mention the unknown scheme 'ftp', got: {msg}"
+    );
+}
+
+/// TEST-U-COMMON-015: DuckDb 短形式应识别为 DuckDb
+#[test]
+fn test_from_url_duckdb_short_form() {
+    let result = DatabaseType::from_url("duckdb::memory:");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), DatabaseType::DuckDb);
+}
+
+/// TEST-U-COMMON-016: postgresql scheme（别名）应识别为 Postgres
+#[test]
+fn test_from_url_postgresql_alias() {
+    let result = DatabaseType::from_url("postgresql://user@host/db");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), DatabaseType::Postgres);
+}
