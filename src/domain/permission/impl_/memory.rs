@@ -27,8 +27,6 @@ impl MemoryPermissionProvider {
             policies: RwLock::new(HashMap::new()),
         }
     }
-
-
 }
 
 impl Default for MemoryPermissionProvider {

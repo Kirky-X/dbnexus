@@ -157,10 +157,7 @@ async fn test_schema_table_compatible_with_sea_orm_entity() {
     assert_eq!(result.last_insert_id, 1);
 
     // 用 Sea-ORM EntityTrait 查询
-    let found: Option<Model> = Entity::find_by_id(1)
-        .one(&conn)
-        .await
-        .expect("Query should succeed");
+    let found: Option<Model> = Entity::find_by_id(1).one(&conn).await.expect("Query should succeed");
     let found = found.expect("Record should exist");
     assert_eq!(found.name, "Alice");
     assert_eq!(found.email, "alice@example.com");

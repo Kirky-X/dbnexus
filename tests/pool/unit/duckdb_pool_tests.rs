@@ -33,9 +33,7 @@ async fn make_duckdb_pool() -> DbPool {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    DbPool::with_config(config)
-        .await
-        .expect("Failed to create DuckDB pool")
+    DbPool::with_config(config).await.expect("Failed to create DuckDB pool")
 }
 
 // ============================================================================
@@ -83,13 +81,21 @@ async fn test_duckdb_session_ddl_and_query() {
     let ddl_result = session
         .execute_duckdb_raw("CREATE TABLE test_users (id INTEGER PRIMARY KEY, name VARCHAR)")
         .await;
-    assert!(ddl_result.is_ok(), "CREATE TABLE should succeed: {:?}", ddl_result.err());
+    assert!(
+        ddl_result.is_ok(),
+        "CREATE TABLE should succeed: {:?}",
+        ddl_result.err()
+    );
 
     // INSERT
     let insert_result = session
         .execute_duckdb_raw("INSERT INTO test_users VALUES (1, 'Alice')")
         .await;
-    assert!(insert_result.is_ok(), "INSERT should succeed: {:?}", insert_result.err());
+    assert!(
+        insert_result.is_ok(),
+        "INSERT should succeed: {:?}",
+        insert_result.err()
+    );
 
     let insert_result2 = session
         .execute_duckdb_raw("INSERT INTO test_users VALUES (2, 'Bob')")
@@ -229,11 +235,7 @@ async fn test_duckdb_pool_concurrent_sessions() {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    let pool = Arc::new(
-        DbPool::with_config(config)
-            .await
-            .expect("Failed to create DuckDB pool"),
-    );
+    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create DuckDB pool"));
 
     // 预先创建表（使用第一个 session，释放后连接回到池中供后续复用）
     {
@@ -274,7 +276,10 @@ async fn test_duckdb_pool_concurrent_sessions() {
     );
 
     // 验证数据（复用同一连接，能看到所有插入的行）
-    let session = pool.get_session("admin").await.expect("Failed to get verification session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get verification session");
     let rows = session
         .execute_duckdb("SELECT COUNT(*) AS cnt FROM concurrent_test")
         .await

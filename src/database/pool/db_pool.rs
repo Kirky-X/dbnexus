@@ -455,9 +455,7 @@ impl DbPool {
                 .build()
                 .await
                 .map_err(|_e| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                        sea_orm::ConnAcquireErr::Timeout,
-                    ))
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
                 })?,
         );
 
@@ -652,9 +650,9 @@ impl DbPool {
     ///
     /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DbConnection> {
-        let db_type = config.database_type().map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("Invalid database URL: {e}")))
-        })?;
+        let db_type = config
+            .database_type()
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("Invalid database URL: {e}"))))?;
 
         match db_type {
             crate::foundation::config::DatabaseType::DuckDb => {
@@ -816,10 +814,7 @@ impl DbPool {
     /// # Returns
     ///
     /// 返回元组 (有效连接列表, 无效连接数量)
-    async fn validate_idle_connections(
-        idle: &mut Vec<DbConnection>,
-        config: &DbConfig,
-    ) -> (Vec<DbConnection>, usize) {
+    async fn validate_idle_connections(idle: &mut Vec<DbConnection>, config: &DbConfig) -> (Vec<DbConnection>, usize) {
         let backend = Self::get_database_backend(&config.url);
 
         // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
@@ -830,20 +825,16 @@ impl DbPool {
             .into_iter()
             .map(|conn| async {
                 let is_valid = match &conn {
-                    DbConnection::SeaOrm(sea_conn) => {
-                        timeout(
-                            Duration::from_secs(2),
-                            sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
-                        )
-                        .await
-                        .is_ok_and(|result| result.is_ok())
-                    }
+                    DbConnection::SeaOrm(sea_conn) => timeout(
+                        Duration::from_secs(2),
+                        sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
+                    )
+                    .await
+                    .is_ok_and(|result| result.is_ok()),
                     #[cfg(feature = "duckdb")]
-                    DbConnection::DuckDb(duck_conn) => {
-                        timeout(Duration::from_secs(2), duck_conn.health_check())
-                            .await
-                            .is_ok_and(|result| result.is_ok())
-                    }
+                    DbConnection::DuckDb(duck_conn) => timeout(Duration::from_secs(2), duck_conn.health_check())
+                        .await
+                        .is_ok_and(|result| result.is_ok()),
                 };
                 (conn, is_valid)
             })
@@ -966,11 +957,7 @@ impl DbPool {
     /// ```
     #[cfg(feature = "pool-health-check")]
     pub fn parse_health_check_interval(value: &str) -> u64 {
-        value
-            .parse::<u64>()
-            .ok()
-            .map(|v| v.clamp(5, 300))
-            .unwrap_or(30)
+        value.parse::<u64>().ok().map(|v| v.clamp(5, 300)).unwrap_or(30)
     }
 
     /// 启动后台连接健康检查任务
@@ -1330,7 +1317,11 @@ impl DbPool {
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
         use crate::database::migration::MigrationExecutor;
 
-        let db_type = self.inner.config.database_type().map_err(|e| DbError::Config(e.to_string()))?;
+        let db_type = self
+            .inner
+            .config
+            .database_type()
+            .map_err(|e| DbError::Config(e.to_string()))?;
 
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
@@ -1354,10 +1345,7 @@ impl DbPool {
 /// 用于 `with_config` 内对 `policy_cache` 的预加载（行为与原内联循环一致：
 /// 静默忽略 `set` 失败）。`perm_config` 为 `None` 时直接返回，不做任何操作。
 #[cfg(feature = "permission")]
-async fn preload_policy_cache(
-    cache: &Cache<String, RolePolicy>,
-    perm_config: Option<&PermissionConfig>,
-) {
+async fn preload_policy_cache(cache: &Cache<String, RolePolicy>, perm_config: Option<&PermissionConfig>) {
     if let Some(perm_config) = perm_config {
         for (role, policy) in &perm_config.roles {
             let _ = cache.set(role, policy).await;

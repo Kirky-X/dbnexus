@@ -88,7 +88,10 @@ async fn test_permission_cache_get_expired_no_swr_returns_none() {
         .with_stale_while_revalidate(false);
     cache.insert("admin", sample_policy("users", PermissionAction::Select));
     tokio::time::sleep(Duration::from_millis(20)).await;
-    assert!(cache.get("admin").is_none(), "expired entry without SWR should return None");
+    assert!(
+        cache.get("admin").is_none(),
+        "expired entry without SWR should return None"
+    );
 }
 
 /// TEST-PERM-CACHE-005: 过期条目在 SWR 启用时应返回旧值
@@ -112,8 +115,7 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
 /// TEST-PERM-CACHE-006: refresh 应从 provider 更新缓存值
 #[tokio::test]
 async fn test_permission_cache_refresh_updates_value() {
-    let provider =
-        make_provider_with_role("admin", sample_policy("orders", PermissionAction::Delete)).await;
+    let provider = make_provider_with_role("admin", sample_policy("orders", PermissionAction::Delete)).await;
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_secs(60))
         .with_refresh_interval(Duration::from_millis(1))
@@ -138,15 +140,16 @@ async fn test_permission_cache_refresh_without_provider_keeps_stale() {
     cache.insert("admin", sample_policy("users", PermissionAction::Select));
     // refresh 应不 panic，保留旧值
     cache.refresh("admin").await;
-    let got = cache.get("admin").expect("stale value should be kept after failed refresh");
+    let got = cache
+        .get("admin")
+        .expect("stale value should be kept after failed refresh");
     assert_eq!(got.tables[0].name, "users");
 }
 
 /// TEST-PERM-CACHE-008: refresh 应受 refresh_interval 节流
 #[tokio::test]
 async fn test_permission_cache_refresh_throttled_by_interval() {
-    let provider =
-        make_provider_with_role("admin", sample_policy("v2", PermissionAction::Select)).await;
+    let provider = make_provider_with_role("admin", sample_policy("v2", PermissionAction::Select)).await;
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_secs(60))
         .with_refresh_interval(Duration::from_secs(60)) // 长间隔

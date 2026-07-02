@@ -17,8 +17,8 @@
 pub mod advanced;
 pub mod rbac;
 
-mod context;
 pub mod cache;
+mod context;
 mod provider;
 mod rate_limiter;
 mod stats;
@@ -48,7 +48,7 @@ pub use cache::{PermissionCache, PermissionCacheConfig};
 
 // 从 context.rs 重导出（需要 cache feature）
 #[cfg(feature = "cache")]
-pub use context::{PermissionContext};
+pub use context::PermissionContext;
 
 // ============================================================================
 // 内部使用（pub(crate)）

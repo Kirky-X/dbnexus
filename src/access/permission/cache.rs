@@ -238,8 +238,7 @@ impl PermissionCache {
                 return;
             }
         }
-        self.last_refresh
-            .insert(key.to_string(), Instant::now());
+        self.last_refresh.insert(key.to_string(), Instant::now());
 
         let provider = match &self.provider {
             Some(p) => p.clone(),
@@ -257,10 +256,7 @@ impl PermissionCache {
             }
             None => {
                 // 角色不存在：保留旧值（stale-while-revalidate 语义）
-                warn_log!(
-                    "refresh returned None for role '{}'; keeping stale value",
-                    key_owned
-                );
+                warn_log!("refresh returned None for role '{}'; keeping stale value", key_owned);
             }
         }
     }
@@ -296,7 +292,8 @@ impl PermissionCache {
                 None => {
                     warn_log!(
                         "Background refresh returned None for role '{}'; keeping stale value (ttl={:?})",
-                        key_owned, ttl
+                        key_owned,
+                        ttl
                     );
                 }
             }

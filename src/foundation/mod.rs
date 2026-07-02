@@ -13,7 +13,7 @@ pub mod error;
 
 // Re-exports for convenience (旧版，保持兼容)
 pub use config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
-pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
-pub use sea_orm::{Condition, Set};
 pub use error::{AuditError, DbError, DbResult, MigrationError};
 pub use error::{ConfigResult, PermissionResult, PoolResult};
+pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
+pub use sea_orm::{Condition, Set};

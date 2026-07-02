@@ -45,17 +45,27 @@ async fn test_session_operations_with_tracing() {
     let result = session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS tracing_test (id INTEGER PRIMARY KEY)")
         .await;
-    assert!(result.is_ok(), "DDL should succeed with tracing feature: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "DDL should succeed with tracing feature: {:?}",
+        result.err()
+    );
 
     // 执行 DML
-    let result = session
-        .execute_raw("INSERT INTO tracing_test (id) VALUES (1)")
-        .await;
-    assert!(result.is_ok(), "DML should succeed with tracing feature: {:?}", result.err());
+    let result = session.execute_raw("INSERT INTO tracing_test (id) VALUES (1)").await;
+    assert!(
+        result.is_ok(),
+        "DML should succeed with tracing feature: {:?}",
+        result.err()
+    );
 
     // 执行查询
     let result = session.execute_raw("SELECT * FROM tracing_test").await;
-    assert!(result.is_ok(), "SELECT should succeed with tracing feature: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "SELECT should succeed with tracing feature: {:?}",
+        result.err()
+    );
 }
 
 // ============================================================================

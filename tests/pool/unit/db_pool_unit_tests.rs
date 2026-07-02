@@ -34,7 +34,11 @@ async fn test_db_pool_new_sqlite_memory() {
     let pool = pool.unwrap();
     let status = pool.status();
     // 默认 min_connections=5，池会预热创建连接
-    assert!(status.total >= 1, "pool should have at least 1 connection after warmup, got {}", status.total);
+    assert!(
+        status.total >= 1,
+        "pool should have at least 1 connection after warmup, got {}",
+        status.total
+    );
 }
 
 /// TEST-U-DPOOL-002: DbPool::with_config 应成功
@@ -75,10 +79,7 @@ async fn test_db_pool_new_invalid_url_fails() {
 /// TEST-U-DPOOL-005: DbPoolBuilder 通过 url 构造
 #[tokio::test]
 async fn test_db_pool_builder_with_url() {
-    let pool = DbPoolBuilder::new()
-        .url("sqlite::memory:")
-        .build()
-        .await;
+    let pool = DbPoolBuilder::new().url("sqlite::memory:").build().await;
     assert!(pool.is_ok(), "builder with url should succeed");
 }
 
@@ -201,7 +202,10 @@ async fn test_db_pool_get_session_admin() {
 async fn test_db_pool_get_session_system() {
     let pool = common::make_sqlite_memory_pool().await;
     let session = pool.get_session("system").await;
-    assert!(session.is_ok(), "system role should be allowed without permission config");
+    assert!(
+        session.is_ok(),
+        "system role should be allowed without permission config"
+    );
 }
 
 /// TEST-U-DPOOL-015: 无权限配置时 get_session("guest") 应失败
@@ -210,7 +214,10 @@ async fn test_db_pool_get_session_system() {
 async fn test_db_pool_get_session_unauthorized_role_fails() {
     let pool = common::make_sqlite_memory_pool().await;
     let result = pool.get_session("guest").await;
-    assert!(result.is_err(), "non-safe role should be rejected without permission config");
+    assert!(
+        result.is_err(),
+        "non-safe role should be rejected without permission config"
+    );
     // Session 不实现 Debug，用 match 代替 unwrap_err
     match result {
         Err(dbnexus::DbError::Permission(_)) => { /* expected */ }
@@ -311,10 +318,7 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
 
     // 完成后 status 应恢复（active 回到 0 或接近 0）
     let status = pool.status();
-    assert!(
-        status.total >= status.active,
-        "invariant violated: total >= active"
-    );
+    assert!(status.total >= status.active, "invariant violated: total >= active");
 }
 
 // ============================================================================

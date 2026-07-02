@@ -9,9 +9,9 @@
 
 #![cfg(feature = "auto-migrate")]
 
-use dbnexus::foundation::DatabaseType;
 use dbnexus::DbConfig;
 use dbnexus::DbPool;
+use dbnexus::foundation::DatabaseType;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -24,6 +24,8 @@ fn id_column_definition(db_type: DatabaseType) -> &'static str {
         DatabaseType::Sqlite => "INTEGER PRIMARY KEY",
         DatabaseType::Postgres => "INTEGER PRIMARY KEY",
         DatabaseType::MySql => "INT PRIMARY KEY",
+        // DuckDB 支持 INTEGER PRIMARY KEY 语法
+        DatabaseType::DuckDb => "INTEGER PRIMARY KEY",
     }
 }
 

@@ -492,9 +492,18 @@ fn test_rbac_role_name_case_sensitive() {
     );
 
     // 角色名称应该区分大小写
-    assert!(provider.get_role_policy("Admin").is_some(), "exact-case Admin role policy should exist");
-    assert!(provider.get_role_policy("admin").is_none(), "lowercase admin role policy should not exist");
-    assert!(provider.get_role_policy("ADMIN").is_none(), "uppercase ADMIN role policy should not exist");
+    assert!(
+        provider.get_role_policy("Admin").is_some(),
+        "exact-case Admin role policy should exist"
+    );
+    assert!(
+        provider.get_role_policy("admin").is_none(),
+        "lowercase admin role policy should not exist"
+    );
+    assert!(
+        provider.get_role_policy("ADMIN").is_none(),
+        "uppercase ADMIN role policy should not exist"
+    );
 }
 
 /// TEST-RBAC-U-017: 表名大小写敏感

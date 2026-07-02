@@ -185,13 +185,7 @@ impl DuckDbConnection {
                     let stmt_ref = row.as_ref();
                     let column_count = stmt_ref.column_count();
                     let column_names: Vec<String> = (0..column_count)
-                        .map(|i| {
-                            stmt_ref
-                                .column_name(i)
-                                .ok()
-                                .map(|s| s.to_string())
-                                .unwrap_or_default()
-                        })
+                        .map(|i| stmt_ref.column_name(i).ok().map(|s| s.to_string()).unwrap_or_default())
                         .collect();
 
                     let mut columns = Vec::with_capacity(column_count);
@@ -293,7 +287,10 @@ mod tests {
             .await
             .expect("Failed to insert");
 
-        let rows = conn.query("SELECT id, name FROM users ORDER BY id").await.expect("Failed to query");
+        let rows = conn
+            .query("SELECT id, name FROM users ORDER BY id")
+            .await
+            .expect("Failed to query");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].column_count(), 2);
 
@@ -316,7 +313,10 @@ mod tests {
         assert_eq!(DuckDbConnection::parse_url(":memory:"), ":memory:");
         assert_eq!(DuckDbConnection::parse_url("duckdb::memory:"), ":memory:");
         assert_eq!(DuckDbConnection::parse_url("duckdb:test.db"), "test.db");
-        assert_eq!(DuckDbConnection::parse_url("duckdb://path/to/file.db"), "path/to/file.db");
+        assert_eq!(
+            DuckDbConnection::parse_url("duckdb://path/to/file.db"),
+            "path/to/file.db"
+        );
         assert_eq!(DuckDbConnection::parse_url("/absolute/path.db"), "/absolute/path.db");
     }
 
@@ -342,7 +342,10 @@ mod tests {
             assert!(result.is_ok(), "Concurrent insert should succeed");
         }
 
-        let rows = conn.query("SELECT COUNT(*) AS cnt FROM concurrent_test").await.expect("Failed to count");
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM concurrent_test")
+            .await
+            .expect("Failed to count");
         assert_eq!(rows.len(), 1);
         let count = rows[0].get("cnt").expect("Failed to get count");
         if let DuckValue::BigInt(n) = count {
