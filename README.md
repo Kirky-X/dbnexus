@@ -62,19 +62,24 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
 }
 
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
-    let user = User { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
-    User::insert(&session, user).await?;
+    let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
+    Model::insert(&session, user).await?;
     Ok(())
 }
 ```
@@ -154,9 +159,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | 预设 | 特性 | 使用场景 |
 |------|------|----------|
-| <span style="color:#166534; padding:4px 8px; border-radius:4px;">minimal</span> | `runtime-tokio-rustls`, `sqlite`, `config-env`, `lru`, `regex`, `sql-parser` | 嵌入式设备最小配置 |
-| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `pool-health-check`, `yaml`, `regex`, `lru` | 微服务配置 |
-| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">all-optional</span> | 除数据库驱动外的所有企业级特性 | 完整企业功能 |
+| <span style="color:#166534; padding:4px 8px; border-radius:4px;">embedded</span> | `runtime-tokio-rustls`, `sqlite`, `config-env` | 嵌入式/边缘设备超最小配置 |
+| <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
+| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | 单体应用 |
+| <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | 除数据库驱动外的所有可选特性 | 所有企业功能（手动选择数据库） |
 
 ---
 
@@ -194,12 +201,17 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
 }
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
 ```
 
 </td>
@@ -224,12 +236,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **步骤 3：插入数据**
 
 ```rust
-let user = User {
+let user = Model {
     id: 1,
     name: "Alice".to_string(),
     email: "alice@example.com".to_string(),
 };
-User::insert(&session, user).await?;
+Model::insert(&session, user).await?;
 ```
 
 </td>
@@ -238,7 +250,7 @@ User::insert(&session, user).await?;
 **步骤 4：查询数据**
 
 ```rust
-let users = User::find_all(&session).await?;
+let users = Model::find_all(&session).await?;
 println!("找到 {} 个用户", users.len());
 ```
 
@@ -255,24 +267,35 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
 
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
 // 管理员可以访问
 let session = pool.get_session("admin").await?;
-User::find_all(&session).await?;
+Model::find_all(&session).await?;
 
 // 普通用户会被拒绝
 let session = pool.get_session("guest").await?;
-User::find_all(&session).await?; // 错误：权限被拒绝
+Model::find_all(&session).await?; // 错误：权限被拒绝
 ```
 
 ---
 
 ## <span id="feature-flags">🎨 特性标志</span>
+
+### ⚠️ v0.2.0 破坏性变更
+
+**所有用户必须更新 Cargo.toml：**
+
+**v0.1.x → v0.2.0 是破坏性变更。** `cache` feature 不再默认启用，多个 feature 现在显式要求 `cache` 必须启用。
 
 ### 数据库驱动（选择一个）
 
@@ -319,11 +342,14 @@ dbnexus = { version = "0.3.0", features = ["runtime-async-std"] }
 
 ```toml
 # 核心功能
-dbnexus = { version = "0.3.0", features = [
-    "permission",      # 权限控制
-    "sql-parser",      # SQL 解析
-    "macros",          # 过程宏
-] }
+# 权限控制（需要 cache 特性）
+dbnexus = { version = "0.3.0", features = ["permission", "cache"] }
+
+# SQL 解析（需要 cache 特性）
+dbnexus = { version = "0.3.0", features = ["sql-parser", "cache"] }
+
+# 过程宏
+dbnexus = { version = "0.3.0", features = ["macros"] }
 
 # 企业级功能
 dbnexus = { version = "0.3.0", features = [
@@ -406,15 +432,16 @@ dbnexus = { version = "0.3.0", features = [
 #### 📝 高级配置
 
 ```rust
-use dbnexus::{DbPool, config::DbConfigBuilder};
+use dbnexus::{DbPool, DbConfig};
 
-let config = DbConfigBuilder::new()
-    .url("postgresql://user:pass@localhost/db")
-    .max_connections(20)
-    .min_connections(5)
-    .idle_timeout(300)
-    .acquire_timeout(5000)
-    .build()?;
+let config = DbConfig {
+    url: "postgresql://user:pass@localhost/db".to_string(),
+    max_connections: 20,
+    min_connections: 5,
+    idle_timeout: 300,
+    acquire_timeout: 5000,
+    ..Default::default()
+};
 
 let pool = DbPool::with_config(config).await?;
 ```
@@ -432,7 +459,8 @@ export DB_ADMIN_ROLE=admin
 ```
 
 ```rust
-let pool = DbPool::new().await?;
+let config = dbnexus::DbConfig::from_env()?;
+let pool = dbnexus::DbPool::with_config(config).await?;
 ```
 
 </td>
@@ -443,17 +471,17 @@ let pool = DbPool::new().await?;
 #### 🔄 事务处理
 
 ```rust
-let mut session = pool.get_session("admin").await?;
+let session = pool.get_session("admin").await?;
 
 // 开始事务
 session.begin_transaction().await?;
 
 // 多个操作
-User::insert(&session, user1).await?;
-User::insert(&session, user2).await?;
+Model::insert(&session, user1).await?;
+Model::insert(&session, user2).await?;
 
 // 提交
-session.commit_transaction().await?;
+session.commit().await?;
 ```
 
 </td>
@@ -462,7 +490,7 @@ session.commit_transaction().await?;
 #### 📊 监控
 
 ```rust
-use dbnexus::{DbPool, metrics::MetricsCollector};
+use dbnexus::{DbPool, MetricsCollector};
 
 let pool = DbPool::new("postgresql://localhost/db").await?;
 
@@ -471,7 +499,7 @@ let status = pool.status();
 println!("活跃: {}, 空闲: {}", status.active, status.idle);
 
 // 导出 Prometheus 指标
-let metrics = MetricsCollector::new(&pool);
+let metrics = MetricsCollector::new();
 println!("{}", metrics.export_prometheus());
 ```
 

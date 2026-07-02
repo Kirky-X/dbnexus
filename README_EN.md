@@ -62,19 +62,24 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
 }
 
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
-    let user = User { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
-    User::insert(&session, user).await?;
+    let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
+    Model::insert(&session, user).await?;
     Ok(())
 }
 ```
@@ -196,12 +201,17 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
     pub email: String,
 }
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
 ```
 
 </td>
@@ -226,12 +236,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Step 3: Insert Data**
 
 ```rust
-let user = User {
+let user = Model {
     id: 1,
     name: "Alice".to_string(),
     email: "alice@example.com".to_string(),
 };
-User::insert(&session, user).await?;
+Model::insert(&session, user).await?;
 ```
 
 </td>
@@ -240,7 +250,7 @@ User::insert(&session, user).await?;
 **Step 4: Query Data**
 
 ```rust
-let users = User::find_all(&session).await?;
+let users = Model::find_all(&session).await?;
 println!("Found {} users", users.len());
 ```
 
@@ -257,19 +267,24 @@ use sea_orm::entity::prelude::*;
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-pub struct User {
+pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub name: String,
 }
 
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
+
 // Admin can access
 let session = pool.get_session("admin").await?;
-User::find_all(&session).await?;
+Model::find_all(&session).await?;
 
 // Regular user will be denied
 let session = pool.get_session("guest").await?;
-User::find_all(&session).await?; // Error: Permission denied
+Model::find_all(&session).await?; // Error: Permission denied
 ```
 
 ---
@@ -438,15 +453,16 @@ dbnexus = { version = "0.3", features = [
 #### 📝 Advanced Configuration
 
 ```rust
-use dbnexus::{DbPool, config::DbConfigBuilder};
+use dbnexus::{DbPool, DbConfig};
 
-let config = DbConfigBuilder::new()
-    .url("postgresql://user:pass@localhost/db")
-    .max_connections(20)
-    .min_connections(5)
-    .idle_timeout(300)
-    .acquire_timeout(5000)
-    .build()?;
+let config = DbConfig {
+    url: "postgresql://user:pass@localhost/db".to_string(),
+    max_connections: 20,
+    min_connections: 5,
+    idle_timeout: 300,
+    acquire_timeout: 5000,
+    ..Default::default()
+};
 
 let pool = DbPool::with_config(config).await?;
 ```
@@ -464,7 +480,8 @@ export DB_ADMIN_ROLE=admin
 ```
 
 ```rust
-let pool = DbPool::new().await?;
+let config = dbnexus::DbConfig::from_env()?;
+let pool = dbnexus::DbPool::with_config(config).await?;
 ```
 
 </td>
@@ -475,17 +492,17 @@ let pool = DbPool::new().await?;
 #### 🔄 Transactions
 
 ```rust
-let mut session = pool.get_session("admin").await?;
+let session = pool.get_session("admin").await?;
 
 // Begin transaction
 session.begin_transaction().await?;
 
 // Multiple operations
-User::insert(&session, user1).await?;
-User::insert(&session, user2).await?;
+Model::insert(&session, user1).await?;
+Model::insert(&session, user2).await?;
 
 // Commit
-session.commit_transaction().await?;
+session.commit().await?;
 ```
 
 </td>
@@ -494,7 +511,7 @@ session.commit_transaction().await?;
 #### 📊 Monitoring
 
 ```rust
-use dbnexus::{DbPool, metrics::MetricsCollector};
+use dbnexus::{DbPool, MetricsCollector};
 
 let pool = DbPool::new("postgresql://localhost/db").await?;
 
@@ -503,7 +520,7 @@ let status = pool.status();
 println!("Active: {}, Idle: {}", status.active, status.idle);
 
 // Export Prometheus metrics
-let metrics = MetricsCollector::new(&pool);
+let metrics = MetricsCollector::new();
 println!("{}", metrics.export_prometheus());
 ```
 
