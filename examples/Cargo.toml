@@ -177,6 +177,31 @@ path = "src/macros/macros_advanced_query.rs"
 name = "kit_usage"
 path = "src/kit/kit_usage.rs"
 
+[[bin]]
+name = "kit_advanced"
+path = "src/kit/kit_advanced.rs"
+
+# ============================================================
+# 通用模块示例 (common/)
+# ============================================================
+[[bin]]
+name = "error_handling"
+path = "src/common/error_handling.rs"
+
+# ============================================================
+# DuckDB 示例 (database/duckdb_query.rs)
+# ============================================================
+[[bin]]
+name = "duckdb_query"
+path = "src/database/duckdb_query.rs"
+
+# ============================================================
+# Tracing OTLP 示例 (observability/tracing_otlp.rs)
+# ============================================================
+[[bin]]
+name = "tracing_otlp"
+path = "src/observability/tracing_otlp.rs"
+
 [dependencies]
 dbnexus = { path = "..", features = [
     "runtime-tokio-rustls",
@@ -199,7 +224,12 @@ dbnexus = { path = "..", features = [
     "health-check",
     "authentication",
     "validation",
+    "duckdb",
+    "tracing",
 ] }
+
+# DuckDB crate（duckdb_query 示例需要直接使用 duckdb::types::Value）
+duckdb = { version = "1.1", features = ["bundled"] }
 
 # Async runtime
 tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "time"] }
