@@ -230,13 +230,14 @@ impl DbPoolBuilder {
 
     /// 设置指标收集器
     ///
-    /// # Arguments
+    /// # Deprecated
     ///
-    /// * `metrics_collector` - 指标收集器实例
-    ///
-    /// # Returns
-    ///
-    /// 返回构造器自身以支持链式调用
+    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
+    /// 请通过 `DbConfig` 或在 `DbPool::with_config()` 创建后注入。
+    #[deprecated(
+        since = "0.3.0",
+        note = "DbPoolBuilder::build() 静默丢弃此值；请通过 DbConfig 或 DbPool::with_config() 后注入"
+    )]
     #[cfg(feature = "metrics")]
     pub fn metrics_collector(mut self, metrics_collector: Arc<MetricsCollector>) -> Self {
         self.metrics_collector = Some(metrics_collector);
@@ -245,13 +246,14 @@ impl DbPoolBuilder {
 
     /// 设置权限配置
     ///
-    /// # Arguments
+    /// # Deprecated
     ///
-    /// * `permission_config` - 权限配置
-    ///
-    /// # Returns
-    ///
-    /// 返回构造器自身以支持链式调用
+    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
+    /// 请通过 `DbConfig.permission_config_path` 指定权限配置文件路径。
+    #[deprecated(
+        since = "0.3.0",
+        note = "DbPoolBuilder::build() 静默丢弃此值；请使用 DbConfig.permission_config_path"
+    )]
     #[cfg(feature = "permission")]
     pub fn permission_config(mut self, permission_config: PermissionConfig) -> Self {
         self.permission_config = Some(permission_config);
@@ -278,27 +280,14 @@ impl DbPoolBuilder {
 
     /// 注入oxcache缓存实例（DI支持）
     ///
-    /// 此方法允许注入oxcache缓存实例，用于数据库查询结果缓存。
+    /// # Deprecated
     ///
-    /// # Arguments
-    ///
-    /// * `cache` - oxcache缓存实例
-    ///
-    /// # Returns
-    ///
-    /// 返回构造器自身以支持链式调用
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use dbnexus::DbPool;
-    /// use oxcache::Cache;
-    ///
-    /// let cache: Cache<String, String> = /* ... */;
-    /// let pool = DbPool::new()
-    ///     .with_oxcache(Arc::new(cache))
-    ///     .await?;
-    /// ```
+    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
+    /// 缓存实例由 `DbPool::with_config()` 根据 `DbConfig.cache_config` 自动创建。
+    #[deprecated(
+        since = "0.3.0",
+        note = "DbPoolBuilder::build() 静默丢弃此值；缓存由 DbPool::with_config() 根据 DbConfig.cache_config 自动创建"
+    )]
     #[cfg(feature = "cache")]
     pub fn with_oxcache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
         self.cache = Some(cache);

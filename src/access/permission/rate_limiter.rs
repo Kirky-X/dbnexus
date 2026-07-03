@@ -98,17 +98,21 @@ impl TokenBucket {
         // 2. 先尝试填充令牌
         self.refill();
 
-        // 3. 优化的令牌消费：快速路径检查 + 原子递减
-        // 使用 fetch_sub 避免高竞争下的 CAS 重试循环
-        let prev_tokens = self.tokens.fetch_sub(1, Ordering::AcqRel);
-
-        if prev_tokens == 0 {
-            // 令牌已耗尽，恢复令牌数（不允许负数）
-            self.tokens.fetch_add(1, Ordering::AcqRel);
-            return false;
+        // 3. 原子 check-and-decrement：仅当 tokens > 0 时递减
+        // 使用 compare_exchange 循环避免 fetch_sub 在 0 时的 u64 下溢竞态
+        loop {
+            let current = self.tokens.load(Ordering::Acquire);
+            if current == 0 {
+                return false;
+            }
+            match self
+                .tokens
+                .compare_exchange(current, current - 1, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return true,
+                Err(_) => continue, // 其他线程已修改，重试
+            }
         }
-
-        true
     }
 
     /// 填充令牌（基于时间差计算应添加的令牌数）

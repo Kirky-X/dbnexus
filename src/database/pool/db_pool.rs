@@ -246,14 +246,8 @@ impl DbPool {
         #[cfg(feature = "pool-warmup")]
         pool.warmup_connections().await?;
 
-        // 加载权限策略到缓存（第二次预加载，保留原行为）
-        #[cfg(feature = "permission")]
-        {
-            let permission_config_guard = pool.inner.permission_config.lock().await;
-            let perm_config_ref = permission_config_guard.as_ref();
-            preload_policy_cache(&pool.inner.policy_cache, perm_config_ref).await;
-            drop(permission_config_guard);
-        }
+        // 注意：权限策略缓存的预加载已在 setup_permission_cache() 中完成（HIGH-004 修复）
+        // 此处不再重复预加载，避免冗余 IO 和缓存覆盖。
 
         #[cfg(feature = "auto-migrate")]
         if config.auto_migrate {
@@ -405,35 +399,15 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(feature = "permission")]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        // try_from 是同步简化版本
-        // 使用 block_on 来创建异步缓存
-        let policy_cache = tokio::runtime::Handle::current()
-            .block_on(async {
-                Cache::builder()
-                    .capacity(config.cache_config.policy_cache_capacity)
-                    .build()
-                    .await
-            })
-            .map_err(|_| ConfigError::InvalidCacheCapacity("Failed to create policy cache".to_string()))?;
-        Ok(Self {
-            inner: Arc::new(DbPoolInner {
-                config: config.clone(),
-                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
-                idle_connections: AsyncMutex::new(Vec::new()),
-                connection_available: Notify::new(),
-                active_count: AtomicU32::new(0),
-                total_count: AtomicU32::new(0),
-                policy_cache: Arc::new(policy_cache),
-                permission_config: Arc::new(AsyncMutex::new(None)),
-                health_check_shutdown: Arc::new(Notify::new()),
-                admin_role: config.admin_role.clone(),
-                #[cfg(feature = "metrics")]
-                metrics_collector: None,
-                wait_count: AtomicU32::new(0),
-                max_waiters: AtomicU32::new(0),
-                borrow_count: AtomicU64::new(0),
-                max_active: AtomicU32::new(0),
-            }),
+        // permission feature 启用时，需要异步创建 oxcache 缓存。
+        // 同步 try_from 无法在 tokio runtime 内安全调用 block_on（会 panic）。
+        // 显式失败，引导用户使用异步构造器 with_config()。
+        let _ = config;
+        Err(ConfigError::InvalidValue {
+            key: "permission".to_string(),
+            message: "DbPool::try_from cannot be used with `permission` feature enabled; \
+             use `DbPool::with_config(config).await` instead (async constructor required for cache initialization)"
+                .to_string(),
         })
     }
 
@@ -610,6 +584,12 @@ impl DbPool {
         if permission_config.is_none() {
             // 没有配置权限文件时，使用安全默认策略
             // 只允许预定义的安全角色，防止未授权访问
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                role = %role,
+                "dbnexus::pool: no permission config loaded, using safe default policy (admin/system only)"
+            );
+            #[cfg(not(feature = "tracing"))]
             eprintln!(
                 "[warn] dbnexus::pool: no permission config loaded, using safe default policy (admin/system only) for role '{}'",
                 role
@@ -757,6 +737,14 @@ impl DbPool {
 
         if !errors.is_empty() {
             // 部分失败：warn 日志记录（显性化，但不阻断初始化）
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                success = success_count,
+                total = initial_connections,
+                errors = errors.len(),
+                "dbnexus::pool::warmup: warmup_connections partially failed"
+            );
+            #[cfg(not(feature = "tracing"))]
             eprintln!(
                 "[warn] dbnexus::pool::warmup: warmup_connections partially failed: {}/{} connections created, {} errors",
                 success_count,
@@ -1374,19 +1362,6 @@ impl DbPool {
         self.release_connection(connection);
 
         Ok(applied)
-    }
-}
-
-/// 把权限配置中的 `roles` 写入策略缓存
-///
-/// 用于 `with_config` 内对 `policy_cache` 的预加载（行为与原内联循环一致：
-/// 静默忽略 `set` 失败）。`perm_config` 为 `None` 时直接返回，不做任何操作。
-#[cfg(feature = "permission")]
-async fn preload_policy_cache(cache: &Cache<String, RolePolicy>, perm_config: Option<&PermissionConfig>) {
-    if let Some(perm_config) = perm_config {
-        for (role, policy) in &perm_config.roles {
-            let _ = cache.set(role, policy).await;
-        }
     }
 }
 
