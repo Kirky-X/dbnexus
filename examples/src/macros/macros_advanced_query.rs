@@ -28,8 +28,8 @@ use dbnexus::foundation::DatabaseType;
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 use sea_orm::entity::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect,
+    ActiveModelTrait, ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
 };
 
 // ============================================
@@ -84,11 +84,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- 2. insert_many() 批量插入 5 条记录 ---\n");
 
     let users = vec![
-        Model { id: 1, name: "Alice".to_string(),   email: "alice@example.com".to_string(),   age: 25 },
-        Model { id: 2, name: "Bob".to_string(),     email: "bob@example.com".to_string(),     age: 17 },
-        Model { id: 3, name: "Charlie".to_string(), email: "charlie@example.com".to_string(), age: 30 },
-        Model { id: 4, name: "Diana".to_string(),   email: "diana@example.com".to_string(),   age: 16 },
-        Model { id: 5, name: "Eve".to_string(),     email: "eve@example.com".to_string(),     age: 22 },
+        Model {
+            id: 1,
+            name: "Alice".to_string(),
+            email: "alice@example.com".to_string(),
+            age: 25,
+        },
+        Model {
+            id: 2,
+            name: "Bob".to_string(),
+            email: "bob@example.com".to_string(),
+            age: 17,
+        },
+        Model {
+            id: 3,
+            name: "Charlie".to_string(),
+            email: "charlie@example.com".to_string(),
+            age: 30,
+        },
+        Model {
+            id: 4,
+            name: "Diana".to_string(),
+            email: "diana@example.com".to_string(),
+            age: 16,
+        },
+        Model {
+            id: 5,
+            name: "Eve".to_string(),
+            email: "eve@example.com".to_string(),
+            age: 22,
+        },
     ];
 
     let result = Model::insert_many(&session, users).await?;
@@ -185,9 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 复合条件: age < 18 OR age > 28
     // 预期: Bob(17), Diana(17), Charlie(30) → 3 条
-    let cond = Condition::any()
-        .add(Column::Age.lt(18))
-        .add(Column::Age.gt(28));
+    let cond = Condition::any().add(Column::Age.lt(18)).add(Column::Age.gt(28));
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 100i64.into())];
 
     let affected = Model::update_many(&session, cond, updates).await?;
@@ -196,10 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证
     let conn = session.connection()?;
-    let count_age_100 = Entity::find()
-        .filter(Column::Age.eq(100))
-        .count(conn)
-        .await?;
+    let count_age_100 = Entity::find().filter(Column::Age.eq(100)).count(conn).await?;
     println!("  ✓ age=100 的记录数: {}", count_age_100);
     assert_eq!(count_age_100, 3);
     println!("  ✓ 断言通过\n");

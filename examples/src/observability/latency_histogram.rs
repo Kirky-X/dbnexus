@@ -19,8 +19,7 @@
 //! ```
 
 use dbnexus::{
-    HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector, SlowQueryConfig,
-    SlowQueryRecord,
+    HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector, SlowQueryConfig, SlowQueryRecord,
 };
 use std::time::Duration;
 
@@ -40,14 +39,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 模拟记录一组查询延迟
     let samples = [
-        Duration::from_micros(500),   // 0.5ms → 落入 ≤1ms 桶
-        Duration::from_millis(2),     // 2ms → 落入 ≤5ms 桶
-        Duration::from_millis(7),     // 7ms → 落入 ≤10ms 桶
-        Duration::from_millis(15),    // 15ms → 落入 ≤50ms 桶
-        Duration::from_millis(75),    // 75ms → 落入 ≤100ms 桶
-        Duration::from_millis(250),   // 250ms → 落入 ≤500ms 桶
-        Duration::from_millis(750),   // 750ms → 落入 ≤1s 桶
-        Duration::from_millis(1500),  // 1500ms → 落入 >1s 溢出桶
+        Duration::from_micros(500),  // 0.5ms → 落入 ≤1ms 桶
+        Duration::from_millis(2),    // 2ms → 落入 ≤5ms 桶
+        Duration::from_millis(7),    // 7ms → 落入 ≤10ms 桶
+        Duration::from_millis(15),   // 15ms → 落入 ≤50ms 桶
+        Duration::from_millis(75),   // 75ms → 落入 ≤100ms 桶
+        Duration::from_millis(250),  // 250ms → 落入 ≤500ms 桶
+        Duration::from_millis(750),  // 750ms → 落入 ≤1s 桶
+        Duration::from_millis(1500), // 1500ms → 落入 >1s 溢出桶
     ];
     for s in &samples {
         histogram.record(*s);
@@ -81,20 +80,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 记录 100 条延迟数据（1ms ~ 100ms 线性分布）
     for i in 1..=100u64 {
-        collector.record_query(
-            "SELECT",
-            Duration::from_millis(i),
-            true,
-            Some(i * 100),
-        );
+        collector.record_query("SELECT", Duration::from_millis(i), true, Some(i * 100));
     }
     // 补充几条长尾延迟
     collector.record_query("SELECT", Duration::from_millis(200), true, None);
     collector.record_query("SELECT", Duration::from_millis(500), true, None);
 
-    let query_stats = collector
-        .get_query_stats("SELECT")
-        .expect("SELECT 统计应存在");
+    let query_stats = collector.get_query_stats("SELECT").expect("SELECT 统计应存在");
     let percentiles: &LatencyPercentiles = &query_stats.latency_percentiles;
     println!("  样本数: {}", percentiles.sample_count);
     println!("  P50  = {:?}", percentiles.p50());

@@ -102,7 +102,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    println!("  {:<15} {:>10} {:>12} {:>5}", "category", "total_qty", "avg_price", "n");
+    println!(
+        "  {:<15} {:>10} {:>12} {:>5}",
+        "category", "total_qty", "avg_price", "n"
+    );
     println!("  {}", "-".repeat(46));
     for row in &rows {
         let category = match row.get("category") {
@@ -166,7 +169,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sum_total += handle.await?;
     }
     println!("  ✓ 8 个并发任务全部完成");
-    println!("  8 个分片 SUM(val) 累加 = {} (应等于 {})", sum_total, (0..16).map(|i| i * 2).sum::<i32>());
+    println!(
+        "  8 个分片 SUM(val) 累加 = {} (应等于 {})",
+        sum_total,
+        (0..16).map(|i| i * 2).sum::<i32>()
+    );
 
     // ============================================
     // 7. 健康检查

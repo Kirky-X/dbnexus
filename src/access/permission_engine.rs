@@ -908,7 +908,7 @@ impl PermissionProvider for YamlPermissionProvider {
         }
 
         // 按优先级从高到低排序
-        matched_rules.sort_by(|a, b| b.0.cmp(&a.0));
+        matched_rules.sort_by_key(|b| std::cmp::Reverse(b.0));
 
         // 评估规则：按优先级从高到低，一旦找到决策立即返回
         for (_, rule) in matched_rules {
@@ -1144,7 +1144,7 @@ impl PermissionProvider for RbacPermissionProvider {
         }
 
         // 按优先级排序
-        all_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        all_rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         // 评估规则
         for rule in all_rules {

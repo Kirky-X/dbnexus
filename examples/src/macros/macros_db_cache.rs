@@ -20,7 +20,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::{CacheConfig, db_entity};
+use dbnexus::{db_entity, CacheConfig};
 use sea_orm::entity::prelude::*;
 
 // ============================================
@@ -90,7 +90,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cache_config: CacheConfig = Model::cache_config();
     println!("  生成的 CacheConfig:");
     println!("    policy_cache_capacity   = {}", cache_config.policy_cache_capacity);
-    println!("    sql_parse_cache_capacity = {}", cache_config.sql_parse_cache_capacity);
+    println!(
+        "    sql_parse_cache_capacity = {}",
+        cache_config.sql_parse_cache_capacity
+    );
     println!("    query_cache_capacity    = {}", cache_config.query_cache_capacity);
     println!("    default_ttl             = {} 秒", cache_config.default_ttl);
 
@@ -145,17 +148,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[READ]");
     let found = Model::find_by_id(&session, 1).await?;
     if let Some(ref a) = found {
-        println!("  ✓ 查询文章: id={}, title=\"{}\", author=\"{}\"", a.id, a.title, a.author);
+        println!(
+            "  ✓ 查询文章: id={}, title=\"{}\", author=\"{}\"",
+            a.id, a.title, a.author
+        );
         println!("    缓存键: \"{}\" (可用于读取/回填缓存)", Model::cache_key(a.id));
     }
 
     // UPDATE
     println!("\n[UPDATE]");
     let before = found.unwrap();
-    let updated = Model::update(&session, Model {
-        title: "Rust 异步编程指南（第二版）".to_string(),
-        ..before
-    }).await?;
+    let updated = Model::update(
+        &session,
+        Model {
+            title: "Rust 异步编程指南（第二版）".to_string(),
+            ..before
+        },
+    )
+    .await?;
     println!("  ✓ 更新文章: id={}, 新 title=\"{}\"", updated.id, updated.title);
     println!("    缓存键: \"{}\" (更新后应失效缓存)", Model::cache_key(updated.id));
 
@@ -182,14 +192,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 7. CacheConfig 应用场景 ---\n");
     let cfg = Model::cache_config();
     println!("  基于 db_cache 宏生成的 CacheConfig:");
-    println!("    - 策略缓存容量:     {} (来自 max_capacity={})",
-        cfg.policy_cache_capacity, Model::CACHE_MAX_CAPACITY);
-    println!("    - SQL 解析缓存容量: {} (来自 max_capacity={})",
-        cfg.sql_parse_cache_capacity, Model::CACHE_MAX_CAPACITY);
-    println!("    - 查询缓存容量:     {} (来自 max_capacity={})",
-        cfg.query_cache_capacity, Model::CACHE_MAX_CAPACITY);
-    println!("    - 默认 TTL:         {} 秒 (来自 CACHE_TTL={})",
-        cfg.default_ttl, Model::CACHE_TTL);
+    println!(
+        "    - 策略缓存容量:     {} (来自 max_capacity={})",
+        cfg.policy_cache_capacity,
+        Model::CACHE_MAX_CAPACITY
+    );
+    println!(
+        "    - SQL 解析缓存容量: {} (来自 max_capacity={})",
+        cfg.sql_parse_cache_capacity,
+        Model::CACHE_MAX_CAPACITY
+    );
+    println!(
+        "    - 查询缓存容量:     {} (来自 max_capacity={})",
+        cfg.query_cache_capacity,
+        Model::CACHE_MAX_CAPACITY
+    );
+    println!(
+        "    - 默认 TTL:         {} 秒 (来自 CACHE_TTL={})",
+        cfg.default_ttl,
+        Model::CACHE_TTL
+    );
     println!("\n  该配置可用于初始化 oxcache::Cache 或其他缓存后端。");
 
     println!("\n========================================");

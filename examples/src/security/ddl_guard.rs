@@ -64,12 +64,21 @@ fn main() {
     println!("--- 场景 1：合法的 DDL 语句（应通过） ---");
 
     let valid_cases = [
-        ("CREATE TABLE", "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))"),
+        (
+            "CREATE TABLE",
+            "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))",
+        ),
         ("CREATE TABLE 小写", "create table products (id int, price real)"),
         ("CREATE OR REPLACE", "CREATE OR REPLACE TABLE sessions (id INT)"),
-        ("ALTER TABLE ADD COLUMN", "ALTER TABLE users ADD COLUMN email VARCHAR(255)"),
+        (
+            "ALTER TABLE ADD COLUMN",
+            "ALTER TABLE users ADD COLUMN email VARCHAR(255)",
+        ),
         ("CREATE INDEX", "CREATE INDEX idx_name ON users (name)"),
-        ("CREATE VIEW", "CREATE VIEW active_users AS SELECT * FROM users WHERE active = true"),
+        (
+            "CREATE VIEW",
+            "CREATE VIEW active_users AS SELECT * FROM users WHERE active = true",
+        ),
         ("DROP INDEX", "DROP INDEX idx_name"),
         ("DROP VIEW", "DROP VIEW active_users"),
         ("SELECT 查询", "SELECT 1"),
