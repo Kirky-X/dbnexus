@@ -164,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
 | <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | 单体应用 |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | 除数据库驱动外的所有可选特性 | 所有企业功能（手动选择数据库） |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration` | 5 个聚合 feature（手动添加数据库驱动和其他特性） |
 
 ---
 
@@ -343,23 +343,25 @@ dbnexus = { version = "0.3.0", features = ["runtime-async-std"] }
 
 ```toml
 # 核心功能
-# 权限控制（需要 cache 特性）
-dbnexus = { version = "0.3.0", features = ["permission", "cache"] }
+# 权限控制（自动启用 sql-parser + yaml + cache 特性，强制依赖 sql-parser 防 SQL 注入）
+dbnexus = { version = "0.3.0", features = ["permission"] }
 
-# SQL 解析（需要 cache 特性）
-dbnexus = { version = "0.3.0", features = ["sql-parser", "cache"] }
+# SQL 解析（自动启用 cache 特性）
+dbnexus = { version = "0.3.0", features = ["sql-parser"] }
 
 # 过程宏
 dbnexus = { version = "0.3.0", features = ["macros"] }
 
 # 企业级功能
 dbnexus = { version = "0.3.0", features = [
-    "metrics",         # Prometheus 指标
-    "tracing",         # 分布式追踪
-    "audit",           # 审计日志
-    "migration",       # 数据库迁移
-    "sharding",        # 数据分片
-    "permission-engine" # 高级权限引擎
+    "metrics",          # Prometheus 指标
+    "tracing",          # 分布式追踪
+    "audit",            # 审计日志
+    "migration",        # 数据库迁移
+    "sharding",         # 数据分片
+    "global-index",     # 跨分片全局索引
+    "permission-engine", # 高级权限引擎
+    "authentication"   # JWT 认证 + 密码强度验证（0.3.0 新增）
 ] }
 
 # 配置

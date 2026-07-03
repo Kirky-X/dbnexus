@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`cache` feature 描述修正**: 从 "LRU" 改为 "oxcache（内部 moka L1 后端）"
 - **协议兼容数据库文档化**: CockroachDB/YugabyteDB/TiDB/MariaDB/Aurora 无需代码改动即可使用，在 README 中明确说明
 
+### Performance
+
+- **DuckDB 连接池化**: 替换 DuckDB 单一 Mutex 为连接池（`DuckDbConnection`），支持 `with_pool_size(url, pool_size)` 并发查询
+- **Session 短锁模式**: 避免 `Session` 持锁期间执行 async DB 调用，降低锁竞争
+- **MetricsCollector 原子化**: 移除不必要的 `RwLock`，改用原子操作释放性能
+- **SqlParser 全局共享单例**: `SqlParser::shared().await` 返回 `Arc<SqlParser>`，避免重复创建解析器实例
+
 ### Fixed
 
 #### 正确性修复（diting 审查）
@@ -69,6 +76,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`verify_token` 不校验 `token_type`**: refresh token 可用作 access token（权限提升风险），新增 `verify_access_token`/`verify_refresh_token` 方法额外校验 `token_type`
 - **`add_user` 无法验证密码强度**: 接收已哈希 `password_hash`，新增 `register_user(username, password, role)` 方法执行 `validate_strength → hash → insert` 完整流程
+
+#### 安全审查修复（tiangang SAST + diting 6 CRITICAL/5 HIGH）
+
+- **DuckDB SQL 注入防护**: `execute_duckdb_raw` 添加 admin role + DdlGuard AST 验证（对齐 `execute_raw_ddl` 行为），非 admin role 拒绝 DDL
+- **令牌桶竞态修复**: RateLimiter 内部状态更新改为原子操作
+- **`try_from` panic 修复**: `DbPool::try_from` 在 `permission` feature 启用时返回错误而非 panic
+- **singleflight 违约修复**: 权限缓存 singleflight 协调逻辑修正
+- **`eprintln!` 替换**: 所有 `eprintln!` 替换为 `tracing::warn!`/`tracing::error!`
+- **`sql-parser` 依赖加固**: 显式声明 sql-parser 依赖防止权限绕过
+- **假 DI setter 修复**: 移除误导性的依赖注入 setter
+- **`Engine*` 双重导出修复**: 消除类型重复导出
+- **空 `impl_` 目录清理**: 移除空实现目录
+- **冗余预加载移除**: 优化启动时无用的预加载逻辑
+- **`deny.toml` 添加 RUSTSEC-2023-0071**: 安全公告加入 cargo-deny 策略
+
+#### 最终回归修复（T024）
+
+- **DuckDB DDL 设计 bug**: `execute_duckdb_raw` 文档声明支持 DDL 但代码无条件拒绝，修复为 admin role + DdlGuard AST 验证后执行（对齐 `execute_raw_ddl`）
+- **DuckDB 健康检查查询失败**: `SELECT 1 AS health` 因 `parse_operation_async` 返回 `Ok(None)` 被拒绝，修复为 admin role 允许执行（对齐 `execute` 的 None 路径）
+- **`sqlite3://` scheme 缺失**: `DatabaseType::from_url` 不支持 `sqlite3://` 格式，添加支持
+- **sharding flaky test 修复**: `test_shard_router_key_consistency` 假设两个特定 key 必映射不同 shard（10% 碰撞概率），改为验证确定性属性 + 统计分布属性
 
 ## [0.2.0] - 2026-06-27
 

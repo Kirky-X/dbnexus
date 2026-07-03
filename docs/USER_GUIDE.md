@@ -125,7 +125,7 @@ use dbnexus::DbPool;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new().await?;
+    let pool = DbPool::new("postgresql://localhost/mydb").await?;
     println!("已连接！");
     Ok(())
 }
@@ -214,6 +214,8 @@ let pool = DbPool::with_config(config).await?;
 | `auto_migrate` | `bool` | false | 自动运行迁移 |
 | `migration_timeout` | `u64` | 60 | 迁移超时（秒） |
 | `admin_role` | `String` | "admin" | 管理员角色名称 |
+| `warmup_timeout` | `u64` | 30 | 连接池预热超时（秒） |
+| `warmup_retries` | `u32` | 3 | 连接池预热重试次数 |
 
 ---
 
@@ -420,7 +422,7 @@ println!("观察到的最大活跃数: {}", status.max_active);
 触发连接池健康检查：
 
 ```rust
-let invalid_count = pool.clean_invalid_connections().await?;
+let invalid_count = pool.clean_invalid_connections().await;
 println!("移除了 {} 个无效连接", invalid_count);
 ```
 
@@ -748,15 +750,16 @@ features = ["metrics"]
 ```rust
 use dbnexus::metrics::MetricsCollector;
 
-let collector = MetricsCollector::new(&pool);
+let collector = MetricsCollector::new();
 
 // 获取池指标
-let pool_metrics = collector.get_pool_metrics();
+let pool_metrics = collector.pool_status();
 println!("活跃连接: {}", pool_metrics.active);
 
 // 获取查询指标
-let query_metrics = collector.get_query_metrics();
-println!("P99 延迟: {}ms", query_metrics.latency_p99);
+if let Some(stats) = collector.get_query_stats("SELECT") {
+    println!("P99 延迟: {}ns", stats.latency_percentiles.p99_ns);
+}
 
 // 导出 Prometheus 格式
 let prometheus_metrics = collector.export_prometheus();
@@ -813,11 +816,243 @@ features = ["tracing"]
 use dbnexus::TracingGuard;
 
 // 初始化 OTLP 导出（默认端点 http://localhost:4317）
-let _guard = TracingGuard::init_with_otlp("dbnexus-service", "http://localhost:4317")?;
+let _guard = TracingGuard::init_with_otlp("http://localhost:4317")?;
 
 // 所有 DB 操作自动跟踪
 let session = pool.get_session("admin").await?;
 User::find_all(&session).await?;
+```
+
+### DuckDB 嵌入式数据库
+
+DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过连接池模式支持真正并行查询。
+
+启用 DuckDB：
+
+```toml
+[dependencies.dbnexus]
+version = "0.3.0"
+features = ["duckdb"]
+```
+
+URL 格式支持：
+
+- `:memory:` 或 `duckdb::memory:` — 内存数据库
+- `duckdb:path/to/file.db` — 文件数据库
+- `duckdb://path/to/file.db` — 文件数据库（URL 格式）
+
+API 说明：
+
+- `DuckDbConnection::new(url: &str) -> Result<Self, DbError>` — 创建连接（默认连接池大小 4）
+- `DuckDbConnection::with_pool_size(url: &str, pool_size: usize) -> Result<Self, DbError>` — 指定连接池大小
+- `conn.execute(sql: &str) -> DbResult<DuckDbExecResult>` — 执行 DDL/DML，返回受影响行数
+- `conn.query(sql: &str) -> DbResult<Vec<DuckDbRow>>` — 执行查询，返回行集合
+- `conn.health_check() -> DbResult<()>` — 健康检查（执行 `SELECT 1`）
+
+`DuckDbRow` 通过列名获取值：`row.get("column_name") -> Option<&DuckValue>`。
+
+```rust
+use dbnexus::DuckDbConnection;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建 DuckDB 连接（默认连接池大小 4）
+    let conn = DuckDbConnection::new(":memory:")?;
+
+    // 创建表
+    conn.execute("CREATE TABLE sales (id INTEGER, amount DOUBLE)").await?;
+
+    // 插入数据
+    conn.execute("INSERT INTO sales VALUES (1, 100.0), (2, 200.0)").await?;
+
+    // 查询
+    let rows = conn.query("SELECT id, amount FROM sales").await?;
+    for row in &rows {
+        // 按列名获取值
+        if let (Some(id), Some(amount)) = (row.get("id"), row.get("amount")) {
+            println!("id={:?}, amount={:?}", id, amount);
+        }
+    }
+
+    // 健康检查
+    conn.health_check().await?;
+    Ok(())
+}
+```
+
+### JWT 认证
+
+启用基于 JWT 的用户认证系统：
+
+```toml
+[dependencies.dbnexus]
+version = "0.3.0"
+features = ["authentication"]
+```
+
+API 说明：
+
+- `AuthenticationManager::new(jwt_secret: &[u8]) -> Self` — 创建认证管理器（密钥为字节切片）
+- `AuthenticationManager::with_config(jwt_secret, access_exp_secs, refresh_exp_secs) -> Self` — 自定义过期时间
+- `manager.register_user(username, password, role) -> AuthResult<()>` — 注册用户（async，含密码强度校验和哈希）
+- `manager.authenticate(credentials: AuthCredentials) -> AuthResult<String>` — 验证凭据并生成 JWT（async）
+- `manager.verify_token(token: &str) -> AuthResult<JwtClaims>` — 验证 JWT（同步方法）
+- `manager.refresh_token(refresh_token: &str) -> AuthResult<String>` — 刷新访问令牌
+
+关联类型：`AuthCredentials`（字段：`username`、`password`）、`JwtClaims`（字段：`sub`、`username`、`role`、`exp`、`iat`、`token_type`）。
+
+```rust
+use dbnexus::{AuthenticationManager, AuthCredentials};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // JWT 密钥（建议从环境变量读取，至少 32 字节）
+    let secret = b"my-secret-key-32-bytes-long-xxxxx";
+    let manager = AuthenticationManager::new(secret);
+
+    // 注册用户（密码需通过强度检查：≥8 字符 + 含字母 + 含数字）
+    manager.register_user("alice", "password123", "admin").await?;
+
+    // 认证
+    let credentials = AuthCredentials {
+        username: "alice".to_string(),
+        password: "password123".to_string(),
+    };
+    let token = manager.authenticate(credentials).await?;
+    println!("Token: {}", token);
+
+    // 验证 token（同步方法，无需 await）
+    let claims = manager.verify_token(&token)?;
+    println!("User: {}, Role: {}", claims.sub, claims.role);
+
+    Ok(())
+}
+```
+
+### DDL 安全守卫
+
+`DdlGuard` 使用 AST（抽象语法树）分析验证 DDL 语句安全性，相比字符串前缀匹配更可靠。需启用 `sql-parser` feature（默认已启用）。
+
+```toml
+[dependencies.dbnexus]
+version = "0.3.0"
+features = ["sql-parser"]
+```
+
+API 说明：
+
+- `DdlGuard::new() -> Self` — 创建守卫实例
+- `guard.validate(sql: &str) -> Result<DdlValidationResult, String>` — 验证 SQL，返回 `Result`（解析失败时返回 `Err`）
+
+`DdlValidationResult` 三态变体：
+
+- `Allowed` — 验证通过
+- `Forbidden(String)` — SQL 被拦截，含原因
+- `ParseError(String)` — SQL 解析失败
+
+白名单允许的语句：`CreateTable`、`AlterTable`、`CreateIndex`、`CreateView`、`Truncate`、`Query`（SELECT）、`DropIndex`、`DropView`。禁止：`DROP TABLE`、`DROP DATABASE`、`INSERT`、`UPDATE`、`DELETE` 等。
+
+注意：`Session::execute_raw_ddl` 和 `execute_duckdb_raw` 内部已自动调用 `DdlGuard`；只有 admin role 才能执行 DDL。
+
+```rust
+use dbnexus::{DdlGuard, DdlValidationResult};
+
+fn main() {
+    let guard = DdlGuard::new();
+
+    // 允许的 DDL（CREATE TABLE 在白名单中）
+    assert!(matches!(
+        guard.validate("CREATE TABLE users (id INT)").unwrap(),
+        DdlValidationResult::Allowed
+    ));
+
+    // 拒绝的 DDL（DROP TABLE 被禁止，仅允许 DROP INDEX/DROP VIEW）
+    match guard.validate("DROP TABLE users").unwrap() {
+        DdlValidationResult::Forbidden(reason) => {
+            println!("拒绝执行: {}", reason);
+        }
+        _ => panic!("应该拒绝 DROP TABLE"),
+    }
+}
+```
+
+### 分片路由
+
+启用数据分片，支持水平扩展：
+
+```toml
+[dependencies.dbnexus]
+version = "0.3.0"
+features = ["sharding"]
+```
+
+API 说明：
+
+- `ShardRouter::new(strategy: S, total_shards: u32) -> Self` — 使用策略实例创建（`S: ShardingStrategy + 'static`）
+- `ShardRouter::with_strategy(strategy: &str, total_shards: u32) -> Self` — 按策略名创建（如 `"hash"`、`"yearly"`，同步方法）
+- `ShardRouter::with_config(config: &ShardConfig) -> Result<Self, DbError>` — 异步、并行初始化所有分片连接池
+- `router.shard_id_for_key(shard_key: &str) -> u32` — 根据 key 计算分片 ID
+- `router.calculate_shard(timestamp: DateTime<Utc>, key: &str) -> u32` — 按时间+key 计算分片
+- `router.get_session_for_shard(shard_key, role) -> Result<Session, DbError>` — 获取分片对应的 Session（async）
+
+默认策略为 `YearlyStrategy`。内置 `create_strategy(name)` 工厂函数支持 `"hash"`、`"yearly"` 等策略名。
+
+```rust
+use dbnexus::ShardRouter;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 hash 策略创建 4 分片路由器（同步方法，不创建连接池）
+    let router = ShardRouter::with_strategy("hash", 4);
+
+    // 根据 key 计算分片 ID
+    let shard_id = router.shard_id_for_key("user_123");
+    println!("Shard: {}", shard_id);
+
+    Ok(())
+}
+```
+
+### 数据验证
+
+启用数据验证 feature 后，`DbError` 增加 `Validation(String)` 变体，并集成 [`validator`](https://docs.rs/validator) crate 提供声明式验证：
+
+```toml
+[dependencies.dbnexus]
+version = "0.3.0"
+features = ["validation"]
+```
+
+启用后可使用 `DbError::Validation` 作为统一错误类型，并将 `validator` 的错误转换为 `DbError`：
+
+```rust
+use dbnexus::DbError;
+use validator::Validate;
+
+#[derive(Validate)]
+struct UserInput {
+    #[validate(email)]
+    email: String,
+    #[validate(length(min = 8))]
+    password: String,
+}
+
+fn process_input(input: &UserInput) -> Result<(), DbError> {
+    // 调用 validator crate 的验证，错误转换为 DbError::Validation
+    input.validate().map_err(|e| DbError::Validation(e.to_string()))?;
+    // 处理输入...
+    Ok(())
+}
+
+fn validate_email(email: &str) -> Result<(), DbError> {
+    if email.is_empty() {
+        return Err(DbError::Validation("邮箱不能为空".to_string()));
+    }
+    if !email.contains('@') {
+        return Err(DbError::Validation("邮箱格式无效".to_string()));
+    }
+    Ok(())
+}
 ```
 
 ---
@@ -1030,8 +1265,10 @@ User::delete(&session, 1).await?;
 
 1. 启用并检查指标：
    ```rust
-   let collector = MetricsCollector::new(&pool);
-   println!("P99 延迟: {}ms", collector.get_query_metrics().latency_p99);
+   let collector = MetricsCollector::new();
+   if let Some(stats) = collector.get_query_stats("SELECT") {
+       println!("P99 延迟: {}ns", stats.latency_percentiles.p99_ns);
+   }
    ```
 
 2. 使用索引：

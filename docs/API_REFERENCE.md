@@ -149,7 +149,10 @@ println!("活跃: {}, 空闲: {}", status.active, status.idle);
 
 手动触发连接健康检查和清理。
 
+**特性门控：** `#[cfg(feature = "pool-health-check")]`
+
 ```rust
+#[cfg(feature = "pool-health-check")]
 pub async fn clean_invalid_connections(&self) -> u32
 ```
 
@@ -175,7 +178,7 @@ pub struct Session {
 执行带权限检查的 SQL 语句。
 
 ```rust
-pub async fn execute(&mut self, sql: &str) -> DbResult<ExecResult>
+pub async fn execute(&self, sql: &str) -> DbResult<ExecResult>
 ```
 
 **参数：**
@@ -207,7 +210,7 @@ pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>
 开始数据库事务。
 
 ```rust
-pub async fn begin_transaction(&mut self) -> DbResult<()>
+pub async fn begin_transaction(&self) -> Result<(), DbError>
 ```
 
 **错误：**
@@ -226,7 +229,7 @@ session.commit().await?;
 提交当前事务。
 
 ```rust
-pub async fn commit(&mut self) -> DbResult<()>
+pub async fn commit(&self) -> Result<(), DbError>
 ```
 
 ##### `rollback`
@@ -234,7 +237,7 @@ pub async fn commit(&mut self) -> DbResult<()>
 回滚当前事务。
 
 ```rust
-pub async fn rollback(&mut self) -> DbResult<()>
+pub async fn rollback(&self) -> Result<(), DbError>
 ```
 
 ##### `is_in_transaction`
@@ -242,7 +245,7 @@ pub async fn rollback(&mut self) -> DbResult<()>
 检查当前是否在事务中。
 
 ```rust
-pub fn is_in_transaction(&self) -> bool
+pub async fn is_in_transaction(&self) -> bool
 ```
 
 ##### `role`
@@ -265,6 +268,7 @@ pub struct PoolStatus {
     pub active: u32,     // 当前活跃连接数
     pub idle: u32,       // 空闲连接数（总数 - 活跃）
     pub wait_count: u32,  // 等待连接的次数
+    pub max_waiters: u32,  // 最大等待计数（历史峰值）
     pub borrow_count: u64, // 总借用次数
     pub max_active: u32, // 观察到的最大活跃连接数
 }
@@ -466,19 +470,33 @@ pub struct PermissionContext {
 创建新的权限上下文。
 
 ```rust
-pub fn new(role: String, cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>) -> Self
+pub fn new(role: String, policy_cache: Arc<Cache<String, RolePolicy>>) -> Self
 ```
 
-##### `with_rate_limiter`
+##### `with_cache_size_and_rate_limit`
 
-创建启用速率限制的上下文。
+创建启用自定义缓存大小和速率限制的上下文。
 
 ```rust
-pub fn with_rate_limiter(
+pub async fn with_cache_size_and_rate_limit(
     role: String,
-    cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>,
-    limiter: Arc<RateLimiter>,
-) -> Self
+    cache_capacity: usize,
+    max_requests: u32,
+    window_secs: u64,
+) -> Result<Self, PermissionError>
+```
+
+##### `with_config_and_rate_limit`
+
+创建使用 `DbConfig` 配置和速率限制的上下文。
+
+```rust
+pub async fn with_config_and_rate_limit(
+    role: String,
+    config: &crate::foundation::config::DbConfig,
+    max_requests: u32,
+    window_secs: u64,
+) -> Result<Self, PermissionError>
 ```
 
 ##### `check_table_access`
@@ -497,7 +515,7 @@ pub async fn check_table_access(&self, table: &str, action: &PermissionAction) -
 从 YAML 字符串加载权限配置。
 
 ```rust
-pub async fn load_policy(&self, yaml: &str) -> DbResult<()>
+pub async fn load_policy(&self, config: &PermissionConfig) -> Result<(), String>
 ```
 
 ### `PermissionConfig`
@@ -539,12 +557,13 @@ roles:
 
 #### 方法
 
-##### `from_yaml`
+##### `from_yaml_str`
 
 从 YAML 字符串解析权限配置。
 
 ```rust
-pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error>
+#[cfg(feature = "yaml")]
+pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error>
 ```
 
 ##### `deny_all`
@@ -694,15 +713,24 @@ pub struct User {
 
 ```rust
 pub enum DbError {
-    Connection(String),
-    ConnectionPool(String),
+    /// 数据库连接错误
+    Connection(#[from] sea_orm::DbErr),
+
+    /// 配置错误
+    Config(String),
+
+    /// 权限错误
     Permission(String),
-    SqlParse(SqlParseError),
+
+    /// 事务错误
     Transaction(String),
+
+    /// 迁移错误
     Migration(String),
+
+    /// 数据验证错误（feature-gated: validation）
+    #[cfg(feature = "validation")]
     Validation(String),
-    Database(sea_orm::DbErr),
-    Internal(String),
 }
 ```
 
@@ -712,14 +740,28 @@ pub enum DbError {
 
 ```rust
 pub enum ConfigError {
-    FileNotFound(PathBuf),
-    InvalidFormat(String),
+    /// 缺少必填字段
     MissingField(String),
-    EnvVarError(String),
-    IoError(io::Error),
+    /// 缺少 URL
+    MissingUrl,
+    /// 无效缓存容量
+    InvalidCacheCapacity(String),
+    /// 无效值
+    InvalidValue { key: String, message: String },
+    /// 无效格式
+    InvalidFormat(String),
+    /// 文件未找到
+    FileNotFound(String),
+    /// IO 错误
+    IoError(String),
+    /// 无效 URL
     InvalidUrl(String),
+    /// 不支持的协议
     UnsupportedProtocol(String),
-    ValidationFailed(String),
+    /// 解析错误
+    ParseError(String),
+    /// 验证错误
+    ValidationError(String),
 }
 ```
 
@@ -728,9 +770,17 @@ pub enum ConfigError {
 SQL 解析错误。
 
 ```rust
-pub struct SqlParseError {
-    pub message: String,
-    pub sql: String,
+pub enum SqlParseError {
+    /// SQL 解析失败（语法错误或无效结构）
+    ParseError(String),
+    /// 不支持的 SQL 语句类型
+    UnsupportedStatement(String),
+    /// 空 SQL 语句
+    EmptyStatement,
+    /// 检测到多条 SQL 语句（仅允许单条语句）
+    MultipleStatements,
+    /// SQL 语句包含变量（可能为动态 SQL 注入）
+    ContainsVariables(String),
 }
 ```
 
@@ -740,14 +790,14 @@ pub struct SqlParseError {
 
 ### `ExecResult`
 
-SQL 执行的结果。
+SQL 执行的结果。直接 re-export 自 `sea_orm`。
 
 ```rust
-pub struct ExecResult {
-    pub rows_affected: u64,
-    pub last_insert_id: Option<i64>,
-}
+// src/database/pool/mod.rs
+pub use sea_orm::ExecResult;
 ```
+
+`ExecResult` 是 `sea_orm::ExecResult` 的类型别名，包含执行后受影响的行数等信息。
 
 ---
 
@@ -827,7 +877,7 @@ OpenTelemetry OTLP 集成，基于 `tracing` + `tracing-opentelemetry` + `opente
 use dbnexus::TracingGuard;
 
 // 初始化 OTLP 导出（默认端点 http://localhost:4317）
-let _guard = TracingGuard::init_with_otlp("dbnexus-service", "http://localhost:4317")?;
+let _guard = TracingGuard::init_with_otlp("http://localhost:4317")?;
 // 进程退出时 _guard drop 自动关闭 tracer
 ```
 
@@ -845,12 +895,11 @@ let auth = AuthenticationManager::new(secret);
 // 注册用户（执行 validate_strength → hash → insert 完整流程）
 let user = auth.register_user("alice", "strong_password", "admin").await?;
 
-// 签发 access/refresh token
-let access_token = auth.login(&user, TokenType::Access).await?;
-let refresh_token = auth.login(&user, TokenType::Refresh).await?;
+// 认证（验证凭据并签发 access token）
+let access_token = auth.authenticate(credentials).await?;
 
 // 校验（额外校验 token_type，防止 refresh 用作 access）
-let claims = auth.verify_access_token(&access_token)?;
+let claims = auth.verify_token(&access_token)?;
 ```
 
 **导出类型：** `AuthenticationManager`、`JwtManager`、`PasswordHasher`、`AuthCredentials`、`JwtClaims`、`TokenType`、`User`、`AuthError`、`AuthResult`
@@ -860,8 +909,8 @@ let claims = auth.verify_access_token(&access_token)?;
 ```rust
 use dbnexus::{HealthChecker, CircuitBreaker, CircuitBreakerConfig};
 
-let checker = HealthChecker::new();
-let status = checker.check_pool(&pool).await?;
+let checker = HealthChecker::new(1000); // check_timeout_ms
+let status: HealthCheckResult = checker.check().await;
 // 熔断器：连续失败达到阈值自动打开
 let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
 ```
@@ -873,7 +922,7 @@ let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
 ```rust
 use dbnexus::{ShardRouter, ShardConfig, ShardingStrategy};
 
-let router = ShardRouter::new(ShardConfig { total_shards: 4, ..Default::default() })?;
+let router = ShardRouter::with_strategy("hash", 4);
 let shard_id = router.shard_id_for_key("user_123");
 
 // 会话级分片路由（0.3.0 新增）
@@ -921,8 +970,8 @@ let pdp = PolicyDecisionPoint::new(provider);
 ```rust
 use dbnexus::{SqlParser, SqlOperationType, is_ddl_operation, contains_sql_injection};
 
-let parser = SqlParser::new();
-let op_type = parser.parse_operation_type("SELECT * FROM users")?; // SqlOperationType::Select
+let parser = SqlParser::new().await;
+let op_type = parser.parse_operation_async("SELECT * FROM users").await?; // Option<(String, PermissionAction)>
 let is_ddl = is_ddl_operation("CREATE TABLE foo (...)"); // true
 let has_injection = contains_sql_injection("'; DROP TABLE--"); // true
 ```
