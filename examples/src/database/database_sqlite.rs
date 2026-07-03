@@ -61,7 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let r2 = session
         .execute_raw("INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')")
         .await?;
-    println!("✓ 插入 {} 条记录 (rows_affected: {}, {})", 2, r1.rows_affected(), r2.rows_affected());
+    println!(
+        "✓ 插入 {} 条记录 (rows_affected: {}, {})",
+        2,
+        r1.rows_affected(),
+        r2.rows_affected()
+    );
 
     drop(session);
     println!("ℹ️  Session 释放，连接归还池中");

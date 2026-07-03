@@ -18,9 +18,8 @@
 //! ```
 
 use dbnexus::access::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource,
-    PermissionRule, PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig,
-    RbacPermissionProvider, Role,
+    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
+    PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
 
@@ -66,12 +65,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     provider.add_permission(
         "admin",
-        rule("admin_all", 100, "*", "*", &[
-            PermissionAction::Select,
-            PermissionAction::Insert,
-            PermissionAction::Update,
-            PermissionAction::Delete,
-        ]),
+        rule(
+            "admin_all",
+            100,
+            "*",
+            "*",
+            &[
+                PermissionAction::Select,
+                PermissionAction::Insert,
+                PermissionAction::Update,
+                PermissionAction::Delete,
+            ],
+        ),
     );
 
     // editor 角色：可读写 articles，可读 users
@@ -83,11 +88,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     provider.add_permission(
         "editor",
-        rule("editor_articles_rw", 50, "*", "articles", &[
-            PermissionAction::Select,
-            PermissionAction::Insert,
-            PermissionAction::Update,
-        ]),
+        rule(
+            "editor_articles_rw",
+            50,
+            "*",
+            "articles",
+            &[
+                PermissionAction::Select,
+                PermissionAction::Insert,
+                PermissionAction::Update,
+            ],
+        ),
     );
     provider.add_permission(
         "editor",
@@ -177,8 +188,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_environment("source", "web");
 
     println!("--- PermissionContext 权限检查 ---\n");
-    println!("  上下文: subject={}, resource={}, action={:?}",
-        context.subject.id, context.resource.name, context.action);
+    println!(
+        "  上下文: subject={}, resource={}, action={:?}",
+        context.subject.id, context.resource.name, context.action
+    );
     println!("  属性: {:?}", context.attributes);
     println!("  环境: {:?}", context.environment);
 

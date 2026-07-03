@@ -185,7 +185,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .into();
 
     let inserted = new_member.insert(session.connection()?).await?;
-    println!("  ✓ 插入成功: id={}, name={}, email={}", inserted.id, inserted.name, inserted.email);
+    println!(
+        "  ✓ 插入成功: id={}, name={}, email={}",
+        inserted.id, inserted.name, inserted.email
+    );
     println!("    created_at = {:?}", inserted.created_at);
     println!("    updated_at = {:?}", inserted.updated_at);
     println!(

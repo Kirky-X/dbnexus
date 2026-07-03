@@ -22,8 +22,8 @@
 mod common;
 
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
-    MemoryAuditStorage, db_entity,
+    db_entity, AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
+    MemoryAuditStorage,
 };
 use sea_orm::entity::prelude::*;
 use std::sync::Arc;
@@ -73,7 +73,6 @@ fn should_audit(operation: &str, role: &str) -> bool {
     let role_match = Model::AUDIT_ROLES.iter().any(|r| *r == role);
     op_match && role_match
 }
-
 
 // ============================================
 // 主函数
@@ -170,11 +169,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ 插入产品: id={}, name={}", created.id, created.name);
 
     if should_audit("CREATE", role) {
-        let event = AuditEvent::create("products", &created.id.to_string(), role)
-            .with_after_value(&format!(
-                r#"{{"name":"{}","price":{},"stock":{}}}"#,
-                created.name, created.price, created.stock
-            ));
+        let event = AuditEvent::create("products", &created.id.to_string(), role).with_after_value(&format!(
+            r#"{{"name":"{}","price":{},"stock":{}}}"#,
+            created.name, created.price, created.stock
+        ));
         logger.log(event).await?;
         println!("  ✓ 审计日志已记录 (operation=CREATE, role={})", role);
     } else {
@@ -193,7 +191,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         logger.log(event).await?;
         println!("  ✓ 审计日志已记录 (operation=READ)");
     } else {
-        println!("  - 跳过审计 (READ 不在 AUDIT_OPERATIONS={:?})", Model::AUDIT_OPERATIONS);
+        println!(
+            "  - 跳过审计 (READ 不在 AUDIT_OPERATIONS={:?})",
+            Model::AUDIT_OPERATIONS
+        );
     }
 
     // UPDATE
@@ -203,12 +204,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         r#"{{"name":"{}","price":{},"stock":{}}}"#,
         before.name, before.price, before.stock
     );
-    let updated = Model::update(&session, Model {
-        price: 1199.99,
-        stock: 20,
-        ..before
-    }).await?;
-    println!("  ✓ 更新产品: id={}, 新 price={:.2}, 新 stock={}", updated.id, updated.price, updated.stock);
+    let updated = Model::update(
+        &session,
+        Model {
+            price: 1199.99,
+            stock: 20,
+            ..before
+        },
+    )
+    .await?;
+    println!(
+        "  ✓ 更新产品: id={}, 新 price={:.2}, 新 stock={}",
+        updated.id, updated.price, updated.stock
+    );
 
     if should_audit("UPDATE", role) && Model::AUDIT_LOG_VALUES {
         let after_value = format!(
@@ -248,8 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ 删除产品 id=2: 影响 {} 行", deleted);
 
     if should_audit("DELETE", role) {
-        let event = AuditEvent::delete("products", "2", role)
-            .with_severity(AuditSeverity::High);
+        let event = AuditEvent::delete("products", "2", role).with_severity(AuditSeverity::High);
         logger.log(event).await?;
         println!("  ✓ 审计日志已记录 (operation=DELETE, severity=High)");
     } else {
@@ -268,8 +275,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let all_events = logger.query(&all_filters).await?;
     println!("\n  [全部审计事件]");
     for ev in &all_events {
-        println!("    - {} {}/{} by {} [{}]",
-            ev.operation, ev.entity_type, ev.entity_id, ev.user_id, ev.severity);
+        println!(
+            "    - {} {}/{} by {} [{}]",
+            ev.operation, ev.entity_type, ev.entity_id, ev.user_id, ev.severity
+        );
     }
 
     // 按 operation 查询
@@ -300,10 +309,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     println!("\n--- 6. 角色不匹配场景 ---\n");
     println!("  AUDIT_ROLES = {:?}", Model::AUDIT_ROLES);
-    println!("  should_audit(\"CREATE\", \"admin\")   = {}", should_audit("CREATE", "admin"));
-    println!("  should_audit(\"CREATE\", \"manager\") = {}", should_audit("CREATE", "manager"));
-    println!("  should_audit(\"CREATE\", \"guest\")   = {} (角色不在 AUDIT_ROLES)", should_audit("CREATE", "guest"));
-    println!("  should_audit(\"READ\", \"admin\")     = {} (READ 不在 AUDIT_OPERATIONS)", should_audit("READ", "admin"));
+    println!(
+        "  should_audit(\"CREATE\", \"admin\")   = {}",
+        should_audit("CREATE", "admin")
+    );
+    println!(
+        "  should_audit(\"CREATE\", \"manager\") = {}",
+        should_audit("CREATE", "manager")
+    );
+    println!(
+        "  should_audit(\"CREATE\", \"guest\")   = {} (角色不在 AUDIT_ROLES)",
+        should_audit("CREATE", "guest")
+    );
+    println!(
+        "  should_audit(\"READ\", \"admin\")     = {} (READ 不在 AUDIT_OPERATIONS)",
+        should_audit("READ", "admin")
+    );
 
     println!("\n========================================");
     println!("✨ db_entity 宏 audit 示例完成！");

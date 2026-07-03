@@ -41,13 +41,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n  发送 5 个请求（应全部允许）:");
     for i in 1..=5 {
         let allowed = limiter.check("user_001").await;
-        println!("    请求 #{}: allowed={}, remaining={}", i, allowed, limiter.remaining("user_001"));
+        println!(
+            "    请求 #{}: allowed={}, remaining={}",
+            i,
+            allowed,
+            limiter.remaining("user_001")
+        );
     }
 
     // 第 6 个请求应该被拒绝
     println!("\n  发送第 6 个请求（应被拒绝）:");
     let allowed = limiter.check("user_001").await;
-    println!("    请求 #6: allowed={}, remaining={}", allowed, limiter.remaining("user_001"));
+    println!(
+        "    请求 #6: allowed={}, remaining={}",
+        allowed,
+        limiter.remaining("user_001")
+    );
     println!();
 
     // ============================================
@@ -72,7 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 验证 user_A 仍有 1 个令牌
     println!("\n  验证 user_A 仍有 1 个令牌（独立计数）:");
     let allowed_a = limiter2.check("user_A").await;
-    println!("    user_A 请求: allowed={}, remaining={}", allowed_a, limiter2.remaining("user_A"));
+    println!(
+        "    user_A 请求: allowed={}, remaining={}",
+        allowed_a,
+        limiter2.remaining("user_A")
+    );
     let denied_a = limiter2.check("user_A").await;
     println!("    user_A 再次请求: allowed={} (应被拒绝)", denied_a);
     println!("    user_B remaining = {} (不受影响)", limiter2.remaining("user_B"));
@@ -186,10 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limiter7 = RateLimiter::new(20, Duration::from_secs(60), 10000, 20);
     println!("  ✓ RateLimiter 创建: max_requests=20/min (模拟 API 限流)");
 
-    let mut stats = Stats {
-        allowed: 0,
-        denied: 0,
-    };
+    let mut stats = Stats { allowed: 0, denied: 0 };
 
     println!("\n  模拟 30 次权限检查:");
     for i in 1..=30 {
@@ -201,7 +211,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if i <= 22 || i == 30 {
             let status = if allowed { "✓" } else { "✗" };
-            println!("    #{}: {} (remaining={})", i, status, limiter7.remaining("api_client"));
+            println!(
+                "    #{}: {} (remaining={})",
+                i,
+                status,
+                limiter7.remaining("api_client")
+            );
         } else if i == 23 {
             println!("    ... (省略中间输出) ...");
         }
@@ -216,7 +231,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_limiter: RateLimiter = RateLimiter::default();
     println!("  ✓ Default 配置: 100 req/min, 10000 buckets, burst=100");
     let allowed = default_limiter.check("default_user").await;
-    println!("    首次请求: allowed={}, remaining={}", allowed, default_limiter.remaining("default_user"));
+    println!(
+        "    首次请求: allowed={}, remaining={}",
+        allowed,
+        default_limiter.remaining("default_user")
+    );
     println!();
 
     // ============================================

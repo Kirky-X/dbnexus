@@ -17,9 +17,7 @@
 //! cargo run --example global_index --features "sqlite,global-index"
 //! ```
 
-use dbnexus::{
-    GlobalIndex, IndexEntry, SyncEvent, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
-};
+use dbnexus::{GlobalIndex, IndexEntry, SyncEvent, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -111,10 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let results = global_index.query_by_index("orders", "user_id", "user_100").await?;
     println!("  ✓ 找到 {} 条记录", results.len());
     for entry in &results {
-        println!(
-            "    → record: {}, shard: {}",
-            entry.record_id, entry.shard_id
-        );
+        println!("    → record: {}, shard: {}", entry.record_id, entry.shard_id);
     }
 
     // 查询 user_200 的订单（分布在分片 0 和 2）
@@ -122,10 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let results = global_index.query_by_index("orders", "user_id", "user_200").await?;
     println!("  ✓ 找到 {} 条记录", results.len());
     for entry in &results {
-        println!(
-            "    → record: {}, shard: {}",
-            entry.record_id, entry.shard_id
-        );
+        println!("    → record: {}, shard: {}", entry.record_id, entry.shard_id);
     }
 
     // 查询不存在的用户
@@ -184,13 +176,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         index_value: "user_100_updated".to_string(), // 更新值
     }];
     let result = global_index.batch_sync(duplicate_entries).await?;
-    println!("  ✓ 重复同步完成: synced={}, failed={}", result.synced_count, result.failed_count);
+    println!(
+        "  ✓ 重复同步完成: synced={}, failed={}",
+        result.synced_count, result.failed_count
+    );
 
     // 验证更新后的值
-    let results = global_index.query_by_index("orders", "user_id", "user_100_updated").await?;
+    let results = global_index
+        .query_by_index("orders", "user_id", "user_100_updated")
+        .await?;
     println!("  ✓ 查询更新后的值: 找到 {} 条记录", results.len());
     for entry in &results {
-        println!("    → record: {}, shard: {}, value: {}", entry.record_id, entry.shard_id, entry.index_value);
+        println!(
+            "    → record: {}, shard: {}, value: {}",
+            entry.record_id, entry.shard_id, entry.index_value
+        );
     }
 
     println!("\n========================================");

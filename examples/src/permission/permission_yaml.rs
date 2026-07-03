@@ -17,9 +17,7 @@
 //! cargo run --example permission_yaml --features "sqlite,permission,yaml"
 //! ```
 
-use dbnexus::access::permission::{
-    PermissionAction, PermissionProvider, YamlPermissionProvider,
-};
+use dbnexus::access::permission::{PermissionAction, PermissionProvider, YamlPermissionProvider};
 use dbnexus::{DbConfig, DbPool};
 use std::collections::HashMap;
 

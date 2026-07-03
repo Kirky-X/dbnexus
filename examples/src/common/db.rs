@@ -52,8 +52,7 @@ pub async fn setup_sqlite_session() -> Result<(DbPool, Session), Box<dyn std::er
 ///
 /// 使用 `sqlite:file::memory:?cache=shared`，多个连接共享同一份内存数据库，
 /// 适用于需要在多个 Session 间看到同一张表的示例（如 CRUD + 事务演示）。
-pub async fn setup_shared_sqlite_session(
-) -> Result<(DbPool, Session), Box<dyn std::error::Error>> {
+pub async fn setup_shared_sqlite_session() -> Result<(DbPool, Session), Box<dyn std::error::Error>> {
     let pool = DbPool::with_config(sqlite_config("sqlite:file::memory:?cache=shared")).await?;
     let session = pool.get_session("admin").await?;
     Ok((pool, session))
@@ -64,8 +63,7 @@ pub async fn setup_shared_sqlite_session(
 /// 在系统临时目录下创建 `dbnexus_example.db` 文件。sqlx 默认 `create_if_missing=false`，
 /// 因此本函数会预创建空文件。返回 `(pool, session, file_path)`，调用方可在结束时
 /// 用 `file_path` 删除数据库文件。
-pub async fn setup_file_sqlite_session(
-) -> Result<(DbPool, Session, std::path::PathBuf), Box<dyn std::error::Error>> {
+pub async fn setup_file_sqlite_session() -> Result<(DbPool, Session, std::path::PathBuf), Box<dyn std::error::Error>> {
     let path = std::env::temp_dir().join("dbnexus_example.db");
     // 清理旧文件以确保示例干净
     let _ = std::fs::remove_file(&path);

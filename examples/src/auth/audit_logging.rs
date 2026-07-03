@@ -20,8 +20,8 @@
 //! ```
 
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
-    AuditSeverity, AuditStatus, MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
+    AuditStatus, MemoryAuditStorage,
 };
 use std::sync::Arc;
 
@@ -58,7 +58,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  max_file_size   = {} bytes", config.max_file_size);
     println!("  retention_count = {} days", config.retention_count);
     println!("  sensitive_fields = {:?}", config.sensitive_fields);
-    println!("  alert_operations = {:?}", config.alert_operations.iter().map(|o| o.to_string()).collect::<Vec<_>>());
+    println!(
+        "  alert_operations = {:?}",
+        config
+            .alert_operations
+            .iter()
+            .map(|o| o.to_string())
+            .collect::<Vec<_>>()
+    );
 
     // ============================================
     // 2. 创建 AuditLogger + MemoryAuditStorage
@@ -139,7 +146,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n--- 6. 记录各类审计事件 ---");
 
     // CREATE
-    logger.log_create("users", "u_001", "admin", Some(r#"{"name":"alice"}"#.to_string())).await?;
+    logger
+        .log_create("users", "u_001", "admin", Some(r#"{"name":"alice"}"#.to_string()))
+        .await?;
     println!("  ✓ log_create: users/u_001 by admin");
 
     // READ
@@ -147,17 +156,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ log_read: users/u_001 by admin");
 
     // UPDATE（带前后值）
-    logger.log_update(
-        "orders",
-        "o_200",
-        "alice",
-        Some(r#"{"status":"pending"}"#.to_string()),
-        Some(r#"{"status":"shipped"}"#.to_string()),
-    ).await?;
+    logger
+        .log_update(
+            "orders",
+            "o_200",
+            "alice",
+            Some(r#"{"status":"pending"}"#.to_string()),
+            Some(r#"{"status":"shipped"}"#.to_string()),
+        )
+        .await?;
     println!("  ✓ log_update: orders/o_200 by alice");
 
     // DELETE（高危操作，会触发告警）
-    logger.log_delete("users", "u_002", "admin", Some(r#"{"name":"bob"}"#.to_string())).await?;
+    logger
+        .log_delete("users", "u_002", "admin", Some(r#"{"name":"bob"}"#.to_string()))
+        .await?;
     println!("  ✓ log_delete: users/u_002 by admin (高危，触发告警)");
 
     // LOGIN
@@ -233,8 +246,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let delete_events = logger.query(&delete_filters).await?;
     println!("  [operation=Delete] 共 {} 条", delete_events.len());
     for ev in &delete_events {
-        println!("    - entity={}/{}, user={}, severity={}",
-            ev.entity_type, ev.entity_id, ev.user_id, ev.severity);
+        println!(
+            "    - entity={}/{}, user={}, severity={}",
+            ev.entity_type, ev.entity_id, ev.user_id, ev.severity
+        );
     }
 
     // 按 severity 查询
@@ -290,8 +305,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         disabled_storage.clone(),
     );
     disabled_logger.log_create("test", "t_1", "u", None).await?;
-    println!("  enabled=false 时 log_create 后存储数量 = {} (应为 0)",
-        disabled_storage.event_count().await);
+    println!(
+        "  enabled=false 时 log_create 后存储数量 = {} (应为 0)",
+        disabled_storage.event_count().await
+    );
 
     // ============================================
     // 10. 日志清理
