@@ -100,7 +100,7 @@ mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 duckdb = ["dep:duckdb"]  # 嵌入式分析型数据库（0.3.0 新增）
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml"]  # 权限控制（dashmap 用于旧版 access/permission，yaml 用于策略解析，futures 用于测试）
+permission = ["dashmap", "futures", "yaml", "sql-parser"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "once_cell", "regex", "unicode-normalization"]

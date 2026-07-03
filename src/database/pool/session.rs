@@ -419,12 +419,62 @@ impl Session {
     /// 查询结果行列表
     #[cfg(feature = "duckdb")]
     pub async fn execute_duckdb(&self, sql: &str) -> DbResult<Vec<crate::database::pool::DuckDbRow>> {
-        let conn = self
-            .connection
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
-        let duck_conn = conn.as_duckdb()?;
-        duck_conn.query(sql).await
+        // 安全检查：与 execute_raw 一致的防御链（DDL 拦截 + SQL 注入检测 + 权限校验）
+        #[cfg(feature = "sql-parser")]
+        {
+            if is_ddl_operation(sql) {
+                return Err(DbError::Permission(
+                    "DDL operations are not allowed in DuckDB query context".to_string(),
+                ));
+            }
+        }
+
+        #[cfg(not(feature = "sql-parser"))]
+        {
+            let _ = sql;
+            return Err(DbError::Permission(
+                "execute_duckdb requires the sql-parser feature to be enabled for security checks".to_string(),
+            ));
+        }
+
+        #[cfg(feature = "sql-parser")]
+        {
+            #[cfg(all(feature = "sql-parser", feature = "permission"))]
+            {
+                let parser = SqlParser::shared().await;
+                match parser.parse_operation_async(sql).await {
+                    Ok(Some((table_name, action))) => {
+                        if table_name.is_empty() || is_invalid_table_name(&table_name) {
+                            return Err(DbError::Permission(
+                                "Failed to extract table name for permission checking".to_string(),
+                            ));
+                        }
+                        if self.role != self.pool_inner.admin_role
+                            && !self.permission_ctx.check_table_access(&table_name, &action).await
+                        {
+                            return Err(permission_denied(&action, &table_name));
+                        }
+                    }
+                    Ok(None) => {
+                        return Err(DbError::Permission(
+                            "SQL statement requires a valid table name for permission checking".to_string(),
+                        ));
+                    }
+                    Err(_) => {
+                        return Err(DbError::Permission(
+                            "Failed to parse SQL statement for permission checking".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            let conn = self
+                .connection
+                .as_ref()
+                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let duck_conn = conn.as_duckdb()?;
+            duck_conn.query(sql).await
+        }
     }
 
     /// 执行 DuckDB DDL/DML 语句（仅 DuckDB 连接可用）
@@ -441,12 +491,62 @@ impl Session {
     /// 受影响的行数信息
     #[cfg(feature = "duckdb")]
     pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::pool::DuckDbExecResult> {
-        let conn = self
-            .connection
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
-        let duck_conn = conn.as_duckdb()?;
-        duck_conn.execute(sql).await
+        // 安全检查：与 execute_raw 一致的防御链（DDL 拦截 + SQL 注入检测 + 权限校验）
+        #[cfg(feature = "sql-parser")]
+        {
+            if is_ddl_operation(sql) {
+                return Err(DbError::Permission(
+                    "DDL operations are not allowed in DuckDB execute context".to_string(),
+                ));
+            }
+        }
+
+        #[cfg(not(feature = "sql-parser"))]
+        {
+            let _ = sql;
+            return Err(DbError::Permission(
+                "execute_duckdb_raw requires the sql-parser feature to be enabled for security checks".to_string(),
+            ));
+        }
+
+        #[cfg(feature = "sql-parser")]
+        {
+            #[cfg(all(feature = "sql-parser", feature = "permission"))]
+            {
+                let parser = SqlParser::shared().await;
+                match parser.parse_operation_async(sql).await {
+                    Ok(Some((table_name, action))) => {
+                        if table_name.is_empty() || is_invalid_table_name(&table_name) {
+                            return Err(DbError::Permission(
+                                "Failed to extract table name for permission checking".to_string(),
+                            ));
+                        }
+                        if self.role != self.pool_inner.admin_role
+                            && !self.permission_ctx.check_table_access(&table_name, &action).await
+                        {
+                            return Err(permission_denied(&action, &table_name));
+                        }
+                    }
+                    Ok(None) => {
+                        return Err(DbError::Permission(
+                            "SQL statement requires a valid table name for permission checking".to_string(),
+                        ));
+                    }
+                    Err(_) => {
+                        return Err(DbError::Permission(
+                            "Failed to parse SQL statement for permission checking".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            let conn = self
+                .connection
+                .as_ref()
+                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let duck_conn = conn.as_duckdb()?;
+            duck_conn.execute(sql).await
+        }
     }
 
     /// 执行 SQL（带权限检查和操作类型）

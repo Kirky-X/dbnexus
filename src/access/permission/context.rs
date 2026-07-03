@@ -389,52 +389,46 @@ impl PermissionContext {
             })
         });
 
-        // Step 3: 获得锁
-        let mut guard = entry.result.lock().await;
+        // 循环：follower 检测到 leader 失败后，重置 done 并重新获取锁作为 leader
+        loop {
+            // Step 3: 获得锁
+            let mut guard = entry.result.lock().await;
 
-        // Step 4: 检查 done 标志
-        if entry.done.load(Ordering::SeqCst) {
-            // Follower: leader 已完成，检测到 thundering herd
-            self.check_stats.record_stampede();
-            let leader_result = (*guard).clone();
-            if let Some(policy) = leader_result {
-                // Leader 成功加载，返回结果
+            // Step 4: 检查 done 标志
+            if entry.done.load(Ordering::SeqCst) {
+                // Follower: leader 已完成，检测到 thundering herd
+                self.check_stats.record_stampede();
+                let leader_result = (*guard).clone();
+                if let Some(policy) = leader_result {
+                    // Leader 成功加载，返回结果
+                    drop(guard);
+                    self.check_stats.record_cache_hit();
+                    return Some(policy);
+                }
+                // Leader 加载失败（无 provider 等），重置 done 并重新循环
+                // 重新获取锁后会走 leader 路径（持锁、设置 done=true），避免裸调 do_load_policy 违反 singleflight
+                entry.done.store(false, Ordering::SeqCst);
                 drop(guard);
-                self.check_stats.record_cache_hit();
-                return Some(policy);
+                continue;
+            } else {
+                // Step 5: Leader: 获得锁且 done = false，开始加载
+                let result = self.do_load_policy();
+                *guard = result.clone();
+
+                // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
+                entry.done.store(true, Ordering::SeqCst);
+
+                // 释放锁
+                drop(guard);
+
+                // 异步缓存插入
+                if let Some(ref policy) = result {
+                    self.policy_cache.set(&self.role, policy).await.ok();
+                }
+
+                return result;
             }
-            // Leader 加载失败（无 provider 等），重置 done 并重新尝试
-            // 这是处理 set_permission_provider 后动态提供者的关键路径
-            entry.done.store(false, Ordering::SeqCst);
-            drop(guard);
-            // 重新进入加载流程（递归入口点）
-            // 注意：in_flight entry 仍然存在，但 done=false，所以会走 leader 路径
-        } else {
-            // Step 5: Leader: 获得锁且 done = false，开始加载
-            let result = self.do_load_policy();
-            *guard = result.clone();
-
-            // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
-            entry.done.store(true, Ordering::SeqCst);
-
-            // 释放锁
-            drop(guard);
-
-            // 异步缓存插入
-            if let Some(ref policy) = result {
-                self.policy_cache.set(&self.role, policy).await.ok();
-            }
-
-            return result;
         }
-
-        // 重新加载（仅当 leader 失败后重置 done 的 follower 路径）
-        // 以 leader 身份重新尝试
-        let result = self.do_load_policy();
-        if let Some(ref policy) = result {
-            self.policy_cache.set(&self.role, policy).await.ok();
-        }
-        result
     }
 
     /// 设置权限提供者

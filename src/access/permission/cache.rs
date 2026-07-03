@@ -24,10 +24,18 @@ use dashmap::DashMap;
 use super::provider::PermissionProvider;
 use super::types::RolePolicy;
 
-/// 后台刷新失败时的日志输出（避免引入 tracing feature 依赖）
+/// 后台刷新失败时的日志输出
 ///
-/// 当 `tracing` feature 启用时可通过 `tracing::warn!` 替代此宏；
-/// 当前用 `eprintln!` 保持 `permission` 模块的独立性。
+/// 当 `tracing` feature 启用时使用 `tracing::warn!`（结构化日志，可被 ELK/Loki 收集）；
+/// 否则降级为 `eprintln!` 保持 `permission` 模块的独立性。
+#[cfg(feature = "tracing")]
+macro_rules! warn_log {
+    ($($arg:tt)*) => {
+        tracing::warn!("PermissionCache: {}", format!($($arg)*));
+    };
+}
+
+#[cfg(not(feature = "tracing"))]
 macro_rules! warn_log {
     ($($arg:tt)*) => {
         eprintln!("[WARN] PermissionCache: {}", format!($($arg)*));
