@@ -188,7 +188,15 @@ impl ShardingStrategy for HashStrategy {
 }
 
 /// 根据字符串创建分片策略
-pub(crate) fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
+///
+/// 公共工厂函数：根据策略名（不区分大小写）创建对应的 `ShardingStrategy` 实例。
+/// 支持的别名：
+/// - `yearly` / `year` → `YearlyStrategy`
+/// - `monthly` / `month` → `MonthlyStrategy`
+/// - `daily` / `day` → `DailyStrategy`
+/// - `hash` → `HashStrategy`
+/// - 其他 → 默认 `YearlyStrategy`
+pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
     match name.to_lowercase().as_str() {
         "yearly" | "year" => Box::new(YearlyStrategy),
         "monthly" | "month" => Box::new(MonthlyStrategy),

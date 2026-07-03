@@ -150,6 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🌐 | **Global Index** | Cross-shard queries (`global-index` feature) |
 | 💾 | **Caching** | oxcache cache (moka L1 backend internally) (`cache` feature) |
 | 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
+| 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature, new in 0.3.0) |
 
 </td>
 </tr>

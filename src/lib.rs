@@ -129,7 +129,7 @@ pub use crate::database::pool::{ConnectionPool, DatabaseSession};
 #[cfg(feature = "duckdb")]
 pub use crate::database::pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
-pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy};
+pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // Access 导出
 #[cfg(feature = "sql-parser")]

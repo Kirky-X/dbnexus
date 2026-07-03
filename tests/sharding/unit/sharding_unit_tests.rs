@@ -8,7 +8,7 @@
 //! 覆盖分片策略配置、哈希分片算法、范围分片算法、跨分片查询聚合、
 //! 分片重平衡、分片热点检测、分片故障转移等场景
 
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, Datelike, TimeZone, Utc};
 use dbnexus::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // ============================================================================
@@ -57,7 +57,7 @@ fn test_hash_strategy_different_timestamps() {
 
     // 不同时间戳应该产生不同的哈希值（可能相同但不强制）
     let unique_shards = std::collections::HashSet::from([shard1, shard2, shard3]);
-    assert!(unique_shards.len() >= 1, "Should have at least one unique shard");
+    assert!(!unique_shards.is_empty(), "Should have at least one unique shard");
 }
 
 /// TEST-SHARD-UNIT-004: 哈希分片策略边界值测试 - 单分片
@@ -131,7 +131,7 @@ fn test_yearly_strategy_multiple_years() {
 
     // 验证年份取模结果
     for (year, shard) in years.iter().zip(shards.iter()) {
-        assert_eq!(*shard, year % total_shards);
+        assert_eq!(*shard, (*year as u32) % total_shards);
     }
 }
 
@@ -389,24 +389,54 @@ fn test_shard_router_route_with_key() {
     let shard = router.route_with_key(dt, key);
 
     assert!(shard.is_some());
-    assert!((shard.unwrap().shard_id as u32) < 6);
+    assert!(shard.unwrap().shard_id < 6);
 }
 
 /// TEST-SHARD-UNIT-026: ShardRouter 关键字路由一致性测试
+///
+/// 验证三个确定性/统计属性：
+/// 1. 相同 key + 相同时间戳 → 相同 shard（确定性）
+/// 2. shard_id 始终在 [0, shard_count) 范围内（不变量）
+/// 3. 100 个不同 key 在 10 个 shard 上分布 reasonably uniform（统计属性，
+///    避免单次哈希碰撞导致的 flaky 失败）
 #[test]
 fn test_shard_router_key_consistency() {
-    let router = ShardRouter::with_strategy("hash", 10);
+    let shard_count: u32 = 10;
+    let router = ShardRouter::with_strategy("hash", shard_count);
 
     let dt = Utc::now();
 
+    // 属性 1：相同 key 必须映射到相同 shard
     let shard1 = router.calculate_shard(dt, "user_1");
     let shard2 = router.calculate_shard(dt, "user_1");
-    let shard3 = router.calculate_shard(dt, "user_2");
-
     assert_eq!(shard1, shard2, "Same key should produce same shard");
-    assert_ne!(
-        shard1, shard3,
-        "Different keys should (usually) produce different shards"
+
+    // 属性 2：shard_id 必须在合法范围
+    assert!(
+        shard1 < shard_count,
+        "shard_id {} must be < shard_count {}",
+        shard1,
+        shard_count
+    );
+
+    // 属性 3：100 个不同 key 应覆盖至少 5 个不同 shard（10 个 shard 上的合理分布）
+    let mut distinct_shards = std::collections::HashSet::new();
+    for i in 0..100u32 {
+        let key = format!("user_{i}");
+        let shard = router.calculate_shard(dt, &key);
+        assert!(
+            (shard as u32) < shard_count,
+            "shard_id {} for key '{}' must be < shard_count {}",
+            shard,
+            key,
+            shard_count
+        );
+        distinct_shards.insert(shard);
+    }
+    assert!(
+        distinct_shards.len() >= 5,
+        "100 keys should spread across at least 5 distinct shards (got {})",
+        distinct_shards.len()
     );
 }
 
@@ -417,7 +447,7 @@ fn test_shard_router_empty_key() {
 
     let dt = Utc.with_ymd_and_hms(2024, 5, 1, 0, 0, 0).unwrap();
 
-    let shard_with_key = router.calculate_shard(dt, "some_key");
+    let _shard_with_key = router.calculate_shard(dt, "some_key");
     let shard_without_key = router.calculate_shard(dt, "");
 
     // 空关键字应该使用默认的时间哈希
@@ -523,8 +553,8 @@ fn test_shard_hotspot_detection_distribution() {
     let hotspots: Vec<(u32, u32)> = access_counts
         .iter()
         .enumerate()
-        .filter(|(_, &count)| count as f64 > avg_access * 2.0)
-        .map(|(id, &count)| (id as u32, count))
+        .filter(|&(_, count)| *count as f64 > avg_access * 2.0)
+        .map(|(id, count)| (id as u32, *count))
         .collect();
 
     println!("Access distribution: {:?}", access_counts);
@@ -564,7 +594,7 @@ fn test_shard_temporal_hotspot() {
 /// TEST-SHARD-UNIT-033: 哈希分片均匀性测试
 #[test]
 fn test_hash_sharding_uniformity() {
-    let strategy = create_strategy("hash");
+    let _strategy = create_strategy("hash");
     let total_shards = 100;
     let sample_size = 100000;
 
@@ -692,10 +722,10 @@ fn test_shard_failure_isolation() {
 
     // 验证路由结果的分片 ID 在有效范围内
     if let Some(s) = shard_0 {
-        assert!((s.shard_id as u32) < 4);
+        assert!(s.shard_id < 4);
     }
     if let Some(s) = shard_1 {
-        assert!((s.shard_id as u32) < 4);
+        assert!(s.shard_id < 4);
     }
 }
 
@@ -709,7 +739,7 @@ fn test_shard_failover_routing() {
 
     // 正常路由
     let shard = router.calculate_shard(dt, "user_123");
-    assert!((shard as u32) < 4);
+    assert!(shard < 4);
 
     // 验证不同 key 路由到不同分片（模拟负载均衡）
     let keys = ["user_1", "user_2", "user_3", "user_4", "user_5"];
@@ -722,7 +752,7 @@ fn test_shard_failover_routing() {
 
     // 验证路由至少能返回有效分片 ID
     for s in &shards {
-        assert!((*s as u32) < 4);
+        assert!(*s < 4);
     }
 
     println!("Routed shards: {:?}", shards);
@@ -749,7 +779,7 @@ fn test_cross_shard_query_routing() {
 
     // 验证每个分片都有有效的 ID
     for shard in &all_shards {
-        assert!((shard.shard_id as u32) < 12);
+        assert!(shard.shard_id < 12);
     }
 }
 
@@ -796,7 +826,7 @@ fn test_cross_shard_aggregation_preparation() {
 
     for key in &target_keys {
         let shard_id = router.calculate_shard(dt, key);
-        shard_key_map.entry(shard_id).or_default().push(key.clone());
+        shard_key_map.entry(shard_id).or_default().push(key.to_string());
     }
 
     // 验证分片映射
@@ -853,12 +883,13 @@ fn test_shard_router_clone_independence() {
     let router_clone = router.clone();
 
     // 原始路由器注册新分片
-    let mut router_mut = router;
+    let mut router_mut = router.clone();
     router_mut.register_shard(0, "db_0".to_string(), "sqlite:./data/db_0.db".to_string());
 
-    // 克隆应该独立
-    assert_eq!(router.all_shards().len(), 1);
-    assert_eq!(router_clone.all_shards().len(), 0);
+    // 克隆应该独立：原始未受影响，克隆体也未受影响
+    assert_eq!(router.all_shards().len(), 0, "original should be unchanged");
+    assert_eq!(router_clone.all_shards().len(), 0, "clone should be unchanged");
+    assert_eq!(router_mut.all_shards().len(), 1, "mutant should have 1 shard");
 }
 
 // ============================================================================
@@ -963,5 +994,276 @@ fn test_router_initialized_shards() {
     assert!(
         initialized.is_empty(),
         "Should have no initialized shards without pools"
+    );
+}
+
+// ============================================================================
+// v0.3.0 新增 API 单元测试
+//
+// 以下测试覆盖 ShardRouter 的 default/new 构造器、get_pool/get_session 的 None 路径、
+// shard_id_for_key 的零分片防御、get_session_for_shard 的错误路径、enforce_shard_binding 的
+// 同/异分片判定。带真实连接池的成功路径由 sharding/integration/shard_session_routing_tests.rs
+// 覆盖，此处仅覆盖无需连接池的逻辑分支。
+// ============================================================================
+
+/// 自定义分片策略（用于测试 `ShardRouter::new` 接受任意 `ShardingStrategy` 实现）
+struct ModuloStrategy;
+
+impl ShardingStrategy for ModuloStrategy {
+    fn calculate(&self, timestamp: DateTime<Utc>, total_shards: u32) -> u32 {
+        // 简单取模：与 YearlyStrategy 等价但 name 不同，便于验证策略被实际使用
+        let year = timestamp.year() as u32;
+        if total_shards == 0 { 0 } else { year % total_shards }
+    }
+
+    fn name(&self) -> &'static str {
+        "modulo_test"
+    }
+
+    fn is_valid_shard_id(&self, shard_id: u32, total_shards: u32) -> bool {
+        shard_id < total_shards
+    }
+
+    fn current_shard(&self, total_shards: u32) -> u32 {
+        self.calculate(Utc::now(), total_shards)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ShardingStrategy> {
+        Box::new(ModuloStrategy)
+    }
+}
+
+/// TEST-SHARD-UNIT-051: ShardRouter::default() 返回 total_shards=1 + yearly 策略
+///
+/// 验证默认构造器的契约：单一分片（避免 `% 0` panic）+ YearlyStrategy（向后兼容）。
+/// 这是 `Default` 实现的硬性保证，破坏即属 breaking change。
+#[test]
+fn test_shard_router_default_returns_single_shard_with_yearly_strategy() {
+    let router = ShardRouter::default();
+
+    assert_eq!(router.total_shards(), 1, "default router must have 1 shard");
+    assert_eq!(
+        router.strategy_name(),
+        "yearly",
+        "default router must use yearly strategy"
+    );
+    assert_eq!(router.pool_count(), 0, "default router must have no pools");
+    assert!(
+        router.initialized_shards().is_empty(),
+        "default router must have no initialized shards"
+    );
+
+    // shard_id_for_key 在 total_shards=1 时必须返回 0（单一分片语义）
+    assert_eq!(
+        router.shard_id_for_key("any_key"),
+        0,
+        "single-shard router must map all keys to shard 0"
+    );
+}
+
+/// TEST-SHARD-UNIT-052: ShardRouter::new() 接受自定义 ShardingStrategy 实现
+///
+/// 验证泛型构造器 `new<S: ShardingStrategy + 'static>(strategy, total_shards)`
+/// 正确接受用户提供的策略实例，且 `strategy_name()` 反映该策略的 `name()` 返回值。
+#[test]
+fn test_shard_router_new_with_custom_strategy() {
+    let mut router = ShardRouter::new(ModuloStrategy, 7);
+
+    assert_eq!(router.total_shards(), 7);
+    assert_eq!(
+        router.strategy_name(),
+        "modulo_test",
+        "strategy_name must reflect the custom strategy's name()"
+    );
+
+    // 验证自定义策略被实际使用：2024 % 7 = 1
+    // 通过 calculate_shard（key 为空时走 strategy.calculate 分支）
+    let dt_2024 = Utc.with_ymd_and_hms(2024, 6, 15, 0, 0, 0).unwrap();
+    let shard_id = router.calculate_shard(dt_2024, "");
+    assert_eq!(shard_id, 1, "ModuloStrategy: 2024 % 7 = 1");
+
+    // 注册分片 1 后，route() 应返回该分片
+    router.register_shard(1, "db_1".to_string(), "sqlite:./data/db_1.db".to_string());
+    let shard = router.route(dt_2024);
+    assert!(shard.is_some(), "shard 1 should be routable after registration");
+    assert_eq!(shard.unwrap().shard_id, 1, "ModuloStrategy: 2024 % 7 = 1");
+}
+
+/// TEST-SHARD-UNIT-053: get_pool 未注册时返回 None
+#[test]
+fn test_get_pool_returns_none_when_no_pool_registered() {
+    let router = ShardRouter::with_strategy("hash", 4);
+
+    assert!(router.get_pool(0).is_none(), "get_pool must be None before set_pool");
+    assert!(router.get_pool(1).is_none());
+    assert!(
+        router.get_pool(99).is_none(),
+        "get_pool for unregistered shard must be None"
+    );
+
+    // 注册分片元信息（不注册连接池）后仍然为 None
+    let mut router = router;
+    router.register_shard(0, "db_0".to_string(), "sqlite::memory:".to_string());
+    assert!(
+        router.get_pool(0).is_none(),
+        "get_pool must still be None after register_shard (no pool)"
+    );
+    assert!(!router.has_pool(0), "has_pool must be false after register_shard only");
+}
+
+/// TEST-SHARD-UNIT-054: get_session 未注册连接池时返回 Ok(None)
+///
+/// 注意：`get_session` 返回 `Result<Option<Session>>`，未注册连接池时返回 `Ok(None)`
+/// 而非 `Err`——这与 `get_session_for_shard`（返回 `Err`）的语义不同。
+#[tokio::test]
+async fn test_get_session_returns_ok_none_when_no_pool() {
+    let router = ShardRouter::with_strategy("hash", 4);
+
+    let result = router.get_session(0).await;
+    assert!(
+        result.is_ok(),
+        "get_session must not return Err when no pool: {:?}",
+        result.err()
+    );
+    assert!(
+        result.unwrap().is_none(),
+        "get_session must return Ok(None) when no pool registered"
+    );
+}
+
+/// TEST-SHARD-UNIT-055: get_session_for_timestamp 未注册连接池时返回 Ok(None)
+#[tokio::test]
+async fn test_get_session_for_timestamp_returns_ok_none_when_no_pool() {
+    let router = ShardRouter::with_strategy("monthly", 12);
+
+    let dt = Utc.with_ymd_and_hms(2024, 6, 15, 0, 0, 0).unwrap();
+    let result = router.get_session_for_timestamp(dt).await;
+    assert!(
+        result.is_ok(),
+        "get_session_for_timestamp must not return Err: {:?}",
+        result.err()
+    );
+    assert!(
+        result.unwrap().is_none(),
+        "get_session_for_timestamp must return Ok(None) when no pool"
+    );
+}
+
+/// TEST-SHARD-UNIT-056: shard_id_for_key 在 total_shards=0 时返回 0（除零防御）
+///
+/// 验证 `shard_id_for_key` 的硬性契约：即使 `total_shards` 为 0（不应发生，Default 保证为 1），
+/// 也不能 panic，而是返回 0（单一分片语义）。
+/// 这是安全红线——破坏即触发 `% 0` panic。
+#[test]
+fn test_shard_id_for_key_zero_total_shards_returns_zero() {
+    // 通过 with_strategy 构造 total_shards=0 的 router（绕过 Default 的保护）
+    let router = ShardRouter::with_strategy("hash", 0);
+
+    // 多个 key 都必须返回 0，不能 panic
+    for key in &["", "a", "user_1", "user_99999", "🎉_unicode_key"] {
+        let shard_id = router.shard_id_for_key(key);
+        assert_eq!(
+            shard_id, 0,
+            "shard_id_for_key must return 0 (not panic) when total_shards=0, key={:?}",
+            key
+        );
+    }
+}
+
+/// TEST-SHARD-UNIT-057: get_session_for_shard 未注册连接池时返回 Err(DbError::Config)
+///
+/// 验证 `get_session_for_shard` 的错误语义：与 `get_session` 不同，此方法返回 `Err`
+/// （因为它是 `Result<Session>` 而非 `Result<Option<Session>>`），错误消息必须包含
+/// "No pool registered for shard"。
+#[tokio::test]
+async fn test_get_session_for_shard_returns_err_when_no_pool() {
+    // 只注册分片元信息，不注册连接池
+    let mut router = ShardRouter::with_strategy("hash", 4);
+    router.register_shard(0, "db_0".to_string(), "sqlite::memory:".to_string());
+    router.register_shard(1, "db_1".to_string(), "sqlite::memory:".to_string());
+    router.register_shard(2, "db_2".to_string(), "sqlite::memory:".to_string());
+    router.register_shard(3, "db_3".to_string(), "sqlite::memory:".to_string());
+
+    let result = router.get_session_for_shard("user_42", "admin").await;
+    let err = match result {
+        Err(e) => e,
+        Ok(_) => panic!("expected Err when no pool registered for computed shard"),
+    };
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("No pool registered for shard"),
+        "error message must mention missing pool, got: {}",
+        msg
+    );
+}
+
+/// TEST-SHARD-UNIT-058: get_session_for_shard_with_id 未注册连接池时返回 Err
+#[tokio::test]
+async fn test_get_session_for_shard_with_id_returns_err_when_no_pool() {
+    let mut router = ShardRouter::with_strategy("hash", 4);
+    router.register_shard(0, "db_0".to_string(), "sqlite::memory:".to_string());
+
+    let result = router.get_session_for_shard_with_id("user_42", "admin").await;
+    let err_msg = match result {
+        Err(e) => format!("{}", e),
+        Ok(_) => panic!("get_session_for_shard_with_id must return Err when no pool"),
+    };
+    assert!(
+        err_msg.contains("No pool registered for shard"),
+        "error message must mention missing pool, got: {}",
+        err_msg
+    );
+}
+
+/// TEST-SHARD-UNIT-059: enforce_shard_binding 同分片返回 Ok，跨分片返回 ShardConflict
+///
+/// 验证 `enforce_shard_binding` 的核心契约：
+/// - 同一 `shard_key` 计算的 `shard_id` 与传入的 `expected_shard_id` 一致 → `Ok(())`
+/// - 不同 `shard_key` 计算的 `shard_id` 与 `expected_shard_id` 不一致 → `Err(ShardConflict)`
+#[test]
+fn test_enforce_shard_binding_same_and_cross_shard() {
+    use dbnexus::ErrorCategory;
+
+    let router = ShardRouter::with_strategy("hash", 8);
+
+    // 选一个 key，计算其 shard_id
+    let primary_key = "user_42";
+    let primary_shard = router.shard_id_for_key(primary_key);
+
+    // 同一 key → Ok
+    let same = router.enforce_shard_binding(primary_shard, primary_key);
+    assert!(
+        same.is_ok(),
+        "enforce_shard_binding must accept same-shard key, got: {:?}",
+        same.err()
+    );
+
+    // 找一个映射到不同分片的 key
+    let conflict_key = (0..256)
+        .map(|i| format!("user_{}", i))
+        .find(|k| router.shard_id_for_key(k) != primary_shard)
+        .expect("should find a key mapping to a different shard within 256 attempts");
+
+    // 跨分片 → Err(ShardConflict)
+    let cross = router.enforce_shard_binding(primary_shard, &conflict_key);
+    let err = match cross {
+        Err(e) => e,
+        Ok(_) => panic!("expected ShardConflict error for cross-shard key"),
+    };
+    assert_eq!(
+        err.category,
+        ErrorCategory::ShardConflict,
+        "cross-shard error must have ShardConflict category, got: {:?}",
+        err.category
+    );
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("Cross-shard query detected"),
+        "error message must mention cross-shard conflict, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains(primary_key) || msg.contains(&conflict_key),
+        "error message should reference one of the keys"
     );
 }
