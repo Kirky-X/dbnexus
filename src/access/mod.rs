@@ -45,10 +45,4 @@ pub use sql_parser::PermissionAction;
 pub use sql_parser::SqlParser;
 
 // Re-exports: permission_engine
-#[cfg(feature = "permission-engine")]
-pub use permission_engine::{
-    PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
-    PermissionProvider as EnginePermissionProvider, PermissionResource, PermissionRule, PermissionSubject,
-    PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
-    YamlPermissionProvider as EngineYamlPermissionProvider,
-};
+// 注意：Engine* 别名仅在 crate root (lib.rs) 导出，此处不再重复导出以避免双重路径（HIGH-002 修复）
