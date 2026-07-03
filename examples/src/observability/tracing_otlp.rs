@@ -94,9 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ execute_raw_ddl 完成（span 'execute_raw_ddl' 已记录）");
 
     session
-        .execute_raw(
-            "INSERT INTO trace_demo (id, name, created_at) VALUES (1, 'hello-trace', '2026-07-03T00:00:00Z')",
-        )
+        .execute_raw("INSERT INTO trace_demo (id, name, created_at) VALUES (1, 'hello-trace', '2026-07-03T00:00:00Z')")
         .await?;
     println!("  ✓ execute_raw INSERT 完成（span 'execute_raw' 已记录）");
 
@@ -113,14 +111,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ begin_transaction（span 已记录）");
 
     session
-        .execute_raw(
-            "INSERT INTO trace_demo (id, name, created_at) VALUES (2, 'txn-1', '2026-07-03T00:01:00Z')",
-        )
+        .execute_raw("INSERT INTO trace_demo (id, name, created_at) VALUES (2, 'txn-1', '2026-07-03T00:01:00Z')")
         .await?;
     session
-        .execute_raw(
-            "INSERT INTO trace_demo (id, name, created_at) VALUES (3, 'txn-2', '2026-07-03T00:02:00Z')",
-        )
+        .execute_raw("INSERT INTO trace_demo (id, name, created_at) VALUES (3, 'txn-2', '2026-07-03T00:02:00Z')")
         .await?;
     println!("  ✓ 事务内 2 条 INSERT 完成");
 

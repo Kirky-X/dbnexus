@@ -123,20 +123,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .await?;
-    println!(
-        "  ✓ 更新用户 id={}: 新邮箱={}",
-        updated.id, updated.email
-    );
+    println!("  ✓ 更新用户 id={}: 新邮箱={}", updated.id, updated.email);
 
     // ============================================
     // 6. 删除数据（Model::delete）
     // ============================================
     println!("\n--- DELETE ---");
     let affected = Model::delete(&session, inserted3.id).await?;
-    println!(
-        "  ✓ 删除用户 id={}: 影响 {} 行",
-        inserted3.id, affected
-    );
+    println!("  ✓ 删除用户 id={}: 影响 {} 行", inserted3.id, affected);
 
     // ============================================
     // 验证最终状态

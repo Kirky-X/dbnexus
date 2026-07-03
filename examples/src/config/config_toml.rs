@@ -67,7 +67,10 @@ default_ttl = 300
     println!("  - database_type     : {}", config.database_type().unwrap());
 
     println!("\n💾 缓存配置:");
-    println!("  - policy_cache_capacity : {}", config.cache_config.policy_cache_capacity);
+    println!(
+        "  - policy_cache_capacity : {}",
+        config.cache_config.policy_cache_capacity
+    );
     println!("  - default_ttl (s)       : {}", config.cache_config.default_ttl);
 
     // ============================================

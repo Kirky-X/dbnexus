@@ -43,10 +43,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dml_cases = [
         ("SELECT * FROM users WHERE id = 1", "SELECT", "users"),
         ("SELECT name, email FROM users WHERE active = 1", "SELECT", "users"),
-        ("INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')", "INSERT", "users"),
+        (
+            "INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')",
+            "INSERT",
+            "users",
+        ),
         ("UPDATE users SET name = 'Bob' WHERE id = 1", "UPDATE", "users"),
         ("DELETE FROM users WHERE id = 1", "DELETE", "users"),
-        ("SELECT u.name, o.id FROM users u JOIN orders o ON u.id = o.user_id", "SELECT", "users"),
+        (
+            "SELECT u.name, o.id FROM users u JOIN orders o ON u.id = o.user_id",
+            "SELECT",
+            "users",
+        ),
     ];
 
     for (sql, expected_op, expected_table) in dml_cases {
@@ -92,7 +100,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  SQL: {}", sql);
         println!("     is_ddl_operation: {}", is_ddl);
         match parse_result {
-            Ok(parsed) => println!("     解析结果: {:?} (表: {:?})", parsed.operation_type, parsed.table_name),
+            Ok(parsed) => println!(
+                "     解析结果: {:?} (表: {:?})",
+                parsed.operation_type, parsed.table_name
+            ),
             Err(e) => println!("     解析拦截: {}", e),
         }
         println!();

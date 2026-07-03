@@ -48,10 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  total={}, active={}, idle={}",
         pool_metrics.total, pool_metrics.active, pool_metrics.idle
     );
-    println!(
-        "  utilization_rate={:.2}%",
-        pool_metrics.utilization_rate() * 100.0
-    );
+    println!("  utilization_rate={:.2}%", pool_metrics.utilization_rate() * 100.0);
 
     // ============================================
     // 3. 记录查询指标（模拟业务流量）
@@ -94,10 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let txn_stats = collector.transaction_stats();
     println!(
         "  事务: total={}, commit={}, rollback={}, success_rate={:.2}%",
-        txn_stats.total_transactions,
-        txn_stats.commit_count,
-        txn_stats.rollback_count,
-        txn_stats.success_rate
+        txn_stats.total_transactions, txn_stats.commit_count, txn_stats.rollback_count, txn_stats.success_rate
     );
 
     let conn_stats = collector.connection_acquire_stats();
@@ -114,10 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let slow_queries = collector.slow_queries();
     println!("  慢查询数量 (threshold=100ms): {}", slow_queries.len());
     for sq in &slow_queries {
-        println!(
-            "  - type={}, duration_ms={}",
-            sq.query_type, sq.duration_ms
-        );
+        println!("  - type={}, duration_ms={}", sq.query_type, sq.duration_ms);
     }
 
     // ============================================
@@ -135,8 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 通过 trait 对象验证 MetricsCollectorTrait 实现
-    let trait_collector: std::sync::Arc<dyn MetricsCollectorTrait> =
-        std::sync::Arc::new(MetricsCollector::new());
+    let trait_collector: std::sync::Arc<dyn MetricsCollectorTrait> = std::sync::Arc::new(MetricsCollector::new());
     let trait_metrics = trait_collector.pool_metrics();
     println!(
         "\n✓ 通过 MetricsCollectorTrait 获取 PoolMetrics: total={}",
@@ -165,16 +155,11 @@ fn print_query_stats(query_type: &str, stats: &QueryStats) {
     let p90 = stats.latency_percentiles.p90();
     let p99 = stats.latency_percentiles.p99();
     println!("  [{}] count={}, errors={}", query_type, stats.count, stats.error_count);
-    println!(
-        "      latency: p50={:?}, p90={:?}, p99={:?}",
-        p50, p90, p99
-    );
+    println!("      latency: p50={:?}, p90={:?}, p99={:?}", p50, p90, p99);
     println!(
         "      throughput: qps={:.2}, error_rate={:.4}",
-        stats.throughput.avg_qps, stats.error_rate()
+        stats.throughput.avg_qps,
+        stats.error_rate()
     );
-    println!(
-        "      histogram samples={}",
-        stats.histogram.total_samples
-    );
+    println!("      histogram samples={}", stats.histogram.total_samples);
 }

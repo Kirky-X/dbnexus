@@ -106,9 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // DML: 插入（使用 INSERT IGNORE 避免重复插入报错）
     let insert_result = session
-        .execute_raw(
-            "INSERT IGNORE INTO users (name, email) VALUES ('Alice', 'alice@example.com')",
-        )
+        .execute_raw("INSERT IGNORE INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
         .await?;
     println!("✓ 插入操作完成 (rows_affected: {})", insert_result.rows_affected());
 

@@ -109,6 +109,11 @@ path = "src/database/sharding.rs"
 name = "global_index"
 path = "src/database/global_index.rs"
 
+# 连接池生命周期管理（pool-warmup / pool-health-check / auto-migrate）
+[[bin]]
+name = "pool_management"
+path = "src/database/pool_management.rs"
+
 # ============================================================
 # 可观测性模块示例 (observability/)
 # ============================================================
@@ -221,7 +226,10 @@ dbnexus = { path = "..", features = [
     "metrics",
     "audit",
     "migration",
+    "auto-migrate",
     "health-check",
+    "pool-health-check",
+    "pool-warmup",
     "authentication",
     "validation",
     "duckdb",
@@ -263,3 +271,10 @@ validator = { version = "0.20", features = ["derive"] }
 
 [features]
 default = []
+
+# 抑制 check-cfg 误报：#[db_entity] 等宏展开后的 #[cfg(feature = "...")]
+# 检查的是 dbnexus 依赖的特性，而非本 crate 的特性。这些特性已通过
+# [dependencies].dbnexus.features 启用，但 rustc 的 check-cfg  lint
+# 只检查本 crate 的 [features] 表，故产生误报告警。
+[lints.rust]
+unexpected_cfgs = "allow"

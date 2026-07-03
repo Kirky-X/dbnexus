@@ -30,9 +30,9 @@ fn main() {
     // ============================================
     // 连接模板中 {shard} 会被替换为分片名称（prefix_shardId）
     let config = ShardConfig::new(
-        "hash",  // 策略：hash 均匀分布
-        4,       // 4 个分片
-        "shard", // 分片名前缀
+        "hash",                     // 策略：hash 均匀分布
+        4,                          // 4 个分片
+        "shard",                    // 分片名前缀
         "sqlite:./data/{shard}.db", // 连接模板
     );
 
@@ -87,7 +87,10 @@ fn main() {
     let timestamps = vec![
         ("2024-01-01 00:00", Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()),
         ("2024-06-15 12:00", Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap()),
-        ("2024-12-31 23:59", Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 0).unwrap()),
+        (
+            "2024-12-31 23:59",
+            Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 0).unwrap(),
+        ),
         ("2025-03-20 08:30", Utc.with_ymd_and_hms(2025, 3, 20, 8, 30, 0).unwrap()),
     ];
 

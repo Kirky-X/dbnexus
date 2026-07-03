@@ -43,8 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let access_token = manager.generate_token(user_id, username, role, TokenType::Access)?;
     let refresh_token = manager.generate_token(user_id, username, role, TokenType::Refresh)?;
-    println!("  ✓ Access token  (前 40 字符): {}...", &access_token[..40.min(access_token.len())]);
-    println!("  ✓ Refresh token (前 40 字符): {}...", &refresh_token[..40.min(refresh_token.len())]);
+    println!(
+        "  ✓ Access token  (前 40 字符): {}...",
+        &access_token[..40.min(access_token.len())]
+    );
+    println!(
+        "  ✓ Refresh token (前 40 字符): {}...",
+        &refresh_token[..40.min(refresh_token.len())]
+    );
 
     // ============================================
     // 3. 验证并解析 Token → JwtClaims
@@ -62,9 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let refresh_claims = manager.verify_token(&refresh_token)?;
     println!("\n  Refresh token claims:");
     println!("    token_type = {:?}", refresh_claims.token_type);
-    println!("    有效期 = {} 秒 ({} → {})",
+    println!(
+        "    有效期 = {} 秒 ({} → {})",
         refresh_claims.exp - refresh_claims.iat,
-        refresh_claims.iat, refresh_claims.exp);
+        refresh_claims.iat,
+        refresh_claims.exp
+    );
 
     // ============================================
     // 4. TokenType 区分
@@ -81,11 +90,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 刷新 Access Token ---");
     let new_access_token = manager.refresh_access_token(&refresh_token)?;
     println!("  ✓ 使用 refresh token 生成新的 access token");
-    println!("    新 token (前 40 字符): {}...", &new_access_token[..40.min(new_access_token.len())]);
+    println!(
+        "    新 token (前 40 字符): {}...",
+        &new_access_token[..40.min(new_access_token.len())]
+    );
 
     let new_claims = manager.verify_token(&new_access_token)?;
-    println!("  ✓ 新 token 验证成功: sub={}, role={}, type={:?}",
-        new_claims.sub, new_claims.role, new_claims.token_type);
+    println!(
+        "  ✓ 新 token 验证成功: sub={}, role={}, type={:?}",
+        new_claims.sub, new_claims.role, new_claims.token_type
+    );
 
     // ============================================
     // 6. 自定义过期时间
@@ -95,10 +109,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let short_token = short_manager.generate_token(user_id, username, role, TokenType::Access)?;
     let short_claims = short_manager.verify_token(&short_token)?;
     println!("  ✓ access=60s, refresh=3600s");
-    println!("    有效期 = {} 秒 (exp - iat = {} - {} = {})",
+    println!(
+        "    有效期 = {} 秒 (exp - iat = {} - {} = {})",
         short_claims.exp - short_claims.iat,
-        short_claims.exp, short_claims.iat,
-        short_claims.exp - short_claims.iat);
+        short_claims.exp,
+        short_claims.iat,
+        short_claims.exp - short_claims.iat
+    );
 
     // ============================================
     // 7. 错误场景：无效 token 与过期 token

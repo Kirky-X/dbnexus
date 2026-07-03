@@ -17,9 +17,7 @@
 //! cargo run --example migration --features "sqlite,migration"
 //! ```
 
-use dbnexus::{
-    Column, ColumnType, DbConfig, DbPool, Migration, MigrationExecutor, Table, TableChange,
-};
+use dbnexus::{Column, ColumnType, DbConfig, DbPool, Migration, MigrationExecutor, Table, TableChange};
 use sea_orm::ConnectionTrait;
 
 /// 从连接池获取一个独立的 sea-orm 连接用于迁移执行器
@@ -104,7 +102,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     migration_v1.add_table_change(TableChange::CreateTable(users_table));
 
-    println!("\n📋 迁移定义: v{} - {}", migration_v1.version, migration_v1.description);
+    println!(
+        "\n📋 迁移定义: v{} - {}",
+        migration_v1.version, migration_v1.description
+    );
     println!("  - 表变更数量: {}", migration_v1.table_changes.len());
 
     // ============================================
