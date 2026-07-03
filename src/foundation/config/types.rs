@@ -226,7 +226,7 @@ pub enum DatabaseType {
 impl DatabaseType {
     /// 从 URL 解析数据库类型
     ///
-    /// 使用 `url` crate 解析连接串，支持 `sqlite`/`postgres`/`postgresql`/`mysql`/`duckdb` scheme。
+    /// 使用 `url` crate 解析连接串，支持 `sqlite`/`sqlite3`/`postgres`/`postgresql`/`mysql`/`duckdb` scheme。
     /// 未知 scheme 返回 `Err(DbNexusError::UnsupportedDatabaseScheme)`。
     ///
     /// # Errors
@@ -234,9 +234,9 @@ impl DatabaseType {
     /// - URL 解析失败（无 scheme）
     /// - 未知数据库协议
     pub fn from_url(url: &str) -> Result<Self, crate::common::error::DbNexusError> {
-        // 处理 SQLite 特殊格式 sqlite::memory:
+        // 处理 SQLite 特殊格式 sqlite::memory: / sqlite3::memory:
         let lower = url.to_lowercase();
-        if lower == "sqlite::memory:" || lower.starts_with("sqlite://") {
+        if lower == "sqlite::memory:" || lower.starts_with("sqlite://") || lower.starts_with("sqlite3://") {
             return Ok(DatabaseType::Sqlite);
         }
         if lower.starts_with("duckdb:") {
@@ -248,7 +248,7 @@ impl DatabaseType {
         })?;
 
         match parsed.scheme() {
-            "sqlite" => Ok(DatabaseType::Sqlite),
+            "sqlite" | "sqlite3" => Ok(DatabaseType::Sqlite),
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
             "mysql" => Ok(DatabaseType::MySql),
             "duckdb" => Ok(DatabaseType::DuckDb),

@@ -327,6 +327,12 @@ name = "shard_session_routing_tests"
 path = "tests/sharding/integration/shard_session_routing_tests.rs"
 required-features = ["sharding", "permission"]
 
+# Sharding 单元测试 - ShardRouter 路由/分片策略/连接池管理（0.3.0 修复：此前未注册导致测试从未运行）
+[[test]]
+name = "sharding_unit_tests"
+path = "tests/sharding/unit/sharding_unit_tests.rs"
+required-features = ["sharding"]
+
 [[test]]
 name = "metrics_integration"
 path = "tests/metrics/integration/metrics_integration.rs"

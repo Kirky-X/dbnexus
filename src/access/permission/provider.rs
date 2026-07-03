@@ -431,4 +431,180 @@ mod tests {
         assert!(p.has_role("admin"));
         assert!(!p.has_role("nobody"));
     }
+
+    // ========================================================================
+    // YamlPermissionProvider::new 边界测试（文件不存在 / 解析失败）
+    // ========================================================================
+
+    /// 不存在的文件路径应回退到 deny_all（roles 为空）
+    #[test]
+    fn yaml_provider_new_nonexistent_file_falls_back_to_deny_all() {
+        let p = YamlPermissionProvider::new("/nonexistent/path/permissions.yaml");
+        // deny_all 应该返回空 roles 配置
+        assert!(
+            p.get_roles().is_empty(),
+            "nonexistent file should fall back to deny_all with empty roles"
+        );
+        assert!(p.get_role_policy("admin").is_none());
+        // check_access 应该返回 Ok(false)（拒绝所有）
+        let result = p.check_access("admin", "any_table", PermissionAction::Select);
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "deny_all should reject all access");
+    }
+
+    /// 提供有效的 YAML 配置文件路径应成功加载
+    #[test]
+    fn yaml_provider_new_with_valid_file_loads_roles() {
+        // 创建临时文件
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("dbnexus_test_permissions_valid.yaml");
+        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
+
+        let p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        let roles = p.get_roles();
+        assert!(
+            roles.iter().any(|r| r == "admin"),
+            "admin role should be loaded from valid file, got: {:?}",
+            roles
+        );
+        let policy = p.get_role_policy("admin");
+        assert!(policy.is_some(), "admin policy should be Some");
+        // 验证权限检查
+        assert!(
+            p.check_access("admin", "any_table", PermissionAction::Select).unwrap(),
+            "admin should have Select on any_table"
+        );
+
+        // 清理
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    /// 提供格式错误的 YAML/JSON 文件应回退到 deny_all
+    #[test]
+    fn yaml_provider_new_with_malformed_file_falls_back_to_deny_all() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("dbnexus_test_permissions_malformed.yaml");
+        let malformed_content = "this is not valid: yaml: content: [[[";
+        std::fs::write(&file_path, malformed_content).expect("failed to write temp file");
+
+        let p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        assert!(
+            p.get_roles().is_empty(),
+            "malformed file should fall back to deny_all with empty roles"
+        );
+
+        // 清理
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    // ========================================================================
+    // YamlPermissionProvider::refresh 异步刷新测试
+    // ========================================================================
+
+    /// from_config 创建的 provider 没有 path，refresh 应返回 Ok（无需刷新）
+    #[tokio::test]
+    async fn yaml_provider_refresh_no_path_returns_ok() {
+        let mut config = PermissionConfig::default();
+        config.roles.insert("admin".into(), RolePolicy::default());
+        let mut p = YamlPermissionProvider::from_config(config);
+        let result = p.refresh().await;
+        assert!(result.is_ok(), "refresh on pathless provider should return Ok");
+    }
+
+    /// refresh 成功路径：文件存在且有效
+    #[tokio::test]
+    async fn yaml_provider_refresh_valid_file_succeeds() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("dbnexus_test_refresh_valid.yaml");
+        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
+
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        // 初始加载应有 admin 角色
+        assert!(p.get_role_policy("admin").is_some());
+
+        // 重写文件，添加新角色
+        let updated_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}, "user": {"tables": [{"name": "docs", "operations": ["select"]}]}}}"#;
+        std::fs::write(&file_path, updated_content).expect("failed to rewrite temp file");
+
+        // 刷新
+        let result = p.refresh().await;
+        assert!(result.is_ok(), "refresh should succeed with valid file");
+
+        // 刷新后应有 user 角色
+        let roles = p.get_roles();
+        assert!(
+            roles.iter().any(|r| r == "user"),
+            "refresh should load new 'user' role: {:?}",
+            roles
+        );
+
+        // 清理
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    /// refresh 文件读取失败路径
+    #[tokio::test]
+    async fn yaml_provider_refresh_file_deleted_returns_err() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("dbnexus_test_refresh_deleted.yaml");
+        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
+
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+
+        // 删除文件，refresh 应失败
+        std::fs::remove_file(&file_path).expect("failed to delete temp file");
+
+        let result = p.refresh().await;
+        assert!(result.is_err(), "refresh should fail when file is deleted");
+        match result {
+            Err(PermissionProviderError::LoadError(_)) => { /* expected */ }
+            Err(other) => panic!("expected LoadError, got {:?}", other),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+    }
+
+    /// refresh 解析失败路径
+    #[tokio::test]
+    async fn yaml_provider_refresh_malformed_returns_err() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("dbnexus_test_refresh_malformed.yaml");
+        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
+
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+
+        // 写入无效内容
+        let malformed = "not valid: yaml: [[[";
+        std::fs::write(&file_path, malformed).expect("failed to rewrite temp file");
+
+        let result = p.refresh().await;
+        assert!(result.is_err(), "refresh should fail with malformed file");
+        match result {
+            Err(PermissionProviderError::LoadError(_)) => { /* expected */ }
+            Err(other) => panic!("expected LoadError, got {:?}", other),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+
+        // 清理
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    // ========================================================================
+    // RefreshablePermissionProvider trait 对象测试
+    // ========================================================================
+
+    /// YamlPermissionProvider 应实现 RefreshablePermissionProvider trait
+    #[tokio::test]
+    async fn yaml_provider_is_refreshable() {
+        let mut config = PermissionConfig::default();
+        config.roles.insert("admin".into(), RolePolicy::default());
+        let mut p = YamlPermissionProvider::from_config(config);
+        // 调用 trait 方法
+        use super::RefreshablePermissionProvider;
+        let result = <YamlPermissionProvider as RefreshablePermissionProvider>::refresh(&mut p).await;
+        assert!(result.is_ok());
+    }
 }

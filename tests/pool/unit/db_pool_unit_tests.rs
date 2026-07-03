@@ -342,3 +342,260 @@ async fn test_db_pool_drop_with_active_session_no_panic() {
     drop(pool);
     drop(_session);
 }
+
+// ============================================================================
+// try_from 同步构造器测试（permission feature 启用时返回 Err）
+// ============================================================================
+
+/// TEST-U-DPOOL-024: try_from 在 permission feature 启用时应返回 Err
+#[cfg(feature = "permission")]
+#[test]
+fn test_db_pool_try_from_with_permission_returns_err() {
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        max_connections: 5,
+        ..Default::default()
+    };
+    let result = DbPool::try_from(&config);
+    assert!(
+        result.is_err(),
+        "try_from should return Err when permission feature is enabled (sync constructor cannot init cache)"
+    );
+}
+
+// ============================================================================
+// DbPoolBuilder 边界测试
+// ============================================================================
+
+/// TEST-U-DPOOL-025: DbPoolBuilder::build() 未提供 url 或 config 应返回 Err
+#[tokio::test]
+async fn test_db_pool_builder_no_url_no_config_fails() {
+    let result = DbPoolBuilder::new().build().await;
+    assert!(result.is_err(), "build() without url or config should fail");
+}
+
+/// TEST-U-DPOOL-026: DbPoolBuilder::admin_role 在 config 已设置时应修改 config
+#[tokio::test]
+async fn test_db_pool_builder_admin_role_with_config() {
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        admin_role: "initial".to_string(),
+        ..Default::default()
+    };
+    let pool = DbPoolBuilder::new()
+        .config(config)
+        .admin_role("root")
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(pool.config().admin_role, "root");
+}
+
+/// TEST-U-DPOOL-027: DbPoolBuilder::max_connections 在只有 url 时应创建 config
+#[tokio::test]
+async fn test_db_pool_builder_max_connections_with_url_only() {
+    let pool = DbPoolBuilder::new()
+        .url("sqlite::memory:")
+        .max_connections(13)
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(pool.config().max_connections, 13);
+}
+
+/// TEST-U-DPOOL-028: DbPoolBuilder::min_connections 在只有 url 时应创建 config
+#[tokio::test]
+async fn test_db_pool_builder_min_connections_with_url_only() {
+    let pool = DbPoolBuilder::new()
+        .url("sqlite::memory:")
+        .min_connections(2)
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(pool.config().min_connections, 2);
+}
+
+/// TEST-U-DPOOL-029: DbPoolBuilder deprecated setters 应为 no-op 但不 panic
+#[allow(deprecated)]
+#[tokio::test]
+async fn test_db_pool_builder_deprecated_setters_are_noop() {
+    // metrics_collector setter (deprecated, no-op)
+    #[cfg(feature = "metrics")]
+    {
+        use dbnexus::MetricsCollector;
+        let collector = std::sync::Arc::new(MetricsCollector::new());
+        let _ = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .metrics_collector(collector)
+            .build()
+            .await;
+    }
+
+    // permission_config setter (deprecated, no-op)
+    #[cfg(feature = "permission")]
+    {
+        use dbnexus::access::permission::PermissionConfig;
+        let _ = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .permission_config(PermissionConfig::default())
+            .build()
+            .await;
+    }
+
+    // with_oxcache setter (deprecated, no-op)
+    #[cfg(feature = "cache")]
+    {
+        use oxcache::Cache;
+        let cache: std::sync::Arc<Cache<String, serde_json::Value>> =
+            std::sync::Arc::new(Cache::builder().capacity(10).build().await.unwrap());
+        let _ = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .with_oxcache(cache)
+            .build()
+            .await;
+    }
+}
+
+// ============================================================================
+// parse_health_check_interval 单元测试
+// ============================================================================
+
+/// TEST-U-DPOOL-030: parse_health_check_interval 边界值
+#[cfg(feature = "pool-health-check")]
+#[test]
+fn test_parse_health_check_interval_boundaries() {
+    use dbnexus::DbPool;
+
+    // 空字符串返回默认 30
+    assert_eq!(DbPool::parse_health_check_interval(""), 30);
+    // 有效值
+    assert_eq!(DbPool::parse_health_check_interval("60"), 60);
+    assert_eq!(DbPool::parse_health_check_interval("5"), 5);
+    assert_eq!(DbPool::parse_health_check_interval("300"), 300);
+    // 小于下限 → 5
+    assert_eq!(DbPool::parse_health_check_interval("1"), 5);
+    assert_eq!(DbPool::parse_health_check_interval("4"), 5);
+    // 大于上限 → 300
+    assert_eq!(DbPool::parse_health_check_interval("301"), 300);
+    assert_eq!(DbPool::parse_health_check_interval("1000"), 300);
+    // 无效字符串 → 默认 30
+    assert_eq!(DbPool::parse_health_check_interval("abc"), 30);
+    assert_eq!(DbPool::parse_health_check_interval("12.5"), 30);
+    assert_eq!(DbPool::parse_health_check_interval("-5"), 30);
+}
+
+// ============================================================================
+// check_connection_health 测试
+// ============================================================================
+
+/// TEST-U-DPOOL-031: check_connection_health 对健康的 SeaORM 连接应返回 true
+#[tokio::test]
+async fn test_check_connection_health_healthy_seaorm() {
+    use dbnexus::DbConnection;
+    let pool = common::make_sqlite_memory_pool().await;
+    let sea_conn = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+    let conn = DbConnection::SeaOrm(sea_conn);
+    let is_healthy = pool.check_connection_health(&conn).await;
+    assert!(is_healthy, "healthy SeaORM connection should return true");
+}
+
+// ============================================================================
+// 健康检查与清理测试（pool-health-check feature）
+// ============================================================================
+
+/// TEST-U-DPOOL-032: clean_invalid_connections 对健康池应返回 0
+#[cfg(feature = "pool-health-check")]
+#[tokio::test]
+async fn test_clean_invalid_connections_healthy_pool() {
+    let pool = common::make_sqlite_memory_pool().await;
+    let removed = pool.clean_invalid_connections().await;
+    assert_eq!(removed, 0, "no invalid connections should be removed from healthy pool");
+}
+
+/// TEST-U-DPOOL-033: validate_and_recreate_connections 对健康池应返回 0
+#[cfg(feature = "pool-health-check")]
+#[tokio::test]
+async fn test_validate_and_recreate_connections_healthy_pool() {
+    let pool = common::make_sqlite_memory_pool().await;
+    let recreated = pool.validate_and_recreate_connections().await;
+    assert!(recreated.is_ok(), "should succeed on healthy pool");
+    assert_eq!(
+        recreated.unwrap(),
+        0,
+        "no connections should be recreated on healthy pool"
+    );
+}
+
+// ============================================================================
+// pool_metrics 测试（metrics feature）
+// ============================================================================
+
+/// TEST-U-DPOOL-034: pool_metrics 在未设置 collector 时应返回全零
+#[cfg(feature = "metrics")]
+#[tokio::test]
+async fn test_pool_metrics_no_collector_returns_zeros() {
+    let pool = common::make_sqlite_memory_pool().await;
+    let metrics = pool.pool_metrics();
+    assert_eq!(metrics.slow_acquires, 0);
+    assert_eq!(metrics.timeout_errors, 0);
+    assert_eq!(metrics.critical_timeouts, 0);
+}
+
+// ============================================================================
+// run_auto_migrate 测试（auto-migrate feature）
+// ============================================================================
+
+/// TEST-U-DPOOL-035: run_auto_migrate 在无 migrations_dir 时应返回 Ok(0)
+#[cfg(feature = "auto-migrate")]
+#[tokio::test]
+async fn test_run_auto_migrate_no_dir_returns_zero() {
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        auto_migrate: true,
+        migrations_dir: None,
+        ..Default::default()
+    };
+    let pool = DbPool::with_config(config).await.unwrap();
+    let result = pool.run_auto_migrate().await;
+    assert!(result.is_ok(), "should succeed when no migrations_dir set");
+    assert_eq!(result.unwrap(), 0, "should apply 0 migrations when no dir");
+}
+
+// ============================================================================
+// DbConnection 方法测试
+// ============================================================================
+
+/// TEST-U-DPOOL-036: DbConnection::as_sea_orm 应返回 Ok
+#[tokio::test]
+async fn test_db_connection_as_sea_orm_ok() {
+    use dbnexus::DbConnection;
+    let sea_conn = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+    let conn = DbConnection::SeaOrm(sea_conn);
+    assert!(
+        conn.as_sea_orm().is_ok(),
+        "as_sea_orm on SeaOrm variant should return Ok"
+    );
+}
+
+/// TEST-U-DPOOL-037: DbConnection::is_duckdb 应返回 false（SeaORM 连接）
+#[tokio::test]
+async fn test_db_connection_is_duckdb_seaorm() {
+    use dbnexus::DbConnection;
+    let sea_conn = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+    let conn = DbConnection::SeaOrm(sea_conn);
+    assert!(!conn.is_duckdb(), "SeaOrm connection should not be duckdb");
+}
+
+/// TEST-U-DPOOL-038: DbConnection::Debug 应不 panic
+#[tokio::test]
+async fn test_db_connection_debug_format() {
+    use dbnexus::DbConnection;
+    let sea_conn = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+    let conn = DbConnection::SeaOrm(sea_conn);
+    let debug_str = format!("{:?}", conn);
+    assert!(
+        debug_str.contains("SeaOrm"),
+        "debug output should contain SeaOrm: {}",
+        debug_str
+    );
+}

@@ -54,20 +54,24 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 **核心特性（始终可用）：**
 - 带 RAII 管理的连接池
 - 基本配置管理
-- 数据库驱动选择（SQLite、PostgreSQL、MySQL）
+- 数据库驱动选择（SQLite、PostgreSQL、MySQL、DuckDB）
 
 **可选核心特性：**
 - `permission` - 基于角色的访问控制
-- `sql-parser` - 用于权限检查的 SQL 解析
+- `sql-parser` - 用于权限检查的 SQL 解析（含 SQL 注入检测）
 - `macros` - 用于代码生成的过程宏
 
 **企业特性（可选）：**
 - `metrics` - Prometheus 指标收集
-- `tracing` - OpenTelemetry 集成
+- `tracing` - OpenTelemetry 集成（0.3.0 增强：OTLP 导出）
 - `audit` - 全面审计日志
 - `migration` - 数据库迁移管理
-- `sharding` - 数据分片支持
-- `cache` - LRU 缓存层
+- `sharding` - 数据分片支持（0.3.0 增强：会话级分片路由）
+- `cache` - oxcache 缓存（内部 moka L1 后端）
+- `authentication` - JWT 认证 + 密码强度验证（0.3.0 新增）
+- `health-check` - 健康检查 + 熔断器（0.3.0 新增）
+- `permission-engine` - 高级权限引擎（RBAC + ABAC）
+- `global-index` - 跨分片全局索引
 
 ### 3. 异步优先设计
 
@@ -110,7 +114,7 @@ graph TD
 ### 关键实现细节
 
 - **连接池**：使用 `AsyncMutex<Vec<DatabaseConnection>>` 配合原子计数器
-- **权限缓存**：角色策略的 LRU 缓存以提高性能
+- **权限缓存**：角色策略的 oxcache 缓存（内部 moka L1 后端）以提高性能
 - **健康检查**：后台任务定期验证空闲连接
 - **RAII 管理**：会话丢弃时连接自动释放
 
@@ -283,7 +287,7 @@ flowchart TD
 
 **性能优化：**
 
-- **LRU 缓存**：默认 256 个条目，减少配置加载
+- **oxcache 缓存**：默认 256 个条目，减少配置加载（内部 moka L1 后端）
 - **速率限制**：每分钟 100 个请求，防止滥用
 - **异步锁**：并发请求的非阻塞
 
