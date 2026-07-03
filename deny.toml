@@ -14,6 +14,10 @@ ignore = [
     # tokio-tar PAX header vulnerability — transitive via testcontainers
     # 无安全升级路径，仅影响开发/测试依赖
     "RUSTSEC-2025-0111",
+    # rsa Marvin Attack — transitive via jsonwebtoken (authentication feature)
+    # 等待 jsonwebtoken 10.x 迁移到 rsa 0.10+；仅在启用 authentication 特性时引入
+    # 缓解措施：项目不对外暴露原始 RSA 签名接口，仅消费 JWT 库的封装 API
+    "RUSTSEC-2023-0071",
 ]
 
 [licenses]
