@@ -24,7 +24,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       needs_update: ${{ steps.check.outputs.needs_update }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -128,7 +128,7 @@ jobs:
             asset_prefix: windows-x64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -211,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -281,7 +281,7 @@ jobs:
       name: crates.io
       url: https://crates.io/crates/dbnexus
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -323,7 +323,7 @@ jobs:
     timeout-minutes: 20
     if: false # 启用此 job 需要配置 Docker Hub 凭据
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
