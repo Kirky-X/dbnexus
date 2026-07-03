@@ -286,7 +286,7 @@ jobs:
           cargo tarpaulin --verbose --features sqlite,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --timeout 300 --out xml --exclude-files "**/tests/**"
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
