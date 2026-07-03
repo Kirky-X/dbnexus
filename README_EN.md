@@ -164,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
 | <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | Monolithic application |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | All optional features without database drivers | All enterprise features (manual database selection) |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration` | 5 aggregate features (manually add database drivers and other features) |
 
 ---
 
@@ -301,17 +301,17 @@ Model::find_all(&session).await?; // Error: Permission denied
 ### Database Drivers (choose one)
 
 ```toml
-# SQLite (embedded)
-dbnexus = { version = "0.3", features = ["sqlite"] }
+# SQLite (default, embedded)
+dbnexus = { version = "0.3.0", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.3", features = ["postgres"] }
+dbnexus = { version = "0.3.0", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.3", features = ["mysql"] }
+dbnexus = { version = "0.3.0", features = ["mysql"] }
 
 # DuckDB (embedded analytical database, new in 0.3.0)
-dbnexus = { version = "0.3", features = ["duckdb"] }
+dbnexus = { version = "0.3.0", features = ["duckdb"] }
 ```
 
 ### Protocol-Compatible Databases
@@ -326,68 +326,80 @@ DBNexus supports the following protocol-compatible databases via standard protoc
 | MariaDB | MySQL | MySQL-compatible fork |
 | Aurora | PostgreSQL/MySQL | AWS cloud-native database |
 
+### Runtime
+
+```toml
+# Tokio with RustLS (default)
+dbnexus = { version = "0.3.0", features = ["runtime-tokio-rustls"] }
+
+# Tokio with Native TLS
+dbnexus = { version = "0.3.0", features = ["runtime-tokio-native-tls"] }
+
+# AsyncStd
+dbnexus = { version = "0.3.0", features = ["runtime-async-std"] }
+```
+
 ### Core Features
 
 ```toml
-# Permission control (REQUIRES cache feature)
-dbnexus = { version = "0.3", features = ["permission", "cache"] }
+# Permission control (auto-enables sql-parser + yaml + cache features; sql-parser is mandatory to prevent SQL injection bypass)
+dbnexus = { version = "0.3.0", features = ["permission"] }
 
-# SQL parsing (REQUIRES cache feature)
-dbnexus = { version = "0.3", features = ["sql-parser", "cache"] }
+# SQL parsing (auto-enables cache feature)
+dbnexus = { version = "0.3.0", features = ["sql-parser"] }
 
 # Procedural macros
-dbnexus = { version = "0.3", features = ["macros"] }
-
-# Caching (required by permission and sql-parser)
-dbnexus = { version = "0.3", features = ["cache"] }
+dbnexus = { version = "0.3.0", features = ["macros"] }
 ```
 
 ### Using Presets (Recommended)
 
 ```toml
 # Embedded/Edge devices (minimal)
-dbnexus = { version = "0.3", features = ["embedded"] }
+dbnexus = { version = "0.3.0", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.3", features = ["microservice"] }
+dbnexus = { version = "0.3.0", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.3", features = ["monolith"] }
+dbnexus = { version = "0.3.0", features = ["monolith"] }
 
 # Enterprise (all features)
-dbnexus = { version = "0.3", features = ["enterprise"] }
+dbnexus = { version = "0.3.0", features = ["enterprise"] }
 ```
 
 ### Optional Features
 
 ```toml
 # Observability (metrics + tracing + health-check)
-dbnexus = { version = "0.3", features = ["observability"] }
+dbnexus = { version = "0.3.0", features = ["observability"] }
 
 # Data management (migration + sharding + global-index)
-dbnexus = { version = "0.3", features = ["data-management"] }
+dbnexus = { version = "0.3.0", features = ["data-management"] }
 
 # Security (audit + permission-engine)
-dbnexus = { version = "0.3", features = ["security"] }
+dbnexus = { version = "0.3.0", features = ["security"] }
 
 # Individual features
-dbnexus = { version = "0.3", features = [
-    "metrics",         # Prometheus metrics
-    "tracing",         # Distributed tracing
-    "audit",           # Audit logging
-    "migration",       # Database migration
-    "sharding",        # Data sharding
-    "permission-engine" # Advanced permission engine (requires cache)
+dbnexus = { version = "0.3.0", features = [
+    "metrics",          # Prometheus metrics
+    "tracing",          # Distributed tracing
+    "audit",            # Audit logging
+    "migration",        # Database migration
+    "sharding",         # Data sharding
+    "global-index",     # Cross-shard global index
+    "permission-engine", # Advanced permission engine (requires cache)
+    "authentication"   # JWT authentication + password strength validation (new in 0.3.0)
 ] }
 ```
 
 ### Configuration
 
 ```toml
-dbnexus = { version = "0.3", features = [
+dbnexus = { version = "0.3.0", features = [
     "yaml",            # YAML config support
     "config-toml",     # TOML config support
-    "config-env",      # Environment variables
+    "config-env",      # Environment variables (default)
 ] }
 ```
 

@@ -73,6 +73,16 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 - `permission-engine` - 高级权限引擎（RBAC + ABAC）
 - `global-index` - 跨分片全局索引
 
+**特性依赖关系（编译时强制）：**
+
+| 特性 | 依赖 | 原因 |
+|------|------|------|
+| `permission` | → `sql-parser`（强制） | 防止 SQL 注入绕过权限检查；同时传递依赖 `dashmap`、`futures`、`yaml` |
+| `sql-parser` | → `cache`（自动启用） | 缓存解析结果以提升性能；同时依赖 `sqlparser`、`once_cell`、`regex`、`unicode-normalization` |
+| `permission-engine` | → `cache`、`dashmap`、`futures`、`once_cell`、`regex` | 高级权限引擎需要缓存策略决策、并发 map、异步和正则支持 |
+
+> 这些依赖关系在 `src/lib.rs` 中通过 `compile_error!` 宏强制检查，缺失依赖将导致编译失败。
+
 ### 3. 异步优先设计
 
 所有 I/O 操作都使用带有 Tokio 的 `async/await`：
@@ -122,373 +132,120 @@ graph TD
 
 ## 模块架构
 
-### 核心模块
-
-#### 1. 配置模块 (`config.rs`)
-
-**职责：**集中配置管理
-
-**关键组件：**
-```rust
-pub struct DbConfig {
-    pub url: String,                    // 数据库连接 URL
-    pub max_connections: u32,           // 最大池大小
-    pub min_connections: u32,           // 最小池大小
-    pub idle_timeout: u64,              // 空闲连接超时
-    pub acquire_timeout: u64,           // 连接获取超时
-    pub permissions_path: Option<String>, // 权限配置路径
-    pub migrations_dir: Option<PathBuf>, // 迁移目录
-    pub auto_migrate: bool,             // 自动迁移标志
-    pub migration_timeout: u64,         // 迁移超时
-    pub admin_role: String,             // 管理员角色名称
-}
-
-pub struct DbConfigBuilder {
-    // 链式 API 用于构建配置
-}
-
-pub struct ConfigCorrector {
-    // 自动修正无效值
-}
-```
-
-**配置源优先级：**
-1. 环境变量（最高）
-2. YAML/TOML 配置文件
-3. 内置默认值（最低）
-
-**安全特性：**
-- 路径遍历攻击防护
-- URL 协议白名单
-- 配置验证
-
-#### 2. 连接池模块 (`pool/`)
-
-**职责：**管理数据库连接生命周期
-
-**架构：**
-
-```mermaid
-graph TD
-    subgraph DbPool["DbPool (Arc<DbPoolInner>)"]
-        idle_connections["idle_connections:<br/>AsyncMutex<Vec<DatabaseConnection>>"]
-        connection_available["connection_available:<br/>Notify"]
-        active_count["active_count:<br/>AtomicU32"]
-        total_count["total_count:<br/>AtomicU32"]
-        wait_count["wait_count:<br/>AtomicU32"]
-        max_active["max_active:<br/>AtomicU32"]
-        policy_cache["policy_cache:<br/>Arc<AsyncMutex<LruCache>>"]
-        config["config:<br/>DbConfig"]
-        admin_role["admin_role:<br/>String"]
-    end
-
-    subgraph Session["Session"]
-        connection["connection:<br/>Option<DatabaseConnection>"]
-        pool["pool:<br/>Arc<DbPool>"]
-        role["role:<br/>String"]
-        transaction["transaction:<br/>Option<DatabaseTransaction>"]
-        permission_ctx["permission_ctx:<br/>PermissionContext"]
-    end
-```
-
-**连接获取流程：**
-
-```rust
-async fn acquire_connection(&self) -> DbResult<DatabaseConnection> {
-    // 1. 尝试从空闲队列获取
-    let mut idle = self.idle_connections.lock().await;
-    if let Some(conn) = idle.pop() {
-        self.active_count.fetch_add(1, Ordering::SeqCst);
-        return Ok(conn);
-    }
-
-    // 2. 检查是否达到最大连接数
-    if self.total_count.load(Ordering::SeqCst) >= self.config.max_connections {
-        drop(idle);
-        self.wait_count.fetch_add(1, Ordering::SeqCst);
-        let notified = self.connection_available.notified();
-        notified.await; // 使用 Notify 高效等待
-        // 重试...
-    }
-
-    // 3. 创建新连接
-    let conn = self.create_connection().await?;
-    self.total_count.fetch_add(1, Ordering::SeqCst);
-    return Ok(conn);
-}
-```
-
-**RAII 实现：**
-
-```rust
-impl Drop for Session {
-    fn drop(&mut self) {
-        if let Some(conn) = self.connection.take() {
-            self.pool.release_connection(conn);
-        }
-    }
-}
-```
+DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/lib.rs` 统一声明和导出。
+
+### 1. 公共类型层 (`common/`)
+
+零依赖的基础类型，被所有层共用。
+
+- `common/mod.rs` — 模块入口
+- `common/error.rs` — `DbNexusError`、`DbNexusResult`、`ErrorCategory`、`QueryErrorReport`（顶层统一错误类型）
 
-#### 3. 权限模块 (`permission.rs`)
+### 2. 基础层 (`foundation/`)
 
-**职责：**基于角色的访问控制（RBAC）
+配置和错误处理的基础设施，无业务逻辑。
 
-**架构：**
+- `foundation/mod.rs` — 模块入口，re-export config/error 及 Sea-ORM trait（`ActiveModelTrait`、`EntityTrait`、`Condition`、`Set`）
+- `foundation/config/` — 配置系统（纯数据结构，通过 serde 反序列化）
+  - `mod.rs` — 模块入口
+  - `types.rs` — `DbConfig`、`CacheConfig`、`PoolConfig`、`DatabaseType`、`ConfigError`
+- `foundation/error/` — 子错误类型
+  - `mod.rs` — `DbError`、`DbResult`、`AuditError`、`MigrationError`、`MigrationResult`、`ConfigResult`、`PermissionResult`、`PoolResult`
 
-```
-PermissionContext
-├── role: String
-├── policy_cache: Arc<AsyncMutex<LruCache<String, RolePolicy>>>
-├── rate_limiter: Option<Arc<RateLimiter>>
-└── config: PermissionConfig
-
-PermissionConfig
-└── roles: HashMap<String, RolePolicy>
-
-RolePolicy
-└── tables: Vec<TablePermission>
-
-TablePermission
-├── name: String (表名或 "*")
-└── operations: HashSet<PermissionAction>
-```
-
-**权限检查流程：**
-
-```mermaid
-flowchart TD
-    Start[权限检查开始] --> RateLimit[速率限制检查]
-    RateLimit -->|超出| Block[阻止请求]
-    RateLimit -->|OK| CacheLookup[LRU 缓存查找]
-
-    CacheLookup -->|缓存命中| ReturnCached[返回缓存决策]
-    CacheLookup -->|缓存未命中| LoadPolicy[从配置加载策略]
-
-    LoadPolicy --> ParseYAML[解析 YAML 配置]
-    ParseYAML --> BuildPolicy[构建角色策略映射]
-    BuildPolicy --> CheckTable[检查表访问]
-
-    CheckTable --> CheckRole{角色是否允许<br/>访问表？}
-    CheckRole -->|否| Deny[拒绝访问]
-    CheckRole -->|是| CheckOp{操作是否<br/>允许？}
-
-    CheckOp -->|否| Deny
-    CheckOp -->|是| CacheDecision[缓存决策]
-
-    CacheDecision --> StoreCache[存储到 LRU 缓存]
-    StoreCache --> Allow[允许访问]
-
-    ReturnCached --> End[结束]
-    Deny --> End
-    Allow --> End
-    Block --> End
-```
-
-**性能优化：**
-
-- **oxcache 缓存**：默认 256 个条目，减少配置加载（内部 moka L1 后端）
-- **速率限制**：每分钟 100 个请求，防止滥用
-- **异步锁**：并发请求的非阻塞
-
-### 可选特性模块
-
-#### 4. 指标模块 (`metrics.rs`)
-
-**职责：**性能指标收集
-
-**跟踪的指标：**
-
-| 指标 | 描述 |
-|---------|-------------|
-| `pool_connections_active` | 当前活跃连接 |
-| `pool_connections_idle` | 空闲连接 |
-| `pool_connections_total` | 总连接数 |
-| `query_latency_p50` | 第 50 百分位延迟 |
-| `query_latency_p99` | 第 99 百分位延迟 |
-| `query_throughput` | 每秒查询数 |
-
-**数据结构：**
-
-```rust
-pub struct MetricsCollector {
-    latency_histogram: LatencyHistogram,
-    latency_percentiles: LatencyPercentiles,
-    query_counter: AtomicU64,
-    error_counter: AtomicU64,
-}
-
-pub struct LatencyPercentiles {
-    p50: AtomicU64,
-    p90: AtomicU64,
-    p95: AtomicU64,
-    p99: AtomicU64,
-    p99_9: AtomicU64,
-}
-```
-
-#### 5. 审计模块 (`audit.rs`)
-
-**职责：**完整操作审计跟踪
-
-**审计事件结构：**
-
-```rust
-pub struct AuditEvent {
-    pub event_id: Uuid,
-    pub timestamp: DateTime<Utc>,
-    pub operation: AuditOperation,
-    pub severity: AuditSeverity,
-    pub result: AuditResult,
-    pub table_name: Option<String>,
-    pub record_id: Option<String>,
-    pub user_role: Option<String>,
-    pub sql_statement: Option<String>,
-    pub error_message: Option<String>,
-    pub execution_time_ms: Option<u64>,
-}
-```
-
-**审计流程：**
-
-```mermaid
-flowchart TD
-    Start[审计流程开始] --> BeforeOp[操作前]
-
-    BeforeOp --> GenUUID[生成 UUID]
-    BeforeOp --> RecordStart[记录开始时间]
-    BeforeOp --> LogDetails[记录请求详情]
-
-    GenUUID --> ExecuteOp[执行操作]
-    RecordStart --> ExecuteOp
-    LogDetails --> ExecuteOp
-
-    ExecuteOp --> CaptureSQL[捕获 SQL 和参数]
-
-    CaptureSQL --> AfterOp[操作后]
-    AfterOp --> RecordEnd[记录结束时间]
-    AfterOp --> CaptureResult[捕获结果<br/>成功/失败]
-    AfterOp --> BuildEvent[构建 AuditEvent]
-    AfterOp --> Persist[持久化到审计日志]
-
-    RecordEnd --> End[审计流程结束]
-    CaptureResult --> End
-    BuildEvent --> End
-    Persist --> End
-```
-
-#### 6. 缓存模块 (`cache.rs`)
-
-**职责：**实体数据缓存
-
-**缓存架构：**
-
-```mermaid
-graph TD
-    subgraph CacheManager["CacheManager<T>"]
-        cache["cache:<br/>LruCache<CacheKey, CacheEntry<T>>"]
-        config["config:<br/>CacheConfig"]
-        stats["stats:<br/>CacheStats"]
-    end
-
-    subgraph CacheEntry["CacheEntry<T>"]
-        value["value:<br/>T"]
-        created_at["created_at:<br/>DateTime<Utc>"]
-        expires_at["expires_at:<br/>DateTime<Utc>"]
-        access_count["access_count:<br/>AtomicU32"]
-        last_accessed["last_accessed:<br/>AtomicU64"]
-    end
-
-    subgraph CacheConfig["CacheConfig"]
-        capacity["capacity:<br/>usize<br/>(最大条目数)"]
-        ttl["ttl:<br/>Duration<br/>(生存时间)"]
-        cleanup_interval["cleanup_interval:<br/>Duration"]
-        enabled["enabled:<br/>bool"]
-    end
-```
-
-**缓存策略：**
-
-- **LRU 淘汰**：最近最少使用的条目首先被淘汰
-- **TTL 过期**：条目在配置时间后过期
-- **写透**：写入时更新缓存
-
-#### 7. 分片模块 (`sharding.rs`)
-
-**职责：**跨分片数据分布
-
-**分片策略：**
-
-```rust
-pub enum ShardingStrategy {
-    Yearly,    // 每年一个分片
-    Monthly,    // 每月一个分片
-    Daily,      // 每日一个分片
-    Hash,       // 一致性哈希分片
-}
-
-pub trait ShardingStrategy: Send + Sync {
-    fn get_shard_name(&self, timestamp: DateTime<Utc>) -> String;
-    fn calculate_shard(&self, key: &str, total_shards: usize) -> usize;
-}
-```
-
-**示例：月度分片**
-
-```rust
-impl ShardingStrategy for MonthlyStrategy {
-    fn get_shard_name(&self, timestamp: DateTime<Utc>) -> String {
-        format!("{}_{}", timestamp.year(), timestamp.month())
-    }
-}
-```
-
-#### 8. 全局索引模块 (`global_index.rs`)
-
-**职责：**跨分片索引
-
-**全局索引架构：**
-
-```mermaid
-graph TD
-    subgraph GlobalIndex["GlobalIndex"]
-        local_index["local_index:<br/>LruCache<String, Vec<IndexEntry>>"]
-        sync_events["sync_events:<br/>Channel<SyncEvent>"]
-        sync_task["sync_task:<br/>JoinHandle<()>"]
-        config["config:<br/>GlobalIndexConfig"]
-    end
-
-    subgraph IndexEntry["IndexEntry"]
-        key["key:<br/>String"]
-        shard_name["shard_name:<br/>String"]
-        record_id["record_id:<br/>String"]
-        updated_at["updated_at:<br/>DateTime<Utc>"]
-    end
-```
-
-**同步流程：**
-
-```mermaid
-sequenceDiagram
-    participant App as 应用程序
-    participant ShardA as 分片 A
-    participant Channel as 同步通道
-    participant Task as 后台任务
-    participant GlobalIdx as 全局索引
-    participant Query as 全局查询
-
-    App->>ShardA: 1. 写操作
-    ShardA->>ShardA: 生成 SyncEvent::Insert
-    ShardA->>Channel: 2. 发布到同步通道
-
-    Channel->>Task: 后台任务拾取事件
-    Task->>GlobalIdx: 3. 更新全局索引
-    GlobalIdx-->>Task: 添加/更新索引条目
-
-    Query->>GlobalIdx: 4. 全局查询
-    GlobalIdx-->>Query: 查询全局索引
-    Query-->>ShardA: 路由到正确分片
-```
+> **注意**：顶层统一错误类型 `DbNexusError` 定义在 `common/error.rs`，本层定义各模块的子错误类型。
+
+### 3. 领域层 (`domain/`)
+
+业务领域接口和数据模型，可依赖 foundation 层和第三方库。
+
+- `domain/mod.rs` — 模块入口
+- `domain/audit/` — 审计领域（cfg = "audit"）
+  - `mod.rs` — `AuditLogger`、`AuditEvent`、`AuditEventBuilder`、`AuditOperation`、`AuditSeverity`、`AuditStatus`、`AuditStorage`、`MemoryAuditStorage`、`AuditContext`、`AuditQueryFilters`、`AuditConfig`
+- `domain/migration/` — 迁移领域
+  - `mod.rs` — 模块入口
+  - `schema.rs`、`types.rs`、`converter.rs`、`metadata.rs`、`column_changes.rs` — 基础模块（始终可用，供 `#[db_entity]` 宏生成的 `schema()` 方法使用）
+  - `executor.rs`、`differ.rs`、`sql_reverser.rs` — 执行模块（cfg = "migration"，依赖 `sqlparser` 和 `regex`）
+- `domain/permission/` — 权限领域接口（cfg = "permission"）
+  - `mod.rs` — `PermissionProvider`、`PermissionChecker`、`PolicyManager`、`PermissionLifecycle` trait，工厂函数 `new`/`with_cache`/`new_in_memory`
+  - `interface.rs` — trait 定义
+  - `config.rs` — `PermissionConfig`、`DefaultPolicy`
+  - `types.rs` — `PermissionAction`、`RolePolicy`、`TablePermission`、`PolicySet`
+  - `error.rs` — `PermissionError`、`PermissionConfigError`
+  - `impl_/` — 实现（`default.rs` = `YamlPermissionProvider`，`memory.rs` = `MemoryPermissionProvider`）
+
+### 4. 数据库层 (`database/`)
+
+数据库连接、会话和分片管理。
+
+- `database/mod.rs` — 模块入口
+- `database/pool/` — 连接池
+  - `mod.rs` — `ConnectionPool` trait、`DatabaseSession` trait、`DbPoolBuilder`、`DbConnection` 枚举、`PoolStatus`
+  - `db_pool.rs` — `DbPool`、`DatabaseConnection` 类型别名
+  - `session.rs` — `Session`（RAII 会话，drop 时自动归还连接）
+  - `duckdb_conn.rs` — `DuckDbConnection`、`DuckDbRow`、`DuckDbExecResult`（cfg = "duckdb"，0.3.0 新增）
+- `database/sharding.rs` — `ShardRouter`、`ShardConfig`、`ShardingStrategy` trait、`create_strategy`（cfg = "sharding"）
+- `database/migration/` — 运行时迁移执行器（cfg = "migration"，重导出 `domain::migration`）
+
+### 5. 访问层 (`access/`)
+
+权限控制、安全检查、认证。
+
+- `access/mod.rs` — 模块入口
+- `access/permission/` — 运行时 RBAC 权限（cfg = "permission"）
+  - `mod.rs` — 模块入口，re-export 各子模块
+  - `types.rs` — `PermissionAction`、`PermissionConfig`、`RolePolicy`、`TablePermission`、`PermissionError`
+  - `context.rs` — `PermissionContext`（缓存 + 速率限制 + 缓存击穿防护，cfg = "cache"）
+  - `cache.rs` — `PermissionCache`、`PermissionCacheConfig`（TTL + SWR 缓存，0.3.0 新增）
+  - `provider.rs` — `PermissionProvider` trait、`MemoryPermissionProvider`、`YamlPermissionProvider`、`RefreshablePermissionProvider`
+  - `rate_limiter.rs` — `RateLimiter`（速率限制）
+  - `stats.rs` — `PermissionCheckStats`、`CacheStats`（权限统计）
+  - `rbac.rs` — `RbacProvider`（RBAC 实现）
+  - `advanced.rs` — `AdvancedRbacProvider`（高级权限功能）
+- `access/security/` — 安全模块
+  - `mod.rs` — 模块入口
+  - `ddl_guard.rs` — `DdlGuard`、`DdlValidationResult`（cfg = "sql-parser"，AST-based DDL 验证）
+  - `sensitive.rs` — `SensitiveMasker`、`MaskType`、`SensitiveError`、`SensitiveResult`（数据脱敏）
+- `access/authentication/` — JWT 认证（cfg = "authentication"，0.3.0 新增）
+  - `mod.rs` — `AuthenticationManager`、`AuthCredentials`、`AuthResult`、`AuthError`
+  - `jwt.rs` — `JwtManager`、`JwtClaims`、`TokenType`
+  - `password.rs` — `PasswordHasher`（bcrypt 哈希 + 密码强度验证）
+  - `models.rs` — `User`、`AuthCredentials` 数据模型
+- `access/permission_engine.rs` — `PolicyDecisionPoint`、`RbacPermissionProvider`、`PermissionRule`、`PermissionDecision`、`PermissionSubject`、`PermissionResource`、`Role`（cfg = "permission-engine"，RBAC + ABAC 高级权限引擎）
+- `access/sql_parser.rs` — `SqlParser`、`SqlParseError`、`is_ddl_operation`、`contains_sql_injection`（cfg = "sql-parser"）
+
+#### 双 Permission 实现说明
+
+项目中存在两套 permission 实现，分工明确：
+
+- **`domain/permission/`** — 权限**领域接口层**，提供 trait 定义（`PermissionProvider`、`PermissionChecker`、`PolicyManager`、`PermissionLifecycle`）和配置类型。适用于仅需接口或配置类型的场景。
+- **`access/permission/`** — 权限**运行时实现层**，提供 `PermissionContext`（缓存 + 速率限制 + 缓存击穿防护）、`RateLimiter`、`RbacProvider`/`AdvancedRbacProvider`、统计等运行时能力。适用于需要运行时上下文/缓存/速率限制的场景。
+
+两层互补共存，非"已弃用"关系。新代码如需运行时上下文/缓存/速率限制，使用 `access/permission`；如仅需接口或配置类型，使用 `domain/permission`。
+
+### 6. 观测层 (`observability/`)
+
+可观测性基础设施。
+
+- `observability/mod.rs` — 模块入口
+- `observability/metrics.rs` — `MetricsCollector`、`MetricsCollectorTrait`、`QueryStats`、`LatencyPercentiles`、`LatencyHistogram`、`PoolMetrics`、`SlowQueryRecord`、`ThroughputStats`、`ConnectionAcquireStats`、`TransactionStats`（cfg = "metrics"，Prometheus 指标导出）
+- `observability/health.rs` — `HealthChecker`、`HealthStatus`、`HealthCheckResult`、`CircuitBreaker`、`CircuitBreakerConfig`、`CircuitBreakerState`、`PoolHealthMetrics`（cfg = "health-check"，健康检查 + 熔断器）
+- `observability/tracing.rs` — `TracingGuard`、`TracingError`（cfg = "tracing"，OpenTelemetry 集成）
+
+### 7. 存储层 (`storage/`)
+
+- `storage/mod.rs` — 模块入口
+- `storage/global_index.rs` — `GlobalIndex`、`IndexEntry`、`SyncEvent`、`SyncResult`、`SYNC_STATUS_PENDING`、`SYNC_STATUS_SYNCED`、`SYNC_STATUS_FAILED` 常量（cfg = "global-index"，跨分片全局索引）
+
+### 8. 工具包层 (`kit/`)
+
+基于 `trait-kit` 的统一能力管理。
+
+- `kit/mod.rs` — `DbNexusKit`（门面，提供 `provide_*` / `*` 方法注册和获取能力）
+- `kit/keys.rs` — `CapabilityKey` 系列类型（`PermissionCapKey`、`ConnectionPoolCapKey`、`DatabaseSessionCapKey`、`MetricsCapKey`、`HealthCapKey`）
+
+### 自动生成模块
+
+- `generated_roles.rs` — 编译时生成的角色常量（由 `#[db_entity]` 宏生成，`mod generated_roles;` 声明）
 
 ---
 
