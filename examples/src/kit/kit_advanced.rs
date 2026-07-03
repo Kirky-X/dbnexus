@@ -26,8 +26,8 @@ use dbnexus::database::pool::PoolStatus;
 use dbnexus::domain::permission::{self, PermissionAction};
 use dbnexus::foundation::error::DbResult;
 use dbnexus::{
-    ConnectionPool, DatabaseSession, DbConfig, DbNexusKit, DbPool, MetricsCollector,
-    MetricsCollectorTrait, PermissionProvider, Session,
+    ConnectionPool, DatabaseSession, DbConfig, DbNexusKit, DbPool, MetricsCollector, MetricsCollectorTrait,
+    PermissionProvider, Session,
 };
 
 // ============================================
@@ -192,15 +192,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 模拟 3 次查询请求，每次先做权限检查
     for i in 1..=3 {
         let start = std::time::Instant::now();
-        let allowed = permission.check(test_role, test_table, PermissionAction::Select).await?;
+        let allowed = permission
+            .check(test_role, test_table, PermissionAction::Select)
+            .await?;
         let duration = start.elapsed();
 
         if allowed {
             // 通过 DatabaseSession 执行 SQL
             let db_session = kit.database_session()?;
-            let _ = db_session
-                .execute_raw("SELECT COUNT(*) FROM orders")
-                .await?;
+            let _ = db_session.execute_raw("SELECT COUNT(*) FROM orders").await?;
             metrics_collector.record_query(duration);
             println!("  请求 #{}: ✓ 权限通过，查询完成，耗时 {:?}", i, duration);
         } else {

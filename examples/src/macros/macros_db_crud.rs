@@ -109,8 +109,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             stock: *stock,
         };
         let inserted = Model::insert(&session, model).await?;
-        println!("  ✓ 插入: id={}, name={}, price={:.2}, stock={}",
-            inserted.id, inserted.name, inserted.price, inserted.stock);
+        println!(
+            "  ✓ 插入: id={}, name={}, price={:.2}, stock={}",
+            inserted.id, inserted.name, inserted.price, inserted.stock
+        );
     }
     println!("  共插入 {} 条记录", products.len());
 
@@ -134,7 +136,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 查询不存在的记录
     let missing = Model::find_by_id(&session, 999).await?;
-    println!("  ✓ 查询 id=999: {}", if missing.is_none() { "未找到（符合预期）" } else { "找到了" });
+    println!(
+        "  ✓ 查询 id=999: {}",
+        if missing.is_none() {
+            "未找到（符合预期）"
+        } else {
+            "找到了"
+        }
+    );
 
     // ============================================
     // 6. find_all — 查询全部
@@ -175,7 +184,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let affordable = Model::find_by_condition(&session, affordable_cond).await?;
     println!("\n  [stock > 0 AND price < 50.0] 共 {} 条:", affordable.len());
     for p in &affordable {
-        println!("    - id={}, name={}, price={:.2}, stock={}", p.id, p.name, p.price, p.stock);
+        println!(
+            "    - id={}, name={}, price={:.2}, stock={}",
+            p.id, p.name, p.price, p.stock
+        );
     }
 
     // ============================================
@@ -185,7 +197,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let page_size: u64 = 3;
     let total_count = Model::count(&session).await?;
     let total_pages = (total_count + page_size - 1) / page_size;
-    println!("  总记录数: {}, 每页: {}, 总页数: {}", total_count, page_size, total_pages);
+    println!(
+        "  总记录数: {}, 每页: {}, 总页数: {}",
+        total_count, page_size, total_pages
+    );
 
     let all_for_paging = Model::find_all(&session).await?;
     for page in 1..=total_pages as usize {
@@ -203,16 +218,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- UPDATE ---");
     let to_update = Model::find_by_id(&session, 5).await?.unwrap();
-    println!("  更新前: id={}, name={}, price={:.2}, stock={}",
-        to_update.id, to_update.name, to_update.price, to_update.stock);
+    println!(
+        "  更新前: id={}, name={}, price={:.2}, stock={}",
+        to_update.id, to_update.name, to_update.price, to_update.stock
+    );
 
-    let updated = Model::update(&session, Model {
-        price: 89.99,
-        stock: 25,
-        ..to_update
-    }).await?;
-    println!("  更新后: id={}, name={}, price={:.2}, stock={}",
-        updated.id, updated.name, updated.price, updated.stock);
+    let updated = Model::update(
+        &session,
+        Model {
+            price: 89.99,
+            stock: 25,
+            ..to_update
+        },
+    )
+    .await?;
+    println!(
+        "  更新后: id={}, name={}, price={:.2}, stock={}",
+        updated.id, updated.name, updated.price, updated.stock
+    );
 
     // ============================================
     // 10. delete_many — 批量删除
@@ -235,7 +258,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证删除
     let check = Model::find_by_id(&session, 1).await?;
-    println!("  ✓ 删除后查询 id=1: {}", if check.is_none() { "未找到（符合预期）" } else { "仍存在" });
+    println!(
+        "  ✓ 删除后查询 id=1: {}",
+        if check.is_none() {
+            "未找到（符合预期）"
+        } else {
+            "仍存在"
+        }
+    );
 
     // ============================================
     // 最终状态

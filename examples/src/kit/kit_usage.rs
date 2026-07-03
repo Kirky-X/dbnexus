@@ -24,13 +24,10 @@ mod common;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use dbnexus::{
-    ConnectionPool, DatabaseSession, DbConfig, DbPool, DbNexusKit, PermissionProvider,
-    Session,
-};
 use dbnexus::database::pool::PoolStatus;
-use dbnexus::foundation::error::DbResult;
 use dbnexus::domain::permission;
+use dbnexus::foundation::error::DbResult;
+use dbnexus::{ConnectionPool, DatabaseSession, DbConfig, DbNexusKit, DbPool, PermissionProvider, Session};
 
 // ============================================
 // 适配器：将 DbPool 适配为 ConnectionPool trait
@@ -146,12 +143,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = kit.connection_pool()?;
     let status = pool.status();
     println!("  ✓ 获取 ConnectionPool 成功");
-    println!("  连接池状态: total={}, active={}, idle={}", status.total, status.active, status.idle);
+    println!(
+        "  连接池状态: total={}, active={}, idle={}",
+        status.total, status.active, status.idle
+    );
     println!("  配置 URL:   {}", pool.config().url);
 
     // 通过 ConnectionPool trait 获取 Session
     let session = pool.get_session("admin").await?;
-    println!("  ✓ 通过 ConnectionPool trait 获取 Session 成功 (角色: {})", session.role());
+    println!(
+        "  ✓ 通过 ConnectionPool trait 获取 Session 成功 (角色: {})",
+        session.role()
+    );
 
     // ============================================
     // 4. 注册 DatabaseSession 能力
@@ -236,8 +239,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 9. Clone 与 Debug 行为 ---\n");
     let cloned_kit = kit.clone();
     println!("  ✓ kit.clone() 成功");
-    println!("  克隆 kit has_connection_pool()  = {}", cloned_kit.has_connection_pool());
-    println!("  克隆 kit has_database_session() = {}", cloned_kit.has_database_session());
+    println!(
+        "  克隆 kit has_connection_pool()  = {}",
+        cloned_kit.has_connection_pool()
+    );
+    println!(
+        "  克隆 kit has_database_session() = {}",
+        cloned_kit.has_database_session()
+    );
     println!("  克隆 kit has_permission()       = {}", cloned_kit.has_permission());
     println!("  Debug 格式: {:?}", kit);
 

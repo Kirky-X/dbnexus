@@ -18,8 +18,7 @@
 //! ```
 
 use dbnexus::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus,
-    PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus, PoolHealthMetrics,
 };
 use std::time::Duration;
 
@@ -72,9 +71,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- 3. CircuitBreaker 熔断器状态转换 ---");
     let config = CircuitBreakerConfig {
-        failure_threshold: 3,   // 连续失败 3 次触发 Open
-        success_threshold: 2,   // HalfOpen 状态连续成功 2 次恢复 Closed
-        timeout_ms: 100,        // 100ms 后从 Open 转为 HalfOpen
+        failure_threshold: 3, // 连续失败 3 次触发 Open
+        success_threshold: 2, // HalfOpen 状态连续成功 2 次恢复 Closed
+        timeout_ms: 100,      // 100ms 后从 Open 转为 HalfOpen
         window_size: 10,
     };
     let breaker = CircuitBreaker::new(config.clone());
@@ -98,7 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 阶段二：can_execute 在 Open 状态下应拒绝
     println!("\n  [阶段二] Open 状态下 can_execute 检查");
     let can_exec = breaker.can_execute().await;
-    println!("  can_execute() = {:?}", can_exec.map(|_| "allowed").map_err(|e| format!("blocked: {}", e)));
+    println!(
+        "  can_execute() = {:?}",
+        can_exec.map(|_| "allowed").map_err(|e| format!("blocked: {}", e))
+    );
 
     // 阶段三：等待超时后触发 Open → HalfOpen
     println!("\n  [阶段三] 等待 {}ms 超时 → 转为 HalfOpen", config.timeout_ms);
@@ -132,9 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inner_status = inner_breaker.status().await;
     println!(
         "  HealthChecker 内置熔断器: state={}, failures={}, successes={}",
-        inner_status.state,
-        inner_status.consecutive_failures,
-        inner_status.consecutive_successes
+        inner_status.state, inner_status.consecutive_failures, inner_status.consecutive_successes
     );
 
     // ============================================
@@ -151,7 +151,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 将指标同步到检查器（这里通过新建检查器演示，实际场景由连接池自动同步）
     let _ = degraded_checker.metrics().snapshot();
     let degraded_result = degraded_checker.check().await;
-    print_health_status(&degraded_result.status, &degraded_result.details, &degraded_result.recommendations);
+    print_health_status(
+        &degraded_result.status,
+        &degraded_result.details,
+        &degraded_result.recommendations,
+    );
 
     println!("\n========================================");
     println!("✨ 健康检查与熔断器示例完成！");

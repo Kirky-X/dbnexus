@@ -167,9 +167,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. 验证 primary_key_column() 与实际列匹配
     // ============================================
     println!("\n--- 4. 验证主键列名 ---\n");
-    println!("  User::primary_key_column()    = {} (对应 users.id)", user::Model::primary_key_column());
-    println!("  Product::primary_key_column() = {} (对应 products.id)", product::Model::primary_key_column());
-    println!("  Order::primary_key_column()   = {} (对应 orders.id)", order::Model::primary_key_column());
+    println!(
+        "  User::primary_key_column()    = {} (对应 users.id)",
+        user::Model::primary_key_column()
+    );
+    println!(
+        "  Product::primary_key_column() = {} (对应 products.id)",
+        product::Model::primary_key_column()
+    );
+    println!(
+        "  Order::primary_key_column()   = {} (对应 orders.id)",
+        order::Model::primary_key_column()
+    );
 
     println!("\n========================================");
     println!("✨ db_entity 宏示例完成！");

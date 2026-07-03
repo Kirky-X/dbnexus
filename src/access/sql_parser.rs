@@ -379,7 +379,7 @@ impl SqlParser {
                 };
 
                 // 只有当操作类型和表名都有效时才返回
-                action.and_then(|a| parsed.table_name.map(|table_name| (table_name, a)))
+                parsed.table_name.zip(action)
             })
     }
 
@@ -415,7 +415,7 @@ impl SqlParser {
         };
 
         // 只有当操作类型和表名都有效时才返回
-        Ok(action.and_then(|a| parsed.table_name.map(|table_name| (table_name, a))))
+        Ok(parsed.table_name.zip(action))
     }
 
     /// Classify a parsed statement into an operation

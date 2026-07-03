@@ -109,10 +109,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         deleted_at: None,
     };
     let am: ActiveModel = alice_v1.into();
-    let inserted: Model = am
-        .insert(session.connection()?)
-        .await?;
-    println!("  ✓ 插入记录: id={}, email={}, name={}", inserted.id, inserted.email, inserted.name);
+    let inserted: Model = am.insert(session.connection()?).await?;
+    println!(
+        "  ✓ 插入记录: id={}, email={}, name={}",
+        inserted.id, inserted.email, inserted.name
+    );
 
     // ============================================
     // 3. 软删除 alice
@@ -146,10 +147,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         deleted_at: None,
     };
     let am: ActiveModel = alice_v2.into();
-    let inserted: Model = am
-        .insert(session.connection()?)
-        .await?;
-    println!("  ✓ 重新注册成功: id={}, email={}, name={}", inserted.id, inserted.email, inserted.name);
+    let inserted: Model = am.insert(session.connection()?).await?;
+    println!(
+        "  ✓ 重新注册成功: id={}, email={}, name={}",
+        inserted.id, inserted.email, inserted.name
+    );
     println!("    → 若使用 UNIQUE(email) 而非 UNIQUE(email, deleted_at)，此插入会失败！");
 
     // ============================================
@@ -164,7 +166,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(active[0].email, "alice@example.com");
     println!("  ✓ find_all() 返回 {} 条活跃记录:", active.len());
     for m in &active {
-        println!("    - id={}, email={}, name={}, deleted_at={:?}", m.id, m.email, m.name, m.deleted_at);
+        println!(
+            "    - id={}, email={}, name={}, deleted_at={:?}",
+            m.id, m.email, m.name, m.deleted_at
+        );
     }
 
     // find_with_deleted 返回全部记录（id=1 软删除 + id=2 活跃）
@@ -172,7 +177,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(all.len(), 2, "应有 2 条记录（含软删除）");
     println!("\n  ✓ find_with_deleted() 返回 {} 条记录（含软删除）:", all.len());
     for m in &all {
-        let status = if m.deleted_at.is_some() { "已软删除" } else { "活跃" };
+        let status = if m.deleted_at.is_some() {
+            "已软删除"
+        } else {
+            "活跃"
+        };
         println!("    - id={}, email={}, name={}, 状态={}", m.id, m.email, m.name, status);
     }
 
@@ -182,7 +191,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(deleted[0].id, 1, "软删除记录应为 id=1");
     println!("\n  ✓ find_only_deleted() 返回 {} 条软删除记录:", deleted.len());
     for m in &deleted {
-        println!("    - id={}, email={}, name={}, deleted_at={:?}", m.id, m.email, m.name, m.deleted_at);
+        println!(
+            "    - id={}, email={}, name={}, deleted_at={:?}",
+            m.id, m.email, m.name, m.deleted_at
+        );
     }
 
     // ============================================
