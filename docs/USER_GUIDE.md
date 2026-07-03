@@ -47,7 +47,7 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.2.0"
+dbnexus = "0.3.0"
 tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -57,10 +57,10 @@ tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.2.0", default-features = false, features = ["embedded"] }
+dbnexus = { version = "0.3.0", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.2.0", features = [
+dbnexus = { version = "0.3.0", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,7 +69,7 @@ dbnexus = { version = "0.2.0", features = [
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.2.0", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.3.0", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 完整特性列表请参见 [README.md](README.md#feature-flags)。
@@ -80,13 +80,13 @@ dbnexus = { version = "0.2.0", features = ["sqlite", "permission", "sql-parser"]
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.2.0", features = ["sqlite"] }
+dbnexus = { version = "0.3.0", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.2.0", features = ["postgres"] }
+dbnexus = { version = "0.3.0", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.2.0", features = ["mysql"] }
+dbnexus = { version = "0.3.0", features = ["mysql"] }
 ```
 
 **重要：**一次只能启用一个数据库驱动。
@@ -739,7 +739,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.2.0"
+version = "0.3.0"
 features = ["metrics"]
 ```
 
@@ -769,7 +769,7 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.2.0"
+version = "0.3.0"
 features = ["audit"]
 ```
 
@@ -803,17 +803,17 @@ SensitiveData::find_by_id(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.2.0"
+version = "0.3.0"
 features = ["tracing"]
 ```
 
 初始化跟踪：
 
 ```rust
-use dbnexus::tracing::TracingGuard;
+use dbnexus::TracingGuard;
 
-// 初始化跟踪
-let _guard = TracingGuard::init_with_otlp("http://localhost:4317")?;
+// 初始化 OTLP 导出（默认端点 http://localhost:4317）
+let _guard = TracingGuard::init_with_otlp("dbnexus-service", "http://localhost:4317")?;
 
 // 所有 DB 操作自动跟踪
 let session = pool.get_session("admin").await?;

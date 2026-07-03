@@ -11,6 +11,8 @@ DBNexus 的完整 API 文档。
 - [权限 API](#权限-api)
 - [过程宏](#过程宏)
 - [错误类型](#错误类型)
+- [特性门控 API](#特性门控-api)
+- [0.3.0 新增 API](#030-新增-api)
 
 ---
 
@@ -763,7 +765,7 @@ pub type Operation = PermissionAction;
 ### 指标（需要 `metrics` 特性）
 
 ```rust
-use dbnexus::metrics::MetricsCollector;
+use dbnexus::MetricsCollector;
 
 let collector = MetricsCollector::new(&pool);
 println!("{}", collector.export_prometheus());
@@ -772,7 +774,7 @@ println!("{}", collector.export_prometheus());
 ### 审计（需要 `audit` 特性）
 
 ```rust
-use dbnexus::audit::AuditLogger;
+use dbnexus::AuditLogger;
 
 let logger = AuditLogger::new("/var/log/dbnexus/audit.log");
 logger.log_event(audit_event).await?;
@@ -781,11 +783,186 @@ logger.log_event(audit_event).await?;
 ### 迁移（需要 `migration` 特性）
 
 ```rust
-use dbnexus::migration::MigrationExecutor;
+use dbnexus::MigrationExecutor;
 
 let executor = MigrationExecutor::new(&pool);
 executor.run_migrations().await?;
 ```
+
+---
+
+## 0.3.0 新增 API
+
+### DuckDB 连接（需要 `duckdb` 特性）
+
+嵌入式分析型数据库支持，作为分析只读旁路接入（绕过 sea-orm，因 sea-orm 2.0.0-rc.37 不支持 DuckDB）。
+v0.3.0 性能优化：使用连接池（`Vec<duckdb::Connection>`）替代单 `Mutex<Connection>`，真正并发=N。
+
+```rust
+use dbnexus::DuckDbConnection;
+
+// 独立创建（不走 DbPool，因为 DuckDB 绕过 sea-orm）
+let conn = DuckDbConnection::new("duckdb::memory:")?;
+// 或指定连接池大小
+let conn = DuckDbConnection::with_pool_size("duckdb://path/to/analytics.db", 8)?;
+
+// 异步执行（内部 spawn_blocking 桥接同步 duckdb crate）
+let result: DuckDbExecResult = conn.execute("INSERT INTO events VALUES (...)").await?;
+let rows: Vec<DuckDbRow> = conn.query("SELECT COUNT(*) FROM events").await?;
+
+// 健康检查与池大小查询
+conn.health_check().await?;
+let size = conn.pool_size();
+```
+
+**导出类型：** `DuckDbConnection`、`DuckDbRow`、`DuckDbExecResult`
+
+**URL 格式：** `:memory:` / `duckdb::memory:`（内存）、`duckdb:path/to/file.db`、`duckdb://path/to/file.db`（文件）
+
+### 分布式追踪（需要 `tracing` 特性）
+
+OpenTelemetry OTLP 集成，基于 `tracing` + `tracing-opentelemetry` + `opentelemetry-otlp`。
+
+```rust
+use dbnexus::TracingGuard;
+
+// 初始化 OTLP 导出（默认端点 http://localhost:4317）
+let _guard = TracingGuard::init_with_otlp("dbnexus-service", "http://localhost:4317")?;
+// 进程退出时 _guard drop 自动关闭 tracer
+```
+
+**导出类型：** `TracingGuard`、`TracingError`
+
+### 认证系统（需要 `authentication` 特性）
+
+JWT 认证 + 密码强度验证，基于 `jsonwebtoken` + `bcrypt`。
+
+```rust
+use dbnexus::{AuthenticationManager, JwtManager, PasswordHasher, TokenType};
+
+let auth = AuthenticationManager::new(secret);
+
+// 注册用户（执行 validate_strength → hash → insert 完整流程）
+let user = auth.register_user("alice", "strong_password", "admin").await?;
+
+// 签发 access/refresh token
+let access_token = auth.login(&user, TokenType::Access).await?;
+let refresh_token = auth.login(&user, TokenType::Refresh).await?;
+
+// 校验（额外校验 token_type，防止 refresh 用作 access）
+let claims = auth.verify_access_token(&access_token)?;
+```
+
+**导出类型：** `AuthenticationManager`、`JwtManager`、`PasswordHasher`、`AuthCredentials`、`JwtClaims`、`TokenType`、`User`、`AuthError`、`AuthResult`
+
+### 健康检查与熔断（需要 `health-check` 特性）
+
+```rust
+use dbnexus::{HealthChecker, CircuitBreaker, CircuitBreakerConfig};
+
+let checker = HealthChecker::new();
+let status = checker.check_pool(&pool).await?;
+// 熔断器：连续失败达到阈值自动打开
+let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
+```
+
+**导出类型：** `HealthChecker`、`HealthStatus`、`CircuitBreaker`、`CircuitBreakerConfig`、`CircuitBreakerState`、`CircuitBreakerError`、`PoolHealthMetrics`
+
+### 分片路由（需要 `sharding` 特性）
+
+```rust
+use dbnexus::{ShardRouter, ShardConfig, ShardingStrategy};
+
+let router = ShardRouter::new(ShardConfig { total_shards: 4, ..Default::default() })?;
+let shard_id = router.shard_id_for_key("user_123");
+
+// 会话级分片路由（0.3.0 新增）
+let session = pool.get_session_for_shard("user_123", "admin").await?;
+```
+
+**导出类型：** `ShardRouter`、`ShardConfig`、`ShardingStrategy`
+
+### 全局索引（需要 `global-index` 特性）
+
+跨分片查询索引支持，基于 sea-orm 持久化到数据库。
+
+```rust
+use dbnexus::GlobalIndex;
+
+// 需要数据库 URL（索引持久化到表）
+let index = GlobalIndex::new("sqlite::memory:").await?;
+
+// 按索引键查询
+let entries = index.query_by_index("users", "user_123").await?;
+
+// 批量同步
+let result = index.batch_sync(entries).await?;
+```
+
+**导出类型：** `GlobalIndex`、`IndexEntry`、`SyncEvent`、`SyncResult`
+
+### 权限引擎（需要 `permission-engine` + `permission` 特性）
+
+高级策略决策点（PDP），支持 RBAC + ABAC，内置缓存与速率限制。
+
+```rust
+use dbnexus::{PolicyDecisionPoint, RbacPermissionProvider};
+use std::sync::Arc;
+
+let provider = Arc::new(RbacPermissionProvider::new());
+let pdp = PolicyDecisionPoint::new(provider);
+// 默认：缓存 TTL 5 分钟，速率限制 100 请求/分钟
+```
+
+**导出类型：** `PolicyDecisionPoint`、`PermissionRule`、`PermissionDecision`、`PermissionSubject`、`PermissionResource`、`RbacPermissionProvider`、`Role`
+
+### SQL 解析器（需要 `sql-parser` 特性）
+
+```rust
+use dbnexus::{SqlParser, SqlOperationType, is_ddl_operation, contains_sql_injection};
+
+let parser = SqlParser::new();
+let op_type = parser.parse_operation_type("SELECT * FROM users")?; // SqlOperationType::Select
+let is_ddl = is_ddl_operation("CREATE TABLE foo (...)"); // true
+let has_injection = contains_sql_injection("'; DROP TABLE--"); // true
+```
+
+**导出类型：** `SqlParser`、`SqlOperationType`、`is_ddl_operation`、`contains_sql_injection`
+
+### 敏感数据脱敏（始终可用）
+
+```rust
+use dbnexus::{SensitiveMasker, MaskType};
+
+let masked = SensitiveMasker::mask("alice@example.com", MaskType::Email)?;
+// => "a***@example.com"
+```
+
+**导出类型：** `SensitiveMasker`、`MaskType`、`SensitiveError`
+
+### 结构化错误报告（始终可用）
+
+```rust
+use dbnexus::QueryErrorReport;
+
+let report = QueryErrorReport::new(...)
+    .with_category(ErrorCategory::PermissionDenied)
+    .with_suggestion("请授予 admin 角色 SELECT 权限");
+```
+
+**导出类型：** `QueryErrorReport`、`ErrorCategory`
+
+### Kit 统一能力管理（始终可用）
+
+基于 `trait-kit` 的统一能力管理入口。
+
+```rust
+use dbnexus::DbNexusKit;
+
+let kit = DbNexusKit::new();
+```
+
+**导出类型：** `DbNexusKit`
 
 ---
 

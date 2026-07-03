@@ -1,9 +1,11 @@
 name: Release
 
+# confers 并行模式：tag 推送 → create-release（先行）→ publish-crates ∥ build-binaries
+# 删除原 validate/update-version/ci-check 串行链（版本在 Cargo.toml 已设置，CI 由 ci.yml 在 PR 阶段完成）
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
 
 permissions:
   contents: write
@@ -15,14 +17,14 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # 验证版本
-  validate:
-    name: Validate Version
+  # 1. 创建 GitHub Release（先行，产出 upload_url 供后续 job 使用）
+  create-release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
-      needs_update: ${{ steps.check.outputs.needs_update }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,68 +37,66 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📌 Version: $VERSION"
 
-      - name: Check version consistency
-        id: check
-        run: |
-          CURRENT_VERSION=$(grep '^version' Cargo.toml | head -1 | awk '{print $3}' | tr -d '"')
-          TAG_VERSION=${{ steps.version.outputs.version }}
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          echo "Current: $CURRENT_VERSION"
-          echo "Tag: $TAG_VERSION"
-
-          if [ "$CURRENT_VERSION" = "$TAG_VERSION" ]; then
-            echo "needs_update=false" >> $GITHUB_OUTPUT
-          else
-            echo "needs_update=true" >> $GITHUB_OUTPUT
-          fi
-
-  # 更新版本
-  update-version:
-    name: Update Version
-    needs: validate
-    if: needs.validate.outputs.needs_update == 'true'
+  # 2. 发布到 crates.io（与 build-binaries 并行）
+  publish-crates:
+    name: Publish to crates.io
+    needs: create-release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+    environment:
+      name: crates.io
+      url: https://crates.io/crates/dbnexus
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-edit
-        run: cargo install cargo-edit
-
-      - name: Update version
-        run: cargo set-version ${{ needs.validate.outputs.version }}
-
-      - name: Commit version changes
+      - name: Publish dbnexus-macros
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
+          cd macros
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
 
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: bump version to ${{ needs.validate.outputs.version }}"
-            git push origin HEAD:main
-            echo "✅ Version updated"
-          fi
+      - name: Wait for index update
+        run: sleep 15
 
-  # 运行 CI 检查
-  ci-check:
-    name: CI Check
-    needs: [validate, update-version]
-    uses: ./.github/workflows/ci.yml
-    with:
-      ref: ${{ github.ref }}
-    secrets: inherit
+      - name: Publish dbnexus
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
 
-  # 构建多平台二进制文件
-  build:
+      - name: Wait for index update
+        run: sleep 15
+
+      - name: Publish dbnexus-cli
+        run: |
+          cd src/tools/cli
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
+
+      - name: Verify publication
+        run: |
+          echo "✅ All crates published!"
+          echo "📦 Check:"
+          echo "  - https://crates.io/crates/dbnexus"
+          echo "  - https://crates.io/crates/dbnexus-macros"
+          echo "  - https://crates.io/crates/dbnexus-cli"
+
+  # 3. 构建多平台二进制（与 publish-crates 并行）
+  build-binaries:
     name: Build ${{ matrix.target }}
-    needs: ci-check
+    needs: create-release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -156,191 +156,43 @@ jobs:
       - name: Build release
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --bins
+            cross build --release --target ${{ matrix.target }} --package dbnexus-cli
           else
-            cargo build --release --target ${{ matrix.target }} --bins
+            cargo build --release --target ${{ matrix.target }} --package dbnexus-cli
           fi
-
-      - name: Build dbnexus-macros
-        run: |
-          cd macros
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
-          cd ..
 
       - name: Package binaries
         id: package
+        shell: bash
         run: |
-          VERSION=${{ needs.validate.outputs.version }}
+          VERSION=${{ needs.create-release.outputs.version }}
           mkdir -p artifacts
 
-          # 查找主二进制文件
-          for binary in dbnexus dbnexus-cli; do
-            binary_path="target/${{ matrix.target }}/release/$binary"
-            if [ -f "$binary_path" ]; then
-              tar czf "artifacts/${binary}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" -C "target/${{ matrix.target }}/release" "$binary"
-              sha256sum "artifacts/${binary}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" | awk '{print $1}' > "artifacts/${binary}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz.sha256"
+          # 只打包 dbnexus-cli 二进制（主包是库，通过 crates.io 发布）
+          binary_path="target/${{ matrix.target }}/release/dbnexus-cli"
+          if [ -f "$binary_path" ]; then
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then
+              binary_name="dbnexus-cli.exe"
+              cp "$binary_path.exe" "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe"
+              sha256sum "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe" | awk '{print $1}' > "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe.sha256"
+            else
+              tar czf "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" -C "target/${{ matrix.target }}/release" "dbnexus-cli"
+              sha256sum "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" | awk '{print $1}' > "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz.sha256"
             fi
-          done
-
-          # 打包库文件
-          for lib in libdbnexus libdbnexus_macros; do
-            lib_path="target/${{ matrix.target }}/release/${lib}.a"
-            if [ -f "$lib_path" ]; then
-              tar czf "artifacts/${lib}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" -C "target/${{ matrix.target }}/release" "${lib}.a"
-              sha256sum "artifacts/${lib}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" | awk '{print $1}' > "artifacts/${lib}-${VERSION}-${{ matrix.asset_prefix }}.tar.gz.sha256"
-            fi
-          done
+          else
+            echo "❌ Binary not found: $binary_path"
+            exit 1
+          fi
 
           ls -la artifacts/
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries-${{ matrix.asset_prefix }}
-          path: artifacts/*
-          if-no-files-found: error
-
-  # 发布到 GitHub Release
-  release:
-    name: Create Release
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          find artifacts -type f -exec cp {} release-assets/ \;
-          ls -la release-assets/
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          VERSION=${{ needs.validate.outputs.version }}
-          TAG_NAME="v${VERSION}"
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          {
-            echo "# Release ${TAG_NAME}"
-            echo ""
-            echo "## What's Changed"
-            echo ""
-            if [ -n "$PREV_TAG" ]; then
-              git log ${PREV_TAG}..HEAD --pretty=format="- %s (%h)" --reverse
-            else
-              echo "Initial release"
-            fi
-            echo ""
-            echo "## Assets"
-            echo ""
-            ls release-assets/ | while read f; do
-              echo "- ${f}"
-            done
-          } > docs/CHANGELOG.md
-
-          cat docs/CHANGELOG.md
-
-      - name: Create GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.validate.outputs.version }}
-          name: Release v${{ needs.validate.outputs.version }}
-          body_path: docs/CHANGELOG.md
-          files: release-assets/*
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/*
 
       - name: Attest release artifacts
         uses: actions/attest-release-assets@v1
         with:
-          subject-path: 'release-assets/*'
-
-  # 发布到 crates.io
-  publish-crates:
-    name: Publish to crates.io
-    needs: release
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment:
-      name: crates.io
-      url: https://crates.io/crates/dbnexus
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Publish dbnexus-macros
-        run: |
-          cd macros
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
-          cd ..
-
-      - name: Wait for index update
-        run: sleep 15
-
-      - name: Publish dbnexus
-        run: |
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
-
-      - name: Publish dbnexus-cli
-        run: |
-          cd src/cli
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
-          cd ../..
-
-      - name: Verify publication
-        run: |
-          echo "✅ All crates published!"
-          echo "📦 Check:"
-          echo "  - https://crates.io/crates/dbnexus"
-          echo "  - https://crates.io/crates/dbnexus-macros"
-          echo "  - https://crates.io/crates/dbnexus-cli"
-
-  # 发布 Docker 镜像（可选）
-  docker:
-    name: Docker Build
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: false # 启用此 job 需要配置 Docker Hub 凭据
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/dbnexus:${{ needs.validate.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          subject-path: 'artifacts/*'

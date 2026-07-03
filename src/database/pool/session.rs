@@ -456,9 +456,14 @@ impl Session {
                         }
                     }
                     Ok(None) => {
-                        return Err(DbError::Permission(
-                            "SQL statement requires a valid table name for permission checking".to_string(),
-                        ));
+                        // admin role 对无法解析的语句直接执行（对齐 execute 的 None 路径），
+                        // 支持 SELECT 1 / SELECT 1 AS health 等无表名健康检查查询；
+                        // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
+                        if self.role != self.pool_inner.admin_role {
+                            return Err(DbError::Permission(
+                                "SQL statement requires a valid table name for permission checking".to_string(),
+                            ));
+                        }
                     }
                     Err(_) => {
                         return Err(DbError::Permission(
@@ -491,13 +496,41 @@ impl Session {
     /// 受影响的行数信息
     #[cfg(feature = "duckdb")]
     pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::pool::DuckDbExecResult> {
-        // 安全检查：与 execute_raw 一致的防御链（DDL 拦截 + SQL 注入检测 + 权限校验）
+        // 安全检查：与 execute_raw_ddl 对齐 —— admin role 通过 DdlGuard 验证后允许 DDL，
+        // 非 admin role 拒绝 DDL。DuckDB 是分析型数据库，admin 需要能创建表/视图，
+        // 与 SeaORM 路径的 execute_raw_ddl 行为保持一致。
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in DuckDB execute context".to_string(),
-                ));
+                if self.role == self.pool_inner.admin_role {
+                    // admin role 通过 DdlGuard AST 验证后直接执行，不再走 parse_operation 权限检查
+                    // （DDL 语句无法被 parse_operation_async 正确解析，会返回 Err）
+                    let guard = DdlGuard::new();
+                    match guard.validate(sql) {
+                        Ok(DdlValidationResult::Allowed) => {
+                            let conn = self
+                                .connection
+                                .as_ref()
+                                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+                            let duck_conn = conn.as_duckdb()?;
+                            return duck_conn.execute(sql).await;
+                        }
+                        Ok(DdlValidationResult::Forbidden(reason)) => {
+                            return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
+                        }
+                        Ok(DdlValidationResult::ParseError(error)) => {
+                            return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
+                        }
+                        Err(error) => {
+                            return Err(DbError::Config(format!("DDL validation error: {}", error)));
+                        }
+                    }
+                } else {
+                    return Err(DbError::Permission(format!(
+                        "DDL operations are only allowed for admin role in DuckDB context. Current role: '{}', Admin role: '{}'",
+                        self.role, self.pool_inner.admin_role
+                    )));
+                }
             }
         }
 
@@ -528,9 +561,13 @@ impl Session {
                         }
                     }
                     Ok(None) => {
-                        return Err(DbError::Permission(
-                            "SQL statement requires a valid table name for permission checking".to_string(),
-                        ));
+                        // admin role 对无法解析的语句直接执行（对齐 execute 的 None 路径），
+                        // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
+                        if self.role != self.pool_inner.admin_role {
+                            return Err(DbError::Permission(
+                                "SQL statement requires a valid table name for permission checking".to_string(),
+                            ));
+                        }
                     }
                     Err(_) => {
                         return Err(DbError::Permission(

@@ -150,6 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🌐 | **全局索引** | 跨分片查询（`global-index` 特性） |
 | 💾 | **缓存** | oxcache 缓存（内部 moka L1 后端）（`cache` 特性） |
 | 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
+| 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性，0.3.0 新增） |
 
 </td>
 </tr>
