@@ -26,7 +26,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       upload_url: ${{ steps.create-release.outputs.upload_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -39,7 +39,7 @@ jobs:
 
       - name: Create GitHub Release
         id: create-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
@@ -59,7 +59,7 @@ jobs:
       name: crates.io
       url: https://crates.io/crates/dbnexus
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -128,7 +128,7 @@ jobs:
             asset_prefix: windows-x64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -142,16 +142,9 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Cache dependencies
-        uses: swatinmurthy/cache-for-rust@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-release-${{ matrix.target }}-
-            ${{ runner.os }}-release-
+          shared-key: release-${{ matrix.target }}
 
       - name: Build release
         run: |
@@ -187,12 +180,12 @@ jobs:
           ls -la artifacts/
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: artifacts/*
 
       - name: Attest release artifacts
-        uses: actions/attest-release-assets@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: 'artifacts/*'
