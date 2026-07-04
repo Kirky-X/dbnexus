@@ -14,8 +14,9 @@
 
 #![cfg(feature = "metrics")]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::{LatencyHistogram, MetricsCollector};
+use std::hint::black_box;
 use std::time::Duration;
 
 // ============================================================================

@@ -8,8 +8,9 @@
 //! 使用 Criterion 进行全面的性能基准测试
 //! 运行: cargo bench
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::{sql_parser::{SqlOperationType, SqlParser}, DbConfig};
+use std::hint::black_box;
 use std::time::Duration;
 
 /// 数据库配置基准

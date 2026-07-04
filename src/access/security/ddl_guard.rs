@@ -124,10 +124,10 @@ impl DdlGuard {
     /// 获取语句的类型名称
     fn statement_type_name(stmt: &Statement) -> String {
         match stmt {
-            Statement::CreateTable { .. } => "CreateTable".to_string(),
-            Statement::AlterTable { .. } => "AlterTable".to_string(),
-            Statement::CreateIndex { .. } => "CreateIndex".to_string(),
-            Statement::CreateView { .. } => "CreateView".to_string(),
+            Statement::CreateTable(_) => "CreateTable".to_string(),
+            Statement::AlterTable(_) => "AlterTable".to_string(),
+            Statement::CreateIndex(_) => "CreateIndex".to_string(),
+            Statement::CreateView(_) => "CreateView".to_string(),
             Statement::Drop { object_type, .. } => {
                 // DROP 语句需要特殊处理，根据 object_type 返回具体类型
                 let type_str = format!("{:?}", object_type);
@@ -143,12 +143,12 @@ impl DdlGuard {
                     format!("Drop{:?}", object_type)
                 }
             }
-            Statement::Truncate { .. } => "Truncate".to_string(),
+            Statement::Truncate(_) => "Truncate".to_string(),
             Statement::Query(_) => "Query".to_string(),
-            Statement::Insert { .. } => "Insert".to_string(),
-            Statement::Update { .. } => "Update".to_string(),
-            Statement::Delete { .. } => "Delete".to_string(),
-            Statement::SetVariable { .. } => "SetVariable".to_string(),
+            Statement::Insert(_) => "Insert".to_string(),
+            Statement::Update(_) => "Update".to_string(),
+            Statement::Delete(_) => "Delete".to_string(),
+            Statement::Set(_) => "Set".to_string(),
             _ => format!("{:?}", stmt),
         }
     }
