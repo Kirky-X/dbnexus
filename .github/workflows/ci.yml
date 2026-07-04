@@ -40,7 +40,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets --workspace -- -D warnings
+        run: cargo clippy --all-features --all-targets --workspace -- -D warnings
+
+      - name: Check docs
+        run: cargo doc --all-features --no-deps --workspace
 
   # OpenSpec 规范检查
   openspec:
