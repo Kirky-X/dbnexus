@@ -438,7 +438,7 @@ required-features = ["sqlite", "permission", "sql-parser"]
 [[test]]
 name = "pool_db_pool_unit_tests"
 path = "tests/pool/unit/db_pool_unit_tests.rs"
-required-features = ["sqlite", "permission"]
+required-features = ["sqlite", "permission", "pool-warmup"]
 
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
@@ -500,6 +500,12 @@ path = "tests/kit/kit_integration_tests.rs"
 name = "sea_orm_type_tests"
 path = "tests/entity/unit/sea_orm_type_tests.rs"
 required-features = ["sqlite", "macros", "permission", "with-chrono", "with-uuid"]
+
+# Entity 模块单元测试 - Condition/ActiveValue/EntityTrait 类型导出验证（0.3.1 注册）
+[[test]]
+name = "entity_unit_tests"
+path = "tests/entity/unit/entity_unit_tests.rs"
+required-features = ["sqlite", "macros", "with-chrono"]
 
 [dev-dependencies.testcontainers]
 version = "0.23"
