@@ -98,6 +98,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`sqlite3://` scheme 缺失**: `DatabaseType::from_url` 不支持 `sqlite3://` 格式，添加支持
 - **sharding flaky test 修复**: `test_shard_router_key_consistency` 假设两个特定 key 必映射不同 shard（10% 碰撞概率），改为验证确定性属性 + 统计分布属性
 
+### Maintenance（v0.3.0 发版前加固）
+
+#### 依赖升级（9 个 Cargo 依赖）
+
+- **sqlparser**: 0.47 → 0.62（破坏性 API：`Statement` 枚举变体改为元组结构体，更新 `classify_statement` 与 `statement_type_name` 的模式匹配）
+- **opentelemetry**: 0.27 → 0.32（`TracerProvider`/`Span` 等 API 重构）
+- **opentelemetry_sdk**: 0.27 → 0.32
+- **opentelemetry-otlp**: 0.27 → 0.32
+- **tracing-opentelemetry**: 0.28 → 0.33
+- **criterion**: 0.5 → 0.8（修复 `BenchmarkGroup` deprecation）
+- **toml**: 1.0 → 1.1
+- **parking_lot**: 0.12 patch 升级
+- **url**: 2.5 patch 升级
+
+#### CI 加固（9 个 GitHub Actions 升级 + 2 个不存在 action 修复）
+
+- **actions/checkout**: v4 → v7（5 处）
+- **actions/cache**: v4 → v6（3 处）
+- **codecov/codecov-action**: v4 → v7
+- **github/codeql-action/init**: v3 → v4
+- **github/codeql-action/analyze**: v3 → v4
+- **softprops/action-gh-release**: v2 → v3（2 处）
+- **swatinmurthy/cache-for-rust@v1** → **Swatinem/rust-cache@v2**（4 处，原 action 仓库不存在，GitHub API 返回 404）
+- **actions/attest-release-assets@v1** → **actions/attest-build-provenance@v3**（原 action 不存在，GitHub API 返回 404）
+- **Swatinem/rust-cache 参数修复**: 移除不支持的 `path`/`restore-keys` 参数，改用 `shared-key` 区分缓存命名空间
+
+#### CI 验证规则增强
+
+- **clippy `--all-features` 修复**: lint job 缺少 `--all-features` 参数，feature-gated 代码从未被 lint
+- **cargo doc check 新增**: lint job 新增 `cargo doc --all-features --no-deps --workspace`，提前捕获 rustdoc 警告
+
+#### 文档警告修复（28 个 rustdoc 警告）
+
+- **`src/domain/migration/converter.rs`**: 28 个 "unclosed HTML tag" 警告修复。markdown 表格中的泛型类型（如 `Option<TableRef>`、`Vec<ColumnDef>`、`Char(Option<u32>)`）未用反引号包裹，rustdoc 误判为 HTML 标签起始。全部加反引号包裹。
+
 ## [0.2.0] - 2026-06-27
 
 ### ⚠️ BREAKING CHANGES - ALL USERS MUST UPDATE
