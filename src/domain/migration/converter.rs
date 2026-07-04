@@ -11,31 +11,31 @@
 //!
 //! | TableCreateStatement 字段 | 访问方法 | migration::schema::Table 字段 |
 //! |---------------------------|----------|-------------------------------|
-//! | table: Option<TableRef> | `get_table_name()` | name: String |
-//! | columns: Vec<ColumnDef> | `get_columns()` | columns: Vec<Column> |
-//! | (从 columns 派生) | - | primary_key_columns: Vec<String> |
-//! | indexes: Vec<IndexCreateStatement> | `get_indexes()` | indexes: Vec<Index> |
-//! | foreign_keys: Vec<ForeignKeyCreateStatement> | `get_foreign_key_create_stmts()` | foreign_keys: Vec<ForeignKey> |
-//! | comment: Option<String> | `get_comment()` | comment: Option<String> |
+//! | table: `Option<TableRef>` | `get_table_name()` | name: `String` |
+//! | columns: `Vec<ColumnDef>` | `get_columns()` | columns: `Vec<Column>` |
+//! | (从 columns 派生) | - | primary_key_columns: `Vec<String>` |
+//! | indexes: `Vec<IndexCreateStatement>` | `get_indexes()` | indexes: `Vec<Index>` |
+//! | foreign_keys: `Vec<ForeignKeyCreateStatement>` | `get_foreign_key_create_stmts()` | foreign_keys: `Vec<ForeignKey>` |
+//! | comment: `Option<String>` | `get_comment()` | comment: `Option<String>` |
 //!
 //! ### ColumnDef → migration::schema::Column
 //!
 //! | ColumnDef 字段 | 访问方法 | migration::schema::Column 字段 |
 //! |----------------|----------|--------------------------------|
-//! | name: DynIden | `get_column_name()` | name: String |
-//! | types: Option<ColumnType> | `get_column_type()` | column_type: ColumnType |
-//! | spec.nullable: Option<bool> | `get_column_spec().nullable` | is_nullable: bool |
-//! | spec.default: Option<Expr> | `get_column_spec().default` | has_default: bool, default_value: Option<String> |
-//! | spec.auto_increment: bool | `get_column_spec().auto_increment` | is_auto_increment: bool |
-//! | spec.primary_key: bool | `get_column_spec().primary_key` | is_primary_key: bool |
-//! | spec.comment: Option<String> | `get_column_spec().comment` | comment: Option<String> |
-//! | spec.unique: bool | `get_column_spec().unique` | (映射为 Index，is_unique=true) |
+//! | name: `DynIden` | `get_column_name()` | name: `String` |
+//! | types: `Option<ColumnType>` | `get_column_type()` | column_type: `ColumnType` |
+//! | spec.nullable: `Option<bool>` | `get_column_spec().nullable` | is_nullable: `bool` |
+//! | spec.default: `Option<Expr>` | `get_column_spec().default` | has_default: `bool`, default_value: `Option<String>` |
+//! | spec.auto_increment: `bool` | `get_column_spec().auto_increment` | is_auto_increment: `bool` |
+//! | spec.primary_key: `bool` | `get_column_spec().primary_key` | is_primary_key: `bool` |
+//! | spec.comment: `Option<String>` | `get_column_spec().comment` | comment: `Option<String>` |
+//! | spec.unique: `bool` | `get_column_spec().unique` | (映射为 Index，is_unique=true) |
 //!
 //! ### sea_query::ColumnType → migration::schema::ColumnType
 //!
 //! | sea_query::ColumnType | migration::schema::ColumnType |
 //! |----------------------|-------------------------------|
-//! | Char(Option<u32>) | String(Option<u32>) |
+//! | `Char(Option<u32>)` | `String(Option<u32>)` |
 //! | String(StringLen::N(n)) | String(Some(n)) |
 //! | String(StringLen::Max) | String(None) |
 //! | String(StringLen::None) | String(None) |
@@ -60,7 +60,7 @@
 //! | Year | Integer |
 //! | Binary(u32) | Binary |
 //! | VarBinary(StringLen) | Binary |
-//! | Bit(Option<u32>) | Custom("bit") |
+//! | `Bit(Option<u32>)` | Custom("bit") |
 //! | VarBit(u32) | Custom("bit") |
 //! | Boolean | Boolean |
 //! | Money(Option<(u32, u32)>) | Custom("money") |
@@ -83,7 +83,7 @@
 //! |---------------------------|----------|-------------------------------|
 //! | index.name | `get_index_spec().get_name()` | name: String |
 //! | table | (从父 TableCreateStatement 传入) | table_name: String |
-//! | index.columns | `get_index_spec().get_column_names()` | columns: Vec<String> |
+//! | index.columns | `get_index_spec().get_column_names()` | columns: `Vec<String>` |
 //! | unique | `is_unique_key()` | is_unique: bool |
 //! | primary | `is_primary_key()` | is_constraint: bool |
 //!
@@ -96,8 +96,8 @@
 //! | columns | `get_columns()` | column_name: String (取第一个) |
 //! | ref_table | `get_ref_table()` | referenced_table_name: String |
 //! | ref_columns | `get_ref_columns()` | referenced_column_name: String (取第一个) |
-//! | on_delete | `get_on_delete()` | on_delete: Option<ForeignKeyAction> |
-//! | on_update | `get_on_update()` | on_update: Option<ForeignKeyAction> |
+//! | on_delete | `get_on_delete()` | on_delete: `Option<ForeignKeyAction>` |
+//! | on_update | `get_on_update()` | on_update: `Option<ForeignKeyAction>` |
 //!
 //! ### sea_query::ForeignKeyAction → migration::schema::ForeignKeyAction
 //!
