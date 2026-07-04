@@ -11,6 +11,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+#[path = "../../common/mod.rs"]
+mod common;
+
 // ============================================================================
 // 配置初始化测试
 // ============================================================================
@@ -49,7 +52,7 @@ async fn test_pool_builder_basic_initialization() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_builder_default_values() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     // 验证默认值
     assert_eq!(pool.config().max_connections, 20);
@@ -157,7 +160,7 @@ fn test_pool_config_validation_empty_url() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_initial_status() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let status = pool.status();
 
@@ -173,7 +176,7 @@ async fn test_pool_initial_status() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_after_session_acquire() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
 
@@ -197,7 +200,7 @@ async fn test_pool_status_after_session_acquire() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_structure() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let status = pool.status();
 
@@ -447,7 +450,7 @@ fn test_pool_timeout_duration_conversion() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_session_auto_release() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
 
@@ -473,7 +476,7 @@ async fn test_pool_session_auto_release() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_borrow_count_tracking() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let initial_status = pool.status();
     let initial_borrow_count = initial_status.borrow_count;
@@ -537,7 +540,7 @@ async fn test_pool_max_active_tracking() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_status_consistency() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     // 多次获取和释放连接
     for _ in 0..10 {
@@ -579,7 +582,7 @@ async fn test_pool_status_consistency() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_via_status() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     // 获取连接并验证状态
     {
@@ -600,7 +603,7 @@ async fn test_connection_lifecycle_via_status() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_connection_lifecycle_borrow_tracking() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let initial_borrow_count = pool.status().borrow_count;
 
@@ -777,7 +780,7 @@ async fn test_pool_large_connection_pool() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_pool_rapid_acquire_release() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     // 快速获取和释放
     for _ in 0..100 {
@@ -802,7 +805,7 @@ async fn test_pool_rapid_acquire_release() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_role() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
     assert_eq!(session.role(), "admin");
@@ -814,7 +817,7 @@ async fn test_session_role() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_transaction_state() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -836,7 +839,7 @@ async fn test_session_transaction_state() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_transaction_rollback() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -855,7 +858,7 @@ async fn test_session_transaction_rollback() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_double_begin_transaction() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
@@ -876,7 +879,7 @@ async fn test_session_double_begin_transaction() {
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_session_commit_without_transaction() {
-    let pool = crate::common::make_sqlite_memory_pool().await;
+    let pool = common::make_sqlite_memory_pool().await;
 
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
