@@ -132,16 +132,40 @@ impl YamlPermissionProvider {
     ///
     /// 如果文件读取失败或 YAML 解析失败，返回错误
     pub fn new(path: &str) -> Self {
-        let config = if let Ok(content) = std::fs::read_to_string(path) {
-            match Self::parse_yaml_content(&content, path) {
+        let config = match std::fs::read_to_string(path) {
+            Ok(content) => match Self::parse_yaml_content(&content, path) {
                 Ok(cfg) => cfg,
-                Err(_e) => {
-                    // 解析失败，使用默认拒绝策略
+                Err(e) => {
+                    // 解析失败：fail-secure 回退到 deny_all，但必须显式记录错误
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        path = path,
+                        error = %e,
+                        "YamlPermissionProvider: YAML 解析失败，回退到 deny_all 策略"
+                    );
+                    #[cfg(not(feature = "tracing"))]
+                    eprintln!(
+                        "[WARN] YamlPermissionProvider: YAML 解析失败 (path='{}'): {}，回退到 deny_all 策略",
+                        path, e
+                    );
                     PermissionConfig::deny_all()
                 }
+            },
+            Err(e) => {
+                // 文件读取失败：fail-secure 回退到 deny_all，但必须显式记录错误
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    path = path,
+                    error = %e,
+                    "YamlPermissionProvider: 权限配置文件读取失败，回退到 deny_all 策略"
+                );
+                #[cfg(not(feature = "tracing"))]
+                eprintln!(
+                    "[WARN] YamlPermissionProvider: 权限配置文件读取失败 (path='{}'): {}，回退到 deny_all 策略",
+                    path, e
+                );
+                PermissionConfig::deny_all()
             }
-        } else {
-            PermissionConfig::deny_all()
         };
 
         Self {
