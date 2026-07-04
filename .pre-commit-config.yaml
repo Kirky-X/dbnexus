@@ -38,7 +38,7 @@ repos:
     pass_filenames: false
     files: ^(Cargo\.(toml|lock)|deny\.toml)$
 
-# 禁止直接提交到 main 分支
+# 禁止直接提交到 main 分支（仅在 commit 阶段运行，允许 feature branch → merge → main → push 流程）
 - repo: local
   hooks:
   - id: no-commit-to-main
@@ -47,3 +47,4 @@ repos:
     language: script
     pass_filenames: false
     always_run: true
+    stages: [pre-commit]
