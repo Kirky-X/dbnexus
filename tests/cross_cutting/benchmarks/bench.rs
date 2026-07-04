@@ -22,9 +22,10 @@
 //!
 //! 这些测试设计用于性能验证，实际延迟会因硬件和环境而异。
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use dbnexus::foundation::config::ConfigError;
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 #[path = "../../common/mod.rs"]
