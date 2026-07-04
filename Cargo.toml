@@ -131,6 +131,8 @@ sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
 global-index = ["chrono", "with-json"]  # 全局索引
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
+with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono 类型支持（DateTime/NaiveDateTime 字段）
+with-uuid = ["sea-orm/with-uuid", "uuid"]  # UUID 类型支持（uuid::Uuid 字段）
 validation = ["validator", "with-time"]  # 数据验证（validator crate + timestamps 依赖）
 
 # === 安全与合规 ===
@@ -492,6 +494,12 @@ path = "tests/security/sensitive_masker_tests.rs"
 [[test]]
 name = "kit_integration_tests"
 path = "tests/kit/kit_integration_tests.rs"
+
+# sea-orm 类型特性桥接测试 - with-chrono/with-uuid 在实体字段中的使用（0.3.0 新增）
+[[test]]
+name = "sea_orm_type_tests"
+path = "tests/entity/unit/sea_orm_type_tests.rs"
+required-features = ["sqlite", "macros", "permission", "with-chrono", "with-uuid"]
 
 [dev-dependencies.testcontainers]
 version = "0.23"

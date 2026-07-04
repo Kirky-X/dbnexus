@@ -112,9 +112,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(DuckValue::Text(s)) => s.as_str(),
             other => panic!("Expected Text for category, got {:?}", other),
         };
+        // NOTE: DuckDB SUM(integer_column) 返回 HUGEINT (i128) 以防止溢出；
+        // COUNT(*) 返回 BIGINT (i64)。两者均需兼容匹配，否则会 panic。
         let total_qty = match row.get("total_qty") {
             Some(DuckValue::BigInt(n)) => *n,
-            other => panic!("Expected BigInt for total_qty, got {:?}", other),
+            Some(DuckValue::HugeInt(n)) => i64::try_from(*n).expect("HugeInt overflow"),
+            other => panic!("Expected BigInt/HugeInt for total_qty, got {:?}", other),
         };
         let avg_price = match row.get("avg_price") {
             Some(DuckValue::Double(d)) => *d,
@@ -123,7 +126,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let n = match row.get("n") {
             Some(DuckValue::BigInt(v)) => *v,
-            other => panic!("Expected BigInt for n, got {:?}", other),
+            Some(DuckValue::HugeInt(v)) => i64::try_from(*v).expect("HugeInt overflow"),
+            other => panic!("Expected BigInt/HugeInt for n, got {:?}", other),
         };
         println!("  {:<15} {:>10} {:>12.2} {:>5}", category, total_qty, avg_price, n);
     }
@@ -158,8 +162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         handles.push(tokio::spawn(async move {
             let sql = format!("SELECT SUM(val) AS s FROM parallel_demo WHERE id % 8 = {task_id}");
             let rows = c.query(&sql).await.expect("query failed");
+            // SUM(integer) 返回 HUGEINT；同时兼容 BigInt 以应对未来 DuckDB 版本变更
             match rows[0].get("s") {
                 Some(DuckValue::BigInt(n)) => *n,
+                Some(DuckValue::HugeInt(n)) => i64::try_from(*n).expect("HugeInt overflow"),
                 _ => 0,
             }
         }));
