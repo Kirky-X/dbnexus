@@ -11,8 +11,6 @@ use clap::{Parser, Subcommand};
 use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::{DbError, DbPool, DbResult};
 use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
-#[cfg(feature = "sql-parser")]
-use dbnexus::{SqlOperationType, SqlParser};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
