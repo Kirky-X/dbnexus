@@ -9,7 +9,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::{Delete, FromTable, Query, SetExpr, Statement, TableWithJoins};
+use sqlparser::ast::{Delete, FromTable, Query, Set, SetExpr, Statement, TableObject, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
@@ -422,17 +422,23 @@ impl SqlParser {
     fn classify_statement(&self, statement: Statement, sql: String) -> Result<ParsedSqlOperation, SqlParseError> {
         let (operation_type, table_name) = match statement {
             Statement::Query(query) => (SqlOperationType::Select, extract_table_from_query(&query)),
-            Statement::Insert(insert) => (SqlOperationType::Insert, Some(insert.table_name.to_string())),
-            Statement::Update { table, .. } => (
+            Statement::Insert(insert) => {
+                let table_name = match &insert.table {
+                    TableObject::TableName(name) => Some(name.to_string()),
+                    _ => None,
+                };
+                (SqlOperationType::Insert, table_name)
+            }
+            Statement::Update(update) => (
                 SqlOperationType::Update,
-                extract_table_name_from_table_with_joins(&table),
+                extract_table_name_from_table_with_joins(&update.table),
             ),
             Statement::Delete(delete) => {
                 let table_name = extract_table_from_delete(&delete);
                 (SqlOperationType::Delete, table_name)
             }
-            Statement::CreateTable { name, .. } => (SqlOperationType::Ddl, Some(name.to_string())),
-            Statement::AlterTable { name, .. } => (SqlOperationType::Ddl, Some(name.to_string())),
+            Statement::CreateTable(create_table) => (SqlOperationType::Ddl, Some(create_table.name.to_string())),
+            Statement::AlterTable(alter_table) => (SqlOperationType::Ddl, Some(alter_table.name.to_string())),
             Statement::Drop { names, object_type, .. } => {
                 // Check if it's a TABLE drop
                 let is_table = format!("{:?}", object_type).contains("Table");
@@ -443,27 +449,26 @@ impl SqlParser {
                 };
                 (SqlOperationType::Ddl, table_name)
             }
-            Statement::Truncate { table_name, .. } => (SqlOperationType::Ddl, Some(table_name.to_string())),
-            Statement::CreateIndex { table_name, .. } => (SqlOperationType::Ddl, Some(table_name.to_string())),
+            Statement::Truncate(truncate) => (
+                SqlOperationType::Ddl,
+                truncate.table_names.first().map(|t| t.name.to_string()),
+            ),
+            Statement::CreateIndex(create_index) => (SqlOperationType::Ddl, Some(create_index.table_name.to_string())),
             Statement::Grant { .. } => (SqlOperationType::Dcl, None),
             Statement::Revoke { .. } => (SqlOperationType::Dcl, None),
             Statement::StartTransaction { .. } | Statement::Commit { .. } | Statement::Rollback { .. } => {
                 (SqlOperationType::Transaction, None)
             }
-            Statement::SetVariable {
-                local: _,
-                hivevar: _,
-                variables,
-                ..
-            } => {
+            Statement::Set(Set::SingleAssignment { variable, .. }) => {
                 // Check if it's a system variable
-                let var_name = variables.to_string().to_lowercase();
+                let var_name = variable.to_string().to_lowercase();
                 if is_ddl_related_variable(&var_name) {
                     (SqlOperationType::Ddl, None)
                 } else {
                     (SqlOperationType::Other, None)
                 }
             }
+            Statement::Set(_) => (SqlOperationType::Other, None),
             // Add more statement types as needed
             _ => (SqlOperationType::Other, None),
         };

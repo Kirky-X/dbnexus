@@ -68,13 +68,13 @@ impl SqlReverser {
     /// 逆向单个SQL语句
     fn reverse_statement(&self, stmt: &Statement) -> Result<String, String> {
         match stmt {
-            Statement::CreateTable { name, .. } => {
-                let table_name = name.to_string();
+            Statement::CreateTable(create_table) => {
+                let table_name = create_table.name.to_string();
                 Ok(format!("DROP TABLE IF EXISTS {}", table_name))
             }
-            Statement::AlterTable { name, operations, .. } => {
-                let table_name = name.to_string();
-                self.reverse_alter_table(&table_name, operations)
+            Statement::AlterTable(alter_table) => {
+                let table_name = alter_table.name.to_string();
+                self.reverse_alter_table(&table_name, &alter_table.operations)
             }
             _ => Err(format!("Unsupported statement type for reversal: {:?}", stmt)),
         }

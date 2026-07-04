@@ -13,8 +13,9 @@
 
 #![cfg(feature = "sharding")]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::ShardRouter;
+use std::hint::black_box;
 
 // ============================================================================
 // 基准测试
