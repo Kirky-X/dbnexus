@@ -507,6 +507,108 @@ name = "entity_unit_tests"
 path = "tests/entity/unit/entity_unit_tests.rs"
 required-features = ["sqlite", "macros", "with-chrono"]
 
+# ============================================================================
+# Convergence Phase 1: 注册 16 个此前未注册的真实测试文件（T026）
+# 这些文件存在于 tests/ 但从未被 [[test]] 注册，导致从未编译运行。
+# 与 v0.3.1 修复的 sharding_unit_tests（T011-fix1）同类问题。
+# ============================================================================
+
+# Core 集成测试 - DbPool 初始化/连接/关闭（Convergence 注册）
+[[test]]
+name = "dbnexus_integration"
+path = "tests/core/integration/dbnexus_integration.rs"
+required-features = ["sqlite"]
+
+# Core 集成测试 - DbConfig serde 反序列化（Convergence 注册）
+[[test]]
+name = "config_integration"
+path = "tests/core/integration/config_integration.rs"
+required-features = ["sqlite"]
+
+# Core 集成测试 - CircuitBreaker/HealthChecker 健康检查（Convergence 注册）
+[[test]]
+name = "health_integration"
+path = "tests/core/integration/health_integration.rs"
+required-features = ["health-check", "sqlite"]
+
+# Core 单元测试 - 边界条件/异常场景（Convergence 注册）
+[[test]]
+name = "edge_cases"
+path = "tests/core/unit/edge_cases.rs"
+required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine"]
+
+# Cache 集成测试 - CacheConfig/moka Cache（Convergence 注册）
+[[test]]
+name = "cache_integration"
+path = "tests/cache/integration/cache_integration.rs"
+required-features = ["cache"]
+
+# GlobalIndex 单元测试 - IndexEntry/SyncEvent/SyncResult（Convergence 注册）
+[[test]]
+name = "global_index_unit_tests"
+path = "tests/global_index/unit/global_index_unit_tests.rs"
+required-features = ["global-index"]
+
+# GlobalIndex 集成测试 - CRUD/跨分片同步（Convergence 注册）
+[[test]]
+name = "global_index_integration"
+path = "tests/global_index/integration/global_index_integration.rs"
+required-features = ["global-index", "sqlite"]
+
+# Health 单元测试 - CircuitBreaker/HealthChecker/PoolHealthMetrics（Convergence 注册）
+[[test]]
+name = "health_unit_tests"
+path = "tests/health/unit/health_unit_tests.rs"
+required-features = ["health-check"]
+
+# Metrics 单元测试 - MetricsCollector/LatencyHistogram/Prometheus 导出（Convergence 注册）
+[[test]]
+name = "metrics_unit_tests"
+path = "tests/metrics/unit/metrics_unit_tests.rs"
+required-features = ["metrics"]
+
+# Migration 单元测试 - Migration/Schema/SqlGenerator/SchemaDiffer（Convergence 注册）
+[[test]]
+name = "migration_unit_tests"
+path = "tests/migration/unit/migration_unit_tests.rs"
+required-features = ["migration"]
+
+# Permission 单元测试 - RbacProvider CRUD/通配符匹配（Convergence 注册）
+[[test]]
+name = "rbac_unit_tests"
+path = "tests/permission/unit/rbac_unit_tests.rs"
+required-features = ["permission"]
+
+# Permission 单元测试 - AdvancedRbacProvider 角色继承链/循环检测（Convergence 注册）
+[[test]]
+name = "advanced_rbac_unit_tests"
+path = "tests/permission/unit/advanced_rbac_unit_tests.rs"
+required-features = ["permission"]
+
+# Permission 单元测试 - PolicyDecisionPoint 决策/缓存/速率限制（Convergence 注册）
+[[test]]
+name = "pdp_unit_tests"
+path = "tests/permission/unit/pdp_unit_tests.rs"
+required-features = ["permission", "permission-engine"]
+
+# Permission 单元测试 - RateLimiter 令牌桶/并发/驱逐（Convergence 注册）
+[[test]]
+name = "rate_limiter_unit_tests"
+path = "tests/permission/unit/rate_limiter_unit_tests.rs"
+required-features = ["permission"]
+
+# Pool 单元测试 - 连接池配置/限制/超时/泄漏检测（Convergence 注册）
+[[test]]
+name = "pool_unit_tests"
+path = "tests/pool/unit/pool_unit_tests.rs"
+required-features = ["sqlite"]
+
+# Pool 集成测试 - 健康检查/clean invalid connections（Convergence 注册）
+[[test]]
+name = "pool_integration"
+path = "tests/pool/integration/pool_integration.rs"
+required-features = ["sqlite"]
+
 [dev-dependencies.testcontainers]
 version = "0.23"
 
