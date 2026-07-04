@@ -44,26 +44,34 @@ pub enum TracingError {
     SubscriberSetup(String),
 }
 
-/// RAII guard：drop 时调用 `opentelemetry::global::shutdown_tracer_provider()` flush 挂起 span
+/// RAII guard：drop 时调用 `SdkTracerProvider::shutdown()` flush 挂起 span
 ///
-/// 通过 [`TracingGuard::init_with_otlp`] 创建。guard 本身不持有资源，仅作为 RAII 语义载体：
-/// 提醒用户在程序退出前保持 guard 存活，以便 Drop 时触发全局 flush。
+/// 通过 [`TracingGuard::init_with_otlp`] 创建。guard 持有 `SdkTracerProvider` 的克隆，
+/// 在 Drop 时调用其 `shutdown()` 方法触发 batch flush 并关闭后台导出线程。
+///
+/// opentelemetry 0.32 移除了 `global::shutdown_tracer_provider()`，
+/// shutdown 责任由 provider 自身承担（`SdkTracerProvider::shutdown`）。
+/// 由于 `SdkTracerProvider` 内部用 `Arc` 共享，全局也持有一份克隆，
+/// 但 shutdown 通过共享的 `is_shutdown` 标志位传播，因此本 guard 调用 shutdown
+/// 会同时让全局 provider 进入已关闭状态。
 pub struct TracingGuard {
-    _private: (),
+    provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
 }
 
 impl TracingGuard {
     /// 初始化 OTLP gRPC exporter + 全局 tracing subscriber
     ///
     /// - 创建 tonic gRPC `SpanExporter` 指向 `endpoint`
-    /// - 构建 `TracerProvider`（batch exporter + Tokio runtime + service.name=dbnexus）
+    /// - 构建 `SdkTracerProvider`（batch span processor + service.name=dbnexus）
     /// - 设置为全局 tracer provider
     /// - 注册 `tracing_opentelemetry::OpenTelemetryLayer` 到全局 subscriber
     ///
-    /// # 运行时要求
+    /// # 运行时说明
     ///
-    /// 此函数使用 `Tokio` batch exporter，**必须在 Tokio 1.x 运行时上下文中调用**
-    ///（例如 `#[tokio::main]` 或 `#[tokio::test]` 函数内）。在非异步上下文中调用会 panic。
+    /// opentelemetry_sdk 0.32 的 `BatchSpanProcessor` 使用独立 OS 线程进行批处理，
+    /// 不再依赖 Tokio runtime 参数。但 tonic gRPC 客户端在建立 channel 时
+    /// 仍需 reactor，建议在 Tokio 1.x 运行时上下文中调用
+    ///（例如 `#[tokio::main]` 或 `#[tokio::test]` 函数内）。
     ///
     /// # 重复初始化
     ///
@@ -85,33 +93,29 @@ impl TracingGuard {
         use opentelemetry::trace::TracerProvider as OtelTracerProvider;
         use opentelemetry_otlp::WithExportConfig;
         use opentelemetry_sdk::Resource;
-        use opentelemetry_sdk::runtime::Tokio;
-        use opentelemetry_sdk::trace::TracerProvider;
+        use opentelemetry_sdk::trace::SdkTracerProvider;
         use tracing_opentelemetry::layer;
         use tracing_subscriber::layer::SubscriberExt;
 
         // 1. 创建 OTLP gRPC SpanExporter
+        //    opentelemetry-otlp 0.32: with_tonic() 隐含 Protocol::Grpc，无需显式指定
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_tonic()
             .with_endpoint(endpoint)
-            .with_protocol(opentelemetry_otlp::Protocol::Grpc)
             .build()
             .map_err(|e| TracingError::ExporterInit(e.to_string()))?;
 
-        // 2. 构建 TracerProvider（batch exporter + Tokio runtime）
-        let provider = TracerProvider::builder()
-            .with_batch_exporter(exporter, Tokio)
-            .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(
-                "service.name",
-                "dbnexus",
-            )]))
+        // 2. 构建 SdkTracerProvider（batch span processor 使用独立 OS 线程，无需 runtime 参数）
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(Resource::builder().with_service_name("dbnexus").build())
             .build();
 
         // 3. 从 provider 获取 SdkTracer（实现 PreSampledTracer，BoxedTracer 未实现）
         let tracer = OtelTracerProvider::tracer(&provider, "dbnexus");
 
-        // 4. 设置全局 tracer provider
-        global::set_tracer_provider(provider);
+        // 4. 设置全局 tracer provider（传入 provider 的克隆，本 guard 保留另一克隆用于 shutdown）
+        global::set_tracer_provider(provider.clone());
 
         // 5. 创建 OpenTelemetry tracing layer 并设置全局 subscriber
         let otel_layer = layer().with_tracer(tracer);
@@ -122,16 +126,21 @@ impl TracingGuard {
         // 6. 标记已初始化（OnceLock::set 在已设置时返回 Err，此处 get 已检查所以安全）
         let _ = TRACING_INITIALIZED.set(());
 
-        Ok(TracingGuard { _private: () })
+        Ok(TracingGuard {
+            provider: Some(provider),
+        })
     }
 }
 
 impl Drop for TracingGuard {
     fn drop(&mut self) {
-        // flush 挂起 span 并关闭全局 tracer provider
-        // opentelemetry 0.27: global::shutdown_tracer_provider() 同步 flush 后 drop provider
-        // 多次调用安全（无 provider 时为 no-op）
-        opentelemetry::global::shutdown_tracer_provider();
+        // flush 挂起 span 并关闭 tracer provider
+        // opentelemetry 0.32: 调用 SdkTracerProvider::shutdown() 同步 flush 后置位 is_shutdown
+        // shutdown 通过共享的 inner.is_shutdown 标志位传播，全局 provider 的克隆也会进入已关闭状态
+        // 多次调用安全（已 shutdown 时返回 AlreadyShutdown 错误，此处忽略）
+        if let Some(provider) = self.provider.take() {
+            let _ = provider.shutdown();
+        }
     }
 }
 
@@ -151,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_tracing_guard_private_field() {
-        // TracingGuard 只能通过 init_with_otlp 构造，_private 字段阻止外部直接构造
+        // TracingGuard 只能通过 init_with_otlp 构造，provider 字段为 Option<SdkTracerProvider>
         // 此测试验证 guard 类型存在且 Send（可在 tokio 任务间传递）
         fn assert_send<T: Send>() {}
         assert_send::<TracingGuard>();
