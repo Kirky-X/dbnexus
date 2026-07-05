@@ -7,7 +7,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -19,7 +19,7 @@ categories = ["database", "asynchronous"]
 
 [workspace.dependencies]
 # Async runtime
-tokio = { version = "1.50", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
+tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
 
 # Error handling
 thiserror = "2.0"
@@ -31,7 +31,7 @@ serde_yaml_ng = "0.10"
 serde_json = "1.0"
 
 # Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
-sea-orm = { version = "2.0.0-rc.37", default-features = false }
+sea-orm = { version = "2.0.0-rc.42", default-features = false }
 
 # Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
@@ -39,7 +39,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "=0.3.0" }
+dbnexus-macros = { path = "macros", version = "=0.3.1" }
 
 [workspace.lints.rust]
 
@@ -190,14 +190,14 @@ serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
-toml = { version = "^1.1", optional = true }
+toml = { version = "1.1", optional = true }
 parking_lot = "0.12"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 once_cell = { version = "1.21", optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
-uuid = { version = "1.22", optional = true, features = ["v4"] }
+uuid = { version = "1.23", optional = true, features = ["v4"] }
 validator = { version = "0.20", optional = true, features = ["derive"] }
 criterion = { version = "0.8", optional = true }
 
@@ -207,8 +207,8 @@ sqlparser = { version = "0.62", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "~6.2", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend
-oxcache = { version = "0.3.2", optional = true }
-trait-kit = "0.1.0"
+oxcache = { version = "0.3", optional = true }
+trait-kit = "0.1"
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
