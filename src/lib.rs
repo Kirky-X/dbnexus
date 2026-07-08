@@ -81,9 +81,6 @@ pub mod observability;
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
-/// Kit 模块 — 基于 `trait-kit` 的统一能力管理
-pub mod kit;
-
 // 生成的权限角色模块
 mod generated_roles;
 
@@ -218,5 +215,4 @@ pub use crate::foundation::error::AuditResult;
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::db_entity;
 
-// Kit 导出
-pub use crate::kit::{DbNexusKit, keys::*};
+// Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）
