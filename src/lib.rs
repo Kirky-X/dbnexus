@@ -102,6 +102,9 @@ pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
 pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
 
+// Domain cache provider 抽象导出（无 feature gate，domain 层核心 trait）
+pub use crate::domain::cache_provider::DbCacheProvider;
+
 // Domain Permission 导出 (新架构)
 #[cfg(feature = "permission")]
 pub use crate::domain::permission::{

@@ -7,6 +7,8 @@
 //!
 //! 提供业务领域相关的能力，可依赖 foundation 层和第三方库
 
+pub mod cache_provider;
+
 #[cfg(feature = "permission")]
 pub mod permission;
 
