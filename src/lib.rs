@@ -226,4 +226,8 @@ pub use dbnexus_macros::db_entity;
 #[cfg(feature = "oxcache-integration")]
 pub use crate::integrations::oxcache_adapter::OxcacheDbCacheAdapter;
 
+// DbNexusModule 导出（kit feature — trait-kit 0.2.2 AsyncKit integration）
+#[cfg(feature = "kit")]
+pub use crate::integrations::kit::DbNexusModule;
+
 // Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）

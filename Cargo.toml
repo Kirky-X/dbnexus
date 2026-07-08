@@ -113,7 +113,7 @@ cache = ["dep:oxcache"]  # 缓存功能（基于 oxcache）
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
 oxcache-integration = ["dep:oxcache"]
-kit = ["dep:trait-kit", "oxcache-integration"]
+kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
@@ -214,8 +214,10 @@ regex = { version = "1.0", optional = true }
 sqlparser = { version = "0.62", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "~6.2", optional = true }
-# Cache via oxcache - moka is used internally by oxcache as L1 backend
-oxcache = { version = "0.3", optional = true }
+# Cache via oxcache - moka is used internally by oxcache as L1 backend.
+# Uses path until oxcache with the `kit` feature is published to crates.io;
+# the version constraint is kept so the published artifact resolves the same.
+oxcache = { version = "0.3", path = "../oxcache", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Uses path until trait-kit 0.2.2 is published to crates.io; the version
