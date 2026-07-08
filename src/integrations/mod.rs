@@ -12,3 +12,6 @@
 
 #[cfg(feature = "oxcache-integration")]
 pub mod oxcache_adapter;
+
+#[cfg(feature = "kit")]
+pub mod kit;
