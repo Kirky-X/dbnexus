@@ -81,6 +81,10 @@ pub mod observability;
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
+/// Integration adapters for external crates (oxcache, etc.)
+#[cfg(feature = "oxcache-integration")]
+pub mod integrations;
+
 // 生成的权限角色模块
 mod generated_roles;
 
@@ -217,5 +221,9 @@ pub use crate::foundation::error::AuditResult;
 // 过程宏 — 仅导出统一属性宏 `db_entity`（替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit）
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::db_entity;
+
+// Integration adapter 导出（oxcache-integration feature）
+#[cfg(feature = "oxcache-integration")]
+pub use crate::integrations::oxcache_adapter::OxcacheDbCacheAdapter;
 
 // Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）
