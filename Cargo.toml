@@ -105,7 +105,15 @@ permission = ["dashmap", "futures", "yaml", "sql-parser"]  # 权限控制（强�
 # 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "once_cell", "regex", "unicode-normalization"]
 macros = ["dbnexus-macros"]
-cache = ["oxcache"]  # 缓存功能（基于 oxcache）
+cache = ["dep:oxcache"]  # 缓存功能（基于 oxcache）
+
+# trait-kit 0.2.2 AsyncKit integration (DbNexusModule). Pulls in trait-kit
+# with the `async` feature only — default features are disabled (Rule 6).
+# `oxcache-integration` enables the OxcacheDbCacheAdapter; `kit` adds the
+# DbNexusModule that wires OxcacheModule's capability into a DbPool.
+# Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
+oxcache-integration = ["dep:oxcache"]
+kit = ["dep:trait-kit", "oxcache-integration"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
@@ -208,6 +216,12 @@ futures = { version = "0.3", optional = true }
 dashmap = { version = "~6.2", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend
 oxcache = { version = "0.3", optional = true }
+
+# trait-kit integration (optional, feature-gated via `kit`).
+# Uses path until trait-kit 0.2.2 is published to crates.io; the version
+# constraint is kept so the published artifact resolves the same.
+# Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
+trait-kit = { version = "0.2.2", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
