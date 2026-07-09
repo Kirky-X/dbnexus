@@ -69,8 +69,8 @@ fn should_audit(operation: &str, role: &str) -> bool {
     if !Model::AUDIT_ENABLED {
         return false;
     }
-    let op_match = Model::AUDIT_OPERATIONS.iter().any(|op| *op == operation);
-    let role_match = Model::AUDIT_ROLES.iter().any(|r| *r == role);
+    let op_match = Model::AUDIT_OPERATIONS.contains(&operation);
+    let role_match = Model::AUDIT_ROLES.contains(&role);
     op_match && role_match
 }
 
