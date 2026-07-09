@@ -24,10 +24,6 @@ use crate::foundation::error::{DbError, DbResult};
 use crate::observability::metrics::MetricsCollector;
 use async_trait::async_trait;
 
-// 编译时检查：必须启用 permission 或 sql-parser feature 之一
-#[cfg(not(any(feature = "permission", feature = "sql-parser")))]
-compile_error!("Either 'permission' or 'sql-parser' feature must be enabled for Session functionality");
-
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
 use tokio::sync::Mutex;
@@ -299,9 +295,9 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            return Err(DbError::Permission(
+            Err(DbError::Permission(
                 "execute_raw requires the sql-parser feature to be enabled".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -432,9 +428,9 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            return Err(DbError::Permission(
+            Err(DbError::Permission(
                 "execute_duckdb requires the sql-parser feature to be enabled for security checks".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -537,9 +533,9 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            return Err(DbError::Permission(
+            Err(DbError::Permission(
                 "execute_duckdb_raw requires the sql-parser feature to be enabled for security checks".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -589,14 +585,13 @@ impl Session {
     /// 执行 SQL（带权限检查和操作类型）
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(db.role = %self.role)))]
     pub async fn execute(&self, sql: &str) -> DbResult<ExecResult> {
-        let start = Instant::now();
-
         // DDL 检查（sql-parser 启用时）
         #[cfg(feature = "sql-parser")]
         check_ddl_operation(sql)?;
 
         #[cfg(feature = "permission")]
         {
+            let start = Instant::now();
             // 解析 SQL 操作类型和表名
             let parsed = parse_sql_for_permission(sql).await?;
             match parsed {
@@ -734,7 +729,7 @@ impl Session {
     }
 
     /// 记录查询指标
-    #[cfg(feature = "metrics")]
+    #[cfg(all(feature = "metrics", feature = "permission"))]
     fn record_query_metrics(&self, query_type: &str, duration: Duration, success: bool) {
         if let Some(metrics) = &self.metrics_collector {
             metrics.record_query(query_type, duration, success, None);
@@ -742,7 +737,7 @@ impl Session {
     }
 
     /// 记录查询指标（无 metrics 特性）
-    #[cfg(not(feature = "metrics"))]
+    #[cfg(all(not(feature = "metrics"), feature = "permission"))]
     fn record_query_metrics(&self, _query_type: &str, _duration: Duration, _success: bool) {
         // No-op when metrics feature is disabled
     }

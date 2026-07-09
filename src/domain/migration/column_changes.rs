@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use dbnexus::database::migration::column_changes::{ColumnChange, ColumnChangeType};
+//! use dbnexus::domain::migration::column_changes::{ColumnChange, ColumnChangeType};
 //!
 //! let change = ColumnChange::new(
 //!     ColumnChangeType::RenameColumn,

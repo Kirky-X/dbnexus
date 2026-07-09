@@ -147,7 +147,7 @@ validation = ["validator", "with-time"]  # 数据验证（validator crate + time
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
 audit = ["chrono", "uuid"]  # 审计日志
-permission-engine = ["dashmap", "cache", "futures", "once_cell", "regex"]  # 高级权限引擎
+permission-engine = ["dashmap", "cache", "futures", "once_cell", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
 # === 开发工具 ===
@@ -255,6 +255,7 @@ assert_cmd = "2.2"
 predicates = "3.1"
 criterion = "0.8"
 tempfile = "3.27"
+futures = "0.3"
 
 [lints]
 workspace = true
@@ -470,6 +471,7 @@ path = "tests/core/unit/common_types_tests.rs"
 [[test]]
 name = "error_unit_tests"
 path = "tests/core/unit/error_unit_tests.rs"
+required-features = ["permission"]
 
 # Domain 单元测试 - 权限模块（PermissionConfig、RolePolicy、MemoryPermissionProvider）
 [[test]]

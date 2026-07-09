@@ -12,6 +12,7 @@
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
+#![doc(html_root_url = "https://docs.rs/dbnexus/0.3.2")]
 
 // ============================================================================
 // 编译期数据库特性互斥检查
@@ -102,8 +103,10 @@ pub use crate::foundation::config::DatabaseType;
 pub use crate::foundation::config::{CacheConfig, ConfigError, DbConfig, PoolConfig};
 pub use crate::foundation::error::DbError;
 pub use crate::foundation::error::DbResult;
+#[cfg(feature = "permission")]
+pub use crate::foundation::error::PermissionResult;
 pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
-pub use crate::foundation::error::{ConfigResult, PermissionResult, PoolResult};
+pub use crate::foundation::error::{ConfigResult, PoolResult};
 pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
 
 // Domain cache provider 抽象导出（无 feature gate，domain 层核心 trait）

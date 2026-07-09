@@ -485,7 +485,7 @@ impl DbConfig {
     /// # Example
     ///
     /// ```rust,ignore
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// let yaml = r#"
     /// url: "sqlite::memory:"
@@ -507,7 +507,7 @@ impl DbConfig {
     /// # Example
     ///
     /// ```rust,ignore
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// let json = r#"{"url":"sqlite::memory:","max_connections":20}"#;
     /// let config = DbConfig::from_json_str(json)?;

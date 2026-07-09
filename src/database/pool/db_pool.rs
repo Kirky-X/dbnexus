@@ -274,7 +274,7 @@ impl DbPool {
         doc = r###"
     /// ```rust
     /// use dbnexus::DbPool;
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -320,7 +320,7 @@ impl DbPool {
     ///
     /// ```rust
     /// use dbnexus::DbPool;
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// let runtime = tokio::runtime::Runtime::new()?;
     /// let _guard = runtime.enter();
@@ -376,7 +376,7 @@ impl DbPool {
     /// ```rust,ignore
     /// # // 需要 config feature
     /// use dbnexus::DbPool;
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// let runtime = tokio::runtime::Runtime::new()?;
     /// let _guard = runtime.enter();
@@ -478,13 +478,14 @@ impl DbPool {
     }
 
     /// 使用 JSON 直接解析权限配置
-    #[cfg(feature = "json")]
+    #[cfg(all(feature = "permission", feature = "json"))]
     fn parse_permission_json(content: &str, source: &str) -> Result<PermissionConfig, String> {
         serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
     }
 
     /// 解析权限配置
     /// 优先使用 JSON 格式（YAML 是 JSON 的超集，serde_yaml_ng 也能解析 JSON）
+    #[cfg(feature = "permission")]
     fn parse_permission_yaml(content: &str, source: &str) -> Result<PermissionConfig, String> {
         // 直接使用 JSON 解析
         #[cfg(feature = "json")]

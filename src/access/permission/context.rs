@@ -170,11 +170,11 @@ impl PermissionContext {
     ///
     /// ```ignore
     /// use dbnexus::permission::PermissionContext;
-    /// use dbnexus::config::DbConfig;
+    /// use dbnexus::DbConfig;
     ///
     /// let config = DbConfig {
     ///     url: "sqlite::memory:".to_string(),
-    ///     cache_config: dbnexus::config::CacheConfig {
+    ///     cache_config: dbnexus::CacheConfig {
     ///         policy_cache_capacity: 8192,
     ///         ..Default::default()
     ///     },
