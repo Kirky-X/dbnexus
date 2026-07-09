@@ -19,7 +19,7 @@
 //! 通过 `serde_yaml_ng` / `serde_json` 直接反序列化创建配置实例：
 //!
 //! ```rust,ignore
-//! use dbnexus::config::DbConfig;
+//! use dbnexus::DbConfig;
 //!
 //! // 从 YAML 字符串加载（需要启用 `yaml` feature）
 //! let yaml = r#"
