@@ -36,6 +36,7 @@ use crate::foundation::error::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
+#[cfg(any(feature = "metrics", feature = "cache"))]
 use std::sync::Arc;
 
 #[cfg(feature = "cache")]

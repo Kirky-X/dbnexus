@@ -114,6 +114,7 @@ pub enum PoolError {
 // - 新增独有变体 `ParseError`
 // - 错误消息大小写变化（如 "Role not found" → "role not found"）
 // access::permission::types::PermissionError 保留不动，待 Phase 4 Task 18 整体删除。
+#[cfg(feature = "permission")]
 pub use crate::domain::permission::PermissionError;
 
 /// 迁移错误
@@ -163,6 +164,7 @@ pub enum AuditError {
 /// 数据库操作结果
 pub type DbResult<T> = Result<T, DbError>;
 /// 权限检查结果
+#[cfg(feature = "permission")]
 pub type PermissionResult<T> = Result<T, PermissionError>;
 /// 连接池操作结果
 pub type PoolResult<T> = Result<T, PoolError>;
@@ -231,6 +233,7 @@ mod tests {
 
     /// 测试 PermissionError 显示
     #[test]
+    #[cfg(feature = "permission")]
     fn test_permission_error_display() {
         let error = PermissionError::Denied {
             resource: "users".to_string(),
