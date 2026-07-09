@@ -134,10 +134,7 @@ mod tests {
             })
         }
 
-        fn delete<'a>(
-            &'a self,
-            key: &'a str,
-        ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+        fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
             Box::pin(async move {
                 let mut map = self.inner.lock().expect("mock cache lock poisoned");
                 map.remove(key);
@@ -219,8 +216,7 @@ mod tests {
     /// that `DbNexusModule::build` will use in T029/T030.
     #[tokio::test]
     async fn db_cache_provider_dyn_dispatch_works() {
-        let cache: Arc<dyn DbCacheProvider + Send + Sync> =
-            Arc::new(MockCacheProvider::new());
+        let cache: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(MockCacheProvider::new());
         cache.set("dyn", b"works".to_vec(), None).await.expect("set");
         let got = cache.get("dyn").await.expect("get");
         assert_eq!(got, Some(b"works".to_vec()));

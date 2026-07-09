@@ -180,7 +180,7 @@ fn main() {
     // 9. Default trait 演示
     // ============================================
     println!("--- 9. Default trait ---");
-    let default_masker: SensitiveMasker = SensitiveMasker::default();
+    let default_masker: SensitiveMasker = SensitiveMasker;
     let _ = default_masker;
     let result = SensitiveMasker::mask("13812345678", MaskType::Phone).unwrap();
     println!("  ✓ Default 创建 + 静态方法调用: 13812345678 → {}", result);
