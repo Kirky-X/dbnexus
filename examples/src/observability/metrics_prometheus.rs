@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 1..=20 {
         let latency_ms = if i % 5 == 0 { 120 } else { 5 + (i % 10) };
         let success = i != 15; // 第 15 次模拟失败
-        let bytes = if success { Some(100 * i as u64) } else { None };
+        let bytes = if success { Some(100 * i) } else { None };
         collector.record_query("SELECT", Duration::from_millis(latency_ms), success, bytes);
     }
     // 记录少量 INSERT/UPDATE 用于多类型指标展示

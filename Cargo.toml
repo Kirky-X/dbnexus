@@ -3,11 +3,12 @@ members = [
     ".",
     "macros",
     "src/tools/cli",
+    "examples",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -39,7 +40,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "=0.3.1" }
+dbnexus-macros = { path = "macros", version = "=0.3.2" }
 
 [workspace.lints.rust]
 
@@ -223,7 +224,7 @@ oxcache = { version = "0.3", path = "../oxcache", optional = true }
 # Uses path until trait-kit 0.2.2 is published to crates.io; the version
 # constraint is kept so the published artifact resolves the same.
 # Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
-trait-kit = { version = "0.2.2", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.2.3", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }

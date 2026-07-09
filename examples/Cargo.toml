@@ -3,8 +3,7 @@ name = "dbnexus-examples"
 version = "0.3.0"
 edition = "2021"
 rust-version = "1.85"
-
-[workspace]
+publish = false
 
 # ============================================================
 # 基础模块示例 (basic/)
@@ -181,10 +180,12 @@ path = "src/macros/macros_advanced_query.rs"
 [[bin]]
 name = "kit_usage"
 path = "src/kit/kit_usage.rs"
+required-features = ["kit"]
 
 [[bin]]
 name = "kit_advanced"
 path = "src/kit/kit_advanced.rs"
+required-features = ["kit"]
 
 # ============================================================
 # 通用模块示例 (common/)
@@ -271,6 +272,10 @@ validator = { version = "0.20", features = ["derive"] }
 
 [features]
 default = []
+
+# kit_usage / kit_advanced 示例引用了尚未实现的 DbNexusKit API，
+# 通过 required-features 排除默认编译，待 DbNexusKit 实现后启用。
+kit = []
 
 # 抑制 check-cfg 误报：#[db_entity] 等宏展开后的 #[cfg(feature = "...")]
 # 检查的是 dbnexus 依赖的特性，而非本 crate 的特性。这些特性已通过

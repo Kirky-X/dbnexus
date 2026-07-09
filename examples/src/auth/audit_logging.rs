@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         AuditOperation::Other("custom_export".to_string()),
     ];
     for op in &operations {
-        println!("  - {}", op.to_string());
+        println!("  - {}", op);
     }
 
     // ============================================
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         AuditSeverity::Critical,
     ];
     for sev in &severities {
-        println!("  - {}", sev.to_string());
+        println!("  - {}", sev);
     }
 
     // ============================================

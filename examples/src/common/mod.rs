@@ -3,6 +3,8 @@
 // Licensed under the MIT License.
 // See LICENSE file in the project root for full license information.
 
+#![allow(dead_code)]
+
 //! 示例共享模块
 //!
 //! 提供跨示例复用的辅助代码，避免在每个示例中重复 DbPool 构造、

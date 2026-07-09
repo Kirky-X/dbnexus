@@ -196,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 分页查询 ---");
     let page_size: u64 = 3;
     let total_count = Model::count(&session).await?;
-    let total_pages = (total_count + page_size - 1) / page_size;
+    let total_pages = total_count.div_ceil(page_size);
     println!(
         "  总记录数: {}, 每页: {}, 总页数: {}",
         total_count, page_size, total_pages
