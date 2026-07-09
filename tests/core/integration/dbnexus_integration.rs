@@ -109,6 +109,7 @@ async fn test_dbpool_try_from_sync() {
 #[tokio::test]
 #[cfg(all(
     feature = "permission",
+    feature = "pool-warmup",
     any(feature = "sqlite", feature = "postgres", feature = "mysql")
 ))]
 async fn test_dbpool_try_from_with_permission() {

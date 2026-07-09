@@ -177,8 +177,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```toml
 [dependencies]
 dbnexus = "0.3.2"
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
-sea-orm = { version = "2.0.0-rc.37", features = ["macros"] }
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
+sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
 
 ### <span id="basic-usage">💡 基本用法</span>
