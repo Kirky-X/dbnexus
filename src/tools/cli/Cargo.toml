@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
+repository = "https://github.com/Kirky-X/dbnexus"
 description = "DBNexus CLI tool for database migration and management"
 
 [[bin]]

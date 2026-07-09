@@ -66,10 +66,7 @@ impl OxcacheDbCacheAdapter {
 }
 
 impl DbCacheProvider for OxcacheDbCacheAdapter {
-    fn get<'a>(
-        &'a self,
-        key: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+    fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
         Box::pin(async move {
             self.cache
                 .get(key)
@@ -92,10 +89,7 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
         })
     }
 
-    fn delete<'a>(
-        &'a self,
-        key: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+    fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
         Box::pin(async move {
             self.cache
                 .delete(key)
@@ -147,10 +141,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_get_absent_returns_none() {
         let adapter = make_adapter();
-        let got = adapter
-            .get("nonexistent")
-            .await
-            .expect("get should succeed");
+        let got = adapter.get("nonexistent").await.expect("get should succeed");
         assert!(got.is_none(), "absent key should return Ok(None)");
     }
 
@@ -159,10 +150,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_delete_removes_value() {
         let adapter = make_adapter();
-        adapter
-            .set("doomed", b"x".to_vec(), None)
-            .await
-            .expect("set");
+        adapter.set("doomed", b"x".to_vec(), None).await.expect("set");
         adapter.delete("doomed").await.expect("delete");
         let gone = adapter.get("doomed").await.expect("get after delete");
         assert!(gone.is_none());

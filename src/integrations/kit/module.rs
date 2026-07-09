@@ -70,8 +70,7 @@ impl ModuleMeta for DbNexusModule {
         // initializer. OnceLock (stable since 1.70) gives us a `&'static`
         // reference to a runtime-constructed `Vec`.
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
-        DEPS
-            .get_or_init(|| vec![("oxcache", TypeId::of::<OxcacheModule>())])
+        DEPS.get_or_init(|| vec![("oxcache", TypeId::of::<OxcacheModule>())])
             .as_slice()
     }
 }
