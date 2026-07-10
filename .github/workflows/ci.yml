@@ -145,6 +145,7 @@ jobs:
 
       - name: Set up database environment
         run: |
+          echo "TEST_DB_TYPE=${{ matrix.db }}" >> $GITHUB_ENV
           if [ "${{ matrix.db }}" == "sqlite" ]; then
             echo "DATABASE_URL=sqlite::memory:" >> $GITHUB_ENV
           elif [ "${{ matrix.db }}" == "postgres" ]; then
