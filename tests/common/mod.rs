@@ -11,12 +11,14 @@ use dbnexus::DbConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
-/// 创建内存 SQLite 连接池的测试 helper
+/// 创建测试连接池的 helper
+///
+/// 优先使用 `DATABASE_URL` 环境变量，默认回退到 `sqlite::memory:`。
+/// 这使得同一测试在 sqlite/mysql/postgres CI 矩阵下均可运行。
 #[allow(dead_code)]
 pub async fn make_sqlite_memory_pool() -> dbnexus::DbPool {
-    dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create test pool")
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
+    dbnexus::DbPool::new(&url).await.expect("Failed to create test pool")
 }
 
 #[cfg(feature = "permission-engine")]
