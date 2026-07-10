@@ -79,6 +79,17 @@ default = [
     "with-time",
 ]
 
+# default without database driver — for CI matrix testing where
+# the database backend is selected via --features <db>,default-no-db
+default-no-db = [
+    "runtime-tokio-rustls",
+    "permission",
+    "sql-parser",
+    "macros",
+    "config-env",
+    "with-time",
+]
+
 # === 运行时 (互斥 - 必须且只能选一个) ===
 runtime-tokio-rustls = [
     "sea-orm/runtime-tokio-rustls",
