@@ -198,14 +198,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -236,14 +229,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -288,14 +274,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -348,14 +327,7 @@ async fn test_check_permission_denied_returns_permission_error() {
     std::fs::write(&perm_file, perm_content).unwrap();
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
@@ -406,14 +378,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -447,14 +412,7 @@ async fn test_execute_with_operation_allows_when_permitted() {
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(),
@@ -508,14 +466,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -556,14 +507,7 @@ async fn test_execute_denied_by_permission() {
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
@@ -613,14 +557,7 @@ async fn test_execute_with_operation_insert_marks_write() {
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(),
@@ -660,14 +597,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -710,14 +640,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -760,14 +683,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -809,14 +725,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -844,14 +753,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -879,14 +781,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -919,14 +814,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
@@ -973,14 +861,7 @@ roles:
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
     let config = dbnexus::DbConfig {
-        url: match std::env::var("TEST_DB_TYPE")
-            .unwrap_or_else(|_| "sqlite".to_string())
-            .as_str()
-        {
-            "postgres" => "postgres://dbnexus:dbnexus_password@localhost:15433/dbnexus_test".to_string(),
-            "mysql" => "mysql://dbnexus:dbnexus_password@localhost:13308/dbnexus_test".to_string(),
-            _ => "sqlite::memory:".to_string(),
-        },
+        url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
         max_connections: 5,
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
