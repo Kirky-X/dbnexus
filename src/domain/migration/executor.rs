@@ -226,8 +226,11 @@ impl MigrationExecutor {
     }
 
     /// 确保迁移历史表存在
+    ///
+    /// PostgreSQL 已知问题：并发 `CREATE TABLE IF NOT EXISTS` 可能因 `pg_type` 类型注册冲突
+    /// 失败（SQLSTATE 23505，`pg_type_typname_nsp_index`）。`IF NOT EXISTS` 仅跳过表已存在的
+    /// 情况，不保护并发类型注册。此方法捕获该特定错误并视为成功（表正由另一会话创建）。
     async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
-        // 这里需要执行创建迁移历史表的 SQL
         let create_table_sql = match self.sql_generator.db_type {
             DatabaseType::Postgres => {
                 "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
@@ -263,11 +266,17 @@ impl MigrationExecutor {
             }
         };
 
-        self.connection
-            .execute_unprepared(create_table_sql)
-            .await
-            .map_err(DbError::Connection)?;
-        Ok(())
+        match self.connection.execute_unprepared(create_table_sql).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("pg_type_typname_nsp_index") {
+                    Ok(())
+                } else {
+                    Err(DbError::Connection(e))
+                }
+            }
+        }
     }
 
     /// 应用单个迁移
