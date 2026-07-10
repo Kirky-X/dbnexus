@@ -837,6 +837,9 @@ async fn test_circuit_breaker_state_change_time_recording() {
     };
     let breaker = CircuitBreaker::new(config);
 
+    // 等待一小段时间确保 time_before 非零，避免时序竞态
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
     let status_before = breaker.status().await;
     let time_before = status_before.time_since_last_change;
 
