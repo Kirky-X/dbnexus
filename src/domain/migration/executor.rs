@@ -229,7 +229,8 @@ impl MigrationExecutor {
     ///
     /// PostgreSQL 已知问题：并发 `CREATE TABLE IF NOT EXISTS` 可能因 `pg_type` 类型注册冲突
     /// 失败（SQLSTATE 23505，`pg_type_typname_nsp_index`）。`IF NOT EXISTS` 仅跳过表已存在的
-    /// 情况，不保护并发类型注册。此方法捕获该特定错误并视为成功（表正由另一会话创建）。
+    /// 情况，不保护并发类型注册。此方法在捕获该错误后等待 50ms 再重试，确保另一会话的
+    /// `CREATE TABLE` 已提交，使重试的 `IF NOT EXISTS` 成为真正的 no-op。
     async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
         let create_table_sql = match self.sql_generator.db_type {
             DatabaseType::Postgres => {
@@ -271,7 +272,20 @@ impl MigrationExecutor {
             Err(e) => {
                 let err_str = e.to_string();
                 if err_str.contains("pg_type_typname_nsp_index") {
-                    Ok(())
+                    // 等待并发 CREATE TABLE 提交后重试，使 IF NOT EXISTS 成为 no-op
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    match self.connection.execute_unprepared(create_table_sql).await {
+                        Ok(_) => Ok(()),
+                        Err(e2) => {
+                            let err_str2 = e2.to_string();
+                            // 重试后仍为 pg_type 冲突或表已存在，视为成功
+                            if err_str2.contains("pg_type_typname_nsp_index") || err_str2.contains("already exists") {
+                                Ok(())
+                            } else {
+                                Err(DbError::Connection(e2))
+                            }
+                        }
+                    }
                 } else {
                     Err(DbError::Connection(e))
                 }
