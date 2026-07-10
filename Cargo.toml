@@ -161,6 +161,9 @@ audit = ["chrono", "uuid"]  # 审计日志
 permission-engine = ["dashmap", "cache", "futures", "once_cell", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
+# === 国际化 ===
+i18n = ["dep:icu", "dep:writeable"]  # ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）
+
 # === 开发工具 ===
 dev = []
 dev-full = ["dev", "bench", "test-utils"]
@@ -241,6 +244,10 @@ jsonwebtoken = { version = "~10.4", features = ["rust_crypto"], optional = true 
 bcrypt = { version = "~0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
+
+# ICU4X 国际化（i18n feature）— 必须在 [dependencies.xxx] 子表头之前声明
+icu = { version = "2.2", optional = true }
+writeable = { version = "0.6", optional = true }
 
 # Tracing / OpenTelemetry（tracing feature）
 tracing = { version = "0.1", optional = true }
