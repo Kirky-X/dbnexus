@@ -67,7 +67,7 @@ jobs:
           languages: ${{ matrix.language }}
           # 使用默认的安全查询套件
           queries: +security-extended
-          build-mode: autobuild
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
