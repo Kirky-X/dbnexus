@@ -136,15 +136,22 @@ async fn test_execute_raw_ddl_admin_only() {
     let (config, _temp_dir) = common::get_test_config();
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
+    let table_name = common::generate_test_table_name("users");
     let admin_session = pool.get_session("admin").await.expect("Failed to get session");
     let ok = admin_session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            table_name
+        ))
         .await;
     assert!(ok.is_ok());
 
     let system_session = pool.get_session("system").await.expect("Failed to get session");
     let denied = system_session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS user_only (id INTEGER PRIMARY KEY)")
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY)",
+            common::generate_test_table_name("user_only")
+        ))
         .await;
     assert!(matches!(denied, Err(DbError::Permission(_))));
 }
@@ -282,16 +289,18 @@ roles:
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
+    let table_name = common::generate_test_table_name("batch_users");
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            table_name
+        ))
         .await
         .expect("Failed to create table");
 
+    let insert_sql = format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name);
     let result = session
-        .batch_execute_in_transaction(vec![
-            "INSERT INTO users (id, name) VALUES (1, 'a')",
-            "THIS IS NOT VALID SQL",
-        ])
+        .batch_execute_in_transaction(vec![insert_sql.as_str(), "THIS IS NOT VALID SQL"])
         .await;
     assert!(result.is_err());
     assert!(!session.is_in_transaction().await);
