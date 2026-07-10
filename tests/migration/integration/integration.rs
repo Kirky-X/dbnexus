@@ -190,7 +190,7 @@ async fn test_migration_executor_first_run() {
 
     // 再次运行迁移，验证幂等性（不会重复应用）
     let result = executor.run_migrations(migration_dir.path()).await;
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Second run should be idempotent: {:?}", result.err());
     assert_eq!(result.unwrap(), 0, "No migration should be applied on second run");
 
     // 清理测试表
