@@ -268,18 +268,29 @@ impl MigrationExecutor {
         };
 
         match self.connection.execute_unprepared(create_table_sql).await {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                eprintln!("[DEBUG ensure_migration_table_exists] CREATE TABLE succeeded");
+                Ok(())
+            }
             Err(e) => {
                 let err_str = e.to_string();
+                eprintln!("[DEBUG ensure_migration_table_exists] error: {err_str}");
                 if err_str.contains("pg_type_typname_nsp_index") {
                     // 等待并发 CREATE TABLE 提交后重试，使 IF NOT EXISTS 成为 no-op
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     match self.connection.execute_unprepared(create_table_sql).await {
-                        Ok(_) => Ok(()),
+                        Ok(_) => {
+                            eprintln!("[DEBUG ensure_migration_table_exists] retry succeeded");
+                            Ok(())
+                        }
                         Err(e2) => {
                             let err_str2 = e2.to_string();
+                            eprintln!("[DEBUG ensure_migration_table_exists] retry error: {err_str2}");
                             // 重试后仍为 pg_type 冲突或表已存在，视为成功
                             if err_str2.contains("pg_type_typname_nsp_index") || err_str2.contains("already exists") {
+                                eprintln!(
+                                    "[DEBUG ensure_migration_table_exists] treating as success (pg_type/already exists)"
+                                );
                                 Ok(())
                             } else {
                                 Err(DbError::Connection(e2))
@@ -510,10 +521,18 @@ impl MigrationExecutor {
         // 批量加载所有已应用的版本（消除 N+1 查询）
         let applied_versions = self.load_applied_versions().await?;
 
+        eprintln!(
+            "[DEBUG run_migrations] applied_versions={:?}, migration_files={:?}",
+            applied_versions,
+            migration_files.iter().map(|m| m.version).collect::<Vec<_>>()
+        );
+
         let pending: Vec<_> = migration_files
             .into_iter()
             .filter(|m| !applied_versions.contains(&m.version))
             .collect();
+
+        eprintln!("[DEBUG run_migrations] pending count={}", pending.len());
 
         if pending.is_empty() {
             return Ok(0);
@@ -553,10 +572,21 @@ impl MigrationExecutor {
 
         let mut applied_versions = std::collections::HashSet::new();
         for row in rows {
-            if let Ok(version) = row.try_get::<i64>("", "version") {
-                applied_versions.insert(version as u32);
+            match row.try_get::<i64>("", "version") {
+                Ok(version) => {
+                    applied_versions.insert(version as u32);
+                }
+                Err(e) => {
+                    eprintln!("[DEBUG load_applied_versions] try_get failed: {e}");
+                }
             }
         }
+
+        eprintln!(
+            "[DEBUG load_applied_versions] loaded {} versions: {:?}",
+            applied_versions.len(),
+            applied_versions
+        );
 
         Ok(applied_versions)
     }
