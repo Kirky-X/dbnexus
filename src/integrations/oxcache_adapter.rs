@@ -4,7 +4,7 @@
 // See LICENSE file in the project root for full license information.
 
 //! `OxcacheDbCacheAdapter` — adapts `oxcache::backend::CacheBackend` to
-//! dbnexus's [`DbCacheProvider`](crate::domain::cache_provider::DbCacheProvider) trait.
+//! dbnexus's [`DbCacheProvider`] trait.
 //!
 //! Phase 4 T027+T028 of the `trait-kit-async-integration` change. Wraps the
 //! cache capability produced by `OxcacheModule` (`Arc<dyn CacheBackend +
