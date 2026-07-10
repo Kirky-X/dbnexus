@@ -177,10 +177,12 @@ jobs:
           fi
 
       - name: Run tests
-        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace
+        # Exclude dbnexus-examples: it hardcodes sqlite+duckdb in its [dependencies],
+        # which conflicts with mysql/postgres matrix testing (compile_error guard).
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples
 
       - name: Run doc tests
-        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples
 
   # 跨平台构建检查
   build:
@@ -226,10 +228,10 @@ jobs:
         run: choco install protoc -y
 
       - name: Build
-        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --target ${{ matrix.target }}
+        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --target ${{ matrix.target }}
 
       - name: Build release
-        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --target ${{ matrix.target }} --release
+        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --target ${{ matrix.target }} --release
 
   # 代码覆盖率
   coverage:
@@ -264,7 +266,7 @@ jobs:
 
       - name: Generate coverage
         run: |
-          cargo tarpaulin --verbose --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --timeout 300 --out xml --exclude-files "**/tests/**"
+          cargo tarpaulin --verbose --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --timeout 300 --out xml --exclude-files "**/tests/**"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
