@@ -9,6 +9,7 @@
 
 use dbnexus::MigrationHistory;
 use dbnexus::foundation::DatabaseType;
+use sea_orm::ConnectionTrait;
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -98,10 +99,11 @@ async fn test_migration_apply() {
         .await
         .expect("Migration should apply successfully");
 
-    // 验证表已创建
+    // 验证表已创建（使用 connection 直接查询，绕过 SQL 解析器对元数据查询的限制）
     let check_sql = table_exists_check_sql(pool.config().database_type().unwrap(), &table_name);
 
-    let result = session.execute_raw(&check_sql).await;
+    let conn = session.connection().expect("Connection should be available");
+    let result = conn.execute_unprepared(&check_sql).await;
     assert!(result.is_ok(), "Migration should be applied");
 
     // 清理
