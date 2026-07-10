@@ -153,11 +153,18 @@ impl AuthenticationManager {
 mod tests {
     use super::*;
 
+    const TEST_PASSWORD: &str = "TestPassword123";
+    const TEST_WRONG_PASSWORD: &str = "WrongPassword";
+    const TEST_STRONG_PASSWORD: &str = "SecurePass123";
+    const TEST_WEAK_SHORT: &str = "Short1";
+    const TEST_WEAK_NO_LETTER: &str = "12345678";
+    const TEST_WEAK_NO_DIGIT: &str = "OnlyLetters";
+
     async fn create_test_manager() -> AuthenticationManager {
         let manager = AuthenticationManager::new(b"test-secret-key");
 
         // 添加测试用户
-        let password_hash = manager.password_hasher.hash("TestPassword123").unwrap();
+        let password_hash = manager.password_hasher.hash(TEST_PASSWORD).unwrap();
         let user = User {
             id: "user123".to_string(),
             username: "testuser".to_string(),
@@ -177,7 +184,7 @@ mod tests {
 
         let credentials = AuthCredentials {
             username: "testuser".to_string(),
-            password: "TestPassword123".to_string(),
+            password: TEST_PASSWORD.to_string(),
         };
 
         let token = manager.authenticate(credentials).await.unwrap();
@@ -194,7 +201,7 @@ mod tests {
 
         let credentials = AuthCredentials {
             username: "testuser".to_string(),
-            password: "WrongPassword".to_string(),
+            password: TEST_WRONG_PASSWORD.to_string(),
         };
 
         let result = manager.authenticate(credentials).await;
@@ -207,7 +214,7 @@ mod tests {
 
         let credentials = AuthCredentials {
             username: "nonexistent".to_string(),
-            password: "TestPassword123".to_string(),
+            password: TEST_PASSWORD.to_string(),
         };
 
         let result = manager.authenticate(credentials).await;
@@ -240,7 +247,7 @@ mod tests {
         // 认证获取访问令牌
         let credentials = AuthCredentials {
             username: "testuser".to_string(),
-            password: "TestPassword123".to_string(),
+            password: TEST_PASSWORD.to_string(),
         };
         let _access_token = manager.authenticate(credentials).await.unwrap();
 
@@ -265,7 +272,7 @@ mod tests {
     async fn test_register_user_weak_password_rejected() {
         let manager = AuthenticationManager::new(b"secret");
         // 太短
-        let result = manager.register_user("u1", "Short1", "user").await;
+        let result = manager.register_user("u1", TEST_WEAK_SHORT, "user").await;
         assert!(
             matches!(result, Err(AuthError::PasswordHash(_))),
             "short password should be rejected"
@@ -276,7 +283,7 @@ mod tests {
     async fn test_register_user_no_letter_rejected() {
         let manager = AuthenticationManager::new(b"secret");
         // 无字母
-        let result = manager.register_user("u2", "12345678", "user").await;
+        let result = manager.register_user("u2", TEST_WEAK_NO_LETTER, "user").await;
         assert!(
             matches!(result, Err(AuthError::PasswordHash(_))),
             "password without letter should be rejected"
@@ -287,7 +294,7 @@ mod tests {
     async fn test_register_user_no_digit_rejected() {
         let manager = AuthenticationManager::new(b"secret");
         // 无数字
-        let result = manager.register_user("u3", "OnlyLetters", "user").await;
+        let result = manager.register_user("u3", TEST_WEAK_NO_DIGIT, "user").await;
         assert!(
             matches!(result, Err(AuthError::PasswordHash(_))),
             "password without digit should be rejected"
@@ -297,13 +304,16 @@ mod tests {
     #[tokio::test]
     async fn test_register_user_strong_password_succeeds_and_authenticates() {
         let manager = AuthenticationManager::new(b"secret");
-        manager.register_user("alice", "SecurePass123", "admin").await.unwrap();
+        manager
+            .register_user("alice", TEST_STRONG_PASSWORD, "admin")
+            .await
+            .unwrap();
 
         // 注册后应能认证
         let token = manager
             .authenticate(AuthCredentials {
                 username: "alice".to_string(),
-                password: "SecurePass123".to_string(),
+                password: TEST_STRONG_PASSWORD.to_string(),
             })
             .await
             .unwrap();
