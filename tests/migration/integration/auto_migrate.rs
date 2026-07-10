@@ -55,15 +55,17 @@ async fn test_migration_file_scanning() {
     let db_type = DatabaseType::parse_database_type(&url).unwrap();
     let id_column = id_column_definition(db_type);
 
-    // 创建测试迁移文件（使用唯一表名避免冲突）
+    // 使用唯一表名和版本号避免测试间冲突
     let table_suffix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
+    let base_version = common::generate_test_migration_base_version();
+    let next_version = base_version + 1;
 
     let migration_content_1 = format!(
         r#"-- Migration: create_users_table
--- Version: 1
+-- Version: {base_version}
 
 -- UP:
 CREATE TABLE users_{table_suffix} (
@@ -79,7 +81,7 @@ DROP TABLE users_{table_suffix};
 
     let migration_content_2 = format!(
         r#"-- Migration: create_orders_table
--- Version: 2
+-- Version: {next_version}
 
 -- UP:
 CREATE TABLE orders_{table_suffix} (
@@ -94,10 +96,16 @@ DROP TABLE orders_{table_suffix};
 "#
     );
 
-    fs::write(temp_dir.path().join("1_create_users_table.sql"), migration_content_1)
-        .expect("Failed to write migration file 1");
-    fs::write(temp_dir.path().join("2_create_orders_table.sql"), migration_content_2)
-        .expect("Failed to write migration file 2");
+    fs::write(
+        temp_dir.path().join(format!("{base_version}_create_users_table.sql")),
+        migration_content_1,
+    )
+    .expect("Failed to write migration file 1");
+    fs::write(
+        temp_dir.path().join(format!("{next_version}_create_orders_table.sql")),
+        migration_content_2,
+    )
+    .expect("Failed to write migration file 2");
 
     // 使用内存数据库
     let config = dbnexus::DbConfig {
@@ -255,16 +263,20 @@ async fn test_migration_version_sorting() {
     let db_type = DatabaseType::parse_database_type(&url).unwrap();
     let id_column = id_column_definition(db_type);
 
-    // 使用唯一表名避免冲突
+    // 使用唯一表名和版本号避免冲突
     let table_suffix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
+    let base_version = common::generate_test_migration_base_version();
+    let v1 = base_version;
+    let v2 = base_version + 1;
+    let v3 = base_version + 2;
 
     // 创建乱序的迁移文件
     let migration_v3 = format!(
         r#"-- Migration: third
--- Version: 3
+-- Version: {v3}
 -- UP:
 CREATE TABLE table_3_{table_suffix} (id {id_column});
 -- DOWN:
@@ -274,7 +286,7 @@ DROP TABLE table_3_{table_suffix};
 
     let migration_v1 = format!(
         r#"-- Migration: first
--- Version: 1
+-- Version: {v1}
 -- UP:
 CREATE TABLE table_1_{table_suffix} (id {id_column});
 -- DOWN:
@@ -284,7 +296,7 @@ DROP TABLE table_1_{table_suffix};
 
     let migration_v2 = format!(
         r#"-- Migration: second
--- Version: 2
+-- Version: {v2}
 -- UP:
 CREATE TABLE table_2_{table_suffix} (id {id_column});
 -- DOWN:
@@ -293,9 +305,9 @@ DROP TABLE table_2_{table_suffix};
     );
 
     // 乱序写入
-    fs::write(temp_dir.path().join("3_third.sql"), migration_v3).expect("Failed to write v3");
-    fs::write(temp_dir.path().join("1_first.sql"), migration_v1).expect("Failed to write v1");
-    fs::write(temp_dir.path().join("2_second.sql"), migration_v2).expect("Failed to write v2");
+    fs::write(temp_dir.path().join(format!("{v3}_third.sql")), migration_v3).expect("Failed to write v3");
+    fs::write(temp_dir.path().join(format!("{v1}_first.sql")), migration_v1).expect("Failed to write v1");
+    fs::write(temp_dir.path().join(format!("{v2}_second.sql")), migration_v2).expect("Failed to write v2");
 
     let config = dbnexus::DbConfig {
         url,

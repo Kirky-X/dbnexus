@@ -152,6 +152,18 @@ pub fn generate_test_table_name(prefix: &str) -> String {
     format!("{}_test_{}", prefix, n)
 }
 
+/// 生成测试用的迁移版本号基址（避免测试间的冲突）
+///
+/// 使用进程内单调递增的原子计数器，保证版本号唯一。
+/// 每次调用返回一个基址，测试可用 base, base+1, base+2... 作为版本号。
+/// 起始值为 10000，每次递增 100，为单个测试留出足够空间。
+#[allow(dead_code)]
+pub fn generate_test_migration_base_version() -> u32 {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(10000);
+    COUNTER.fetch_add(100, Ordering::SeqCst)
+}
+
 /// 清理测试表
 ///
 /// 在指定的会话上删除测试表
