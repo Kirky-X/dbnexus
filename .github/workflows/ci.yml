@@ -138,16 +138,18 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.db }}
-            ${{ runner.os }}-
+          shared-key: ${{ matrix.db }}-${{ runner.os }}
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Set up database environment
         run: |
-          echo "DATABASE_URL=${{ matrix.db }}://dbnexus:dbnexus_password@localhost:5432/dbnexus_test" >> $GITHUB_ENV
-          if [ "${{ matrix.db }}" == "mysql" ]; then
+          if [ "${{ matrix.db }}" == "sqlite" ]; then
+            echo "DATABASE_URL=sqlite::memory:" >> $GITHUB_ENV
+          elif [ "${{ matrix.db }}" == "postgres" ]; then
+            echo "DATABASE_URL=postgres://dbnexus:dbnexus_password@localhost:5432/dbnexus_test" >> $GITHUB_ENV
+          elif [ "${{ matrix.db }}" == "mysql" ]; then
             echo "DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:3306/dbnexus_test" >> $GITHUB_ENV
           fi
 
@@ -175,10 +177,10 @@ jobs:
           fi
 
       - name: Run tests
-        run: cargo test --features ${{ matrix.db }},all-optional --workspace
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace
 
       - name: Run doc tests
-        run: cargo test --features ${{ matrix.db }},all-optional --doc --workspace
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace
 
   # 跨平台构建检查
   build:
@@ -209,17 +211,25 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.db }}
-            ${{ runner.os }}-
+          shared-key: ${{ matrix.db }}-${{ runner.os }}
 
-      - name: Install protoc
-        uses: arduino/setup-protoc@v3
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: choco install protoc -y
 
       - name: Build
-        run: cargo build --features ${{ matrix.db }},all-optional --workspace --target ${{ matrix.target }}
+        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --target ${{ matrix.target }}
 
       - name: Build release
-        run: cargo build --features ${{ matrix.db }},all-optional --workspace --target ${{ matrix.target }} --release
+        run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --target ${{ matrix.target }} --release
 
   # 代码覆盖率
   coverage:
@@ -254,7 +264,7 @@ jobs:
 
       - name: Generate coverage
         run: |
-          cargo tarpaulin --verbose --features sqlite,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --timeout 300 --out xml --exclude-files "**/tests/**"
+          cargo tarpaulin --verbose --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --timeout 300 --out xml --exclude-files "**/tests/**"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -293,7 +303,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Build documentation
-        run: cargo doc --no-deps --features sqlite,all-optional --workspace
+        run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional --workspace
 
       - name: Check documentation links
         run: |
@@ -303,7 +313,7 @@ jobs:
       - name: Verify docs.rs configuration
         run: |
           # 检查 docs.rs 配置是否正确
-          cargo metadata --format-version 1 | jq -r '.[0].metadata["docs.rs"]'
+          cargo metadata --format-version 1 | jq -r '.packages[0].metadata["docs.rs"]'
 
   # 依赖更新检查
   dependabot:
