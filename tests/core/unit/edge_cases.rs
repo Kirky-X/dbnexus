@@ -399,8 +399,9 @@ mod concurrency_boundary_tests {
     #[tokio::test]
     async fn test_pool_exhaustion_boundary() {
         // 显式配置 max_connections=1 测试连接池耗尽
+        let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
         let config = dbnexus::DbConfig {
-            url: "sqlite::memory:".to_string(),
+            url,
             max_connections: 1,
             acquire_timeout: 50, // 50ms 超时
             ..Default::default()
