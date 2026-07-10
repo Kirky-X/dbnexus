@@ -177,12 +177,13 @@ jobs:
           fi
 
       - name: Run tests
-        # Exclude dbnexus-examples: it hardcodes sqlite+duckdb in its [dependencies],
-        # which conflicts with mysql/postgres matrix testing (compile_error guard).
-        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples
+        # Exclude dbnexus-examples (hardcodes sqlite+duckdb in [dependencies]) and
+        # dbnexus-macros (hardcodes sqlite in [dev-dependencies]). Both conflict
+        # with mysql/postgres matrix testing via feature unification.
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
       - name: Run doc tests
-        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples
+        run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
   # 跨平台构建检查
   build:
