@@ -69,10 +69,20 @@ impl Default for PasswordHasher {
 mod tests {
     use super::*;
 
+    const TEST_PASSWORD: &str = "TestPassword123";
+    const TEST_WRONG_PASSWORD: &str = "WrongPassword";
+    const TEST_VALID_PASSWORD: &str = "ValidPass123";
+    const TEST_WEAK_SHORT: &str = "Short1";
+    const TEST_WEAK_NO_LETTER: &str = "12345678";
+    const TEST_WEAK_NO_DIGIT: &str = "OnlyLetters";
+    const TEST_PASSWORD_A: &str = "Password123";
+    const TEST_PASSWORD_B: &str = "SecurePass456";
+    const TEST_PASSWORD_C: &str = "MySecret@789";
+
     #[test]
     fn test_hash_password() {
         let hasher = PasswordHasher::new();
-        let password = "TestPassword123";
+        let password = TEST_PASSWORD;
 
         let hash = hasher.hash(password).unwrap();
         assert_ne!(hash, password);
@@ -82,11 +92,11 @@ mod tests {
     #[test]
     fn test_verify_password() {
         let hasher = PasswordHasher::new();
-        let password = "TestPassword123";
+        let password = TEST_PASSWORD;
 
         let hash = hasher.hash(password).unwrap();
         assert!(hasher.verify(password, &hash).is_ok());
-        assert!(hasher.verify("WrongPassword", &hash).is_err());
+        assert!(hasher.verify(TEST_WRONG_PASSWORD, &hash).is_err());
     }
 
     #[test]
@@ -94,22 +104,22 @@ mod tests {
         let hasher = PasswordHasher::new();
 
         // 太短
-        assert!(hasher.validate_strength("Short1").is_err());
+        assert!(hasher.validate_strength(TEST_WEAK_SHORT).is_err());
 
         // 缺少数字
-        assert!(hasher.validate_strength("OnlyLetters").is_err());
+        assert!(hasher.validate_strength(TEST_WEAK_NO_DIGIT).is_err());
 
         // 缺少字母
-        assert!(hasher.validate_strength("12345678").is_err());
+        assert!(hasher.validate_strength(TEST_WEAK_NO_LETTER).is_err());
 
         // 有效密码
-        assert!(hasher.validate_strength("ValidPass123").is_ok());
+        assert!(hasher.validate_strength(TEST_VALID_PASSWORD).is_ok());
     }
 
     #[test]
     fn test_hash_and_verify_consistency() {
         let hasher = PasswordHasher::new();
-        let passwords = vec!["Password123", "SecurePass456", "MySecret@789"];
+        let passwords = vec![TEST_PASSWORD_A, TEST_PASSWORD_B, TEST_PASSWORD_C];
 
         for password in passwords {
             let hash = hasher.hash(password).unwrap();

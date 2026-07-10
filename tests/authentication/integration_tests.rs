@@ -17,6 +17,14 @@ use dbnexus::{AuthCredentials, AuthError, AuthenticationManager, JwtManager, Pas
 const TEST_SECRET: &[u8] = b"test_secret_key_for_integration_tests_2026";
 const ALT_SECRET: &[u8] = b"different_secret_key_for_signature_mismatch";
 
+const TEST_PASSWORD: &str = "Password123";
+const TEST_WRONG_PASSWORD: &str = "WrongPassword";
+const TEST_SECURE_PASSWORD: &str = "MySecurePassword123";
+const TEST_CORRECT_PASSWORD: &str = "CorrectPassword123";
+const TEST_WRONG_PASSWORD_456: &str = "WrongPassword456";
+const TEST_OLD_PASSWORD: &str = "OldPassword123";
+const TEST_NEW_PASSWORD: &str = "NewPassword456";
+
 fn make_user(username: &str, password: &str, role: &str) -> User {
     let hash = PasswordHasher::new().hash(password).expect("hash should succeed");
     User {
@@ -31,7 +39,7 @@ fn make_user(username: &str, password: &str, role: &str) -> User {
 
 async fn make_manager_with_user() -> AuthenticationManager {
     let mgr = AuthenticationManager::new(TEST_SECRET);
-    mgr.add_user(make_user("alice", "Password123", "admin"))
+    mgr.add_user(make_user("alice", TEST_PASSWORD, "admin"))
         .await
         .expect("add_user should succeed");
     mgr
@@ -135,7 +143,7 @@ async fn test_jwt_invalid_signature() {
 #[test]
 fn test_password_hash_and_verify() {
     let hasher = PasswordHasher::new();
-    let password = "MySecurePassword123";
+    let password = TEST_SECURE_PASSWORD;
 
     let hash = hasher.hash(password).expect("hash should succeed");
     assert!(hash.starts_with("$2b$"), "bcrypt hash should start with $2b$");
@@ -150,9 +158,9 @@ fn test_password_hash_and_verify() {
 #[test]
 fn test_password_wrong_password() {
     let hasher = PasswordHasher::new();
-    let hash = hasher.hash("CorrectPassword123").expect("hash should succeed");
+    let hash = hasher.hash(TEST_CORRECT_PASSWORD).expect("hash should succeed");
 
-    let result = hasher.verify("WrongPassword456", &hash);
+    let result = hasher.verify(TEST_WRONG_PASSWORD_456, &hash);
     assert!(result.is_err(), "wrong password should fail");
     assert!(
         matches!(result, Err(AuthError::InvalidCredentials)),
@@ -174,8 +182,8 @@ fn test_password_empty() {
 #[test]
 fn test_password_update() {
     let hasher = PasswordHasher::new();
-    let old_password = "OldPassword123";
-    let new_password = "NewPassword456";
+    let old_password = TEST_OLD_PASSWORD;
+    let new_password = TEST_NEW_PASSWORD;
 
     let old_hash = hasher.hash(old_password).expect("hash old should succeed");
     let new_hash = hasher.hash(new_password).expect("hash new should succeed");
@@ -206,7 +214,7 @@ async fn test_authenticate_success() {
     let token = mgr
         .authenticate(AuthCredentials {
             username: "alice".to_string(),
-            password: "Password123".to_string(),
+            password: TEST_PASSWORD.to_string(),
         })
         .await
         .expect("authenticate should succeed");
@@ -227,7 +235,7 @@ async fn test_authenticate_wrong_password() {
     let result = mgr
         .authenticate(AuthCredentials {
             username: "alice".to_string(),
-            password: "WrongPassword".to_string(),
+            password: TEST_WRONG_PASSWORD.to_string(),
         })
         .await;
 
@@ -247,7 +255,7 @@ async fn test_authenticate_unknown_user() {
     let result = mgr
         .authenticate(AuthCredentials {
             username: "nonexistent_user".to_string(),
-            password: "Password123".to_string(),
+            password: TEST_PASSWORD.to_string(),
         })
         .await;
 
