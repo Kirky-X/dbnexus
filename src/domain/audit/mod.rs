@@ -848,17 +848,17 @@ impl AuditLogger {
                     let replacement = format!("***REDACTED_{}***", field.to_uppercase());
 
                     // 1. JSON 格式: "field":
-                    result = result.replace(&format!(r#""{}":"#, field), &format!(r#""{}":"#, &replacement));
+                    result = result.replace(&format!(r#""{}":"#, field), &format!(r#""{}":"#, replacement));
 
                     // 2. 非 JSON 格式: field:
-                    result = result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, &replacement));
+                    result = result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, replacement));
 
                     // 3. 嵌套字段 (如 user.password)
                     if field.contains('.') {
                         let parts: Vec<&str> = field.split('.').collect();
                         if parts.len() >= 2 {
                             let nested_pattern = format!(r#""{}""#, field);
-                            result = result.replace(&nested_pattern, &format!(r#""{}""#, &replacement));
+                            result = result.replace(&nested_pattern, &format!(r#""{}""#, replacement));
                         }
                     }
 

@@ -39,41 +39,17 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Run clippy
         run: cargo clippy --all-features --all-targets --workspace -- -D warnings
 
       - name: Check docs
         run: cargo doc --all-features --no-deps --workspace
 
-  # OpenSpec 规范检查
-  openspec:
-    name: OpenSpec Validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install openspec
-        run: |
-          if ! command -v openspec &> /dev/null; then
-            cargo install --git https://github.com/anomalyco/openspec --locked
-          fi
-
-      - name: Cache openspec
-        uses: actions/cache@v6
-        with:
-          path: ~/.cargo/bin/openspec
-          key: ${{ runner.os }}-openspec-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run openspec validation
-        run: openspec validate --strict
-
-      - name: List active changes
-        run: openspec list
+  # OpenSpec 规范检查 — 已移除（anomalyco/openspec 仓库已不存在）
+  # 如需恢复，需找到新的 openspec 工具源
 
   # 安全审计
   security:
@@ -103,7 +79,7 @@ jobs:
           fi
 
       - name: Run cargo-deny check
-        run: cargo deny check license advisories
+        run: cargo deny check licenses advisories
 
       - name: Check for vulnerable dependencies
         run: cargo deny check bans --show-stats
@@ -111,7 +87,7 @@ jobs:
   # 数据库矩阵测试
   test:
     name: Test (${{ matrix.db }})
-    needs: [lint, openspec, security]
+    needs: [lint, security]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -165,6 +141,9 @@ jobs:
           shared-key: ${{ matrix.db }}
             ${{ runner.os }}-
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Set up database environment
         run: |
           echo "DATABASE_URL=${{ matrix.db }}://dbnexus:dbnexus_password@localhost:5432/dbnexus_test" >> $GITHUB_ENV
@@ -204,7 +183,7 @@ jobs:
   # 跨平台构建检查
   build:
     name: Build (${{ matrix.os }}-${{ matrix.db }})
-    needs: [lint, openspec, security]
+    needs: [lint, security]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -233,6 +212,9 @@ jobs:
           shared-key: ${{ matrix.db }}
             ${{ runner.os }}-
 
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+
       - name: Build
         run: cargo build --features ${{ matrix.db }},all-optional --workspace --target ${{ matrix.target }}
 
@@ -260,6 +242,9 @@ jobs:
           key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-tarpaulin-
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install tarpaulin
         run: |
@@ -290,7 +275,7 @@ jobs:
   # 文档检查
   docs:
     name: Documentation
-    needs: [lint, openspec]
+    needs: [lint]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -303,6 +288,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: docs
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Build documentation
         run: cargo doc --no-deps --features sqlite,all-optional --workspace
@@ -351,7 +339,6 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "✅ Lint: ${{ needs.lint.result }}"
-          echo "✅ OpenSpec: ${{ needs.openspec.result }}"
           echo "✅ Security: ${{ needs.security.result }}"
           echo "✅ Test: ${{ needs.test.result }}"
           echo "✅ Build: ${{ needs.build.result }}"
