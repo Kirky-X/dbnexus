@@ -906,7 +906,7 @@ impl MetricsCollector {
             window_qps: 0.0,
         };
 
-        for (_, m) in map.iter() {
+        for m in map.values() {
             let throughput = m.throughput.throughput(elapsed);
             total.total_operations += throughput.total_operations;
             total.success_count += throughput.success_count;
