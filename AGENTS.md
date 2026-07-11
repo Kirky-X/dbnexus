@@ -17,7 +17,8 @@ dbnexus 是基于 Sea-ORM 构建的企业级 Rust 数据库抽象层，提供连
 dbnexus/
 ├── src/
 │   ├── lib.rs                    # crate 根模块，公共 API 导出
-│   ├── common/                   # 公共类型（error）
+│   ├── error.rs                  # 统一错误类型（DbNexusError, DbNexusResult）
+│   ├── common/                   # 公共类型
 │   ├── foundation/               # Foundation 层 - 基础模块（config, error）
 │   ├── domain/                   # Domain 层 - 领域模块
 │   │   ├── permission/           #   权限领域模型
