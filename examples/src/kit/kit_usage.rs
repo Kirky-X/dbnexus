@@ -274,7 +274,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - DbNexusKit 基于 trait-kit，提供类型安全的能力注册和发现");
     println!("  - 每个能力通过 CapabilityKey 标识，编译期类型检查");
     println!("  - replace_* 支持运行时热替换，适用于动态重新配置场景");
-    println!("  - 未注册能力返回 KitError，调用方需显式处理");
+    println!("  - 未注册能力返回 TraitKitError，调用方需显式处理");
 
     Ok(())
 }
