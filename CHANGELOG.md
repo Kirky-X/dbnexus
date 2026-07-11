@@ -7,7 +7,14 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-07-11
+
 ### 变更
+
+- **权限导出去重**: 消除重复的权限模块导出
+- **RUSTSEC-2023-0071 文档化**: 记录 `rsa` crate 安全公告（上游暂无修复，已在 `deny.toml` 中声明忽略）
+
+### 变更（Phase 6 前置）
 
 - **edition 2024 升级**: workspace 从 edition 2021 升级到 edition 2024
 - **rust-version 1.85**: 最低支持的 Rust 版本提升至 1.85（edition 2024 要求）
