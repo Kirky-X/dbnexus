@@ -3,7 +3,7 @@
 //! 子错误类型模块
 //!
 //! 定义 DBNexus 项目中各功能模块的子错误类型。
-//! 顶层统一错误类型 `DbNexusError` 定义在 [`crate::common::error`] 模块。
+//! 顶层统一错误类型 `DbNexusError` 定义在 [`crate::error`] 模块。
 //!
 //! # 错误类型
 //!
