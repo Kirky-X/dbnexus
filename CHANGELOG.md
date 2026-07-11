@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### ⚠️ BREAKING CHANGES
+
+- `error` 模块从 `src/common/error.rs` 迁移到 `src/error.rs`，导入路径 `crate::common::error::` → `crate::error::`
+
 ## [0.3.3] - 2026-07-11
 
 ### 变更
