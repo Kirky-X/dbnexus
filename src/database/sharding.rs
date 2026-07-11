@@ -569,13 +569,13 @@ impl ShardRouter {
         &self,
         expected_shard_id: u32,
         requested_shard_key: &str,
-    ) -> Result<(), crate::common::error::QueryErrorReport> {
+    ) -> Result<(), crate::error::QueryErrorReport> {
         let actual_shard_id = self.shard_id_for_key(requested_shard_key);
         if actual_shard_id == expected_shard_id {
             Ok(())
         } else {
-            Err(crate::common::error::QueryErrorReport::new(
-                crate::common::error::ErrorCategory::ShardConflict,
+            Err(crate::error::QueryErrorReport::new(
+                crate::error::ErrorCategory::ShardConflict,
                 format!(
                     "Cross-shard query detected: shard_key '{}' maps to shard {}, but session is bound to shard {}",
                     requested_shard_key, actual_shard_id, expected_shard_id
