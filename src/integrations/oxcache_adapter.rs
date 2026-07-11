@@ -39,7 +39,7 @@ use crate::foundation::error::DbError;
 /// Constructed in `DbNexusModule::build()` (Phase 4 T029/T030) from the
 /// `Arc<dyn CacheBackend + Send + Sync>` capability produced by
 /// `OxcacheModule`. The adapter proxies `get`/`set`/`delete` calls to the
-/// underlying oxcache backend and maps `oxcache::CacheError` to `DbError`.
+/// underlying oxcache backend and maps `oxcache::OxCacheError` to `DbError`.
 ///
 /// # Feature gating
 ///
