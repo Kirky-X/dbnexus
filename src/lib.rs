@@ -61,6 +61,9 @@ compile_error!("The 'permission' feature requires the 'cache' feature to be enab
 /// 公共类型模块
 pub mod common;
 
+/// 统一错误类型模块
+pub mod error;
+
 /// Foundation 层 - 基础模块 (旧版，保持兼容)
 pub mod foundation;
 
@@ -95,7 +98,7 @@ mod generated_roles;
 // ============================================================================
 
 // Common 导出 (新架构)
-pub use crate::common::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
+pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
 // DatabaseType 统一定一在 foundation::config（Task 15：合并 common::types::DatabaseType）
 pub use crate::foundation::config::DatabaseType;
