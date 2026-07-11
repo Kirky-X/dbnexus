@@ -44,7 +44,6 @@ specmark/
 docs/superpowers/
 
 # AI assistant config (local only)
-AGENTS.md
 CLAUDE.md
 
 # =============================================================================

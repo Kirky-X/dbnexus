@@ -32,6 +32,10 @@
 </p>
 
 <p align="center">
+  <a href="README_EN.md">English</a> | 简体中文
+</p>
+
+<p align="center">
   <strong>企业级 Rust 数据库抽象层</strong>
 </p>
 
@@ -103,6 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [🔒 安全性](#security)
 - [🧪 测试](#testing)
 - [🤝 贡献](#contributing)
+- [📋 更新日志](#changelog)
 - [📄 许可证](#license)
 - [🙏 致谢](#acknowledgments)
 
@@ -603,7 +608,7 @@ make docker-down
 
 <div align="center" style="margin: 24px 0;">
 
-欢迎贡献！请查看仓库获取贡献指南。
+欢迎贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 获取详细的贡献指南。
 
 </div>
 
@@ -623,6 +628,12 @@ cargo test --all-features
 # 运行 linter
 cargo clippy --all-features
 ```
+
+---
+
+## <span id="changelog">📋 更新日志</span>
+
+详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
