@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! SQL 注入检测示例
 //!
 //! 演示 `contains_sql_injection` 函数的使用，包括：

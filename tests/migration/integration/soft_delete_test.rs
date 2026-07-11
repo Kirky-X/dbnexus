@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Tasks 6.10-6.12: soft_delete 集成测试
 //!
 //! 验证 `#[db_entity(table_name = "...", primary_key = "...", soft_delete = true)]`：

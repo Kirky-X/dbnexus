@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! sea-orm 类型特性桥接测试
 //!
 //! 验证 `with-chrono` 和 `with-uuid` 特性是否正确桥接 sea-orm 的类型支持：

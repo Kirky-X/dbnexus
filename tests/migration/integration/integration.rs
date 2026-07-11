@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 迁移集成测试
 //!
 //! 注意: 部分测试需要内部 API，已暂时跳过

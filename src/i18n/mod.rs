@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! ICU4X-backed internationalization formatting for database operations.
 //!
 //! Provides locale-aware number formatting, date formatting, plural rules,

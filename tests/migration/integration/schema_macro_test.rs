@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Task 4.9: schema() 方法集成测试
 //!
 //! 验证 `#[db_entity]` 宏生成的 `schema(backend)` 方法：

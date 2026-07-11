@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Advanced RBAC 权限提供者实现
 //!
 //! 提供基于角色的访问控制（RBAC）的高级权限提供者，支持角色继承。

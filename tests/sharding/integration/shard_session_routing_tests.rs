@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 分片路由 Session 集成测试 (T068)
 //!
 //! 测试 v0.3.0 新增的 ShardRouter 分片路由 API：

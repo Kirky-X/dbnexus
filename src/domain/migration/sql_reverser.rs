@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 use sqlparser::ast::{AlterTableOperation, Statement};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 自动迁移集成测试
 //!
 //! 测试自动迁移功能的各个组件：配置解析、迁移扫描、手动迁移、自动迁移触发等

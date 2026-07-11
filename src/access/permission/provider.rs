@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 权限提供者 trait 和实现
 //!
 //! 定义权限配置的通用接口，便于测试和替换实现。

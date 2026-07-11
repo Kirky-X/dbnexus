@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 分片路由性能基准测试（T092）
 //!
 //! 衡量 `ShardRouter` 的核心路由开销：

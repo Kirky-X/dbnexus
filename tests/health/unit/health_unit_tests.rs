@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 健康检查模块单元测试
 //!
 //! 测试健康检查模块的核心功能，包括熔断器、连接池指标、健康检查器和自动恢复器。

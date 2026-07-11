@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DB Nexus 过程宏定义
 //!
 //! 提供 `#[db_entity]` 统一属性宏，替代旧版的 `DbEntity`（derive）、`db_crud`、`db_permission`、

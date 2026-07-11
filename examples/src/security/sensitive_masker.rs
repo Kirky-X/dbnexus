@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 敏感数据脱敏示例
 //!
 //! 展示如何使用 SensitiveMasker 对不同类型的敏感数据进行脱敏：

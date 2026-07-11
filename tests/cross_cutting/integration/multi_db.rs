@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-// Licensed under MIT License
-
+// SPDX-License-Identifier: MIT
 #[path = "../../common/mod.rs"]
 mod common;
 

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DbNexusKit 统一能力管理示例
 //!
 //! 演示如何使用 [`DbNexusKit`] 进行模块能力的注册、发现和替换：

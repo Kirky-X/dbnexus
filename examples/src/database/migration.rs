@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 数据库迁移示例
 //!
 //! 演示如何使用 [`MigrationExecutor`] 执行数据库迁移：
