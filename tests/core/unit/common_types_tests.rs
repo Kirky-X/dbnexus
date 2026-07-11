@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! common::error 与 DatabaseType 单元测试
+//! error 与 DatabaseType 单元测试
 //!
 //! 覆盖：
 //! - `DatabaseType` 枚举的默认值、Display、Clone/Copy、PartialEq、Debug、Serialize/Deserialize
 //! - `DbNexusResult` 类型别名 Ok 路径
 
-use dbnexus::common::error::DbNexusResult;
+use dbnexus::error::DbNexusResult;
 use dbnexus::foundation::config::DatabaseType;
 
 // ============================================================================

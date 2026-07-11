@@ -230,7 +230,7 @@ impl DatabaseType {
     ///
     /// - URL 解析失败（无 scheme）
     /// - 未知数据库协议
-    pub fn from_url(url: &str) -> Result<Self, crate::common::error::DbNexusError> {
+    pub fn from_url(url: &str) -> Result<Self, crate::error::DbNexusError> {
         // 处理 SQLite 特殊格式 sqlite::memory: / sqlite3::memory:
         let lower = url.to_lowercase();
         if lower == "sqlite::memory:" || lower.starts_with("sqlite://") || lower.starts_with("sqlite3://") {
@@ -241,7 +241,7 @@ impl DatabaseType {
         }
 
         let parsed = url::Url::parse(url).map_err(|_| {
-            crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!("failed to parse URL: {url}"))
+            crate::error::DbNexusError::UnsupportedDatabaseScheme(format!("failed to parse URL: {url}"))
         })?;
 
         match parsed.scheme() {
@@ -249,7 +249,7 @@ impl DatabaseType {
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
             "mysql" => Ok(DatabaseType::MySql),
             "duckdb" => Ok(DatabaseType::DuckDb),
-            other => Err(crate::common::error::DbNexusError::UnsupportedDatabaseScheme(format!(
+            other => Err(crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
                 "'{other}' is not a supported database scheme"
             ))),
         }
@@ -260,7 +260,7 @@ impl DatabaseType {
     /// # Errors
     ///
     /// 同 [`from_url`](Self::from_url)
-    pub fn parse_database_type(url: &str) -> Result<Self, crate::common::error::DbNexusError> {
+    pub fn parse_database_type(url: &str) -> Result<Self, crate::error::DbNexusError> {
         Self::from_url(url)
     }
 
@@ -522,7 +522,7 @@ impl DbConfig {
     /// # Errors
     ///
     /// URL 解析失败或未知协议时返回 `DbNexusError::UnsupportedDatabaseScheme`
-    pub fn database_type(&self) -> Result<DatabaseType, crate::common::error::DbNexusError> {
+    pub fn database_type(&self) -> Result<DatabaseType, crate::error::DbNexusError> {
         DatabaseType::from_url(&self.url)
     }
 
