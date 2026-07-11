@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 错误类型单元测试
 //!
 //! 测试 DbError, PoolError, PermissionError, ConfigError, MigrationError, AuditError

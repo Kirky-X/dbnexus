@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! YAML 配置文件示例
 //!
 //! 演示如何通过 YAML 字符串创建 [`DbConfig`] 并构建连接池：

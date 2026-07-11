@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! PermissionCache TTL + SWR 单元测试（v0.3.0 T063 新增）
 //!
 //! 覆盖：

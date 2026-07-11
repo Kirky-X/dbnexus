@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! PostgreSQL testcontainers 集成测试
 //!
 //! 使用 testcontainers 启动真实的 PostgreSQL 容器，验证 dbnexus 在真实数据库环境下的

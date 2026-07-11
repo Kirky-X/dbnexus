@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 密码哈希与用户认证示例
 //!
 //! 演示 `PasswordHasher` 与 `AuthenticationManager` 的完整使用流程：

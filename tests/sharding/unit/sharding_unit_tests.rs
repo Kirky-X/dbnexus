@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 分片系统单元测试
 //!
 //! 覆盖分片策略配置、哈希分片算法、范围分片算法、跨分片查询聚合、

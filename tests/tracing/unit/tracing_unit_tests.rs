@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! TracingGuard 单元测试
 //!
 //! 测试 [`dbnexus::TracingGuard::init_with_otlp`] 的初始化、重复初始化安全、

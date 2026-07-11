@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DDL 辅助函数
 //!
 //! 提供 `users` / `articles` 表的快捷创建函数，统一示例中的 `CREATE TABLE` 样板。

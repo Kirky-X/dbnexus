@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DbNexusKit 高级示例：同时注册 pool + permission + metrics 三个能力
 //!
 //! 本示例在 [`kit_usage`] 基础上演示更复杂的 Kit 组合场景：

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 连接池单元测试
 //!
 //! 测试连接池的核心功能，包括配置初始化、连接限制、超时处理和泄漏检测。

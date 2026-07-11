@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! db_entity 高级查询示例（schema + query + paginate + batch）
 //!
 //! 演示 `#[db_entity(...)]` 宏生成的高级查询和批量操作方法：

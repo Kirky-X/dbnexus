@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 权限上下文辅助函数
 //!
 //! 为使用 `#[db_permission]` 宏的示例提供统一的 `PermissionContext` 构造方式。

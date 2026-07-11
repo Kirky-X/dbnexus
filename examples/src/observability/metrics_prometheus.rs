@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Prometheus 指标导出示例
 //!
 //! 演示 `MetricsCollector` 的完整使用流程：

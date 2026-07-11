@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 数据库连接池与会话辅助函数
 //!
 //! 提供三种典型场景的快捷构造方式，统一示例中的 DbPool/Session 样板代码：

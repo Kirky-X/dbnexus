@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Sea-ORM `TableCreateStatement` → `migration::schema::Table` 转换器
 //!
 //! ## 映射表（Task 4.1）

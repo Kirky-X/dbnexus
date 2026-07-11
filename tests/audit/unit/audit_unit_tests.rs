@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 审计模块单元测试
 //!
 //! 测试审计日志的核心功能，包括日志轮转、敏感数据脱敏、压缩存储、导出、完整性校验和异步写入。

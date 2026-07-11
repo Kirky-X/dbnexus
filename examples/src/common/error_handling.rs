@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 结构化错误报告示例
 //!
 //! 演示 v0.3.0 新增的 [`QueryErrorReport`] 与 [`ErrorCategory`] 的使用：

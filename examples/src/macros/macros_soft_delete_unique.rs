@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 软删除与唯一约束示例
 //!
 //! 演示 `#[db_entity(..., soft_delete = true)]` 配合复合唯一约束 `UNIQUE(email, deleted_at)`

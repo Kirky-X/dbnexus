@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DuckDB 后端查询示例（v0.3.0 新增）
 //!
 //! 演示 [`DuckDbConnection`] 的完整使用流程：

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 测试辅助模块
 //!
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
