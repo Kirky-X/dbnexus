@@ -1,11 +1,17 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project will be documented in this file.
+本项目所有显著变更都将记录在此文件中。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
+本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
 ## [Unreleased]
+
+### 变更
+
+- **edition 2024 升级**: workspace 从 edition 2021 升级到 edition 2024
+- **rust-version 1.85**: 最低支持的 Rust 版本提升至 1.85（edition 2024 要求）
+- **MIT license 统一**: workspace 统一采用 MIT 许可证，所有子 crate（dbnexus、dbnexus-macros、dbnexus-examples）均使用同一许可证
 
 ## [0.3.0] - 2026-07-03
 
