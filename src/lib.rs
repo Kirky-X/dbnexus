@@ -12,7 +12,7 @@
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
-#![doc(html_root_url = "https://docs.rs/dbnexus/0.3.2")]
+#![doc(html_root_url = "https://docs.rs/dbnexus/0.3.3")]
 
 // ============================================================================
 // 编译期数据库特性互斥检查
