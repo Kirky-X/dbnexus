@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DDL 安全守卫模块
 //!
 //! 提供基于 AST（抽象语法树）的 DDL 语句验证，相比字符串前缀匹配更安全可靠。

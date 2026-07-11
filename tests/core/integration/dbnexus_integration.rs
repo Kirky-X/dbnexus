@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! DbNexus 核心入口集成测试
 //!
 //! 覆盖 DbPool 初始化、连接、关闭和 DbPoolBuilder 构建等功能测试

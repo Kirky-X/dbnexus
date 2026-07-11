@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 分布式追踪模块
 //!
 //! 基于 OpenTelemetry + tracing-opentelemetry 桥接，提供 OTLP gRPC 导出能力。

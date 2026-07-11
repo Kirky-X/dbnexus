@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 健康检查模块集成测试
 //!
 //! 测试连接池健康检查、熔断器模式、性能指标收集和自动恢复机制

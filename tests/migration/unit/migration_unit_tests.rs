@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Migration 模块单元测试
 //!
 //! 测试数据库迁移的独立组件：Schema、SQL生成、类型转换等（无需数据库连接）

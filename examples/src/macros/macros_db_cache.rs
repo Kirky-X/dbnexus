@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! db_entity 宏 cache 子参数示例
 //!
 //! 演示 `#[db_entity(..., cache(...))]` 生成的缓存配置常量与方法：

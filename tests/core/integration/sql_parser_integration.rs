@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! SQL 解析模块集成测试
 //!
 //! 测试 SQL 解析、操作类型检测和权限动作映射功能

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Tasks 5.5-5.8: query/paginate/insert_many/update_many 集成测试
 //!
 //! 验证 `#[db_entity]` 宏生成的方法：

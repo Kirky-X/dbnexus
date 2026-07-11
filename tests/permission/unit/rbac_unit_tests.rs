@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! RBAC 权限提供者单元测试
 //!
 //! 测试 RbacProvider 的核心功能，包括：

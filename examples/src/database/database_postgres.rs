@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! PostgreSQL 数据库集成示例
 //!
 //! 演示如何连接 PostgreSQL 并执行基本操作。

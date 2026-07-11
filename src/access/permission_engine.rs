@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 可插拔权限引擎模块
 //!
 //! 提供灵活的权限引擎架构，支持多种权限提供者实现：

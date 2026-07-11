@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 指标系统性能基准测试（T093）
 //!
 //! 衡量 `MetricsCollector` 与 `LatencyHistogram` 的核心操作开销：
