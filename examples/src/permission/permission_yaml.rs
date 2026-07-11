@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! YAML 权限策略示例
 //!
 //! 演示 `YamlPermissionProvider` 的使用，包括：

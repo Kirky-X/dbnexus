@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Task 6.1-6.3 验证: timestamps = true 自动时间戳集成测试
 //!
 //! 验证 `#[db_entity(table_name = "...", primary_key = "...", timestamps = true)]`：

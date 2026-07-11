@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 权限领域模块
 //!
 //! 提供基于角色的权限控制能力

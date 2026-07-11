@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! RBAC 权限控制示例
 //!
 //! 演示 `MemoryPermissionProvider` 的使用，包括：

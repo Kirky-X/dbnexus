@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 全局索引单元测试
 //!
 //! 测试 IndexEntry、SyncEvent、SyncResult 等基础数据结构

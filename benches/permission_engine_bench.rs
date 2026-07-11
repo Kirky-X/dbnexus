@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 权限引擎性能基准测试（T091）
 //!
 //! 衡量 `PermissionCache` 的核心操作开销：

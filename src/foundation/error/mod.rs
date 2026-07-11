@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under MIT License
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 子错误类型模块
 //!
 //! 定义 DBNexus 项目中各功能模块的子错误类型。

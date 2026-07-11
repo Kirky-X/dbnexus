@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 权限缓存（TTL + SWR）
 //!
 //! 提供 `PermissionCache`：基于 `DashMap` 的线程安全权限策略缓存，支持：

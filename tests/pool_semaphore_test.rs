@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 信号量许可管理测试（Perf-1 修复验证）
 //!
 //! 测试连接池信号量许可的正确归还，确保无死锁和许可泄漏。

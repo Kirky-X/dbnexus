@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 共享示例实体
 //!
 //! 定义跨示例复用的实体（`user::Model`、`article::Model`），避免每个示例都重复声明

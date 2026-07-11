@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License.
-// See LICENSE file in project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! 统一错误类型
 
 use std::fmt;

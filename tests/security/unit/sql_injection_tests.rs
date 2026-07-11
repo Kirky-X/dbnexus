@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! SQL 注入检测测试套件
 //!
 //! 专门测试小写变体的注入模式，验证 `contains_sql_injection` 函数的大小写不敏感行为。

@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! Authentication 集成测试（T079-T084）
 //!
 //! 通过公共 API 测试 JWT 签发/验证、密码哈希、AuthenticationManager 认证流程。

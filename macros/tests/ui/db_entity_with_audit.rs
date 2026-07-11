@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // db_entity 宏 audit 子参数测试
 #![allow(unexpected_cfgs)]
 

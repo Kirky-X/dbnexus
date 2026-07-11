@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! db_entity 宏测试套件
 //!
 //! 测试 `#[db_entity(...)]` 统一属性宏的正确性

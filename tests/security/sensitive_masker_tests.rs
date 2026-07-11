@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//
-// Licensed under the MIT License
-// See LICENSE file in the project root for full license information.
-
+// SPDX-License-Identifier: MIT
 //! SensitiveMasker 外部测试（T085-T087）
 //!
 //! 通过公共 API `SensitiveMasker::mask(data, mask_type)` 测试各类脱敏场景。
