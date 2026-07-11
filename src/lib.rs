@@ -148,17 +148,9 @@ pub use crate::access::security::{DdlGuard, DdlValidationResult};
 pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(feature = "permission")]
-#[cfg(not(feature = "permission-engine"))]
 pub use crate::access::permission::{
     MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
     PermissionConfig, PermissionContext, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
-    RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
-};
-
-#[cfg(all(feature = "permission", feature = "permission-engine"))]
-pub use crate::access::permission::{
-    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
-    PermissionConfig, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
     RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
