@@ -181,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dbnexus = "0.3.2"
+dbnexus = "0.3.3"
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
@@ -307,16 +307,16 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # SQLite（默认，嵌入式）
-dbnexus = { version = "0.3.2", features = ["sqlite"] }
+dbnexus = { version = "0.3.3", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.3.2", features = ["postgres"] }
+dbnexus = { version = "0.3.3", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.3.2", features = ["mysql"] }
+dbnexus = { version = "0.3.3", features = ["mysql"] }
 
 # DuckDB（嵌入式分析型数据库，0.3.0 新增）
-dbnexus = { version = "0.3.2", features = ["duckdb"] }
+dbnexus = { version = "0.3.3", features = ["duckdb"] }
 ```
 
 ### 协议兼容数据库
@@ -335,13 +335,13 @@ DBNexus 通过标准协议支持以下兼容数据库（无需额外特性，使
 
 ```toml
 # Tokio with RustLS（默认）
-dbnexus = { version = "0.3.2", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.3.3", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.3.2", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.3.3", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.3.2", features = ["runtime-async-std"] }
+dbnexus = { version = "0.3.3", features = ["runtime-async-std"] }
 ```
 
 ### 可选功能
@@ -349,16 +349,16 @@ dbnexus = { version = "0.3.2", features = ["runtime-async-std"] }
 ```toml
 # 核心功能
 # 权限控制（自动启用 sql-parser + yaml + cache 特性，强制依赖 sql-parser 防 SQL 注入）
-dbnexus = { version = "0.3.2", features = ["permission"] }
+dbnexus = { version = "0.3.3", features = ["permission"] }
 
 # SQL 解析（自动启用 cache 特性）
-dbnexus = { version = "0.3.2", features = ["sql-parser"] }
+dbnexus = { version = "0.3.3", features = ["sql-parser"] }
 
 # 过程宏
-dbnexus = { version = "0.3.2", features = ["macros"] }
+dbnexus = { version = "0.3.3", features = ["macros"] }
 
 # 企业级功能
-dbnexus = { version = "0.3.2", features = [
+dbnexus = { version = "0.3.3", features = [
     "metrics",          # Prometheus 指标
     "tracing",          # 分布式追踪
     "audit",            # 审计日志
@@ -370,7 +370,7 @@ dbnexus = { version = "0.3.2", features = [
 ] }
 
 # 配置
-dbnexus = { version = "0.3.2", features = [
+dbnexus = { version = "0.3.3", features = [
     "yaml",            # YAML 配置支持
     "config-toml",     # TOML 配置支持
     "config-env",      # 环境变量（默认）
