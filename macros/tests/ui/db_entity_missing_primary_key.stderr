@@ -1,5 +1,5 @@
 error: #[db_entity] requires `primary_key = "..."` parameter
- --> tests/ui/db_entity_missing_primary_key.rs:8:12
-  |
-8 | pub struct Model {
-  |            ^^^^^
+  --> tests/ui/db_entity_missing_primary_key.rs:10:12
+   |
+10 | pub struct Model {
+   |            ^^^^^
