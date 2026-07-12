@@ -5,31 +5,33 @@
 <img src="docs/image/logo/logo.png" alt="DBNexus Logo" width="200" style="margin-bottom: 16px;">
 
 <p>
-  <!-- CI/CD 状态 -->
+  <!-- CI/CD Status -->
   <a href="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml">
     <img src="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg" alt="CI Status" style="display:inline;margin:0 4px;">
   </a>
-  <!-- 版本 -->
+  <!-- Version -->
   <a href="https://crates.io/crates/dbnexus">
     <img src="https://img.shields.io/crates/v/dbnexus.svg" alt="Version" style="display:inline;margin:0 4px;">
   </a>
-  <!-- 文档 -->
+  <!-- Documentation -->
   <a href="https://docs.rs/dbnexus">
     <img src="https://docs.rs/dbnexus/badge.svg" alt="Documentation" style="display:inline;margin:0 4px;">
   </a>
-  <!-- 下载量 -->
+  <!-- Downloads -->
   <a href="https://crates.io/crates/dbnexus">
     <img src="https://img.shields.io/crates/d/dbnexus.svg" alt="Downloads" style="display:inline;margin:0 4px;">
   </a>
-  <!-- 许可证 -->
+  <!-- License -->
   <a href="https://github.com/Kirky-X/dbnexus/blob/main/LICENSE">
     <img src="https://img.shields.io/crates/l/dbnexus.svg" alt="License" style="display:inline;margin:0 4px;">
   </a>
-  <!-- Rust 版本 -->
+  <!-- Rust Version -->
   <a href="https://www.rust-lang.org/">
     <img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+" style="display:inline;margin:0 4px;">
   </a>
 </p>
+
+[中文](./README.md)
 
 <p align="center">
   <strong>Enterprise-grade Database Abstraction Layer for Rust</strong>
@@ -44,8 +46,6 @@
 </p>
 
 </div>
-
-[中文](./README.md)
 
 ---
 
