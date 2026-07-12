@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use dbnexus::domain::migration::metadata::{MigrationMetadata, TableSnapshot, ColumnDefinition};
+//! use dbnexus::domain::{MigrationMetadata, TableSnapshot, ColumnDefinition};
 //!
 //! let mut metadata = MigrationMetadata::new(
 //!     1,
@@ -100,7 +100,7 @@ impl MigrationMetadata {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::domain::migration::MigrationMetadata;
+    /// use dbnexus::domain::MigrationMetadata;
     ///
     /// let metadata = MigrationMetadata::new(
     ///     1,

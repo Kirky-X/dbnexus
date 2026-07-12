@@ -15,6 +15,16 @@ pub mod sharding;
 // Re-exports
 #[cfg(feature = "migration")]
 pub use migration::MigrationExecutor;
-pub use pool::{ConnectionPool, DatabaseSession, DbPool, DbPoolBuilder, Session};
+#[cfg(feature = "migration")]
+pub use migration::{
+    Column, ColumnType, Index, Migration, MigrationFile, MigrationFileParser, MigrationHistory, MigrationVersion,
+    Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+};
+pub use pool::{
+    ConnectionPool, DatabaseConnection, DatabaseSession, DbConnection, DbPool, DbPoolBuilder, PoolStatus, Session,
+};
+pub use pool::{ConnectionTrait, TransactionTrait};
+#[cfg(feature = "duckdb")]
+pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
-pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy};
+pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};

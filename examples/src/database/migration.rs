@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // MigrationExecutor 需要一个 sea_orm::DatabaseConnection
     let conn = connect_for_migration(db_url).await?;
-    let mut executor = MigrationExecutor::new(conn, dbnexus::foundation::config::DatabaseType::Sqlite);
+    let mut executor = MigrationExecutor::new(conn, dbnexus::foundation::DatabaseType::Sqlite);
     println!("✓ 迁移执行器创建成功");
 
     // ============================================

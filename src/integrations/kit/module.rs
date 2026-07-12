@@ -40,10 +40,10 @@ use trait_kit::prelude::*;
 
 use oxcache::integrations::kit::OxcacheModule;
 
-use crate::database::pool::{ConnectionPool, DbPoolBuilder};
-use crate::foundation::config::DbConfig;
-use crate::foundation::error::DbError;
-use crate::integrations::oxcache_adapter::OxcacheDbCacheAdapter;
+use crate::database::{ConnectionPool, DbPoolBuilder};
+use crate::foundation::DbConfig;
+use crate::foundation::DbError;
+use crate::integrations::OxcacheDbCacheAdapter;
 
 /// trait-kit `AsyncKit` module that constructs a dbnexus `DbPool`.
 ///

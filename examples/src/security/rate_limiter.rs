@@ -18,7 +18,7 @@
 //! cargo run --example rate_limiter --features "permission"
 //! ```
 
-use dbnexus::access::permission::RateLimiter;
+use dbnexus::access::RateLimiter;
 use std::time::Duration;
 
 #[tokio::main]
