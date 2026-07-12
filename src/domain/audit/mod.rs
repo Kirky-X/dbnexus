@@ -807,7 +807,7 @@ mod tests {
 /// ```rust
 /// use dbnexus::{AuditEvent, AuditOperation, AuditSeverity};
 ///
-/// # fn example() -> Result<(), dbnexus::domain::audit::BuildError> {
+/// # fn example() -> Result<(), dbnexus::domain::BuildError> {
 /// let event = AuditEvent::builder()
 ///     .operation(AuditOperation::Create)
 ///     .entity_type("users")

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 内存权限提供者实现
 
-use crate::domain::permission::{
+use crate::domain::{
     PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle, PermissionProvider,
     PolicyManager, RolePolicy,
 };

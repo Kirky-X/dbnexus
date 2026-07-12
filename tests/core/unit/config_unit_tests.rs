@@ -9,7 +9,7 @@
 //! - `foundation::config::DatabaseType` 的 `from_url`/`as_str`/`is_real_database`/`Display`
 //! - `ConfigError` 各变体 Display
 
-use dbnexus::foundation::config::{
+use dbnexus::foundation::{
     CacheConfig, ConfigError, DatabaseType as FoundationDatabaseType, DbConfig, PoolConfig as FoundationPoolConfig,
 };
 use std::time::Duration;

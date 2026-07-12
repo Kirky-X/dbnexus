@@ -17,7 +17,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::access::permission::{PermissionAction, PermissionContext};
+use dbnexus::access::{PermissionAction, PermissionContext};
 use dbnexus::db_entity;
 use sea_orm::entity::prelude::*;
 

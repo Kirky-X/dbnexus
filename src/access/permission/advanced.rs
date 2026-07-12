@@ -108,7 +108,7 @@ impl AdvancedRbacProvider {
     /// # Arguments
     ///
     /// * `config` - 数据库配置引用
-    pub fn from_config(config: &crate::foundation::config::DbConfig) -> Self {
+    pub fn from_config(config: &crate::foundation::DbConfig) -> Self {
         // 使用 policy_cache_capacity 作为继承角色缓存的容量
         // 这是一个合理的默认值，因为角色数量通常远小于权限策略数量
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
