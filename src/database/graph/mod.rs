@@ -18,6 +18,11 @@
 //! - [`GraphConnection`][]: 图数据库连接（execute_cypher / health_check / begin_graph_txn）
 //! - [`GraphTransaction`][]: 图数据库事务（commit / rollback / execute_cypher）
 
+#[cfg(feature = "ladybug")]
+pub mod ladybug_conn;
+#[cfg(feature = "neo4j")]
+pub mod neo4j_conn;
+
 use crate::foundation::DbResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
