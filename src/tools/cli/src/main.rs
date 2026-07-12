@@ -564,6 +564,11 @@ async fn rollback_migration(
                 "Migration rollback for DuckDB is not supported via SeaORM backend".to_string(),
             ));
         }
+        MigrationDatabaseType::Ladybug | MigrationDatabaseType::Neo4j => {
+            return Err(DbError::Config(
+                "Migration rollback for graph databases is not supported".to_string(),
+            ));
+        }
     };
     let delete_sql = sea_orm::Statement::from_sql_and_values(
         backend,

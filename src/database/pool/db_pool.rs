@@ -24,6 +24,8 @@ use tokio::time::timeout;
 use super::Session;
 #[cfg(feature = "permission")]
 use crate::access::PermissionConfig;
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+use crate::database::GraphConnection;
 use crate::foundation::{ConfigError, DbConfig};
 use crate::foundation::{DbError, DbResult};
 #[cfg(feature = "metrics")]
@@ -39,6 +41,8 @@ pub type DatabaseConnection = sea_orm::DatabaseConnection;
 ///
 /// 支持 SeaORM（SQLite/PostgreSQL/MySQL）和 DuckDB 两种后端连接。
 /// `DbPool` 和 `Session` 通过此枚举统一管理不同后端的连接。
+///
+/// 0.4.0 新增 Ladybug 和 Neo4j 图数据库后端。
 #[derive(Clone)]
 pub enum DbConnection {
     /// SeaORM 连接（SQLite/PostgreSQL/MySQL）
@@ -46,10 +50,16 @@ pub enum DbConnection {
     /// DuckDB 嵌入式连接（duckdb feature）
     #[cfg(feature = "duckdb")]
     DuckDb(crate::database::DuckDbConnection),
+    /// Ladybug 嵌入式图数据库连接（ladybug feature）
+    #[cfg(feature = "ladybug")]
+    Ladybug(Arc<crate::database::LadybugConnection>),
+    /// Neo4j 图数据库服务器连接（neo4j feature）
+    #[cfg(feature = "neo4j")]
+    Neo4j(Arc<crate::database::Neo4jConnection>),
 }
 
 impl DbConnection {
-    /// 获取 SeaORM 连接引用，若为 DuckDB 则返回错误
+    /// 获取 SeaORM 连接引用，若为其他后端则返回错误
     pub fn as_sea_orm(&self) -> DbResult<&DatabaseConnection> {
         match self {
             DbConnection::SeaOrm(conn) => Ok(conn),
@@ -57,16 +67,54 @@ impl DbConnection {
             DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
                 "Operation requires SeaORM connection but got DuckDb".to_string(),
             ))),
+            #[cfg(feature = "ladybug")]
+            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires SeaORM connection but got Ladybug".to_string(),
+            ))),
+            #[cfg(feature = "neo4j")]
+            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires SeaORM connection but got Neo4j".to_string(),
+            ))),
         }
     }
 
-    /// 获取 DuckDB 连接引用，若为 SeaORM 则返回错误
+    /// 获取 DuckDB 连接引用，若为其他后端则返回错误
     #[cfg(feature = "duckdb")]
     pub fn as_duckdb(&self) -> DbResult<&crate::database::DuckDbConnection> {
         match self {
             DbConnection::DuckDb(conn) => Ok(conn),
             DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
                 "Operation requires DuckDb connection but got SeaOrm".to_string(),
+            ))),
+            #[cfg(feature = "ladybug")]
+            DbConnection::Ladybug(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires DuckDb connection but got Ladybug".to_string(),
+            ))),
+            #[cfg(feature = "neo4j")]
+            DbConnection::Neo4j(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires DuckDb connection but got Neo4j".to_string(),
+            ))),
+        }
+    }
+
+    /// 获取图数据库连接引用（`&dyn GraphConnection`），若为关系型后端则返回错误
+    ///
+    /// # Errors
+    ///
+    /// 当连接为 SeaOrm 或 DuckDb 时返回 `DbError::Connection`。
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    pub fn as_graph(&self) -> DbResult<&dyn crate::database::GraphConnection> {
+        match self {
+            #[cfg(feature = "ladybug")]
+            DbConnection::Ladybug(conn) => Ok(conn.as_ref()),
+            #[cfg(feature = "neo4j")]
+            DbConnection::Neo4j(conn) => Ok(conn.as_ref()),
+            DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires graph connection but got SeaOrm".to_string(),
+            ))),
+            #[cfg(feature = "duckdb")]
+            DbConnection::DuckDb(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "Operation requires graph connection but got DuckDb".to_string(),
             ))),
         }
     }
@@ -82,6 +130,23 @@ impl DbConnection {
             false
         }
     }
+
+    /// 判断是否为图数据库连接（Ladybug 或 Neo4j）
+    pub fn is_graph(&self) -> bool {
+        #[cfg(feature = "ladybug")]
+        {
+            if matches!(self, DbConnection::Ladybug(_)) {
+                return true;
+            }
+        }
+        #[cfg(feature = "neo4j")]
+        {
+            if matches!(self, DbConnection::Neo4j(_)) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl std::fmt::Debug for DbConnection {
@@ -90,6 +155,10 @@ impl std::fmt::Debug for DbConnection {
             DbConnection::SeaOrm(_) => write!(f, "DbConnection::SeaOrm(..)"),
             #[cfg(feature = "duckdb")]
             DbConnection::DuckDb(conn) => write!(f, "DbConnection::DuckDb({conn:?})"),
+            #[cfg(feature = "ladybug")]
+            DbConnection::Ladybug(conn) => write!(f, "DbConnection::Ladybug({conn:?})"),
+            #[cfg(feature = "neo4j")]
+            DbConnection::Neo4j(conn) => write!(f, "DbConnection::Neo4j({conn:?})"),
         }
     }
 }
@@ -653,6 +722,34 @@ impl DbPool {
                     )))
                 }
             }
+            crate::foundation::DatabaseType::Ladybug => {
+                #[cfg(feature = "ladybug")]
+                {
+                    let pool_size = config.max_connections as usize;
+                    let conn = crate::database::LadybugConnection::new(&config.url, pool_size)?;
+                    Ok(DbConnection::Ladybug(Arc::new(conn)))
+                }
+                #[cfg(not(feature = "ladybug"))]
+                {
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(
+                        "Ladybug feature is not enabled".to_string(),
+                    )))
+                }
+            }
+            crate::foundation::DatabaseType::Neo4j => {
+                #[cfg(feature = "neo4j")]
+                {
+                    let (uri, user, password) = crate::database::Neo4jConnection::parse_url(&config.url)?;
+                    let conn = crate::database::Neo4jConnection::new(&uri, &user, &password).await?;
+                    Ok(DbConnection::Neo4j(Arc::new(conn)))
+                }
+                #[cfg(not(feature = "neo4j"))]
+                {
+                    Err(DbError::Connection(sea_orm::DbErr::Custom(
+                        "Neo4j feature is not enabled".to_string(),
+                    )))
+                }
+            }
             _ => {
                 let conn = sea_orm::Database::connect(&config.url).await?;
                 Ok(DbConnection::SeaOrm(conn))
@@ -785,6 +882,16 @@ impl DbPool {
                 let result = timeout(Duration::from_secs(5), duck_conn.health_check()).await;
                 matches!(result, Ok(Ok(_)))
             }
+            #[cfg(feature = "ladybug")]
+            DbConnection::Ladybug(conn) => {
+                let result = timeout(Duration::from_secs(5), conn.health_check()).await;
+                matches!(result, Ok(Ok(_)))
+            }
+            #[cfg(feature = "neo4j")]
+            DbConnection::Neo4j(conn) => {
+                let result = timeout(Duration::from_secs(5), conn.health_check()).await;
+                matches!(result, Ok(Ok(_)))
+            }
         }
     }
 
@@ -856,6 +963,14 @@ impl DbPool {
                     .is_ok_and(|result| result.is_ok()),
                     #[cfg(feature = "duckdb")]
                     DbConnection::DuckDb(duck_conn) => timeout(Duration::from_secs(2), duck_conn.health_check())
+                        .await
+                        .is_ok_and(|result| result.is_ok()),
+                    #[cfg(feature = "ladybug")]
+                    DbConnection::Ladybug(graph_conn) => timeout(Duration::from_secs(2), graph_conn.health_check())
+                        .await
+                        .is_ok_and(|result| result.is_ok()),
+                    #[cfg(feature = "neo4j")]
+                    DbConnection::Neo4j(graph_conn) => timeout(Duration::from_secs(2), graph_conn.health_check())
                         .await
                         .is_ok_and(|result| result.is_ok()),
                 };
@@ -1427,5 +1542,160 @@ impl super::ConnectionPool for DbPool {
 
     fn config(&self) -> &DbConfig {
         self.config()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(feature = "ladybug")]
+    #[test]
+    fn test_ladybug_connection_is_graph() {
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
+        assert!(conn.is_graph(), "Ladybug connection should be graph");
+        assert!(!conn.is_duckdb(), "Ladybug connection should not be duckdb");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[test]
+    fn test_ladybug_connection_as_graph_returns_ok() {
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
+        let result = conn.as_graph();
+        assert!(result.is_ok(), "as_graph() on Ladybug should return Ok");
+        let graph = result.unwrap();
+        assert_eq!(graph.backend_name(), "ladybug");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[test]
+    fn test_ladybug_connection_as_sea_orm_returns_err() {
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
+        let result = conn.as_sea_orm();
+        assert!(result.is_err(), "as_sea_orm() on Ladybug should return Err");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[tokio::test]
+    async fn test_create_connection_ladybug_memory() {
+        let config = DbConfig {
+            url: "ladybug::memory:".to_string(),
+            max_connections: 4,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for ladybug::memory: should succeed");
+        assert!(conn.is_graph(), "should be graph connection");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        assert_eq!(graph.backend_name(), "ladybug");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[tokio::test]
+    async fn test_create_connection_ladybug_health_check() {
+        let config = DbConfig {
+            url: "ladybug::memory:".to_string(),
+            max_connections: 2,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for ladybug::memory: should succeed");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        graph.health_check().await.expect("health_check should pass");
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[test]
+    fn test_neo4j_connection_is_graph() {
+        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        assert!(conn.is_graph(), "Neo4j connection should be graph");
+        assert!(!conn.is_duckdb(), "Neo4j connection should not be duckdb");
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[test]
+    fn test_neo4j_connection_as_graph_returns_ok() {
+        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        let result = conn.as_graph();
+        assert!(result.is_ok(), "as_graph() on Neo4j should return Ok");
+        let graph = result.unwrap();
+        assert_eq!(graph.backend_name(), "neo4j");
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[test]
+    fn test_neo4j_connection_as_sea_orm_returns_err() {
+        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        let result = conn.as_sea_orm();
+        assert!(result.is_err(), "as_sea_orm() on Neo4j should return Err");
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[tokio::test]
+    #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
+    async fn test_create_connection_neo4j() {
+        let url = std::env::var("NEO4J_URL").unwrap_or_else(|_| "neo4j://localhost:7687".to_string());
+        let config = DbConfig {
+            url,
+            max_connections: 4,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for neo4j should succeed");
+        assert!(conn.is_graph(), "should be graph connection");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        assert_eq!(graph.backend_name(), "neo4j");
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_sea_orm_connection_is_graph_returns_false() {
+        let sea_conn = sea_orm::Database::connect("sqlite::memory:")
+            .await
+            .expect("sqlite memory connection");
+        let conn = DbConnection::SeaOrm(sea_conn);
+        assert!(!conn.is_graph(), "SeaOrm connection should not be graph");
+        assert!(!conn.is_duckdb(), "SeaOrm connection should not be duckdb");
+    }
+
+    #[cfg(all(feature = "sqlite", any(feature = "ladybug", feature = "neo4j")))]
+    #[tokio::test]
+    async fn test_sea_orm_connection_as_graph_returns_err() {
+        let sea_conn = sea_orm::Database::connect("sqlite::memory:")
+            .await
+            .expect("sqlite memory connection");
+        let conn = DbConnection::SeaOrm(sea_conn);
+        let result = conn.as_graph();
+        assert!(result.is_err(), "as_graph() on SeaOrm should return Err");
+    }
+
+    #[test]
+    fn test_db_connection_debug_format() {
+        #[cfg(feature = "ladybug")]
+        {
+            let conn = DbConnection::Ladybug(Arc::new(
+                crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+            ));
+            let debug_str = format!("{conn:?}");
+            assert!(
+                debug_str.contains("Ladybug"),
+                "Debug should contain 'Ladybug': {debug_str}"
+            );
+        }
+        #[cfg(feature = "neo4j")]
+        {
+            let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+            let debug_str = format!("{conn:?}");
+            assert!(debug_str.contains("Neo4j"), "Debug should contain 'Neo4j': {debug_str}");
+        }
     }
 }

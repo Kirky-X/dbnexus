@@ -7,6 +7,37 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-13
+
+### 新增
+
+- **图数据库支持**：新增 `LadybugConnection`（嵌入式图 DB，基于 lbug 0.18）和 `Neo4jConnection`（服务器端图 DB，基于 neo4rs 0.8），通过 `GraphConnection` trait 统一抽象
+- **图事务**：`Session` 新增 `execute_cypher` 方法，支持图事务分发（begin/commit/rollback），通过 `GraphTransaction` trait 抽象图事务句柄
+- **宏扩展**：`#[db_entity]` 新增 `exists()` 和 `find_by_ids()` 方法；新增 `#[db_graph]` 宏用于图实体代码生成；宏参数类型校验增强（非字符串字面量报错）
+- **权限模型**：`PermissionAction` 新增 `Traverse` 和 `Match` 变体用于图操作权限控制
+- **DatabaseType**：新增 `Ladybug` 和 `Neo4j` 变体，`from_url` 识别 `ladybug:`/`neo4j:`/`neo4j+s:`/`neo4j+ssc:` scheme
+- **DbConnection**：新增 `Ladybug(Arc<LadybugConnection>)` 和 `Neo4j(Arc<Neo4jConnection>)` 变体，`as_graph()`/`is_graph()` 方法
+- **feature gate**：新增 `ladybug` 和 `neo4j` feature（与关系型 DB 不互斥，允许混合使用）
+
+### 变更
+
+- `trait-kit` 依赖升级 `0.2` → `0.3`
+- `oxcache` 依赖升级 `0.3.4` → `0.3.8`（trait-kit 0.3 支持）
+- `parse_url`（Neo4j）返回 `Result`，无凭据时从环境变量读取或返回明确错误（LOW-001）
+- `LadybugConnection` 使用 `Arc<Semaphore>` 限制并发数（替代 `Vec<Connection>` 连接池，因 lbug 生命周期限制）
+
+### 修复
+
+- **HIGH-001**：图事务并发竞态 — `execute_cypher` 的 take → 锁外 await → put back 模式在并发下绕过事务隔离，新增 `graph_op_mutex` 串行化图操作
+- **FM-3.1**（RPN=216）：`execute_cypher` panic 时事务隔离被绕过 — PoisonGuard RAII 模式在 unwinding 时设置 poisoned 标记
+- **FM-3.6**（RPN=294）：`Session::Drop` 不处理图事务 — 通过级联 Drop 解决（LadybugTransaction actor 自动 ROLLBACK，Neo4jTransaction::Drop spawn rollback）
+- **FM-2.2**（RPN=168）：`Neo4jTransaction` 无 Drop impl — 实现 Drop，`try_lock` + `spawn` rollback task
+- **FM-1.6**（RPN=144）：`begin_graph_txn` 无并发限制 — `LadybugTransaction` 持有 `OwnedSemaphorePermit` 直到 commit/rollback
+- **M-48**：`LadybugConnection::parse_url` 路径遍历校验 — 拒绝包含 `..` 的路径
+- **M-49**：`Neo4jConnection::parse_url` 错误信息不回显原始 URL — 避免凭据泄露
+- **MED-004**：`LadybugConnection::execute_cypher` 行获取逻辑重复 — 去重为 `execute_cypher_on_conn` 共享函数
+- **MED-006**：宏参数类型不匹配时静默忽略 — 4 个参数 + hooks 加 `else` 分支报错
+
 ## [0.3.4] - 2026-07-12
 
 ### ⚠️ BREAKING CHANGES

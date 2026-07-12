@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! Database 模块
 //!
-//! 提供数据库连接管理、迁移、分片等功能
+//! 提供数据库连接管理、迁移、分片、图数据库等功能
 
+pub mod graph;
 #[cfg(feature = "migration")]
 pub mod migration;
 pub mod pool;
@@ -28,3 +29,12 @@ pub use pool::{ConnectionTrait, TransactionTrait};
 pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
 pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
+
+// 图数据库 re-exports
+#[cfg(feature = "ladybug")]
+pub use graph::ladybug_conn::LadybugConnection;
+#[cfg(feature = "neo4j")]
+pub use graph::neo4j_conn::Neo4jConnection;
+pub use graph::{
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+};

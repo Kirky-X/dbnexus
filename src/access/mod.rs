@@ -22,6 +22,8 @@ pub use security::{DdlGuard, DdlValidationResult};
 pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 // Re-exports: permission
+#[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
+pub use permission::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use permission::{
     AdvancedRbacProvider, CacheStats, MemoryPermissionProvider, PermissionAction, PermissionCache,
