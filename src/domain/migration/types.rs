@@ -99,7 +99,7 @@ pub enum ColumnChange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::migration::schema::{Column, ColumnType, Table};
+    use crate::domain::migration::{Column, ColumnType, Table};
 
     fn sample_column() -> Column {
         Column {

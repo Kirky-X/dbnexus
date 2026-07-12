@@ -5,7 +5,7 @@
 //! 提供数据库连接池的创建、管理和自动修正功能
 
 #[cfg(feature = "permission")]
-use crate::access::permission::RolePolicy;
+use crate::access::RolePolicy;
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
 use oxcache::Cache;
@@ -23,11 +23,11 @@ use tokio::time::timeout;
 
 use super::Session;
 #[cfg(feature = "permission")]
-use crate::access::permission::PermissionConfig;
-use crate::foundation::config::{ConfigError, DbConfig};
-use crate::foundation::error::{DbError, DbResult};
+use crate::access::PermissionConfig;
+use crate::foundation::{ConfigError, DbConfig};
+use crate::foundation::{DbError, DbResult};
 #[cfg(feature = "metrics")]
-use crate::observability::metrics::MetricsCollector;
+use crate::observability::MetricsCollector;
 
 // 导入 Sea-ORM 的连接 trait
 use sea_orm::ConnectionTrait;
@@ -45,7 +45,7 @@ pub enum DbConnection {
     SeaOrm(DatabaseConnection),
     /// DuckDB 嵌入式连接（duckdb feature）
     #[cfg(feature = "duckdb")]
-    DuckDb(crate::database::pool::DuckDbConnection),
+    DuckDb(crate::database::DuckDbConnection),
 }
 
 impl DbConnection {
@@ -62,7 +62,7 @@ impl DbConnection {
 
     /// 获取 DuckDB 连接引用，若为 SeaORM 则返回错误
     #[cfg(feature = "duckdb")]
-    pub fn as_duckdb(&self) -> DbResult<&crate::database::pool::DuckDbConnection> {
+    pub fn as_duckdb(&self) -> DbResult<&crate::database::DuckDbConnection> {
         match self {
             DbConnection::DuckDb(conn) => Ok(conn),
             DbConnection::SeaOrm(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
@@ -640,10 +640,10 @@ impl DbPool {
             .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("Invalid database URL: {e}"))))?;
 
         match db_type {
-            crate::foundation::config::DatabaseType::DuckDb => {
+            crate::foundation::DatabaseType::DuckDb => {
                 #[cfg(feature = "duckdb")]
                 {
-                    let conn = crate::database::pool::DuckDbConnection::new(&config.url)?;
+                    let conn = crate::database::DuckDbConnection::new(&config.url)?;
                     Ok(DbConnection::DuckDb(conn))
                 }
                 #[cfg(not(feature = "duckdb"))]
@@ -1338,7 +1338,7 @@ impl DbPool {
     /// 成功应用的迁移数量
     #[cfg(feature = "auto-migrate")]
     pub async fn run_migrations(&self, migrations_dir: &std::path::Path) -> Result<u32, DbError> {
-        use crate::database::migration::MigrationExecutor;
+        use crate::database::MigrationExecutor;
 
         let db_type = self
             .inner

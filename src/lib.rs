@@ -101,76 +101,76 @@ mod generated_roles;
 pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
 // DatabaseType 统一定一在 foundation::config（Task 15：合并 common::types::DatabaseType）
-pub use crate::foundation::config::DatabaseType;
+pub use crate::foundation::DatabaseType;
 
 // Foundation 导出 (旧版，保持兼容)
-pub use crate::foundation::config::{CacheConfig, ConfigError, DbConfig, PoolConfig};
-pub use crate::foundation::error::DbError;
-pub use crate::foundation::error::DbResult;
+pub use crate::foundation::DbError;
+pub use crate::foundation::DbResult;
 #[cfg(feature = "permission")]
-pub use crate::foundation::error::PermissionResult;
-pub use crate::foundation::error::{AuditError, MigrationError, MigrationResult};
-pub use crate::foundation::error::{ConfigResult, PoolResult};
+pub use crate::foundation::PermissionResult;
 pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
+pub use crate::foundation::{AuditError, MigrationError, MigrationResult};
+pub use crate::foundation::{CacheConfig, ConfigError, DbConfig, PoolConfig};
+pub use crate::foundation::{ConfigResult, PoolResult};
 
 // Domain cache provider 抽象导出（无 feature gate，domain 层核心 trait）
-pub use crate::domain::cache_provider::DbCacheProvider;
+pub use crate::domain::DbCacheProvider;
 
 // Domain Permission 导出 (新架构)
 #[cfg(feature = "permission")]
-pub use crate::domain::permission::{
+pub use crate::domain::{
     PermissionAction as DomainPermissionAction, PermissionConfig as NewPermissionConfig, PermissionConfigError,
     PermissionError as NewPermissionError, PermissionProvider, RolePolicy as DomainRolePolicy,
     TablePermission as DomainTablePermission,
 };
 
 // Database 导出
+pub use crate::database::DbConnection;
+pub use crate::database::DbPool;
+pub use crate::database::DbPoolBuilder;
+pub use crate::database::Session;
 #[cfg(feature = "migration")]
-pub use crate::database::migration::{
+pub use crate::database::{
     Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser, MigrationHistory,
     MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
-pub use crate::database::pool::DbConnection;
-pub use crate::database::pool::DbPool;
-pub use crate::database::pool::DbPoolBuilder;
-pub use crate::database::pool::Session;
-pub use crate::database::pool::{ConnectionPool, DatabaseSession};
+pub use crate::database::{ConnectionPool, DatabaseSession};
 
 // DuckDB 连接包装器导出（0.3.0 新增）
 #[cfg(feature = "duckdb")]
-pub use crate::database::pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
+pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
-pub use crate::database::sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
+pub use crate::database::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // Access 导出
 #[cfg(feature = "sql-parser")]
-pub use crate::access::security::{DdlGuard, DdlValidationResult};
-pub use crate::access::security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
+pub use crate::access::{DdlGuard, DdlValidationResult};
+pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(feature = "permission")]
-pub use crate::access::permission::{
+pub use crate::access::{
     MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
     PermissionConfig, PermissionContext, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
     RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
 };
 
 #[cfg(feature = "authentication")]
-pub use crate::access::authentication::{
+pub use crate::access::{
     AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager, PasswordHasher, TokenType,
     User,
 };
 
 #[cfg(feature = "sql-parser")]
-pub use crate::access::sql_parser::SqlParser;
+pub use crate::access::SqlParser;
 
 #[cfg(feature = "sql-parser")]
-pub use crate::access::sql_parser::SqlOperationType;
+pub use crate::access::SqlOperationType;
 
 #[cfg(feature = "sql-parser")]
-pub use crate::access::sql_parser::is_ddl_operation;
+pub use crate::access::is_ddl_operation;
 
 #[cfg(feature = "sql-parser")]
-pub use crate::access::sql_parser::contains_sql_injection;
+pub use crate::access::contains_sql_injection;
 
 #[cfg(feature = "permission-engine")]
 #[cfg(feature = "permission")]
@@ -183,12 +183,12 @@ pub use crate::access::permission_engine::{
 
 // Observability 导出
 #[cfg(feature = "health-check")]
-pub use crate::observability::health::{
+pub use crate::observability::{
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
     PoolHealthMetrics,
 };
 #[cfg(feature = "metrics")]
-pub use crate::observability::metrics::{
+pub use crate::observability::{
     ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
     MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
     TransactionStats,
@@ -196,26 +196,26 @@ pub use crate::observability::metrics::{
 
 // Tracing 导出（tracing feature）
 #[cfg(feature = "tracing")]
-pub use crate::observability::tracing::{TracingError, TracingGuard};
+pub use crate::observability::{TracingError, TracingGuard};
 
 // MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
-pub use crate::observability::metrics::MockMetrics;
+pub use crate::observability::MockMetrics;
 
 // Storage 导出
 #[cfg(feature = "global-index")]
-pub use crate::storage::global_index::{
+pub use crate::storage::{
     GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
 };
 
 // Business 导出（直接从 domain::audit 导出，移除 business 中间层）
 #[cfg(feature = "audit")]
-pub use crate::domain::audit::{
+pub use crate::domain::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
     AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
 #[cfg(feature = "audit")]
-pub use crate::foundation::error::AuditResult;
+pub use crate::foundation::AuditResult;
 
 // 过程宏 — 仅导出统一属性宏 `db_entity`（替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit）
 #[cfg(feature = "macros")]
@@ -223,11 +223,11 @@ pub use dbnexus_macros::db_entity;
 
 // Integration adapter 导出（oxcache-integration feature）
 #[cfg(feature = "oxcache-integration")]
-pub use crate::integrations::oxcache_adapter::OxcacheDbCacheAdapter;
+pub use crate::integrations::OxcacheDbCacheAdapter;
 
 // DbNexusModule 导出（kit feature — trait-kit 0.2.2 AsyncKit integration）
 #[cfg(feature = "kit")]
-pub use crate::integrations::kit::DbNexusModule;
+pub use crate::integrations::DbNexusModule;
 
 // I18n 导出（i18n feature — ICU4X 国际化格式化）
 #[cfg(feature = "i18n")]

@@ -15,7 +15,7 @@
 
 #[cfg(feature = "permission")]
 mod permission_tests {
-    use dbnexus::domain::permission::{
+    use dbnexus::domain::{
         DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig, PermissionConfigError, PermissionError,
         PermissionLifecycle, PolicyManager, PolicySet, RolePolicy, TablePermission, new, new_in_memory,
     };
@@ -713,7 +713,7 @@ editor:
     async fn test_with_cache_injection() {
         let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::new());
         let cfg = PermissionConfig::default();
-        let result = dbnexus::domain::permission::with_cache(cfg, cache).await;
+        let result = dbnexus::domain::with_cache(cfg, cache).await;
         assert!(result.is_ok(), "with_cache should succeed with default config");
     }
 
@@ -725,7 +725,7 @@ editor:
             policy_path: Some("/nonexistent/path/policy.yaml".into()),
             ..PermissionConfig::default()
         };
-        let result = dbnexus::domain::permission::with_cache(cfg, cache).await;
+        let result = dbnexus::domain::with_cache(cfg, cache).await;
         assert!(result.is_err());
     }
 

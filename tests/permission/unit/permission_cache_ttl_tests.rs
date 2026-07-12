@@ -13,9 +13,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use dbnexus::access::permission::{
-    MemoryPermissionProvider, PermissionAction, PermissionCache, RolePolicy, TablePermission,
-};
+use dbnexus::access::{MemoryPermissionProvider, PermissionAction, PermissionCache, RolePolicy, TablePermission};
 
 // ============================================================================
 // 辅助函数

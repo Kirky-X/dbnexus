@@ -19,7 +19,7 @@ impl SqlReverser {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::database::migration::SqlReverser;
+    /// use dbnexus::domain::SqlReverser;
     ///
     /// let reverser = SqlReverser::new();
     /// ```
@@ -43,7 +43,7 @@ impl SqlReverser {
     /// # Example
     ///
     /// ```rust
-    /// use dbnexus::database::migration::SqlReverser;
+    /// use dbnexus::domain::SqlReverser;
     ///
     /// let reverser = SqlReverser::new();
     /// let up_sql = "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255));";

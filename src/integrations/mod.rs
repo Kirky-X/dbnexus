@@ -12,3 +12,10 @@ pub mod oxcache_adapter;
 
 #[cfg(feature = "kit")]
 pub mod kit;
+
+// Re-exports
+#[cfg(feature = "oxcache-integration")]
+pub use oxcache_adapter::OxcacheDbCacheAdapter;
+
+#[cfg(feature = "kit")]
+pub use kit::DbNexusModule;
