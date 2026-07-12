@@ -739,10 +739,9 @@ impl DbPool {
             crate::foundation::DatabaseType::Neo4j => {
                 #[cfg(feature = "neo4j")]
                 {
-                    // T031 将替换为 Neo4jConnection::new(url, user, password)
-                    Err(DbError::Config(
-                        "Neo4j create_connection not yet wired (T031 will implement)".to_string(),
-                    ))
+                    let (uri, user, password) = crate::database::Neo4jConnection::parse_url(&config.url);
+                    let conn = crate::database::Neo4jConnection::new(&uri, &user, &password).await?;
+                    Ok(DbConnection::Neo4j(Arc::new(conn)))
                 }
                 #[cfg(not(feature = "neo4j"))]
                 {
@@ -1637,6 +1636,24 @@ mod tests {
         let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Neo4j should return Err");
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[tokio::test]
+    #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
+    async fn test_create_connection_neo4j() {
+        let url = std::env::var("NEO4J_URL").unwrap_or_else(|_| "neo4j://localhost:7687".to_string());
+        let config = DbConfig {
+            url,
+            max_connections: 4,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for neo4j should succeed");
+        assert!(conn.is_graph(), "should be graph connection");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        assert_eq!(graph.backend_name(), "neo4j");
     }
 
     #[cfg(feature = "sqlite")]
