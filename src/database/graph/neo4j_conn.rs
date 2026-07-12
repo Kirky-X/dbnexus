@@ -233,9 +233,35 @@ impl GraphConnection for Neo4jConnection {
 /// 包装 `neo4rs::Txn`，通过 `AsyncMutex<Option<Txn>>` 提供内部可变性。
 /// `execute_cypher` 锁定 mutex 调用 `Txn::execute`（需要 `&mut self`）。
 /// `commit`/`rollback` 从 `Option` 中取出 `Txn` 并消耗它。
+///
+/// # Drop 行为（FM-2.2 修复）
+///
+/// `neo4rs::Txn` 的 Drop 只归还连接到池，**不发送 ROLLBACK 消息**，服务器端事务
+/// 会一直保持到超时。此处 Drop 时尝试 `try_lock` + `spawn` rollback task：
+/// - 锁可用且在 tokio runtime 中：spawn 异步 rollback
+/// - 锁被持有（有操作正在进行）或不在 runtime 中：`Txn` 随 Drop 归还连接，
+///   服务器端事务在超时后回滚（neo4j 默认 60s）
 pub struct Neo4jTransaction {
     /// 事务句柄（None 表示已 commit/rollback）
     txn: AsyncMutex<Option<neo4rs::Txn>>,
+}
+
+impl Drop for Neo4jTransaction {
+    fn drop(&mut self) {
+        // FM-2.2 修复：未显式 commit/rollback 的事务在 Drop 时尝试 rollback
+        if let Ok(mut guard) = self.txn.try_lock() {
+            if let Some(txn) = guard.take() {
+                if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                    // 在 tokio runtime 中：spawn 异步 rollback，不阻塞 Drop
+                    handle.spawn(async move {
+                        let _ = txn.rollback().await;
+                    });
+                }
+                // 不在 runtime 中：txn 被 drop，连接归还到池，服务器端事务超时后回滚
+            }
+        }
+        // 锁被持有（有操作正在进行）：txn 会随 Neo4jTransaction 一起 drop，连接归还到池
+    }
 }
 
 #[async_trait::async_trait]
