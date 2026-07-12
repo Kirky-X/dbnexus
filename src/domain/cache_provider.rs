@@ -24,12 +24,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use crate::foundation::error::DbError;
+use crate::foundation::DbError;
 
 /// Cache provider abstraction consumed by dbnexus internals.
 ///
 /// Defines the minimal get/set/delete interface for a byte-oriented cache.
-/// Implementations include [`OxcacheDbCacheAdapter`](crate::integrations::oxcache_adapter::OxcacheDbCacheAdapter)
+/// Implementations include [`OxcacheDbCacheAdapter`](crate::integrations::OxcacheDbCacheAdapter)
 /// (feature-gated behind `oxcache-integration`) and any custom adapter the
 /// user supplies.
 ///

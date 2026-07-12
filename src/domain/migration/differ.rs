@@ -6,7 +6,7 @@
 
 use super::schema::*;
 use super::types::*;
-use crate::foundation::config::DatabaseType;
+use crate::foundation::DatabaseType;
 use regex::Regex;
 use std::sync::LazyLock;
 

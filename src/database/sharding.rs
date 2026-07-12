@@ -225,7 +225,7 @@ pub struct ShardRouter {
     /// 分片配置映射
     shards: HashMap<u32, ShardInfo>,
     /// 分片连接池映射
-    pools: HashMap<u32, Arc<crate::database::pool::DbPool>>,
+    pools: HashMap<u32, Arc<crate::database::DbPool>>,
 }
 
 impl Default for ShardRouter {
@@ -279,7 +279,7 @@ impl ShardRouter {
     /// - 使用 FuturesUnordered 并行创建所有分片连接池
     /// - 显著减少启动时间（从 O(n) 串行到 O(1) 并行）
     /// - 保持错误处理和日志记录
-    pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::foundation::error::DbError> {
+    pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::foundation::DbError> {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
         // 收集所有分片信息
@@ -302,7 +302,7 @@ impl ShardRouter {
                 let shard_id_copy = *shard_id;
                 let name_copy = name.clone();
                 async move {
-                    let result = crate::database::pool::DbPool::new(&conn_string).await;
+                    let result = crate::database::DbPool::new(&conn_string).await;
                     (shard_id_copy, name_copy, result)
                 }
             })
@@ -312,11 +312,7 @@ impl ShardRouter {
         let mut pool_stream = stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
 
         // 收集结果
-        let mut results: Vec<(
-            u32,
-            String,
-            Result<crate::database::pool::DbPool, crate::foundation::error::DbError>,
-        )> = Vec::new();
+        let mut results: Vec<(u32, String, Result<crate::database::DbPool, crate::foundation::DbError>)> = Vec::new();
 
         while let Some(result) = pool_stream.next().await {
             results.push(result);
@@ -372,7 +368,7 @@ impl ShardRouter {
         shard_id: u32,
         name: String,
         connection_string: String,
-        pool: Arc<crate::database::pool::DbPool>,
+        pool: Arc<crate::database::DbPool>,
     ) {
         self.shards.insert(
             shard_id,
@@ -389,10 +385,10 @@ impl ShardRouter {
     pub fn set_pool(
         &mut self,
         shard_id: u32,
-        pool: Arc<crate::database::pool::DbPool>,
-    ) -> Result<(), crate::foundation::error::DbError> {
+        pool: Arc<crate::database::DbPool>,
+    ) -> Result<(), crate::foundation::DbError> {
         if !self.shards.contains_key(&shard_id) {
-            return Err(crate::foundation::error::DbError::Config(format!(
+            return Err(crate::foundation::DbError::Config(format!(
                 "Shard {} not registered",
                 shard_id
             )));
@@ -446,7 +442,7 @@ impl ShardRouter {
     }
 
     /// 获取指定分片的连接池
-    pub fn get_pool(&self, shard_id: u32) -> Option<&Arc<crate::database::pool::DbPool>> {
+    pub fn get_pool(&self, shard_id: u32) -> Option<&Arc<crate::database::DbPool>> {
         self.pools.get(&shard_id)
     }
 
@@ -454,7 +450,7 @@ impl ShardRouter {
     pub async fn get_session(
         &self,
         shard_id: u32,
-    ) -> Result<Option<crate::database::pool::Session>, crate::foundation::error::DbError> {
+    ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
         if let Some(pool) = self.pools.get(&shard_id) {
             let session = pool.get_session("default").await?;
             Ok(Some(session))
@@ -467,7 +463,7 @@ impl ShardRouter {
     pub async fn get_session_for_timestamp(
         &self,
         timestamp: DateTime<Utc>,
-    ) -> Result<Option<crate::database::pool::Session>, crate::foundation::error::DbError> {
+    ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
         let shard_id = self.strategy.calculate(timestamp, self.total_shards);
         self.get_session(shard_id).await
     }
@@ -513,10 +509,10 @@ impl ShardRouter {
         &self,
         shard_key: &str,
         role: &str,
-    ) -> Result<crate::database::pool::Session, crate::foundation::error::DbError> {
+    ) -> Result<crate::database::Session, crate::foundation::DbError> {
         let shard_id = self.shard_id_for_key(shard_key);
         let pool = self.pools.get(&shard_id).ok_or_else(|| {
-            crate::foundation::error::DbError::Config(format!(
+            crate::foundation::DbError::Config(format!(
                 "No pool registered for shard {} (shard_key='{}')",
                 shard_id, shard_key
             ))
@@ -536,10 +532,10 @@ impl ShardRouter {
         &self,
         shard_key: &str,
         role: &str,
-    ) -> Result<(crate::database::pool::Session, u32), crate::foundation::error::DbError> {
+    ) -> Result<(crate::database::Session, u32), crate::foundation::DbError> {
         let shard_id = self.shard_id_for_key(shard_key);
         let pool = self.pools.get(&shard_id).ok_or_else(|| {
-            crate::foundation::error::DbError::Config(format!(
+            crate::foundation::DbError::Config(format!(
                 "No pool registered for shard {} (shard_key='{}')",
                 shard_id, shard_key
             ))
@@ -601,7 +597,7 @@ impl ShardRouter {
     }
 
     /// 移除分片的连接池
-    pub fn remove_pool(&mut self, shard_id: u32) -> Option<Arc<crate::database::pool::DbPool>> {
+    pub fn remove_pool(&mut self, shard_id: u32) -> Option<Arc<crate::database::DbPool>> {
         self.pools.remove(&shard_id)
     }
 

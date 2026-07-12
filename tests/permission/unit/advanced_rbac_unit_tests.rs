@@ -9,9 +9,7 @@
 //! - 权限冲突解决
 //! - 缓存机制
 
-use dbnexus::access::permission::{
-    AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission,
-};
+use dbnexus::access::{AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission};
 
 // ============================================================================
 // 角色继承链解析测试

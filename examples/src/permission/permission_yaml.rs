@@ -14,7 +14,7 @@
 //! cargo run --example permission_yaml --features "sqlite,permission,yaml"
 //! ```
 
-use dbnexus::access::permission::{PermissionAction, PermissionProvider, YamlPermissionProvider};
+use dbnexus::access::{PermissionAction, PermissionProvider, YamlPermissionProvider};
 use dbnexus::{DbConfig, DbPool};
 use std::collections::HashMap;
 
@@ -103,18 +103,18 @@ roles:
     println!("{}", yaml_content);
 
     // 使用 serde_yaml_ng 解析 YAML（yaml feature 提供）
-    let config: dbnexus::access::permission::PermissionConfig =
+    let config: dbnexus::access::PermissionConfig =
         serde_yaml_ng::from_str(yaml_content).expect("Failed to parse YAML config");
 
     println!("✓ YAML 配置解析成功\n");
 
     // 也可以通过编程方式构建相同的配置：
-    let _manual_config = dbnexus::access::permission::PermissionConfig {
+    let _manual_config = dbnexus::access::PermissionConfig {
         roles: HashMap::from([
             (
                 "admin".to_string(),
-                dbnexus::access::permission::RolePolicy {
-                    tables: vec![dbnexus::access::permission::TablePermission {
+                dbnexus::access::RolePolicy {
+                    tables: vec![dbnexus::access::TablePermission {
                         name: "*".to_string(),
                         operations: vec![
                             PermissionAction::Select,
@@ -127,8 +127,8 @@ roles:
             ),
             (
                 "guest".to_string(),
-                dbnexus::access::permission::RolePolicy {
-                    tables: vec![dbnexus::access::permission::TablePermission {
+                dbnexus::access::RolePolicy {
+                    tables: vec![dbnexus::access::TablePermission {
                         name: "users".to_string(),
                         operations: vec![PermissionAction::Select],
                     }],

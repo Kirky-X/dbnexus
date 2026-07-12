@@ -324,7 +324,7 @@ impl Clone for PermissionCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::access::permission::types::{PermissionAction, TablePermission};
+    use crate::access::{PermissionAction, TablePermission};
 
     fn sample_policy(table: &str) -> RolePolicy {
         RolePolicy {

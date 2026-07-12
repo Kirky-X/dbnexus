@@ -180,10 +180,7 @@ impl PermissionContext {
     ///
     /// let ctx = PermissionContext::with_config("admin".to_string(), &config).await;
     /// ```
-    pub async fn with_config(
-        role: String,
-        config: &crate::foundation::config::DbConfig,
-    ) -> Result<Self, PermissionError> {
+    pub async fn with_config(role: String, config: &crate::foundation::DbConfig) -> Result<Self, PermissionError> {
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
         Self::with_cache_size(role, cache_capacity).await
     }
@@ -200,7 +197,7 @@ impl PermissionContext {
     /// * `window_secs` - 速率限制时间窗口（秒）
     pub async fn with_config_and_rate_limit(
         role: String,
-        config: &crate::foundation::config::DbConfig,
+        config: &crate::foundation::DbConfig,
         max_requests: u32,
         window_secs: u64,
     ) -> Result<Self, PermissionError> {
@@ -255,7 +252,7 @@ impl PermissionContext {
     ///
     /// * `role` - 角色名称
     /// * `config` - 数据库配置引用
-    pub fn new_with_config(role: String, config: &crate::foundation::config::DbConfig) -> Self {
+    pub fn new_with_config(role: String, config: &crate::foundation::DbConfig) -> Self {
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
         let cache = tokio::runtime::Handle::current()
             .block_on(async { Cache::builder().capacity(cache_capacity as u64).build().await })
@@ -336,7 +333,7 @@ impl PermissionContext {
         role: String,
         policy_cache: Arc<Cache<String, RolePolicy>>,
         permission_provider: Arc<dyn PermissionProvider>,
-        config: &crate::foundation::config::DbConfig,
+        config: &crate::foundation::DbConfig,
     ) -> Self {
         Self {
             role,
@@ -591,8 +588,8 @@ impl PermissionContext {
 #[cfg(all(test, feature = "cache"))]
 mod tests {
     use super::*;
-    use crate::access::permission::provider::MemoryPermissionProvider;
-    use crate::access::permission::types::TablePermission;
+    use crate::access::MemoryPermissionProvider;
+    use crate::access::TablePermission;
     #[cfg(feature = "permission-engine")]
     use futures;
 
@@ -910,7 +907,7 @@ mod tests {
     /// TEST-U-039: PermissionContext 使用 DbConfig 配置化缓存容量
     #[tokio::test]
     async fn test_permission_context_with_config() {
-        use crate::foundation::config::{CacheConfig, DbConfig};
+        use crate::foundation::{CacheConfig, DbConfig};
 
         // 创建自定义缓存容量配置
         let config = DbConfig {
@@ -935,7 +932,7 @@ mod tests {
     /// TEST-U-040: PermissionContext 同步版本使用 DbConfig 配置
     #[test]
     fn test_permission_context_new_with_config() {
-        use crate::foundation::config::{CacheConfig, DbConfig};
+        use crate::foundation::{CacheConfig, DbConfig};
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
@@ -983,7 +980,7 @@ mod tests {
     /// TEST-U-043: PermissionContext 配置化缓存容量与速率限制组合测试
     #[tokio::test]
     async fn test_permission_context_with_config_and_rate_limit() {
-        use crate::foundation::config::{CacheConfig, DbConfig};
+        use crate::foundation::{CacheConfig, DbConfig};
 
         // 创建自定义缓存容量配置
         let config = DbConfig {
@@ -1013,7 +1010,7 @@ mod tests {
     /// TEST-U-052: 缓存击穿防护 - 并发请求触发 stampede 保护
     #[tokio::test]
     async fn test_cache_stampede_counter_increments() {
-        use crate::access::permission::types::TablePermission;
+        use crate::access::TablePermission;
 
         let config = PermissionConfig {
             roles: [(

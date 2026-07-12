@@ -13,3 +13,27 @@ pub mod migration;
 
 #[cfg(feature = "audit")]
 pub mod audit;
+
+// Re-exports
+pub use cache_provider::DbCacheProvider;
+
+#[cfg(all(feature = "permission", feature = "cache"))]
+pub use permission::with_cache;
+#[cfg(feature = "permission")]
+pub use permission::{
+    DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig, PermissionConfigError, PermissionError,
+    PermissionLifecycle, PermissionProvider, PolicyManager, PolicySet, RolePolicy, TablePermission, new, new_in_memory,
+};
+
+#[cfg(feature = "audit")]
+pub use audit::{
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
+    AuditSeverity, AuditStatus, AuditStorage, BuildError, MemoryAuditStorage,
+};
+
+#[cfg(feature = "migration")]
+pub use migration::{
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser, MigrationHistory,
+    MigrationVersion, Schema, SchemaDiffer, SqlGenerator, SqlReverser, Table, TableChange,
+};
+pub use migration::{ColumnChange, ColumnChangeType, ColumnDefinition, MigrationMetadata, TableSnapshot};
