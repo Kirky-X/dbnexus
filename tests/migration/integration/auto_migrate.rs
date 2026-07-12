@@ -23,6 +23,9 @@ fn id_column_definition(db_type: DatabaseType) -> &'static str {
         DatabaseType::MySql => "INT PRIMARY KEY",
         // DuckDB 支持 INTEGER PRIMARY KEY 语法
         DatabaseType::DuckDb => "INTEGER PRIMARY KEY",
+        DatabaseType::Ladybug | DatabaseType::Neo4j => {
+            panic!("Graph databases do not support relational primary key definitions")
+        }
     }
 }
 

@@ -218,12 +218,17 @@ pub enum DatabaseType {
     Sqlite,
     /// DuckDB（嵌入式分析型数据库，0.3.0 新增）
     DuckDb,
+    /// Ladybug（嵌入式图数据库，0.4.0 新增）
+    Ladybug,
+    /// Neo4j（图数据库服务器，0.4.0 新增）
+    Neo4j,
 }
 
 impl DatabaseType {
     /// 从 URL 解析数据库类型
     ///
-    /// 使用 `url` crate 解析连接串，支持 `sqlite`/`sqlite3`/`postgres`/`postgresql`/`mysql`/`duckdb` scheme。
+    /// 使用 `url` crate 解析连接串，支持 `sqlite`/`sqlite3`/`postgres`/`postgresql`/`mysql`/`duckdb`/
+    /// `lbug`/`ladybug`/`neo4j`/`neo4j+s`/`neo4j+ssc` scheme。
     /// 未知 scheme 返回 `Err(DbNexusError::UnsupportedDatabaseScheme)`。
     ///
     /// # Errors
@@ -239,6 +244,14 @@ impl DatabaseType {
         if lower.starts_with("duckdb:") {
             return Ok(DatabaseType::DuckDb);
         }
+        // 处理 Ladybug 图数据库格式 lbug: / ladybug:
+        if lower.starts_with("lbug:") || lower.starts_with("ladybug:") {
+            return Ok(DatabaseType::Ladybug);
+        }
+        // 处理 Neo4j 图数据库格式 neo4j: / neo4j+s: / neo4j+ssc:
+        if lower.starts_with("neo4j:") || lower.starts_with("neo4j+s:") || lower.starts_with("neo4j+ssc:") {
+            return Ok(DatabaseType::Neo4j);
+        }
 
         let parsed = url::Url::parse(url).map_err(|_| {
             crate::error::DbNexusError::UnsupportedDatabaseScheme(format!("failed to parse URL: {url}"))
@@ -249,6 +262,8 @@ impl DatabaseType {
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
             "mysql" => Ok(DatabaseType::MySql),
             "duckdb" => Ok(DatabaseType::DuckDb),
+            "lbug" | "ladybug" => Ok(DatabaseType::Ladybug),
+            "neo4j" | "neo4j+s" | "neo4j+ssc" => Ok(DatabaseType::Neo4j),
             other => Err(crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
                 "'{other}' is not a supported database scheme"
             ))),
@@ -271,6 +286,8 @@ impl DatabaseType {
             DatabaseType::MySql => "mysql",
             DatabaseType::Sqlite => "sqlite",
             DatabaseType::DuckDb => "duckdb",
+            DatabaseType::Ladybug => "ladybug",
+            DatabaseType::Neo4j => "neo4j",
         }
     }
 
@@ -278,6 +295,8 @@ impl DatabaseType {
     ///
     /// 0.3.0 新增：取代 `is_real_database()` 的二分法，更清晰地表达数据库部署模式。
     /// 嵌入式数据库运行在进程内，无需独立服务器；服务器端数据库（Postgres/MySQL）需要独立进程。
+    ///
+    /// 注意：图数据库（Ladybug/Neo4j）不属于此分类，请使用 [`is_graph()`](Self::is_graph) 判断。
     pub fn is_embedded(&self) -> bool {
         matches!(self, DatabaseType::Sqlite | DatabaseType::DuckDb)
     }
@@ -285,8 +304,19 @@ impl DatabaseType {
     /// 检查是否为服务器端数据库（PostgreSQL / MySQL）
     ///
     /// 0.3.0 新增：与 `is_embedded()` 互补。
+    ///
+    /// 注意：图数据库（Ladybug/Neo4j）不属于此分类，请使用 [`is_graph()`](Self::is_graph) 判断。
     pub fn is_server_side(&self) -> bool {
         matches!(self, DatabaseType::Postgres | DatabaseType::MySql)
+    }
+
+    /// 检查是否为图数据库（Ladybug / Neo4j）
+    ///
+    /// 0.4.0 新增：图数据库使用 Cypher 查询语言和图遍历模型，
+    /// 与关系型数据库（SQL）的表/行/列模型完全不同。
+    /// Ladybug 是嵌入式图数据库，Neo4j 是服务器端图数据库。
+    pub fn is_graph(&self) -> bool {
+        matches!(self, DatabaseType::Ladybug | DatabaseType::Neo4j)
     }
 
     /// 检查是否为真实数据库（非 SQLite 内存数据库）
@@ -295,6 +325,7 @@ impl DatabaseType {
     ///
     /// 此方法语义模糊（"真实"数据库 vs "内存"数据库 vs "嵌入式"数据库），
     /// 0.3.0 推荐使用 [`is_embedded()`](Self::is_embedded) 或 [`is_server_side()`](Self::is_server_side) 替代。
+    /// 0.4.0 新增 [`is_graph()`](Self::is_graph) 用于判断图数据库。
     pub fn is_real_database(&self) -> bool {
         matches!(self, DatabaseType::Postgres | DatabaseType::MySql)
     }
@@ -725,6 +756,54 @@ mod tests {
     }
 
     #[test]
+    fn test_database_type_from_url_ladybug() {
+        // lbug: scheme（短别名）
+        assert_eq!(
+            DatabaseType::from_url("lbug://test.lbug").unwrap(),
+            DatabaseType::Ladybug
+        );
+        assert_eq!(DatabaseType::from_url("lbug:test.lbug").unwrap(), DatabaseType::Ladybug);
+        // ladybug: scheme（完整名）
+        assert_eq!(
+            DatabaseType::from_url("ladybug://test.lbug").unwrap(),
+            DatabaseType::Ladybug
+        );
+        // 大小写不敏感
+        assert_eq!(
+            DatabaseType::from_url("LBUG://test.lbug").unwrap(),
+            DatabaseType::Ladybug
+        );
+        assert_eq!(
+            DatabaseType::from_url("Ladybug://test.lbug").unwrap(),
+            DatabaseType::Ladybug
+        );
+    }
+
+    #[test]
+    fn test_database_type_from_url_neo4j() {
+        // neo4j: scheme（明文）
+        assert_eq!(
+            DatabaseType::from_url("neo4j://user:pass@localhost:7687").unwrap(),
+            DatabaseType::Neo4j
+        );
+        // neo4j+s: scheme（TLS）
+        assert_eq!(
+            DatabaseType::from_url("neo4j+s://user:pass@host:7687").unwrap(),
+            DatabaseType::Neo4j
+        );
+        // neo4j+ssc: scheme（自签名 TLS）
+        assert_eq!(
+            DatabaseType::from_url("neo4j+ssc://user:pass@host:7687").unwrap(),
+            DatabaseType::Neo4j
+        );
+        // 大小写不敏感
+        assert_eq!(
+            DatabaseType::from_url("NEO4J://localhost:7687").unwrap(),
+            DatabaseType::Neo4j
+        );
+    }
+
+    #[test]
     fn test_database_type_from_url_unknown_scheme_returns_error() {
         // 未知 scheme 现在返回错误（不再默认 SQLite）
         assert!(DatabaseType::from_url("unknown://foo").is_err());
@@ -748,6 +827,8 @@ mod tests {
         assert_eq!(DatabaseType::MySql.as_str(), "mysql");
         assert_eq!(DatabaseType::Sqlite.as_str(), "sqlite");
         assert_eq!(DatabaseType::DuckDb.as_str(), "duckdb");
+        assert_eq!(DatabaseType::Ladybug.as_str(), "ladybug");
+        assert_eq!(DatabaseType::Neo4j.as_str(), "neo4j");
     }
 
     #[test]
@@ -756,6 +837,9 @@ mod tests {
         assert!(DatabaseType::DuckDb.is_embedded());
         assert!(!DatabaseType::Postgres.is_embedded());
         assert!(!DatabaseType::MySql.is_embedded());
+        // 图 DB 不属于嵌入式关系型数据库
+        assert!(!DatabaseType::Ladybug.is_embedded());
+        assert!(!DatabaseType::Neo4j.is_embedded());
     }
 
     #[test]
@@ -764,6 +848,20 @@ mod tests {
         assert!(DatabaseType::MySql.is_server_side());
         assert!(!DatabaseType::Sqlite.is_server_side());
         assert!(!DatabaseType::DuckDb.is_server_side());
+        // 图 DB 不属于服务器端关系型数据库
+        assert!(!DatabaseType::Ladybug.is_server_side());
+        assert!(!DatabaseType::Neo4j.is_server_side());
+    }
+
+    #[test]
+    fn test_database_type_is_graph() {
+        assert!(DatabaseType::Ladybug.is_graph());
+        assert!(DatabaseType::Neo4j.is_graph());
+        // 关系型数据库不是图数据库
+        assert!(!DatabaseType::Postgres.is_graph());
+        assert!(!DatabaseType::MySql.is_graph());
+        assert!(!DatabaseType::Sqlite.is_graph());
+        assert!(!DatabaseType::DuckDb.is_graph());
     }
 
     #[test]
@@ -772,6 +870,9 @@ mod tests {
         assert!(DatabaseType::MySql.is_real_database());
         assert!(!DatabaseType::Sqlite.is_real_database());
         assert!(!DatabaseType::DuckDb.is_real_database());
+        // 图 DB 不属于 is_real_database（deprecated 方法的原有语义：服务器端关系型）
+        assert!(!DatabaseType::Ladybug.is_real_database());
+        assert!(!DatabaseType::Neo4j.is_real_database());
     }
 
     #[test]
@@ -780,6 +881,8 @@ mod tests {
         assert_eq!(DatabaseType::MySql.to_string(), "mysql");
         assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
         assert_eq!(DatabaseType::DuckDb.to_string(), "duckdb");
+        assert_eq!(DatabaseType::Ladybug.to_string(), "ladybug");
+        assert_eq!(DatabaseType::Neo4j.to_string(), "neo4j");
     }
 
     #[test]
@@ -795,6 +898,8 @@ mod tests {
             DatabaseType::Postgres,
             DatabaseType::MySql,
             DatabaseType::DuckDb,
+            DatabaseType::Ladybug,
+            DatabaseType::Neo4j,
         ];
         for original in cases {
             let json = serde_json::to_string(&original).expect("serialize should succeed");
