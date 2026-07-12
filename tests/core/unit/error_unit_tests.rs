@@ -4,7 +4,7 @@
 //!
 //! 测试 DbError, PoolError, PermissionError, ConfigError, MigrationError, AuditError
 
-use dbnexus::foundation::error::{PermissionError, PoolError};
+use dbnexus::foundation::{PermissionError, PoolError};
 use dbnexus::{AuditError, ConfigError, DbError, MigrationError};
 
 // ============================================================================
@@ -559,7 +559,7 @@ fn test_query_error_report_from_unsupported_scheme() {
 #[test]
 fn test_query_error_report_from_permission_error() {
     use dbnexus::DbNexusError;
-    let perm_err = dbnexus::foundation::error::PermissionError::Denied {
+    let perm_err = dbnexus::foundation::PermissionError::Denied {
         resource: "users".to_string(),
         operation: "DELETE".to_string(),
     };

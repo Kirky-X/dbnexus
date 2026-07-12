@@ -7,8 +7,8 @@
 use dbnexus::DbError;
 use dbnexus::DbPool;
 #[cfg(feature = "permission")]
-use dbnexus::access::permission::{PermissionAction as Operation, PermissionConfig};
-use dbnexus::foundation::config::ConfigError;
+use dbnexus::access::{PermissionAction as Operation, PermissionConfig};
+use dbnexus::foundation::ConfigError;
 use tempfile::TempDir;
 
 #[path = "../../common/mod.rs"]

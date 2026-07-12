@@ -24,8 +24,10 @@ pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 // Re-exports: permission
 #[cfg(feature = "permission")]
 pub use permission::{
-    MemoryPermissionProvider, PermissionAction, PermissionConfig, PermissionContext, PermissionProvider,
-    PermissionProviderError, RolePolicy, TablePermission, YamlPermissionProvider,
+    AdvancedRbacProvider, CacheStats, MemoryPermissionProvider, PermissionAction, PermissionCache,
+    PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot, PermissionConfig, PermissionContext,
+    PermissionError, PermissionProvider, PermissionProviderError, RateLimiter, RbacProvider,
+    RefreshablePermissionProvider, RolePolicy, TablePermission, YamlPermissionProvider,
 };
 
 // Re-exports: authentication
@@ -39,7 +41,7 @@ pub use authentication::{
 #[cfg(all(feature = "sql-parser", not(feature = "permission")))]
 pub use sql_parser::PermissionAction;
 #[cfg(feature = "sql-parser")]
-pub use sql_parser::SqlParser;
+pub use sql_parser::{SqlOperationType, SqlParser, contains_sql_injection, is_ddl_operation};
 
 // Re-exports: permission_engine
 // 注意：Engine* 别名仅在 crate root (lib.rs) 导出，此处不再重复导出以避免双重路径（HIGH-002 修复）
