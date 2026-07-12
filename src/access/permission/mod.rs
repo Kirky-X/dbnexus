@@ -26,6 +26,8 @@ mod types;
 // ============================================================================
 
 // 从 types.rs 重导出
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+pub use types::GraphPermissionContext;
 pub use types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy, TablePermission};
 
 // 从 provider.rs 重导出

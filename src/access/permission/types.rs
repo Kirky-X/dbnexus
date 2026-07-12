@@ -40,6 +40,12 @@ pub enum PermissionAction {
     Update,
     /// 删除操作
     Delete,
+    /// 图遍历操作（图数据库专用，ladybug/neo4j feature 启用时可用）
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    Traverse,
+    /// 图匹配操作（图数据库专用，ladybug/neo4j feature 启用时可用）
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    Match,
 }
 
 impl std::fmt::Display for PermissionAction {
@@ -49,6 +55,10 @@ impl std::fmt::Display for PermissionAction {
             PermissionAction::Insert => write!(f, "INSERT"),
             PermissionAction::Update => write!(f, "UPDATE"),
             PermissionAction::Delete => write!(f, "DELETE"),
+            #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+            PermissionAction::Traverse => write!(f, "TRAVERSE"),
+            #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+            PermissionAction::Match => write!(f, "MATCH"),
         }
     }
 }
@@ -259,6 +269,67 @@ impl PermissionConfig {
     }
 }
 
+// ============================================================================
+// 图权限上下文（Phase 1 stub）
+// ============================================================================
+
+/// 图权限上下文（Phase 1 stub）
+///
+/// 提供图数据库操作的权限检查。当前为 Phase 1 stub 实现：
+/// - admin 角色绕过所有检查
+/// - 非 admin 角色被拒绝
+///
+/// 后续 Phase 2 将实现细粒度的图标签/关系类型权限控制。
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+pub struct GraphPermissionContext {
+    /// 当前角色名称
+    pub role: String,
+    /// 管理员角色名称（绕过所有权限检查）
+    pub admin_role: String,
+}
+
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+impl GraphPermissionContext {
+    /// 创建新的图权限上下文
+    ///
+    /// # 参数
+    ///
+    /// * `role` - 当前角色名称
+    /// * `admin_role` - 管理员角色名称
+    pub fn new(role: &str, admin_role: &str) -> Self {
+        Self {
+            role: role.to_string(),
+            admin_role: admin_role.to_string(),
+        }
+    }
+
+    /// 检查图操作权限（Phase 1 stub）
+    ///
+    /// Phase 1 实现：admin 角色绕过所有检查，非 admin 角色被拒绝。
+    ///
+    /// # 参数
+    ///
+    /// * `_action` - 权限操作类型（Phase 1 中未使用，Phase 2 将基于操作类型做细粒度检查）
+    ///
+    /// # 返回
+    ///
+    /// admin 角色返回 `Ok(())`，非 admin 角色返回 `Err(DbError::Permission)`。
+    ///
+    /// # Errors
+    ///
+    /// 非 admin 角色调用时返回 `DbError::Permission`。
+    pub fn check_graph_access(&self, _action: PermissionAction) -> crate::foundation::DbResult<()> {
+        if self.role == self.admin_role {
+            Ok(())
+        } else {
+            Err(crate::foundation::DbError::Permission(format!(
+                "Graph operation denied for role '{}': admin role '{}' required",
+                self.role, self.admin_role
+            )))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +341,25 @@ mod tests {
         assert_eq!(PermissionAction::Insert.to_string(), "INSERT");
         assert_eq!(PermissionAction::Update.to_string(), "UPDATE");
         assert_eq!(PermissionAction::Delete.to_string(), "DELETE");
+    }
+
+    /// TEST-U-010-graph: 图操作变体 Display 测试（ladybug/neo4j feature）
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_operation_display_graph_variants() {
+        assert_eq!(PermissionAction::Traverse.to_string(), "TRAVERSE");
+        assert_eq!(PermissionAction::Match.to_string(), "MATCH");
+    }
+
+    /// TEST-U-010-graph-construct: 图操作变体可构造且可比较
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_operation_graph_variants_construct() {
+        let traverse = PermissionAction::Traverse;
+        let match_op = PermissionAction::Match;
+        assert_ne!(traverse, match_op);
+        assert_ne!(traverse, PermissionAction::Select);
+        assert_ne!(match_op, PermissionAction::Delete);
     }
 
     /// TEST-U-011: RolePolicy allows 测试
@@ -493,5 +583,76 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("has no operations defined")));
+    }
+
+    // ========================================================================
+    // GraphPermissionContext 测试（Phase 1 stub）
+    // ========================================================================
+
+    /// TEST-GRAPH-PERM-001: admin 角色调用 check_graph_access 应返回 Ok
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_graph_permission_context_admin_bypass() {
+        let ctx = GraphPermissionContext::new("admin", "admin");
+        let result = ctx.check_graph_access(PermissionAction::Traverse);
+        assert!(result.is_ok(), "admin role should bypass graph permission check");
+    }
+
+    /// TEST-GRAPH-PERM-002: 非 admin 角色调用 check_graph_access 应返回 Err
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_graph_permission_context_non_admin_denied() {
+        let ctx = GraphPermissionContext::new("user", "admin");
+        let result = ctx.check_graph_access(PermissionAction::Match);
+        assert!(result.is_err(), "non-admin role should be denied");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(ref msg) if msg.contains("Graph operation denied")),
+            "expected Permission error with 'Graph operation denied', got {:?}",
+            err
+        );
+    }
+
+    /// TEST-GRAPH-PERM-003: admin 角色对所有图操作都返回 Ok
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_graph_permission_context_admin_all_actions() {
+        let ctx = GraphPermissionContext::new("admin", "admin");
+        assert!(ctx.check_graph_access(PermissionAction::Traverse).is_ok());
+        assert!(ctx.check_graph_access(PermissionAction::Match).is_ok());
+        assert!(ctx.check_graph_access(PermissionAction::Select).is_ok());
+    }
+
+    /// TEST-GRAPH-PERM-004: 非 admin 角色对所有图操作都返回 Err
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_graph_permission_context_non_admin_all_actions_denied() {
+        let ctx = GraphPermissionContext::new("guest", "admin");
+        assert!(ctx.check_graph_access(PermissionAction::Traverse).is_err());
+        assert!(ctx.check_graph_access(PermissionAction::Match).is_err());
+        assert!(ctx.check_graph_access(PermissionAction::Select).is_err());
+    }
+
+    /// TEST-GRAPH-PERM-005: 错误消息包含角色名和管理员角色名
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[test]
+    fn test_graph_permission_context_error_message_contains_roles() {
+        let ctx = GraphPermissionContext::new("editor", "superadmin");
+        let result = ctx.check_graph_access(PermissionAction::Traverse);
+        assert!(result.is_err());
+        let err_msg = match result.unwrap_err() {
+            crate::foundation::DbError::Permission(msg) => msg,
+            other => panic!("expected Permission error, got {:?}", other),
+        };
+        assert!(
+            err_msg.contains("editor"),
+            "error should contain current role 'editor': {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("superadmin"),
+            "error should contain admin role 'superadmin': {}",
+            err_msg
+        );
     }
 }
