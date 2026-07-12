@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-07-12
+
 ### ⚠️ BREAKING CHANGES
 
 - `error` 模块从 `src/common/error.rs` 迁移到 `src/error.rs`，导入路径 `crate::common::error::` → `crate::error::`
@@ -360,3 +362,5 @@ cargo build
 - Cache feature was implicitly enabled, could not be disabled
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
+
+[0.3.4]: https://github.com/Kirky-X/dbnexus/compare/v0.3.3...v0.3.4
