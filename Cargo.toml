@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.4"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -40,7 +40,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "0.3" }
+dbnexus-macros = { path = "macros", version = "0.4" }
 
 [workspace.lints.rust]
 
@@ -237,7 +237,7 @@ oxcache = { version = "0.3", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
-trait-kit = { version = "0.2", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.3", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
