@@ -142,6 +142,15 @@ pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
 pub use crate::database::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
+// 图数据库连接导出（0.4.0 新增）
+#[cfg(feature = "ladybug")]
+pub use crate::database::LadybugConnection;
+#[cfg(feature = "neo4j")]
+pub use crate::database::Neo4jConnection;
+pub use crate::database::{
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+};
+
 // Access 导出
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{DdlGuard, DdlValidationResult};
