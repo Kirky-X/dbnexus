@@ -15,6 +15,13 @@
 //! `Connection::new(&db)` 开销低（仅打开同一进程内数据库的会话），配合 `Semaphore`
 //! 限制并发数，等效于连接池模式。
 //!
+//! # 事务模型
+//!
+//! lbug 0.18.1 无原生事务 API（`begin_txn`/`commit`/`rollback`），事务通过 Cypher 语句
+//! `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` 控制。显式事务要求所有语句在同一
+//! `Connection` 上执行，因此 [`LadybugTransaction`] 使用 actor 模式：通过 channel
+//! 将命令发送到持有 `Connection` 的 blocking 线程，确保事务内所有操作使用同一连接。
+//!
 //! # 线程安全
 //!
 //! `lbug::Database` 是 `Send + Sync`（unsafe impl），`lbug::Connection` 是 `Send + Sync`。
@@ -22,13 +29,16 @@
 
 use std::sync::Arc;
 
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, mpsc, oneshot};
+use tokio::task::JoinHandle;
 
-use crate::database::graph::{GraphConnection, GraphExecResult, GraphTransaction};
+use crate::database::graph::{
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+};
 use crate::foundation::{DbError, DbResult};
 
 /// 默认并发连接数
-#[allow(dead_code)]
+#[cfg(test)]
 const DEFAULT_POOL_SIZE: usize = 4;
 
 /// Ladybug 图数据库连接
@@ -46,10 +56,8 @@ const DEFAULT_POOL_SIZE: usize = 4;
 #[derive(Clone)]
 pub struct LadybugConnection {
     /// 数据库实例（Arc 共享，Connection 在 spawn_blocking 内按需创建）
-    #[allow(dead_code)]
     db: Arc<lbug::Database>,
     /// 并发限制信号量（等效于连接池大小）
-    #[allow(dead_code)]
     spawn_permit: Arc<Semaphore>,
     /// 配置的并发数
     pool_size: usize,
@@ -117,20 +125,11 @@ impl LadybugConnection {
     }
 
     /// 获取 Semaphore 许可证，限制 spawn_blocking 并发数
-    ///
-    /// 返回的 `SemaphorePermit` 在 drop 时自动释放，确保不会泄漏。
-    #[allow(dead_code)]
-    pub(crate) async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
+    async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
         self.spawn_permit
             .acquire()
             .await
             .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string())))
-    }
-
-    /// 获取数据库引用（供 T027 的 GraphConnection impl 在 spawn_blocking 内创建 Connection）
-    #[allow(dead_code)]
-    pub(crate) fn database(&self) -> &lbug::Database {
-        &self.db
     }
 }
 
@@ -144,32 +143,316 @@ impl std::fmt::Debug for LadybugConnection {
 }
 
 // ============================================================================
-// GraphConnection impl（stub — T027 将替换为真实实现）
+// GraphConnection impl
 // ============================================================================
 
 #[async_trait::async_trait]
 impl GraphConnection for LadybugConnection {
-    async fn execute_cypher(&self, _cypher: &str) -> DbResult<GraphExecResult> {
-        Err(DbError::Config(
-            "LadybugConnection::execute_cypher not yet implemented (T027 will implement)".to_string(),
-        ))
+    async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
+        let permit = self.acquire_permit().await?;
+        let db = self.db.clone();
+        let cypher_owned = cypher.to_string();
+        let handle: JoinHandle<DbResult<GraphExecResult>> = tokio::task::spawn_blocking(move || {
+            let conn = lbug::Connection::new(&db)
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Connection::new: {e}"))))?;
+            let mut result = conn
+                .query(&cypher_owned)
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug query: {e}"))))?;
+            let column_names = result.get_column_names();
+            let num_tuples = result.get_num_tuples();
+            let mut rows = Vec::with_capacity(num_tuples as usize);
+            for row_values in &mut result {
+                let columns = column_names
+                    .iter()
+                    .zip(row_values.iter())
+                    .map(|(name, value)| (name.clone(), map_lbug_value(value)))
+                    .collect();
+                rows.push(GraphRow { columns });
+            }
+            Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+        });
+        let result = handle
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}"))))?;
+        drop(permit);
+        result
     }
 
     async fn health_check(&self) -> DbResult<()> {
-        Err(DbError::Config(
-            "LadybugConnection::health_check not yet implemented (T027 will implement)".to_string(),
-        ))
+        let result = self.execute_cypher("RETURN 1").await?;
+        match result {
+            GraphExecResult::Query(q) if !q.rows.is_empty() => Ok(()),
+            GraphExecResult::Query(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "ladybug health check returned no rows".to_string(),
+            ))),
+            GraphExecResult::Write { .. } => Ok(()),
+        }
     }
 
     async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
-        Err(DbError::Config(
-            "LadybugConnection::begin_graph_txn not yet implemented (T027 will implement)".to_string(),
-        ))
+        let db = self.db.clone();
+        let (tx, mut rx) = mpsc::channel::<TxnCommand>(8);
+
+        let handle: JoinHandle<DbResult<()>> = tokio::task::spawn_blocking(move || {
+            let conn = lbug::Connection::new(&db).map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug txn Connection::new: {e}")))
+            })?;
+            conn.query("BEGIN TRANSACTION")
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug BEGIN TRANSACTION: {e}"))))?;
+
+            while let Some(cmd) = rx.blocking_recv() {
+                match cmd {
+                    TxnCommand::Execute { cypher, reply } => {
+                        let result = execute_cypher_on_conn(&conn, &cypher);
+                        let _ = reply.send(result);
+                    }
+                    TxnCommand::Commit { reply } => {
+                        let result = conn
+                            .query("COMMIT")
+                            .map(|_| ())
+                            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug COMMIT: {e}"))));
+                        let _ = reply.send(result);
+                        return Ok(());
+                    }
+                    TxnCommand::Rollback { reply } => {
+                        let result = conn
+                            .query("ROLLBACK")
+                            .map(|_| ())
+                            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug ROLLBACK: {e}"))));
+                        let _ = reply.send(result);
+                        return Ok(());
+                    }
+                }
+            }
+            // Channel closed without Commit/Rollback — 自动回滚
+            let _ = conn.query("ROLLBACK");
+            Ok(())
+        });
+
+        Ok(Box::new(LadybugTransaction {
+            tx,
+            handle: Some(handle),
+        }))
     }
 
     fn backend_name(&self) -> &'static str {
         "ladybug"
     }
+}
+
+// ============================================================================
+// LadybugTransaction（事务 actor 模式）
+// ============================================================================
+
+/// 事务命令（通过 channel 发送到 blocking 线程）
+enum TxnCommand {
+    /// 执行 Cypher 查询
+    Execute {
+        /// Cypher 语句
+        cypher: String,
+        /// 结果回复通道
+        reply: oneshot::Sender<DbResult<GraphExecResult>>,
+    },
+    /// 提交事务
+    Commit {
+        /// 结果回复通道
+        reply: oneshot::Sender<DbResult<()>>,
+    },
+    /// 回滚事务
+    Rollback {
+        /// 结果回复通道
+        reply: oneshot::Sender<DbResult<()>>,
+    },
+}
+
+/// Ladybug 图数据库事务
+///
+/// 使用 actor 模式：通过 channel 将命令发送到持有 `Connection` 的 blocking 线程，
+/// 确保事务内所有操作使用同一 `Connection`（lbug 事务要求）。
+pub struct LadybugTransaction {
+    /// 命令发送通道
+    tx: mpsc::Sender<TxnCommand>,
+    /// blocking 线程句柄（commit/rollback 时 await）
+    handle: Option<JoinHandle<DbResult<()>>>,
+}
+
+#[async_trait::async_trait]
+impl GraphTransaction for LadybugTransaction {
+    async fn commit(mut self: Box<Self>) -> DbResult<()> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.tx
+            .send(TxnCommand::Commit { reply: reply_tx })
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
+        let result = reply_rx
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?;
+        // 等待 blocking 线程退出
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.await;
+        }
+        result
+    }
+
+    async fn rollback(mut self: Box<Self>) -> DbResult<()> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.tx
+            .send(TxnCommand::Rollback { reply: reply_tx })
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
+        let result = reply_rx
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?;
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.await;
+        }
+        result
+    }
+
+    async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.tx
+            .send(TxnCommand::Execute {
+                cypher: cypher.to_string(),
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
+        reply_rx
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?
+    }
+}
+
+// ============================================================================
+// 内部辅助函数
+// ============================================================================
+
+/// 在 blocking 线程内通过指定 Connection 执行 Cypher 查询
+fn execute_cypher_on_conn(conn: &lbug::Connection, cypher: &str) -> DbResult<GraphExecResult> {
+    let mut result = conn
+        .query(cypher)
+        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug query: {e}"))))?;
+    let column_names = result.get_column_names();
+    let num_tuples = result.get_num_tuples();
+    let mut rows = Vec::with_capacity(num_tuples as usize);
+    for row_values in &mut result {
+        let columns = column_names
+            .iter()
+            .zip(row_values.iter())
+            .map(|(name, value)| (name.clone(), map_lbug_value(value)))
+            .collect();
+        rows.push(GraphRow { columns });
+    }
+    Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+}
+
+/// 将 `lbug::Value` 映射为 [`GraphValue`]
+fn map_lbug_value(value: &lbug::Value) -> GraphValue {
+    match value {
+        lbug::Value::Node(node) => GraphValue::Node(map_lbug_node(node)),
+        lbug::Value::Rel(rel) => GraphValue::Rel(map_lbug_rel(rel)),
+        lbug::Value::RecursiveRel { nodes, rels: _ } => {
+            let path_nodes: Vec<GraphNode> = nodes.iter().map(map_lbug_node).collect();
+            GraphValue::Path(path_nodes)
+        }
+        // 标量值
+        lbug::Value::Null(_) => GraphValue::Scalar(serde_json::Value::Null),
+        lbug::Value::Bool(b) => GraphValue::Scalar(serde_json::json!(b)),
+        lbug::Value::Int8(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::Int16(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::Int32(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::Int64(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::UInt8(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::UInt16(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::UInt32(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::UInt64(i) => GraphValue::Scalar(serde_json::json!(i)),
+        lbug::Value::Int128(i) => GraphValue::Scalar(serde_json::json!(i128_to_string(i))),
+        lbug::Value::Float(f) => GraphValue::Scalar(serde_json::json!(f)),
+        lbug::Value::Double(f) => GraphValue::Scalar(serde_json::json!(f)),
+        lbug::Value::String(s) => GraphValue::Scalar(serde_json::json!(s)),
+        lbug::Value::Json(v) => GraphValue::Scalar(v.clone()),
+        lbug::Value::Blob(b) => GraphValue::Scalar(serde_json::json!(b)),
+        // 日期/时间 → ISO 字符串
+        lbug::Value::Date(d) => GraphValue::Scalar(serde_json::json!(d.to_string())),
+        lbug::Value::Interval(d) => GraphValue::Scalar(serde_json::json!(d.to_string())),
+        lbug::Value::Timestamp(t)
+        | lbug::Value::TimestampTz(t)
+        | lbug::Value::TimestampNs(t)
+        | lbug::Value::TimestampMs(t)
+        | lbug::Value::TimestampSec(t) => GraphValue::Scalar(serde_json::json!(t.to_string())),
+        lbug::Value::InternalID(id) => GraphValue::Scalar(serde_json::json!(format!("{}:{}", id.table_id, id.offset))),
+        lbug::Value::UUID(u) => GraphValue::Scalar(serde_json::json!(u.to_string())),
+        lbug::Value::Decimal(d) => GraphValue::Scalar(serde_json::json!(d.to_string())),
+        // 复合类型 → JSON
+        lbug::Value::List(_, items) | lbug::Value::Array(_, items) => {
+            let arr: Vec<serde_json::Value> = items
+                .iter()
+                .map(|v| graph_value_to_json_scalar(&map_lbug_value(v)))
+                .collect();
+            GraphValue::Scalar(serde_json::Value::Array(arr))
+        }
+        lbug::Value::Struct(fields) => {
+            let mut map = serde_json::Map::new();
+            for (name, value) in fields {
+                map.insert(name.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+            }
+            GraphValue::Scalar(serde_json::Value::Object(map))
+        }
+        lbug::Value::Map(_, entries) => {
+            let mut map = serde_json::Map::new();
+            for (key, value) in entries {
+                let key_str = match key {
+                    lbug::Value::String(s) => s.clone(),
+                    _ => format!("{key}"),
+                };
+                map.insert(key_str, graph_value_to_json_scalar(&map_lbug_value(value)));
+            }
+            GraphValue::Scalar(serde_json::Value::Object(map))
+        }
+        lbug::Value::Union { value, .. } => map_lbug_value(value),
+    }
+}
+
+/// 将 `lbug::NodeVal` 映射为 [`GraphNode`]
+fn map_lbug_node(node: &lbug::NodeVal) -> GraphNode {
+    let mut map = serde_json::Map::new();
+    for (key, value) in node.get_properties() {
+        map.insert(key.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+    }
+    GraphNode {
+        label: node.get_label_name().clone(),
+        properties: serde_json::Value::Object(map),
+    }
+}
+
+/// 将 `lbug::RelVal` 映射为 [`GraphRel`]
+fn map_lbug_rel(rel: &lbug::RelVal) -> GraphRel {
+    let mut map = serde_json::Map::new();
+    for (key, value) in rel.get_properties() {
+        map.insert(key.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+    }
+    GraphRel {
+        rel_type: rel.get_label_name().clone(),
+        src_id: rel.get_src_node().offset as i64,
+        dst_id: rel.get_dst_node().offset as i64,
+        properties: serde_json::Value::Object(map),
+    }
+}
+
+/// 将 GraphValue 转换为 JSON 标量（用于嵌套在属性/列表中）
+fn graph_value_to_json_scalar(value: &GraphValue) -> serde_json::Value {
+    match value {
+        GraphValue::Scalar(s) => s.clone(),
+        GraphValue::Node(n) => serde_json::to_value(n).unwrap_or(serde_json::Value::Null),
+        GraphValue::Rel(r) => serde_json::to_value(r).unwrap_or(serde_json::Value::Null),
+        GraphValue::Path(p) => serde_json::to_value(p).unwrap_or(serde_json::Value::Null),
+    }
+}
+
+/// 将 i128 转换为字符串（serde_json 不直接支持 i128）
+fn i128_to_string(i: &i128) -> String {
+    i.to_string()
 }
 
 #[cfg(test)]
@@ -242,8 +525,6 @@ mod tests {
         let conn1 = LadybugConnection::new(":memory:", 2).expect("Failed to create connection");
         let conn2 = conn1.clone();
         assert_eq!(conn1.pool_size(), conn2.pool_size());
-        // 两个 clone 共享同一个 Arc<Database>，但此处无法直接验证 Arc 指针相等（字段私有）
-        // 通过 clone 后 backend_name 仍可用间接验证
         assert_eq!(conn1.backend_name(), conn2.backend_name());
     }
 
@@ -255,32 +536,234 @@ mod tests {
         assert!(debug_str.contains("pool_size: 4"));
     }
 
-    // ===== GraphConnection stub 测试（T027 将替换）=====
+    // ===== GraphConnection execute_cypher 测试 =====
 
     #[tokio::test]
-    async fn test_ladybug_stub_execute_cypher_returns_error() {
+    async fn test_ladybug_execute_return_1() {
         let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
-        let result = conn.execute_cypher("RETURN 1").await;
-        assert!(result.is_err(), "stub execute_cypher should return error");
+        let result = conn
+            .execute_cypher("RETURN 1")
+            .await
+            .expect("execute_cypher should succeed");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should return 1 row");
+                let value = &q.rows[0].columns[0].1;
+                match value {
+                    GraphValue::Scalar(s) => assert_eq!(s, &serde_json::json!(1)),
+                    other => panic!("expected Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
     }
 
     #[tokio::test]
-    async fn test_ladybug_stub_health_check_returns_error() {
+    async fn test_ladybug_execute_create_node_table() {
         let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
-        let result = conn.health_check().await;
-        assert!(result.is_err(), "stub health_check should return error");
+        // DDL 语句在 lbug 中可能返回状态行或空结果集，关键是执行不报错
+        let result = conn
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .await
+            .expect("create node table should succeed");
+        // lbug 所有语句都返回 Query 变体
+        assert!(
+            matches!(result, GraphExecResult::Query(_)),
+            "expected Query variant, got {result:?}"
+        );
+        // 验证 DDL 生效：插入数据并查询
+        conn.execute_cypher("CREATE (:Person {name: 'Test', age: 1})")
+            .await
+            .expect("create node should succeed");
+        let match_result = conn
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .await
+            .expect("match should succeed");
+        match match_result {
+            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 1, "should see 1 person after DDL+CREATE"),
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
     }
 
     #[tokio::test]
-    async fn test_ladybug_stub_begin_graph_txn_returns_error() {
+    async fn test_ladybug_execute_create_and_match() {
         let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
-        let result = conn.begin_graph_txn().await;
-        assert!(result.is_err(), "stub begin_graph_txn should return error");
+        conn.execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+        conn.execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .await
+            .expect("create alice");
+        conn.execute_cypher("CREATE (:Person {name: 'Bob', age: 30})")
+            .await
+            .expect("create bob");
+
+        let result = conn
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY name")
+            .await
+            .expect("match should succeed");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 2, "should return 2 persons");
+                let name0 = &q.rows[0].columns[0].1;
+                match name0 {
+                    GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Alice"),
+                    other => panic!("expected String Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
     }
+
+    #[tokio::test]
+    async fn test_ladybug_execute_invalid_cypher_returns_error() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        let result = conn.execute_cypher("INVALID CYPHER").await;
+        assert!(result.is_err(), "invalid cypher should return error");
+    }
+
+    // ===== health_check 测试 =====
+
+    #[tokio::test]
+    async fn test_ladybug_health_check_passes() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        conn.health_check().await.expect("health check should pass");
+    }
+
+    // ===== backend_name 测试 =====
 
     #[test]
     fn test_ladybug_backend_name() {
         let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
         assert_eq!(conn.backend_name(), "ladybug");
+    }
+
+    // ===== 事务测试 =====
+
+    #[tokio::test]
+    async fn test_ladybug_txn_commit() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        conn.execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+
+        let txn = conn.begin_graph_txn().await.expect("begin txn should succeed");
+        txn.execute_cypher("CREATE (:Person {name: 'Alice'})")
+            .await
+            .expect("create in txn");
+        txn.commit().await.expect("commit should succeed");
+
+        // 验证事务提交后数据可见
+        let result = conn
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .await
+            .expect("match after commit");
+        match result {
+            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 1, "should see 1 person after commit"),
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ladybug_txn_rollback() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        conn.execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+
+        let txn = conn.begin_graph_txn().await.expect("begin txn should succeed");
+        txn.execute_cypher("CREATE (:Person {name: 'Alice'})")
+            .await
+            .expect("create in txn");
+        txn.rollback().await.expect("rollback should succeed");
+
+        // 验证事务回滚后数据不可见
+        let result = conn
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .await
+            .expect("match after rollback");
+        match result {
+            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 0, "should see 0 persons after rollback"),
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ladybug_txn_execute_cypher_returns_result() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        conn.execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+
+        let txn = conn.begin_graph_txn().await.expect("begin txn");
+        txn.execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .await
+            .expect("create alice");
+
+        let result = txn
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+            .await
+            .expect("match in txn");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should see 1 person in txn");
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+        txn.commit().await.expect("commit");
+    }
+
+    // ===== 值映射测试 =====
+
+    #[test]
+    fn test_map_lbug_value_null() {
+        let val = lbug::Value::Null(lbug::LogicalType::String);
+        let mapped = map_lbug_value(&val);
+        assert_eq!(mapped, GraphValue::Scalar(serde_json::Value::Null));
+    }
+
+    #[test]
+    fn test_map_lbug_value_bool() {
+        let val = lbug::Value::Bool(true);
+        let mapped = map_lbug_value(&val);
+        assert_eq!(mapped, GraphValue::Scalar(serde_json::json!(true)));
+    }
+
+    #[test]
+    fn test_map_lbug_value_int64() {
+        let val = lbug::Value::Int64(42);
+        let mapped = map_lbug_value(&val);
+        assert_eq!(mapped, GraphValue::Scalar(serde_json::json!(42)));
+    }
+
+    #[test]
+    fn test_map_lbug_value_string() {
+        let val = lbug::Value::String("hello".to_string());
+        let mapped = map_lbug_value(&val);
+        assert_eq!(mapped, GraphValue::Scalar(serde_json::json!("hello")));
+    }
+
+    #[test]
+    fn test_map_lbug_value_internal_id() {
+        let val = lbug::Value::InternalID(lbug::InternalID { offset: 5, table_id: 2 });
+        let mapped = map_lbug_value(&val);
+        assert_eq!(mapped, GraphValue::Scalar(serde_json::json!("2:5")));
+    }
+
+    #[test]
+    fn test_map_lbug_value_list() {
+        let val = lbug::Value::List(
+            lbug::LogicalType::Int64,
+            vec![lbug::Value::Int64(1), lbug::Value::Int64(2)],
+        );
+        let mapped = map_lbug_value(&val);
+        match mapped {
+            GraphValue::Scalar(serde_json::Value::Array(arr)) => {
+                assert_eq!(arr.len(), 2);
+                assert_eq!(arr[0], serde_json::json!(1));
+                assert_eq!(arr[1], serde_json::json!(2));
+            }
+            other => panic!("expected Array scalar, got {other:?}"),
+        }
     }
 }
