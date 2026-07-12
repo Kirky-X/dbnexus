@@ -1554,7 +1554,9 @@ mod tests {
     #[cfg(feature = "ladybug")]
     #[test]
     fn test_ladybug_connection_is_graph() {
-        let conn = DbConnection::Ladybug(Arc::new(crate::database::LadybugConnection::new_placeholder()));
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
         assert!(conn.is_graph(), "Ladybug connection should be graph");
         assert!(!conn.is_duckdb(), "Ladybug connection should not be duckdb");
     }
@@ -1562,7 +1564,9 @@ mod tests {
     #[cfg(feature = "ladybug")]
     #[test]
     fn test_ladybug_connection_as_graph_returns_ok() {
-        let conn = DbConnection::Ladybug(Arc::new(crate::database::LadybugConnection::new_placeholder()));
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
         let result = conn.as_graph();
         assert!(result.is_ok(), "as_graph() on Ladybug should return Ok");
         let graph = result.unwrap();
@@ -1572,7 +1576,9 @@ mod tests {
     #[cfg(feature = "ladybug")]
     #[test]
     fn test_ladybug_connection_as_sea_orm_returns_err() {
-        let conn = DbConnection::Ladybug(Arc::new(crate::database::LadybugConnection::new_placeholder()));
+        let conn = DbConnection::Ladybug(Arc::new(
+            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+        ));
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Ladybug should return Err");
     }
@@ -1629,7 +1635,9 @@ mod tests {
     fn test_db_connection_debug_format() {
         #[cfg(feature = "ladybug")]
         {
-            let conn = DbConnection::Ladybug(Arc::new(crate::database::LadybugConnection::new_placeholder()));
+            let conn = DbConnection::Ladybug(Arc::new(
+                crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+            ));
             let debug_str = format!("{conn:?}");
             assert!(
                 debug_str.contains("Ladybug"),
