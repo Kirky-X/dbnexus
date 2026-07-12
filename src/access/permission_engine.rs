@@ -32,7 +32,7 @@
 //! }
 //! ```
 
-pub use crate::access::permission::PermissionAction;
+pub use super::permission::PermissionAction;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
