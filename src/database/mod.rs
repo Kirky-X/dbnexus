@@ -31,6 +31,10 @@ pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // 图数据库 re-exports
+#[cfg(feature = "ladybug")]
+pub use graph::ladybug_conn::LadybugConnection;
+#[cfg(feature = "neo4j")]
+pub use graph::neo4j_conn::Neo4jConnection;
 pub use graph::{
     GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
 };
