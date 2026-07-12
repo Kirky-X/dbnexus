@@ -59,10 +59,10 @@ compile_error!("The 'permission' feature requires the 'cache' feature to be enab
 // ============================================================================
 
 /// 公共类型模块
-pub mod common;
+mod common;
 
 /// 统一错误类型模块
-pub mod error;
+mod error;
 
 /// Foundation 层 - 基础模块 (旧版，保持兼容)
 pub mod foundation;
@@ -84,7 +84,7 @@ pub mod storage;
 
 /// Internationalization 模块 - ICU4X locale 感知格式化（i18n feature）
 #[cfg(feature = "i18n")]
-pub mod i18n;
+mod i18n;
 
 /// Integration adapters for external crates (oxcache, etc.)
 #[cfg(feature = "oxcache-integration")]
