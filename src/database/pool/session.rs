@@ -37,6 +37,14 @@ struct SessionState {
     /// 可在 `execute_raw` 中短锁 clone 后锁外执行 async DB 操作，避免持锁 await。
     transaction: Option<Arc<DatabaseTransaction>>,
 
+    /// 图数据库事务对象（ladybug/neo4j feature 启用时可用）
+    ///
+    /// 使用 `Box<dyn GraphTransaction + Send>` 存储图事务句柄。
+    /// `GraphTransaction::commit/rollback` 消耗 `self`，因此使用 `Option` 存储，
+    /// take 出来后调用。
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    graph_transaction: Option<Box<dyn crate::database::graph::GraphTransaction + Send>>,
+
     /// 最后写操作时间（用于读写分离）
     last_write: Option<Instant>,
 }
@@ -85,6 +93,8 @@ impl Session {
             permission_ctx,
             state: Mutex::new(SessionState {
                 transaction: None,
+                #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+                graph_transaction: None,
                 last_write: None,
             }),
             #[cfg(feature = "metrics")]
@@ -125,26 +135,68 @@ impl Session {
     }
 
     /// 是否在事务中
+    ///
+    /// 图事务或关系型事务任一存在都返回 true。
     pub async fn is_in_transaction(&self) -> bool {
         let state = self.state.lock().await;
-        state.transaction.is_some()
+        #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+        {
+            state.graph_transaction.is_some() || state.transaction.is_some()
+        }
+        #[cfg(not(any(feature = "ladybug", feature = "neo4j")))]
+        {
+            state.transaction.is_some()
+        }
     }
 
     /// 开始事务
     ///
     /// v0.3.0 性能优化：短锁模式，避免持锁期间 async DB 调用。
     /// 流程：短锁检查 → 锁外 begin → 短锁写入（含并发冲突处理）
+    ///
+    /// 图事务双轨：按连接类型分发到关系型（SeaORM）或图（GraphConnection）事务路径。
     pub async fn begin_transaction(&self) -> Result<(), DbError> {
         // 短锁：检查是否已在事务中
         {
             let state = self.state.lock().await;
+            #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+            if state.graph_transaction.is_some() {
+                return Err(DbError::Transaction("Already in graph transaction".to_string()));
+            }
             if state.transaction.is_some() {
                 return Err(DbError::Transaction("Already in transaction".to_string()));
             }
         }
 
-        // 锁外：执行 async DB 操作（避免持锁 await 阻塞其他调用者）
-        let conn = self.connection()?;
+        // 获取连接
+        let conn = self.connection.as_ref().ok_or_else(|| {
+            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+        })?;
+
+        // 图连接分发：调用 begin_graph_txn
+        #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+        if conn.is_graph() {
+            let graph = conn.as_graph()?;
+            let graph_txn = graph
+                .begin_graph_txn()
+                .await
+                .map_err(|e| DbError::Transaction(format!("Failed to begin graph transaction: {}", e)))?;
+
+            // 短锁：写入 graph_transaction（含并发冲突处理）
+            let mut state = self.state.lock().await;
+            if state.graph_transaction.is_some() {
+                // 并发冲突：两次锁之间有其他调用已开始事务，回滚新创建的图事务
+                let _ = graph_txn.rollback().await;
+                return Err(DbError::Transaction(
+                    "Already in graph transaction (concurrent begin detected)".to_string(),
+                ));
+            }
+            state.graph_transaction = Some(graph_txn);
+            return Ok(());
+        }
+
+        // SeaORM 逻辑：锁外执行 async DB 操作
+        let conn = conn.as_sea_orm()?;
         let transaction = conn
             .begin()
             .await
@@ -167,12 +219,35 @@ impl Session {
     ///
     /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 commit。
     ///
+    /// 图事务双轨：优先检查 graph_transaction，有则提交图事务，否则走 SeaORM 逻辑。
+    ///
     /// # 并发安全
     ///
     /// 如果在 commit 时有其他查询正在执行（持有 transaction 的 Arc clone），
     /// `Arc::try_unwrap` 会失败并返回错误。这是预期行为：用户不应在查询执行中提交事务。
     pub async fn commit(&self) -> Result<(), DbError> {
-        // 短锁：take transaction
+        // 图事务优先：短锁 take graph_transaction
+        #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+        {
+            let graph_txn = {
+                let mut state = self.state.lock().await;
+                state.graph_transaction.take()
+            };
+            if let Some(graph_txn) = graph_txn {
+                // 锁外：执行 async commit（commit 消耗 self）
+                graph_txn
+                    .commit()
+                    .await
+                    .map_err(|e| DbError::Transaction(format!("Failed to commit graph transaction: {}", e)))?;
+
+                // 短锁：清除 last_write
+                let mut state = self.state.lock().await;
+                state.last_write = None;
+                return Ok(());
+            }
+        }
+
+        // SeaORM 逻辑：短锁 take transaction
         let transaction_arc = {
             let mut state = self.state.lock().await;
             state
@@ -202,12 +277,31 @@ impl Session {
     ///
     /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 rollback。
     ///
+    /// 图事务双轨：优先检查 graph_transaction，有则回滚图事务，否则走 SeaORM 逻辑。
+    ///
     /// # 并发安全
     ///
     /// 如果在 rollback 时有其他查询正在执行（持有 transaction 的 Arc clone），
     /// `Arc::try_unwrap` 会失败并返回错误。这是预期行为：用户不应在查询执行中回滚事务。
     pub async fn rollback(&self) -> Result<(), DbError> {
-        // 短锁：take transaction
+        // 图事务优先：短锁 take graph_transaction
+        #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+        {
+            let graph_txn = {
+                let mut state = self.state.lock().await;
+                state.graph_transaction.take()
+            };
+            if let Some(graph_txn) = graph_txn {
+                // 锁外：执行 async rollback（rollback 消耗 self）
+                graph_txn
+                    .rollback()
+                    .await
+                    .map_err(|e| DbError::Transaction(format!("Failed to rollback graph transaction: {}", e)))?;
+                return Ok(());
+            }
+        }
+
+        // SeaORM 逻辑：短锁 take transaction
         let transaction_arc = {
             let mut state = self.state.lock().await;
             if state.transaction.is_none() {
@@ -578,6 +672,64 @@ impl Session {
             let duck_conn = conn.as_duckdb()?;
             duck_conn.execute(sql).await
         }
+    }
+
+    /// 执行 Cypher 查询（图数据库专用，ladybug/neo4j feature 启用时可用）
+    ///
+    /// 按事务状态自动分发：
+    /// - 在图事务中：委托给事务句柄执行（确保事务内所有操作使用同一连接）
+    /// - 不在事务中：直接在连接上执行
+    ///
+    /// # 权限检查
+    ///
+    /// Phase 1 stub：admin 角色绕过所有检查，非 admin 角色被拒绝。
+    ///
+    /// # 参数
+    ///
+    /// * `cypher` - Cypher 查询语句
+    ///
+    /// # 返回
+    ///
+    /// 图执行结果（Query 或 Write）
+    ///
+    /// # Errors
+    ///
+    /// - 非 admin 角色调用时返回 `DbError::Permission`
+    /// - 连接不是图连接时返回 `DbError::Connection`
+    /// - 查询语法错误或执行失败时返回对应的 `DbError`
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    pub async fn execute_cypher(&self, cypher: &str) -> DbResult<crate::database::graph::GraphExecResult> {
+        // 图权限检查（T035 stub：admin 绕过，非 admin deny）
+        #[cfg(feature = "permission")]
+        {
+            let graph_perm_ctx =
+                crate::access::permission::GraphPermissionContext::new(&self.role, &self.pool_inner.admin_role);
+            graph_perm_ctx.check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
+        }
+
+        // 取连接
+        let conn = self.connection.as_ref().ok_or_else(|| {
+            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+        })?;
+
+        // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
+        let graph_txn = {
+            let mut state = self.state.lock().await;
+            state.graph_transaction.take()
+        };
+
+        if let Some(graph_txn) = graph_txn {
+            // 委托给事务句柄执行
+            let result = graph_txn.execute_cypher(cypher).await;
+            // 短锁：put back（无论成功失败都放回，由用户决定 commit/rollback）
+            let mut state = self.state.lock().await;
+            state.graph_transaction = Some(graph_txn);
+            return result;
+        }
+
+        // 不在事务中，直接在连接上执行
+        let graph = conn.as_graph()?;
+        graph.execute_cypher(cypher).await
     }
 
     /// 执行 SQL（带权限检查和操作类型）
@@ -972,5 +1124,363 @@ impl super::DatabaseSession for Session {
 
     async fn is_in_transaction(&self) -> bool {
         self.is_in_transaction().await
+    }
+}
+
+// ============================================================================
+// 图事务测试（Ladybug :memory: 端到端验证）
+// ============================================================================
+
+#[cfg(all(test, feature = "ladybug"))]
+mod graph_tests {
+    use super::*;
+    use crate::database::graph::{GraphExecResult, GraphValue};
+
+    /// 创建 Ladybug 内存连接池
+    async fn make_ladybug_pool() -> DbPool {
+        DbPool::new("ladybug::memory:")
+            .await
+            .expect("Failed to create Ladybug pool")
+    }
+
+    // ===== T032: is_in_transaction 图事务支持 =====
+
+    /// TEST-GRAPH-TXN-001: 图连接初始 is_in_transaction 为 false
+    #[tokio::test]
+    async fn test_graph_session_is_in_transaction_initial_false() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        assert!(
+            !session.is_in_transaction().await,
+            "initial state should be no transaction"
+        );
+    }
+
+    /// TEST-GRAPH-TXN-002: begin_transaction 后 is_in_transaction 为 true
+    #[tokio::test]
+    async fn test_graph_session_begin_sets_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        session.begin_transaction().await.expect("begin should succeed");
+        assert!(
+            session.is_in_transaction().await,
+            "should be in transaction after begin"
+        );
+    }
+
+    /// TEST-GRAPH-TXN-003: begin + commit 后 is_in_transaction 为 false
+    #[tokio::test]
+    async fn test_graph_session_commit_clears_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        session.begin_transaction().await.expect("begin");
+        session.commit().await.expect("commit");
+        assert!(
+            !session.is_in_transaction().await,
+            "should not be in transaction after commit"
+        );
+    }
+
+    /// TEST-GRAPH-TXN-004: begin + rollback 后 is_in_transaction 为 false
+    #[tokio::test]
+    async fn test_graph_session_rollback_clears_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        session.begin_transaction().await.expect("begin");
+        session.rollback().await.expect("rollback");
+        assert!(
+            !session.is_in_transaction().await,
+            "should not be in transaction after rollback"
+        );
+    }
+
+    // ===== T033: begin/commit/rollback 图事务分发 =====
+
+    /// TEST-GRAPH-TXN-005: 图事务 begin → execute_cypher → commit 端到端
+    #[tokio::test]
+    async fn test_graph_transaction_commit_e2e() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // 准备：创建 schema
+        session
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create node table");
+
+        // 事务：插入数据并提交
+        session.begin_transaction().await.expect("begin");
+        session
+            .execute_cypher("CREATE (:Person {name: 'Alice'})")
+            .await
+            .expect("create in txn");
+        session.commit().await.expect("commit");
+
+        // 验证：提交后数据可见
+        let result = session
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .await
+            .expect("match after commit");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should see 1 person after commit");
+                let name = &q.rows[0].columns[0].1;
+                match name {
+                    GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Alice"),
+                    other => panic!("expected String Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    /// TEST-GRAPH-TXN-006: 图事务 begin → execute_cypher → rollback 端到端
+    #[tokio::test]
+    async fn test_graph_transaction_rollback_e2e() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // 准备：创建 schema
+        session
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create node table");
+
+        // 事务：插入数据并回滚
+        session.begin_transaction().await.expect("begin");
+        session
+            .execute_cypher("CREATE (:Person {name: 'Bob'})")
+            .await
+            .expect("create in txn");
+        session.rollback().await.expect("rollback");
+
+        // 验证：回滚后数据不可见
+        let result = session
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .await
+            .expect("match after rollback");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 0, "should see 0 persons after rollback");
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    /// TEST-GRAPH-TXN-007: 重复 begin 应返回 Transaction 错误
+    #[tokio::test]
+    async fn test_graph_double_begin_fails() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        session.begin_transaction().await.expect("first begin");
+        let result = session.begin_transaction().await;
+        assert!(result.is_err(), "double begin should fail");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, DbError::Transaction(ref msg) if msg.contains("Already in")),
+            "expected 'Already in' error, got {:?}",
+            err
+        );
+    }
+
+    /// TEST-GRAPH-TXN-008: 无事务时 commit 应返回错误
+    #[tokio::test]
+    async fn test_graph_commit_without_transaction_fails() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        let result = session.commit().await;
+        assert!(result.is_err(), "commit without transaction should fail");
+    }
+
+    /// TEST-GRAPH-TXN-009: 无事务时 rollback 应返回错误
+    #[tokio::test]
+    async fn test_graph_rollback_without_transaction_fails() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        let result = session.rollback().await;
+        assert!(result.is_err(), "rollback without transaction should fail");
+    }
+
+    // ===== T034: execute_cypher 测试 =====
+
+    /// TEST-GRAPH-EXEC-001: 不在事务中 execute_cypher("RETURN 1") 返回结果
+    #[tokio::test]
+    async fn test_execute_cypher_without_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        let result = session
+            .execute_cypher("RETURN 1")
+            .await
+            .expect("execute_cypher should succeed");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should return 1 row");
+                let value = &q.rows[0].columns[0].1;
+                match value {
+                    GraphValue::Scalar(s) => assert_eq!(s, &serde_json::json!(1)),
+                    other => panic!("expected Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    /// TEST-GRAPH-EXEC-002: 在事务中 execute_cypher 委托给事务句柄
+    #[tokio::test]
+    async fn test_execute_cypher_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        session
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+
+        session.begin_transaction().await.expect("begin");
+        session
+            .execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .await
+            .expect("create in txn");
+
+        // 事务内查询应看到数据
+        let result = session
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+            .await
+            .expect("match in txn");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should see 1 person in txn");
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+        session.commit().await.expect("commit");
+    }
+
+    /// TEST-GRAPH-EXEC-003: CREATE NODE TABLE + CREATE + MATCH 端到端
+    #[tokio::test]
+    async fn test_execute_cypher_e2e_create_match() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // DDL
+        session
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .await
+            .expect("create node table");
+
+        // 插入多条
+        session
+            .execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .await
+            .expect("create alice");
+        session
+            .execute_cypher("CREATE (:Person {name: 'Bob', age: 30})")
+            .await
+            .expect("create bob");
+
+        // 查询并验证
+        let result = session
+            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY name")
+            .await
+            .expect("match");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 2, "should return 2 persons");
+                // 验证第一行
+                let name0 = &q.rows[0].columns[0].1;
+                match name0 {
+                    GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Alice"),
+                    other => panic!("expected String Scalar, got {other:?}"),
+                }
+                // 验证第二行
+                let name1 = &q.rows[1].columns[0].1;
+                match name1 {
+                    GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Bob"),
+                    other => panic!("expected String Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    /// TEST-GRAPH-EXEC-004: 无效 Cypher 返回错误
+    #[tokio::test]
+    async fn test_execute_cypher_invalid_returns_error() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        let result = session.execute_cypher("INVALID CYPHER").await;
+        assert!(result.is_err(), "invalid cypher should return error");
+    }
+
+    /// TEST-GRAPH-EXEC-005: 事务内多次 execute_cypher 使用同一事务句柄
+    #[tokio::test]
+    async fn test_execute_cypher_multiple_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        session
+            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create table");
+
+        session.begin_transaction().await.expect("begin");
+
+        // 多次 execute_cypher 都应在同一事务内
+        session
+            .execute_cypher("CREATE (:Person {name: 'A'})")
+            .await
+            .expect("create A");
+        session
+            .execute_cypher("CREATE (:Person {name: 'B'})")
+            .await
+            .expect("create B");
+        session
+            .execute_cypher("CREATE (:Person {name: 'C'})")
+            .await
+            .expect("create C");
+
+        let result = session
+            .execute_cypher("MATCH (p:Person) RETURN count(p) AS cnt")
+            .await
+            .expect("count in txn");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1);
+                let cnt = &q.rows[0].columns[0].1;
+                match cnt {
+                    GraphValue::Scalar(s) => assert_eq!(s, &serde_json::json!(3)),
+                    other => panic!("expected Scalar, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+        session.commit().await.expect("commit");
+    }
+
+    /// TEST-GRAPH-EXEC-006: 非 admin 角色调用 execute_cypher 应被拒绝（permission feature）
+    #[cfg(feature = "permission")]
+    #[tokio::test]
+    async fn test_execute_cypher_non_admin_denied() {
+        let pool = make_ladybug_pool().await;
+        // system 角色在无权限配置时也被允许获取 session
+        let session = pool.get_session("system").await.expect("get_session");
+        let result = session.execute_cypher("RETURN 1").await;
+        assert!(result.is_err(), "non-admin role should be denied");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, DbError::Permission(ref msg) if msg.contains("Graph operation denied")),
+            "expected Permission error, got {:?}",
+            err
+        );
+    }
+
+    /// TEST-GRAPH-EXEC-007: admin 角色 execute_cypher 成功（permission feature）
+    #[cfg(feature = "permission")]
+    #[tokio::test]
+    async fn test_execute_cypher_admin_allowed() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+        let result = session.execute_cypher("RETURN 42").await;
+        assert!(result.is_ok(), "admin role should be allowed");
     }
 }
