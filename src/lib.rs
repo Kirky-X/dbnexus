@@ -166,6 +166,8 @@ pub use crate::database::{
 pub use crate::access::{DdlGuard, DdlValidationResult};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
+#[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
+pub use crate::access::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use crate::access::{
     MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
