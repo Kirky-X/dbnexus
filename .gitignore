@@ -112,3 +112,20 @@ docker-compose.yml
 # 本地开发工具
 Makefile
 .gitnexus
+
+# =============================================================================
+# AI / Agent Tools (not for version control)
+# =============================================================================
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+CODEIUM.md
+.claude/
+.trae/
+.qoder/
+.opencode/
+.cursor/
+.aider/
+.continue/
+.codeium/
+.github/copilot/
