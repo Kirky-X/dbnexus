@@ -9,7 +9,7 @@
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
-#![doc(html_root_url = "https://docs.rs/dbnexus/0.3.4")]
+#![doc(html_root_url = "https://docs.rs/dbnexus/0.4.0")]
 
 // ============================================================================
 // 编译期数据库特性互斥检查
@@ -35,12 +35,22 @@ compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 ))]
 compile_error!("Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features");
 
-// 规则 3：至少一个数据库后端
+// 规则 3：至少一个数据库后端（关系型或图 DB）
+// 图 DB feature（ladybug/neo4j）与关系型 feature 不互斥，允许混合使用
 #[cfg(all(
     not(clippy),
-    not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "duckdb"))
+    not(any(
+        feature = "sqlite",
+        feature = "postgres",
+        feature = "mysql",
+        feature = "duckdb",
+        feature = "ladybug",
+        feature = "neo4j"
+    ))
 ))]
-compile_error!("Must enable at least one database feature: 'sqlite', 'postgres', 'mysql', or 'duckdb'");
+compile_error!(
+    "Must enable at least one database feature: 'sqlite', 'postgres', 'mysql', 'duckdb', 'ladybug', or 'neo4j'"
+);
 
 // 检查 feature 依赖关系
 // Task 21：移除 permission-with-cache 检查（该聚合 feature 已移除，用户改用 permission + cache）
@@ -142,11 +152,22 @@ pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
 pub use crate::database::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
+// 图数据库连接导出（0.4.0 新增）
+#[cfg(feature = "ladybug")]
+pub use crate::database::LadybugConnection;
+#[cfg(feature = "neo4j")]
+pub use crate::database::Neo4jConnection;
+pub use crate::database::{
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+};
+
 // Access 导出
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{DdlGuard, DdlValidationResult};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
+#[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
+pub use crate::access::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use crate::access::{
     MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,

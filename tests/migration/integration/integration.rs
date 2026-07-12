@@ -30,6 +30,9 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
             "SELECT table_name FROM information_schema.tables WHERE table_name='{}'",
             table_name
         ),
+        DatabaseType::Ladybug | DatabaseType::Neo4j => {
+            panic!("Graph databases do not support relational table existence checks")
+        }
     }
 }
 

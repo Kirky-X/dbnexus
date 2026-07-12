@@ -123,6 +123,9 @@ impl MigrationExecutor {
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                panic!("Graph databases do not participate in relational migrations")
+            }
         };
 
         let applied_at_value = format_applied_at_for_backend(backend, applied_at);
@@ -174,6 +177,9 @@ impl MigrationExecutor {
                 }
                 DatabaseType::DuckDb => {
                     query.column(Alias::new("applied_at"));
+                }
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not participate in relational migrations")
                 }
             }
 
@@ -263,6 +269,9 @@ impl MigrationExecutor {
                     file_path TEXT
                 );"
             }
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                panic!("Graph databases do not participate in relational migrations")
+            }
         };
 
         match self.connection.execute_unprepared(create_table_sql).await {
@@ -322,6 +331,9 @@ impl MigrationExecutor {
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                panic!("Graph databases do not participate in relational migrations")
+            }
         };
 
         let insert_sql = build_migration_insert_sql(backend);
@@ -581,6 +593,9 @@ impl MigrationExecutor {
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                panic!("Graph databases do not participate in relational migrations")
+            }
         };
         let insert_sql = build_migration_insert_sql(backend);
         let applied_at_value = format_applied_at_for_backend(backend, applied_at);
