@@ -85,7 +85,12 @@ impl Neo4jConnection {
     /// # 返回
     ///
     /// 返回三元组 `(uri, user, password)`，uri 已去除 userinfo 部分。
-    pub fn parse_url(url: &str) -> (String, String, String) {
+    ///
+    /// # 错误
+    ///
+    /// - URL 无凭据且 `NEO4J_USER`/`NEO4J_PASSWORD` 环境变量未设置时返回错误
+    ///   （避免空凭据导致后续 `neo4rs::Graph::new` 认证失败但错误信息不指向根因）
+    pub fn parse_url(url: &str) -> DbResult<(String, String, String)> {
         match url::Url::parse(url) {
             Ok(parsed) => {
                 let scheme = parsed.scheme();
@@ -97,16 +102,34 @@ impl Neo4jConnection {
                 let password = parsed.password().unwrap_or("").to_string();
 
                 if user.is_empty() {
-                    let env_user = std::env::var("NEO4J_USER").unwrap_or_default();
-                    let env_pass = std::env::var("NEO4J_PASSWORD").unwrap_or_default();
-                    (uri, env_user, env_pass)
+                    let env_user = std::env::var("NEO4J_USER").map_err(|_| {
+                        DbError::Connection(sea_orm::DbErr::Custom(
+                            "neo4j URL has no credentials and NEO4J_USER env var is not set".to_string(),
+                        ))
+                    })?;
+                    let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
+                        DbError::Connection(sea_orm::DbErr::Custom(
+                            "neo4j URL has no credentials and NEO4J_PASSWORD env var is not set".to_string(),
+                        ))
+                    })?;
+                    Ok((uri, env_user, env_pass))
                 } else {
-                    (uri, user, password)
+                    Ok((uri, user, password))
                 }
             }
             Err(_) => {
-                // 非 URL 格式，原样返回，凭据为空
-                (url.to_string(), String::new(), String::new())
+                // 非 URL 格式，原样返回 uri，凭据从环境变量读取
+                let env_user = std::env::var("NEO4J_USER").map_err(|_| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "neo4j URL '{url}' is not a valid URL and NEO4J_USER env var is not set"
+                    )))
+                })?;
+                let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "neo4j URL '{url}' is not a valid URL and NEO4J_PASSWORD env var is not set"
+                    )))
+                })?;
+                Ok((url.to_string(), env_user, env_pass))
             }
         }
     }
@@ -285,7 +308,8 @@ mod tests {
 
     #[test]
     fn test_parse_url_neo4j_with_credentials() {
-        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j://user:pass@localhost:7687");
+        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j://user:pass@localhost:7687")
+            .expect("parse_url with credentials should succeed");
         assert_eq!(uri, "neo4j://localhost:7687");
         assert_eq!(user, "user");
         assert_eq!(pass, "pass");
@@ -293,37 +317,38 @@ mod tests {
 
     #[test]
     fn test_parse_url_neo4j_plus_s_with_credentials() {
-        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j+s://admin:secret@host:7687");
+        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j+s://admin:secret@host:7687")
+            .expect("parse_url with credentials should succeed");
         assert_eq!(uri, "neo4j+s://host:7687");
         assert_eq!(user, "admin");
         assert_eq!(pass, "secret");
     }
 
     #[test]
-    fn test_parse_url_neo4j_no_credentials_extracts_uri() {
-        // 不验证 user/pass（依赖环境变量 NEO4J_USER/NEO4J_PASSWORD），
-        // 仅验证 URI 正确提取了 host:port 并去除了 userinfo
-        let (uri, _, _) = Neo4jConnection::parse_url("neo4j://localhost:7687");
-        assert_eq!(uri, "neo4j://localhost:7687");
+    fn test_parse_url_neo4j_no_credentials_returns_error() {
+        // 无凭据且环境变量未设置时必须返回明确错误（LOW-001 修复）
+        let result = Neo4jConnection::parse_url("neo4j://localhost:7687");
+        assert!(result.is_err(), "parse_url without credentials should error");
     }
 
     #[test]
     fn test_parse_url_neo4j_default_port() {
-        let (uri, _, _) = Neo4jConnection::parse_url("neo4j://user:pass@localhost");
+        let (uri, _, _) = Neo4jConnection::parse_url("neo4j://user:pass@localhost")
+            .expect("parse_url with credentials should succeed");
         assert_eq!(uri, "neo4j://localhost:7687");
     }
 
     #[test]
-    fn test_parse_url_invalid_returns_as_is() {
-        let (uri, user, pass) = Neo4jConnection::parse_url("not_a_url");
-        assert_eq!(uri, "not_a_url");
-        assert_eq!(user, "");
-        assert_eq!(pass, "");
+    fn test_parse_url_invalid_returns_error() {
+        // 非 URL 格式且环境变量未设置时必须返回明确错误（LOW-001 修复）
+        let result = Neo4jConnection::parse_url("not_a_url");
+        assert!(result.is_err(), "parse_url with invalid URL should error");
     }
 
     #[test]
     fn test_parse_url_password_with_special_chars() {
-        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j://user:p%40ss@host:7687");
+        let (uri, user, pass) = Neo4jConnection::parse_url("neo4j://user:p%40ss@host:7687")
+            .expect("parse_url with credentials should succeed");
         assert_eq!(uri, "neo4j://host:7687");
         assert_eq!(user, "user");
         // url crate 不对 password 做百分号解码，保持原始编码形式
@@ -397,17 +422,12 @@ mod tests {
     /// 从环境变量获取 Neo4j 连接信息，未设置则返回 None
     fn neo4j_test_connection() -> Option<Neo4jConnection> {
         let url = std::env::var("NEO4J_URL").ok()?;
-        let user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string());
-        let password = std::env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "neo4j".to_string());
-
-        // 如果 URL 包含凭据，parse_url 提取；否则用环境变量
-        let (uri, parsed_user, parsed_pass) = Neo4jConnection::parse_url(&url);
-        let final_user = if parsed_user.is_empty() { user } else { parsed_user };
-        let final_pass = if parsed_pass.is_empty() { password } else { parsed_pass };
+        // parse_url 现在返回 Result，无凭据时从环境变量读取
+        let (uri, user, password) = Neo4jConnection::parse_url(&url).ok()?;
 
         // 用 block_on 同步创建（测试环境已有 tokio runtime）
         let rt = tokio::runtime::Runtime::new().ok()?;
-        rt.block_on(async { Neo4jConnection::new(&uri, &final_user, &final_pass).await })
+        rt.block_on(async { Neo4jConnection::new(&uri, &user, &password).await })
             .ok()
     }
 

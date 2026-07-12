@@ -155,21 +155,7 @@ impl GraphConnection for LadybugConnection {
         let handle: JoinHandle<DbResult<GraphExecResult>> = tokio::task::spawn_blocking(move || {
             let conn = lbug::Connection::new(&db)
                 .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Connection::new: {e}"))))?;
-            let mut result = conn
-                .query(&cypher_owned)
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug query: {e}"))))?;
-            let column_names = result.get_column_names();
-            let num_tuples = result.get_num_tuples();
-            let mut rows = Vec::with_capacity(num_tuples as usize);
-            for row_values in &mut result {
-                let columns = column_names
-                    .iter()
-                    .zip(row_values.iter())
-                    .map(|(name, value)| (name.clone(), map_lbug_value(value)))
-                    .collect();
-                rows.push(GraphRow { columns });
-            }
-            Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+            execute_cypher_on_conn(&conn, &cypher_owned)
         });
         let result = handle
             .await
@@ -367,7 +353,7 @@ fn map_lbug_value(value: &lbug::Value) -> GraphValue {
         lbug::Value::UInt16(i) => GraphValue::Scalar(serde_json::json!(i)),
         lbug::Value::UInt32(i) => GraphValue::Scalar(serde_json::json!(i)),
         lbug::Value::UInt64(i) => GraphValue::Scalar(serde_json::json!(i)),
-        lbug::Value::Int128(i) => GraphValue::Scalar(serde_json::json!(i128_to_string(i))),
+        lbug::Value::Int128(i) => GraphValue::Scalar(serde_json::json!(i.to_string())),
         lbug::Value::Float(f) => GraphValue::Scalar(serde_json::json!(f)),
         lbug::Value::Double(f) => GraphValue::Scalar(serde_json::json!(f)),
         lbug::Value::String(s) => GraphValue::Scalar(serde_json::json!(s)),
@@ -448,11 +434,6 @@ fn graph_value_to_json_scalar(value: &GraphValue) -> serde_json::Value {
         GraphValue::Rel(r) => serde_json::to_value(r).unwrap_or(serde_json::Value::Null),
         GraphValue::Path(p) => serde_json::to_value(p).unwrap_or(serde_json::Value::Null),
     }
-}
-
-/// 将 i128 转换为字符串（serde_json 不直接支持 i128）
-fn i128_to_string(i: &i128) -> String {
-    i.to_string()
 }
 
 #[cfg(test)]

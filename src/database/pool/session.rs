@@ -70,6 +70,15 @@ pub struct Session {
     /// 内部可变状态（事务和写操作时间）
     state: Mutex<SessionState>,
 
+    /// 图操作互斥锁（防止并发 `execute_cypher` 在 take → put back 窗口绕过事务）
+    ///
+    /// HIGH-001 修复：`Box<dyn GraphTransaction>` 不可 clone，图事务采用
+    /// take → 锁外 await → put back 模式。若无互斥，并发 `execute_cypher` 会在
+    /// take 后的 await 窗口内看到 `graph_transaction` 为 `None`，落入"直接在连接上
+    /// 执行"分支，破坏事务隔离。此锁将图操作串行化，确保 put back 后才允许下一个 take。
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    graph_op_mutex: Mutex<()>,
+
     /// 指标收集器（可选，用于 metrics 特性）
     #[cfg(feature = "metrics")]
     metrics_collector: Option<Arc<MetricsCollector>>,
@@ -97,6 +106,8 @@ impl Session {
                 graph_transaction: None,
                 last_write: None,
             }),
+            #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+            graph_op_mutex: Mutex::new(()),
             #[cfg(feature = "metrics")]
             metrics_collector: metrics,
         }
@@ -711,6 +722,12 @@ impl Session {
         let conn = self.connection.as_ref().ok_or_else(|| {
             DbError::Config("Connection not available - Session may have been invalidated".to_string())
         })?;
+
+        // 获取图操作互斥锁（HIGH-001 修复）
+        //
+        // 串行化 `execute_cypher` 调用，确保图事务 take → await → put back 期间
+        // 无并发调用看到 `graph_transaction` 为 `None` 而绕过事务隔离。
+        let _graph_op_guard = self.graph_op_mutex.lock().await;
 
         // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
         let graph_txn = {

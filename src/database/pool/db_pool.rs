@@ -739,7 +739,7 @@ impl DbPool {
             crate::foundation::DatabaseType::Neo4j => {
                 #[cfg(feature = "neo4j")]
                 {
-                    let (uri, user, password) = crate::database::Neo4jConnection::parse_url(&config.url);
+                    let (uri, user, password) = crate::database::Neo4jConnection::parse_url(&config.url)?;
                     let conn = crate::database::Neo4jConnection::new(&uri, &user, &password).await?;
                     Ok(DbConnection::Neo4j(Arc::new(conn)))
                 }
