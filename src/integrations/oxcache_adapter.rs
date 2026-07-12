@@ -31,8 +31,8 @@ use std::sync::Arc;
 
 use oxcache::backend::CacheBackend;
 
-use crate::domain::cache_provider::DbCacheProvider;
-use crate::foundation::error::DbError;
+use crate::domain::DbCacheProvider;
+use crate::foundation::DbError;
 
 /// Adapter that wraps an oxcache `CacheBackend` as a `DbCacheProvider`.
 ///

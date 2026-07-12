@@ -80,7 +80,7 @@ pub enum PoolError {
 // - 错误消息大小写变化（如 "Role not found" → "role not found"）
 // access::permission::types::PermissionError 保留不动，待 Phase 4 Task 18 整体删除。
 #[cfg(feature = "permission")]
-pub use crate::domain::permission::PermissionError;
+pub use crate::domain::PermissionError;
 
 /// 迁移错误
 #[derive(Debug, thiserror::Error)]
@@ -134,7 +134,7 @@ pub type PermissionResult<T> = Result<T, PermissionError>;
 /// 连接池操作结果
 pub type PoolResult<T> = Result<T, PoolError>;
 /// 配置操作结果
-pub type ConfigResult<T> = Result<T, crate::foundation::config::ConfigError>;
+pub type ConfigResult<T> = Result<T, crate::foundation::ConfigError>;
 /// 迁移操作结果
 pub type MigrationResult<T> = Result<T, MigrationError>;
 /// 审计操作结果

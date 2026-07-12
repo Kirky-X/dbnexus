@@ -7,18 +7,19 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "permission")]
-use crate::access::permission::{PermissionAction, PermissionContext};
-#[cfg(feature = "sql-parser")]
-use crate::access::security::{DdlGuard, DdlValidationResult};
+use super::db_pool::DbPoolInner;
+use super::{DatabaseConnection, DbConnection, DbPool};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
-use crate::access::sql_parser::SqlParser;
+use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
-use crate::access::sql_parser::is_ddl_operation;
-use crate::database::pool::db_pool::{DatabaseConnection, DbConnection, DbPool, DbPoolInner};
-use crate::foundation::error::{DbError, DbResult};
+use crate::access::is_ddl_operation;
+#[cfg(feature = "sql-parser")]
+use crate::access::{DdlGuard, DdlValidationResult};
+#[cfg(feature = "permission")]
+use crate::access::{PermissionAction, PermissionContext};
+use crate::foundation::{DbError, DbResult};
 #[cfg(feature = "metrics")]
-use crate::observability::metrics::MetricsCollector;
+use crate::observability::MetricsCollector;
 use async_trait::async_trait;
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
@@ -270,7 +271,7 @@ impl Session {
     #[cfg(feature = "migration")]
     pub fn create_migration_executor(
         &self,
-        db_type: crate::foundation::config::DatabaseType,
+        db_type: crate::foundation::DatabaseType,
     ) -> Result<super::MigrationExecutor, DbError> {
         let conn = self.connection()?.clone();
         Ok(super::MigrationExecutor::new(conn, db_type))
@@ -411,7 +412,7 @@ impl Session {
     ///
     /// 查询结果行列表
     #[cfg(feature = "duckdb")]
-    pub async fn execute_duckdb(&self, sql: &str) -> DbResult<Vec<crate::database::pool::DuckDbRow>> {
+    pub async fn execute_duckdb(&self, sql: &str) -> DbResult<Vec<crate::database::DuckDbRow>> {
         // 安全检查：与 execute_raw 一致的防御链（DDL 拦截 + SQL 注入检测 + 权限校验）
         #[cfg(feature = "sql-parser")]
         {
@@ -488,7 +489,7 @@ impl Session {
     ///
     /// 受影响的行数信息
     #[cfg(feature = "duckdb")]
-    pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::pool::DuckDbExecResult> {
+    pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::DuckDbExecResult> {
         // 安全检查：与 execute_raw_ddl 对齐 —— admin role 通过 DdlGuard 验证后允许 DDL，
         // 非 admin role 拒绝 DDL。DuckDB 是分析型数据库，admin 需要能创建表/视图，
         // 与 SeaORM 路径的 execute_raw_ddl 行为保持一致。

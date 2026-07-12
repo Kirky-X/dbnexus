@@ -8,7 +8,7 @@
 //! - 通配符匹配
 //! - 边界条件和错误处理
 
-use dbnexus::access::permission::{
+use dbnexus::access::{
     PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy, TablePermission,
 };
 

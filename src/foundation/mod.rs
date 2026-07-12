@@ -9,10 +9,12 @@ pub mod config;
 pub mod error;
 
 // Re-exports for convenience (旧版，保持兼容)
-pub use config::{ConfigError, DatabaseType, DbConfig, PoolConfig};
+pub use config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
+#[cfg(feature = "permission")]
+pub use error::PermissionError;
 #[cfg(feature = "permission")]
 pub use error::PermissionResult;
-pub use error::{AuditError, DbError, DbResult, MigrationError};
-pub use error::{ConfigResult, PoolResult};
+pub use error::{AuditError, AuditResult, DbError, DbResult, MigrationError, MigrationResult};
+pub use error::{ConfigResult, PoolError, PoolResult};
 pub use sea_orm::entity::prelude::{ActiveModelTrait, EntityTrait};
 pub use sea_orm::{Condition, Set};

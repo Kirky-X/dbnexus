@@ -17,7 +17,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use dbnexus::access::permission::{
+use dbnexus::access::{
     MemoryPermissionProvider, PermissionAction, PermissionContext, PermissionProvider, RolePolicy, TablePermission,
 };
 use dbnexus::db_entity;
