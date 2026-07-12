@@ -7,8 +7,6 @@
 //!
 //! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能。
 
-#![allow(dead_code)] // 允许未使用的辅助函数（后续 Phase 启用）
-
 use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
 use regex::Regex;
@@ -70,16 +68,6 @@ struct HooksArgs {
 }
 
 impl HooksArgs {
-    /// 是否有任何 hook 被指定
-    fn has_any(&self) -> bool {
-        self.before_insert.is_some()
-            || self.after_insert.is_some()
-            || self.before_update.is_some()
-            || self.after_update.is_some()
-            || self.before_delete.is_some()
-            || self.after_delete.is_some()
-    }
-
     /// 是否有 before_save 相关 hook（before_insert 或 before_update）
     fn has_before_save_hooks(&self) -> bool {
         self.before_insert.is_some() || self.before_update.is_some()
@@ -133,7 +121,17 @@ fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::
                         ));
                     }
                 }
+            } else {
+                return Err(syn::Error::new(
+                    nv.value.span(),
+                    format!("hook parameter '{}' must be a string literal", key),
+                ));
             }
+        } else {
+            return Err(syn::Error::new(
+                meta.span(),
+                "hooks() parameters must be in `key = \"value\"` form",
+            ));
         }
     }
 
@@ -167,6 +165,8 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.table_name = s.value();
+                } else {
+                    return Err(syn::Error::new(nv.value.span(), "table_name must be a string literal"));
                 }
             }
             // primary_key = "..."
@@ -176,6 +176,8 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.primary_key = s.value();
+                } else {
+                    return Err(syn::Error::new(nv.value.span(), "primary_key must be a string literal"));
                 }
             }
             // timestamps = true|false
@@ -185,6 +187,11 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.timestamps = b.value;
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "timestamps must be a boolean literal (true|false)",
+                    ));
                 }
             }
             // soft_delete = true|false
@@ -194,6 +201,11 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.soft_delete = b.value;
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "soft_delete must be a boolean literal (true|false)",
+                    ));
                 }
             }
             // validate （布尔开关，无值）
@@ -1612,65 +1624,4 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
     }
 
     Ok(())
-}
-
-/// 验证配置路径安全性
-fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
-    // 1. 空路径检查
-    if config_path.is_empty() {
-        proc_macro_error2::abort!(struct_name, "Config path cannot be empty");
-    }
-
-    // 2. 路径遍历攻击检测（正则表达式）
-    let path_traversal_regex =
-        regex::Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Path traversal regex should be valid");
-    if path_traversal_regex.is_match(config_path) {
-        proc_macro_error2::abort!(
-            struct_name,
-            "Config path contains invalid parent directory reference or path traversal patterns"
-        );
-    }
-
-    // 3. 空字节注入检查
-    if config_path.as_bytes().contains(&0) {
-        proc_macro_error2::abort!(struct_name, "Config path contains null byte");
-    }
-
-    // 4. 绝对路径检查（允许绝对路径，但给出警告）
-    if config_path.starts_with('/') || config_path.starts_with('\\') {
-        // 在宏中，我们只能编译时检查，无法验证文件是否存在
-        // 对于绝对路径，我们接受但建议使用相对路径
-    }
-
-    // 5. 检查 Windows 驱动器字母路径
-    if config_path.contains(':') && config_path.len() > 2 {
-        let chars: Vec<char> = config_path.chars().collect();
-        if chars.len() > 2 && chars[1] == ':' {
-            proc_macro_error2::abort!(
-                struct_name,
-                "Absolute Windows paths are not recommended. Use relative paths instead."
-            );
-        }
-    }
-
-    // 6. 检查危险的系统路径
-    let dangerous_paths = [
-        "/etc/passwd",
-        "/etc/shadow",
-        "/etc/sudoers",
-        "/root/.ssh",
-        "/proc/self",
-        "/sys/kernel",
-        "C:\\Windows\\System32",
-    ];
-    let lower_path = config_path.to_lowercase();
-    for dangerous in &dangerous_paths {
-        if lower_path.contains(&dangerous.to_lowercase()) {
-            proc_macro_error2::abort!(
-                struct_name,
-                "Config path references dangerous system path: {}",
-                dangerous
-            );
-        }
-    }
 }
