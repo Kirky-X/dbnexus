@@ -45,6 +45,13 @@ struct SessionState {
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     graph_transaction: Option<Box<dyn crate::database::graph::GraphTransaction + Send>>,
 
+    /// 图事务是否被 poison（FM-3.1 修复）
+    ///
+    /// 当 `execute_cypher` 在事务内 await 期间 panic 时，take→put back 中断，
+    /// 事务句柄丢失。设置此标记后，后续图操作返回错误，防止在事务外执行。
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    graph_txn_poisoned: bool,
+
     /// 最后写操作时间（用于读写分离）
     last_write: Option<Instant>,
 }
@@ -104,6 +111,8 @@ impl Session {
                 transaction: None,
                 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
                 graph_transaction: None,
+                #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+                graph_txn_poisoned: false,
                 last_write: None,
             }),
             #[cfg(any(feature = "ladybug", feature = "neo4j"))]
@@ -732,12 +741,44 @@ impl Session {
         // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
         let graph_txn = {
             let mut state = self.state.lock().await;
+            // FM-3.1 修复：检查 poisoned 标记，防止 panic 后事务隔离被绕过
+            if state.graph_txn_poisoned {
+                return Err(DbError::Transaction(
+                    "Graph transaction is poisoned due to previous panic; \
+                     Session must be dropped and recreated"
+                        .to_string(),
+                ));
+            }
             state.graph_transaction.take()
         };
 
         if let Some(graph_txn) = graph_txn {
-            // 委托给事务句柄执行
+            // FM-3.1 修复：PoisonGuard 确保 panic 时设置 poisoned 标记
+            //
+            // 如果 `graph_txn.execute_cypher().await` panic，put back 不会执行，
+            // 事务句柄丢失。guard 在 unwinding 时设置 poisoned 标记，
+            // 后续 execute_cypher 返回错误而非绕过事务隔离。
+            struct PoisonGuard<'a> {
+                state: &'a Mutex<SessionState>,
+                armed: bool,
+            }
+            impl<'a> Drop for PoisonGuard<'a> {
+                fn drop(&mut self) {
+                    if self.armed {
+                        if let Ok(mut state) = self.state.try_lock() {
+                            state.graph_txn_poisoned = true;
+                        }
+                    }
+                }
+            }
+
+            let mut guard = PoisonGuard {
+                state: &self.state,
+                armed: true,
+            };
             let result = graph_txn.execute_cypher(cypher).await;
+            guard.armed = false; // 正常完成，解除 armed
+
             // 短锁：put back（无论成功失败都放回，由用户决定 commit/rollback）
             let mut state = self.state.lock().await;
             state.graph_transaction = Some(graph_txn);
@@ -1019,6 +1060,15 @@ fn check_ddl_operation(sql: &str) -> DbResult<()> {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // FM-3.6 修复说明：图事务通过级联 Drop 处理
+        //
+        // `state: Mutex<SessionState>` 被 drop 时，`SessionState::graph_transaction`
+        // 也会被 drop，触发 `LadybugTransaction::drop`（actor 模式自动 ROLLBACK）
+        // 或 `Neo4jTransaction::drop`（FM-2.2 修复：spawn rollback task）。
+        //
+        // 如果 `execute_cypher` 正在执行（graph_txn 被 take 出来在 await 中），
+        // Session drop 会导致 future drop，局部变量 `graph_txn` 也会被 drop。
+        //
         // 归还连接到池
         if let Some(conn) = self.connection.take() {
             self.pool.release_connection(conn);
