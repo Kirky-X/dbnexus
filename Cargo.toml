@@ -110,6 +110,9 @@ sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros"]
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 duckdb = ["dep:duckdb"]  # 嵌入式分析型数据库（0.3.0 新增）
+# Graph database drivers (can coexist with relational drivers per design 2.8)
+ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
+neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
 permission = ["dashmap", "futures", "yaml", "sql-parser"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试）
@@ -238,6 +241,11 @@ trait-kit = { version = "0.2", features = ["async"], optional = true, default-fe
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
+
+# Ladybug embedded graph database (ladybug feature, 0.4.0 new)
+lbug = { version = "0.18", optional = true }
+# Neo4j graph database server (neo4j feature, 0.4.0 new)
+neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
 jsonwebtoken = { version = "~10.4", features = ["rust_crypto"], optional = true }
