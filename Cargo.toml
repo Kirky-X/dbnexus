@@ -40,7 +40,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "=0.3.3" }
+dbnexus-macros = { path = "macros", version = "0.3" }
 
 [workspace.lints.rust]
 
