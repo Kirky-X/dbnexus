@@ -182,6 +182,14 @@ impl GraphConnection for LadybugConnection {
     }
 
     async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
+        // FM-1.6 修复：事务也占用 Semaphore permit，防止并发事务数无上限
+        let permit = self
+            .spawn_permit
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string())))?;
+
         let db = self.db.clone();
         let (tx, mut rx) = mpsc::channel::<TxnCommand>(8);
 
@@ -224,6 +232,7 @@ impl GraphConnection for LadybugConnection {
         Ok(Box::new(LadybugTransaction {
             tx,
             handle: Some(handle),
+            _permit: permit,
         }))
     }
 
@@ -261,11 +270,23 @@ enum TxnCommand {
 ///
 /// 使用 actor 模式：通过 channel 将命令发送到持有 `Connection` 的 blocking 线程，
 /// 确保事务内所有操作使用同一 `Connection`（lbug 事务要求）。
+///
+/// # Drop 行为
+///
+/// Drop 时 `tx` 被释放，channel 关闭，blocking 线程的 `blocking_recv` 收到 `None`
+/// 后自动执行 `ROLLBACK`。`JoinHandle` 被 detach（blocking 线程继续运行到 ROLLBACK 完成）。
+///
+/// # 并发限制（FM-1.6 修复）
+///
+/// `_permit` 持有 `Semaphore` 许可证直到 `commit`/`rollback` 消耗 self，
+/// 防止事务数无上限地绕过连接池并发限制。
 pub struct LadybugTransaction {
     /// 命令发送通道
     tx: mpsc::Sender<TxnCommand>,
     /// blocking 线程句柄（commit/rollback 时 await）
     handle: Option<JoinHandle<DbResult<()>>>,
+    /// Semaphore 许可证（FM-1.6 修复：事务期间持有，commit/rollback 时释放）
+    _permit: tokio::sync::OwnedSemaphorePermit,
 }
 
 #[async_trait::async_trait]
