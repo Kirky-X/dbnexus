@@ -61,12 +61,18 @@ impl ColumnType {
                 DatabaseType::Postgres => "VARCHAR(255)".to_string(),
                 DatabaseType::Sqlite => "TEXT".to_string(),
                 DatabaseType::DuckDb => "VARCHAR(255)".to_string(),
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not support relational column types")
+                }
             },
             ColumnType::String(Some(len)) => match db_type {
                 DatabaseType::MySql => format!("VARCHAR({})", len),
                 DatabaseType::Postgres => format!("VARCHAR({})", len),
                 DatabaseType::Sqlite => "TEXT".to_string(),
                 DatabaseType::DuckDb => format!("VARCHAR({})", len),
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not support relational column types")
+                }
             },
             ColumnType::Text => "TEXT".to_string(),
             ColumnType::Boolean => match db_type {
@@ -74,6 +80,9 @@ impl ColumnType {
                 DatabaseType::Postgres => "BOOLEAN".to_string(),
                 DatabaseType::Sqlite => "INTEGER".to_string(),
                 DatabaseType::DuckDb => "BOOLEAN".to_string(),
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not support relational column types")
+                }
             },
             ColumnType::Float => "FLOAT".to_string(),
             ColumnType::Double => "DOUBLE PRECISION".to_string(),
@@ -84,6 +93,9 @@ impl ColumnType {
                 DatabaseType::Postgres => "TIMESTAMP".to_string(),
                 DatabaseType::Sqlite => "TEXT".to_string(),
                 DatabaseType::DuckDb => "TIMESTAMP".to_string(),
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not support relational column types")
+                }
             },
             ColumnType::Timestamp => "TIMESTAMP".to_string(),
             ColumnType::Json => match db_type {
@@ -91,6 +103,9 @@ impl ColumnType {
                 DatabaseType::Postgres => "JSONB".to_string(),
                 DatabaseType::Sqlite => "TEXT".to_string(),
                 DatabaseType::DuckDb => "JSON".to_string(),
+                DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                    panic!("Graph databases do not support relational column types")
+                }
             },
             ColumnType::Binary => "BLOB".to_string(),
             ColumnType::Custom(name) => name.to_string(),

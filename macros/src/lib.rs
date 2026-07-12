@@ -7,8 +7,6 @@
 //!
 //! 这些宏适配 sea-orm 2.0，简化实体定义同时保留权限控制功能。
 
-#![allow(dead_code)] // 允许未使用的辅助函数（后续 Phase 启用）
-
 use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
 use regex::Regex;
@@ -70,16 +68,6 @@ struct HooksArgs {
 }
 
 impl HooksArgs {
-    /// 是否有任何 hook 被指定
-    fn has_any(&self) -> bool {
-        self.before_insert.is_some()
-            || self.after_insert.is_some()
-            || self.before_update.is_some()
-            || self.after_update.is_some()
-            || self.before_delete.is_some()
-            || self.after_delete.is_some()
-    }
-
     /// 是否有 before_save 相关 hook（before_insert 或 before_update）
     fn has_before_save_hooks(&self) -> bool {
         self.before_insert.is_some() || self.before_update.is_some()
@@ -133,7 +121,17 @@ fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::
                         ));
                     }
                 }
+            } else {
+                return Err(syn::Error::new(
+                    nv.value.span(),
+                    format!("hook parameter '{}' must be a string literal", key),
+                ));
             }
+        } else {
+            return Err(syn::Error::new(
+                meta.span(),
+                "hooks() parameters must be in `key = \"value\"` form",
+            ));
         }
     }
 
@@ -167,6 +165,8 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.table_name = s.value();
+                } else {
+                    return Err(syn::Error::new(nv.value.span(), "table_name must be a string literal"));
                 }
             }
             // primary_key = "..."
@@ -176,6 +176,8 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.primary_key = s.value();
+                } else {
+                    return Err(syn::Error::new(nv.value.span(), "primary_key must be a string literal"));
                 }
             }
             // timestamps = true|false
@@ -185,6 +187,11 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.timestamps = b.value;
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "timestamps must be a boolean literal (true|false)",
+                    ));
                 }
             }
             // soft_delete = true|false
@@ -194,6 +201,11 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 }) = &nv.value
                 {
                     result.soft_delete = b.value;
+                } else {
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "soft_delete must be a boolean literal (true|false)",
+                    ));
                 }
             }
             // validate （布尔开关，无值）
@@ -220,7 +232,20 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
                 result.audit_tokens = Some(list.tokens.clone());
             }
             _ => {
-                // 忽略未识别的参数（向前兼容，后续 Phase 实现）
+                let name = match &meta {
+                    syn::Meta::Path(p) => p.get_ident().map(|i| i.to_string()).unwrap_or_default(),
+                    syn::Meta::NameValue(nv) => nv.path.get_ident().map(|i| i.to_string()).unwrap_or_default(),
+                    syn::Meta::List(l) => l.path.get_ident().map(|i| i.to_string()).unwrap_or_default(),
+                };
+                return Err(syn::Error::new(
+                    meta.span(),
+                    format!(
+                        "unknown #[db_entity] parameter '{}', expected one of: \
+                         table_name, primary_key, timestamps, soft_delete, validate, \
+                         hooks, permissions, cache, audit",
+                        name
+                    ),
+                ));
             }
         }
     }
@@ -232,31 +257,39 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
 // 嵌套参数解析辅助函数（permissions/cache/audit 子参数）
 // ============================================================================
 
-/// 解析嵌套的 name = value 参数对，返回 (参数名, 值 token) 列表
-fn parse_nested_params(tokens: &proc_macro2::TokenStream) -> Vec<(String, proc_macro2::TokenStream)> {
+/// 解析嵌套的 name = value 参数对，返回 (参数名, 参数名 span, 值 token) 列表
+fn parse_nested_params(
+    tokens: &proc_macro2::TokenStream,
+) -> Result<Vec<(String, proc_macro2::Span, proc_macro2::TokenStream)>, syn::Error> {
     let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
-    let parsed = match parser.parse2(tokens.clone()) {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
+    let parsed = parser.parse2(tokens.clone())?;
 
     let mut result = Vec::new();
     for meta in parsed {
         match meta {
             syn::Meta::NameValue(nv) => {
                 if let Some(ident) = nv.path.get_ident() {
-                    result.push((ident.to_string(), nv.value.to_token_stream()));
+                    result.push((ident.to_string(), nv.path.span(), nv.value.to_token_stream()));
                 }
             }
             syn::Meta::Path(p) => {
                 if let Some(ident) = p.get_ident() {
-                    result.push((ident.to_string(), proc_macro2::TokenStream::new()));
+                    result.push((ident.to_string(), p.span(), proc_macro2::TokenStream::new()));
                 }
             }
-            _ => {}
+            syn::Meta::List(list) => {
+                let name = list.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                return Err(syn::Error::new(
+                    list.path.span(),
+                    format!(
+                        "unexpected nested list parameter '{}', expected name = value pair",
+                        name
+                    ),
+                ));
+            }
         }
     }
-    result
+    Ok(result)
 }
 
 /// 从 token 中提取字符串数组（如 `["admin", "manager"]` → `vec!["admin", "manager"]`）
@@ -325,11 +358,11 @@ fn parse_permissions_params(
     tokens: &proc_macro2::TokenStream,
     struct_name: &syn::Ident,
 ) -> Result<PermissionsParams, syn::Error> {
-    let params = parse_nested_params(tokens);
+    let params = parse_nested_params(tokens)?;
     let mut roles = Vec::new();
     let mut operations = Vec::new();
 
-    for (name, value_tokens) in params {
+    for (name, span, value_tokens) in params {
         match name.as_str() {
             "roles" => {
                 roles = extract_string_array(&value_tokens)?;
@@ -339,7 +372,15 @@ fn parse_permissions_params(
             "operations" => {
                 operations = extract_string_array(&value_tokens)?;
             }
-            _ => {}
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    format!(
+                        "unknown parameter '{}' in permissions(), expected one of: roles, operations",
+                        name
+                    ),
+                ));
+            }
         }
     }
 
@@ -354,12 +395,12 @@ struct CacheParams {
 }
 
 fn parse_cache_params(tokens: &proc_macro2::TokenStream) -> Result<CacheParams, syn::Error> {
-    let params = parse_nested_params(tokens);
+    let params = parse_nested_params(tokens)?;
     let mut ttl: u64 = 300;
     let mut strategy = String::from("lru");
     let mut max_capacity: usize = 10000;
 
-    for (name, value_tokens) in params {
+    for (name, span, value_tokens) in params {
         match name.as_str() {
             "ttl" => ttl = extract_u64(&value_tokens)?,
             "strategy" => strategy = extract_string(&value_tokens)?,
@@ -367,7 +408,15 @@ fn parse_cache_params(tokens: &proc_macro2::TokenStream) -> Result<CacheParams, 
                 let cap = extract_u64(&value_tokens)?;
                 max_capacity = cap as usize;
             }
-            _ => {}
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    format!(
+                        "unknown parameter '{}' in cache(), expected one of: ttl, strategy, max_capacity",
+                        name
+                    ),
+                ));
+            }
         }
     }
 
@@ -387,13 +436,13 @@ struct AuditParams {
 }
 
 fn parse_audit_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Ident) -> Result<AuditParams, syn::Error> {
-    let params = parse_nested_params(tokens);
+    let params = parse_nested_params(tokens)?;
     let mut table_name = String::new();
     let mut log_values = true;
     let mut operations = vec!["INSERT".to_string(), "UPDATE".to_string(), "DELETE".to_string()];
     let mut roles = vec!["admin".to_string()];
 
-    for (name, value_tokens) in params {
+    for (name, span, value_tokens) in params {
         match name.as_str() {
             "table_name" => table_name = extract_string(&value_tokens)?,
             "log_values" => log_values = extract_bool(&value_tokens)?,
@@ -403,7 +452,15 @@ fn parse_audit_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Iden
                 validate_role_names(&roles, struct_name)
                     .map_err(|_| syn::Error::new(struct_name.span(), "Invalid role name format in audit()"))?;
             }
-            _ => {}
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    format!(
+                        "unknown parameter '{}' in audit(), expected one of: table_name, log_values, operations, roles",
+                        name
+                    ),
+                ));
+            }
         }
     }
 
@@ -1438,6 +1495,59 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(result)
             }
 
+            /// 条件查询是否存在记录（带权限控制）
+            ///
+            /// 执行 SELECT COUNT(*) 查询，返回是否存在满足条件的记录。
+            /// soft_delete=true 时自动过滤已软删除记录
+            pub async fn exists(
+                session: &::dbnexus::database::pool::Session,
+                condition: sea_orm::Condition,
+            ) -> Result<bool, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "SELECT").await?;
+                let conn = session.connection()?;
+
+                let count = Entity::find()
+                    .filter(condition)
+                    #soft_delete_filter
+                    .count(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, count > 0);
+
+                Ok(count > 0)
+            }
+
+            /// 根据主键批量查找记录（带权限控制）
+            ///
+            /// 使用 IN 条件一次查询获取所有主键对应的记录。
+            /// soft_delete=true 时自动过滤已软删除记录。
+            /// 注意：返回记录的顺序可能与输入顺序不同。
+            pub async fn find_by_ids(
+                session: &::dbnexus::database::pool::Session,
+                pks: Vec<i64>,
+            ) -> Result<Vec<Self>, dbnexus::DbError> {
+                use sea_orm::EntityTrait;
+
+                session.check_table_permission(#table_name, "SELECT").await?;
+                let conn = session.connection()?;
+
+                let result = Entity::find()
+                    .filter(Column::#primary_key_pascal.is_in(pks))
+                    #soft_delete_filter
+                    .all(conn)
+                    .await
+                    .map_err(dbnexus::DbError::Connection)?;
+
+                #[cfg(feature = "metrics")]
+                session.record_metric("select", #table_name, !result.is_empty());
+
+                Ok(result)
+            }
+
             /// 统计记录数（带权限控制）
             ///
             /// soft_delete=true 时自动过滤已软删除记录
@@ -1514,65 +1624,4 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
     }
 
     Ok(())
-}
-
-/// 验证配置路径安全性
-fn validate_config_path(config_path: &str, struct_name: &syn::Ident) {
-    // 1. 空路径检查
-    if config_path.is_empty() {
-        proc_macro_error2::abort!(struct_name, "Config path cannot be empty");
-    }
-
-    // 2. 路径遍历攻击检测（正则表达式）
-    let path_traversal_regex =
-        regex::Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Path traversal regex should be valid");
-    if path_traversal_regex.is_match(config_path) {
-        proc_macro_error2::abort!(
-            struct_name,
-            "Config path contains invalid parent directory reference or path traversal patterns"
-        );
-    }
-
-    // 3. 空字节注入检查
-    if config_path.as_bytes().contains(&0) {
-        proc_macro_error2::abort!(struct_name, "Config path contains null byte");
-    }
-
-    // 4. 绝对路径检查（允许绝对路径，但给出警告）
-    if config_path.starts_with('/') || config_path.starts_with('\\') {
-        // 在宏中，我们只能编译时检查，无法验证文件是否存在
-        // 对于绝对路径，我们接受但建议使用相对路径
-    }
-
-    // 5. 检查 Windows 驱动器字母路径
-    if config_path.contains(':') && config_path.len() > 2 {
-        let chars: Vec<char> = config_path.chars().collect();
-        if chars.len() > 2 && chars[1] == ':' {
-            proc_macro_error2::abort!(
-                struct_name,
-                "Absolute Windows paths are not recommended. Use relative paths instead."
-            );
-        }
-    }
-
-    // 6. 检查危险的系统路径
-    let dangerous_paths = [
-        "/etc/passwd",
-        "/etc/shadow",
-        "/etc/sudoers",
-        "/root/.ssh",
-        "/proc/self",
-        "/sys/kernel",
-        "C:\\Windows\\System32",
-    ];
-    let lower_path = config_path.to_lowercase();
-    for dangerous in &dangerous_paths {
-        if lower_path.contains(&dangerous.to_lowercase()) {
-            proc_macro_error2::abort!(
-                struct_name,
-                "Config path references dangerous system path: {}",
-                dangerous
-            );
-        }
-    }
 }

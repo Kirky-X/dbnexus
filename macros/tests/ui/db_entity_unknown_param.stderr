@@ -1,0 +1,5 @@
+error: unknown #[db_entity] parameter 'unknown_param', expected one of: table_name, primary_key, timestamps, soft_delete, validate, hooks, permissions, cache, audit
+ --> tests/ui/db_entity_unknown_param.rs:7:55
+  |
+7 | #[db_entity(table_name = "users", primary_key = "id", unknown_param = "value")]
+  |                                                       ^^^^^^^^^^^^^

@@ -572,6 +572,9 @@ impl SqlGenerator {
                     validated_table_name, validated_table_name, validated_column_name
                 ))
             }
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                Err("Graph databases do not support relational ALTER TABLE operations".to_string())
+            }
         }
     }
 
