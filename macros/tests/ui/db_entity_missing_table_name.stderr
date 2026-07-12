@@ -1,5 +1,5 @@
 error: #[db_entity] requires `table_name = "..."` parameter
- --> tests/ui/db_entity_missing_table_name.rs:8:12
-  |
-8 | pub struct Model {
-  |            ^^^^^
+  --> tests/ui/db_entity_missing_table_name.rs:10:12
+   |
+10 | pub struct Model {
+   |            ^^^^^
