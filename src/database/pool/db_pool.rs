@@ -725,10 +725,9 @@ impl DbPool {
             crate::foundation::DatabaseType::Ladybug => {
                 #[cfg(feature = "ladybug")]
                 {
-                    // T028 将替换为 LadybugConnection::new(&config.url, pool_size)
-                    Err(DbError::Config(
-                        "Ladybug create_connection not yet wired (T028 will implement)".to_string(),
-                    ))
+                    let pool_size = config.max_connections as usize;
+                    let conn = crate::database::LadybugConnection::new(&config.url, pool_size)?;
+                    Ok(DbConnection::Ladybug(Arc::new(conn)))
                 }
                 #[cfg(not(feature = "ladybug"))]
                 {
@@ -1581,6 +1580,37 @@ mod tests {
         ));
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Ladybug should return Err");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[tokio::test]
+    async fn test_create_connection_ladybug_memory() {
+        let config = DbConfig {
+            url: "ladybug::memory:".to_string(),
+            max_connections: 4,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for ladybug::memory: should succeed");
+        assert!(conn.is_graph(), "should be graph connection");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        assert_eq!(graph.backend_name(), "ladybug");
+    }
+
+    #[cfg(feature = "ladybug")]
+    #[tokio::test]
+    async fn test_create_connection_ladybug_health_check() {
+        let config = DbConfig {
+            url: "ladybug::memory:".to_string(),
+            max_connections: 2,
+            ..Default::default()
+        };
+        let conn = DbPool::create_connection(&config)
+            .await
+            .expect("create_connection for ladybug::memory: should succeed");
+        let graph = conn.as_graph().expect("as_graph should succeed");
+        graph.health_check().await.expect("health_check should pass");
     }
 
     #[cfg(feature = "neo4j")]
