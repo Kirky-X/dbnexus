@@ -6,8 +6,8 @@
 //! - `DatabaseType` 枚举的默认值、Display、Clone/Copy、PartialEq、Debug、Serialize/Deserialize
 //! - `DbNexusResult` 类型别名 Ok 路径
 
-use dbnexus::error::DbNexusResult;
-use dbnexus::foundation::config::DatabaseType;
+use dbnexus::DbNexusResult;
+use dbnexus::foundation::DatabaseType;
 
 // ============================================================================
 // DatabaseType 枚举测试
