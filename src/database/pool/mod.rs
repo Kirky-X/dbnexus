@@ -11,7 +11,7 @@ mod session;
 #[cfg(feature = "duckdb")]
 pub mod duckdb_conn;
 
-use crate::foundation::config::DbConfig;
+use crate::foundation::DbConfig;
 
 pub use db_pool::{DatabaseConnection, DbConnection, DbPool, PoolStatus};
 pub use session::Session;
@@ -21,16 +21,16 @@ pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 
 // 导出迁移执行器供内部使用
 #[cfg(feature = "migration")]
-pub(crate) use crate::database::migration::MigrationExecutor;
+pub(crate) use crate::database::MigrationExecutor;
 
 // 导入 MetricsCollectorTrait
 #[cfg(feature = "metrics")]
-use crate::observability::metrics::MetricsCollectorTrait;
+use crate::observability::MetricsCollectorTrait;
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
-use crate::foundation::error::DbResult;
+use crate::foundation::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
@@ -150,7 +150,7 @@ pub trait DatabaseSession: Send + Sync {
 // ============================================================================
 
 #[cfg(feature = "permission")]
-use crate::access::permission::PermissionConfig;
+use crate::access::PermissionConfig;
 
 /// DbPool 构造器
 ///

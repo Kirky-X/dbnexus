@@ -6,8 +6,8 @@
 
 use super::differ::SqlGenerator;
 use super::schema::*;
-use crate::foundation::config::DatabaseType;
-use crate::foundation::error::DbError;
+use crate::foundation::DatabaseType;
+use crate::foundation::DbError;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
 
@@ -703,7 +703,7 @@ impl MigrationFileParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::migration::types::TableChange;
+    use crate::domain::TableChange;
 
     // =====================================================================
     // build_placeholder_list

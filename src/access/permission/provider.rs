@@ -347,7 +347,7 @@ impl PermissionProvider for MemoryPermissionProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::access::permission::types::TablePermission;
+    use crate::access::TablePermission;
 
     #[tokio::test]
     async fn memory_provider_new_is_empty() {

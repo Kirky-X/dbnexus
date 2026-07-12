@@ -5,7 +5,7 @@
 //! 定义数据库表、列、索引等结构
 
 use super::types::*;
-use crate::foundation::config::DatabaseType;
+use crate::foundation::DatabaseType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -295,7 +295,7 @@ impl Migration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foundation::config::DatabaseType;
+    use crate::foundation::DatabaseType;
 
     #[test]
     fn column_type_to_sql_integer() {

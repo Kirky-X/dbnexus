@@ -19,9 +19,9 @@ mod common;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use dbnexus::database::pool::PoolStatus;
-use dbnexus::domain::permission::{self, PermissionAction};
-use dbnexus::foundation::error::DbResult;
+use dbnexus::database::PoolStatus;
+use dbnexus::domain::{permission, PermissionAction};
+use dbnexus::foundation::DbResult;
 use dbnexus::{
     ConnectionPool, DatabaseSession, DbConfig, DbNexusKit, DbPool, MetricsCollector, MetricsCollectorTrait,
     PermissionProvider, Session,

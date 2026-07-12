@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 默认权限提供者实现（YAML 文件）
 
-use crate::domain::permission::{
+use crate::domain::{
     PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle, PermissionProvider,
     PolicyManager, RolePolicy,
 };
@@ -95,8 +95,8 @@ impl PermissionChecker for YamlPermissionProvider {
         } else {
             // 根据默认策略
             match self.config.default_policy {
-                crate::domain::permission::DefaultPolicy::AllowAll => Ok(true),
-                crate::domain::permission::DefaultPolicy::DenyAll => Ok(false),
+                crate::domain::DefaultPolicy::AllowAll => Ok(true),
+                crate::domain::DefaultPolicy::DenyAll => Ok(false),
             }
         }
     }

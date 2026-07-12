@@ -6,7 +6,7 @@
 
 use dbnexus::Condition;
 use dbnexus::DbPool;
-use dbnexus::access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::access::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use sea_orm::ActiveValue;
 
 /// 根据数据库 URL 判断数据库类型

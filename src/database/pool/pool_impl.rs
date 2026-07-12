@@ -6,13 +6,13 @@
 
 use super::*;
 
-use crate::foundation::config::DbConfig;
-use crate::foundation::error::DbResult;
+use crate::foundation::DbConfig;
+use crate::foundation::DbResult;
 
 #[cfg(feature = "permission")]
-use crate::access::permission::PermissionConfig;
+use crate::access::PermissionConfig;
 #[cfg(feature = "metrics")]
-use crate::observability::metrics::MetricsCollector;
+use crate::observability::MetricsCollector;
 #[cfg(feature = "cache")]
 use oxcache::Cache;
 #[cfg(any(feature = "metrics", feature = "cache"))]
@@ -190,7 +190,7 @@ impl DbPoolBuilder {
                 ..Default::default()
             }
         } else {
-            return Err(crate::foundation::error::DbError::new(sea_orm::DbErr::Custom(
+            return Err(crate::foundation::DbError::new(sea_orm::DbErr::Custom(
                 "Either url or config must be provided".to_string(),
             )));
         };

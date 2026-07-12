@@ -431,7 +431,7 @@ async fn test_db_pool_builder_deprecated_setters_are_noop() {
     // permission_config setter (deprecated, no-op)
     #[cfg(feature = "permission")]
     {
-        use dbnexus::access::permission::PermissionConfig;
+        use dbnexus::access::PermissionConfig;
         let _ = DbPoolBuilder::new()
             .url("sqlite::memory:")
             .permission_config(PermissionConfig::default())

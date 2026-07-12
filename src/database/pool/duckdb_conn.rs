@@ -29,7 +29,7 @@ use duckdb::types::Value as DuckValue;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
-use crate::foundation::error::{DbError, DbResult};
+use crate::foundation::{DbError, DbResult};
 
 /// DuckDB 查询结果的行数据
 ///
@@ -103,7 +103,7 @@ impl DuckDbConnection {
     /// # 示例
     ///
     /// ```ignore
-    /// use dbnexus::database::pool::DuckDbConnection;
+    /// use dbnexus::database::DuckDbConnection;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
