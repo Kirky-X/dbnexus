@@ -91,6 +91,12 @@ impl LadybugConnection {
     pub fn with_pool_size(url: &str, pool_size: usize) -> DbResult<Self> {
         let pool_size = pool_size.max(1);
         let db_path = Self::parse_url(url);
+        // 路径遍历校验（M-48 修复）：拒绝包含 .. 的路径，防止打开任意文件
+        if db_path != ":memory:" && db_path.contains("..") {
+            return Err(DbError::Connection(sea_orm::DbErr::Custom(
+                "ladybug database path contains path traversal characters '..': rejected for security".to_string(),
+            )));
+        }
         let db = lbug::Database::new(&db_path, lbug::SystemConfig::default())
             .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Database::new failed: {e}"))))?;
         Ok(Self {
@@ -497,6 +503,15 @@ mod tests {
     #[test]
     fn test_ladybug_parse_url_raw_path() {
         assert_eq!(LadybugConnection::parse_url("/absolute/path.db"), "/absolute/path.db");
+    }
+
+    #[test]
+    fn test_ladybug_rejects_path_traversal() {
+        // M-48 修复：路径遍历校验，拒绝包含 .. 的路径
+        let result = LadybugConnection::with_pool_size("ladybug:../../etc/passwd", 2);
+        assert!(result.is_err(), "path traversal should be rejected");
+        let result = LadybugConnection::with_pool_size("../../etc/passwd", 2);
+        assert!(result.is_err(), "path traversal should be rejected");
     }
 
     // ===== Clone + Debug 测试 =====
