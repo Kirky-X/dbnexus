@@ -119,15 +119,16 @@ impl Neo4jConnection {
             }
             Err(_) => {
                 // 非 URL 格式，原样返回 uri，凭据从环境变量读取
+                // 错误信息不回显原始 URL，避免凭据泄露（M-49 修复）
                 let env_user = std::env::var("NEO4J_USER").map_err(|_| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "neo4j URL '{url}' is not a valid URL and NEO4J_USER env var is not set"
-                    )))
+                    DbError::Connection(sea_orm::DbErr::Custom(
+                        "neo4j URL is not a valid URL and NEO4J_USER env var is not set".to_string(),
+                    ))
                 })?;
                 let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "neo4j URL '{url}' is not a valid URL and NEO4J_PASSWORD env var is not set"
-                    )))
+                    DbError::Connection(sea_orm::DbErr::Custom(
+                        "neo4j URL is not a valid URL and NEO4J_PASSWORD env var is not set".to_string(),
+                    ))
                 })?;
                 Ok((url.to_string(), env_user, env_pass))
             }
