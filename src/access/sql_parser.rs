@@ -24,10 +24,10 @@ const MAX_TABLE_NAME_LENGTH: usize = 128;
 const MAX_QUERY_DEPTH: usize = 10;
 
 #[cfg(feature = "permission")]
-pub use crate::access::permission::PermissionAction;
+pub use super::permission::PermissionAction;
 
 #[cfg(all(feature = "permission-engine", not(feature = "permission")))]
-pub use crate::access::permission_engine::PermissionAction;
+pub use super::permission_engine::PermissionAction;
 
 /// 权限操作类型（本地定义）
 ///
