@@ -38,6 +38,13 @@
 - **MED-004**：`LadybugConnection::execute_cypher` 行获取逻辑重复 — 去重为 `execute_cypher_on_conn` 共享函数
 - **MED-006**：宏参数类型不匹配时静默忽略 — 4 个参数 + hooks 加 `else` 分支报错
 
+### ⚠️ BREAKING CHANGES
+
+- `default` feature 改为空数组 `[]`（之前包含 runtime-tokio-rustls/sqlite/permission/sql-parser/macros/config-env/with-time 7 个特性）
+- 新增 `default-no-db` 聚合特性，提供不含数据库驱动的常用功能集
+- 用户必须显式启用 runtime + driver + features，推荐 `default-features = false, features = ["default-no-db", "sqlite"]`
+- pre-commit 脚本和 CI 统一使用 `--no-default-features --features sqlite,default-no-db,all-optional` 命令
+
 ## [0.3.4] - 2026-07-12
 
 ### ⚠️ BREAKING CHANGES

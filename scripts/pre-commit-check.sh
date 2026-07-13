@@ -185,7 +185,7 @@ check_cargo_clippy() {
 
     # 只检查 lib 和 bins 目标，跳过 tests 和 benches（它们可能有不完整的代码）
     local clippy_output
-    if ! clippy_output=$(RUSTFLAGS="--cap-lints=allow" cargo clippy --lib --bins --features sqlite,all-optional --workspace -- -D warnings 2>&1); then
+    if ! clippy_output=$(RUSTFLAGS="--cap-lints=allow" cargo clippy --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace -- -D warnings 2>&1); then
         echo "$clippy_output" >> "$LOG_FILE"
         log_error "Clippy 检查发现警告/错误"
 
@@ -206,10 +206,10 @@ check_cargo_clippy() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 运行以下命令查看完整报告:"
-        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace${NC}"
         echo ""
         echo "  2. 自动修复部分问题:"
-        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --fix --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo clippy --fix --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace${NC}"
         echo ""
 
         end_timer "clippy"
@@ -227,8 +227,9 @@ check_cargo_check() {
     start_timer "check"
 
     # 只检查 lib 和 bins 目标
+    # Rule 6: --no-default-features + 显式 features（与 CI 一致）
     local check_output
-    if ! check_output=$(RUSTFLAGS="--cap-lints=allow" cargo check --lib --bins --features sqlite,all-optional --workspace 2>&1); then
+    if ! check_output=$(RUSTFLAGS="--cap-lints=allow" cargo check --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace 2>&1); then
         echo "$check_output" >> "$LOG_FILE"
         log_error "编译检查失败"
 
@@ -239,7 +240,7 @@ check_cargo_check() {
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  1. 查看完整编译错误:"
-        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo check --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}RUSTFLAGS=\"--cap-lints=allow\" cargo check --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace${NC}"
         echo ""
         echo "  2. 检查 Cargo.toml 中的依赖配置"
         echo ""
@@ -259,12 +260,13 @@ check_cargo_build() {
     start_timer "build"
 
     # 只构建 lib 和 bins，跳过 tests 和 benches
-    if ! cargo build --lib --bins --features sqlite,all-optional --workspace >> "$LOG_FILE" 2>&1; then
+    # Rule 6: --no-default-features + 显式 features（与 CI 一致）
+    if ! cargo build --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace >> "$LOG_FILE" 2>&1; then
         log_error "构建检查失败"
         echo ""
         echo -e "${YELLOW}修复建议:${NC}"
         echo "  运行以下命令查看详细错误:"
-        echo "     ${CYAN}cargo build --lib --bins --features sqlite,all-optional --workspace${NC}"
+        echo "     ${CYAN}cargo build --lib --bins --no-default-features --features sqlite,default-no-db,all-optional --workspace${NC}"
         echo ""
 
         end_timer "build"
