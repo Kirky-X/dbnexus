@@ -69,18 +69,15 @@ description = "An enterprise-grade database abstraction layer for Rust with buil
 autoexamples = false
 
 [features]
-default = [
-    "runtime-tokio-rustls",
-    "sqlite",
-    "permission",
-    "sql-parser",
-    "macros",
-    "config-env",
-    "with-time",
-]
+# Rule 6: default features 最小化 — 所有依赖通过显式 features 启用。
+# 与 oxcache/inklog/sdforge 保持一致（default = []）。
+# 使用者需显式启用 runtime + 数据库驱动 + 所需功能特性。
+# CI 使用 `--no-default-features --features <db>,default-no-db,all-optional`。
+default = []
 
 # default without database driver — for CI matrix testing where
 # the database backend is selected via --features <db>,default-no-db
+# Provides a convenience aggregate for the common non-driver feature set.
 default-no-db = [
     "runtime-tokio-rustls",
     "permission",
