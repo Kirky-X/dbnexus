@@ -1,7 +1,8 @@
 name: Release
 
-# confers 并行模式：tag 推送 → create-release（先行）→ publish-crates ∥ build-binaries
-# 删除原 validate/update-version/ci-check 串行链（版本在 Cargo.toml 已设置，CI 由 ci.yml 在 PR 阶段完成）
+# tag 推送 → create-release（先行）→ publish-crates
+# 主包 dbnexus 是库 crate（无 [[bin]]），通过 crates.io 发布，无需交叉编译二进制。
+# dbnexus-cli 同样通过 crates.io 发布（cargo install dbnexus-cli 安装）。
 on:
   push:
     tags:
@@ -49,7 +50,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2. 发布到 crates.io（与 build-binaries 并行）
+  # 2. 发布到 crates.io
   publish-crates:
     name: Publish to crates.io
     needs: create-release
@@ -92,100 +93,3 @@ jobs:
           echo "  - https://crates.io/crates/dbnexus"
           echo "  - https://crates.io/crates/dbnexus-macros"
           echo "  - https://crates.io/crates/dbnexus-cli"
-
-  # 3. 构建多平台二进制（与 publish-crates 并行）
-  build-binaries:
-    name: Build ${{ matrix.target }}
-    needs: create-release
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            cross: false
-            asset_prefix: linux-x64
-
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            cross: true
-            asset_prefix: linux-arm64
-
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            cross: false
-            asset_prefix: macos-x64
-
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            cross: false
-            asset_prefix: macos-arm64
-
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            cross: false
-            asset_prefix: windows-x64
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install cross-compilation tools
-        if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: release-${{ matrix.target }}
-
-      - name: Build release
-        run: |
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --package dbnexus-cli
-          else
-            cargo build --release --target ${{ matrix.target }} --package dbnexus-cli
-          fi
-
-      - name: Package binaries
-        id: package
-        shell: bash
-        run: |
-          VERSION=${{ needs.create-release.outputs.version }}
-          mkdir -p artifacts
-
-          # 只打包 dbnexus-cli 二进制（主包是库，通过 crates.io 发布）
-          binary_path="target/${{ matrix.target }}/release/dbnexus-cli"
-          if [ -f "$binary_path" ]; then
-            if [ "${{ matrix.os }}" = "windows-latest" ]; then
-              binary_name="dbnexus-cli.exe"
-              cp "$binary_path.exe" "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe"
-              sha256sum "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe" | awk '{print $1}' > "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.exe.sha256"
-            else
-              tar czf "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" -C "target/${{ matrix.target }}/release" "dbnexus-cli"
-              sha256sum "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz" | awk '{print $1}' > "artifacts/dbnexus-cli-${VERSION}-${{ matrix.asset_prefix }}.tar.gz.sha256"
-            fi
-          else
-            echo "❌ Binary not found: $binary_path"
-            exit 1
-          fi
-
-          ls -la artifacts/
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: artifacts/*
-
-      - name: Attest release artifacts
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-path: 'artifacts/*'

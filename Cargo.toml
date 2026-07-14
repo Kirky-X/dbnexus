@@ -245,7 +245,7 @@ lbug = { version = "0.18", optional = true }
 neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
-jsonwebtoken = { version = "~10.4", features = ["rust_crypto"], optional = true }
+jsonwebtoken = { version = "~10.4", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "~0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
