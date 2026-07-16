@@ -36,7 +36,7 @@ mod tests {
 
     const TEST_PASSWORD: &str = "TestPassword123";
     const TEST_WRONG_PASSWORD: &str = "WrongPassword";
-    const TEST_STRONG_PASSWORD: &str = "SecurePass123";
+    const TEST_STRONG_PASSWORD: &str = "SecurePass@123";
     const TEST_WEAK_SHORT: &str = "Short1";
     const TEST_WEAK_NO_LETTER: &str = "12345678";
     const TEST_WEAK_NO_DIGIT: &str = "OnlyLetters";
