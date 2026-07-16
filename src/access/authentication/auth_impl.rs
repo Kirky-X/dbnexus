@@ -54,8 +54,16 @@ impl AuthenticationManager {
 
     /// 添加或更新用户（跳过密码哈希验证）
     ///
+    /// **HD-3 文档明确**：此方法可见性为 `pub(crate)`，**不对外暴露**。
+    /// 仅限 crate 内部迁移/测试场景使用（如批量导入历史用户、测试 fixture 构造）。
+    /// 外部代码必须使用 [`add_user`](Self::add_user)（验证 bcrypt 格式）或
+    /// [`register_user`](Self::register_user)（验证密码强度 + 哈希 + 存储）。
+    ///
+    /// `pub(crate)` 可见性是 HD-3 修复的硬性约束：确保外部调用方无法绕过
+    /// `add_user` 的 bcrypt 格式验证（vuln-0002），从源头杜绝无效哈希进入存储。
+    /// 若未来需要对外暴露，必须先增加等价的安全验证，不得直接放宽可见性。
+    ///
     /// **安全警告**：此方法不验证 `password_hash` 格式，仅限内部迁移/测试使用。
-    /// 外部代码应使用 [`add_user`](Self::add_user) 或 [`register_user`](Self::register_user)。
     ///
     /// # Safety（语义层面）
     ///
@@ -323,5 +331,71 @@ mod tests {
             result.is_ok(),
             "add_user_unchecked should skip validation for internal use"
         );
+    }
+
+    // ===== HD-3 测试：add_user vs add_user_unchecked 职责清晰分离 =====
+
+    /// HD-3 测试：add_user 必须验证 bcrypt 格式（公共 API 职责）
+    ///
+    /// 同一无效 password_hash，add_user 必须拒绝，add_user_unchecked 必须接受。
+    /// 验证两者职责清晰分离：公共 API 强制安全，内部 API 跳过验证。
+    #[tokio::test]
+    async fn test_hd3_add_user_vs_unchecked_role_separation() {
+        let mgr = AuthenticationManager::new(b"secret");
+
+        // 构造无效 password_hash 的 User
+        let make_user = || User {
+            id: "u1".to_string(),
+            username: "test_hd3".to_string(),
+            password_hash: "invalid-not-bcrypt".to_string(),
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+
+        // add_user（公共 API）必须拒绝无效 bcrypt 哈希
+        let result = mgr.add_user(make_user()).await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "HD-3: add_user (public API) must reject invalid bcrypt hash"
+        );
+
+        // add_user_unchecked（pub(crate) 内部 API）跳过验证，接受任意 hash
+        let result = mgr.add_user_unchecked(make_user()).await;
+        assert!(
+            result.is_ok(),
+            "HD-3: add_user_unchecked (pub(crate) internal) should skip validation"
+        );
+    }
+
+    /// HD-3 测试：add_user_unchecked 接受的 user 可被 get_user 读回
+    ///
+    /// 验证 pub(crate) 内部 API 写入的数据可被公共读取 API 读回，
+    /// 确保迁移场景（如批量导入）的数据完整性。
+    #[tokio::test]
+    async fn test_hd3_add_user_unchecked_data_round_trip() {
+        let mgr = AuthenticationManager::new(b"secret");
+
+        // 内部 API 写入（模拟迁移场景）
+        let user = User {
+            id: "migrated-1".to_string(),
+            username: "migrated_user".to_string(),
+            password_hash: "$2b$12$somefakebutnonemptyhashplaceholder012345678901234567890123456".to_string(),
+            role: "user".to_string(),
+            email: Some("migrated@example.com".to_string()),
+            created_at: None,
+        };
+        mgr.add_user_unchecked(user)
+            .await
+            .expect("internal write should succeed");
+
+        // 公共 API 读回
+        let read = mgr
+            .get_user("migrated_user")
+            .await
+            .expect("get_user should find migrated user");
+        assert_eq!(read.id, "migrated-1");
+        assert_eq!(read.role, "user");
+        assert_eq!(read.email.as_deref(), Some("migrated@example.com"));
     }
 }
