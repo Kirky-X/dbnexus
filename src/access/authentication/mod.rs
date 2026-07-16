@@ -15,7 +15,7 @@ mod auth_impl;
 
 pub use jwt::JwtManager;
 pub use models::{AuthCredentials, AuthError, AuthResult, JwtClaims, TokenType, User};
-pub use password::PasswordHasher;
+pub use password::{PasswordHasher, PasswordPolicy};
 
 use std::collections::HashMap;
 use std::sync::Arc;
