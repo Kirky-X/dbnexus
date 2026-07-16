@@ -1019,25 +1019,31 @@ impl Session {
     pub async fn batch_execute_in_transaction(&self, sqls: Vec<&str>) -> DbResult<Vec<ExecResult>> {
         self.begin_transaction().await?;
 
-        let mut results = Vec::new();
-        let mut last_error = None;
+        // MD-3 修复：用 async block + ? 简化事务执行，消除 last_error + break 命令式风格
+        let result: DbResult<Vec<ExecResult>> = async {
+            let mut results = Vec::with_capacity(sqls.len());
+            for sql in sqls {
+                results.push(self.execute_raw(sql).await?);
+            }
+            Ok(results)
+        }
+        .await;
 
-        for sql in sqls {
-            match self.execute_raw(sql).await {
-                Ok(result) => results.push(result),
-                Err(e) => {
-                    last_error = Some(e);
-                    break;
+        match result {
+            Ok(results) => {
+                self.commit().await?;
+                Ok(results)
+            }
+            Err(e) => {
+                // LD-4 修复：保留原始错误上下文，rollback 失败时组合错误消息（不覆盖原始错误）
+                match self.rollback().await {
+                    Ok(()) => Err(e),
+                    Err(rollback_err) => Err(DbError::Transaction(format!(
+                        "batch failed: {}; rollback also failed: {}",
+                        e, rollback_err
+                    ))),
                 }
             }
-        }
-
-        if let Some(error) = last_error {
-            self.rollback().await?;
-            Err(error)
-        } else {
-            self.commit().await?;
-            Ok(results)
         }
     }
 
