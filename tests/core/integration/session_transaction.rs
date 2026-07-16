@@ -4,17 +4,35 @@
 //!
 //! 配置解析通过 serde 直接反序列化
 
+// 所有 import 仅在启用数据库驱动（sqlite/postgres/mysql）时被实际使用——
+// 测试函数均带 `#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]`，
+// 因此此处统一加 cfg gate，避免在 `--features "permission authentication sql-parser ladybug"`
+// 等无数据库驱动的特性组合下触发 unused_imports / dead_code 警告。
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 use dbnexus::DbError;
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 use dbnexus::DbPool;
-#[cfg(feature = "permission")]
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
 use dbnexus::access::{PermissionAction as Operation, PermissionConfig};
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
 use dbnexus::foundation::ConfigError;
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 use tempfile::TempDir;
 
 #[path = "../../common/mod.rs"]
 mod common;
 
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
     serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
