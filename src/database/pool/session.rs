@@ -58,6 +58,12 @@ struct SessionState {
     graph_txn_poisoned: bool,
 
     /// 最后写操作时间（用于读写分离）
+    ///
+    /// LD-1 误报说明（架构审查）：审查曾标记"`Option<Instant>` 存在原子时序问题"为
+    /// LOW 架构问题。此为误报：`last_write` 由外层 `state: Mutex<SessionState>` 保护，
+    /// 所有读写均持锁（`mark_write` 写、`should_use_master` 读、`commit/rollback` 清除），
+    /// 不存在无锁并发访问，无需使用 `AtomicInstant`。`Mutex<SessionState>` 的串行化
+    /// 保证 `last_write` 的 read-modify-write 是原子的。改用原子操作反而是过度工程化。
     last_write: Option<Instant>,
 }
 
@@ -804,6 +810,17 @@ impl Session {
     ///
     /// 使用 `Option<HashMap>` 区分两种操作。`params.take()` 在互斥分支中消耗参数，
     /// 避免在 `execute_cypher` 路径强制构造空 HashMap，也无需 clone。
+    ///
+    /// # HD-2 误报说明（架构审查）
+    ///
+    /// 审查曾标记"Session 直接依赖 Ladybug/Neo4j 具体实现"为 HIGH 架构问题。此为误报：
+    /// 所有图操作通过 `conn.as_graph()?` 获取 `&dyn GraphConnection` trait 对象，
+    /// Session 仅持有 `DbConnection` 枚举与 `&dyn GraphConnection`/`Box<dyn GraphTransaction>`
+    /// trait 对象，不直接依赖任何具体类型。`begin_transaction` 与本 helper 的图路径
+    /// 均通过 trait 方法分发，Ladybug/Neo4j 实现细节封装在各自 `ladybug_conn`/`neo4j_conn`
+    /// 模块内。这与 `sea_orm::DatabaseTransaction` 的依赖方式一致：通过 trait 对象解耦，
+    /// 而非 concrete type。新增图后端只需实现 `GraphConnection`/`GraphTransaction` trait，
+    /// Session 代码无需改动（开放-封闭原则）。
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     async fn execute_cypher_in_transaction(
         &self,
