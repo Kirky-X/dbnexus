@@ -25,7 +25,7 @@ pub mod neo4j_conn;
 
 use std::collections::HashMap;
 
-use crate::foundation::DbResult;
+use crate::foundation::{DbError, DbResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -138,24 +138,31 @@ pub trait GraphConnection: Send + Sync {
     /// 通过 `params` 提供 `name` 的值，底层使用 prepared statement，
     /// 数据库不会将参数值解析为 Cypher 代码，从根本上防止注入。
     ///
-    /// # 默认实现
+    /// # 默认实现（HD-1 修复）
     ///
-    /// 默认回退到 [`execute_cypher`](Self::execute_cypher)（忽略参数，不安全），
-    /// 仅用于向后兼容外部 implementor。内置实现（Ladybug/Neo4j）重写此方法
-    /// 使用真正的 prepared statement。
+    /// 默认实现返回 `DbError::Config` 错误，**不再静默回退到 `execute_cypher`**。
+    /// 原回退实现会丢弃 `params`，违反 Liskov 替换：调用方预期参数化查询被执行，
+    /// 但实际被忽略，可能导致 Cypher 注入（参数本应隔离代码与数据）。
+    /// 强制每个实现显式重写此方法，或显式接受不安全语义。
+    ///
+    /// 内置实现（Ladybug/Neo4j）均重写此方法使用真正的 prepared statement。
     ///
     /// # Errors
     ///
-    /// 查询语法错误、参数类型不匹配、连接失败时返回 `DbError`。
+    /// - 未重写时返回 `DbError::Config`，消息含 "execute_cypher_with_params not implemented"
+    /// - 查询语法错误、参数类型不匹配、连接失败时返回 `DbError`
     async fn execute_cypher_with_params(
         &self,
-        cypher: &str,
-        params: HashMap<String, serde_json::Value>,
+        _cypher: &str,
+        _params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        // 默认实现：忽略参数，回退到 execute_cypher
-        // 这是 backward-compat 路径，内置 implementor 应重写
-        let _ = params;
-        self.execute_cypher(cypher).await
+        // HD-1 修复：默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
+        // 原回退实现违反 Liskov 替换：子类静默忽略 params 可导致 Cypher 注入
+        Err(DbError::Config(
+            "execute_cypher_with_params not implemented for this GraphConnection implementor; \
+             must override to provide parameterized queries (vuln-0005/HD-1)"
+                .to_string(),
+        ))
     }
 
     /// 健康检查
@@ -218,27 +225,35 @@ pub trait GraphTransaction: Send + Sync {
     /// 语义同 [`GraphConnection::execute_cypher_with_params`]，
     /// 但在事务上下文内执行，确保事务内所有操作使用同一连接。
     ///
-    /// # 默认实现
+    /// # 默认实现（HD-1 修复）
     ///
-    /// 默认回退到 [`execute_cypher`](Self::execute_cypher)（忽略参数，不安全），
-    /// 内置实现（Ladybug/Neo4j）重写此方法使用真正的 prepared statement。
+    /// 默认实现返回 `DbError::Config` 错误，**不再静默回退到 `execute_cypher`**。
+    /// 原回退实现会丢弃 `params`，违反 Liskov 替换。强制每个事务实现显式重写。
+    ///
+    /// 内置实现（Ladybug/Neo4j）均重写此方法使用真正的 prepared statement。
     ///
     /// # Errors
     ///
-    /// 查询语法错误、参数类型不匹配、事务已关闭时返回 `DbError`。
+    /// - 未重写时返回 `DbError::Config`，消息含 "execute_cypher_with_params not implemented"
+    /// - 查询语法错误、参数类型不匹配、事务已关闭时返回 `DbError`
     async fn execute_cypher_with_params(
         &self,
-        cypher: &str,
-        params: HashMap<String, serde_json::Value>,
+        _cypher: &str,
+        _params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        let _ = params;
-        self.execute_cypher(cypher).await
+        // HD-1 修复：默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
+        Err(DbError::Config(
+            "execute_cypher_with_params not implemented for this GraphTransaction implementor; \
+             must override to provide parameterized queries (vuln-0005/HD-1)"
+                .to_string(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::foundation::DbError;
     use serde_json::json;
 
     // ===== GraphNode 测试 =====
@@ -439,6 +454,104 @@ mod tests {
             GraphExecResult::Write { rows_affected } => {
                 assert_eq!(rows_affected, 42);
             }
+        }
+    }
+
+    // ===== HD-1 测试：execute_cypher_with_params 默认实现返回错误（不静默回退） =====
+
+    /// HD-1 Red-1：GraphConnection 默认 execute_cypher_with_params 返回错误而非回退
+    ///
+    /// 构造一个仅实现必需方法的 mock GraphConnection，验证未重写的
+    /// `execute_cypher_with_params` 返回 `DbError::Config` 错误，
+    /// 而不是静默回退到 `execute_cypher` 丢弃 params。
+    #[tokio::test]
+    async fn test_hd1_graph_connection_default_with_params_returns_error() {
+        use async_trait::async_trait;
+
+        /// Mock 实现：仅实现必需方法，不重写 execute_cypher_with_params
+        struct MockGraphConnection;
+
+        #[async_trait]
+        impl GraphConnection for MockGraphConnection {
+            async fn execute_cypher(&self, _cypher: &str) -> DbResult<GraphExecResult> {
+                // 不应被调用（默认实现应返回错误而非回退到此）
+                Ok(GraphExecResult::Write { rows_affected: 0 })
+            }
+            async fn health_check(&self) -> DbResult<()> {
+                Ok(())
+            }
+            async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
+                Err(DbError::Config("not implemented in mock".to_string()))
+            }
+            fn backend_name(&self) -> &'static str {
+                "mock"
+            }
+        }
+
+        let conn = MockGraphConnection;
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("Alice"));
+
+        let result = conn.execute_cypher_with_params("RETURN $name", params).await;
+        assert!(
+            result.is_err(),
+            "HD-1: default execute_cypher_with_params must return error, not silently fall back"
+        );
+        match result {
+            Err(DbError::Config(msg)) => {
+                assert!(
+                    msg.contains("execute_cypher_with_params not implemented"),
+                    "error should mention 'not implemented', got: {}",
+                    msg
+                );
+            }
+            other => panic!("HD-1: expected DbError::Config, got {:?}", other),
+        }
+    }
+
+    /// HD-1 Red-2：GraphTransaction 默认 execute_cypher_with_params 返回错误而非回退
+    ///
+    /// 构造一个仅实现必需方法的 mock GraphTransaction，验证未重写的
+    /// `execute_cypher_with_params` 返回 `DbError::Config` 错误。
+    #[tokio::test]
+    async fn test_hd1_graph_transaction_default_with_params_returns_error() {
+        use async_trait::async_trait;
+
+        /// Mock 实现：仅实现必需方法，不重写 execute_cypher_with_params
+        struct MockGraphTransaction;
+
+        #[async_trait]
+        impl GraphTransaction for MockGraphTransaction {
+            async fn commit(self: Box<Self>) -> DbResult<()> {
+                Ok(())
+            }
+            async fn rollback(self: Box<Self>) -> DbResult<()> {
+                Ok(())
+            }
+            async fn execute_cypher(&self, _cypher: &str) -> DbResult<GraphExecResult> {
+                // 不应被调用
+                Ok(GraphExecResult::Write { rows_affected: 0 })
+            }
+        }
+
+        let txn = MockGraphTransaction;
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), serde_json::json!("Alice"));
+
+        let result = txn.execute_cypher_with_params("RETURN $name", params).await;
+        assert!(
+            result.is_err(),
+            "HD-1: default execute_cypher_with_params must return error, not silently fall back"
+        );
+        match result {
+            Err(DbError::Config(msg)) => {
+                assert!(
+                    msg.contains("execute_cypher_with_params not implemented"),
+                    "error should mention 'not implemented', got: {}",
+                    msg
+                );
+            }
+            other => panic!("HD-1: expected DbError::Config, got {:?}", other),
         }
     }
 }

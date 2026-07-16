@@ -1552,6 +1552,7 @@ impl super::ConnectionPool for DbPool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_imports)]
     use super::*;
 
     #[cfg(feature = "ladybug")]
