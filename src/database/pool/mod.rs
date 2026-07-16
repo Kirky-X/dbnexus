@@ -4,6 +4,7 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
+mod audit;
 mod db_pool;
 mod pool_impl;
 mod session;
