@@ -36,9 +36,33 @@ impl AuthenticationManager {
 
     /// 添加或更新用户（直接插入已哈希的 User）
     ///
+    /// vuln-0002 修复：验证 `password_hash` 为非空且符合 bcrypt 格式。
+    ///
     /// 适用于测试/迁移场景。生产用户注册应使用 [`register_user`](Self::register_user)，
     /// 后者会验证密码强度并自动哈希。
+    ///
+    /// # 错误
+    ///
+    /// - `password_hash` 为空时返回 `AuthError::PasswordHash`
+    /// - `password_hash` 不符合 bcrypt 格式时返回 `AuthError::PasswordHash`
     pub async fn add_user(&self, user: User) -> AuthResult<()> {
+        validate_bcrypt_hash(&user.password_hash)?;
+        let mut users = self.users.write().await;
+        users.insert(user.username.clone(), user);
+        Ok(())
+    }
+
+    /// 添加或更新用户（跳过密码哈希验证）
+    ///
+    /// **安全警告**：此方法不验证 `password_hash` 格式，仅限内部迁移/测试使用。
+    /// 外部代码应使用 [`add_user`](Self::add_user) 或 [`register_user`](Self::register_user)。
+    ///
+    /// # Safety（语义层面）
+    ///
+    /// 调用方必须确保 `user.password_hash` 是有效的 bcrypt 哈希，
+    /// 否则后续 `authenticate()` 会因 `bcrypt::verify` 失败而拒绝该用户登录。
+    #[doc(hidden)]
+    pub(crate) async fn add_user_unchecked(&self, user: User) -> AuthResult<()> {
         let mut users = self.users.write().await;
         users.insert(user.username.clone(), user);
         Ok(())
@@ -65,7 +89,8 @@ impl AuthenticationManager {
         // 2. 哈希密码
         let password_hash = self.password_hasher.hash(password)?;
 
-        // 3. 构造 User 并存储
+        // 3. 构造 User 并存储（使用 add_user_unchecked 因为密码已由 validate_strength 验证，
+        //    且 password_hash 来自 self.password_hasher.hash() 一定是有效 bcrypt 格式）
         let user = User {
             id: username.to_string(),
             username: username.to_string(),
@@ -75,9 +100,7 @@ impl AuthenticationManager {
             created_at: None,
         };
 
-        let mut users = self.users.write().await;
-        users.insert(username.to_string(), user);
-        Ok(())
+        self.add_user_unchecked(user).await
     }
 
     /// 用户认证
@@ -126,5 +149,179 @@ impl AuthenticationManager {
             .remove(username)
             .map(|_| ())
             .ok_or_else(|| AuthError::UserNotFound(username.to_string()))
+    }
+}
+
+/// 验证 bcrypt 哈希格式（vuln-0002 修复）
+///
+/// bcrypt 哈希格式：`$2<a|b|y>$<cost>$<22-char-salt><31-char-hash>`
+/// 总长度固定为 60 字符。
+///
+/// # 参数
+///
+/// * `hash` - 待验证的密码哈希字符串
+///
+/// # 错误
+///
+/// - 哈希为空时返回 `AuthError::PasswordHash`
+/// - 哈希不以 `$2a$`/`$2b$`/`$2y$` 开头时返回 `AuthError::PasswordHash`
+/// - 哈希长度不为 60 时返回 `AuthError::PasswordHash`
+/// - cost 字段非数字时返回 `AuthError::PasswordHash`
+fn validate_bcrypt_hash(hash: &str) -> AuthResult<()> {
+    if hash.is_empty() {
+        return Err(AuthError::PasswordHash("password_hash must not be empty".to_string()));
+    }
+
+    // bcrypt 哈希固定长度为 60
+    if hash.len() != 60 {
+        return Err(AuthError::PasswordHash(format!(
+            "password_hash must be a valid bcrypt hash (60 chars, got {})",
+            hash.len()
+        )));
+    }
+
+    // 必须以 $2a$、$2b$ 或 $2y$ 开头
+    let prefix = &hash[..4];
+    if !matches!(prefix, "$2a$" | "$2b$" | "$2y$") {
+        return Err(AuthError::PasswordHash(
+            "password_hash must start with $2a$, $2b$, or $2y$".to_string(),
+        ));
+    }
+
+    // cost 字段（第 4-5 位）必须为两位数字
+    let cost_str = &hash[4..6];
+    if !cost_str.chars().all(|c| c.is_ascii_digit()) {
+        return Err(AuthError::PasswordHash(
+            "password_hash cost factor must be numeric".to_string(),
+        ));
+    }
+
+    // 第 6 位必须是 $
+    if !hash[6..7].starts_with('$') {
+        return Err(AuthError::PasswordHash(
+            "password_hash format invalid: missing $ after cost".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_bcrypt_hash_valid() {
+        // 真实 bcrypt 哈希
+        let hasher = PasswordHasher::new();
+        let hash = hasher.hash("TestPass@123").unwrap();
+        assert!(validate_bcrypt_hash(&hash).is_ok());
+    }
+
+    #[test]
+    fn test_validate_bcrypt_hash_empty() {
+        assert!(validate_bcrypt_hash("").is_err());
+    }
+
+    #[test]
+    fn test_validate_bcrypt_hash_plaintext() {
+        assert!(validate_bcrypt_hash("plaintext").is_err());
+        assert!(validate_bcrypt_hash("password123").is_err());
+    }
+
+    #[test]
+    fn test_validate_bcrypt_hash_wrong_prefix() {
+        // 错误的前缀
+        let fake_hash = "$3a$12$01234567890123456789012345678901234567890123456789";
+        assert!(validate_bcrypt_hash(fake_hash).is_err());
+    }
+
+    #[test]
+    fn test_validate_bcrypt_hash_wrong_length() {
+        // 正确前缀但长度不对
+        let short_hash = "$2b$12$short";
+        assert!(validate_bcrypt_hash(short_hash).is_err());
+    }
+
+    #[test]
+    fn test_validate_bcrypt_hash_non_numeric_cost() {
+        // cost 字段非数字
+        let fake_hash = "$2b$ab$0123456789012345678901234567890123456789012345678";
+        assert!(validate_bcrypt_hash(fake_hash).is_err());
+    }
+
+    /// vuln-0002 回归测试：add_user 必须拒绝空 password_hash
+    #[tokio::test]
+    async fn test_vuln_0002_add_user_rejects_empty_hash() {
+        let mgr = AuthenticationManager::new(b"secret");
+        let user = User {
+            id: "u1".to_string(),
+            username: "test".to_string(),
+            password_hash: "".to_string(),
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+        let result = mgr.add_user(user).await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "add_user must reject empty password_hash"
+        );
+    }
+
+    /// vuln-0002 回归测试：add_user 必须拒绝非 bcrypt 格式的 password_hash
+    #[tokio::test]
+    async fn test_vuln_0002_add_user_rejects_plaintext_hash() {
+        let mgr = AuthenticationManager::new(b"secret");
+        let user = User {
+            id: "u1".to_string(),
+            username: "test".to_string(),
+            password_hash: "plaintext_password".to_string(),
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+        let result = mgr.add_user(user).await;
+        assert!(
+            matches!(result, Err(AuthError::PasswordHash(_))),
+            "add_user must reject non-bcrypt password_hash"
+        );
+    }
+
+    /// vuln-0002 回归测试：add_user 接受有效 bcrypt 哈希
+    #[tokio::test]
+    async fn test_vuln_0002_add_user_accepts_valid_bcrypt() {
+        let mgr = AuthenticationManager::new(b"secret");
+        let hasher = PasswordHasher::new();
+        let hash = hasher.hash("ValidPass@123").unwrap();
+        let user = User {
+            id: "u1".to_string(),
+            username: "test".to_string(),
+            password_hash: hash,
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+        let result = mgr.add_user(user).await;
+        assert!(result.is_ok(), "add_user should accept valid bcrypt hash");
+    }
+
+    /// vuln-0002 回归测试：add_user_unchecked 不验证 password_hash
+    #[tokio::test]
+    async fn test_vuln_0002_add_user_unchecked_skips_validation() {
+        let mgr = AuthenticationManager::new(b"secret");
+        let user = User {
+            id: "u1".to_string(),
+            username: "test".to_string(),
+            password_hash: "anything".to_string(),
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+        let result = mgr.add_user_unchecked(user).await;
+        assert!(
+            result.is_ok(),
+            "add_user_unchecked should skip validation for internal use"
+        );
     }
 }
