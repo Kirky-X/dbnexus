@@ -143,7 +143,9 @@ impl Session {
     #[cfg(feature = "permission")]
     pub async fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
         // Admin 角色绕过权限检查（拥有完全控制权）
+        // vuln-0001 修复：admin bypass 仍记录审计日志以保留审计链
         if self.role == self.pool_inner.admin_role {
+            audit_admin_bypass(&self.role, table, operation);
             return Ok(());
         }
 
@@ -978,8 +980,9 @@ impl Session {
             };
 
             // Admin 角色绕过权限检查
+            // vuln-0001 修复：admin bypass 仍记录审计日志
             if self.role == self.pool_inner.admin_role {
-                // admin 有完全权限，跳过检查
+                audit_admin_bypass(&self.role, _table_name, &action);
             } else if !self.permission_ctx.check_table_access(_table_name, &action).await {
                 return Err(permission_denied(_operation, _table_name));
             }
@@ -1034,6 +1037,64 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 #[cfg(feature = "permission")]
 fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl std::fmt::Display + ?Sized)) -> DbError {
     DbError::Permission(format!("Permission denied for {} on {}", action, table))
+}
+
+/// 记录 admin 权限绕过审计日志（vuln-0001 修复）
+///
+/// admin 角色绕过权限检查时调用此函数，记录审计日志以保留审计链。
+/// 日志输出到 stderr（始终）和 tracing（当 tracing feature 启用时）。
+///
+/// # 参数
+///
+/// * `role` - 当前角色名称
+/// * `table` - 被访问的表名
+/// * `operation` - 权限操作类型
+#[cfg(feature = "permission")]
+fn audit_admin_bypass(role: &str, table: &str, operation: &PermissionAction) {
+    let msg = format!(
+        "[SECURITY AUDIT] Admin role '{}' bypassed permission check: operation={:?} table={}",
+        role, operation, table
+    );
+    eprintln!("{}", msg);
+    #[cfg(feature = "tracing")]
+    {
+        tracing::warn!(
+            role = role,
+            table = table,
+            operation = ?operation,
+            "Admin role bypassed permission check (vuln-0001 audit)"
+        );
+    }
+}
+
+/// 检查是否使用了默认 admin 角色并发出警告（vuln-0001 修复）
+///
+/// 当 `admin_role` 为 "admin"（默认值）时，记录安全警告。
+/// 返回 `true` 表示使用了默认值（不安全），`false` 表示已自定义。
+///
+/// # 参数
+///
+/// * `admin_role` - 当前配置的 admin 角色名称
+///
+/// # 返回
+///
+/// `true` 表示使用了默认 "admin" 角色（不安全），`false` 表示已自定义
+pub fn warn_if_default_admin_role_used(admin_role: &str) -> bool {
+    if admin_role == "admin" {
+        let msg = "[SECURITY WARNING] Using default admin_role 'admin' is insecure. \
+                   Set a custom admin_role via DbConfig.admin_role or DbPoolBuilder::admin_role().";
+        eprintln!("{}", msg);
+        #[cfg(feature = "tracing")]
+        {
+            tracing::warn!(
+                admin_role = admin_role,
+                "Using default admin_role 'admin' is insecure (vuln-0001)"
+            );
+        }
+        true
+    } else {
+        false
+    }
 }
 
 /// 判断是否为写操作（Insert/Update/Delete）
@@ -1549,5 +1610,90 @@ mod graph_tests {
         let session = pool.get_session("admin").await.expect("get_session");
         let result = session.execute_cypher("RETURN 42").await;
         assert!(result.is_ok(), "admin role should be allowed");
+    }
+}
+
+// ============================================================================
+// vuln-0001 安全审计测试
+// ============================================================================
+
+#[cfg(test)]
+mod vuln_0001_tests {
+    use super::*;
+
+    /// vuln-0001 回归测试：warn_if_default_admin_role_used 对默认 "admin" 返回 true
+    #[test]
+    fn test_vuln_0001_warn_default_admin_role() {
+        assert!(
+            warn_if_default_admin_role_used("admin"),
+            "default admin_role 'admin' should trigger warning"
+        );
+    }
+
+    /// vuln-0001 回归测试：warn_if_default_admin_role_used 对自定义角色返回 false
+    #[test]
+    fn test_vuln_0001_custom_admin_role_no_warning() {
+        assert!(
+            !warn_if_default_admin_role_used("super-admin-2026"),
+            "custom admin_role should not trigger warning"
+        );
+    }
+
+    /// vuln-0001 回归测试：admin bypass 审计日志不 panic
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_vuln_0001_audit_admin_bypass_no_panic() {
+        // audit_admin_bypass 应该正常执行而不 panic
+        // 它输出到 stderr，我们只验证不 panic
+        audit_admin_bypass("admin", "users", &PermissionAction::Select);
+        audit_admin_bypass("admin", "users", &PermissionAction::Insert);
+        audit_admin_bypass("admin", "orders", &PermissionAction::Delete);
+    }
+
+    /// vuln-0001 集成测试：admin 角色绕过权限检查仍返回 Ok（带审计日志）
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
+    #[tokio::test]
+    async fn test_vuln_0001_admin_bypass_returns_ok_with_audit() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // admin 角色绕过权限检查，应返回 Ok
+        let result = session.check_permission("any_table", &PermissionAction::Select).await;
+        assert!(result.is_ok(), "admin bypass should return Ok");
+
+        // 也测试其他操作
+        let result = session.check_permission("any_table", &PermissionAction::Insert).await;
+        assert!(result.is_ok(), "admin bypass should return Ok for Insert");
+
+        let result = session.check_permission("any_table", &PermissionAction::Delete).await;
+        assert!(result.is_ok(), "admin bypass should return Ok for Delete");
+    }
+
+    /// vuln-0001 集成测试：非 admin 角色权限被拒绝
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
+    #[tokio::test]
+    async fn test_vuln_0001_non_admin_denied() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        // system 角色可获取 session 但不是 admin_role，无权限配置时 check_permission 应拒绝
+        let session = pool.get_session("system").await.expect("get_session");
+
+        // 非 admin 角色应被拒绝（无权限配置时默认拒绝）
+        let result = session.check_permission("any_table", &PermissionAction::Select).await;
+        assert!(result.is_err(), "non-admin should be denied");
+    }
+
+    /// vuln-0001 集成测试：check_table_permission admin bypass 带审计日志
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
+    #[tokio::test]
+    async fn test_vuln_0001_check_table_permission_admin_bypass() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // admin bypass check_table_permission
+        let result = session.check_table_permission("users", "SELECT").await;
+        assert!(result.is_ok(), "admin should bypass check_table_permission");
+
+        let result = session.check_table_permission("users", "INSERT").await;
+        assert!(result.is_ok(), "admin should bypass check_table_permission for INSERT");
     }
 }
