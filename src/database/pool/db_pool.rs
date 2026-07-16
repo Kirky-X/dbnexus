@@ -305,7 +305,7 @@ impl DbPool {
         };
 
         // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），发出安全警告
-        super::session::warn_if_default_admin_role_used(&config.admin_role);
+        super::audit::warn_if_default_admin_role_used(&config.admin_role);
 
         // 启动后台健康检查任务
         #[cfg(feature = "pool-health-check")]
@@ -413,7 +413,7 @@ impl DbPool {
     #[cfg(not(feature = "permission"))]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
         // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），发出安全警告
-        super::session::warn_if_default_admin_role_used(&config.admin_role);
+        super::audit::warn_if_default_admin_role_used(&config.admin_role);
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
