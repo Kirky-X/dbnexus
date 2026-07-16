@@ -737,78 +737,8 @@ impl Session {
         note = "vuln-0005: Cypher injection risk; use execute_cypher_with_params instead"
     )]
     pub async fn execute_cypher(&self, cypher: &str) -> DbResult<crate::database::graph::GraphExecResult> {
-        // vuln-0005 修复：注入防护检查（长度限制 + 危险模式检测）
-        validate_cypher_safety(cypher)?;
-
-        // 图权限检查（T035 stub：admin 绕过，非 admin deny）
-        #[cfg(feature = "permission")]
-        {
-            let graph_perm_ctx =
-                crate::access::permission::GraphPermissionContext::new(&self.role, &self.pool_inner.admin_role);
-            graph_perm_ctx.check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
-        }
-
-        // 取连接
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available - Session may have been invalidated".to_string())
-        })?;
-
-        // 获取图操作互斥锁（HIGH-001 修复）
-        //
-        // 串行化 `execute_cypher` 调用，确保图事务 take → await → put back 期间
-        // 无并发调用看到 `graph_transaction` 为 `None` 而绕过事务隔离。
-        let _graph_op_guard = self.graph_op_mutex.lock().await;
-
-        // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
-        let graph_txn = {
-            let mut state = self.state.lock().await;
-            // FM-3.1 修复：检查 poisoned 标记，防止 panic 后事务隔离被绕过
-            if state.graph_txn_poisoned {
-                return Err(DbError::Transaction(
-                    "Graph transaction is poisoned due to previous panic; \
-                     Session must be dropped and recreated"
-                        .to_string(),
-                ));
-            }
-            state.graph_transaction.take()
-        };
-
-        if let Some(graph_txn) = graph_txn {
-            // FM-3.1 修复：PoisonGuard 确保 panic 时设置 poisoned 标记
-            //
-            // 如果 `graph_txn.execute_cypher().await` panic，put back 不会执行，
-            // 事务句柄丢失。guard 在 unwinding 时设置 poisoned 标记，
-            // 后续 execute_cypher 返回错误而非绕过事务隔离。
-            struct PoisonGuard<'a> {
-                state: &'a Mutex<SessionState>,
-                armed: bool,
-            }
-            impl<'a> Drop for PoisonGuard<'a> {
-                fn drop(&mut self) {
-                    if self.armed {
-                        if let Ok(mut state) = self.state.try_lock() {
-                            state.graph_txn_poisoned = true;
-                        }
-                    }
-                }
-            }
-
-            let mut guard = PoisonGuard {
-                state: &self.state,
-                armed: true,
-            };
-            let result = graph_txn.execute_cypher(cypher).await;
-            guard.armed = false; // 正常完成，解除 armed
-
-            // 短锁：put back（无论成功失败都放回，由用户决定 commit/rollback）
-            let mut state = self.state.lock().await;
-            state.graph_transaction = Some(graph_txn);
-            return result;
-        }
-
-        // 不在事务中，直接在连接上执行
-        let graph = conn.as_graph()?;
-        graph.execute_cypher(cypher).await
+        // MD-1 修复：委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
+        self.execute_cypher_in_transaction(cypher, None).await
     }
 
     /// 执行参数化 Cypher 查询（vuln-0005 修复）
@@ -851,10 +781,39 @@ impl Session {
         cypher: &str,
         params: HashMap<String, serde_json::Value>,
     ) -> DbResult<crate::database::graph::GraphExecResult> {
+        // MD-1 修复：委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
+        self.execute_cypher_in_transaction(cypher, Some(params)).await
+    }
+
+    /// 执行 Cypher 查询的内部 helper（MD-1 提取，统一事务分发逻辑）
+    ///
+    /// `execute_cypher` 与 `execute_cypher_with_params` 共享完整的事务分发流程：
+    /// 1. 注入防护（vuln-0005）
+    /// 2. 图权限检查
+    /// 3. 取连接 + 获取图操作互斥锁（HIGH-001：串行化 take → put back）
+    /// 4. 短锁 take graph_transaction（含 poisoned 检查，FM-3.1）
+    /// 5. 事务内执行：PoisonGuard + take → await → put back
+    /// 6. 事务外执行：直接在连接上调用
+    ///
+    /// # 参数
+    ///
+    /// * `cypher` - Cypher 查询语句
+    /// * `params` - `None` 调用 `execute_cypher`，`Some` 调用 `execute_cypher_with_params`
+    ///
+    /// # 设计说明
+    ///
+    /// 使用 `Option<HashMap>` 区分两种操作。`params.take()` 在互斥分支中消耗参数，
+    /// 避免在 `execute_cypher` 路径强制构造空 HashMap，也无需 clone。
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    async fn execute_cypher_in_transaction(
+        &self,
+        cypher: &str,
+        mut params: Option<HashMap<String, serde_json::Value>>,
+    ) -> DbResult<crate::database::graph::GraphExecResult> {
         // vuln-0005 修复：注入防护检查（长度限制 + 危险模式检测）
         validate_cypher_safety(cypher)?;
 
-        // 图权限检查（与 execute_cypher 相同）
+        // 图权限检查（admin 角色由 GraphPermissionContext 内部处理）
         #[cfg(feature = "permission")]
         {
             let graph_perm_ctx =
@@ -867,7 +826,7 @@ impl Session {
             DbError::Config("Connection not available - Session may have been invalidated".to_string())
         })?;
 
-        // 获取图操作互斥锁（与 execute_cypher 相同逻辑）
+        // 获取图操作互斥锁（HIGH-001：防止并发 take → put back 窗口绕过事务隔离）
         let _graph_op_guard = self.graph_op_mutex.lock().await;
 
         // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
@@ -884,7 +843,7 @@ impl Session {
         };
 
         if let Some(graph_txn) = graph_txn {
-            // PoisonGuard（同 execute_cypher）
+            // PoisonGuard（FM-3.1 修复：panic 时标记事务为 poisoned，防止丢失句柄后绕过事务隔离）
             struct PoisonGuard<'a> {
                 state: &'a Mutex<SessionState>,
                 armed: bool,
@@ -903,7 +862,12 @@ impl Session {
                 state: &self.state,
                 armed: true,
             };
-            let result = graph_txn.execute_cypher_with_params(cypher, params).await;
+            // 互斥分支：params.take() 确保参数只被消耗一次（None → execute_cypher / Some → with_params）
+            let result = if let Some(p) = params.take() {
+                graph_txn.execute_cypher_with_params(cypher, p).await
+            } else {
+                graph_txn.execute_cypher(cypher).await
+            };
             guard.armed = false;
 
             let mut state = self.state.lock().await;
@@ -911,9 +875,13 @@ impl Session {
             return result;
         }
 
-        // 不在事务中，直接在连接上执行参数化查询
+        // 不在事务中，直接在连接上执行
         let graph = conn.as_graph()?;
-        graph.execute_cypher_with_params(cypher, params).await
+        if let Some(p) = params.take() {
+            graph.execute_cypher_with_params(cypher, p).await
+        } else {
+            graph.execute_cypher(cypher).await
+        }
     }
 
     /// 执行 SQL（带权限检查和操作类型）
