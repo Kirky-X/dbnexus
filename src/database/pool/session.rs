@@ -853,8 +853,19 @@ impl Session {
             }
         }
 
-        // 提取表名
-        let table_name = extract_table_name(sql);
+        // 提取表名（vuln-0003 修复：使用 SqlParser 替代朴素字符串匹配）
+        //
+        // 旧实现 `extract_table_name(sql)` 使用 `contains("FROM ")` 朴素字符串匹配，
+        // 可被 SQL 字符串字面量、注释、子查询混淆绕过权限检查。
+        // 新实现 `extract_table_name_via_parser(sql)` 使用 sqlparser AST 解析，
+        // 正确处理字符串字面量、注释、子查询等复杂 SQL 语法。
+        //
+        // 当 SqlParser 无法提取表名（None）时，跳过表级权限检查，
+        // 由下游 `execute_raw` 的 SqlParser 检查提供防御纵深。
+        #[cfg(feature = "sql-parser")]
+        let table_name: String = extract_table_name_via_parser(sql).await.unwrap_or_default();
+        #[cfg(not(feature = "sql-parser"))]
+        let table_name: String = extract_table_name(sql);
 
         // 检查权限
         #[cfg(feature = "permission")]
@@ -1138,7 +1149,35 @@ impl Drop for Session {
 }
 
 /// 简化的表名提取（用于权限检查）
+///
+/// # 弃用警告（vuln-0003 修复）
+///
+/// 此函数使用 `contains("FROM ")` 等朴素字符串匹配提取表名，
+/// 可被以下 SQL 混淆绕过权限检查：
+///
+/// 1. **字符串字面量包含 "FROM "**：`SELECT 'from the depths' FROM users`
+///    朴素解析器返回 "the" 而非 "users"。
+/// 2. **SQL 注释包含 "FROM "**：`SELECT /* FROM fake_table */ * FROM users`
+///    朴素解析器返回 "fake_table" 而非 "users"。
+/// 3. **子查询的首个 FROM 在内层**：`SELECT * FROM (SELECT * FROM inner) AS sub`
+///    朴素解析器返回 "(SELECT" 而非正确表名。
+///
+/// # 替代方案
+///
+/// 使用 [`extract_table_name_via_parser`] 替代，后者基于 sqlparser AST 解析，
+/// 正确处理字符串字面量、注释、子查询等复杂 SQL 语法。
+///
+/// 当 `sql-parser` feature 启用时（`permission` feature 强制启用），
+/// [`Session::execute_with_operation`] 已改用 [`extract_table_name_via_parser`]。
+///
+/// 此函数保留用于 `permission` feature 未启用 `sql-parser` 的边缘情况
+/// （实际上 Cargo.toml 中 `permission = ["sql-parser", ...]` 已强制此依赖）。
+#[deprecated(
+    since = "0.4.2",
+    note = "vuln-0003: 朴素字符串匹配可被 SQL 字符串字面量/注释/子查询绕过，请使用 `extract_table_name_via_parser` 替代"
+)]
 #[cfg(feature = "permission")]
+#[allow(dead_code)] // 当 sql-parser 启用时（permission 强制启用），此函数被 extract_table_name_via_parser 替代
 fn extract_table_name(sql: &str) -> String {
     // 这是一个简化的实现，实际应该使用 sqlparser
     let sql_upper = sql.to_uppercase();
@@ -1179,8 +1218,54 @@ fn extract_table_name(sql: &str) -> String {
     String::new()
 }
 
+/// 基于 SqlParser 的表名提取（vuln-0003 修复）
+///
+/// 使用 sqlparser AST 解析提取 SQL 语句的表名，替代朴素字符串匹配。
+/// 正确处理字符串字面量、注释、子查询等复杂 SQL 语法，防止权限检查绕过。
+///
+/// # 参数
+///
+/// * `sql` - SQL 语句
+///
+/// # 返回
+///
+/// - `Some(table_name)` - 成功提取表名
+/// - `None` - 解析失败、不支持的语句类型（DDL/DCL/Transaction）或无表名
+///
+/// # 行为说明
+///
+/// - 使用全局共享 `SqlParser` 单例，避免重复创建 parser + 缓存
+/// - 解析失败时返回 `None`，调用方应跳过表级权限检查（由下游 `execute_raw`
+///   的 SqlParser 检查提供防御纵深）
+/// - 派生表（subquery in FROM）返回 `None`（无具名基表）
+///
+/// # 安全性
+///
+/// 此函数是 vuln-0003 修复的核心，替代了可被绕过的 `extract_table_name`。
+/// 当 `permission` feature 启用时，`sql-parser` feature 被强制启用
+/// （Cargo.toml: `permission = ["sql-parser", ...]`），因此此函数始终可用。
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+async fn extract_table_name_via_parser(sql: &str) -> Option<String> {
+    let parser = SqlParser::shared().await;
+    match parser.parse_operation_async(sql).await {
+        Ok(Some((table, _))) => {
+            if table.is_empty() || is_invalid_table_name(&table) {
+                None
+            } else {
+                Some(table)
+            }
+        }
+        Ok(None) => None,
+        Err(_) => None,
+    }
+}
+
 #[cfg(all(feature = "permission", not(feature = "sql-parser")))]
+#[allow(deprecated)]
 fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
+    // 此函数仅在 permission 启用但 sql-parser 未启用时使用
+    // （实际上 Cargo.toml 中 permission 强制依赖 sql-parser，此分支为死代码）
+    // 当 sql-parser 不可用时，只能使用已弃用的 extract_table_name 作为 fallback
     let table_name = extract_table_name(sql);
     let sql_upper = sql.trim_start().to_uppercase();
     let action = if sql_upper.starts_with("INSERT") {
@@ -1695,5 +1780,214 @@ mod vuln_0001_tests {
 
         let result = session.check_table_permission("users", "INSERT").await;
         assert!(result.is_ok(), "admin should bypass check_table_permission for INSERT");
+    }
+}
+
+// ============================================================================
+// vuln-0003 测试：extract_table_name 朴素字符串匹配绕过
+// ============================================================================
+//
+// 漏洞描述：
+//   `extract_table_name` 使用 `contains("FROM ")` 等朴素字符串匹配提取表名，
+//   可被以下 SQL 混淆绕过权限检查：
+//   1. 字符串字面量包含 "FROM " → 提取错误的表名
+//   2. SQL 注释包含 "FROM " → 提取错误的表名
+//   3. 子查询的首个 FROM 在内层 → 提取错误的表名
+//
+// 修复方案：
+//   使用 SqlParser（基于 sqlparser AST 解析）替代朴素字符串匹配，
+//   标记 `extract_table_name` 为 `#[deprecated]`。
+// ============================================================================
+
+#[cfg(test)]
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+#[allow(deprecated)]
+mod vuln_0003_tests {
+    use super::*;
+
+    /// 辅助：通过 SqlParser 提取表名（修复后由 `extract_table_name_via_parser` 提供）
+    ///
+    /// 此函数在测试模块内独立实现，避免依赖尚未添加的内部函数。
+    /// 修复后由 `extract_table_name_via_parser` 替代此测试辅助。
+    async fn extract_table_name_via_parser_for_test(sql: &str) -> Option<String> {
+        let parser = SqlParser::shared().await;
+        parser
+            .parse_operation_async(sql)
+            .await
+            .ok()
+            .flatten()
+            .map(|(table, _)| table)
+    }
+
+    /// vuln-0003 Red-1：朴素 `extract_table_name` 对字符串字面量内的 "FROM " 误匹配
+    ///
+    /// SQL: `SELECT 'from the depths' FROM users`
+    /// 朴素解析器返回 "the"（来自字符串字面量 "from the depths"），
+    /// 而 SqlParser 正确返回 "users"。
+    #[tokio::test]
+    async fn test_vuln_0003_naive_fails_on_string_literal_containing_from() {
+        let sql = "SELECT 'from the depths' FROM users";
+
+        // 朴素解析器返回错误结果（漏洞证据）
+        let naive_result = extract_table_name(sql);
+        assert_ne!(
+            naive_result, "users",
+            "naive extract_table_name should NOT return 'users' (demonstrating the bug)"
+        );
+
+        // SqlParser 正确提取表名
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        assert_eq!(
+            parser_result.as_deref(),
+            Some("users"),
+            "SqlParser should correctly extract 'users' table name"
+        );
+    }
+
+    /// vuln-0003 Red-2：朴素 `extract_table_name` 对 SQL 注释内的 "FROM " 误匹配
+    ///
+    /// SQL: `SELECT /* FROM fake_table */ * FROM users`
+    /// 朴素解析器返回 "fake_table"（来自注释），权限检查针对错误表名。
+    ///
+    /// SqlParser 行为：
+    /// - 将 `/* ... */` 块注释视为潜在注入向量并拒绝（安全行为）
+    /// - 或正确提取 "users"（若注释被正常处理）
+    /// 两种行为都是安全的，关键是不会返回错误表名让 SQL 绕过权限检查。
+    #[tokio::test]
+    async fn test_vuln_0003_naive_fails_on_comment_containing_from() {
+        let sql = "SELECT /* FROM fake_table */ * FROM users";
+
+        // 朴素解析器返回错误结果（漏洞证据）
+        let naive_result = extract_table_name(sql);
+        assert_ne!(
+            naive_result, "users",
+            "naive extract_table_name should NOT return 'users' when comment contains FROM (demonstrating the bug)"
+        );
+
+        // SqlParser 行为：拒绝 SQL（返回 None）或正确提取表名
+        // 两种都是安全行为 — 关键是不会返回错误表名绕过权限检查
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        match parser_result {
+            None => {
+                // SqlParser 拒绝 SQL（检测到注释注入模式）— 安全行为
+            }
+            Some(table) => {
+                assert_eq!(
+                    table, "users",
+                    "SqlParser should either reject or return correct table name 'users', got: {}",
+                    table
+                );
+            }
+        }
+    }
+
+    /// vuln-0003 Red-3：朴素 `extract_table_name` 对子查询的首个 FROM 误匹配
+    ///
+    /// SQL: `SELECT * FROM (SELECT * FROM inner_table) AS sub`
+    /// 朴素解析器返回 "(SELECT"（来自子查询的 FROM），
+    /// 而 SqlParser 正确返回 "inner_table"（最外层 FROM 的表名）。
+    ///
+    /// 注意：对于派生表（subquery in FROM），SqlParser 返回 None
+    /// 因为派生表没有具名基表，朴素解析器返回无意义的 "(SELECT" 是错误的。
+    #[tokio::test]
+    async fn test_vuln_0003_naive_fails_on_subquery_from() {
+        let sql = "SELECT * FROM (SELECT * FROM inner_table) AS sub";
+
+        // 朴素解析器返回错误结果（漏洞证据）
+        let naive_result = extract_table_name(sql);
+        // 朴素解析器会返回 "(SELECT" 之类的无意义字符串
+        assert_ne!(
+            naive_result, "inner_table",
+            "naive extract_table_name should NOT return 'inner_table' for subquery (demonstrating the bug)"
+        );
+
+        // SqlParser 应返回 None（派生表无具名基表）或正确表名，
+        // 但绝不会返回朴素解析器那样的无意义字符串
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        // SqlParser 对派生表返回 None（无具名基表）
+        // 这是正确行为：派生表的权限检查应在外层 SQL 上下文处理
+        assert!(
+            parser_result.is_none() || parser_result.as_deref() == Some("inner_table"),
+            "SqlParser should return None or correct table name for derived table, got: {:?}",
+            parser_result
+        );
+    }
+
+    /// vuln-0003 Red-4：朴素 `extract_table_name` 对 INSERT INTO 字符串字面量误匹配
+    ///
+    /// SQL: `INSERT INTO users (name) VALUES ('from into values')`
+    /// 朴素解析器应正确提取 "users"，但类似情况在其他 SQL 类型中可能出错。
+    /// 此测试验证 SqlParser 对 INSERT 的正确处理。
+    #[tokio::test]
+    async fn test_vuln_0003_parser_correctly_handles_insert() {
+        let sql = "INSERT INTO users (name) VALUES ('from into values')";
+
+        // SqlParser 正确提取表名
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        assert_eq!(
+            parser_result.as_deref(),
+            Some("users"),
+            "SqlParser should correctly extract 'users' for INSERT"
+        );
+    }
+
+    /// vuln-0003 Red-5：朴素 `extract_table_name` 对 UPDATE 字符串字面量误匹配
+    ///
+    /// SQL: `UPDATE users SET name = 'from users' WHERE id = 1`
+    /// 朴素解析器对 UPDATE 路径使用 `contains("UPDATE ")`，
+    /// 此测试验证 SqlParser 对 UPDATE 的正确处理。
+    #[tokio::test]
+    async fn test_vuln_0003_parser_correctly_handles_update() {
+        let sql = "UPDATE users SET name = 'from users' WHERE id = 1";
+
+        // SqlParser 正确提取表名
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        assert_eq!(
+            parser_result.as_deref(),
+            Some("users"),
+            "SqlParser should correctly extract 'users' for UPDATE"
+        );
+    }
+
+    /// vuln-0003 Red-6：朴素 `extract_table_name` 对 DELETE 字符串字面量误匹配
+    ///
+    /// SQL: `DELETE FROM users WHERE name = 'from deleted'`
+    /// 此测试验证 SqlParser 对 DELETE 的正确处理。
+    #[tokio::test]
+    async fn test_vuln_0003_parser_correctly_handles_delete() {
+        let sql = "DELETE FROM users WHERE name = 'from deleted'";
+
+        // SqlParser 正确提取表名
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        assert_eq!(
+            parser_result.as_deref(),
+            Some("users"),
+            "SqlParser should correctly extract 'users' for DELETE"
+        );
+    }
+
+    /// vuln-0003 Red-7：朴素 `extract_table_name` 对带引号的表名处理
+    ///
+    /// SQL: `SELECT * FROM "users" WHERE id = 1`
+    /// 朴素解析器返回 `"users"`（带引号），权限检查可能因引号不匹配而失败。
+    /// SqlParser 返回 `"users"`（标准化形式，与权限策略匹配）。
+    #[tokio::test]
+    async fn test_vuln_0003_parser_handles_quoted_table_name() {
+        let sql = "SELECT * FROM \"users\" WHERE id = 1";
+
+        // SqlParser 应正确解析带引号的表名
+        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        assert!(
+            parser_result.is_some(),
+            "SqlParser should extract table name for quoted identifier, got: {:?}",
+            parser_result
+        );
+        // 表名应包含 "users"（可能带引号或不带引号，取决于 sqlparser 序列化）
+        let table = parser_result.unwrap();
+        assert!(
+            table.contains("users"),
+            "extracted table name should contain 'users', got: {}",
+            table
+        );
     }
 }
