@@ -192,6 +192,14 @@ pub trait GraphConnection: Send + Sync {
 /// （`async_trait` 生成的 future 持有 `&Self`，要 `Send` 则 `Self: Sync`）。
 /// 两个内置 implementor（`LadybugTransaction`/`Neo4jTransaction`）的内部字段
 /// 均为 `Sync` 类型（`mpsc::Sender`/`AsyncMutex`），天然满足此约束。
+///
+/// # MD-2 误报说明（架构审查）
+///
+/// 审查曾标记"`Send + Sync` 约束过严"为 MEDIUM 架构问题。此为误报：
+/// `async_trait` 为 `&self` 方法生成的 future 持有 `&Self`，要使 future `Send`
+/// 则 `Self: Sync` 是 Rust 编译器的强制要求，非过度约束。降级为仅 `Send` 会导致
+/// `execute_cypher_with_params` 等 `&self` 方法无法跨线程 await（编译失败）。
+/// 第三方实现只需内部字段 `Sync`，与 `GraphConnection` trait 的约束一致。
 #[async_trait]
 pub trait GraphTransaction: Send + Sync {
     /// 提交事务
