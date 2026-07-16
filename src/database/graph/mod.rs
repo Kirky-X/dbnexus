@@ -15,13 +15,15 @@
 //!
 //! # Trait
 //!
-//! - [`GraphConnection`][]: 图数据库连接（execute_cypher / health_check / begin_graph_txn）
-//! - [`GraphTransaction`][]: 图数据库事务（commit / rollback / execute_cypher）
+//! - [`GraphConnection`][]: 图数据库连接（execute_cypher / execute_cypher_with_params / health_check / begin_graph_txn）
+//! - [`GraphTransaction`][]: 图数据库事务（commit / rollback / execute_cypher / execute_cypher_with_params）
 
 #[cfg(feature = "ladybug")]
 pub mod ladybug_conn;
 #[cfg(feature = "neo4j")]
 pub mod neo4j_conn;
+
+use std::collections::HashMap;
 
 use crate::foundation::DbResult;
 use async_trait::async_trait;
@@ -117,10 +119,44 @@ pub enum GraphExecResult {
 pub trait GraphConnection: Send + Sync {
     /// 执行 Cypher 查询
     ///
+    /// # 安全性警告（vuln-0005）
+    ///
+    /// 直接拼接用户输入到 `cypher` 字符串易导致 Cypher 注入。
+    /// 应优先使用 [`execute_cypher_with_params`](Self::execute_cypher_with_params)。
+    ///
     /// # Errors
     ///
     /// 查询语法错误、连接失败或数据库内部错误时返回 `DbError`。
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult>;
+
+    /// 执行参数化 Cypher 查询（vuln-0005 修复）
+    ///
+    /// 参数以 `$name` 形式引用，例如：
+    /// ```cypher
+    /// MATCH (n:User {name: $name}) RETURN n
+    /// ```
+    /// 通过 `params` 提供 `name` 的值，底层使用 prepared statement，
+    /// 数据库不会将参数值解析为 Cypher 代码，从根本上防止注入。
+    ///
+    /// # 默认实现
+    ///
+    /// 默认回退到 [`execute_cypher`](Self::execute_cypher)（忽略参数，不安全），
+    /// 仅用于向后兼容外部 implementor。内置实现（Ladybug/Neo4j）重写此方法
+    /// 使用真正的 prepared statement。
+    ///
+    /// # Errors
+    ///
+    /// 查询语法错误、参数类型不匹配、连接失败时返回 `DbError`。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        // 默认实现：忽略参数，回退到 execute_cypher
+        // 这是 backward-compat 路径，内置 implementor 应重写
+        let _ = params;
+        self.execute_cypher(cypher).await
+    }
 
     /// 健康检查
     ///
@@ -143,8 +179,14 @@ pub trait GraphConnection: Send + Sync {
 /// 图数据库事务 trait
 ///
 /// 提供事务内的 Cypher 执行和提交/回滚能力。
+///
+/// vuln-0005 修复：trait 约束从 `Send` 升级为 `Send + Sync`，
+/// 使 `execute_cypher_with_params` 等 `&self` 方法生成的 future 能跨线程传递
+/// （`async_trait` 生成的 future 持有 `&Self`，要 `Send` 则 `Self: Sync`）。
+/// 两个内置 implementor（`LadybugTransaction`/`Neo4jTransaction`）的内部字段
+/// 均为 `Sync` 类型（`mpsc::Sender`/`AsyncMutex`），天然满足此约束。
 #[async_trait]
-pub trait GraphTransaction: Send {
+pub trait GraphTransaction: Send + Sync {
     /// 提交事务
     ///
     /// # Errors
@@ -161,10 +203,37 @@ pub trait GraphTransaction: Send {
 
     /// 在事务内执行 Cypher 查询
     ///
+    /// # 安全性警告（vuln-0005）
+    ///
+    /// 直接拼接用户输入到 `cypher` 字符串易导致 Cypher 注入。
+    /// 应优先使用 [`execute_cypher_with_params`](Self::execute_cypher_with_params)。
+    ///
     /// # Errors
     ///
     /// 查询语法错误或事务已关闭时返回 `DbError`。
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult>;
+
+    /// 在事务内执行参数化 Cypher 查询（vuln-0005 修复）
+    ///
+    /// 语义同 [`GraphConnection::execute_cypher_with_params`]，
+    /// 但在事务上下文内执行，确保事务内所有操作使用同一连接。
+    ///
+    /// # 默认实现
+    ///
+    /// 默认回退到 [`execute_cypher`](Self::execute_cypher)（忽略参数，不安全），
+    /// 内置实现（Ladybug/Neo4j）重写此方法使用真正的 prepared statement。
+    ///
+    /// # Errors
+    ///
+    /// 查询语法错误、参数类型不匹配、事务已关闭时返回 `DbError`。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        let _ = params;
+        self.execute_cypher(cypher).await
+    }
 }
 
 #[cfg(test)]

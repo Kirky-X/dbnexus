@@ -24,6 +24,7 @@
 //! `neo4rs::Txn` 是 `Send + Sync`（持有独占连接）。通过 `Arc<Graph>` 共享连接，
 //! `AsyncMutex<Option<Txn>>` 保证事务内操作的线程安全。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::Mutex as AsyncMutex;
@@ -192,6 +193,53 @@ impl GraphConnection for Neo4jConnection {
         Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
     }
 
+    /// vuln-0005 修复：使用 `neo4rs::query(cypher).params(...)` 执行参数化查询
+    ///
+    /// neo4rs 在客户端将参数以 Bolt 协议的 typed value 形式发送到服务器，
+    /// 服务器不会将参数值解析为 Cypher 代码，从根本上防止注入。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| DbError::Config("Neo4jConnection not connected (placeholder)".to_string()))?;
+
+        let mut query = neo4rs::query(cypher);
+        for (key, value) in params {
+            query = attach_param_to_query(query, &key, value);
+        }
+
+        let mut stream = graph
+            .execute(query)
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j execute (params): {e}"))))?;
+
+        let mut rows = Vec::new();
+        while let Some(row) = stream
+            .next()
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}"))))?
+        {
+            let json_val: serde_json::Value = row
+                .to::<serde_json::Value>()
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row deserialize: {e}"))))?;
+
+            let columns = match json_val {
+                serde_json::Value::Object(map) => map
+                    .into_iter()
+                    .map(|(name, val)| (name, GraphValue::Scalar(val)))
+                    .collect(),
+                other => vec![("value".to_string(), GraphValue::Scalar(other))],
+            };
+            rows.push(GraphRow { columns });
+        }
+
+        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+    }
+
     async fn health_check(&self) -> DbResult<()> {
         let result = self.execute_cypher("RETURN 1").await?;
         match result {
@@ -320,6 +368,104 @@ impl GraphTransaction for Neo4jTransaction {
         }
 
         Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+    }
+
+    /// vuln-0005 修复：在事务内执行参数化 Cypher 查询
+    ///
+    /// 通过 `neo4rs::query(cypher).param(key, value)` 在事务上下文内执行，
+    /// 参数以 Bolt 协议 typed value 形式发送到服务器，防止注入。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        let mut guard = self.txn.lock().await;
+        let txn = guard.as_mut().ok_or_else(|| {
+            DbError::Connection(sea_orm::DbErr::Custom("neo4j transaction already consumed".to_string()))
+        })?;
+
+        let mut query = neo4rs::query(cypher);
+        for (key, value) in params {
+            query = attach_param_to_query(query, &key, value);
+        }
+
+        let mut stream = txn
+            .execute(query)
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn execute (params): {e}"))))?;
+
+        let mut rows = Vec::new();
+        while let Some(row) = stream
+            .next(&mut *txn)
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}"))))?
+        {
+            let json_val: serde_json::Value = row
+                .to::<serde_json::Value>()
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row deserialize: {e}"))))?;
+
+            let columns = match json_val {
+                serde_json::Value::Object(map) => map
+                    .into_iter()
+                    .map(|(name, val)| (name, GraphValue::Scalar(val)))
+                    .collect(),
+                other => vec![("value".to_string(), GraphValue::Scalar(other))],
+            };
+            rows.push(GraphRow { columns });
+        }
+
+        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+    }
+}
+
+// ============================================================================
+// 内部辅助函数
+// ============================================================================
+
+/// 将 `serde_json::Value` 转换为 `BoltType` 并 attach 到 query（vuln-0005 修复）
+///
+/// 转换规则：
+/// - `Null` → `BoltType::Null`
+/// - `Bool` → `BoltType::Boolean`
+/// - 整数（i64 范围内）→ `BoltType::Integer`
+/// - 浮点 → `BoltType::Float`
+/// - 字符串 → `BoltType::String`
+/// - 数组 → `BoltType::List`（递归转换元素）
+/// - 对象 → `BoltType::Map`（递归转换值）
+fn attach_param_to_query(mut query: neo4rs::Query, key: &str, value: serde_json::Value) -> neo4rs::Query {
+    let bolt_value = json_to_bolt_type(value);
+    query = query.param(key, bolt_value);
+    query
+}
+
+/// 将 `serde_json::Value` 转换为 `neo4rs::BoltType`
+fn json_to_bolt_type(value: serde_json::Value) -> neo4rs::BoltType {
+    use neo4rs::BoltType;
+    match value {
+        serde_json::Value::Null => BoltType::Null(neo4rs::BoltNull),
+        serde_json::Value::Bool(b) => BoltType::from(b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                BoltType::from(i)
+            } else if let Some(f) = n.as_f64() {
+                BoltType::from(f)
+            } else {
+                // 大整数 / 特殊数值 → 序列化为字符串保留精度
+                BoltType::from(n.to_string())
+            }
+        }
+        serde_json::Value::String(s) => BoltType::from(s),
+        serde_json::Value::Array(arr) => {
+            let bolt_list: Vec<neo4rs::BoltType> = arr.into_iter().map(json_to_bolt_type).collect();
+            BoltType::List(neo4rs::BoltList::from(bolt_list))
+        }
+        serde_json::Value::Object(obj) => {
+            let mut bolt_map = neo4rs::BoltMap::default();
+            for (k, v) in obj {
+                bolt_map.put(k.into(), json_to_bolt_type(v));
+            }
+            BoltType::Map(bolt_map)
+        }
     }
 }
 
