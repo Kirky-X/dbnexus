@@ -1175,7 +1175,14 @@ fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl s
 /// 记录 admin 权限绕过审计日志（vuln-0001 修复）
 ///
 /// admin 角色绕过权限检查时调用此函数，记录审计日志以保留审计链。
-/// 日志输出到 stderr（始终）和 tracing（当 tracing feature 启用时）。
+///
+/// **性能优化**（perf-HIGH）：此函数位于 SQL 热路径（`Session::execute()` → `check_permission()`），
+/// 生产环境 admin 重负载场景下每秒可达千次调用。原实现先 `format!` 分配 String（~200ns），
+/// 再 `eprintln!` 同步阻塞 I/O（10-100μs，stderr 全局锁），并造成 tracing 启用时的双重输出。
+///
+/// 现遵循项目惯例（参见 `access/permission/cache.rs` 中的 `warn_log!` 宏）：
+/// - `tracing` feature 启用时：仅走 `tracing::warn!`（异步、结构化、可采样、可过滤）
+/// - 未启用 `tracing` 时：降级为 `eprintln!`，但直接使用其 lazy 格式化（不预先 `format!`）
 ///
 /// # 参数
 ///
@@ -1184,18 +1191,23 @@ fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl s
 /// * `operation` - 权限操作类型
 #[cfg(feature = "permission")]
 fn audit_admin_bypass(role: &str, table: &str, operation: &PermissionAction) {
-    let msg = format!(
-        "[SECURITY AUDIT] Admin role '{}' bypassed permission check: operation={:?} table={}",
-        role, operation, table
-    );
-    eprintln!("{}", msg);
     #[cfg(feature = "tracing")]
     {
         tracing::warn!(
+            target: "dbnexus.security.audit",
             role = role,
             table = table,
             operation = ?operation,
             "Admin role bypassed permission check (vuln-0001 audit)"
+        );
+    }
+    #[cfg(not(feature = "tracing"))]
+    {
+        // 非 tracing 时降级为 eprintln!（遵循 access/permission/cache.rs 中的 warn_log! 惯例）
+        // 直接使用 eprintln! 的 lazy 格式化，避免 format! 预分配 String
+        eprintln!(
+            "[SECURITY AUDIT] Admin role '{}' bypassed permission check: operation={:?} table={}",
+            role, operation, table
         );
     }
 }
@@ -1204,6 +1216,10 @@ fn audit_admin_bypass(role: &str, table: &str, operation: &PermissionAction) {
 ///
 /// 当 `admin_role` 为 "admin"（默认值）时，记录安全警告。
 /// 返回 `true` 表示使用了默认值（不安全），`false` 表示已自定义。
+///
+/// 日志输出遵循与 `audit_admin_bypass` 一致的模式：
+/// - `tracing` feature 启用时：仅走 `tracing::warn!`
+/// - 未启用 `tracing` 时：降级为 `eprintln!`
 ///
 /// # 参数
 ///
@@ -1214,14 +1230,20 @@ fn audit_admin_bypass(role: &str, table: &str, operation: &PermissionAction) {
 /// `true` 表示使用了默认 "admin" 角色（不安全），`false` 表示已自定义
 pub fn warn_if_default_admin_role_used(admin_role: &str) -> bool {
     if admin_role == "admin" {
-        let msg = "[SECURITY WARNING] Using default admin_role 'admin' is insecure. \
-                   Set a custom admin_role via DbConfig.admin_role or DbPoolBuilder::admin_role().";
-        eprintln!("{}", msg);
         #[cfg(feature = "tracing")]
         {
             tracing::warn!(
+                target: "dbnexus.security.audit",
                 admin_role = admin_role,
-                "Using default admin_role 'admin' is insecure (vuln-0001)"
+                "Using default admin_role 'admin' is insecure (vuln-0001). \
+                 Set a custom admin_role via DbConfig.admin_role or DbPoolBuilder::admin_role()."
+            );
+        }
+        #[cfg(not(feature = "tracing"))]
+        {
+            eprintln!(
+                "[SECURITY WARNING] Using default admin_role 'admin' is insecure. \
+                 Set a custom admin_role via DbConfig.admin_role or DbPoolBuilder::admin_role()."
             );
         }
         true
