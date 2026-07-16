@@ -970,17 +970,9 @@ impl Session {
         // 执行 SQL
         let result = self.execute_raw(sql).await?;
 
-        // 记录指标
-        let duration = start.elapsed();
-        self.record_query_metrics(&format!("{:?}", operation), duration, true);
-
-        // 如果是写操作，标记
-        #[cfg(feature = "permission")]
-        {
-            if is_write_action(operation) {
-                self.mark_write().await;
-            }
-        }
+        // LD-2 修复：复用 record_metrics_and_mark_write 统一 metrics 记录与 mark_write 逻辑，
+        // 消除与 execute() 方法中重复的手动展开（record_query_metrics + is_write_action + mark_write）
+        self.record_metrics_and_mark_write(operation, start).await;
 
         Ok(result)
     }
