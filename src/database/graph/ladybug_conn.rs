@@ -27,6 +27,7 @@
 //! `lbug::Database` 是 `Send + Sync`（unsafe impl），`lbug::Connection` 是 `Send + Sync`。
 //! 通过 `Arc<Database>` 共享数据库实例，`Arc<Semaphore>` 限制并发数。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::{Semaphore, mpsc, oneshot};
@@ -170,6 +171,30 @@ impl GraphConnection for LadybugConnection {
         result
     }
 
+    /// vuln-0005 修复：使用 lbug prepared statement 执行参数化查询
+    ///
+    /// 流程：`conn.prepare(cypher)` → `conn.execute(&mut prepared, params)`，
+    /// 参数值通过 FFI 以 `lbug::Value` 形式传入，数据库不会将其解析为 Cypher 代码。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        let permit = self.acquire_permit().await?;
+        let db = self.db.clone();
+        let cypher_owned = cypher.to_string();
+        let handle: JoinHandle<DbResult<GraphExecResult>> = tokio::task::spawn_blocking(move || {
+            let conn = lbug::Connection::new(&db)
+                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Connection::new: {e}"))))?;
+            execute_cypher_with_params_on_conn(&conn, &cypher_owned, &params)
+        });
+        let result = handle
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}"))))?;
+        drop(permit);
+        result
+    }
+
     async fn health_check(&self) -> DbResult<()> {
         let result = self.execute_cypher("RETURN 1").await?;
         match result {
@@ -204,6 +229,10 @@ impl GraphConnection for LadybugConnection {
                 match cmd {
                     TxnCommand::Execute { cypher, reply } => {
                         let result = execute_cypher_on_conn(&conn, &cypher);
+                        let _ = reply.send(result);
+                    }
+                    TxnCommand::ExecuteWithParams { cypher, params, reply } => {
+                        let result = execute_cypher_with_params_on_conn(&conn, &cypher, &params);
                         let _ = reply.send(result);
                     }
                     TxnCommand::Commit { reply } => {
@@ -251,6 +280,15 @@ enum TxnCommand {
     Execute {
         /// Cypher 语句
         cypher: String,
+        /// 结果回复通道
+        reply: oneshot::Sender<DbResult<GraphExecResult>>,
+    },
+    /// 执行参数化 Cypher 查询（vuln-0005 修复）
+    ExecuteWithParams {
+        /// Cypher 语句（含 $param 占位符）
+        cypher: String,
+        /// 参数映射
+        params: HashMap<String, serde_json::Value>,
         /// 结果回复通道
         reply: oneshot::Sender<DbResult<GraphExecResult>>,
     },
@@ -335,6 +373,29 @@ impl GraphTransaction for LadybugTransaction {
             .await
             .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?
     }
+
+    /// vuln-0005 修复：通过 actor channel 转发参数化查询到 blocking 线程
+    ///
+    /// blocking 线程在事务上下文内调用 `conn.prepare` + `conn.execute`，
+    /// 确保事务内所有操作使用同一 `Connection`（lbug 事务要求）。
+    async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<GraphExecResult> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.tx
+            .send(TxnCommand::ExecuteWithParams {
+                cypher: cypher.to_string(),
+                params,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
+        reply_rx
+            .await
+            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?
+    }
 }
 
 // ============================================================================
@@ -358,6 +419,79 @@ fn execute_cypher_on_conn(conn: &lbug::Connection, cypher: &str) -> DbResult<Gra
         rows.push(GraphRow { columns });
     }
     Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+}
+
+/// 在 blocking 线程内通过指定 Connection 执行参数化 Cypher 查询（vuln-0005 修复）
+///
+/// 使用 `conn.prepare(cypher)` + `conn.execute(&mut prepared, params)` 走 prepared statement
+/// 路径，参数值以 `lbug::Value` 形式通过 FFI 传入，数据库不会将其解析为 Cypher 代码，
+/// 从根本上防止 Cypher 注入。
+fn execute_cypher_with_params_on_conn(
+    conn: &lbug::Connection,
+    cypher: &str,
+    params: &HashMap<String, serde_json::Value>,
+) -> DbResult<GraphExecResult> {
+    let mut prepared = conn
+        .prepare(cypher)
+        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug prepare: {e}"))))?;
+
+    // 将 serde_json::Value 转换为 lbug::Value（按 (key, value) 对的 vec 传入）
+    let lbug_params: Vec<(&str, lbug::Value)> = params
+        .iter()
+        .map(|(k, v)| (k.as_str(), json_to_lbug_value(v)))
+        .collect();
+
+    let mut result = conn
+        .execute(&mut prepared, lbug_params)
+        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug execute (prepared): {e}"))))?;
+
+    let column_names = result.get_column_names();
+    let num_tuples = result.get_num_tuples();
+    let mut rows = Vec::with_capacity(num_tuples as usize);
+    for row_values in &mut result {
+        let columns = column_names
+            .iter()
+            .zip(row_values.iter())
+            .map(|(name, value)| (name.clone(), map_lbug_value(value)))
+            .collect();
+        rows.push(GraphRow { columns });
+    }
+    Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+}
+
+/// 将 `serde_json::Value` 转换为 `lbug::Value`（用于 prepared statement 参数绑定）
+///
+/// 转换规则：
+/// - `Null` → `lbug::Value::Null(LogicalType::Any)`（不指定类型）
+/// - `Bool` → `lbug::Value::Bool`
+/// - 整数（i64 范围内）→ `lbug::Value::Int64`
+/// - 浮点 → `lbug::Value::Double`
+/// - 字符串 → `lbug::Value::String`
+/// - 其他（数组/对象/大整数）→ `lbug::Value::Json`（保留原始 JSON）
+fn json_to_lbug_value(value: &serde_json::Value) -> lbug::Value {
+    match value {
+        serde_json::Value::Null => lbug::Value::Null(lbug::LogicalType::Any),
+        serde_json::Value::Bool(b) => lbug::Value::Bool(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                lbug::Value::Int64(i)
+            } else if let Some(u) = n.as_u64() {
+                // u64 超出 i64 范围时，通过 JSON 保留精度
+                if u <= i64::MAX as u64 {
+                    lbug::Value::Int64(u as i64)
+                } else {
+                    lbug::Value::Json(value.clone())
+                }
+            } else if let Some(f) = n.as_f64() {
+                lbug::Value::Double(f)
+            } else {
+                lbug::Value::Json(value.clone())
+            }
+        }
+        serde_json::Value::String(s) => lbug::Value::String(s.clone()),
+        // 数组/对象/其他复杂类型以 JSON 形式传入（lbug 原生支持 JSON 类型）
+        other => lbug::Value::Json(other.clone()),
+    }
 }
 
 /// 将 `lbug::Value` 映射为 [`GraphValue`]
