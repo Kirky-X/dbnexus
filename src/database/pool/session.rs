@@ -7,6 +7,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+use std::collections::HashMap;
+
 use super::db_pool::DbPoolInner;
 use super::{DatabaseConnection, DbConnection, DbPool};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
@@ -706,6 +709,12 @@ impl Session {
     ///
     /// Phase 1 stub：admin 角色绕过所有检查，非 admin 角色被拒绝。
     ///
+    /// # 安全性警告（vuln-0005）
+    ///
+    /// 直接拼接用户输入到 `cypher` 字符串易导致 Cypher 注入。
+    /// 此方法仅接受无参数 Cypher，应优先使用
+    /// [`execute_cypher_with_params`](Self::execute_cypher_with_params)。
+    ///
     /// # 参数
     ///
     /// * `cypher` - Cypher 查询语句
@@ -719,8 +728,16 @@ impl Session {
     /// - 非 admin 角色调用时返回 `DbError::Permission`
     /// - 连接不是图连接时返回 `DbError::Connection`
     /// - 查询语法错误或执行失败时返回对应的 `DbError`
+    /// - Cypher 包含多语句/注释/危险过程时返回 `DbError::Permission`（vuln-0005）
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    #[deprecated(
+        since = "0.4.2",
+        note = "vuln-0005: Cypher injection risk; use execute_cypher_with_params instead"
+    )]
     pub async fn execute_cypher(&self, cypher: &str) -> DbResult<crate::database::graph::GraphExecResult> {
+        // vuln-0005 修复：注入防护检查（长度限制 + 危险模式检测）
+        validate_cypher_safety(cypher)?;
+
         // 图权限检查（T035 stub：admin 绕过，非 admin deny）
         #[cfg(feature = "permission")]
         {
@@ -790,6 +807,111 @@ impl Session {
         // 不在事务中，直接在连接上执行
         let graph = conn.as_graph()?;
         graph.execute_cypher(cypher).await
+    }
+
+    /// 执行参数化 Cypher 查询（vuln-0005 修复）
+    ///
+    /// 与 [`execute_cypher`](Self::execute_cypher) 相同的事务分发逻辑，
+    /// 但通过 `$name` 占位符 + `params` 映射传递用户输入，
+    /// 底层使用 prepared statement，数据库不会将参数值解析为 Cypher 代码，
+    /// 从根本上防止 Cypher 注入。
+    ///
+    /// # 参数
+    ///
+    /// * `cypher` - Cypher 查询语句（含 `$param` 占位符）
+    /// * `params` - 参数映射（key 必须与 Cypher 中的 `$param` 名称一致）
+    ///
+    /// # 返回
+    ///
+    /// 图执行结果（Query 或 Write）
+    ///
+    /// # Errors
+    ///
+    /// - 非 admin 角色调用时返回 `DbError::Permission`
+    /// - 连接不是图连接时返回 `DbError::Connection`
+    /// - 查询语法错误或执行失败时返回对应的 `DbError`
+    /// - Cypher 包含多语句/注释/危险过程时返回 `DbError::Permission`（vuln-0005）
+    ///
+    /// # 示例
+    ///
+    /// ```ignore
+    /// let mut params = HashMap::new();
+    /// params.insert("name".to_string(), serde_json::json!("Alice"));
+    /// params.insert("age".to_string(), serde_json::json!(30));
+    /// let result = session.execute_cypher_with_params(
+    ///     "CREATE (n:User {name: $name, age: $age})",
+    ///     params,
+    /// ).await?;
+    /// ```
+    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+    pub async fn execute_cypher_with_params(
+        &self,
+        cypher: &str,
+        params: HashMap<String, serde_json::Value>,
+    ) -> DbResult<crate::database::graph::GraphExecResult> {
+        // vuln-0005 修复：注入防护检查（长度限制 + 危险模式检测）
+        validate_cypher_safety(cypher)?;
+
+        // 图权限检查（与 execute_cypher 相同）
+        #[cfg(feature = "permission")]
+        {
+            let graph_perm_ctx =
+                crate::access::permission::GraphPermissionContext::new(&self.role, &self.pool_inner.admin_role);
+            graph_perm_ctx.check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
+        }
+
+        // 取连接
+        let conn = self.connection.as_ref().ok_or_else(|| {
+            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+        })?;
+
+        // 获取图操作互斥锁（与 execute_cypher 相同逻辑）
+        let _graph_op_guard = self.graph_op_mutex.lock().await;
+
+        // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
+        let graph_txn = {
+            let mut state = self.state.lock().await;
+            if state.graph_txn_poisoned {
+                return Err(DbError::Transaction(
+                    "Graph transaction is poisoned due to previous panic; \
+                     Session must be dropped and recreated"
+                        .to_string(),
+                ));
+            }
+            state.graph_transaction.take()
+        };
+
+        if let Some(graph_txn) = graph_txn {
+            // PoisonGuard（同 execute_cypher）
+            struct PoisonGuard<'a> {
+                state: &'a Mutex<SessionState>,
+                armed: bool,
+            }
+            impl<'a> Drop for PoisonGuard<'a> {
+                fn drop(&mut self) {
+                    if self.armed {
+                        if let Ok(mut state) = self.state.try_lock() {
+                            state.graph_txn_poisoned = true;
+                        }
+                    }
+                }
+            }
+
+            let mut guard = PoisonGuard {
+                state: &self.state,
+                armed: true,
+            };
+            let result = graph_txn.execute_cypher_with_params(cypher, params).await;
+            guard.armed = false;
+
+            let mut state = self.state.lock().await;
+            state.graph_transaction = Some(graph_txn);
+            return result;
+        }
+
+        // 不在事务中，直接在连接上执行参数化查询
+        let graph = conn.as_graph()?;
+        graph.execute_cypher_with_params(cypher, params).await
     }
 
     /// 执行 SQL（带权限检查和操作类型）
@@ -1117,6 +1239,96 @@ fn is_write_action(action: &PermissionAction) -> bool {
     )
 }
 
+/// vuln-0005 修复：Cypher 注入防护检查
+///
+/// 对原始 Cypher 语句进行多层安全检查，拒绝明显危险的输入。
+/// 这是参数化查询之外的第二道防线（defense in depth）：
+/// - 参数化查询防止值注入
+/// - 此函数防止语句结构注入（多语句、注释混淆、危险过程调用）
+///
+/// # 检查项
+///
+/// 1. **长度限制**：超过 10KB（10_240 字节）的 Cypher 拒绝（防止 DoS / 端口扫描 payload）
+/// 2. **多语句**：除末尾分号外的 `;` 拒绝（防止 `MATCH ...; DELETE ...` 多语句注入）
+/// 3. **行注释**：`//`（非 URL scheme）拒绝（防止注释掉后续安全检查）
+/// 4. **块注释**：`/* */` 拒绝（防止注释绕过权限检查片段）
+/// 5. **危险过程**：`CALL apoc.` 等管理员过程拒绝（防止提权 / 文件系统访问）
+///
+/// # 参数
+///
+/// * `cypher` - 待检查的 Cypher 语句
+///
+/// # 返回
+///
+/// - `Ok(())` 表示通过安全检查
+/// - `Err(DbError::Permission(...))` 表示检测到危险模式
+///
+/// # Errors
+///
+/// 检测到危险模式时返回 `DbError::Permission`，错误消息描述具体原因。
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
+fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
+    // 1. 长度限制：10KB（10_240 字节）
+    const MAX_CYPHER_BYTES: usize = 10_240;
+    if cypher.len() > MAX_CYPHER_BYTES {
+        return Err(DbError::Permission(format!(
+            "Cypher query exceeds maximum length ({} bytes, got {} bytes) - potential DoS payload",
+            MAX_CYPHER_BYTES,
+            cypher.len()
+        )));
+    }
+
+    // 2. 多语句检测：除末尾分号外的 `;`
+    //
+    // 末尾分号允许（部分客户端习惯以 `;` 结尾），但中间的 `;` 视为多语句注入。
+    let trimmed = cypher.trim();
+    let inner = trimmed.trim_end_matches(';').trim();
+    if inner.contains(';') {
+        return Err(DbError::Permission(
+            "Cypher query contains multiple statements (';' inside query) - potential injection".to_string(),
+        ));
+    }
+
+    // 3. 行注释检测：`//`（排除 URL scheme 如 `http://`、`https://`）
+    //
+    // Cypher 不支持 `//` 行注释（OpenCypher 标准用 `//` 是合法注释，但极少在正常查询中使用）。
+    // 检测策略：查找 `//` 出现位置，若前一个字符不是字母（排除 URL scheme）则拒绝。
+    if let Some(pos) = cypher.find("//") {
+        let is_url_scheme = pos > 0 && {
+            let prev = cypher.as_bytes()[pos - 1];
+            prev.is_ascii_alphabetic()
+        };
+        if !is_url_scheme {
+            return Err(DbError::Permission(
+                "Cypher query contains line comment '//' - potential injection".to_string(),
+            ));
+        }
+    }
+
+    // 4. 块注释检测：`/* */`
+    if cypher.contains("/*") || cypher.contains("*/") {
+        return Err(DbError::Permission(
+            "Cypher query contains block comment '/* */' - potential injection".to_string(),
+        ));
+    }
+
+    // 5. 危险过程调用检测：`CALL apoc.`（APOC 是 Neo4j 管理员过程库，可执行系统操作）
+    //
+    // 其他危险过程（如 `dbms.`、`db.`）也在黑名单中，防止提权 / 系统访问。
+    let cypher_lower = cypher.to_ascii_lowercase();
+    const DANGEROUS_CALLS: &[&str] = &["call apoc.", "call dbms.", "call db.", "call tx."];
+    for &dangerous in DANGEROUS_CALLS {
+        if cypher_lower.contains(dangerous) {
+            return Err(DbError::Permission(format!(
+                "Cypher query calls dangerous procedure ('{}') - potential privilege escalation",
+                dangerous
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// 检查 DDL 操作，如果 SQL 为 DDL 则返回错误
 ///
 /// 统一 execute / execute_raw / execute_with_operation 中的 DDL 拒绝逻辑。
@@ -1345,6 +1557,7 @@ impl super::DatabaseSession for Session {
 // ============================================================================
 
 #[cfg(all(test, feature = "ladybug"))]
+#[allow(deprecated)] // vuln-0005: Session::execute_cypher 已 deprecated，但 graph_tests 仍需验证旧 API 行为
 mod graph_tests {
     use super::*;
     use crate::database::graph::{GraphExecResult, GraphValue};
@@ -1989,5 +2202,356 @@ mod vuln_0003_tests {
             "extracted table name should contain 'users', got: {}",
             table
         );
+    }
+}
+
+// ============================================================================
+// vuln-0005 测试：Cypher 注入防护
+// ============================================================================
+//
+// 漏洞描述：
+//   `Session::execute_cypher` 直接接受 Cypher 字符串并执行，
+//   若调用方将用户输入拼接进 Cypher，可导致 Cypher 注入：
+//   - 多语句注入：`MATCH (n) RETURN n; DELETE (n)`
+//   - 注释混淆：`MATCH (n) // bypass RETURN n`
+//   - 危险过程：`CALL apoc.systemdb.admin(...)`
+//
+// 修复方案：
+//   1. 添加 `validate_cypher_safety` 对原始 Cypher 做多层检查（长度/多语句/注释/危险过程）
+//   2. 添加 `execute_cypher_with_params` 使用 prepared statement 防止值注入
+//   3. 标记 `execute_cypher` 为 `#[deprecated]`，引导调用方迁移
+//
+// 测试策略：
+//   - 单元测试 `validate_cypher_safety` 各检查项（拒绝/允许）
+//   - 集成测试 `execute_cypher_with_params` 端到端验证参数化查询
+// ============================================================================
+
+#[cfg(all(test, feature = "ladybug"))]
+mod vuln_0005_tests {
+    use super::*;
+    use crate::database::graph::{GraphExecResult, GraphValue};
+
+    /// 辅助：创建 Ladybug 内存连接池
+    async fn make_ladybug_pool() -> DbPool {
+        DbPool::new("ladybug::memory:")
+            .await
+            .expect("Failed to create Ladybug pool")
+    }
+
+    // ===== validate_cypher_safety 拒绝路径 =====
+
+    /// vuln-0005 Red-1：超过 10KB 的 Cypher 被拒绝（DoS 防护）
+    ///
+    /// 构造 11KB（11_264 字节）的 Cypher 查询，应被 `validate_cypher_safety` 拒绝。
+    #[test]
+    fn test_validate_cypher_safety_rejects_too_long() {
+        // 11_264 字节 = 11KB，超过 10_240 字节限制
+        let long_cypher = format!("MATCH (n) RETURN '{}'", "x".repeat(11_200));
+        assert!(
+            long_cypher.len() > 10_240,
+            "test cypher should exceed 10KB, got {} bytes",
+            long_cypher.len()
+        );
+
+        let result = validate_cypher_safety(&long_cypher);
+        assert!(
+            result.is_err(),
+            "Cypher exceeding 10KB should be rejected (got {} bytes)",
+            long_cypher.len()
+        );
+
+        // 验证错误类型为 Permission
+        match &result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("maximum length") || msg.contains("exceeds"),
+                    "error should mention length, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+    }
+
+    /// vuln-0005 Red-2：多语句 Cypher 被拒绝（`;` 在查询中间）
+    ///
+    /// `MATCH (n) RETURN n; MATCH (m) RETURN m` 包含中间分号，
+    /// 应被 `validate_cypher_safety` 拒绝（防止 `MATCH ...; DELETE ...` 注入）。
+    #[test]
+    fn test_validate_cypher_safety_rejects_multi_statement() {
+        let cypher = "MATCH (n) RETURN n; MATCH (m) RETURN m";
+        let result = validate_cypher_safety(cypher);
+        assert!(result.is_err(), "multi-statement Cypher should be rejected");
+
+        match &result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("multiple statements") || msg.contains("';'"),
+                    "error should mention multiple statements, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+    }
+
+    /// vuln-0005 Red-3：包含行注释 `//` 的 Cypher 被拒绝
+    ///
+    /// `MATCH (n) // comment RETURN n` 包含行注释，
+    /// 应被 `validate_cypher_safety` 拒绝（防止注释绕过安全检查）。
+    #[test]
+    fn test_validate_cypher_safety_rejects_line_comment() {
+        let cypher = "MATCH (n) // comment RETURN n";
+        let result = validate_cypher_safety(cypher);
+        assert!(result.is_err(), "Cypher with line comment '//' should be rejected");
+
+        match &result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("line comment") || msg.contains("//"),
+                    "error should mention line comment, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+    }
+
+    /// vuln-0005 Red-4：包含块注释 `/* */` 的 Cypher 被拒绝
+    ///
+    /// `MATCH (n) /* comment */ RETURN n` 包含块注释，
+    /// 应被 `validate_cypher_safety` 拒绝（防止注释绕过权限检查片段）。
+    #[test]
+    fn test_validate_cypher_safety_rejects_block_comment() {
+        let cypher = "MATCH (n) /* comment */ RETURN n";
+        let result = validate_cypher_safety(cypher);
+        assert!(result.is_err(), "Cypher with block comment '/* */' should be rejected");
+
+        match &result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("block comment") || msg.contains("/*"),
+                    "error should mention block comment, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+    }
+
+    /// vuln-0005 Red-5：调用 APOC 危险过程的 Cypher 被拒绝
+    ///
+    /// `CALL apoc.systemdb.admin(...)` 调用 APOC 管理员过程，
+    /// 应被 `validate_cypher_safety` 拒绝（防止提权/文件系统访问）。
+    #[test]
+    fn test_validate_cypher_safety_rejects_apoc_call() {
+        let cypher = "CALL apoc.systemdb.admin('something')";
+        let result = validate_cypher_safety(cypher);
+        assert!(result.is_err(), "Cypher calling APOC procedure should be rejected");
+
+        match &result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("dangerous procedure") || msg.contains("apoc"),
+                    "error should mention dangerous procedure, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+    }
+
+    // ===== validate_cypher_safety 允许路径 =====
+
+    /// vuln-0005 Green-1：正常 Cypher 查询通过安全检查
+    ///
+    /// `MATCH (n:User) RETURN n` 是标准查询，应通过 `validate_cypher_safety`。
+    #[test]
+    fn test_validate_cypher_safety_allows_normal_query() {
+        let cypher = "MATCH (n:User) RETURN n";
+        let result = validate_cypher_safety(cypher);
+        assert!(
+            result.is_ok(),
+            "normal Cypher query should pass safety check, got: {:?}",
+            result
+        );
+    }
+
+    /// vuln-0005 Green-2：末尾分号允许（部分客户端习惯以 `;` 结尾）
+    ///
+    /// `MATCH (n) RETURN n;` 末尾有分号，但中间无分号，应通过检查。
+    #[test]
+    fn test_validate_cypher_safety_allows_trailing_semicolon() {
+        let cypher = "MATCH (n) RETURN n;";
+        let result = validate_cypher_safety(cypher);
+        assert!(
+            result.is_ok(),
+            "Cypher with trailing semicolon should pass safety check, got: {:?}",
+            result
+        );
+    }
+
+    // ===== execute_cypher_with_params 端到端测试 =====
+
+    /// vuln-0005 Green-3：参数化查询端到端验证
+    ///
+    /// 使用 Ladybug :memory: 图数据库，验证 `execute_cypher_with_params` 能正确：
+    /// 1. 接受 `$param` 占位符 Cypher
+    /// 2. 通过 params 映射传递参数值
+    /// 3. 底层 prepared statement 正确执行
+    /// 4. 返回正确的结果集
+    ///
+    /// 测试场景：CREATE NODE TABLE → 插入参数化数据 → MATCH 验证
+    #[tokio::test]
+    async fn test_execute_cypher_with_params_passes_params() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // 1. 创建 Node Table（DDL，无参数）
+        session
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
+            .await
+            .expect("create node table");
+
+        // 2. 参数化插入 Alice
+        let mut params_alice = HashMap::new();
+        params_alice.insert("name".to_string(), serde_json::json!("Alice"));
+        params_alice.insert("age".to_string(), serde_json::json!(25));
+        session
+            .execute_cypher_with_params("CREATE (:Person {name: $name, age: $age})", params_alice)
+            .await
+            .expect("create Alice with params");
+
+        // 3. 参数化插入 Bob
+        let mut params_bob = HashMap::new();
+        params_bob.insert("name".to_string(), serde_json::json!("Bob"));
+        params_bob.insert("age".to_string(), serde_json::json!(30));
+        session
+            .execute_cypher_with_params("CREATE (:Person {name: $name, age: $age})", params_bob)
+            .await
+            .expect("create Bob with params");
+
+        // 4. 参数化查询：按 name 过滤
+        let mut params_query = HashMap::new();
+        params_query.insert("target_name".to_string(), serde_json::json!("Alice"));
+        let result = session
+            .execute_cypher_with_params(
+                "MATCH (p:Person) WHERE p.name = $target_name RETURN p.name AS name, p.age AS age",
+                params_query,
+            )
+            .await
+            .expect("match with params");
+
+        // 5. 验证结果
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should return 1 person (Alice)");
+                // 验证 name 列
+                let name_val = &q.rows[0].columns[0].1;
+                match name_val {
+                    GraphValue::Scalar(serde_json::Value::String(s)) => {
+                        assert_eq!(s, "Alice", "name should be Alice");
+                    }
+                    other => panic!("expected String Scalar for name, got {other:?}"),
+                }
+                // 验证 age 列
+                let age_val = &q.rows[0].columns[1].1;
+                match age_val {
+                    GraphValue::Scalar(serde_json::Value::Number(n)) => {
+                        assert_eq!(n.as_i64(), Some(25), "age should be 25");
+                    }
+                    other => panic!("expected Number Scalar for age, got {other:?}"),
+                }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant, got Write"),
+        }
+    }
+
+    /// vuln-0005 Green-4：参数化查询在事务内正常工作
+    ///
+    /// 验证 `execute_cypher_with_params` 在图事务内执行时，
+    /// 所有操作使用同一事务连接（事务隔离）。
+    #[tokio::test]
+    async fn test_execute_cypher_with_params_in_transaction() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // 创建 Node Table
+        session
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Account(id INT64, balance INT64, PRIMARY KEY(id))",
+                HashMap::new(),
+            )
+            .await
+            .expect("create node table");
+
+        // 开始事务
+        session.begin_transaction().await.expect("begin transaction");
+
+        // 事务内参数化插入
+        let mut params1 = HashMap::new();
+        params1.insert("id".to_string(), serde_json::json!(1));
+        params1.insert("balance".to_string(), serde_json::json!(100));
+        session
+            .execute_cypher_with_params("CREATE (:Account {id: $id, balance: $balance})", params1)
+            .await
+            .expect("create account 1 in txn");
+
+        let mut params2 = HashMap::new();
+        params2.insert("id".to_string(), serde_json::json!(2));
+        params2.insert("balance".to_string(), serde_json::json!(200));
+        session
+            .execute_cypher_with_params("CREATE (:Account {id: $id, balance: $balance})", params2)
+            .await
+            .expect("create account 2 in txn");
+
+        // 事务内查询验证
+        let result = session
+            .execute_cypher_with_params("MATCH (a:Account) RETURN a.id AS id ORDER BY a.id", HashMap::new())
+            .await
+            .expect("match in txn");
+
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 2, "should see 2 accounts in txn");
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+
+        session.commit().await.expect("commit");
+    }
+
+    /// vuln-0005 Red-6：execute_cypher_with_params 也执行安全检查
+    ///
+    /// 验证 `execute_cypher_with_params` 同样拒绝危险 Cypher（多语句），
+    /// 防止调用方误以为参数化查询可以绕过语句结构检查。
+    #[tokio::test]
+    async fn test_execute_cypher_with_params_rejects_injection() {
+        let pool = make_ladybug_pool().await;
+        let session = pool.get_session("admin").await.expect("get_session");
+
+        // 多语句注入尝试
+        let result = session
+            .execute_cypher_with_params("MATCH (n) RETURN n; DELETE (n)", HashMap::new())
+            .await;
+
+        assert!(
+            result.is_err(),
+            "multi-statement Cypher should be rejected even in execute_cypher_with_params"
+        );
+
+        match result {
+            Err(DbError::Permission(msg)) => {
+                assert!(
+                    msg.contains("multiple statements") || msg.contains("';'"),
+                    "error should mention multiple statements, got: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
     }
 }
