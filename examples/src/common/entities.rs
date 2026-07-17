@@ -18,7 +18,7 @@
 //! 固定名称的 `ActiveModel` / `Relation` / `Entity` / `Column` 等关联项。
 
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 // ============================================
 // User 实体

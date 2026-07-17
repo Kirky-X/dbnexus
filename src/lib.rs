@@ -243,3 +243,32 @@ pub use crate::integrations::DbNexusModule;
 pub use crate::i18n::{DbI18nFormatter, I18nError};
 
 // Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）
+
+// ============================================================================
+// Re-export underlying dependencies
+// ============================================================================
+// Allows examples and downstream crates to use `dbnexus::sea_orm::...`,
+// `dbnexus::chrono::...`, `dbnexus::async_trait::...` instead of declaring
+// a direct dependency on these crates. Each re-export is feature-gated to the
+// feature set that actually pulls in the underlying dependency.
+
+// sea_orm is a non-optional dependency but is re-exported only under database
+// driver features to keep the API surface minimal in non-sea-orm builds.
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "duckdb"))]
+pub use sea_orm;
+
+// async_trait is a non-optional dependency; always available.
+pub use async_trait;
+
+// tokio is a non-optional core dependency; always available.
+pub use tokio;
+
+// chrono is an optional dependency; re-export only when a feature that pulls
+// it in is enabled (sharding / global-index / audit / with-chrono).
+#[cfg(any(
+    feature = "sharding",
+    feature = "global-index",
+    feature = "audit",
+    feature = "with-chrono"
+))]
+pub use chrono;

@@ -9,9 +9,9 @@
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{ActiveModelTrait, DbBackend, EntityTrait, Set};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveModelTrait, DbBackend, EntityTrait, Set};
 
 /// 测试用实体 — 启用 timestamps
 #[db_entity(table_name = "events", primary_key = "id", timestamps = true)]

@@ -19,7 +19,7 @@ mod common;
 
 use dbnexus::access::{PermissionAction, PermissionContext};
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 // ============================================
 // 定义带 permissions 注解的实体

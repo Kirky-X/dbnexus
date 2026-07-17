@@ -4,7 +4,7 @@
 //!
 //! 测试审计模块的查询组合、存储后端、告警系统、配置等高级功能
 
-use chrono::Utc;
+use dbnexus::chrono::Utc;
 use dbnexus::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditStorage, MemoryAuditStorage,
 };

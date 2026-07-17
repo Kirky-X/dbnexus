@@ -14,7 +14,7 @@
 //! cargo run --example sharding --features "sqlite,sharding"
 //! ```
 
-use chrono::{TimeZone, Utc};
+use dbnexus::chrono::{TimeZone, Utc};
 use dbnexus::{ShardConfig, ShardRouter};
 
 fn main() {

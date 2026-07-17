@@ -5,9 +5,9 @@
 //! 运行: cargo bench --bench permission_bench --features "sqlite permission"
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use dbnexus::tokio::runtime::Runtime;
 use dbnexus::{DbConfig, DbPool, PoolConfig};
 use std::hint::black_box;
-use tokio::runtime::Runtime;
 
 fn bench_connection_pool_creation(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
