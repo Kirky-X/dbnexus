@@ -5,19 +5,21 @@
 yanked = "warn"
 unmaintained = "transitive"
 ignore = [
-    # proc-macro-error2 unmaintained — transitive via sea-orm-macros (sea-bae)
+    # proc-macro-error2 unmaintained (RUSTSEC-2026-0173) — transitive via sea-orm-macros (sea-bae)
     # 无安全升级路径，等待 sea-orm 生态迁移
     "RUSTSEC-2026-0173",
-    # rustls-pemfile unmaintained — transitive via bollard (testcontainers)
-    # 无安全升级路径，仅影响开发/测试依赖
-    "RUSTSEC-2025-0134",
-    # tokio-tar PAX header vulnerability — transitive via testcontainers
-    # 无安全升级路径，仅影响开发/测试依赖
-    "RUSTSEC-2025-0111",
-    # rsa Marvin Attack — transitive via jsonwebtoken (authentication feature)
-    # 等待 jsonwebtoken 10.x 迁移到 rsa 0.10+；仅在启用 authentication 特性时引入
-    # 缓解措施：项目不对外暴露原始 RSA 签名接口，仅消费 JWT 库的封装 API
-    "RUSTSEC-2023-0071",
+    # cxx unsound (RUSTSEC-2026-0202) — let_cxx_string! 使用未初始化值（异常安全）
+    # 不可触发证据（2026-07 核实）：
+    #   1. cxx 由 lbug(optional, ladybug feature) 传递引入；dbnexus `default = []` 不启用 ladybug
+    #   2. lbug 0.18.2 crate 源码未使用 let_cxx_string! / cxx::bridge 宏
+    #   3. 触发路径为死代码；dbnexus src/ 无任何 cxx 用法
+    # 待 cargo-deny advisory-db 同步此条后此 ignore 生效；当前 db 未收录故不报
+    "RUSTSEC-2026-0202",
+    # 历史死代码 ignore 已清理（2026-07）：
+    #   RUSTSEC-2025-0134 (rustls-pemfile) / RUSTSEC-2025-0111 (tokio-tar) —
+    #     testcontainers 升级后对应 crate 已不在依赖树
+    #   RUSTSEC-2023-0071 (rsa) — jsonwebtoken 升至 10.4.0 后 rsa 已移除
+    #   （原注释"等待 jsonwebtoken 迁移 rsa 0.10+"已过时，漏洞随升级自然消失）
 ]
 
 [licenses]

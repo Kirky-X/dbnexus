@@ -1,7 +1,5 @@
-# cargo-audit configuration
-# RUSTSEC-2023-0071: rsa 0.9.10 Marvin Attack (timing sidechannel, medium 5.9)
-# No stable fix available upstream — fix is in rsa 0.10.0-rc.x (pre-release).
-# rsa is pulled transitively via jsonwebtoken (authentication feature only).
-# Tracked upstream: https://rustsec.org/advisories/RUSTSEC-2023-0071
+# cargo-audit configuration (补充工具；主治理工具为 cargo-deny / deny.toml)
+# 历史 RUSTSEC-2023-0071 (rsa) ignore 已移除 — jsonwebtoken 升至 10.4.0 后 rsa
+# 不再在依赖树，漏洞随升级自然消失（advisory 已 "not encountered"）
 [advisories]
-ignore = ["RUSTSEC-2023-0071"]
+ignore = []
