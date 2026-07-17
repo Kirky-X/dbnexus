@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-17
+
+### 安全修复
+
+- **[vuln-0001]** 为 admin 绕过操作新增审计日志，并对默认 `admin_role` 发出警告
+- **[vuln-0002]** `add_user` 校验 bcrypt hash 格式，拒绝畸形密码哈希
+- **[vuln-0003]** 表名提取从朴素字符串匹配替换为 `SqlParser`，消除注入隐患
+- **[vuln-0004]** 密码策略增强：引入黑名单 + 复杂度要求
+- **[vuln-0005]** 新增 `execute_cypher_with_params` 并废弃裸 Cypher 执行，加入注入防护
+- **[vuln-0006]** 放宽 `jsonwebtoken` 约束至 `~10`，接纳 CVE-2026-25537 补丁版本
+
+### 重构
+
+- graph/pool：`HD-1` `execute_cypher_with_params` 默认实现返回错误而非静默回退（Liskov 注入风险消除）
+- auth：`HD-3` `add_user_unchecked` 强化 `pub(crate)` 约束文档 + 职责分离测试；`HD-4` `PasswordPolicy` 可配置 + 自定义黑名单
+- pool：`HD-5`/`MD-4` 抽出 `audit.rs` 分离安全审计逻辑；`MD-1` 抽出 `execute_cypher_in_transaction` 复用图事务分发；`MD-3`/`LD-4` 简化 `batch_execute_in_transaction`；`LD-2` `execute_with_operation` 复用 `record_metrics_and_mark_write`
+- `HD-2`/`MD-2`/`LD-1` 误报文档说明（trait 解耦 / `Send+Sync` 必要性 / `Mutex` 保护时序）
+- examples/tests/benches：扩展 L1 重导出隔离 + 补 `tokio`
+- lib.rs：文档化 L1/L2/L3 重导出范围
+
+### 性能
+
+- audit_admin_bypass 热路径移除 `eprintln!`
+
 ## [0.4.0] - 2026-07-13
 
 ### 新增
