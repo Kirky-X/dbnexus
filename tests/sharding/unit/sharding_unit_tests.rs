@@ -5,7 +5,7 @@
 //! 覆盖分片策略配置、哈希分片算法、范围分片算法、跨分片查询聚合、
 //! 分片重平衡、分片热点检测、分片故障转移等场景
 
-use chrono::{DateTime, Datelike, TimeZone, Utc};
+use dbnexus::chrono::{DateTime, Datelike, TimeZone, Utc};
 use dbnexus::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // ============================================================================

@@ -27,9 +27,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
 use validator::Validate;
 
 // ============================================

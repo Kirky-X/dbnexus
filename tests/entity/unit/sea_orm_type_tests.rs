@@ -14,14 +14,14 @@
 
 #![cfg(all(feature = "with-chrono", feature = "with-uuid", feature = "macros"))]
 
-use sea_orm::ActiveValue;
+use dbnexus::sea_orm::ActiveValue;
 
 // ============================================================================
 // chrono 类型实体测试（with-chrono 特性）
 // ============================================================================
 
 mod chrono_entity {
-    use sea_orm::entity::prelude::*;
+    use dbnexus::sea_orm::entity::prelude::*;
 
     /// 测试实体：使用 chrono::DateTime<Utc> 作为字段类型
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -93,7 +93,7 @@ fn test_chrono_datetime_serialization() {
 // ============================================================================
 
 mod uuid_entity {
-    use sea_orm::entity::prelude::*;
+    use dbnexus::sea_orm::entity::prelude::*;
 
     /// 测试实体：使用 uuid::Uuid 作为字段类型
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -159,7 +159,7 @@ fn test_uuid_serialization() {
 // ============================================================================
 
 mod mixed_entity {
-    use sea_orm::entity::prelude::*;
+    use dbnexus::sea_orm::entity::prelude::*;
 
     /// 测试实体：同时使用 chrono 和 uuid 类型字段
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

@@ -6,7 +6,7 @@
 
 use dbnexus::MigrationHistory;
 use dbnexus::foundation::DatabaseType;
-use sea_orm::ConnectionTrait;
+use dbnexus::sea_orm::ConnectionTrait;
 
 #[path = "../../common/mod.rs"]
 mod common;

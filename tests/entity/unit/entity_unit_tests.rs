@@ -7,8 +7,8 @@
 //! - `ActiveValue`（Set/NotSet/Unchanged 变体）
 //! - `ActiveModelTrait` / `EntityTrait` trait 导出
 
+use dbnexus::sea_orm::ActiveValue;
 use dbnexus::{ActiveModelTrait, Condition, EntityTrait};
-use sea_orm::ActiveValue;
 
 /// 测试 Condition 类型是否正确导出
 #[test]
@@ -144,7 +144,7 @@ fn test_set_various_types() {
     let _b2: ActiveValue<bool> = ActiveValue::Set(false);
 
     // 时间类型（需要 with-chrono feature）
-    use chrono::{DateTime, Utc};
+    use dbnexus::chrono::{DateTime, Utc};
     let _t1: ActiveValue<DateTime<Utc>> = ActiveValue::Set(Utc::now());
     let _t2: ActiveValue<Option<DateTime<Utc>>> = ActiveValue::Set(Some(Utc::now()));
 

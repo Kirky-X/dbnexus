@@ -9,9 +9,9 @@
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{ConnectionTrait, DbBackend, Statement};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
 /// 测试用实体 — `#[db_entity]` 宏生成 `schema()` 等方法
 #[db_entity(table_name = "users", primary_key = "id")]

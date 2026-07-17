@@ -26,7 +26,7 @@
 mod common;
 
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 // ============================================
 // 定义 Product 实体（带 db_entity 宏）
