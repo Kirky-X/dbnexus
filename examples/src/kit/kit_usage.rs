@@ -20,7 +20,7 @@ mod common;
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use dbnexus::async_trait::async_trait;
 use dbnexus::database::PoolStatus;
 use dbnexus::domain::permission;
 use dbnexus::foundation::DbResult;

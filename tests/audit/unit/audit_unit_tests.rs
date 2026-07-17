@@ -4,7 +4,7 @@
 //!
 //! 测试审计日志的核心功能，包括日志轮转、敏感数据脱敏、压缩存储、导出、完整性校验和异步写入。
 
-use chrono::Utc;
+use dbnexus::chrono::Utc;
 use dbnexus::{
     AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage,
     MemoryAuditStorage,

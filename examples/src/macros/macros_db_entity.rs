@@ -18,7 +18,7 @@
 mod common;
 
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 // ============================================
 // User 实体

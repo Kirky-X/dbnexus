@@ -7,7 +7,7 @@
 use dbnexus::Condition;
 use dbnexus::DbPool;
 use dbnexus::access::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
-use sea_orm::ActiveValue;
+use dbnexus::sea_orm::ActiveValue;
 
 /// 根据数据库 URL 判断数据库类型
 fn detect_db_type_from_url(url: &str) -> &'static str {
