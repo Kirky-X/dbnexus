@@ -22,9 +22,11 @@ mod common;
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{
+    ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 
 // ============================================
 // 实体定义

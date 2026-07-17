@@ -17,8 +17,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::{db_entity, CacheConfig};
-use sea_orm::entity::prelude::*;
 
 // ============================================
 // 定义 Article 实体（带 cache 子参数）

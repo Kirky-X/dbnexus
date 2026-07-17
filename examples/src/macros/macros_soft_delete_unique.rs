@@ -34,8 +34,8 @@
 mod common;
 
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveModelTrait, EntityTrait};
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{ActiveModelTrait, EntityTrait};
 
 // ============================================
 // Member 实体（启用 soft_delete）

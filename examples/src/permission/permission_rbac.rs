@@ -21,7 +21,7 @@ use dbnexus::access::{
     MemoryPermissionProvider, PermissionAction, PermissionContext, PermissionProvider, RolePolicy, TablePermission,
 };
 use dbnexus::db_entity;
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 // ============================================
 // 定义 User 实体（带 permissions 注解）

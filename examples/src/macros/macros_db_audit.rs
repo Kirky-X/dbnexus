@@ -18,11 +18,11 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::{
     db_entity, AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
     MemoryAuditStorage,
 };
-use sea_orm::entity::prelude::*;
 use std::sync::Arc;
 
 // ============================================

@@ -356,8 +356,8 @@ mod number_boundary_tests {
 #[cfg(test)]
 mod concurrency_boundary_tests {
     use super::common;
+    use dbnexus::tokio::sync::Barrier;
     use std::sync::Arc;
-    use tokio::sync::Barrier;
 
     #[tokio::test]
     async fn test_massive_concurrent_connections() {

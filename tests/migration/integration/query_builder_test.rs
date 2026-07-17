@@ -10,9 +10,11 @@
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{
+    ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 
 /// 测试用实体 — 包含 age 字段以支持 update_many 测试
 #[db_entity(table_name = "users", primary_key = "id")]

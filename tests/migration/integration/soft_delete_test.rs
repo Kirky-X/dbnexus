@@ -9,9 +9,9 @@
 
 use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
+use dbnexus::sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
 
 /// 测试用实体 — 启用 soft_delete（deleted_at 自动注入）
 #[db_entity(table_name = "articles", primary_key = "id", soft_delete = true)]
@@ -206,7 +206,7 @@ async fn test_delete_many_soft_delete_batch() {
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
     // 批量软删除 id=1 和 id=3
-    use sea_orm::ColumnTrait;
+    use dbnexus::sea_orm::ColumnTrait;
     let cond = sea_orm::Condition::any().add(Column::Id.eq(1)).add(Column::Id.eq(3));
     let affected = Model::delete_many(&session, cond)
         .await
