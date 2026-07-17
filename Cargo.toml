@@ -245,7 +245,7 @@ lbug = { version = "0.18", optional = true }
 neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
-# jsonwebtoken: 放宽至 ~10 以允许未来 10.5+ 补丁版本（vuln-0006 修复 CVE-2026-25537）
+# jsonwebtoken: CVE-2026-25537 修复版为 10.3.0，当前锁定的 10.4.0 已含修复（cargo audit 无 advisory）
 jsonwebtoken = { version = "~10", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "~0.19", optional = true }
 
