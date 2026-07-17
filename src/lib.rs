@@ -247,10 +247,22 @@ pub use crate::i18n::{DbI18nFormatter, I18nError};
 // ============================================================================
 // Re-export underlying dependencies
 // ============================================================================
-// Allows examples and downstream crates to use `dbnexus::sea_orm::...`,
-// `dbnexus::chrono::...`, `dbnexus::async_trait::...` instead of declaring
-// a direct dependency on these crates. Each re-export is feature-gated to the
-// feature set that actually pulls in the underlying dependency.
+// Scope: only type references (L1) — e.g. `use dbnexus::sea_orm::ActiveValue`,
+// `use dbnexus::chrono::Utc`, `use dbnexus::tokio::sync::Mutex`,
+// `use dbnexus::async_trait::async_trait`. Macro attributes that expand to
+// canonical crate paths (L2, e.g. `#[tokio::main]` expands to
+// `tokio::runtime::...`, `#[derive(serde::Serialize)]` expands to
+// `impl serde::Serialize`) and macro invocations (L3, e.g.
+// `sea_orm::entity::prelude!()`) reference absolute crate paths at expansion
+// time and cannot be routed through a re-export alias; downstream crates must
+// still declare direct dependencies for those uses. Note: `#[async_trait]` is
+// an attribute macro whose expansion does NOT reference `async_trait::` paths,
+// so it can be used via the re-export (`use dbnexus::async_trait::async_trait`).
+// This re-export narrows the direct-dependency surface to the macro path only;
+// it does not eliminate it.
+//
+// Each re-export is feature-gated to the feature set that actually pulls in
+// the underlying dependency.
 
 // sea_orm is a non-optional dependency but is re-exported only under database
 // driver features to keep the API surface minimal in non-sea-orm builds.
