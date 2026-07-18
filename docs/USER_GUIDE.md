@@ -47,7 +47,7 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.3.0"
+dbnexus = "0.3"
 tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -57,10 +57,10 @@ tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.3.0", default-features = false, features = ["embedded"] }
+dbnexus = { version = "0.3", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.3.0", features = [
+dbnexus = { version = "0.3", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,7 +69,7 @@ dbnexus = { version = "0.3.0", features = [
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.3.0", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.3", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 完整特性列表请参见 [README.md](README.md#feature-flags)。
@@ -80,13 +80,13 @@ dbnexus = { version = "0.3.0", features = ["sqlite", "permission", "sql-parser"]
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.3.0", features = ["sqlite"] }
+dbnexus = { version = "0.3", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.3.0", features = ["postgres"] }
+dbnexus = { version = "0.3", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.3.0", features = ["mysql"] }
+dbnexus = { version = "0.3", features = ["mysql"] }
 ```
 
 **重要：**一次只能启用一个数据库驱动。
@@ -741,7 +741,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["metrics"]
 ```
 
@@ -772,7 +772,7 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["audit"]
 ```
 
@@ -806,7 +806,7 @@ SensitiveData::find_by_id(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["tracing"]
 ```
 
@@ -831,7 +831,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["duckdb"]
 ```
 
@@ -886,7 +886,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["authentication"]
 ```
 
@@ -935,7 +935,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["sql-parser"]
 ```
 
@@ -982,7 +982,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["sharding"]
 ```
 
@@ -1019,7 +1019,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3.0"
+version = "0.3"
 features = ["validation"]
 ```
 
