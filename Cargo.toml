@@ -642,6 +642,12 @@ name = "pool_integration"
 path = "tests/pool/integration/pool_integration.rs"
 required-features = ["sqlite"]
 
+# E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）
+[[test]]
+name = "e2e_advanced"
+path = "tests/e2e_advanced.rs"
+required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication", "i18n", "tracing"]
+
 [dev-dependencies.testcontainers]
 version = "0.27"
 
