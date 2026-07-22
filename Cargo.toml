@@ -31,7 +31,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml_ng = "0.10"
 serde_json = "1.0"
 
-# Database - 使用最新的 prerelease 版本，不包含数据库驱动，由各子包自行选择
+# Database - 不包含数据库驱动，由各子包自行选择
 sea-orm = { version = "2.0.0-rc.42", default-features = false }
 
 # Time
@@ -129,7 +129,7 @@ kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
-config-toml = ["toml"]
+config-toml = []  # TOML 配置支持（无额外依赖，用户需自行添加 toml crate）
 config-env = []  # 环境变量配置（无额外依赖）
 json = []  # JSON 支持（用于直接 serde_json 反序列化）
 
@@ -213,7 +213,6 @@ serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
-toml = { version = "1.1", optional = true }
 parking_lot = "0.12"
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 once_cell = { version = "1.21", optional = true }
