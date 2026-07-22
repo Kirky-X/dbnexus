@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### 测试
+
+- 新增 `tests/e2e_advanced.rs`（89 个测试）：覆盖 SensitiveMasker(11)、CircuitBreaker(12)、ShardRouter(13)、GlobalIndex(10)、Authentication(14)、i18n(16)、Tracing(5)、PoolHealthMetrics(13) 共 8 个模块的边界与异常场景。2 个测试标记为 `#[ignore]`（需 OTLP collector）
+
 ## [0.4.2] - 2026-07-17
 
 ### 安全修复
