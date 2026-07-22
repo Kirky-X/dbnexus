@@ -11,7 +11,12 @@
 
 - 新增 `tests/e2e_advanced.rs`（89 个测试）：覆盖 SensitiveMasker(11)、CircuitBreaker(12)、ShardRouter(13)、GlobalIndex(10)、Authentication(14)、i18n(16)、Tracing(5)、PoolHealthMetrics(13) 共 8 个模块的边界与异常场景。2 个测试标记为 `#[ignore]`（需 OTLP collector）
 
-## [0.4.2] - 2026-07-17
+## [0.4.2] - 2026-07-22
+
+### 修复
+
+- **[fix-pk-types]** `#[db_entity]` 宏生成的主键参数从硬编码 `i64` 改为泛型，修复 Uuid/String 主键实体调用时 `the trait bound 'uuid::Uuid: From<i64>' is not satisfied` 编译错误。具体约束：`find_by_id` / `delete`（soft_delete=false 分支）改为 `PK: Into<<<Entity as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType>`（对接 `Entity::find_by_id`）；`find_by_ids` / `delete`（soft_delete=true 分支）/ `force_delete` 改为 `PK: Into<sea_orm::Value>`（对接 `Column::eq` / `is_in`）。完全向后兼容（i64 主键无需修改调用代码）。新增 `tests/entity/unit/db_entity_pk_types_test.rs` 11 个回归测试覆盖 i64/Uuid/String 三种主键 × 编译期/签名/ActiveModel/soft_delete=true 分支验证
+- **[known-limitation]** `cache_key(id: i64)` 仍硬编码 i64（与本次泛型化方向不一致），Uuid/String 主键实体启用 `cache(...)` 时调用 `cache_key` 会编译失败。此问题超出本次修复范围（规则 6 外科手术式修改），计划在 0.4.3 修复
 
 ### 安全修复
 
