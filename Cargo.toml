@@ -139,7 +139,7 @@ pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
 observability = ["metrics", "health-check", "tracing"]
-metrics = []  # Prometheus 格式 metrics 导出（内置实现，无需外部 crate）
+metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
 tracing = ["dep:tracing", "dep:tracing-opentelemetry", "dep:tracing-subscriber", "dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 
@@ -213,7 +213,7 @@ serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
-parking_lot = "0.12"
+parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 once_cell = { version = "1.21", optional = true }
 twox-hash = { version = "2.1", optional = true }
