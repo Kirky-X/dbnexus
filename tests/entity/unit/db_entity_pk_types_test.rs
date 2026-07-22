@@ -241,3 +241,53 @@ fn test_force_delete_signature_is_generic() {
     let _ = soft_delete_uuid_entity::Model::force_delete::<i64>;
     let _ = soft_delete_uuid_entity::Model::force_delete::<String>;
 }
+
+// ============================================================================
+// cache_key 泛型化测试（0.4.3：cache_key 从 i64 改为 Display 泛型）
+// ============================================================================
+
+mod cache_uuid_entity {
+    use super::*;
+
+    /// 启用 cache 的 Uuid 主键实体：验证 cache_key 泛型化后支持 Uuid 主键。
+    ///
+    /// 0.4.2 中 cache_key(id: i64) 硬编码 i64，Uuid 主键实体调用 cache_key 编译失败。
+    /// 0.4.3 修复为 `cache_key<PK: Display>(id: PK)`。
+    #[db_entity(
+        table_name = "cache_uuid",
+        primary_key = "id",
+        cache(ttl = 60, strategy = "lru", max_capacity = 100)
+    )]
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[sea_orm(table_name = "cache_uuid")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: uuid::Uuid,
+        pub name: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+}
+
+/// 验证 cache_key 泛型化后支持 Uuid 主键（0.4.3 修复）
+#[test]
+fn test_cache_key_accepts_uuid() {
+    let id = uuid::Uuid::nil();
+    let key = cache_uuid_entity::Model::cache_key(id);
+    assert_eq!(key, format!("cache_uuid:{}", id));
+}
+
+/// 验证 cache_key 泛型化后仍向后兼容 i64（0.4.2 基线）
+#[test]
+fn test_cache_key_backward_compatible_i64() {
+    let key = cache_uuid_entity::Model::cache_key(42i64);
+    assert_eq!(key, "cache_uuid:42");
+}
+
+/// 验证 cache_key 泛型化后支持 String 主键
+#[test]
+fn test_cache_key_accepts_string() {
+    let key = cache_uuid_entity::Model::cache_key("USER001".to_string());
+    assert_eq!(key, "cache_uuid:USER001");
+}
