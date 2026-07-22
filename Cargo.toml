@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.3"
+version = "0.4.4"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -227,7 +227,7 @@ criterion = { version = "0.8", optional = true }
 regex = { version = "1.0", optional = true }
 sqlparser = { version = "0.62", optional = true }
 futures = { version = "0.3", optional = true }
-dashmap = { version = "~6.2", optional = true }
+dashmap = { version = "6.2", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
 oxcache = { version = "0.3", optional = true }
 
@@ -245,8 +245,8 @@ neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
 # jsonwebtoken: CVE-2026-25537 修复版为 10.3.0，当前锁定的 10.4.0 已含修复（cargo audit 无 advisory）
-jsonwebtoken = { version = "~10", features = ["aws_lc_rs"], optional = true }
-bcrypt = { version = "~0.19", optional = true }
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"], optional = true }
+bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
 
