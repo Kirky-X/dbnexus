@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-23
+
+### Changed
+
+- 依赖版本约束移除波浪号（`~`）：`dashmap ~6.2`→`6.2`、`jsonwebtoken ~10`→`10`、`bcrypt ~0.19`→`0.19`，统一为 Major.Minor 精确格式
+- 依赖刷新：`cargo update` 将 lockfile 锁定到最新兼容版本（含 oxcache 0.3.9→0.3.12、trait-kit 0.3.0→0.3.1、tokio 1.52.4→1.53.1、uuid 1.23.5→1.24.0、duckdb 1.10504→1.10505、arrow 58.3→58.4 等）
+
+### Security
+
+- `cargo deny check advisories bans` 通过，无已知漏洞（unmaintained 警告为既有传递依赖，已在 deny.toml 中登记）
+
+### 说明
+
+- 回归测试采用项目 CI 支持的特性组合 `--no-default-features --features sqlite,default-no-db,all-optional`（覆盖 dashmap/jsonwebtoken/bcrypt 所在的 cache/security 特性），全部通过；`--all-features` 因 duckdb 与 lbug 各自捆绑 mbedtls 导致重复符号链接冲突，属既有架构限制（CI 从不使用 `--all-features`），非本次依赖变更引入
+
 ## [0.4.3] - 2026-07-22
 
 ### 修复
