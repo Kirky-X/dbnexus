@@ -626,8 +626,13 @@ impl MyEntity {
     // 插入记录
     pub async fn insert(session: &Session, value: MyEntity) -> DbResult<MyEntity>;
 
-    // 按主键查找
-    pub async fn find_by_id(session: &Session, id: i64) -> DbResult<Option<MyEntity>>;
+    // 按主键查找（0.4.2：主键泛型化，支持 i64/Uuid/String 等任意主键类型）
+    pub async fn find_by_id<PK>(session: &Session, pk: PK) -> DbResult<Option<MyEntity>>
+    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>;
+
+    // 按主键批量查找（0.4.2：主键泛型化，对接 sea-orm `is_in`）
+    pub async fn find_by_ids<PK>(session: &Session, pks: Vec<PK>) -> DbResult<Vec<MyEntity>>
+    where PK: Into<sea_orm::Value>;
 
     // 查找所有记录
     pub async fn find_all(session: &Session) -> DbResult<Vec<MyEntity>>;
@@ -641,8 +646,14 @@ impl MyEntity {
     // 更新记录
     pub async fn update(session: &Session, value: MyEntity) -> DbResult<MyEntity>;
 
-    // 按主键删除
-    pub async fn delete(session: &Session, id: i64) -> DbResult<()>;
+    // 按主键删除（0.4.2：主键泛型化，约束随 soft_delete 宏参数变化）
+    //
+    // soft_delete=false（默认）：PK: Into<PrimaryKey::ValueType>（对接 Entity::find_by_id）
+    // soft_delete=true：         PK: Into<sea_orm::Value>（对接 Column::eq）
+    //
+    // soft_delete=true 实体还会额外生成 force_delete 方法（约束同 Into<sea_orm::Value>）。
+    pub async fn delete<PK>(session: &Session, pk: PK) -> DbResult<()>
+    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>;
 
     // 按条件删除
     pub async fn delete_many(session: &Session, condition: Condition) -> DbResult<u64>;
