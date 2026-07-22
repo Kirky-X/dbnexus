@@ -9,6 +9,10 @@
 
 ## [0.4.3] - 2026-07-22
 
+### 修复
+
+- **[fix-cache-key]** `#[db_entity]` 宏生成的 `cache_key(id: i64)` 从硬编码 i64 改为泛型 `cache_key<PK: Display>(id: PK)`，修复 Uuid/String 主键实体启用 `cache(...)` 时调用 `cache_key` 的编译错误（0.4.2 标注的已知限制）。新增 3 个回归测试覆盖 Uuid/i64/String 三种主键类型的 cache_key 调用
+
 ### 测试
 
 - 新增 `tests/e2e_advanced.rs`（89 个测试）：覆盖 SensitiveMasker(11)、CircuitBreaker(12)、ShardRouter(13)、GlobalIndex(10)、Authentication(14)、i18n(16)、Tracing(5)、PoolHealthMetrics(13) 共 8 个模块的边界与异常场景。2 个测试标记为 `#[ignore]`（需 OTLP collector）

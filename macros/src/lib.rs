@@ -712,7 +712,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub const CACHE_ENABLED: bool = true;
 
             /// 生成缓存键，格式为 "{table_name}:{id}"
-            pub fn cache_key(id: i64) -> String {
+            ///
+            /// 主键类型泛型化（0.4.3），支持 i64/uuid::Uuid/String 等任何实现了 `Display` 的类型。
+            pub fn cache_key<PK: ::std::fmt::Display>(id: PK) -> String {
                 format!("{}:{}", #table_name, id)
             }
 
