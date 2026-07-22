@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -538,6 +538,14 @@ required-features = ["sqlite", "macros", "permission", "with-chrono", "with-uuid
 name = "entity_unit_tests"
 path = "tests/entity/unit/entity_unit_tests.rs"
 required-features = ["sqlite", "macros", "with-chrono"]
+
+# db_entity 宏主键类型泛型化回归测试（0.4.2 新增）
+# 验证 #[db_entity] 在 i64 / Uuid / String 主键下的 find_by_id / find_by_ids / delete / force_delete 编译期与签名正确性
+# 0.4.1 回归 bug：Uuid 主键实体编译失败 'the trait bound uuid::Uuid: From<i64> is not satisfied'
+[[test]]
+name = "db_entity_pk_types_test"
+path = "tests/entity/unit/db_entity_pk_types_test.rs"
+required-features = ["sqlite", "macros", "permission", "with-uuid", "with-time"]
 
 # ============================================================================
 # Convergence Phase 1: 注册 16 个此前未注册的真实测试文件（T026）

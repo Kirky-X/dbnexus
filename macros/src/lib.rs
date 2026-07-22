@@ -1022,10 +1022,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 软删除：根据主键设置 deleted_at（带权限控制）
             ///
             /// 不物理删除记录，而是 UPDATE SET deleted_at = now WHERE pk = ? AND deleted_at IS NULL
-            pub async fn delete(
+            ///
+            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
+            /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
+            pub async fn delete<PK>(
                 session: &::dbnexus::database::pool::Session,
-                pk: i64,
-            ) -> Result<u64, dbnexus::DbError> {
+                pk: PK,
+            ) -> Result<u64, dbnexus::DbError>
+            where
+                PK: Into<sea_orm::Value>,
+            {
                 use sea_orm::{EntityTrait, QueryFilter, QuerySelect};
                 use ::sea_orm::sea_query::Expr;
 
@@ -1115,10 +1121,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             /// 物理删除：根据主键永久删除记录（带权限控制）
-            pub async fn force_delete(
+            ///
+            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
+            /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
+            pub async fn force_delete<PK>(
                 session: &::dbnexus::database::pool::Session,
-                pk: i64,
-            ) -> Result<u64, dbnexus::DbError> {
+                pk: PK,
+            ) -> Result<u64, dbnexus::DbError>
+            where
+                PK: Into<sea_orm::Value>,
+            {
                 use sea_orm::{EntityTrait, QueryFilter};
 
                 session.check_table_permission(#table_name, "DELETE").await?;
@@ -1139,10 +1151,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         quote! {
             /// 物理删除：根据主键删除记录（带权限控制）
-            pub async fn delete(
+            ///
+            /// 主键类型由实体 `PrimaryKey::ValueType` 决定，支持 i32/i64/String/uuid::Uuid 等
+            /// 任何实现了 `Into<PrimaryKey::ValueType>` 的类型。
+            pub async fn delete<PK>(
                 session: &::dbnexus::database::pool::Session,
-                pk: i64,
-            ) -> Result<u64, dbnexus::DbError> {
+                pk: PK,
+            ) -> Result<u64, dbnexus::DbError>
+            where
+                PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
+            {
                 use sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "DELETE").await?;
@@ -1152,7 +1170,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                     .one(conn)
                     .await
                     .map_err(dbnexus::DbError::Connection)?
-                    .ok_or_else(|| dbnexus::DbError::Config(format!("Record with pk {} not found", pk)))?;
+                    .ok_or_else(|| dbnexus::DbError::Config("Record not found by primary key".to_string()))?;
 
                 let active_model: ActiveModel = record.into();
                 let result = Entity::delete(active_model)
@@ -1384,10 +1402,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 根据主键查找记录（带权限控制）
             ///
             /// soft_delete=true 时自动过滤已软删除记录
-            pub async fn find_by_id(
+            ///
+            /// 主键类型由实体 `PrimaryKey::ValueType` 决定，支持 i32/i64/String/uuid::Uuid 等
+            /// 任何实现了 `Into<PrimaryKey::ValueType>` 的类型均可作为 `pk` 参数。
+            pub async fn find_by_id<PK>(
                 session: &::dbnexus::database::pool::Session,
-                pk: i64,
-            ) -> Result<Option<Self>, dbnexus::DbError> {
+                pk: PK,
+            ) -> Result<Option<Self>, dbnexus::DbError>
+            where
+                PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
+            {
                 use sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
@@ -1526,10 +1550,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 使用 IN 条件一次查询获取所有主键对应的记录。
             /// soft_delete=true 时自动过滤已软删除记录。
             /// 注意：返回记录的顺序可能与输入顺序不同。
-            pub async fn find_by_ids(
+            ///
+            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::is_in` 签名一致），
+            /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
+            pub async fn find_by_ids<PK>(
                 session: &::dbnexus::database::pool::Session,
-                pks: Vec<i64>,
-            ) -> Result<Vec<Self>, dbnexus::DbError> {
+                pks: Vec<PK>,
+            ) -> Result<Vec<Self>, dbnexus::DbError>
+            where
+                PK: Into<sea_orm::Value>,
+            {
                 use sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
