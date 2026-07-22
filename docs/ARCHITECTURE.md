@@ -278,11 +278,22 @@ struct User {
 **生成的代码（简化）：**
 ```rust
 impl User {
-    // CRUD 方法
+    // CRUD 方法（0.4.2：find_by_id/find_by_ids/delete 主键泛型化，支持 i64/Uuid/String 等任意主键类型）
     pub async fn insert(session: &Session, value: User) -> DbResult<User> { /* ... */ }
-    pub async fn find_by_id(session: &Session, id: i64) -> DbResult<Option<User>> { /* ... */ }
+    pub async fn find_by_id<PK>(session: &Session, pk: PK) -> DbResult<Option<User>>
+    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>
+    { /* ... */ }
+    pub async fn find_by_ids<PK>(session: &Session, pks: Vec<PK>) -> DbResult<Vec<User>>
+    where PK: Into<sea_orm::Value>
+    { /* ... */ }
     pub async fn update(session: &Session, value: User) -> DbResult<User> { /* ... */ }
-    pub async fn delete(session: &Session, id: i64) -> DbResult<()> { /* ... */ }
+    // delete 约束随 soft_delete 宏参数变化：
+    // - soft_delete=false（默认）：Into<PrimaryKey::ValueType>（对接 Entity::find_by_id）
+    // - soft_delete=true：         Into<sea_orm::Value>（对接 Column::eq）
+    // soft_delete=true 实体还会额外生成 force_delete 方法（约束同 Into<sea_orm::Value>）。
+    pub async fn delete<PK>(session: &Session, pk: PK) -> DbResult<()>
+    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>
+    { /* ... */ }
 
     // 实体方法
     pub const TABLE_NAME: &str = "users";
