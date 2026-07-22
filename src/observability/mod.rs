@@ -6,6 +6,7 @@
 
 // 单文件模块
 pub mod health;
+#[cfg(feature = "metrics")]
 pub mod metrics;
 #[cfg(feature = "tracing")]
 pub mod tracing;
