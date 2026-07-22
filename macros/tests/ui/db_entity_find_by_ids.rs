@@ -20,7 +20,8 @@ pub enum Relation {}
 
 fn main() {
     // 验证 find_by_ids 方法存在（async fn 编译期检查）
-    let _ = Model::find_by_ids;
+    // 0.4.2: find_by_ids 泛型化后需指定类型参数才能取函数指针
+    let _ = Model::find_by_ids::<i64>;
     assert_eq!(Model::table_name(), "users");
     println!("db_entity find_by_ids test passed!");
 }
