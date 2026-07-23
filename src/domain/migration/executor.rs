@@ -232,8 +232,13 @@ impl MigrationExecutor {
     /// 确保迁移历史表存在
     ///
     /// PostgreSQL 已知问题：并发 `CREATE TABLE IF NOT EXISTS` 可能因 `pg_type` 类型注册冲突
-    /// 失败（SQLSTATE 23505，`pg_type_typname_nsp_index`）。`IF NOT EXISTS` 仅跳过表已存在的
-    /// 情况，不保护并发类型注册。此方法在捕获该错误后等待 50ms 再重试，确保另一会话的
+    /// 失败，表现为两类错误：
+    /// - SQLSTATE 23505（`pg_type_typname_nsp_index`）：并发类型注册唯一约束冲突；
+    /// - SQLSTATE 42710（`type "..." already exists`）：另一会话已提交同名复合类型。
+    ///
+    /// `IF NOT EXISTS` 仅跳过"关系已存在"的情况，不保护并发类型注册，也不覆盖"类型已存在"。
+    /// 由于 `CREATE TABLE` 与其行类型原子绑定（类型存在即表存在），上述冲突均可安全视为
+    /// "表已由并发会话创建"。此方法在捕获这两类错误后等待 50ms 再重试，确保另一会话的
     /// `CREATE TABLE` 已提交，使重试的 `IF NOT EXISTS` 成为真正的 no-op。
     async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
         let create_table_sql = match self.sql_generator.db_type {
@@ -278,7 +283,12 @@ impl MigrationExecutor {
             Ok(_) => Ok(()),
             Err(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("pg_type_typname_nsp_index") {
+                // 并发 CREATE TABLE 或历史残留触发两类"已存在"冲突：
+                //   - pg_type_typname_nsp_index（SQLSTATE 23505）：并发类型注册唯一约束冲突
+                //   - "type ... already exists"（SQLSTATE 42710）：另一会话已提交同名复合类型
+                let is_creation_conflict =
+                    err_str.contains("pg_type_typname_nsp_index") || err_str.contains("already exists");
+                if is_creation_conflict {
                     // 等待并发 CREATE TABLE 提交后重试，使 IF NOT EXISTS 成为 no-op
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     match self.connection.execute_unprepared(create_table_sql).await {
