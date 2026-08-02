@@ -21,6 +21,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// 默认用户存储上限
+const DEFAULT_MAX_USERS: usize = 10_000;
+
 /// 认证管理器
 ///
 /// 统一管理用户认证、Token 生成和验证
@@ -28,6 +31,8 @@ pub struct AuthenticationManager {
     password_hasher: PasswordHasher,
     jwt_manager: JwtManager,
     users: Arc<RwLock<HashMap<String, User>>>,
+    /// 用户存储最大容量（防止内存无限增长）
+    max_users: usize,
 }
 
 #[cfg(test)]
@@ -42,7 +47,7 @@ mod tests {
     const TEST_WEAK_NO_DIGIT: &str = "OnlyLetters";
 
     async fn create_test_manager() -> AuthenticationManager {
-        let manager = AuthenticationManager::new(b"test-secret-key");
+        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
 
         // 添加测试用户
         let password_hash = manager.password_hasher.hash(TEST_PASSWORD).unwrap();
@@ -151,7 +156,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_weak_password_rejected() {
-        let manager = AuthenticationManager::new(b"secret");
+        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         // 太短
         let result = manager.register_user("u1", TEST_WEAK_SHORT, "user").await;
         assert!(
@@ -162,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_no_letter_rejected() {
-        let manager = AuthenticationManager::new(b"secret");
+        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         // 无字母
         let result = manager.register_user("u2", TEST_WEAK_NO_LETTER, "user").await;
         assert!(
@@ -173,7 +178,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_no_digit_rejected() {
-        let manager = AuthenticationManager::new(b"secret");
+        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         // 无数字
         let result = manager.register_user("u3", TEST_WEAK_NO_DIGIT, "user").await;
         assert!(
@@ -184,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_strong_password_succeeds_and_authenticates() {
-        let manager = AuthenticationManager::new(b"secret");
+        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         manager
             .register_user("alice", TEST_STRONG_PASSWORD, "admin")
             .await

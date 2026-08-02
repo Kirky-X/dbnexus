@@ -22,6 +22,7 @@ impl AuthenticationManager {
             password_hasher: PasswordHasher::new(),
             jwt_manager: JwtManager::new(jwt_secret),
             users: Arc::new(RwLock::new(HashMap::new())),
+            max_users: super::DEFAULT_MAX_USERS,
         }
     }
 
@@ -31,6 +32,17 @@ impl AuthenticationManager {
             password_hasher: PasswordHasher::new(),
             jwt_manager: JwtManager::with_expiration(jwt_secret, access_expiration_secs, refresh_expiration_secs),
             users: Arc::new(RwLock::new(HashMap::new())),
+            max_users: super::DEFAULT_MAX_USERS,
+        }
+    }
+
+    /// 使用自定义用户上限创建认证管理器
+    pub fn with_max_users(jwt_secret: &[u8], max_users: usize) -> Self {
+        Self {
+            password_hasher: PasswordHasher::new(),
+            jwt_manager: JwtManager::new(jwt_secret),
+            users: Arc::new(RwLock::new(HashMap::new())),
+            max_users,
         }
     }
 
@@ -48,6 +60,13 @@ impl AuthenticationManager {
     pub async fn add_user(&self, user: User) -> AuthResult<()> {
         validate_bcrypt_hash(&user.password_hash)?;
         let mut users = self.users.write().await;
+        // H-7: 检查用户存储上限（已存在的用户更新不计入）
+        if !users.contains_key(&user.username) && users.len() >= self.max_users {
+            return Err(AuthError::UserLimitReached(format!(
+                "Cannot add user '{}': user storage limit of {} reached",
+                user.username, self.max_users
+            )));
+        }
         users.insert(user.username.clone(), user);
         Ok(())
     }
@@ -72,6 +91,13 @@ impl AuthenticationManager {
     #[doc(hidden)]
     pub(crate) async fn add_user_unchecked(&self, user: User) -> AuthResult<()> {
         let mut users = self.users.write().await;
+        // H-7: 检查用户存储上限（已存在的用户更新不计入）
+        if !users.contains_key(&user.username) && users.len() >= self.max_users {
+            return Err(AuthError::UserLimitReached(format!(
+                "Cannot add user '{}': user storage limit of {} reached",
+                user.username, self.max_users
+            )));
+        }
         users.insert(user.username.clone(), user);
         Ok(())
     }
@@ -180,12 +206,17 @@ fn validate_bcrypt_hash(hash: &str) -> AuthResult<()> {
         return Err(AuthError::PasswordHash("password_hash must not be empty".to_string()));
     }
 
-    // bcrypt 哈希固定长度为 60
+    // bcrypt 哈希固定长度为 60 字节
     if hash.len() != 60 {
         return Err(AuthError::PasswordHash(format!(
-            "password_hash must be a valid bcrypt hash (60 chars, got {})",
+            "password_hash must be a valid bcrypt hash (60 bytes, got {})",
             hash.len()
         )));
+    }
+
+    // 必须是纯 ASCII（bcrypt 哈希始终为 ASCII，防止多字节 UTF-8 输入导致切片 panic）
+    if !hash.is_ascii() {
+        return Err(AuthError::PasswordHash("password_hash must be ASCII".to_string()));
     }
 
     // 必须以 $2a$、$2b$ 或 $2y$ 开头
@@ -261,7 +292,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝空 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_empty_hash() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -280,7 +311,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝非 bcrypt 格式的 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_plaintext_hash() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -299,7 +330,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 接受有效 bcrypt 哈希
     #[tokio::test]
     async fn test_vuln_0002_add_user_accepts_valid_bcrypt() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         let hasher = PasswordHasher::new();
         let hash = hasher.hash("ValidPass@123").unwrap();
         let user = User {
@@ -317,7 +348,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user_unchecked 不验证 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_unchecked_skips_validation() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -341,7 +372,7 @@ mod tests {
     /// 验证两者职责清晰分离：公共 API 强制安全，内部 API 跳过验证。
     #[tokio::test]
     async fn test_hd3_add_user_vs_unchecked_role_separation() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
 
         // 构造无效 password_hash 的 User
         let make_user = || User {
@@ -374,7 +405,7 @@ mod tests {
     /// 确保迁移场景（如批量导入）的数据完整性。
     #[tokio::test]
     async fn test_hd3_add_user_unchecked_data_round_trip() {
-        let mgr = AuthenticationManager::new(b"secret");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
 
         // 内部 API 写入（模拟迁移场景）
         let user = User {
