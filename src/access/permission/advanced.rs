@@ -138,8 +138,8 @@ impl AdvancedRbacProvider {
     /// ```
     pub fn add_role_inheritance(&self, child_role: String, parent_roles: Vec<String>) {
         self.role_hierarchy.insert(child_role.clone(), parent_roles);
-        // 清除相关缓存
-        self.inherited_roles_cache.remove(&child_role);
+        // 级联失效：清除 child_role 及其所有传递依赖者的缓存
+        self.invalidate_role_cache_cascade(&child_role);
     }
 
     /// 批量设置角色继承关系
@@ -152,7 +152,33 @@ impl AdvancedRbacProvider {
     pub fn set_role_inheritances(&self, inheritances: Vec<(String, Vec<String>)>) {
         for (child, parents) in inheritances {
             self.role_hierarchy.insert(child.clone(), parents);
-            self.inherited_roles_cache.remove(&child);
+            self.invalidate_role_cache_cascade(&child);
+        }
+    }
+
+    /// 级联失效角色继承缓存
+    ///
+    /// 清除指定角色及其所有传递依赖者（继承链下游）的缓存。
+    /// 例如：C 继承 B，B 继承 A，修改 B 的继承关系时，B 和 C 的缓存都会被清除。
+    fn invalidate_role_cache_cascade(&self, role: &str) {
+        // BFS 查找所有传递依赖此角色的下游角色
+        let mut to_invalidate = VecDeque::new();
+        let mut visited = HashSet::new();
+        to_invalidate.push_back(role.to_string());
+        visited.insert(role.to_string());
+
+        while let Some(current) = to_invalidate.pop_front() {
+            // 清除当前角色的缓存
+            self.inherited_roles_cache.remove(&current);
+
+            // 查找直接继承 current 的角色（反向边）
+            for entry in self.role_hierarchy.iter() {
+                let dependent = entry.key();
+                let parents = entry.value();
+                if parents.contains(&current) && visited.insert(dependent.clone()) {
+                    to_invalidate.push_back(dependent.clone());
+                }
+            }
         }
     }
 
