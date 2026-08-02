@@ -233,15 +233,16 @@ impl PasswordPolicy {
     ///
     /// 密码不满足任一条件时返回 `AuthError::PasswordHash`。
     pub fn validate(&self, password: &str) -> AuthResult<()> {
-        // 长度检查
-        if password.len() < self.min_len {
+        // 长度检查（使用字符计数而非字节计数，确保 Unicode 密码的安全保证一致）
+        let char_count = password.chars().count();
+        if char_count < self.min_len {
             return Err(AuthError::PasswordHash(format!(
                 "Password must be at least {} characters",
                 self.min_len
             )));
         }
 
-        if password.len() > self.max_len {
+        if char_count > self.max_len {
             return Err(AuthError::PasswordHash(format!(
                 "Password must not exceed {} characters (bcrypt truncation limit)",
                 self.max_len
