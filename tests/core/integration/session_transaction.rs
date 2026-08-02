@@ -221,7 +221,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -252,7 +255,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -297,7 +303,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -352,7 +361,10 @@ async fn test_check_permission_denied_returns_permission_error() {
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
         ..Default::default()
@@ -403,7 +415,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -437,7 +452,10 @@ async fn test_execute_with_operation_allows_when_permitted() {
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(),
         ..Default::default()
@@ -491,7 +509,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -532,7 +553,10 @@ async fn test_execute_denied_by_permission() {
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
         ..Default::default()
@@ -582,7 +606,10 @@ async fn test_execute_with_operation_insert_marks_write() {
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         admin_role: "admin".to_string(),
         ..Default::default()
@@ -622,7 +649,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -665,7 +695,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -708,7 +741,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -750,7 +786,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -778,7 +817,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -806,7 +848,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -839,7 +884,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
@@ -886,7 +934,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string()),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };

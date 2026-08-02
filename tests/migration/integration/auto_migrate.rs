@@ -110,12 +110,15 @@ DROP TABLE orders_{table_suffix};
     // 使用内存数据库
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
         migration_timeout: 60,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
+
         ..Default::default()
     };
 
@@ -153,12 +156,15 @@ async fn test_empty_migrations_directory() {
     let url = common::get_test_database_url();
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
         migration_timeout: 60,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
+
         ..Default::default()
     };
 
@@ -177,12 +183,15 @@ async fn test_nonexistent_migrations_directory() {
     let url = common::get_test_database_url();
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
         migration_timeout: 60,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
+
         ..Default::default()
     };
 
@@ -311,12 +320,15 @@ DROP TABLE table_2_{table_suffix};
 
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
         migration_timeout: 60,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
+
         ..Default::default()
     };
 

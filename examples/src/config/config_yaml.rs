@@ -57,10 +57,10 @@ cache_config:
     // ============================================
     println!("\n📋 解析后的 DbConfig:");
     println!("  - url              : {}", config.url);
-    println!("  - max_connections   : {}", config.max_connections);
-    println!("  - min_connections   : {}", config.min_connections);
-    println!("  - idle_timeout (s)  : {}", config.idle_timeout);
-    println!("  - acquire_timeout(ms): {}", config.acquire_timeout);
+    println!("  - max_connections   : {}", config.pool_config.max_connections);
+    println!("  - min_connections   : {}", config.pool_config.min_connections);
+    println!("  - idle_timeout (s)  : {}", config.pool_config.idle_timeout);
+    println!("  - acquire_timeout(ms): {}", config.pool_config.acquire_timeout);
     println!("  - admin_role        : {}", config.admin_role);
     println!("  - database_type     : {}", config.database_type().unwrap());
 
@@ -70,7 +70,7 @@ cache_config:
     let pool = DbPool::with_config(config).await?;
     println!("\n✓ 连接池创建成功");
     println!("  - 实际 URL      : {}", pool.config().url);
-    println!("  - 实际最大连接数: {}", pool.config().max_connections);
+    println!("  - 实际最大连接数: {}", pool.config().pool_config.max_connections);
 
     let status = pool.status();
     println!("\n📊 连接池状态:");

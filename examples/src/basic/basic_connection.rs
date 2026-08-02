@@ -28,15 +28,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 5,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
     println!("  - 数据库 URL: {}", pool.config().url);
-    println!("  - 最大连接数: {}", pool.config().max_connections);
-    println!("  - 最小连接数: {}", pool.config().min_connections);
+    println!("  - 最大连接数: {}", pool.config().pool_config.max_connections);
+    println!("  - 最小连接数: {}", pool.config().pool_config.min_connections);
     println!("  - 管理员角色: {}", pool.config().admin_role);
 
     // ============================================
