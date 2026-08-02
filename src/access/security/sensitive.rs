@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! 敏感数据处理模块
 //!
-//! 提供数据脱敏和加密存储功能，包括：
-//! - 数据脱敏：手机号、邮箱、身份证、银行卡等
-//! - 安全哈希：使用 SHA-256 或 bcrypt 进行不可逆哈希
-//! - AES 加密：可逆加密用于敏感数据存储
+//! 提供数据脱敏功能，包括：
+//! - 数据脱敏：手机号、邮箱、身份证、银行卡、地址等
+//! - 自定义脱敏：支持前缀/后缀保留的灵活脱敏策略
 
 use thiserror::Error;
 
@@ -138,9 +137,11 @@ impl SensitiveMasker {
         let local_chars: Vec<char> = local.chars().collect();
         let prefix_len = local_chars.len().min(2);
         let prefix: String = local_chars[..prefix_len].iter().collect();
-        let mask_count = local_chars.len() - prefix_len;
 
-        Ok(format!("{}{}@{}", prefix, "*".repeat(mask_count.max(3)), domain))
+        // 设置最大 mask 长度（10），防止超长 local-part 分配大量 *；最少 3 个 *
+        let mask_count = (local_chars.len() - prefix_len).clamp(3, 10);
+
+        Ok(format!("{}{}@{}", prefix, "*".repeat(mask_count), domain))
     }
 
     /// 身份证脱敏：1101************1234
@@ -227,8 +228,9 @@ impl SensitiveMasker {
         // 如果找到行政区划，保留到该位置
         if last_keyword_pos > 0 && last_keyword_pos < trimmed.len() {
             let prefix = &trimmed[..last_keyword_pos];
-            let mask_len = trimmed.len() - last_keyword_pos;
-            return Ok(format!("{}{}", prefix, "*".repeat(mask_len)));
+            // 使用字符计数而非字节长度，防止中文等多字节字符产生过多星号
+            let suffix_chars = trimmed[last_keyword_pos..].chars().count();
+            return Ok(format!("{}{}", prefix, "*".repeat(suffix_chars)));
         }
 
         // 否则保留前6个字符
@@ -249,9 +251,15 @@ impl SensitiveMasker {
         let chars: Vec<char> = data.chars().collect();
         let len = chars.len();
 
-        if keep_prefix + keep_suffix >= len {
-            // 如果保留位数超过总长度，返回原数据
-            return Ok(data.to_string());
+        // 溢出保护 + 确保至少有一个字符被脱敏
+        let total_keep = keep_prefix
+            .checked_add(keep_suffix)
+            .ok_or_else(|| SensitiveError::InvalidInput("keep_prefix + keep_suffix overflow".to_string()))?;
+        if total_keep >= len {
+            return Err(SensitiveError::InvalidInput(format!(
+                "keep_prefix ({}) + keep_suffix ({}) = {} >= data length ({})",
+                keep_prefix, keep_suffix, total_keep, len
+            )));
         }
 
         let prefix: String = chars[..keep_prefix].iter().collect();
@@ -373,17 +381,16 @@ mod tests {
             "12******90"
         );
 
-        // 保留位数超过总长度
-        assert_eq!(
+        // 保留位数超过总长度 — 应返回错误（防止完全绕过脱敏）
+        assert!(
             SensitiveMasker::mask(
                 "123",
                 MaskType::Custom {
                     keep_prefix: 2,
-                    keep_suffix: 2
+                    keep_suffix: 2,
                 }
             )
-            .unwrap(),
-            "123"
+            .is_err()
         );
     }
 
