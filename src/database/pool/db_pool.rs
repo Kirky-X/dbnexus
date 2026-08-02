@@ -168,6 +168,9 @@ impl std::fmt::Debug for DbConnection {
 pub struct DbPool {
     /// 内部连接池
     inner: Arc<DbPoolInner>,
+    /// 缓存提供者（DI 注入点，feature-gated behind `cache`）
+    #[cfg(feature = "cache")]
+    cache_provider: Option<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 }
 
 pub(crate) struct DbPoolInner {
@@ -243,6 +246,23 @@ impl DbPool {
         }
     }
 
+    /// 设置缓存提供者（DI 注入点）
+    ///
+    /// 允许外部注入缓存实现，覆盖默认的内置缓存。
+    /// 仅在 `cache` 特性启用时可用。
+    #[cfg(feature = "cache")]
+    pub fn set_cache_provider(&mut self, provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>) {
+        self.cache_provider = Some(provider);
+    }
+
+    /// 获取缓存提供者引用
+    ///
+    /// 返回当前注入的缓存提供者，如果未注入则返回 `None`。
+    #[cfg(feature = "cache")]
+    pub fn cache_provider(&self) -> Option<&Arc<dyn crate::domain::DbCacheProvider + Send + Sync>> {
+        self.cache_provider.as_ref()
+    }
+
     /// 创建新的连接池
     ///
     /// # Arguments
@@ -274,6 +294,11 @@ impl DbPool {
 
     /// 使用配置创建连接池
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
+        // 验证配置有效性（在创建任何连接前捕获非法参数）
+        config
+            .validate()
+            .map_err(|e| DbError::Config(format!("Invalid configuration: {e}")))?;
+
         // 创建连接（复用 create_connection 保持错误转换一致）
         let _connection = Self::create_connection(&config).await?;
 
@@ -284,7 +309,7 @@ impl DbPool {
         let pool = Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
-                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
+                connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -302,6 +327,8 @@ impl DbPool {
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
             }),
+            #[cfg(feature = "cache")]
+            cache_provider: None,
         };
 
         // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），发出安全警告
@@ -349,8 +376,11 @@ impl DbPool {
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let config = DbConfig {
     ///         url: "sqlite::memory:".to_string(),
-    ///         max_connections: 10,
-    ///         min_connections: 2,
+    ///         pool_config: dbnexus::foundation::PoolConfig {
+    ///             max_connections: 10,
+    ///             min_connections: 2,
+    ///             ..Default::default()
+    ///         },
     ///         ..Default::default()
     ///     };
     ///
@@ -396,10 +426,12 @@ impl DbPool {
     ///
     /// let config = DbConfig {
     ///     url: "sqlite::memory:".to_string(),
-    ///     max_connections: 10,
-    ///     min_connections: 1,
-    ///     idle_timeout: 300,
-    ///     acquire_timeout: 5000,
+    ///     pool_config: dbnexus::foundation::PoolConfig {
+    ///         max_connections: 10,
+    ///         min_connections: 1,
+    ///         idle_timeout: 300,
+    ///         acquire_timeout: 5000,
+    ///     },
     ///     ..Default::default()
     /// };
     ///
@@ -417,7 +449,7 @@ impl DbPool {
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: config.clone(),
-                connection_semaphore: Arc::new(Semaphore::new(config.max_connections as usize)),
+                connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -431,6 +463,8 @@ impl DbPool {
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
             }),
+            #[cfg(feature = "cache")]
+            cache_provider: None,
         })
     }
 
@@ -454,10 +488,12 @@ impl DbPool {
     ///
     /// let config = DbConfig {
     ///     url: "sqlite::memory:".to_string(),
-    ///     max_connections: 10,
-    ///     min_connections: 1,
-    ///     idle_timeout: 300,
-    ///     acquire_timeout: 5000,
+    ///     pool_config: dbnexus::foundation::PoolConfig {
+    ///         max_connections: 10,
+    ///         min_connections: 1,
+    ///         idle_timeout: 300,
+    ///         acquire_timeout: 5000,
+    ///     },
     ///     ..Default::default()
     /// };
     ///
@@ -505,7 +541,7 @@ impl DbPool {
         );
 
         // 加载权限配置（如果指定了路径）- 仅在启用permission特性时
-        let permission_config = Self::load_permission_config(config).await;
+        let permission_config = Self::load_permission_config(config).await?;
 
         // 预加载权限策略到缓存（如果存在权限配置）
         if let Some(ref perm_config) = permission_config {
@@ -523,29 +559,23 @@ impl DbPool {
     ///
     /// # Returns
     ///
-    /// - `Some(PermissionConfig)` - 成功加载的权限配置
-    /// - `None` - 没有配置权限文件或加载失败，使用默认的 deny_all 策略
+    /// - `Ok(Some(PermissionConfig))` - 成功加载的权限配置
+    /// - `Ok(None)` - 没有配置权限文件路径
+    /// - `Err(DbError::Config(..))` - 文件存在但读取或解析失败
     #[cfg(feature = "permission")]
-    async fn load_permission_config(config: &DbConfig) -> Option<PermissionConfig> {
+    async fn load_permission_config(config: &DbConfig) -> DbResult<Option<PermissionConfig>> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
-            match tokio::fs::read_to_string(path).await {
-                Ok(content) => match Self::parse_permission_yaml(&content, path) {
-                    Ok(perm_config) => {
-                        return Some(perm_config);
-                    }
-                    Err(_e) => {
-                        return None;
-                    }
-                },
-                Err(_e) => {
-                    return None;
-                }
-            }
+            let content = tokio::fs::read_to_string(path)
+                .await
+                .map_err(|e| DbError::Config(format!("Failed to read permission config file '{path}': {e}")))?;
+            let perm_config = Self::parse_permission_yaml(&content, path)
+                .map_err(|e| DbError::Config(format!("Failed to parse permission config file '{path}': {e}")))?;
+            return Ok(Some(perm_config));
         }
 
         // 没有配置权限文件
-        None
+        Ok(None)
     }
 
     /// 使用 JSON 直接解析权限配置
@@ -730,7 +760,7 @@ impl DbPool {
             crate::foundation::DatabaseType::Ladybug => {
                 #[cfg(feature = "ladybug")]
                 {
-                    let pool_size = config.max_connections as usize;
+                    let pool_size = config.pool_config.max_connections as usize;
                     let conn = crate::database::LadybugConnection::new(&config.url, pool_size)?;
                     Ok(DbConnection::Ladybug(Arc::new(conn)))
                 }
@@ -773,7 +803,7 @@ impl DbPool {
     /// - 全部成功：返回 `Ok`
     #[cfg(feature = "pool-warmup")]
     async fn warmup_connections(&self) -> DbResult<()> {
-        let initial_connections = self.inner.config.min_connections;
+        let initial_connections = self.inner.config.pool_config.min_connections;
         let warmup_timeout = Duration::from_secs(self.inner.config.warmup_timeout);
         let warmup_retries = self.inner.config.warmup_retries;
 
@@ -1050,7 +1080,7 @@ impl DbPool {
 
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
-            let needed = config.min_connections.saturating_sub(current_idle as u32) as usize;
+            let needed = config.pool_config.min_connections.saturating_sub(current_idle as u32) as usize;
 
             for _ in 0..needed {
                 match Self::create_connection(config).await {
@@ -1298,7 +1328,7 @@ impl DbPool {
 
         // 尝试快速路径：非阻塞获取锁
         if let Ok(mut idle) = inner.idle_connections.try_lock() {
-            if idle.len() < inner.config.max_connections as usize {
+            if idle.len() < inner.config.pool_config.max_connections as usize {
                 idle.push(conn);
                 inner.connection_available.notify_one();
                 // 归还信号量许可
@@ -1316,7 +1346,7 @@ impl DbPool {
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::spawn(async move {
                 let mut idle = inner.idle_connections.lock().await;
-                if idle.len() < inner.config.max_connections as usize {
+                if idle.len() < inner.config.pool_config.max_connections as usize {
                     idle.push(conn);
                     inner.connection_available.notify_one();
                 } else {
@@ -1423,7 +1453,7 @@ impl DbPool {
     ///
     /// # async fn example(pool: &DbPool) {
     /// let config = pool.config();
-    /// println!("Max connections: {}", config.max_connections);
+    /// println!("Max connections: {}", config.pool_config.max_connections);
     /// # }
     /// ```
     pub fn config(&self) -> &DbConfig {
@@ -1554,6 +1584,7 @@ impl super::ConnectionPool for DbPool {
 mod tests {
     #![allow(unused_imports)]
     use super::*;
+    use crate::foundation::PoolConfig;
 
     #[cfg(feature = "ladybug")]
     #[test]
@@ -1592,7 +1623,10 @@ mod tests {
     async fn test_create_connection_ladybug_memory() {
         let config = DbConfig {
             url: "ladybug::memory:".to_string(),
-            max_connections: 4,
+            pool_config: PoolConfig {
+                max_connections: 4,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let conn = DbPool::create_connection(&config)
@@ -1608,7 +1642,10 @@ mod tests {
     async fn test_create_connection_ladybug_health_check() {
         let config = DbConfig {
             url: "ladybug::memory:".to_string(),
-            max_connections: 2,
+            pool_config: PoolConfig {
+                max_connections: 2,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let conn = DbPool::create_connection(&config)
@@ -1651,7 +1688,10 @@ mod tests {
         let url = std::env::var("NEO4J_URL").unwrap_or_else(|_| "neo4j://localhost:7687".to_string());
         let config = DbConfig {
             url,
-            max_connections: 4,
+            pool_config: PoolConfig {
+                max_connections: 4,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let conn = DbPool::create_connection(&config)

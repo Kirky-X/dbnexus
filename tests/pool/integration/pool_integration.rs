@@ -115,8 +115,11 @@ async fn test_pool_config_boundaries() {
     for max_conn in [1, 5, 10] {
         let config = dbnexus::DbConfig {
             url: url.clone(),
-            max_connections: max_conn,
-            min_connections: 0, // 避免 min > max 冲突
+            pool_config: dbnexus::foundation::PoolConfig {
+                max_connections: max_conn,
+                min_connections: 0, // 避免 min > max 冲突
+                ..Default::default()
+            },
             ..Default::default()
         };
         let pool = tokio::time::timeout(std::time::Duration::from_secs(10), dbnexus::DbPool::with_config(config))
@@ -135,9 +138,13 @@ async fn test_connection_acquire_with_small_pool() {
     let url = common::get_test_database_url();
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 2,
-        min_connections: 1,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
     let pool = dbnexus::DbPool::with_config(config).await.expect("Failed");
@@ -164,10 +171,14 @@ async fn test_pool_exhaustion_alert_levels() {
     // 使用极小连接池和极短超时触发告警
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        acquire_timeout: 200, // 200ms 超时，应快速触发 warn 级别告警
         admin_role: "admin".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 200, // 200ms 超时，应快速触发 warn 级别告警
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 

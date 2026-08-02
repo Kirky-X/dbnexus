@@ -228,8 +228,11 @@ roles:
     let db_config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 3,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 3,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(db_config).await?;

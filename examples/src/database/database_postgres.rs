@@ -48,10 +48,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = DbConfig {
         url: db_url.clone(),
         admin_role: "admin".to_string(),
-        max_connections: 10,
-        min_connections: 2,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 2,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         ..Default::default()
     };
 

@@ -29,8 +29,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let memory_config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 5,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let memory_pool = DbPool::with_config(memory_config).await?;
@@ -89,8 +92,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_config = DbConfig {
         url: format!("sqlite://{}", db_path),
         admin_role: "admin".to_string(),
-        max_connections: 5,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let file_pool = DbPool::with_config(file_config).await?;

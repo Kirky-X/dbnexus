@@ -247,7 +247,10 @@ roles:
 
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         admin_role: "admin".to_string(),
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()

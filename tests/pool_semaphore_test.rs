@@ -13,9 +13,12 @@ use std::time::Duration;
 async fn test_semaphore_permit_return_basic() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
-        acquire_timeout: 2000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            acquire_timeout: 2000,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -46,9 +49,12 @@ async fn test_semaphore_permit_return_basic() {
 async fn test_semaphore_permit_return_concurrent() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -100,9 +106,12 @@ async fn test_semaphore_permit_return_concurrent() {
 async fn test_no_deadlock_high_concurrency() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 3,
-        min_connections: 1,
-        acquire_timeout: 10000, // 较长超时以确保不会因超时而失败
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 3,
+            min_connections: 1,
+            acquire_timeout: 10000, // 较长超时以确保不会因超时而失败
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -162,9 +171,12 @@ async fn test_no_deadlock_high_concurrency() {
 async fn test_semaphore_permit_reuse_after_max() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
-        acquire_timeout: 3000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            acquire_timeout: 3000,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -209,9 +221,12 @@ async fn test_semaphore_permit_reuse_after_max() {
 async fn test_pool_stress_rapid_acquire_release() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 1,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -258,9 +273,12 @@ async fn test_pool_stress_rapid_acquire_release() {
 async fn test_semaphore_fairness() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

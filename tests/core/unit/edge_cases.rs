@@ -36,11 +36,14 @@ mod config_boundary_tests {
         // 零连接数 - 配置会被创建，但 DbPool 创建时会失败
         let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
-            max_connections: 0,
+            pool_config: dbnexus::foundation::PoolConfig {
+                max_connections: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.max_connections, 0);
+        assert_eq!(config.pool_config.max_connections, 0);
     }
 
     #[tokio::test]
@@ -48,11 +51,14 @@ mod config_boundary_tests {
         // 负数连接数 - u32 类型不支持负数，这里测试最小值
         let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
-            max_connections: 0,
+            pool_config: dbnexus::foundation::PoolConfig {
+                max_connections: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.max_connections, 0);
+        assert_eq!(config.pool_config.max_connections, 0);
     }
 
     #[tokio::test]
@@ -60,11 +66,14 @@ mod config_boundary_tests {
         // 超大连接数 - 配置会被创建
         let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
-            max_connections: 10000,
+            pool_config: dbnexus::foundation::PoolConfig {
+                max_connections: 10000,
+                ..Default::default()
+            },
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.max_connections, 10000);
+        assert_eq!(config.pool_config.max_connections, 10000);
     }
 
     #[tokio::test]
@@ -72,13 +81,16 @@ mod config_boundary_tests {
         // 零超时 - 配置会被创建
         let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
-            acquire_timeout: 0,
-            idle_timeout: 0,
+            pool_config: dbnexus::foundation::PoolConfig {
+                acquire_timeout: 0,
+                idle_timeout: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.acquire_timeout, 0);
-        assert_eq!(config.idle_timeout, 0);
+        assert_eq!(config.pool_config.acquire_timeout, 0);
+        assert_eq!(config.pool_config.idle_timeout, 0);
     }
 
     #[tokio::test]
@@ -86,13 +98,16 @@ mod config_boundary_tests {
         // 最大超时 - 配置会被创建
         let config = dbnexus::DbConfig {
             url: "sqlite::memory:".to_string(),
-            acquire_timeout: u64::MAX,
-            idle_timeout: u64::MAX,
+            pool_config: dbnexus::foundation::PoolConfig {
+                acquire_timeout: u64::MAX,
+                idle_timeout: u64::MAX,
+                ..Default::default()
+            },
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.acquire_timeout, u64::MAX);
-        assert_eq!(config.idle_timeout, u64::MAX);
+        assert_eq!(config.pool_config.acquire_timeout, u64::MAX);
+        assert_eq!(config.pool_config.idle_timeout, u64::MAX);
     }
 
     #[tokio::test]
@@ -399,8 +414,12 @@ mod concurrency_boundary_tests {
         let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
         let config = dbnexus::DbConfig {
             url,
-            max_connections: 1,
-            acquire_timeout: 50, // 50ms 超时
+            pool_config: dbnexus::foundation::PoolConfig {
+                max_connections: 1,
+                acquire_timeout: 50, // 50ms 超时
+                ..Default::default()
+            },
+
             ..Default::default()
         };
         let pool = dbnexus::DbPool::with_config(config)

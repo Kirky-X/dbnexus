@@ -41,6 +41,9 @@ use std::sync::Arc;
 #[cfg(feature = "cache")]
 use oxcache::Cache;
 
+#[cfg(feature = "cache")]
+use crate::domain::DbCacheProvider;
+
 /// 连接池抽象 trait
 ///
 /// 定义连接池的通用接口，便于测试和替换实现
@@ -190,4 +193,7 @@ pub struct DbPoolBuilder {
     /// 缓存实例（用于查询结果缓存）
     #[cfg(feature = "cache")]
     cache: Option<Arc<Cache<String, serde_json::Value>>>,
+    /// 缓存提供者（DI 注入点，优先于内部缓存）
+    #[cfg(feature = "cache")]
+    cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
 }

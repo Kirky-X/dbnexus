@@ -14,6 +14,7 @@
 
 #![cfg(feature = "sqlite")]
 
+use dbnexus::foundation::PoolConfig;
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
 
 #[path = "../../common/mod.rs"]
@@ -43,8 +44,11 @@ async fn test_db_pool_new_sqlite_memory() {
 async fn test_db_pool_with_config() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 1,
+        pool_config: PoolConfig {
+            max_connections: 10,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await;
@@ -85,13 +89,16 @@ async fn test_db_pool_builder_with_url() {
 async fn test_db_pool_builder_with_config() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
+        pool_config: PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPoolBuilder::new().config(config).build().await;
     assert!(pool.is_ok(), "builder with config should succeed");
     let pool = pool.unwrap();
-    assert_eq!(pool.config().max_connections, 5);
+    assert_eq!(pool.config().pool_config.max_connections, 5);
 }
 
 /// TEST-U-DPOOL-007: DbPoolBuilder 链式设置 max/min connections
@@ -105,8 +112,8 @@ async fn test_db_pool_builder_max_min_connections() {
         .await;
     assert!(pool.is_ok());
     let pool = pool.unwrap();
-    assert_eq!(pool.config().max_connections, 15);
-    assert_eq!(pool.config().min_connections, 2);
+    assert_eq!(pool.config().pool_config.max_connections, 15);
+    assert_eq!(pool.config().pool_config.min_connections, 2);
 }
 
 /// TEST-U-DPOOL-008: DbPoolBuilder 设置 admin_role
@@ -132,8 +139,11 @@ async fn test_db_pool_status_initial() {
     // 使用 min_connections=0 确保初始状态无连接
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        min_connections: 0,
-        max_connections: 20,
+        pool_config: PoolConfig {
+            min_connections: 0,
+            max_connections: 20,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
@@ -160,12 +170,15 @@ async fn test_db_pool_status_invariant_total_equals_active_plus_idle() {
 async fn test_db_pool_config_returns_built_config() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 7,
+        pool_config: PoolConfig {
+            max_connections: 7,
+            ..Default::default()
+        },
         admin_role: "sa".to_string(),
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
-    assert_eq!(pool.config().max_connections, 7);
+    assert_eq!(pool.config().pool_config.max_connections, 7);
     assert_eq!(pool.config().admin_role, "sa");
     assert_eq!(pool.config().url, "sqlite::memory:");
 }
@@ -177,7 +190,7 @@ async fn test_db_pool_get_actual_config() {
     let cfg1 = pool.config();
     let cfg2 = pool.get_actual_config();
     assert_eq!(cfg1.url, cfg2.url);
-    assert_eq!(cfg1.max_connections, cfg2.max_connections);
+    assert_eq!(cfg1.pool_config.max_connections, cfg2.pool_config.max_connections);
 }
 
 // ============================================================================
@@ -253,7 +266,10 @@ async fn test_db_pool_clone_config_equal() {
     let pool = common::make_sqlite_memory_pool().await;
     let cloned = pool.clone();
     assert_eq!(pool.config().url, cloned.config().url);
-    assert_eq!(pool.config().max_connections, cloned.config().max_connections);
+    assert_eq!(
+        pool.config().pool_config.max_connections,
+        cloned.config().pool_config.max_connections
+    );
 }
 
 // ============================================================================
@@ -265,8 +281,11 @@ async fn test_db_pool_clone_config_equal() {
 async fn test_db_pool_max_connections_one() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 0,
+        pool_config: PoolConfig {
+            max_connections: 1,
+            min_connections: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
@@ -295,7 +314,7 @@ async fn test_db_pool_serial_get_session_reuses_connection() {
 async fn test_db_pool_concurrent_get_session_preserves_invariants() {
     use std::sync::Arc;
     let pool = Arc::new(common::make_sqlite_memory_pool().await);
-    let max = pool.config().max_connections;
+    let max = pool.config().pool_config.max_connections;
 
     let mut handles = Vec::new();
     for _ in 0..max {
@@ -350,7 +369,10 @@ async fn test_db_pool_drop_with_active_session_no_panic() {
 fn test_db_pool_try_from_with_permission_returns_err() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
+        pool_config: PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let result = DbPool::try_from(&config);
@@ -397,7 +419,7 @@ async fn test_db_pool_builder_max_connections_with_url_only() {
         .build()
         .await
         .unwrap();
-    assert_eq!(pool.config().max_connections, 13);
+    assert_eq!(pool.config().pool_config.max_connections, 13);
 }
 
 /// TEST-U-DPOOL-028: DbPoolBuilder::min_connections 在只有 url 时应创建 config
@@ -409,7 +431,7 @@ async fn test_db_pool_builder_min_connections_with_url_only() {
         .build()
         .await
         .unwrap();
-    assert_eq!(pool.config().min_connections, 2);
+    assert_eq!(pool.config().pool_config.min_connections, 2);
 }
 
 /// TEST-U-DPOOL-029: DbPoolBuilder deprecated setters 应为 no-op 但不 panic

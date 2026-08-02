@@ -50,10 +50,12 @@ fn make_config(url: String) -> DbConfig {
     DbConfig {
         url,
         admin_role: "admin".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         ..Default::default()
     }
 }

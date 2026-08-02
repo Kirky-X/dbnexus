@@ -218,17 +218,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config2 = DbConfig {
         url: "sqlite:file::memory:?cache=shared".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 10,
-        min_connections: 2,
-        ..Default::default()
-    };
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 2,
+            ..Default::default()
+        },
+        ..Default::default()};
     let db_pool2 = Arc::new(DbPool::with_config(config2).await?);
     let pool_adapter2 = Arc::new(PoolAdapter { inner: db_pool2 });
     kit.replace_connection_pool(pool_adapter2);
     println!("  ✓ ConnectionPool 已热替换 (max_connections: 5 → 10)");
 
     let new_pool = kit.connection_pool()?;
-    println!("  替换后 max_connections = {}", new_pool.config().max_connections);
+    println!("  替换后 max_connections = {}", new_pool.config().pool_config.max_connections);
 
     // ============================================
     // 9. Clone 与 Debug
