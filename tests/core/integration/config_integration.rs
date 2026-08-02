@@ -9,7 +9,7 @@
 //! - 验证 DbConfig 结构体及其 serde Deserialize 实现
 //! - `#[cfg(feature = "yaml")]` 测试：验证 DbConfig 的 serde_yaml_ng 反序列化
 
-use dbnexus::foundation::DatabaseType;
+use dbnexus::foundation::{DatabaseType, PoolConfig};
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
 
 #[path = "../../common/mod.rs"]
@@ -19,13 +19,16 @@ mod common;
 async fn test_config_builder_basic() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 2,
+        pool_config: PoolConfig {
+            max_connections: 10,
+            min_connections: 2,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
     assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 10);
+    assert_eq!(config.pool_config.max_connections, 10);
 }
 
 #[cfg(feature = "yaml")]
@@ -48,8 +51,8 @@ acquire_timeout: 5000
 "#;
     let config = serde_yaml_ng::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
+    assert_eq!(config.pool_config.max_connections, 20);
+    assert_eq!(config.pool_config.min_connections, 5);
 }
 
 #[tokio::test]
@@ -91,15 +94,19 @@ async fn test_dbpool_from_config() {
     let url = common::get_test_database_url();
     let config = DbConfig {
         url,
-        max_connections: 10,
-        min_connections: 3,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 3,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
     // try_from uses block_on which can't be called from within a tokio runtime
     // So we use the async version instead and pass config directly
     let pool = DbPoolBuilder::new().config(config).build().await.unwrap();
-    assert_eq!(pool.config().max_connections, 10);
+    assert_eq!(pool.config().pool_config.max_connections, 10);
 }
 
 #[tokio::test]
@@ -117,48 +124,59 @@ async fn test_config_validation() {
     // min > max 应该验证失败
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 10,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 10,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
     // 注意：DbConfig 结构体不会在创建时验证，需要手动验证或由 DbPool 验证
     // 这里我们检查配置已创建，但 DbPool 创建时会失败
-    assert!(config.max_connections < config.min_connections);
+    assert!(config.pool_config.max_connections < config.pool_config.min_connections);
 }
 
 #[tokio::test]
 async fn test_config_clone() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
     let cloned = config.clone();
     assert_eq!(config.url, cloned.url);
-    assert_eq!(config.max_connections, cloned.max_connections);
+    assert_eq!(config.pool_config.max_connections, cloned.pool_config.max_connections);
 }
 
 #[tokio::test]
 async fn test_config_builder_chaining() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 20,
-        min_connections: 5,
-        idle_timeout: 600,
-        acquire_timeout: 10000,
         auto_migrate: true,
         migration_timeout: 120,
         admin_role: "superuser".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 20,
+            min_connections: 5,
+            idle_timeout: 600,
+            acquire_timeout: 10000,
+        },
+
         ..Default::default()
     };
 
     assert_eq!(config.url, "sqlite::memory:");
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
-    assert_eq!(config.idle_timeout, 600);
-    assert_eq!(config.acquire_timeout, 10000);
+    assert_eq!(config.pool_config.max_connections, 20);
+    assert_eq!(config.pool_config.min_connections, 5);
+    assert_eq!(config.pool_config.idle_timeout, 600);
+    assert_eq!(config.pool_config.acquire_timeout, 10000);
     assert!(config.auto_migrate);
     assert_eq!(config.migration_timeout, 120);
     assert_eq!(config.admin_role, "superuser");
@@ -187,10 +205,10 @@ async fn test_config_default_values() {
         ..Default::default()
     };
 
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
-    assert_eq!(config.idle_timeout, 300);
-    assert_eq!(config.acquire_timeout, 5000);
+    assert_eq!(config.pool_config.max_connections, 20);
+    assert_eq!(config.pool_config.min_connections, 5);
+    assert_eq!(config.pool_config.idle_timeout, 300);
+    assert_eq!(config.pool_config.acquire_timeout, 5000);
     assert!(!config.auto_migrate);
     assert_eq!(config.migration_timeout, 60);
     assert_eq!(config.admin_role, "admin");
@@ -200,20 +218,28 @@ async fn test_config_default_values() {
 async fn test_config_boundary_values() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
-    assert_eq!(config.max_connections, 1);
-    assert_eq!(config.min_connections, 1);
+    assert_eq!(config.pool_config.max_connections, 1);
+    assert_eq!(config.pool_config.min_connections, 1);
 
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1000,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1000,
+            min_connections: 1,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
-    assert_eq!(config.max_connections, 1000);
+    assert_eq!(config.pool_config.max_connections, 1000);
 }
 
 #[tokio::test]
@@ -222,21 +248,29 @@ async fn test_config_boundary_rejection() {
     // 验证会在 DbPool 创建时进行
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1001,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1001,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
     // 配置已创建，值被设置
-    assert_eq!(config.max_connections, 1001);
+    assert_eq!(config.pool_config.max_connections, 1001);
 
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 200,
-        min_connections: 101,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 200,
+            min_connections: 101,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
     // 配置已创建，值被设置
-    assert_eq!(config.max_connections, 200);
-    assert_eq!(config.min_connections, 101);
+    assert_eq!(config.pool_config.max_connections, 200);
+    assert_eq!(config.pool_config.min_connections, 101);
 }
 
 #[tokio::test]
@@ -262,21 +296,29 @@ async fn test_config_invalid_urls() {
 async fn test_config_timeout_boundaries() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        idle_timeout: 1,
-        acquire_timeout: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            idle_timeout: 1,
+            acquire_timeout: 1,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
-    assert_eq!(config.idle_timeout, 1);
-    assert_eq!(config.acquire_timeout, 1);
+    assert_eq!(config.pool_config.idle_timeout, 1);
+    assert_eq!(config.pool_config.acquire_timeout, 1);
 
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        idle_timeout: 86400,
-        acquire_timeout: 300000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            idle_timeout: 86400,
+            acquire_timeout: 300000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
-    assert_eq!(config.idle_timeout, 86400);
-    assert_eq!(config.acquire_timeout, 300000);
+    assert_eq!(config.pool_config.idle_timeout, 86400);
+    assert_eq!(config.pool_config.acquire_timeout, 300000);
 }
 
 #[tokio::test]

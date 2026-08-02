@@ -6,11 +6,13 @@
 
 use super::*;
 
-use crate::foundation::DbConfig;
 use crate::foundation::DbResult;
+use crate::foundation::{DbConfig, PoolConfig};
 
 #[cfg(feature = "permission")]
 use crate::access::PermissionConfig;
+#[cfg(feature = "cache")]
+use crate::domain::DbCacheProvider;
 #[cfg(feature = "metrics")]
 use crate::observability::MetricsCollector;
 #[cfg(feature = "cache")]
@@ -118,6 +120,24 @@ impl DbPoolBuilder {
         self
     }
 
+    /// 注入缓存提供者（DI 注入点）
+    ///
+    /// 允许外部注入 `DbCacheProvider` 实现，覆盖默认的内置缓存。
+    /// 仅在 `cache` 特性启用时可用。
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - 缓存提供者实例
+    ///
+    /// # Returns
+    ///
+    /// 返回构造器自身以支持链式调用
+    #[cfg(feature = "cache")]
+    pub fn cache_provider(mut self, provider: Arc<dyn DbCacheProvider + Send + Sync>) -> Self {
+        self.cache_provider = Some(provider);
+        self
+    }
+
     /// 设置最大连接数
     ///
     /// # Arguments
@@ -129,12 +149,15 @@ impl DbPoolBuilder {
     /// 返回构造器自身以支持链式调用
     pub fn max_connections(mut self, max_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
-            config.max_connections = max_connections;
+            config.pool_config.max_connections = max_connections;
         } else if let Some(ref url) = self.url {
             // 如果只有 url，创建一个默认配置然后修改
             let config = DbConfig {
                 url: url.clone(),
-                max_connections,
+                pool_config: PoolConfig {
+                    max_connections,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             self.config = Some(config);
@@ -153,11 +176,14 @@ impl DbPoolBuilder {
     /// 返回构造器自身以支持链式调用
     pub fn min_connections(mut self, min_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
-            config.min_connections = min_connections;
+            config.pool_config.min_connections = min_connections;
         } else if let Some(ref url) = self.url {
             let config = DbConfig {
                 url: url.clone(),
-                min_connections,
+                pool_config: PoolConfig {
+                    min_connections,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             self.config = Some(config);
@@ -182,10 +208,12 @@ impl DbPoolBuilder {
             // 从 url 创建默认配置
             DbConfig {
                 url,
-                max_connections: 20,
-                min_connections: 5,
-                idle_timeout: 300,
-                acquire_timeout: 5000,
+                pool_config: PoolConfig {
+                    max_connections: 20,
+                    min_connections: 5,
+                    idle_timeout: 300,
+                    acquire_timeout: 5000,
+                },
                 admin_role: self.admin_role.unwrap_or_else(|| "admin".to_string()),
                 ..Default::default()
             }
@@ -196,7 +224,14 @@ impl DbPoolBuilder {
         };
 
         // 创建 pool
-        let pool = DbPool::with_config(config).await?;
+        #[allow(unused_mut)]
+        let mut pool = DbPool::with_config(config).await?;
+
+        // 注入缓存提供者（如果设置）
+        #[cfg(feature = "cache")]
+        if let Some(cache_provider) = self.cache_provider {
+            pool.set_cache_provider(cache_provider);
+        }
 
         // 注意：以下值已通过 config 设置，不需要额外调用 setter 方法
         // - admin_role: 在 config 创建时已设置（line 327）

@@ -5,6 +5,7 @@
 //! 提供跨数据库测试的辅助函数，包括配置管理、测试夹具和工具函数
 
 use dbnexus::DbConfig;
+use dbnexus::foundation::PoolConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -111,10 +112,12 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
         // 使用结构体字面量构建配置
         let config = dbnexus::DbConfig {
             url,
-            max_connections: 5,
-            min_connections: 1,
-            idle_timeout: 300,
-            acquire_timeout: 5000,
+            pool_config: PoolConfig {
+                max_connections: 5,
+                min_connections: 1,
+                idle_timeout: 300,
+                acquire_timeout: 5000,
+            },
             admin_role: "admin".to_string(),
             permissions_path: Some(perm_path),
             ..Default::default()
@@ -127,10 +130,12 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
     // 无权限配置
     let config = dbnexus::DbConfig {
         url,
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
+        pool_config: PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         admin_role: "admin".to_string(),
         ..Default::default()
     };
@@ -275,10 +280,12 @@ roles:
     // 使用 sqlx 标准的 SQLite URL 格式
     let config = dbnexus::DbConfig {
         url: format!("sqlite://{}", db_path_str),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
+        pool_config: PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };

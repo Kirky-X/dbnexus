@@ -132,11 +132,14 @@ fn config_validation_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let config = dbnexus::DbConfig {
                 url: "sqlite::memory:".to_string(),
-                max_connections: 10,
-                min_connections: 1,
-                idle_timeout: 300,
-                acquire_timeout: 5000,
                 admin_role: "admin".to_string(),
+                pool_config: dbnexus::foundation::PoolConfig {
+                    max_connections: 10,
+                    min_connections: 1,
+                    idle_timeout: 300,
+                    acquire_timeout: 5000,
+                },
+
                 ..Default::default()
             };
             black_box(config)

@@ -115,6 +115,32 @@ impl Default for CacheConfig {
 }
 
 impl CacheConfig {
+    /// 验证缓存配置有效性
+    ///
+    /// 所有 capacity 字段必须 > 0。
+    ///
+    /// # Errors
+    ///
+    /// 任何 capacity 为 0 时返回 `ConfigError::InvalidCacheCapacity`
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.policy_cache_capacity == 0 {
+            return Err(ConfigError::InvalidCacheCapacity(
+                "policy_cache_capacity must be > 0".to_string(),
+            ));
+        }
+        if self.sql_parse_cache_capacity == 0 {
+            return Err(ConfigError::InvalidCacheCapacity(
+                "sql_parse_cache_capacity must be > 0".to_string(),
+            ));
+        }
+        if self.query_cache_capacity == 0 {
+            return Err(ConfigError::InvalidCacheCapacity(
+                "query_cache_capacity must be > 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     /// 获取默认 TTL Duration
     pub fn default_ttl_duration(&self) -> Duration {
         Duration::from_secs(self.default_ttl)
@@ -191,6 +217,37 @@ impl Default for PoolConfig {
 }
 
 impl PoolConfig {
+    /// 验证连接池配置有效性
+    ///
+    /// # Errors
+    ///
+    /// - `max_connections == 0` 或 `acquire_timeout == 0` 返回 `ConfigError::InvalidValue`
+    /// - `min_connections > max_connections` 返回 `ConfigError::InvalidValue`
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.max_connections == 0 {
+            return Err(ConfigError::InvalidValue {
+                key: "max_connections".to_string(),
+                message: "max_connections must be > 0".to_string(),
+            });
+        }
+        if self.min_connections > self.max_connections {
+            return Err(ConfigError::InvalidValue {
+                key: "min_connections".to_string(),
+                message: format!(
+                    "min_connections ({}) must be <= max_connections ({})",
+                    self.min_connections, self.max_connections
+                ),
+            });
+        }
+        if self.acquire_timeout == 0 {
+            return Err(ConfigError::InvalidValue {
+                key: "acquire_timeout".to_string(),
+                message: "acquire_timeout must be > 0".to_string(),
+            });
+        }
+        Ok(())
+    }
+
     /// 获取空闲超时 Duration
     pub fn idle_timeout_duration(&self) -> Duration {
         Duration::from_secs(self.idle_timeout)
@@ -350,10 +407,7 @@ impl std::fmt::Display for DatabaseType {
 /// | 字段 | 默认值 |
 /// |------|--------|
 /// | `url` | **必填** |
-/// | `max_connections` | 20 |
-/// | `min_connections` | 5 |
-/// | `idle_timeout` | 300 |
-/// | `acquire_timeout` | 5000 |
+/// | `pool_config` (flatten) | `PoolConfig::default()` |
 /// | `admin_role` | "admin" |
 /// | `permissions_path` | None |
 /// | `migrations_dir` | None |
@@ -363,21 +417,9 @@ pub struct DbConfig {
     /// 数据库连接 URL
     pub url: String,
 
-    /// 最大连接数
-    #[serde(default = "default_max_connections")]
-    pub max_connections: u32,
-
-    /// 最小连接数
-    #[serde(default = "default_min_connections")]
-    pub min_connections: u32,
-
-    /// 空闲连接超时（秒）
-    #[serde(default = "default_idle_timeout")]
-    pub idle_timeout: u64,
-
-    /// 连接获取超时（毫秒）
-    #[serde(default = "default_acquire_timeout")]
-    pub acquire_timeout: u64,
+    /// 连接池配置（通过 `#[serde(flatten)]` 扁平化，保持序列化向后兼容）
+    #[serde(flatten)]
+    pub pool_config: PoolConfig,
 
     /// 权限配置文件路径
     #[serde(default)]
@@ -416,10 +458,7 @@ impl Default for DbConfig {
     fn default() -> Self {
         Self {
             url: String::new(),
-            max_connections: default_max_connections(),
-            min_connections: default_min_connections(),
-            idle_timeout: default_idle_timeout(),
-            acquire_timeout: default_acquire_timeout(),
+            pool_config: PoolConfig::default(),
             permissions_path: None,
             migrations_dir: None,
             auto_migrate: false,
@@ -445,6 +484,30 @@ fn default_warmup_retries() -> u32 {
     3
 }
 
+/// 解析环境变量为 u32，变量不存在时返回默认值，存在但解析失败时返回错误
+#[cfg(feature = "config-env")]
+fn parse_env_u32(key: &str, default: u32) -> Result<u32, ConfigError> {
+    match std::env::var(key) {
+        Ok(val) => val.parse::<u32>().map_err(|_| ConfigError::InvalidValue {
+            key: key.to_string(),
+            message: format!("expected u32, got '{val}'"),
+        }),
+        Err(_) => Ok(default),
+    }
+}
+
+/// 解析环境变量为 u64，变量不存在时返回默认值，存在但解析失败时返回错误
+#[cfg(feature = "config-env")]
+fn parse_env_u64(key: &str, default: u64) -> Result<u64, ConfigError> {
+    match std::env::var(key) {
+        Ok(val) => val.parse::<u64>().map_err(|_| ConfigError::InvalidValue {
+            key: key.to_string(),
+            message: format!("expected u64, got '{val}'"),
+        }),
+        Err(_) => Ok(default),
+    }
+}
+
 impl DbConfig {
     /// 从环境变量加载配置
     ///
@@ -465,22 +528,12 @@ impl DbConfig {
 
         Ok(Self {
             url,
-            max_connections: std::env::var("DB_MAX_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(20),
-            min_connections: std::env::var("DB_MIN_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(5),
-            idle_timeout: std::env::var("DB_IDLE_TIMEOUT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(300),
-            acquire_timeout: std::env::var("DB_ACQUIRE_TIMEOUT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(5000),
+            pool_config: PoolConfig {
+                max_connections: parse_env_u32("DB_MAX_CONNECTIONS", 20)?,
+                min_connections: parse_env_u32("DB_MIN_CONNECTIONS", 5)?,
+                idle_timeout: parse_env_u64("DB_IDLE_TIMEOUT", 300)?,
+                acquire_timeout: parse_env_u64("DB_ACQUIRE_TIMEOUT", 5000)?,
+            },
             admin_role: std::env::var("DB_ADMIN_ROLE").unwrap_or_else(|_| "admin".to_string()),
             permissions_path: std::env::var("DB_PERMISSIONS_PATH").ok(),
             migrations_dir: std::env::var("DB_MIGRATIONS_DIR").ok().map(PathBuf::from),
@@ -488,18 +541,9 @@ impl DbConfig {
                 .ok()
                 .map(|s| s.to_lowercase() == "true")
                 .unwrap_or(false),
-            migration_timeout: std::env::var("DB_MIGRATION_TIMEOUT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(60),
-            warmup_timeout: std::env::var("DB_WARMUP_TIMEOUT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(30),
-            warmup_retries: std::env::var("DB_WARMUP_RETRIES")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(3),
+            migration_timeout: parse_env_u64("DB_MIGRATION_TIMEOUT", 60)?,
+            warmup_timeout: parse_env_u64("DB_WARMUP_TIMEOUT", 30)?,
+            warmup_retries: parse_env_u32("DB_WARMUP_RETRIES", 3)?,
             cache_config: CacheConfig::default(),
         })
     }
@@ -557,14 +601,14 @@ impl DbConfig {
         DatabaseType::from_url(&self.url)
     }
 
-    /// 获取空闲超时 Duration
+    /// 获取空闲超时 Duration（委托到 pool_config）
     pub fn idle_timeout_duration(&self) -> Duration {
-        Duration::from_secs(self.idle_timeout)
+        self.pool_config.idle_timeout_duration()
     }
 
-    /// 获取获取超时 Duration
+    /// 获取获取超时 Duration（委托到 pool_config）
     pub fn acquire_timeout_duration(&self) -> Duration {
-        Duration::from_millis(self.acquire_timeout)
+        self.pool_config.acquire_timeout_duration()
     }
 
     /// 获取迁移超时 Duration
@@ -575,6 +619,20 @@ impl DbConfig {
     /// 获取缓存配置
     pub fn cache_config(&self) -> &CacheConfig {
         &self.cache_config
+    }
+
+    /// 验证数据库配置有效性
+    ///
+    /// 委托调用 `CacheConfig::validate()` 并验证连接池字段。
+    ///
+    /// # Errors
+    ///
+    /// - 缓存容量为 0 时返回 `ConfigError::InvalidCacheCapacity`
+    /// - `max_connections == 0` 或 `min_connections > max_connections` 返回 `ConfigError::InvalidValue`
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        self.cache_config.validate()?;
+        self.pool_config.validate()?;
+        Ok(())
     }
 }
 
@@ -677,6 +735,44 @@ mod tests {
         assert_eq!(cfg.default_ttl, 300);
     }
 
+    #[test]
+    fn test_cache_config_validate_accepts_valid() {
+        assert!(CacheConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn test_cache_config_validate_rejects_zero_policy_capacity() {
+        let cfg = CacheConfig {
+            policy_cache_capacity: 0,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(
+            err.to_string().contains("policy_cache_capacity"),
+            "error should mention field name, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_cache_config_validate_rejects_zero_sql_parse_capacity() {
+        let cfg = CacheConfig {
+            sql_parse_cache_capacity: 0,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("sql_parse_cache_capacity"));
+    }
+
+    #[test]
+    fn test_cache_config_validate_rejects_zero_query_capacity() {
+        let cfg = CacheConfig {
+            query_cache_capacity: 0,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("query_cache_capacity"));
+    }
+
     // ===== PoolConfig 测试 =====
 
     #[test]
@@ -703,6 +799,42 @@ mod tests {
         assert_eq!(cfg.min_connections, 5);
         assert_eq!(cfg.idle_timeout, 300);
         assert_eq!(cfg.acquire_timeout, 5000);
+    }
+
+    #[test]
+    fn test_pool_config_validate_accepts_valid() {
+        assert!(PoolConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn test_pool_config_validate_rejects_zero_max_connections() {
+        let cfg = PoolConfig {
+            max_connections: 0,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("max_connections"));
+    }
+
+    #[test]
+    fn test_pool_config_validate_rejects_min_greater_than_max() {
+        let cfg = PoolConfig {
+            min_connections: 10,
+            max_connections: 5,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("min_connections"));
+    }
+
+    #[test]
+    fn test_pool_config_validate_rejects_zero_acquire_timeout() {
+        let cfg = PoolConfig {
+            acquire_timeout: 0,
+            ..Default::default()
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("acquire_timeout"));
     }
 
     // ===== DatabaseType 测试 =====
@@ -914,10 +1046,10 @@ mod tests {
     fn test_db_config_default() {
         let cfg = DbConfig::default();
         assert_eq!(cfg.url, String::new());
-        assert_eq!(cfg.max_connections, 20);
-        assert_eq!(cfg.min_connections, 5);
-        assert_eq!(cfg.idle_timeout, 300);
-        assert_eq!(cfg.acquire_timeout, 5000);
+        assert_eq!(cfg.pool_config.max_connections, 20);
+        assert_eq!(cfg.pool_config.min_connections, 5);
+        assert_eq!(cfg.pool_config.idle_timeout, 300);
+        assert_eq!(cfg.pool_config.acquire_timeout, 5000);
         assert_eq!(cfg.admin_role, "admin");
         assert_eq!(cfg.migration_timeout, 60);
         assert_eq!(cfg.warmup_timeout, 30);
@@ -965,13 +1097,52 @@ mod tests {
     }
 
     #[test]
+    fn test_db_config_validate_delegates_to_cache_and_pool() {
+        // Default should be valid
+        assert!(DbConfig::default().validate().is_ok());
+
+        // Invalid cache config should fail
+        let cfg = DbConfig {
+            cache_config: CacheConfig {
+                policy_cache_capacity: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+
+        // Invalid pool config should fail
+        let cfg = DbConfig {
+            pool_config: PoolConfig {
+                max_connections: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+
+        // min > max should fail
+        let cfg = DbConfig {
+            pool_config: PoolConfig {
+                min_connections: 100,
+                max_connections: 5,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
     fn test_db_config_serde_roundtrip() {
         let cfg = DbConfig {
             url: "sqlite::memory:".to_string(),
-            max_connections: 10,
-            min_connections: 2,
-            idle_timeout: 100,
-            acquire_timeout: 3000,
+            pool_config: PoolConfig {
+                max_connections: 10,
+                min_connections: 2,
+                idle_timeout: 100,
+                acquire_timeout: 3000,
+            },
             permissions_path: Some("/tmp/perms.yaml".into()),
             migrations_dir: Some(PathBuf::from("/tmp/migrations")),
             auto_migrate: true,
@@ -989,10 +1160,10 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         let deserialized: DbConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.url, "sqlite::memory:");
-        assert_eq!(deserialized.max_connections, 10);
-        assert_eq!(deserialized.min_connections, 2);
-        assert_eq!(deserialized.idle_timeout, 100);
-        assert_eq!(deserialized.acquire_timeout, 3000);
+        assert_eq!(deserialized.pool_config.max_connections, 10);
+        assert_eq!(deserialized.pool_config.min_connections, 2);
+        assert_eq!(deserialized.pool_config.idle_timeout, 100);
+        assert_eq!(deserialized.pool_config.acquire_timeout, 3000);
         assert_eq!(deserialized.permissions_path, Some("/tmp/perms.yaml".to_string()));
         assert_eq!(deserialized.migrations_dir, Some(PathBuf::from("/tmp/migrations")));
         assert!(deserialized.auto_migrate);
@@ -1009,8 +1180,8 @@ mod tests {
         let json = r#"{"url":"sqlite::memory:"}"#;
         let cfg: DbConfig = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.url, "sqlite::memory:");
-        assert_eq!(cfg.max_connections, 20);
-        assert_eq!(cfg.min_connections, 5);
+        assert_eq!(cfg.pool_config.max_connections, 20);
+        assert_eq!(cfg.pool_config.min_connections, 5);
         assert_eq!(cfg.admin_role, "admin");
         assert!(!cfg.auto_migrate);
     }

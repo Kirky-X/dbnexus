@@ -26,10 +26,9 @@
 //! `DbConfig.cache_config` via `DbPool::with_config()`.
 //!
 //! Resolution (Rule 7): the `OxcacheDbCacheAdapter` is constructed inside
-//! `build()` (proving the OxcacheModule capability wiring is type-compatible),
-//! but it is **not injected** into the pool. The pool builds with its default
-//! cache configuration. A future change can add a `.cache_provider()` setter
-//! to `DbPoolBuilder` if explicit cache injection is required.
+//! `build()` and injected via `DbPoolBuilder::cache_provider()` (added in
+//! fix-review-findings change). The pool receives the adapter as a
+//! `DbCacheProvider` trait object, enabling DI-based cache injection.
 
 use std::any::TypeId;
 use std::future::Future;
@@ -53,9 +52,8 @@ use crate::integrations::OxcacheDbCacheAdapter;
 /// the capability with `kit.require::<DbNexusModule>()`.
 ///
 /// The returned `Arc<dyn ConnectionPool + Send + Sync>` is a fully initialized
-/// database connection pool. See the module-level docs for the
-/// design-divergence rationale (spec.md wrote `.cache(adapter)` injection,
-/// but `DbPoolBuilder` has no such setter).
+/// database connection pool. The `OxcacheDbCacheAdapter` is injected via
+/// `DbPoolBuilder::cache_provider()`, enabling cache DI through the kit.
 pub struct DbNexusModule;
 
 impl ModuleMeta for DbNexusModule {
@@ -85,19 +83,20 @@ impl AsyncAutoBuilder for DbNexusModule {
                 .require::<OxcacheModule>()
                 .map_err(|e| DbError::Config(format!("require OxcacheModule: {e}")))?;
 
-            // 2. Wrap in OxcacheDbCacheAdapter — proves the capability wiring
-            //    is type-compatible. Not injected into the pool (Rule 7:
-            //    DbPoolBuilder has no cache(DbCacheProvider) setter; see
-            //    module-level docs).
-            let _ = OxcacheDbCacheAdapter::new(cache_cap);
+            // 2. Wrap in OxcacheDbCacheAdapter and inject via cache_provider().
+            let adapter = OxcacheDbCacheAdapter::new(cache_cap);
 
             // 3. Read DbConfig from the kit.
             let config: DbConfig = kit
                 .config()
                 .map_err(|e| DbError::Config(format!("read DbConfig: {e}")))?;
 
-            // 4. Build the pool.
-            let pool = DbPoolBuilder::new().config(config).build().await?;
+            // 4. Build the pool with cache provider injected.
+            let pool = DbPoolBuilder::new()
+                .config(config)
+                .cache_provider(Arc::new(adapter))
+                .build()
+                .await?;
 
             // 5. Return as Arc<dyn ConnectionPool + Send + Sync>.
             Ok(Arc::new(pool) as Arc<dyn ConnectionPool + Send + Sync>)
@@ -150,8 +149,11 @@ mod tests {
         kit.set_config(OxcacheConfig::default());
         kit.set_config(DbConfig {
             url: "sqlite::memory:".to_string(),
-            max_connections: 5,
-            min_connections: 1,
+            pool_config: crate::foundation::PoolConfig {
+                max_connections: 5,
+                min_connections: 1,
+                ..Default::default()
+            },
             ..Default::default()
         });
         kit.register::<OxcacheModule>().expect("register OxcacheModule");

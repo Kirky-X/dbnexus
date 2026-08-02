@@ -16,10 +16,12 @@ fn bench_db_config_building(c: &mut Criterion) {
         b.iter(|| {
             let _ = DbConfig {
                 url: "sqlite::memory:".to_string(),
-                max_connections: 10,
-                min_connections: 1,
-                ..Default::default()
-            };
+                pool_config: dbnexus::foundation::PoolConfig {
+                    max_connections: 10,
+                    min_connections: 1,
+                    ..Default::default()
+                },
+                ..Default::default()};
         })
     });
 
@@ -27,15 +29,16 @@ fn bench_db_config_building(c: &mut Criterion) {
         b.iter(|| {
             let _ = DbConfig {
                 url: "postgresql://user:pass@localhost:5432/db".to_string(),
-                max_connections: 100,
-                min_connections: 5,
-                idle_timeout: 300,
-                acquire_timeout: 5000,
                 permissions_path: Some("./permissions.yaml".to_string()),
                 migrations_dir: Some("./migrations".to_string()),
                 auto_migrate: true,
-                ..Default::default()
-            };
+                pool_config: dbnexus::foundation::PoolConfig {
+                    max_connections: 100,
+                    min_connections: 5,
+                    idle_timeout: 300,
+                    acquire_timeout: 5000,
+                },
+                ..Default::default()};
         })
     });
 }

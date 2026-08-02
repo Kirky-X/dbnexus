@@ -23,10 +23,10 @@ use std::time::Duration;
 fn test_db_config_default_values() {
     let config = DbConfig::default();
     assert_eq!(config.url, "");
-    assert_eq!(config.max_connections, 20);
-    assert_eq!(config.min_connections, 5);
-    assert_eq!(config.idle_timeout, 300);
-    assert_eq!(config.acquire_timeout, 5000);
+    assert_eq!(config.pool_config.max_connections, 20);
+    assert_eq!(config.pool_config.min_connections, 5);
+    assert_eq!(config.pool_config.idle_timeout, 300);
+    assert_eq!(config.pool_config.acquire_timeout, 5000);
     assert_eq!(config.admin_role, "admin");
     assert_eq!(config.migration_timeout, 60);
     assert_eq!(config.warmup_timeout, 30);
@@ -41,10 +41,12 @@ fn test_db_config_default_values() {
 fn test_db_config_custom_values() {
     let config = DbConfig {
         url: "postgres://localhost/db".to_string(),
-        max_connections: 50,
-        min_connections: 10,
-        idle_timeout: 600,
-        acquire_timeout: 10000,
+        pool_config: FoundationPoolConfig {
+            max_connections: 50,
+            min_connections: 10,
+            idle_timeout: 600,
+            acquire_timeout: 10000,
+        },
         admin_role: "root".to_string(),
         migration_timeout: 120,
         warmup_timeout: 60,
@@ -55,8 +57,8 @@ fn test_db_config_custom_values() {
         cache_config: CacheConfig::default(),
     };
     assert_eq!(config.url, "postgres://localhost/db");
-    assert_eq!(config.max_connections, 50);
-    assert_eq!(config.min_connections, 10);
+    assert_eq!(config.pool_config.max_connections, 50);
+    assert_eq!(config.pool_config.min_connections, 10);
     assert_eq!(config.admin_role, "root");
     assert!(config.auto_migrate);
     assert_eq!(config.permissions_path, Some("/etc/permissions.yaml".to_string()));
@@ -126,7 +128,10 @@ fn test_db_config_database_type_case_insensitive() {
 #[test]
 fn test_db_config_idle_timeout_duration() {
     let config = DbConfig {
-        idle_timeout: 120,
+        pool_config: FoundationPoolConfig {
+            idle_timeout: 120,
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert_eq!(config.idle_timeout_duration(), Duration::from_secs(120));
@@ -136,7 +141,10 @@ fn test_db_config_idle_timeout_duration() {
 #[test]
 fn test_db_config_acquire_timeout_duration() {
     let config = DbConfig {
-        acquire_timeout: 3000,
+        pool_config: FoundationPoolConfig {
+            acquire_timeout: 3000,
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(3000));
@@ -166,12 +174,15 @@ fn test_db_config_cache_config_accessor() {
 fn test_db_config_clone() {
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
+        pool_config: FoundationPoolConfig {
+            max_connections: 10,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let cloned = config.clone();
     assert_eq!(config.url, cloned.url);
-    assert_eq!(config.max_connections, cloned.max_connections);
+    assert_eq!(config.pool_config.max_connections, cloned.pool_config.max_connections);
 }
 
 // ============================================================================
