@@ -4,6 +4,9 @@
 
 use super::models::{AuthError, AuthResult, JwtClaims, TokenType};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use std::collections::HashSet;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// JWT 访问令牌默认过期时间（秒）
@@ -12,12 +15,22 @@ const ACCESS_TOKEN_EXPIRATION_SECS: u64 = 3600; // 1 hour
 /// JWT 刷新令牌默认过期时间（秒）
 const REFRESH_TOKEN_EXPIRATION_SECS: u64 = 3600 * 24 * 7; // 7 days
 
+/// 默认有效角色列表
+const DEFAULT_VALID_ROLES: &[&str] = &["admin", "user", "readonly", "readwrite"];
+
+/// jti 全局计数器
+static JTI_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// JWT 管理器
 pub struct JwtManager {
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
     access_expiration_secs: u64,
     refresh_expiration_secs: u64,
+    /// 有效角色白名单，防止 `generate_token` 注入任意角色
+    valid_roles: HashSet<String>,
+    /// 已撤销的 refresh token jti 集合（refresh token rotation 保护）
+    revoked_refresh_jtis: Mutex<HashSet<String>>,
 }
 
 impl JwtManager {
@@ -25,27 +38,63 @@ impl JwtManager {
     ///
     /// # 参数
     ///
-    /// * `secret` - JWT 签名密钥（建议从环境变量读取）
+    /// * `secret` - JWT 签名密钥（建议从环境变量读取，至少 32 字节 / 256 bits）
+    ///
+    /// # 错误
+    ///
+    /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
     pub fn new(secret: &[u8]) -> Self {
+        // HS256 要求至少 256 bits（32 字节）密钥
+        if secret.len() < 32 {
+            panic!(
+                "JWT secret must be at least 32 bytes (256 bits) for HS256, got {} bytes",
+                secret.len()
+            );
+        }
         Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoding_key: DecodingKey::from_secret(secret),
             access_expiration_secs: ACCESS_TOKEN_EXPIRATION_SECS,
             refresh_expiration_secs: REFRESH_TOKEN_EXPIRATION_SECS,
+            valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
+            revoked_refresh_jtis: Mutex::new(HashSet::new()),
         }
     }
 
     /// 使用自定义过期时间创建 JWT 管理器
+    ///
+    /// # 错误
+    ///
+    /// 密钥短于 32 字节时 panic。
     pub fn with_expiration(secret: &[u8], access_expiration_secs: u64, refresh_expiration_secs: u64) -> Self {
+        if secret.len() < 32 {
+            panic!(
+                "JWT secret must be at least 32 bytes (256 bits) for HS256, got {} bytes",
+                secret.len()
+            );
+        }
         Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoding_key: DecodingKey::from_secret(secret),
             access_expiration_secs,
             refresh_expiration_secs,
+            valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
+            revoked_refresh_jtis: Mutex::new(HashSet::new()),
         }
     }
 
+    /// 添加自定义有效角色
+    ///
+    /// 扩展角色白名单，允许 `generate_token` 接受自定义角色。
+    pub fn add_valid_role(&mut self, role: String) {
+        self.valid_roles.insert(role);
+    }
+
     /// 生成 JWT Token
+    ///
+    /// # 错误
+    ///
+    /// - `role` 不在有效角色白名单中时返回 `AuthError::TokenGeneration`
     pub fn generate_token(
         &self,
         user_id: &str,
@@ -53,6 +102,15 @@ impl JwtManager {
         role: &str,
         token_type: TokenType,
     ) -> AuthResult<String> {
+        // H-1: 角色白名单验证，防止注入任意角色
+        if !self.valid_roles.contains(role) {
+            return Err(AuthError::TokenGeneration(format!(
+                "Invalid role '{}'. Valid roles: {:?}",
+                role,
+                self.valid_roles.iter().collect::<Vec<_>>()
+            )));
+        }
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| AuthError::TokenGeneration("System time error".to_string()))?
@@ -63,6 +121,10 @@ impl JwtManager {
             TokenType::Refresh => now + self.refresh_expiration_secs as usize,
         };
 
+        // M-1: 生成唯一 jti（全局计数器 + 时间戳）
+        let jti_count = JTI_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let jti = format!("{}-{}-{}", user_id, now, jti_count);
+
         let claims = JwtClaims {
             sub: user_id.to_string(),
             username: username.to_string(),
@@ -70,6 +132,7 @@ impl JwtManager {
             exp: expiration,
             iat: now,
             token_type,
+            jti,
         };
 
         encode(&Header::default(), &claims, &self.encoding_key).map_err(|e| AuthError::TokenGeneration(e.to_string()))
@@ -111,17 +174,32 @@ impl JwtManager {
     ///
     /// 在 [`verify_token`](Self::verify_token) 基础上额外校验 `token_type`，
     /// 确保 access token 不能用作 refresh token（防止 token 混用）。
+    /// 同时检查 token 是否已被撤销（refresh token rotation 保护）。
     pub fn verify_refresh_token(&self, token: &str) -> AuthResult<JwtClaims> {
         let claims = self.verify_token(token)?;
         if claims.token_type != TokenType::Refresh {
             return Err(AuthError::InvalidToken);
         }
+        // H-3: 检查 refresh token 是否已被撤销
+        if let Ok(revoked) = self.revoked_refresh_jtis.lock() {
+            if revoked.contains(&claims.jti) {
+                return Err(AuthError::InvalidToken);
+            }
+        }
         Ok(claims)
     }
 
-    /// 刷新访问令牌
+    /// 刷新访问令牌（带 refresh token rotation）
+    ///
+    /// 刷新成功后自动撤销旧的 refresh token，防止重放攻击。
     pub fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
         let claims = self.verify_refresh_token(refresh_token)?;
+
+        // H-3: 撤销旧 refresh token（refresh token rotation）
+        if let Ok(mut revoked) = self.revoked_refresh_jtis.lock() {
+            revoked.insert(claims.jti.clone());
+        }
+
         self.generate_token(&claims.sub, &claims.username, &claims.role, TokenType::Access)
     }
 }
@@ -130,7 +208,7 @@ impl JwtManager {
 mod tests {
     use super::*;
 
-    const TEST_SECRET: &[u8] = b"test-secret-key-for-testing";
+    const TEST_SECRET: &[u8] = b"test-secret-key-for-testing-32bx"; // 32 bytes minimum for HS256
 
     #[test]
     fn test_generate_and_verify_token() {
