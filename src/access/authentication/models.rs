@@ -30,6 +30,10 @@ pub enum AuthError {
     /// 密码哈希失败
     #[error("Password hash failed: {0}")]
     PasswordHash(String),
+
+    /// 用户存储已达上限
+    #[error("User storage limit reached: {0}")]
+    UserLimitReached(String),
 }
 
 /// 认证结果类型别名
@@ -44,7 +48,8 @@ pub struct User {
     /// 用户名
     pub username: String,
 
-    /// 密码哈希（bcrypt）
+    /// 密码哈希（bcrypt）— 禁止序列化到 JSON，防止凭据泄露
+    #[serde(skip)]
     pub password_hash: String,
 
     /// 用户角色
@@ -65,7 +70,8 @@ pub struct AuthCredentials {
     /// 用户名
     pub username: String,
 
-    /// 密码
+    /// 密码 — 禁止序列化，防止明文密码泄露
+    #[serde(skip)]
     pub password: String,
 }
 
@@ -99,6 +105,9 @@ pub struct JwtClaims {
 
     /// Token 类型
     pub token_type: TokenType,
+
+    /// JWT ID — 唯一标识符，用于单独撤销 token
+    pub jti: String,
 }
 
 #[cfg(test)]
@@ -124,7 +133,8 @@ mod tests {
 
         let json = serde_json::to_string(&user).unwrap();
         assert!(json.contains("test_user"));
-        // 密码哈希在序列化时应该包含（用于存储），但在日志中需要脱敏处理
-        assert!(json.contains("password_hash"));
+        // 密码哈希不得出现在序列化输出中（防止凭据泄露）
+        assert!(!json.contains("password_hash"));
+        assert!(!json.contains("hash"));
     }
 }
