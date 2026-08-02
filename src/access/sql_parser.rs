@@ -91,6 +91,8 @@ pub struct ParsedSqlOperation {
     pub operation_type: SqlOperationType,
     /// The table name if applicable
     pub table_name: Option<String>,
+    /// 所有涉及的表名（包括 JOIN 中的表），用于完整权限检查
+    pub all_table_names: Vec<String>,
     /// The raw SQL statement
     pub sql: String,
 }
@@ -279,8 +281,12 @@ impl SqlParser {
 
         // Check for multiple statements (basic detection)
         if sql.contains(';') {
-            // Allow SET statements with multiple assignments
-            if !sql.starts_with("SET ") {
+            // Allow only safe SET statements (SET SESSION, SET NAMES, etc.) — not arbitrary SET
+            let is_safe_set = sql.starts_with("SET SESSION ")
+                || sql.starts_with("SET NAMES ")
+                || sql.starts_with("SET CHARACTER ")
+                || sql.starts_with("SET @@");
+            if !is_safe_set {
                 // 检查查询深度（防止复杂度攻击）
                 let depth = estimate_query_depth(sql);
                 if depth > MAX_QUERY_DEPTH {
@@ -417,57 +423,84 @@ impl SqlParser {
 
     /// Classify a parsed statement into an operation
     fn classify_statement(&self, statement: Statement, sql: String) -> Result<ParsedSqlOperation, SqlParseError> {
-        let (operation_type, table_name) = match statement {
-            Statement::Query(query) => (SqlOperationType::Select, extract_table_from_query(&query)),
+        let (operation_type, table_name, all_table_names) = match statement {
+            Statement::Query(query) => {
+                let (primary, all) = extract_table_from_query(&query);
+                (SqlOperationType::Select, primary, all)
+            }
             Statement::Insert(insert) => {
                 let table_name = match &insert.table {
                     TableObject::TableName(name) => Some(name.to_string()),
                     _ => None,
                 };
-                (SqlOperationType::Insert, table_name)
+                let all = table_name.iter().cloned().collect();
+                (SqlOperationType::Insert, table_name, all)
             }
-            Statement::Update(update) => (
-                SqlOperationType::Update,
-                extract_table_name_from_table_with_joins(&update.table),
-            ),
+            Statement::Update(update) => {
+                let table_name = extract_table_name_from_table_with_joins(&update.table);
+                let mut all = Vec::new();
+                if let Some(ref name) = table_name {
+                    all.push(name.clone());
+                }
+                // UPDATE 也可能包含 JOIN
+                for join in &update.table.joins {
+                    if let sqlparser::ast::TableFactor::Table { name, .. } = &join.relation {
+                        all.push(name.to_string());
+                    }
+                }
+                (SqlOperationType::Update, table_name, all)
+            }
             Statement::Delete(delete) => {
                 let table_name = extract_table_from_delete(&delete);
-                (SqlOperationType::Delete, table_name)
+                let all = table_name.iter().cloned().collect();
+                (SqlOperationType::Delete, table_name, all)
             }
-            Statement::CreateTable(create_table) => (SqlOperationType::Ddl, Some(create_table.name.to_string())),
-            Statement::AlterTable(alter_table) => (SqlOperationType::Ddl, Some(alter_table.name.to_string())),
+            Statement::CreateTable(create_table) => {
+                let name = create_table.name.to_string();
+                (SqlOperationType::Ddl, Some(name.clone()), vec![name])
+            }
+            Statement::AlterTable(alter_table) => {
+                let name = alter_table.name.to_string();
+                (SqlOperationType::Ddl, Some(name.clone()), vec![name])
+            }
             Statement::Drop { names, object_type, .. } => {
-                // Check if it's a TABLE drop
                 let is_table = format!("{:?}", object_type).contains("Table");
                 let table_name = if is_table && !names.is_empty() {
                     Some(names[0].to_string())
                 } else {
                     None
                 };
-                (SqlOperationType::Ddl, table_name)
+                let all: Vec<String> = if is_table {
+                    names.iter().map(|n| n.to_string()).collect()
+                } else {
+                    Vec::new()
+                };
+                (SqlOperationType::Ddl, table_name, all)
             }
-            Statement::Truncate(truncate) => (
-                SqlOperationType::Ddl,
-                truncate.table_names.first().map(|t| t.name.to_string()),
-            ),
-            Statement::CreateIndex(create_index) => (SqlOperationType::Ddl, Some(create_index.table_name.to_string())),
-            Statement::Grant { .. } => (SqlOperationType::Dcl, None),
-            Statement::Revoke { .. } => (SqlOperationType::Dcl, None),
+            Statement::Truncate(truncate) => {
+                let table_name = truncate.table_names.first().map(|t| t.name.to_string());
+                let all: Vec<String> = truncate.table_names.iter().map(|t| t.name.to_string()).collect();
+                (SqlOperationType::Ddl, table_name, all)
+            }
+            Statement::CreateIndex(create_index) => {
+                let name = create_index.table_name.to_string();
+                (SqlOperationType::Ddl, Some(name.clone()), vec![name])
+            }
+            Statement::Grant { .. } => (SqlOperationType::Dcl, None, Vec::new()),
+            Statement::Revoke { .. } => (SqlOperationType::Dcl, None, Vec::new()),
             Statement::StartTransaction { .. } | Statement::Commit { .. } | Statement::Rollback { .. } => {
-                (SqlOperationType::Transaction, None)
+                (SqlOperationType::Transaction, None, Vec::new())
             }
             Statement::Set(Set::SingleAssignment { variable, .. }) => {
-                // Check if it's a system variable
                 let var_name = variable.to_string().to_lowercase();
                 if is_ddl_related_variable(&var_name) {
-                    (SqlOperationType::Ddl, None)
+                    (SqlOperationType::Ddl, None, Vec::new())
                 } else {
-                    (SqlOperationType::Other, None)
+                    (SqlOperationType::Other, None, Vec::new())
                 }
             }
-            Statement::Set(_) => (SqlOperationType::Other, None),
-            // Add more statement types as needed
-            _ => (SqlOperationType::Other, None),
+            Statement::Set(_) => (SqlOperationType::Other, None, Vec::new()),
+            _ => (SqlOperationType::Other, None, Vec::new()),
         };
 
         // 验证表名长度
@@ -483,6 +516,7 @@ impl SqlParser {
         Ok(ParsedSqlOperation {
             operation_type,
             table_name,
+            all_table_names,
             sql,
         })
     }
@@ -550,7 +584,9 @@ pub fn contains_sql_injection(sql: &str) -> bool {
 
     // 第二步：移除字符串字面量
     let sql_without_strings = remove_string_literals(&normalized);
-    let sql_upper = sql_without_strings.to_uppercase();
+    // 第三步：移除块注释（防止合法 /* comment */ 触发误报）
+    let sql_without_comments = strip_block_comments(&sql_without_strings);
+    let sql_upper = sql_without_comments.to_uppercase();
 
     // Comprehensive SQL injection patterns organized by category
     let injection_patterns = [
@@ -628,8 +664,6 @@ pub fn contains_sql_injection(sql: &str) -> bool {
         "-- ",
         "--+",
         "#",
-        "/* ",
-        "*/",
         // === 其他危险模式 ===
         "HAVING 1=1",
         "ORDER BY 1--",
@@ -677,6 +711,9 @@ fn contains_ddl_operation(sql: &str) -> bool {
 }
 
 /// Remove string literals from SQL to avoid false positives in variable detection
+///
+/// 单引号和双引号内容被视为字符串字面量并替换为空格。
+/// 反引号（MySQL 标识符引用）保留原始内容，因为它是标识符引用而非字符串字面量。
 fn remove_string_literals(sql: &str) -> String {
     let mut result = String::new();
     let mut in_string = false;
@@ -712,7 +749,9 @@ fn remove_string_literals(sql: &str) -> String {
             continue;
         }
 
-        if ch == '\'' || ch == '"' || ch == '`' {
+        // 仅将单引号和双引号视为字符串字面量分隔符
+        // 反引号是 MySQL 标识符引用（如 `table_name`），保留原始内容
+        if ch == '\'' || ch == '"' {
             in_string = true;
             string_char = ch;
             result.push(' '); // Replace string delimiters with space
@@ -722,6 +761,37 @@ fn remove_string_literals(sql: &str) -> String {
         result.push(ch);
     }
 
+    result
+}
+
+/// 移除 SQL 中的块注释（`/* ... */`），用等长空格替换以保持位置信息
+fn strip_block_comments(sql: &str) -> String {
+    let mut result = String::with_capacity(sql.len());
+    let mut chars = sql.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '/' && chars.peek() == Some(&'*') {
+            chars.next(); // consume '*'
+            result.push(' ');
+            result.push(' ');
+            // 消费直到 */ 或 EOF
+            loop {
+                match chars.next() {
+                    Some('*') if chars.peek() == Some(&'/') => {
+                        chars.next();
+                        result.push(' ');
+                        result.push(' ');
+                        break;
+                    }
+                    Some(c) => {
+                        result.push(if c == '\n' { '\n' } else { ' ' });
+                    }
+                    None => break,
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
     result
 }
 
@@ -771,16 +841,33 @@ fn extract_table_from_delete(delete: &Delete) -> Option<String> {
     }
 }
 
-fn extract_table_from_query(query: &Query) -> Option<String> {
+fn extract_table_from_query(query: &Query) -> (Option<String>, Vec<String>) {
     let SetExpr::Select(select) = query.body.as_ref() else {
-        return None;
+        return (None, Vec::new());
     };
 
     if select.from.is_empty() {
-        return None;
+        return (None, Vec::new());
     }
 
-    extract_table_name_from_table_with_joins(&select.from[0])
+    let mut all_tables = Vec::new();
+
+    // 提取 FROM 子句中所有表（包括 JOIN）
+    for from_item in &select.from {
+        // 主表
+        if let Some(name) = extract_table_name_from_table_with_joins(from_item) {
+            all_tables.push(name);
+        }
+        // JOIN 表
+        for join in &from_item.joins {
+            if let sqlparser::ast::TableFactor::Table { name, .. } = &join.relation {
+                all_tables.push(name.to_string());
+            }
+        }
+    }
+
+    let primary = all_tables.first().cloned();
+    (primary, all_tables)
 }
 
 /// Check if a variable is DDL-related
@@ -821,11 +908,16 @@ pub fn is_ddl_operation(sql: &str) -> bool {
 }
 
 /// 估算查询深度（简化版，通过嵌套括号）
+///
+/// 先剥离字符串字面量，避免字符串内的括号被错误计入深度。
+/// 例如 `WHERE note = '(select ...)'` 中的括号不应增加深度。
 fn estimate_query_depth(sql: &str) -> usize {
+    // 先移除字符串字面量，防止字符串内的括号干扰深度计算
+    let cleaned = remove_string_literals(sql);
     let mut depth: usize = 1;
     let mut max_depth: usize = 1;
 
-    for char in sql.chars() {
+    for char in cleaned.chars() {
         match char {
             '(' => {
                 depth += 1;
@@ -1205,9 +1297,9 @@ mod tests {
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 --+"));
         // # 注释 (MySQL)
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 #"));
-        // /* */ 块注释
-        assert!(contains_sql_injection("SELECT * /* comment */ FROM users"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 /* bypass */"));
+        // /* */ 块注释 — 合法块注释不应触发误报（已先剥离再匹配）
+        assert!(!contains_sql_injection("SELECT * /* comment */ FROM users"));
+        assert!(!contains_sql_injection("SELECT * FROM users WHERE id = 1 /* bypass */"));
     }
 
     /// 测试其他危险模式检测
