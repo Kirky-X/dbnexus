@@ -235,8 +235,11 @@ fn default_enabled() -> bool {
 
 /// 检查规则是否匹配当前上下文
 ///
-/// 通用匹配逻辑：检查主体、资源以及操作是否在 allow/deny 列表中。
+/// 通用匹配逻辑：检查主体、资源、操作以及条件是否在 allow/deny 列表中。
 /// 若操作既不在 allow 也不在 deny，则规则不匹配（提前过滤，避免无谓排序）。
+///
+/// 条件评估：若规则定义了 `condition`，则必须匹配上下文的 attributes 或 environment。
+/// 条件格式为 `key=value` 对（逗号分隔），所有条件必须满足（AND 语义）。
 fn matches_rule(rule: &PermissionRule, context: &PermissionContext) -> bool {
     // 检查主体匹配
     if rule.subject != "*" && rule.subject != context.subject.id {
@@ -257,27 +260,57 @@ fn matches_rule(rule: &PermissionRule, context: &PermissionContext) -> bool {
         return false;
     }
 
+    // 条件评估：若规则定义了 condition，必须匹配上下文属性
+    if let Some(ref condition) = rule.condition {
+        if !evaluate_condition(condition, context) {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// 评估条件表达式是否匹配上下文
+///
+/// 条件格式：`key=value` 对（逗号分隔），所有条件必须满足（AND 语义）。
+/// 查找顺序：先查 context.attributes，再查 context.environment。
+/// 无法解析的条件默认不匹配（fail-safe）。
+fn evaluate_condition(condition: &str, context: &PermissionContext) -> bool {
+    let condition = condition.trim();
+    if condition.is_empty() {
+        return true; // 空条件视为匹配
+    }
+
+    for pair in condition.split(',') {
+        let pair = pair.trim();
+        if let Some((key, expected)) = pair.split_once('=') {
+            let key = key.trim();
+            let expected = expected.trim();
+            // 先查 attributes，再查 environment
+            let actual = context.attributes.get(key).or_else(|| context.environment.get(key));
+            match actual {
+                Some(val) if val == expected => continue,
+                _ => return false,
+            }
+        } else {
+            // 无法解析的条件片段，fail-safe 拒绝
+            return false;
+        }
+    }
+
     true
 }
 
 /// 获取主体的所有角色（含继承）
 ///
-/// 优先从角色映射表中获取；若无映射，检查主体本身是否是预定义的角色
-/// （确保只返回预定义角色，防止安全问题）。
+/// 仅从角色映射表中获取，不允许 subject ID 直接匹配预定义角色名（防止权限提升）。
 fn get_subject_roles<V>(
     mapping: &HashMap<String, Vec<String>>,
-    roles: &HashMap<String, V>,
+    _roles: &HashMap<String, V>,
     subject: &str,
 ) -> Vec<String> {
-    // 优先从角色映射中获取
-    if let Some(roles_list) = mapping.get(subject) {
-        return roles_list.clone();
-    }
-    // 如果没有映射，检查 subject 本身是否是预定义的角色
-    if roles.contains_key(subject) {
-        return vec![subject.to_string()];
-    }
-    Vec::new()
+    // 仅从显式映射中获取角色，禁止 subject ID 直接匹配角色名
+    mapping.get(subject).cloned().unwrap_or_default()
 }
 
 /// 权限提供者 trait
@@ -598,6 +631,10 @@ impl PolicyDecisionPoint {
     }
 
     /// 检查速率限制
+    ///
+    /// 注意：DashMap `entry()` API 在条目生命周期内持有分片写锁，
+    /// 因此 read-check-increment 操作在同一分片内是原子的。
+    /// 不同 subject 之间互不影响（各自独立分片）。
     fn check_rate_limit(&self, subject_id: &str) -> bool {
         let key = subject_id.to_string();
         let now = Instant::now();
@@ -1221,7 +1258,7 @@ impl RbacPermissionProvider {
     /// 检查角色是否存在
     pub fn has_role(&self, role: &str) -> bool {
         if let Ok(roles) = self.roles.read() {
-            roles.contains_key(role) || self.get_subject_roles(role).contains(&role.to_string())
+            roles.contains_key(role)
         } else {
             false
         }

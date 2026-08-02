@@ -122,8 +122,11 @@ impl TokenBucket {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis() as i64;
+            .as_millis()
+            .min(i64::MAX as u128) as i64;
 
+        // 外层循环：有界重试（防止异常竞争下无限自旋）
+        let mut outer_retries = 0u32;
         loop {
             let last_refill = self.last_refill.load(Ordering::Relaxed);
             let elapsed_ms = now_ms - last_refill;
@@ -133,8 +136,11 @@ impl TokenBucket {
                 return;
             }
 
-            // 计算应添加的令牌数
-            let tokens_to_add = (elapsed_ms as u64 * self.refill_rate) / 1000;
+            // 计算应添加的令牌数（溢出保护）
+            let tokens_to_add = (elapsed_ms as u64)
+                .saturating_mul(self.refill_rate)
+                .saturating_div(1000)
+                .min(self.max_tokens);
 
             // 尝试更新 last_refill 时间戳（CAS）
             if self
@@ -143,9 +149,10 @@ impl TokenBucket {
                 .is_ok()
             {
                 // 成功更新时间戳，现在添加令牌
+                let mut inner_retries = 0u32;
                 loop {
                     let current_tokens = self.tokens.load(Ordering::Relaxed);
-                    let new_tokens = std::cmp::min(current_tokens + tokens_to_add, self.max_tokens);
+                    let new_tokens = std::cmp::min(current_tokens.saturating_add(tokens_to_add), self.max_tokens);
 
                     if self
                         .tokens
@@ -154,10 +161,20 @@ impl TokenBucket {
                     {
                         return;
                     }
-                    // CAS 失败，重试
+                    // CAS 失败，提示 CPU 并重试
+                    std::hint::spin_loop();
+                    inner_retries += 1;
+                    if inner_retries >= 100 {
+                        return; // 放弃，下次 refill 再试
+                    }
                 }
             }
-            // CAS 失败，其他线程已经更新了时间戳，重试整个循环
+            // CAS 失败，其他线程已经更新了时间戳
+            std::hint::spin_loop();
+            outer_retries += 1;
+            if outer_retries >= 100 {
+                return; // 有界退出
+            }
         }
     }
 
