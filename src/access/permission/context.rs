@@ -25,6 +25,31 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 /// 此值作为后备默认值使用，实际应从 `CacheConfig.policy_cache_capacity` 获取。
 const DEFAULT_POLICY_CACHE_CAPACITY: usize = 4096;
 
+/// 从同步上下文安全创建缓存
+///
+/// 处理两种运行场景：
+/// - 在 tokio 运行时内（async 上下文）：使用 `block_in_place` + `Handle::block_on`
+/// - 在 tokio 运行时外：创建临时运行时执行异步构建
+///
+/// # Panics
+///
+/// 若无 tokio 运行时且无法创建临时运行时，则 panic。
+fn create_cache_sync(capacity: usize) -> Cache<String, RolePolicy> {
+    let build_future = async { Cache::builder().capacity(capacity as u64).build().await };
+
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            // 在 tokio 运行时内，使用 block_in_place 避免 async 上下文死锁
+            tokio::task::block_in_place(|| handle.block_on(build_future)).expect("Failed to create cache")
+        }
+        Err(_) => {
+            // 无运行时，创建临时运行时
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+            rt.block_on(build_future).expect("Failed to create cache")
+        }
+    }
+}
+
 /// 权限上下文
 ///
 /// 注意：此结构体需要启用 `cache` feature 才能使用。
@@ -219,15 +244,13 @@ impl PermissionContext {
     ///
     /// 此方法为需要同步创建权限上下文的场景提供便利，例如在 Session 初始化过程中。
     /// 使用默认的缓存大小和速率限制配置。
+    ///
+    /// # Panics
+    ///
+    /// 在 async 上下文中调用时不会死锁（使用 `block_in_place`）。
+    /// 若无 tokio 运行时，会创建临时运行时。
     pub fn new_with_defaults(role: String) -> Self {
-        let cache = tokio::runtime::Handle::current()
-            .block_on(async {
-                Cache::builder()
-                    .capacity(DEFAULT_POLICY_CACHE_CAPACITY as u64)
-                    .build()
-                    .await
-            })
-            .expect("Failed to create cache");
+        let cache = create_cache_sync(DEFAULT_POLICY_CACHE_CAPACITY);
         Self {
             role,
             policy_cache: Arc::new(cache),
@@ -254,9 +277,7 @@ impl PermissionContext {
     /// * `config` - 数据库配置引用
     pub fn new_with_config(role: String, config: &crate::foundation::DbConfig) -> Self {
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
-        let cache = tokio::runtime::Handle::current()
-            .block_on(async { Cache::builder().capacity(cache_capacity as u64).build().await })
-            .expect("Failed to create cache");
+        let cache = create_cache_sync(cache_capacity);
         Self {
             role,
             policy_cache: Arc::new(cache),
@@ -375,54 +396,63 @@ impl PermissionContext {
             return Some(policy);
         }
 
-        // Step 2: 获取或创建 in_flight entry
-        let entry = self.in_flight.entry(self.role.clone()).or_insert_with(|| {
-            Arc::new(InFlightEntry {
-                result: TokioMutex::new(None),
-                done: Arc::new(AtomicBool::new(false)),
-            })
-        });
+        // Step 2: 获取或创建 in_flight entry（限定作用域，确保释放 DashMap 借用）
+        let result = {
+            let entry = self.in_flight.entry(self.role.clone()).or_insert_with(|| {
+                Arc::new(InFlightEntry {
+                    result: TokioMutex::new(None),
+                    done: Arc::new(AtomicBool::new(false)),
+                })
+            });
 
-        // 循环：follower 检测到 leader 失败后，重置 done 并重新获取锁作为 leader
-        loop {
-            // Step 3: 获得锁
-            let mut guard = entry.result.lock().await;
+            // 循环：follower 检测到 leader 失败后，重置 done 并重新获取锁作为 leader
+            loop {
+                // Step 3: 获得锁
+                let mut guard = entry.result.lock().await;
 
-            // Step 4: 检查 done 标志
-            if entry.done.load(Ordering::SeqCst) {
-                // Follower: leader 已完成，检测到 thundering herd
-                self.check_stats.record_stampede();
-                let leader_result = (*guard).clone();
-                if let Some(policy) = leader_result {
-                    // Leader 成功加载，返回结果
+                // Step 4: 检查 done 标志
+                if entry.done.load(Ordering::SeqCst) {
+                    // Follower: leader 已完成，检测到 thundering herd
+                    self.check_stats.record_stampede();
+                    let leader_result = (*guard).clone();
+                    if let Some(policy) = leader_result {
+                        // Leader 成功加载，返回结果
+                        drop(guard);
+                        self.check_stats.record_cache_hit();
+                        break Some(policy);
+                    }
+                    // Leader 加载失败（无 provider 等），重置 done 并重新循环
+                    entry.done.store(false, Ordering::SeqCst);
                     drop(guard);
-                    self.check_stats.record_cache_hit();
-                    return Some(policy);
+                    continue;
+                } else {
+                    // Step 5: Leader: 获得锁且 done = false，开始加载
+                    let result = self.do_load_policy();
+                    *guard = result.clone();
+
+                    // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
+                    entry.done.store(true, Ordering::SeqCst);
+
+                    // 释放锁
+                    drop(guard);
+
+                    // 异步缓存插入
+                    if let Some(ref policy) = result {
+                        self.policy_cache.set(&self.role, policy).await.ok();
+                    }
+
+                    break result;
                 }
-                // Leader 加载失败（无 provider 等），重置 done 并重新循环
-                // 重新获取锁后会走 leader 路径（持锁、设置 done=true），避免裸调 do_load_policy 违反 singleflight
-                entry.done.store(false, Ordering::SeqCst);
-                drop(guard);
-                continue;
-            } else {
-                // Step 5: Leader: 获得锁且 done = false，开始加载
-                let result = self.do_load_policy();
-                *guard = result.clone();
-
-                // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
-                entry.done.store(true, Ordering::SeqCst);
-
-                // 释放锁
-                drop(guard);
-
-                // 异步缓存插入
-                if let Some(ref policy) = result {
-                    self.policy_cache.set(&self.role, policy).await.ok();
-                }
-
-                return result;
             }
-        }
+        };
+
+        // 注意：in_flight 条目有意保留，不在此处移除。
+        // 原因：并发 follower 可能在 leader 完成后仍有延迟到达，
+        // 提前移除会导致 follower 创建新 entry 并触发重复加载（stampede 防护失效）。
+        // in_flight 条目内存开销很小（每个 role 一个 Arc<InFlightEntry>），
+        // 且角色数量通常有界。
+
+        result
     }
 
     /// 设置权限提供者
@@ -519,9 +549,26 @@ impl PermissionContext {
     /// # Returns
     ///
     /// 如果有权限返回 true，否则返回 false
-    pub async fn verify_operation(&self, table: &str, operation: &PermissionAction, _conditions: Option<&str>) -> bool {
+    ///
+    /// # 条件评估
+    ///
+    /// 若提供 `conditions`，当前实现会拒绝访问（fail-safe），
+    /// 因为行级安全策略需要行级上下文（当前不可用）。
+    /// 调用方应使用无条件的 `check_table_access` 进行表级权限检查。
+    pub async fn verify_operation(&self, table: &str, operation: &PermissionAction, conditions: Option<&str>) -> bool {
         // 基础权限检查
-        self.check_table_access(table, operation).await
+        if !self.check_table_access(table, operation).await {
+            return false;
+        }
+
+        // 条件评估：行级安全策略需要行级上下文，当前不支持
+        // 采用 fail-safe 策略：有未评估的条件时拒绝访问
+        if conditions.is_some() {
+            // TODO: 实现行级安全策略评估，需要传入行级上下文
+            return false;
+        }
+
+        true
     }
 
     /// 批量检查多个权限
