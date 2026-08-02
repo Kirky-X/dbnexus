@@ -34,8 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let warmup_config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 20,
-        min_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 20,
+            min_connections: 5,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -95,10 +98,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let migrate_config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
-        max_connections: 5,
-        min_connections: 1,
         migrations_dir: Some(temp_dir.clone()),
         auto_migrate: true,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

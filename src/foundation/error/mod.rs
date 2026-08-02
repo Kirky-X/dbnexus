@@ -44,6 +44,10 @@ pub enum DbError {
     #[error("Migration error: {0}")]
     Migration(String),
 
+    /// 缓存操作错误
+    #[error("Cache error: {0}")]
+    Cache(String),
+
     /// 数据验证错误（feature-gated: validation）
     #[cfg(feature = "validation")]
     #[error("Validation error: {0}")]
@@ -184,6 +188,25 @@ mod tests {
 
         let mig_err = DbError::Migration("migration failed".to_string());
         assert!(matches!(mig_err, DbError::Migration(_)));
+    }
+
+    /// 测试 DbError::Cache 变体 Display
+    #[test]
+    fn test_db_error_cache_variant_display() {
+        let error = DbError::Cache("connection refused".to_string());
+        let msg = error.to_string();
+        assert!(msg.contains("Cache"), "should contain 'Cache', got: {msg}");
+        assert!(
+            msg.contains("connection refused"),
+            "should contain 'connection refused', got: {msg}"
+        );
+    }
+
+    /// 测试 DbError::Cache 变体 match
+    #[test]
+    fn test_db_error_cache_variant_match() {
+        let error = DbError::Cache("timeout".to_string());
+        assert!(matches!(error, DbError::Cache(_)));
     }
 
     /// 测试 PoolError 显示

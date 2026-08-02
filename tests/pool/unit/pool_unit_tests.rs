@@ -23,11 +23,13 @@ mod common;
 async fn test_pool_builder_basic_initialization() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 2,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 2,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         ..Default::default()
     };
 
@@ -36,10 +38,10 @@ async fn test_pool_builder_basic_initialization() {
         .expect("Failed to create pool");
 
     // 验证配置正确应用
-    assert_eq!(pool.config().max_connections, 10);
-    assert_eq!(pool.config().min_connections, 2);
-    assert_eq!(pool.config().idle_timeout, 300);
-    assert_eq!(pool.config().acquire_timeout, 5000);
+    assert_eq!(pool.config().pool_config.max_connections, 10);
+    assert_eq!(pool.config().pool_config.min_connections, 2);
+    assert_eq!(pool.config().pool_config.idle_timeout, 300);
+    assert_eq!(pool.config().pool_config.acquire_timeout, 5000);
     assert_eq!(pool.config().admin_role, "admin");
 }
 
@@ -52,10 +54,10 @@ async fn test_pool_builder_default_values() {
     let pool = common::make_sqlite_memory_pool().await;
 
     // 验证默认值
-    assert_eq!(pool.config().max_connections, 20);
-    assert_eq!(pool.config().min_connections, 5);
-    assert_eq!(pool.config().idle_timeout, 300);
-    assert_eq!(pool.config().acquire_timeout, 5000);
+    assert_eq!(pool.config().pool_config.max_connections, 20);
+    assert_eq!(pool.config().pool_config.min_connections, 5);
+    assert_eq!(pool.config().pool_config.idle_timeout, 300);
+    assert_eq!(pool.config().pool_config.acquire_timeout, 5000);
     assert_eq!(pool.config().admin_role, "admin");
 }
 
@@ -67,8 +69,12 @@ async fn test_pool_builder_default_values() {
 async fn test_pool_builder_chained_configuration() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 15,
-        min_connections: 3,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 15,
+            min_connections: 3,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -76,8 +82,8 @@ async fn test_pool_builder_chained_configuration() {
         .await
         .expect("Failed to create pool");
 
-    assert_eq!(pool.config().max_connections, 15);
-    assert_eq!(pool.config().min_connections, 3);
+    assert_eq!(pool.config().pool_config.max_connections, 15);
+    assert_eq!(pool.config().pool_config.min_connections, 3);
 }
 
 /// TEST-U-POOL-004: 测试配置边界值 - 最小连接数等于最大连接数
@@ -88,8 +94,12 @@ async fn test_pool_builder_chained_configuration() {
 async fn test_pool_config_min_equals_max() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 5,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -97,8 +107,8 @@ async fn test_pool_config_min_equals_max() {
         .await
         .expect("Failed to create pool");
 
-    assert_eq!(pool.config().max_connections, 5);
-    assert_eq!(pool.config().min_connections, 5);
+    assert_eq!(pool.config().pool_config.max_connections, 5);
+    assert_eq!(pool.config().pool_config.min_connections, 5);
 }
 
 /// TEST-U-POOL-005: 测试配置验证 - min > max
@@ -109,13 +119,17 @@ async fn test_pool_config_min_equals_max() {
 fn test_pool_config_validation_min_greater_than_max() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 10,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 10,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
     // 配置已创建，值被设置
-    assert!(config.max_connections < config.min_connections);
+    assert!(config.pool_config.max_connections < config.pool_config.min_connections);
 }
 
 /// TEST-U-POOL-006: 测试配置验证 - 零连接数
@@ -125,12 +139,16 @@ fn test_pool_config_validation_min_greater_than_max() {
 fn test_pool_config_validation_zero_max_connections() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 0,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 0,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
     // 配置已创建，值被设置
-    assert_eq!(config.max_connections, 0);
+    assert_eq!(config.pool_config.max_connections, 0);
 }
 
 /// TEST-U-POOL-007: 测试配置验证 - 空 URL
@@ -162,7 +180,7 @@ async fn test_pool_initial_status() {
     let status = pool.status();
 
     // 初始状态下，total 和 active 应该是合理的值
-    assert!(status.total <= pool.config().max_connections);
+    assert!(status.total <= pool.config().pool_config.max_connections);
     assert_eq!(status.active, 0);
     assert_eq!(status.total, status.active + status.idle);
 }
@@ -226,9 +244,12 @@ async fn test_pool_max_connections_limit() {
     let max_connections = 3;
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections,
-        min_connections: 1,
-        acquire_timeout: 1000, // 短超时以便快速测试
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections,
+            min_connections: 1,
+            acquire_timeout: 1000, // 短超时以便快速测试
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -275,8 +296,12 @@ async fn test_pool_max_connections_limit() {
 async fn test_pool_connection_reuse() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -303,9 +328,13 @@ async fn test_pool_connection_reuse() {
 async fn test_pool_concurrent_connection_acquire() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        acquire_timeout: 2000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            acquire_timeout: 2000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -354,9 +383,13 @@ async fn test_pool_concurrent_connection_acquire() {
 async fn test_pool_acquire_timeout() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        acquire_timeout: 500, // 500ms 超时
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 500, // 500ms 超时
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -394,9 +427,13 @@ async fn test_pool_acquire_timeout() {
 async fn test_pool_timeout_then_release() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        acquire_timeout: 500,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 500,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -430,7 +467,11 @@ async fn test_pool_timeout_then_release() {
 fn test_pool_timeout_duration_conversion() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        acquire_timeout: 3000,
+        pool_config: dbnexus::foundation::PoolConfig {
+            acquire_timeout: 3000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -502,7 +543,11 @@ async fn test_pool_borrow_count_tracking() {
 async fn test_pool_max_active_tracking() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -626,7 +671,11 @@ async fn test_connection_lifecycle_borrow_tracking() {
 async fn test_connection_lifecycle_max_active_tracking() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 5,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 5,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -662,9 +711,13 @@ async fn test_connection_lifecycle_max_active_tracking() {
 async fn test_connection_lifecycle_wait_tracking() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        acquire_timeout: 500,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 500,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -707,12 +760,21 @@ fn test_pool_config_default_values_reasonable() {
     };
 
     // 验证默认值在合理范围内
-    assert!(config.max_connections > 0, "max_connections should be > 0");
-    assert!(config.max_connections <= 1000, "max_connections should be <= 1000");
-    assert!(config.min_connections > 0, "min_connections should be > 0");
-    assert!(config.min_connections <= config.max_connections, "min <= max");
-    assert!(config.idle_timeout >= 30, "idle_timeout should be >= 30");
-    assert!(config.acquire_timeout >= 1000, "acquire_timeout should be >= 1000");
+    assert!(config.pool_config.max_connections > 0, "max_connections should be > 0");
+    assert!(
+        config.pool_config.max_connections <= 1000,
+        "max_connections should be <= 1000"
+    );
+    assert!(config.pool_config.min_connections > 0, "min_connections should be > 0");
+    assert!(
+        config.pool_config.min_connections <= config.pool_config.max_connections,
+        "min <= max"
+    );
+    assert!(config.pool_config.idle_timeout >= 30, "idle_timeout should be >= 30");
+    assert!(
+        config.pool_config.acquire_timeout >= 1000,
+        "acquire_timeout should be >= 1000"
+    );
 }
 
 // ============================================================================
@@ -727,8 +789,12 @@ fn test_pool_config_default_values_reasonable() {
 async fn test_pool_single_connection() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -758,8 +824,12 @@ async fn test_pool_single_connection() {
 async fn test_pool_large_connection_pool() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 100,
-        min_connections: 10,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 100,
+            min_connections: 10,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -767,8 +837,8 @@ async fn test_pool_large_connection_pool() {
         .await
         .expect("Failed to create pool");
 
-    assert_eq!(pool.config().max_connections, 100);
-    assert_eq!(pool.config().min_connections, 10);
+    assert_eq!(pool.config().pool_config.max_connections, 100);
+    assert_eq!(pool.config().pool_config.min_connections, 10);
 }
 
 /// TEST-U-POOL-030: 测试快速获取释放连接
@@ -1125,10 +1195,14 @@ fn test_health_check_interval_above_maximum() {
 async fn test_wait_count_increments_during_contention() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 2,
-        min_connections: 1,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 
@@ -1191,10 +1265,14 @@ async fn test_wait_count_increments_during_contention() {
 async fn test_max_waiters_tracks_historical_peak() {
     let config = dbnexus::DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        acquire_timeout: 5000,
         admin_role: "admin".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 5000,
+            ..Default::default()
+        },
+
         ..Default::default()
     };
 

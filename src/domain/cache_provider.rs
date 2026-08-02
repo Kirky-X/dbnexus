@@ -9,16 +9,7 @@
 //! pulling in the `async-trait` crate. This mirrors the pattern used by
 //! `trait_kit::AsyncAutoBuilder` (see `trait-kit/src/core/meta.rs`).
 //!
-//! # Design (Rule 7: expose, don't paper over)
-//!
-//! `design.md` Decision 2 (lines 196-207) and `spec.md` R-dbnexus-module-001
-//! specify `DbError::cache(message)` for error mapping. The actual
-//! `DbError` enum (`src/foundation/error/mod.rs`) has **no `cache` variant**
-//! — the closest semantic match is `DbError::Config(String)`, which we use
-//! for cache-related errors surfaced by `DbCacheProvider` implementations.
-//! This divergence is documented here rather than silently papered over;
-//! a future change can add a dedicated `DbError::Cache(String)` variant if
-//! the codebase grows enough cache-related error paths to warrant it.
+//! Cache operation errors are reported via `DbError::Cache(..)`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -41,17 +32,14 @@ use crate::foundation::DbError;
 /// dispatch requires the explicit `Pin<Box>` indirection (Rust 1.91 supports
 /// `async fn` in trait but not `dyn` with native async methods).
 ///
-/// # Rule 7 divergence from `design.md`
+/// # Error mapping
 ///
-/// `design.md` wrote `DbError::cache(e.to_string())` for error mapping.
-/// `DbError` has no `cache` variant — we use `DbError::Config(String)` as
-/// the closest semantic match for cache-related configuration/operational
-/// errors. See the module-level docs for the full rationale.
+/// Cache operation failures are reported via `DbError::Cache(..)`.
 pub trait DbCacheProvider: Send + Sync {
     /// Retrieve a byte value from the cache by key.
     ///
     /// Returns `Ok(None)` if the key is absent (not an error condition).
-    /// Returns `Err(DbError::Config(..))` if the underlying cache backend
+    /// Returns `Err(DbError::Cache(..))` if the underlying cache backend
     /// reports an operational failure.
     #[allow(
         clippy::type_complexity,
@@ -62,7 +50,7 @@ pub trait DbCacheProvider: Send + Sync {
     /// Store a byte value in the cache with an optional TTL.
     ///
     /// If `ttl` is `None`, the implementation applies its default expiry
-    /// policy. Returns `Err(DbError::Config(..))` on backend failure.
+    /// policy. Returns `Err(DbError::Cache(..))` on backend failure.
     #[allow(
         clippy::type_complexity,
         reason = "Pin<Box<dyn Future + Send>> is the canonical dyn-compatible async trait dispatch type"

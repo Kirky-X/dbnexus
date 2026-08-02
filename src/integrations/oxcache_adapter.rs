@@ -18,12 +18,6 @@
 //!    returns `Arc<dyn CacheBackend + Send + Sync>` because `UnifiedCache`
 //!    is not object-safe (documented in OxcacheModule's module-level docs).
 //!    This adapter follows the actual OxcacheModule capability type.
-//!
-//! 2. **`DbError::cache(message)` → `DbError::Config(String)`**:
-//!    `spec.md` R-dbnexus-module-002 specifies `DbError::cache(message)` for
-//!    error mapping. `DbError` has no `cache` variant — we use
-//!    `DbError::Config(String)` with a `"cache ..."` prefix for traceability.
-//!    See `cache_provider.rs` module-level docs for the full rationale.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -68,7 +62,7 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
             self.cache
                 .get(key)
                 .await
-                .map_err(|e| DbError::Config(format!("cache get failed: {e}")))
+                .map_err(|e| DbError::Cache(format!("cache get failed: {e}")))
         })
     }
 
@@ -82,7 +76,7 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
             self.cache
                 .set(key, value, ttl)
                 .await
-                .map_err(|e| DbError::Config(format!("cache set failed: {e}")))
+                .map_err(|e| DbError::Cache(format!("cache set failed: {e}")))
         })
     }
 
@@ -91,7 +85,7 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
             self.cache
                 .delete(key)
                 .await
-                .map_err(|e| DbError::Config(format!("cache delete failed: {e}")))
+                .map_err(|e| DbError::Cache(format!("cache delete failed: {e}")))
         })
     }
 }
@@ -168,19 +162,19 @@ mod tests {
     }
 
     /// R-dbnexus-module-002 #6: error mapping — oxcache errors become
-    /// `DbError::Config`. Hard to trigger a real oxcache error, so we
-    /// verify the error type by checking that `DbError::Config` is the
+    /// `DbError::Cache`. Hard to trigger a real oxcache error, so we
+    /// verify the error type by checking that `DbError::Cache` is the
     /// variant used in the adapter (static check via `From`-like pattern).
     #[test]
-    fn adapter_error_mapping_uses_db_error_config() {
-        // The adapter's get/set/delete use DbError::Config(format!(...)).
+    fn adapter_error_mapping_uses_db_error_cache() {
+        // The adapter's get/set/delete use DbError::Cache(format!(...)).
         // Verify the variant exists and can be constructed with the
         // "cache ..." prefix pattern the adapter uses.
-        let err = DbError::Config("cache get failed: simulated".to_string());
+        let err = DbError::Cache("cache get failed: simulated".to_string());
         let msg = err.message();
         assert!(
-            msg.starts_with("cache get failed:"),
-            "error message should start with cache prefix, got: {msg}"
+            msg.contains("cache get failed:"),
+            "error message should contain cache failure info, got: {msg}"
         );
     }
 

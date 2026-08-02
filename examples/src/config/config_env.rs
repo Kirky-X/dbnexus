@@ -55,10 +55,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n📋 解析后的 DbConfig:");
     println!("  - url              : {}", config.url);
-    println!("  - max_connections   : {}", config.max_connections);
-    println!("  - min_connections   : {}", config.min_connections);
-    println!("  - idle_timeout (s)  : {}", config.idle_timeout);
-    println!("  - acquire_timeout(ms): {}", config.acquire_timeout);
+    println!("  - max_connections   : {}", config.pool_config.max_connections);
+    println!("  - min_connections   : {}", config.pool_config.min_connections);
+    println!("  - idle_timeout (s)  : {}", config.pool_config.idle_timeout);
+    println!("  - acquire_timeout(ms): {}", config.pool_config.acquire_timeout);
     println!("  - admin_role        : {}", config.admin_role);
     println!("  - auto_migrate      : {}", config.auto_migrate);
     println!("  - database_type     : {}", config.database_type().unwrap());

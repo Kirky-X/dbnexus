@@ -13,6 +13,7 @@
 
 #![cfg(feature = "duckdb")]
 
+use dbnexus::foundation::PoolConfig;
 use dbnexus::{DbConfig, DbPool};
 
 // ============================================================================
@@ -23,10 +24,12 @@ use dbnexus::{DbConfig, DbPool};
 async fn make_duckdb_pool() -> DbPool {
     let config = DbConfig {
         url: "duckdb::memory:".to_string(),
-        max_connections: 5,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
+        pool_config: PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 5000,
+        },
         admin_role: "admin".to_string(),
         ..Default::default()
     };
@@ -56,8 +59,11 @@ async fn test_duckdb_pool_creation_memory() {
 async fn test_duckdb_pool_creation_with_config() {
     let config = DbConfig {
         url: "duckdb::memory:".to_string(),
-        max_connections: 3,
-        min_connections: 1,
+        pool_config: PoolConfig {
+            max_connections: 3,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await;
@@ -225,10 +231,12 @@ async fn test_duckdb_pool_concurrent_sessions() {
     // max_connections=1 确保所有 session 复用同一连接（共享 :memory: 数据库）
     let config = DbConfig {
         url: "duckdb::memory:".to_string(),
-        max_connections: 1,
-        min_connections: 1,
-        idle_timeout: 300,
-        acquire_timeout: 10000,
+        pool_config: PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 10000,
+        },
         admin_role: "admin".to_string(),
         ..Default::default()
     };

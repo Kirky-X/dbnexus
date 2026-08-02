@@ -24,8 +24,11 @@ fn bench_connection_pool_with_config(c: &mut Criterion) {
 
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
-        max_connections: 10,
-        min_connections: 1,
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 10,
+            min_connections: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -55,10 +58,12 @@ fn bench_config_building(c: &mut Criterion) {
         b.iter(|| {
             let config = DbConfig {
                 url: "postgresql://user:pass@localhost/db".to_string(),
-                max_connections: 20,
-                min_connections: 5,
-                idle_timeout: 300,
-                acquire_timeout: 5000,
+                pool_config: dbnexus::foundation::PoolConfig {
+                    max_connections: 20,
+                    min_connections: 5,
+                    idle_timeout: 300,
+                    acquire_timeout: 5000,
+                },
                 ..Default::default()
             };
             black_box(config);
