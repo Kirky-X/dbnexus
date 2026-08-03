@@ -23,11 +23,15 @@ fn _assert_trait_impl(repo: &TestUserRepository) -> &dyn TestUserRepositoryTrait
 // T027: 运行时 CRUD 验证
 // ============================================================================
 
-/// 创建测试用 SQLite 内存池
+/// 创建测试用 SQLite 共享内存池
+///
+/// 使用共享内存模式，确保连接池中多个连接可以访问同一个内存数据库。
 async fn create_test_pool() -> DbPool {
-    DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create test pool")
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let url = format!("sqlite:file:repo_macro_test_{}?mode=memory&cache=shared", id);
+    DbPool::new(&url).await.expect("Failed to create test pool")
 }
 
 /// 初始化测试表

@@ -223,12 +223,16 @@ const CRUD_TEST_TABLE: &str = "crud_entity_test";
 /// 内部维护自己的连接池，每个内部连接到 `:memory:` 会创建独立的内存数据库，导致
 /// `CREATE TABLE` 在连接 A 上执行后，`INSERT` 在连接 B 上执行时找不到表。
 fn get_test_config_with_all_permissions() -> (dbnexus::DbConfig, tempfile::TempDir) {
+    // 始终使用文件型 SQLite，避免 `sqlite::memory:` 连接隔离问题
+    // （sea-orm 连接池内部每个连接到 `:memory:` 会创建独立内存数据库）
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
 
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+    let url = if cfg!(feature = "sqlite") {
         let db_path = dir.path().join("test.db");
         format!("sqlite://{}?mode=rwc", db_path.display())
-    });
+    } else {
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string())
+    };
 
     let perm_content = r#"
 roles:
@@ -236,10 +240,10 @@ roles:
     tables:
       - name: "*"
         operations:
-          - SELECT
-          - INSERT
-          - UPDATE
-          - DELETE
+          - select
+          - insert
+          - update
+          - delete
 "#;
 
     let perm_file = dir.path().join("perms.yaml");
