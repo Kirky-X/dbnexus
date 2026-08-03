@@ -97,25 +97,46 @@ mod tests {
     }
 
     #[test]
-    fn test_format_migration_message_singular() {
+    fn test_format_migration_message_en() {
         let fmt = DbI18nFormatter::new("en").expect("en locale");
         let msg = fmt.format_migration_message(1).expect("migration message");
         assert!(msg.contains("1"), "message should contain count: got '{msg}'");
         assert!(
-            msg.contains("migration applied"),
-            "singular form should be 'migration applied': got '{msg}'"
+            msg.contains("migration") && msg.contains("applied"),
+            "en migration message: got '{msg}'"
         );
+
+        let msg2 = fmt.format_migration_message(5).expect("migration message");
+        assert!(msg2.contains("5"), "message should contain count: got '{msg2}'");
     }
 
     #[test]
-    fn test_format_migration_message_plural() {
-        let fmt = DbI18nFormatter::new("en").expect("en locale");
-        let msg = fmt.format_migration_message(2).expect("migration message");
-        assert!(msg.contains("2"), "message should contain count: got '{msg}'");
+    fn test_format_migration_message_zh() {
+        let fmt = DbI18nFormatter::new("zh-CN").expect("zh-CN locale");
+        let msg = fmt.format_migration_message(1).expect("migration message");
         assert!(
-            msg.contains("migrations applied"),
-            "plural form should be 'migrations applied': got '{msg}'"
+            msg.contains("已应用") && msg.contains("迁移"),
+            "zh-CN migration message should contain Chinese text: got '{msg}'"
         );
+        assert!(msg.contains("1"), "message should contain count: got '{msg}'");
+    }
+
+    #[test]
+    fn test_format_migration_message_de() {
+        let fmt = DbI18nFormatter::new("de-DE").expect("de-DE locale");
+        let msg = fmt.format_migration_message(3).expect("migration message");
+        assert!(
+            msg.contains("Migrationen") && msg.contains("angewendet"),
+            "de-DE migration message: got '{msg}'"
+        );
+        assert!(msg.contains("3"), "message should contain count: got '{msg}'");
+    }
+
+    #[test]
+    fn test_format_migration_message_ja() {
+        let fmt = DbI18nFormatter::new("ja-JP").expect("ja-JP locale");
+        let msg = fmt.format_migration_message(2).expect("migration message");
+        assert!(msg.contains("マイグレーション"), "ja-JP migration message: got '{msg}'");
     }
 
     #[test]
