@@ -258,9 +258,12 @@ impl GlobalIndex {
 mod tests {
     use super::*;
 
-    /// 创建基于 SQLite 内存的 GlobalIndex 实例
+    /// 创建基于 SQLite 共享内存的 GlobalIndex 实例
+    ///
+    /// 使用共享内存模式，确保连接池中多个连接可以访问同一个内存数据库。
     async fn create_global_index() -> GlobalIndex {
-        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create DbPool");
+        let url = "sqlite:file:global_index_lib_test?mode=memory&cache=shared";
+        let pool = DbPool::new(url).await.expect("Failed to create DbPool");
         GlobalIndex::new(Arc::new(pool))
             .await
             .expect("Failed to create GlobalIndex")
