@@ -235,18 +235,18 @@ dbnexus = { path = "..", features = [
 duckdb = { version = "1.1", features = ["bundled"] }
 
 # Async runtime
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { workspace = true }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
-time = { version = "0.3", features = ["formatting", "parsing"] }
+time = { workspace = true }
 
 # Database
-sea-orm = { version = "2.0.0-rc.42", default-features = false, features = ["runtime-tokio-rustls", "sqlx-sqlite", "macros"] }
+sea-orm = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "sqlx-sqlite", "macros"] }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml_ng = "0.10"
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }
 toml = "^1.1"
 
 # Logging
@@ -256,7 +256,7 @@ tracing = "0.1"
 async-trait = "0.1"
 
 # Validation (macros_db_entity_v2 示例需要)
-validator = { version = "0.20", features = ["derive"] }
+validator = { workspace = true }
 
 [features]
 default = []
