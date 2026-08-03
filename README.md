@@ -131,7 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 💾 | **缓存** | oxcache 缓存（内部 moka L1 后端）（`cache` 特性） |
 | 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
 | 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性，0.3.0 新增） |
-| 🌍 | **国际化** | ICU4X locale 感知格式化（`i18n` 特性，0.4.0 新增） |
+| 🌍 | **国际化** | ICU4X locale 感知格式化（核心特性，始终可用） |
 
 </td>
 </tr>
@@ -356,7 +356,7 @@ dbnexus = { version = "0.4", features = [
     "global-index",     # 跨分片全局索引
     "permission-engine", # 高级权限引擎
     "authentication"   # JWT 认证 + 密码强度验证（0.3.0 新增）
-    # "i18n"           # ICU4X 国际化（0.4.0 新增）
+    # i18n 已为核心特性，始终可用，无需显式启用
 ] }
 
 # 配置

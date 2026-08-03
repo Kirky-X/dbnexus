@@ -55,6 +55,7 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 - 带 RAII 管理的连接池
 - 基本配置管理
 - 数据库驱动选择（SQLite、PostgreSQL、MySQL、DuckDB）
+- ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）
 
 **可选核心特性：**
 - `permission` - 基于角色的访问控制
@@ -74,7 +75,6 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 - `global-index` - 跨分片全局索引
 - `ladybug` - 嵌入式图数据库（0.4.0 新增）
 - `neo4j` - Neo4j 图数据库服务器（0.4.0 新增）
-- `i18n` - ICU4X 国际化格式化（0.4.0 新增）
 - `kit` - trait-kit 能力管理集成（0.4.0 新增）
 
 **特性依赖关系（编译时强制）：**
@@ -264,10 +264,10 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
 
 ### 9. 国际化模块 (`i18n/`)
 
-基于 ICU4X 的 locale 感知格式化（0.4.0 新增）。
+基于 ICU4X 的 locale 感知格式化（核心特性，始终可用）。
 
 - `i18n/mod.rs` — 模块入口
-- `i18n/i18n_impl.rs` — `DbI18nFormatter`、`I18nError`（cfg = "i18n"）
+- `i18n/i18n_impl.rs` — `DbI18nFormatter`、`I18nError`
 
 ### 自动生成模块
 
