@@ -35,19 +35,19 @@
 pub use super::permission::PermissionAction;
 use async_trait::async_trait;
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 /// 预编译的正则表达式，用于检测路径遍历攻击模式
-/// 使用 once_cell 确保线程安全的单次初始化
-static PATH_TRAVERSAL_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
+/// 使用 LazyLock 确保线程安全的单次初始化
+static PATH_TRAVERSAL_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
 
 /// 检查配置路径是否安全
 ///
