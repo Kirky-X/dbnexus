@@ -465,6 +465,36 @@ impl Session {
                 let state = self.state.lock().await;
                 state.transaction.clone()
             };
+
+            // retry feature: 幂等查询自动重试 + 指数退避
+            #[cfg(feature = "retry")]
+            {
+                if let Some(ref policy) = self.pool_inner.config.retry_policy {
+                    if crate::reliability::is_idempotent_operation(sql) {
+                        let mut last_error: Option<DbError> = None;
+                        // 首次执行 + 重试循环
+                        for attempt in 0..=policy.max_retries {
+                            if attempt > 0 {
+                                let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
+                                tokio::time::sleep(backoff).await;
+                            }
+                            let result = if let Some(ref tx) = tx_opt {
+                                tx.execute_unprepared(sql).await.map_err(DbError::Connection)
+                            } else {
+                                let conn = self.connection()?;
+                                conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+                            };
+                            match result {
+                                Ok(exec_result) => return Ok(exec_result),
+                                Err(e) => last_error = Some(e),
+                            }
+                        }
+                        return Err(last_error.unwrap());
+                    }
+                }
+            }
+
+            // 无重试路径（retry 未启用或非幂等操作）
             if let Some(tx) = tx_opt {
                 return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
             }
@@ -472,6 +502,16 @@ impl Session {
             let conn = self.connection()?;
             conn.execute_unprepared(sql).await.map_err(DbError::Connection)
         }
+    }
+
+    /// 计算重试退避时间（retry feature 内部辅助方法）
+    #[cfg(feature = "retry")]
+    fn calculate_retry_backoff(policy: &crate::reliability::RetryPolicy, attempt: u32) -> std::time::Duration {
+        use std::time::Duration;
+        let base_ms = policy.initial_backoff_ms as f64;
+        let backoff_ms = base_ms * policy.multiplier.powi(attempt as i32);
+        let capped_ms = backoff_ms.min(policy.max_backoff_ms as f64);
+        Duration::from_millis(capped_ms as u64)
     }
 
     /// 执行 DDL 操作（允许创建表、删除表等操作）
