@@ -256,7 +256,7 @@ tracing = "0.1"
 async-trait = "0.1"
 
 # Validation (macros_db_entity_v2 示例需要)
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 
 [features]
 default = []
