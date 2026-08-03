@@ -642,35 +642,19 @@ impl DbPool {
         Ok(None)
     }
 
-    /// 使用 JSON 直接解析权限配置
-    #[cfg(all(feature = "permission", feature = "json"))]
-    fn parse_permission_json(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
-    }
-
     /// 解析权限配置
-    /// 优先使用 JSON 格式（YAML 是 JSON 的超集，serde_yaml_ng 也能解析 JSON）
+    ///
+    /// 使用 `serde_yaml_ng` 解析（YAML 是 JSON 超集，兼容两种输入）。
     #[cfg(feature = "permission")]
     fn parse_permission_yaml(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        // 直接使用 JSON 解析
-        #[cfg(feature = "json")]
+        #[cfg(feature = "yaml")]
         {
-            Self::parse_permission_json(content, source)
+            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
         }
-        #[cfg(not(feature = "json"))]
+        #[cfg(not(feature = "yaml"))]
         {
-            // 如果没有 json feature，使用 serde_yaml_ng 直接解析
-            #[cfg(feature = "yaml")]
-            {
-                serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
-            }
-            #[cfg(not(feature = "yaml"))]
-            {
-                Err(format!(
-                    "Cannot parse permission config from '{}': neither JSON nor YAML support available",
-                    source
-                ))
-            }
+            let _ = (content, source);
+            Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
         }
     }
 
