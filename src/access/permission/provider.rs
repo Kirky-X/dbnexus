@@ -171,34 +171,19 @@ impl YamlPermissionProvider {
         }
     }
 
-    /// 解析权限配置内容
-    /// 直接使用 JSON 解析
-    #[cfg(feature = "json")]
-    fn parse_json_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        serde_json::from_str(content).map_err(|e| format!("JSON parse error in '{}': {}", source, e))
-    }
-
     /// 使用 `serde_yaml_ng` 解析 YAML 内容
+    ///
+    /// YAML 是 JSON 的超集，因此 `serde_yaml_ng` 同时兼容 JSON 输入，
+    /// 无需根据 `json` feature 切换解析器。
     fn parse_yaml_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
-        // 直接使用 JSON 解析
-        #[cfg(feature = "json")]
+        #[cfg(feature = "yaml")]
         {
-            Self::parse_json_content(content, source)
+            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
         }
-        #[cfg(not(feature = "json"))]
+        #[cfg(not(feature = "yaml"))]
         {
-            // 如果没有 json feature，使用 serde_yaml_ng 直接解析
-            #[cfg(feature = "yaml")]
-            {
-                serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
-            }
-            #[cfg(not(feature = "yaml"))]
-            {
-                Err(format!(
-                    "Cannot parse permission config from '{}': neither JSON nor YAML support available",
-                    source
-                ))
-            }
+            let _ = (content, source);
+            Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
         }
     }
 
@@ -250,26 +235,18 @@ impl RefreshablePermissionProvider for YamlPermissionProvider {
 }
 
 /// 使用 `serde_yaml_ng` 异步解析 YAML 内容（独立函数）
+///
+/// YAML 是 JSON 的超集，因此 `serde_yaml_ng` 同时兼容 JSON 输入，
+/// 无需根据 `json` feature 切换解析器。
 async fn parse_permission_yaml_async(content: &str, source: &str) -> Result<PermissionConfig, String> {
-    // 直接使用 JSON 解析
-    #[cfg(feature = "json")]
+    #[cfg(feature = "yaml")]
     {
-        serde_json::from_str(content).map_err(|e| format!("Config deserialization error in '{}': {}", source, e))
+        serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
     }
-    #[cfg(not(feature = "json"))]
+    #[cfg(not(feature = "yaml"))]
     {
-        // 如果没有 json feature，使用 serde_yaml_ng 直接解析
-        #[cfg(feature = "yaml")]
-        {
-            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
-        }
-        #[cfg(not(feature = "yaml"))]
-        {
-            Err(format!(
-                "Cannot parse permission config from '{}': neither JSON nor YAML support available",
-                source
-            ))
-        }
+        let _ = (content, source);
+        Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
     }
 }
 
