@@ -55,6 +55,12 @@ fn test_db_config_custom_values() {
         permissions_path: Some("/etc/permissions.yaml".to_string()),
         migrations_dir: Some(std::path::PathBuf::from("/etc/migrations")),
         cache_config: CacheConfig::default(),
+        #[cfg(feature = "retry")]
+        retry_policy: None,
+        #[cfg(feature = "failover")]
+        failover_config: None,
+        #[cfg(feature = "replica-routing")]
+        replica_config: None,
     };
     assert_eq!(config.url, "postgres://localhost/db");
     assert_eq!(config.pool_config.max_connections, 50);

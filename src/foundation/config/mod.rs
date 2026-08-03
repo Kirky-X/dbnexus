@@ -33,5 +33,11 @@
 mod types;
 
 pub use types::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
+
+#[cfg(feature = "failover")]
+pub use types::FailoverConfig;
+
+#[cfg(feature = "replica-routing")]
+pub use types::ReplicaConfig;
 // 注意: DbError 和 DbResult 已迁移到 crate::error 模块
 // 请使用 crate::error::{DbError, DbResult} 代替
