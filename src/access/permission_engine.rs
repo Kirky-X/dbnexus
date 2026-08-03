@@ -870,37 +870,29 @@ impl YamlPermissionProvider {
             roles: HashMap<String, Vec<PermissionRule>>,
         }
 
-        // 直接使用 JSON 解析
-        #[cfg(feature = "json")]
+        // 使用 serde_yaml_ng 解析（YAML 是 JSON 超集，兼容两种输入）
+        #[cfg(feature = "yaml")]
         {
-            let config: YamlConfig = serde_json::from_str(&content)?;
+            let config: YamlConfig = serde_yaml_ng::from_str(&content)?;
 
             // 更新角色权限
             if let Ok(mut roles) = self.roles.write() {
                 *roles = config.roles;
             }
         }
-        #[cfg(not(feature = "json"))]
+        #[cfg(not(feature = "yaml"))]
         {
-            // 如果没有 json feature，使用 serde_yaml_ng 直接解析
-            #[cfg(feature = "yaml")]
-            {
-                let config: YamlConfig = serde_yaml_ng::from_str(&content)?;
-
-                // 更新角色权限
-                if let Ok(mut roles) = self.roles.write() {
-                    *roles = config.roles;
-                }
-            }
-            #[cfg(not(feature = "yaml"))]
-            {
-                return Err("Cannot parse permission config: neither JSON nor YAML support available".into());
-            }
+            return Err("Cannot parse permission config: 'yaml' feature is not enabled".into());
         }
 
-        // 初始化角色映射（从角色定义中提取）
+        // 构建角色映射：每个角色名映射到自身（subject 通过角色名匹配）
         if let Ok(mut role_mapping) = self.role_mapping.write() {
             role_mapping.clear();
+            if let Ok(roles) = self.roles.read() {
+                for role_name in roles.keys() {
+                    role_mapping.insert(role_name.clone(), vec![role_name.clone()]);
+                }
+            }
         }
 
         if let Ok(mut last_refresh) = self.last_refresh.write() {
