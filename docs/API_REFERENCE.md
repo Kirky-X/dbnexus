@@ -1099,7 +1099,7 @@ session.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
 
 **权限控制：** `PermissionAction` 新增 `Traverse` 和 `Match` 变体用于图操作权限控制。
 
-### 国际化格式化（需要 `i18n` 特性）
+### 国际化格式化（核心特性，始终可用）
 
 基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。
 

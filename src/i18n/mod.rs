@@ -9,11 +9,7 @@
 //! migration timestamps, and sorting SQL error messages by locale-specific
 //! collation rules.
 //!
-//! Enable with the `i18n` cargo feature:
-//! ```toml
-//! [dependencies]
-//! dbnexus = { version = "...", features = ["i18n"] }
-//! ```
+//! This is a **core feature** — always available, no feature flag required.
 //!
 //! # Example
 //!

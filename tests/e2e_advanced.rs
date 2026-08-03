@@ -1135,9 +1135,8 @@ mod authentication_advanced {
 }
 
 // ============================================================================
-// i18n 高级边界测试（i18n feature）
+// i18n 高级边界测试（核心特性，始终可用）
 // ============================================================================
-#[cfg(feature = "i18n")]
 mod i18n_advanced {
     use dbnexus::{DbI18nFormatter, I18nError};
     use std::cmp::Ordering;

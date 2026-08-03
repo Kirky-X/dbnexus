@@ -88,6 +88,7 @@ default-no-db = [
     "macros",
     "config-env",
     "with-time",
+    "i18n",
 ]
 
 # === 运行时 (互斥 - 必须且只能选一个) ===
@@ -164,8 +165,8 @@ audit = ["chrono", "uuid"]  # 审计日志
 permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
-# === 国际化 ===
-i18n = ["dep:icu", "dep:writeable"]  # ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）
+# === 国际化（核心特性，始终可用） ===
+i18n = []  # ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）— 核心必备特性，icu/writeable 为非可选依赖
 
 # === 开发工具 ===
 dev = []
@@ -176,7 +177,7 @@ cli-tests = []
 
 # === 预设配置 ===
 # 嵌入式/边缘设备 - 超轻量配置
-embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]
+embedded = ["runtime-tokio-rustls", "sqlite", "config-env", "i18n"]
 
 # 微服务 - 优化的配置
 microservice = [
@@ -186,6 +187,7 @@ microservice = [
     "sql-parser",
     "config-env",
     "observability",
+    "i18n",
 ]
 
 # 单体应用 - 完整配置
@@ -198,6 +200,7 @@ monolith = [
     "data-management",
     "security",
     "observability",
+    "i18n",
 ]
 
 # 企业级 - 全功能配置
@@ -256,9 +259,9 @@ bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
 
-# ICU4X 国际化（i18n feature）— 必须在 [dependencies.xxx] 子表头之前声明
-icu = { version = "2.2", optional = true }
-writeable = { version = "0.6", optional = true }
+# ICU4X 国际化（核心特性，始终可用）
+icu = "2.2"
+writeable = "0.6"
 
 # Tracing / OpenTelemetry（tracing feature）
 tracing = { version = "0.1", optional = true }
@@ -664,7 +667,7 @@ required-features = ["sqlite"]
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e_advanced.rs"
-required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication", "i18n", "tracing"]
+required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication", "tracing"]
 
 [dev-dependencies.testcontainers]
 version = "0.27"
