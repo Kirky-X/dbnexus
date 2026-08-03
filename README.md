@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | ✅ | **过程宏** | 自动生成 CRUD 方法和权限检查 |
 | ✅ | **SQL 解析器** | 提取操作类型和目标表 |
 | ✅ | **事务支持** | 完整的事务管理 |
-| ✅ | **多数据库支持** | SQLite、PostgreSQL、MySQL、DuckDB |
+| ✅ | **多数据库支持** | SQLite、PostgreSQL、MySQL、DuckDB、Ladybug、Neo4j |
 
 </td>
 <td width="50%" style="vertical-align:top; padding: 16px; border-radius:8px; border:1px solid #E2E8F0;">
@@ -131,6 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 💾 | **缓存** | oxcache 缓存（内部 moka L1 后端）（`cache` 特性） |
 | 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
 | 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性，0.3.0 新增） |
+| 🌍 | **国际化** | ICU4X locale 感知格式化（`i18n` 特性，0.4.0 新增） |
 
 </td>
 </tr>
@@ -299,6 +300,12 @@ dbnexus = { version = "0.4", features = ["mysql"] }
 
 # DuckDB（嵌入式分析型数据库，0.3.0 新增）
 dbnexus = { version = "0.4", features = ["duckdb"] }
+
+# Ladybug（嵌入式图数据库，0.4.0 新增）
+dbnexus = { version = "0.4", features = ["ladybug"] }
+
+# Neo4j（图数据库服务器，0.4.0 新增）
+dbnexus = { version = "0.4", features = ["neo4j"] }
 ```
 
 ### 协议兼容数据库
@@ -349,6 +356,7 @@ dbnexus = { version = "0.4", features = [
     "global-index",     # 跨分片全局索引
     "permission-engine", # 高级权限引擎
     "authentication"   # JWT 认证 + 密码强度验证（0.3.0 新增）
+    # "i18n"           # ICU4X 国际化（0.4.0 新增）
 ] }
 
 # 配置
@@ -368,7 +376,7 @@ dbnexus = { version = "0.4", features = [
 <table style="width:100%; max-width: 800px;">
 <tr>
 <td align="center" width="33%" style="padding: 16px;">
-<a href="USER_GUIDE.md" style="text-decoration:none;">
+<a href="docs/USER_GUIDE.md" style="text-decoration:none;">
 <div style="padding: 24px; border-radius:12px; transition: transform 0.2s;">
 <b style="color:#1E293B;">📖 用户指南</b>
 </div>
@@ -400,9 +408,9 @@ dbnexus = { version = "0.4", features = [
 
 | 资源 | 描述 |
 |------|------|
-| 📖 [用户指南](USER_GUIDE.md) | 使用 DBNexus 的全面指南 |
-| 📘 [API 参考](API_REFERENCE.md) | 完整 API 文档 |
-| 🏗️ [架构文档](ARCHITECTURE.md) | 系统架构和设计决策 |
+| 📖 [用户指南](docs/USER_GUIDE.md) | 使用 DBNexus 的全面指南 |
+| 📘 [API 参考](docs/API_REFERENCE.md) | 完整 API 文档 |
+| 🏗️ [架构文档](docs/ARCHITECTURE.md) | 系统架构和设计决策 |
 | 📦 [示例](examples/) | 可运行的代码示例 |
 
 ---
@@ -422,14 +430,16 @@ dbnexus = { version = "0.4", features = [
 #### 📝 高级配置
 
 ```rust
-use dbnexus::{DbPool, DbConfig};
+use dbnexus::{DbPool, DbConfig, PoolConfig};
 
 let config = DbConfig {
     url: "postgresql://user:pass@localhost/db".to_string(),
-    max_connections: 20,
-    min_connections: 5,
-    idle_timeout: 300,
-    acquire_timeout: 5000,
+    pool_config: PoolConfig {
+        max_connections: 20,
+        min_connections: 5,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+    },
     ..Default::default()
 };
 
@@ -527,7 +537,7 @@ graph TD
     D --> E[Sea-ORM / SQLx<br/>数据库驱动<br/>查询构建器]
 ```
 
-查看 [ARCHITECTURE.md](ARCHITECTURE.md) 获取详细的架构文档。
+查看 [ARCHITECTURE.md](docs/ARCHITECTURE.md) 获取详细的架构文档。
 
 ---
 
@@ -590,7 +600,7 @@ make docker-down
 
 <div align="center" style="margin: 24px 0;">
 
-欢迎贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 获取详细的贡献指南。
+欢迎贡献！请查看 [CONTRIBUTING.md](docs/CONTRIBUTING.md) 获取详细的贡献指南。
 
 </div>
 
