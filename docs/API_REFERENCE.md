@@ -13,6 +13,7 @@ DBNexus 的完整 API 文档。
 - [错误类型](#错误类型)
 - [特性门控 API](#特性门控-api)
 - [0.3.0 新增 API](#030-新增-api)
+- [0.4.0 新增 API](#040-新增-api)
 
 ---
 
@@ -65,10 +66,16 @@ pub async fn try_from_config(config: DbConfig) -> DbResult<Self>
 
 **示例：**
 ```rust
-let config = DbConfigBuilder::new()
-    .url("postgresql://localhost/db")
-    .max_connections(20)
-    .build()?;
+use dbnexus::{DbConfig, PoolConfig};
+
+let config = DbConfig {
+    url: "postgresql://localhost/db".to_string(),
+    pool_config: PoolConfig {
+        max_connections: 20,
+        ..Default::default()
+    },
+    ..Default::default()
+};
 
 let pool = DbPool::try_from_config(config).await?;
 ```
@@ -89,10 +96,16 @@ pub async fn with_config(config: DbConfig) -> DbResult<Self>
 
 **示例：**
 ```rust
-let config = DbConfigBuilder::new()
-    .url("postgresql://localhost/db")
-    .max_connections(20)
-    .build()?;
+use dbnexus::{DbConfig, PoolConfig};
+
+let config = DbConfig {
+    url: "postgresql://localhost/db".to_string(),
+    pool_config: PoolConfig {
+        max_connections: 20,
+        ..Default::default()
+    },
+    ..Default::default()
+};
 
 let pool = DbPool::with_config(config).await?;
 ```
@@ -289,17 +302,9 @@ pub struct PoolStatus {
 pub struct DbConfig {
     pub url: String,
 
-    #[serde(default = "default_max_connections")]
-    pub max_connections: u32,
-
-    #[serde(default = "default_min_connections")]
-    pub min_connections: u32,
-
-    #[serde(default = "default_idle_timeout")]
-    pub idle_timeout: u64,
-
-    #[serde(default = "default_acquire_timeout")]
-    pub acquire_timeout: u64,
+    /// 连接池配置（通过 `#[serde(flatten)]` 扁平化，保持序列化向后兼容）
+    #[serde(flatten)]
+    pub pool_config: PoolConfig,
 
     #[serde(default)]
     pub permissions_path: Option<String>,
@@ -324,6 +329,27 @@ pub struct DbConfig {
 
     #[serde(default)]
     pub cache_config: CacheConfig,
+}
+```
+
+> **注意：** `DbConfig` 通过 `#[serde(flatten)]` 将 `PoolConfig` 的字段扁平化到序列化格式中，因此 YAML/JSON 中直接写 `max_connections` 等字段即可。但 Rust 代码中需通过 `config.pool_config.max_connections` 访问。
+
+**`PoolConfig` 结构：**
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolConfig {
+    #[serde(default = "default_max_connections")]
+    pub max_connections: u32,
+
+    #[serde(default = "default_min_connections")]
+    pub min_connections: u32,
+
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout: u64,
+
+    #[serde(default = "default_acquire_timeout")]
+    pub acquire_timeout: u64,
 }
 ```
 
@@ -739,6 +765,9 @@ pub enum DbError {
     /// 迁移错误
     Migration(String),
 
+    /// 缓存操作错误
+    Cache(String),
+
     /// 数据验证错误（feature-gated: validation）
     #[cfg(feature = "validation")]
     Validation(String),
@@ -936,11 +965,23 @@ use dbnexus::{ShardRouter, ShardConfig, ShardingStrategy};
 let router = ShardRouter::with_strategy("hash", 4);
 let shard_id = router.shard_id_for_key("user_123");
 
-// 会话级分片路由（0.3.0 新增）
-let session = pool.get_session_for_shard("user_123", "admin").await?;
+// 会话级分片路由（0.3.0 新增，注意：方法在 ShardRouter 上，非 DbPool）
+let session = router.get_session_for_shard("user_123", "admin").await?;
+
+// 同时返回分片 ID（便于后续绑定检查）
+let (session, shard_id) = router.get_session_for_shard_with_id("user_42", "admin").await?;
 ```
 
-**导出类型：** `ShardRouter`、`ShardConfig`、`ShardingStrategy`
+**API 说明：**
+
+- `ShardRouter::with_strategy(strategy: &str, total_shards: u32) -> Self` — 按策略名创建（同步方法）
+- `ShardRouter::with_config(config: &ShardConfig) -> Result<Self, DbError>` — 异步并行初始化所有分片连接池
+- `router.shard_id_for_key(shard_key: &str) -> u32` — 根据 key 计算分片 ID
+- `router.get_session_for_shard(shard_key, role) -> Result<Session, DbError>` — 获取分片对应的 Session（async）
+- `router.get_session_for_shard_with_id(shard_key, role) -> Result<(Session, u32), DbError>` — 同时返回分片 ID
+- `router.calculate_shard(timestamp, key) -> u32` — 按时间+key 计算分片
+
+**导出类型：** `ShardRouter`、`ShardConfig`、`ShardingStrategy`、`create_strategy`
 
 ### 全局索引（需要 `global-index` 特性）
 
@@ -1023,6 +1064,63 @@ let kit = DbNexusKit::new();
 ```
 
 **导出类型：** `DbNexusKit`
+
+---
+
+## 0.4.0 新增 API
+
+### 图数据库支持（需要 `ladybug` 或 `neo4j` 特性）
+
+嵌入式图数据库（Ladybug）和服务器端图数据库（Neo4j）支持，通过 `GraphConnection` trait 统一抽象。图数据库与关系型数据库不互斥，可混合使用。
+
+```rust
+use dbnexus::{LadybugConnection, GraphConnection, GraphNode, GraphQueryResult};
+
+// Ladybug 嵌入式图数据库
+let conn = LadybugConnection::new("ladybug:path/to/graph.db")?;
+let result = conn.execute_cypher("MATCH (n) RETURN n").await?;
+
+// Neo4j 服务器端图数据库
+use dbnexus::Neo4jConnection;
+let conn = Neo4jConnection::new("neo4j://localhost:7687", "user", "pass").await?;
+let result = conn.execute_cypher("MATCH (n) RETURN n").await?;
+```
+
+**导出类型：** `LadybugConnection`、`Neo4jConnection`、`GraphConnection`、`GraphExecResult`、`GraphNode`、`GraphQueryResult`、`GraphRel`、`GraphRow`、`GraphTransaction`、`GraphValue`
+
+**Session 图事务支持：**
+
+```rust
+// Session 支持图事务（execute_cypher）
+session.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
+```
+
+**权限控制：** `PermissionAction` 新增 `Traverse` 和 `Match` 变体用于图操作权限控制。
+
+### 国际化格式化（需要 `i18n` 特性）
+
+基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。
+
+```rust
+use dbnexus::{DbI18nFormatter, I18nError};
+
+let formatter = DbI18nFormatter::new("zh-CN")?;
+let formatted = formatter.format_number(1234567.89);
+```
+
+**导出类型：** `DbI18nFormatter`、`I18nError`
+
+### trait-kit 集成（需要 `kit` 特性）
+
+基于 `trait-kit` 0.3 的统一能力管理，将 DBNexus 作为 trait-kit 模块集成。
+
+```rust
+use dbnexus::DbNexusModule;
+
+let module = DbNexusModule::new(/* ... */);
+```
+
+**导出类型：** `DbNexusModule`、`OxcacheDbCacheAdapter`（需要 `oxcache-integration` 特性）
 
 ---
 
