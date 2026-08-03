@@ -35,7 +35,7 @@ fn test_new_generator_invalid_machine_id() {
 #[test]
 fn test_generated_id_is_nonzero() {
     let id_gen = SnowflakeIdGenerator::new(1, 1_700_000_000_000).unwrap();
-    let id = id_gen.next_id();
+    let id = id_gen.next_id().expect("ID generation should succeed");
     assert_ne!(id, 0, "Generated ID should not be 0");
 }
 
@@ -44,7 +44,7 @@ fn test_ids_are_monotonically_increasing() {
     let id_gen = SnowflakeIdGenerator::new(5, 1_700_000_000_000).unwrap();
     let mut prev_id = 0u64;
     for _ in 0..10_000 {
-        let id = id_gen.next_id();
+        let id = id_gen.next_id().expect("ID generation should succeed");
         assert!(id > prev_id, "IDs must be monotonically increasing: {id} <= {prev_id}");
         prev_id = id;
     }
@@ -55,7 +55,7 @@ fn test_ids_are_unique() {
     let id_gen = SnowflakeIdGenerator::new(10, 1_700_000_000_000).unwrap();
     let mut ids = HashSet::new();
     for _ in 0..10_000 {
-        let id = id_gen.next_id();
+        let id = id_gen.next_id().expect("ID generation should succeed");
         assert!(ids.insert(id), "Duplicate ID generated: {id}");
     }
 }
@@ -68,7 +68,7 @@ fn test_ids_are_unique() {
 fn test_parse_id_extracts_machine_id() {
     let machine_id = 42;
     let id_gen = SnowflakeIdGenerator::new(machine_id, 1_700_000_000_000).unwrap();
-    let id = id_gen.next_id();
+    let id = id_gen.next_id().expect("ID generation should succeed");
     let components = id_gen.parse_id(id);
     assert_eq!(components.machine_id, machine_id);
 }
@@ -76,7 +76,7 @@ fn test_parse_id_extracts_machine_id() {
 #[test]
 fn test_parse_id_timestamp_is_positive() {
     let id_gen = SnowflakeIdGenerator::new(1, 1_700_000_000_000).unwrap();
-    let id = id_gen.next_id();
+    let id = id_gen.next_id().expect("ID generation should succeed");
     let components = id_gen.parse_id(id);
     assert!(components.timestamp_ms > 0, "Timestamp should be positive");
 }
@@ -84,7 +84,7 @@ fn test_parse_id_timestamp_is_positive() {
 #[test]
 fn test_parse_id_sequence_starts_at_zero() {
     let id_gen = SnowflakeIdGenerator::new(1, 1_700_000_000_000).unwrap();
-    let id = id_gen.next_id();
+    let id = id_gen.next_id().expect("ID generation should succeed");
     let components = id_gen.parse_id(id);
     // 第一个 ID 的 sequence 应为 0（新毫秒重置）
     assert_eq!(components.sequence, 0);
@@ -94,7 +94,7 @@ fn test_parse_id_sequence_starts_at_zero() {
 fn test_parse_id_roundtrip() {
     let machine_id = 100;
     let id_gen = SnowflakeIdGenerator::new(machine_id, 1_700_000_000_000).unwrap();
-    let id = id_gen.next_id();
+    let id = id_gen.next_id().expect("ID generation should succeed");
     let components = id_gen.parse_id(id);
 
     // 重新组装 ID 应等于原始 ID
@@ -119,7 +119,7 @@ fn test_concurrent_id_generation_no_duplicates() {
         handles.push(thread::spawn(move || {
             let mut ids = Vec::with_capacity(ids_per_thread);
             for _ in 0..ids_per_thread {
-                ids.push(id_gen_clone.next_id());
+                ids.push(id_gen_clone.next_id().expect("ID generation should succeed"));
             }
             ids
         }));
@@ -148,7 +148,7 @@ fn test_concurrent_ids_monotonically_increasing_per_thread() {
         handles.push(thread::spawn(move || {
             let mut ids = Vec::with_capacity(ids_per_thread);
             for _ in 0..ids_per_thread {
-                ids.push(id_gen_clone.next_id());
+                ids.push(id_gen_clone.next_id().expect("ID generation should succeed"));
             }
             ids
         }));
