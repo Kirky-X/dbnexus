@@ -80,8 +80,7 @@ pub mod observability;
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
-/// Internationalization 模块 - ICU4X locale 感知格式化（i18n feature）
-#[cfg(feature = "i18n")]
+/// Internationalization 模块 - ICU4X locale 感知格式化（核心特性，始终可用）
 mod i18n;
 
 /// Integration adapters for external crates (oxcache, etc.)
@@ -240,8 +239,7 @@ pub use crate::integrations::OxcacheDbCacheAdapter;
 #[cfg(feature = "kit")]
 pub use crate::integrations::DbNexusModule;
 
-// I18n 导出（i18n feature — ICU4X 国际化格式化）
-#[cfg(feature = "i18n")]
+// I18n 导出（核心特性 — ICU4X 国际化格式化）
 pub use crate::i18n::{DbI18nFormatter, I18nError};
 
 // Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）

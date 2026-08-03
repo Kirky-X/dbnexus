@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 💾 | **Caching** | oxcache cache (moka L1 backend internally) (`cache` feature) |
 | 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
 | 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature, new in 0.3.0) |
-| 🌍 | **Internationalization** | ICU4X locale-aware formatting (`i18n` feature, new in 0.4.0) |
+| 🌍 | **Internationalization** | ICU4X locale-aware formatting (core feature, always available) |
 
 </td>
 </tr>
@@ -405,7 +405,7 @@ dbnexus = { version = "0.4", features = [
     "global-index",     # Cross-shard global index
     "permission-engine", # Advanced permission engine (requires cache)
     "authentication"   # JWT authentication + password strength validation (new in 0.3.0)
-    # "i18n"           # ICU4X internationalization (new in 0.4.0)
+    # i18n is now a core feature, always available without explicit enabling
 ] }
 ```
 

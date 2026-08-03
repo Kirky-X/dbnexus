@@ -1109,15 +1109,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 国际化格式化（需要 `i18n` 特性）
+### 国际化格式化（核心特性，始终可用）
 
-基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。
-
-```toml
-[dependencies.dbnexus]
-version = "0.4"
-features = ["i18n"]
-```
+基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。国际化是系统核心组件，无需额外启用任何特性。
 
 ```rust
 use dbnexus::DbI18nFormatter;
