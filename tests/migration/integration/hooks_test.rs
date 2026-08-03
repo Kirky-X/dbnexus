@@ -189,9 +189,12 @@ pub enum Relation {}
 async fn setup() -> (dbnexus::DbPool, std::sync::MutexGuard<'static, ()>) {
     let guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     reset_counters();
-    let pool = dbnexus::DbPool::new("sqlite::memory:")
-        .await
-        .expect("Failed to create pool");
+    // 使用唯一命名的共享内存数据库，避免测试间冲突
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let url = format!("sqlite:file:hooks_test_{}?mode=memory&cache=shared", id);
+    let pool = dbnexus::DbPool::new(&url).await.expect("Failed to create pool");
     let session = pool.get_session("admin").await.expect("Failed to get session");
 
     let table = Model::schema(DbBackend::Sqlite);

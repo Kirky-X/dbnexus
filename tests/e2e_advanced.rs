@@ -898,7 +898,9 @@ mod authentication_advanced {
     /// Token 中包含特殊字符的 username/role
     #[tokio::test]
     async fn test_token_with_special_chars() {
-        let mgr = JwtManager::new(SECRET);
+        let mut mgr = JwtManager::new(SECRET);
+        // 添加含特殊字符的角色到有效角色列表
+        mgr.add_valid_role("role:admin".to_string());
         let token = mgr
             .generate_token("user-id-123", "user_name@test", "role:admin", TokenType::Access)
             .expect("generate_token should succeed");
