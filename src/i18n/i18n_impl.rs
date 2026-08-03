@@ -33,6 +33,42 @@ fn plural_category_name(category: PluralCategory) -> &'static str {
     }
 }
 
+// ============================================
+// 消息目录（Message Catalog）
+// ============================================
+
+/// Get a locale-specific message template by key.
+///
+/// Returns the translated template string with `{count}` placeholders
+/// where applicable. Falls back to English for unsupported locales.
+fn get_message(locale: &Locale, key: &str) -> &'static str {
+    let lang = locale.id.language.as_str();
+    match (lang, key) {
+        // --- 迁移消息 ---
+        ("zh", "migration") => "已应用 {count} 个迁移",
+        ("de", "migration") => "{count} Migrationen angewendet",
+        ("ja", "migration") => "{count} 件のマイグレーションを適用しました",
+        ("fr", "migration") => "{count} migrations appliquées",
+        // English and fallback
+        (_, "migration") => "{count} migrations applied",
+
+        // --- 通用消息 ---
+        ("zh", "hello_world") => "你好，世界！",
+        ("de", "hello_world") => "Hallo, Welt!",
+        ("ja", "hello_world") => "こんにちは、世界！",
+        ("fr", "hello_world") => "Bonjour, le monde !",
+        (_, "hello_world") => "Hello, World!",
+
+        // Unknown key fallback
+        _ => "",
+    }
+}
+
+/// Replace `{count}` placeholder in a message template with a formatted string.
+fn substitute_count(template: &str, formatted_count: &str) -> String {
+    template.replace("{count}", formatted_count)
+}
+
 impl DbI18nFormatter {
     /// Create a new formatter for the given BCP-47 locale tag.
     ///
@@ -94,18 +130,15 @@ impl DbI18nFormatter {
     }
 
     /// Build a locale-aware migration message combining the formatted
-    /// count with a plural-aware noun (e.g. `"1 migration applied"` for
-    /// English count=1, `"2 migrations applied"` for count=2).
+    /// count with a locale-specific translated template
+    /// (e.g. `"1 migration applied"` for en-US, `"已应用 1 个迁移"` for zh-CN).
     ///
     /// # Errors
     /// Returns [`I18nError::InvalidNumber`] if the count cannot be formatted.
     pub fn format_migration_message(&self, count: u64) -> Result<String, I18nError> {
         let count_str = self.format_number(count as f64)?;
-        let noun = match self.plural_rules.category_for(count) {
-            PluralCategory::One => "migration",
-            _ => "migrations",
-        };
-        Ok(format!("{count_str} {noun} applied"))
+        let template = get_message(&self.locale, "migration");
+        Ok(substitute_count(template, &count_str))
     }
 
     /// Format an ISO calendar date (year / month / day) as a migration
