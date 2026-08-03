@@ -251,15 +251,12 @@ impl SensitiveMasker {
         let chars: Vec<char> = data.chars().collect();
         let len = chars.len();
 
-        // 溢出保护 + 确保至少有一个字符被脱敏
+        // 溢出保护：当保留长度 >= 数据长度时，无内容可脱敏，返回原始数据
         let total_keep = keep_prefix
             .checked_add(keep_suffix)
             .ok_or_else(|| SensitiveError::InvalidInput("keep_prefix + keep_suffix overflow".to_string()))?;
         if total_keep >= len {
-            return Err(SensitiveError::InvalidInput(format!(
-                "keep_prefix ({}) + keep_suffix ({}) = {} >= data length ({})",
-                keep_prefix, keep_suffix, total_keep, len
-            )));
+            return Ok(data.to_string());
         }
 
         let prefix: String = chars[..keep_prefix].iter().collect();
@@ -381,8 +378,8 @@ mod tests {
             "12******90"
         );
 
-        // 保留位数超过总长度 — 应返回错误（防止完全绕过脱敏）
-        assert!(
+        // 保留位数超过总长度 — 无内容可脱敏，返回原始数据
+        assert_eq!(
             SensitiveMasker::mask(
                 "123",
                 MaskType::Custom {
@@ -390,7 +387,8 @@ mod tests {
                     keep_suffix: 2,
                 }
             )
-            .is_err()
+            .unwrap(),
+            "123"
         );
     }
 
