@@ -1,18 +1,21 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! DbNexusKit 统一能力管理示例
+//! DbNexusModule + AsyncKit 依赖注入示例
 //!
-//! 演示如何使用 [`DbNexusKit`] 进行模块能力的注册、发现和替换：
-//! - 通过 `provide_*` 注册连接池、数据库会话、权限提供者等能力
-//! - 通过 `has_*` 检查能力是否已注册
-//! - 通过 `connection_pool()` / `database_session()` / `permission()` 获取能力
-//! - 通过 `replace_*` 热替换已注册的能力
-//! - 展示未注册能力获取时的错误处理
+//! 演示如何使用 [`DbNexusModule`] 与 trait-kit 的 [`AsyncKit`] 进行模块注册、
+//! 构建和获取数据库连接池能力：
+//! - 通过 `AsyncKit::register` 注册 `OxcacheModule` 和 `DbNexusModule`
+//! - 通过 `AsyncKit::set_config` 配置 `OxcacheConfig` 和 `DbConfig`
+//! - 通过 `AsyncKit::build` 构建并获取 `Arc<dyn ConnectionPool>`
+//! - 使用连接池执行 DDL、INSERT、SELECT 和事务操作
+//!
+//! `DbNexusModule` 是 trait-kit 0.2.2 `AsyncKit` 集成模块，
+//! 它将 dbnexus 的数据库连接池注入到 AsyncKit 依赖发现框架中。
 //!
 //! # 运行示例
 //!
 //! ```bash
-//! cargo run --example kit_usage --features "sqlite,permission,macros"
+//! cargo run --bin kit_usage --features "kit"
 //! ```
 
 #[path = "../common/mod.rs"]
@@ -20,85 +23,11 @@ mod common;
 
 use std::sync::Arc;
 
-use dbnexus::async_trait::async_trait;
-use dbnexus::database::PoolStatus;
-use dbnexus::domain::permission;
-use dbnexus::foundation::DbResult;
-use dbnexus::{ConnectionPool, DatabaseSession, DbConfig, DbNexusKit, DbPool, PermissionProvider, Session};
-
-// ============================================
-// 适配器：将 DbPool 适配为 ConnectionPool trait
-// ============================================
-
-/// DbPool → ConnectionPool 适配器
-///
-/// `DbPool` 拥有与 `ConnectionPool` trait 相同的方法签名，但未直接实现该 trait。
-/// 通过此适配器，可将真实的 `DbPool` 注册到 `DbNexusKit` 中。
-struct PoolAdapter {
-    inner: Arc<DbPool>,
-}
-
-#[async_trait]
-impl ConnectionPool for PoolAdapter {
-    async fn get_session(&self, role: &str) -> DbResult<Session> {
-        self.inner.get_session(role).await
-    }
-
-    fn status(&self) -> PoolStatus {
-        self.inner.status()
-    }
-
-    fn config(&self) -> &DbConfig {
-        self.inner.config()
-    }
-}
-
-// ============================================
-// 适配器：将 Session 适配为 DatabaseSession trait
-// ============================================
-
-/// Session → DatabaseSession 适配器
-///
-/// `Session` 拥有与 `DatabaseSession` trait 相同的方法签名，但未直接实现该 trait。
-/// 通过此适配器，可将真实的 `Session` 注册到 `DbNexusKit` 中。
-struct SessionAdapter {
-    inner: Session,
-}
-
-#[async_trait]
-impl DatabaseSession for SessionAdapter {
-    async fn execute(&self, sql: &str) -> DbResult<sea_orm::ExecResult> {
-        self.inner.execute(sql).await
-    }
-
-    async fn execute_raw(&self, sql: &str) -> DbResult<sea_orm::ExecResult> {
-        self.inner.execute_raw(sql).await
-    }
-
-    async fn execute_raw_ddl(&self, sql: &str) -> DbResult<sea_orm::ExecResult> {
-        self.inner.execute_raw_ddl(sql).await
-    }
-
-    async fn begin_transaction(&self) -> DbResult<()> {
-        self.inner.begin_transaction().await
-    }
-
-    async fn commit(&self) -> DbResult<()> {
-        self.inner.commit().await
-    }
-
-    async fn rollback(&self) -> DbResult<()> {
-        self.inner.rollback().await
-    }
-
-    fn role(&self) -> &str {
-        self.inner.role()
-    }
-
-    async fn is_in_transaction(&self) -> bool {
-        self.inner.is_in_transaction().await
-    }
-}
+use dbnexus::database::ConnectionPool;
+use dbnexus::foundation::{DbConfig, PoolConfig};
+use dbnexus::DbNexusModule;
+use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
+use trait_kit::prelude::*;
 
 // ============================================
 // 主函数
@@ -107,176 +36,191 @@ impl DatabaseSession for SessionAdapter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🧰 DBNexus DbNexusKit 统一能力管理示例");
+    println!("🧰 DBNexus AsyncKit + DbNexusModule 依赖注入示例");
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建空的 DbNexusKit
+    // 1. 创建 AsyncKit 并配置
     // ============================================
-    println!("--- 1. 创建空的 DbNexusKit ---\n");
-    let kit = DbNexusKit::new();
-    println!("  ✓ DbNexusKit 创建成功");
-    println!("  has_connection_pool()  = {}", kit.has_connection_pool());
-    println!("  has_database_session() = {}", kit.has_database_session());
-    println!("  has_permission()       = {}", kit.has_permission());
+    println!("--- 1. 创建 AsyncKit 并设置配置 ---\n");
+
+    let mut kit = AsyncKit::new();
+    println!("  ✓ AsyncKit 创建成功");
+
+    // 设置 OxcacheConfig（OxcacheModule 需要）
+    kit.set_config(OxcacheConfig::default());
+    println!("  ✓ OxcacheConfig 已设置（默认配置）");
+
+    // 设置 DbConfig（DbNexusModule 需要）
+    let db_config = DbConfig {
+        url: "sqlite:file::memory:?cache=shared".to_string(),
+        admin_role: "admin".to_string(),
+        pool_config: PoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    kit.set_config(db_config);
+    println!("  ✓ DbConfig 已设置（sqlite 共享内存, max_connections=5）");
 
     // ============================================
-    // 2. 创建真实 DbPool 并注册为 ConnectionPool 能力
+    // 2. 注册模块
     // ============================================
-    println!("\n--- 2. 注册 ConnectionPool 能力 ---\n");
-    let (db_pool_inner, _) = common::db::setup_shared_sqlite_session().await?;
-    let db_pool = Arc::new(db_pool_inner);
-    println!("  ✓ DbPool 创建成功");
+    println!("\n--- 2. 注册模块 ---\n");
 
-    let pool_adapter = Arc::new(PoolAdapter { inner: db_pool });
-    kit.provide_connection_pool(pool_adapter)?;
-    println!("  ✓ ConnectionPool 能力已注册");
-    println!("  has_connection_pool()  = {}", kit.has_connection_pool());
+    // OxcacheModule 必须先注册（DbNexusModule 依赖它）
+    kit.register::<OxcacheModule>()
+        .map_err(|e| format!("register OxcacheModule: {e}"))?;
+    println!("  ✓ OxcacheModule 已注册（缓存模块）");
+
+    kit.register::<DbNexusModule>()
+        .map_err(|e| format!("register DbNexusModule: {e}"))?;
+    println!("  ✓ DbNexusModule 已注册（数据库连接池模块）");
+    println!("  依赖关系: DbNexusModule → OxcacheModule");
 
     // ============================================
-    // 3. 获取 ConnectionPool 能力并使用
+    // 3. 构建 Kit 并获取连接池
     // ============================================
-    println!("\n--- 3. 获取并使用 ConnectionPool 能力 ---\n");
-    let pool = kit.connection_pool()?;
+    println!("\n--- 3. 构建 Kit ---\n");
+
+    let kit = kit.build().await.map_err(|e| format!("AsyncKit::build: {e}"))?;
+    println!("  ✓ AsyncKit 构建成功");
+
+    // 从 kit 中获取 DbNexusModule 的能力（Arc<dyn ConnectionPool + Send + Sync>）
+    let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
+        .require::<DbNexusModule>()
+        .map_err(|e| format!("require DbNexusModule: {e}"))?;
+    println!("  ✓ 获取 Arc<dyn ConnectionPool> 成功");
+
+    // ============================================
+    // 4. 使用连接池
+    // ============================================
+    println!("\n--- 4. 使用连接池 ---\n");
+
+    // 查看连接池状态
     let status = pool.status();
-    println!("  ✓ 获取 ConnectionPool 成功");
     println!(
         "  连接池状态: total={}, active={}, idle={}",
         status.total, status.active, status.idle
     );
-    println!("  配置 URL:   {}", pool.config().url);
+    println!("  配置 URL: {}", pool.config().url);
 
-    // 通过 ConnectionPool trait 获取 Session
+    // 获取 Session 并执行 DDL
     let session = pool.get_session("admin").await?;
-    println!(
-        "  ✓ 通过 ConnectionPool trait 获取 Session 成功 (角色: {})",
-        session.role()
-    );
+    println!("  ✓ 获取 Session 成功 (角色: {})", session.role());
 
-    // ============================================
-    // 4. 注册 DatabaseSession 能力
-    // ============================================
-    println!("\n--- 4. 注册 DatabaseSession 能力 ---\n");
-    let session_adapter = Arc::new(SessionAdapter { inner: session });
-    kit.provide_database_session(session_adapter)?;
-    println!("  ✓ DatabaseSession 能力已注册");
-    println!("  has_database_session() = {}", kit.has_database_session());
-
-    // ============================================
-    // 5. 获取 DatabaseSession 能力并执行 SQL
-    // ============================================
-    println!("\n--- 5. 获取并使用 DatabaseSession 能力 ---\n");
-    let db_session = kit.database_session()?;
-    println!("  ✓ 获取 DatabaseSession 成功 (角色: {})", db_session.role());
-
-    db_session
+    session
         .execute_raw_ddl(
             "CREATE TABLE IF NOT EXISTS kit_demo (
                 id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL
+                name TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
             )",
         )
         .await?;
-    println!("  ✓ 通过 DatabaseSession trait 执行 DDL 成功");
+    println!("  ✓ 执行 DDL 成功: CREATE TABLE kit_demo");
 
-    db_session
-        .execute_raw("INSERT INTO kit_demo (id, name) VALUES (1, 'hello-kit')")
+    // ============================================
+    // 5. INSERT 数据
+    // ============================================
+    println!("\n--- 5. INSERT 数据 ---\n");
+
+    session
+        .execute_raw("INSERT INTO kit_demo (id, name) VALUES (1, 'async-kit')")
         .await?;
-    println!("  ✓ 通过 DatabaseSession trait 执行 INSERT 成功");
-
-    println!("  is_in_transaction() = {}", db_session.is_in_transaction().await);
-
-    // ============================================
-    // 6. 注册 Permission 能力
-    // ============================================
-    println!("\n--- 6. 注册 Permission 能力 ---\n");
-    let perm_provider: Arc<dyn PermissionProvider> = Arc::new(permission::new_in_memory());
-    kit.provide_permission(perm_provider)?;
-    println!("  ✓ Permission 能力已注册");
-    println!("  has_permission()       = {}", kit.has_permission());
-
-    let _perm = kit.permission()?;
-    println!("  ✓ 获取 Permission 能力成功");
+    session
+        .execute_raw("INSERT INTO kit_demo (id, name) VALUES (2, 'dbnexus-module')")
+        .await?;
+    session
+        .execute_raw("INSERT INTO kit_demo (id, name) VALUES (3, 'oxcache-module')")
+        .await?;
+    println!("  ✓ 插入 3 行测试数据");
 
     // ============================================
-    // 7. 错误处理：获取未注册的能力
+    // 6. SELECT 查询
     // ============================================
-    println!("\n--- 7. 错误处理：获取未注册的能力 ---\n");
+    println!("\n--- 6. SELECT 查询 ---\n");
 
-    // 创建一个新 kit，不注册任何能力
-    let empty_kit = DbNexusKit::new();
-    let err = empty_kit.connection_pool();
-    println!("  未注册时 connection_pool() 返回: {:?}", err.err());
-
-    let err = empty_kit.database_session();
-    println!("  未注册时 database_session() 返回: {:?}", err.err());
+    session.execute_raw("SELECT id, name FROM kit_demo ORDER BY id").await?;
+    println!("  ✓ 查询 kit_demo 表成功");
 
     // ============================================
-    // 8. 热替换能力 (replace_*)
+    // 7. 事务操作
     // ============================================
-    println!("\n--- 8. 热替换 ConnectionPool 能力 ---\n");
-    let config2 = DbConfig {
-        url: "sqlite:file::memory:?cache=shared".to_string(),
-        admin_role: "admin".to_string(),
-        pool_config: dbnexus::foundation::PoolConfig {
-            max_connections: 10,
-            min_connections: 2,
-            ..Default::default()
-        },
-        ..Default::default()};
-    let db_pool2 = Arc::new(DbPool::with_config(config2).await?);
-    let pool_adapter2 = Arc::new(PoolAdapter { inner: db_pool2 });
-    kit.replace_connection_pool(pool_adapter2);
-    println!("  ✓ ConnectionPool 已热替换 (max_connections: 5 → 10)");
+    println!("\n--- 7. 事务操作 ---\n");
 
-    let new_pool = kit.connection_pool()?;
-    println!("  替换后 max_connections = {}", new_pool.config().pool_config.max_connections);
+    session.begin_transaction().await?;
+    println!("  ✓ 开始事务");
+
+    session
+        .execute_raw("INSERT INTO kit_demo (id, name) VALUES (4, 'transaction-test')")
+        .await?;
+    println!("  ✓ 事务内插入: transaction-test");
+
+    println!("  is_in_transaction() = {}", session.is_in_transaction().await);
+
+    session.commit().await?;
+    println!("  ✓ 事务已提交");
 
     // ============================================
-    // 9. Clone 与 Debug
+    // 8. 错误处理演示
     // ============================================
-    println!("\n--- 9. Clone 与 Debug 行为 ---\n");
-    let cloned_kit = kit.clone();
-    println!("  ✓ kit.clone() 成功");
+    println!("\n--- 8. 错误处理 ---\n");
+
+    // 演示：未注册 OxcacheModule 时 build 会失败
+    let mut incomplete_kit = AsyncKit::new();
+    incomplete_kit.set_config(DbConfig {
+        url: "sqlite::memory:".to_string(),
+        ..Default::default()
+    });
+    incomplete_kit
+        .register::<DbNexusModule>()
+        .map_err(|e| format!("register: {e}"))?;
+
+    match incomplete_kit.build().await {
+        Ok(_) => println!("  ✗ 预期应该失败"),
+        Err(e) => {
+            let msg = e.to_string();
+            println!("  ✓ 未注册 OxcacheModule 时 build 失败（预期行为）");
+            println!("  错误信息: {}", msg);
+            assert!(msg.contains("oxcache"), "错误应提及 oxcache 依赖, got: {msg}");
+        }
+    }
+
+    // ============================================
+    // 9. 多 Session 使用
+    // ============================================
+    println!("\n--- 9. 多 Session ---\n");
+
+    let admin_session = pool.get_session("admin").await?;
+    let system_session = pool.get_session("system").await?;
+    println!("  ✓ admin session (role: {})", admin_session.role());
+    println!("  ✓ system session (role: {})", system_session.role());
+
+    let final_status = pool.status();
     println!(
-        "  克隆 kit has_connection_pool()  = {}",
-        cloned_kit.has_connection_pool()
+        "\n  最终连接池状态: total={}, active={}, idle={}",
+        final_status.total, final_status.active, final_status.idle
     );
-    println!(
-        "  克隆 kit has_database_session() = {}",
-        cloned_kit.has_database_session()
-    );
-    println!("  克隆 kit has_permission()       = {}", cloned_kit.has_permission());
-    println!("  Debug 格式: {:?}", kit);
-
-    // ============================================
-    // 10. as_inner / into_inner 访问底层 Kit
-    // ============================================
-    println!("\n--- 10. 底层 Kit 访问 ---\n");
-    let _inner_ref = kit.as_inner();
-    println!("  ✓ as_inner() 获取底层 &Kit 引用成功");
-
-    // 注意：into_inner 会消费 kit，放最后执行
-    let _inner = kit.into_inner();
-    println!("  ✓ into_inner() 消费 kit 并返回底层 Kit 成功");
 
     println!("\n========================================");
-    println!("✨ DbNexusKit 统一能力管理示例完成！");
+    println!("✨ AsyncKit + DbNexusModule 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - DbNexusKit::new()                    创建空 kit");
-    println!("  - kit.provide_connection_pool(pool)    注册连接池能力");
-    println!("  - kit.connection_pool()                获取连接池能力");
-    println!("  - kit.has_connection_pool()            检查能力是否已注册");
-    println!("  - kit.replace_connection_pool(pool)    热替换能力");
-    println!("  - kit.provide_database_session(sess)   注册数据库会话能力");
-    println!("  - kit.provide_permission(provider)     注册权限提供者能力");
-    println!("  - kit.clone()                          克隆 kit（共享注册项）");
+    println!("  - AsyncKit::new()                    创建 DI 容器");
+    println!("  - kit.set_config(T)                  设置模块配置");
+    println!("  - kit.register::<M>()                注册模块");
+    println!("  - kit.build().await                  构建（拓扑排序 + 依赖注入）");
+    println!("  - kit.require::<M>()                 获取模块能力");
+    println!("  - DbNexusModule                      构建 DbPool 的 AsyncKit 模块");
+    println!("  - OxcacheModule                      构建缓存后端的 AsyncKit 模块");
     println!("\n💡 设计要点:");
-    println!("  - DbNexusKit 基于 trait-kit，提供类型安全的能力注册和发现");
-    println!("  - 每个能力通过 CapabilityKey 标识，编译期类型检查");
-    println!("  - replace_* 支持运行时热替换，适用于动态重新配置场景");
-    println!("  - 未注册能力返回 TraitKitError，调用方需显式处理");
+    println!("  - DbNexusModule 依赖 OxcacheModule（自动拓扑排序）");
+    println!("  - OxcacheDbCacheAdapter 在 build() 内自动创建并注入");
+    println!("  - 返回 Arc<dyn ConnectionPool + Send + Sync> trait 对象");
+    println!("  - 未注册依赖模块时 build() 返回清晰错误");
 
     Ok(())
 }
