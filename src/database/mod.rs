@@ -4,6 +4,7 @@
 //!
 //! 提供数据库连接管理、迁移、分片、图数据库等功能
 
+// 图数据库抽象层（始终可用：提供类型定义和 trait，具体实现在 ladybug/neo4j feature 后）
 pub mod graph;
 #[cfg(feature = "migration")]
 pub mod migration;
