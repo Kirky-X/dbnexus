@@ -28,7 +28,7 @@ cargo run --example quickstart --features sqlite
 
 ### [config.rs](config.rs)
 配置管理示例，展示多种配置初始化方式：
-- 使用 DbConfigBuilder 创建配置
+- 使用 DbConfig 结构体创建配置
 - 使用配置结构体创建配置
 - 从配置文件加载配置
 - 使用环境变量配置

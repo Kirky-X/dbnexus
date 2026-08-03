@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | ✅ | **Procedural Macros** | Auto-generate CRUD methods and permission checks |
 | ✅ | **SQL Parser** | Extract operation type and target table |
 | ✅ | **Transaction Support** | Complete transaction management |
-| ✅ | **Multi-Database Support** | SQLite, PostgreSQL, MySQL, DuckDB |
+| ✅ | **Multi-Database Support** | SQLite, PostgreSQL, MySQL, DuckDB, Ladybug, Neo4j |
 
 </td>
 <td width="50%" style="vertical-align:top; padding: 16px; border-radius:8px; border:1px solid #E2E8F0;">
@@ -153,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 💾 | **Caching** | oxcache cache (moka L1 backend internally) (`cache` feature) |
 | 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
 | 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature, new in 0.3.0) |
+| 🌍 | **Internationalization** | ICU4X locale-aware formatting (`i18n` feature, new in 0.4.0) |
 
 </td>
 </tr>
@@ -178,9 +179,9 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = "0.3"
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
-sea-orm = { version = "2.0.0-rc.37", features = ["macros"] }
+dbnexus = { version = "0.4", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
+sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
 
 ### <span id="basic-usage">💡 Basic Usage</span>
@@ -300,20 +301,32 @@ Model::find_all(&session).await?; // Error: Permission denied
 
 **Version 0.1.x → 0.2.0 is a breaking change.** The `cache` feature is no longer enabled by default, and several features now explicitly require `cache` to be enabled.
 
+### ⚠️ BREAKING CHANGE in v0.4.0
+
+- `default` feature is now an empty array `[]` (previously included 7 features)
+- Users must explicitly enable runtime + database driver + desired features
+- Recommended: `default-features = false, features = ["default-no-db", "sqlite"]`
+
 ### Database Drivers (choose one)
 
 ```toml
 # SQLite (default, embedded)
-dbnexus = { version = "0.3", features = ["sqlite"] }
+dbnexus = { version = "0.4", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.3", features = ["postgres"] }
+dbnexus = { version = "0.4", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.3", features = ["mysql"] }
+dbnexus = { version = "0.4", features = ["mysql"] }
 
 # DuckDB (embedded analytical database, new in 0.3.0)
-dbnexus = { version = "0.3", features = ["duckdb"] }
+dbnexus = { version = "0.4", features = ["duckdb"] }
+
+# Ladybug (embedded graph database, new in 0.4.0)
+dbnexus = { version = "0.4", features = ["ladybug"] }
+
+# Neo4j (graph database server, new in 0.4.0)
+dbnexus = { version = "0.4", features = ["neo4j"] }
 ```
 
 ### Protocol-Compatible Databases
@@ -332,58 +345,58 @@ DBNexus supports the following protocol-compatible databases via standard protoc
 
 ```toml
 # Tokio with RustLS (default)
-dbnexus = { version = "0.3", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.4", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.3", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.4", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.3", features = ["runtime-async-std"] }
+dbnexus = { version = "0.4", features = ["runtime-async-std"] }
 ```
 
 ### Core Features
 
 ```toml
 # Permission control (auto-enables sql-parser + yaml + cache features; sql-parser is mandatory to prevent SQL injection bypass)
-dbnexus = { version = "0.3", features = ["permission"] }
+dbnexus = { version = "0.4", features = ["permission"] }
 
 # SQL parsing (auto-enables cache feature)
-dbnexus = { version = "0.3", features = ["sql-parser"] }
+dbnexus = { version = "0.4", features = ["sql-parser"] }
 
 # Procedural macros
-dbnexus = { version = "0.3", features = ["macros"] }
+dbnexus = { version = "0.4", features = ["macros"] }
 ```
 
 ### Using Presets (Recommended)
 
 ```toml
 # Embedded/Edge devices (minimal)
-dbnexus = { version = "0.3", features = ["embedded"] }
+dbnexus = { version = "0.4", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.3", features = ["microservice"] }
+dbnexus = { version = "0.4", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.3", features = ["monolith"] }
+dbnexus = { version = "0.4", features = ["monolith"] }
 
 # Enterprise (all features)
-dbnexus = { version = "0.3", features = ["enterprise"] }
+dbnexus = { version = "0.4", features = ["enterprise"] }
 ```
 
 ### Optional Features
 
 ```toml
 # Observability (metrics + tracing + health-check)
-dbnexus = { version = "0.3", features = ["observability"] }
+dbnexus = { version = "0.4", features = ["observability"] }
 
 # Data management (migration + sharding + global-index)
-dbnexus = { version = "0.3", features = ["data-management"] }
+dbnexus = { version = "0.4", features = ["data-management"] }
 
 # Security (audit + permission-engine)
-dbnexus = { version = "0.3", features = ["security"] }
+dbnexus = { version = "0.4", features = ["security"] }
 
 # Individual features
-dbnexus = { version = "0.3", features = [
+dbnexus = { version = "0.4", features = [
     "metrics",          # Prometheus metrics
     "tracing",          # Distributed tracing
     "audit",            # Audit logging
@@ -392,13 +405,14 @@ dbnexus = { version = "0.3", features = [
     "global-index",     # Cross-shard global index
     "permission-engine", # Advanced permission engine (requires cache)
     "authentication"   # JWT authentication + password strength validation (new in 0.3.0)
+    # "i18n"           # ICU4X internationalization (new in 0.4.0)
 ] }
 ```
 
 ### Configuration
 
 ```toml
-dbnexus = { version = "0.3", features = [
+dbnexus = { version = "0.4", features = [
     "yaml",            # YAML config support
     "config-toml",     # TOML config support
     "config-env",      # Environment variables (default)
@@ -414,7 +428,7 @@ dbnexus = { version = "0.3", features = [
 <table style="width:100%; max-width: 800px;">
 <tr>
 <td align="center" width="33%" style="padding: 16px;">
-<a href="USER_GUIDE.md" style="text-decoration:none;">
+<a href="docs/USER_GUIDE.md" style="text-decoration:none;">
 <div style="padding: 24px; border-radius:12px; transition: transform 0.2s;">
 <b style="color:#1E293B;">📖 User Guide</b>
 </div>
@@ -446,9 +460,9 @@ dbnexus = { version = "0.3", features = [
 
 | Resource | Description |
 |----------|-------------|
-| 📖 [User Guide](USER_GUIDE.md) | Comprehensive guide for using DBNexus |
-| 📘 [API Reference](API_REFERENCE.md) | Complete API documentation |
-| 🏗️ [Architecture](ARCHITECTURE.md) | System architecture and design decisions |
+| 📖 [User Guide](docs/USER_GUIDE.md) | Comprehensive guide for using DBNexus |
+| 📘 [API Reference](docs/API_REFERENCE.md) | Complete API documentation |
+| 🏗️ [Architecture](docs/ARCHITECTURE.md) | System architecture and design decisions |
 | 📦 [Examples](examples/) | Working code examples |
 
 ---
@@ -468,14 +482,16 @@ dbnexus = { version = "0.3", features = [
 #### 📝 Advanced Configuration
 
 ```rust
-use dbnexus::{DbPool, DbConfig};
+use dbnexus::{DbPool, DbConfig, PoolConfig};
 
 let config = DbConfig {
     url: "postgresql://user:pass@localhost/db".to_string(),
-    max_connections: 20,
-    min_connections: 5,
-    idle_timeout: 300,
-    acquire_timeout: 5000,
+    pool_config: PoolConfig {
+        max_connections: 20,
+        min_connections: 5,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+    },
     ..Default::default()
 };
 
@@ -547,6 +563,10 @@ println!("{}", metrics.export_prometheus());
 
 **[📂 View all examples →](examples/)**
 
+---
+
+> **Note**: `dbnexus-examples` is set to `publish = false` and managed within the workspace.
+
 </div>
 
 ---
@@ -571,7 +591,7 @@ graph TD
     D --> E[Sea-ORM / SQLx<br/>Database drivers<br/>Query builder]
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
 
 ---
 
@@ -634,7 +654,7 @@ make docker-down
 
 <div align="center" style="margin: 24px 0;">
 
-Contributions are welcome! Please check the repository for contribution guidelines.
+Contributions are welcome! Please check [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed contribution guidelines.
 
 </div>
 
