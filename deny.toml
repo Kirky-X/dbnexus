@@ -15,11 +15,16 @@ ignore = [
     #   3. 触发路径为死代码；dbnexus src/ 无任何 cxx 用法
     # 待 cargo-deny advisory-db 同步此条后此 ignore 生效；当前 db 未收录故不报
     "RUSTSEC-2026-0202",
-    # 历史死代码 ignore 已清理（2026-07）：
-    #   RUSTSEC-2025-0134 (rustls-pemfile) / RUSTSEC-2025-0111 (tokio-tar) —
-    #     testcontainers 升级后对应 crate 已不在依赖树
-    #   RUSTSEC-2023-0071 (rsa) — jsonwebtoken 升至 10.4.0 后 rsa 已移除
-    #   （原注释"等待 jsonwebtoken 迁移 rsa 0.10+"已过时，漏洞随升级自然消失）
+    # neo4rs 传递依赖 unmaintained（2026-08 核实，均为 neo4rs → 传递引入）：
+    #   RUSTSEC-2025-0012 (backoff) — neo4rs 依赖，无安全升级路径
+    #   RUSTSEC-2024-0384 (instant) — backoff → instant，无安全升级路径
+    #   RUSTSEC-2024-0436 (paste) — neo4rs 依赖，可用 pastey 替代但需 neo4rs 侧迁移
+    #   RUSTSEC-2025-0134 (rustls-pemfile) — neo4rs/rustls-native-certs 依赖，建议迁移至 rustls-pki-types
+    # 待 neo4rs 上游迁移后自然消除
+    "RUSTSEC-2025-0012",
+    "RUSTSEC-2024-0384",
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2025-0134",
 ]
 
 [licenses]

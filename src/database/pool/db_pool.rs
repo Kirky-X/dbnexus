@@ -223,6 +223,11 @@ pub(crate) struct DbPoolInner {
 
     /// 最大活跃连接数
     pub(super) max_active: AtomicU32,
+
+    /// 故障转移：当前活跃 URL 索引（failover feature）
+    #[cfg(feature = "failover")]
+    #[allow(dead_code)]
+    pub(super) current_url_index: std::sync::atomic::AtomicU32,
 }
 
 impl DbPoolInner {
@@ -381,6 +386,8 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
+                #[cfg(feature = "failover")]
+                current_url_index: std::sync::atomic::AtomicU32::new(0),
             }),
             #[cfg(feature = "cache")]
             cache_provider: None,
@@ -517,6 +524,8 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
+                #[cfg(feature = "failover")]
+                current_url_index: std::sync::atomic::AtomicU32::new(0),
             }),
             #[cfg(feature = "cache")]
             cache_provider: None,
@@ -682,6 +691,64 @@ impl DbPool {
         &self.inner.config
     }
 
+    // ========================================================================
+    // 故障转移方法（failover feature）
+    // ========================================================================
+
+    /// 原子切换到下一个 URL（循环遍历故障转移链）
+    #[cfg(feature = "failover")]
+    #[allow(dead_code)]
+    pub(crate) fn advance_to_next_url(&self) {
+        if let Some(ref config) = self.inner.config.failover_config {
+            let len = config.urls.len() as u32;
+            if len <= 1 {
+                return;
+            }
+            self.inner
+                .current_url_index
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| Some((current + 1) % len))
+                .ok();
+        }
+    }
+
+    /// 获取当前活跃 URL（故障转移感知）
+    #[cfg(feature = "failover")]
+    #[allow(dead_code)]
+    pub(crate) fn current_url(&self) -> &str {
+        if let Some(ref config) = self.inner.config.failover_config {
+            if !config.urls.is_empty() {
+                let idx = self.inner.current_url_index.load(Ordering::SeqCst) as usize;
+                return &config.urls[idx.min(config.urls.len() - 1)];
+            }
+        }
+        &self.inner.config.url
+    }
+
+    /// 获取当前活跃 URL（无故障转移时回退到 config.url）
+    #[cfg(not(feature = "failover"))]
+    #[allow(dead_code)]
+    pub(crate) fn current_url(&self) -> &str {
+        &self.inner.config.url
+    }
+
+    /// 验证连接有效性
+    ///
+    /// 执行探测查询（PostgreSQL/MySQL: `SELECT 1`，SQLite: `SELECT 1`）
+    /// 验证连接是否可用。无效连接应被调用方惰性移除。
+    #[cfg(feature = "failover")]
+    #[allow(dead_code)]
+    pub(crate) async fn validate_connection(&self, conn: &sea_orm::DatabaseConnection) -> bool {
+        use sea_orm::ConnectionTrait;
+        let query = self
+            .inner
+            .config
+            .failover_config
+            .as_ref()
+            .and_then(|c| c.health_check_query.as_deref())
+            .unwrap_or("SELECT 1");
+        conn.execute_unprepared(query).await.is_ok()
+    }
+
     /// 从池中获取 Session（带 metrics 支持）
     ///
     /// # Arguments
@@ -691,6 +758,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果角色未在权限配置中定义，返回错误
+    ///
     /// # 安全警告
     ///
     /// 此方法接受角色字符串参数，调用者应确保：

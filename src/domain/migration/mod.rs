@@ -33,6 +33,10 @@ pub mod schema;
 pub mod sql_reverser;
 pub mod types;
 
+/// 分片迁移编排器（shard-migration feature）
+#[cfg(feature = "shard-migration")]
+pub mod shard_orchestrator;
+
 pub use column_changes::ColumnChangeType;
 pub use converter::*;
 #[cfg(feature = "migration")]
@@ -44,3 +48,6 @@ pub use schema::*;
 #[cfg(feature = "migration")]
 pub use sql_reverser::*;
 pub use types::*;
+
+#[cfg(feature = "shard-migration")]
+pub use shard_orchestrator::{OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult};

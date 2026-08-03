@@ -88,7 +88,6 @@ default-no-db = [
     "macros",
     "config-env",
     "with-time",
-    "i18n",
 ]
 
 # === 运行时 (互斥 - 必须且只能选一个) ===
@@ -156,17 +155,24 @@ global-index = ["chrono", "with-json"]  # 全局索引
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
 with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono 类型支持（DateTime/NaiveDateTime 字段）
-with-uuid = ["sea-orm/with-uuid", "uuid"]  # UUID 类型支持（uuid::Uuid 字段）
+with-uuid = ["sea-orm/with-uuid", "dep:uuid"]  # UUID 类型支持（uuid::Uuid 字段）
 validation = ["validator", "with-time"]  # 数据验证（validator crate + timestamps 依赖）
+
+# === 分布式能力 ===
+retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sql-parser 判断幂等性，rand 用于 jitter）
+failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
+replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
+scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
+shard-migration = ["migration", "sharding"]  # 分片迁移编排
+saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
+distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
+distributed-capabilities = ["retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 分布式能力聚合 feature
 
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
-audit = ["chrono", "uuid"]  # 审计日志
+audit = ["chrono", "dep:uuid"]  # 审计日志
 permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
-
-# === 国际化（核心特性，始终可用） ===
-i18n = []  # ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）— 核心必备特性，icu/writeable 为非可选依赖
 
 # === 开发工具 ===
 dev = []
@@ -177,7 +183,7 @@ cli-tests = []
 
 # === 预设配置 ===
 # 嵌入式/边缘设备 - 超轻量配置
-embedded = ["runtime-tokio-rustls", "sqlite", "config-env", "i18n"]
+embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]
 
 # 微服务 - 优化的配置
 microservice = [
@@ -187,7 +193,6 @@ microservice = [
     "sql-parser",
     "config-env",
     "observability",
-    "i18n",
 ]
 
 # 单体应用 - 完整配置
@@ -200,14 +205,20 @@ monolith = [
     "data-management",
     "security",
     "observability",
-    "i18n",
+    "retry",
+    "failover",
+    "replica-routing",
+    "scatter-gather",
+    "shard-migration",
+    "saga",
+    "distributed-id",
 ]
 
 # 企业级 - 全功能配置
 enterprise = ["postgres", "monolith", "permission-engine"]
 
 # 所有可选功能（不包括数据库驱动）
-all-optional = ["cache", "observability", "data-management", "security", "migration"]
+all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]
 
 [dependencies]
 # Workspace dependencies
@@ -258,6 +269,7 @@ jsonwebtoken = { version = "11.0", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
+rand = { version = "0.8", optional = true }
 
 # ICU4X 国际化（核心特性，始终可用）
 icu = "2.2"
@@ -668,6 +680,48 @@ required-features = ["sqlite"]
 name = "e2e_advanced"
 path = "tests/e2e_advanced.rs"
 required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication", "tracing"]
+
+# Retry 单元测试 - RetryPolicy/is_idempotent_operation/RetryExecutor
+[[test]]
+name = "retry_unit_tests"
+path = "tests/retry/unit/retry_unit_tests.rs"
+required-features = ["retry", "sqlite"]
+
+# Failover 单元测试 - FailoverConfig
+[[test]]
+name = "failover_unit_tests"
+path = "tests/failover/unit/failover_unit_tests.rs"
+required-features = ["failover", "sqlite"]
+
+# Replica 单元测试 - ReplicaConfig
+[[test]]
+name = "replica_unit_tests"
+path = "tests/replica/unit/replica_unit_tests.rs"
+required-features = ["replica-routing", "sqlite"]
+
+# Scatter-Gather 单元测试 - 聚合类型/PartialFailurePolicy
+[[test]]
+name = "scatter_unit_tests"
+path = "tests/scatter/unit/scatter_unit_tests.rs"
+required-features = ["scatter-gather", "sqlite"]
+
+# Saga 单元测试 - SagaStatus/SagaError/InMemorySagaLog
+[[test]]
+name = "saga_unit_tests"
+path = "tests/saga/unit/saga_unit_tests.rs"
+required-features = ["saga", "sqlite"]
+
+# 分布式 ID 单元测试 - SnowflakeIdGenerator
+[[test]]
+name = "distributed_id_tests"
+path = "tests/distributed_id/unit/distributed_id_tests.rs"
+required-features = ["distributed-id"]
+
+# 分布式能力端到端集成测试
+[[test]]
+name = "e2e_distributed"
+path = "tests/e2e_distributed.rs"
+required-features = ["sqlite", "runtime-tokio-rustls", "distributed-capabilities"]
 
 [dev-dependencies.testcontainers]
 version = "0.27"

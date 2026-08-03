@@ -9,6 +9,10 @@ pub mod config;
 pub mod error;
 
 // Re-exports for convenience (旧版，保持兼容)
+#[cfg(feature = "failover")]
+pub use config::FailoverConfig;
+#[cfg(feature = "replica-routing")]
+pub use config::ReplicaConfig;
 pub use config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
 #[cfg(feature = "permission")]
 pub use error::PermissionError;

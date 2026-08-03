@@ -77,6 +77,10 @@ pub mod access;
 /// Observability 层 - 可观测模块
 pub mod observability;
 
+/// Reliability 层 - 运行时容错模块（重试、故障转移等）
+#[cfg(feature = "retry")]
+pub mod reliability;
+
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
@@ -103,8 +107,12 @@ pub use crate::foundation::DatabaseType;
 // Foundation 导出 (旧版，保持兼容)
 pub use crate::foundation::DbError;
 pub use crate::foundation::DbResult;
+#[cfg(feature = "failover")]
+pub use crate::foundation::FailoverConfig;
 #[cfg(feature = "permission")]
 pub use crate::foundation::PermissionResult;
+#[cfg(feature = "replica-routing")]
+pub use crate::foundation::ReplicaConfig;
 pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
 pub use crate::foundation::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::{CacheConfig, ConfigError, DbConfig, PoolConfig};
@@ -205,6 +213,39 @@ pub use crate::observability::{
 // Tracing 导出（tracing feature）
 #[cfg(feature = "tracing")]
 pub use crate::observability::{TracingError, TracingGuard};
+
+// Reliability 导出（retry feature）
+#[cfg(feature = "retry")]
+pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};
+
+// Replica routing 导出（replica-routing feature）
+#[cfg(feature = "replica-routing")]
+pub use crate::database::replica::MySqlLagDetector;
+#[cfg(feature = "replica-routing")]
+pub use crate::database::replica::PostgresLagDetector;
+#[cfg(feature = "replica-routing")]
+pub use crate::database::replica::{ReplicaPool, ReplicationLag, ReplicationLagDetector, SqliteLagDetector};
+
+// Scatter-Gather 导出（scatter-gather feature）
+#[cfg(feature = "scatter-gather")]
+pub use crate::database::{
+    AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ScatterResult, ShardError,
+};
+
+// Saga 分布式事务导出（saga feature）
+#[cfg(feature = "saga")]
+pub use crate::database::{
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator, SagaStatus, SagaStep,
+    SagaStepLog,
+};
+
+// 分片迁移编排导出（shard-migration feature）
+#[cfg(feature = "shard-migration")]
+pub use crate::domain::migration::{OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult};
+
+// 分布式 ID 生成器导出（distributed-id feature）
+#[cfg(feature = "distributed-id")]
+pub use crate::common::{DistributedIdGenerator, IdComponents, SnowflakeIdGenerator};
 
 // MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]

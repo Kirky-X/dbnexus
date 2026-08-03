@@ -398,6 +398,93 @@ impl std::fmt::Display for DatabaseType {
 // 数据库配置
 // ============================================================================
 
+// 数据库配置
+//
+// 纯数据结构，通过 `from_yaml_str()` / `from_json_str()` 直接反序列化加载
+//
+// # 配置字段
+//
+// | 字段 | 默认值 |
+// |------|--------|
+// | `url` | **必填** |
+// | `pool_config` (flatten) | `PoolConfig::default()` |
+// ============================================================================
+// 故障转移配置
+// ============================================================================
+
+/// 连接故障转移配置
+///
+/// 定义故障转移链：当主库不可用时自动切换到备用 URL。
+/// 与 CircuitBreaker 协同工作，连续失败达到阈值时触发切换。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub struct FailoverConfig {
+    /// 有序 URL 列表：[primary, replica1, replica2, ...]
+    /// 第一个为 primary，后续为故障转移目标
+    pub urls: Vec<String>,
+    /// 自定义健康检查 SQL（默认 `SELECT 1`）
+    #[serde(default)]
+    pub health_check_query: Option<String>,
+    /// 连续失败 N 次触发故障转移，默认 3
+    #[serde(default = "default_failover_threshold")]
+    pub failover_threshold: u32,
+}
+
+impl Default for FailoverConfig {
+    fn default() -> Self {
+        Self {
+            urls: Vec::new(),
+            health_check_query: None,
+            failover_threshold: default_failover_threshold(),
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn default_failover_threshold() -> u32 {
+    3
+}
+
+// ============================================================================
+// 副本路由配置
+// ============================================================================
+
+/// 副本路由配置
+///
+/// 基于复制 lag 检测的读写分离配置。
+/// 当副本延迟超过阈值时自动回退到主库。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub struct ReplicaConfig {
+    /// 副本数据库 URL 列表
+    pub replica_urls: Vec<String>,
+    /// 最大允许复制延迟（秒），超过则回退主库，默认 5.0
+    #[serde(default = "default_max_lag_seconds")]
+    pub max_lag_seconds: f64,
+    /// Lag 检测间隔（秒），默认 10
+    #[serde(default = "default_lag_check_interval")]
+    pub lag_check_interval_secs: u64,
+}
+
+impl Default for ReplicaConfig {
+    fn default() -> Self {
+        Self {
+            replica_urls: Vec::new(),
+            max_lag_seconds: default_max_lag_seconds(),
+            lag_check_interval_secs: default_lag_check_interval(),
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn default_max_lag_seconds() -> f64 {
+    5.0
+}
+#[allow(dead_code)]
+fn default_lag_check_interval() -> u64 {
+    10
+}
+
 /// 数据库配置
 ///
 /// 纯数据结构，通过 `from_yaml_str()` / `from_json_str()` 直接反序列化加载
@@ -452,6 +539,21 @@ pub struct DbConfig {
     /// 缓存配置
     #[serde(default)]
     pub cache_config: CacheConfig,
+
+    /// 运行时重试策略（`retry` feature 启用时可用）
+    #[cfg(feature = "retry")]
+    #[serde(default)]
+    pub retry_policy: Option<crate::reliability::RetryPolicy>,
+
+    /// 连接故障转移配置（`failover` feature 启用时可用）
+    #[cfg(feature = "failover")]
+    #[serde(default)]
+    pub failover_config: Option<FailoverConfig>,
+
+    /// 副本路由配置（`replica-routing` feature 启用时可用）
+    #[cfg(feature = "replica-routing")]
+    #[serde(default)]
+    pub replica_config: Option<ReplicaConfig>,
 }
 
 impl Default for DbConfig {
@@ -467,6 +569,12 @@ impl Default for DbConfig {
             warmup_timeout: default_warmup_timeout(),
             warmup_retries: default_warmup_retries(),
             cache_config: CacheConfig::default(),
+            #[cfg(feature = "retry")]
+            retry_policy: None,
+            #[cfg(feature = "failover")]
+            failover_config: None,
+            #[cfg(feature = "replica-routing")]
+            replica_config: None,
         }
     }
 }
@@ -545,6 +653,12 @@ impl DbConfig {
             warmup_timeout: parse_env_u64("DB_WARMUP_TIMEOUT", 30)?,
             warmup_retries: parse_env_u32("DB_WARMUP_RETRIES", 3)?,
             cache_config: CacheConfig::default(),
+            #[cfg(feature = "retry")]
+            retry_policy: None,
+            #[cfg(feature = "failover")]
+            failover_config: None,
+            #[cfg(feature = "replica-routing")]
+            replica_config: None,
         })
     }
 
@@ -1156,6 +1270,12 @@ mod tests {
                 query_cache_capacity: 1024,
                 default_ttl: 60,
             },
+            #[cfg(feature = "retry")]
+            retry_policy: None,
+            #[cfg(feature = "failover")]
+            failover_config: None,
+            #[cfg(feature = "replica-routing")]
+            replica_config: None,
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let deserialized: DbConfig = serde_json::from_str(&json).unwrap();
