@@ -44,6 +44,9 @@ pub struct RetryPolicy {
     pub multiplier: f64,
     /// 是否添加随机抖动（避免 thundering herd），默认 true
     pub jitter: bool,
+    /// 整体 wall-clock 超时（毫秒），`None` 表示无超时限制，默认 `None`
+    #[serde(default)]
+    pub overall_timeout_ms: Option<u64>,
 }
 
 impl Default for RetryPolicy {
@@ -54,6 +57,7 @@ impl Default for RetryPolicy {
             max_backoff_ms: 5000,
             multiplier: 2.0,
             jitter: true,
+            overall_timeout_ms: None,
         }
     }
 }
@@ -86,6 +90,13 @@ pub enum RetryError {
     },
     /// 非幂等操作被拒绝重试
     NonRetryable(DbError),
+    /// 整体超时
+    Timeout {
+        /// 超时时间（毫秒）
+        timeout_ms: u64,
+        /// 最后一次执行的错误
+        last_error: DbError,
+    },
 }
 
 impl fmt::Display for RetryError {
@@ -95,6 +106,9 @@ impl fmt::Display for RetryError {
                 write!(f, "Retry exhausted after {attempts} attempts: {last_error}")
             }
             Self::NonRetryable(err) => write!(f, "Non-retryable operation: {err}"),
+            Self::Timeout { timeout_ms, last_error } => {
+                write!(f, "Retry timed out after {timeout_ms}ms: {last_error}")
+            }
         }
     }
 }
@@ -104,6 +118,7 @@ impl std::error::Error for RetryError {
         match self {
             Self::Exhausted { last_error, .. } => Some(last_error),
             Self::NonRetryable(err) => Some(err),
+            Self::Timeout { last_error, .. } => Some(last_error),
         }
     }
 }
@@ -113,6 +128,7 @@ impl From<RetryError> for DbError {
         match err {
             RetryError::Exhausted { last_error, .. } => last_error,
             RetryError::NonRetryable(err) => err,
+            RetryError::Timeout { last_error, .. } => last_error,
         }
     }
 }
@@ -127,11 +143,15 @@ impl From<RetryError> for DbError {
 /// 其余（INSERT / UPDATE / DELETE / DDL / DCL / Transaction）均视为非幂等。
 ///
 /// 未知操作类型默认返回 false（安全侧）。
+///
+/// # 性能
+///
+/// 零分配实现：直接字节级前缀比较，无字符串分配。
 pub fn is_idempotent_operation(sql: &str) -> bool {
-    let trimmed = sql.trim_start();
-    let prefix = trimmed.chars().take(10).collect::<String>();
-    let upper = prefix.to_ascii_uppercase();
-    upper.starts_with("SELECT") || upper.starts_with("SHOW") || upper.starts_with("EXPLAIN")
+    let trimmed = sql.trim_start().as_bytes();
+    trimmed.len() >= 6 && trimmed[..6].eq_ignore_ascii_case(b"SELECT")
+        || trimmed.len() >= 4 && trimmed[..4].eq_ignore_ascii_case(b"SHOW")
+        || trimmed.len() >= 7 && trimmed[..7].eq_ignore_ascii_case(b"EXPLAIN")
 }
 
 // ============================================================================
@@ -170,6 +190,9 @@ impl RetryExecutor {
             return operation().await.map_err(RetryError::NonRetryable);
         }
 
+        let deadline = policy.overall_timeout_ms.map(Duration::from_millis);
+        let start = std::time::Instant::now();
+
         // 首次执行
         let mut last_error = match operation().await {
             Ok(val) => return Ok(val),
@@ -178,6 +201,16 @@ impl RetryExecutor {
 
         // 重试循环
         for attempt in 0..policy.max_retries {
+            // 检查整体超时
+            if let Some(timeout) = deadline {
+                if start.elapsed() >= timeout {
+                    return Err(RetryError::Timeout {
+                        timeout_ms: timeout.as_millis() as u64,
+                        last_error,
+                    });
+                }
+            }
+
             let backoff = Self::calculate_backoff(policy, attempt);
             tokio::time::sleep(backoff).await;
 
@@ -196,7 +229,9 @@ impl RetryExecutor {
     /// 计算第 `attempt` 次重试的退避时间
     fn calculate_backoff(policy: &RetryPolicy, attempt: u32) -> Duration {
         let base_ms = policy.initial_backoff_ms as f64;
-        let backoff_ms = base_ms * policy.multiplier.powi(attempt as i32);
+        // 防止 `attempt as i32` 溢出：限制在 i32::MAX 以内
+        let safe_attempt = attempt.min(i32::MAX as u32);
+        let backoff_ms = base_ms * policy.multiplier.powi(safe_attempt as i32);
         let capped_ms = backoff_ms.min(policy.max_backoff_ms as f64);
 
         if policy.jitter {
