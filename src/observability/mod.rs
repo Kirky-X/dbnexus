@@ -5,6 +5,7 @@
 //! 提供健康检查、性能指标等可观测性功能
 
 // 单文件模块
+#[cfg(feature = "health-check")]
 pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
