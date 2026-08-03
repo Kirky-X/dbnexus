@@ -6,6 +6,8 @@
 
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
+#[cfg(feature = "permission")]
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
 use oxcache::Cache;
@@ -196,9 +198,9 @@ pub(crate) struct DbPoolInner {
     #[cfg(feature = "permission")]
     pub(crate) policy_cache: Arc<Cache<String, RolePolicy>>,
 
-    /// 权限配置（懒加载，使用 tokio 异步锁）
+    /// 权限配置（懒加载，使用 ArcSwap 无锁读取 — COW 模式）
     #[cfg(feature = "permission")]
-    permission_config: Arc<AsyncMutex<Option<PermissionConfig>>>,
+    permission_config: Arc<ArcSwapOption<PermissionConfig>>,
 
     /// 后台健康检查任务（用于优雅关闭）
     health_check_shutdown: Arc<Notify>,
@@ -221,6 +223,56 @@ pub(crate) struct DbPoolInner {
 
     /// 最大活跃连接数
     pub(super) max_active: AtomicU32,
+}
+
+impl DbPoolInner {
+    /// 归还连接到池（内部实现）
+    ///
+    /// 直接从 `DbPoolInner` 操作，无需通过 `DbPool` 中转。
+    /// Session 的 Drop 可直接调用此方法，避免持有 `Arc<DbPool>`。
+    pub(crate) fn release_connection(inner: &Arc<Self>, conn: DbConnection) {
+        inner.active_count.fetch_sub(1, Ordering::SeqCst);
+        let inner_clone = Arc::clone(inner);
+
+        // 尝试快速路径：非阻塞获取锁
+        if let Ok(mut idle) = inner_clone.idle_connections.try_lock() {
+            if idle.len() < inner_clone.config.pool_config.max_connections as usize {
+                idle.push(conn);
+                inner_clone.connection_available.notify_one();
+                inner_clone.connection_semaphore.add_permits(1);
+            } else {
+                inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
+                inner_clone.connection_semaphore.add_permits(1);
+            }
+            return;
+        }
+
+        // 异步路径：在 tokio 运行时中执行
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::spawn(async move {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    // 同步代码段保护
+                }));
+                if result.is_err() {
+                    inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
+                    inner_clone.connection_semaphore.add_permits(1);
+                    return;
+                }
+
+                let mut idle = inner_clone.idle_connections.lock().await;
+                if idle.len() < inner_clone.config.pool_config.max_connections as usize {
+                    idle.push(conn);
+                    inner_clone.connection_available.notify_one();
+                } else {
+                    inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
+                }
+                inner_clone.connection_semaphore.add_permits(1);
+            });
+        } else {
+            inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
+            inner_clone.connection_semaphore.add_permits(1);
+        }
+    }
 }
 
 impl DbPool {
@@ -317,7 +369,10 @@ impl DbPool {
                 #[cfg(feature = "permission")]
                 policy_cache,
                 #[cfg(feature = "permission")]
-                permission_config: Arc::new(AsyncMutex::new(permission_config)),
+                permission_config: match permission_config {
+                    Some(config) => Arc::new(ArcSwapOption::from_pointee(config)),
+                    None => Arc::new(ArcSwapOption::empty()),
+                },
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
@@ -664,8 +719,7 @@ impl DbPool {
         self.validate_role_name(role).await?;
 
         let connection = self.acquire_connection().await?;
-        let pool_ref = Arc::new(self.clone());
-        let session = Session::new(connection, pool_ref, self.inner.clone(), role.to_string());
+        let session = Session::new(connection, self.inner.clone(), role.to_string());
 
         Ok(session)
     }
@@ -679,8 +733,8 @@ impl DbPool {
     /// 正在使用安全默认策略，提醒用户配置权限文件以启用完整角色验证。
     #[cfg(feature = "permission")]
     async fn validate_role_name(&self, role: &str) -> DbResult<()> {
-        // 获取权限配置锁
-        let permission_config = self.inner.permission_config.lock().await;
+        // 无锁读取权限配置（ArcSwap COW — 读取是完全无锁的 CAS 操作）
+        let permission_config = self.inner.permission_config.load();
 
         // 检查权限配置是否存在（用户是否显式配置了权限文件）
         if permission_config.is_none() {
@@ -1322,46 +1376,9 @@ impl DbPool {
     ///
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
+    #[cfg(feature = "auto-migrate")]
     pub(crate) fn release_connection(&self, conn: DbConnection) {
-        self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
-        let inner = self.inner.clone();
-
-        // 尝试快速路径：非阻塞获取锁
-        if let Ok(mut idle) = inner.idle_connections.try_lock() {
-            if idle.len() < inner.config.pool_config.max_connections as usize {
-                idle.push(conn);
-                inner.connection_available.notify_one();
-                // 归还信号量许可
-                inner.connection_semaphore.add_permits(1);
-            } else {
-                // 空闲队列已满，丢弃连接
-                inner.total_count.fetch_sub(1, Ordering::SeqCst);
-                // 归还信号量许可
-                inner.connection_semaphore.add_permits(1);
-            }
-            return;
-        }
-
-        // 异步路径：在 tokio 运行时中执行
-        if tokio::runtime::Handle::try_current().is_ok() {
-            tokio::spawn(async move {
-                let mut idle = inner.idle_connections.lock().await;
-                if idle.len() < inner.config.pool_config.max_connections as usize {
-                    idle.push(conn);
-                    inner.connection_available.notify_one();
-                } else {
-                    // 空闲队列已满，丢弃连接
-                    inner.total_count.fetch_sub(1, Ordering::SeqCst);
-                }
-                // 归还信号量许可
-                inner.connection_semaphore.add_permits(1);
-            });
-        } else {
-            // 没有 tokio 运行时，丢弃连接
-            inner.total_count.fetch_sub(1, Ordering::SeqCst);
-            // 归还信号量许可
-            inner.connection_semaphore.add_permits(1);
-        }
+        DbPoolInner::release_connection(&self.inner, conn);
     }
 
     /// 获取连接池状态

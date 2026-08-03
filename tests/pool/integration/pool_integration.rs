@@ -237,3 +237,44 @@ async fn test_pool_exhaustion_alert_levels() {
 
     let _ = _holder.await;
 }
+
+/// T007: 并发 get_session 无锁读安全性验证（ArcSwap COW）
+///
+/// 启动 10 个 tokio task 并发调用 `get_session("admin")`，
+/// 验证无 panic 且全部成功返回 Session（验证 ArcSwap 的无锁读安全性）。
+#[tokio::test]
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
+async fn test_concurrent_get_session_arcswap_safety() {
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create pool");
+    let pool = Arc::new(pool);
+
+    let mut handles = Vec::new();
+    for i in 0..10 {
+        let pool_clone = Arc::clone(&pool);
+        let handle = tokio::spawn(async move {
+            let session = pool_clone
+                .get_session("admin")
+                .await
+                .unwrap_or_else(|e| panic!("Task {} failed to get session: {:?}", i, e));
+            // 保持 session 活跃一小段时间，增加并发竞争窗口
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            drop(session);
+        });
+        handles.push(handle);
+    }
+
+    // 等待所有 task 完成
+    for handle in handles {
+        handle.await.expect("Task panicked");
+    }
+
+    // 所有 session 释放后，active_count 应该归零
+    let status = pool.status();
+    assert_eq!(
+        status.active, 0,
+        "All sessions should be returned, active_count should be 0"
+    );
+}

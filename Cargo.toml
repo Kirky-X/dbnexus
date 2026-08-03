@@ -115,7 +115,7 @@ ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml", "sql-parser"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试）
+permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization"]
@@ -150,7 +150,7 @@ tracing = ["dep:tracing", "dep:tracing-opentelemetry", "dep:tracing-subscriber",
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
 migration = ["sqlparser", "regex"]  # 数据库迁移
 auto-migrate = ["migration"]  # 自动迁移
-sharding = ["twox-hash", "chrono", "futures"]  # 数据分片
+sharding = ["twox-hash", "chrono", "futures", "dashmap"]  # 数据分片（dashmap 用于分片连接池并发管理）
 global-index = ["chrono", "with-json"]  # 全局索引
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
@@ -230,6 +230,10 @@ regex = { version = "1.0", optional = true }
 sqlparser = { version = "0.62", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "6.2", optional = true }
+# Lock-free read for permission config (COW pattern)
+arc-swap = { version = "1.7", optional = true }
+# Lock-free connection pool queue (crossbeam-deque)
+crossbeam-deque = { version = "0.8", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
 oxcache = { version = "0.3", optional = true }
 
@@ -356,6 +360,11 @@ required-features = ["macros", "migration", "sqlite", "validation"]
 name = "migration_hooks"
 path = "tests/migration/integration/hooks_test.rs"
 required-features = ["macros", "migration", "sqlite"]
+
+[[test]]
+name = "repository_macro_test"
+path = "tests/repository_macro_test.rs"
+required-features = ["macros", "sqlite", "runtime-tokio-rustls", "sql-parser"]
 
 [[test]]
 name = "sharding_integration"

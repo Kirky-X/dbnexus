@@ -21,6 +21,7 @@
 //! ```
 
 use chrono::{DateTime, Datelike, Utc};
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -184,6 +185,92 @@ impl ShardingStrategy for HashStrategy {
     }
 }
 
+/// 一致性哈希分片策略
+///
+/// 使用虚拟环（virtual ring）实现一致性哈希，每个物理节点对应 `virtual_nodes` 个虚拟节点。
+/// 扩缩容时仅迁移 O(N/k) 数据，优于普通哈希的 O(N) 迁移。
+///
+/// 默认每个物理节点 150 个虚拟节点，可在构造时自定义。
+#[derive(Debug, Clone)]
+pub struct ConsistentHashStrategy {
+    /// 每个物理节点的虚拟节点数（默认 150）
+    pub virtual_nodes: u32,
+}
+
+impl Default for ConsistentHashStrategy {
+    fn default() -> Self {
+        Self { virtual_nodes: 150 }
+    }
+}
+
+impl ConsistentHashStrategy {
+    /// 一致性环查找：将 hash 映射到 [0, total_shards) 范围内
+    ///
+    /// 生成 `total_shards * virtual_nodes` 个虚拟节点位置，
+    /// 通过二分查找找到 hash 落点对应的分片。
+    fn consistent_ring_lookup(hash: u64, total_shards: u32, virtual_nodes: u32) -> u32 {
+        if total_shards <= 1 {
+            return 0;
+        }
+
+        use std::hash::{Hash, Hasher};
+
+        // 生成所有虚拟节点位置并排序
+        let mut positions: Vec<(u64, u32)> = Vec::with_capacity(total_shards as usize * virtual_nodes as usize);
+
+        for shard_id in 0..total_shards {
+            for vnode in 0..virtual_nodes {
+                let mut hasher = twox_hash::XxHash64::default();
+                (shard_id, vnode).hash(&mut hasher);
+                positions.push((hasher.finish(), shard_id));
+            }
+        }
+
+        positions.sort_unstable_by_key(|&(pos, _)| pos);
+
+        // 二分查找 hash 落点
+        match positions.binary_search_by_key(&hash, |&(pos, _)| pos) {
+            Ok(idx) => positions[idx].1,
+            Err(idx) => {
+                if idx >= positions.len() {
+                    positions[0].1 // 环回
+                } else {
+                    positions[idx].1
+                }
+            }
+        }
+    }
+}
+
+impl ShardingStrategy for ConsistentHashStrategy {
+    fn calculate(&self, timestamp: DateTime<Utc>, total_shards: u32) -> u32 {
+        use std::hash::{Hash, Hasher};
+        use twox_hash::XxHash64;
+
+        let mut hasher = XxHash64::default();
+        timestamp.timestamp_millis().hash(&mut hasher);
+        let hash = hasher.finish();
+
+        Self::consistent_ring_lookup(hash, total_shards, self.virtual_nodes)
+    }
+
+    fn name(&self) -> &'static str {
+        "consistent-hash"
+    }
+
+    fn is_valid_shard_id(&self, shard_id: u32, total_shards: u32) -> bool {
+        shard_id < total_shards
+    }
+
+    fn current_shard(&self, total_shards: u32) -> u32 {
+        self.calculate(Utc::now(), total_shards)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ShardingStrategy> {
+        Box::new(self.clone())
+    }
+}
+
 /// 根据字符串创建分片策略
 ///
 /// 公共工厂函数：根据策略名（不区分大小写）创建对应的 `ShardingStrategy` 实例。
@@ -192,6 +279,7 @@ impl ShardingStrategy for HashStrategy {
 /// - `monthly` / `month` → `MonthlyStrategy`
 /// - `daily` / `day` → `DailyStrategy`
 /// - `hash` → `HashStrategy`
+/// - `consistent-hash` / `consistent` → `ConsistentHashStrategy`
 /// - 其他 → 默认 `YearlyStrategy`
 pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
     match name.to_lowercase().as_str() {
@@ -199,6 +287,7 @@ pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
         "monthly" | "month" => Box::new(MonthlyStrategy),
         "daily" | "day" => Box::new(DailyStrategy),
         "hash" => Box::new(HashStrategy),
+        "consistent-hash" | "consistent" => Box::new(ConsistentHashStrategy::default()),
         _ => Box::new(YearlyStrategy), // 默认使用年分片
     }
 }
@@ -224,8 +313,8 @@ pub struct ShardRouter {
     strategy: Box<dyn ShardingStrategy>,
     /// 分片配置映射
     shards: HashMap<u32, ShardInfo>,
-    /// 分片连接池映射
-    pools: HashMap<u32, Arc<crate::database::DbPool>>,
+    /// 分片连接池映射（DashMap 支持无锁并发读写）
+    pools: DashMap<u32, Arc<crate::database::DbPool>>,
 }
 
 impl Default for ShardRouter {
@@ -236,18 +325,22 @@ impl Default for ShardRouter {
             total_shards: 1,
             strategy: Box::new(YearlyStrategy),
             shards: HashMap::new(),
-            pools: HashMap::new(),
+            pools: DashMap::new(),
         }
     }
 }
 
 impl Clone for ShardRouter {
     fn clone(&self) -> Self {
+        let pools = DashMap::new();
+        for entry in self.pools.iter() {
+            pools.insert(*entry.key(), Arc::clone(entry.value()));
+        }
         Self {
             total_shards: self.total_shards,
             strategy: self.strategy.boxed_clone(),
             shards: self.shards.clone(),
-            pools: self.pools.clone(),
+            pools,
         }
     }
 }
@@ -259,7 +352,7 @@ impl ShardRouter {
             total_shards,
             strategy: Box::new(strategy),
             shards: HashMap::new(),
-            pools: HashMap::new(),
+            pools: DashMap::new(),
         }
     }
 
@@ -269,7 +362,7 @@ impl ShardRouter {
             total_shards,
             strategy: create_strategy(strategy),
             shards: HashMap::new(),
-            pools: HashMap::new(),
+            pools: DashMap::new(),
         }
     }
 
@@ -442,8 +535,8 @@ impl ShardRouter {
     }
 
     /// 获取指定分片的连接池
-    pub fn get_pool(&self, shard_id: u32) -> Option<&Arc<crate::database::DbPool>> {
-        self.pools.get(&shard_id)
+    pub fn get_pool(&self, shard_id: u32) -> Option<Arc<crate::database::DbPool>> {
+        self.pools.get(&shard_id).map(|r| Arc::clone(r.value()))
     }
 
     /// 获取指定分片的 Session
@@ -451,7 +544,7 @@ impl ShardRouter {
         &self,
         shard_id: u32,
     ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
-        if let Some(pool) = self.pools.get(&shard_id) {
+        if let Some(pool) = self.get_pool(shard_id) {
             let session = pool.get_session("default").await?;
             Ok(Some(session))
         } else {
@@ -511,7 +604,7 @@ impl ShardRouter {
         role: &str,
     ) -> Result<crate::database::Session, crate::foundation::DbError> {
         let shard_id = self.shard_id_for_key(shard_key);
-        let pool = self.pools.get(&shard_id).ok_or_else(|| {
+        let pool = self.get_pool(shard_id).ok_or_else(|| {
             crate::foundation::DbError::Config(format!(
                 "No pool registered for shard {} (shard_key='{}')",
                 shard_id, shard_key
@@ -534,7 +627,7 @@ impl ShardRouter {
         role: &str,
     ) -> Result<(crate::database::Session, u32), crate::foundation::DbError> {
         let shard_id = self.shard_id_for_key(shard_key);
-        let pool = self.pools.get(&shard_id).ok_or_else(|| {
+        let pool = self.get_pool(shard_id).ok_or_else(|| {
             crate::foundation::DbError::Config(format!(
                 "No pool registered for shard {} (shard_key='{}')",
                 shard_id, shard_key
@@ -583,7 +676,7 @@ impl ShardRouter {
 
     /// 获取所有已初始化的分片 ID
     pub fn initialized_shards(&self) -> Vec<u32> {
-        self.pools.keys().cloned().collect()
+        self.pools.iter().map(|entry| *entry.key()).collect()
     }
 
     /// 检查分片是否有连接池
@@ -597,13 +690,28 @@ impl ShardRouter {
     }
 
     /// 移除分片的连接池
-    pub fn remove_pool(&mut self, shard_id: u32) -> Option<Arc<crate::database::DbPool>> {
-        self.pools.remove(&shard_id)
+    pub fn remove_pool(&self, shard_id: u32) -> Option<Arc<crate::database::DbPool>> {
+        self.pools.remove(&shard_id).map(|(_, v)| v)
     }
 
     /// 清空所有连接池
-    pub fn clear_pools(&mut self) {
+    pub fn clear_pools(&self) {
         self.pools.clear();
+    }
+
+    /// 动态添加分片连接池（运行时扩缩容）
+    ///
+    /// 利用 DashMap 的无锁并发特性，支持 `&self` 调用（无需 `&mut self`），
+    /// 可在多线程环境中安全地动态增减分片。
+    pub fn add_shard(&self, shard_id: u32, pool: Arc<crate::database::DbPool>) {
+        self.pools.insert(shard_id, pool);
+    }
+
+    /// 动态移除分片连接池（运行时缩容）
+    ///
+    /// 返回被移除的连接池（如果存在），调用方可决定是否优雅关闭。
+    pub fn remove_shard(&self, shard_id: u32) -> Option<Arc<crate::database::DbPool>> {
+        self.pools.remove(&shard_id).map(|(_, v)| v)
     }
 }
 
@@ -783,5 +891,75 @@ mod tests {
             let shard = strategy.calculate(test_time, 12);
             assert_eq!(shard, base_shard, "'{}' should work like 'yearly'", variant);
         }
+    }
+
+    // ===== ConsistentHashStrategy 测试 =====
+
+    #[test]
+    fn test_consistent_hash_deterministic() {
+        let strategy = ConsistentHashStrategy::default();
+        let time = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
+
+        // 相同输入必须映射到相同分片
+        let shard1 = strategy.calculate(time, 10);
+        let shard2 = strategy.calculate(time, 10);
+        assert_eq!(shard1, shard2, "Same input must map to same shard");
+    }
+
+    #[test]
+    fn test_consistent_hash_single_shard() {
+        let strategy = ConsistentHashStrategy::default();
+        let time = Utc::now();
+
+        // total_shards=1 时总是返回 0
+        for _ in 0..100 {
+            assert_eq!(strategy.calculate(time, 1), 0);
+        }
+    }
+
+    #[test]
+    fn test_consistent_hash_low_migration() {
+        let strategy = ConsistentHashStrategy::default();
+        let times: Vec<DateTime<Utc>> = (0..1000)
+            .map(|i| Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + chrono::Duration::seconds(i))
+            .collect();
+
+        // 计算 N=4 时的分片分配
+        let assignments_n4: Vec<u32> = times.iter().map(|t| strategy.calculate(*t, 4)).collect();
+
+        // 计算 N=5 时的分片分配
+        let assignments_n5: Vec<u32> = times.iter().map(|t| strategy.calculate(*t, 5)).collect();
+
+        // 统计迁移量（分片发生变化的条目数）
+        let migration_count = assignments_n4
+            .iter()
+            .zip(assignments_n5.iter())
+            .filter(|(a, b)| a != b)
+            .count();
+
+        // 理论最优迁移率 ≈ 1/5 = 20%，允许一定偏差
+        let migration_rate = migration_count as f64 / 1000.0;
+        assert!(
+            migration_rate < 0.4,
+            "Migration rate should be < 40% (theoretical ~20%), got {:.1}%",
+            migration_rate * 100.0
+        );
+    }
+
+    #[test]
+    fn test_consistent_hash_factory() {
+        let strategy = create_strategy("consistent-hash");
+        assert_eq!(strategy.name(), "consistent-hash");
+
+        let strategy2 = create_strategy("consistent");
+        assert_eq!(strategy2.name(), "consistent-hash");
+    }
+
+    #[test]
+    fn test_consistent_hash_valid_shard_id() {
+        let strategy = ConsistentHashStrategy::default();
+        assert!(strategy.is_valid_shard_id(0, 10));
+        assert!(strategy.is_valid_shard_id(9, 10));
+        assert!(!strategy.is_valid_shard_id(10, 10));
     }
 }
