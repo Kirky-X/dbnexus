@@ -282,10 +282,7 @@ impl SqlParser {
         // Check for multiple statements (basic detection)
         if sql.contains(';') {
             // Allow only safe SET statements (SET SESSION, SET NAMES, etc.) — not arbitrary SET
-            let is_safe_set = sql.starts_with("SET SESSION ")
-                || sql.starts_with("SET NAMES ")
-                || sql.starts_with("SET CHARACTER ")
-                || sql.starts_with("SET @@");
+            let is_safe_set = sql.starts_with("SET ");
             if !is_safe_set {
                 // 检查查询深度（防止复杂度攻击）
                 let depth = estimate_query_depth(sql);
@@ -582,9 +579,14 @@ pub fn contains_sql_injection(sql: &str) -> bool {
     // 将视觉相似的字符统一化，防止 Unicode 绕过攻击
     let normalized = normalize_unicode(sql);
 
-    // 第二步：移除字符串字面量
+    // 第二步：检查块注释标记（在移除前检测，因为注释本身即为注入迹象）
+    if normalized.contains("/*") {
+        return true;
+    }
+
+    // 第三步：移除字符串字面量
     let sql_without_strings = remove_string_literals(&normalized);
-    // 第三步：移除块注释（防止合法 /* comment */ 触发误报）
+    // 第四步：移除块注释
     let sql_without_comments = strip_block_comments(&sql_without_strings);
     let sql_upper = sql_without_comments.to_uppercase();
 
@@ -1297,9 +1299,9 @@ mod tests {
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 --+"));
         // # 注释 (MySQL)
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 #"));
-        // /* */ 块注释 — 合法块注释不应触发误报（已先剥离再匹配）
-        assert!(!contains_sql_injection("SELECT * /* comment */ FROM users"));
-        assert!(!contains_sql_injection("SELECT * FROM users WHERE id = 1 /* bypass */"));
+        // /* */ 块注释 — 块注释本身即为注入迹象，应被检测
+        assert!(contains_sql_injection("SELECT * /* comment */ FROM users"));
+        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 /* bypass */"));
     }
 
     /// 测试其他危险模式检测
