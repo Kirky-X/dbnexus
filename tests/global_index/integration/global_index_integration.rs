@@ -18,13 +18,11 @@ use std::sync::Arc;
 /// 使用 SQLite 共享内存模式，确保连接池中多个连接可以访问同一个内存数据库。
 /// 普通 `sqlite::memory:` 每个连接有独立的内存数据库，不适合连接池场景。
 fn get_database_url() -> String {
-    if let Ok(url) = std::env::var("DATABASE_URL") {
-        return url;
-    }
-
     // 使用唯一命名的共享内存数据库，避免测试间冲突
+    // 注意：不使用 `sqlite::memory:` 因为每个连接会获得独立的内存数据库，
+    // 连接池中多个连接无法共享同一数据。
     use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    static COUNTER: AtomicU64 = AtomicU64::new(1000);
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("sqlite:file:dbnexus_test_{}?mode=memory&cache=shared", id)
 }

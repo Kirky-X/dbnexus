@@ -18,73 +18,70 @@ use std::time::{Duration, Instant};
 #[path = "../../common/mod.rs"]
 mod common;
 
-/// 临时 JSON 权限配置文件内容（PermissionRule 格式，用于 permission_engine）
-const TEST_PERMISSIONS_JSON: &str = r#"{
-  "roles": {
-    "admin": [
-      {
-        "name": "admin_all",
-        "priority": 0,
-        "subject": "admin",
-        "resource": "*",
-        "allow": ["select", "insert", "update", "delete"],
-        "deny": [],
-        "enabled": true
-      }
-    ],
-    "manager": [
-      {
-        "name": "manager_users",
-        "priority": 0,
-        "subject": "manager",
-        "resource": "users",
-        "allow": ["select", "insert", "update"],
-        "deny": [],
-        "enabled": true
-      },
-      {
-        "name": "manager_orders",
-        "priority": 0,
-        "subject": "manager",
-        "resource": "orders",
-        "allow": ["select", "insert", "update", "delete"],
-        "deny": [],
-        "enabled": true
-      }
-    ],
-    "user": [
-      {
-        "name": "user_select_users",
-        "priority": 0,
-        "subject": "user",
-        "resource": "users",
-        "allow": ["select"],
-        "deny": ["delete"],
-        "enabled": true
-      },
-      {
-        "name": "user_select_products",
-        "priority": 0,
-        "subject": "user",
-        "resource": "products",
-        "allow": ["select"],
-        "deny": [],
-        "enabled": true
-      }
-    ],
-    "guest": [
-      {
-        "name": "guest_select_products",
-        "priority": 0,
-        "subject": "guest",
-        "resource": "products",
-        "allow": ["select"],
-        "deny": [],
-        "enabled": true
-      }
-    ]
-  }
-}"#;
+/// 权限配置测试数据（PermissionRule 格式：roles → Vec<PermissionRule>）
+const TEST_PERMISSIONS_YAML: &str = r#"
+roles:
+  admin:
+    - name: admin_all
+      priority: 100
+      subject: "*"
+      resource: "*"
+      allow:
+        - select
+        - insert
+        - update
+        - delete
+      deny: []
+      enabled: true
+  manager:
+    - name: manager_users
+      priority: 50
+      subject: "*"
+      resource: users
+      allow:
+        - select
+        - insert
+        - update
+      deny: []
+      enabled: true
+    - name: manager_orders
+      priority: 50
+      subject: "*"
+      resource: orders
+      allow:
+        - select
+        - insert
+        - update
+        - delete
+      deny: []
+      enabled: true
+  user:
+    - name: user_read
+      priority: 10
+      subject: "*"
+      resource: users
+      allow:
+        - select
+      deny: []
+      enabled: true
+    - name: user_deny_delete
+      priority: 20
+      subject: "*"
+      resource: users
+      allow: []
+      deny:
+        - delete
+      enabled: true
+  guest:
+    - name: guest_products
+      priority: 5
+      subject: "*"
+      resource: products
+      allow:
+        - select
+      deny: []
+      enabled: true
+"#;
 
 /// TEST-PE-001: YAML 权限提供者创建测试
 #[tokio::test]
@@ -92,7 +89,7 @@ async fn test_yaml_permission_provider_creation_succeeds() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
         .expect("Failed to create YAML provider");
@@ -113,7 +110,7 @@ async fn test_yaml_permission_check_returns_correct_decisions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -189,6 +186,11 @@ async fn test_rbac_permission_provider_creation_succeeds() {
     provider.add_role(user_role.clone());
     provider.add_role(viewer_role.clone());
 
+    // 映射主体到角色
+    provider.add_role_to_subject("admin", "admin");
+    provider.add_role_to_subject("user", "user");
+    provider.add_role_to_subject("user", "viewer");
+
     // 添加 admin 的权限规则
     provider.add_permission(
         "admin",
@@ -226,7 +228,7 @@ async fn test_policy_decision_point_returns_expected_decisions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -259,7 +261,7 @@ async fn test_permission_provider_refresh_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -281,7 +283,7 @@ async fn test_get_allowed_resources_returns_expected_resources() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -308,7 +310,7 @@ async fn test_get_allowed_actions_returns_expected_actions() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -338,7 +340,7 @@ async fn test_wildcard_resource_matching_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -360,7 +362,7 @@ async fn test_multiple_providers_priority_returns_allow() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let yaml_provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
@@ -385,7 +387,7 @@ async fn test_permission_decision_latency_under_threshold() {
     // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
-    std::fs::write(&perm_file, TEST_PERMISSIONS_JSON).expect("Failed to write test permissions");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
     let provider = Arc::new(
         EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
