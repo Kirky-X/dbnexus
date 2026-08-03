@@ -175,11 +175,48 @@ name = "macros_advanced_query"
 path = "src/macros/macros_advanced_query.rs"
 
 # ============================================================
-# Kit 统一能力管理示例 (kit/)
-# ------------------------------------------------------------
-# kit_usage / kit_advanced 引用了尚未实现的 DbNexusKit API，
-# 暂不注册为 [[bin]]，待 DbNexusKit 实现后启用。
+# 图数据库模块示例 (graph/)
 # ============================================================
+# 注意: graph_ladybug 需要 ladybug feature，但与 duckdb 存在 mbedtls 链接冲突，
+# 故不注册为 [[bin]]。单独编译:
+#   cargo build --bin graph_ladybug --no-default-features \
+#     --features "runtime-tokio-rustls,sqlite,cache,ladybug"
+
+[[bin]]
+name = "graph_neo4j"
+path = "src/graph/graph_neo4j.rs"
+
+# ============================================================
+# 国际化模块示例 (common/i18n_formatting.rs)
+# ============================================================
+[[bin]]
+name = "i18n_formatting"
+path = "src/common/i18n_formatting.rs"
+
+# ============================================================
+# 集成适配器模块示例 (integrations/)
+# ============================================================
+[[bin]]
+name = "oxcache_adapter"
+path = "src/integrations/oxcache_adapter.rs"
+
+# ============================================================
+# 独立缓存功能示例 (common/cache_standalone.rs)
+# ============================================================
+[[bin]]
+name = "cache_standalone"
+path = "src/common/cache_standalone.rs"
+
+# ============================================================
+# Kit 统一能力管理示例 (kit/)
+# ============================================================
+[[bin]]
+name = "kit_usage"
+path = "src/kit/kit_usage.rs"
+
+[[bin]]
+name = "kit_advanced"
+path = "src/kit/kit_advanced.rs"
 
 # ============================================================
 # 通用模块示例 (common/)
@@ -229,10 +266,22 @@ dbnexus = { path = "..", features = [
     "validation",
     "duckdb",
     "tracing",
+    "neo4j",
+    "oxcache-integration",
+    "kit",
 ] }
 
 # DuckDB crate（duckdb_query 示例需要直接使用 duckdb::types::Value）
 duckdb = { version = "1.1", features = ["bundled"] }
+
+# Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
+oxcache = { version = "0.3" }
+
+# trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
+trait-kit = { version = "0.3", features = ["async"], default-features = false }
+
+# JSON（图数据库示例需要 serde_json::json!）
+serde_json = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
