@@ -29,6 +29,7 @@ fn test_retry_policy_custom_values() {
         max_backoff_ms: 10000,
         multiplier: 3.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
     assert_eq!(policy.max_retries, 5);
     assert_eq!(policy.initial_backoff_ms, 200);
@@ -130,6 +131,7 @@ async fn test_execute_with_retry_success_first_try() {
         max_backoff_ms: 100,
         multiplier: 2.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
 
     let result = RetryExecutor::execute_with_retry(&policy, || async { Ok::<i32, _>(42) }, "SELECT 1").await;
@@ -145,6 +147,7 @@ async fn test_execute_with_retry_success_after_failures() {
         max_backoff_ms: 100,
         multiplier: 2.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -182,6 +185,7 @@ async fn test_execute_with_retry_exhausted() {
         max_backoff_ms: 100,
         multiplier: 2.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -214,6 +218,7 @@ async fn test_non_idempotent_no_retry() {
         max_backoff_ms: 100,
         multiplier: 2.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -245,6 +250,7 @@ async fn test_retry_policy_zero_retries() {
         max_backoff_ms: 100,
         multiplier: 2.0,
         jitter: false,
+        overall_timeout_ms: None,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
