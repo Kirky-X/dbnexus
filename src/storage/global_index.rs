@@ -10,10 +10,12 @@
 #![allow(missing_docs)]
 
 use sea_orm::ActiveValue::Set;
-use sea_orm::Database;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::OnConflict;
 use std::sync::Arc;
+
+use crate::database::DbPool;
+use crate::foundation::DbResult;
 
 /// 同步状态：待同步
 pub const SYNC_STATUS_PENDING: &str = "pending";
@@ -77,22 +79,31 @@ pub struct SyncResult {
 }
 
 /// 全局索引管理器
+///
+/// 通过 `Arc<DbPool>` 管理连接，复用连接池的权限检查、metrics 和健康检查能力。
+/// 所有 SQL 操作通过 `pool.get_session("admin")` 获取 Session 执行。
 pub struct GlobalIndex {
-    pool: Arc<sea_orm::DbConn>,
+    pool: Arc<DbPool>,
 }
 
 impl GlobalIndex {
     /// 创建新的全局索引管理器
-    pub async fn new(db_url: &str) -> Result<Self, sea_orm::DbErr> {
-        let db = Database::connect(db_url).await?;
+    ///
+    /// 接受 `Arc<DbPool>` 参数，通过 DbPool 统一管理连接生命周期。
+    /// 自动创建全局索引表（如果不存在）。
+    pub async fn new(pool: Arc<DbPool>) -> DbResult<Self> {
+        // 通过 Session 获取连接执行表创建
+        let session = pool.get_session("admin").await?;
+        let conn = session.connection()?;
+        Self::create_table_if_not_exists(conn).await?;
+        // session 在此 drop，归还连接到池
+        drop(session);
 
-        Self::create_table_if_not_exists(&db).await?;
-
-        Ok(Self { pool: Arc::new(db) })
+        Ok(Self { pool })
     }
 
     /// 创建全局索引表（如果不存在）
-    async fn create_table_if_not_exists(db: &sea_orm::DbConn) -> Result<(), sea_orm::DbErr> {
+    async fn create_table_if_not_exists(db: &sea_orm::DatabaseConnection) -> DbResult<()> {
         use sea_orm::Schema;
 
         let builder = db.get_database_backend();
@@ -112,12 +123,15 @@ impl GlobalIndex {
         table_name: &str,
         index_key: &str,
         index_value: &str,
-    ) -> Result<Vec<IndexEntry>, sea_orm::DbErr> {
+    ) -> DbResult<Vec<IndexEntry>> {
+        let session = self.pool.get_session("admin").await?;
+        let conn = session.connection()?;
+
         let results = Entity::find()
             .filter(Column::TableName.eq(table_name))
             .filter(Column::IndexKey.eq(index_key))
             .filter(Column::IndexValue.eq(index_value))
-            .all(&*self.pool)
+            .all(conn)
             .await?;
 
         Ok(results
@@ -136,7 +150,7 @@ impl GlobalIndex {
     ///
     /// 将大量条目分成每批最多 500 条进行插入，配合 `OnConflict` 实现 upsert。
     /// 即使部分批次失败，已成功的批次仍会持久化（部分成功语义）。
-    pub async fn batch_sync(&self, entries: Vec<IndexEntry>) -> Result<SyncResult, sea_orm::DbErr> {
+    pub async fn batch_sync(&self, entries: Vec<IndexEntry>) -> DbResult<SyncResult> {
         if entries.is_empty() {
             return Ok(SyncResult {
                 success: true,
@@ -165,6 +179,22 @@ impl GlobalIndex {
     async fn chunk_and_upsert(&self, entries: &[IndexEntry], chunk_size: usize) -> (usize, Vec<String>) {
         let mut total_synced = 0usize;
         let mut all_errors: Vec<String> = Vec::new();
+
+        // 获取一个 Session 用于整个批量操作
+        let session = match self.pool.get_session("admin").await {
+            Ok(s) => s,
+            Err(e) => {
+                all_errors.push(format!("Failed to acquire session: {:?}", e));
+                return (0, all_errors);
+            }
+        };
+        let conn = match session.connection() {
+            Ok(c) => c,
+            Err(e) => {
+                all_errors.push(format!("Failed to get connection: {:?}", e));
+                return (0, all_errors);
+            }
+        };
 
         for (batch_idx, chunk) in entries.chunks(chunk_size).enumerate() {
             let active_models: Vec<ActiveModel> = chunk
@@ -202,7 +232,7 @@ impl GlobalIndex {
                         ])
                         .to_owned(),
                 )
-                .exec(&*self.pool)
+                .exec(conn)
                 .await
             {
                 Ok(_) => {
@@ -230,7 +260,8 @@ mod tests {
 
     /// 创建基于 SQLite 内存的 GlobalIndex 实例
     async fn create_global_index() -> GlobalIndex {
-        GlobalIndex::new("sqlite::memory:")
+        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create DbPool");
+        GlobalIndex::new(Arc::new(pool))
             .await
             .expect("Failed to create GlobalIndex")
     }

@@ -230,3 +230,91 @@ fn test_shard_id_for_key_within_range() {
         assert!(shard_id < 8, "shard_id {} should be < 8 for key {}", shard_id, key);
     }
 }
+
+// ============================================================================
+// T021: add_shard / remove_shard 动态分片管理测试
+// ============================================================================
+
+/// T021: add_shard 支持运行时动态添加分片连接池（&self 调用，无需 &mut self）
+#[tokio::test]
+async fn test_add_shard_dynamic() {
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let router = ShardRouter::with_strategy("hash", 4);
+    assert_eq!(router.pool_count(), 0);
+
+    // add_shard 使用 &self（DashMap 内部可变性）
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+    router.add_shard(0, Arc::clone(&pool));
+    assert_eq!(router.pool_count(), 1);
+    assert!(router.has_pool(0));
+
+    // 添加多个分片
+    let pool2 = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+    router.add_shard(2, pool2);
+    assert_eq!(router.pool_count(), 2);
+    assert!(router.has_pool(2));
+}
+
+/// T021: remove_shard 支持运行时动态移除分片（&self 调用）
+#[tokio::test]
+async fn test_remove_shard_dynamic() {
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let router = ShardRouter::with_strategy("hash", 4);
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+    router.add_shard(0, pool);
+    assert_eq!(router.pool_count(), 1);
+
+    // remove_shard 使用 &self
+    let removed = router.remove_shard(0);
+    assert!(removed.is_some(), "remove_shard should return the pool");
+    assert_eq!(router.pool_count(), 0);
+    assert!(!router.has_pool(0));
+
+    // 移除不存在的分片返回 None
+    let removed = router.remove_shard(99);
+    assert!(removed.is_none());
+}
+
+/// T021: add_shard/remove_shard 并发安全性（DashMap 无锁并发）
+#[tokio::test]
+async fn test_shard_dynamic_concurrent_safety() {
+    let Some(url) = get_database_url() else {
+        return;
+    };
+
+    let router = Arc::new(ShardRouter::with_strategy("hash", 16));
+
+    // 并发添加分片
+    let mut handles = vec![];
+    for i in 0..8u32 {
+        let router_clone = Arc::clone(&router);
+        let url_clone = url.clone();
+        handles.push(tokio::spawn(async move {
+            let pool = Arc::new(dbnexus::DbPool::new(&url_clone).await.unwrap());
+            router_clone.add_shard(i, pool);
+        }));
+    }
+    for handle in handles {
+        handle.await.unwrap();
+    }
+    assert_eq!(router.pool_count(), 8);
+
+    // 并发移除分片
+    let mut handles = vec![];
+    for i in 0..4u32 {
+        let router_clone = Arc::clone(&router);
+        handles.push(tokio::spawn(async move {
+            router_clone.remove_shard(i);
+        }));
+    }
+    for handle in handles {
+        handle.await.unwrap();
+    }
+    assert_eq!(router.pool_count(), 4);
+}

@@ -10,10 +10,12 @@ use std::time::{Duration, Instant};
 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
 use std::collections::HashMap;
 
+#[cfg(all(test, any(feature = "ladybug", feature = "permission")))]
+use super::DbPool;
 #[cfg(feature = "permission")]
 use super::audit::audit_admin_bypass;
 use super::db_pool::DbPoolInner;
-use super::{DatabaseConnection, DbConnection, DbPool};
+use super::{DatabaseConnection, DbConnection};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
@@ -72,10 +74,7 @@ pub struct Session {
     /// 数据库连接（统一枚举：SeaORM 或 DuckDB）
     connection: Option<DbConnection>,
 
-    /// 连接池（用于释放连接）
-    pool: Arc<DbPool>,
-
-    /// 连接池内部状态
+    /// 连接池内部状态（用于归还连接）
     pool_inner: Arc<DbPoolInner>,
 
     /// 角色
@@ -104,7 +103,7 @@ pub struct Session {
 
 impl Session {
     /// 创建新的 Session
-    pub(crate) fn new(connection: DbConnection, pool: Arc<DbPool>, pool_inner: Arc<DbPoolInner>, role: String) -> Self {
+    pub(crate) fn new(connection: DbConnection, pool_inner: Arc<DbPoolInner>, role: String) -> Self {
         #[cfg(feature = "permission")]
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
@@ -113,7 +112,6 @@ impl Session {
 
         Session {
             connection: Some(connection),
-            pool,
             pool_inner,
             role,
             #[cfg(feature = "permission")]
@@ -1280,9 +1278,9 @@ impl Drop for Session {
         // 如果 `execute_cypher` 正在执行（graph_txn 被 take 出来在 await 中），
         // Session drop 会导致 future drop，局部变量 `graph_txn` 也会被 drop。
         //
-        // 归还连接到池
+        // 归还连接到池（直接通过 DbPoolInner 操作，无需 Arc<DbPool>）
         if let Some(conn) = self.connection.take() {
-            self.pool.release_connection(conn);
+            DbPoolInner::release_connection(&self.pool_inner, conn);
         }
     }
 }

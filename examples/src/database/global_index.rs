@@ -14,7 +14,10 @@
 //! cargo run --example global_index --features "sqlite,global-index"
 //! ```
 
-use dbnexus::{GlobalIndex, IndexEntry, SyncEvent, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED};
+use dbnexus::{
+    DbPool, GlobalIndex, IndexEntry, SyncEvent, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
+};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,8 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 1. 创建全局索引管理器
     // ============================================
-    // GlobalIndex::new 会自动创建 global_index 表（如果不存在）
-    let global_index = GlobalIndex::new("sqlite::memory:").await?;
+    // GlobalIndex::new 接受 Arc<DbPool>，通过连接池统一管理连接生命周期
+    let pool = DbPool::new("sqlite::memory:").await?;
+    let global_index = GlobalIndex::new(Arc::new(pool)).await?;
     println!("✓ 全局索引管理器创建成功（global_index 表已自动创建）");
 
     // ============================================
@@ -194,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✨ 全局索引示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - GlobalIndex::new(db_url) 创建管理器并自动建表");
+    println!("  - GlobalIndex::new(Arc<DbPool>) 创建管理器并自动建表");
     println!("  - IndexEntry 结构: table_name, record_id, shard_id, index_key, index_value");
     println!("  - batch_sync(entries) 批量同步（支持 upsert，分批插入避免参数限制）");
     println!("  - query_by_index(table, key, value) 跨分片查询");
