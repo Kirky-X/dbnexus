@@ -41,7 +41,6 @@ compile_error!("Cannot mix embedded (sqlite/duckdb) and server-side (postgres/my
 // 图 DB feature（ladybug/neo4j）与关系型 feature 不互斥，允许混合使用
 
 // 检查 feature 依赖关系
-// Task 21：移除 permission-with-cache 检查（该聚合 feature 已移除，用户改用 permission + cache）
 #[cfg(all(not(clippy), feature = "permission-engine", not(feature = "cache")))]
 compile_error!("The 'permission-engine' feature requires the 'cache' feature to be enabled");
 
@@ -101,7 +100,7 @@ mod generated_roles;
 // Common 导出 (新架构)
 pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
-// DatabaseType 统一定一在 foundation::config（Task 15：合并 common::types::DatabaseType）
+// DatabaseType 统一在 foundation::config
 pub use crate::foundation::DatabaseType;
 
 // Foundation 导出 (旧版，保持兼容)
@@ -245,7 +244,7 @@ pub use crate::domain::migration::{OrchestratedMigrationResult, ShardMigrationOr
 
 // 分布式 ID 生成器导出（distributed-id feature）
 #[cfg(feature = "distributed-id")]
-pub use crate::common::{DistributedIdGenerator, IdComponents, SnowflakeIdGenerator};
+pub use crate::common::{DistributedIdGenerator, IdComponents, SnowflakeError, SnowflakeIdGenerator};
 
 // MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
@@ -282,8 +281,6 @@ pub use crate::integrations::DbNexusModule;
 
 // I18n 导出（核心特性 — ICU4X 国际化格式化）
 pub use crate::i18n::{DbI18nFormatter, I18nError};
-
-// Kit 导出已移除（trait-kit 0.1 集成已在 T023 删除，0.2.2 AsyncKit 集成见 src/integrations/kit/）
 
 // ============================================================================
 // Re-export underlying dependencies

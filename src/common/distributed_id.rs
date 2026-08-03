@@ -8,6 +8,45 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ============================================================================
+// SnowflakeError — ID 生成错误
+// ============================================================================
+
+/// Snowflake ID 生成器错误
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnowflakeError {
+    /// 系统时钟回拨超过容忍阈值（spin-wait 超时后仍未恢复）
+    ClockBacktrack {
+        /// 等待后的时间戳仍落后于上次使用时间戳
+        waited_ts: u64,
+        /// 上次使用的时间戳
+        last_ts: u64,
+    },
+    /// 时间戳溢出（41 bits 耗尽，约 69 年后触发）
+    TimestampOverflow {
+        /// 当前时间戳（超出 41 bits 范围）
+        timestamp: u64,
+    },
+}
+
+impl std::fmt::Display for SnowflakeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ClockBacktrack { waited_ts, last_ts } => {
+                write!(
+                    f,
+                    "Clock backtrack: waited timestamp {waited_ts} still behind last used {last_ts}"
+                )
+            }
+            Self::TimestampOverflow { timestamp } => {
+                write!(f, "Timestamp overflow: {timestamp} exceeds 41-bit capacity")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SnowflakeError {}
+
+// ============================================================================
 // IdComponents — ID 解析结果
 // ============================================================================
 
@@ -29,7 +68,11 @@ pub struct IdComponents {
 /// 分布式 ID 生成器 trait
 pub trait DistributedIdGenerator: Send + Sync {
     /// 生成下一个 ID
-    fn next_id(&self) -> u64;
+    ///
+    /// # 错误
+    ///
+    /// 时钟回拨或时间戳溢出时返回 `SnowflakeError`
+    fn next_id(&self) -> Result<u64, SnowflakeError>;
     /// 解析 ID 组成
     fn parse_id(&self, id: u64) -> IdComponents;
 }
@@ -82,16 +125,20 @@ impl SnowflakeIdGenerator {
     }
 
     /// 获取当前时间戳（毫秒，自定义 epoch 起算）
+    ///
+    /// 时钟回拨时钳位到 0 而非 panic（NTP 调整可能导致 `SystemTime` 早于 `UNIX_EPOCH`）
     fn current_timestamp(&self) -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .unwrap_or_default()
             .as_millis() as u64
             - self.epoch
     }
 
     /// spin-wait 直到下一毫秒
-    fn wait_next_millis(&self, last_ts: u64) -> u64 {
+    ///
+    /// 返回 `Some(ts)` 表示成功推进到下一毫秒，`None` 表示超时（100k 次旋转后仍未推进）
+    fn wait_next_millis(&self, last_ts: u64) -> Option<u64> {
         let mut ts = self.current_timestamp();
         let mut spins = 0;
         while ts <= last_ts {
@@ -99,27 +146,41 @@ impl SnowflakeIdGenerator {
             ts = self.current_timestamp();
             spins += 1;
             if spins > 100_000 {
-                break;
+                return None;
             }
         }
-        ts
+        Some(ts)
     }
 }
 
+/// 41 bits 时间戳最大值（约 69 年）
+const MAX_TIMESTAMP: u64 = (1 << 41) - 1;
+
 impl DistributedIdGenerator for SnowflakeIdGenerator {
-    fn next_id(&self) -> u64 {
+    fn next_id(&self) -> Result<u64, SnowflakeError> {
         loop {
             let timestamp = self.current_timestamp();
+
+            // 时间戳溢出检查（41 bits 耗尽）
+            if timestamp > MAX_TIMESTAMP {
+                return Err(SnowflakeError::TimestampOverflow { timestamp });
+            }
+
             let current = self.ts_seq.load(Ordering::SeqCst);
             let last_ts = current >> 12;
 
             if timestamp < last_ts {
-                // 时钟回拨：spin-wait 最多 1ms
-                let waited = self.wait_next_millis(last_ts);
-                if waited < last_ts {
-                    return 0; // 仍然回拨，返回 0 表示错误
+                // 时钟回拨：spin-wait 最多 100k 次旋转
+                match self.wait_next_millis(last_ts) {
+                    Some(waited) if waited > last_ts => continue,
+                    _ => {
+                        // 超时或仍落后 — 返回明确错误而非歧义的 0
+                        return Err(SnowflakeError::ClockBacktrack {
+                            waited_ts: self.current_timestamp(),
+                            last_ts,
+                        });
+                    }
                 }
-                continue;
             }
 
             // 计算新的 ts_seq 值
@@ -130,9 +191,16 @@ impl DistributedIdGenerator for SnowflakeIdGenerator {
                 // 同一毫秒：递增序列号
                 let seq = (current & 0xFFF) + 1;
                 if seq > 0xFFF {
-                    // 序列号溢出：等待下一毫秒后重试
-                    self.wait_next_millis(last_ts);
-                    continue;
+                    // 序列号溢出：等待下一毫秒
+                    match self.wait_next_millis(last_ts) {
+                        Some(_) => continue,
+                        None => {
+                            return Err(SnowflakeError::ClockBacktrack {
+                                waited_ts: self.current_timestamp(),
+                                last_ts,
+                            });
+                        }
+                    }
                 }
                 (last_ts << 12) | seq
             };
@@ -144,7 +212,7 @@ impl DistributedIdGenerator for SnowflakeIdGenerator {
             {
                 Ok(_) => {
                     let seq = new_ts_seq & 0xFFF;
-                    return (timestamp << 22) | ((self.machine_id as u64) << 12) | seq;
+                    return Ok((timestamp << 22) | ((self.machine_id as u64) << 12) | seq);
                 }
                 Err(_) => {
                     // CAS 失败：其他线程已更新，重试

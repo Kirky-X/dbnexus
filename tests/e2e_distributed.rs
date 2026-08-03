@@ -161,7 +161,9 @@ mod distributed_id_integration {
         for _ in 0..5 {
             let gen_clone = Arc::clone(&id_gen);
             handles.push(thread::spawn(move || {
-                (0..200).map(|_| gen_clone.next_id()).collect::<Vec<_>>()
+                (0..200)
+                    .map(|_| gen_clone.next_id().expect("ID generation should succeed"))
+                    .collect::<Vec<_>>()
             }));
         }
 
@@ -177,7 +179,7 @@ mod distributed_id_integration {
     #[test]
     fn test_id_parse_roundtrip() {
         let id_gen = SnowflakeIdGenerator::new(99, 1_700_000_000_000).unwrap();
-        let id = id_gen.next_id();
+        let id = id_gen.next_id().expect("ID generation should succeed");
         let components = id_gen.parse_id(id);
         assert_eq!(components.machine_id, 99);
         assert!(components.timestamp_ms > 0);
