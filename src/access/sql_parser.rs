@@ -3,13 +3,13 @@
 //! SQL Parser module using sqlparser for enhanced SQL parsing and validation.
 //! This module provides robust SQL operation detection and permission action mapping.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{Delete, FromTable, Query, Set, SetExpr, Statement, TableObject, TableWithJoins};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -528,7 +528,7 @@ fn contains_variables(sql: &str) -> bool {
     let sql_without_strings = remove_string_literals(sql);
 
     // Enhanced detection patterns for SQL injection and dynamic SQL variables
-    static PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    static PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         vec![
             // Named parameters: @variable, :variable
             Regex::new(r"@[\w]+").expect("Regex pattern should be valid"),
