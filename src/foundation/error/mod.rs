@@ -48,6 +48,10 @@ pub enum DbError {
     #[error("Cache error: {0}")]
     Cache(String),
 
+    /// 查询错误
+    #[error("Query error: {0}")]
+    Query(String),
+
     /// 数据验证错误（feature-gated: validation）
     #[cfg(feature = "validation")]
     #[error("Validation error: {0}")]

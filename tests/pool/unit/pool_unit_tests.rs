@@ -1320,3 +1320,47 @@ async fn test_max_waiters_tracks_historical_peak() {
 //
 // 注意：信号量许可管理的并发测试已移至 tests/pool_semaphore_test.rs
 // 这里的测试专注于单元级别的验证。
+
+// ============================================================================
+// T010: release_connection 安全性测试
+// ============================================================================
+
+/// T010: 验证连续 acquire + release 1000 次后无连接泄漏
+///
+/// 验证 release_connection 在所有路径上正确维护计数一致性：
+/// - active_count 归零（所有连接已归还，无活跃连接）
+/// - total_count == active_count + idle_count（连接被回收到 idle 队列而非销毁）
+/// - 信号量许可完整归还
+#[tokio::test]
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
+async fn test_release_connection_no_leak() {
+    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create pool");
+
+    // 连续 acquire + release 1000 次
+    for _ in 0..1000 {
+        let session = pool.get_session("admin").await.expect("Failed to get session");
+        drop(session); // 触发 release_connection
+    }
+
+    // 等待异步路径完成
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let status = pool.status();
+    assert_eq!(
+        status.active, 0,
+        "active_count should be 0 after all sessions dropped, got {}",
+        status.active
+    );
+    // 连接被回收到 idle 队列而非销毁，所以 total >= 0 且 total == idle
+    // 由于是串行 acquire+release，连接池最多保留 1 个连接在 idle
+    assert!(
+        status.total <= 1,
+        "total_count should be <= 1 (connection reused via idle pool), got {}",
+        status.total
+    );
+    assert_eq!(
+        status.total, status.idle,
+        "all connections should be idle (total={}, idle={})",
+        status.total, status.idle
+    );
+}

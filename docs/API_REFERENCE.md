@@ -988,13 +988,15 @@ let (session, shard_id) = router.get_session_for_shard_with_id("user_42", "admin
 跨分片查询索引支持，基于 sea-orm 持久化到数据库。
 
 ```rust
-use dbnexus::GlobalIndex;
+use dbnexus::{DbPool, GlobalIndex};
+use std::sync::Arc;
 
-// 需要数据库 URL（索引持久化到表）
-let index = GlobalIndex::new("sqlite::memory:").await?;
+// 通过 DbPool 统一管理连接生命周期
+let pool = DbPool::new("sqlite::memory:").await?;
+let index = GlobalIndex::new(Arc::new(pool)).await?;
 
 // 按索引键查询
-let entries = index.query_by_index("users", "user_123").await?;
+let entries = index.query_by_index("users", "user_id", "user_123").await?;
 
 // 批量同步
 let result = index.batch_sync(entries).await?;

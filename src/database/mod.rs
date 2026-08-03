@@ -28,7 +28,7 @@ pub use pool::{ConnectionTrait, TransactionTrait};
 #[cfg(feature = "duckdb")]
 pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "sharding")]
-pub use sharding::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
+pub use sharding::{ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // 图数据库 re-exports
 #[cfg(feature = "ladybug")]
