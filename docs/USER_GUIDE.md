@@ -47,8 +47,8 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.3"
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
+dbnexus = "0.4"
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 ```
 
 ### 2. 选择特性
@@ -57,10 +57,10 @@ tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.3", default-features = false, features = ["embedded"] }
+dbnexus = { version = "0.4", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.3", features = [
+dbnexus = { version = "0.4", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,10 +69,10 @@ dbnexus = { version = "0.3", features = [
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.3", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.4", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
-完整特性列表请参见 [README.md](README.md#feature-flags)。
+完整特性列表请参见 [README.md](../README.md#feature-flags)。
 
 ### 3. 启用数据库驱动
 
@@ -80,16 +80,25 @@ dbnexus = { version = "0.3", features = ["sqlite", "permission", "sql-parser"] }
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.3", features = ["sqlite"] }
+dbnexus = { version = "0.4", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.3", features = ["postgres"] }
+dbnexus = { version = "0.4", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.3", features = ["mysql"] }
+dbnexus = { version = "0.4", features = ["mysql"] }
+
+# DuckDB（嵌入式分析型数据库）
+dbnexus = { version = "0.4", features = ["duckdb"] }
+
+# Ladybug（嵌入式图数据库）
+dbnexus = { version = "0.4", features = ["ladybug"] }
+
+# Neo4j（图数据库服务器）
+dbnexus = { version = "0.4", features = ["neo4j"] }
 ```
 
-**重要：**一次只能启用一个数据库驱动。
+**重要：**关系型数据库驱动（SQLite/PostgreSQL/MySQL/DuckDB）之间一次只能启用一个。图数据库驱动（Ladybug/Neo4j）可与关系型驱动共存。
 
 ### 4. 验证安装
 
@@ -152,7 +161,11 @@ admin_role: admin
 ```rust
 use dbnexus::DbConfig;
 
-let config = DbConfig::from_yaml_file("dbnexus.yaml")?;
+// 从 YAML 字符串加载（需要 yaml feature）
+#[cfg(feature = "yaml")]
+let yaml_content = std::fs::read_to_string("dbnexus.yaml")?;
+#[cfg(feature = "yaml")]
+let config = DbConfig::from_yaml_str(&yaml_content)?;
 let pool = DbPool::with_config(config).await?;
 ```
 
@@ -176,26 +189,31 @@ admin_role = "admin"
 #[cfg(feature = "config-toml")]
 use dbnexus::DbConfig;
 
-let config = DbConfig::from_toml_file("dbnexus.toml")?;
+// 从 JSON 字符串加载（DbConfig 支持 serde_json 反序列化）
+let json_content = std::fs::read_to_string("dbnexus.json")?;
+let config = DbConfig::from_json_str(&json_content)?;
 let pool = DbPool::with_config(config).await?;
 ```
 
-### 使用构建器模式
+### 使用程序化配置
 
-对于程序化配置：
+对于程序化配置，直接构造 `DbConfig` 结构体：
 
 ```rust
-use dbnexus::{DbPool, config::DbConfigBuilder};
+use dbnexus::{DbPool, DbConfig, PoolConfig};
 
-let config = DbConfigBuilder::new()
-    .url("postgresql://localhost/mydb")
-    .max_connections(20)
-    .min_connections(5)
-    .idle_timeout(300)
-    .acquire_timeout(5000)
-    .auto_migrate(true)
-    .admin_role("admin")
-    .build()?;
+let config = DbConfig {
+    url: "postgresql://localhost/mydb".to_string(),
+    pool_config: PoolConfig {
+        max_connections: 20,
+        min_connections: 5,
+        idle_timeout: 300,
+        acquire_timeout: 5000,
+    },
+    admin_role: "admin".to_string(),
+    auto_migrate: true,
+    ..Default::default()
+};
 
 let pool = DbPool::with_config(config).await?;
 ```
@@ -741,7 +759,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["metrics"]
 ```
 
@@ -772,7 +790,7 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["audit"]
 ```
 
@@ -806,7 +824,7 @@ SensitiveData::find_by_id(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["tracing"]
 ```
 
@@ -831,7 +849,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["duckdb"]
 ```
 
@@ -886,7 +904,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["authentication"]
 ```
 
@@ -935,7 +953,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["sql-parser"]
 ```
 
@@ -982,7 +1000,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["sharding"]
 ```
 
@@ -1019,7 +1037,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.3"
+version = "0.4"
 features = ["validation"]
 ```
 
@@ -1053,6 +1071,60 @@ fn validate_email(email: &str) -> Result<(), DbError> {
     }
     Ok(())
 }
+```
+
+### 图数据库（需要 `ladybug` 或 `neo4j` 特性）
+
+DBNexus 支持图数据库，通过 `GraphConnection` trait 统一抽象。图数据库与关系型数据库不互斥，可混合使用。
+
+```toml
+[dependencies.dbnexus]
+version = "0.4"
+features = ["ladybug"]  # 或 "neo4j"
+```
+
+API 说明：
+
+- `LadybugConnection::new(url: &str) -> Result<Self, DbError>` — 创建嵌入式图数据库连接
+- `Neo4jConnection::new(url, user, pass) -> Result<Self, DbError>` — 创建 Neo4j 服务器连接（async）
+- `conn.execute_cypher(cypher: &str) -> Result<GraphExecResult, DbError>` — 执行 Cypher 语句
+- `conn.query_cypher(cypher: &str) -> Result<GraphQueryResult, DbError>` — 查询图数据
+- `session.execute_cypher(cypher: &str) -> Result<GraphExecResult, DbError>` — 通过 Session 执行（支持图事务）
+
+```rust
+use dbnexus::{LadybugConnection, GraphConnection};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let conn = LadybugConnection::new("ladybug::memory:")?;
+
+    // 创建节点
+    conn.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
+
+    // 查询
+    let result = conn.query_cypher("MATCH (n:User) RETURN n").await?;
+    println!("节点数: {}", result.rows.len());
+
+    Ok(())
+}
+```
+
+### 国际化格式化（需要 `i18n` 特性）
+
+基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。
+
+```toml
+[dependencies.dbnexus]
+version = "0.4"
+features = ["i18n"]
+```
+
+```rust
+use dbnexus::DbI18nFormatter;
+
+let formatter = DbI18nFormatter::new("zh-CN")?;
+// locale 感知的数字格式化
+let formatted = formatter.format_number(1234567.89);
 ```
 
 ---

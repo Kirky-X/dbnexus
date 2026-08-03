@@ -72,6 +72,10 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 - `health-check` - 健康检查 + 熔断器（0.3.0 新增）
 - `permission-engine` - 高级权限引擎（RBAC + ABAC）
 - `global-index` - 跨分片全局索引
+- `ladybug` - 嵌入式图数据库（0.4.0 新增）
+- `neo4j` - Neo4j 图数据库服务器（0.4.0 新增）
+- `i18n` - ICU4X 国际化格式化（0.4.0 新增）
+- `kit` - trait-kit 能力管理集成（0.4.0 新增）
 
 **特性依赖关系（编译时强制）：**
 
@@ -134,6 +138,13 @@ graph TD
 
 DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/lib.rs` 统一声明和导出。
 
+### 0. 顶层模块
+
+统一错误类型和模块声明。
+
+- `lib.rs` — 模块声明、编译期特性互斥检查、公共 API 导出
+- `error.rs` — `DbNexusError`、`DbNexusResult`、`ErrorCategory`、`QueryErrorReport`（顶层统一错误类型）
+
 ### 1. 公共类型层 (`common/`)
 
 零依赖的基础类型，被所有层共用。
@@ -183,6 +194,12 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
   - `db_pool.rs` — `DbPool`、`DatabaseConnection` 类型别名
   - `session.rs` — `Session`（RAII 会话，drop 时自动归还连接）
   - `duckdb_conn.rs` — `DuckDbConnection`、`DuckDbRow`、`DuckDbExecResult`（cfg = "duckdb"，0.3.0 新增）
+  - `pool_impl.rs` — 连接池内部实现
+  - `audit.rs` — 安全审计日志（admin 旁路操作审计）
+- `database/graph/` — 图数据库（0.4.0 新增）
+  - `mod.rs` — `GraphConnection` trait、`GraphTransaction` trait、`GraphNode`、`GraphRel`、`GraphRow`、`GraphValue`、`GraphExecResult`、`GraphQueryResult`
+  - `ladybug_conn.rs` — `LadybugConnection`（cfg = "ladybug"，嵌入式图数据库）
+  - `neo4j_conn.rs` — `Neo4jConnection`（cfg = "neo4j"，Neo4j 服务器）
 - `database/sharding.rs` — `ShardRouter`、`ShardConfig`、`ShardingStrategy` trait、`create_strategy`（cfg = "sharding"）
 - `database/migration/` — 运行时迁移执行器（cfg = "migration"，重导出 `domain::migration`）
 
@@ -240,8 +257,17 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
 
 基于 `trait-kit` 的统一能力管理。
 
-- `kit/mod.rs` — `DbNexusKit`（门面，提供 `provide_*` / `*` 方法注册和获取能力）
-- `kit/keys.rs` — `CapabilityKey` 系列类型（`PermissionCapKey`、`ConnectionPoolCapKey`、`DatabaseSessionCapKey`、`MetricsCapKey`、`HealthCapKey`）
+- `integrations/kit/mod.rs` — `DbNexusModule`（cfg = "kit"，trait-kit 0.3 异步集成）
+- `integrations/kit/module.rs` — `DbNexusModule` 实现
+- `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = "oxcache-integration"）
+- `integrations/mod.rs` — 模块入口
+
+### 9. 国际化模块 (`i18n/`)
+
+基于 ICU4X 的 locale 感知格式化（0.4.0 新增）。
+
+- `i18n/mod.rs` — 模块入口
+- `i18n/i18n_impl.rs` — `DbI18nFormatter`、`I18nError`（cfg = "i18n"）
 
 ### 自动生成模块
 
