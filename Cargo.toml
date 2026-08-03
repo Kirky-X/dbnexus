@@ -32,7 +32,7 @@ serde_yaml_ng = "0.10"
 serde_json = "1.0"
 
 # Database - 不包含数据库驱动，由各子包自行选择
-sea-orm = { version = "2.0.0-rc.42", default-features = false }
+sea-orm = { version = "2.0", default-features = false }
 
 # Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
@@ -41,6 +41,9 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 
 # Internal packages
 dbnexus-macros = { path = "macros", version = "0.4" }
+
+# Validation（root + examples 共享）
+validator = { version = "0.21", features = ["derive"] }
 
 [workspace.lints.rust]
 
@@ -115,7 +118,7 @@ neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 permission = ["dashmap", "futures", "yaml", "sql-parser"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
-sql-parser = ["sqlparser", "cache", "once_cell", "regex", "unicode-normalization"]
+sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization"]
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache"]  # 缓存功能（基于 oxcache）
 
@@ -158,7 +161,7 @@ validation = ["validator", "with-time"]  # 数据验证（validator crate + time
 # === 安全与合规 ===
 security = ["audit", "permission-engine"]
 audit = ["chrono", "uuid"]  # 审计日志
-permission-engine = ["dashmap", "cache", "futures", "once_cell", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
+permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
 # === 国际化 ===
@@ -215,12 +218,11 @@ sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
-once_cell = { version = "1.21", optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.23", optional = true, features = ["v4"] }
-validator = { version = "0.20", optional = true, features = ["derive"] }
+validator = { workspace = true, optional = true }
 criterion = { version = "0.8", optional = true }
 
 # External dependencies
@@ -239,13 +241,13 @@ trait-kit = { version = "0.3", features = ["async"], optional = true, default-fe
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
 
 # Ladybug embedded graph database (ladybug feature, 0.4.0 new)
-lbug = { version = "0.18", optional = true }
+lbug = { version = "0.19", optional = true }
 # Neo4j graph database server (neo4j feature, 0.4.0 new)
 neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
-# jsonwebtoken: CVE-2026-25537 修复版为 10.3.0，当前锁定的 10.4.0 已含修复（cargo audit 无 advisory）
-jsonwebtoken = { version = "10", features = ["aws_lc_rs"], optional = true }
+# jsonwebtoken: v11 使用 aws_lc_rs 后端，API 与 v10 兼容
+jsonwebtoken = { version = "11.0", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
