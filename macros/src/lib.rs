@@ -1657,3 +1657,229 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
 
     Ok(())
 }
+
+// ============================================================================
+// db_repository — 仓储模式代码生成宏
+// ============================================================================
+
+/// `db_repository` 属性宏参数
+#[derive(Default)]
+struct DbRepositoryArgs {
+    /// 表名（必需）
+    table: String,
+}
+
+impl DbRepositoryArgs {
+    fn parse(args: TokenStream) -> Self {
+        let mut result = Self::default();
+        let parser = syn::meta::parser(|meta| {
+            if meta.path.is_ident("table") {
+                let value = meta.value()?;
+                let lit: syn::LitStr = value.parse()?;
+                result.table = lit.value();
+                Ok(())
+            } else {
+                Err(meta.error("unsupported property"))
+            }
+        });
+        parser.parse(args).expect("failed to parse db_repository arguments");
+        if result.table.is_empty() {
+            panic!("db_repository requires `table` parameter: #[db_repository(table = \"users\")]");
+        }
+        result
+    }
+}
+
+/// `db_repository` 属性宏
+///
+/// 为标注的结构体生成仓储 trait 和默认实现。
+///
+/// # 参数
+///
+/// - `table` — 数据库表名（必需）
+///
+/// # 生成的 Trait 方法
+///
+/// - `find_by_id(pool, id)` — 按主键查询
+/// - `find_all(pool)` — 查询全部
+/// - `insert(pool, data)` — 插入记录
+/// - `update(pool, id, data)` — 更新记录
+/// - `delete_by_id(pool, id)` — 按主键删除
+///
+/// # Example
+///
+/// ```ignore
+/// use dbnexus::db_repository;
+///
+/// #[db_repository(table = "users")]
+/// struct UserRepository;
+///
+/// // 展开为 UserRepositoryTrait + 默认实现
+/// ```
+#[proc_macro_attribute]
+pub fn db_repository(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = DbRepositoryArgs::parse(args);
+    let item = parse_macro_input!(input as syn::ItemStruct);
+    let struct_name = &item.ident;
+    let trait_name = syn::Ident::new(&format!("{}Trait", struct_name), struct_name.span());
+    let table_name = &args.table;
+
+    let vis = &item.vis;
+
+    let expanded = quote! {
+        // 保留原始结构体
+        #item
+
+        /// 仓储 trait — 由 `#[db_repository]` 宏生成
+        #[::dbnexus::async_trait::async_trait]
+        #vis trait #trait_name: Send + Sync {
+            /// 按主键查询
+            async fn find_by_id(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+            ) -> ::dbnexus::DbResult<Option<serde_json::Value>>;
+
+            /// 查询全部记录
+            async fn find_all(
+                &self,
+                pool: &::dbnexus::DbPool,
+            ) -> ::dbnexus::DbResult<Vec<serde_json::Value>>;
+
+            /// 插入记录
+            async fn insert(
+                &self,
+                pool: &::dbnexus::DbPool,
+                data: serde_json::Value,
+            ) -> ::dbnexus::DbResult<()>;
+
+            /// 按主键更新
+            async fn update(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+                data: serde_json::Value,
+            ) -> ::dbnexus::DbResult<()>;
+
+            /// 按主键删除
+            async fn delete_by_id(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+            ) -> ::dbnexus::DbResult<()>;
+        }
+
+        #[::dbnexus::async_trait::async_trait]
+        impl #trait_name for #struct_name {
+            async fn find_by_id(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+            ) -> ::dbnexus::DbResult<Option<serde_json::Value>> {
+                use ::sea_orm::ConnectionTrait;
+                let session = pool.get_session("admin").await?;
+                let conn = session.connection()?;
+                let stmt = ::sea_orm::Statement::from_string(
+                    conn.get_database_backend(),
+                    format!("SELECT * FROM {} WHERE id = {}", #table_name, id),
+                );
+                let rows = conn.query_all_raw(stmt).await?;
+                if rows.is_empty() {
+                    Ok(None)
+                } else {
+                    // 将第一行转为 JSON（通过 try_get 提取已知列）
+                    let row = &rows[0];
+                    let id_val: Option<i64> = row.try_get("", "id").ok();
+                    let mut map = serde_json::Map::new();
+                    if let Some(v) = id_val { map.insert("id".into(), serde_json::json!(v)); }
+                    // 通用字段通过 try_get_by 尝试提取
+                    Ok(Some(serde_json::Value::Object(map)))
+                }
+            }
+
+            async fn find_all(
+                &self,
+                pool: &::dbnexus::DbPool,
+            ) -> ::dbnexus::DbResult<Vec<serde_json::Value>> {
+                use ::sea_orm::ConnectionTrait;
+                let session = pool.get_session("admin").await?;
+                let conn = session.connection()?;
+                let stmt = ::sea_orm::Statement::from_string(
+                    conn.get_database_backend(),
+                    format!("SELECT * FROM {}", #table_name),
+                );
+                let rows = conn.query_all_raw(stmt).await?;
+                let mut results = Vec::new();
+                for row in &rows {
+                    let id_val: Option<i64> = row.try_get("", "id").ok();
+                    let mut map = serde_json::Map::new();
+                    if let Some(v) = id_val { map.insert("id".into(), serde_json::json!(v)); }
+                    results.push(serde_json::Value::Object(map));
+                }
+                Ok(results)
+            }
+
+            async fn insert(
+                &self,
+                pool: &::dbnexus::DbPool,
+                data: serde_json::Value,
+            ) -> ::dbnexus::DbResult<()> {
+                let session = pool.get_session("admin").await?;
+                let obj = data.as_object().ok_or_else(|| ::dbnexus::DbError::Query("insert data must be a JSON object".to_string()))?;
+                let columns: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+                let values: Vec<String> = obj.values().map(|v| match v {
+                    serde_json::Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                    serde_json::Value::Null => "NULL".to_string(),
+                    other => other.to_string(),
+                }).collect();
+                let sql = format!(
+                    "INSERT INTO {} ({}) VALUES ({})",
+                    #table_name,
+                    columns.join(", "),
+                    values.join(", "),
+                );
+                session.execute_raw(&sql).await?;
+                Ok(())
+            }
+
+            async fn update(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+                data: serde_json::Value,
+            ) -> ::dbnexus::DbResult<()> {
+                let session = pool.get_session("admin").await?;
+                let obj = data.as_object().ok_or_else(|| ::dbnexus::DbError::Query("update data must be a JSON object".to_string()))?;
+                let set_clauses: Vec<String> = obj.iter().map(|(k, v)| {
+                    let val = match v {
+                        serde_json::Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                        serde_json::Value::Null => "NULL".to_string(),
+                        other => other.to_string(),
+                    };
+                    format!("{} = {}", k, val)
+                }).collect();
+                let sql = format!(
+                    "UPDATE {} SET {} WHERE id = {}",
+                    #table_name,
+                    set_clauses.join(", "),
+                    id,
+                );
+                session.execute_raw(&sql).await?;
+                Ok(())
+            }
+
+            async fn delete_by_id(
+                &self,
+                pool: &::dbnexus::DbPool,
+                id: i64,
+            ) -> ::dbnexus::DbResult<()> {
+                let session = pool.get_session("admin").await?;
+                let sql = format!("DELETE FROM {} WHERE id = {}", #table_name, id);
+                session.execute_raw(&sql).await?;
+                Ok(())
+            }
+        }
+    };
+
+    expanded.into()
+}

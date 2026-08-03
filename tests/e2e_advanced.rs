@@ -704,7 +704,12 @@ mod global_index_advanced {
     }
 
     async fn create_index() -> GlobalIndex {
-        GlobalIndex::new("sqlite::memory:")
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(1000);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let url = format!("sqlite:file:dbnexus_e2e_{}?mode=memory&cache=shared", id);
+        let pool = dbnexus::DbPool::new(&url).await.expect("Failed to create DbPool");
+        GlobalIndex::new(std::sync::Arc::new(pool))
             .await
             .expect("Failed to create GlobalIndex")
     }

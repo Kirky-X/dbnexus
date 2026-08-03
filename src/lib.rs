@@ -135,10 +135,10 @@ pub use crate::database::{
 pub use crate::database::{ConnectionPool, DatabaseSession};
 
 // DuckDB 连接包装器导出（0.3.0 新增）
+#[cfg(feature = "sharding")]
+pub use crate::database::{ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 #[cfg(feature = "duckdb")]
 pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
-#[cfg(feature = "sharding")]
-pub use crate::database::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 
 // 图数据库连接导出（0.4.0 新增）
 #[cfg(feature = "ladybug")]
@@ -226,9 +226,11 @@ pub use crate::domain::{
 #[cfg(feature = "audit")]
 pub use crate::foundation::AuditResult;
 
-// 过程宏 — 仅导出统一属性宏 `db_entity`（替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit）
+// 过程宏 — 导出 `db_entity` 和 `db_repository`
 #[cfg(feature = "macros")]
 pub use dbnexus_macros::db_entity;
+#[cfg(feature = "macros")]
+pub use dbnexus_macros::db_repository;
 
 // Integration adapter 导出（oxcache-integration feature）
 #[cfg(feature = "oxcache-integration")]

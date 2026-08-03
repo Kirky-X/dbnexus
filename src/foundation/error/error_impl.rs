@@ -21,6 +21,7 @@ impl DbError {
             DbError::Transaction(msg) => msg.clone(),
             DbError::Migration(msg) => msg.clone(),
             DbError::Cache(msg) => msg.clone(),
+            DbError::Query(msg) => msg.clone(),
             #[cfg(feature = "validation")]
             DbError::Validation(msg) => msg.clone(),
         }
