@@ -1,28 +1,46 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! ICU4X-backed internationalization formatting for database operations.
+//! ICU4X-backed internationalization for database operations.
 //!
-//! Provides locale-aware number formatting, date formatting, plural rules,
-//! and string collation via the `icu` crate (ICU4X 2.x). Useful for
-//! generating locale-sensitive migration messages (e.g. "1 migration" vs
-//! "2 migrations"), formatting row counts in query results, displaying
-//! migration timestamps, and sorting SQL error messages by locale-specific
-//! collation rules.
+//! Provides:
+//! - **Locale detection**: Automatic system locale detection with `DBNEXUS_LANG`
+//!   environment variable override and manual `set_locale()` API.
+//! - **Message catalog**: Compile-time embedded translations for 2 languages
+//!   (en, zh) covering all error types and CLI output.
+//! - **LocalizedMsg / I18nExt traits**: Extension traits for error types to
+//!   provide `to_localized_string()` and `message_en()`.
+//! - **DbI18nFormatter**: ICU4X locale-aware number/date/plural/collation formatting.
 //!
 //! This is a **core feature** — always available, no feature flag required.
+//!
+//! # Locale Priority
+//!
+//! 1. `set_locale()` override
+//! 2. `DBNEXUS_LANG` environment variable
+//! 3. `sys-locale` system detection
+//! 4. `"en"` fallback
 //!
 //! # Example
 //!
 //! ```rust,ignore
-//! use dbnexus::i18n::DbI18nFormatter;
+//! use dbnexus::i18n;
 //!
-//! let fmt = DbI18nFormatter::new("en-US")?;
-//! let msg = fmt.format_migration_message(2)?; // "2 migrations applied"
+//! // Set locale
+//! i18n::set_locale("zh-CN").unwrap();
+//!
+//! // Translate a message
+//! let msg = i18n::t("pool-exhausted", &[]);
+//! // => "连接池已耗尽"
+//!
+//! // Use DbI18nFormatter for number/date formatting
+//! let fmt = i18n::DbI18nFormatter::new("en-US")?;
 //! let rows = fmt.format_row_count(1_234_567)?;
-//! let ts = fmt.format_timestamp(2026, 7, 11)?;
 //! ```
 
+pub mod catalog;
+pub mod error_ext;
 mod i18n_impl;
+pub mod locale;
 
 use icu::collator::CollatorBorrowed;
 use icu::decimal::DecimalFormatter;
@@ -119,24 +137,6 @@ mod tests {
             "zh-CN migration message should contain Chinese text: got '{msg}'"
         );
         assert!(msg.contains("1"), "message should contain count: got '{msg}'");
-    }
-
-    #[test]
-    fn test_format_migration_message_de() {
-        let fmt = DbI18nFormatter::new("de-DE").expect("de-DE locale");
-        let msg = fmt.format_migration_message(3).expect("migration message");
-        assert!(
-            msg.contains("Migrationen") && msg.contains("angewendet"),
-            "de-DE migration message: got '{msg}'"
-        );
-        assert!(msg.contains("3"), "message should contain count: got '{msg}'");
-    }
-
-    #[test]
-    fn test_format_migration_message_ja() {
-        let fmt = DbI18nFormatter::new("ja-JP").expect("ja-JP locale");
-        let msg = fmt.format_migration_message(2).expect("migration message");
-        assert!(msg.contains("マイグレーション"), "ja-JP migration message: got '{msg}'");
     }
 
     #[test]

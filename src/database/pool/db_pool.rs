@@ -1842,6 +1842,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_db_connection_is_duckdb_without_feature() {
         // Without duckdb feature, is_duckdb() always returns false
@@ -1849,12 +1850,14 @@ mod tests {
         assert!(!conn.is_duckdb());
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_db_connection_is_graph_seaorm() {
         let conn = DbConnection::SeaOrm(sea_orm::Database::connect("sqlite::memory:").await.unwrap());
         assert!(!conn.is_graph());
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_db_connection_as_sea_orm_success() {
         let sea_conn = sea_orm::Database::connect("sqlite::memory:")
@@ -1864,6 +1867,7 @@ mod tests {
         assert!(conn.as_sea_orm().is_ok());
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_pool_status_and_config() {
         let config = DbConfig {
@@ -1890,6 +1894,7 @@ mod tests {
         assert_eq!(pool.config().pool_config.min_connections, 2);
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_pool_update_max_active() {
         let config = DbConfig {
@@ -1947,6 +1952,7 @@ mod tests {
         assert!(result.is_err(), "Neo4j connection should fail without neo4j feature");
     }
 
+    #[cfg(feature = "sqlite")]
     #[test]
     fn test_pool_try_from_with_permission_returns_error() {
         let config = DbConfig::default();
@@ -1954,6 +1960,7 @@ mod tests {
         assert!(result.is_err(), "try_from should fail with permission feature enabled");
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_pool_current_url() {
         let config = DbConfig {
@@ -1966,6 +1973,7 @@ mod tests {
 
     // ===== 补充测试：Debug trait, ConnectionPool trait, health check, release_connection =====
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_seaorm_debug_format() {
         let sea_conn = sea_orm::Database::connect("sqlite::memory:")
@@ -1979,6 +1987,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_connection_pool_trait_methods() {
         use super::super::ConnectionPool;
@@ -2011,6 +2020,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_check_connection_health_sqlite() {
         let config = DbConfig {
@@ -2027,6 +2037,7 @@ mod tests {
         assert!(healthy, "SQLite memory connection should be healthy");
     }
 
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_release_connection_pool_full() {
         // Test release_connection when idle pool is at capacity
