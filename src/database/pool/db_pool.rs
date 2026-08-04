@@ -1900,10 +1900,10 @@ mod tests {
         };
         let pool = DbPool::with_config(config).await.expect("should create pool");
 
-        // Test status() — pool eagerly creates min_connections on init
+        // Test status() — without pool-warmup feature, connections are created lazily
         let status = pool.status();
-        assert_eq!(status.total, 2); // min_connections = 2
-        assert_eq!(status.idle, 2);
+        assert_eq!(status.total, 0); // no warmup → no pre-created connections
+        assert_eq!(status.idle, 0);
         assert_eq!(status.borrow_count, 0);
 
         // Test config()
@@ -2021,9 +2021,9 @@ mod tests {
         };
         let pool = DbPool::with_config(config).await.expect("should create pool");
 
-        // Test ConnectionPool::status — pool eagerly creates min_connections on init
+        // Test ConnectionPool::status — without pool-warmup feature, connections are created lazily
         let status = ConnectionPool::status(&pool);
-        assert_eq!(status.total, 5); // default min_connections = 5
+        assert_eq!(status.total, 0); // no warmup → no pre-created connections
 
         // Test ConnectionPool::config
         let cfg = ConnectionPool::config(&pool);
