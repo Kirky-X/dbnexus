@@ -341,11 +341,12 @@ mod tests {
         let kit = kit.build().await.expect("AsyncKit::build");
         let pool: Arc<dyn ConnectionPool + Send + Sync> =
             kit.require::<DbNexusModule>().expect("require DbNexusModule");
-        // Before first use: total=0, lazy init not triggered.
+        // Before first use: pool eagerly creates min_connections, so health check
+        // reports Healthy (connections are pre-warmed).
         let status = DbNexusModule::check(&pool);
         assert!(
-            !status.is_healthy(),
-            "expected non-Healthy before first use, got: {status:?}"
+            status.is_healthy(),
+            "expected Healthy after pool pre-warm, got: {status:?}"
         );
     }
 
@@ -431,12 +432,12 @@ mod tests {
             observer.built_count()
         );
 
-        // Health check via kit API — pool uses lazy init, so before first
-        // use the pool has 0 connections and reports non-Healthy.
+        // Health check via kit API — pool pre-creates min_connections, so
+        // connections are available and health check reports Healthy.
         let health = kit.health_check::<DbNexusModule>().expect("health_check");
         assert!(
-            !health.is_healthy(),
-            "expected non-Healthy before first use, got: {health:?}"
+            health.is_healthy(),
+            "expected Healthy after pool pre-warm, got: {health:?}"
         );
 
         // Shutdown exercises lifecycle on_shutdown (default no-op for us).
