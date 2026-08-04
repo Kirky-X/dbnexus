@@ -271,9 +271,9 @@ pub use dbnexus_macros::db_repository;
 #[cfg(feature = "oxcache-integration")]
 pub use crate::integrations::OxcacheDbCacheAdapter;
 
-// DbNexusModule 导出（kit feature — trait-kit 0.2.2 AsyncKit integration）
+// DbNexusModule 导出（kit feature — trait-kit 0.4 AsyncKit integration）
 #[cfg(feature = "kit")]
-pub use crate::integrations::DbNexusModule;
+pub use crate::integrations::{DbNexusBuildObserver, DbNexusModule};
 
 // I18n 导出（核心特性 — ICU4X 国际化格式化 + 全局 locale 管理）
 pub use crate::i18n::catalog::{t, t_simple, translate, translate_en};

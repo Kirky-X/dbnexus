@@ -9,7 +9,7 @@
 //! - 通过 `AsyncKit::build` 构建并获取 `Arc<dyn ConnectionPool>`
 //! - 使用连接池执行 DDL、INSERT、SELECT 和事务操作
 //!
-//! `DbNexusModule` 是 trait-kit 0.2.2 `AsyncKit` 集成模块，
+//! `DbNexusModule` 是 trait-kit 0.4 `AsyncKit` 集成模块，
 //! 它将 dbnexus 的数据库连接池注入到 AsyncKit 依赖发现框架中。
 //!
 //! # 运行示例
