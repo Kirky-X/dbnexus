@@ -220,10 +220,10 @@ impl PermissionCache {
     /// 刷新失败时保留旧值并记录 warn 日志。
     pub async fn refresh(&self, key: &str) {
         // 节流：检查上次刷新时间
-        if let Some(last) = self.last_refresh.get(key) {
-            if last.elapsed() < self.config.refresh_interval {
-                return;
-            }
+        if let Some(last) = self.last_refresh.get(key)
+            && last.elapsed() < self.config.refresh_interval
+        {
+            return;
         }
         self.last_refresh.insert(key.to_string(), Instant::now());
 
@@ -252,10 +252,10 @@ impl PermissionCache {
             return;
         }
         // 节流检查
-        if let Some(last) = self.last_refresh.get(key) {
-            if last.elapsed() < self.config.refresh_interval {
-                return;
-            }
+        if let Some(last) = self.last_refresh.get(key)
+            && last.elapsed() < self.config.refresh_interval
+        {
+            return;
         }
         let key_owned = key.to_string();
         let provider = self.provider.clone().unwrap();

@@ -252,30 +252,29 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
 
     if applied_count > 0 {
         // 显示最新迁移信息
-        if let Some(latest_version) = executor.history().get_latest_version() {
-            if let Some(latest_migration) = executor
+        if let Some(latest_version) = executor.history().get_latest_version()
+            && let Some(latest_migration) = executor
                 .history()
                 .applied_migrations
                 .iter()
                 .find(|m| m.version == latest_version)
-            {
-                println!("   {}", i18n::t_simple("cli-latest-migration"));
-                println!(
-                    "{}",
-                    i18n::t("cli-version", &[("version", latest_migration.version.to_string())])
-                );
-                println!(
-                    "{}",
-                    i18n::t(
-                        "cli-description",
-                        &[("description", latest_migration.description.clone())]
-                    )
-                );
-                println!(
-                    "{}",
-                    i18n::t("cli-applied-at", &[("time", latest_migration.applied_at.to_string())])
-                );
-            }
+        {
+            println!("   {}", i18n::t_simple("cli-latest-migration"));
+            println!(
+                "{}",
+                i18n::t("cli-version", &[("version", latest_migration.version.to_string())])
+            );
+            println!(
+                "{}",
+                i18n::t(
+                    "cli-description",
+                    &[("description", latest_migration.description.clone())]
+                )
+            );
+            println!(
+                "{}",
+                i18n::t("cli-applied-at", &[("time", latest_migration.applied_at.to_string())])
+            );
         }
 
         // 显示所有已应用迁移
@@ -766,11 +765,11 @@ async fn generate_migration(
     }
 
     // 确保输出目录存在
-    if let Some(parent) = output.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent)
-                .map_err(|e| DbError::Config(i18n::t("cli-output-dir-create-failed", &[("error", e.to_string())])))?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)
+            .map_err(|e| DbError::Config(i18n::t("cli-output-dir-create-failed", &[("error", e.to_string())])))?;
     }
 
     // 写入文件
