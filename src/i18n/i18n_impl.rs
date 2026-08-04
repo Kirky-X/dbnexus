@@ -178,3 +178,121 @@ impl DbI18nFormatter {
         Ok(self.collator.compare(a, b))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_plural_category_name_all_variants() {
+        // Arabic (ar) has Zero category for count=0
+        let fmt_ar = DbI18nFormatter::new("ar").expect("ar locale");
+        let cat = fmt_ar.plural_category(0).expect("ar plural 0");
+        assert_eq!(cat, "Zero", "Arabic count=0 should be Zero, got: {cat}");
+
+        // English count=1 → One
+        let fmt_en = DbI18nFormatter::new("en").expect("en locale");
+        assert_eq!(fmt_en.plural_category(1).unwrap(), "One");
+
+        // Some locales have Two (e.g. Arabic count=2)
+        let cat2 = fmt_ar.plural_category(2).expect("ar plural 2");
+        assert_eq!(cat2, "Two", "Arabic count=2 should be Two, got: {cat2}");
+
+        // Polish (pl) has Few for count=2,3,4
+        let fmt_pl = DbI18nFormatter::new("pl").expect("pl locale");
+        let cat_few = fmt_pl.plural_category(2).expect("pl plural 2");
+        assert_eq!(cat_few, "Few", "Polish count=2 should be Few, got: {cat_few}");
+
+        // Many category: Arabic has Many for values 11..99 (e.g. 11)
+        let cat_many = fmt_ar.plural_category(11).expect("ar plural 11");
+        assert_eq!(cat_many, "Many", "Arabic count=11 should be Many, got: {cat_many}");
+
+        // Other: English count=0
+        let cat_other = fmt_en.plural_category(0).expect("en plural 0");
+        assert_eq!(cat_other, "Other", "English count=0 should be Other, got: {cat_other}");
+    }
+
+    #[test]
+    fn test_get_message_via_migration_all_locales() {
+        // Test that each locale produces expected migration text
+        let locales_and_expected = vec![("zh-CN", "迁移"), ("en-US", "migrations applied")];
+        for (locale, expected) in locales_and_expected {
+            let fmt = DbI18nFormatter::new(locale).unwrap_or_else(|_| panic!("locale {locale}"));
+            let msg = fmt
+                .format_migration_message(5)
+                .unwrap_or_else(|_| panic!("migration msg for {locale}"));
+            assert!(
+                msg.contains(expected),
+                "locale {locale}: expected '{expected}' in '{msg}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_format_number_zh() {
+        let fmt = DbI18nFormatter::new("zh-CN").expect("zh-CN locale");
+        let result = fmt.format_number(1234567.0).expect("format number zh");
+        // Chinese uses different grouping separator
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_format_timestamp_invalid_date() {
+        let fmt = DbI18nFormatter::new("en-US").expect("en-US locale");
+        // Month 13 is invalid
+        let result = fmt.format_timestamp(2026, 13, 1);
+        assert!(result.is_err(), "invalid month should return error");
+    }
+
+    #[test]
+    fn test_format_timestamp_invalid_day() {
+        let fmt = DbI18nFormatter::new("en-US").expect("en-US locale");
+        // Day 32 is invalid
+        let result = fmt.format_timestamp(2026, 1, 32);
+        assert!(result.is_err(), "invalid day should return error");
+    }
+
+    #[test]
+    fn test_format_migration_message_fr() {
+        let fmt = DbI18nFormatter::new("fr-FR").expect("fr-FR locale");
+        let msg = fmt.format_migration_message(10).expect("fr migration message");
+        assert!(msg.contains("migrations"), "fr message: got '{msg}'");
+    }
+
+    // 直接测试私有函数以覆盖 get_message 的 hello_world 分支和 unknown key fallback
+    #[test]
+    fn test_get_message_hello_world_all_locales() {
+        use icu::locale::Locale;
+        use std::str::FromStr;
+
+        // zh hello_world
+        let zh = Locale::from_str("zh").unwrap();
+        assert_eq!(get_message(&zh, "hello_world"), "你好，世界！");
+
+        // en (fallback) hello_world
+        let en = Locale::from_str("en").unwrap();
+        assert_eq!(get_message(&en, "hello_world"), "Hello, World!");
+    }
+
+    #[test]
+    fn test_get_message_unknown_key_returns_empty() {
+        use icu::locale::Locale;
+        use std::str::FromStr;
+
+        let en = Locale::from_str("en").unwrap();
+        assert_eq!(get_message(&en, "nonexistent_key"), "");
+
+        let zh = Locale::from_str("zh").unwrap();
+        assert_eq!(get_message(&zh, "nonexistent_key"), "");
+    }
+
+    #[test]
+    fn test_substitute_count() {
+        assert_eq!(
+            substitute_count("{count} migrations applied", "5"),
+            "5 migrations applied"
+        );
+        assert_eq!(substitute_count("no placeholder", "5"), "no placeholder");
+        assert_eq!(substitute_count("{count} of {count}", "3"), "3 of 3");
+    }
+}

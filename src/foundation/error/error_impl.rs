@@ -41,3 +41,62 @@ impl From<&str> for DbError {
         Self::Config(msg.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_connection() {
+        let err = DbError::new(sea_orm::DbErr::Custom("conn failed".to_string()));
+        assert!(err.message().contains("conn failed"));
+    }
+
+    #[test]
+    fn test_message_config() {
+        let err = DbError::Config("bad config".to_string());
+        assert_eq!(err.message(), "bad config");
+    }
+
+    #[test]
+    fn test_message_permission() {
+        let err = DbError::Permission("denied".to_string());
+        assert_eq!(err.message(), "denied");
+    }
+
+    #[test]
+    fn test_message_transaction() {
+        let err = DbError::Transaction("txn failed".to_string());
+        assert_eq!(err.message(), "txn failed");
+    }
+
+    #[test]
+    fn test_message_migration() {
+        let err = DbError::Migration("migrate failed".to_string());
+        assert_eq!(err.message(), "migrate failed");
+    }
+
+    #[test]
+    fn test_message_cache() {
+        let err = DbError::Cache("cache miss".to_string());
+        assert_eq!(err.message(), "cache miss");
+    }
+
+    #[test]
+    fn test_message_query() {
+        let err = DbError::Query("query failed".to_string());
+        assert_eq!(err.message(), "query failed");
+    }
+
+    #[test]
+    fn test_from_string() {
+        let err: DbError = "config error".to_string().into();
+        assert_eq!(err.message(), "config error");
+    }
+
+    #[test]
+    fn test_from_str() {
+        let err: DbError = "config error".into();
+        assert_eq!(err.message(), "config error");
+    }
+}
