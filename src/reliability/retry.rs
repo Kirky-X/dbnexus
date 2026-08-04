@@ -124,6 +124,30 @@ impl std::error::Error for RetryError {
     }
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for RetryError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::Exhausted { .. } => "retry-exhausted",
+            Self::NonRetryable(_) => "retry-non-retryable",
+            Self::Timeout { .. } => "retry-timeout",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::Exhausted { attempts, last_error } => vec![
+                ("attempts", attempts.to_string()),
+                ("last_error", last_error.to_string()),
+            ],
+            Self::NonRetryable(err) => vec![("error", err.to_string())],
+            Self::Timeout { timeout_ms, last_error } => vec![
+                ("timeout_ms", timeout_ms.to_string()),
+                ("last_error", last_error.to_string()),
+            ],
+        }
+    }
+}
+
 impl From<RetryError> for DbError {
     fn from(err: RetryError) -> Self {
         match err {

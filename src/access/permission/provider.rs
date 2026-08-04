@@ -29,6 +29,26 @@ pub enum PermissionProviderError {
     Unknown(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for PermissionProviderError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::RoleNotFound(_) => "perm-provider-role-not-found",
+            Self::LoadError(_) => "perm-provider-load-error",
+            Self::CheckError(_) => "perm-provider-check-error",
+            Self::Unknown(_) => "perm-provider-unknown",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::RoleNotFound(role) => vec![("role", role.clone())],
+            Self::LoadError(reason) => vec![("reason", reason.clone())],
+            Self::CheckError(reason) => vec![("reason", reason.clone())],
+            Self::Unknown(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 /// 权限提供者 trait 接口
 ///
 /// 定义权限配置的通用接口，便于测试和替换实现。

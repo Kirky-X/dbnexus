@@ -53,3 +53,45 @@ pub enum PermissionError {
     #[error("policy parse error: {0}")]
     ParseError(String),
 }
+
+impl crate::i18n::error_ext::LocalizedMsg for PermissionConfigError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::MissingField(_) => "perm-config-missing-field",
+            Self::InvalidValue { .. } => "perm-config-invalid-value",
+            Self::PolicyFileNotFound(_) => "perm-config-policy-not-found",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::MissingField(field) => vec![("field", field.clone())],
+            Self::InvalidValue { field, reason } => vec![("field", field.clone()), ("reason", reason.clone())],
+            Self::PolicyFileNotFound(path) => vec![("path", path.clone())],
+        }
+    }
+}
+
+impl crate::i18n::error_ext::LocalizedMsg for PermissionError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::Denied { .. } => "perm-denied",
+            Self::RoleNotFound(_) => "perm-role-not-found",
+            Self::InvalidPolicy(_) => "perm-invalid-policy",
+            Self::RateLimited => "perm-rate-limited",
+            Self::ParseError(_) => "perm-parse-error",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::Denied { resource, operation } => {
+                vec![("resource", resource.clone()), ("operation", operation.clone())]
+            }
+            Self::RoleNotFound(role) => vec![("role", role.clone())],
+            Self::InvalidPolicy(reason) => vec![("reason", reason.clone())],
+            Self::RateLimited => vec![],
+            Self::ParseError(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}

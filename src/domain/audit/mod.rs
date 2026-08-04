@@ -49,6 +49,16 @@ pub enum BuildError {
     EntityIdRequired,
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for BuildError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::OperationRequired => "audit-builder-operation-required",
+            Self::EntityTypeRequired => "audit-builder-entity-type-required",
+            Self::EntityIdRequired => "audit-builder-entity-id-required",
+        }
+    }
+}
+
 /// 审计操作类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuditOperation {

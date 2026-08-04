@@ -36,6 +36,24 @@ pub enum MetricsError {
     Unknown(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for MetricsError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::ExportError(_) => "metrics-export-error",
+            Self::NotInitialized => "metrics-not-initialized",
+            Self::Unknown(_) => "metrics-unknown",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::ExportError(reason) => vec![("reason", reason.clone())],
+            Self::NotInitialized => vec![],
+            Self::Unknown(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 /// 指标收集器 trait 接口
 ///
 /// 定义性能指标收集的通用接口，便于测试和替换实现。

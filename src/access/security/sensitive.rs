@@ -32,6 +32,28 @@ pub enum SensitiveError {
     InvalidInput(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for SensitiveError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::MaskingFailed(_) => "sensitive-masking-failed",
+            Self::EncryptionFailed(_) => "sensitive-encryption-failed",
+            Self::DecryptionFailed(_) => "sensitive-decryption-failed",
+            Self::InvalidKey(_) => "sensitive-invalid-key",
+            Self::InvalidInput(_) => "sensitive-invalid-input",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::MaskingFailed(reason) => vec![("reason", reason.clone())],
+            Self::EncryptionFailed(reason) => vec![("reason", reason.clone())],
+            Self::DecryptionFailed(reason) => vec![("reason", reason.clone())],
+            Self::InvalidKey(reason) => vec![("reason", reason.clone())],
+            Self::InvalidInput(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 /// 敏感数据处理结果
 pub type SensitiveResult<T> = Result<T, SensitiveError>;
 
@@ -405,5 +427,74 @@ mod tests {
 
         // 无效银行卡
         assert!(SensitiveMasker::mask("1234567", MaskType::BankCard).is_err());
+    }
+
+    #[test]
+    fn test_mask_email_empty_local_part() {
+        // Empty local part (line 133)
+        let result = SensitiveMasker::mask("@example.com", MaskType::Email);
+        assert!(result.is_err(), "empty local part should error");
+    }
+
+    #[test]
+    fn test_mask_name_empty() {
+        // Empty name (line 196)
+        let result = SensitiveMasker::mask("", MaskType::Name);
+        assert!(result.is_err(), "empty name should error");
+    }
+
+    #[test]
+    fn test_mask_name_whitespace_only() {
+        // Whitespace-only name (line 196)
+        let result = SensitiveMasker::mask("   ", MaskType::Name);
+        assert!(result.is_err(), "whitespace-only name should error");
+    }
+
+    #[test]
+    fn test_mask_address_empty() {
+        // Empty address (line 214)
+        let result = SensitiveMasker::mask("", MaskType::Address);
+        assert!(result.is_err(), "empty address should error");
+    }
+
+    #[test]
+    fn test_mask_address_whitespace_only() {
+        // Whitespace-only address (line 214)
+        let result = SensitiveMasker::mask("   ", MaskType::Address);
+        assert!(result.is_err(), "whitespace-only address should error");
+    }
+
+    #[test]
+    fn test_mask_custom_empty_data() {
+        // Empty data (line 248)
+        let result = SensitiveMasker::mask(
+            "",
+            MaskType::Custom {
+                keep_prefix: 1,
+                keep_suffix: 1,
+            },
+        );
+        assert!(result.is_err(), "empty data should error");
+    }
+
+    #[test]
+    fn test_mask_custom_overflow() {
+        // keep_prefix + keep_suffix overflow
+        let result = SensitiveMasker::mask(
+            "test",
+            MaskType::Custom {
+                keep_prefix: usize::MAX,
+                keep_suffix: 1,
+            },
+        );
+        assert!(result.is_err(), "overflow should error");
+    }
+
+    #[test]
+    fn test_default_sensitive_masker() {
+        // Default impl (lines 271-272)
+        let _masker = SensitiveMasker;
+        let result = SensitiveMasker::mask("13812345678", MaskType::Phone);
+        assert!(result.is_ok());
     }
 }
