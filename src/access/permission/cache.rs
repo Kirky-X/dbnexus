@@ -21,24 +21,6 @@ use dashmap::DashMap;
 use super::provider::PermissionProvider;
 use super::types::RolePolicy;
 
-/// 后台刷新失败时的日志输出
-///
-/// 当 `tracing` feature 启用时使用 `tracing::warn!`（结构化日志，可被 ELK/Loki 收集）；
-/// 否则降级为 `eprintln!` 保持 `permission` 模块的独立性。
-#[cfg(feature = "tracing")]
-macro_rules! warn_log {
-    ($($arg:tt)*) => {
-        tracing::warn!("PermissionCache: {}", format!($($arg)*));
-    };
-}
-
-#[cfg(not(feature = "tracing"))]
-macro_rules! warn_log {
-    ($($arg:tt)*) => {
-        eprintln!("[WARN] PermissionCache: {}", format!($($arg)*));
-    };
-}
-
 /// 默认 TTL（5 分钟）
 const DEFAULT_TTL: Duration = Duration::from_secs(300);
 /// 默认最小刷新间隔（60 秒，防止刷新风暴）
@@ -248,7 +230,6 @@ impl PermissionCache {
         let provider = match &self.provider {
             Some(p) => p.clone(),
             None => {
-                warn_log!("refresh called without provider; key={}", key);
                 return;
             }
         };
@@ -261,7 +242,6 @@ impl PermissionCache {
             }
             None => {
                 // 角色不存在：保留旧值（stale-while-revalidate 语义）
-                warn_log!("refresh returned None for role '{}'; keeping stale value", key_owned);
             }
         }
     }
@@ -279,7 +259,6 @@ impl PermissionCache {
         }
         let key_owned = key.to_string();
         let provider = self.provider.clone().unwrap();
-        let ttl = self.config.ttl;
         // Arc<DashMap> clone 是廉价的引用计数，spawn 任务写入会反映到原 cache
         let inner = self.inner.clone();
         let last_refresh = self.last_refresh.clone();
@@ -295,11 +274,7 @@ impl PermissionCache {
                     inner.insert(key_owned, entry);
                 }
                 None => {
-                    warn_log!(
-                        "Background refresh returned None for role '{}'; keeping stale value (ttl={:?})",
-                        key_owned,
-                        ttl
-                    );
+                    // 后台刷新返回 None，保留旧值
                 }
             }
         });

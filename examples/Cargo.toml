@@ -232,13 +232,6 @@ path = "src/common/error_handling.rs"
 name = "duckdb_query"
 path = "src/database/duckdb_query.rs"
 
-# ============================================================
-# Tracing OTLP 示例 (observability/tracing_otlp.rs)
-# ============================================================
-[[bin]]
-name = "tracing_otlp"
-path = "src/observability/tracing_otlp.rs"
-
 [dependencies]
 dbnexus = { path = "..", features = [
     "runtime-tokio-rustls",
@@ -265,7 +258,6 @@ dbnexus = { path = "..", features = [
     "authentication",
     "validation",
     "duckdb",
-    "tracing",
     "neo4j",
     "oxcache-integration",
     "kit",
@@ -275,7 +267,7 @@ dbnexus = { path = "..", features = [
 duckdb = { version = "1.1", features = ["bundled"] }
 
 # Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
-oxcache = { version = "0.3" }
+oxcache = { version = "0.4" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
 trait-kit = { version = "0.3", features = ["async"], default-features = false }
@@ -297,9 +289,6 @@ sea-orm = { workspace = true, default-features = false, features = ["runtime-tok
 serde = { workspace = true }
 serde_yaml_ng = { workspace = true }
 toml = "^1.1"
-
-# Logging
-tracing = "0.1"
 
 # Async trait (#[db_entity] 宏展开生成 #[::async_trait::async_trait]，需要直接依赖)
 async-trait = "0.1"

@@ -127,48 +127,24 @@ impl YamlPermissionProvider {
     ///
     /// # Errors
     ///
-    /// 如果文件读取失败或 YAML 解析失败，返回错误
-    pub fn new(path: &str) -> Self {
+    /// 如果文件读取失败或 YAML 解析失败，返回 `PermissionProviderError::LoadError`
+    pub fn new(path: &str) -> Result<Self, PermissionProviderError> {
         let config = match std::fs::read_to_string(path) {
-            Ok(content) => match Self::parse_yaml_content(&content, path) {
-                Ok(cfg) => cfg,
-                Err(e) => {
-                    // 解析失败：fail-secure 回退到 deny_all，但必须显式记录错误
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!(
-                        path = path,
-                        error = %e,
-                        "YamlPermissionProvider: YAML 解析失败，回退到 deny_all 策略"
-                    );
-                    #[cfg(not(feature = "tracing"))]
-                    eprintln!(
-                        "[WARN] YamlPermissionProvider: YAML 解析失败 (path='{}'): {}，回退到 deny_all 策略",
-                        path, e
-                    );
-                    PermissionConfig::deny_all()
-                }
-            },
+            Ok(content) => Self::parse_yaml_content(&content, path).map_err(|e| {
+                PermissionProviderError::LoadError(format!("YAML parse error (path='{}'): {}", path, e))
+            })?,
             Err(e) => {
-                // 文件读取失败：fail-secure 回退到 deny_all，但必须显式记录错误
-                #[cfg(feature = "tracing")]
-                tracing::warn!(
-                    path = path,
-                    error = %e,
-                    "YamlPermissionProvider: 权限配置文件读取失败，回退到 deny_all 策略"
-                );
-                #[cfg(not(feature = "tracing"))]
-                eprintln!(
-                    "[WARN] YamlPermissionProvider: 权限配置文件读取失败 (path='{}'): {}，回退到 deny_all 策略",
+                return Err(PermissionProviderError::LoadError(format!(
+                    "Permission config file read error (path='{}'): {}",
                     path, e
-                );
-                PermissionConfig::deny_all()
+                )));
             }
         };
 
-        Self {
+        Ok(Self {
             config: Arc::new(config),
             path: Some(path.to_string()),
-        }
+        })
     }
 
     /// 使用 `serde_yaml_ng` 解析 YAML 内容
@@ -434,20 +410,16 @@ mod tests {
     // YamlPermissionProvider::new 边界测试（文件不存在 / 解析失败）
     // ========================================================================
 
-    /// 不存在的文件路径应回退到 deny_all（roles 为空）
+    /// 不存在的文件路径应返回错误
     #[test]
-    fn yaml_provider_new_nonexistent_file_falls_back_to_deny_all() {
-        let p = YamlPermissionProvider::new("/nonexistent/path/permissions.yaml");
-        // deny_all 应该返回空 roles 配置
-        assert!(
-            p.get_roles().is_empty(),
-            "nonexistent file should fall back to deny_all with empty roles"
-        );
-        assert!(p.get_role_policy("admin").is_none());
-        // check_access 应该返回 Ok(false)（拒绝所有）
-        let result = p.check_access("admin", "any_table", PermissionAction::Select);
-        assert!(result.is_ok());
-        assert!(!result.unwrap(), "deny_all should reject all access");
+    fn yaml_provider_new_nonexistent_file_returns_error() {
+        let result = YamlPermissionProvider::new("/nonexistent/path/permissions.yaml");
+        assert!(result.is_err(), "nonexistent file should return error");
+        match result {
+            Err(PermissionProviderError::LoadError(_)) => { /* expected */ }
+            Err(other) => panic!("expected LoadError, got {:?}", other),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
     }
 
     /// 提供有效的 YAML 配置文件路径应成功加载
@@ -459,7 +431,7 @@ mod tests {
         let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
-        let p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        let p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
         let roles = p.get_roles();
         assert!(
             roles.iter().any(|r| r == "admin"),
@@ -478,19 +450,21 @@ mod tests {
         let _ = std::fs::remove_file(&file_path);
     }
 
-    /// 提供格式错误的 YAML/JSON 文件应回退到 deny_all
+    /// 提供格式错误的 YAML/JSON 文件应返回错误
     #[test]
-    fn yaml_provider_new_with_malformed_file_falls_back_to_deny_all() {
+    fn yaml_provider_new_with_malformed_file_returns_error() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_permissions_malformed.yaml");
         let malformed_content = "this is not valid: yaml: content: [[[";
         std::fs::write(&file_path, malformed_content).expect("failed to write temp file");
 
-        let p = YamlPermissionProvider::new(file_path.to_str().unwrap());
-        assert!(
-            p.get_roles().is_empty(),
-            "malformed file should fall back to deny_all with empty roles"
-        );
+        let result = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        assert!(result.is_err(), "malformed file should return error");
+        match result {
+            Err(PermissionProviderError::LoadError(_)) => { /* expected */ }
+            Err(other) => panic!("expected LoadError, got {:?}", other),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
 
         // 清理
         let _ = std::fs::remove_file(&file_path);
@@ -518,7 +492,7 @@ mod tests {
         let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
-        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
         // 初始加载应有 admin 角色
         assert!(p.get_role_policy("admin").is_some());
 
@@ -550,7 +524,7 @@ mod tests {
         let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
-        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
 
         // 删除文件，refresh 应失败
         std::fs::remove_file(&file_path).expect("failed to delete temp file");
@@ -572,7 +546,7 @@ mod tests {
         let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
-        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap());
+        let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
 
         // 写入无效内容
         let malformed = "not valid: yaml: [[[";

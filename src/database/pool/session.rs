@@ -403,7 +403,6 @@ impl Session {
     }
 
     /// 执行原始 SQL（带权限检查）
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(db.role = %self.role)))]
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
@@ -940,7 +939,6 @@ impl Session {
     }
 
     /// 执行 SQL（带权限检查和操作类型）
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self), fields(db.role = %self.role)))]
     pub async fn execute(&self, sql: &str) -> DbResult<ExecResult> {
         // DDL 检查（sql-parser 启用时）
         #[cfg(feature = "sql-parser")]
@@ -986,7 +984,6 @@ impl Session {
 
     /// 执行 SQL 并指定操作类型
     #[cfg(feature = "permission")]
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, operation), fields(db.role = %self.role)))]
     pub async fn execute_with_operation(&self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
         let start = Instant::now();
 
@@ -2490,5 +2487,301 @@ mod vuln_0005_tests {
             }
             other => panic!("expected DbError::Permission, got {:?}", other),
         }
+    }
+}
+
+// ============================================================================
+// Session 基础测试（仅需 sqlite feature）
+// ============================================================================
+
+#[cfg(test)]
+#[cfg(feature = "sqlite")]
+mod session_basic_tests {
+    use super::*;
+
+    /// 辅助：创建 SQLite 内存连接池并获取 session
+    async fn make_test_session(role: &str) -> (super::super::DbPool, Session) {
+        let pool = super::super::DbPool::new("sqlite::memory:")
+            .await
+            .expect("Failed to create pool");
+        let session = pool.get_session(role).await.expect("get_session failed");
+        (pool, session)
+    }
+
+    #[tokio::test]
+    async fn test_session_role() {
+        let (_pool, session) = make_test_session("admin").await;
+        assert_eq!(session.role(), "admin");
+    }
+
+    #[tokio::test]
+    async fn test_session_is_in_transaction_initially_false() {
+        let (_pool, session) = make_test_session("admin").await;
+        assert!(!session.is_in_transaction().await);
+    }
+
+    #[tokio::test]
+    async fn test_session_should_use_master_initially_false() {
+        let (_pool, session) = make_test_session("admin").await;
+        assert!(!session.should_use_master().await);
+    }
+
+    #[tokio::test]
+    async fn test_session_mark_write_enables_master() {
+        let (_pool, session) = make_test_session("admin").await;
+        session.mark_write().await;
+        assert!(session.should_use_master().await);
+    }
+
+    #[tokio::test]
+    async fn test_session_connection_returns_ok() {
+        let (_pool, session) = make_test_session("admin").await;
+        assert!(session.connection().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_session_begin_and_commit_transaction() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // 开始事务
+        session.begin_transaction().await.expect("begin_transaction");
+        assert!(session.is_in_transaction().await);
+        assert!(session.should_use_master().await);
+
+        // 提交事务
+        session.commit().await.expect("commit");
+        assert!(!session.is_in_transaction().await);
+    }
+
+    #[tokio::test]
+    async fn test_session_begin_and_rollback_transaction() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        session.begin_transaction().await.expect("begin_transaction");
+        assert!(session.is_in_transaction().await);
+
+        session.rollback().await.expect("rollback");
+        assert!(!session.is_in_transaction().await);
+    }
+
+    #[tokio::test]
+    async fn test_session_double_begin_returns_error() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        session.begin_transaction().await.expect("first begin");
+
+        // 第二次 begin 应返回错误
+        let result = session.begin_transaction().await;
+        assert!(result.is_err(), "double begin should return error");
+
+        // 清理：提交第一个事务
+        session.commit().await.expect("commit");
+    }
+
+    #[tokio::test]
+    async fn test_session_rollback_without_transaction_returns_error() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // 没有活跃事务时 rollback 应返回错误
+        let result = session.rollback().await;
+        assert!(result.is_err(), "rollback without transaction should error");
+    }
+
+    #[tokio::test]
+    async fn test_session_commit_without_transaction_returns_error() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        let result = session.commit().await;
+        assert!(result.is_err(), "commit without transaction should error");
+    }
+
+    #[tokio::test]
+    async fn test_session_execute_raw_select() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // Create a table first so SELECT has a valid table name
+        use sea_orm::ConnectionTrait;
+        session
+            .connection()
+            .unwrap()
+            .execute_unprepared("CREATE TABLE sel_test (id INTEGER PRIMARY KEY)")
+            .await
+            .expect("create table");
+
+        // SELECT from table should succeed for admin role
+        let result = session.execute_raw("SELECT * FROM sel_test").await;
+        assert!(result.is_ok(), "SELECT from table should succeed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_session_execute_raw_ddl_rejected() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // DDL operations should be rejected by execute_raw
+        let result = session.execute_raw("CREATE TABLE test (id INTEGER)").await;
+        assert!(result.is_err(), "DDL should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_session_execute_raw_create_table_and_insert() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // Create table via execute_unprepared (not execute_raw which checks permissions)
+        use sea_orm::ConnectionTrait;
+        session
+            .connection()
+            .unwrap()
+            .execute_unprepared("CREATE TABLE test_tbl (id INTEGER PRIMARY KEY, name TEXT)")
+            .await
+            .expect("create table");
+
+        // Insert via execute_raw (admin bypasses permission)
+        let result = session
+            .execute_raw("INSERT INTO test_tbl (id, name) VALUES (1, 'test')")
+            .await;
+        assert!(result.is_ok(), "INSERT should succeed for admin: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_session_database_session_trait_commit() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // Use the DatabaseSession trait method explicitly
+        use super::super::DatabaseSession;
+        let result = DatabaseSession::commit(&session).await;
+        assert!(result.is_err(), "commit without transaction via trait should error");
+    }
+
+    #[tokio::test]
+    async fn test_session_database_session_trait_rollback() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        use super::super::DatabaseSession;
+        let result = DatabaseSession::rollback(&session).await;
+        assert!(result.is_err(), "rollback without transaction via trait should error");
+    }
+
+    #[tokio::test]
+    async fn test_session_database_session_trait_execute() {
+        let (_pool, session) = make_test_session("admin").await;
+
+        // Create a table first
+        use sea_orm::ConnectionTrait;
+        session
+            .connection()
+            .unwrap()
+            .execute_unprepared("CREATE TABLE trait_exec_test (id INTEGER PRIMARY KEY)")
+            .await
+            .expect("create table");
+
+        use super::super::DatabaseSession;
+        let result = DatabaseSession::execute(&session, "INSERT INTO trait_exec_test (id) VALUES (1)").await;
+        assert!(result.is_ok(), "execute via trait should succeed: {:?}", result.err());
+    }
+
+    // ===== 补充测试：extract_table_name, is_invalid_table_name, create_migration_executor =====
+
+    #[test]
+    fn test_extract_table_name_select_no_trailing() {
+        // SELECT FROM with no trailing delimiter -> covers line 1368
+        #[allow(deprecated)]
+        let result = super::extract_table_name("SELECT * FROM users");
+        assert_eq!(result, "users");
+    }
+
+    #[test]
+    fn test_extract_table_name_insert_no_trailing() {
+        // INSERT INTO with no trailing delimiter -> covers lines 1373-1379
+        #[allow(deprecated)]
+        let result = super::extract_table_name("INSERT INTO my_table");
+        assert_eq!(result, "my_table");
+    }
+
+    #[test]
+    fn test_extract_table_name_update_no_trailing() {
+        // UPDATE with no trailing delimiter -> covers lines 1384-1390
+        #[allow(deprecated)]
+        let result = super::extract_table_name("UPDATE records");
+        assert_eq!(result, "records");
+    }
+
+    #[test]
+    fn test_extract_table_name_unsupported_returns_empty() {
+        // Unsupported SQL -> covers line 1395
+        #[allow(deprecated)]
+        let result = super::extract_table_name("DELETE something");
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_extract_table_name_insert_with_paren() {
+        // INSERT INTO with paren delimiter -> covers lines 1373-1377
+        #[allow(deprecated)]
+        let result = super::extract_table_name("INSERT INTO users(id, name)");
+        assert_eq!(result, "users");
+    }
+
+    #[test]
+    fn test_extract_table_name_update_with_semicolon() {
+        // UPDATE with semicolon delimiter -> covers lines 1384-1388
+        #[allow(deprecated)]
+        let result = super::extract_table_name("UPDATE records;set x=1");
+        assert_eq!(result, "records");
+    }
+
+    #[tokio::test]
+    async fn test_extract_table_name_via_parser_invalid_table() {
+        // Parser returns empty table name -> covers line 1430
+        let result = super::extract_table_name_via_parser("SELECT 1").await;
+        assert!(result.is_none(), "SELECT without FROM table should return None");
+    }
+
+    #[tokio::test]
+    async fn test_extract_table_name_via_parser_unsupported() {
+        // Unsupported statement -> covers line 1435
+        let result = super::extract_table_name_via_parser("INVALID SQL GIBBERISH").await;
+        // Either None (parse error) or Some table
+        // Just verify it doesn't panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_extract_table_name_via_parser_parse_error() {
+        // Parse error -> covers line 1436
+        let result = super::extract_table_name_via_parser("/* comment */").await;
+        // Comments alone should be a parse error or None
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_is_invalid_table_name_empty() {
+        // Empty table name -> covers line 1164
+        assert!(super::is_invalid_table_name(""));
+        assert!(super::is_invalid_table_name("   "));
+    }
+
+    #[test]
+    fn test_is_invalid_table_name_empty_part() {
+        // Table name with empty part after split -> covers line 1170
+        assert!(super::is_invalid_table_name("schema..table"));
+        assert!(super::is_invalid_table_name(".table"));
+    }
+
+    #[test]
+    fn test_is_invalid_table_name_valid() {
+        assert!(!super::is_invalid_table_name("users"));
+        assert!(!super::is_invalid_table_name("public.users"));
+        assert!(!super::is_invalid_table_name("\"quoted\".\"table\""));
+    }
+
+    #[tokio::test]
+    async fn test_create_migration_executor() {
+        let (_pool, session) = make_test_session("admin").await;
+        let result = session.create_migration_executor(crate::foundation::DatabaseType::Sqlite);
+        assert!(
+            result.is_ok(),
+            "create_migration_executor should succeed: {:?}",
+            result.err()
+        );
     }
 }
