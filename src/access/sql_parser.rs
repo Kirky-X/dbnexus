@@ -523,13 +523,13 @@ impl SqlParser {
         };
 
         // 验证表名长度
-        if let Some(ref table) = table_name {
-            if table.len() > MAX_TABLE_NAME_LENGTH {
-                return Err(SqlParseError::ParseError(format!(
-                    "Table name exceeds maximum length of {} characters",
-                    MAX_TABLE_NAME_LENGTH
-                )));
-            }
+        if let Some(ref table) = table_name
+            && table.len() > MAX_TABLE_NAME_LENGTH
+        {
+            return Err(SqlParseError::ParseError(format!(
+                "Table name exceeds maximum length of {} characters",
+                MAX_TABLE_NAME_LENGTH
+            )));
         }
 
         Ok(ParsedSqlOperation {

@@ -181,10 +181,10 @@ impl JwtManager {
             return Err(AuthError::InvalidToken);
         }
         // H-3: 检查 refresh token 是否已被撤销
-        if let Ok(revoked) = self.revoked_refresh_jtis.lock() {
-            if revoked.contains(&claims.jti) {
-                return Err(AuthError::InvalidToken);
-            }
+        if let Ok(revoked) = self.revoked_refresh_jtis.lock()
+            && revoked.contains(&claims.jti)
+        {
+            return Err(AuthError::InvalidToken);
         }
         Ok(claims)
     }

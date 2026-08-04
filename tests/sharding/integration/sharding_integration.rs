@@ -54,10 +54,10 @@ fn test_router_route_with_key() {
     for i in 0..100 {
         let key = format!("user_{}", i);
         let shard = router.route_with_key(dt, &key);
-        if let Some(s) = shard {
-            if !shards_seen.contains(&s.shard_id) {
-                shards_seen.push(s.shard_id);
-            }
+        if let Some(s) = shard
+            && !shards_seen.contains(&s.shard_id)
+        {
+            shards_seen.push(s.shard_id);
         }
     }
 

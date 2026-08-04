@@ -261,10 +261,10 @@ fn matches_rule(rule: &PermissionRule, context: &PermissionContext) -> bool {
     }
 
     // 条件评估：若规则定义了 condition，必须匹配上下文属性
-    if let Some(ref condition) = rule.condition {
-        if !evaluate_condition(condition, context) {
-            return false;
-        }
+    if let Some(ref condition) = rule.condition
+        && !evaluate_condition(condition, context)
+    {
+        return false;
     }
 
     true
@@ -652,10 +652,10 @@ impl PolicyDecisionPoint {
         let cache_key = self.generate_cache_key(context);
 
         // 检查缓存（带 TTL 验证）
-        if self.cache_enabled {
-            if let Some(decision) = self.get_cached_decision(&cache_key) {
-                return decision;
-            }
+        if self.cache_enabled
+            && let Some(decision) = self.get_cached_decision(&cache_key)
+        {
+            return decision;
         }
 
         // 获取权限决策
@@ -875,10 +875,10 @@ impl PermissionProvider for YamlPermissionProvider {
     async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
         // 加载配置（如果需要）
         let age = self.last_refresh.read().map(|r| r.elapsed()).unwrap_or_default();
-        if age.as_secs() > 60 {
-            if let Err(e) = self.load_config().await {
-                return PermissionDecision::Error(format!("Failed to load config: {}", e));
-            }
+        if age.as_secs() > 60
+            && let Err(e) = self.load_config().await
+        {
+            return PermissionDecision::Error(format!("Failed to load config: {}", e));
         }
 
         let roles = match self.roles.read() {

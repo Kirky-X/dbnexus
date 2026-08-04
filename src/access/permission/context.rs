@@ -374,10 +374,10 @@ impl PermissionContext {
 
     /// 执行实际的策略加载（不含缓存写入）
     fn do_load_policy(&self) -> Option<RolePolicy> {
-        if let Some(provider) = &self.permission_provider {
-            if let Some(policy) = provider.get_role_policy(&self.role) {
-                return Some(policy);
-            }
+        if let Some(provider) = &self.permission_provider
+            && let Some(policy) = provider.get_role_policy(&self.role)
+        {
+            return Some(policy);
         }
         None
     }
@@ -472,11 +472,11 @@ impl PermissionContext {
     /// - `true` - 成功加载策略到缓存
     /// - `false` - 无法加载（无权限提供者或角色不存在）
     pub async fn try_reload_policy(&self) -> bool {
-        if let Some(provider) = &self.permission_provider {
-            if let Some(policy) = provider.get_role_policy(&self.role) {
-                self.policy_cache.set(&self.role, &policy).await.ok();
-                return true;
-            }
+        if let Some(provider) = &self.permission_provider
+            && let Some(policy) = provider.get_role_policy(&self.role)
+        {
+            self.policy_cache.set(&self.role, &policy).await.ok();
+            return true;
         }
         false
     }
@@ -495,11 +495,11 @@ impl PermissionContext {
     /// 4. 重新加载失败时安全地拒绝访问
     pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
         // 1. 检查速率限制
-        if let Some(limiter) = &self.rate_limiter {
-            if !limiter.check(&self.role).await {
-                self.check_stats.record_rate_limited();
-                return false;
-            }
+        if let Some(limiter) = &self.rate_limiter
+            && !limiter.check(&self.role).await
+        {
+            self.check_stats.record_rate_limited();
+            return false;
         }
 
         // 2. 尝试从缓存获取，如果未命中则尝试加载

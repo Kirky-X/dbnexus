@@ -409,13 +409,13 @@ impl DbPool {
         // 此处不再重复预加载，避免冗余 IO 和缓存覆盖。
 
         #[cfg(feature = "auto-migrate")]
-        if config.auto_migrate {
-            if let Some(ref migrations_dir) = config.migrations_dir {
-                if migrations_dir.exists() {
-                    let _applied = pool.run_migrations(migrations_dir).await?;
-                } else {
-                    // migrations directory does not exist, skip migration
-                }
+        if config.auto_migrate
+            && let Some(ref migrations_dir) = config.migrations_dir
+        {
+            if migrations_dir.exists() {
+                let _applied = pool.run_migrations(migrations_dir).await?;
+            } else {
+                // migrations directory does not exist, skip migration
             }
         }
 
@@ -712,11 +712,11 @@ impl DbPool {
     #[cfg(feature = "failover")]
     #[allow(dead_code)]
     pub(crate) fn current_url(&self) -> &str {
-        if let Some(ref config) = self.inner.config.failover_config {
-            if !config.urls.is_empty() {
-                let idx = self.inner.current_url_index.load(Ordering::SeqCst) as usize;
-                return &config.urls[idx.min(config.urls.len() - 1)];
-            }
+        if let Some(ref config) = self.inner.config.failover_config
+            && !config.urls.is_empty()
+        {
+            let idx = self.inner.current_url_index.load(Ordering::SeqCst) as usize;
+            return &config.urls[idx.min(config.urls.len() - 1)];
         }
         &self.inner.config.url
     }
