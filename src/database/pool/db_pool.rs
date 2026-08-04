@@ -6,6 +6,7 @@
 
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
+use crate::i18n;
 #[cfg(feature = "permission")]
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -354,7 +355,7 @@ impl DbPool {
         // 验证配置有效性（在创建任何连接前捕获非法参数）
         config
             .validate()
-            .map_err(|e| DbError::Config(format!("Invalid configuration: {e}")))?;
+            .map_err(|e| DbError::Config(i18n::t("pool-invalid-config", &[("error", e.to_string())])))?;
 
         // 创建连接（复用 create_connection 保持错误转换一致）
         let _connection = Self::create_connection(&config).await?;
@@ -630,11 +631,18 @@ impl DbPool {
     async fn load_permission_config(config: &DbConfig) -> DbResult<Option<PermissionConfig>> {
         // 尝试从配置文件加载
         if let Some(ref path) = config.permissions_path {
-            let content = tokio::fs::read_to_string(path)
-                .await
-                .map_err(|e| DbError::Config(format!("Failed to read permission config file '{path}': {e}")))?;
-            let perm_config = Self::parse_permission_yaml(&content, path)
-                .map_err(|e| DbError::Config(format!("Failed to parse permission config file '{path}': {e}")))?;
+            let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+                DbError::Config(i18n::t(
+                    "pool-read-config-failed",
+                    &[("path", path.clone()), ("error", e.to_string())],
+                ))
+            })?;
+            let perm_config = Self::parse_permission_yaml(&content, path).map_err(|e| {
+                DbError::Config(i18n::t(
+                    "pool-parse-config-failed",
+                    &[("path", path.clone()), ("error", e.to_string())],
+                ))
+            })?;
             return Ok(Some(perm_config));
         }
 
@@ -649,7 +657,12 @@ impl DbPool {
     fn parse_permission_yaml(content: &str, source: &str) -> Result<PermissionConfig, String> {
         #[cfg(feature = "yaml")]
         {
-            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+            serde_yaml_ng::from_str(content).map_err(|e| {
+                i18n::t(
+                    "pool-yaml-parse-error",
+                    &[("source", source.to_string()), ("error", e.to_string())],
+                )
+            })
         }
         #[cfg(not(feature = "yaml"))]
         {
@@ -835,9 +848,12 @@ impl DbPool {
     ///
     /// 如果连接失败，返回数据库错误
     async fn create_connection(config: &DbConfig) -> DbResult<DbConnection> {
-        let db_type = config
-            .database_type()
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("Invalid database URL: {e}"))))?;
+        let db_type = config.database_type().map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-invalid-db-url",
+                &[("error", e.to_string())],
+            )))
+        })?;
 
         match db_type {
             crate::foundation::DatabaseType::DuckDb => {
@@ -1172,7 +1188,10 @@ impl DbPool {
                         recreated_count += 1;
                     }
                     Err(e) => {
-                        return Err(sea_orm::DbErr::Custom(format!("Failed to recreate connections: {}", e)));
+                        return Err(sea_orm::DbErr::Custom(i18n::t(
+                            "pool-recreate-failed",
+                            &[("error", e.to_string())],
+                        )));
                     }
                 }
             }
@@ -2066,5 +2085,124 @@ mod tests {
         // Verify pool is consistent - idle should be <= max_connections
         let status = pool.status();
         assert!(status.idle <= 2, "idle should be <= max_connections: {}", status.idle);
+    }
+
+    // ===== 补充测试：cache 方法, validate_role_name =====
+
+    #[cfg(feature = "cache")]
+    #[tokio::test]
+    async fn test_pool_set_and_get_cache_provider() {
+        use crate::foundation::DbError;
+        use std::future::Future;
+        use std::pin::Pin;
+
+        struct NoopCacheProvider;
+        impl crate::domain::DbCacheProvider for NoopCacheProvider {
+            fn get<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(None) })
+            }
+            fn set<'a>(
+                &'a self,
+                _key: &'a str,
+                _value: Vec<u8>,
+                _ttl: Option<std::time::Duration>,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let mut pool = DbPool::with_config(config).await.expect("should create pool");
+
+        // Initially no cache provider
+        assert!(pool.cache_provider().is_none());
+
+        // Set cache provider (covers lines 311-312)
+        let provider = Arc::new(NoopCacheProvider);
+        pool.set_cache_provider(provider);
+
+        // Now cache provider should be Some (covers lines 319-320)
+        assert!(pool.cache_provider().is_some());
+    }
+
+    #[cfg(feature = "permission")]
+    #[tokio::test]
+    async fn test_validate_role_name_with_config_unknown_role() {
+        use std::io::Write;
+
+        // Create a temp permission config file with only "admin" role
+        let yaml_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations: ["select", "insert", "update", "delete"]
+"#;
+        let tmp_dir = std::env::temp_dir();
+        let yaml_path = tmp_dir.join("test_perm_config.yaml");
+        {
+            let mut file = std::fs::File::create(&yaml_path).expect("create temp file");
+            file.write_all(yaml_content.as_bytes()).expect("write temp file");
+        }
+
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            permissions_path: Some(yaml_path.to_string_lossy().to_string()),
+            ..Default::default()
+        };
+        let pool = DbPool::with_config(config).await.expect("should create pool");
+
+        // "admin" role exists in config -> should succeed
+        let result = pool.get_session("admin").await;
+        assert!(result.is_ok(), "admin should be allowed: {:?}", result.err());
+
+        // "unknown_role" does NOT exist in config -> should fail (covers line 812)
+        let result = pool.get_session("unknown_role").await;
+        assert!(result.is_err(), "unknown_role should be rejected");
+        match result.err().unwrap() {
+            DbError::Permission(msg) => {
+                assert!(
+                    msg.contains("not defined in permission configuration"),
+                    "error should mention role not defined: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DbError::Permission, got {:?}", other),
+        }
+
+        // Clean up temp file
+        let _ = std::fs::remove_file(&yaml_path);
+    }
+
+    #[cfg(feature = "permission")]
+    #[tokio::test]
+    async fn test_validate_role_name_no_config_unsafe_role() {
+        // Without permission config, only "admin" and "system" are allowed
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let pool = DbPool::with_config(config).await.expect("should create pool");
+
+        // "admin" is a safe role -> should succeed
+        let result = pool.get_session("admin").await;
+        assert!(result.is_ok(), "admin should be allowed: {:?}", result.err());
+
+        // "system" is a safe role -> should succeed
+        let result = pool.get_session("system").await;
+        assert!(result.is_ok(), "system should be allowed: {:?}", result.err());
+
+        // "hacker" is NOT a safe role -> should fail
+        let result = pool.get_session("hacker").await;
+        assert!(result.is_err(), "hacker should be rejected");
     }
 }
