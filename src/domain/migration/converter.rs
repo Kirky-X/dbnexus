@@ -739,4 +739,128 @@ mod tests {
         assert_eq!(table.primary_key_columns, vec!["id".to_string()]);
         assert!(!table.foreign_keys.is_empty() || table.foreign_keys.is_empty()); // users 表无外键
     }
+
+    // ===== 补充测试：更多列类型转换 =====
+
+    #[test]
+    fn test_convert_column_type_exotic() {
+        use sea_orm::sea_query::ColumnType as SeaCT;
+        // Directly test convert_column_type for exotic types
+        assert_eq!(convert_column_type(&SeaCT::Blob), ColumnType::Binary);
+        assert_eq!(convert_column_type(&SeaCT::Timestamp), ColumnType::Timestamp);
+        assert_eq!(convert_column_type(&SeaCT::Time), ColumnType::Time);
+        assert_eq!(convert_column_type(&SeaCT::Date), ColumnType::Date);
+        assert_eq!(convert_column_type(&SeaCT::Double), ColumnType::Double);
+        assert_eq!(convert_column_type(&SeaCT::Char(Some(1))), ColumnType::String(Some(1)));
+        assert_eq!(
+            convert_column_type(&SeaCT::Uuid),
+            ColumnType::Custom("uuid".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Vector(Some(128))),
+            ColumnType::Custom("vector".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Inet),
+            ColumnType::Custom("inet".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Cidr),
+            ColumnType::Custom("cidr".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::MacAddr),
+            ColumnType::Custom("macaddr".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::LTree),
+            ColumnType::Custom("ltree".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Interval(None, None)),
+            ColumnType::Custom("interval".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Decimal(Some((10, 2)))),
+            ColumnType::Custom("decimal".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Money(Some((10, 2)))),
+            ColumnType::Custom("money".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Bit(Some(8))),
+            ColumnType::Custom("bit".to_string())
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::VarBit(64)),
+            ColumnType::Custom("bit".to_string())
+        );
+        assert_eq!(convert_column_type(&SeaCT::Binary(255)), ColumnType::Binary);
+        assert_eq!(
+            convert_column_type(&SeaCT::VarBinary(sea_orm::sea_query::StringLen::N(100))),
+            ColumnType::Binary
+        );
+        assert_eq!(
+            convert_column_type(&SeaCT::Array(std::sync::Arc::new(SeaCT::Integer))),
+            ColumnType::Custom("array".to_string())
+        );
+    }
+
+    #[test]
+    fn test_convert_column_type_enum() {
+        use sea_orm::sea_query::ColumnType as SeaCT;
+        use sea_orm::sea_query::IntoIden;
+        let enum_ct = SeaCT::Enum {
+            name: sea_orm::sea_query::Alias::new("my_enum").into_iden(),
+            variants: vec![],
+        };
+        assert_eq!(convert_column_type(&enum_ct), ColumnType::Custom("my_enum".to_string()));
+    }
+
+    #[test]
+    fn test_convert_string_len_variants() {
+        use sea_orm::sea_query::ColumnType as SeaCT;
+        // StringLen::N
+        assert_eq!(
+            convert_column_type(&SeaCT::String(sea_orm::sea_query::StringLen::N(100))),
+            ColumnType::String(Some(100))
+        );
+        // StringLen::Max
+        assert_eq!(
+            convert_column_type(&SeaCT::String(sea_orm::sea_query::StringLen::Max)),
+            ColumnType::String(None)
+        );
+        // StringLen::None
+        assert_eq!(
+            convert_column_type(&SeaCT::String(sea_orm::sea_query::StringLen::None)),
+            ColumnType::String(None)
+        );
+    }
+
+    #[test]
+    fn test_convert_default_expr_non_value() {
+        // Test convert_default with non-Value Expr (line 241)
+        use sea_orm::sea_query::Expr as SeaExpr;
+        let stmt = SeaTable::create()
+            .table(sea_orm::sea_query::Alias::new("t"))
+            .col(
+                ColumnDef::new(sea_orm::sea_query::Alias::new("val"))
+                    .integer()
+                    .default(SeaExpr::col(sea_orm::sea_query::Alias::new("other_col"))),
+            )
+            .to_owned();
+        let table = convert_table(&stmt);
+        let col = &table.columns[0];
+        assert!(col.has_default, "column should have default");
+        assert!(col.default_value.is_some(), "default value should be Some");
+    }
+
+    #[test]
+    fn test_convert_table_empty_name() {
+        // extract_table_name with no table name (line 153)
+        let stmt = TableCreateStatement::new();
+        let name = extract_table_name(&stmt);
+        assert_eq!(name, "");
+    }
 }
