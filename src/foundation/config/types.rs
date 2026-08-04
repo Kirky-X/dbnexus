@@ -1412,6 +1412,12 @@ mod tests {
     #[cfg(feature = "config-env")]
     #[test]
     fn test_db_config_from_env_missing_url() {
+        // CI sets DATABASE_URL for the test matrix, so skip when it is present.
+        // Full from_env() coverage is in tests/ (external crate, can use unsafe set_var).
+        if std::env::var("DATABASE_URL").is_ok() {
+            eprintln!("Skipping test_db_config_from_env_missing_url: DATABASE_URL is set");
+            return;
+        }
         let result = DbConfig::from_env();
         assert!(result.is_err(), "from_env without DATABASE_URL should fail");
         match result.unwrap_err() {
