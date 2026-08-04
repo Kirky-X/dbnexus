@@ -219,6 +219,40 @@ name = "kit_advanced"
 path = "src/kit/kit_advanced.rs"
 
 # ============================================================
+# 分布式能力示例 (distributed/)
+# ============================================================
+[[bin]]
+name = "distributed_id"
+path = "src/distributed/distributed_id.rs"
+
+[[bin]]
+name = "saga"
+path = "src/distributed/saga.rs"
+
+[[bin]]
+name = "scatter_gather"
+path = "src/distributed/scatter_gather.rs"
+
+[[bin]]
+name = "replica_routing"
+path = "src/distributed/replica_routing.rs"
+
+[[bin]]
+name = "shard_migration"
+path = "src/distributed/shard_migration.rs"
+
+# ============================================================
+# 可靠性模块示例 (reliability/)
+# ============================================================
+[[bin]]
+name = "retry"
+path = "src/reliability/retry.rs"
+
+[[bin]]
+name = "failover"
+path = "src/reliability/failover.rs"
+
+# ============================================================
 # 通用模块示例 (common/)
 # ============================================================
 [[bin]]
@@ -261,6 +295,13 @@ dbnexus = { path = "..", features = [
     "neo4j",
     "oxcache-integration",
     "kit",
+    "retry",
+    "failover",
+    "replica-routing",
+    "scatter-gather",
+    "shard-migration",
+    "saga",
+    "distributed-id",
 ] }
 
 # DuckDB crate（duckdb_query 示例需要直接使用 duckdb::types::Value）

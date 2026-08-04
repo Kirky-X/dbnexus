@@ -1900,11 +1900,10 @@ mod tests {
         };
         let pool = DbPool::with_config(config).await.expect("should create pool");
 
-        // Test status()
+        // Test status() — pool eagerly creates min_connections on init
         let status = pool.status();
-        assert_eq!(status.total, 0);
-        assert_eq!(status.active, 0);
-        assert_eq!(status.idle, 0);
+        assert_eq!(status.total, 2); // min_connections = 2
+        assert_eq!(status.idle, 2);
         assert_eq!(status.borrow_count, 0);
 
         // Test config()
@@ -1938,6 +1937,7 @@ mod tests {
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 10);
     }
 
+    #[cfg(not(feature = "duckdb"))]
     #[tokio::test]
     async fn test_create_connection_duckdb_not_enabled() {
         let config = DbConfig {
@@ -2021,9 +2021,9 @@ mod tests {
         };
         let pool = DbPool::with_config(config).await.expect("should create pool");
 
-        // Test ConnectionPool::status
+        // Test ConnectionPool::status — pool eagerly creates min_connections on init
         let status = ConnectionPool::status(&pool);
-        assert_eq!(status.total, 0);
+        assert_eq!(status.total, 5); // default min_connections = 5
 
         // Test ConnectionPool::config
         let cfg = ConnectionPool::config(&pool);

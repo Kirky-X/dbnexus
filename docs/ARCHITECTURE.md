@@ -136,7 +136,7 @@ graph TD
 
 ## 模块架构
 
-DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/lib.rs` 统一声明和导出。
+DBNexus 采用清晰的分层架构，每层有明确职责。各层通过 `src/lib.rs` 统一声明和导出。
 
 ### 0. 顶层模块
 
@@ -248,12 +248,19 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
 - `observability/health.rs` — `HealthChecker`、`HealthStatus`、`HealthCheckResult`、`CircuitBreaker`、`CircuitBreakerConfig`、`CircuitBreakerState`、`PoolHealthMetrics`（cfg = "health-check"，健康检查 + 熔断器）
 - `observability/tracing.rs` — `TracingGuard`、`TracingError`（cfg = "tracing"，OpenTelemetry 集成）
 
-### 7. 存储层 (`storage/`)
+### 7. 可靠性层 (`reliability/`)
+
+运行时容错能力（重试、故障转移等）。
+
+- `reliability/mod.rs` — 模块入口
+- `reliability/retry.rs` — `RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation`（cfg = "retry"，运行时重试 + 指数退避，仅幂等查询自动重试）
+
+### 8. 存储层 (`storage/`)
 
 - `storage/mod.rs` — 模块入口
 - `storage/global_index.rs` — `GlobalIndex`、`IndexEntry`、`SyncEvent`、`SyncResult`、`SYNC_STATUS_PENDING`、`SYNC_STATUS_SYNCED`、`SYNC_STATUS_FAILED` 常量（cfg = "global-index"，跨分片全局索引）
 
-### 8. 工具包层 (`kit/`)
+### 9. 工具包层 (`kit/`)
 
 基于 `trait-kit` 的统一能力管理。
 
@@ -262,7 +269,7 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
 - `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = "oxcache-integration"）
 - `integrations/mod.rs` — 模块入口
 
-### 9. 国际化模块 (`i18n/`)
+### 10. 国际化模块 (`i18n/`)
 
 基于 ICU4X 的 locale 感知格式化（核心特性，始终可用）。
 

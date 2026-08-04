@@ -16,6 +16,8 @@
 - [可观测性模块](#可观测性模块-observability)
 - [宏模块](#宏模块-macros)
 - [图数据库模块](#图数据库模块-graph)
+- [分布式能力](#分布式能力-distributed)
+- [可靠性模块](#可靠性模块-reliability)
 - [国际化模块](#国际化模块-i18n)
 - [集成适配器](#集成适配器-integrations)
 - [缓存功能](#缓存功能-cache)
@@ -110,7 +112,6 @@ cargo run --bin basic_transaction
 | `metrics_prometheus` | `observability/metrics_prometheus.rs` | Prometheus 指标导出 |
 | `health_check` | `observability/health_check.rs` | HealthChecker + CircuitBreaker |
 | `latency_histogram` | `observability/latency_histogram.rs` | 延迟直方图 + 慢查询 |
-| `tracing_otlp` | `observability/tracing_otlp.rs` | OTLP 分布式追踪 |
 
 ## 宏模块 (macros/)
 
@@ -138,6 +139,36 @@ cargo run --bin graph_ladybug
 # Neo4j（需要 Neo4j 服务器，无服务器时演示优雅降级）
 cargo run --bin graph_neo4j
 NEO4J_URL=neo4j://user:pass@localhost:7687 cargo run --bin graph_neo4j  # pragma: allowlist secret
+```
+
+## 分布式能力 (distributed/)
+
+| 示例 | 文件 | 说明 |
+|------|------|------|
+| `distributed_id` | `distributed/distributed_id.rs` | SnowflakeIdGenerator + ID 解析 + 并发安全 |
+| `saga` | `distributed/saga.rs` | SagaOrchestrator + SagaAction + 补偿事务 |
+| `scatter_gather` | `distributed/scatter_gather.rs` | ScatterGatherExecutor + 聚合函数 |
+| `replica_routing` | `distributed/replica_routing.rs` | ReplicaConfig + FailoverConfig + 读写分离 |
+| `shard_migration` | `distributed/shard_migration.rs` | ShardMigrationOrchestrator + 并行/串行迁移 |
+
+```bash
+cargo run --bin distributed_id
+cargo run --bin saga
+cargo run --bin scatter_gather
+cargo run --bin replica_routing
+cargo run --bin shard_migration
+```
+
+## 可靠性模块 (reliability/)
+
+| 示例 | 文件 | 说明 |
+|------|------|------|
+| `retry` | `reliability/retry.rs` | RetryExecutor + 指数退避 + 幂等性判断 |
+| `failover` | `reliability/failover.rs` | FailoverConfig + CircuitBreaker 协同 |
+
+```bash
+cargo run --bin retry
+cargo run --bin failover
 ```
 
 ## 国际化模块 (i18n)
@@ -237,6 +268,15 @@ cargo build --all-targets
 - `migration` / `auto-migrate` — 数据库迁移
 - `sharding` — 数据分片
 - `global-index` — 全局索引
+
+#### 分布式能力
+- `retry` — 运行时重试 + 指数退避
+- `failover` — 连接故障转移
+- `replica-routing` — 副本路由（读写分离）
+- `scatter-gather` — 跨分片查询引擎
+- `shard-migration` — 分片迁移编排
+- `saga` — 分布式事务 Saga 编排器
+- `distributed-id` — 分布式 ID 生成器（Snowflake）
 
 #### 集成
 - `oxcache-integration` — Oxcache 缓存适配器
