@@ -7,6 +7,32 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-04
+
+### Added
+
+- **分布式能力示例（7 个新示例）**：补全 `examples/` 中缺失的核心功能模块示例
+  - `distributed_id`：Snowflake ID 生成器，批量生成、ID 解析、多线程并发、错误场景
+  - `saga`：Saga 分布式事务编排，自定义 SagaAction、成功/失败+补偿场景、SagaLog
+  - `scatter_gather`：跨分片 Scatter-Gather 查询，聚合函数、PartialFailurePolicy
+  - `replica_routing`：副本路由读写分离、ReplicaConfig、FailoverConfig 协同
+  - `shard_migration`：分片迁移编排器、并行/串行模式、OrchestratedMigrationResult
+  - `retry`：运行时重试+指数退避、幂等性判断、自定义策略、重试耗尽
+  - `failover`：连接故障转移链、CircuitBreaker 状态机、与 DbConfig 集成
+- 新增 `distributed-capabilities` 聚合 feature 的 examples 透传
+
+### Fixed
+
+- **连接池测试断言同步**：`test_pool_status_and_config`、`test_connection_pool_trait_methods` 更新断言以匹配池预创建 min_connections 行为
+- **DuckDB 测试特性守卫**：`test_create_connection_duckdb_not_enabled` 添加 `#[cfg(not(feature = "duckdb"))]` 避免特性启用时误跑
+- **Kit 健康检查测试同步**：`health_check_unhealthy_before_first_use`、`full_kit_with_lifecycle_health_observer` 更新预期以匹配池预创建连接后 Healthy 状态
+- **文档幽灵条目清理**：移除 `examples/README.md` 中不存在的 `tracing_otlp` 条目
+
+### Changed
+
+- `docs/API_REFERENCE.md`：新增分布式能力模块 API 文档
+- `docs/ARCHITECTURE.md`：更新架构图反映分布式能力模块
+
 ## [0.4.4] - 2026-07-23
 
 ### Changed
