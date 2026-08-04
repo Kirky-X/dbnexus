@@ -711,7 +711,7 @@ editor:
     #[cfg(feature = "cache")]
     #[tokio::test]
     async fn test_with_cache_injection() {
-        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::new());
+        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::builder().build().await.unwrap());
         let cfg = PermissionConfig::default();
         let result = dbnexus::domain::with_cache(cfg, cache).await;
         assert!(result.is_ok(), "with_cache should succeed with default config");
@@ -720,7 +720,7 @@ editor:
     #[cfg(feature = "cache")]
     #[tokio::test]
     async fn test_with_cache_invalid_path() {
-        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::new());
+        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::builder().build().await.unwrap());
         let cfg = PermissionConfig {
             policy_path: Some("/nonexistent/path/policy.yaml".into()),
             ..PermissionConfig::default()

@@ -395,8 +395,6 @@ pub struct PolicyDecisionPoint {
     rate_limit_store: DashMap<String, RateLimitEntry>,
     /// 默认决策（当提供者返回 NotApplicable 时使用）
     default_decision: PermissionDecision,
-    /// 是否记录拒绝的决策到 stderr
-    log_denied: bool,
 }
 
 /// PolicyDecisionPoint 构建器
@@ -423,7 +421,6 @@ pub struct PolicyDecisionPointBuilder {
     rate_limit_max_requests: Option<u32>,
     rate_limit_window_seconds: Option<u32>,
     default_decision: Option<PermissionDecision>,
-    log_denied: Option<bool>,
 }
 
 impl PolicyDecisionPointBuilder {
@@ -436,7 +433,6 @@ impl PolicyDecisionPointBuilder {
             rate_limit_max_requests: None,
             rate_limit_window_seconds: None,
             default_decision: None,
-            log_denied: None,
         }
     }
 
@@ -492,16 +488,6 @@ impl PolicyDecisionPointBuilder {
         self
     }
 
-    /// 设置是否记录拒绝的决策到 stderr
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - 是否记录拒绝的决策
-    pub fn log_denied(mut self, enabled: bool) -> Self {
-        self.log_denied = Some(enabled);
-        self
-    }
-
     /// 构建策略决策点
     ///
     /// # Panics
@@ -521,7 +507,6 @@ impl PolicyDecisionPointBuilder {
                 .unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
             rate_limit_store: DashMap::new(),
             default_decision: self.default_decision.unwrap_or(PermissionDecision::NotApplicable),
-            log_denied: self.log_denied.unwrap_or(false),
         }
     }
 }
@@ -538,7 +523,6 @@ impl PolicyDecisionPoint {
             rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
             default_decision: PermissionDecision::NotApplicable,
-            log_denied: false,
         }
     }
 
@@ -590,7 +574,6 @@ impl PolicyDecisionPoint {
             rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
             default_decision: PermissionDecision::NotApplicable,
-            log_denied: false,
         }
     }
 
@@ -605,7 +588,6 @@ impl PolicyDecisionPoint {
             rate_limit_window_seconds: window_seconds,
             rate_limit_store: DashMap::new(),
             default_decision: PermissionDecision::NotApplicable,
-            log_denied: false,
         }
     }
 
@@ -613,7 +595,6 @@ impl PolicyDecisionPoint {
     ///
     /// 正确应用 `PolicyDecisionPointConfig` 中的所有字段，包括：
     /// - `default_decision`：当提供者返回 `NotApplicable` 时使用的默认决策
-    /// - `log_denied`：是否记录拒绝的决策到 stderr
     /// - `cache_ttl_seconds`：缓存 TTL
     /// - `cache_enabled`：是否启用缓存
     pub fn with_config(provider: Arc<dyn PermissionProvider>, config: PolicyDecisionPointConfig) -> Self {
@@ -626,7 +607,6 @@ impl PolicyDecisionPoint {
             rate_limit_window_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
             rate_limit_store: DashMap::new(),
             default_decision: config.default_decision,
-            log_denied: config.log_denied,
         }
     }
 
@@ -674,7 +654,6 @@ impl PolicyDecisionPoint {
         // 检查缓存（带 TTL 验证）
         if self.cache_enabled {
             if let Some(decision) = self.get_cached_decision(&cache_key) {
-                self.maybe_log_denied(&decision, context);
                 return decision;
             }
         }
@@ -693,19 +672,7 @@ impl PolicyDecisionPoint {
             self.update_cache(&cache_key, decision.clone());
         }
 
-        self.maybe_log_denied(&decision, context);
-
         decision
-    }
-
-    /// 记录拒绝的决策到 stderr（当 log_denied 为 true 且决策为 Deny 时）
-    fn maybe_log_denied(&self, decision: &PermissionDecision, context: &PermissionContext) {
-        if self.log_denied && matches!(decision, PermissionDecision::Deny) {
-            eprintln!(
-                "[permission] 拒绝访问: subject={}, resource={}, action={:?}",
-                context.subject.id, context.resource.name, context.action
-            );
-        }
     }
 
     /// 检查用户是否有权限执行操作
@@ -1264,8 +1231,6 @@ impl RbacPermissionProvider {
 pub struct PolicyDecisionPointConfig {
     /// 默认决策（当没有匹配规则时）
     pub default_decision: PermissionDecision,
-    /// 是否记录拒绝的决策
-    pub log_denied: bool,
     /// 缓存配置
     pub cache_ttl_seconds: u64,
     /// 是否启用缓存
@@ -1276,7 +1241,6 @@ impl Default for PolicyDecisionPointConfig {
     fn default() -> Self {
         Self {
             default_decision: PermissionDecision::Deny,
-            log_denied: true,
             cache_ttl_seconds: 300,
             cache_enabled: true,
         }

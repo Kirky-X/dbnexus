@@ -9,6 +9,7 @@ use std::fmt;
 use std::future::Future;
 use std::time::Duration;
 
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 use crate::foundation::DbError;
@@ -237,7 +238,7 @@ impl RetryExecutor {
         if policy.jitter {
             // ±25% 随机抖动
             let jitter_range = capped_ms * 0.25;
-            let jitter_offset = (rand::random::<f64>() - 0.5) * 2.0 * jitter_range;
+            let jitter_offset = (rand::rng().random::<f64>() - 0.5) * 2.0 * jitter_range;
             let final_ms = (capped_ms + jitter_offset).max(1.0);
             Duration::from_millis(final_ms as u64)
         } else {

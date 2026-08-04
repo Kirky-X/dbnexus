@@ -41,7 +41,7 @@ repos:
   # cargo-deny 许可证/漏洞/禁用依赖检查
   - id: cargo-deny
     name: cargo deny check
-    entry: cargo deny check license advisories bans
+    entry: cargo deny check licenses advisories bans
     language: system
     pass_filenames: false
     files: ^(Cargo\.(toml|lock)|deny\.toml)$
