@@ -237,3 +237,278 @@ async fn test_postgres_transaction_commit() {
         "Insert should conflict with committed data (rows_affected=0)"
     );
 }
+
+// ============================================================================
+// 数据类型测试
+// ============================================================================
+
+#[tokio::test]
+async fn test_postgres_data_types() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    // PostgreSQL 特有数据类型
+    session
+        .execute_raw_ddl(
+            "CREATE TABLE type_test (
+                id SERIAL PRIMARY KEY,
+                bool_col BOOLEAN,
+                int_col INTEGER,
+                bigint_col BIGINT,
+                float_col REAL,
+                double_col DOUBLE PRECISION,
+                text_col TEXT,
+                varchar_col VARCHAR(100),
+                uuid_col UUID,
+                json_col JSONB,
+                array_col INTEGER[]
+            )",
+        )
+        .await
+        .expect("Failed to create table");
+
+    session
+        .execute_raw(
+            "INSERT INTO type_test (bool_col, int_col, bigint_col, float_col, double_col,
+             text_col, varchar_col, uuid_col, json_col, array_col)
+             VALUES (true, 42, 9223372036854775807, 3.14, 2.718281828,
+             'text value', 'varchar value', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+             '{\"key\": \"value\"}', '{1,2,3}')",
+        )
+        .await
+        .expect("Failed to insert");
+
+    let result = session
+        .execute_raw("SELECT * FROM type_test WHERE id = 1")
+        .await
+        .expect("Failed to query");
+    assert_eq!(result.rows_affected(), 1, "Should return 1 row");
+}
+
+#[tokio::test]
+async fn test_postgres_null_handling() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_raw_ddl("CREATE TABLE null_test (id SERIAL PRIMARY KEY, nullable_col VARCHAR(100))")
+        .await
+        .expect("Failed to create table");
+
+    session
+        .execute_raw("INSERT INTO null_test (nullable_col) VALUES (NULL)")
+        .await
+        .expect("Failed to insert NULL");
+
+    let result = session
+        .execute_raw("SELECT nullable_col FROM null_test WHERE id = 1")
+        .await
+        .expect("Failed to query");
+    assert_eq!(result.rows_affected(), 1, "Should return 1 row");
+}
+
+// ============================================================================
+// 错误路径测试
+// ============================================================================
+
+#[tokio::test]
+async fn test_postgres_syntax_error_returns_error() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    let result = session.execute_raw("SELEC * FORM nonexistent").await;
+    assert!(result.is_err(), "Syntax error should return error");
+}
+
+#[tokio::test]
+async fn test_postgres_table_not_exists_returns_error() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    let result = session.execute_raw("SELECT * FROM nonexistent_table").await;
+    assert!(result.is_err(), "Query on nonexistent table should return error");
+}
+
+#[tokio::test]
+async fn test_postgres_duplicate_key_returns_error() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_raw_ddl("CREATE TABLE pk_test (id INTEGER PRIMARY KEY, value VARCHAR(50))")
+        .await
+        .expect("Failed to create table");
+
+    session
+        .execute_raw("INSERT INTO pk_test (id, value) VALUES (1, 'first')")
+        .await
+        .expect("First insert should succeed");
+
+    let result = session
+        .execute_raw("INSERT INTO pk_test (id, value) VALUES (1, 'duplicate')")
+        .await;
+    assert!(result.is_err(), "Duplicate primary key should return error");
+}
+
+// ============================================================================
+// 聚合与 JOIN 测试
+// ============================================================================
+
+#[tokio::test]
+async fn test_postgres_aggregate_query() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_raw_ddl("CREATE TABLE sales (id SERIAL PRIMARY KEY, product VARCHAR(50), amount DECIMAL(10,2))")
+        .await
+        .expect("Failed to create table");
+
+    session
+        .execute_raw("INSERT INTO sales (product, amount) VALUES ('A', 100.50), ('A', 200.00), ('B', 50.00)")
+        .await
+        .expect("Failed to insert");
+
+    let result = session
+        .execute_raw(
+            "SELECT product, COUNT(*) as cnt, SUM(amount) as total FROM sales GROUP BY product ORDER BY product",
+        )
+        .await
+        .expect("Aggregate query should succeed");
+    assert_eq!(result.rows_affected(), 2, "Should return 2 groups");
+}
+
+#[tokio::test]
+async fn test_postgres_join_query() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_raw_ddl("CREATE TABLE customers (id SERIAL PRIMARY KEY, name VARCHAR(100))")
+        .await
+        .expect("Failed to create customers table");
+
+    session
+        .execute_raw_ddl("CREATE TABLE orders (id SERIAL PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DECIMAL(10,2))")
+        .await
+        .expect("Failed to create orders table");
+
+    session
+        .execute_raw("INSERT INTO customers (name) VALUES ('Alice'), ('Bob')")
+        .await
+        .expect("Failed to insert customers");
+
+    session
+        .execute_raw("INSERT INTO orders (customer_id, total) VALUES (1, 100.00), (1, 200.00), (2, 50.00)")
+        .await
+        .expect("Failed to insert orders");
+
+    let result = session
+        .execute_raw(
+            "SELECT c.name, COUNT(o.id) as order_count, SUM(o.total) as total_spent
+             FROM customers c LEFT JOIN orders o ON c.id = o.customer_id
+             GROUP BY c.name ORDER BY c.name",
+        )
+        .await
+        .expect("JOIN query should succeed");
+    assert_eq!(result.rows_affected(), 2, "Should return 2 customers");
+}
+
+// ============================================================================
+// 健康检查与并发测试
+// ============================================================================
+
+#[tokio::test]
+async fn test_postgres_health_check() {
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+
+    // 通过成功获取 session 并执行查询来验证连接健康
+    let session = pool.get_session("admin").await;
+    assert!(session.is_ok(), "get_session should succeed with healthy connection");
+
+    let session = session.unwrap();
+    let result = session.execute_raw("SELECT 1").await;
+    assert!(result.is_ok(), "Health check query should succeed");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_postgres_concurrent_access() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let (_container, url) = setup_postgres().await;
+    let config = make_config(url);
+    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+
+    // 创建测试表
+    {
+        let session = pool.get_session("admin").await.expect("Failed to get setup session");
+        session
+            .execute_raw_ddl("CREATE TABLE concurrent_test (id INTEGER, value INTEGER)")
+            .await
+            .expect("CREATE TABLE should succeed");
+    }
+
+    let success_count = Arc::new(AtomicUsize::new(0));
+    let mut handles = Vec::new();
+
+    for i in 0..4 {
+        let pool_clone = pool.clone();
+        let success_clone = success_count.clone();
+        handles.push(tokio::spawn(async move {
+            let session = match pool_clone.get_session("admin").await {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let sql = format!("INSERT INTO concurrent_test VALUES ({}, {})", i, i * 10);
+            if session.execute_raw(&sql).await.is_ok() {
+                success_clone.fetch_add(1, Ordering::SeqCst);
+            }
+        }));
+    }
+
+    for handle in handles {
+        handle.await.expect("Task panicked");
+    }
+
+    assert_eq!(
+        success_count.load(Ordering::SeqCst),
+        4,
+        "All concurrent inserts should succeed"
+    );
+
+    // 验证数据
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get verification session");
+    let result = session
+        .execute_raw("SELECT COUNT(*) as cnt FROM concurrent_test")
+        .await
+        .expect("COUNT query should succeed");
+    assert_eq!(result.rows_affected(), 1, "Should return 1 row");
+}
