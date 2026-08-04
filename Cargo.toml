@@ -431,13 +431,13 @@ required-features = ["migration"]
 [[test]]
 name = "postgres_testcontainers"
 path = "tests/postgres_testcontainers.rs"
-required-features = ["postgres"]
+required-features = ["postgres", "runtime-tokio-rustls", "sql-parser"]
 
 # Docker testcontainers 集成测试 - MySQL（需要 Docker 环境）
 [[test]]
 name = "mysql_testcontainers"
 path = "tests/mysql_testcontainers.rs"
-required-features = ["mysql"]
+required-features = ["mysql", "runtime-tokio-rustls", "sql-parser"]
 
 [[bench]]
 name = "permission_bench"
@@ -482,7 +482,7 @@ required-features = ["sqlite", "futures"]
 [[test]]
 name = "duckdb_pool_tests"
 path = "tests/pool/unit/duckdb_pool_tests.rs"
-required-features = ["duckdb"]
+required-features = ["duckdb", "sql-parser", "permission"]
 
 # Security tests - SQL injection detection tests
 [[test]]
@@ -494,13 +494,13 @@ required-features = ["sql-parser"]
 [[test]]
 name = "pool_session_unit_tests"
 path = "tests/pool/unit/session_unit_tests.rs"
-required-features = ["sqlite", "permission", "sql-parser"]
+required-features = ["sqlite", "permission", "sql-parser", "runtime-tokio-rustls"]
 
 # Pool 单元测试 - DbPool 构造、status、get_session 权限
 [[test]]
 name = "pool_db_pool_unit_tests"
 path = "tests/pool/unit/db_pool_unit_tests.rs"
-required-features = ["sqlite", "permission", "pool-warmup"]
+required-features = ["sqlite", "permission", "pool-warmup", "runtime-tokio-rustls"]
 
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
@@ -667,7 +667,7 @@ required-features = ["permission"]
 [[test]]
 name = "pool_unit_tests"
 path = "tests/pool/unit/pool_unit_tests.rs"
-required-features = ["sqlite"]
+required-features = ["sqlite", "runtime-tokio-rustls"]
 
 # Pool 集成测试 - 健康检查/clean invalid connections（Convergence 注册）
 [[test]]
