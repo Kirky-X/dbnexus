@@ -251,3 +251,237 @@ impl std::fmt::Debug for DbPoolBuilder {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_new() {
+        let builder = DbPoolBuilder::new();
+        assert!(builder.url.is_none());
+        assert!(builder.config.is_none());
+        assert!(builder.admin_role.is_none());
+    }
+
+    #[test]
+    fn test_builder_url() {
+        let builder = DbPoolBuilder::new().url("sqlite::memory:");
+        assert_eq!(builder.url.as_deref(), Some("sqlite::memory:"));
+    }
+
+    #[test]
+    fn test_builder_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let builder = DbPoolBuilder::new().config(config);
+        assert!(builder.config.is_some());
+        assert_eq!(builder.config.unwrap().url, "sqlite::memory:");
+    }
+
+    #[test]
+    fn test_builder_admin_role_with_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            admin_role: "old_admin".to_string(),
+            ..Default::default()
+        };
+        let builder = DbPoolBuilder::new().config(config).admin_role("new_admin");
+        assert_eq!(builder.config.unwrap().admin_role, "new_admin");
+    }
+
+    #[test]
+    fn test_builder_admin_role_without_config() {
+        let builder = DbPoolBuilder::new().admin_role("super_admin");
+        assert_eq!(builder.admin_role.as_deref(), Some("super_admin"));
+    }
+
+    #[test]
+    fn test_builder_max_connections_with_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let builder = DbPoolBuilder::new().config(config).max_connections(50);
+        assert_eq!(builder.config.unwrap().pool_config.max_connections, 50);
+    }
+
+    #[test]
+    fn test_builder_max_connections_with_url_only() {
+        let builder = DbPoolBuilder::new().url("sqlite::memory:").max_connections(30);
+        let config = builder.config.unwrap();
+        assert_eq!(config.pool_config.max_connections, 30);
+        assert_eq!(config.url, "sqlite::memory:");
+    }
+
+    #[test]
+    fn test_builder_max_connections_no_config_no_url() {
+        // Neither config nor url set -> no-op (self stays same)
+        let builder = DbPoolBuilder::new().max_connections(30);
+        assert!(builder.config.is_none());
+    }
+
+    #[test]
+    fn test_builder_min_connections_with_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let builder = DbPoolBuilder::new().config(config).min_connections(10);
+        assert_eq!(builder.config.unwrap().pool_config.min_connections, 10);
+    }
+
+    #[test]
+    fn test_builder_min_connections_with_url_only() {
+        let builder = DbPoolBuilder::new().url("sqlite::memory:").min_connections(5);
+        let config = builder.config.unwrap();
+        assert_eq!(config.pool_config.min_connections, 5);
+    }
+
+    #[test]
+    fn test_builder_min_connections_no_config_no_url() {
+        let builder = DbPoolBuilder::new().min_connections(5);
+        assert!(builder.config.is_none());
+    }
+
+    #[test]
+    fn test_builder_debug_format() {
+        let builder = DbPoolBuilder::new().url("sqlite::memory:");
+        let debug = format!("{:?}", builder);
+        assert!(debug.contains("DbPoolBuilder"));
+        assert!(debug.contains("sqlite::memory:"));
+    }
+
+    #[tokio::test]
+    async fn test_builder_build_no_url_no_config_fails() {
+        let result = DbPoolBuilder::new().build().await;
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_builder_build_with_url() {
+        let pool = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .build()
+            .await
+            .expect("should build pool");
+        assert_eq!(pool.config().url, "sqlite::memory:");
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_builder_build_with_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            pool_config: PoolConfig {
+                max_connections: 15,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let pool = DbPoolBuilder::new()
+            .config(config)
+            .build()
+            .await
+            .expect("should build pool");
+        assert_eq!(pool.config().pool_config.max_connections, 15);
+    }
+
+    #[cfg(feature = "permission")]
+    #[test]
+    #[allow(deprecated)]
+    fn test_builder_permission_config_deprecated() {
+        let perm_config = crate::access::PermissionConfig::default();
+        let builder = DbPoolBuilder::new().permission_config(perm_config);
+        assert!(builder.permission_config.is_some());
+    }
+
+    #[cfg(feature = "cache")]
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_builder_with_oxcache_deprecated() {
+        let cache = Arc::new(
+            Cache::builder()
+                .capacity(10)
+                .build()
+                .await
+                .expect("should create cache"),
+        );
+        let builder = DbPoolBuilder::new().with_oxcache(cache);
+        assert!(builder.cache.is_some());
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_builder_cache_provider() {
+        use crate::foundation::DbError;
+        use std::future::Future;
+        use std::pin::Pin;
+
+        struct NoopCacheProvider;
+        impl DbCacheProvider for NoopCacheProvider {
+            fn get<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(None) })
+            }
+            fn set<'a>(
+                &'a self,
+                _key: &'a str,
+                _value: Vec<u8>,
+                _ttl: Option<std::time::Duration>,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        let provider = Arc::new(NoopCacheProvider);
+        let builder = DbPoolBuilder::new().cache_provider(provider);
+        assert!(builder.cache_provider.is_some());
+    }
+
+    #[cfg(feature = "cache")]
+    #[tokio::test]
+    async fn test_builder_build_with_cache_provider() {
+        use crate::foundation::DbError;
+        use std::future::Future;
+        use std::pin::Pin;
+
+        struct NoopCacheProvider;
+        impl DbCacheProvider for NoopCacheProvider {
+            fn get<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(None) })
+            }
+            fn set<'a>(
+                &'a self,
+                _key: &'a str,
+                _value: Vec<u8>,
+                _ttl: Option<std::time::Duration>,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        let provider = Arc::new(NoopCacheProvider);
+        let pool = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .cache_provider(provider)
+            .build()
+            .await
+            .expect("should build pool with cache provider");
+        assert!(pool.cache_provider().is_some());
+    }
+}
