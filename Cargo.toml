@@ -274,7 +274,7 @@ rand = { version = "0.10", optional = true }
 icu = "2.2"
 writeable = "0.6"
 sys-locale = "0.3"
-fluent-bundle = "0.15"
+fluent-bundle = "0.16"
 unic-langid = "0.9"
 
 

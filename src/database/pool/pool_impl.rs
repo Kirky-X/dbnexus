@@ -11,13 +11,13 @@ use crate::foundation::{DbConfig, PoolConfig};
 
 #[cfg(feature = "permission")]
 use crate::access::PermissionConfig;
-#[cfg(feature = "cache")]
+#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
 use crate::domain::DbCacheProvider;
 #[cfg(feature = "metrics")]
 use crate::observability::MetricsCollector;
 #[cfg(feature = "cache")]
 use oxcache::Cache;
-#[cfg(any(feature = "metrics", feature = "cache"))]
+#[cfg(any(feature = "metrics", feature = "cache", feature = "oxcache-integration"))]
 use std::sync::Arc;
 
 impl DbPoolBuilder {
@@ -132,7 +132,7 @@ impl DbPoolBuilder {
     /// # Returns
     ///
     /// 返回构造器自身以支持链式调用
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub fn cache_provider(mut self, provider: Arc<dyn DbCacheProvider + Send + Sync>) -> Self {
         self.cache_provider = Some(provider);
         self
@@ -228,7 +228,7 @@ impl DbPoolBuilder {
         let mut pool = DbPool::with_config(config).await?;
 
         // 注入缓存提供者（如果设置）
-        #[cfg(feature = "cache")]
+        #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
         if let Some(cache_provider) = self.cache_provider {
             pool.set_cache_provider(cache_provider);
         }
@@ -414,7 +414,7 @@ mod tests {
         assert!(builder.cache.is_some());
     }
 
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     #[test]
     fn test_builder_cache_provider() {
         use crate::foundation::DbError;
@@ -447,7 +447,7 @@ mod tests {
         assert!(builder.cache_provider.is_some());
     }
 
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     #[tokio::test]
     async fn test_builder_build_with_cache_provider() {
         use crate::foundation::DbError;
