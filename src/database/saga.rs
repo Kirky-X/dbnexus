@@ -40,6 +40,24 @@ impl fmt::Display for SagaError {
 
 impl std::error::Error for SagaError {}
 
+impl crate::i18n::error_ext::LocalizedMsg for SagaError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::ExecutionFailed(_) => "saga-execution-failed",
+            Self::CompensationFailed(_) => "saga-compensation-failed",
+            Self::Timeout(_) => "saga-timeout",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::ExecutionFailed(reason) => vec![("reason", reason.clone())],
+            Self::CompensationFailed(reason) => vec![("reason", reason.clone())],
+            Self::Timeout(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 // ============================================================================
 // SagaAction trait
 // ============================================================================

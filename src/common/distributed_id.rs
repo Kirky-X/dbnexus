@@ -46,6 +46,24 @@ impl std::fmt::Display for SnowflakeError {
 
 impl std::error::Error for SnowflakeError {}
 
+impl crate::i18n::error_ext::LocalizedMsg for SnowflakeError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::ClockBacktrack { .. } => "snowflake-clock-backtrack",
+            Self::TimestampOverflow { .. } => "snowflake-timestamp-overflow",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::ClockBacktrack { waited_ts, last_ts } => {
+                vec![("waited_ts", waited_ts.to_string()), ("last_ts", last_ts.to_string())]
+            }
+            Self::TimestampOverflow { timestamp } => vec![("timestamp", timestamp.to_string())],
+        }
+    }
+}
+
 // ============================================================================
 // IdComponents — ID 解析结果
 // ============================================================================

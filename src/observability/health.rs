@@ -233,6 +233,16 @@ impl CircuitBreakerError {
     }
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for CircuitBreakerError {
+    fn message_key(&self) -> &'static str {
+        "circuit-breaker"
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        vec![("state", format!("{}", self.state))]
+    }
+}
+
 /// 熔断器配置
 #[derive(Debug, Clone)]
 pub struct CircuitBreakerConfig {
