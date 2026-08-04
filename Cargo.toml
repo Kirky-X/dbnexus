@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.4"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.91"
 authors = ["Kirky.X"]
@@ -40,7 +40,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "0.4" }
+dbnexus-macros = { path = "macros", version = "0.5" }
 
 # Validation（root + examples 共享）
 validator = { version = "0.21", features = ["derive"] }
