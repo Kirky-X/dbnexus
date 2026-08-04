@@ -703,4 +703,111 @@ mod tests {
         // 清理
         let _ = conn.execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n").await;
     }
+
+    // ===== json_to_bolt_type 全类型覆盖测试 =====
+
+    #[test]
+    fn test_json_to_bolt_null() {
+        let bolt = json_to_bolt_type(serde_json::Value::Null);
+        assert!(matches!(bolt, neo4rs::BoltType::Null(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_bool() {
+        let bolt = json_to_bolt_type(serde_json::json!(true));
+        assert!(matches!(bolt, neo4rs::BoltType::Boolean(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_integer() {
+        let bolt = json_to_bolt_type(serde_json::json!(42));
+        assert!(matches!(bolt, neo4rs::BoltType::Integer(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_float() {
+        let bolt = json_to_bolt_type(serde_json::json!(1.5));
+        assert!(matches!(bolt, neo4rs::BoltType::Float(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_string() {
+        let bolt = json_to_bolt_type(serde_json::json!("hello"));
+        assert!(matches!(bolt, neo4rs::BoltType::String(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_array() {
+        let bolt = json_to_bolt_type(serde_json::json!([1, 2, 3]));
+        assert!(matches!(bolt, neo4rs::BoltType::List(_)));
+    }
+
+    #[test]
+    fn test_json_to_bolt_object() {
+        let bolt = json_to_bolt_type(serde_json::json!({"key": "value"}));
+        assert!(matches!(bolt, neo4rs::BoltType::Map(_)));
+    }
+
+    // ===== placeholder execute_cypher_with_params 测试 =====
+
+    #[tokio::test]
+    async fn test_neo4j_placeholder_execute_with_params_returns_error() {
+        let conn = Neo4jConnection::new_placeholder();
+        let params = HashMap::from([("name".to_string(), serde_json::json!("Alice"))]);
+        let result = conn
+            .execute_cypher_with_params("MATCH (n) WHERE n.name = $name RETURN n", params)
+            .await;
+        assert!(
+            result.is_err(),
+            "placeholder should return error for execute_cypher_with_params"
+        );
+        let err = result.unwrap_err();
+        match err {
+            DbError::Config(msg) => assert!(
+                msg.contains("not connected"),
+                "error should mention 'not connected': {msg}"
+            ),
+            other => panic!("expected DbError::Config, got {other:?}"),
+        }
+    }
+
+    // ===== 真实服务器：参数化查询测试 =====
+
+    #[tokio::test]
+    #[ignore = "需要 Neo4j 服务器"]
+    async fn test_neo4j_execute_with_params() {
+        let conn = neo4j_test_connection()
+            .await
+            .expect("NEO4J_URL not set or connection failed");
+        // 清理
+        let _ = conn.execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n").await;
+
+        // 参数化创建节点
+        let params = HashMap::from([
+            ("name".to_string(), serde_json::json!("Alice")),
+            ("age".to_string(), serde_json::json!(30)),
+        ]);
+        conn.execute_cypher_with_params("CREATE (n:T029ParamTest {name: $name, age: $age})", params)
+            .await
+            .expect("parameterized create should succeed");
+
+        // 参数化查询
+        let query_params = HashMap::from([("name".to_string(), serde_json::json!("Alice"))]);
+        let result = conn
+            .execute_cypher_with_params(
+                "MATCH (n:T029ParamTest {name: $name}) RETURN n.age AS age",
+                query_params,
+            )
+            .await
+            .expect("parameterized query should succeed");
+        match result {
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should find 1 node");
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query"),
+        }
+
+        // 清理
+        let _ = conn.execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n").await;
+    }
 }
