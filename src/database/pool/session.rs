@@ -25,6 +25,7 @@ use crate::access::{DdlGuard, DdlValidationResult};
 #[cfg(feature = "permission")]
 use crate::access::{PermissionAction, PermissionContext};
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 #[cfg(feature = "metrics")]
 use crate::observability::MetricsCollector;
 use async_trait::async_trait;
@@ -208,10 +209,9 @@ impl Session {
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
         if conn.is_graph() {
             let graph = conn.as_graph()?;
-            let graph_txn = graph
-                .begin_graph_txn()
-                .await
-                .map_err(|e| DbError::Transaction(format!("Failed to begin graph transaction: {}", e)))?;
+            let graph_txn = graph.begin_graph_txn().await.map_err(|e| {
+                DbError::Transaction(i18n::t("session-txn-begin-graph-failed", &[("error", e.to_string())]))
+            })?;
 
             // 短锁：写入 graph_transaction（含并发冲突处理）
             let mut state = self.state.lock().await;
@@ -231,7 +231,7 @@ impl Session {
         let transaction = conn
             .begin()
             .await
-            .map_err(|e| DbError::Transaction(format!("Failed to begin transaction: {}", e)))?;
+            .map_err(|e| DbError::Transaction(i18n::t("session-txn-begin-failed", &[("error", e.to_string())])))?;
 
         // 短锁：写入 transaction（含并发冲突处理）
         let mut state = self.state.lock().await;
@@ -266,10 +266,9 @@ impl Session {
             };
             if let Some(graph_txn) = graph_txn {
                 // 锁外：执行 async commit（commit 消耗 self）
-                graph_txn
-                    .commit()
-                    .await
-                    .map_err(|e| DbError::Transaction(format!("Failed to commit graph transaction: {}", e)))?;
+                graph_txn.commit().await.map_err(|e| {
+                    DbError::Transaction(i18n::t("session-txn-commit-failed", &[("error", e.to_string())]))
+                })?;
 
                 // 短锁：清除 last_write
                 let mut state = self.state.lock().await;
@@ -324,10 +323,12 @@ impl Session {
             };
             if let Some(graph_txn) = graph_txn {
                 // 锁外：执行 async rollback（rollback 消耗 self）
-                graph_txn
-                    .rollback()
-                    .await
-                    .map_err(|e| DbError::Transaction(format!("Failed to rollback graph transaction: {}", e)))?;
+                graph_txn.rollback().await.map_err(|e| {
+                    DbError::Transaction(i18n::t(
+                        "session-txn-rollback-graph-failed",
+                        &[("error", e.to_string())],
+                    ))
+                })?;
                 return Ok(());
             }
         }
@@ -353,7 +354,7 @@ impl Session {
         transaction
             .rollback()
             .await
-            .map_err(|e| DbError::Transaction(format!("Failed to rollback transaction: {}", e)))?;
+            .map_err(|e| DbError::Transaction(i18n::t("session-txn-rollback-failed", &[("error", e.to_string())])))?;
 
         Ok(())
     }
@@ -547,13 +548,22 @@ impl Session {
                     // 通过验证，继续执行
                 }
                 Ok(DdlValidationResult::Forbidden(reason)) => {
-                    return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
+                    return Err(DbError::Permission(i18n::t(
+                        "session-ddl-not-allowed",
+                        &[("reason", reason.to_string())],
+                    )));
                 }
                 Ok(DdlValidationResult::ParseError(error)) => {
-                    return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
+                    return Err(DbError::Config(i18n::t(
+                        "session-ddl-parse-failed",
+                        &[("error", error.to_string())],
+                    )));
                 }
                 Err(error) => {
-                    return Err(DbError::Config(format!("DDL validation error: {}", error)));
+                    return Err(DbError::Config(i18n::t(
+                        "session-ddl-validation-error",
+                        &[("error", error.to_string())],
+                    )));
                 }
             }
         }
@@ -674,13 +684,22 @@ impl Session {
                             return duck_conn.execute(sql).await;
                         }
                         Ok(DdlValidationResult::Forbidden(reason)) => {
-                            return Err(DbError::Permission(format!("DDL operation not allowed: {}", reason)));
+                            return Err(DbError::Permission(i18n::t(
+                                "session-ddl-not-allowed",
+                                &[("reason", reason.to_string())],
+                            )));
                         }
                         Ok(DdlValidationResult::ParseError(error)) => {
-                            return Err(DbError::Config(format!("Failed to parse DDL SQL: {}", error)));
+                            return Err(DbError::Config(i18n::t(
+                                "session-ddl-parse-failed",
+                                &[("error", error.to_string())],
+                            )));
                         }
                         Err(error) => {
-                            return Err(DbError::Config(format!("DDL validation error: {}", error)));
+                            return Err(DbError::Config(i18n::t(
+                                "session-ddl-validation-error",
+                                &[("error", error.to_string())],
+                            )));
                         }
                     }
                 } else {
@@ -1129,7 +1148,12 @@ impl Session {
                 "SELECT" => PermissionAction::Select,
                 "UPDATE" => PermissionAction::Update,
                 "DELETE" => PermissionAction::Delete,
-                _ => return Err(DbError::Permission(format!("Unknown operation: {}", _operation))),
+                _ => {
+                    return Err(DbError::Permission(i18n::t(
+                        "session-unknown-operation",
+                        &[("operation", _operation.to_string())],
+                    )));
+                }
             };
 
             // Admin 角色绕过权限检查
@@ -1189,7 +1213,10 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 /// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
 #[cfg(feature = "permission")]
 fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl std::fmt::Display + ?Sized)) -> DbError {
-    DbError::Permission(format!("Permission denied for {} on {}", action, table))
+    DbError::Permission(i18n::t(
+        "session-permission-denied",
+        &[("action", action.to_string()), ("table", table.to_string())],
+    ))
 }
 
 /// 判断是否为写操作（Insert/Update/Delete）
@@ -1912,6 +1939,51 @@ mod vuln_0001_tests {
         // 非 admin 角色应被拒绝（无权限配置时默认拒绝）
         let result = session.check_permission("any_table", &PermissionAction::Select).await;
         assert!(result.is_err(), "non-admin should be denied");
+    }
+
+    /// 非 admin 角色有权限时 check_permission 返回 Ok (覆盖 line 162)
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
+    #[tokio::test]
+    async fn test_check_permission_non_admin_allowed() {
+        use std::io::Write;
+
+        // 创建权限配置文件，授予 "reader" 角色对 "test_tbl" 的 SELECT 权限
+        let yaml_content = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations: ["select", "insert", "update", "delete"]
+  reader:
+    tables:
+      - name: "test_tbl"
+        operations: ["select"]
+"#;
+        let tmp_dir = std::env::temp_dir();
+        let yaml_path = tmp_dir.join("test_non_admin_perm.yaml");
+        {
+            let mut file = std::fs::File::create(&yaml_path).expect("create temp file");
+            file.write_all(yaml_content.as_bytes()).expect("write temp file");
+        }
+
+        let config = crate::foundation::DbConfig {
+            url: "sqlite::memory:".to_string(),
+            permissions_path: Some(yaml_path.to_string_lossy().to_string()),
+            ..Default::default()
+        };
+        let pool = DbPool::with_config(config).await.expect("should create pool");
+
+        // reader 角色有 test_tbl 的 SELECT 权限 -> check_permission 应返回 Ok
+        let session = pool.get_session("reader").await.expect("get_session for reader");
+        let result = session.check_permission("test_tbl", &PermissionAction::Select).await;
+        assert!(
+            result.is_ok(),
+            "reader should have SELECT on test_tbl: {:?}",
+            result.err()
+        );
+
+        // 清理临时文件
+        let _ = std::fs::remove_file(&yaml_path);
     }
 
     /// vuln-0001 集成测试：check_table_permission admin bypass 带审计日志
