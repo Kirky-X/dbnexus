@@ -83,8 +83,8 @@ pub mod reliability;
 /// Storage 模块 (保留用于 global-index)
 pub mod storage;
 
-/// Internationalization 模块 - ICU4X locale 感知格式化（核心特性，始终可用）
-mod i18n;
+/// Internationalization 模块 - ICU4X + Fluent locale 感知格式化（核心特性，始终可用）
+pub mod i18n;
 
 /// Integration adapters for external crates (oxcache, etc.)
 #[cfg(feature = "oxcache-integration")]
