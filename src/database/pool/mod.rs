@@ -35,13 +35,13 @@ use crate::foundation::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
-#[cfg(any(feature = "metrics", feature = "cache"))]
+#[cfg(any(feature = "metrics", feature = "cache", feature = "oxcache-integration"))]
 use std::sync::Arc;
 
 #[cfg(feature = "cache")]
 use oxcache::Cache;
 
-#[cfg(feature = "cache")]
+#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
 use crate::domain::DbCacheProvider;
 
 /// 连接池抽象 trait
@@ -194,6 +194,6 @@ pub struct DbPoolBuilder {
     #[cfg(feature = "cache")]
     cache: Option<Arc<Cache<String, serde_json::Value>>>,
     /// 缓存提供者（DI 注入点，优先于内部缓存）
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
 }
