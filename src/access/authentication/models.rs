@@ -36,6 +36,32 @@ pub enum AuthError {
     UserLimitReached(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for AuthError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::InvalidCredentials => "auth-invalid-credentials",
+            Self::TokenGeneration(_) => "auth-token-generation",
+            Self::InvalidToken => "auth-invalid-token",
+            Self::TokenExpired => "auth-token-expired",
+            Self::UserNotFound(_) => "auth-user-not-found",
+            Self::PasswordHash(_) => "auth-password-hash",
+            Self::UserLimitReached(_) => "auth-user-limit-reached",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::InvalidCredentials => vec![],
+            Self::TokenGeneration(reason) => vec![("reason", reason.clone())],
+            Self::InvalidToken => vec![],
+            Self::TokenExpired => vec![],
+            Self::UserNotFound(user) => vec![("user", user.clone())],
+            Self::PasswordHash(reason) => vec![("reason", reason.clone())],
+            Self::UserLimitReached(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 /// 认证结果类型别名
 pub type AuthResult<T> = Result<T, AuthError>;
 

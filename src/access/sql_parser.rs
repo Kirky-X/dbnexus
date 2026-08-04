@@ -84,6 +84,28 @@ pub enum SqlParseError {
     ContainsVariables(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for SqlParseError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::ParseError(_) => "sql-parse-error",
+            Self::UnsupportedStatement(_) => "sql-unsupported-statement",
+            Self::EmptyStatement => "sql-empty-statement",
+            Self::MultipleStatements => "sql-multiple-statements",
+            Self::ContainsVariables(_) => "sql-contains-variables",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::ParseError(reason) => vec![("reason", reason.clone())],
+            Self::UnsupportedStatement(stmt_type) => vec![("stmt_type", stmt_type.clone())],
+            Self::EmptyStatement => vec![],
+            Self::MultipleStatements => vec![],
+            Self::ContainsVariables(details) => vec![("details", details.clone())],
+        }
+    }
+}
+
 /// Represents a parsed SQL operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSqlOperation {
