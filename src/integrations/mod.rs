@@ -18,4 +18,4 @@ pub mod kit;
 pub use oxcache_adapter::OxcacheDbCacheAdapter;
 
 #[cfg(feature = "kit")]
-pub use kit::DbNexusModule;
+pub use kit::{DbNexusBuildObserver, DbNexusModule};

@@ -257,7 +257,7 @@ DBNexus 采用清晰的八层架构，每层有明确职责。各层通过 `src/
 
 基于 `trait-kit` 的统一能力管理。
 
-- `integrations/kit/mod.rs` — `DbNexusModule`（cfg = "kit"，trait-kit 0.3 异步集成）
+- `integrations/kit/mod.rs` — `DbNexusModule`（cfg = "kit"，trait-kit 0.4 异步集成）
 - `integrations/kit/module.rs` — `DbNexusModule` 实现
 - `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = "oxcache-integration"）
 - `integrations/mod.rs` — 模块入口
