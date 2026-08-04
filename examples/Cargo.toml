@@ -270,7 +270,7 @@ duckdb = { version = "1.1", features = ["bundled"] }
 oxcache = { version = "0.4" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
-trait-kit = { version = "0.3", features = ["async"], default-features = false }
+trait-kit = { version = "0.4", features = ["async", "lifecycle", "health", "observability"], default-features = false }
 
 # JSON（图数据库示例需要 serde_json::json!）
 serde_json = { workspace = true }
