@@ -14,6 +14,7 @@ DBNexus 的完整 API 文档。
 - [特性门控 API](#特性门控-api)
 - [0.3.0 新增 API](#030-新增-api)
 - [0.4.0 新增 API](#040-新增-api)
+- [重试 API](#重试-api)
 
 ---
 
@@ -1123,6 +1124,126 @@ let module = DbNexusModule::new(/* ... */);
 ```
 
 **导出类型：** `DbNexusModule`、`OxcacheDbCacheAdapter`（需要 `oxcache-integration` 特性）
+
+---
+
+## 重试 API
+
+运行时重试 + 指数退避（需要 `retry` 特性）。仅对幂等查询（SELECT / SHOW / EXPLAIN）自动重试，非幂等操作直接执行不重试。
+
+### `RetryPolicy`
+
+重试策略配置。
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    /// 最大重试次数（不含首次执行），默认 3
+    pub max_retries: u32,
+    /// 初始退避间隔（毫秒），默认 100
+    pub initial_backoff_ms: u64,
+    /// 最大退避间隔上限（毫秒），默认 5000
+    pub max_backoff_ms: u64,
+    /// 退避增长倍数，默认 2.0
+    pub multiplier: f64,
+    /// 是否添加随机抖动（避免 thundering herd），默认 true
+    pub jitter: bool,
+    /// 整体 wall-clock 超时（毫秒），`None` 表示无超时限，默认 `None`
+    pub overall_timeout_ms: Option<u64>,
+}
+```
+
+**方法：**
+
+- `initial_backoff() -> Duration` — 获取初始退避间隔
+- `max_backoff() -> Duration` — 获取最大退避间隔
+
+**示例：**
+```rust
+use dbnexus::RetryPolicy;
+
+let policy = RetryPolicy {
+    max_retries: 5,
+    initial_backoff_ms: 200,
+    ..Default::default()
+};
+```
+
+### `RetryExecutor`
+
+重试执行器 — 无状态，所有方法为关联函数。
+
+```rust
+pub struct RetryExecutor;
+```
+
+#### `execute_with_retry`
+
+执行可重试操作（关联函数，非实例方法）。仅当 `sql` 被判定为幂等操作时才自动重试。
+
+```rust
+pub async fn execute_with_retry<F, Fut, T>(
+    policy: &RetryPolicy,
+    operation: F,
+    sql: &str,
+) -> Result<T, RetryError>
+where
+    F: Fn() -> Fut + Send + Sync,
+    Fut: Future<Output = Result<T, DbError>> + Send,
+    T: Send,
+```
+
+**参数：**
+- `policy: &RetryPolicy` — 重试策略配置
+- `operation: F` — 异步闭包，执行实际操作
+- `sql: &str` — SQL 字符串，用于幂等性判断
+
+**退避策略：** 第 N 次重试的等待时间 = `min(initial_backoff * multiplier^N, max_backoff)`，当 `jitter = true` 时添加 ±25% 的随机抖动。
+
+**示例：**
+```rust
+use dbnexus::{RetryExecutor, RetryPolicy};
+
+let policy = RetryPolicy::default();
+let result = RetryExecutor::execute_with_retry(&policy, || {
+    async move { Ok("success") }
+}, "SELECT * FROM users").await;
+```
+
+### `RetryError`
+
+重试过程中的错误类型。
+
+```rust
+pub enum RetryError {
+    /// 重试次数耗尽，包含最后一次错误
+    Exhausted { attempts: u32, last_error: DbError },
+    /// 非幂等操作被拒绝重试
+    NonRetryable(DbError),
+    /// 整体超时
+    Timeout { timeout_ms: u64, last_error: DbError },
+}
+```
+
+### `is_idempotent_operation`
+
+判断 SQL 操作是否为幂等操作（可安全重试）。
+
+```rust
+pub fn is_idempotent_operation(sql: &str) -> bool
+```
+
+`SELECT`、`SHOW`、`EXPLAIN` 为幂等操作，其余（INSERT / UPDATE / DELETE / DDL）均视为非幂等。零分配实现，直接字节级前缀比较。
+
+**示例：**
+```rust
+use dbnexus::is_idempotent_operation;
+
+assert!(is_idempotent_operation("SELECT * FROM users"));
+assert!(!is_idempotent_operation("INSERT INTO users VALUES (1)"));
+```
+
+**导出类型：** `RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation`
 
 ---
 
