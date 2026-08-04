@@ -261,10 +261,10 @@ impl SagaOrchestrator {
                         for (completed_name, completed_shard_id, _) in completed_steps.iter().rev() {
                             if let Ok(Some(session)) = self.router.get_session(*completed_shard_id).await {
                                 // 找到对应步骤的 compensation
-                                if let Some(original_step) = steps.iter().find(|s| s.name == *completed_name) {
-                                    if let Ok(()) = original_step.compensation.execute(&session).await {
-                                        compensated.push(completed_name.clone());
-                                    }
+                                if let Some(original_step) = steps.iter().find(|s| s.name == *completed_name)
+                                    && let Ok(()) = original_step.compensation.execute(&session).await
+                                {
+                                    compensated.push(completed_name.clone());
                                 }
                             }
                         }

@@ -469,28 +469,28 @@ impl Session {
             // retry feature: 幂等查询自动重试 + 指数退避
             #[cfg(feature = "retry")]
             {
-                if let Some(ref policy) = self.pool_inner.config.retry_policy {
-                    if crate::reliability::is_idempotent_operation(sql) {
-                        let mut last_error: Option<DbError> = None;
-                        // 首次执行 + 重试循环
-                        for attempt in 0..=policy.max_retries {
-                            if attempt > 0 {
-                                let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
-                                tokio::time::sleep(backoff).await;
-                            }
-                            let result = if let Some(ref tx) = tx_opt {
-                                tx.execute_unprepared(sql).await.map_err(DbError::Connection)
-                            } else {
-                                let conn = self.connection()?;
-                                conn.execute_unprepared(sql).await.map_err(DbError::Connection)
-                            };
-                            match result {
-                                Ok(exec_result) => return Ok(exec_result),
-                                Err(e) => last_error = Some(e),
-                            }
+                if let Some(ref policy) = self.pool_inner.config.retry_policy
+                    && crate::reliability::is_idempotent_operation(sql)
+                {
+                    let mut last_error: Option<DbError> = None;
+                    // 首次执行 + 重试循环
+                    for attempt in 0..=policy.max_retries {
+                        if attempt > 0 {
+                            let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
+                            tokio::time::sleep(backoff).await;
                         }
-                        return Err(last_error.unwrap());
+                        let result = if let Some(ref tx) = tx_opt {
+                            tx.execute_unprepared(sql).await.map_err(DbError::Connection)
+                        } else {
+                            let conn = self.connection()?;
+                            conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+                        };
+                        match result {
+                            Ok(exec_result) => return Ok(exec_result),
+                            Err(e) => last_error = Some(e),
+                        }
                     }
+                    return Err(last_error.unwrap());
                 }
             }
 
@@ -923,10 +923,10 @@ impl Session {
             }
             impl<'a> Drop for PoisonGuard<'a> {
                 fn drop(&mut self) {
-                    if self.armed {
-                        if let Ok(mut state) = self.state.try_lock() {
-                            state.graph_txn_poisoned = true;
-                        }
+                    if self.armed
+                        && let Ok(mut state) = self.state.try_lock()
+                    {
+                        state.graph_txn_poisoned = true;
                     }
                 }
             }
@@ -1383,36 +1383,36 @@ fn extract_table_name(sql: &str) -> String {
     // 这是一个简化的实现，实际应该使用 sqlparser
     let sql_upper = sql.to_uppercase();
 
-    if sql_upper.contains("FROM ") {
-        if let Some(start) = sql_upper.find("FROM ") {
-            let rest = &sql[start + 5..];
-            if let Some(end) = rest.find(|c| [' ', ',', ';', '(', ')'].contains(&c)) {
-                return rest[..end].trim().to_string();
-            } else {
-                return rest.trim().to_string();
-            }
+    if sql_upper.contains("FROM ")
+        && let Some(start) = sql_upper.find("FROM ")
+    {
+        let rest = &sql[start + 5..];
+        if let Some(end) = rest.find(|c| [' ', ',', ';', '(', ')'].contains(&c)) {
+            return rest[..end].trim().to_string();
+        } else {
+            return rest.trim().to_string();
         }
     }
 
-    if sql_upper.contains("INTO ") {
-        if let Some(start) = sql_upper.find("INTO ") {
-            let rest = &sql[start + 5..];
-            if let Some(end) = rest.find(|c| [' ', '(', ';'].contains(&c)) {
-                return rest[..end].trim().to_string();
-            } else {
-                return rest.trim().to_string();
-            }
+    if sql_upper.contains("INTO ")
+        && let Some(start) = sql_upper.find("INTO ")
+    {
+        let rest = &sql[start + 5..];
+        if let Some(end) = rest.find(|c| [' ', '(', ';'].contains(&c)) {
+            return rest[..end].trim().to_string();
+        } else {
+            return rest.trim().to_string();
         }
     }
 
-    if sql_upper.contains("UPDATE ") {
-        if let Some(start) = sql_upper.find("UPDATE ") {
-            let rest = &sql[start + 7..];
-            if let Some(end) = rest.find(|c| [' ', ';'].contains(&c)) {
-                return rest[..end].trim().to_string();
-            } else {
-                return rest.trim().to_string();
-            }
+    if sql_upper.contains("UPDATE ")
+        && let Some(start) = sql_upper.find("UPDATE ")
+    {
+        let rest = &sql[start + 7..];
+        if let Some(end) = rest.find(|c| [' ', ';'].contains(&c)) {
+            return rest[..end].trim().to_string();
+        } else {
+            return rest.trim().to_string();
         }
     }
 

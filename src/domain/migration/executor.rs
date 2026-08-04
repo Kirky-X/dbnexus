@@ -69,19 +69,19 @@ fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
     #[allow(deprecated)]
     let format_with_subseconds =
         time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]").ok();
-    if let Some(format) = format_with_subseconds {
-        if let Ok(dt) = time::PrimitiveDateTime::parse(value, &format) {
-            return Some(dt.assume_utc());
-        }
+    if let Some(format) = format_with_subseconds
+        && let Ok(dt) = time::PrimitiveDateTime::parse(value, &format)
+    {
+        return Some(dt.assume_utc());
     }
 
     #[allow(deprecated)]
     let format_without_subseconds =
         time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").ok();
-    if let Some(format) = format_without_subseconds {
-        if let Ok(dt) = time::PrimitiveDateTime::parse(value, &format) {
-            return Some(dt.assume_utc());
-        }
+    if let Some(format) = format_without_subseconds
+        && let Ok(dt) = time::PrimitiveDateTime::parse(value, &format)
+    {
+        return Some(dt.assume_utc());
     }
 
     None
@@ -478,20 +478,20 @@ impl MigrationExecutor {
             let entry = entry.map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
             let path = entry.path();
 
-            if path.is_file() && path.extension().map(|e| e == "sql").unwrap_or(false) {
-                if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                    if let Some((version, description)) = Self::parse_filename(filename) {
-                        let content = std::fs::read_to_string(&path)
-                            .map_err(|e| DbError::Config(format!("Failed to read migration file: {}", e)))?;
+            if path.is_file()
+                && path.extension().map(|e| e == "sql").unwrap_or(false)
+                && let Some(filename) = path.file_name().and_then(|n| n.to_str())
+                && let Some((version, description)) = Self::parse_filename(filename)
+            {
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| DbError::Config(format!("Failed to read migration file: {}", e)))?;
 
-                        migrations.push(MigrationFile {
-                            version,
-                            description,
-                            file_path: path,
-                            content,
-                        });
-                    }
-                }
+                migrations.push(MigrationFile {
+                    version,
+                    description,
+                    file_path: path,
+                    content,
+                });
             }
         }
 

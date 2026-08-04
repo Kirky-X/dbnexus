@@ -26,19 +26,18 @@ static OVERRIDE_LOCALE: std::sync::RwLock<Option<Locale>> = std::sync::RwLock::n
 /// Priority: `DBNEXUS_LANG` env var → `sys-locale` → `"en"` fallback.
 fn detect_locale() -> Locale {
     // 1. DBNEXUS_LANG environment variable
-    if let Ok(lang) = std::env::var("DBNEXUS_LANG") {
-        if !lang.is_empty() {
-            if let Ok(locale) = Locale::from_str(&lang) {
-                return locale;
-            }
-        }
+    if let Ok(lang) = std::env::var("DBNEXUS_LANG")
+        && !lang.is_empty()
+        && let Ok(locale) = Locale::from_str(&lang)
+    {
+        return locale;
     }
 
     // 2. sys-locale system detection
-    if let Some(sys_locale) = sys_locale::get_locale() {
-        if let Ok(locale) = Locale::from_str(&sys_locale) {
-            return locale;
-        }
+    if let Some(sys_locale) = sys_locale::get_locale()
+        && let Ok(locale) = Locale::from_str(&sys_locale)
+    {
+        return locale;
     }
 
     // 3. English fallback
@@ -52,10 +51,10 @@ fn detect_locale() -> Locale {
 /// 2. Global default (detected once on first access via [`detect_locale()`])
 pub fn current_locale() -> Locale {
     // Check override first
-    if let Ok(guard) = OVERRIDE_LOCALE.read() {
-        if let Some(locale) = guard.as_ref() {
-            return locale.clone();
-        }
+    if let Ok(guard) = OVERRIDE_LOCALE.read()
+        && let Some(locale) = guard.as_ref()
+    {
+        return locale.clone();
     }
 
     // Fall back to global default (initialized once)

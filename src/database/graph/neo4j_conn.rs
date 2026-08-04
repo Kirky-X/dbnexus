@@ -297,17 +297,16 @@ pub struct Neo4jTransaction {
 impl Drop for Neo4jTransaction {
     fn drop(&mut self) {
         // FM-2.2 修复：未显式 commit/rollback 的事务在 Drop 时尝试 rollback
-        if let Ok(mut guard) = self.txn.try_lock() {
-            if let Some(txn) = guard.take() {
-                if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                    // 在 tokio runtime 中：spawn 异步 rollback，不阻塞 Drop
-                    handle.spawn(async move {
-                        let _ = txn.rollback().await;
-                    });
-                }
-                // 不在 runtime 中：txn 被 drop，连接归还到池，服务器端事务超时后回滚
-            }
+        if let Ok(mut guard) = self.txn.try_lock()
+            && let Some(txn) = guard.take()
+            && let Ok(handle) = tokio::runtime::Handle::try_current()
+        {
+            // 在 tokio runtime 中：spawn 异步 rollback，不阻塞 Drop
+            handle.spawn(async move {
+                let _ = txn.rollback().await;
+            });
         }
+        // 不在 runtime 中：txn 被 drop，连接归还到池，服务器端事务超时后回滚
         // 锁被持有（有操作正在进行）：txn 会随 Neo4jTransaction 一起 drop，连接归还到池
     }
 }
