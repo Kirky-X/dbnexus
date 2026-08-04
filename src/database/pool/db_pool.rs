@@ -171,8 +171,8 @@ impl std::fmt::Debug for DbConnection {
 pub struct DbPool {
     /// 内部连接池
     inner: Arc<DbPoolInner>,
-    /// 缓存提供者（DI 注入点，feature-gated behind `cache`）
-    #[cfg(feature = "cache")]
+    /// 缓存提供者（DI 注入点，feature-gated behind `cache` or `oxcache-integration`）
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 }
 
@@ -308,7 +308,7 @@ impl DbPool {
     ///
     /// 允许外部注入缓存实现，覆盖默认的内置缓存。
     /// 仅在 `cache` 特性启用时可用。
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub fn set_cache_provider(&mut self, provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>) {
         self.cache_provider = Some(provider);
     }
@@ -316,7 +316,7 @@ impl DbPool {
     /// 获取缓存提供者引用
     ///
     /// 返回当前注入的缓存提供者，如果未注入则返回 `None`。
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub fn cache_provider(&self) -> Option<&Arc<dyn crate::domain::DbCacheProvider + Send + Sync>> {
         self.cache_provider.as_ref()
     }
@@ -390,7 +390,7 @@ impl DbPool {
                 #[cfg(feature = "failover")]
                 current_url_index: std::sync::atomic::AtomicU32::new(0),
             }),
-            #[cfg(feature = "cache")]
+            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
             cache_provider: None,
         };
 
@@ -528,7 +528,7 @@ impl DbPool {
                 #[cfg(feature = "failover")]
                 current_url_index: std::sync::atomic::AtomicU32::new(0),
             }),
-            #[cfg(feature = "cache")]
+            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
             cache_provider: None,
         })
     }
@@ -2089,7 +2089,7 @@ mod tests {
 
     // ===== 补充测试：cache 方法, validate_role_name =====
 
-    #[cfg(feature = "cache")]
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     #[tokio::test]
     async fn test_pool_set_and_get_cache_provider() {
         use crate::foundation::DbError;
