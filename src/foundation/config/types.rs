@@ -66,6 +66,40 @@ pub enum ConfigError {
     ValidationError(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for ConfigError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::MissingField(_) => "config-missing-field",
+            Self::MissingUrl => "config-missing-url",
+            Self::InvalidCacheCapacity(_) => "config-invalid-cache-capacity",
+            Self::InvalidValue { .. } => "config-invalid-value",
+            Self::InvalidFormat(_) => "config-invalid-format",
+            Self::FileNotFound(_) => "config-file-not-found",
+            Self::IoError(_) => "config-io-error",
+            Self::InvalidUrl(_) => "config-invalid-url",
+            Self::UnsupportedProtocol(_) => "config-unsupported-protocol",
+            Self::ParseError(_) => "config-parse-error",
+            Self::ValidationError(_) => "config-validation-error",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::MissingField(field) => vec![("field", field.clone())],
+            Self::InvalidCacheCapacity(reason) => vec![("reason", reason.clone())],
+            Self::InvalidValue { key, message } => vec![("key", key.clone()), ("message", message.clone())],
+            Self::InvalidFormat(reason) => vec![("reason", reason.clone())],
+            Self::FileNotFound(path) => vec![("path", path.clone())],
+            Self::IoError(reason) => vec![("reason", reason.clone())],
+            Self::InvalidUrl(url) => vec![("url", url.clone())],
+            Self::UnsupportedProtocol(protocol) => vec![("protocol", protocol.clone())],
+            Self::ParseError(reason) => vec![("reason", reason.clone())],
+            Self::ValidationError(reason) => vec![("reason", reason.clone())],
+            Self::MissingUrl => vec![],
+        }
+    }
+}
+
 // ============================================================================
 // 缓存配置
 // ============================================================================
