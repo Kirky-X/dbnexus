@@ -323,13 +323,21 @@ mod tests {
     fn column_type_to_sql_string() {
         assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Sqlite), "TEXT");
         assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Postgres), "VARCHAR(255)");
+        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::MySql), "VARCHAR(255)");
+        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::DuckDb), "VARCHAR(255)");
         assert_eq!(ColumnType::String(Some(64)).to_sql(DatabaseType::MySql), "VARCHAR(64)");
+        assert_eq!(
+            ColumnType::String(Some(128)).to_sql(DatabaseType::DuckDb),
+            "VARCHAR(128)"
+        );
     }
 
     #[test]
     fn column_type_to_sql_boolean() {
         assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Sqlite), "INTEGER");
         assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Postgres), "BOOLEAN");
+        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::MySql), "BOOLEAN");
+        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::DuckDb), "BOOLEAN");
     }
 
     #[test]
@@ -337,6 +345,7 @@ mod tests {
         assert_eq!(ColumnType::Json.to_sql(DatabaseType::Sqlite), "TEXT");
         assert_eq!(ColumnType::Json.to_sql(DatabaseType::Postgres), "JSONB");
         assert_eq!(ColumnType::Json.to_sql(DatabaseType::MySql), "JSON");
+        assert_eq!(ColumnType::Json.to_sql(DatabaseType::DuckDb), "JSON");
     }
 
     #[test]
@@ -628,6 +637,97 @@ mod tests {
         let now = time::OffsetDateTime::now_utc();
         let diff = restored.applied_at - now;
         assert!(diff.whole_seconds().abs() < 5, "timestamp should be close to now");
+    }
+
+    // ===== 补充测试：DuckDb 分支覆盖 =====
+
+    #[test]
+    fn test_column_type_to_sql_duckdb_string() {
+        // String(None) for DuckDb -> VARCHAR(255)
+        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::DuckDb), "VARCHAR(255)");
+        // String(Some(128)) for DuckDb -> VARCHAR(128)
+        assert_eq!(
+            ColumnType::String(Some(128)).to_sql(DatabaseType::DuckDb),
+            "VARCHAR(128)"
+        );
+    }
+
+    #[test]
+    fn test_column_type_to_sql_duckdb_boolean() {
+        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::DuckDb), "BOOLEAN");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_duckdb_datetime() {
+        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::DuckDb), "TIMESTAMP");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_duckdb_json() {
+        assert_eq!(ColumnType::Json.to_sql(DatabaseType::DuckDb), "JSON");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_duckdb_others() {
+        // BigInteger, Float, Double, Date, Time, Timestamp, Binary, Custom
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::DuckDb), "BIGINT");
+        assert_eq!(ColumnType::Float.to_sql(DatabaseType::DuckDb), "FLOAT");
+        assert_eq!(ColumnType::Double.to_sql(DatabaseType::DuckDb), "DOUBLE PRECISION");
+        assert_eq!(ColumnType::Date.to_sql(DatabaseType::DuckDb), "DATE");
+        assert_eq!(ColumnType::Time.to_sql(DatabaseType::DuckDb), "TIME");
+        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::DuckDb), "TIMESTAMP");
+        assert_eq!(ColumnType::Binary.to_sql(DatabaseType::DuckDb), "BLOB");
+        assert_eq!(
+            ColumnType::Custom("MY_TYPE".into()).to_sql(DatabaseType::DuckDb),
+            "MY_TYPE"
+        );
+    }
+
+    #[test]
+    fn test_column_type_to_sql_mysql_others() {
+        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::MySql), "BIGINT");
+        assert_eq!(ColumnType::Float.to_sql(DatabaseType::MySql), "FLOAT");
+        assert_eq!(ColumnType::Date.to_sql(DatabaseType::MySql), "DATE");
+        assert_eq!(ColumnType::Time.to_sql(DatabaseType::MySql), "TIME");
+        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::MySql), "TIMESTAMP");
+    }
+
+    #[test]
+    fn test_column_type_to_sql_graph_db_panics() {
+        // Use catch_unwind to test panic branches (tarpaulin tracks coverage through catch_unwind)
+        let result = std::panic::catch_unwind(|| ColumnType::String(None).to_sql(DatabaseType::Ladybug));
+        assert!(result.is_err(), "Ladybug String(None) should panic");
+
+        let result = std::panic::catch_unwind(|| ColumnType::String(Some(10)).to_sql(DatabaseType::Neo4j));
+        assert!(result.is_err(), "Neo4j String(Some) should panic");
+
+        let result = std::panic::catch_unwind(|| ColumnType::Boolean.to_sql(DatabaseType::Ladybug));
+        assert!(result.is_err(), "Ladybug Boolean should panic");
+
+        let result = std::panic::catch_unwind(|| ColumnType::DateTime.to_sql(DatabaseType::Neo4j));
+        assert!(result.is_err(), "Neo4j DateTime should panic");
+
+        let result = std::panic::catch_unwind(|| ColumnType::Json.to_sql(DatabaseType::Ladybug));
+        assert!(result.is_err(), "Ladybug Json should panic");
+    }
+
+    #[test]
+    fn test_serializable_migration_version_valid_rfc3339() {
+        // Cover line 735: valid RFC3339 parse success path
+        let serializable = SerializableMigrationVersion {
+            version: 5,
+            description: "valid timestamp".to_string(),
+            applied_at: "2026-07-04T12:00:00Z".to_string(),
+            file_path: "m5.sql".to_string(),
+        };
+        let restored: MigrationVersion = serializable.into();
+        assert_eq!(restored.version, 5);
+        assert_eq!(restored.description, "valid timestamp");
+        assert_eq!(restored.file_path, "m5.sql");
+        // applied_at should be parsed correctly, not fallback to now
+        assert_eq!(restored.applied_at.year(), 2026);
+        assert_eq!(restored.applied_at.month() as u8, 7);
+        assert_eq!(restored.applied_at.day(), 4);
     }
 }
 
