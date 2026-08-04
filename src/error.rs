@@ -23,6 +23,28 @@ pub enum DbNexusError {
     UnsupportedDatabaseScheme(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for DbNexusError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            #[cfg(feature = "permission")]
+            Self::Permission(err) => err.message_key(),
+            #[cfg(feature = "permission")]
+            Self::PermissionConfig(err) => err.message_key(),
+            Self::UnsupportedDatabaseScheme(_) => "nexus-unsupported-database",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            #[cfg(feature = "permission")]
+            Self::Permission(err) => err.message_args(),
+            #[cfg(feature = "permission")]
+            Self::PermissionConfig(err) => err.message_args(),
+            Self::UnsupportedDatabaseScheme(scheme) => vec![("scheme", scheme.clone())],
+        }
+    }
+}
+
 /// DBNexus 统一结果类型
 pub type DbNexusResult<T> = Result<T, DbNexusError>;
 
@@ -140,6 +162,38 @@ impl std::error::Error for QueryErrorReport {
     }
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for ErrorCategory {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::Permission => "error-category-permission",
+            Self::InjectionRisk => "error-category-injection-risk",
+            Self::SyntaxError => "error-category-syntax-error",
+            Self::ShardConflict => "error-category-shard-conflict",
+        }
+    }
+}
+
+impl crate::i18n::error_ext::LocalizedMsg for QueryErrorReport {
+    fn message_key(&self) -> &'static str {
+        "query-error-report"
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        let mut args = vec![
+            ("category", self.category.to_string()),
+            ("message", self.message.clone()),
+            ("suggestion", self.suggestion.clone()),
+        ];
+        if let Some(table) = &self.table {
+            args.push(("table", table.clone()));
+        }
+        if let Some(operation) = &self.operation {
+            args.push(("operation", operation.clone()));
+        }
+        args
+    }
+}
+
 /// 从 `DbNexusError` 自动推断 `ErrorCategory` 并构造报告
 impl From<DbNexusError> for QueryErrorReport {
     fn from(err: DbNexusError) -> Self {
@@ -162,5 +216,94 @@ impl From<DbNexusError> for QueryErrorReport {
                 "Use a supported database scheme: sqlite, postgres, mysql, or duckdb",
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_category_display() {
+        assert_eq!(ErrorCategory::Permission.to_string(), "Permission");
+        assert_eq!(ErrorCategory::InjectionRisk.to_string(), "InjectionRisk");
+        assert_eq!(ErrorCategory::SyntaxError.to_string(), "SyntaxError");
+        assert_eq!(ErrorCategory::ShardConflict.to_string(), "ShardConflict");
+    }
+
+    #[test]
+    fn test_query_error_report_new() {
+        let report = QueryErrorReport::new(ErrorCategory::SyntaxError, "bad sql", "fix it");
+        assert_eq!(report.category, ErrorCategory::SyntaxError);
+        assert_eq!(report.message, "bad sql");
+        assert_eq!(report.suggestion, "fix it");
+        assert!(report.table.is_none());
+        assert!(report.operation.is_none());
+    }
+
+    #[test]
+    fn test_query_error_report_with_table() {
+        let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "check perms").with_table("users");
+        assert_eq!(report.table.as_deref(), Some("users"));
+    }
+
+    #[test]
+    fn test_query_error_report_with_operation() {
+        let report =
+            QueryErrorReport::new(ErrorCategory::InjectionRisk, "injection", "use params").with_operation("SELECT");
+        assert_eq!(report.operation.as_deref(), Some("SELECT"));
+    }
+
+    #[test]
+    fn test_query_error_report_display_full() {
+        let report = QueryErrorReport::new(
+            ErrorCategory::InjectionRisk,
+            "SQL contains UNION",
+            "Use parameterized queries",
+        )
+        .with_table("users")
+        .with_operation("SELECT");
+        let display = report.to_string();
+        assert!(display.contains("[InjectionRisk]"));
+        assert!(display.contains("SQL contains UNION"));
+        assert!(display.contains("Suggestion: Use parameterized queries"));
+        assert!(display.contains("Table: users"));
+        assert!(display.contains("Operation: SELECT"));
+    }
+
+    #[test]
+    fn test_query_error_report_display_minimal() {
+        let report = QueryErrorReport::new(ErrorCategory::SyntaxError, "bad sql", "fix it");
+        let display = report.to_string();
+        assert!(display.contains("[SyntaxError]"));
+        assert!(display.contains("bad sql"));
+        assert!(!display.contains("Table:"));
+        assert!(!display.contains("Operation:"));
+    }
+
+    #[test]
+    fn test_query_error_report_error_trait() {
+        let report = QueryErrorReport::new(ErrorCategory::SyntaxError, "bad sql", "fix it");
+        // Error trait: source() returns None
+        assert!(std::error::Error::source(&report).is_none());
+    }
+
+    #[test]
+    fn test_from_db_nexus_error_unsupported_scheme() {
+        let err = DbNexusError::UnsupportedDatabaseScheme("oracle://localhost".to_string());
+        let report = QueryErrorReport::from(err);
+        assert_eq!(report.category, ErrorCategory::SyntaxError);
+        assert!(report.message.contains("oracle"));
+    }
+
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_from_db_nexus_error_permission() {
+        let err = DbNexusError::Permission(crate::domain::PermissionError::Denied {
+            resource: "users".to_string(),
+            operation: "DELETE".to_string(),
+        });
+        let report = QueryErrorReport::from(err);
+        assert_eq!(report.category, ErrorCategory::Permission);
     }
 }
