@@ -1306,7 +1306,101 @@ mod tests {
         assert!(!cfg.auto_migrate);
     }
 
-    // 注意：from_env() 测试需要修改环境变量，在 Rust 2024 edition 中
+    // ===== 补充测试：FailoverConfig / ReplicaConfig Default =====
+
+    #[test]
+    fn test_failover_config_default() {
+        let cfg = FailoverConfig::default();
+        assert!(cfg.urls.is_empty());
+        assert!(cfg.health_check_query.is_none());
+        assert_eq!(cfg.failover_threshold, 3);
+    }
+
+    #[test]
+    fn test_replica_config_default() {
+        let cfg = ReplicaConfig::default();
+        assert!(cfg.replica_urls.is_empty());
+        assert_eq!(cfg.max_lag_seconds, 5.0);
+        assert_eq!(cfg.lag_check_interval_secs, 10);
+    }
+
+    // ===== 补充测试：from_yaml_str, from_json_str, from_env =====
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn test_db_config_from_yaml_str() {
+        let yaml = "url: 'sqlite::memory:'\nadmin_role: dbadmin\n";
+        let cfg = DbConfig::from_yaml_str(yaml).expect("should deserialize YAML");
+        assert_eq!(cfg.url, "sqlite::memory:");
+        assert_eq!(cfg.admin_role, "dbadmin");
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn test_db_config_from_yaml_str_minimal() {
+        let yaml = "url: postgres://localhost/db\n";
+        let cfg = DbConfig::from_yaml_str(yaml).expect("should deserialize minimal YAML");
+        assert_eq!(cfg.url, "postgres://localhost/db");
+    }
+
+    #[test]
+    fn test_db_config_from_json_str() {
+        let json = r#"{"url":"sqlite::memory:","max_connections":15,"admin_role":"superadmin"}"#;
+        let cfg = DbConfig::from_json_str(json).expect("should deserialize");
+        assert_eq!(cfg.url, "sqlite::memory:");
+        assert_eq!(cfg.pool_config.max_connections, 15);
+        assert_eq!(cfg.admin_role, "superadmin");
+    }
+
+    #[test]
+    fn test_db_config_from_json_str_invalid() {
+        let json = r#"{invalid json}"#;
+        assert!(DbConfig::from_json_str(json).is_err());
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn test_cache_config_from_yaml_str() {
+        let yaml = "default_ttl: 120\npolicy_cache_capacity: 500\n";
+        let cfg = CacheConfig::from_yaml_str(yaml).expect("should deserialize YAML");
+        assert_eq!(cfg.default_ttl, 120);
+        assert_eq!(cfg.policy_cache_capacity, 500);
+    }
+
+    #[test]
+    fn test_cache_config_from_json_value() {
+        let json = serde_json::json!({"default_ttl": 60, "policy_cache_capacity": 100});
+        let cfg = CacheConfig::from_json_value(json).expect("should deserialize");
+        assert_eq!(cfg.default_ttl, 60);
+        assert_eq!(cfg.policy_cache_capacity, 100);
+    }
+
+    #[cfg(feature = "config-env")]
+    #[test]
+    fn test_db_config_from_env_missing_url() {
+        let result = DbConfig::from_env();
+        assert!(result.is_err(), "from_env without DATABASE_URL should fail");
+        match result.unwrap_err() {
+            ConfigError::MissingUrl => {} // expected
+            other => panic!("Expected MissingUrl, got: {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "config-env")]
+    #[test]
+    fn test_parse_env_u32_missing_returns_default() {
+        let result = super::parse_env_u32("DBNEXUS_TEST_NONEXISTENT_U32", 42);
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[cfg(feature = "config-env")]
+    #[test]
+    fn test_parse_env_u64_missing_returns_default() {
+        let result = super::parse_env_u64("DBNEXUS_TEST_NONEXISTENT_U64", 999);
+        assert_eq!(result.unwrap(), 999);
+    }
+
+    // 注意：from_env() 完整测试需要修改环境变量，在 Rust 2024 edition 中
     // set_var/remove_var 为 unsafe，但 lib crate 有 #![forbid(unsafe_code)]。
     // from_env 的覆盖率为外部测试目录（tests/）中独立 crate 的测试覆盖。
 }
