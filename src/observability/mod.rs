@@ -9,8 +9,6 @@
 pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
-#[cfg(feature = "tracing")]
-pub mod tracing;
 
 // Re-exports
 #[cfg(feature = "health-check")]
@@ -26,5 +24,3 @@ pub use metrics::{
     MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
     TransactionStats,
 };
-#[cfg(feature = "tracing")]
-pub use tracing::{TracingError, TracingGuard};

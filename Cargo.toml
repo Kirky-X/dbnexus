@@ -141,10 +141,9 @@ pool-health-check = ["futures"]  # 连接池健康检查
 pool-warmup = ["futures"]  # 连接池预热
 
 # === 可观测性 ===
-observability = ["metrics", "health-check", "tracing"]
+observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
-tracing = ["dep:tracing", "dep:tracing-opentelemetry", "dep:tracing-subscriber", "dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
@@ -249,7 +248,7 @@ arc-swap = { version = "1.7", optional = true }
 # Lock-free connection pool queue (crossbeam-deque)
 crossbeam-deque = { version = "0.8", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
-oxcache = { version = "0.3", optional = true }
+oxcache = { version = "0.4", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
@@ -269,19 +268,12 @@ jsonwebtoken = { version = "11.0", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
-rand = { version = "0.8", optional = true }
+rand = { version = "0.10", optional = true }
 
 # ICU4X 国际化（核心特性，始终可用）
 icu = "2.2"
 writeable = "0.6"
 
-# Tracing / OpenTelemetry（tracing feature）
-tracing = { version = "0.1", optional = true }
-tracing-opentelemetry = { version = "0.33", optional = true }
-tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter", "fmt"] }
-opentelemetry = { version = "0.32", optional = true }
-opentelemetry_sdk = { version = "0.32", optional = true }
-opentelemetry-otlp = { version = "0.32", optional = true, features = ["grpc-tonic"] }
 
 # Internal packages
 dbnexus-macros = { workspace = true, optional = true }
@@ -530,18 +522,6 @@ name = "permission_cache_ttl_tests"
 path = "tests/permission/unit/permission_cache_ttl_tests.rs"
 required-features = ["permission", "cache"]
 
-# Tracing 单元测试 - TracingGuard init/重复初始化安全/TracingError Display
-[[test]]
-name = "tracing_unit_tests"
-path = "tests/tracing/unit/tracing_unit_tests.rs"
-required-features = ["tracing"]
-
-# Tracing 集成测试 - TracingGuard drop + Session span 自动创建
-[[test]]
-name = "tracing_integration"
-path = "tests/tracing/integration/tracing_integration.rs"
-required-features = ["tracing", "sqlite", "permission"]
-
 # Authentication 集成测试 - JWT 签发验证 / 密码哈希 / AuthenticationManager（0.3.0 新增）
 [[test]]
 name = "authentication_integration"
@@ -679,7 +659,7 @@ required-features = ["sqlite"]
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e_advanced.rs"
-required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication", "tracing"]
+required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication"]
 
 # Retry 单元测试 - RetryPolicy/is_idempotent_operation/RetryExecutor
 [[test]]

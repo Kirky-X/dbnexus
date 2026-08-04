@@ -209,10 +209,6 @@ pub use crate::observability::{
     TransactionStats,
 };
 
-// Tracing 导出（tracing feature）
-#[cfg(feature = "tracing")]
-pub use crate::observability::{TracingError, TracingGuard};
-
 // Reliability 导出（retry feature）
 #[cfg(feature = "retry")]
 pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};
