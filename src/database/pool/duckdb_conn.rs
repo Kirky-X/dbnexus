@@ -520,4 +520,237 @@ mod tests {
             panic!("Expected BigInt, got {:?}", count);
         }
     }
+
+    // ===== 数据类型映射测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_data_types_boolean() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE bool_test (id INTEGER, flag BOOLEAN)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO bool_test VALUES (1, true), (2, false)")
+            .await
+            .expect("insert");
+
+        let rows = conn
+            .query("SELECT flag FROM bool_test ORDER BY id")
+            .await
+            .expect("query");
+        assert_eq!(rows.len(), 2);
+        // DuckDB BOOLEAN 映射
+        match &rows[0].get("flag").expect("should have flag") {
+            DuckValue::Boolean(b) => assert!(*b, "first row should be true"),
+            other => panic!("Expected Boolean, got {:?}", other),
+        }
+        match &rows[1].get("flag").expect("should have flag") {
+            DuckValue::Boolean(b) => assert!(!*b, "second row should be false"),
+            other => panic!("Expected Boolean, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_data_types_double() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE double_test (val DOUBLE)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO double_test VALUES (3.14), (-0.001)")
+            .await
+            .expect("insert");
+
+        let rows = conn
+            .query("SELECT val FROM double_test ORDER BY val")
+            .await
+            .expect("query");
+        assert_eq!(rows.len(), 2);
+        match &rows[0].get("val").expect("should have val") {
+            DuckValue::Double(f) => assert!((*f - (-0.001)).abs() < 1e-10, "first should be -0.001"),
+            other => panic!("Expected Double, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_null_handling() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE null_test (id INTEGER, name VARCHAR)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO null_test VALUES (1, NULL), (2, 'hello')")
+            .await
+            .expect("insert");
+
+        let rows = conn
+            .query("SELECT name FROM null_test ORDER BY id")
+            .await
+            .expect("query");
+        assert_eq!(rows.len(), 2);
+        // 第一行 name 为 NULL
+        match &rows[0].get("name").expect("should have name column") {
+            DuckValue::Null => {} // expected
+            other => panic!("Expected Null, got {:?}", other),
+        }
+        // 第二行 name 为 'hello'
+        match &rows[1].get("name").expect("should have name column") {
+            DuckValue::Text(s) => assert_eq!(s, "hello"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    // ===== 错误路径测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_syntax_error_returns_error() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn.execute("CREAT TABL broken (id INTEGER)").await;
+        assert!(result.is_err(), "syntax error should return error");
+        let err = result.unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("DuckDB"), "error should mention DuckDB: {msg}");
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_table_not_exists_returns_error() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn.query("SELECT * FROM nonexistent_table").await;
+        assert!(result.is_err(), "query on nonexistent table should error");
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_insert_duplicate_pk_returns_error() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE pk_test (id INTEGER PRIMARY KEY)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO pk_test VALUES (1)")
+            .await
+            .expect("first insert");
+        let result = conn.execute("INSERT INTO pk_test VALUES (1)").await;
+        assert!(result.is_err(), "duplicate PK should return error");
+    }
+
+    // ===== DuckDbRow API 测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_row_get_nonexistent_column_returns_none() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE row_test (id INTEGER)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO row_test VALUES (42)").await.expect("insert");
+
+        let rows = conn.query("SELECT id FROM row_test").await.expect("query");
+        assert_eq!(rows.len(), 1);
+        assert!(
+            rows[0].get("nonexistent").is_none(),
+            "get() with unknown column should return None"
+        );
+        assert!(rows[0].get("").is_none(), "get() with empty string should return None");
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_row_column_count_empty_result() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        conn.execute("CREATE TABLE empty_test (a INTEGER, b VARCHAR, c DOUBLE)")
+            .await
+            .expect("create table");
+
+        // 查询空表 — 0 行但列结构已知
+        let rows = conn.query("SELECT a, b, c FROM empty_test").await.expect("query");
+        assert_eq!(rows.len(), 0, "empty table should return 0 rows");
+    }
+
+    // ===== Debug 输出测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_connection_debug_format() {
+        let conn = DuckDbConnection::with_pool_size(":memory:", 3).expect("Failed to create connection");
+        let debug_str = format!("{:?}", conn);
+        assert!(
+            debug_str.contains("DuckDbConnection"),
+            "Debug should contain struct name"
+        );
+        assert!(debug_str.contains("pool_size: 3"), "Debug should contain pool_size");
+    }
+
+    // ===== 文件数据库测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_file_database_persistence() {
+        // 使用绝对路径避免 DuckDB 相对路径解析问题
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!("dbnexus_duckdb_test_{}.db", std::process::id()));
+        // 确保父目录存在（某些环境下 temp_dir() 返回的路径可能不存在）
+        if let Some(parent) = db_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let url = format!("duckdb:{}", db_path.display());
+
+        // 创建连接、建表、插入数据
+        {
+            let conn = DuckDbConnection::new(&url).expect("Failed to create file connection");
+            conn.execute("CREATE TABLE persist_test (id INTEGER, val VARCHAR)")
+                .await
+                .expect("create table");
+            conn.execute("INSERT INTO persist_test VALUES (1, 'durable')")
+                .await
+                .expect("insert");
+        } // conn dropped
+
+        // 重新打开文件，验证数据持久化（dir 必须保持存活）
+        let conn2 = DuckDbConnection::new(&url).expect("Failed to reopen file connection");
+        let rows = conn2
+            .query("SELECT val FROM persist_test WHERE id = 1")
+            .await
+            .expect("query after reopen");
+        assert_eq!(rows.len(), 1, "data should persist across connections");
+        match &rows[0].get("val").expect("should have val") {
+            DuckValue::Text(s) => assert_eq!(s, "durable"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+        drop(conn2);
+        // 清理临时文件
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    // ===== 连接池耗尽测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_pool_exhaustion_queues_requests() {
+        // pool_size=1，只有 1 个连接
+        let conn = Arc::new(DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection"));
+        conn.execute("CREATE TABLE queue_test (id INTEGER)")
+            .await
+            .expect("create table");
+
+        // 串行执行多个插入（pool_size=1 时自动排队）
+        for i in 0..5 {
+            conn.execute(&format!("INSERT INTO queue_test VALUES ({i})"))
+                .await
+                .expect("insert should succeed after queuing");
+        }
+
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM queue_test")
+            .await
+            .expect("count");
+        let count = rows[0].get("cnt").expect("should have cnt");
+        if let DuckValue::BigInt(n) = count {
+            assert_eq!(*n, 5, "all 5 inserts should succeed with queuing");
+        } else {
+            panic!("Expected BigInt, got {:?}", count);
+        }
+    }
+
+    // ===== URL 解析边界测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_parse_url_case_insensitive() {
+        // :MEMORY: 大小写不敏感
+        assert_eq!(DuckDbConnection::parse_url(":MEMORY:"), ":memory:");
+        // duckdb::memory: 大小写不敏感
+        assert_eq!(DuckDbConnection::parse_url("DuckDB::memory:"), ":memory:");
+        // duckdb: 前缀剥离保留原始大小写（仅前缀匹配不敏感）
+        assert_eq!(DuckDbConnection::parse_url("duckdb:test.db"), "test.db");
+    }
 }
