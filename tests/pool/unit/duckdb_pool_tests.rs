@@ -320,3 +320,104 @@ async fn test_duckdb_pool_status_invariants() {
         status.idle
     );
 }
+
+// ============================================================================
+// Session 安全链测试
+// ============================================================================
+
+/// TEST-U-DDB-010: 非 admin role 执行 DDL 应被拒绝
+#[tokio::test]
+async fn test_duckdb_non_admin_ddl_rejected() {
+    let pool = make_duckdb_pool().await;
+    // 无权限配置时，非 admin/system 角色在 get_session 阶段即被拒绝
+    let session_result = pool.get_session("viewer").await;
+    assert!(
+        session_result.is_err(),
+        "non-admin role 'viewer' should be rejected without permission config"
+    );
+    let err = format!("{}", session_result.err().unwrap());
+    assert!(
+        err.contains("not allowed") || err.contains("permission"),
+        "error should mention permission: {err}"
+    );
+}
+
+/// TEST-U-DDB-011: admin role 执行 DDL 应成功
+#[tokio::test]
+async fn test_duckdb_admin_ddl_allowed() {
+    let pool = make_duckdb_pool().await;
+    let session = pool.get_session("admin").await.expect("Failed to get admin session");
+
+    session
+        .execute_duckdb_raw("CREATE TABLE admin_table (id INTEGER PRIMARY KEY, data VARCHAR)")
+        .await
+        .expect("admin DDL should succeed");
+
+    // 验证表已创建
+    session
+        .execute_duckdb_raw("INSERT INTO admin_table VALUES (1, 'test')")
+        .await
+        .expect("insert after admin DDL should succeed");
+
+    let rows = session
+        .execute_duckdb("SELECT data FROM admin_table WHERE id = 1")
+        .await
+        .expect("select should succeed");
+    assert_eq!(rows.len(), 1, "should see 1 row");
+}
+
+/// TEST-U-DDB-012: execute_duckdb 对 DDL 语句应被拒绝（只读查询方法）
+#[tokio::test]
+async fn test_duckdb_query_rejects_ddl() {
+    let pool = make_duckdb_pool().await;
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    // execute_duckdb 是只读查询方法，应拒绝 DDL
+    let result = session.execute_duckdb("CREATE TABLE should_fail (id INTEGER)").await;
+    assert!(result.is_err(), "execute_duckdb should reject DDL even for admin");
+}
+
+// ============================================================================
+// 数据类型集成测试
+// ============================================================================
+
+/// TEST-U-DDB-013: DuckDB 应支持多种数据类型
+#[tokio::test]
+async fn test_duckdb_multiple_data_types() {
+    let pool = make_duckdb_pool().await;
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+
+    session
+        .execute_duckdb_raw("CREATE TABLE types_test (id INTEGER, name VARCHAR, score DOUBLE, active BOOLEAN)")
+        .await
+        .expect("create table");
+
+    session
+        .execute_duckdb_raw("INSERT INTO types_test VALUES (1, 'Alice', 95.5, true), (2, 'Bob', NULL, false)")
+        .await
+        .expect("insert");
+
+    let rows = session
+        .execute_duckdb("SELECT id, name, score, active FROM types_test ORDER BY id")
+        .await
+        .expect("select");
+
+    assert_eq!(rows.len(), 2, "should have 2 rows");
+    assert_eq!(rows[0].column_count(), 4, "should have 4 columns");
+
+    // 验证第一行
+    let name = rows[0].get("name").expect("should have name");
+    if let duckdb::types::Value::Text(s) = name {
+        assert_eq!(s, "Alice");
+    } else {
+        panic!("Expected Text, got {:?}", name);
+    }
+
+    // 验证第二行 NULL
+    let score = rows[1].get("score").expect("should have score");
+    assert!(
+        matches!(score, duckdb::types::Value::Null),
+        "Bob's score should be NULL, got {:?}",
+        score
+    );
+}
