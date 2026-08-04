@@ -593,21 +593,20 @@ mod tests {
     // ===== 集成测试（需要 Neo4j 服务器，标记 #[ignore]） =====
 
     /// 从环境变量获取 Neo4j 连接信息，未设置则返回 None
-    fn neo4j_test_connection() -> Option<Neo4jConnection> {
+    async fn neo4j_test_connection() -> Option<Neo4jConnection> {
         let url = std::env::var("NEO4J_URL").ok()?;
         // parse_url 现在返回 Result，无凭据时从环境变量读取
         let (uri, user, password) = Neo4jConnection::parse_url(&url).ok()?;
 
-        // 用 block_on 同步创建（测试环境已有 tokio runtime）
-        let rt = tokio::runtime::Runtime::new().ok()?;
-        rt.block_on(async { Neo4jConnection::new(&uri, &user, &password).await })
-            .ok()
+        Neo4jConnection::new(&uri, &user, &password).await.ok()
     }
 
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
     async fn test_neo4j_execute_return_1() {
-        let conn = neo4j_test_connection().expect("NEO4J_URL not set or connection failed");
+        let conn = neo4j_test_connection()
+            .await
+            .expect("NEO4J_URL not set or connection failed");
         let result = conn
             .execute_cypher("RETURN 1 AS n")
             .await
@@ -628,7 +627,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
     async fn test_neo4j_health_check() {
-        let conn = neo4j_test_connection().expect("NEO4J_URL not set or connection failed");
+        let conn = neo4j_test_connection()
+            .await
+            .expect("NEO4J_URL not set or connection failed");
         conn.health_check()
             .await
             .expect("health check should pass on connected Neo4j");
@@ -637,7 +638,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
     async fn test_neo4j_txn_commit() {
-        let conn = neo4j_test_connection().expect("NEO4J_URL not set or connection failed");
+        let conn = neo4j_test_connection()
+            .await
+            .expect("NEO4J_URL not set or connection failed");
         // 清理可能存在的测试数据
         let _ = conn.execute_cypher("MATCH (n:T029Test) DETACH DELETE n").await;
 
@@ -673,19 +676,21 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
     async fn test_neo4j_txn_rollback() {
-        let conn = neo4j_test_connection().expect("NEO4J_URL not set or connection failed");
-        // 清理可能存在的测试数据
-        let _ = conn.execute_cypher("MATCH (n:T029Test) DETACH DELETE n").await;
+        let conn = neo4j_test_connection()
+            .await
+            .expect("NEO4J_URL not set or connection failed");
+        // 使用独立标签避免与 commit 测试并行运行时的数据竞争
+        let _ = conn.execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n").await;
 
         let txn = conn.begin_graph_txn().await.expect("begin_graph_txn should succeed");
-        txn.execute_cypher("CREATE (n:T029Test {name: 'Bob'})")
+        txn.execute_cypher("CREATE (n:T029RollbackTest {name: 'Bob'})")
             .await
             .expect("create in txn should succeed");
         txn.rollback().await.expect("rollback should succeed");
 
         // 验证事务回滚后数据不可见
         let result = conn
-            .execute_cypher("MATCH (n:T029Test) RETURN n.name AS name")
+            .execute_cypher("MATCH (n:T029RollbackTest) RETURN n.name AS name")
             .await
             .expect("match after rollback should succeed");
         match result {
@@ -694,5 +699,8 @@ mod tests {
             }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
+
+        // 清理
+        let _ = conn.execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n").await;
     }
 }
