@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! ICU4X-backed internationalization for database operations.
+//! ICU4X + Fluent-backed internationalization for database operations.
 //!
 //! Provides:
 //! - **Locale detection**: Automatic system locale detection with `DBNEXUS_LANG`
 //!   environment variable override and manual `set_locale()` API.
-//! - **Message catalog**: Compile-time embedded translations for 2 languages
-//!   (en, zh) covering all error types and CLI output.
+//! - **Message catalog**: Fluent (FTL) translations embedded at compile time
+//!   for 2 languages (en, zh), resolved via `fluent-bundle` concurrent bundles.
+//!   Covers all error types and CLI output.
 //! - **LocalizedMsg / I18nExt traits**: Extension traits for error types to
 //!   provide `to_localized_string()` and `message_en()`.
 //! - **DbI18nFormatter**: ICU4X locale-aware number/date/plural/collation formatting.
