@@ -130,6 +130,95 @@ pub enum AuditError {
     ConfigError(String),
 }
 
+impl crate::i18n::error_ext::LocalizedMsg for DbError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::Connection(_) => "db-connection",
+            Self::Config(_) => "db-config",
+            Self::Permission(_) => "db-permission",
+            Self::Transaction(_) => "db-transaction",
+            Self::Migration(_) => "db-migration",
+            Self::Cache(_) => "db-cache",
+            Self::Query(_) => "db-query",
+            #[cfg(feature = "validation")]
+            Self::Validation(_) => "db-validation",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::Connection(err) => vec![("error", err.to_string())],
+            Self::Config(msg) => vec![("message", msg.clone())],
+            Self::Permission(msg) => vec![("message", msg.clone())],
+            Self::Transaction(msg) => vec![("message", msg.clone())],
+            Self::Migration(msg) => vec![("message", msg.clone())],
+            Self::Cache(msg) => vec![("message", msg.clone())],
+            Self::Query(msg) => vec![("message", msg.clone())],
+            #[cfg(feature = "validation")]
+            Self::Validation(msg) => vec![("message", msg.clone())],
+        }
+    }
+}
+
+impl crate::i18n::error_ext::LocalizedMsg for PoolError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::AcquireTimeout => "pool-acquire-timeout",
+            Self::PoolExhausted => "pool-exhausted",
+            Self::ConnectionFailed(_) => "pool-connection-failed",
+            Self::HealthCheckFailed(_) => "pool-health-check-failed",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::ConnectionFailed(reason) => vec![("reason", reason.clone())],
+            Self::HealthCheckFailed(reason) => vec![("reason", reason.clone())],
+            _ => vec![],
+        }
+    }
+}
+
+impl crate::i18n::error_ext::LocalizedMsg for MigrationError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::FileNotFound(_) => "migration-file-not-found",
+            Self::ParseError(_) => "migration-parse-error",
+            Self::ExecutionError(_) => "migration-execution-error",
+            Self::VersionConflict(_) => "migration-version-conflict",
+            Self::RollbackError(_) => "migration-rollback-error",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::FileNotFound(path) => vec![("path", path.clone())],
+            Self::ParseError(reason) => vec![("reason", reason.clone())],
+            Self::ExecutionError(reason) => vec![("reason", reason.clone())],
+            Self::VersionConflict(reason) => vec![("reason", reason.clone())],
+            Self::RollbackError(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
+impl crate::i18n::error_ext::LocalizedMsg for AuditError {
+    fn message_key(&self) -> &'static str {
+        match self {
+            Self::WriteError(_) => "audit-write-error",
+            Self::SerializationError(_) => "audit-serialization-error",
+            Self::ConfigError(_) => "audit-config-error",
+        }
+    }
+
+    fn message_args(&self) -> Vec<(&str, String)> {
+        match self {
+            Self::WriteError(reason) => vec![("reason", reason.clone())],
+            Self::SerializationError(reason) => vec![("reason", reason.clone())],
+            Self::ConfigError(reason) => vec![("reason", reason.clone())],
+        }
+    }
+}
+
 // ============================================================================
 // 结果类型别名
 // ============================================================================
