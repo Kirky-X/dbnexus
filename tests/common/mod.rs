@@ -35,14 +35,14 @@ where
 /// 脱敏 URL，隐藏密码
 fn sanitize_url(url: &str) -> String {
     // 简单的 URL 脱敏：替换密码部分为 ****
-    if let Some(at_pos) = url.find('@') {
-        if let Some(proto_end) = url.find("://") {
-            let proto = &url[..proto_end + 3];
-            let rest = &url[at_pos..];
-            if let Some(colon_pos) = url[proto_end + 3..at_pos].find(':') {
-                let user = &url[proto_end + 3..proto_end + 3 + colon_pos];
-                return format!("{}{}:****{}", proto, user, rest);
-            }
+    if let Some(at_pos) = url.find('@')
+        && let Some(proto_end) = url.find("://")
+    {
+        let proto = &url[..proto_end + 3];
+        let rest = &url[at_pos..];
+        if let Some(colon_pos) = url[proto_end + 3..at_pos].find(':') {
+            let user = &url[proto_end + 3..proto_end + 3 + colon_pos];
+            return format!("{}{}:****{}", proto, user, rest);
         }
     }
     url.to_string()

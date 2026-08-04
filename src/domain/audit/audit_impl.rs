@@ -739,31 +739,31 @@ impl AuditLogger {
         }
 
         // 尝试解析并脱敏
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
-            if let Some(arr) = json_val.as_array() {
-                let mut modified = false;
-                let mut new_arr = Vec::new();
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value)
+            && let Some(arr) = json_val.as_array()
+        {
+            let mut modified = false;
+            let mut new_arr = Vec::new();
 
-                for item in arr {
-                    if let Some(obj) = item.as_object() {
-                        let mut new_obj = serde_json::Map::new();
-                        for (k, v) in obj {
-                            if k == field {
-                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
-                                modified = true;
-                            } else {
-                                new_obj.insert(k.clone(), v.clone());
-                            }
+            for item in arr {
+                if let Some(obj) = item.as_object() {
+                    let mut new_obj = serde_json::Map::new();
+                    for (k, v) in obj {
+                        if k == field {
+                            new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                            modified = true;
+                        } else {
+                            new_obj.insert(k.clone(), v.clone());
                         }
-                        new_arr.push(serde_json::Value::Object(new_obj));
-                    } else {
-                        new_arr.push(item.clone());
                     }
+                    new_arr.push(serde_json::Value::Object(new_obj));
+                } else {
+                    new_arr.push(item.clone());
                 }
+            }
 
-                if modified {
-                    return serde_json::to_string(&new_arr).unwrap_or(value.to_string());
-                }
+            if modified {
+                return serde_json::to_string(&new_arr).unwrap_or(value.to_string());
             }
         }
 
@@ -772,7 +772,7 @@ impl AuditLogger {
 
     /// 检测字符串是否为有效的 Base64 编码
     pub(super) fn is_base64(s: &str) -> bool {
-        if s.len() % 4 != 0 || s.is_empty() {
+        if !s.len().is_multiple_of(4) || s.is_empty() {
             return false;
         }
         let valid_chars: std::collections::HashSet<char> =

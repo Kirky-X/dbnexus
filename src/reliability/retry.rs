@@ -227,13 +227,13 @@ impl RetryExecutor {
         // 重试循环
         for attempt in 0..policy.max_retries {
             // 检查整体超时
-            if let Some(timeout) = deadline {
-                if start.elapsed() >= timeout {
-                    return Err(RetryError::Timeout {
-                        timeout_ms: timeout.as_millis() as u64,
-                        last_error,
-                    });
-                }
+            if let Some(timeout) = deadline
+                && start.elapsed() >= timeout
+            {
+                return Err(RetryError::Timeout {
+                    timeout_ms: timeout.as_millis() as u64,
+                    last_error,
+                });
             }
 
             let backoff = Self::calculate_backoff(policy, attempt);

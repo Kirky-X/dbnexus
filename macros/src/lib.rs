@@ -584,15 +584,15 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         _ => false,
     };
 
-    if entity_args.soft_delete && !has_deleted_at_field {
-        if let syn::Data::Struct(ref mut data) = input.data {
-            if let syn::Fields::Named(ref mut fields) = data.fields {
-                let deleted_at_field: syn::Field = syn::parse_quote! {
-                    pub deleted_at: Option<time::OffsetDateTime>
-                };
-                fields.named.push(deleted_at_field);
-            }
-        }
+    if entity_args.soft_delete
+        && !has_deleted_at_field
+        && let syn::Data::Struct(ref mut data) = input.data
+        && let syn::Fields::Named(ref mut fields) = data.fields
+    {
+        let deleted_at_field: syn::Field = syn::parse_quote! {
+            pub deleted_at: Option<time::OffsetDateTime>
+        };
+        fields.named.push(deleted_at_field);
     }
 
     // 解析 permissions/cache/audit 嵌套参数
