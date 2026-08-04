@@ -74,7 +74,7 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
     ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
         Box::pin(async move {
             self.cache
-                .set(key, value, ttl)
+                .set(key.into(), Arc::new(value), ttl)
                 .await
                 .map_err(|e| DbError::Cache(format!("cache set failed: {e}")))
         })

@@ -129,7 +129,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pdp_config = PolicyDecisionPointConfig {
         default_decision: PermissionDecision::Deny,
-        log_denied: true,
         cache_ttl_seconds: 600,
         cache_enabled: true,
     };
