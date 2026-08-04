@@ -42,6 +42,12 @@ pub mod error_ext;
 mod i18n_impl;
 pub mod locale;
 
+// Re-export commonly used functions at module level
+#[allow(unused_imports)]
+pub use catalog::{t, t_simple, translate};
+#[allow(unused_imports)]
+pub use locale::{current_locale, set_locale};
+
 use icu::collator::CollatorBorrowed;
 use icu::decimal::DecimalFormatter;
 use icu::locale::Locale;
