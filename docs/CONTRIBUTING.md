@@ -4,7 +4,7 @@
 
 ## 开发环境
 
-- **Rust 1.85+**（edition 2024）
+- **Rust 1.91+**（edition 2024）
 - **Git**（配置了 pre-commit hooks）
 - **Docker**（可选，用于 PostgreSQL/MySQL 集成测试）
 
@@ -106,7 +106,7 @@ pre-commit run --all-files
 
 - **遵循现有代码库命名和架构惯例**（即使你认为自己的写法更好）
 - **依赖必须通过 feature 门控**，不引入未门控的依赖
-- **edition 2024**，rust 1.85+
+- **edition 2024**，rust 1.91+
 - **MIT License**
 
 ### Rust 规范

@@ -91,7 +91,7 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 
 所有 I/O 操作都使用带有 Tokio 的 `async/await`：
 
-- `AsyncMutex` 用于线程安全状态
+- `RwLock` 用于读多写少的共享状态，`Mutex` 用于写密集路径
 - `Notify` 用于高效条件等待
 - `tokio::spawn` 用于后台任务
 
@@ -127,7 +127,7 @@ graph TD
 
 ### 关键实现细节
 
-- **连接池**：使用 `AsyncMutex<Vec<DatabaseConnection>>` 配合原子计数器
+- **连接池**：使用 `RwLock` + 原子计数器管理连接状态
 - **权限缓存**：角色策略的 oxcache 缓存（内部 moka L1 后端）以提高性能
 - **健康检查**：后台任务定期验证空闲连接
 - **RAII 管理**：会话丢弃时连接自动释放
