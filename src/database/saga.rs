@@ -4,6 +4,7 @@
 //!
 //! 每分片独立事务 + 补偿操作，应用层协调，无跨分片锁。
 
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -229,6 +230,10 @@ impl SagaOrchestrator {
         let mut completed_steps: Vec<(String, u32, Box<dyn SagaAction>)> = Vec::new();
         let mut completed_names: Vec<String> = Vec::new();
 
+        // 预建步骤名→索引映射，补偿时 O(1) 查找替代线性扫描
+        let step_index_map: HashMap<&str, usize> =
+            steps.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
+
         // 顺序执行每个步骤
         for step in &steps {
             let session_result = self.router.get_session(step.shard_id).await;
@@ -260,9 +265,9 @@ impl SagaOrchestrator {
 
                         for (completed_name, completed_shard_id, _) in completed_steps.iter().rev() {
                             if let Ok(Some(session)) = self.router.get_session(*completed_shard_id).await {
-                                // 找到对应步骤的 compensation
-                                if let Some(original_step) = steps.iter().find(|s| s.name == *completed_name)
-                                    && let Ok(()) = original_step.compensation.execute(&session).await
+                                // O(1) 查找原始步骤的 compensation
+                                if let Some(&idx) = step_index_map.get(completed_name.as_str())
+                                    && let Ok(()) = steps[idx].compensation.execute(&session).await
                                 {
                                     compensated.push(completed_name.clone());
                                 }

@@ -197,10 +197,11 @@ impl GlobalIndex {
         };
 
         for (batch_idx, chunk) in entries.chunks(chunk_size).enumerate() {
+            // 每批次计算一次时间戳，避免每个 entry 重复调用 chrono::Utc::now()
+            let now = chrono::Utc::now().to_rfc3339();
             let active_models: Vec<ActiveModel> = chunk
                 .iter()
                 .map(|entry| {
-                    let now = chrono::Utc::now().to_rfc3339();
                     let id = format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
                     ActiveModel {
                         id: Set(id),
@@ -211,7 +212,7 @@ impl GlobalIndex {
                         index_value: Set(entry.index_value.clone()),
                         created_at: Set(now.clone()),
                         updated_at: Set(now.clone()),
-                        last_modified: Set(now),
+                        last_modified: Set(now.clone()),
                         sync_status: Set(SYNC_STATUS_SYNCED.to_string()),
                     }
                 })

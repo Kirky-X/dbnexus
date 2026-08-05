@@ -32,7 +32,9 @@ use async_trait::async_trait;
 
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 use sea_orm::{ConnectionTrait, DatabaseTransaction, ExecResult, TransactionTrait};
+#[cfg(any(feature = "ladybug", feature = "neo4j"))]
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 /// Session 内部可变状态
 ///
@@ -86,7 +88,7 @@ pub struct Session {
     permission_ctx: PermissionContext,
 
     /// 内部可变状态（事务和写操作时间）
-    state: Mutex<SessionState>,
+    state: RwLock<SessionState>,
 
     /// 图操作互斥锁（防止并发 `execute_cypher` 在 take → put back 窗口绕过事务）
     ///
@@ -117,7 +119,7 @@ impl Session {
             role,
             #[cfg(feature = "permission")]
             permission_ctx,
-            state: Mutex::new(SessionState {
+            state: RwLock::new(SessionState {
                 transaction: None,
                 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
                 graph_transaction: None,
@@ -145,7 +147,7 @@ impl Session {
 
     /// 标记为写操作
     pub async fn mark_write(&self) {
-        let mut state = self.state.lock().await;
+        let mut state = self.state.write().await;
         state.last_write = Some(Instant::now());
     }
 
@@ -170,7 +172,7 @@ impl Session {
     ///
     /// 图事务或关系型事务任一存在都返回 true。
     pub async fn is_in_transaction(&self) -> bool {
-        let state = self.state.lock().await;
+        let state = self.state.read().await;
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
         {
             state.graph_transaction.is_some() || state.transaction.is_some()
@@ -190,7 +192,7 @@ impl Session {
     pub async fn begin_transaction(&self) -> Result<(), DbError> {
         // 短锁：检查是否已在事务中
         {
-            let state = self.state.lock().await;
+            let state = self.state.write().await;
             #[cfg(any(feature = "ladybug", feature = "neo4j"))]
             if state.graph_transaction.is_some() {
                 return Err(DbError::Transaction("Already in graph transaction".to_string()));
@@ -214,14 +216,20 @@ impl Session {
             })?;
 
             // 短锁：写入 graph_transaction（含并发冲突处理）
-            let mut state = self.state.lock().await;
-            if state.graph_transaction.is_some() {
-                // 并发冲突：两次锁之间有其他调用已开始事务，回滚新创建的图事务
+            // extract-take-operate-writeback：锁内仅检查，rollback 在锁外执行
+            let has_conflict = {
+                let state = self.state.write().await;
+                state.graph_transaction.is_some()
+            };
+            if has_conflict {
+                // 并发冲突：锁已释放，安全执行 rollback
                 let _ = graph_txn.rollback().await;
                 return Err(DbError::Transaction(
                     "Already in graph transaction (concurrent begin detected)".to_string(),
                 ));
             }
+            // 无冲突：安全写入
+            let mut state = self.state.write().await;
             state.graph_transaction = Some(graph_txn);
             return Ok(());
         }
@@ -234,15 +242,22 @@ impl Session {
             .map_err(|e| DbError::Transaction(i18n::t("session-txn-begin-failed", &[("error", e.to_string())])))?;
 
         // 短锁：写入 transaction（含并发冲突处理）
-        let mut state = self.state.lock().await;
-        if state.transaction.is_some() {
-            // 并发冲突：两次锁之间有其他调用已开始事务，回滚新创建的事务
+        // extract-take-operate-writeback：锁内仅检查，rollback 在锁外执行
+        let has_conflict = {
+            let state = self.state.write().await;
+            state.transaction.is_some()
+        };
+        if has_conflict {
+            // 并发冲突：锁已释放，安全执行 rollback
             let _ = transaction.rollback().await;
             return Err(DbError::Transaction(
                 "Already in transaction (concurrent begin detected)".to_string(),
             ));
         }
-        state.transaction = Some(Arc::new(transaction));
+        // 无冲突：安全包装并写入
+        let transaction = Arc::new(transaction);
+        let mut state = self.state.write().await;
+        state.transaction = Some(transaction);
         Ok(())
     }
 
@@ -261,7 +276,7 @@ impl Session {
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
         {
             let graph_txn = {
-                let mut state = self.state.lock().await;
+                let mut state = self.state.write().await;
                 state.graph_transaction.take()
             };
             if let Some(graph_txn) = graph_txn {
@@ -271,7 +286,7 @@ impl Session {
                 })?;
 
                 // 短锁：清除 last_write
-                let mut state = self.state.lock().await;
+                let mut state = self.state.write().await;
                 state.last_write = None;
                 return Ok(());
             }
@@ -279,7 +294,7 @@ impl Session {
 
         // SeaORM 逻辑：短锁 take transaction
         let transaction_arc = {
-            let mut state = self.state.lock().await;
+            let mut state = self.state.write().await;
             state
                 .transaction
                 .take()
@@ -298,7 +313,7 @@ impl Session {
             .map_err(|e| DbError::Transaction(e.to_string()))?;
 
         // 短锁：清除 last_write
-        let mut state = self.state.lock().await;
+        let mut state = self.state.write().await;
         state.last_write = None;
         Ok(())
     }
@@ -318,7 +333,7 @@ impl Session {
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
         {
             let graph_txn = {
-                let mut state = self.state.lock().await;
+                let mut state = self.state.write().await;
                 state.graph_transaction.take()
             };
             if let Some(graph_txn) = graph_txn {
@@ -335,7 +350,7 @@ impl Session {
 
         // SeaORM 逻辑：短锁 take transaction
         let transaction_arc = {
-            let mut state = self.state.lock().await;
+            let mut state = self.state.write().await;
             if state.transaction.is_none() {
                 return Err(DbError::Transaction("Not in transaction".to_string()));
             }
@@ -361,7 +376,7 @@ impl Session {
 
     /// 是否应该使用主库（基于读写分离配置）
     pub async fn should_use_master(&self) -> bool {
-        let state = self.state.lock().await;
+        let state = self.state.read().await;
         // 如果在事务中，必须使用主库
         if state.transaction.is_some() {
             return true;
@@ -462,7 +477,7 @@ impl Session {
 
             // v0.3.0 性能优化：短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
             let tx_opt: Option<Arc<DatabaseTransaction>> = {
-                let state = self.state.lock().await;
+                let state = self.state.write().await;
                 state.transaction.clone()
             };
 
@@ -763,49 +778,9 @@ impl Session {
         }
     }
 
-    /// 执行 Cypher 查询（图数据库专用，ladybug/neo4j feature 启用时可用）
-    ///
-    /// 按事务状态自动分发：
-    /// - 在图事务中：委托给事务句柄执行（确保事务内所有操作使用同一连接）
-    /// - 不在事务中：直接在连接上执行
-    ///
-    /// # 权限检查
-    ///
-    /// Phase 1 stub：admin 角色绕过所有检查，非 admin 角色被拒绝。
-    ///
-    /// # 安全性警告（vuln-0005）
-    ///
-    /// 直接拼接用户输入到 `cypher` 字符串易导致 Cypher 注入。
-    /// 此方法仅接受无参数 Cypher，应优先使用
-    /// [`execute_cypher_with_params`](Self::execute_cypher_with_params)。
-    ///
-    /// # 参数
-    ///
-    /// * `cypher` - Cypher 查询语句
-    ///
-    /// # 返回
-    ///
-    /// 图执行结果（Query 或 Write）
-    ///
-    /// # Errors
-    ///
-    /// - 非 admin 角色调用时返回 `DbError::Permission`
-    /// - 连接不是图连接时返回 `DbError::Connection`
-    /// - 查询语法错误或执行失败时返回对应的 `DbError`
-    /// - Cypher 包含多语句/注释/危险过程时返回 `DbError::Permission`（vuln-0005）
-    #[cfg(any(feature = "ladybug", feature = "neo4j"))]
-    #[deprecated(
-        since = "0.4.2",
-        note = "vuln-0005: Cypher injection risk; use execute_cypher_with_params instead"
-    )]
-    pub async fn execute_cypher(&self, cypher: &str) -> DbResult<crate::database::graph::GraphExecResult> {
-        // MD-1 修复：委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
-        self.execute_cypher_in_transaction(cypher, None).await
-    }
-
     /// 执行参数化 Cypher 查询（vuln-0005 修复）
     ///
-    /// 与 [`execute_cypher`](Self::execute_cypher) 相同的事务分发逻辑，
+    /// 与 `execute_cypher_in_transaction` 相同的事务分发逻辑，
     /// 但通过 `$name` 占位符 + `params` 映射传递用户输入，
     /// 底层使用 prepared statement，数据库不会将参数值解析为 Cypher 代码，
     /// 从根本上防止 Cypher 注入。
@@ -849,7 +824,7 @@ impl Session {
 
     /// 执行 Cypher 查询的内部 helper（MD-1 提取，统一事务分发逻辑）
     ///
-    /// `execute_cypher` 与 `execute_cypher_with_params` 共享完整的事务分发流程：
+    /// `execute_cypher_with_params` 的完整事务分发流程：
     /// 1. 注入防护（vuln-0005）
     /// 2. 图权限检查
     /// 3. 取连接 + 获取图操作互斥锁（HIGH-001：串行化 take → put back）
@@ -860,12 +835,12 @@ impl Session {
     /// # 参数
     ///
     /// * `cypher` - Cypher 查询语句
-    /// * `params` - `None` 调用 `execute_cypher`，`Some` 调用 `execute_cypher_with_params`
+    /// * `params` - 参数映射（key 对应 Cypher 中的 `$param` 占位符）
     ///
     /// # 设计说明
     ///
     /// 使用 `Option<HashMap>` 区分两种操作。`params.take()` 在互斥分支中消耗参数，
-    /// 避免在 `execute_cypher` 路径强制构造空 HashMap，也无需 clone。
+    /// 避免在调用路径强制构造空 HashMap，也无需 clone。
     ///
     /// # HD-2 误报说明（架构审查）
     ///
@@ -904,7 +879,7 @@ impl Session {
 
         // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
         let graph_txn = {
-            let mut state = self.state.lock().await;
+            let mut state = self.state.write().await;
             if state.graph_txn_poisoned {
                 return Err(DbError::Transaction(
                     "Graph transaction is poisoned due to previous panic; \
@@ -918,13 +893,13 @@ impl Session {
         if let Some(graph_txn) = graph_txn {
             // PoisonGuard（FM-3.1 修复：panic 时标记事务为 poisoned，防止丢失句柄后绕过事务隔离）
             struct PoisonGuard<'a> {
-                state: &'a Mutex<SessionState>,
+                state: &'a RwLock<SessionState>,
                 armed: bool,
             }
             impl<'a> Drop for PoisonGuard<'a> {
                 fn drop(&mut self) {
                     if self.armed
-                        && let Ok(mut state) = self.state.try_lock()
+                        && let Ok(mut state) = self.state.try_write()
                     {
                         state.graph_txn_poisoned = true;
                     }
@@ -943,7 +918,7 @@ impl Session {
             };
             guard.armed = false;
 
-            let mut state = self.state.lock().await;
+            let mut state = self.state.write().await;
             state.graph_transaction = Some(graph_txn);
             return result;
         }
@@ -1016,19 +991,8 @@ impl Session {
             }
         }
 
-        // 提取表名（vuln-0003 修复：使用 SqlParser 替代朴素字符串匹配）
-        //
-        // 旧实现 `extract_table_name(sql)` 使用 `contains("FROM ")` 朴素字符串匹配，
-        // 可被 SQL 字符串字面量、注释、子查询混淆绕过权限检查。
-        // 新实现 `extract_table_name_via_parser(sql)` 使用 sqlparser AST 解析，
-        // 正确处理字符串字面量、注释、子查询等复杂 SQL 语法。
-        //
-        // 当 SqlParser 无法提取表名（None）时，跳过表级权限检查，
-        // 由下游 `execute_raw` 的 SqlParser 检查提供防御纵深。
-        #[cfg(feature = "sql-parser")]
+        // 提取表名（vuln-0003 修复：使用 SqlParser AST 解析替代朴素字符串匹配）
         let table_name: String = extract_table_name_via_parser(sql).await.unwrap_or_default();
-        #[cfg(not(feature = "sql-parser"))]
-        let table_name: String = extract_table_name(sql);
 
         // 检查权限
         #[cfg(feature = "permission")]
@@ -1349,76 +1313,6 @@ impl Drop for Session {
     }
 }
 
-/// 简化的表名提取（用于权限检查）
-///
-/// # 弃用警告（vuln-0003 修复）
-///
-/// 此函数使用 `contains("FROM ")` 等朴素字符串匹配提取表名，
-/// 可被以下 SQL 混淆绕过权限检查：
-///
-/// 1. **字符串字面量包含 "FROM "**：`SELECT 'from the depths' FROM users`
-///    朴素解析器返回 "the" 而非 "users"。
-/// 2. **SQL 注释包含 "FROM "**：`SELECT /* FROM fake_table */ * FROM users`
-///    朴素解析器返回 "fake_table" 而非 "users"。
-/// 3. **子查询的首个 FROM 在内层**：`SELECT * FROM (SELECT * FROM inner) AS sub`
-///    朴素解析器返回 "(SELECT" 而非正确表名。
-///
-/// # 替代方案
-///
-/// 使用 [`extract_table_name_via_parser`] 替代，后者基于 sqlparser AST 解析，
-/// 正确处理字符串字面量、注释、子查询等复杂 SQL 语法。
-///
-/// 当 `sql-parser` feature 启用时（`permission` feature 强制启用），
-/// [`Session::execute_with_operation`] 已改用 [`extract_table_name_via_parser`]。
-///
-/// 此函数保留用于 `permission` feature 未启用 `sql-parser` 的边缘情况
-/// （实际上 Cargo.toml 中 `permission = ["sql-parser", ...]` 已强制此依赖）。
-#[deprecated(
-    since = "0.4.2",
-    note = "vuln-0003: 朴素字符串匹配可被 SQL 字符串字面量/注释/子查询绕过，请使用 `extract_table_name_via_parser` 替代"
-)]
-#[cfg(feature = "permission")]
-#[allow(dead_code)] // 当 sql-parser 启用时（permission 强制启用），此函数被 extract_table_name_via_parser 替代
-fn extract_table_name(sql: &str) -> String {
-    // 这是一个简化的实现，实际应该使用 sqlparser
-    let sql_upper = sql.to_uppercase();
-
-    if sql_upper.contains("FROM ")
-        && let Some(start) = sql_upper.find("FROM ")
-    {
-        let rest = &sql[start + 5..];
-        if let Some(end) = rest.find(|c| [' ', ',', ';', '(', ')'].contains(&c)) {
-            return rest[..end].trim().to_string();
-        } else {
-            return rest.trim().to_string();
-        }
-    }
-
-    if sql_upper.contains("INTO ")
-        && let Some(start) = sql_upper.find("INTO ")
-    {
-        let rest = &sql[start + 5..];
-        if let Some(end) = rest.find(|c| [' ', '(', ';'].contains(&c)) {
-            return rest[..end].trim().to_string();
-        } else {
-            return rest.trim().to_string();
-        }
-    }
-
-    if sql_upper.contains("UPDATE ")
-        && let Some(start) = sql_upper.find("UPDATE ")
-    {
-        let rest = &sql[start + 7..];
-        if let Some(end) = rest.find(|c| [' ', ';'].contains(&c)) {
-            return rest[..end].trim().to_string();
-        } else {
-            return rest.trim().to_string();
-        }
-    }
-
-    String::new()
-}
-
 /// 基于 SqlParser 的表名提取（vuln-0003 修复）
 ///
 /// 使用 sqlparser AST 解析提取 SQL 语句的表名，替代朴素字符串匹配。
@@ -1461,47 +1355,17 @@ async fn extract_table_name_via_parser(sql: &str) -> Option<String> {
     }
 }
 
-#[cfg(all(feature = "permission", not(feature = "sql-parser")))]
-#[allow(deprecated)]
-fn parse_table_and_action(sql: &str) -> (String, PermissionAction) {
-    // 此函数仅在 permission 启用但 sql-parser 未启用时使用
-    // （实际上 Cargo.toml 中 permission 强制依赖 sql-parser，此分支为死代码）
-    // 当 sql-parser 不可用时，只能使用已弃用的 extract_table_name 作为 fallback
-    let table_name = extract_table_name(sql);
-    let sql_upper = sql.trim_start().to_uppercase();
-    let action = if sql_upper.starts_with("INSERT") {
-        PermissionAction::Insert
-    } else if sql_upper.starts_with("UPDATE") {
-        PermissionAction::Update
-    } else if sql_upper.starts_with("DELETE") {
-        PermissionAction::Delete
-    } else {
-        PermissionAction::Select
-    };
-
-    (table_name, action)
-}
-
 /// 解析 SQL 操作类型和表名用于权限检查
 ///
-/// 统一 execute 流程中的 SQL 解析入口，消除 permission+sql-parser 与
-/// permission+无 sql-parser 两个 cfg 分支的重复结构：
-/// - sql-parser 启用：返回 None 表示不支持的语句或解析失败（execute 会跳过权限检查直接执行）
-/// - sql-parser 未启用：始终返回 Some（使用简化解析器 parse_table_and_action）
+/// 使用 SqlParser AST 解析提取表名和操作类型。
+/// 返回 None 表示不支持的语句或解析失败（execute 会跳过权限检查直接执行）。
 #[cfg(feature = "permission")]
 async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, PermissionAction)>> {
-    #[cfg(feature = "sql-parser")]
-    {
-        let parser = SqlParser::shared().await;
-        match parser.parse_operation_async(sql).await {
-            Ok(Some((table, action))) => Ok(Some((table, action))),
-            Ok(None) => Ok(None),
-            Err(_) => Ok(None),
-        }
-    }
-    #[cfg(not(feature = "sql-parser"))]
-    {
-        Ok(Some(parse_table_and_action(sql)))
+    let parser = SqlParser::shared().await;
+    match parser.parse_operation_async(sql).await {
+        Ok(Some((table, action))) => Ok(Some((table, action))),
+        Ok(None) => Ok(None),
+        Err(_) => Ok(None),
     }
 }
 
@@ -1546,7 +1410,6 @@ impl super::DatabaseSession for Session {
 // ============================================================================
 
 #[cfg(all(test, feature = "ladybug"))]
-#[allow(deprecated)] // vuln-0005: Session::execute_cypher 已 deprecated，但 graph_tests 仍需验证旧 API 行为
 mod graph_tests {
     use super::*;
     use crate::database::graph::{GraphExecResult, GraphValue};
@@ -1619,21 +1482,24 @@ mod graph_tests {
 
         // 准备：创建 schema
         session
-            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
             .await
             .expect("create node table");
 
         // 事务：插入数据并提交
         session.begin_transaction().await.expect("begin");
         session
-            .execute_cypher("CREATE (:Person {name: 'Alice'})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'Alice'})", HashMap::new())
             .await
             .expect("create in txn");
         session.commit().await.expect("commit");
 
         // 验证：提交后数据可见
         let result = session
-            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .execute_cypher_with_params("MATCH (p:Person) RETURN p.name AS name", HashMap::new())
             .await
             .expect("match after commit");
         match result {
@@ -1657,21 +1523,24 @@ mod graph_tests {
 
         // 准备：创建 schema
         session
-            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
             .await
             .expect("create node table");
 
         // 事务：插入数据并回滚
         session.begin_transaction().await.expect("begin");
         session
-            .execute_cypher("CREATE (:Person {name: 'Bob'})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'Bob'})", HashMap::new())
             .await
             .expect("create in txn");
         session.rollback().await.expect("rollback");
 
         // 验证：回滚后数据不可见
         let result = session
-            .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
+            .execute_cypher_with_params("MATCH (p:Person) RETURN p.name AS name", HashMap::new())
             .await
             .expect("match after rollback");
         match result {
@@ -1724,7 +1593,7 @@ mod graph_tests {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
         let result = session
-            .execute_cypher("RETURN 1")
+            .execute_cypher_with_params("RETURN 1", HashMap::new())
             .await
             .expect("execute_cypher should succeed");
         match result {
@@ -1747,19 +1616,22 @@ mod graph_tests {
         let session = pool.get_session("admin").await.expect("get_session");
 
         session
-            .execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
             .await
             .expect("create table");
 
         session.begin_transaction().await.expect("begin");
         session
-            .execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'Alice', age: 25})", HashMap::new())
             .await
             .expect("create in txn");
 
         // 事务内查询应看到数据
         let result = session
-            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+            .execute_cypher_with_params("MATCH (p:Person) RETURN p.name AS name, p.age AS age", HashMap::new())
             .await
             .expect("match in txn");
         match result {
@@ -1779,23 +1651,29 @@ mod graph_tests {
 
         // DDL
         session
-            .execute_cypher("CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))")
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
             .await
             .expect("create node table");
 
         // 插入多条
         session
-            .execute_cypher("CREATE (:Person {name: 'Alice', age: 25})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'Alice', age: 25})", HashMap::new())
             .await
             .expect("create alice");
         session
-            .execute_cypher("CREATE (:Person {name: 'Bob', age: 30})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'Bob', age: 30})", HashMap::new())
             .await
             .expect("create bob");
 
         // 查询并验证
         let result = session
-            .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY name")
+            .execute_cypher_with_params(
+                "MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY name",
+                HashMap::new(),
+            )
             .await
             .expect("match");
         match result {
@@ -1823,7 +1701,9 @@ mod graph_tests {
     async fn test_execute_cypher_invalid_returns_error() {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
-        let result = session.execute_cypher("INVALID CYPHER").await;
+        let result = session
+            .execute_cypher_with_params("INVALID CYPHER", HashMap::new())
+            .await;
         assert!(result.is_err(), "invalid cypher should return error");
     }
 
@@ -1834,7 +1714,10 @@ mod graph_tests {
         let session = pool.get_session("admin").await.expect("get_session");
 
         session
-            .execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .execute_cypher_with_params(
+                "CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))",
+                HashMap::new(),
+            )
             .await
             .expect("create table");
 
@@ -1842,20 +1725,20 @@ mod graph_tests {
 
         // 多次 execute_cypher 都应在同一事务内
         session
-            .execute_cypher("CREATE (:Person {name: 'A'})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'A'})", HashMap::new())
             .await
             .expect("create A");
         session
-            .execute_cypher("CREATE (:Person {name: 'B'})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'B'})", HashMap::new())
             .await
             .expect("create B");
         session
-            .execute_cypher("CREATE (:Person {name: 'C'})")
+            .execute_cypher_with_params("CREATE (:Person {name: 'C'})", HashMap::new())
             .await
             .expect("create C");
 
         let result = session
-            .execute_cypher("MATCH (p:Person) RETURN count(p) AS cnt")
+            .execute_cypher_with_params("MATCH (p:Person) RETURN count(p) AS cnt", HashMap::new())
             .await
             .expect("count in txn");
         match result {
@@ -1872,14 +1755,14 @@ mod graph_tests {
         session.commit().await.expect("commit");
     }
 
-    /// TEST-GRAPH-EXEC-006: 非 admin 角色调用 execute_cypher 应被拒绝（permission feature）
+    /// TEST-GRAPH-EXEC-006: 非 admin 角色调用 execute_cypher_with_params 应被拒绝（permission feature）
     #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_execute_cypher_non_admin_denied() {
         let pool = make_ladybug_pool().await;
         // system 角色在无权限配置时也被允许获取 session
         let session = pool.get_session("system").await.expect("get_session");
-        let result = session.execute_cypher("RETURN 1").await;
+        let result = session.execute_cypher_with_params("RETURN 1", HashMap::new()).await;
         assert!(result.is_err(), "non-admin role should be denied");
         let err = result.unwrap_err();
         assert!(
@@ -1889,13 +1772,13 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-EXEC-007: admin 角色 execute_cypher 成功（permission feature）
+    /// TEST-GRAPH-EXEC-007: admin 角色 execute_cypher_with_params 成功（permission feature）
     #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_execute_cypher_admin_allowed() {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
-        let result = session.execute_cypher("RETURN 42").await;
+        let result = session.execute_cypher_with_params("RETURN 42", HashMap::new()).await;
         assert!(result.is_ok(), "admin role should be allowed");
     }
 }
@@ -2003,146 +1886,19 @@ roles:
 }
 
 // ============================================================================
-// vuln-0003 测试：extract_table_name 朴素字符串匹配绕过
-// ============================================================================
-//
-// 漏洞描述：
-//   `extract_table_name` 使用 `contains("FROM ")` 等朴素字符串匹配提取表名，
-//   可被以下 SQL 混淆绕过权限检查：
-//   1. 字符串字面量包含 "FROM " → 提取错误的表名
-//   2. SQL 注释包含 "FROM " → 提取错误的表名
-//   3. 子查询的首个 FROM 在内层 → 提取错误的表名
-//
-// 修复方案：
-//   使用 SqlParser（基于 sqlparser AST 解析）替代朴素字符串匹配，
-//   标记 `extract_table_name` 为 `#[deprecated]`。
+// vuln-0003 测试：SqlParser 表名提取安全验证
 // ============================================================================
 
 #[cfg(test)]
 #[cfg(all(feature = "permission", feature = "sql-parser"))]
-#[allow(deprecated)]
 mod vuln_0003_tests {
     use super::*;
 
-    /// 辅助：通过 SqlParser 提取表名（修复后由 `extract_table_name_via_parser` 提供）
-    ///
-    /// 此函数在测试模块内独立实现，避免依赖尚未添加的内部函数。
-    /// 修复后由 `extract_table_name_via_parser` 替代此测试辅助。
-    async fn extract_table_name_via_parser_for_test(sql: &str) -> Option<String> {
-        let parser = SqlParser::shared().await;
-        parser
-            .parse_operation_async(sql)
-            .await
-            .ok()
-            .flatten()
-            .map(|(table, _)| table)
-    }
-
-    /// vuln-0003 Red-1：朴素 `extract_table_name` 对字符串字面量内的 "FROM " 误匹配
-    ///
-    /// SQL: `SELECT 'from the depths' FROM users`
-    /// 朴素解析器返回 "the"（来自字符串字面量 "from the depths"），
-    /// 而 SqlParser 正确返回 "users"。
-    #[tokio::test]
-    async fn test_vuln_0003_naive_fails_on_string_literal_containing_from() {
-        let sql = "SELECT 'from the depths' FROM users";
-
-        // 朴素解析器返回错误结果（漏洞证据）
-        let naive_result = extract_table_name(sql);
-        assert_ne!(
-            naive_result, "users",
-            "naive extract_table_name should NOT return 'users' (demonstrating the bug)"
-        );
-
-        // SqlParser 正确提取表名
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
-        assert_eq!(
-            parser_result.as_deref(),
-            Some("users"),
-            "SqlParser should correctly extract 'users' table name"
-        );
-    }
-
-    /// vuln-0003 Red-2：朴素 `extract_table_name` 对 SQL 注释内的 "FROM " 误匹配
-    ///
-    /// SQL: `SELECT /* FROM fake_table */ * FROM users`
-    /// 朴素解析器返回 "fake_table"（来自注释），权限检查针对错误表名。
-    ///
-    /// SqlParser 行为：
-    /// - 将 `/* ... */` 块注释视为潜在注入向量并拒绝（安全行为）
-    /// - 或正确提取 "users"（若注释被正常处理）
-    /// 两种行为都是安全的，关键是不会返回错误表名让 SQL 绕过权限检查。
-    #[tokio::test]
-    async fn test_vuln_0003_naive_fails_on_comment_containing_from() {
-        let sql = "SELECT /* FROM fake_table */ * FROM users";
-
-        // 朴素解析器返回错误结果（漏洞证据）
-        let naive_result = extract_table_name(sql);
-        assert_ne!(
-            naive_result, "users",
-            "naive extract_table_name should NOT return 'users' when comment contains FROM (demonstrating the bug)"
-        );
-
-        // SqlParser 行为：拒绝 SQL（返回 None）或正确提取表名
-        // 两种都是安全行为 — 关键是不会返回错误表名绕过权限检查
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
-        match parser_result {
-            None => {
-                // SqlParser 拒绝 SQL（检测到注释注入模式）— 安全行为
-            }
-            Some(table) => {
-                assert_eq!(
-                    table, "users",
-                    "SqlParser should either reject or return correct table name 'users', got: {}",
-                    table
-                );
-            }
-        }
-    }
-
-    /// vuln-0003 Red-3：朴素 `extract_table_name` 对子查询的首个 FROM 误匹配
-    ///
-    /// SQL: `SELECT * FROM (SELECT * FROM inner_table) AS sub`
-    /// 朴素解析器返回 "(SELECT"（来自子查询的 FROM），
-    /// 而 SqlParser 正确返回 "inner_table"（最外层 FROM 的表名）。
-    ///
-    /// 注意：对于派生表（subquery in FROM），SqlParser 返回 None
-    /// 因为派生表没有具名基表，朴素解析器返回无意义的 "(SELECT" 是错误的。
-    #[tokio::test]
-    async fn test_vuln_0003_naive_fails_on_subquery_from() {
-        let sql = "SELECT * FROM (SELECT * FROM inner_table) AS sub";
-
-        // 朴素解析器返回错误结果（漏洞证据）
-        let naive_result = extract_table_name(sql);
-        // 朴素解析器会返回 "(SELECT" 之类的无意义字符串
-        assert_ne!(
-            naive_result, "inner_table",
-            "naive extract_table_name should NOT return 'inner_table' for subquery (demonstrating the bug)"
-        );
-
-        // SqlParser 应返回 None（派生表无具名基表）或正确表名，
-        // 但绝不会返回朴素解析器那样的无意义字符串
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
-        // SqlParser 对派生表返回 None（无具名基表）
-        // 这是正确行为：派生表的权限检查应在外层 SQL 上下文处理
-        assert!(
-            parser_result.is_none() || parser_result.as_deref() == Some("inner_table"),
-            "SqlParser should return None or correct table name for derived table, got: {:?}",
-            parser_result
-        );
-    }
-
-    /// vuln-0003 Red-4：朴素 `extract_table_name` 对 INSERT INTO 字符串字面量误匹配
-    ///
-    /// SQL: `INSERT INTO users (name) VALUES ('from into values')`
-    /// 朴素解析器应正确提取 "users"，但类似情况在其他 SQL 类型中可能出错。
-    /// 此测试验证 SqlParser 对 INSERT 的正确处理。
+    /// vuln-0003：SqlParser 对 INSERT 的正确处理
     #[tokio::test]
     async fn test_vuln_0003_parser_correctly_handles_insert() {
         let sql = "INSERT INTO users (name) VALUES ('from into values')";
-
-        // SqlParser 正确提取表名
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        let parser_result = extract_table_name_via_parser(sql).await;
         assert_eq!(
             parser_result.as_deref(),
             Some("users"),
@@ -2150,17 +1906,11 @@ mod vuln_0003_tests {
         );
     }
 
-    /// vuln-0003 Red-5：朴素 `extract_table_name` 对 UPDATE 字符串字面量误匹配
-    ///
-    /// SQL: `UPDATE users SET name = 'from users' WHERE id = 1`
-    /// 朴素解析器对 UPDATE 路径使用 `contains("UPDATE ")`，
-    /// 此测试验证 SqlParser 对 UPDATE 的正确处理。
+    /// vuln-0003：SqlParser 对 UPDATE 的正确处理
     #[tokio::test]
     async fn test_vuln_0003_parser_correctly_handles_update() {
         let sql = "UPDATE users SET name = 'from users' WHERE id = 1";
-
-        // SqlParser 正确提取表名
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        let parser_result = extract_table_name_via_parser(sql).await;
         assert_eq!(
             parser_result.as_deref(),
             Some("users"),
@@ -2168,16 +1918,11 @@ mod vuln_0003_tests {
         );
     }
 
-    /// vuln-0003 Red-6：朴素 `extract_table_name` 对 DELETE 字符串字面量误匹配
-    ///
-    /// SQL: `DELETE FROM users WHERE name = 'from deleted'`
-    /// 此测试验证 SqlParser 对 DELETE 的正确处理。
+    /// vuln-0003：SqlParser 对 DELETE 的正确处理
     #[tokio::test]
     async fn test_vuln_0003_parser_correctly_handles_delete() {
         let sql = "DELETE FROM users WHERE name = 'from deleted'";
-
-        // SqlParser 正确提取表名
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        let parser_result = extract_table_name_via_parser(sql).await;
         assert_eq!(
             parser_result.as_deref(),
             Some("users"),
@@ -2195,7 +1940,7 @@ mod vuln_0003_tests {
         let sql = "SELECT * FROM \"users\" WHERE id = 1";
 
         // SqlParser 应正确解析带引号的表名
-        let parser_result = extract_table_name_via_parser_for_test(sql).await;
+        let parser_result = extract_table_name_via_parser(sql).await;
         assert!(
             parser_result.is_some(),
             "SqlParser should extract table name for quoted identifier, got: {:?}",
@@ -2751,55 +2496,7 @@ mod session_basic_tests {
         assert!(result.is_ok(), "execute via trait should succeed: {:?}", result.err());
     }
 
-    // ===== 补充测试：extract_table_name, is_invalid_table_name, create_migration_executor =====
-
-    #[test]
-    fn test_extract_table_name_select_no_trailing() {
-        // SELECT FROM with no trailing delimiter -> covers line 1368
-        #[allow(deprecated)]
-        let result = super::extract_table_name("SELECT * FROM users");
-        assert_eq!(result, "users");
-    }
-
-    #[test]
-    fn test_extract_table_name_insert_no_trailing() {
-        // INSERT INTO with no trailing delimiter -> covers lines 1373-1379
-        #[allow(deprecated)]
-        let result = super::extract_table_name("INSERT INTO my_table");
-        assert_eq!(result, "my_table");
-    }
-
-    #[test]
-    fn test_extract_table_name_update_no_trailing() {
-        // UPDATE with no trailing delimiter -> covers lines 1384-1390
-        #[allow(deprecated)]
-        let result = super::extract_table_name("UPDATE records");
-        assert_eq!(result, "records");
-    }
-
-    #[test]
-    fn test_extract_table_name_unsupported_returns_empty() {
-        // Unsupported SQL -> covers line 1395
-        #[allow(deprecated)]
-        let result = super::extract_table_name("DELETE something");
-        assert_eq!(result, "");
-    }
-
-    #[test]
-    fn test_extract_table_name_insert_with_paren() {
-        // INSERT INTO with paren delimiter -> covers lines 1373-1377
-        #[allow(deprecated)]
-        let result = super::extract_table_name("INSERT INTO users(id, name)");
-        assert_eq!(result, "users");
-    }
-
-    #[test]
-    fn test_extract_table_name_update_with_semicolon() {
-        // UPDATE with semicolon delimiter -> covers lines 1384-1388
-        #[allow(deprecated)]
-        let result = super::extract_table_name("UPDATE records;set x=1");
-        assert_eq!(result, "records");
-    }
+    // ===== 补充测试：is_invalid_table_name, create_migration_executor =====
 
     #[tokio::test]
     async fn test_extract_table_name_via_parser_invalid_table() {
