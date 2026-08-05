@@ -302,18 +302,6 @@ Model::find_all(&session).await?; // Error: Permission denied
 
 ## <span id="feature-flags">🎨 Feature Flags</span>
 
-### ⚠️ BREAKING CHANGE in v0.2.0
-
-**All users must update their Cargo.toml:**
-
-**Version 0.1.x → 0.2.0 is a breaking change.** The `cache` feature is no longer enabled by default, and several features now explicitly require `cache` to be enabled.
-
-### ⚠️ BREAKING CHANGE in v0.4.0
-
-- `default` feature is now an empty array `[]` (previously included 7 features)
-- Users must explicitly enable runtime + database driver + desired features
-- Recommended: `default-features = false, features = ["default-no-db", "sqlite"]`
-
 ### Database Drivers (choose one)
 
 ```toml
