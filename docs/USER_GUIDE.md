@@ -33,7 +33,7 @@
 
 ### 先决条件
 
-- Rust 1.85 或更高版本
+- Rust 1.91 或更高版本
 - Rust 和 SQL 基础知识
 - 数据库（PostgreSQL、MySQL 或 SQLite）
 
@@ -47,7 +47,7 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.4"
+dbnexus = "0.5"
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -759,7 +759,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["metrics"]
 ```
 
@@ -790,7 +790,7 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["audit"]
 ```
 
@@ -824,7 +824,7 @@ SensitiveData::find_by_id(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["tracing"]
 ```
 
@@ -849,7 +849,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["duckdb"]
 ```
 
@@ -904,7 +904,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["authentication"]
 ```
 
@@ -953,7 +953,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["sql-parser"]
 ```
 
@@ -1000,7 +1000,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["sharding"]
 ```
 
@@ -1037,7 +1037,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["validation"]
 ```
 
@@ -1079,7 +1079,7 @@ DBNexus 支持图数据库，通过 `GraphConnection` trait 统一抽象。图�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.4"
+version = "0.5"
 features = ["ladybug"]  # 或 "neo4j"
 ```
 
