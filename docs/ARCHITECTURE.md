@@ -612,8 +612,10 @@ pub struct PoolStatus {
 ### 异步操作
 
 - 所有 I/O 使用 `async/await`
-- `AsyncMutex` 用于保护共享状态
+- `RwLock` 用于读多写少的共享状态（Session 内部状态），允许并发读
+- `Mutex` 仅用于写密集路径（图操作互斥）
 - `Notify` 而不是条件变量（避免忙等待）
+- `AcqRel` 内存序替代 `SeqCst`，减少不必要的全局同步开销
 
 ### 连接池
 
