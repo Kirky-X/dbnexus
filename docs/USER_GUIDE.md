@@ -57,10 +57,10 @@ tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.4", default-features = false, features = ["embedded"] }
+dbnexus = { version = "0.5", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.4", features = [
+dbnexus = { version = "0.5", features = [
     "postgres",
     "permission",
     "metrics",
@@ -69,7 +69,7 @@ dbnexus = { version = "0.4", features = [
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.4", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.5", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 完整特性列表请参见 [README.md](../README.md#feature-flags)。
@@ -80,22 +80,22 @@ dbnexus = { version = "0.4", features = ["sqlite", "permission", "sql-parser"] }
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.4", features = ["sqlite"] }
+dbnexus = { version = "0.5", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.4", features = ["postgres"] }
+dbnexus = { version = "0.5", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.4", features = ["mysql"] }
+dbnexus = { version = "0.5", features = ["mysql"] }
 
 # DuckDB（嵌入式分析型数据库）
-dbnexus = { version = "0.4", features = ["duckdb"] }
+dbnexus = { version = "0.5", features = ["duckdb"] }
 
 # Ladybug（嵌入式图数据库）
-dbnexus = { version = "0.4", features = ["ladybug"] }
+dbnexus = { version = "0.5", features = ["ladybug"] }
 
 # Neo4j（图数据库服务器）
-dbnexus = { version = "0.4", features = ["neo4j"] }
+dbnexus = { version = "0.5", features = ["neo4j"] }
 ```
 
 **重要：**关系型数据库驱动（SQLite/PostgreSQL/MySQL/DuckDB）之间一次只能启用一个。图数据库驱动（Ladybug/Neo4j）可与关系型驱动共存。

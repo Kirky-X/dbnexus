@@ -54,7 +54,7 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 **核心特性（始终可用）：**
 - 带 RAII 管理的连接池
 - 基本配置管理
-- 数据库驱动选择（SQLite、PostgreSQL、MySQL、DuckDB）
+- 数据库驱动选择（SQLite、PostgreSQL、MySQL、DuckDB、Ladybug、Neo4j）
 - ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）
 
 **可选核心特性：**
@@ -82,8 +82,8 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 | 特性 | 依赖 | 原因 |
 |------|------|------|
 | `permission` | → `sql-parser`（强制） | 防止 SQL 注入绕过权限检查；同时传递依赖 `dashmap`、`futures`、`yaml` |
-| `sql-parser` | → `cache`（自动启用） | 缓存解析结果以提升性能；同时依赖 `sqlparser`、`once_cell`、`regex`、`unicode-normalization` |
-| `permission-engine` | → `cache`、`dashmap`、`futures`、`once_cell`、`regex` | 高级权限引擎需要缓存策略决策、并发 map、异步和正则支持 |
+| `sql-parser` | → `cache`（自动启用） | 缓存解析结果以提升性能；同时依赖 `sqlparser`、`regex`、`unicode-normalization` |
+| `permission-engine` | → `cache`、`dashmap`、`futures`、`regex`、`permission` | 高级权限引擎需要缓存策略决策、并发 map、异步和正则支持 |
 
 > 这些依赖关系在 `src/lib.rs` 中通过 `compile_error!` 宏强制检查，缺失依赖将导致编译失败。
 
@@ -676,7 +676,7 @@ graph TD
     subgraph Minimal["最小部署"]
         SQLite[SQLite]
         config_env[config-env]
-        lru[lru]
+        oxcache[oxcache]
         sql_parser[sql-parser]
     end
 
