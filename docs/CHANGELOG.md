@@ -7,6 +7,29 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-06
+
+### Performance
+
+- **SQL 注入检测**：模式表从栈数组改为 `static &[&str]`，消除每次调用的数组重建开销
+- **Saga 补偿查找**：`HashMap<&str, usize>` 预索引替代 O(n²) 线性扫描
+- **脱敏处理**：`sanitize_json_object` 改为 owned-value 签名，消除递归 clone
+- **Session 并发**：`tokio::sync::Mutex` → `tokio::sync::RwLock`，纯读操作（`is_in_transaction`、`get_graph_transaction` 等）允许并发访问
+- **连接池配置共享**：`DbConfig` 通过 `Arc<DbConfig>` 共享，warmup 时避免深拷贝
+- **连接获取瘦身**：`acquire_connection` 热路径提取为 `#[inline]` helper，feature-gated 分支零成本
+- **Atomic ordering 降级**：`SeqCst` → `AcqRel`，减少不必要的全局同步
+- **锁内 await 修复**：`begin_transaction` 并发冲突路径改为 extract-check-operate-writeback 模式，避免持锁执行 `.await`
+
+### Removed
+
+- **已弃用 builder 方法清理**：移除 `DbPoolBuilder::metrics_collector()`、`permission_config()`、`with_oxcache()` 等标记为 `#[deprecated]` 的 setter
+- **CLI 死代码清理**：移除 `src/tools/cli/src/main.rs` 中未使用的辅助函数和导入
+
+### Changed
+
+- `docs/CHANGELOG.md`：从项目根目录移至 `docs/` 统一文档组织
+- 移除 `.semgrepignore`（项目未使用 Semgrep）
+
 ## [0.5.0] - 2026-08-04
 
 ### Added
