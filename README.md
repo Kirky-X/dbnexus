@@ -149,9 +149,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 |------|------|----------|
 | <span style="color:#166534; padding:4px 8px; border-radius:4px;">embedded</span> | `runtime-tokio-rustls`, `sqlite`, `config-env` | 嵌入式/边缘设备超最小配置 |
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
-| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | 单体应用 |
+| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, `distributed-capabilities` | 单体应用（含全部 7 项分布式能力） |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `distributed-capabilities` | 6 个聚合 feature（手动添加数据库驱动和其他特性） |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `retry`, `failover`, `replica-routing`, `scatter-gather`, `shard-migration`, `saga`, `distributed-id` | 12 个独立 feature（手动添加数据库驱动和其他特性） |
 
 ---
 
@@ -349,7 +349,7 @@ dbnexus = { version = "0.5", features = [
     "global-index",     # 跨分片全局索引
     "permission-engine", # 高级权限引擎
     "authentication",   # JWT 认证 + 密码强度验证
-    "distributed-capabilities" # 分布式能力聚合（retry/failover/saga/scatter-gather 等）
+    "distributed-capabilities" # 分布式能力聚合（retry/failover/replica-routing/scatter-gather/shard-migration/saga/distributed-id）
     # i18n 已为核心特性，始终可用，无需显式启用
 ] }
 
