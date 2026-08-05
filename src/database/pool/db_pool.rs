@@ -15,7 +15,6 @@ use oxcache::Cache;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
-#[cfg(feature = "metrics")]
 use std::time::Instant;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
@@ -177,8 +176,8 @@ pub struct DbPool {
 }
 
 pub(crate) struct DbPoolInner {
-    /// 配置
-    pub(crate) config: DbConfig,
+    /// 配置（Arc 共享，避免 warmup 等场景的深拷贝）
+    pub(crate) config: Arc<DbConfig>,
 
     /// 信号量控制最大连接数（优化锁竞争）
     connection_semaphore: Arc<Semaphore>,
@@ -227,7 +226,7 @@ pub(crate) struct DbPoolInner {
 
     /// 故障转移：当前活跃 URL 索引（failover feature）
     #[cfg(feature = "failover")]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO(failover): reserved for failover integration
     pub(super) current_url_index: std::sync::atomic::AtomicU32,
 }
 
@@ -366,7 +365,7 @@ impl DbPool {
 
         let pool = Self {
             inner: Arc::new(DbPoolInner {
-                config: config.clone(),
+                config: Arc::new(config.clone()),
                 connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
@@ -511,7 +510,7 @@ impl DbPool {
         super::audit::warn_if_default_admin_role_used(&config.admin_role);
         Ok(Self {
             inner: Arc::new(DbPoolInner {
-                config: config.clone(),
+                config: Arc::new(config.clone()),
                 connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
@@ -694,7 +693,7 @@ impl DbPool {
 
     /// 原子切换到下一个 URL（循环遍历故障转移链）
     #[cfg(feature = "failover")]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO(failover): reserved for failover integration
     pub(crate) fn advance_to_next_url(&self) {
         if let Some(ref config) = self.inner.config.failover_config {
             let len = config.urls.len() as u32;
@@ -710,7 +709,7 @@ impl DbPool {
 
     /// 获取当前活跃 URL（故障转移感知）
     #[cfg(feature = "failover")]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO(failover): reserved for failover integration
     pub(crate) fn current_url(&self) -> &str {
         if let Some(ref config) = self.inner.config.failover_config
             && !config.urls.is_empty()
@@ -723,7 +722,7 @@ impl DbPool {
 
     /// 获取当前活跃 URL（无故障转移时回退到 config.url）
     #[cfg(not(feature = "failover"))]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO(failover): reserved for failover integration
     pub(crate) fn current_url(&self) -> &str {
         &self.inner.config.url
     }
@@ -733,7 +732,7 @@ impl DbPool {
     /// 执行探测查询（PostgreSQL/MySQL: `SELECT 1`，SQLite: `SELECT 1`）
     /// 验证连接是否可用。无效连接应被调用方惰性移除。
     #[cfg(feature = "failover")]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO(failover): reserved for failover integration
     pub(crate) async fn validate_connection(&self, conn: &sea_orm::DatabaseConnection) -> bool {
         use sea_orm::ConnectionTrait;
         let query = self
@@ -922,7 +921,7 @@ impl DbPool {
         let mut connection_tasks = Vec::new();
 
         for _ in 0..initial_connections {
-            let config = self.inner.config.clone();
+            let config = Arc::clone(&self.inner.config);
             connection_tasks.push(async move {
                 let mut retries = 0;
                 let mut last_error = None;
@@ -1309,43 +1308,25 @@ impl DbPool {
         self.update_max_waiters(waiters);
 
         // 步骤 1: 获取信号量许可（等待可用槽位，带超时）
-        // 信号量提供公平的等待队列，避免惊群效应
         let timeout_duration = self.inner.config.acquire_timeout_duration();
 
-        // 仅在启用 metrics 时需要记录开始时间
-        #[cfg(feature = "metrics")]
         let start = Instant::now();
 
         let acquire_result = timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
-
-        // wait_count 递减（无论成功或失败）
         self.inner.wait_count.fetch_sub(1, Ordering::SeqCst);
 
         let permit = match acquire_result {
             Ok(Ok(p)) => {
-                // 记录获取延迟和慢获取
-                #[cfg(feature = "metrics")]
-                if let Some(ref collector) = self.inner.metrics_collector {
-                    collector.record_connection_acquire_duration(start.elapsed());
-                }
+                self.record_acquire_duration(start);
                 p
             }
             Ok(Err(_)) => {
-                // permit error - shouldn't happen with tokio semaphore
                 return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                     sea_orm::ConnAcquireErr::Timeout,
                 )));
             }
             Err(_) => {
-                // Timeout - 记录超时指标
-                #[cfg(feature = "metrics")]
-                {
-                    let elapsed_ms = start.elapsed().as_millis() as u64;
-                    if let Some(ref collector) = self.inner.metrics_collector {
-                        collector.record_connection_timeout_level(elapsed_ms);
-                    }
-                }
-
+                self.record_acquire_timeout(start);
                 return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                     sea_orm::ConnAcquireErr::Timeout,
                 )));
@@ -1353,23 +1334,18 @@ impl DbPool {
         };
 
         // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间）
-        // 使用独立作用域确保锁尽快释放
         {
             let mut idle = self.inner.idle_connections.lock().await;
             if let Some(conn) = idle.pop() {
-                // 更新统计计数
                 let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
                 self.update_max_active(active);
                 self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
-                // 忘记许可，因为连接被借出（release_connection 会归还）
                 permit.forget();
                 return Ok(conn);
             }
-            // 锁在此处释放
         }
 
-        // 步骤 3: 创建新连接（不持有锁，避免阻塞其他操作）
-        // 先更新计数，再创建连接
+        // 步骤 3: 创建新连接（不持有锁）
         self.inner.total_count.fetch_add(1, Ordering::SeqCst);
         let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_max_active(active);
@@ -1377,20 +1353,44 @@ impl DbPool {
         match Self::create_connection(&self.inner.config).await {
             Ok(conn) => {
                 self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
-                // 忘记许可，因为连接被借出
                 permit.forget();
                 Ok(conn)
             }
             Err(e) => {
-                // 创建失败，回滚计数并释放许可
                 self.inner.total_count.fetch_sub(1, Ordering::SeqCst);
                 self.inner.active_count.fetch_sub(1, Ordering::SeqCst);
-                // 释放许可（drop 会自动释放）
                 drop(permit);
                 Err(e)
             }
         }
     }
+
+    /// 记录连接获取延迟指标（metrics feature 启用时有效，否则编译消除）
+    #[cfg(feature = "metrics")]
+    #[inline]
+    fn record_acquire_duration(&self, start: Instant) {
+        if let Some(ref collector) = self.inner.metrics_collector {
+            collector.record_connection_acquire_duration(start.elapsed());
+        }
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    #[inline]
+    fn record_acquire_duration(&self, _start: Instant) {}
+
+    /// 记录连接获取超时指标
+    #[cfg(feature = "metrics")]
+    #[inline]
+    fn record_acquire_timeout(&self, start: Instant) {
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        if let Some(ref collector) = self.inner.metrics_collector {
+            collector.record_connection_timeout_level(elapsed_ms);
+        }
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    #[inline]
+    fn record_acquire_timeout(&self, _start: Instant) {}
 
     /// 更新最大等待者计数（使用 CAS 避免竞态条件）
     fn update_max_waiters(&self, current_waiters: u32) {
