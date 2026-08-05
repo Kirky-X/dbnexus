@@ -612,8 +612,11 @@ pub fn contains_sql_injection(sql: &str) -> bool {
     let sql_without_comments = strip_block_comments(&sql_without_strings);
     let sql_upper = sql_without_comments.to_uppercase();
 
-    // Comprehensive SQL injection patterns organized by category
-    let injection_patterns = [
+    // 静态模式表：放在 static 而非栈上，避免每次调用重新分配；
+    // 数据在只读段，CPU L1 cache 友好，分支预测命中率高。
+    // 注：模式含多词子串（如 "UNION SELECT"），无法用 HashSet 精确匹配，
+    // 必须做子串扫描。Aho-Corasick 可进一步优化但需外部 crate。
+    static INJECTION_PATTERNS: &[&str] = &[
         // === UNION 注入 ===
         "UNION SELECT",
         "UNION ALL SELECT",
@@ -701,13 +704,7 @@ pub fn contains_sql_injection(sql: &str) -> bool {
         "UTL_INADDR.GET_HOST_NAME(",
     ];
 
-    for pattern in &injection_patterns {
-        if sql_upper.contains(pattern) {
-            return true;
-        }
-    }
-
-    false
+    INJECTION_PATTERNS.iter().any(|pattern| sql_upper.contains(pattern))
 }
 
 /// Check if SQL contains DDL operations

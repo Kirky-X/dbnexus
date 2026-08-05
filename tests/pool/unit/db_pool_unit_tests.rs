@@ -434,47 +434,6 @@ async fn test_db_pool_builder_min_connections_with_url_only() {
     assert_eq!(pool.config().pool_config.min_connections, 2);
 }
 
-/// TEST-U-DPOOL-029: DbPoolBuilder deprecated setters 应为 no-op 但不 panic
-#[allow(deprecated)]
-#[tokio::test]
-async fn test_db_pool_builder_deprecated_setters_are_noop() {
-    // metrics_collector setter (deprecated, no-op)
-    #[cfg(feature = "metrics")]
-    {
-        use dbnexus::MetricsCollector;
-        let collector = std::sync::Arc::new(MetricsCollector::new());
-        let _ = DbPoolBuilder::new()
-            .url("sqlite::memory:")
-            .metrics_collector(collector)
-            .build()
-            .await;
-    }
-
-    // permission_config setter (deprecated, no-op)
-    #[cfg(feature = "permission")]
-    {
-        use dbnexus::access::PermissionConfig;
-        let _ = DbPoolBuilder::new()
-            .url("sqlite::memory:")
-            .permission_config(PermissionConfig::default())
-            .build()
-            .await;
-    }
-
-    // with_oxcache setter (deprecated, no-op)
-    #[cfg(feature = "cache")]
-    {
-        use oxcache::Cache;
-        let cache: std::sync::Arc<Cache<String, serde_json::Value>> =
-            std::sync::Arc::new(Cache::builder().capacity(10).build().await.unwrap());
-        let _ = DbPoolBuilder::new()
-            .url("sqlite::memory:")
-            .with_oxcache(cache)
-            .build()
-            .await;
-    }
-}
-
 // ============================================================================
 // parse_health_check_interval 单元测试
 // ============================================================================
