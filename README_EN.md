@@ -172,9 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 |------|------|----------|
 | <span style="color:#166534; padding:4px 8px; border-radius:4px;">embedded</span> | `runtime-tokio-rustls`, `sqlite`, `config-env` | Ultra-minimal for embedded/edge devices |
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
-| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | Monolithic application |
+| <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, `distributed-capabilities` | Monolithic application (includes all 7 distributed capabilities) |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `distributed-capabilities` | 6 aggregate features (manually add database drivers and other features) |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `retry`, `failover`, `replica-routing`, `scatter-gather`, `shard-migration`, `saga`, `distributed-id` | 12 individual features (manually add database drivers and other features) |
 
 ---
 
@@ -305,8 +305,8 @@ Model::find_all(&session).await?; // Error: Permission denied
 ### Database Drivers (choose one)
 
 ```toml
-# SQLite (default, embedded)
-dbnexus = { version = "0.5", features = ["sqlite"] }
+# SQLite (embedded)
+dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 
 # PostgreSQL
 dbnexus = { version = "0.5", features = ["postgres"] }
@@ -400,7 +400,7 @@ dbnexus = { version = "0.5", features = [
     "global-index",     # Cross-shard global index
     "permission-engine", # Advanced permission engine (requires cache)
     "authentication",   # JWT authentication + password strength validation
-    "distributed-capabilities" # Distributed capabilities aggregate (retry/failover/saga/scatter-gather etc.)
+    "distributed-capabilities" # Distributed capabilities aggregate (retry/failover/replica-routing/scatter-gather/shard-migration/saga/distributed-id)
     # i18n is now a core feature, always available without explicit enabling
 ] }
 ```
