@@ -9,15 +9,9 @@ use super::*;
 use crate::foundation::DbResult;
 use crate::foundation::{DbConfig, PoolConfig};
 
-#[cfg(feature = "permission")]
-use crate::access::PermissionConfig;
 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
 use crate::domain::DbCacheProvider;
-#[cfg(feature = "metrics")]
-use crate::observability::MetricsCollector;
-#[cfg(feature = "cache")]
-use oxcache::Cache;
-#[cfg(any(feature = "metrics", feature = "cache", feature = "oxcache-integration"))]
+#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
 use std::sync::Arc;
 
 impl DbPoolBuilder {
@@ -54,38 +48,6 @@ impl DbPoolBuilder {
         self
     }
 
-    /// 设置指标收集器
-    ///
-    /// # Deprecated
-    ///
-    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
-    /// 请通过 `DbConfig` 或在 `DbPool::with_config()` 创建后注入。
-    #[deprecated(
-        since = "0.3.0",
-        note = "DbPoolBuilder::build() 静默丢弃此值；请通过 DbConfig 或 DbPool::with_config() 后注入"
-    )]
-    #[cfg(feature = "metrics")]
-    pub fn metrics_collector(mut self, metrics_collector: Arc<MetricsCollector>) -> Self {
-        self.metrics_collector = Some(metrics_collector);
-        self
-    }
-
-    /// 设置权限配置
-    ///
-    /// # Deprecated
-    ///
-    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
-    /// 请通过 `DbConfig.permission_config_path` 指定权限配置文件路径。
-    #[deprecated(
-        since = "0.3.0",
-        note = "DbPoolBuilder::build() 静默丢弃此值；请使用 DbConfig.permission_config_path"
-    )]
-    #[cfg(feature = "permission")]
-    pub fn permission_config(mut self, permission_config: PermissionConfig) -> Self {
-        self.permission_config = Some(permission_config);
-        self
-    }
-
     /// 设置管理员角色名称
     ///
     /// # Arguments
@@ -101,22 +63,6 @@ impl DbPoolBuilder {
         } else {
             self.admin_role = Some(admin_role.to_string());
         }
-        self
-    }
-
-    /// 注入oxcache缓存实例（DI支持）
-    ///
-    /// # Deprecated
-    ///
-    /// **此 setter 为 no-op**：`build()` 当前不会使用此值（HIGH-001）。
-    /// 缓存实例由 `DbPool::with_config()` 根据 `DbConfig.cache_config` 自动创建。
-    #[deprecated(
-        since = "0.3.0",
-        note = "DbPoolBuilder::build() 静默丢弃此值；缓存由 DbPool::with_config() 根据 DbConfig.cache_config 自动创建"
-    )]
-    #[cfg(feature = "cache")]
-    pub fn with_oxcache(mut self, cache: Arc<Cache<String, serde_json::Value>>) -> Self {
-        self.cache = Some(cache);
         self
     }
 
@@ -388,30 +334,6 @@ mod tests {
             .await
             .expect("should build pool");
         assert_eq!(pool.config().pool_config.max_connections, 15);
-    }
-
-    #[cfg(feature = "permission")]
-    #[test]
-    #[allow(deprecated)]
-    fn test_builder_permission_config_deprecated() {
-        let perm_config = crate::access::PermissionConfig::default();
-        let builder = DbPoolBuilder::new().permission_config(perm_config);
-        assert!(builder.permission_config.is_some());
-    }
-
-    #[cfg(feature = "cache")]
-    #[tokio::test]
-    #[allow(deprecated)]
-    async fn test_builder_with_oxcache_deprecated() {
-        let cache = Arc::new(
-            Cache::builder()
-                .capacity(10)
-                .build()
-                .await
-                .expect("should create cache"),
-        );
-        let builder = DbPoolBuilder::new().with_oxcache(cache);
-        assert!(builder.cache.is_some());
     }
 
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]

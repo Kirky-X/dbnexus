@@ -267,7 +267,7 @@ fn default_sensitive_fields() -> Vec<String> {
 /// # Returns
 ///
 /// 脱敏后的 JSON 值
-fn sanitize_json_object(value: &serde_json::Value, sensitive_fields: &[String], depth: usize) -> serde_json::Value {
+fn sanitize_json_object(value: serde_json::Value, sensitive_fields: &[String], depth: usize) -> serde_json::Value {
     // 防止栈溢出：超过最大深度时返回占位符
     if depth > MAX_SANITIZE_DEPTH {
         return serde_json::Value::String("[MAX_DEPTH_EXCEEDED]".to_string());
@@ -275,7 +275,7 @@ fn sanitize_json_object(value: &serde_json::Value, sensitive_fields: &[String], 
 
     match value {
         serde_json::Value::Object(obj) => {
-            let mut new_obj = serde_json::Map::new();
+            let mut new_obj = serde_json::Map::with_capacity(obj.len());
             for (key, val) in obj {
                 // 检查当前字段名是否为敏感字段（不区分大小写）
                 let is_sensitive = sensitive_fields
@@ -284,24 +284,24 @@ fn sanitize_json_object(value: &serde_json::Value, sensitive_fields: &[String], 
 
                 if is_sensitive {
                     // 敏感字段直接替换为 [REDACTED]
-                    new_obj.insert(key.clone(), serde_json::Value::String("[REDACTED]".to_string()));
+                    new_obj.insert(key, serde_json::Value::String("[REDACTED]".to_string()));
                 } else {
-                    // 非敏感字段递归处理
-                    new_obj.insert(key.clone(), sanitize_json_object(val, sensitive_fields, depth + 1));
+                    // 非敏感字段递归处理（move val，避免 clone）
+                    new_obj.insert(key, sanitize_json_object(val, sensitive_fields, depth + 1));
                 }
             }
             serde_json::Value::Object(new_obj)
         }
         serde_json::Value::Array(arr) => {
-            // 数组中的每个元素递归处理
+            // 数组中的每个元素递归处理（move 每个元素，避免 clone）
             serde_json::Value::Array(
-                arr.iter()
+                arr.into_iter()
                     .map(|v| sanitize_json_object(v, sensitive_fields, depth + 1))
                     .collect(),
             )
         }
-        // 其他类型（字符串、数字、布尔、null）直接克隆
-        other => other.clone(),
+        // 其他类型（字符串、数字、布尔、null）直接返回（已拥有所有权，无需 clone）
+        other => other,
     }
 }
 
@@ -328,7 +328,7 @@ impl AuditEvent {
 
         // 尝试解析 JSON
         if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
-            let sanitized = sanitize_json_object(&json_value, &fields, 0);
+            let sanitized = sanitize_json_object(json_value, &fields, 0);
             serde_json::to_string(&sanitized).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string())
         } else {
             // 非 JSON 值，检查是否包含敏感关键字
