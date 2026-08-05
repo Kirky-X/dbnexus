@@ -279,19 +279,6 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ## <span id="feature-flags">🎨 特性标志</span>
 
-### ⚠️ v0.2.0 破坏性变更
-
-**所有用户必须更新 Cargo.toml：**
-
-**v0.1.x → v0.2.0 是破坏性变更。** `cache` feature 不再默认启用，多个 feature 现在显式要求 `cache` 必须启用。
-
-## ⚠️ v0.4.0 破坏性变更
-
-- `default` feature 现在为空数组 `[]`（之前包含 7 个特性）
-- 用户必须显式启用 runtime + 数据库驱动 + 所需功能特性
-- 推荐使用 `default-no-db` 聚合特性 + 显式数据库驱动，例如：
-  `default-features = false, features = ["default-no-db", "sqlite"]`
-
 ### 数据库驱动（选择一个）
 
 ```toml
