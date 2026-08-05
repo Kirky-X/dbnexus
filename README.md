@@ -5,7 +5,7 @@
 <img src="docs/image/logo/logo.png" alt="DBNexus Logo" width="200" style="margin-bottom: 16px;">
 
 <p>
-  <a href="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml"><img src="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg" alt="CI 状态" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/v/dbnexus.svg" alt="版本" style="display:inline;margin:0 4px;"></a> <a href="https://docs.rs/dbnexus"><img src="https://docs.rs/dbnexus/badge.svg" alt="文档" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/d/dbnexus.svg" alt="下载量" style="display:inline;margin:0 4px;"></a> <a href="https://github.com/Kirky-X/dbnexus/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/dbnexus.svg" alt="许可证" style="display:inline;margin:0 4px;"></a> <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+" style="display:inline;margin:0 4px;"></a>
+  <a href="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml"><img src="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg" alt="CI 状态" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/v/dbnexus.svg" alt="版本" style="display:inline;margin:0 4px;"></a> <a href="https://docs.rs/dbnexus"><img src="https://docs.rs/dbnexus/badge.svg" alt="文档" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/d/dbnexus.svg" alt="下载量" style="display:inline;margin:0 4px;"></a> <a href="https://github.com/Kirky-X/dbnexus/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/dbnexus.svg" alt="许可证" style="display:inline;margin:0 4px;"></a> <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.91+-orange.svg" alt="Rust 1.91+" style="display:inline;margin:0 4px;"></a>
 </p>
 
 中文 | [English](./README_EN.md)
@@ -130,8 +130,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🌐 | **全局索引** | 跨分片查询（`global-index` 特性） |
 | 💾 | **缓存** | oxcache 缓存（内部 moka L1 后端）（`cache` 特性） |
 | 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
-| 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性，0.3.0 新增） |
+| 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性） |
 | 🌍 | **国际化** | ICU4X locale 感知格式化（核心特性，始终可用） |
+| 🔁 | **重试机制** | 指数退避 + 幂等判断（`retry` 特性） |
+| 🔄 | **故障转移** | CircuitBreaker 状态机（`failover` 特性） |
+| 🌐 | **副本路由** | 读写分离（`replica-routing` 特性） |
+| 📡 | **Scatter-Gather** | 跨分片聚合查询（`scatter-gather` 特性） |
+| 🧩 | **Saga 事务** | 分布式事务编排（`saga` 特性） |
+| 🔢 | **分布式 ID** | Snowflake ID 生成（`distributed-id` 特性） |
 
 </td>
 </tr>
@@ -145,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
 | <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | 单体应用 |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration` | 5 个聚合 feature（手动添加数据库驱动和其他特性） |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `distributed-capabilities` | 6 个聚合 feature（手动添加数据库驱动和其他特性） |
 
 ---
 
@@ -157,7 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.4", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
+dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
@@ -290,22 +296,22 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # SQLite（嵌入式）
-dbnexus = { version = "0.4", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
+dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.4", features = ["postgres"] }
+dbnexus = { version = "0.5", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.4", features = ["mysql"] }
+dbnexus = { version = "0.5", features = ["mysql"] }
 
 # DuckDB（嵌入式分析型数据库，0.3.0 新增）
-dbnexus = { version = "0.4", features = ["duckdb"] }
+dbnexus = { version = "0.5", features = ["duckdb"] }
 
 # Ladybug（嵌入式图数据库，0.4.0 新增）
-dbnexus = { version = "0.4", features = ["ladybug"] }
+dbnexus = { version = "0.5", features = ["ladybug"] }
 
 # Neo4j（图数据库服务器，0.4.0 新增）
-dbnexus = { version = "0.4", features = ["neo4j"] }
+dbnexus = { version = "0.5", features = ["neo4j"] }
 ```
 
 ### 协议兼容数据库
@@ -324,13 +330,13 @@ DBNexus 通过标准协议支持以下兼容数据库（无需额外特性，使
 
 ```toml
 # Tokio with RustLS（默认）
-dbnexus = { version = "0.4", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.5", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.4", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.5", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.4", features = ["runtime-async-std"] }
+dbnexus = { version = "0.5", features = ["runtime-async-std"] }
 ```
 
 ### 可选功能
@@ -338,16 +344,16 @@ dbnexus = { version = "0.4", features = ["runtime-async-std"] }
 ```toml
 # 核心功能
 # 权限控制（自动启用 sql-parser + yaml + cache 特性，强制依赖 sql-parser 防 SQL 注入）
-dbnexus = { version = "0.4", features = ["permission"] }
+dbnexus = { version = "0.5", features = ["permission"] }
 
 # SQL 解析（自动启用 cache 特性）
-dbnexus = { version = "0.4", features = ["sql-parser"] }
+dbnexus = { version = "0.5", features = ["sql-parser"] }
 
 # 过程宏
-dbnexus = { version = "0.4", features = ["macros"] }
+dbnexus = { version = "0.5", features = ["macros"] }
 
 # 企业级功能
-dbnexus = { version = "0.4", features = [
+dbnexus = { version = "0.5", features = [
     "metrics",          # Prometheus 指标
     "tracing",          # 分布式追踪
     "audit",            # 审计日志
@@ -355,12 +361,13 @@ dbnexus = { version = "0.4", features = [
     "sharding",         # 数据分片
     "global-index",     # 跨分片全局索引
     "permission-engine", # 高级权限引擎
-    "authentication"   # JWT 认证 + 密码强度验证（0.3.0 新增）
+    "authentication",   # JWT 认证 + 密码强度验证
+    "distributed-capabilities" # 分布式能力聚合（retry/failover/saga/scatter-gather 等）
     # i18n 已为核心特性，始终可用，无需显式启用
 ] }
 
 # 配置
-dbnexus = { version = "0.4", features = [
+dbnexus = { version = "0.5", features = [
     "yaml",            # YAML 配置支持
     "config-toml",     # TOML 配置支持
     "config-env",      # 环境变量（默认）
@@ -568,30 +575,11 @@ DBNexus 在设计时就考虑了安全性：
 </div>
 
 ```bash
-# SQLite 测试
-cargo test --features sqlite
+# 运行全部测试
+cargo test --all-features
 
-# PostgreSQL 测试
-cargo test --features postgres
-
-# MySQL 测试
-cargo test --features mysql
-
-# 所有测试（需要 Docker）
-make test-all
-```
-
-### 使用 Docker
-
-```bash
-# 启动数据库
-make docker-up
-
-# 运行所有测试
-make test-all
-
-# 停止数据库
-make docker-down
+# 运行特定数据库测试（需要 Docker 环境）
+cargo test --features "runtime-tokio-rustls postgres"
 ```
 
 ---
