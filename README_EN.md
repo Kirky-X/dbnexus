@@ -27,7 +27,7 @@
   </a>
   <!-- Rust Version -->
   <a href="https://www.rust-lang.org/">
-    <img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+" style="display:inline;margin:0 4px;">
+    <img src="https://img.shields.io/badge/rust-1.91+-orange.svg" alt="Rust 1.91+" style="display:inline;margin:0 4px;">
   </a>
 </p>
 
@@ -105,6 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [🔒 Security](#security)
 - [🧪 Testing](#testing)
 - [🤝 Contributing](#contributing)
+- [📋 Changelog](#changelog)
 - [📄 License](#license)
 - [🙏 Acknowledgments](#acknowledgments)
 
@@ -152,8 +153,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🌐 | **Global Index** | Cross-shard queries (`global-index` feature) |
 | 💾 | **Caching** | oxcache cache (moka L1 backend internally) (`cache` feature) |
 | 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
-| 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature, new in 0.3.0) |
+| 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature) |
 | 🌍 | **Internationalization** | ICU4X locale-aware formatting (core feature, always available) |
+| 🔁 | **Retry** | Exponential backoff + idempotency check (`retry` feature) |
+| 🔄 | **Failover** | CircuitBreaker state machine (`failover` feature) |
+| 🌐 | **Replica Routing** | Read/write splitting (`replica-routing` feature) |
+| 📡 | **Scatter-Gather** | Cross-shard aggregate queries (`scatter-gather` feature) |
+| 🧩 | **Saga Transactions** | Distributed transaction orchestration (`saga` feature) |
+| 🔢 | **Distributed ID** | Snowflake ID generation (`distributed-id` feature) |
 
 </td>
 </tr>
@@ -167,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | <span style="color:#1E40AF; padding:4px 8px; border-radius:4px;">microservice</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
 | <span style="color:#7C3AED; padding:4px 8px; border-radius:4px;">monolith</span> | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability` | Monolithic application |
 | <span style="color:#991B1B; padding:4px 8px; border-radius:4px;">enterprise</span> | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration` | 5 aggregate features (manually add database drivers and other features) |
+| <span style="color:#64748B; padding:4px 8px; border-radius:4px;">all-optional</span> | `cache`, `observability`, `data-management`, `security`, `migration`, `distributed-capabilities` | 6 aggregate features (manually add database drivers and other features) |
 
 ---
 
@@ -179,7 +186,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.4", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
+dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
@@ -311,22 +318,22 @@ Model::find_all(&session).await?; // Error: Permission denied
 
 ```toml
 # SQLite (default, embedded)
-dbnexus = { version = "0.4", features = ["sqlite"] }
+dbnexus = { version = "0.5", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.4", features = ["postgres"] }
+dbnexus = { version = "0.5", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.4", features = ["mysql"] }
+dbnexus = { version = "0.5", features = ["mysql"] }
 
 # DuckDB (embedded analytical database, new in 0.3.0)
-dbnexus = { version = "0.4", features = ["duckdb"] }
+dbnexus = { version = "0.5", features = ["duckdb"] }
 
 # Ladybug (embedded graph database, new in 0.4.0)
-dbnexus = { version = "0.4", features = ["ladybug"] }
+dbnexus = { version = "0.5", features = ["ladybug"] }
 
 # Neo4j (graph database server, new in 0.4.0)
-dbnexus = { version = "0.4", features = ["neo4j"] }
+dbnexus = { version = "0.5", features = ["neo4j"] }
 ```
 
 ### Protocol-Compatible Databases
@@ -345,58 +352,58 @@ DBNexus supports the following protocol-compatible databases via standard protoc
 
 ```toml
 # Tokio with RustLS (default)
-dbnexus = { version = "0.4", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.5", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.4", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.5", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.4", features = ["runtime-async-std"] }
+dbnexus = { version = "0.5", features = ["runtime-async-std"] }
 ```
 
 ### Core Features
 
 ```toml
 # Permission control (auto-enables sql-parser + yaml + cache features; sql-parser is mandatory to prevent SQL injection bypass)
-dbnexus = { version = "0.4", features = ["permission"] }
+dbnexus = { version = "0.5", features = ["permission"] }
 
 # SQL parsing (auto-enables cache feature)
-dbnexus = { version = "0.4", features = ["sql-parser"] }
+dbnexus = { version = "0.5", features = ["sql-parser"] }
 
 # Procedural macros
-dbnexus = { version = "0.4", features = ["macros"] }
+dbnexus = { version = "0.5", features = ["macros"] }
 ```
 
 ### Using Presets (Recommended)
 
 ```toml
 # Embedded/Edge devices (minimal)
-dbnexus = { version = "0.4", features = ["embedded"] }
+dbnexus = { version = "0.5", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.4", features = ["microservice"] }
+dbnexus = { version = "0.5", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.4", features = ["monolith"] }
+dbnexus = { version = "0.5", features = ["monolith"] }
 
 # Enterprise (all features)
-dbnexus = { version = "0.4", features = ["enterprise"] }
+dbnexus = { version = "0.5", features = ["enterprise"] }
 ```
 
 ### Optional Features
 
 ```toml
 # Observability (metrics + tracing + health-check)
-dbnexus = { version = "0.4", features = ["observability"] }
+dbnexus = { version = "0.5", features = ["observability"] }
 
 # Data management (migration + sharding + global-index)
-dbnexus = { version = "0.4", features = ["data-management"] }
+dbnexus = { version = "0.5", features = ["data-management"] }
 
 # Security (audit + permission-engine)
-dbnexus = { version = "0.4", features = ["security"] }
+dbnexus = { version = "0.5", features = ["security"] }
 
 # Individual features
-dbnexus = { version = "0.4", features = [
+dbnexus = { version = "0.5", features = [
     "metrics",          # Prometheus metrics
     "tracing",          # Distributed tracing
     "audit",            # Audit logging
@@ -404,7 +411,8 @@ dbnexus = { version = "0.4", features = [
     "sharding",         # Data sharding
     "global-index",     # Cross-shard global index
     "permission-engine", # Advanced permission engine (requires cache)
-    "authentication"   # JWT authentication + password strength validation (new in 0.3.0)
+    "authentication",   # JWT authentication + password strength validation
+    "distributed-capabilities" # Distributed capabilities aggregate (retry/failover/saga/scatter-gather etc.)
     # i18n is now a core feature, always available without explicit enabling
 ] }
 ```
@@ -412,7 +420,7 @@ dbnexus = { version = "0.4", features = [
 ### Configuration
 
 ```toml
-dbnexus = { version = "0.4", features = [
+dbnexus = { version = "0.5", features = [
     "yaml",            # YAML config support
     "config-toml",     # TOML config support
     "config-env",      # Environment variables (default)
@@ -622,30 +630,11 @@ DBNexus is built with security in mind:
 </div>
 
 ```bash
-# SQLite tests
-cargo test --features sqlite
-
-# PostgreSQL tests
-cargo test --features postgres
-
-# MySQL tests
-cargo test --features mysql
-
-# All tests (requires Docker)
-make test-all
-```
-
-### Using Docker
-
-```bash
-# Start databases
-make docker-up
-
 # Run all tests
-make test-all
+cargo test --all-features
 
-# Stop databases
-make docker-down
+# Run tests for a specific database (requires Docker environment)
+cargo test --features "runtime-tokio-rustls postgres"
 ```
 
 ---
@@ -674,6 +663,12 @@ cargo test --all-features
 # Run linter
 cargo clippy --all-features
 ```
+
+---
+
+## <span id="changelog">📋 Changelog</span>
+
+See [CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
