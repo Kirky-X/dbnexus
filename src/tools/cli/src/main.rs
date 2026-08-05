@@ -5,10 +5,10 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Parser, Subcommand};
+use dbnexus::MigrationExecutor;
 use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::i18n;
 use dbnexus::{DbError, DbPool, DbResult};
-use dbnexus::{MigrationExecutor, MigrationFile, MigrationFileParser};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -805,88 +805,6 @@ fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<Di
         up: "-- 自动生成的 UP SQL 请手动编辑".to_string(),
         down: "-- 自动生成的 DOWN SQL 请手动编辑".to_string(),
     })
-}
-
-/// 解析并应用迁移
-#[allow(dead_code)]
-async fn parse_and_apply_migration(
-    session: &mut dbnexus::Session,
-    executor: &mut MigrationExecutor,
-    content: &str,
-    version: u32,
-) -> DbResult<()> {
-    // 解析迁移内容
-    let (description, _full_content) =
-        MigrationFileParser::parse_migration_file(content).unwrap_or(("Migration".to_string(), content.to_string()));
-
-    // 提取 UP SQL（-- UP 到 -- DOWN 之间）
-    let up_sql = extract_sql_section(content, "UP")?;
-
-    // 验证并执行 UP SQL（SQL 注入防护）
-    if !up_sql.trim().is_empty() {
-        // 对于迁移场景，我们信任迁移文件中的 SQL，只进行基本的安全检查
-
-        // 检测危险操作
-        let sql_upper = up_sql.trim().to_uppercase();
-        let dangerous_patterns = [("DROP DATABASE", "DROP DATABASE"), ("TRUNCATE TABLE", "TRUNCATE TABLE")];
-        for (pattern, description) in &dangerous_patterns {
-            if sql_upper.contains(pattern) {
-                return Err(DbError::Migration(format!(
-                    "Forbidden pattern in migration SQL: {} ({})",
-                    pattern, description
-                )));
-            }
-        }
-
-        // 直接执行 SQL
-        session.execute_raw(&up_sql).await?;
-    }
-
-    let file_path = format!("migration_v{}.sql", version);
-    let migration_file = MigrationFile::new(
-        version,
-        description,
-        std::path::PathBuf::from(&file_path),
-        String::new(), // SQL 已在上面执行，content 为空
-    );
-    executor.apply_migration_file_public(&migration_file).await?;
-
-    Ok(())
-}
-
-/// 提取 SQL 部分
-#[allow(dead_code)]
-fn extract_sql_section(content: &str, section: &str) -> Result<String, DbError> {
-    let section_start_pattern = format!("-- {}:", section);
-    let section_end_pattern = format!("-- {}", if section == "UP" { "DOWN" } else { "UP" });
-
-    // 查找 section 开始标记（-- UP: 或 -- DOWN:）
-    let start_match = content.find(&section_start_pattern);
-    // 查找 section 结束标记
-    let end_match = content.find(&section_end_pattern);
-
-    if let Some(start_idx) = start_match {
-        // 跳过一整行：找到换行符位置
-        let line_end = content[start_idx..]
-            .find('\n')
-            .map(|offset| start_idx + offset + 1)  // +1 包含换行符
-            .unwrap_or(start_idx + section_start_pattern.len());
-
-        if let Some(end_idx) = end_match {
-            if end_idx > start_idx {
-                // 提取 section 开始换行符之后，到 section 结束标记之前的内容
-                Ok(content[line_end..end_idx].trim().to_string())
-            } else {
-                // 没有结束标记，提取到文件末尾
-                Ok(content[line_end..].trim().to_string())
-            }
-        } else {
-            // 没有结束标记，提取到文件末尾
-            Ok(content[line_end..].trim().to_string())
-        }
-    } else {
-        Ok(String::new())
-    }
 }
 
 /// 列出所有迁移文件
