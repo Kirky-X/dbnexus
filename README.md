@@ -8,7 +8,7 @@
   <a href="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml"><img src="https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg" alt="CI 状态" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/v/dbnexus.svg" alt="版本" style="display:inline;margin:0 4px;"></a> <a href="https://docs.rs/dbnexus"><img src="https://docs.rs/dbnexus/badge.svg" alt="文档" style="display:inline;margin:0 4px;"></a> <a href="https://crates.io/crates/dbnexus"><img src="https://img.shields.io/crates/d/dbnexus.svg" alt="下载量" style="display:inline;margin:0 4px;"></a> <a href="https://github.com/Kirky-X/dbnexus/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/dbnexus.svg" alt="许可证" style="display:inline;margin:0 4px;"></a> <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.85+-orange.svg" alt="Rust 1.85+" style="display:inline;margin:0 4px;"></a>
 </p>
 
-[English](./README_EN.md)
+中文 | [English](./README_EN.md)
 
 <p align="center">
   <strong>企业级 Rust 数据库抽象层</strong>
