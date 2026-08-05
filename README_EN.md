@@ -31,7 +31,7 @@
   </a>
 </p>
 
-[中文](./README.md)
+[中文](./README.md) | English
 
 <p align="center">
   <strong>Enterprise-grade Database Abstraction Layer for Rust</strong>
