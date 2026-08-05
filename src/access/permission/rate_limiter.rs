@@ -145,7 +145,7 @@ impl TokenBucket {
             // 尝试更新 last_refill 时间戳（CAS）
             if self
                 .last_refill
-                .compare_exchange(last_refill, now_ms, Ordering::SeqCst, Ordering::Relaxed)
+                .compare_exchange(last_refill, now_ms, Ordering::AcqRel, Ordering::Relaxed)
                 .is_ok()
             {
                 // 成功更新时间戳，现在添加令牌
@@ -156,7 +156,7 @@ impl TokenBucket {
 
                     if self
                         .tokens
-                        .compare_exchange(current_tokens, new_tokens, Ordering::SeqCst, Ordering::Relaxed)
+                        .compare_exchange(current_tokens, new_tokens, Ordering::AcqRel, Ordering::Relaxed)
                         .is_ok()
                     {
                         return;
