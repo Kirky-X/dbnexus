@@ -625,7 +625,7 @@ cargo clippy --all-features
 
 ## <span id="changelog">📋 更新日志</span>
 
-详见 [CHANGELOG.md](CHANGELOG.md)。
+详见 [CHANGELOG.md](docs/CHANGELOG.md)。
 
 ---
 
