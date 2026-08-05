@@ -38,15 +38,6 @@ fn make_adapter(capacity: u64) -> OxcacheDbCacheAdapter {
     OxcacheDbCacheAdapter::new(cache)
 }
 
-/// 打印操作结果
-#[allow(dead_code)]
-fn print_result<T: std::fmt::Debug>(op: &str, result: &Result<T, DbError>) {
-    match result {
-        Ok(val) => println!("  ✓ {} → {:?}", op, val),
-        Err(e) => println!("  ✗ {} → 错误: {}", op, e),
-    }
-}
-
 // ============================================
 // 主函数
 // ============================================

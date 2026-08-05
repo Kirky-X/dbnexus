@@ -24,10 +24,6 @@ pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 #[cfg(feature = "migration")]
 pub(crate) use crate::database::MigrationExecutor;
 
-// 导入 MetricsCollectorTrait
-#[cfg(feature = "metrics")]
-use crate::observability::MetricsCollectorTrait;
-
 // 导入 Sea-ORM 的事务 trait 和连接 trait
 pub use sea_orm::{ConnectionTrait, TransactionTrait};
 
@@ -37,9 +33,6 @@ use sea_orm::ExecResult;
 
 #[cfg(any(feature = "metrics", feature = "cache", feature = "oxcache-integration"))]
 use std::sync::Arc;
-
-#[cfg(feature = "cache")]
-use oxcache::Cache;
 
 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
 use crate::domain::DbCacheProvider;
@@ -153,9 +146,6 @@ pub trait DatabaseSession: Send + Sync {
 // DbPoolBuilder - 依赖注入构造器
 // ============================================================================
 
-#[cfg(feature = "permission")]
-use crate::access::PermissionConfig;
-
 /// DbPool 构造器
 ///
 /// 支持部分依赖注入的流式 API 构建模式。
@@ -182,17 +172,8 @@ pub struct DbPoolBuilder {
     url: Option<String>,
     /// 数据库配置（可选，如果提供了 url 则自动创建）
     config: Option<DbConfig>,
-    /// 指标收集器（可选）
-    #[cfg(feature = "metrics")]
-    metrics_collector: Option<Arc<dyn MetricsCollectorTrait>>,
-    /// 权限配置（可选）
-    #[cfg(feature = "permission")]
-    permission_config: Option<PermissionConfig>,
     /// 管理员角色名称（可选，默认使用配置中的值）
     admin_role: Option<String>,
-    /// 缓存实例（用于查询结果缓存）
-    #[cfg(feature = "cache")]
-    cache: Option<Arc<Cache<String, serde_json::Value>>>,
     /// 缓存提供者（DI 注入点，优先于内部缓存）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
