@@ -128,7 +128,7 @@ cache = ["dep:oxcache"]  # 缓存功能（基于 oxcache）
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
 oxcache-integration = ["dep:oxcache"]
-kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observability"]
+kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", ]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
@@ -248,11 +248,11 @@ arc-swap = { version = "1.7", optional = true }
 # Lock-free connection pool queue (crossbeam-deque)
 crossbeam-deque = { version = "0.8", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
-oxcache = { version = "0.4", optional = true }
+oxcache = { path = "../oxcache", version = "0.4", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
-trait-kit = { version = "0.4", features = ["async"], optional = true, default-features = false }
+trait-kit = { path = "../trait-kit", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
