@@ -2543,6 +2543,7 @@ mod session_basic_tests {
         assert!(!super::is_invalid_table_name("\"quoted\".\"table\""));
     }
 
+    #[cfg(feature = "migration")]
     #[tokio::test]
     async fn test_create_migration_executor() {
         let (_pool, session) = make_test_session("admin").await;

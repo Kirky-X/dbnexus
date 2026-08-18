@@ -369,7 +369,7 @@ mod tests {
         assert!(builder.cache_provider.is_some());
     }
 
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(all(any(feature = "cache", feature = "oxcache-integration"), feature = "sqlite"))]
     #[tokio::test]
     async fn test_builder_build_with_cache_provider() {
         use crate::foundation::DbError;
