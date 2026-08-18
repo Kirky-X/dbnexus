@@ -130,3 +130,6 @@ CODEIUM.md
 .codeium/
 .github/copilot/
 strix_runs
+
+# examples build artifacts
+**/examples/target/
