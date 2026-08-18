@@ -2089,7 +2089,7 @@ mod tests {
 
     // ===== 补充测试：cache 方法, validate_role_name =====
 
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(all(any(feature = "cache", feature = "oxcache-integration"), feature = "sqlite"))]
     #[tokio::test]
     async fn test_pool_set_and_get_cache_provider() {
         use crate::foundation::DbError;
@@ -2134,7 +2134,7 @@ mod tests {
         assert!(pool.cache_provider().is_some());
     }
 
-    #[cfg(feature = "permission")]
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
     #[tokio::test]
     async fn test_validate_role_name_with_config_unknown_role() {
         use std::io::Write;
@@ -2183,7 +2183,7 @@ roles:
         let _ = std::fs::remove_file(&yaml_path);
     }
 
-    #[cfg(feature = "permission")]
+    #[cfg(all(feature = "permission", feature = "sqlite"))]
     #[tokio::test]
     async fn test_validate_role_name_no_config_unsafe_role() {
         // Without permission config, only "admin" and "system" are allowed
