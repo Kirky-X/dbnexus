@@ -5,16 +5,9 @@
 yanked = "warn"
 unmaintained = "transitive"
 ignore = [
-    # proc-macro-error2 unmaintained (RUSTSEC-2026-0173) — transitive via sea-orm-macros (sea-bae)
-    # 无安全升级路径，等待 sea-orm 生态迁移
-    "RUSTSEC-2026-0173",
-    # cxx unsound (RUSTSEC-2026-0202) — let_cxx_string! 使用未初始化值（异常安全）
-    # 不可触发证据（2026-07 核实）：
-    #   1. cxx 由 lbug(optional, ladybug feature) 传递引入；dbnexus `default = []` 不启用 ladybug
-    #   2. lbug 0.18.2 crate 源码未使用 let_cxx_string! / cxx::bridge 宏
-    #   3. 触发路径为死代码；dbnexus src/ 无任何 cxx 用法
-    # 待 cargo-deny advisory-db 同步此条后此 ignore 生效；当前 db 未收录故不报
-    "RUSTSEC-2026-0202",
+    # proc-macro-error2 (RUSTSEC-2026-0173) — 已移除该依赖（2026-08 改用 syn::Error），advisory 不再出现
+    # cxx unsound (RUSTSEC-2026-0202) — 已随 proc-macro-error2 移除而不再出现于依赖树
+    # （2026-08 移除 proc-macro-error2 后 advisory-not-detected，清理此 ignore）
     # neo4rs 传递依赖 unmaintained（2026-08 核实，均为 neo4rs → 传递引入）：
     #   RUSTSEC-2025-0012 (backoff) — neo4rs 依赖，无安全升级路径
     #   RUSTSEC-2024-0384 (instant) — backoff → instant，无安全升级路径

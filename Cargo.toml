@@ -72,6 +72,9 @@ description = "An enterprise-grade database abstraction layer for Rust with buil
 autoexamples = false
 
 [features]
+# ⚠️ 驱动互斥（严格，无逃生门）：embedded（sqlite/duckdb）与 server-side（postgres/mysql）
+# 任何混合（含 --all-features 全开）一律编译失败。多后端 crate 不适用 --all-features
+# 验证（Cargo 无 feature 互斥语法），请按驱动分组启用 features 验证。
 # Rule 6: default features 最小化 — 所有依赖通过显式 features 启用。
 # 与 oxcache/inklog/sdforge 保持一致（default = []）。
 # 使用者需显式启用 runtime + 数据库驱动 + 所需功能特性。

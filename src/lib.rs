@@ -16,7 +16,6 @@
 // ============================================================================
 
 // 规则 1：postgres 与 mysql 互斥（当未启用嵌入式数据库时，服务器端数据库不能同时启用）
-// 注意：当 sqlite 或 duckdb 也被启用时（如 --all-features 场景），允许共存以便测试
 #[cfg(all(
     not(clippy),
     feature = "postgres",
@@ -25,13 +24,13 @@
 ))]
 compile_error!("Cannot enable both 'postgres' and 'mysql' features");
 
-// 规则 2：嵌入式（sqlite/duckdb）与服务器端（postgres/mysql）不能混合
-// 注意：当全部 4 个数据库后端都启用时（如 --all-features 场景），允许共存以便测试
+// 规则 2：嵌入式（sqlite/duckdb）与服务器端（postgres/mysql）严格互斥，无逃生门。
+// 任何混合（含 --all-features 全开场景）一律编译失败——多后端 crate 不适用
+// --all-features 验证（Cargo 无 feature 互斥语法），消费方按驱动分组启用 features。
 #[cfg(all(
     not(clippy),
     any(feature = "sqlite", feature = "duckdb"),
-    any(feature = "postgres", feature = "mysql"),
-    not(all(feature = "sqlite", feature = "duckdb", feature = "postgres", feature = "mysql"))
+    any(feature = "postgres", feature = "mysql")
 ))]
 compile_error!("Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features");
 
