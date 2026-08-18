@@ -366,8 +366,7 @@ fn parse_permissions_params(
         match name.as_str() {
             "roles" => {
                 roles = extract_string_array(&value_tokens)?;
-                validate_role_names(&roles, struct_name)
-                    .map_err(|_| syn::Error::new(struct_name.span(), "Invalid role name format in permissions()"))?;
+                validate_role_names(&roles, struct_name)?;
             }
             "operations" => {
                 operations = extract_string_array(&value_tokens)?;
@@ -449,8 +448,7 @@ fn parse_audit_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Iden
             "operations" => operations = extract_string_array(&value_tokens)?,
             "roles" => {
                 roles = extract_string_array(&value_tokens)?;
-                validate_role_names(&roles, struct_name)
-                    .map_err(|_| syn::Error::new(struct_name.span(), "Invalid role name format in audit()"))?;
+                validate_role_names(&roles, struct_name)?;
             }
             _ => {
                 return Err(syn::Error::new(
@@ -1635,13 +1633,14 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 /// - 以字母或下划线开头
 /// - 只能包含字母、数字、下划线
 /// - 长度在 1-64 之间
-fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(), ()> {
+fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(), syn::Error> {
     // 角色名格式：字母/下划线开头，后跟字母、数字、下划线
-    let role_name_pattern = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$").map_err(|_| ())?;
+    let role_name_pattern = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
+        .map_err(|_| syn::Error::new(struct_name.span(), "invalid role name regex"))?;
 
     for role in roles {
         if !role_name_pattern.is_match(role) {
-            proc_macro_error2::abort!(
+            return Err(syn::Error::new_spanned(
                 struct_name,
                 format!(
                     "Invalid role name '{}'. Role names must:\n\
@@ -1651,7 +1650,7 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
                      Example valid roles: admin, user_123, _moderator",
                     role
                 ),
-            );
+            ));
         }
     }
 

@@ -383,7 +383,10 @@ mod tests {
         assert_eq!(obs.built_count(), 2);
         assert_eq!(obs.error_count(), 0);
 
-        obs.on_build_error("failing-module", &TraitKitError::MissingCapability { key: "x" });
+        obs.on_build_error(
+            "failing-module",
+            &TraitKitError::MissingCapability { key: "x".to_string() },
+        );
         assert_eq!(obs.built_count(), 2);
         assert_eq!(obs.error_count(), 1);
     }
