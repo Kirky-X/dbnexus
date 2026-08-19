@@ -239,3 +239,76 @@ async fn test_permission_check_with_auto_load() {
     let result2 = ctx.check_table_access("users", &Operation::Select).await;
     assert!(result2, "Should have permission from cache");
 }
+
+/// 回归测试：JOIN / 子查询跨表越权读取必须被拒绝
+///
+/// 历史漏洞：`execute_raw` 只对主表做权限检查，`all_table_names`（JOIN 表/子查询表）
+/// 收集后从未被用于权限判定。受限角色可 `SELECT * FROM users JOIN orders ...` 或
+/// `SELECT * FROM users WHERE id IN (SELECT ... FROM orders)` 越权读取未授权表。
+/// 修复后语句涉及的**所有**表都必须通过权限检查。
+#[tokio::test]
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
+#[allow(clippy::unwrap_used)]
+async fn test_join_and_subquery_cross_table_access_denied() {
+    use dbnexus::foundation::DbError;
+
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+
+    // admin 创建 users / orders 两张表（user 角色只有 users 的 select 权限）
+    let admin = pool.get_session("admin").await.expect("Failed to get session");
+    let users_table = "users";
+    let orders_table = "orders";
+    let _ = admin
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
+            users_table
+        ))
+        .await;
+    let _ = admin
+        .execute_raw_ddl(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, user_id INTEGER, total DECIMAL(10,2))",
+            orders_table
+        ))
+        .await;
+    drop(admin);
+
+    let user_session = pool.get_session("user").await.expect("Failed to get session");
+
+    // 直接访问有权限的表：允许
+    let ok = user_session.execute_raw("SELECT * FROM users").await;
+    assert!(ok.is_ok(), "user role should read its own table");
+
+    // JOIN 到未授权表：必须拒绝
+    let joined = user_session
+        .execute_raw("SELECT * FROM users JOIN orders ON users.id = orders.user_id")
+        .await;
+    assert!(
+        matches!(joined, Err(DbError::Permission(_))),
+        "JOIN to unauthorized table must be denied, got: {:?}",
+        joined.err()
+    );
+
+    // WHERE 子查询引用未授权表：必须拒绝
+    let subquery = user_session
+        .execute_raw("SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)")
+        .await;
+    assert!(
+        matches!(subquery, Err(DbError::Permission(_))),
+        "subquery on unauthorized table must be denied, got: {:?}",
+        subquery.err()
+    );
+
+    // EXISTS 子查询引用未授权表：必须拒绝
+    let exists = user_session
+        .execute_raw("SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)")
+        .await;
+    assert!(
+        matches!(exists, Err(DbError::Permission(_))),
+        "EXISTS subquery on unauthorized table must be denied, got: {:?}",
+        exists.err()
+    );
+}
