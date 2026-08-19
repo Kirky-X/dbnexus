@@ -21,7 +21,7 @@ use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::is_ddl_operation;
 #[cfg(feature = "sql-parser")]
-use crate::access::{DdlGuard, DdlValidationResult};
+use crate::access::{DdlGuard, DdlValidationResult, SqlOperationType};
 #[cfg(feature = "permission")]
 use crate::access::{PermissionAction, PermissionContext};
 use crate::foundation::{DbError, DbResult};
@@ -444,27 +444,47 @@ impl Session {
             {
                 // 解析 SQL 操作类型和表名（使用全局共享单例，避免重复创建 parser + 缓存）
                 let parser = SqlParser::shared().await;
-                match parser.parse_operation_async(sql).await {
-                    Ok(Some((table_name, action))) => {
-                        if table_name.is_empty() || is_invalid_table_name(&table_name) {
+                match parser.parse_single(sql).await {
+                    Ok(parsed) => {
+                        let action = match parsed.operation_type {
+                            SqlOperationType::Select => PermissionAction::Select,
+                            SqlOperationType::Insert => PermissionAction::Insert,
+                            SqlOperationType::Update => PermissionAction::Update,
+                            SqlOperationType::Delete => PermissionAction::Delete,
+                            // 解析成功但是不支持的语句类型（DDL/DCL/Transaction）或没有表名的语句
+                            // 这些情况需要拒绝执行以确保安全
+                            _ => {
+                                return Err(DbError::Permission(
+                                    "SQL statement requires a valid table name for permission checking".to_string(),
+                                ));
+                            }
+                        };
+
+                        if parsed.all_table_names.is_empty() {
                             return Err(DbError::Permission(
                                 "Failed to extract table name for permission checking".to_string(),
                             ));
                         }
-                        // 检查权限
+                        for table in &parsed.all_table_names {
+                            if table.is_empty() || is_invalid_table_name(table) {
+                                return Err(DbError::Permission(
+                                    "Failed to extract table name for permission checking".to_string(),
+                                ));
+                            }
+                        }
+
                         // Admin 角色绕过权限检查
                         if self.role == self.pool_inner.admin_role {
                             // admin 有完全权限，跳过检查
-                        } else if !self.permission_ctx.check_table_access(&table_name, &action).await {
-                            return Err(permission_denied(&action, &table_name));
+                        } else {
+                            // 对语句涉及的所有表逐一检查权限
+                            // （含 JOIN/子查询表，防止通过关联表越权读写未授权数据）
+                            for table in &parsed.all_table_names {
+                                if !self.permission_ctx.check_table_access(table, &action).await {
+                                    return Err(permission_denied(&action, table));
+                                }
+                            }
                         }
-                    }
-                    Ok(None) => {
-                        // 解析成功但是不支持的语句类型（DDL/DCL/Transaction）或没有表名的语句
-                        // 这些情况需要拒绝执行以确保安全
-                        return Err(DbError::Permission(
-                            "SQL statement requires a valid table name for permission checking".to_string(),
-                        ));
                     }
                     Err(_) => {
                         // 解析失败，拒绝执行
