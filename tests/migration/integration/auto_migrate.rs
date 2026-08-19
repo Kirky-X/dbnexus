@@ -124,6 +124,9 @@ DROP TABLE orders_{table_suffix};
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
 
+    // 清理本测试将使用的迁移版本记录（持久化 postgres/mysql 测试库跨运行隔离）
+    common::cleanup_migration_versions(&pool, &[base_version, next_version]).await;
+
     // 运行迁移（不手动删除表，让迁移系统处理）
     let migrations = pool
         .run_migrations(temp_dir.path())
@@ -333,6 +336,9 @@ DROP TABLE table_2_{table_suffix};
     };
 
     let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+
+    // 清理本测试将使用的迁移版本记录（持久化 postgres/mysql 测试库跨运行隔离）
+    common::cleanup_migration_versions(&pool, &[v1, v2, v3]).await;
 
     // 运行迁移（不手动删除表，让迁移系统处理）
     let applied = pool
