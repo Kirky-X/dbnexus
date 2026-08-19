@@ -863,32 +863,147 @@ fn extract_table_from_delete(delete: &Delete) -> Option<String> {
 }
 
 fn extract_table_from_query(query: &Query) -> (Option<String>, Vec<String>) {
+    let mut all_tables = Vec::new();
+    extract_query_tables(query, &mut all_tables);
+    let primary = all_tables.first().cloned();
+    (primary, all_tables)
+}
+
+/// 递归提取 Query 中所有被引用的表（FROM/JOIN/派生表/WHERE/HAVING 子查询）
+///
+/// 供权限检查使用：只检查主表会让受限角色通过 JOIN/子查询越权访问未授权表，
+/// 因此必须收集语句涉及的**全部**表。
+fn extract_query_tables(query: &Query, out: &mut Vec<String>) {
     let SetExpr::Select(select) = query.body.as_ref() else {
-        return (None, Vec::new());
+        return;
     };
 
-    if select.from.is_empty() {
-        return (None, Vec::new());
-    }
-
-    let mut all_tables = Vec::new();
-
-    // 提取 FROM 子句中所有表（包括 JOIN）
     for from_item in &select.from {
-        // 主表
-        if let Some(name) = extract_table_name_from_table_with_joins(from_item) {
-            all_tables.push(name);
+        // 主表 / JOIN 表（含派生表内层子查询）
+        match &from_item.relation {
+            sqlparser::ast::TableFactor::Table { name, .. } => out.push(name.to_string()),
+            sqlparser::ast::TableFactor::Derived { subquery, .. } => {
+                extract_query_tables(subquery, out);
+            }
+            _ => {}
         }
-        // JOIN 表
         for join in &from_item.joins {
-            if let sqlparser::ast::TableFactor::Table { name, .. } = &join.relation {
-                all_tables.push(name.to_string());
+            match &join.relation {
+                sqlparser::ast::TableFactor::Table { name, .. } => out.push(name.to_string()),
+                sqlparser::ast::TableFactor::Derived { subquery, .. } => {
+                    extract_query_tables(subquery, out);
+                }
+                _ => {}
             }
         }
     }
 
-    let primary = all_tables.first().cloned();
-    (primary, all_tables)
+    // WHERE / HAVING / PREWHERE / QUALIFY 中的子查询
+    for expr in [&select.prewhere, &select.selection, &select.having, &select.qualify]
+        .into_iter()
+        .flatten()
+    {
+        extract_subquery_tables(expr, out);
+    }
+}
+
+/// 递归遍历表达式，提取其中嵌套子查询引用的表
+fn extract_subquery_tables(expr: &sqlparser::ast::Expr, out: &mut Vec<String>) {
+    use sqlparser::ast::{Expr, FunctionArg, FunctionArgExpr};
+    match expr {
+        Expr::Subquery(q) | Expr::InSubquery { subquery: q, .. } | Expr::Exists { subquery: q, .. } => {
+            extract_query_tables(q, out);
+        }
+        Expr::Nested(e) => extract_subquery_tables(e, out),
+        Expr::UnaryOp { expr: e, .. } => extract_subquery_tables(e, out),
+        Expr::BinaryOp { left, right, .. } => {
+            extract_subquery_tables(left, out);
+            extract_subquery_tables(right, out);
+        }
+        Expr::IsDistinctFrom(a, b) | Expr::IsNotDistinctFrom(a, b) => {
+            extract_subquery_tables(a, out);
+            extract_subquery_tables(b, out);
+        }
+        Expr::Between { expr: e, low, high, .. } => {
+            extract_subquery_tables(e, out);
+            extract_subquery_tables(low, out);
+            extract_subquery_tables(high, out);
+        }
+        Expr::InList { expr: e, list, .. } => {
+            extract_subquery_tables(e, out);
+            for item in list {
+                extract_subquery_tables(item, out);
+            }
+        }
+        Expr::InUnnest {
+            expr: e, array_expr, ..
+        } => {
+            extract_subquery_tables(e, out);
+            extract_subquery_tables(array_expr, out);
+        }
+        Expr::AnyOp { left, right, .. } | Expr::AllOp { left, right, .. } => {
+            extract_subquery_tables(left, out);
+            extract_subquery_tables(right, out);
+        }
+        Expr::Like { expr: e, pattern, .. } | Expr::ILike { expr: e, pattern, .. } => {
+            extract_subquery_tables(e, out);
+            extract_subquery_tables(pattern, out);
+        }
+        Expr::SimilarTo { expr: e, pattern, .. } => {
+            extract_subquery_tables(e, out);
+            extract_subquery_tables(pattern, out);
+        }
+        Expr::IsNull(e)
+        | Expr::IsNotNull(e)
+        | Expr::IsTrue(e)
+        | Expr::IsNotTrue(e)
+        | Expr::IsFalse(e)
+        | Expr::IsNotFalse(e)
+        | Expr::IsUnknown(e)
+        | Expr::IsNotUnknown(e) => extract_subquery_tables(e, out),
+        Expr::Cast { expr: e, .. } => extract_subquery_tables(e, out),
+        Expr::Function(f) => {
+            use sqlparser::ast::FunctionArguments;
+            match &f.args {
+                FunctionArguments::Subquery(q) => extract_query_tables(q, out),
+                FunctionArguments::List(list) => {
+                    for arg in &list.args {
+                        match arg {
+                            FunctionArg::Unnamed(arg_expr)
+                            | FunctionArg::Named { arg: arg_expr, .. }
+                            | FunctionArg::ExprNamed { arg: arg_expr, .. } => {
+                                if let FunctionArgExpr::Expr(e) = arg_expr {
+                                    extract_subquery_tables(e, out);
+                                }
+                            }
+                        }
+                    }
+                }
+                FunctionArguments::None => {}
+            }
+        }
+        Expr::Case {
+            operand,
+            conditions,
+            else_result,
+            ..
+        } => {
+            if let Some(o) = operand {
+                extract_subquery_tables(o, out);
+            }
+            for when in conditions {
+                extract_subquery_tables(&when.condition, out);
+                extract_subquery_tables(&when.result, out);
+            }
+            if let Some(e) = else_result {
+                extract_subquery_tables(e, out);
+            }
+        }
+        Expr::JsonAccess { value: root, .. } => extract_subquery_tables(root, out),
+        Expr::IsNormalized { expr: e, .. } => extract_subquery_tables(e, out),
+        // 其余表达式类型不包含子查询
+        _ => {}
+    }
 }
 
 /// Check if a variable is DDL-related
