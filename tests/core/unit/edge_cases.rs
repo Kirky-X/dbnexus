@@ -419,6 +419,7 @@ mod concurrency_boundary_tests {
         let config = dbnexus::DbConfig {
             url,
             pool_config: dbnexus::foundation::PoolConfig {
+                min_connections: 1,
                 max_connections: 1,
                 acquire_timeout: 50, // 50ms 超时
                 ..Default::default()
