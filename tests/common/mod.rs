@@ -166,6 +166,31 @@ pub fn generate_test_migration_base_version() -> u32 {
     COUNTER.fetch_add(100, Ordering::SeqCst)
 }
 
+/// 清理迁移跟踪表中指定的版本记录（持久化测试数据库隔离）
+///
+/// `dbnexus_migrations` 跟踪表在共享的 postgres/mysql 测试库中跨运行持久存在，
+/// 而测试迁移版本号在每个测试进程内从 10000 重新计数（见
+/// `generate_test_migration_base_version`）。重跑同一测试时，上一轮写入的
+/// 版本记录会让 `run_migrations` 误判为已应用（返回 0），导致
+/// `applied == N` 断言失败。运行迁移前删除本测试将要使用的版本记录，
+/// 保证每次运行幂等。
+#[allow(dead_code)]
+pub async fn cleanup_migration_versions(pool: &dbnexus::DbPool, versions: &[u32]) {
+    if versions.is_empty() {
+        return;
+    }
+    use dbnexus::sea_orm::ConnectionTrait;
+    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let conn = session.connection().expect("Connection should be available");
+    let placeholders = versions.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
+    let _ = conn
+        .execute_unprepared(&format!(
+            "DELETE FROM dbnexus_migrations WHERE version IN ({})",
+            placeholders
+        ))
+        .await;
+}
+
 /// 清理测试表
 ///
 /// 在指定的会话上删除测试表
