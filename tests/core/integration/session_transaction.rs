@@ -978,6 +978,11 @@ async fn test_transaction_short_lock_pattern_works() {
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS short_lock_test (id INTEGER PRIMARY KEY, val TEXT)")
         .await
         .expect("Failed to create table");
+    // 幂等清理：持久库重跑时清空固定主键残留，避免 duplicate key
+    session
+        .execute_raw("DELETE FROM short_lock_test")
+        .await
+        .expect("Failed to clean table");
 
     // 完整事务流程：begin → execute → commit
     session.begin_transaction().await.expect("begin failed");
@@ -1008,6 +1013,12 @@ async fn test_transaction_multiple_executes_in_same_transaction() {
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS multi_exec_test (id INTEGER PRIMARY KEY, val TEXT)")
         .await
         .expect("Failed to create table");
+
+    // 幂等清理：持久库重跑时清空固定主键残留，避免 duplicate key
+    session
+        .execute_raw("DELETE FROM multi_exec_test")
+        .await
+        .expect("Failed to clean table");
 
     session.begin_transaction().await.expect("begin failed");
 
