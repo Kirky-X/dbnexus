@@ -1,5 +1,15 @@
 # cargo-audit configuration (补充工具；主治理工具为 cargo-deny / deny.toml)
 # 历史 RUSTSEC-2023-0071 (rsa) ignore 已移除 — jsonwebtoken 升至 10.4.0 后 rsa
 # 不再在依赖树，漏洞随升级自然消失（advisory 已 "not encountered"）
+#
+# RUSTSEC-2026-0235 (rkyv <0.8.17 越界读) — 书面豁免：
+# rkyv 仅经 rust_decimal 1.42.1 的可选特性 `rkyv`（默认 off，default=["serde","std"]）
+# 出现在 Cargo.lock（cargo 锁文件记录全部可选依赖），dbnexus 实际构建图未启用该特性，
+# 漏洞代码不会被编译/加载。rkyv 0.8 需 rust_decimal 进行 major 依赖升级，超出本次
+# +0.1 发布范围，记入审查卷宗待上游 rust_decimal 迁移后移除。
+# ⚠ cargo-audit 0.22+ 已移除 audit.toml 配置文件支持，ignore 须经 CLI 传递：
+#   cargo audit --ignore RUSTSEC-2026-0235
 [advisories]
-ignore = []
+ignore = [
+    "RUSTSEC-2026-0235",
+]
