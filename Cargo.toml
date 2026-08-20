@@ -710,7 +710,7 @@ path = "tests/e2e_distributed.rs"
 required-features = ["sqlite", "runtime-tokio-rustls", "distributed-capabilities"]
 
 [dev-dependencies.testcontainers]
-version = "0.27"
+version = "0.28"
 
 # ============================================================================
 # 示例管理说明
