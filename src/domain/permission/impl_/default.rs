@@ -117,6 +117,11 @@ impl PolicyManager for YamlPermissionProvider {
 #[async_trait]
 impl PermissionLifecycle for YamlPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
+        if let Some(path) = &self.config.policy_path {
+            tokio::fs::read(path).await.map_err(|e| {
+                anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e)
+            })?;
+        }
         Ok(())
     }
 
@@ -127,3 +132,50 @@ impl PermissionLifecycle for YamlPermissionProvider {
 }
 
 impl PermissionProvider for YamlPermissionProvider {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_provider(config: PermissionConfig) -> YamlPermissionProvider {
+        YamlPermissionProvider {
+            config,
+            policies: RwLock::new(HashMap::new()),
+            #[cfg(feature = "cache")]
+            cache: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn health_check_ok_without_policy_file() {
+        let provider = make_provider(PermissionConfig::default());
+        assert!(provider.health_check().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn health_check_fails_when_policy_file_missing() {
+        let config = PermissionConfig {
+            policy_path: Some("__nonexistent_permissions_file.yaml".to_string()),
+            ..PermissionConfig::default()
+        };
+        let provider = make_provider(config);
+        assert!(provider.health_check().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn health_check_ok_when_policy_file_readable() {
+        let path = std::env::temp_dir().join(format!(
+            "dbnexus_health_{}.yaml",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"roles:\n  admin: {tables: []}\n").unwrap();
+        let config = PermissionConfig {
+            policy_path: Some(path.to_string_lossy().to_string()),
+            ..PermissionConfig::default()
+        };
+        let provider = make_provider(config);
+        let result = provider.health_check().await;
+        std::fs::remove_file(&path).unwrap();
+        assert!(result.is_ok(), "可读策略文件必须健康: {result:?}");
+    }
+}

@@ -64,6 +64,12 @@ impl PolicyManager for MemoryPermissionProvider {
 #[async_trait]
 impl PermissionLifecycle for MemoryPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
+        let guard = self.policies.read().unwrap();
+        if guard.is_empty() {
+            return Err(anyhow::anyhow!(
+                "MemoryPermissionProvider 策略表未初始化：无任何角色策略（容量 0）"
+            ));
+        }
         Ok(())
     }
 
@@ -74,3 +80,27 @@ impl PermissionLifecycle for MemoryPermissionProvider {
 }
 
 impl PermissionProvider for MemoryPermissionProvider {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn health_check_fails_when_strategy_table_empty() {
+        let provider = MemoryPermissionProvider::new();
+        let result = provider.health_check().await;
+        assert!(result.is_err(), "空策略表必须报告不健康");
+    }
+
+    #[tokio::test]
+    async fn health_check_ok_after_policy_loaded() {
+        let provider = MemoryPermissionProvider::new();
+        provider
+            .policies
+            .write()
+            .unwrap()
+            .insert("admin".to_string(), RolePolicy { tables: Vec::new() });
+        let result = provider.health_check().await;
+        assert!(result.is_ok(), "已加载策略的 provider 必须健康: {result:?}");
+    }
+}
