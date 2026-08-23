@@ -561,10 +561,9 @@ impl PermissionContext {
             return false;
         }
 
-        // 条件评估：行级安全策略需要行级上下文，当前不支持
-        // 采用 fail-safe 策略：有未评估的条件时拒绝访问
+        // 条件评估：行级安全策略需要行级上下文，当前不支持；
+        // 采用 fail-safe 策略——有未评估的条件时拒绝访问（契约见 doc comment §条件评估）
         if conditions.is_some() {
-            // TODO: 实现行级安全策略评估，需要传入行级上下文
             return false;
         }
 
@@ -1163,6 +1162,41 @@ mod tests {
         assert!(
             miss_count >= 1,
             "Should have at least 1 cache miss for the first access"
+        );
+    }
+
+    /// 验证 verify_operation 三态契约（行级条件 fail-safe）：
+    /// 1) 表级无权限 → false
+    /// 2) 表级有权限 + 无条件 → true
+    /// 3) 表级有权限 + 行级条件（行级上下文当前不支持）→ fail-safe false
+    #[tokio::test]
+    async fn test_verify_operation_failsafe_contract() {
+        let config = PermissionConfig {
+            roles: [(
+                "test_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let ctx = PermissionContext::with_cache_size("test_role".to_string(), 256)
+            .await
+            .unwrap();
+        ctx.load_policy(&config).await.unwrap();
+
+        // 未授权表 → 拒绝
+        assert!(!ctx.verify_operation("orders", &PermissionAction::Select, None).await);
+        // 授权表 + 无条件 → 允许
+        assert!(ctx.verify_operation("users", &PermissionAction::Select, None).await);
+        // 授权表 + 行级条件 → fail-safe 拒绝（行级评估未实现，绝不因未评估条件放行）
+        assert!(
+            !ctx.verify_operation("users", &PermissionAction::Select, Some("tenant_id = 1"))
+                .await
         );
     }
 }

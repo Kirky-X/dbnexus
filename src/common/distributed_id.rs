@@ -252,3 +252,42 @@ impl DistributedIdGenerator for SnowflakeIdGenerator {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering as AtomicOrder;
+
+    /// 时钟回拨防御：预置 last 时间戳为 far-future，
+    /// next_id 走回拨分支，spin-wait 超时后必须返回显性 ClockBacktrack 错误
+    /// （规则 12：错误显性化，禁止静默产生歧义 ID）。
+    #[test]
+    fn test_clock_backtrack_returns_explicit_error() {
+        let generator = SnowflakeIdGenerator::new(7, 0).unwrap();
+        let now = generator.current_timestamp();
+        let future = now + 10_000_000; // ~2.8 小时后，远超 spins 容忍窗口
+
+        generator.ts_seq.store(future << 12, AtomicOrder::SeqCst);
+
+        match generator.next_id() {
+            Err(SnowflakeError::ClockBacktrack { last_ts, .. }) => {
+                assert!(
+                    last_ts >= now + 9_000_000,
+                    "last_ts should reflect the future marker, got {last_ts}"
+                );
+            }
+            other => panic!("expected ClockBacktrack, got {other:?}"),
+        }
+    }
+
+    /// 正常路径不受回拨标记影响：清空后 next_id 正常返回单调 ID
+    #[test]
+    fn test_generation_is_clean_after_backtrack_marker_cleared() {
+        let generator = SnowflakeIdGenerator::new(7, 0).unwrap();
+        generator.ts_seq.store(0, AtomicOrder::SeqCst);
+        let id = generator.next_id().unwrap();
+        let parsed = generator.parse_id(id);
+        assert!(parsed.timestamp_ms > 0);
+        assert_eq!(parsed.machine_id, 7);
+    }
+}
