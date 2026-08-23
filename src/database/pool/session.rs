@@ -2432,6 +2432,7 @@ mod session_basic_tests {
         assert!(result.is_err(), "commit without transaction should error");
     }
 
+    #[cfg(feature = "sql-parser")]
     #[tokio::test]
     async fn test_session_execute_raw_select() {
         let (_pool, session) = make_test_session("admin").await;
@@ -2459,6 +2460,7 @@ mod session_basic_tests {
         assert!(result.is_err(), "DDL should be rejected");
     }
 
+    #[cfg(feature = "sql-parser")]
     #[tokio::test]
     async fn test_session_execute_raw_create_table_and_insert() {
         let (_pool, session) = make_test_session("admin").await;
@@ -2498,6 +2500,7 @@ mod session_basic_tests {
         assert!(result.is_err(), "rollback without transaction via trait should error");
     }
 
+    #[cfg(feature = "sql-parser")]
     #[tokio::test]
     async fn test_session_database_session_trait_execute() {
         let (_pool, session) = make_test_session("admin").await;
@@ -2518,6 +2521,7 @@ mod session_basic_tests {
 
     // ===== 补充测试：is_invalid_table_name, create_migration_executor =====
 
+    #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_extract_table_name_via_parser_invalid_table() {
         // Parser returns empty table name -> covers line 1430
@@ -2525,6 +2529,7 @@ mod session_basic_tests {
         assert!(result.is_none(), "SELECT without FROM table should return None");
     }
 
+    #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_extract_table_name_via_parser_unsupported() {
         // Unsupported statement -> covers line 1435
@@ -2534,6 +2539,7 @@ mod session_basic_tests {
         let _ = result;
     }
 
+    #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_extract_table_name_via_parser_parse_error() {
         // Parse error -> covers line 1436
@@ -2542,6 +2548,7 @@ mod session_basic_tests {
         assert!(result.is_none());
     }
 
+    #[cfg(feature = "permission")]
     #[test]
     fn test_is_invalid_table_name_empty() {
         // Empty table name -> covers line 1164
@@ -2549,6 +2556,7 @@ mod session_basic_tests {
         assert!(super::is_invalid_table_name("   "));
     }
 
+    #[cfg(feature = "permission")]
     #[test]
     fn test_is_invalid_table_name_empty_part() {
         // Table name with empty part after split -> covers line 1170
@@ -2556,6 +2564,7 @@ mod session_basic_tests {
         assert!(super::is_invalid_table_name(".table"));
     }
 
+    #[cfg(feature = "permission")]
     #[test]
     fn test_is_invalid_table_name_valid() {
         assert!(!super::is_invalid_table_name("users"));
