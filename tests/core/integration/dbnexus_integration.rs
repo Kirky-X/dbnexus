@@ -689,6 +689,8 @@ async fn test_empty_role_handling() {
 
     // 空角色应该被处理
     let result = pool.get_session("").await;
+    #[cfg(not(feature = "permission"))]
+    let _ = result;
 
     // 根据权限配置，空角色可能被拒绝
     #[cfg(feature = "permission")]

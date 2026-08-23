@@ -380,7 +380,12 @@ async fn test_check_permission_denied_returns_permission_error() {
     let result = session.check_permission("orders", &Operation::Select).await;
     match result {
         Ok(_) => panic!("expected permission denied"),
-        Err(DbError::Permission(msg)) => assert!(msg.contains("Permission denied")),
+        // 消息经 i18n 本地化（zh-CN 下为中文措辞）+ Display 为大写，断言大小写不敏感参数
+        Err(DbError::Permission(msg)) => {
+            let lower = msg.to_lowercase();
+            assert!(lower.contains("orders"), "should mention table: {msg}");
+            assert!(lower.contains("select"), "should mention operation: {msg}");
+        }
         Err(e) => panic!("unexpected error: {e}"),
     }
 }
