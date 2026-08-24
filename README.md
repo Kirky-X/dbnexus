@@ -129,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | 🔀 | **数据分片** | 支持分片策略（`sharding` 特性） |
 | 🌐 | **全局索引** | 跨分片查询（`global-index` 特性） |
 | 💾 | **缓存** | oxcache 缓存（内部 moka L1 后端）（`cache` 特性） |
+| 🩺 | **权限健康检查** | 权限提供者 `health_check` 真实化：内存 provider 校验策略表容量 > 0（空表报不健康）；YAML provider 校验策略文件可读（`permission` 特性） |
 | 🔐 | **权限引擎** | 高级权限系统（`permission-engine` 特性） |
 | 🛡️ | **JWT 认证** | JWT + 密码强度验证（`authentication` 特性） |
 | 🌍 | **国际化** | ICU4X locale 感知格式化（核心特性，始终可用） |
