@@ -118,9 +118,9 @@ impl PolicyManager for YamlPermissionProvider {
 impl PermissionLifecycle for YamlPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
         if let Some(path) = &self.config.policy_path {
-            tokio::fs::read(path).await.map_err(|e| {
-                anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e)
-            })?;
+            tokio::fs::read(path)
+                .await
+                .map_err(|e| anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e))?;
         }
         Ok(())
     }
@@ -164,10 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn health_check_ok_when_policy_file_readable() {
-        let path = std::env::temp_dir().join(format!(
-            "dbnexus_health_{}.yaml",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("dbnexus_health_{}.yaml", std::process::id()));
         std::fs::write(&path, b"roles:\n  admin: {tables: []}\n").unwrap();
         let config = PermissionConfig {
             policy_path: Some(path.to_string_lossy().to_string()),
