@@ -70,13 +70,13 @@ jobs:
       - name: Publish dbnexus-macros
         run: |
           cd macros
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
 
       - name: Wait for index update
         run: sleep 15
 
       - name: Publish dbnexus
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
 
       - name: Wait for index update
         run: sleep 15
@@ -84,7 +84,7 @@ jobs:
       - name: Publish dbnexus-cli
         run: |
           cd src/tools/cli
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || echo "Already published or skipped"
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
 
       - name: Verify publication
         run: |
