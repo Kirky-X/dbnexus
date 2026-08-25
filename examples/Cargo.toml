@@ -267,7 +267,7 @@ name = "duckdb_query"
 path = "src/database/duckdb_query.rs"
 
 [dependencies]
-dbnexus = { path = "..", features = [
+dbnexus = { path = "..", version = "0.6.0-rc.1", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "permission",
@@ -308,10 +308,10 @@ dbnexus = { path = "..", features = [
 duckdb = { version = "1.1", features = ["bundled"] }
 
 # Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
-oxcache = { path = "../../oxcache", version = "0.4" }
+oxcache = { path = "../../oxcache", version = "0.5.0-rc.1" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
-trait-kit = { path = "../../trait-kit", version = "0.4", features = ["async", "lifecycle", "health"], default-features = false }
+trait-kit = { path = "../../trait-kit", version = "0.5.0-rc.1", features = ["async", "lifecycle", "health"], default-features = false }
 
 # JSON（图数据库示例需要 serde_json::json!）
 serde_json = { workspace = true }
