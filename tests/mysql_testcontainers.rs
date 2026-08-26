@@ -22,7 +22,10 @@ use testcontainers::runners::AsyncRunner;
 ///
 /// 使用本地 `mysql:8.0-oracle` 镜像（需预先 `docker pull mysql:8.0-oracle`）。
 /// 容器必须在测试期间保持存活，否则 Docker 会回收它。
-async fn setup_mysql() -> (ContainerAsync<GenericImage>, String) {
+async fn setup_mysql() -> (Option<ContainerAsync<GenericImage>>, String) {
+    if let Ok(url) = std::env::var("TEST_DATABASE_URL").or_else(|_| std::env::var("DATABASE_URL")) {
+        return (None, url);
+    }
     let container = GenericImage::new("mysql", "8.0-oracle")
         .with_wait_for(WaitFor::message_on_stdout("MySQL init process done"))
         .with_wait_for(WaitFor::seconds(5))
@@ -42,7 +45,7 @@ async fn setup_mysql() -> (ContainerAsync<GenericImage>, String) {
 
     let url = format!("mysql://dbnexus:dbnexus@{}:{}/dbnexus_test", host, port);
 
-    (container, url)
+    (Some(container), url)
 }
 
 /// 创建测试用的 DbConfig
