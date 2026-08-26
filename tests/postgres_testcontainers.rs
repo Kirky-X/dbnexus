@@ -22,7 +22,12 @@ use testcontainers::runners::AsyncRunner;
 ///
 /// 使用本地 `postgres:16-alpine` 镜像（需预先 `docker pull postgres:16-alpine`）。
 /// 容器必须在测试期间保持存活，否则 Docker 会回收它。
-async fn setup_postgres() -> (ContainerAsync<GenericImage>, String) {
+/// 当 `TEST_DATABASE_URL` / `DATABASE_URL` 存在（CI 服务型 postgres）时
+/// 直接复用该 URL，不再起 testcontainers 容器（避免容器资源压力）。
+async fn setup_postgres() -> (Option<ContainerAsync<GenericImage>>, String) {
+    if let Ok(url) = std::env::var("TEST_DATABASE_URL").or_else(|_| std::env::var("DATABASE_URL")) {
+        return (None, url);
+    }
     let container = GenericImage::new("postgres", "16-alpine")
         .with_wait_for(WaitFor::message_on_stderr(
             "database system is ready to accept connections",
@@ -43,7 +48,7 @@ async fn setup_postgres() -> (ContainerAsync<GenericImage>, String) {
 
     let url = format!("postgres://dbnexus:dbnexus@{}:{}/dbnexus_test", host, port);
 
-    (container, url)
+    (Some(container), url)
 }
 
 /// 创建测试用的 DbConfig
