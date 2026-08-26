@@ -96,15 +96,19 @@ mod tests {
         }
     }
 
-    #[test]
+        #[test]
     fn test_to_localized_string_en() {
+        // 先清残留（并行测试的全局 override 污染防护）
+        clear_locale_override();
         set_locale("en").unwrap();
         let err = TestError;
         assert_eq!(err.to_localized_string(), "Connection pool exhausted");
+        clear_locale_override();
     }
 
     #[test]
     fn test_to_localized_string_zh() {
+        clear_locale_override();
         set_locale("zh-CN").unwrap();
         let err = TestError;
         assert_eq!(err.to_localized_string(), "连接池已耗尽");
@@ -113,6 +117,7 @@ mod tests {
 
     #[test]
     fn test_message_en_always_english() {
+        clear_locale_override();
         set_locale("zh-CN").unwrap();
         let err = TestError;
         // message_en should always return English
@@ -122,6 +127,7 @@ mod tests {
 
     #[test]
     fn test_to_string_still_english() {
+        clear_locale_override();
         set_locale("zh-CN").unwrap();
         let err = TestError;
         // thiserror Display should still be English
