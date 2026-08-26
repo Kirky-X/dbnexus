@@ -96,42 +96,25 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_to_localized_string_en() {
-        // 先清残留（并行测试的全局 override 污染防护）
+        #[test]
+    fn test_to_localized_string_locales() {
+        // 单测试内顺序完成全部 locale 断言：全局 override 态在并行测试下
+        // 存在竞态（set/clear 非原子），合并为单用例消除交叉污染。
+        // en
         clear_locale_override();
         set_locale("en").unwrap();
         let err = TestError;
         assert_eq!(err.to_localized_string(), "Connection pool exhausted");
-        clear_locale_override();
-    }
 
-    #[test]
-    fn test_to_localized_string_zh() {
-        clear_locale_override();
+        // zh-CN
         set_locale("zh-CN").unwrap();
-        let err = TestError;
         assert_eq!(err.to_localized_string(), "连接池已耗尽");
-        clear_locale_override();
-    }
 
-    #[test]
-    fn test_message_en_always_english() {
-        clear_locale_override();
-        set_locale("zh-CN").unwrap();
-        let err = TestError;
-        // message_en should always return English
+        // message_en 恒英文（无论 locale）
         assert_eq!(err.message_en(), "Connection pool exhausted");
-        clear_locale_override();
-    }
-
-    #[test]
-    fn test_to_string_still_english() {
-        clear_locale_override();
-        set_locale("zh-CN").unwrap();
-        let err = TestError;
-        // thiserror Display should still be English
+        // thiserror Display 恒英文
         assert_eq!(err.to_string(), "test error");
+
         clear_locale_override();
     }
 
