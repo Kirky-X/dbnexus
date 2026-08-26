@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 自动迁移集成测试
 //!
+#![allow(clippy::await_holding_lock)]
 //! 测试自动迁移功能的各个组件：配置解析、迁移扫描、手动迁移、自动迁移触发等
 
 #![cfg(feature = "auto-migrate")]
