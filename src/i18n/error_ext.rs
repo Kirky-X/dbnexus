@@ -96,7 +96,7 @@ mod tests {
         }
     }
 
-        #[test]
+    #[test]
     fn test_to_localized_string_en() {
         // 先清残留（并行测试的全局 override 污染防护）
         clear_locale_override();
