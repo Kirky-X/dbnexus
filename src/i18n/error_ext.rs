@@ -96,7 +96,7 @@ mod tests {
         }
     }
 
-        #[test]
+    #[test]
     fn test_to_localized_string_locales() {
         // 单测试内顺序完成全部 locale 断言：全局 override 态在并行测试下
         // 存在竞态（set/clear 非原子），合并为单用例消除交叉污染。
