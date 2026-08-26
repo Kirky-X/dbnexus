@@ -209,7 +209,7 @@ async fn test_mysql_transaction_commit() {
 
     session
         .execute_raw_ddl(
-            "CREATE TABLE orders (
+            "CREATE TABLE IF NOT EXISTS orders_txn_commit (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 order_no VARCHAR(100) NOT NULL,
                 UNIQUE KEY uk_order_no (order_no)
@@ -221,7 +221,7 @@ async fn test_mysql_transaction_commit() {
     session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
-        .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001')")
+        .execute_raw("INSERT INTO orders_txn_commit (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to insert in transaction");
 
