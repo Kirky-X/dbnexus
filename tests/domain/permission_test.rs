@@ -744,7 +744,8 @@ editor:
 
         assert!(checker.check("admin", "users", PermissionAction::Select).await.is_ok());
         assert!(manager.get_policy("anyone").await.is_ok());
-        assert!(lifecycle.health_check().await.is_ok());
+        // T015 语义：空策略表 provider 不健康
+        assert!(lifecycle.health_check().await.is_err());
         lifecycle.shutdown().await;
     }
 
