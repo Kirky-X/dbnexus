@@ -452,12 +452,17 @@ async fn test_postgres_health_check() {
         .expect("Failed to create pool");
 
     // 通过成功获取 session 并执行查询来验证连接健康
+    // 通过产品连接健康 API 验证（execute_raw 的 SELECT 1 会被
+    // sql-parser+permission 的「无表名拒绝」拦截，health 应走专用通道）
     let session = pool.get_session("admin").await;
     assert!(session.is_ok(), "get_session should succeed with healthy connection");
 
     let session = session.unwrap();
-    let result = session.execute_raw("SELECT 1").await;
-    assert!(result.is_ok(), "Health check query should succeed");
+    let conn = session.connection().expect("session connection available");
+    let healthy = pool
+        .check_connection_health(&dbnexus::DbConnection::SeaOrm(conn.clone()))
+        .await;
+    assert!(healthy, "Health check should succeed");
 }
 
 #[tokio::test(flavor = "multi_thread")]
