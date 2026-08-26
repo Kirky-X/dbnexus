@@ -210,7 +210,7 @@ async fn test_postgres_transaction_commit() {
 
     session
         .execute_raw_ddl(
-            "CREATE TABLE orders (
+            "CREATE TABLE IF NOT EXISTS orders_txn_commit (
                 id SERIAL PRIMARY KEY,
                 order_no VARCHAR(100) NOT NULL UNIQUE
             )",
@@ -221,7 +221,7 @@ async fn test_postgres_transaction_commit() {
     session.begin_transaction().await.expect("Failed to begin transaction");
 
     session
-        .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001')")
+        .execute_raw("INSERT INTO orders_txn_commit (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to insert in transaction");
 
@@ -233,7 +233,7 @@ async fn test_postgres_transaction_commit() {
     );
 
     let conflict_result = session
-        .execute_raw("INSERT INTO orders (order_no) VALUES ('ORD-001') ON CONFLICT (order_no) DO NOTHING")
+        .execute_raw("INSERT INTO orders_txn_commit (order_no) VALUES ('ORD-001') ON CONFLICT (order_no) DO NOTHING")
         .await
         .expect("Failed to execute conflict insert");
     assert_eq!(
