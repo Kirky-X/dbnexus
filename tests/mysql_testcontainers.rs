@@ -460,8 +460,12 @@ async fn test_mysql_health_check() {
     assert!(session.is_ok(), "get_session should succeed with healthy connection");
 
     let session = session.unwrap();
-    let result = session.execute_raw("SELECT 1").await;
-    assert!(result.is_ok(), "Health check query should succeed");
+    // 产品健康通道（execute_raw 的 SELECT 1 会被 sql-parser 无表名拦截）
+    let conn = session.connection().expect("session connection available");
+    let healthy = pool
+        .check_connection_health(&dbnexus::DbConnection::SeaOrm(conn.clone()))
+        .await;
+    assert!(healthy, "Health check should succeed");
 }
 
 #[tokio::test(flavor = "multi_thread")]
