@@ -233,7 +233,7 @@ async fn test_mysql_transaction_commit() {
     );
 
     let conflict_result = session
-        .execute_raw("INSERT IGNORE INTO orders (order_no) VALUES ('ORD-001')")
+        .execute_raw("INSERT IGNORE INTO orders_txn_commit (order_no) VALUES ('ORD-001')")
         .await
         .expect("Failed to execute conflict insert");
     assert_eq!(
