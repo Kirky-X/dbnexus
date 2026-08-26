@@ -13,7 +13,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// env 型测试与读取 env 的池测试互斥（进程级环境变量共享，并行会互相污染）
+/// env 修改/读取测试的进程级互斥（环境变量共享，并行会互相污染）
 static DB_ENV_LOCK: Mutex<()> = Mutex::new(());
 use tempfile::TempDir;
 
@@ -53,9 +53,9 @@ async fn test_auto_migrate_config_creation() {
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_migration_file_scanning() {
+    let _env_guard = DB_ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-let _env_guard = DB_ENV_LOCK.lock().unwrap();
     let url = common::get_test_database_url();
     let db_type = DatabaseType::parse_database_type(&url).unwrap();
     let id_column = id_column_definition(db_type);
@@ -159,8 +159,8 @@ async fn test_migration_timeout_config() {
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_empty_migrations_directory() {
+    let _env_guard = DB_ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-let _env_guard = DB_ENV_LOCK.lock().unwrap();
 
     let url = common::get_test_database_url();
     let config = dbnexus::DbConfig {
@@ -187,9 +187,9 @@ let _env_guard = DB_ENV_LOCK.lock().unwrap();
 
 /// TEST-AM-005: 不存在目录测试
 #[tokio::test]
-let _env_guard = DB_ENV_LOCK.lock().unwrap();
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_nonexistent_migrations_directory() {
+    let _env_guard = DB_ENV_LOCK.lock().unwrap();
     let url = common::get_test_database_url();
     let config = dbnexus::DbConfig {
         url,
@@ -276,8 +276,8 @@ async fn test_migration_config_from_env() {
 /// TEST-AM-007: 迁移版本排序测试（使用内存数据库）
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-let _env_guard = DB_ENV_LOCK.lock().unwrap();
 async fn test_migration_version_sorting() {
+    let _env_guard = DB_ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
     let url = common::get_test_database_url();
