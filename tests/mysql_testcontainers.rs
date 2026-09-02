@@ -292,7 +292,7 @@ async fn test_mysql_data_types() {
         .await
         .expect("Failed to query");
     // MySQL execute_raw 对 SELECT 返回 rows_affected=0
-    assert!(result.rows_affected() >= 0, "Query should succeed");
+    assert_eq!(result.rows_affected(), 0, "Query should succeed");
 }
 
 #[tokio::test]
@@ -317,7 +317,7 @@ async fn test_mysql_null_handling() {
         .execute_raw("SELECT nullable_col FROM null_test WHERE id = 1")
         .await
         .expect("Failed to query");
-    assert!(result.rows_affected() >= 0, "Query should succeed");
+    assert_eq!(result.rows_affected(), 0, "Query should succeed");
 }
 
 // ============================================================================
@@ -402,7 +402,7 @@ async fn test_mysql_aggregate_query() {
         )
         .await
         .expect("Aggregate query should succeed");
-    assert!(result.rows_affected() >= 0, "Aggregate query should succeed");
+    assert_eq!(result.rows_affected(), 0, "Aggregate query should succeed");
 }
 
 #[tokio::test]
@@ -441,7 +441,7 @@ async fn test_mysql_join_query() {
         )
         .await
         .expect("JOIN query should succeed");
-    assert!(result.rows_affected() >= 0, "JOIN query should succeed");
+    assert_eq!(result.rows_affected(), 0, "JOIN query should succeed");
 }
 
 // ============================================================================
@@ -523,5 +523,5 @@ async fn test_mysql_concurrent_access() {
         .execute_raw("SELECT COUNT(*) as cnt FROM concurrent_test")
         .await
         .expect("COUNT query should succeed");
-    assert!(result.rows_affected() >= 0, "COUNT query should succeed");
+    assert_eq!(result.rows_affected(), 0, "COUNT query should succeed");
 }

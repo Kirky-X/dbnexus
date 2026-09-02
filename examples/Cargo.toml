@@ -308,10 +308,10 @@ dbnexus = { path = "..", version = "0.6.0-rc.1", features = [
 duckdb = { version = "1.1", features = ["bundled"] }
 
 # Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
-oxcache = { version = "0.5.0-rc.1" }
+oxcache = { version = "0.5.0-rc.2", path = "../../oxcache" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
-trait-kit = { version = "0.5.0-rc.1", features = ["async", "lifecycle", "health"], default-features = false }
+trait-kit = { version = "0.5.0-rc.2", path = "../../trait-kit", features = ["async", "lifecycle", "health"], default-features = false }
 
 # JSON（图数据库示例需要 serde_json::json!）
 serde_json = { workspace = true }
