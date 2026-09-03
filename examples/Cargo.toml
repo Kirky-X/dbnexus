@@ -1,6 +1,6 @@
 [package]
 name = "dbnexus-examples"
-version = "0.5.1"
+version = "0.6.0-rc.2"
 edition = "2021"
 rust-version = "1.85"
 publish = false
@@ -267,7 +267,7 @@ name = "duckdb_query"
 path = "src/database/duckdb_query.rs"
 
 [dependencies]
-dbnexus = { path = "..", version = "0.6.0-rc.1", features = [
+dbnexus = { path = "..", version = "0.6.0-rc.2", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "permission",

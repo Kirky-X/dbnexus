@@ -186,7 +186,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
+dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
@@ -306,22 +306,22 @@ Model::find_all(&session).await?; // Error: Permission denied
 
 ```toml
 # SQLite (embedded)
-dbnexus = { version = "0.5", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
+dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.5", features = ["postgres"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.5", features = ["mysql"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["mysql"] }
 
 # DuckDB (embedded analytical database, new in 0.3.0)
-dbnexus = { version = "0.5", features = ["duckdb"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["duckdb"] }
 
 # Ladybug (embedded graph database, new in 0.4.0)
-dbnexus = { version = "0.5", features = ["ladybug"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["ladybug"] }
 
 # Neo4j (graph database server, new in 0.4.0)
-dbnexus = { version = "0.5", features = ["neo4j"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["neo4j"] }
 ```
 
 ### Protocol-Compatible Databases
@@ -340,58 +340,58 @@ DBNexus supports the following protocol-compatible databases via standard protoc
 
 ```toml
 # Tokio with RustLS (default)
-dbnexus = { version = "0.5", features = ["runtime-tokio-rustls"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["runtime-tokio-rustls"] }
 
 # Tokio with Native TLS
-dbnexus = { version = "0.5", features = ["runtime-tokio-native-tls"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["runtime-tokio-native-tls"] }
 
 # AsyncStd
-dbnexus = { version = "0.5", features = ["runtime-async-std"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["runtime-async-std"] }
 ```
 
 ### Core Features
 
 ```toml
 # Permission control (auto-enables sql-parser + yaml + cache features; sql-parser is mandatory to prevent SQL injection bypass)
-dbnexus = { version = "0.5", features = ["permission"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["permission"] }
 
 # SQL parsing (auto-enables cache feature)
-dbnexus = { version = "0.5", features = ["sql-parser"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["sql-parser"] }
 
 # Procedural macros
-dbnexus = { version = "0.5", features = ["macros"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["macros"] }
 ```
 
 ### Using Presets (Recommended)
 
 ```toml
 # Embedded/Edge devices (minimal)
-dbnexus = { version = "0.5", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.5", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.5", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["monolith"] }
 
 # Enterprise (all features)
-dbnexus = { version = "0.5", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["enterprise"] }
 ```
 
 ### Optional Features
 
 ```toml
 # Observability (metrics + tracing + health-check)
-dbnexus = { version = "0.5", features = ["observability"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["observability"] }
 
 # Data management (migration + sharding + global-index)
-dbnexus = { version = "0.5", features = ["data-management"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["data-management"] }
 
 # Security (audit + permission-engine)
-dbnexus = { version = "0.5", features = ["security"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["security"] }
 
 # Individual features
-dbnexus = { version = "0.5", features = [
+dbnexus = { version = "0.6.0-rc.2", features = [
     "metrics",          # Prometheus metrics
     "tracing",          # Distributed tracing
     "audit",            # Audit logging
@@ -408,7 +408,7 @@ dbnexus = { version = "0.5", features = [
 ### Configuration
 
 ```toml
-dbnexus = { version = "0.5", features = [
+dbnexus = { version = "0.6.0-rc.2", features = [
     "yaml",            # YAML config support
     "config-toml",     # TOML config support
     "config-env",      # Environment variables (default)
