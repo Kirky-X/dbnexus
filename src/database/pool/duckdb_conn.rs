@@ -147,6 +147,41 @@ impl DuckDbConnection {
         })
     }
 
+    /// 从已存在的 `duckdb::Connection` 创建连接池（共享底层 DatabaseHandle）。
+    ///
+    /// 用于多组件共享同一 DuckDB 文件句柄的场景（如 alphalloy 的 sync store + DbPool）。
+    /// 传入的 `conn` 应已通过 `try_clone()` 从主连接派生，所有池内连接再对此 `conn`
+    /// 做 `try_clone`，确保全部连接共享同一底层 DatabaseHandle。
+    ///
+    /// # 参数
+    ///
+    /// * `conn` - 已存在的 `duckdb::Connection`（必须已 open，与主连接 try_clone 共享）
+    /// * `pool_size` - 连接池大小（并发查询数）
+    pub fn from_shared(conn: duckdb::Connection, pool_size: usize) -> Result<Self, DbError> {
+        let pool_size = pool_size.max(1);
+        let mut pool = Vec::with_capacity(pool_size);
+        pool.push(conn.try_clone().map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "DuckDB from_shared try_clone failed for primary: {e}"
+            )))
+        })?);
+        for i in 1..pool_size {
+            let cloned = pool[0].try_clone().map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "DuckDB from_shared try_clone failed for connection {}: {e}",
+                    i + 1
+                )))
+            })?;
+            pool.push(cloned);
+        }
+
+        Ok(Self {
+            pool: Arc::new(Mutex::new(pool)),
+            pool_size,
+            spawn_permit: Arc::new(Semaphore::new(pool_size)),
+        })
+    }
+
     /// 解析 DuckDB URL 为文件路径
     ///
     /// 支持的格式：
