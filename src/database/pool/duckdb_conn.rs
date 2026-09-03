@@ -25,7 +25,7 @@
 
 use std::sync::Arc;
 
-use duckdb::types::Value as DuckValue;
+pub use duckdb::types::Value as DuckValue;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
@@ -188,16 +188,21 @@ impl DuckDbConnection {
     /// - `:memory:` → `:memory:`
     /// - `duckdb::memory:` → `:memory:`
     /// - `duckdb:path` → `path`
-    /// - `duckdb://path` → `path`
+    /// - `duckdb://relative/path` → `relative/path`（双斜杠 + 相对路径）
+    /// - `duckdb:///absolute/path` → `/absolute/path`（三斜杠 = 绝对路径，保留根斜杠）
     /// - 其他 → 原样返回（兼容直接文件路径）
     fn parse_url(url: &str) -> String {
         let lower = url.to_lowercase();
         if lower == ":memory:" || lower == "duckdb::memory:" {
             return ":memory:".to_string();
         }
+        // `duckdb://…`：`///`（含第三个斜杠）= 绝对路径，必须保留根斜杠
+        // （此前 trim_start_matches('/') 会把绝对路径削成相对路径，导致打开错误文件）
+        if let Some(rest) = url.strip_prefix("duckdb://") {
+            return rest.to_string();
+        }
         if let Some(rest) = url.strip_prefix("duckdb:") {
-            // duckdb:path 或 duckdb://path
-            return rest.trim_start_matches('/').to_string();
+            return rest.to_string();
         }
         url.to_string()
     }
@@ -310,6 +315,188 @@ impl DuckDbConnection {
         }
 
         Ok(rows)
+    }
+
+    /// 执行参数化 DDL/DML 语句（仅 DuckDB 连接可用）
+    ///
+    /// 与 [`Self::execute`] 的唯一区别：通过 prepared statement 传递绑定参数，
+    /// 数据库不会将参数值解析为 SQL 代码，从根本上防止 SQL 注入（vuln-0005 同源修复）。
+    /// 所有携带用户输入的语句必须走本方法，禁止 format!/拼接组装 SQL。
+    ///
+    /// # 参数
+    ///
+    /// * `sql` - 含 `?` 占位符的 SQL 语句
+    /// * `params` - 按占位符顺序排列的绑定值（`duckdb::types::Value`）
+    pub async fn execute_with_params(&self, sql: &str, params: Vec<DuckValue>) -> DbResult<DuckDbExecResult> {
+        let permit = self.acquire_permit().await?;
+
+        let conn = {
+            let mut pool = self.pool.lock().await;
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let sql_owned = sql.to_string();
+        let handle: JoinHandle<DbResult<(duckdb::Connection, DuckDbExecResult)>> =
+            tokio::task::spawn_blocking(move || {
+                let rows_affected = conn
+                    .execute(&sql_owned, duckdb::params_from_iter(params))
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB execute_with_params failed: {e}"
+                        )))
+                    })?;
+                Ok((conn, DuckDbExecResult { rows_affected }))
+            });
+
+        let result = handle
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        drop(permit);
+
+        let (conn, exec_result) = result?;
+        {
+            let mut pool = self.pool.lock().await;
+            pool.push(conn);
+        }
+
+        Ok(exec_result)
+    }
+
+    /// 执行参数化查询（仅 DuckDB 连接可用）
+    ///
+    /// 与 [`Self::query`] 的唯一区别：通过 prepared statement 传递绑定参数，
+    /// 数据库不会将参数值解析为 SQL 代码，从根本上防止 SQL 注入。
+    /// 所有携带用户输入的查询必须走本方法，禁止 format!/拼接组装 SQL。
+    ///
+    /// # 参数
+    ///
+    /// * `sql` - 含 `?` 占位符的 SQL 查询语句
+    /// * `params` - 按占位符顺序排列的绑定值（`duckdb::types::Value`）
+    pub async fn query_with_params(&self, sql: &str, params: Vec<DuckValue>) -> DbResult<Vec<DuckDbRow>> {
+        let permit = self.acquire_permit().await?;
+
+        let conn = {
+            let mut pool = self.pool.lock().await;
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let sql_owned = sql.to_string();
+        let handle: JoinHandle<DbResult<(duckdb::Connection, Vec<DuckDbRow>)>> =
+            tokio::task::spawn_blocking(move || {
+                let mut stmt = conn
+                    .prepare(&sql_owned)
+                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB prepare failed: {e}"))))?;
+
+                let rows = stmt
+                    .query_map(duckdb::params_from_iter(params), |row| {
+                        let stmt_ref = row.as_ref();
+                        let column_count = stmt_ref.column_count();
+                        let column_names: Vec<String> = (0..column_count)
+                            .map(|i| stmt_ref.column_name(i).ok().map(|s| s.to_string()).unwrap_or_default())
+                            .collect();
+
+                        let mut columns = Vec::with_capacity(column_count);
+                        for (i, name) in column_names.iter().enumerate() {
+                            let value: DuckValue = row.get(i).unwrap_or(DuckValue::Null);
+                            columns.push((name.clone(), value));
+                        }
+                        Ok(DuckDbRow { columns })
+                    })
+                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB query failed: {e}"))))?;
+
+                let mut result = Vec::new();
+                for row_result in rows {
+                    let row = row_result.map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB row fetch failed: {e}")))
+                    })?;
+                    result.push(row);
+                }
+                drop(stmt);
+                Ok((conn, result))
+            });
+
+        let result = handle
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        drop(permit);
+
+        let (conn, rows) = result?;
+        {
+            let mut pool = self.pool.lock().await;
+            pool.push(conn);
+        }
+
+        Ok(rows)
+    }
+
+    /// 在单个事务中原子执行多条参数化语句（仅 DuckDB 连接可用）
+    ///
+    /// 从内部连接池取出**同一条**底层连接，按顺序执行 `BEGIN → stmt1 → stmt2 → … → COMMIT`；
+    /// 任一语句失败则整体 ROLLBACK（ DROP 前置写入，杜绝孤儿行）。
+    /// 用于"级联删除 + 主表删除"等多语句原子性场景——dbnexus 的 Session 级
+    /// `begin_transaction` 仅支持 SeaORM 后端，DuckDB 路径的事务原子性由本方法提供。
+    ///
+    /// # 参数
+    ///
+    /// * `statements` - `(sql, params)` 有序序列，全部在同一事务内执行
+    ///
+    /// # 返回
+    ///
+    /// 各语句的执行结果（顺序与输入一致）
+    pub async fn execute_transaction(
+        &self,
+        statements: Vec<(String, Vec<DuckValue>)>,
+    ) -> DbResult<Vec<DuckDbExecResult>> {
+        let permit = self.acquire_permit().await?;
+
+        let mut conn = {
+            let mut pool = self.pool.lock().await;
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let handle: JoinHandle<DbResult<(duckdb::Connection, Vec<DuckDbExecResult>)>> =
+            tokio::task::spawn_blocking(move || {
+                let tx = conn.transaction().map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB begin transaction failed: {e}")))
+                })?;
+                let mut results = Vec::with_capacity(statements.len());
+                for (sql, params) in statements {
+                    let rows_affected = tx.execute(&sql, duckdb::params_from_iter(params)).map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB transaction statement failed: {e}"
+                        )))
+                    })?;
+                    results.push(DuckDbExecResult { rows_affected });
+                }
+                tx.commit()
+                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB commit failed: {e}"))))?;
+                Ok((conn, results))
+            });
+
+        let result = handle
+            .await
+            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        drop(permit);
+
+        let (conn, results) = result?;
+        {
+            let mut pool = self.pool.lock().await;
+            pool.push(conn);
+        }
+
+        Ok(results)
     }
 
     /// 健康检查（执行 `SELECT 1`）
