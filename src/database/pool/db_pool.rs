@@ -414,6 +414,77 @@ impl DbPool {
         Ok(pool)
     }
 
+    /// 从已存在的 `duckdb::Connection` 创建 DuckDB 连接池（共享底层 DatabaseHandle）。
+    ///
+    /// 用于多组件共享同一 DuckDB 文件句柄的场景（如 alphalloy 的 sync store + DbPool）。
+    /// 传入的 `conn` 应已通过 `try_clone()` 从主连接派生。
+    ///
+    /// 与 `with_config` 不同：跳过 `create_connection`（不重新 open 文件），
+    /// 直接通过 `DuckDbConnection::from_shared` 包装已有连接。
+    /// 不执行 warmup / auto-migrate（调用方通过 Session API 自行管理迁移）。
+    #[cfg(feature = "duckdb")]
+    pub fn with_existing_duckdb_connection(conn: duckdb::Connection, pool_size: usize) -> DbResult<Self> {
+        let pool_size = pool_size.max(1);
+
+        // 从已存在的连接创建 DuckDbConnection（内部 try_clone 填充池）
+        let duckdb_conn = crate::database::DuckDbConnection::from_shared(conn, pool_size)?;
+
+        // 最小化配置（仅用于池元数据和 session 权限检查）
+        let config = DbConfig {
+            url: "duckdb://shared".to_string(),
+            pool_config: crate::foundation::PoolConfig {
+                max_connections: pool_size as u32,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // 预填充空闲池：所有连接预先创建，避免 acquire_connection 触发 create_connection
+        // （create_connection 会重新 open 文件，导致 DuckDB 文件锁冲突）
+        // DuckDbConnection 是 Clone（内部 Arc 共享），clone 后共享同一底层 DatabaseHandle。
+        let mut idle_vec = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            idle_vec.push(DbConnection::DuckDb(duckdb_conn.clone()));
+        }
+
+        let pool = Self {
+            inner: Arc::new(DbPoolInner {
+                config: Arc::new(config.clone()),
+                connection_semaphore: Arc::new(Semaphore::new(pool_size)),
+                idle_connections: AsyncMutex::new(idle_vec),
+                connection_available: Notify::new(),
+                active_count: AtomicU32::new(0),
+                total_count: AtomicU32::new(pool_size as u32),
+                #[cfg(feature = "permission")]
+                policy_cache: {
+                    // 最小化权限缓存（无配置文件，使用安全默认策略）
+                    Arc::new(Cache::new())
+                },
+                #[cfg(feature = "permission")]
+                permission_config: Arc::new(ArcSwapOption::empty()),
+                health_check_shutdown: Arc::new(Notify::new()),
+                admin_role: config.admin_role.clone(),
+                #[cfg(feature = "metrics")]
+                metrics_collector: None,
+                wait_count: AtomicU32::new(0),
+                max_waiters: AtomicU32::new(0),
+                borrow_count: AtomicU64::new(0),
+                max_active: AtomicU32::new(0),
+            }),
+            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+            cache_provider: None,
+        };
+
+        // 安全审计：检查默认 admin 角色
+        super::audit::warn_if_default_admin_role_used(&config.admin_role);
+
+        // 启动后台健康检查
+        #[cfg(feature = "pool-health-check")]
+        pool.start_background_health_check();
+
+        Ok(pool)
+    }
+
     /// 使用配置结构体创建连接池
     ///
     /// 此方法接受一个 [`DbConfig`] 结构体，用于配置连接池的所有参数。
