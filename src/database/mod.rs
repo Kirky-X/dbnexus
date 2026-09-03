@@ -39,7 +39,7 @@ pub use pool::{
 };
 pub use pool::{ConnectionTrait, TransactionTrait};
 #[cfg(feature = "duckdb")]
-pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
+pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
 #[cfg(feature = "sharding")]
 pub use sharding::{ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 

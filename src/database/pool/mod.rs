@@ -18,7 +18,7 @@ pub use db_pool::{DatabaseConnection, DbConnection, DbPool, PoolStatus};
 pub use session::Session;
 
 #[cfg(feature = "duckdb")]
-pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
+pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
 
 // 导出迁移执行器供内部使用
 #[cfg(feature = "migration")]

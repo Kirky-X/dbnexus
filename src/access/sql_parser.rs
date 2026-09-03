@@ -542,6 +542,9 @@ impl SqlParser {
 }
 
 /// Check if SQL contains variables or dangerous patterns (enhanced detection)
+///
+/// `?` prepared-statement 占位符**不算**危险变量：它是参数绑定的安全形态，
+/// 值通过 prepared statement 传递，数据库不会将其解析为 SQL 代码。
 fn contains_variables(sql: &str) -> bool {
     // Remove string literals first to avoid false positives
     let sql_without_strings = remove_string_literals(sql);
@@ -556,10 +559,11 @@ fn contains_variables(sql: &str) -> bool {
             Regex::new(r"\$\{?[\w]+\}?").expect("Regex pattern should be valid"),
             // Percent-encoded parameters: %variable%
             Regex::new(r"%[\w]+%").expect("Regex pattern should be valid"),
-            // Question mark placeholders (ODBC style)
-            Regex::new(r"\?").expect("Regex pattern should be valid"),
             // Hex literals that might be used to bypass filters
             Regex::new(r"0x[0-9A-Fa-f]+").expect("Regex pattern should be valid"),
+            // NOTE：`?` prepared-statement 占位符不再视为危险变量——它是参数绑定的
+            // 安全形态（值经 prepared statement 传递，数据库不解析为 SQL），
+            // 依赖参数化 API 的调用方（如 execute_duckdb_with_params）必须放行。
         ]
     });
 
@@ -1145,6 +1149,25 @@ mod tests {
         let result = parser.parse_single("SELECT * FROM users WHERE id = @userId").await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), SqlParseError::ContainsVariables(..)));
+    }
+
+    #[tokio::test]
+    async fn test_question_mark_placeholder_allowed() {
+        // `?` 是参数绑定的安全形态（prepared statement），必须放行而非按危险变量拒绝
+        let parser = SqlParser::new().await;
+        let result = parser
+            .parse_single("INSERT INTO users (name, age) VALUES (?, ?)")
+            .await
+            .expect("含 ? 占位符的 INSERT 应解析成功");
+        assert_eq!(result.table_name.as_deref(), Some("users"));
+        assert!(matches!(result.operation_type, SqlOperationType::Insert));
+
+        let select = parser
+            .parse_single("SELECT name FROM users WHERE id = ? AND age > ?")
+            .await
+            .expect("含 ? 占位符的 SELECT 应解析成功");
+        assert_eq!(select.table_name.as_deref(), Some("users"));
+        assert!(matches!(select.operation_type, SqlOperationType::Select));
     }
 
     #[test]
