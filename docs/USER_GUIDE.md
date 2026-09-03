@@ -47,7 +47,7 @@
 
 ```toml
 [dependencies]
-dbnexus = "0.5"
+dbnexus = "0.6.0-rc.2"
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -57,19 +57,18 @@ tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.5", default-features = false, features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["embedded"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.5", features = [
+dbnexus = { version = "0.6.0-rc.2", features = [
     "postgres",
     "permission",
     "metrics",
-    "tracing",
     "audit"
 ] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.5", features = ["sqlite", "permission", "sql-parser"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["sqlite", "permission", "sql-parser"] }
 ```
 
 完整特性列表请参见 [README.md](../README.md#feature-flags)。
@@ -80,22 +79,22 @@ dbnexus = { version = "0.5", features = ["sqlite", "permission", "sql-parser"] }
 
 ```toml
 # SQLite（默认）
-dbnexus = { version = "0.5", features = ["sqlite"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["sqlite"] }
 
 # PostgreSQL
-dbnexus = { version = "0.5", features = ["postgres"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["postgres"] }
 
 # MySQL
-dbnexus = { version = "0.5", features = ["mysql"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["mysql"] }
 
 # DuckDB（嵌入式分析型数据库）
-dbnexus = { version = "0.5", features = ["duckdb"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["duckdb"] }
 
 # Ladybug（嵌入式图数据库）
-dbnexus = { version = "0.5", features = ["ladybug"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["ladybug"] }
 
 # Neo4j（图数据库服务器）
-dbnexus = { version = "0.5", features = ["neo4j"] }
+dbnexus = { version = "0.6.0-rc.2", features = ["neo4j"] }
 ```
 
 **重要：**关系型数据库驱动（SQLite/PostgreSQL/MySQL/DuckDB）之间一次只能启用一个。图数据库驱动（Ladybug/Neo4j）可与关系型驱动共存。
@@ -759,7 +758,7 @@ Product::invalidate_cache(&session, 1).await?;
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["metrics"]
 ```
 
@@ -790,7 +789,7 @@ println!("{}", prometheus_metrics);
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["audit"]
 ```
 
@@ -818,29 +817,6 @@ SensitiveData::insert(&session, data).await?;
 SensitiveData::find_by_id(&session, 1).await?;
 ```
 
-### 分布式跟踪
-
-启用 OpenTelemetry 跟踪：
-
-```toml
-[dependencies.dbnexus]
-version = "0.5"
-features = ["tracing"]
-```
-
-初始化跟踪：
-
-```rust
-use dbnexus::TracingGuard;
-
-// 初始化 OTLP 导出（默认端点 http://localhost:4317）
-let _guard = TracingGuard::init_with_otlp("http://localhost:4317")?;
-
-// 所有 DB 操作自动跟踪
-let session = pool.get_session("admin").await?;
-User::find_all(&session).await?;
-```
-
 ### DuckDB 嵌入式数据库
 
 DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过连接池模式支持真正并行查询。
@@ -849,7 +825,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景。0.3.0 新增通过�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["duckdb"]
 ```
 
@@ -904,7 +880,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["authentication"]
 ```
 
@@ -953,7 +929,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["sql-parser"]
 ```
 
@@ -1000,7 +976,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["sharding"]
 ```
 
@@ -1037,7 +1013,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["validation"]
 ```
 
@@ -1079,7 +1055,7 @@ DBNexus 支持图数据库，通过 `GraphConnection` trait 统一抽象。图�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.5"
+version = "0.6.0-rc.2"
 features = ["ladybug"]  # 或 "neo4j"
 ```
 

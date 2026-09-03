@@ -7,6 +7,37 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.2] - 2026-09-03
+
+### BREAKING CHANGES
+
+- **移除 `tracing` 特性**：OpenTelemetry 分布式追踪模块及相关 `TracingGuard`/`TracingError` API 已从代码中移除。请求者请直接使用 `tracing` / `tracing-opentelemetry` / `opentelemetry-otlp` crate 进行仪表化，避免与上游子依赖同名词法冲突
+
+### Changed
+
+- 依赖路径本地化：`oxcache` / `trait-kit` 在 `[workspace.dependencies]` 与 `examples/` 改用 `path` + `version` 双写，供本地联调与 CI 发布模式共用
+- `Cargo.lock` 加入版本控制（库 crate 现在生成并提交）
+- 版本号递增至 `0.6.0-rc.2`（下一个 minor 预发布）
+
+### Fixed
+
+- **池驱动互斥严格化**：移除 4 驱动同时启用的逃生门，编译期 `compile_error!` 保证 `sqlite` / `postgres` / `mysql` / `duckdb` 互斥
+- **健康检查语义真实化**：`permission::health_check` 对 memory 策略表校验容量、对 yaml 策略文件校验可读性
+- **JOIN / 子查询权限执行**：补全跨表 JOIN 路径上的权限检查
+- **全局索引测试隔离**：in-memory DB 每个用例独立句柄，根除并行 upsert 竞态
+- **h2 安全升级**：`h2` crate 升级到修复 DoS 漏洞的版本
+- **macros 依赖瘦身**：`proc-macro-error2` 依赖移除（不再需要），减少编译开销
+- **连接池 acceptance fixes**：跨 feature gate 一致性、失败转移清理、雪flake ID 测试稳定性
+
+### Documentation
+
+- 修复 README 中 `v0.2` / `v0.4` 残留的过期破坏性变更说明
+- 同步 README 预设特性列表与 `Cargo.toml` 实际值
+- 修复 USER_GUIDE / ARCHITECTURE 中遗留的版本号、依赖名、`AsyncMutex` 描述错误
+- 同步文档版本号到 `0.6.0-rc.2`
+- 移除 `tracing` 特性在 USER_GUIDE / API_REFERENCE / ARCHITECTURE 中的所有描述与示例
+- `docs/` 子目录新增多语言标识辅助
+
 ## [0.5.1] - 2026-08-06
 
 ### Performance

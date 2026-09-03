@@ -910,20 +910,6 @@ let size = conn.pool_size();
 
 **URL 格式：** `:memory:` / `duckdb::memory:`（内存）、`duckdb:path/to/file.db`、`duckdb://path/to/file.db`（文件）
 
-### 分布式追踪（需要 `tracing` 特性）
-
-OpenTelemetry OTLP 集成，基于 `tracing` + `tracing-opentelemetry` + `opentelemetry-otlp`。
-
-```rust
-use dbnexus::TracingGuard;
-
-// 初始化 OTLP 导出（默认端点 http://localhost:4317）
-let _guard = TracingGuard::init_with_otlp("http://localhost:4317")?;
-// 进程退出时 _guard drop 自动关闭 tracer
-```
-
-**导出类型：** `TracingGuard`、`TracingError`
-
 ### 认证系统（需要 `authentication` 特性）
 
 JWT 认证 + 密码强度验证，基于 `jsonwebtoken` + `bcrypt`。
