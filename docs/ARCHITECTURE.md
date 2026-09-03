@@ -64,7 +64,6 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 
 **企业特性（可选）：**
 - `metrics` - Prometheus 指标收集
-- `tracing` - OpenTelemetry 集成（0.3.0 增强：OTLP 导出）
 - `audit` - 全面审计日志
 - `migration` - 数据库迁移管理
 - `sharding` - 数据分片支持（0.3.0 增强：会话级分片路由）
@@ -246,7 +245,6 @@ DBNexus 采用清晰的分层架构，每层有明确职责。各层通过 `src/
 - `observability/mod.rs` — 模块入口
 - `observability/metrics.rs` — `MetricsCollector`、`MetricsCollectorTrait`、`QueryStats`、`LatencyPercentiles`、`LatencyHistogram`、`PoolMetrics`、`SlowQueryRecord`、`ThroughputStats`、`ConnectionAcquireStats`、`TransactionStats`（cfg = "metrics"，Prometheus 指标导出）
 - `observability/health.rs` — `HealthChecker`、`HealthStatus`、`HealthCheckResult`、`CircuitBreaker`、`CircuitBreakerConfig`、`CircuitBreakerState`、`PoolHealthMetrics`（cfg = "health-check"，健康检查 + 熔断器）
-- `observability/tracing.rs` — `TracingGuard`、`TracingError`（cfg = "tracing"，OpenTelemetry 集成）
 
 ### 7. 可靠性层 (`reliability/`)
 
@@ -690,13 +688,11 @@ graph TD
     subgraph Enterprise["企业部署"]
         AllFeatures[所有可选特性]
         metrics[metrics]
-        tracing[tracing]
         audit[audit]
         sharding[sharding]
     end
 
     AllFeatures --> metrics
-    AllFeatures --> tracing
     AllFeatures --> audit
     AllFeatures --> sharding
 ```
