@@ -16,6 +16,9 @@ const ALLOWED_DDL_STATEMENTS: &[&str] = &[
     "CreateIndex",
     "DropIndex",
     "CreateView",
+    // DropView：与 CreateView 成对——能建视图即应能删（test_valid_drop_view 契约）；
+    // 6487866 白名单扩展时遗漏，导致 DROP VIEW 被拒
+    "DropView",
     "Truncate",
     "Query", // SELECT 查询（用于验证）
     // DML 语句：迁移事务可能混合 DDL+DML（如 ALTER TABLE + UPDATE），
