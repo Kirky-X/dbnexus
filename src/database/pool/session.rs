@@ -487,10 +487,15 @@ impl Session {
                         }
                     }
                     Err(_) => {
-                        // 解析失败，拒绝执行
-                        return Err(DbError::Permission(
-                            "Failed to parse SQL statement for permission checking".to_string(),
-                        ));
+                        // 解析失败：admin role 放行（对齐 Ok(None)/parse 失败路径），
+                        // 非 admin role 拒绝（安全默认）。
+                        if self.role == self.pool_inner.admin_role {
+                            // admin 有完全权限，跳过检查
+                        } else {
+                            return Err(DbError::Permission(
+                                "Failed to parse SQL statement for permission checking".to_string(),
+                            ));
+                        }
                     }
                 }
             }
@@ -671,9 +676,14 @@ impl Session {
                     }
                 }
                 Err(_) => {
-                    return Err(DbError::Permission(
-                        "Failed to parse SQL statement for permission checking".to_string(),
-                    ));
+                    // 解析失败（如 SQL 含 INFORMATION_SCHEMA 被注入检测拦截）：
+                    // admin role 放行（对齐 Ok(None) 路径——admin 拥有完全控制权）；
+                    // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
+                    if self.role != self.pool_inner.admin_role {
+                        return Err(DbError::Permission(
+                            "Failed to parse SQL statement for permission checking".to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -878,9 +888,12 @@ impl Session {
                         }
                     }
                     Err(_) => {
-                        return Err(DbError::Permission(
-                            "Failed to parse SQL statement for permission checking".to_string(),
-                        ));
+                        // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
+                        if self.role != self.pool_inner.admin_role {
+                            return Err(DbError::Permission(
+                                "Failed to parse SQL statement for permission checking".to_string(),
+                            ));
+                        }
                     }
                 }
             }
@@ -991,9 +1004,12 @@ impl Session {
                         }
                     }
                     Err(_) => {
-                        return Err(DbError::Permission(
-                            "Failed to parse SQL statement for permission checking".to_string(),
-                        ));
+                        // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
+                        if self.role != self.pool_inner.admin_role {
+                            return Err(DbError::Permission(
+                                "Failed to parse SQL statement for permission checking".to_string(),
+                            ));
+                        }
                     }
                 }
             }
