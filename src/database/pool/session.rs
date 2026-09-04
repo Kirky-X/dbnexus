@@ -21,7 +21,10 @@ use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::is_ddl_operation;
 #[cfg(feature = "sql-parser")]
-use crate::access::{DdlGuard, DdlValidationResult, SqlOperationType};
+use crate::access::{DdlGuard, DdlValidationResult};
+// SqlOperationType 仅在 permission 权限检查路径（parse_operation_async 结果映射）使用
+#[cfg(all(feature = "sql-parser", feature = "permission"))]
+use crate::access::SqlOperationType;
 #[cfg(feature = "permission")]
 use crate::access::{PermissionAction, PermissionContext};
 use crate::foundation::{DbError, DbResult};
@@ -621,7 +624,12 @@ impl Session {
     /// - 无法解析的语句 → admin 放行（支持 `SELECT 1` 等健康检查），非 admin 拒绝
     ///
     /// 返回 `Ok(())` 表示语句已通过安全门，调用方可继续执行。
-    #[cfg(feature = "sql-parser")]
+    ///
+    /// 门控含 `duckdb`：本方法的全部调用者（`execute_duckdb*` 系列）均为
+    /// `#[cfg(feature = "duckdb")]`。若只门控 `sql-parser`，则
+    /// "sql-parser 开 + duckdb 关"组合下本方法成为死代码（触发
+    /// `dead_code` 警告，下游 CI 的 `-D warnings` 会失败）。
+    #[cfg(all(feature = "sql-parser", feature = "duckdb"))]
     async fn duckdb_security_gate(&self, sql: &str) -> DbResult<()> {
         if is_ddl_operation(sql) {
             // DDL：仅 admin 角色（对齐 execute_raw_ddl 的角色白名单）
