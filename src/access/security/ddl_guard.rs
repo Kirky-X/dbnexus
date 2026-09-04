@@ -12,10 +12,17 @@ use sqlparser::parser::Parser;
 const ALLOWED_DDL_STATEMENTS: &[&str] = &[
     "CreateTable",
     "AlterTable",
+    "DropTable",
     "CreateIndex",
+    "DropIndex",
     "CreateView",
     "Truncate",
     "Query", // SELECT 查询（用于验证）
+    // DML 语句：迁移事务可能混合 DDL+DML（如 ALTER TABLE + UPDATE），
+    // admin 路径的 DdlGuard 应放行——表级权限已由 security_gate 前置检查。
+    "Insert",
+    "Update",
+    "Delete",
 ];
 
 /// 禁止的 SQL 模式（AST 无法捕获的模式，如字符串拼接注入）
@@ -103,19 +110,9 @@ impl DdlGuard {
 
     /// 检查语句类型是否在白名单中
     fn is_allowed_statement(stmt: &Statement) -> bool {
-        match stmt {
-            // 特殊处理 DROP 语句：只允许 DROP INDEX 和 DROP VIEW，禁止其他 DROP 操作
-            Statement::Drop { object_type, .. } => {
-                let type_str = format!("{:?}", object_type);
-                // 只允许 DROP INDEX 和 DROP VIEW，禁止 DROP TABLE/DATABASE/SCHEMA 等
-                type_str.contains("Index") || type_str.contains("View")
-            }
-            // 其他语句检查白名单
-            _ => {
-                let type_name = Self::statement_type_name(stmt);
-                ALLOWED_DDL_STATEMENTS.contains(&type_name.as_str())
-            }
-        }
+        // 统一走白名单检查（包括 DROP 语句），不再硬编码过滤特定 DROP 类型
+        let type_name = Self::statement_type_name(stmt);
+        ALLOWED_DDL_STATEMENTS.contains(&type_name.as_str())
     }
 
     /// 获取语句的类型名称
@@ -252,50 +249,35 @@ mod tests {
     }
 
     #[test]
-    fn test_drop_table_not_in_whitelist() {
-        // DROP TABLE 不在白名单中（只有 CreateTable 等）
-        // 注意: Statement::DropTable 与 DropView/DropIndex 不同
+    fn test_drop_table_allowed_for_admin() {
+        // DROP TABLE 在白名单中（admin 路径 DdlGuard 放行，角色检查由 security_gate 前置保证）
         let result = guard().validate("DROP TABLE users").unwrap();
-        assert!(matches!(
-            result,
-            DdlValidationResult::Forbidden(ref msg) if msg.contains("DropTable")
-        ));
+        assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
-    fn test_insert_not_allowed() {
+    fn test_insert_allowed_for_admin() {
+        // DML 在白名单中（迁移事务可能混合 DDL+DML）
         let result = guard().validate("INSERT INTO users (id) VALUES (1)").unwrap();
-        assert!(matches!(
-            result,
-            DdlValidationResult::Forbidden(ref msg) if msg.contains("Insert")
-        ));
+        assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
-    fn test_update_not_allowed() {
+    fn test_update_allowed_for_admin() {
         let result = guard().validate("UPDATE users SET name = 'test' WHERE id = 1").unwrap();
-        assert!(matches!(
-            result,
-            DdlValidationResult::Forbidden(ref msg) if msg.contains("Update")
-        ));
+        assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
-    fn test_delete_not_allowed() {
+    fn test_delete_allowed_for_admin() {
         let result = guard().validate("DELETE FROM users WHERE id = 1").unwrap();
-        assert!(matches!(
-            result,
-            DdlValidationResult::Forbidden(ref msg) if msg.contains("Delete")
-        ));
+        assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
-    fn test_delete_lowercase_not_allowed() {
+    fn test_delete_lowercase_allowed_for_admin() {
         let result = guard().validate("delete from users where id = 1").unwrap();
-        assert!(matches!(
-            result,
-            DdlValidationResult::Forbidden(ref msg) if msg.contains("Delete")
-        ));
+        assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
