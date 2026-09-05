@@ -148,12 +148,26 @@ impl AuditEvent {
 
     /// 创建操作事件
     pub fn create(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(AuditOperation::Create, entity_type, entity_id, user_id, "", "")
+        Self::new(
+            AuditOperation::Create,
+            entity_type,
+            entity_id,
+            user_id,
+            "",
+            "",
+        )
     }
 
     /// 读取操作事件
     pub fn read(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(AuditOperation::Read, entity_type, entity_id, user_id, "", "")
+        Self::new(
+            AuditOperation::Read,
+            entity_type,
+            entity_id,
+            user_id,
+            "",
+            "",
+        )
     }
 
     /// 更新操作事件
@@ -164,7 +178,14 @@ impl AuditEvent {
         before: Option<String>,
         after: Option<String>,
     ) -> Self {
-        let mut event = Self::new(AuditOperation::Update, entity_type, entity_id, user_id, "", "");
+        let mut event = Self::new(
+            AuditOperation::Update,
+            entity_type,
+            entity_id,
+            user_id,
+            "",
+            "",
+        );
         event.before_value = before;
         event.after_value = after;
         event
@@ -172,7 +193,14 @@ impl AuditEvent {
 
     /// 删除操作事件
     pub fn delete(entity_type: &str, entity_id: &str, user_id: &str) -> Self {
-        Self::new(AuditOperation::Delete, entity_type, entity_id, user_id, "", "")
+        Self::new(
+            AuditOperation::Delete,
+            entity_type,
+            entity_id,
+            user_id,
+            "",
+            "",
+        )
     }
 
     /// 设置用户信息
@@ -267,7 +295,11 @@ fn default_sensitive_fields() -> Vec<String> {
 /// # Returns
 ///
 /// 脱敏后的 JSON 值
-fn sanitize_json_object(value: serde_json::Value, sensitive_fields: &[String], depth: usize) -> serde_json::Value {
+fn sanitize_json_object(
+    value: serde_json::Value,
+    sensitive_fields: &[String],
+    depth: usize,
+) -> serde_json::Value {
     // 防止栈溢出：超过最大深度时返回占位符
     if depth > MAX_SANITIZE_DEPTH {
         return serde_json::Value::String("[MAX_DEPTH_EXCEEDED]".to_string());
@@ -329,13 +361,16 @@ impl AuditEvent {
         // 尝试解析 JSON
         if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
             let sanitized = sanitize_json_object(json_value, &fields, 0);
-            serde_json::to_string(&sanitized).unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string())
+            serde_json::to_string(&sanitized)
+                .unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string())
         } else {
             // 非 JSON 值，检查是否包含敏感关键字
             let lower = value.to_lowercase();
             for field in &fields {
                 // 检查 JSON 格式: "field":
-                if lower.contains(&format!("\"{}\":", field)) || lower.contains(&format!("\"{}\" :", field)) {
+                if lower.contains(&format!("\"{}\":", field))
+                    || lower.contains(&format!("\"{}\" :", field))
+                {
                     return "***REDACTED***".to_string();
                 }
                 // 检查非 JSON 格式: field:
@@ -415,7 +450,8 @@ impl MemoryAuditStorage {
 
     /// 获取已丢弃的事件数量
     pub fn dropped_count(&self) -> u64 {
-        self.dropped_count.load(std::sync::atomic::Ordering::Relaxed)
+        self.dropped_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// 获取当前事件数量
@@ -427,13 +463,17 @@ impl MemoryAuditStorage {
 
 #[async_trait]
 impl AuditStorage for MemoryAuditStorage {
-    async fn store(&self, event: &AuditEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn store(
+        &self,
+        event: &AuditEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut events = self.events.lock().await;
 
         // 如果超过最大容量，移除最旧的
         if events.len() >= self.max_events {
             events.remove(0);
-            self.dropped_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.dropped_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
 
         events.push(event.clone());
@@ -480,7 +520,10 @@ impl AuditStorage for MemoryAuditStorage {
         Ok(result)
     }
 
-    async fn cleanup(&self, before: &DateTime<Utc>) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup(
+        &self,
+        before: &DateTime<Utc>,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let mut events = self.events.lock().await;
         let before_count = events.len();
         events.retain(|e| e.timestamp > *before);
@@ -506,7 +549,10 @@ impl AuditLogger {
 
     /// 创建带默认配置的审计日志器
     pub fn with_default_storage() -> Self {
-        Self::with_config(AuditConfig::default(), Arc::new(MemoryAuditStorage::new(10000)))
+        Self::with_config(
+            AuditConfig::default(),
+            Arc::new(MemoryAuditStorage::new(10000)),
+        )
     }
 }
 
@@ -526,7 +572,10 @@ impl AuditLogger {
     }
 
     /// 记录审计事件
-    pub async fn log(&self, event: AuditEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn log(
+        &self,
+        event: AuditEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -593,7 +642,8 @@ impl AuditLogger {
         user_id: &str,
         before: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let event = AuditEvent::delete(entity_type, entity_id, user_id).with_severity(AuditSeverity::High);
+        let event =
+            AuditEvent::delete(entity_type, entity_id, user_id).with_severity(AuditSeverity::High);
         let event = match before {
             Some(ref v) => event.with_before_value(v),
             None => event,
@@ -610,9 +660,14 @@ impl AuditLogger {
     }
 
     /// 清理旧日志
-    pub async fn cleanup(&self, days: i64) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn cleanup(
+        &self,
+        days: i64,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let delta = chrono::Duration::try_days(days).ok_or("Invalid date calculation")?;
-        let before = Utc::now().checked_sub_signed(delta).ok_or("Invalid date calculation")?;
+        let before = Utc::now()
+            .checked_sub_signed(delta)
+            .ok_or("Invalid date calculation")?;
         self.storage.cleanup(&before).await
     }
 
@@ -625,17 +680,22 @@ impl AuditLogger {
                     let replacement = format!("***REDACTED_{}***", field.to_uppercase());
 
                     // 1. JSON 格式: "field":
-                    result = result.replace(&format!(r#""{}":"#, field), &format!(r#""{}":"#, replacement));
+                    result = result.replace(
+                        &format!(r#""{}":"#, field),
+                        &format!(r#""{}":"#, replacement),
+                    );
 
                     // 2. 非 JSON 格式: field:
-                    result = result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, replacement));
+                    result =
+                        result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, replacement));
 
                     // 3. 嵌套字段 (如 user.password)
                     if field.contains('.') {
                         let parts: Vec<&str> = field.split('.').collect();
                         if parts.len() >= 2 {
                             let nested_pattern = format!(r#""{}""#, field);
-                            result = result.replace(&nested_pattern, &format!(r#""{}""#, replacement));
+                            result =
+                                result.replace(&nested_pattern, &format!(r#""{}""#, replacement));
                         }
                     }
 
@@ -675,13 +735,19 @@ impl AuditLogger {
                     // 检查字段名匹配
                     if k == field || k.contains(&field_with_underscore) {
                         let redacted_key = format!("{}{}redacted", k, underscore_str);
-                        new_obj.insert(redacted_key, serde_json::Value::String(replacement.to_string()));
+                        new_obj.insert(
+                            redacted_key,
+                            serde_json::Value::String(replacement.to_string()),
+                        );
                         modified = true;
                     } else if v.is_string() {
                         let s = v.as_str().unwrap_or("");
                         // 检测并脱敏 Base64 编码
                         if Self::is_base64(s) {
-                            new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                            new_obj.insert(
+                                k.clone(),
+                                serde_json::Value::String(replacement.to_string()),
+                            );
                             modified = true;
                         } else {
                             new_obj.insert(k.clone(), v.clone());
@@ -709,7 +775,10 @@ impl AuditLogger {
                                 || (v.is_string() && Self::is_base64(v.as_str().unwrap_or("")));
 
                             if should_mask {
-                                new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                                new_obj.insert(
+                                    k.clone(),
+                                    serde_json::Value::String(replacement.to_string()),
+                                );
                                 modified = true;
                             } else {
                                 new_obj.insert(k.clone(), v.clone());
@@ -750,7 +819,10 @@ impl AuditLogger {
                     let mut new_obj = serde_json::Map::new();
                     for (k, v) in obj {
                         if k == field {
-                            new_obj.insert(k.clone(), serde_json::Value::String(replacement.to_string()));
+                            new_obj.insert(
+                                k.clone(),
+                                serde_json::Value::String(replacement.to_string()),
+                            );
                             modified = true;
                         } else {
                             new_obj.insert(k.clone(), v.clone());
@@ -952,7 +1024,9 @@ impl AuditEventBuilder {
             before_value: self.before_value,
             after_value: self.after_value,
             extra: self.extra,
-            request_id: self.request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            request_id: self
+                .request_id
+                .unwrap_or_else(|| Uuid::new_v4().to_string()),
             session_id: self.session_id.unwrap_or_default(),
             trace_context: None,
         })

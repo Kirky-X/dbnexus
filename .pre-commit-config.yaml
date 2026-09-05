@@ -1,58 +1,61 @@
-# Pre-commit hooks configuration
+# pre-commit 配置 — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
+# 安装: pip install pre-commit && pre-commit install --install-hooks
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v5.0.0
-  hooks:
-  - id: trailing-whitespace
-  - id: end-of-file-fixer
-  - id: check-yaml
-  - id: check-toml
-  - id: mixed-line-ending
-    args: ['--fix=lf']
-  - id: detect-private-key
-    exclude: ^scripts/pre-commit-check\.sh$  # 排除安全检查脚本（包含检测模式字符串，非真实私钥）
-  - id: check-merge-conflict
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-merge-conflict
+        args: ['--assume-in-merge']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
 
-# Detect secrets（高熵字符串/各类 token；baseline 记录已知误报，新增真实密钥才报警）
-- repo: https://github.com/Yelp/detect-secrets
-  rev: v1.5.0
-  hooks:
-  - id: detect-secrets
-    args: [--baseline, .secrets.baseline]
-    exclude: '^Cargo\.lock$'
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        # --baseline: 本仓 .secrets.baseline 记录已知误报(示例/测试中的演示凭据),
+        # 仅新增真实密钥才报警
+        args: [--baseline, .secrets.baseline, --exclude-files, tests/, --exclude-files, examples/]
+        exclude: '^Cargo\.lock$'
 
-# Rust 工程化检查（local hooks，使用系统 cargo）
-- repo: local
-  hooks:
-  # 代码格式检查（不修改，仅检查）
-  - id: cargo-fmt
-    name: cargo fmt --check
-    entry: cargo fmt --all -- --check
-    language: system
-    types: [rust]
-    pass_filenames: false
-  # Clippy 严格检查（-D warnings 将所有 warning 视为 error）
-  - id: cargo-clippy
-    name: cargo clippy
-    entry: cargo clippy --all-targets --workspace -- -D warnings
-    language: system
-    types: [rust]
-    pass_filenames: false
-  # cargo-deny 许可证/漏洞/禁用依赖检查
-  - id: cargo-deny
-    name: cargo deny check
-    entry: cargo deny check licenses advisories bans
-    language: system
-    pass_filenames: false
-    files: ^(Cargo\.(toml|lock)|deny\.toml)$
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.28.0
+    hooks:
+      - id: typos
 
-# 禁止直接提交到 main 分支（仅在 commit 阶段运行，允许 feature branch → merge → main → push 流程）
-- repo: local
-  hooks:
-  - id: no-commit-to-main
-    name: No commit to main branch
-    entry: scripts/no-commit-to-main.sh
-    language: script
-    pass_filenames: false
-    always_run: true
-    stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Format Rust code
+        description: Run rustfmt on Rust files
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-check
+        name: cargo check
+        # 零告警门槛 feature 组合(与 CI lint job 一致);dbnexus 驱动互斥,不可 --all-features
+        entry: cargo check --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        # 零告警门槛 feature 组合(与 CI clippy job 一致);dbnexus 驱动互斥,不可 --all-features
+        entry: cargo clippy --all-targets --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+ci:
+  autoupdate_commit_msg: "chore: update pre-commit hooks"

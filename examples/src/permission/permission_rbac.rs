@@ -18,7 +18,8 @@
 mod common;
 
 use dbnexus::access::{
-    MemoryPermissionProvider, PermissionAction, PermissionContext, PermissionProvider, RolePolicy, TablePermission,
+    MemoryPermissionProvider, PermissionAction, PermissionContext, PermissionProvider, RolePolicy,
+    TablePermission,
 };
 use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
@@ -212,7 +213,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - MemoryPermissionProvider::new()   创建内存权限提供者");
     println!("  - provider.add_role(role, policy)  添加角色策略（async）");
     println!("  - provider.check_access(role, table, op)  检查表级权限");
-    println!("  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  编译期生成权限校验方法");
+    println!(
+        "  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  编译期生成权限校验方法"
+    );
     println!("  - Model::check_permission(&ctx)    校验角色是否允许访问实体");
     println!("  - Model::check_operation(&ctx, &op) 校验角色+操作是否允许");
 

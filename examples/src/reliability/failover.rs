@@ -47,7 +47,10 @@ fn main() {
         println!("  [{}] {} : {}", i, role, url);
     }
     println!();
-    println!("  - 健康检查 SQL : {:?}", failover_config.health_check_query);
+    println!(
+        "  - 健康检查 SQL : {:?}",
+        failover_config.health_check_query
+    );
     println!(
         "  - 触发阈值     : 连续失败 {} 次后切换",
         failover_config.failover_threshold
@@ -135,7 +138,10 @@ fn main() {
     println!("  FailoverConfig::default():");
     println!("  - urls              : (空)");
     println!("  - health_check_query: None");
-    println!("  - failover_threshold: {}", default_config.failover_threshold);
+    println!(
+        "  - failover_threshold: {}",
+        default_config.failover_threshold
+    );
     println!();
 
     // ============================================

@@ -44,7 +44,10 @@ fn test_db_error_display() {
 #[test]
 fn test_pool_error_acquire_timeout() {
     let error = PoolError::AcquireTimeout;
-    assert_eq!(format!("{error}"), "Failed to acquire connection within timeout");
+    assert_eq!(
+        format!("{error}"),
+        "Failed to acquire connection within timeout"
+    );
 }
 
 #[test]
@@ -56,13 +59,19 @@ fn test_pool_error_pool_exhausted() {
 #[test]
 fn test_pool_error_connection_failed() {
     let error = PoolError::ConnectionFailed("Database unreachable".to_string());
-    assert_eq!(format!("{error}"), "Failed to create connection: Database unreachable");
+    assert_eq!(
+        format!("{error}"),
+        "Failed to create connection: Database unreachable"
+    );
 }
 
 #[test]
 fn test_pool_error_health_check_failed() {
     let error = PoolError::HealthCheckFailed("Connection unhealthy".to_string());
-    assert_eq!(format!("{error}"), "Health check failed: Connection unhealthy");
+    assert_eq!(
+        format!("{error}"),
+        "Health check failed: Connection unhealthy"
+    );
 }
 
 #[test]
@@ -93,7 +102,10 @@ fn test_permission_error_role_not_found() {
 #[test]
 fn test_permission_error_invalid_policy() {
     let error = PermissionError::InvalidPolicy("Missing policy".to_string());
-    assert_eq!(format!("{error}"), "invalid policy configuration: Missing policy");
+    assert_eq!(
+        format!("{error}"),
+        "invalid policy configuration: Missing policy"
+    );
 }
 
 #[test]
@@ -188,13 +200,19 @@ fn test_migration_error_file_not_found() {
 #[test]
 fn test_migration_error_parse_error() {
     let error = MigrationError::ParseError("Invalid SQL syntax".to_string());
-    assert_eq!(format!("{error}"), "Failed to parse migration file: Invalid SQL syntax");
+    assert_eq!(
+        format!("{error}"),
+        "Failed to parse migration file: Invalid SQL syntax"
+    );
 }
 
 #[test]
 fn test_migration_error_execution_error() {
     let error = MigrationError::ExecutionError("Duplicate key".to_string());
-    assert_eq!(format!("{error}"), "Migration execution failed: Duplicate key");
+    assert_eq!(
+        format!("{error}"),
+        "Migration execution failed: Duplicate key"
+    );
 }
 
 #[test]
@@ -209,7 +227,10 @@ fn test_migration_error_version_conflict() {
 #[test]
 fn test_migration_error_rollback_error() {
     let error = MigrationError::RollbackError("Cannot drop table".to_string());
-    assert_eq!(format!("{error}"), "Migration rollback failed: Cannot drop table");
+    assert_eq!(
+        format!("{error}"),
+        "Migration rollback failed: Cannot drop table"
+    );
 }
 
 #[test]
@@ -240,13 +261,19 @@ fn test_audit_error_write_error() {
 #[test]
 fn test_audit_error_serialization_error() {
     let error = AuditError::SerializationError("JSON error".to_string());
-    assert_eq!(format!("{error}"), "Failed to serialize audit data: JSON error");
+    assert_eq!(
+        format!("{error}"),
+        "Failed to serialize audit data: JSON error"
+    );
 }
 
 #[test]
 fn test_audit_error_config_error() {
     let error = AuditError::ConfigError("Missing field".to_string());
-    assert_eq!(format!("{error}"), "Invalid audit configuration: Missing field");
+    assert_eq!(
+        format!("{error}"),
+        "Invalid audit configuration: Missing field"
+    );
 }
 
 #[test]
@@ -302,7 +329,8 @@ fn test_permission_result_type_alias() {
 fn test_config_result_type_alias() {
     // 测试 ConfigResult 类型别名
     let success: dbnexus::ConfigResult<String> = Ok("config".to_string());
-    let failure: dbnexus::ConfigResult<String> = Err(ConfigError::FileNotFound("config.yaml".to_string()));
+    let failure: dbnexus::ConfigResult<String> =
+        Err(ConfigError::FileNotFound("config.yaml".to_string()));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some("config".to_string()));
@@ -313,7 +341,8 @@ fn test_config_result_type_alias() {
 fn test_migration_result_type_alias() {
     // 测试 MigrationResult 类型别名
     let success: dbnexus::MigrationResult<u32> = Ok(5);
-    let failure: dbnexus::MigrationResult<u32> = Err(MigrationError::FileNotFound("001.sql".to_string()));
+    let failure: dbnexus::MigrationResult<u32> =
+        Err(MigrationError::FileNotFound("001.sql".to_string()));
 
     assert!(success.is_ok());
     assert_eq!(success.ok(), Some(5));
@@ -536,7 +565,8 @@ fn test_query_error_report_display_full() {
 /// TEST-U-ERR-007: Display 仅含 table 时不应输出 Operation 行
 #[test]
 fn test_query_error_report_display_table_only() {
-    let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "grant access").with_table("accounts");
+    let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "grant access")
+        .with_table("accounts");
     let display = format!("{report}");
     assert!(display.contains("Table: accounts"));
     assert!(!display.contains("Operation:"));

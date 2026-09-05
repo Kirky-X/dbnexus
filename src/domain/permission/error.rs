@@ -66,7 +66,9 @@ impl crate::i18n::error_ext::LocalizedMsg for PermissionConfigError {
     fn message_args(&self) -> Vec<(&str, String)> {
         match self {
             Self::MissingField(field) => vec![("field", field.clone())],
-            Self::InvalidValue { field, reason } => vec![("field", field.clone()), ("reason", reason.clone())],
+            Self::InvalidValue { field, reason } => {
+                vec![("field", field.clone()), ("reason", reason.clone())]
+            }
             Self::PolicyFileNotFound(path) => vec![("path", path.clone())],
         }
     }
@@ -85,8 +87,14 @@ impl crate::i18n::error_ext::LocalizedMsg for PermissionError {
 
     fn message_args(&self) -> Vec<(&str, String)> {
         match self {
-            Self::Denied { resource, operation } => {
-                vec![("resource", resource.clone()), ("operation", operation.clone())]
+            Self::Denied {
+                resource,
+                operation,
+            } => {
+                vec![
+                    ("resource", resource.clone()),
+                    ("operation", operation.clone()),
+                ]
             }
             Self::RoleNotFound(role) => vec![("role", role.clone())],
             Self::InvalidPolicy(reason) => vec![("reason", reason.clone())],

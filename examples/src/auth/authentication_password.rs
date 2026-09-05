@@ -14,7 +14,9 @@
 //! cargo run --example authentication_password --features "authentication"
 //! ```
 
-use dbnexus::{AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User};
+use dbnexus::{
+    AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,13 +34,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let password_hash = hasher.hash(password)?;
     println!("  原始密码: {}", password);
     println!("  哈希结果: {}", password_hash);
-    assert!(password_hash.starts_with("$2b$"), "bcrypt 哈希应以 $2b$ 开头");
+    assert!(
+        password_hash.starts_with("$2b$"),
+        "bcrypt 哈希应以 $2b$ 开头"
+    );
 
     // 验证正确密码
     let verify_ok = hasher.verify(password, &password_hash);
     println!(
         "\n  验证正确密码: {:?}",
-        verify_ok.as_ref().map(|_| "✓ 通过").map_err(|e| format!("✗ {}", e))
+        verify_ok
+            .as_ref()
+            .map(|_| "✓ 通过")
+            .map_err(|e| format!("✗ {}", e))
     );
     assert!(verify_ok.is_ok());
 
@@ -46,7 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let verify_fail = hasher.verify("WrongPassword", &password_hash);
     println!(
         "  验证错误密码: {:?}",
-        verify_fail.as_ref().map(|_| "✓ 通过").map_err(|e| format!("✗ {}", e))
+        verify_fail
+            .as_ref()
+            .map(|_| "✓ 通过")
+            .map_err(|e| format!("✗ {}", e))
     );
     assert!(matches!(verify_fail, Err(AuthError::InvalidCredentials)));
 
@@ -62,7 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     for (pwd, desc) in &test_cases {
         let result = hasher.validate_strength(pwd);
-        let status = if result.is_ok() { "✓ 通过" } else { "✗ 拒绝" };
+        let status = if result.is_ok() {
+            "✓ 通过"
+        } else {
+            "✗ 拒绝"
+        };
         println!("  {:>15} [{}] - {}", pwd, status, desc);
     }
 
@@ -138,7 +153,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wrong_result = manager.authenticate(wrong_password).await;
     println!(
         "  错误密码: {:?}",
-        wrong_result.map(|_| "✓ 通过").map_err(|e| format!("✗ {}", e))
+        wrong_result
+            .map(|_| "✓ 通过")
+            .map_err(|e| format!("✗ {}", e))
     );
 
     let nonexistent = AuthCredentials {
@@ -148,7 +165,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nonexistent_result = manager.authenticate(nonexistent).await;
     println!(
         "  不存在用户: {:?}",
-        nonexistent_result.map(|_| "✓ 通过").map_err(|e| format!("✗ {}", e))
+        nonexistent_result
+            .map(|_| "✓ 通过")
+            .map_err(|e| format!("✗ {}", e))
     );
 
     // ============================================
@@ -158,11 +177,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // AuthenticationManager 内部的 jwt_manager 是私有的，
     // 这里使用相同 secret 创建独立 JwtManager 来签发 refresh token（生产中通常由登录接口返回）
     let jwt_for_refresh = JwtManager::new(b"dbnexus-demo-secret");
-    let refresh_token = jwt_for_refresh.generate_token("u_001", "alice", "admin", TokenType::Refresh)?;
+    let refresh_token =
+        jwt_for_refresh.generate_token("u_001", "alice", "admin", TokenType::Refresh)?;
     let new_access = manager.refresh_token(&refresh_token)?;
     println!("  ✓ 用 refresh token 换取新 access token");
     let new_claims = manager.verify_token(&new_access)?;
-    println!("  ✓ 新 token: sub={}, type={:?}", new_claims.sub, new_claims.token_type);
+    println!(
+        "  ✓ 新 token: sub={}, type={:?}",
+        new_claims.sub, new_claims.token_type
+    );
 
     // ============================================
     // 6. 用户删除

@@ -109,7 +109,11 @@ pub struct Session {
 
 impl Session {
     /// 创建新的 Session
-    pub(crate) fn new(connection: DbConnection, pool_inner: Arc<DbPoolInner>, role: String) -> Self {
+    pub(crate) fn new(
+        connection: DbConnection,
+        pool_inner: Arc<DbPoolInner>,
+        role: String,
+    ) -> Self {
         #[cfg(feature = "permission")]
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
@@ -156,7 +160,11 @@ impl Session {
 
     /// 检查权限
     #[cfg(feature = "permission")]
-    pub async fn check_permission(&self, table: &str, operation: &PermissionAction) -> Result<(), DbError> {
+    pub async fn check_permission(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+    ) -> Result<(), DbError> {
         // Admin 角色绕过权限检查（拥有完全控制权）
         // vuln-0001 修复：admin bypass 仍记录审计日志以保留审计链
         if self.role == self.pool_inner.admin_role {
@@ -164,7 +172,11 @@ impl Session {
             return Ok(());
         }
 
-        if self.permission_ctx.check_table_access(table, operation).await {
+        if self
+            .permission_ctx
+            .check_table_access(table, operation)
+            .await
+        {
             Ok(())
         } else {
             Err(permission_denied(operation, table))
@@ -198,7 +210,9 @@ impl Session {
             let state = self.state.write().await;
             #[cfg(any(feature = "ladybug", feature = "neo4j"))]
             if state.graph_transaction.is_some() {
-                return Err(DbError::Transaction("Already in graph transaction".to_string()));
+                return Err(DbError::Transaction(
+                    "Already in graph transaction".to_string(),
+                ));
             }
             if state.transaction.is_some() {
                 return Err(DbError::Transaction("Already in transaction".to_string()));
@@ -207,7 +221,9 @@ impl Session {
 
         // 获取连接
         let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+            DbError::Config(
+                "Connection not available - Session may have been invalidated".to_string(),
+            )
         })?;
 
         // 图连接分发：调用 begin_graph_txn
@@ -215,7 +231,10 @@ impl Session {
         if conn.is_graph() {
             let graph = conn.as_graph()?;
             let graph_txn = graph.begin_graph_txn().await.map_err(|e| {
-                DbError::Transaction(i18n::t("session-txn-begin-graph-failed", &[("error", e.to_string())]))
+                DbError::Transaction(i18n::t(
+                    "session-txn-begin-graph-failed",
+                    &[("error", e.to_string())],
+                ))
             })?;
 
             // 短锁：写入 graph_transaction（含并发冲突处理）
@@ -239,10 +258,12 @@ impl Session {
 
         // SeaORM 逻辑：锁外执行 async DB 操作
         let conn = conn.as_sea_orm()?;
-        let transaction = conn
-            .begin()
-            .await
-            .map_err(|e| DbError::Transaction(i18n::t("session-txn-begin-failed", &[("error", e.to_string())])))?;
+        let transaction = conn.begin().await.map_err(|e| {
+            DbError::Transaction(i18n::t(
+                "session-txn-begin-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
 
         // 短锁：写入 transaction（含并发冲突处理）
         // extract-take-operate-writeback：锁内仅检查，rollback 在锁外执行
@@ -285,7 +306,10 @@ impl Session {
             if let Some(graph_txn) = graph_txn {
                 // 锁外：执行 async commit（commit 消耗 self）
                 graph_txn.commit().await.map_err(|e| {
-                    DbError::Transaction(i18n::t("session-txn-commit-failed", &[("error", e.to_string())]))
+                    DbError::Transaction(i18n::t(
+                        "session-txn-commit-failed",
+                        &[("error", e.to_string())],
+                    ))
                 })?;
 
                 // 短锁：清除 last_write
@@ -298,15 +322,16 @@ impl Session {
         // SeaORM 逻辑：短锁 take transaction
         let transaction_arc = {
             let mut state = self.state.write().await;
-            state
-                .transaction
-                .take()
-                .ok_or_else(|| DbError::Transaction("No active transaction to commit".to_string()))?
+            state.transaction.take().ok_or_else(|| {
+                DbError::Transaction("No active transaction to commit".to_string())
+            })?
         };
 
         // 锁外：try_unwrap 解包 Arc（如果有并发查询持有引用，会失败）
         let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
-            DbError::Transaction("Cannot commit: transaction is in use by a concurrent query".to_string())
+            DbError::Transaction(
+                "Cannot commit: transaction is in use by a concurrent query".to_string(),
+            )
         })?;
 
         // 锁外：执行 async commit（commit 消耗 self）
@@ -357,22 +382,25 @@ impl Session {
             if state.transaction.is_none() {
                 return Err(DbError::Transaction("Not in transaction".to_string()));
             }
-            state
-                .transaction
-                .take()
-                .ok_or_else(|| DbError::Transaction("No active transaction to rollback".to_string()))?
+            state.transaction.take().ok_or_else(|| {
+                DbError::Transaction("No active transaction to rollback".to_string())
+            })?
         };
 
         // 锁外：try_unwrap 解包 Arc
         let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
-            DbError::Transaction("Cannot rollback: transaction is in use by a concurrent query".to_string())
+            DbError::Transaction(
+                "Cannot rollback: transaction is in use by a concurrent query".to_string(),
+            )
         })?;
 
         // 锁外：执行 async rollback（rollback 消耗 self）
-        transaction
-            .rollback()
-            .await
-            .map_err(|e| DbError::Transaction(i18n::t("session-txn-rollback-failed", &[("error", e.to_string())])))?;
+        transaction.rollback().await.map_err(|e| {
+            DbError::Transaction(i18n::t(
+                "session-txn-rollback-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
 
         Ok(())
     }
@@ -404,7 +432,11 @@ impl Session {
     pub fn connection(&self) -> Result<&DatabaseConnection, DbError> {
         self.connection
             .as_ref()
-            .ok_or_else(|| DbError::Config("Connection not available - Session may have been invalidated".to_string()))?
+            .ok_or_else(|| {
+                DbError::Config(
+                    "Connection not available - Session may have been invalidated".to_string(),
+                )
+            })?
             .as_sea_orm()
     }
 
@@ -471,7 +503,8 @@ impl Session {
                         for table in &parsed.all_table_names {
                             if table.is_empty() || is_invalid_table_name(table) {
                                 return Err(DbError::Permission(
-                                    "Failed to extract table name for permission checking".to_string(),
+                                    "Failed to extract table name for permission checking"
+                                        .to_string(),
                                 ));
                             }
                         }
@@ -523,10 +556,14 @@ impl Session {
                             tokio::time::sleep(backoff).await;
                         }
                         let result = if let Some(ref tx) = tx_opt {
-                            tx.execute_unprepared(sql).await.map_err(DbError::Connection)
+                            tx.execute_unprepared(sql)
+                                .await
+                                .map_err(DbError::Connection)
                         } else {
                             let conn = self.connection()?;
-                            conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+                            conn.execute_unprepared(sql)
+                                .await
+                                .map_err(DbError::Connection)
                         };
                         match result {
                             Ok(exec_result) => return Ok(exec_result),
@@ -539,17 +576,25 @@ impl Session {
 
             // 无重试路径（retry 未启用或非幂等操作）
             if let Some(tx) = tx_opt {
-                return tx.execute_unprepared(sql).await.map_err(DbError::Connection);
+                return tx
+                    .execute_unprepared(sql)
+                    .await
+                    .map_err(DbError::Connection);
             }
 
             let conn = self.connection()?;
-            conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+            conn.execute_unprepared(sql)
+                .await
+                .map_err(DbError::Connection)
         }
     }
 
     /// 计算重试退避时间（retry feature 内部辅助方法）
     #[cfg(feature = "retry")]
-    fn calculate_retry_backoff(policy: &crate::reliability::RetryPolicy, attempt: u32) -> std::time::Duration {
+    fn calculate_retry_backoff(
+        policy: &crate::reliability::RetryPolicy,
+        attempt: u32,
+    ) -> std::time::Duration {
         use std::time::Duration;
         let base_ms = policy.initial_backoff_ms as f64;
         let backoff_ms = base_ms * policy.multiplier.powi(attempt as i32);
@@ -613,7 +658,9 @@ impl Session {
 
         // 执行 SQL
         let conn = self.connection()?;
-        conn.execute_unprepared(sql).await.map_err(DbError::Connection)
+        conn.execute_unprepared(sql)
+            .await
+            .map_err(DbError::Connection)
     }
 
     /// DuckDB 路径统一安全门（DDL 拦截 + SQL 注入检测 + 权限校验）
@@ -669,7 +716,10 @@ impl Session {
                         ));
                     }
                     if self.role != self.pool_inner.admin_role
-                        && !self.permission_ctx.check_table_access(&table_name, &action).await
+                        && !self
+                            .permission_ctx
+                            .check_table_access(&table_name, &action)
+                            .await
                     {
                         return Err(permission_denied(&action, &table_name));
                     }
@@ -679,7 +729,8 @@ impl Session {
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                     if self.role != self.pool_inner.admin_role {
                         return Err(DbError::Permission(
-                            "SQL statement requires a valid table name for permission checking".to_string(),
+                            "SQL statement requires a valid table name for permission checking"
+                                .to_string(),
                         ));
                     }
                 }
@@ -863,7 +914,8 @@ impl Session {
         {
             let _ = sql;
             Err(DbError::Permission(
-                "execute_duckdb requires the sql-parser feature to be enabled for security checks".to_string(),
+                "execute_duckdb requires the sql-parser feature to be enabled for security checks"
+                    .to_string(),
             ))
         }
 
@@ -880,7 +932,10 @@ impl Session {
                             ));
                         }
                         if self.role != self.pool_inner.admin_role
-                            && !self.permission_ctx.check_table_access(&table_name, &action).await
+                            && !self
+                                .permission_ctx
+                                .check_table_access(&table_name, &action)
+                                .await
                         {
                             return Err(permission_denied(&action, &table_name));
                         }
@@ -891,7 +946,8 @@ impl Session {
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                         if self.role != self.pool_inner.admin_role {
                             return Err(DbError::Permission(
-                                "SQL statement requires a valid table name for permission checking".to_string(),
+                                "SQL statement requires a valid table name for permission checking"
+                                    .to_string(),
                             ));
                         }
                     }
@@ -928,7 +984,10 @@ impl Session {
     ///
     /// 受影响的行数信息
     #[cfg(feature = "duckdb")]
-    pub async fn execute_duckdb_raw(&self, sql: &str) -> DbResult<crate::database::DuckDbExecResult> {
+    pub async fn execute_duckdb_raw(
+        &self,
+        sql: &str,
+    ) -> DbResult<crate::database::DuckDbExecResult> {
         // 安全检查：与 execute_raw_ddl 对齐 —— admin role 通过 DdlGuard 验证后允许 DDL，
         // 非 admin role 拒绝 DDL。DuckDB 是分析型数据库，admin 需要能创建表/视图，
         // 与 SeaORM 路径的 execute_raw_ddl 行为保持一致。
@@ -941,10 +1000,9 @@ impl Session {
                     let guard = DdlGuard::new();
                     match guard.validate(sql) {
                         Ok(DdlValidationResult::Allowed) => {
-                            let conn = self
-                                .connection
-                                .as_ref()
-                                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+                            let conn = self.connection.as_ref().ok_or_else(|| {
+                                DbError::Config("Connection not available".to_string())
+                            })?;
                             let duck_conn = conn.as_duckdb()?;
                             return duck_conn.execute(sql).await;
                         }
@@ -997,7 +1055,10 @@ impl Session {
                             ));
                         }
                         if self.role != self.pool_inner.admin_role
-                            && !self.permission_ctx.check_table_access(&table_name, &action).await
+                            && !self
+                                .permission_ctx
+                                .check_table_access(&table_name, &action)
+                                .await
                         {
                             return Err(permission_denied(&action, &table_name));
                         }
@@ -1007,7 +1068,8 @@ impl Session {
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                         if self.role != self.pool_inner.admin_role {
                             return Err(DbError::Permission(
-                                "SQL statement requires a valid table name for permission checking".to_string(),
+                                "SQL statement requires a valid table name for permission checking"
+                                    .to_string(),
                             ));
                         }
                     }
@@ -1072,7 +1134,8 @@ impl Session {
         params: HashMap<String, serde_json::Value>,
     ) -> DbResult<crate::database::graph::GraphExecResult> {
         // MD-1 修复：委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
-        self.execute_cypher_in_transaction(cypher, Some(params)).await
+        self.execute_cypher_in_transaction(cypher, Some(params))
+            .await
     }
 
     /// 执行 Cypher 查询的内部 helper（MD-1 提取，统一事务分发逻辑）
@@ -1117,14 +1180,19 @@ impl Session {
         // 图权限检查（admin 角色由 GraphPermissionContext 内部处理）
         #[cfg(feature = "permission")]
         {
-            let graph_perm_ctx =
-                crate::access::permission::GraphPermissionContext::new(&self.role, &self.pool_inner.admin_role);
-            graph_perm_ctx.check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
+            let graph_perm_ctx = crate::access::permission::GraphPermissionContext::new(
+                &self.role,
+                &self.pool_inner.admin_role,
+            );
+            graph_perm_ctx
+                .check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
         }
 
         // 取连接
         let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config("Connection not available - Session may have been invalidated".to_string())
+            DbError::Config(
+                "Connection not available - Session may have been invalidated".to_string(),
+            )
         })?;
 
         // 获取图操作互斥锁（HIGH-001：防止并发 take → put back 窗口绕过事务隔离）
@@ -1231,7 +1299,11 @@ impl Session {
 
     /// 执行 SQL 并指定操作类型
     #[cfg(feature = "permission")]
-    pub async fn execute_with_operation(&self, sql: &str, operation: &PermissionAction) -> DbResult<ExecResult> {
+    pub async fn execute_with_operation(
+        &self,
+        sql: &str,
+        operation: &PermissionAction,
+    ) -> DbResult<ExecResult> {
         let start = Instant::now();
 
         #[cfg(feature = "sql-parser")]
@@ -1250,7 +1322,12 @@ impl Session {
         // 检查权限
         #[cfg(feature = "permission")]
         {
-            if !table_name.is_empty() && !self.permission_ctx.check_table_access(&table_name, operation).await {
+            if !table_name.is_empty()
+                && !self
+                    .permission_ctx
+                    .check_table_access(&table_name, operation)
+                    .await
+            {
                 return Err(permission_denied(operation, &table_name));
             }
         }
@@ -1357,7 +1434,11 @@ impl Session {
     /// 检查表级权限
     ///
     /// 此方法为 ORM 操作提供权限检查，确保所有实体操作都经过权限验证
-    pub async fn check_table_permission(&self, _table_name: &str, _operation: &str) -> DbResult<()> {
+    pub async fn check_table_permission(
+        &self,
+        _table_name: &str,
+        _operation: &str,
+    ) -> DbResult<()> {
         #[cfg(feature = "permission")]
         {
             let action = match _operation {
@@ -1377,7 +1458,11 @@ impl Session {
             // vuln-0001 修复：admin bypass 仍记录审计日志
             if self.role == self.pool_inner.admin_role {
                 audit_admin_bypass(&self.role, _table_name, &action);
-            } else if !self.permission_ctx.check_table_access(_table_name, &action).await {
+            } else if !self
+                .permission_ctx
+                .check_table_access(_table_name, &action)
+                .await
+            {
                 return Err(permission_denied(_operation, _table_name));
             }
         }
@@ -1390,7 +1475,12 @@ impl Session {
         if let Some(metrics) = &self.metrics_collector {
             // 使用表名的哈希值作为 bytes 参数
             let bytes = Some(table_name.len() as u64);
-            metrics.record_query(operation, std::time::Duration::from_millis(0), success, bytes);
+            metrics.record_query(
+                operation,
+                std::time::Duration::from_millis(0),
+                success,
+                bytes,
+            );
         }
     }
 }
@@ -1429,7 +1519,10 @@ fn is_invalid_table_name(table_name: &str) -> bool {
 /// 统一 "Permission denied for {action} on {table}" 错误消息格式，
 /// 避免在多处调用点重复 `DbError::Permission(format!(...))` 模板。
 #[cfg(feature = "permission")]
-fn permission_denied(action: &(impl std::fmt::Display + ?Sized), table: &(impl std::fmt::Display + ?Sized)) -> DbError {
+fn permission_denied(
+    action: &(impl std::fmt::Display + ?Sized),
+    table: &(impl std::fmt::Display + ?Sized),
+) -> DbError {
     DbError::Permission(i18n::t(
         "session-permission-denied",
         &[("action", action.to_string()), ("table", table.to_string())],
@@ -1491,7 +1584,8 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
     let inner = trimmed.trim_end_matches(';').trim();
     if inner.contains(';') {
         return Err(DbError::Permission(
-            "Cypher query contains multiple statements (';' inside query) - potential injection".to_string(),
+            "Cypher query contains multiple statements (';' inside query) - potential injection"
+                .to_string(),
         ));
     }
 
@@ -1692,7 +1786,10 @@ mod graph_tests {
     async fn test_graph_session_begin_sets_in_transaction() {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
-        session.begin_transaction().await.expect("begin should succeed");
+        session
+            .begin_transaction()
+            .await
+            .expect("begin should succeed");
         assert!(
             session.is_in_transaction().await,
             "should be in transaction after begin"
@@ -1884,7 +1981,10 @@ mod graph_tests {
 
         // 事务内查询应看到数据
         let result = session
-            .execute_cypher_with_params("MATCH (p:Person) RETURN p.name AS name, p.age AS age", HashMap::new())
+            .execute_cypher_with_params(
+                "MATCH (p:Person) RETURN p.name AS name, p.age AS age",
+                HashMap::new(),
+            )
             .await
             .expect("match in txn");
         match result {
@@ -2015,7 +2115,9 @@ mod graph_tests {
         let pool = make_ladybug_pool().await;
         // system 角色在无权限配置时也被允许获取 session
         let session = pool.get_session("system").await.expect("get_session");
-        let result = session.execute_cypher_with_params("RETURN 1", HashMap::new()).await;
+        let result = session
+            .execute_cypher_with_params("RETURN 1", HashMap::new())
+            .await;
         assert!(result.is_err(), "non-admin role should be denied");
         let err = result.unwrap_err();
         assert!(
@@ -2031,7 +2133,9 @@ mod graph_tests {
     async fn test_execute_cypher_admin_allowed() {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
-        let result = session.execute_cypher_with_params("RETURN 42", HashMap::new()).await;
+        let result = session
+            .execute_cypher_with_params("RETURN 42", HashMap::new())
+            .await;
         assert!(result.is_ok(), "admin role should be allowed");
     }
 }
@@ -2049,18 +2153,26 @@ mod vuln_0001_tests {
     #[cfg(all(feature = "permission", feature = "sqlite"))]
     #[tokio::test]
     async fn test_vuln_0001_admin_bypass_returns_ok_with_audit() {
-        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        let pool = DbPool::new("sqlite::memory:")
+            .await
+            .expect("Failed to create pool");
         let session = pool.get_session("admin").await.expect("get_session");
 
         // admin 角色绕过权限检查，应返回 Ok
-        let result = session.check_permission("any_table", &PermissionAction::Select).await;
+        let result = session
+            .check_permission("any_table", &PermissionAction::Select)
+            .await;
         assert!(result.is_ok(), "admin bypass should return Ok");
 
         // 也测试其他操作
-        let result = session.check_permission("any_table", &PermissionAction::Insert).await;
+        let result = session
+            .check_permission("any_table", &PermissionAction::Insert)
+            .await;
         assert!(result.is_ok(), "admin bypass should return Ok for Insert");
 
-        let result = session.check_permission("any_table", &PermissionAction::Delete).await;
+        let result = session
+            .check_permission("any_table", &PermissionAction::Delete)
+            .await;
         assert!(result.is_ok(), "admin bypass should return Ok for Delete");
     }
 
@@ -2068,12 +2180,16 @@ mod vuln_0001_tests {
     #[cfg(all(feature = "permission", feature = "sqlite"))]
     #[tokio::test]
     async fn test_vuln_0001_non_admin_denied() {
-        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        let pool = DbPool::new("sqlite::memory:")
+            .await
+            .expect("Failed to create pool");
         // system 角色可获取 session 但不是 admin_role，无权限配置时 check_permission 应拒绝
         let session = pool.get_session("system").await.expect("get_session");
 
         // 非 admin 角色应被拒绝（无权限配置时默认拒绝）
-        let result = session.check_permission("any_table", &PermissionAction::Select).await;
+        let result = session
+            .check_permission("any_table", &PermissionAction::Select)
+            .await;
         assert!(result.is_err(), "non-admin should be denied");
     }
 
@@ -2099,7 +2215,8 @@ roles:
         let yaml_path = tmp_dir.join("test_non_admin_perm.yaml");
         {
             let mut file = std::fs::File::create(&yaml_path).expect("create temp file");
-            file.write_all(yaml_content.as_bytes()).expect("write temp file");
+            file.write_all(yaml_content.as_bytes())
+                .expect("write temp file");
         }
 
         let config = crate::foundation::DbConfig {
@@ -2107,11 +2224,18 @@ roles:
             permissions_path: Some(yaml_path.to_string_lossy().to_string()),
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // reader 角色有 test_tbl 的 SELECT 权限 -> check_permission 应返回 Ok
-        let session = pool.get_session("reader").await.expect("get_session for reader");
-        let result = session.check_permission("test_tbl", &PermissionAction::Select).await;
+        let session = pool
+            .get_session("reader")
+            .await
+            .expect("get_session for reader");
+        let result = session
+            .check_permission("test_tbl", &PermissionAction::Select)
+            .await;
         assert!(
             result.is_ok(),
             "reader should have SELECT on test_tbl: {:?}",
@@ -2126,7 +2250,9 @@ roles:
     #[cfg(all(feature = "permission", feature = "sqlite"))]
     #[tokio::test]
     async fn test_vuln_0001_check_table_permission_admin_bypass() {
-        let pool = DbPool::new("sqlite::memory:").await.expect("Failed to create pool");
+        let pool = DbPool::new("sqlite::memory:")
+            .await
+            .expect("Failed to create pool");
         let session = pool.get_session("admin").await.expect("get_session");
 
         // admin bypass check_table_permission
@@ -2134,7 +2260,10 @@ roles:
         assert!(result.is_ok(), "admin should bypass check_table_permission");
 
         let result = session.check_table_permission("users", "INSERT").await;
-        assert!(result.is_ok(), "admin should bypass check_table_permission for INSERT");
+        assert!(
+            result.is_ok(),
+            "admin should bypass check_table_permission for INSERT"
+        );
     }
 }
 
@@ -2307,7 +2436,10 @@ mod vuln_0005_tests {
     fn test_validate_cypher_safety_rejects_line_comment() {
         let cypher = "MATCH (n) // comment RETURN n";
         let result = validate_cypher_safety(cypher);
-        assert!(result.is_err(), "Cypher with line comment '//' should be rejected");
+        assert!(
+            result.is_err(),
+            "Cypher with line comment '//' should be rejected"
+        );
 
         match &result {
             Err(DbError::Permission(msg)) => {
@@ -2329,7 +2461,10 @@ mod vuln_0005_tests {
     fn test_validate_cypher_safety_rejects_block_comment() {
         let cypher = "MATCH (n) /* comment */ RETURN n";
         let result = validate_cypher_safety(cypher);
-        assert!(result.is_err(), "Cypher with block comment '/* */' should be rejected");
+        assert!(
+            result.is_err(),
+            "Cypher with block comment '/* */' should be rejected"
+        );
 
         match &result {
             Err(DbError::Permission(msg)) => {
@@ -2351,7 +2486,10 @@ mod vuln_0005_tests {
     fn test_validate_cypher_safety_rejects_apoc_call() {
         let cypher = "CALL apoc.systemdb.admin('something')";
         let result = validate_cypher_safety(cypher);
-        assert!(result.is_err(), "Cypher calling APOC procedure should be rejected");
+        assert!(
+            result.is_err(),
+            "Cypher calling APOC procedure should be rejected"
+        );
 
         match &result {
             Err(DbError::Permission(msg)) => {
@@ -2493,7 +2631,10 @@ mod vuln_0005_tests {
             .expect("create node table");
 
         // 开始事务
-        session.begin_transaction().await.expect("begin transaction");
+        session
+            .begin_transaction()
+            .await
+            .expect("begin transaction");
 
         // 事务内参数化插入
         let mut params1 = HashMap::new();
@@ -2514,7 +2655,10 @@ mod vuln_0005_tests {
 
         // 事务内查询验证
         let result = session
-            .execute_cypher_with_params("MATCH (a:Account) RETURN a.id AS id ORDER BY a.id", HashMap::new())
+            .execute_cypher_with_params(
+                "MATCH (a:Account) RETURN a.id AS id ORDER BY a.id",
+                HashMap::new(),
+            )
             .await
             .expect("match in txn");
 
@@ -2614,7 +2758,10 @@ mod session_basic_tests {
         let (_pool, session) = make_test_session("admin").await;
 
         // 开始事务
-        session.begin_transaction().await.expect("begin_transaction");
+        session
+            .begin_transaction()
+            .await
+            .expect("begin_transaction");
         assert!(session.is_in_transaction().await);
         assert!(session.should_use_master().await);
 
@@ -2627,7 +2774,10 @@ mod session_basic_tests {
     async fn test_session_begin_and_rollback_transaction() {
         let (_pool, session) = make_test_session("admin").await;
 
-        session.begin_transaction().await.expect("begin_transaction");
+        session
+            .begin_transaction()
+            .await
+            .expect("begin_transaction");
         assert!(session.is_in_transaction().await);
 
         session.rollback().await.expect("rollback");
@@ -2681,7 +2831,11 @@ mod session_basic_tests {
 
         // SELECT from table should succeed for admin role
         let result = session.execute_raw("SELECT * FROM sel_test").await;
-        assert!(result.is_ok(), "SELECT from table should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "SELECT from table should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[tokio::test]
@@ -2711,7 +2865,11 @@ mod session_basic_tests {
         let result = session
             .execute_raw("INSERT INTO test_tbl (id, name) VALUES (1, 'test')")
             .await;
-        assert!(result.is_ok(), "INSERT should succeed for admin: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "INSERT should succeed for admin: {:?}",
+            result.err()
+        );
     }
 
     #[tokio::test]
@@ -2721,7 +2879,10 @@ mod session_basic_tests {
         // Use the DatabaseSession trait method explicitly
         use super::super::DatabaseSession;
         let result = DatabaseSession::commit(&session).await;
-        assert!(result.is_err(), "commit without transaction via trait should error");
+        assert!(
+            result.is_err(),
+            "commit without transaction via trait should error"
+        );
     }
 
     #[tokio::test]
@@ -2730,7 +2891,10 @@ mod session_basic_tests {
 
         use super::super::DatabaseSession;
         let result = DatabaseSession::rollback(&session).await;
-        assert!(result.is_err(), "rollback without transaction via trait should error");
+        assert!(
+            result.is_err(),
+            "rollback without transaction via trait should error"
+        );
     }
 
     #[cfg(feature = "sql-parser")]
@@ -2748,8 +2912,13 @@ mod session_basic_tests {
             .expect("create table");
 
         use super::super::DatabaseSession;
-        let result = DatabaseSession::execute(&session, "INSERT INTO trait_exec_test (id) VALUES (1)").await;
-        assert!(result.is_ok(), "execute via trait should succeed: {:?}", result.err());
+        let result =
+            DatabaseSession::execute(&session, "INSERT INTO trait_exec_test (id) VALUES (1)").await;
+        assert!(
+            result.is_ok(),
+            "execute via trait should succeed: {:?}",
+            result.err()
+        );
     }
 
     // ===== 补充测试：is_invalid_table_name, create_migration_executor =====
@@ -2759,7 +2928,10 @@ mod session_basic_tests {
     async fn test_extract_table_name_via_parser_invalid_table() {
         // Parser returns empty table name -> covers line 1430
         let result = super::extract_table_name_via_parser("SELECT 1").await;
-        assert!(result.is_none(), "SELECT without FROM table should return None");
+        assert!(
+            result.is_none(),
+            "SELECT without FROM table should return None"
+        );
     }
 
     #[cfg(feature = "permission")]

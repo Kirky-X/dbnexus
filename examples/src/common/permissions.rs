@@ -27,7 +27,9 @@ pub async fn setup_guest_context() -> Result<PermissionContext, Box<dyn std::err
 }
 
 /// 创建指定角色的权限上下文（带默认速率限制）
-pub async fn setup_role_context(role: &str) -> Result<PermissionContext, Box<dyn std::error::Error>> {
+pub async fn setup_role_context(
+    role: &str,
+) -> Result<PermissionContext, Box<dyn std::error::Error>> {
     let ctx = PermissionContext::new_default_with_rate_limit(role.to_string()).await?;
     Ok(ctx)
 }

@@ -11,7 +11,10 @@ use dbnexus::{AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterRe
 #[test]
 fn test_partial_failure_policy_equality() {
     assert_eq!(PartialFailurePolicy::Fail, PartialFailurePolicy::Fail);
-    assert_eq!(PartialFailurePolicy::BestEffort, PartialFailurePolicy::BestEffort);
+    assert_eq!(
+        PartialFailurePolicy::BestEffort,
+        PartialFailurePolicy::BestEffort
+    );
     assert_ne!(PartialFailurePolicy::Fail, PartialFailurePolicy::BestEffort);
 }
 

@@ -85,7 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let denied_a = limiter2.check("user_A").await;
     println!("    user_A 再次请求: allowed={} (应被拒绝)", denied_a);
-    println!("    user_B remaining = {} (不受影响)", limiter2.remaining("user_B"));
+    println!(
+        "    user_B remaining = {} (不受影响)",
+        limiter2.remaining("user_B")
+    );
     println!();
 
     // ============================================
@@ -99,13 +102,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = limiter3.check("user_reset").await;
     let _ = limiter3.check("user_reset").await;
     let denied = limiter3.check("user_reset").await;
-    println!("\n  消耗 2 个令牌后第 3 次请求: allowed={} (应被拒绝)", denied);
+    println!(
+        "\n  消耗 2 个令牌后第 3 次请求: allowed={} (应被拒绝)",
+        denied
+    );
     println!("    remaining = {}", limiter3.remaining("user_reset"));
 
     // 重置
     println!("\n  执行 limiter.reset(\"user_reset\")");
     limiter3.reset("user_reset");
-    println!("    remaining = {} (重置后)", limiter3.remaining("user_reset"));
+    println!(
+        "    remaining = {} (重置后)",
+        limiter3.remaining("user_reset")
+    );
 
     // 验证可再次请求
     let allowed = limiter3.check("user_reset").await;
@@ -148,7 +157,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..10 {
         let _ = limiter5.check("refill_user").await;
     }
-    println!("    remaining = {} (已耗尽)", limiter5.remaining("refill_user"));
+    println!(
+        "    remaining = {} (已耗尽)",
+        limiter5.remaining("refill_user")
+    );
 
     // 等待 1.1 秒让令牌填充
     println!("\n  等待 1.1 秒让令牌填充...");
@@ -196,7 +208,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limiter7 = RateLimiter::new(20, Duration::from_secs(60), 10000, 20);
     println!("  ✓ RateLimiter 创建: max_requests=20/min (模拟 API 限流)");
 
-    let mut stats = Stats { allowed: 0, denied: 0 };
+    let mut stats = Stats {
+        allowed: 0,
+        denied: 0,
+    };
 
     println!("\n  模拟 30 次权限检查:");
     for i in 1..=30 {

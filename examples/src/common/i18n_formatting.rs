@@ -115,7 +115,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Locale: {}", locale);
         for (year, month, day) in dates {
             match fmt.format_timestamp(year, month, day) {
-                Ok(formatted) => println!("    {:04}-{:02}-{:02} → {}", year, month, day, formatted),
+                Ok(formatted) => {
+                    println!("    {:04}-{:02}-{:02} → {}", year, month, day, formatted)
+                }
                 Err(e) => println!("    {:04}-{:02}-{:02} → 错误: {}", year, month, day, e),
             }
         }

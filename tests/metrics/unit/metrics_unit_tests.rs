@@ -10,7 +10,9 @@
 //! - 指标基数控制测试
 //! - 高基数标签检测测试
 
-use dbnexus::{LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics};
+use dbnexus::{
+    LatencyHistogram, LatencyPercentiles, MetricsCollector, MetricsCollectorTrait, PoolMetrics,
+};
 use std::time::Duration;
 
 // ============================================================================
@@ -507,7 +509,12 @@ fn test_high_cardinality_detection_many_types() {
 
     // 创建大量不同的查询类型（模拟高基数标签）
     for i in 0..1000 {
-        collector.record_query(&format!("SELECT_{}", i), Duration::from_millis(10), true, Some(100));
+        collector.record_query(
+            &format!("SELECT_{}", i),
+            Duration::from_millis(10),
+            true,
+            Some(100),
+        );
     }
 
     let all_stats = collector.all_query_stats();
@@ -523,7 +530,12 @@ fn test_memory_control_high_cardinality() {
 
     // 记录大量不同的查询类型
     for i in 0..500 {
-        collector.record_query(&format!("type_{}", i), Duration::from_millis(i % 100), true, None);
+        collector.record_query(
+            &format!("type_{}", i),
+            Duration::from_millis(i % 100),
+            true,
+            None,
+        );
     }
 
     // 验证仍然可以获取统计
@@ -579,7 +591,12 @@ fn test_prometheus_export_high_cardinality() {
 
     // 记录多种查询类型
     for i in 0..50 {
-        collector.record_query(&format!("query_type_{}", i), Duration::from_millis(10), true, Some(100));
+        collector.record_query(
+            &format!("query_type_{}", i),
+            Duration::from_millis(10),
+            true,
+            Some(100),
+        );
     }
 
     let prometheus = collector.export_prometheus();
@@ -597,7 +614,12 @@ fn test_time_window_high_cardinality() {
     // 记录多种类型，每种记录多次
     for _ in 0..10 {
         for i in 0..100 {
-            collector.record_query(&format!("type_{}", i), Duration::from_millis(i % 50), true, None);
+            collector.record_query(
+                &format!("type_{}", i),
+                Duration::from_millis(i % 50),
+                true,
+                None,
+            );
         }
     }
 
@@ -815,7 +837,12 @@ fn test_concurrent_data_consistency() {
         let collector_clone = Arc::clone(&collector);
         let handle = thread::spawn(move || {
             for i in 0..100 {
-                collector_clone.record_query("SELECT", Duration::from_millis(i % 50), true, Some(100));
+                collector_clone.record_query(
+                    "SELECT",
+                    Duration::from_millis(i % 50),
+                    true,
+                    Some(100),
+                );
             }
         });
         handles.push(handle);

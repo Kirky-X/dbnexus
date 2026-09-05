@@ -57,7 +57,10 @@ impl OxcacheDbCacheAdapter {
 }
 
 impl DbCacheProvider for OxcacheDbCacheAdapter {
-    fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+    fn get<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
         Box::pin(async move {
             self.cache
                 .get(key)
@@ -80,7 +83,10 @@ impl DbCacheProvider for OxcacheDbCacheAdapter {
         })
     }
 
-    fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+    fn delete<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
         Box::pin(async move {
             self.cache
                 .delete(key)
@@ -132,7 +138,10 @@ mod tests {
     #[tokio::test]
     async fn adapter_get_absent_returns_none() {
         let adapter = make_adapter();
-        let got = adapter.get("nonexistent").await.expect("get should succeed");
+        let got = adapter
+            .get("nonexistent")
+            .await
+            .expect("get should succeed");
         assert!(got.is_none(), "absent key should return Ok(None)");
     }
 
@@ -141,7 +150,10 @@ mod tests {
     #[tokio::test]
     async fn adapter_delete_removes_value() {
         let adapter = make_adapter();
-        adapter.set("doomed", b"x".to_vec(), None).await.expect("set");
+        adapter
+            .set("doomed", b"x".to_vec(), None)
+            .await
+            .expect("set");
         adapter.delete("doomed").await.expect("delete");
         let gone = adapter.get("doomed").await.expect("get after delete");
         assert!(gone.is_none());
@@ -154,7 +166,11 @@ mod tests {
     async fn adapter_set_with_ttl() {
         let adapter = make_adapter();
         adapter
-            .set("ttl_key", b"ttl_val".to_vec(), Some(Duration::from_secs(60)))
+            .set(
+                "ttl_key",
+                b"ttl_val".to_vec(),
+                Some(Duration::from_secs(60)),
+            )
             .await
             .expect("set with ttl");
         let got = adapter.get("ttl_key").await.expect("get");
@@ -191,7 +207,10 @@ mod tests {
         let got = adapter.get("dyn_key").await.expect("get via dyn");
         assert_eq!(got, Some(b"dyn_val".to_vec()));
         adapter.delete("dyn_key").await.expect("delete via dyn");
-        let gone = adapter.get("dyn_key").await.expect("get after delete via dyn");
+        let gone = adapter
+            .get("dyn_key")
+            .await
+            .expect("get after delete via dyn");
         assert!(gone.is_none());
     }
 }

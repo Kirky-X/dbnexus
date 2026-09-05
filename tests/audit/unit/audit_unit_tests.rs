@@ -6,8 +6,8 @@
 
 use dbnexus::chrono::Utc;
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage,
-    MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
+    AuditStatus, AuditStorage, MemoryAuditStorage,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,7 +42,11 @@ async fn test_audit_log_rotation_on_capacity() {
 
     // 验证存储容量限制生效
     let count = storage.event_count().await;
-    assert!(count <= 5, "Storage should respect capacity limit, got {}", count);
+    assert!(
+        count <= 5,
+        "Storage should respect capacity limit, got {}",
+        count
+    );
 }
 
 /// TEST-U-AUDIT-002: 测试手动触发日志轮转
@@ -88,16 +92,19 @@ async fn test_audit_rotation_retain_high_severity() {
 
     // 写入普通日志直到接近容量
     for i in 0..8 {
-        let event = AuditEvent::create("normal", &i.to_string(), "user").with_severity(AuditSeverity::Info);
+        let event =
+            AuditEvent::create("normal", &i.to_string(), "user").with_severity(AuditSeverity::Info);
         logger.log(event).await.unwrap();
     }
 
     // 写入高优先级日志
-    let critical_event = AuditEvent::create("critical", "1", "admin").with_severity(AuditSeverity::Critical);
+    let critical_event =
+        AuditEvent::create("critical", "1", "admin").with_severity(AuditSeverity::Critical);
     logger.log(critical_event).await.unwrap();
 
     // 再写入一条普通日志触发轮转
-    let last_event = AuditEvent::create("normal", "last", "user").with_severity(AuditSeverity::Info);
+    let last_event =
+        AuditEvent::create("normal", "last", "user").with_severity(AuditSeverity::Info);
     logger.log(last_event).await.unwrap();
 
     // 验证高优先级日志存在
@@ -106,7 +113,10 @@ async fn test_audit_rotation_retain_high_severity() {
         ..Default::default()
     };
     let critical_logs = storage.query(&filters).await.unwrap();
-    assert!(!critical_logs.is_empty(), "Critical logs should be retained");
+    assert!(
+        !critical_logs.is_empty(),
+        "Critical logs should be retained"
+    );
 }
 
 // ============================================================================
@@ -122,8 +132,9 @@ async fn test_audit_sanitize_json_sensitive_fields() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    let event = AuditEvent::create("users", "1", "admin")
-        .with_after_value(r#"{"username": "test", "password": "secret123", "email": "test@example.com"}"#);
+    let event = AuditEvent::create("users", "1", "admin").with_after_value(
+        r#"{"username": "test", "password": "secret123", "email": "test@example.com"}"#,
+    );
 
     logger.log(event).await.unwrap();
 
@@ -155,7 +166,10 @@ async fn test_audit_sanitize_non_json_sensitive_fields() {
     let sensitive_input = "password: my_secret_password, username: test";
     let sanitized = AuditEvent::sanitize_value(sensitive_input, Some(vec!["password".to_string()]));
 
-    assert_eq!(sanitized, "***REDACTED***", "Sensitive value should be redacted");
+    assert_eq!(
+        sanitized, "***REDACTED***",
+        "Sensitive value should be redacted"
+    );
 }
 
 /// TEST-U-AUDIT-006: 测试 Base64 编码值脱敏
@@ -168,8 +182,8 @@ async fn test_audit_sanitize_base64_values() {
     let logger = AuditLogger::with_config(config, storage.clone());
 
     // Base64 编码的 "secret" 是 "c2VjcmV0"
-    let event =
-        AuditEvent::create("secrets", "1", "admin").with_after_value(r#"{"token": "c2VjcmV0", "name": "test"}"#);
+    let event = AuditEvent::create("secrets", "1", "admin")
+        .with_after_value(r#"{"token": "c2VjcmV0", "name": "test"}"#);
 
     logger.log(event).await.unwrap();
 
@@ -362,8 +376,8 @@ async fn test_audit_batch_export() {
 /// 验证导出时敏感数据被正确脱敏。
 #[tokio::test]
 async fn test_audit_export_with_sanitization() {
-    let event =
-        AuditEvent::create("users", "1", "admin").with_after_value(r#"{"password": "secret", "data": "public"}"#);
+    let event = AuditEvent::create("users", "1", "admin")
+        .with_after_value(r#"{"password": "secret", "data": "public"}"#);
 
     // 获取脱敏后的副本
     let sanitized = event.sanitized();
@@ -445,10 +459,16 @@ async fn test_audit_required_fields() {
 
     // 验证必需字段存在且非空
     assert!(!event.id.is_empty(), "ID should not be empty");
-    assert!(!event.entity_type.is_empty(), "Entity type should not be empty");
+    assert!(
+        !event.entity_type.is_empty(),
+        "Entity type should not be empty"
+    );
     assert!(!event.entity_id.is_empty(), "Entity ID should not be empty");
     assert!(!event.user_id.is_empty(), "User ID should not be empty");
-    assert!(!event.request_id.is_empty(), "Request ID should not be empty");
+    assert!(
+        !event.request_id.is_empty(),
+        "Request ID should not be empty"
+    );
     assert_eq!(event.operation, AuditOperation::Create);
     assert_eq!(event.result, AuditStatus::Success);
     assert_eq!(event.severity, AuditSeverity::High);
@@ -480,7 +500,10 @@ async fn test_audit_log_integrity_checksum() {
     assert_eq!(results.len(), 1, "Should find the logged event");
 
     let stored_json = results[0].to_json().unwrap();
-    assert_eq!(original_json, stored_json, "Stored event should match original");
+    assert_eq!(
+        original_json, stored_json,
+        "Stored event should match original"
+    );
 }
 
 // ============================================================================
@@ -647,7 +670,8 @@ async fn test_audit_event_builder() {
 /// 验证审计事件可以包含分布式追踪上下文。
 #[tokio::test]
 async fn test_audit_trace_context() {
-    let event = AuditEvent::create("test", "1", "admin").with_trace_context("trace-123", "span-456");
+    let event =
+        AuditEvent::create("test", "1", "admin").with_trace_context("trace-123", "span-456");
 
     assert!(event.trace_context.is_some());
     let trace = event.trace_context.unwrap();
@@ -684,7 +708,10 @@ fn test_audit_config_defaults() {
         10 * 1024 * 1024,
         "Default max file size should be 10MB"
     );
-    assert_eq!(config.retention_count, 7, "Default retention should be 7 days");
+    assert_eq!(
+        config.retention_count, 7,
+        "Default retention should be 7 days"
+    );
     assert!(config.sensitive_fields.contains(&"password".to_string()));
     assert!(config.sensitive_fields.contains(&"token".to_string()));
     assert!(config.alert_operations.contains(&AuditOperation::Delete));
@@ -699,8 +726,9 @@ async fn test_audit_sanitize_json_array() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    let event = AuditEvent::create("users", "1", "admin")
-        .with_after_value(r#"[{"name": "user1", "password": "pass1"}, {"name": "user2", "password": "pass2"}]"#);
+    let event = AuditEvent::create("users", "1", "admin").with_after_value(
+        r#"[{"name": "user1", "password": "pass1"}, {"name": "user2", "password": "pass2"}]"#,
+    );
 
     logger.log(event).await.unwrap();
 

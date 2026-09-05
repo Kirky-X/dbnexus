@@ -66,7 +66,11 @@ impl JwtManager {
     /// # 错误
     ///
     /// 密钥短于 32 字节时 panic。
-    pub fn with_expiration(secret: &[u8], access_expiration_secs: u64, refresh_expiration_secs: u64) -> Self {
+    pub fn with_expiration(
+        secret: &[u8],
+        access_expiration_secs: u64,
+        refresh_expiration_secs: u64,
+    ) -> Self {
         if secret.len() < 32 {
             panic!(
                 "JWT secret must be at least 32 bytes (256 bits) for HS256, got {} bytes",
@@ -135,7 +139,8 @@ impl JwtManager {
             jti,
         };
 
-        encode(&Header::default(), &claims, &self.encoding_key).map_err(|e| AuthError::TokenGeneration(e.to_string()))
+        encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|e| AuthError::TokenGeneration(e.to_string()))
     }
 
     /// 验证 JWT Token（不校验 token_type）
@@ -200,7 +205,12 @@ impl JwtManager {
             revoked.insert(claims.jti.clone());
         }
 
-        self.generate_token(&claims.sub, &claims.username, &claims.role, TokenType::Access)
+        self.generate_token(
+            &claims.sub,
+            &claims.username,
+            &claims.role,
+            TokenType::Access,
+        )
     }
 }
 

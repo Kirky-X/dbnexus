@@ -23,9 +23,9 @@ mod common;
 
 use std::sync::Arc;
 
+use dbnexus::DbNexusModule;
 use dbnexus::database::ConnectionPool;
 use dbnexus::foundation::{DbConfig, PoolConfig};
-use dbnexus::DbNexusModule;
 use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
 use trait_kit::prelude::*;
 
@@ -85,7 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- 3. 构建 Kit ---\n");
 
-    let kit = kit.build().await.map_err(|e| format!("AsyncKit::build: {e}"))?;
+    let kit = kit
+        .build()
+        .await
+        .map_err(|e| format!("AsyncKit::build: {e}"))?;
     println!("  ✓ AsyncKit 构建成功");
 
     // 从 kit 中获取 DbNexusModule 的能力（Arc<dyn ConnectionPool + Send + Sync>）
@@ -143,7 +146,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- 6. SELECT 查询 ---\n");
 
-    session.execute_raw("SELECT id, name FROM kit_demo ORDER BY id").await?;
+    session
+        .execute_raw("SELECT id, name FROM kit_demo ORDER BY id")
+        .await?;
     println!("  ✓ 查询 kit_demo 表成功");
 
     // ============================================
@@ -159,7 +164,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ 事务内插入: transaction-test");
 
-    println!("  is_in_transaction() = {}", session.is_in_transaction().await);
+    println!(
+        "  is_in_transaction() = {}",
+        session.is_in_transaction().await
+    );
 
     session.commit().await?;
     println!("  ✓ 事务已提交");
@@ -185,7 +193,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let msg = e.to_string();
             println!("  ✓ 未注册 OxcacheModule 时 build 失败（预期行为）");
             println!("  错误信息: {}", msg);
-            assert!(msg.contains("oxcache"), "错误应提及 oxcache 依赖, got: {msg}");
+            assert!(
+                msg.contains("oxcache"),
+                "错误应提及 oxcache 依赖, got: {msg}"
+            );
         }
     }
 

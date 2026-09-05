@@ -54,12 +54,17 @@ impl SimpleMemoryCache {
     }
 
     fn is_expired(entry: &CacheEntry) -> bool {
-        entry.expires_at.is_some_and(|exp| std::time::Instant::now() >= exp)
+        entry
+            .expires_at
+            .is_some_and(|exp| std::time::Instant::now() >= exp)
     }
 }
 
 impl DbCacheProvider for SimpleMemoryCache {
-    fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+    fn get<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
         Box::pin(async move {
             let store = self
                 .store
@@ -105,7 +110,10 @@ impl DbCacheProvider for SimpleMemoryCache {
         })
     }
 
-    fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+    fn delete<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
         Box::pin(async move {
             let mut store = self
                 .store
@@ -170,7 +178,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- 3. TTL 过期 ---\n");
 
     cache
-        .set("ttl_key", b"temporary".to_vec(), Some(Duration::from_millis(100)))
+        .set(
+            "ttl_key",
+            b"temporary".to_vec(),
+            Some(Duration::from_millis(100)),
+        )
         .await?;
     println!("  ✓ set(\"ttl_key\", ttl=100ms)");
 
@@ -207,7 +219,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("--- 5. 与 DbPoolBuilder 集成 ---\n");
 
-    let custom_cache: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(SimpleMemoryCache::new(200));
+    let custom_cache: Arc<dyn DbCacheProvider + Send + Sync> =
+        Arc::new(SimpleMemoryCache::new(200));
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
         pool_config: PoolConfig {
@@ -225,7 +238,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ DbPoolBuilder 构建成功（注入自定义缓存）");
     println!("  连接池 URL: {}", pool.config().url);
-    println!("  max_connections: {}", pool.config().pool_config.max_connections);
+    println!(
+        "  max_connections: {}",
+        pool.config().pool_config.max_connections
+    );
 
     // 验证连接池可用
     let session = pool.get_session("admin").await?;

@@ -79,7 +79,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 选一个 shard_key 并取得绑定分片
     let bound_key = "user_42";
     let bound_shard_id = router.shard_id_for_key(bound_key);
-    println!("  绑定: shard_key='{}' → shard_id={}", bound_key, bound_shard_id);
+    println!(
+        "  绑定: shard_key='{}' → shard_id={}",
+        bound_key, bound_shard_id
+    );
 
     // 用一个落在不同分片的 shard_key 触发冲突
     // 通过遍历找出一个冲突的 key（保证示例可重现）

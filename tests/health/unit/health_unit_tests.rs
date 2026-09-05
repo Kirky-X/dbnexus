@@ -10,8 +10,8 @@ use std::time::Duration;
 
 // 导入健康检查模块
 use dbnexus::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
-    PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker,
+    HealthStatus, PoolHealthMetrics,
 };
 
 // ============================================================================
@@ -305,7 +305,8 @@ async fn test_health_checker_timeout_returns_degraded() {
 
     // 超时应该返回降级或 unhealthy 状态
     assert!(
-        matches!(result.status, HealthStatus::Degraded(_)) || matches!(result.status, HealthStatus::Unhealthy(_)),
+        matches!(result.status, HealthStatus::Degraded(_))
+            || matches!(result.status, HealthStatus::Unhealthy(_)),
         "超时应该返回降级或 unhealthy 状态"
     );
     assert!(result.latency > Duration::ZERO, "应该记录延迟");
@@ -321,7 +322,10 @@ async fn test_health_checker_normal_completion() {
     let result = checker.check().await;
 
     // 正常完成时延迟应该小于超时时间
-    assert!(result.latency < Duration::from_millis(1000), "延迟应该小于超时时间");
+    assert!(
+        result.latency < Duration::from_millis(1000),
+        "延迟应该小于超时时间"
+    );
     // 应该包含详细信息
     assert!(!result.details.is_empty(), "应该包含详细信息");
 }
@@ -486,7 +490,10 @@ async fn test_pool_health_metrics_should_create_connection() {
     // 有连接时不应该创建
     metrics.record_connection_created();
     metrics.increment_idle().await;
-    assert!(!metrics.should_create_connection(1), "有空闲连接时不应该创建");
+    assert!(
+        !metrics.should_create_connection(1),
+        "有空闲连接时不应该创建"
+    );
 }
 
 /// TEST-U-HEALTH-025: 测试连接池健康指标设置等待请求数
@@ -530,8 +537,14 @@ async fn test_multi_datasource_health_aggregation() {
     let result2 = checker2.check().await;
 
     // 两个检查器都应该有结果
-    assert!(matches!(result1.status, HealthStatus::Healthy) || matches!(result1.status, HealthStatus::Degraded(_)));
-    assert!(matches!(result2.status, HealthStatus::Healthy) || matches!(result2.status, HealthStatus::Degraded(_)));
+    assert!(
+        matches!(result1.status, HealthStatus::Healthy)
+            || matches!(result1.status, HealthStatus::Degraded(_))
+    );
+    assert!(
+        matches!(result2.status, HealthStatus::Healthy)
+            || matches!(result2.status, HealthStatus::Degraded(_))
+    );
 }
 
 /// TEST-U-HEALTH-027: 测试部分数据源不健康时的聚合
@@ -554,10 +567,14 @@ async fn test_partial_unhealthy_aggregation() {
     let result2 = checker2.check().await;
 
     // 第一个应该健康或降级
-    assert!(matches!(result1.status, HealthStatus::Healthy) || matches!(result1.status, HealthStatus::Degraded(_)));
+    assert!(
+        matches!(result1.status, HealthStatus::Healthy)
+            || matches!(result1.status, HealthStatus::Degraded(_))
+    );
     // 第二个应该不健康或降级
     assert!(
-        matches!(result2.status, HealthStatus::Unhealthy(_)) || matches!(result2.status, HealthStatus::Degraded(_))
+        matches!(result2.status, HealthStatus::Unhealthy(_))
+            || matches!(result2.status, HealthStatus::Degraded(_))
     );
 }
 
@@ -747,7 +764,8 @@ async fn test_health_checker_no_connections_state() {
 
     // 无连接时应该是不健康或降级状态
     assert!(
-        matches!(result.status, HealthStatus::Unhealthy(_)) || matches!(result.status, HealthStatus::Degraded(_)),
+        matches!(result.status, HealthStatus::Unhealthy(_))
+            || matches!(result.status, HealthStatus::Degraded(_)),
         "无连接时应该返回不健康或降级状态"
     );
 }
@@ -770,7 +788,8 @@ async fn test_health_checker_healthy_state() {
 
     // 有可用连接时应该返回健康状态
     assert!(
-        matches!(result.status, HealthStatus::Healthy) || matches!(result.status, HealthStatus::Degraded(_)),
+        matches!(result.status, HealthStatus::Healthy)
+            || matches!(result.status, HealthStatus::Degraded(_)),
         "有可用连接时应该返回健康或降级状态"
     );
 }

@@ -16,7 +16,8 @@
 //! ```
 
 use dbnexus::{
-    HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector, SlowQueryConfig, SlowQueryRecord,
+    HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector, SlowQueryConfig,
+    SlowQueryRecord,
 };
 use std::time::Duration;
 
@@ -83,7 +84,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     collector.record_query("SELECT", Duration::from_millis(200), true, None);
     collector.record_query("SELECT", Duration::from_millis(500), true, None);
 
-    let query_stats = collector.get_query_stats("SELECT").expect("SELECT 统计应存在");
+    let query_stats = collector
+        .get_query_stats("SELECT")
+        .expect("SELECT 统计应存在");
     let percentiles: &LatencyPercentiles = &query_stats.latency_percentiles;
     println!("  样本数: {}", percentiles.sample_count);
     println!("  P50  = {:?}", percentiles.p50());

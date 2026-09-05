@@ -5,7 +5,9 @@
 //! 通过公共 API 测试 JWT 签发/验证、密码哈希、AuthenticationManager 认证流程。
 //! 覆盖正常路径、过期、篡改、无效签名、错误密码、未知用户等场景。
 
-use dbnexus::{AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User};
+use dbnexus::{
+    AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User,
+};
 
 // ============================================================================
 // 辅助函数
@@ -23,7 +25,9 @@ const TEST_OLD_PASSWORD: &str = "OldPassword123";
 const TEST_NEW_PASSWORD: &str = "NewPassword456";
 
 fn make_user(username: &str, password: &str, role: &str) -> User {
-    let hash = PasswordHasher::new().hash(password).expect("hash should succeed");
+    let hash = PasswordHasher::new()
+        .hash(password)
+        .expect("hash should succeed");
     User {
         id: format!("uid_{}", username),
         username: username.to_string(),
@@ -56,7 +60,9 @@ async fn test_jwt_issue_and_verify() {
         .expect("generate_token should succeed");
     assert!(!token.is_empty(), "token must be non-empty");
 
-    let claims = mgr.verify_token(&token).expect("verify_token should succeed");
+    let claims = mgr
+        .verify_token(&token)
+        .expect("verify_token should succeed");
     assert_eq!(claims.sub, "user_1");
     assert_eq!(claims.username, "alice");
     assert_eq!(claims.role, "admin");
@@ -124,7 +130,10 @@ async fn test_jwt_invalid_signature() {
         .expect("generate_token should succeed");
 
     let result = verifier.verify_token(&token);
-    assert!(result.is_err(), "token signed with different key should fail");
+    assert!(
+        result.is_err(),
+        "token signed with different key should fail"
+    );
     assert!(
         matches!(result, Err(AuthError::InvalidToken)),
         "expected InvalidToken for signature mismatch, got {:?}",
@@ -143,7 +152,10 @@ fn test_password_hash_and_verify() {
     let password = TEST_SECURE_PASSWORD;
 
     let hash = hasher.hash(password).expect("hash should succeed");
-    assert!(hash.starts_with("$2b$"), "bcrypt hash should start with $2b$");
+    assert!(
+        hash.starts_with("$2b$"),
+        "bcrypt hash should start with $2b$"
+    );
     assert_ne!(hash, password, "hash must differ from plaintext");
 
     hasher
@@ -155,7 +167,9 @@ fn test_password_hash_and_verify() {
 #[test]
 fn test_password_wrong_password() {
     let hasher = PasswordHasher::new();
-    let hash = hasher.hash(TEST_CORRECT_PASSWORD).expect("hash should succeed");
+    let hash = hasher
+        .hash(TEST_CORRECT_PASSWORD)
+        .expect("hash should succeed");
 
     let result = hasher.verify(TEST_WRONG_PASSWORD_456, &hash);
     assert!(result.is_err(), "wrong password should fail");
@@ -192,11 +206,17 @@ fn test_password_update() {
 
     // 旧密码对新哈希验证失败
     let result = hasher.verify(old_password, &new_hash);
-    assert!(result.is_err(), "old password should not verify against new hash");
+    assert!(
+        result.is_err(),
+        "old password should not verify against new hash"
+    );
 
     // 新密码对旧哈希验证失败
     let result = hasher.verify(new_password, &old_hash);
-    assert!(result.is_err(), "new password should not verify against old hash");
+    assert!(
+        result.is_err(),
+        "new password should not verify against old hash"
+    );
 }
 
 // ============================================================================
@@ -219,7 +239,9 @@ async fn test_authenticate_success() {
     assert!(!token.is_empty(), "token must be non-empty");
 
     // 验证 token 的 claims
-    let claims = mgr.verify_token(&token).expect("verify_token should succeed");
+    let claims = mgr
+        .verify_token(&token)
+        .expect("verify_token should succeed");
     assert_eq!(claims.username, "alice");
     assert_eq!(claims.role, "admin");
 }

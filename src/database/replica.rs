@@ -64,8 +64,7 @@ impl Default for PostgresLagDetector {
 impl ReplicationLagDetector for PostgresLagDetector {
     async fn detect_lag(&self, pool: &DbPool) -> DbResult<ReplicationLag> {
         let session = pool.get_session("admin").await?;
-        let _sql =
-            "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), COALESCE(pg_last_wal_replay_lsn(), pg_current_wal_lsn()))";
+        let _sql = "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), COALESCE(pg_last_wal_replay_lsn(), pg_current_wal_lsn()))";
         let _ = session;
         Ok(ReplicationLag {
             lag_bytes: Some(0),
@@ -89,7 +88,9 @@ pub struct MySqlLagDetector {
 
 impl Default for MySqlLagDetector {
     fn default() -> Self {
-        Self { max_lag_seconds: 5.0 }
+        Self {
+            max_lag_seconds: 5.0,
+        }
     }
 }
 
@@ -146,7 +147,11 @@ pub struct ReplicaPool {
 
 impl ReplicaPool {
     /// 创建副本连接池
-    pub fn new(pool: Arc<DbPool>, lag_detector: Box<dyn ReplicationLagDetector>, max_lag_seconds: f64) -> Self {
+    pub fn new(
+        pool: Arc<DbPool>,
+        lag_detector: Box<dyn ReplicationLagDetector>,
+        max_lag_seconds: f64,
+    ) -> Self {
         Self {
             pool,
             lag_detector,

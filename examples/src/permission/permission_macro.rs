@@ -58,9 +58,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("--- 宏生成的常量 ---\n");
     println!("  User::ALLOWED_ROLES      = {:?}", Model::ALLOWED_ROLES);
-    println!("  User::ALLOWED_OPERATIONS = {:?}", Model::ALLOWED_OPERATIONS);
+    println!(
+        "  User::ALLOWED_OPERATIONS = {:?}",
+        Model::ALLOWED_OPERATIONS
+    );
     println!("  Model::allowed_roles()   = {:?}", Model::allowed_roles());
-    println!("  Model::allowed_operations() = {:?}", Model::allowed_operations());
+    println!(
+        "  Model::allowed_operations() = {:?}",
+        Model::allowed_operations()
+    );
 
     // ============================================
     // 2. 创建 DbPool + Session

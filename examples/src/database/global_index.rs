@@ -15,7 +15,8 @@
 //! ```
 
 use dbnexus::{
-    DbPool, GlobalIndex, IndexEntry, SyncEvent, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
+    DbPool, GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
+    SyncEvent,
 };
 use std::sync::Arc;
 
@@ -107,23 +108,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 查询 user_100 的所有订单（分布在分片 0 和 1）
     println!("查询 user_id = user_100 的订单:");
-    let results = global_index.query_by_index("orders", "user_id", "user_100").await?;
+    let results = global_index
+        .query_by_index("orders", "user_id", "user_100")
+        .await?;
     println!("  ✓ 找到 {} 条记录", results.len());
     for entry in &results {
-        println!("    → record: {}, shard: {}", entry.record_id, entry.shard_id);
+        println!(
+            "    → record: {}, shard: {}",
+            entry.record_id, entry.shard_id
+        );
     }
 
     // 查询 user_200 的订单（分布在分片 0 和 2）
     println!("\n查询 user_id = user_200 的订单:");
-    let results = global_index.query_by_index("orders", "user_id", "user_200").await?;
+    let results = global_index
+        .query_by_index("orders", "user_id", "user_200")
+        .await?;
     println!("  ✓ 找到 {} 条记录", results.len());
     for entry in &results {
-        println!("    → record: {}, shard: {}", entry.record_id, entry.shard_id);
+        println!(
+            "    → record: {}, shard: {}",
+            entry.record_id, entry.shard_id
+        );
     }
 
     // 查询不存在的用户
     println!("\n查询 user_id = user_999（不存在）的订单:");
-    let results = global_index.query_by_index("orders", "user_id", "user_999").await?;
+    let results = global_index
+        .query_by_index("orders", "user_id", "user_999")
+        .await?;
     println!("  ✓ 找到 {} 条记录", results.len());
 
     // ============================================
@@ -153,15 +166,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  SyncEvent::Delete(entry) - 数据删除事件");
     println!("\n  事件示例:");
     match &insert_event {
-        SyncEvent::Insert(e) => println!("    Insert: {}@{} (shard {})", e.table_name, e.record_id, e.shard_id),
+        SyncEvent::Insert(e) => println!(
+            "    Insert: {}@{} (shard {})",
+            e.table_name, e.record_id, e.shard_id
+        ),
         _ => unreachable!(),
     }
     match &update_event {
-        SyncEvent::Update(e) => println!("    Update: {}@{} (shard {})", e.table_name, e.record_id, e.shard_id),
+        SyncEvent::Update(e) => println!(
+            "    Update: {}@{} (shard {})",
+            e.table_name, e.record_id, e.shard_id
+        ),
         _ => unreachable!(),
     }
     match &delete_event {
-        SyncEvent::Delete(e) => println!("    Delete: {}@{} (shard {})", e.table_name, e.record_id, e.shard_id),
+        SyncEvent::Delete(e) => println!(
+            "    Delete: {}@{} (shard {})",
+            e.table_name, e.record_id, e.shard_id
+        ),
         _ => unreachable!(),
     }
 

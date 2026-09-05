@@ -34,15 +34,21 @@ mod common;
     any(feature = "sqlite", feature = "postgres", feature = "mysql")
 ))]
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
-    serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+    serde_json::from_str(json)
+        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_role() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert_eq!(session.role(), "admin");
 }
 
@@ -53,8 +59,13 @@ async fn test_session_role() {
 ))]
 async fn test_session_permission_ctx() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let ctx = session.permission_ctx();
     assert_eq!(ctx.role(), "admin");
 }
@@ -63,8 +74,13 @@ async fn test_session_permission_ctx() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_mark_write() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     session.mark_write().await;
     assert!(session.should_use_master().await);
 }
@@ -73,10 +89,18 @@ async fn test_session_mark_write() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_begin() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert!(!session.is_in_transaction().await);
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
 }
 
@@ -84,11 +108,22 @@ async fn test_transaction_begin() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_commit() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
-    session.commit().await.expect("Failed to commit transaction");
+    session
+        .commit()
+        .await
+        .expect("Failed to commit transaction");
     assert!(!session.is_in_transaction().await);
 }
 
@@ -96,11 +131,22 @@ async fn test_transaction_commit() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_rollback() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
-    session.rollback().await.expect("Failed to rollback transaction");
+    session
+        .rollback()
+        .await
+        .expect("Failed to rollback transaction");
     assert!(!session.is_in_transaction().await);
 }
 
@@ -108,9 +154,17 @@ async fn test_transaction_rollback() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_double_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     let result = session.begin_transaction().await;
     assert!(result.is_err());
 }
@@ -119,8 +173,13 @@ async fn test_transaction_double_begin_error() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_commit_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let result = session.commit().await;
     assert!(result.is_err());
 }
@@ -129,8 +188,13 @@ async fn test_transaction_commit_without_begin_error() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_rollback_without_begin_error() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let result = session.rollback().await;
     assert!(result.is_err());
 }
@@ -139,9 +203,17 @@ async fn test_transaction_rollback_without_begin_error() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_should_use_master_in_transaction() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.should_use_master().await);
 }
 
@@ -149,10 +221,15 @@ async fn test_should_use_master_in_transaction() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_raw_ddl_admin_only() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     let table_name = common::generate_test_table_name("users");
-    let admin_session = pool.get_session("admin").await.expect("Failed to get session");
+    let admin_session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let ok = admin_session
         .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY, name TEXT)",
@@ -161,7 +238,10 @@ async fn test_execute_raw_ddl_admin_only() {
         .await;
     assert!(ok.is_ok());
 
-    let system_session = pool.get_session("system").await.expect("Failed to get session");
+    let system_session = pool
+        .get_session("system")
+        .await
+        .expect("Failed to get session");
     let denied = system_session
         .execute_raw_ddl(&format!(
             "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY)",
@@ -175,8 +255,13 @@ async fn test_execute_raw_ddl_admin_only() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_execute_raw_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session
         .execute_raw("CREATE TABLE IF NOT EXISTS ddl_blocked (id INTEGER PRIMARY KEY)")
@@ -191,8 +276,13 @@ async fn test_execute_raw_denies_ddl() {
 ))]
 async fn test_execute_raw_requires_sql_parser_feature() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute_raw("SELECT 1").await;
     assert!(matches!(
@@ -228,8 +318,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute_raw("SELECT 1").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -262,8 +357,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 使用唯一表名避免测试间冲突
     let table_name = format!("test_users_{}", std::process::id());
@@ -277,7 +377,10 @@ roles:
         .expect("Failed to create table");
 
     session
-        .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
+        .execute(&format!(
+            "INSERT INTO {} (id, name) VALUES (1, 'a')",
+            table_name
+        ))
         .await
         .expect("Failed to insert");
     assert!(session.should_use_master().await);
@@ -310,8 +413,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let table_name = common::generate_test_table_name("batch_users");
     session
@@ -373,9 +481,13 @@ async fn test_check_permission_denied_returns_permission_error() {
     // 使用非 admin 角色进行权限测试
     let session = pool.get_session("test_user").await.unwrap();
 
-    let perm_config =
-        parse_json_config(&std::fs::read_to_string(&perm_file).unwrap()).expect("Failed to parse permission JSON");
-    session.permission_ctx().load_policy(&perm_config).await.unwrap();
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_file).unwrap())
+        .expect("Failed to parse permission JSON");
+    session
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .await
+        .unwrap();
 
     let result = session.check_permission("orders", &Operation::Select).await;
     match result {
@@ -394,8 +506,13 @@ async fn test_check_permission_denied_returns_permission_error() {
 #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
 async fn test_execute_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session
         .execute("CREATE TABLE IF NOT EXISTS ddl_blocked_2 (id INTEGER PRIMARY KEY)")
@@ -427,8 +544,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session
         .execute_with_operation("SELECT 1 FROM orders", &Operation::Select)
@@ -465,8 +587,13 @@ async fn test_execute_with_operation_allows_when_permitted() {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)")
@@ -483,14 +610,25 @@ async fn test_execute_with_operation_allows_when_permitted() {
 #[cfg(all(feature = "sqlite", feature = "permission"))]
 async fn test_commit_clears_last_write() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session.mark_write().await;
     assert!(session.should_use_master().await);
 
-    session.begin_transaction().await.expect("Failed to begin transaction");
-    session.commit().await.expect("Failed to commit transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
+    session
+        .commit()
+        .await
+        .expect("Failed to commit transaction");
     assert!(!session.should_use_master().await);
 }
 
@@ -521,8 +659,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute("SELECT 1").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -566,9 +709,14 @@ async fn test_execute_denied_by_permission() {
         admin_role: "admin".to_string(), // 明确设置 admin_role 为 "admin"
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
     // 使用非 admin 角色进行权限测试
-    let session = pool.get_session("test_user").await.expect("Failed to get session");
+    let session = pool
+        .get_session("test_user")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM orders").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
@@ -578,8 +726,13 @@ async fn test_execute_denied_by_permission() {
 #[cfg(all(feature = "sqlite", feature = "permission", feature = "sql-parser"))]
 async fn test_execute_with_operation_denies_ddl() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session
         .execute_with_operation(
@@ -619,8 +772,13 @@ async fn test_execute_with_operation_insert_marks_write() {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -628,7 +786,10 @@ async fn test_execute_with_operation_insert_marks_write() {
         .expect("Failed to create table");
 
     session
-        .execute_with_operation("INSERT INTO users (id, name) VALUES (1, 'a')", &Operation::Insert)
+        .execute_with_operation(
+            "INSERT INTO users (id, name) VALUES (1, 'a')",
+            &Operation::Insert,
+        )
         .await
         .expect("Failed to insert");
     assert!(session.should_use_master().await);
@@ -661,8 +822,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -707,8 +873,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -753,8 +924,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
@@ -798,11 +974,18 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute_raw("SELECT 1 FROM \"\"").await;
-    assert!(matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name")));
+    assert!(
+        matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name"))
+    );
 }
 
 #[tokio::test]
@@ -829,11 +1012,18 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM \"\"").await;
-    assert!(matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name")));
+    assert!(
+        matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name"))
+    );
 }
 
 #[tokio::test]
@@ -860,8 +1050,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session
         .execute_with_operation("SELECT 1 FROM orders ", &Operation::Select)
@@ -896,8 +1091,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 使用唯一表名避免测试间冲突
     let table_name = format!("test_users_{}", std::process::id());
@@ -911,7 +1111,10 @@ roles:
         .expect("Failed to create table");
 
     session
-        .execute(&format!("INSERT INTO {} (id, name) VALUES (1, 'a')", table_name))
+        .execute(&format!(
+            "INSERT INTO {} (id, name) VALUES (1, 'a')",
+            table_name
+        ))
         .await
         .expect("Failed to insert");
     assert!(session.should_use_master().await);
@@ -946,8 +1149,13 @@ roles:
         permissions_path: Some(perm_file.to_string_lossy().to_string()),
         ..Default::default()
     };
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let sess: &dyn DatabaseSession = &session;
     assert_eq!(sess.role(), "admin");
@@ -959,9 +1167,13 @@ roles:
     sess.execute("INSERT INTO users (id, name) VALUES (1, 'a')")
         .await
         .expect("Failed to insert");
-    sess.execute_raw("SELECT * FROM users").await.expect("Failed to select");
+    sess.execute_raw("SELECT * FROM users")
+        .await
+        .expect("Failed to select");
 
-    sess.begin_transaction().await.expect("Failed to begin transaction");
+    sess.begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(sess.is_in_transaction().await);
     sess.rollback().await.expect("Failed to rollback");
     assert!(!sess.is_in_transaction().await);
@@ -975,12 +1187,19 @@ roles:
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_short_lock_pattern_works() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 建表
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS short_lock_test (id INTEGER PRIMARY KEY, val TEXT)")
+        .execute_raw_ddl(
+            "CREATE TABLE IF NOT EXISTS short_lock_test (id INTEGER PRIMARY KEY, val TEXT)",
+        )
         .await
         .expect("Failed to create table");
     // 幂等清理：持久库重跑时清空固定主键残留，避免 duplicate key
@@ -1011,11 +1230,18 @@ async fn test_transaction_short_lock_pattern_works() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_multiple_executes_in_same_transaction() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS multi_exec_test (id INTEGER PRIMARY KEY, val TEXT)")
+        .execute_raw_ddl(
+            "CREATE TABLE IF NOT EXISTS multi_exec_test (id INTEGER PRIMARY KEY, val TEXT)",
+        )
         .await
         .expect("Failed to create table");
 

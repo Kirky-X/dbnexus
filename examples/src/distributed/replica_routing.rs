@@ -41,14 +41,23 @@ fn main() {
     for (i, url) in replica_config.replica_urls.iter().enumerate() {
         println!("    - replica {}   : {}", i + 1, url);
     }
-    println!("  - 最大延迟阈值  : {:.1} 秒", replica_config.max_lag_seconds);
-    println!("  - 检测间隔      : {} 秒", replica_config.lag_check_interval_secs);
+    println!(
+        "  - 最大延迟阈值  : {:.1} 秒",
+        replica_config.max_lag_seconds
+    );
+    println!(
+        "  - 检测间隔      : {} 秒",
+        replica_config.lag_check_interval_secs
+    );
     println!();
 
     // 默认配置
     let default_config = ReplicaConfig::default();
     println!("  默认配置:");
-    println!("  - max_lag_seconds      : {:.1}", default_config.max_lag_seconds);
+    println!(
+        "  - max_lag_seconds      : {:.1}",
+        default_config.max_lag_seconds
+    );
     println!(
         "  - lag_check_interval   : {} 秒",
         default_config.lag_check_interval_secs
@@ -136,8 +145,14 @@ fn main() {
         let role = if i == 0 { "primary" } else { "standby" };
         println!("    [{}] {} : {}", i, role, url);
     }
-    println!("  - 健康检查 SQL : {:?}", failover_config.health_check_query);
-    println!("  - 触发阈值     : 连续失败 {} 次", failover_config.failover_threshold);
+    println!(
+        "  - 健康检查 SQL : {:?}",
+        failover_config.health_check_query
+    );
+    println!(
+        "  - 触发阈值     : 连续失败 {} 次",
+        failover_config.failover_threshold
+    );
     println!();
 
     // 默认配置
@@ -145,7 +160,10 @@ fn main() {
     println!("  默认配置:");
     println!("  - urls              : (空)");
     println!("  - health_check_query: None (默认 SELECT 1)");
-    println!("  - failover_threshold: {}", default_failover.failover_threshold);
+    println!(
+        "  - failover_threshold: {}",
+        default_failover.failover_threshold
+    );
     println!();
 
     // ============================================

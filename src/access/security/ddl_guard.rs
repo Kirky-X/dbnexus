@@ -74,7 +74,9 @@ impl DdlGuard {
     pub fn validate(&self, sql: &str) -> Result<DdlValidationResult, String> {
         let sql_trimmed = sql.trim();
         if sql_trimmed.is_empty() {
-            return Ok(DdlValidationResult::Forbidden("Empty SQL statement".to_string()));
+            return Ok(DdlValidationResult::Forbidden(
+                "Empty SQL statement".to_string(),
+            ));
         }
 
         // 第一步：检查禁止的字符串模式（捕获 AST 无法检测的注入）
@@ -89,8 +91,8 @@ impl DdlGuard {
         }
 
         // 第二步：AST 解析验证
-        let statements =
-            Parser::parse_sql(&self.dialect, sql_trimmed).map_err(|e| format!("Failed to parse SQL: {}", e))?;
+        let statements = Parser::parse_sql(&self.dialect, sql_trimmed)
+            .map_err(|e| format!("Failed to parse SQL: {}", e))?;
 
         if statements.is_empty() {
             return Ok(DdlValidationResult::Forbidden(
@@ -167,7 +169,9 @@ mod tests {
 
     #[test]
     fn test_valid_create_table() {
-        let result = guard().validate("CREATE TABLE users (id INT PRIMARY KEY)").unwrap();
+        let result = guard()
+            .validate("CREATE TABLE users (id INT PRIMARY KEY)")
+            .unwrap();
         assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
@@ -180,7 +184,9 @@ mod tests {
     #[test]
     fn test_valid_create_or_replace() {
         // CREATE OR REPLACE 是 sqlparser 规范化的语句，仍解析为 CreateTable
-        let result = guard().validate("CREATE OR REPLACE TABLE users (id INT)").unwrap();
+        let result = guard()
+            .validate("CREATE OR REPLACE TABLE users (id INT)")
+            .unwrap();
         assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
@@ -194,7 +200,9 @@ mod tests {
 
     #[test]
     fn test_valid_create_index() {
-        let result = guard().validate("CREATE INDEX idx_name ON users (name)").unwrap();
+        let result = guard()
+            .validate("CREATE INDEX idx_name ON users (name)")
+            .unwrap();
         assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
@@ -261,13 +269,17 @@ mod tests {
     #[test]
     fn test_insert_allowed_for_admin() {
         // DML 在白名单中（迁移事务可能混合 DDL+DML）
-        let result = guard().validate("INSERT INTO users (id) VALUES (1)").unwrap();
+        let result = guard()
+            .validate("INSERT INTO users (id) VALUES (1)")
+            .unwrap();
         assert!(matches!(result, DdlValidationResult::Allowed));
     }
 
     #[test]
     fn test_update_allowed_for_admin() {
-        let result = guard().validate("UPDATE users SET name = 'test' WHERE id = 1").unwrap();
+        let result = guard()
+            .validate("UPDATE users SET name = 'test' WHERE id = 1")
+            .unwrap();
         assert!(matches!(result, DdlValidationResult::Allowed));
     }
 

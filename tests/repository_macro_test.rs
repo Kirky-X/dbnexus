@@ -30,7 +30,10 @@ async fn create_test_pool() -> DbPool {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let url = format!("sqlite:file:repo_macro_test_{}?mode=memory&cache=shared", id);
+    let url = format!(
+        "sqlite:file:repo_macro_test_{}?mode=memory&cache=shared",
+        id
+    );
     DbPool::new(&url).await.expect("Failed to create test pool")
 }
 
@@ -38,7 +41,9 @@ async fn create_test_pool() -> DbPool {
 async fn setup_test_table(pool: &DbPool) {
     let session = pool.get_session("admin").await.expect("get_session");
     session
-        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS test_users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
+        .execute_raw_ddl(
+            "CREATE TABLE IF NOT EXISTS test_users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)",
+        )
         .await
         .expect("create table");
 }
@@ -52,9 +57,14 @@ async fn test_repository_insert_and_find_by_id() {
     let repo = TestUserRepository;
 
     let data = serde_json::json!({"id": 1, "name": "Alice", "email": "alice@example.com"});
-    repo.insert(&pool, data).await.expect("insert should succeed");
+    repo.insert(&pool, data)
+        .await
+        .expect("insert should succeed");
 
-    let result = repo.find_by_id(&pool, 1).await.expect("find_by_id should succeed");
+    let result = repo
+        .find_by_id(&pool, 1)
+        .await
+        .expect("find_by_id should succeed");
     assert!(result.is_some(), "should find the inserted record");
     let row = result.unwrap();
     assert_eq!(row["id"], 1);

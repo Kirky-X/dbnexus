@@ -126,7 +126,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(DuckValue::HugeInt(v)) => i64::try_from(*v).expect("HugeInt overflow"),
             other => panic!("Expected BigInt/HugeInt for n, got {:?}", other),
         };
-        println!("  {:<15} {:>10} {:>12.2} {:>5}", category, total_qty, avg_price, n);
+        println!(
+            "  {:<15} {:>10} {:>12.2} {:>5}",
+            category, total_qty, avg_price, n
+        );
     }
     assert_eq!(rows.len(), 3, "Expected 3 categories");
 

@@ -57,7 +57,10 @@ impl crate::i18n::error_ext::LocalizedMsg for SnowflakeError {
     fn message_args(&self) -> Vec<(&str, String)> {
         match self {
             Self::ClockBacktrack { waited_ts, last_ts } => {
-                vec![("waited_ts", waited_ts.to_string()), ("last_ts", last_ts.to_string())]
+                vec![
+                    ("waited_ts", waited_ts.to_string()),
+                    ("last_ts", last_ts.to_string()),
+                ]
             }
             Self::TimestampOverflow { timestamp } => vec![("timestamp", timestamp.to_string())],
         }
@@ -224,10 +227,12 @@ impl DistributedIdGenerator for SnowflakeIdGenerator {
             };
 
             // CAS: 原子更新 ts_seq
-            match self
-                .ts_seq
-                .compare_exchange(current, new_ts_seq, Ordering::SeqCst, Ordering::SeqCst)
-            {
+            match self.ts_seq.compare_exchange(
+                current,
+                new_ts_seq,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
                 Ok(_) => {
                     let seq = new_ts_seq & 0xFFF;
                     return Ok((timestamp << 22) | ((self.machine_id as u64) << 12) | seq);

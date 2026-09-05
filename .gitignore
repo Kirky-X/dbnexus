@@ -2,8 +2,8 @@
 # Rust Build Artifacts
 # =============================================================================
 /target/
+**/examples/target/
 **/*.rs.bk
-Cargo.lock
 
 # =============================================================================
 # IDE & Editors
@@ -33,20 +33,6 @@ logs/
 .cache/
 
 # =============================================================================
-# AI Tool Caches (Temporary only)
-# =============================================================================
-.trae/
-.sisyphus/
-.claude/
-.opencode/
-openspec/
-specmark/
-docs/superpowers/
-
-# AI assistant config (local only)
-CLAUDE.md
-
-# =============================================================================
 # Environment & Secrets
 # =============================================================================
 .env
@@ -61,8 +47,8 @@ secrets/
 # =============================================================================
 coverage/
 *.profraw
-.tarpaulin/
-tarpaulin-report.html
+*.profdata
+lcov.info
 
 # =============================================================================
 # Database Files (Local only)
@@ -72,8 +58,14 @@ tarpaulin-report.html
 *.sqlite3
 requirements.db
 
-# Database migrations
+# Database migrations generated locally
 migrations/
+
+# 测试产生的迁移文件
+*_test_migration.sql
+
+# 测试环境配置（docker-compose.test.yml 等本地环境基座不入库）
+docker-compose.yml
 
 # =============================================================================
 # Python (if applicable)
@@ -92,51 +84,44 @@ node_modules/
 npm-debug.log*
 
 # =============================================================================
-# Keep These Files (Do NOT ignore)
-# =============================================================================
-# .iflow/ - iFlow configuration
-# .qoder/ - Qoder configuration
-# openspec/ - OpenSpec specifications
-# CHANGELOG.md - Change history
-# rustfmt.toml - Code formatting
-# .cargo/config.toml - Cargo configuration
-
-# 测试产生的迁移文件
-*_test_migration.sql
-di.md
-.qoder
-
-# 测试环境配置
-docker-compose.yml
-
-# 本地开发工具
-Makefile
-.gitnexus
-
-# =============================================================================
 # AI / Agent Tools (not for version control)
 # =============================================================================
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-CODEIUM.md
-.claude/
 .trae/
-.qoder/
+.sisyphus/
+.claude/
 .opencode/
+.qoder/
+.qoder
 .cursor/
 .aider/
 .continue/
 .codeium/
 .github/copilot/
+openspec/
+specmark/
+docs/superpowers/
 strix_runs
+.gitnexus
+.workbuddy-ai/
 
-# examples build artifacts
-**/examples/target/
+# AI assistant config (local only)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+CODEIUM.md
+
+# mimosa 安全扫描工具产物
+.mimosa/
 
 # Reviews (security/quality scan artifacts)
 reviews/
-.cargo/
 
-# WorkBuddy AI local notes
-.workbuddy-ai/
+# =============================================================================
+# Keep These Files (Do NOT ignore)
+# =============================================================================
+# Cargo.lock        - 锁定依赖版本,纳入版本控制(应用仓库惯例)
+# rust-toolchain.toml - 统一工具链基线,纳入版本控制
+# .secrets.baseline - detect-secrets 已知误报基线,纳入版本控制
+# CHANGELOG.md      - 变更历史
+# rustfmt.toml      - 代码格式化配置
+# .cargo/config.toml - Cargo 配置(如需共享)

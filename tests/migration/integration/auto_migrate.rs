@@ -103,12 +103,16 @@ DROP TABLE orders_{table_suffix};
     );
 
     fs::write(
-        temp_dir.path().join(format!("{base_version}_create_users_table.sql")),
+        temp_dir
+            .path()
+            .join(format!("{base_version}_create_users_table.sql")),
         migration_content_1,
     )
     .expect("Failed to write migration file 1");
     fs::write(
-        temp_dir.path().join(format!("{next_version}_create_orders_table.sql")),
+        temp_dir
+            .path()
+            .join(format!("{next_version}_create_orders_table.sql")),
         migration_content_2,
     )
     .expect("Failed to write migration file 2");
@@ -128,7 +132,9 @@ DROP TABLE orders_{table_suffix};
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     // 清理本测试将使用的迁移版本记录（持久化 postgres/mysql 测试库跨运行隔离）
     common::cleanup_migration_versions(&pool, &[base_version, next_version]).await;
@@ -178,11 +184,16 @@ async fn test_empty_migrations_directory() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     let result = pool.run_migrations(temp_dir.path()).await;
 
-    assert!(result.is_ok(), "Running migrations on empty directory should succeed");
+    assert!(
+        result.is_ok(),
+        "Running migrations on empty directory should succeed"
+    );
     assert_eq!(result.unwrap(), 0, "Should apply 0 migrations");
 }
 
@@ -206,7 +217,9 @@ async fn test_nonexistent_migrations_directory() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     let non_existent_path = PathBuf::from("/tmp/non_existent_migrations_12345");
 
@@ -244,7 +257,10 @@ async fn test_migration_config_from_env() {
 
         assert!(config.auto_migrate);
         assert!(config.migrations_dir.is_some());
-        assert_eq!(config.migrations_dir.unwrap(), PathBuf::from("/custom/migrations"));
+        assert_eq!(
+            config.migrations_dir.unwrap(),
+            PathBuf::from("/custom/migrations")
+        );
         assert_eq!(config.migration_timeout, 120);
     }));
 
@@ -327,9 +343,21 @@ DROP TABLE table_2_{table_suffix};
     );
 
     // 乱序写入
-    fs::write(temp_dir.path().join(format!("{v3}_third.sql")), migration_v3).expect("Failed to write v3");
-    fs::write(temp_dir.path().join(format!("{v1}_first.sql")), migration_v1).expect("Failed to write v1");
-    fs::write(temp_dir.path().join(format!("{v2}_second.sql")), migration_v2).expect("Failed to write v2");
+    fs::write(
+        temp_dir.path().join(format!("{v3}_third.sql")),
+        migration_v3,
+    )
+    .expect("Failed to write v3");
+    fs::write(
+        temp_dir.path().join(format!("{v1}_first.sql")),
+        migration_v1,
+    )
+    .expect("Failed to write v1");
+    fs::write(
+        temp_dir.path().join(format!("{v2}_second.sql")),
+        migration_v2,
+    )
+    .expect("Failed to write v2");
 
     let config = dbnexus::DbConfig {
         url,
@@ -345,7 +373,9 @@ DROP TABLE table_2_{table_suffix};
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     // 清理本测试将使用的迁移版本记录（持久化 postgres/mysql 测试库跨运行隔离）
     common::cleanup_migration_versions(&pool, &[v1, v2, v3]).await;

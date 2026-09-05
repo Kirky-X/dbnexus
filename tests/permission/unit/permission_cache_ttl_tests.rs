@@ -13,7 +13,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use dbnexus::access::{MemoryPermissionProvider, PermissionAction, PermissionCache, RolePolicy, TablePermission};
+use dbnexus::access::{
+    MemoryPermissionProvider, PermissionAction, PermissionCache, RolePolicy, TablePermission,
+};
 
 // ============================================================================
 // 辅助函数
@@ -110,7 +112,8 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
 /// TEST-PERM-CACHE-006: refresh 应从 provider 更新缓存值
 #[tokio::test]
 async fn test_permission_cache_refresh_updates_value() {
-    let provider = make_provider_with_role("admin", sample_policy("orders", PermissionAction::Delete)).await;
+    let provider =
+        make_provider_with_role("admin", sample_policy("orders", PermissionAction::Delete)).await;
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_secs(60))
         .with_refresh_interval(Duration::from_millis(1))
@@ -120,7 +123,9 @@ async fn test_permission_cache_refresh_updates_value() {
     cache.insert("admin", sample_policy("users", PermissionAction::Select));
     // 刷新应替换为 provider 中的值
     cache.refresh("admin").await;
-    let got = cache.get("admin").expect("after refresh, value should be present");
+    let got = cache
+        .get("admin")
+        .expect("after refresh, value should be present");
     assert_eq!(got.tables[0].name, "orders");
     assert_eq!(got.tables[0].operations[0], PermissionAction::Delete);
 }
@@ -144,7 +149,8 @@ async fn test_permission_cache_refresh_without_provider_keeps_stale() {
 /// TEST-PERM-CACHE-008: refresh 应受 refresh_interval 节流
 #[tokio::test]
 async fn test_permission_cache_refresh_throttled_by_interval() {
-    let provider = make_provider_with_role("admin", sample_policy("v2", PermissionAction::Select)).await;
+    let provider =
+        make_provider_with_role("admin", sample_policy("v2", PermissionAction::Select)).await;
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_secs(60))
         .with_refresh_interval(Duration::from_secs(60)) // 长间隔
@@ -203,7 +209,10 @@ async fn test_permission_cache_clear() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_permission_cache_concurrent_access() {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
-    cache.insert("shared", sample_policy("shared_table", PermissionAction::Select));
+    cache.insert(
+        "shared",
+        sample_policy("shared_table", PermissionAction::Select),
+    );
 
     let cache_clone = cache.clone();
     let writer = tokio::spawn(async move {
@@ -239,5 +248,8 @@ async fn test_permission_cache_is_expired() {
     assert!(!cache.is_expired("admin"));
     tokio::time::sleep(Duration::from_millis(20)).await;
     assert!(cache.is_expired("admin"));
-    assert!(cache.is_expired("ghost"), "missing entry should be considered expired");
+    assert!(
+        cache.is_expired("ghost"),
+        "missing entry should be considered expired"
+    );
 }

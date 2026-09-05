@@ -20,7 +20,7 @@ use crate::foundation::DbError;
 /// Cache provider abstraction consumed by dbnexus internals.
 ///
 /// Defines the minimal get/set/delete interface for a byte-oriented cache.
-/// Implementations include [`OxcacheDbCacheAdapter`](crate::integrations::OxcacheDbCacheAdapter)
+/// Implementations include `OxcacheDbCacheAdapter`
 /// (feature-gated behind `oxcache-integration`) and any custom adapter the
 /// user supplies.
 ///
@@ -45,7 +45,10 @@ pub trait DbCacheProvider: Send + Sync {
         clippy::type_complexity,
         reason = "Pin<Box<dyn Future + Send>> is the canonical dyn-compatible async trait dispatch type"
     )]
-    fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>;
+    fn get<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>;
 
     /// Store a byte value in the cache with an optional TTL.
     ///
@@ -68,7 +71,10 @@ pub trait DbCacheProvider: Send + Sync {
         clippy::type_complexity,
         reason = "Pin<Box<dyn Future + Send>> is the canonical dyn-compatible async trait dispatch type"
     )]
-    fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>>;
+    fn delete<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>>;
 }
 
 #[cfg(test)]
@@ -119,7 +125,10 @@ mod tests {
             })
         }
 
-        fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+        fn delete<'a>(
+            &'a self,
+            key: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
             Box::pin(async move {
                 let mut map = self.inner.lock().expect("mock cache lock poisoned");
                 map.remove(key);
@@ -190,8 +199,14 @@ mod tests {
     #[tokio::test]
     async fn db_cache_provider_set_overwrites() {
         let cache = MockCacheProvider::new();
-        cache.set("k", b"old".to_vec(), None).await.expect("set old");
-        cache.set("k", b"new".to_vec(), None).await.expect("set new");
+        cache
+            .set("k", b"old".to_vec(), None)
+            .await
+            .expect("set old");
+        cache
+            .set("k", b"new".to_vec(), None)
+            .await
+            .expect("set new");
         let got = cache.get("k").await.expect("get");
         assert_eq!(got, Some(b"new".to_vec()));
     }
@@ -202,7 +217,10 @@ mod tests {
     #[tokio::test]
     async fn db_cache_provider_dyn_dispatch_works() {
         let cache: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(MockCacheProvider::new());
-        cache.set("dyn", b"works".to_vec(), None).await.expect("set");
+        cache
+            .set("dyn", b"works".to_vec(), None)
+            .await
+            .expect("set");
         let got = cache.get("dyn").await.expect("get");
         assert_eq!(got, Some(b"works".to_vec()));
         cache.delete("dyn").await.expect("delete");

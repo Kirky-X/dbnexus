@@ -22,9 +22,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use dbnexus::foundation::DbError;
 use dbnexus::DbCacheProvider;
 use dbnexus::OxcacheDbCacheAdapter;
+use dbnexus::foundation::DbError;
 use oxcache::backend::{CacheBackend, MokaMemoryBackend};
 
 // ============================================
@@ -105,7 +105,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 设置带 TTL 的缓存
     adapter
-        .set("session:abc", b"token_data".to_vec(), Some(Duration::from_secs(60)))
+        .set(
+            "session:abc",
+            b"token_data".to_vec(),
+            Some(Duration::from_secs(60)),
+        )
         .await?;
     println!("  ✓ set(\"session:abc\", ttl=60s)");
 
@@ -117,7 +121,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 设置短 TTL 的缓存
     adapter
-        .set("temp:data", b"ephemeral".to_vec(), Some(Duration::from_millis(1)))
+        .set(
+            "temp:data",
+            b"ephemeral".to_vec(),
+            Some(Duration::from_millis(1)),
+        )
         .await?;
     println!("  ✓ set(\"temp:data\", ttl=1ms)");
 

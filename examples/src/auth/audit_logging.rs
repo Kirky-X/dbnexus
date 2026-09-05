@@ -17,8 +17,8 @@
 //! ```
 
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
-    AuditStatus, MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
+    AuditSeverity, AuditStatus, MemoryAuditStorage,
 };
 use std::sync::Arc;
 
@@ -144,7 +144,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // CREATE
     logger
-        .log_create("users", "u_001", "admin", Some(r#"{"name":"alice"}"#.to_string()))
+        .log_create(
+            "users",
+            "u_001",
+            "admin",
+            Some(r#"{"name":"alice"}"#.to_string()),
+        )
         .await?;
     println!("  ✓ log_create: users/u_001 by admin");
 
@@ -166,7 +171,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // DELETE（高危操作，会触发告警）
     logger
-        .log_delete("users", "u_002", "admin", Some(r#"{"name":"bob"}"#.to_string()))
+        .log_delete(
+            "users",
+            "u_002",
+            "admin",
+            Some(r#"{"name":"bob"}"#.to_string()),
+        )
         .await?;
     println!("  ✓ log_delete: users/u_002 by admin (高危，触发告警)");
 
@@ -283,7 +293,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(after) = &ev.after_value {
             println!("  原始 after_value 包含 password/api_key");
             println!("  存储后 after_value = {}", after);
-            assert!(after.contains("***REDACTED_PASSWORD***"), "password 应被脱敏");
+            assert!(
+                after.contains("***REDACTED_PASSWORD***"),
+                "password 应被脱敏"
+            );
             assert!(after.contains("***REDACTED_API_KEY***"), "api_key 应被脱敏");
             println!("  ✓ password 和 api_key 已被自动脱敏");
         }

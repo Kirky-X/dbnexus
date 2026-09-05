@@ -9,4 +9,6 @@
 pub mod distributed_id;
 
 #[cfg(feature = "distributed-id")]
-pub use distributed_id::{DistributedIdGenerator, IdComponents, SnowflakeError, SnowflakeIdGenerator};
+pub use distributed_id::{
+    DistributedIdGenerator, IdComponents, SnowflakeError, SnowflakeIdGenerator,
+};

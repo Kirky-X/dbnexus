@@ -121,7 +121,8 @@ impl PoolHealthMetrics {
     /// 检查是否需要创建新连接
     pub fn should_create_connection(&self, min_connections: usize) -> bool {
         let snapshot = self.snapshot();
-        snapshot.total < min_connections || (snapshot.active >= snapshot.total && snapshot.idle == 0)
+        snapshot.total < min_connections
+            || (snapshot.active >= snapshot.total && snapshot.idle == 0)
     }
 
     /// 增加活跃连接
@@ -368,7 +369,13 @@ impl CircuitBreaker {
             CircuitBreakerState::Closed => Ok(()),
             CircuitBreakerState::HalfOpen => {
                 // 半开状态允许少量请求
-                let failures = self.failure_window.read().await.iter().filter(|&&f| f).count();
+                let failures = self
+                    .failure_window
+                    .read()
+                    .await
+                    .iter()
+                    .filter(|&&f| f)
+                    .count();
                 let total = self.failure_window.read().await.len();
                 if total > 0 {
                     let failure_rate = failures as f64 / total as f64;
@@ -489,34 +496,35 @@ impl HealthChecker {
         let snapshot = self.metrics.snapshot();
 
         // 评估健康状态
-        let status = if snapshot.failed > snapshot.created.saturating_sub(10) && snapshot.created > 10 {
-            recommendations.push("检查数据库连接配置是否正确".to_string());
-            recommendations.push("验证网络连接是否稳定".to_string());
-            HealthStatus::Unhealthy(format!(
-                "连接失败率过高: {}/{} ({:.1}%)",
-                snapshot.failed,
-                snapshot.created,
-                snapshot.created as f64 / (snapshot.created + snapshot.failed) as f64 * 100.0
-            ))
-        } else if snapshot.total == 0 {
-            recommendations.push("请确保数据库连接池已正确初始化".to_string());
-            HealthStatus::Unhealthy("无可用连接".to_string())
-        } else if cb_status.state == CircuitBreakerState::Open {
-            recommendations.push("等待熔断器恢复".to_string());
-            HealthStatus::Degraded("熔断器已打开，请求被拒绝".to_string())
-        } else if snapshot.active >= snapshot.total && snapshot.waiting > 10 {
-            recommendations.push("考虑增加连接池大小".to_string());
-            recommendations.push("检查是否有连接泄露".to_string());
-            HealthStatus::Degraded(format!(
-                "连接池已满: {}/{} 活跃, {} 等待",
-                snapshot.active, snapshot.total, snapshot.waiting
-            ))
-        } else if snapshot.idle == 0 && snapshot.active > 0 {
-            recommendations.push("考虑增加最小连接数".to_string());
-            HealthStatus::Degraded("无空闲连接".to_string())
-        } else {
-            HealthStatus::Healthy
-        };
+        let status =
+            if snapshot.failed > snapshot.created.saturating_sub(10) && snapshot.created > 10 {
+                recommendations.push("检查数据库连接配置是否正确".to_string());
+                recommendations.push("验证网络连接是否稳定".to_string());
+                HealthStatus::Unhealthy(format!(
+                    "连接失败率过高: {}/{} ({:.1}%)",
+                    snapshot.failed,
+                    snapshot.created,
+                    snapshot.created as f64 / (snapshot.created + snapshot.failed) as f64 * 100.0
+                ))
+            } else if snapshot.total == 0 {
+                recommendations.push("请确保数据库连接池已正确初始化".to_string());
+                HealthStatus::Unhealthy("无可用连接".to_string())
+            } else if cb_status.state == CircuitBreakerState::Open {
+                recommendations.push("等待熔断器恢复".to_string());
+                HealthStatus::Degraded("熔断器已打开，请求被拒绝".to_string())
+            } else if snapshot.active >= snapshot.total && snapshot.waiting > 10 {
+                recommendations.push("考虑增加连接池大小".to_string());
+                recommendations.push("检查是否有连接泄露".to_string());
+                HealthStatus::Degraded(format!(
+                    "连接池已满: {}/{} 活跃, {} 等待",
+                    snapshot.active, snapshot.total, snapshot.waiting
+                ))
+            } else if snapshot.idle == 0 && snapshot.active > 0 {
+                recommendations.push("考虑增加最小连接数".to_string());
+                HealthStatus::Degraded("无空闲连接".to_string())
+            } else {
+                HealthStatus::Healthy
+            };
 
         // 更新健康检查时间
         self.metrics.update_health_check_time().await;

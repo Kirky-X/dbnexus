@@ -51,7 +51,9 @@ fn test_retry_policy_duration_accessors() {
 
 #[test]
 fn test_is_idempotent_select() {
-    assert!(dbnexus::reliability::is_idempotent_operation("SELECT * FROM users"));
+    assert!(dbnexus::reliability::is_idempotent_operation(
+        "SELECT * FROM users"
+    ));
     assert!(dbnexus::reliability::is_idempotent_operation(
         "select count(*) from orders"
     ));
@@ -61,7 +63,9 @@ fn test_is_idempotent_select() {
 #[test]
 fn test_is_idempotent_show() {
     assert!(dbnexus::reliability::is_idempotent_operation("SHOW TABLES"));
-    assert!(dbnexus::reliability::is_idempotent_operation("show databases"));
+    assert!(dbnexus::reliability::is_idempotent_operation(
+        "show databases"
+    ));
 }
 
 #[test]
@@ -103,7 +107,9 @@ fn test_not_idempotent_ddl() {
     assert!(!dbnexus::reliability::is_idempotent_operation(
         "CREATE TABLE test (id INT)"
     ));
-    assert!(!dbnexus::reliability::is_idempotent_operation("DROP TABLE test"));
+    assert!(!dbnexus::reliability::is_idempotent_operation(
+        "DROP TABLE test"
+    ));
     assert!(!dbnexus::reliability::is_idempotent_operation(
         "ALTER TABLE test ADD COLUMN name VARCHAR(100)"
     ));
@@ -134,7 +140,8 @@ async fn test_execute_with_retry_success_first_try() {
         overall_timeout_ms: None,
     };
 
-    let result = RetryExecutor::execute_with_retry(&policy, || async { Ok::<i32, _>(42) }, "SELECT 1").await;
+    let result =
+        RetryExecutor::execute_with_retry(&policy, || async { Ok::<i32, _>(42) }, "SELECT 1").await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 42);
 }
@@ -161,7 +168,9 @@ async fn test_execute_with_retry_success_after_failures() {
                 let count = attempt.fetch_add(1, Ordering::SeqCst);
                 if count < 2 {
                     // 前 2 次失败
-                    Err(dbnexus::foundation::DbError::Query("mock connection error".to_string()))
+                    Err(dbnexus::foundation::DbError::Query(
+                        "mock connection error".to_string(),
+                    ))
                 } else {
                     // 第 3 次成功
                     Ok(99)
@@ -197,7 +206,9 @@ async fn test_execute_with_retry_exhausted() {
             let attempt = attempt_clone.clone();
             async move {
                 attempt.fetch_add(1, Ordering::SeqCst);
-                Err::<i32, _>(dbnexus::foundation::DbError::Query("persistent error".to_string()))
+                Err::<i32, _>(dbnexus::foundation::DbError::Query(
+                    "persistent error".to_string(),
+                ))
             }
         },
         "SELECT 1",

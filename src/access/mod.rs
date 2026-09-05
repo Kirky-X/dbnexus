@@ -27,16 +27,17 @@ pub use permission::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use permission::{
     AdvancedRbacProvider, CacheStats, MemoryPermissionProvider, PermissionAction, PermissionCache,
-    PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot, PermissionConfig, PermissionContext,
-    PermissionError, PermissionProvider, PermissionProviderError, RateLimiter, RbacProvider,
-    RefreshablePermissionProvider, RolePolicy, TablePermission, YamlPermissionProvider,
+    PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot, PermissionConfig,
+    PermissionContext, PermissionError, PermissionProvider, PermissionProviderError, RateLimiter,
+    RbacProvider, RefreshablePermissionProvider, RolePolicy, TablePermission,
+    YamlPermissionProvider,
 };
 
 // Re-exports: authentication
 #[cfg(feature = "authentication")]
 pub use authentication::{
-    AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager, PasswordHasher, TokenType,
-    User,
+    AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager,
+    PasswordHasher, TokenType, User,
 };
 
 // Re-exports: sql_parser

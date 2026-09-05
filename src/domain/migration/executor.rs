@@ -29,7 +29,9 @@ fn build_placeholder_list(backend: sea_orm::DbBackend, count: usize) -> String {
             .map(|index| format!("${}", index))
             .collect::<Vec<_>>()
             .join(", "),
-        _ => std::iter::repeat_n("?", count).collect::<Vec<_>>().join(", "),
+        _ => std::iter::repeat_n("?", count)
+            .collect::<Vec<_>>()
+            .join(", "),
     }
 }
 
@@ -53,12 +55,17 @@ fn format_mysql_applied_at(applied_at: time::OffsetDateTime) -> String {
     let applied_at = applied_at.to_offset(time::UtcOffset::UTC);
     #[allow(deprecated)]
     match time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]") {
-        Ok(format) => applied_at.format(&format).unwrap_or_else(|_| applied_at.to_string()),
+        Ok(format) => applied_at
+            .format(&format)
+            .unwrap_or_else(|_| applied_at.to_string()),
         Err(_) => applied_at.to_string(),
     }
 }
 
-fn format_applied_at_for_backend(backend: sea_orm::DbBackend, applied_at: time::OffsetDateTime) -> String {
+fn format_applied_at_for_backend(
+    backend: sea_orm::DbBackend,
+    applied_at: time::OffsetDateTime,
+) -> String {
     match backend {
         sea_orm::DbBackend::MySql => format_mysql_applied_at(applied_at),
         _ => applied_at.to_string(),
@@ -67,8 +74,10 @@ fn format_applied_at_for_backend(backend: sea_orm::DbBackend, applied_at: time::
 
 fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
     #[allow(deprecated)]
-    let format_with_subseconds =
-        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]").ok();
+    let format_with_subseconds = time::format_description::parse(
+        "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]",
+    )
+    .ok();
     if let Some(format) = format_with_subseconds
         && let Ok(dt) = time::PrimitiveDateTime::parse(value, &format)
     {
@@ -90,7 +99,9 @@ fn parse_mysql_applied_at(value: &str) -> Option<time::OffsetDateTime> {
 fn parse_applied_at_for_db(db_type: DatabaseType, value: &str) -> Option<time::OffsetDateTime> {
     match db_type {
         DatabaseType::MySql => parse_mysql_applied_at(value),
-        _ => time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok(),
+        _ => {
+            time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()
+        }
     }
 }
 
@@ -170,7 +181,10 @@ impl MigrationExecutor {
                     query.expr_as(Expr::cust("applied_at::text"), Alias::new("applied_at"));
                 }
                 DatabaseType::MySql => {
-                    query.expr_as(Expr::cust("CAST(applied_at AS CHAR)"), Alias::new("applied_at"));
+                    query.expr_as(
+                        Expr::cust("CAST(applied_at AS CHAR)"),
+                        Alias::new("applied_at"),
+                    );
                 }
                 DatabaseType::Sqlite => {
                     query.column(Alias::new("applied_at"));
@@ -185,7 +199,10 @@ impl MigrationExecutor {
 
             query.order_by(Alias::new("version"), Order::Asc);
 
-            self.connection.query_all(&query).await.map_err(DbError::Connection)?
+            self.connection
+                .query_all(&query)
+                .await
+                .map_err(DbError::Connection)?
         };
 
         let mut history = MigrationHistory::new();
@@ -286,8 +303,8 @@ impl MigrationExecutor {
                 // 并发 CREATE TABLE 或历史残留触发两类"已存在"冲突：
                 //   - pg_type_typname_nsp_index（SQLSTATE 23505）：并发类型注册唯一约束冲突
                 //   - "type ... already exists"（SQLSTATE 42710）：另一会话已提交同名复合类型
-                let is_creation_conflict =
-                    err_str.contains("pg_type_typname_nsp_index") || err_str.contains("already exists");
+                let is_creation_conflict = err_str.contains("pg_type_typname_nsp_index")
+                    || err_str.contains("already exists");
                 if is_creation_conflict {
                     // 等待并发 CREATE TABLE 提交后重试，使 IF NOT EXISTS 成为 no-op
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -296,7 +313,9 @@ impl MigrationExecutor {
                         Err(e2) => {
                             let err_str2 = e2.to_string();
                             // 重试后仍为 pg_type 冲突或表已存在，视为成功
-                            if err_str2.contains("pg_type_typname_nsp_index") || err_str2.contains("already exists") {
+                            if err_str2.contains("pg_type_typname_nsp_index")
+                                || err_str2.contains("already exists")
+                            {
                                 Ok(())
                             } else {
                                 Err(DbError::Connection(e2))
@@ -323,14 +342,18 @@ impl MigrationExecutor {
 
         // 执行迁移 SQL
         if !sql.is_empty() {
-            txn.execute_unprepared(&sql).await.map_err(DbError::Connection)?;
+            txn.execute_unprepared(&sql)
+                .await
+                .map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史
         let version_record = MigrationVersion {
             version: migration.version,
             description: migration.description.clone(),
-            applied_at: migration.timestamp.unwrap_or_else(time::OffsetDateTime::now_utc),
+            applied_at: migration
+                .timestamp
+                .unwrap_or_else(time::OffsetDateTime::now_utc),
             file_path: format!("migration_v{}.sql", migration.version),
         };
 
@@ -370,7 +393,10 @@ impl MigrationExecutor {
     }
 
     /// 获取待应用的迁移
-    pub async fn get_pending_migrations<'a>(&'a mut self, all_migrations: &'a [Migration]) -> Vec<&'a Migration> {
+    pub async fn get_pending_migrations<'a>(
+        &'a mut self,
+        all_migrations: &'a [Migration],
+    ) -> Vec<&'a Migration> {
         // 重新加载历史记录以获取最新状态
         if self.load_history().await.is_ok() {
             self.history.get_pending_migrations(all_migrations)
@@ -382,7 +408,11 @@ impl MigrationExecutor {
 
     /// 获取所有迁移的版本号
     pub fn get_all_versions(&self) -> Vec<u32> {
-        self.history.applied_migrations.iter().map(|m| m.version).collect()
+        self.history
+            .applied_migrations
+            .iter()
+            .map(|m| m.version)
+            .collect()
     }
 
     /// 获取最新应用的迁移
@@ -475,7 +505,8 @@ impl MigrationExecutor {
             .map_err(|e| DbError::Config(format!("Failed to read migration directory: {}", e)))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
+            let entry = entry
+                .map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_file()
@@ -483,8 +514,9 @@ impl MigrationExecutor {
                 && let Some(filename) = path.file_name().and_then(|n| n.to_str())
                 && let Some((version, description)) = Self::parse_filename(filename)
             {
-                let content = std::fs::read_to_string(&path)
-                    .map_err(|e| DbError::Config(format!("Failed to read migration file: {}", e)))?;
+                let content = std::fs::read_to_string(&path).map_err(|e| {
+                    DbError::Config(format!("Failed to read migration file: {}", e))
+                })?;
 
                 migrations.push(MigrationFile {
                     version,
@@ -569,7 +601,11 @@ impl MigrationExecutor {
         query.column(Alias::new("version"));
         query.from(Alias::new("dbnexus_migrations"));
 
-        let rows = self.connection.query_all(&query).await.map_err(DbError::Connection)?;
+        let rows = self
+            .connection
+            .query_all(&query)
+            .await
+            .map_err(DbError::Connection)?;
 
         let mut applied_versions = std::collections::HashSet::new();
         for row in rows {
@@ -583,7 +619,10 @@ impl MigrationExecutor {
     }
 
     /// 应用单个迁移文件
-    async fn apply_migration_file(&mut self, migration_file: &MigrationFile) -> Result<(), DbError> {
+    async fn apply_migration_file(
+        &mut self,
+        migration_file: &MigrationFile,
+    ) -> Result<(), DbError> {
         // 解析迁移文件内容
         let sql = Self::extract_up_sql(&migration_file.content);
 
@@ -592,7 +631,9 @@ impl MigrationExecutor {
 
         // 执行迁移 SQL
         if !sql.is_empty() {
-            txn.execute_unprepared(sql).await.map_err(DbError::Connection)?;
+            txn.execute_unprepared(sql)
+                .await
+                .map_err(DbError::Connection)?;
         }
 
         // 记录迁移历史（使用参数化查询防止 SQL 注入）
@@ -637,7 +678,10 @@ impl MigrationExecutor {
     }
 
     #[allow(missing_docs)]
-    pub async fn apply_migration_file_public(&mut self, migration_file: &MigrationFile) -> Result<(), DbError> {
+    pub async fn apply_migration_file_public(
+        &mut self,
+        migration_file: &MigrationFile,
+    ) -> Result<(), DbError> {
         self.apply_migration_file(migration_file).await
     }
 
@@ -657,14 +701,21 @@ impl MigrationExecutor {
             None
         }
 
-        let up_marker = find_marker_line(content, &["-- UP:", "-- up:", "-- UP", "-- up", "UP:", "UP"]);
+        let up_marker = find_marker_line(
+            content,
+            &["-- UP:", "-- up:", "-- UP", "-- up", "UP:", "UP"],
+        );
         let down_marker = find_marker_line(
             content,
-            &["-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN"],
+            &[
+                "-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN",
+            ],
         );
 
         match (up_marker, down_marker) {
-            (Some((_, up_end)), Some((down_start, _))) if down_start > up_end => &content[up_end..down_start],
+            (Some((_, up_end)), Some((down_start, _))) if down_start > up_end => {
+                &content[up_end..down_start]
+            }
             (Some((_, up_end)), _) => &content[up_end..],
             (None, Some((down_start, _))) => &content[..down_start],
             (None, None) => content,
@@ -707,17 +758,24 @@ impl MigrationFileParser {
     /// 验证SQL语法（基本验证）
     fn validate_sql_syntax(content: &str) -> Result<(), String> {
         // 检查是否包含基本的SQL语句
-        let has_up = content.contains("UP") || content.contains("up") || content.to_uppercase().contains("-- UP");
-        let has_down =
-            content.contains("DOWN") || content.contains("down") || content.to_uppercase().contains("-- DOWN");
+        let has_up = content.contains("UP")
+            || content.contains("up")
+            || content.to_uppercase().contains("-- UP");
+        let has_down = content.contains("DOWN")
+            || content.contains("down")
+            || content.to_uppercase().contains("-- DOWN");
 
         if !has_up && !has_down {
             // 如果没有UP/DOWN标记，只要包含SQL语句即可
             let sql_statements = ["CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"];
-            let contains_sql = sql_statements.iter().any(|stmt| content.to_uppercase().contains(stmt));
+            let contains_sql = sql_statements
+                .iter()
+                .any(|stmt| content.to_uppercase().contains(stmt));
 
             if !contains_sql {
-                return Err("Migration file does not contain recognizable SQL statements".to_string());
+                return Err(
+                    "Migration file does not contain recognizable SQL statements".to_string(),
+                );
             }
         }
 
@@ -917,7 +975,10 @@ mod tests {
         );
         assert_eq!(file.version(), 1);
         assert_eq!(file.description(), "create_users");
-        assert_eq!(file.file_path(), &PathBuf::from("/migrations/001_create_users.sql"));
+        assert_eq!(
+            file.file_path(),
+            &PathBuf::from("/migrations/001_create_users.sql")
+        );
         assert_eq!(file.content(), "CREATE TABLE users (id INTEGER);");
     }
 
@@ -927,8 +988,7 @@ mod tests {
 
     #[test]
     fn test_migration_file_parser_valid_with_up_down() {
-        let content =
-            "-- Migration: create users table\n-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let content = "-- Migration: create users table\n-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
         let result = MigrationFileParser::parse_migration_file(content);
         assert!(result.is_ok());
         let (desc, _) = result.unwrap();
@@ -956,7 +1016,8 @@ mod tests {
 
     #[test]
     fn test_migration_file_parser_extract_description_with_marker() {
-        let content = "-- Migration: add index on users\nCREATE INDEX idx_users_email ON users(email);";
+        let content =
+            "-- Migration: add index on users\nCREATE INDEX idx_users_email ON users(email);";
         let result = MigrationFileParser::parse_migration_file(content);
         assert!(result.is_ok());
         let (desc, _) = result.unwrap();
@@ -1026,7 +1087,8 @@ mod tests {
         let executor = create_sqlite_executor().await;
         let dt = time::OffsetDateTime::now_utc();
         #[allow(deprecated)]
-        let sql = executor.build_history_insert_sql_raw(1, "test migration", dt, "/path/to/file.sql");
+        let sql =
+            executor.build_history_insert_sql_raw(1, "test migration", dt, "/path/to/file.sql");
         assert!(sql.contains("INSERT INTO dbnexus_migrations"));
         assert!(sql.contains("1"));
         assert!(sql.contains("test migration"));
@@ -1039,7 +1101,8 @@ mod tests {
         let executor = create_sqlite_executor().await;
         let dt = time::OffsetDateTime::now_utc();
         #[allow(deprecated)]
-        let sql = executor.build_history_insert_sql_raw(1, "it's a 'test'", dt, "/path/to/file.sql");
+        let sql =
+            executor.build_history_insert_sql_raw(1, "it's a 'test'", dt, "/path/to/file.sql");
         // 单引号应被转义为 ''
         assert!(sql.contains("it''s a ''test''"));
     }
@@ -1126,7 +1189,11 @@ mod tests {
     // MigrationExecutor - scan_migrations (需要 auto-migrate)
     // =====================================================================
 
-    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[cfg(all(
+        feature = "auto-migrate",
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls"
+    ))]
     #[tokio::test]
     async fn test_scan_migrations_empty_dir() {
         let executor = create_sqlite_executor().await;
@@ -1136,7 +1203,11 @@ mod tests {
         assert!(result.unwrap().is_empty());
     }
 
-    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[cfg(all(
+        feature = "auto-migrate",
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls"
+    ))]
     #[tokio::test]
     async fn test_scan_migrations_nonexistent_dir() {
         let executor = create_sqlite_executor().await;
@@ -1146,7 +1217,11 @@ mod tests {
         assert!(result.unwrap().is_empty());
     }
 
-    #[cfg(all(feature = "auto-migrate", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[cfg(all(
+        feature = "auto-migrate",
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls"
+    ))]
     #[tokio::test]
     async fn test_scan_migrations_with_files() {
         let executor = create_sqlite_executor().await;
@@ -1158,11 +1233,19 @@ mod tests {
             "ALTER TABLE t ADD COLUMN c TEXT;",
         )
         .unwrap();
-        std::fs::write(dir.path().join("001_create_table.sql"), "CREATE TABLE t (id INTEGER);").unwrap();
+        std::fs::write(
+            dir.path().join("001_create_table.sql"),
+            "CREATE TABLE t (id INTEGER);",
+        )
+        .unwrap();
         // 非SQL文件应被忽略
         std::fs::write(dir.path().join("readme.txt"), "not a migration").unwrap();
         // 无效文件名应被忽略（无法解析版本号）
-        std::fs::write(dir.path().join("invalid.sql"), "CREATE TABLE t (id INTEGER);").unwrap();
+        std::fs::write(
+            dir.path().join("invalid.sql"),
+            "CREATE TABLE t (id INTEGER);",
+        )
+        .unwrap();
 
         let result = executor.scan_migrations(dir.path());
         assert!(result.is_ok());
@@ -1332,7 +1415,11 @@ mod tests {
         assert_eq!(latest.description, "test");
     }
 
-    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
     #[tokio::test]
     async fn test_run_migrations_from_files() {
         let mut executor = create_sqlite_executor().await;
@@ -1352,7 +1439,11 @@ mod tests {
         assert_eq!(result.unwrap(), 0);
     }
 
-    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
     #[tokio::test]
     async fn test_run_migrations_empty_dir() {
         let mut executor = create_sqlite_executor().await;
@@ -1363,7 +1454,11 @@ mod tests {
         assert_eq!(result.unwrap(), 0);
     }
 
-    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
     #[tokio::test]
     async fn test_get_pending_migrations() {
         let mut executor = create_sqlite_executor().await;
@@ -1402,7 +1497,11 @@ mod tests {
         assert_eq!(pending[1].version, 3);
     }
 
-    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls", feature = "auto-migrate"))]
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
     #[tokio::test]
     async fn test_apply_migration_file_public() {
         let mut executor = create_sqlite_executor().await;
@@ -1416,7 +1515,11 @@ mod tests {
         );
 
         let result = executor.apply_migration_file_public(&file).await;
-        assert!(result.is_ok(), "apply_migration_file_public failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "apply_migration_file_public failed: {:?}",
+            result.err()
+        );
         assert_eq!(executor.get_all_versions(), vec![1]);
     }
 

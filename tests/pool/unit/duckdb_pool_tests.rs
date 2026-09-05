@@ -33,7 +33,9 @@ async fn make_duckdb_pool() -> DbPool {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    DbPool::with_config(config).await.expect("Failed to create DuckDB pool")
+    DbPool::with_config(config)
+        .await
+        .expect("Failed to create DuckDB pool")
 }
 
 // ============================================================================
@@ -67,7 +69,10 @@ async fn test_duckdb_pool_creation_with_config() {
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await;
-    assert!(pool.is_ok(), "DuckDB pool creation with config should succeed");
+    assert!(
+        pool.is_ok(),
+        "DuckDB pool creation with config should succeed"
+    );
 }
 
 // ============================================================================
@@ -78,7 +83,10 @@ async fn test_duckdb_pool_creation_with_config() {
 #[tokio::test]
 async fn test_duckdb_session_ddl_and_query() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // CREATE TABLE
     let ddl_result = session
@@ -127,7 +135,10 @@ async fn test_duckdb_session_ddl_and_query() {
 #[tokio::test]
 async fn test_duckdb_session_aggregate_query() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_duckdb_raw("CREATE TABLE orders (id INTEGER, amount DOUBLE)")
@@ -164,7 +175,10 @@ async fn test_duckdb_pool_health_check() {
 
     // 通过 get_session 验证连接可用性（内部会创建连接）
     let session = pool.get_session("admin").await;
-    assert!(session.is_ok(), "get_session should succeed with healthy connection");
+    assert!(
+        session.is_ok(),
+        "get_session should succeed with healthy connection"
+    );
 
     // 验证 Session 可以执行查询
     let session = session.unwrap();
@@ -183,11 +197,16 @@ async fn test_duckdb_pool_health_check() {
 #[tokio::test]
 async fn test_duckdb_session_seaorm_method_fails() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // execute_raw_ddl 内部调用 self.connection()?.execute_unprepared()
     // connection() 调用 as_sea_orm()，对 DuckDB 连接返回错误
-    let result = session.execute_raw_ddl("CREATE TABLE test (id INTEGER)").await;
+    let result = session
+        .execute_raw_ddl("CREATE TABLE test (id INTEGER)")
+        .await;
     assert!(
         result.is_err(),
         "SeaORM execute_raw_ddl should fail on DuckDB connection"
@@ -204,7 +223,10 @@ async fn test_duckdb_session_seaorm_method_fails() {
 #[tokio::test]
 async fn test_duckdb_session_transaction_fails() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // begin_transaction 内部调用 self.connection()?.begin()
     // 对 DuckDB 连接，connection() 返回错误
@@ -240,11 +262,18 @@ async fn test_duckdb_pool_concurrent_sessions() {
         admin_role: "admin".to_string(),
         ..Default::default()
     };
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create DuckDB pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create DuckDB pool"),
+    );
 
     // 预先创建表（使用第一个 session，释放后连接回到池中供后续复用）
     {
-        let session = pool.get_session("admin").await.expect("Failed to get setup session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get setup session");
         session
             .execute_duckdb_raw("CREATE TABLE concurrent_test (id INTEGER, value INTEGER)")
             .await
@@ -346,7 +375,10 @@ async fn test_duckdb_non_admin_ddl_rejected() {
 #[tokio::test]
 async fn test_duckdb_admin_ddl_allowed() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get admin session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get admin session");
 
     session
         .execute_duckdb_raw("CREATE TABLE admin_table (id INTEGER PRIMARY KEY, data VARCHAR)")
@@ -370,11 +402,19 @@ async fn test_duckdb_admin_ddl_allowed() {
 #[tokio::test]
 async fn test_duckdb_query_rejects_ddl() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // execute_duckdb 是只读查询方法，应拒绝 DDL
-    let result = session.execute_duckdb("CREATE TABLE should_fail (id INTEGER)").await;
-    assert!(result.is_err(), "execute_duckdb should reject DDL even for admin");
+    let result = session
+        .execute_duckdb("CREATE TABLE should_fail (id INTEGER)")
+        .await;
+    assert!(
+        result.is_err(),
+        "execute_duckdb should reject DDL even for admin"
+    );
 }
 
 // ============================================================================
@@ -385,15 +425,22 @@ async fn test_duckdb_query_rejects_ddl() {
 #[tokio::test]
 async fn test_duckdb_multiple_data_types() {
     let pool = make_duckdb_pool().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
-        .execute_duckdb_raw("CREATE TABLE types_test (id INTEGER, name VARCHAR, score DOUBLE, active BOOLEAN)")
+        .execute_duckdb_raw(
+            "CREATE TABLE types_test (id INTEGER, name VARCHAR, score DOUBLE, active BOOLEAN)",
+        )
         .await
         .expect("create table");
 
     session
-        .execute_duckdb_raw("INSERT INTO types_test VALUES (1, 'Alice', 95.5, true), (2, 'Bob', NULL, false)")
+        .execute_duckdb_raw(
+            "INSERT INTO types_test VALUES (1, 'Alice', 95.5, true), (2, 'Bob', NULL, false)",
+        )
         .await
         .expect("insert");
 

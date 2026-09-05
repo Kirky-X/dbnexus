@@ -71,7 +71,10 @@ async fn test_semaphore_permit_return_concurrent() {
     for _ in 0..iterations {
         let pool_clone = pool.clone();
         let handle = tokio::spawn(async move {
-            let session = pool_clone.get_session("admin").await.expect("Failed to get session");
+            let session = pool_clone
+                .get_session("admin")
+                .await
+                .expect("Failed to get session");
             // 模拟短暂使用
             tokio::time::sleep(Duration::from_millis(1)).await;
             drop(session);
@@ -131,7 +134,9 @@ async fn test_no_deadlock_high_concurrency() {
             let pool_clone = pool.clone();
             let handle = tokio::spawn(async move {
                 // 使用 timeout 确保不会永久阻塞
-                match tokio::time::timeout(Duration::from_secs(5), pool_clone.get_session("admin")).await {
+                match tokio::time::timeout(Duration::from_secs(5), pool_clone.get_session("admin"))
+                    .await
+                {
                     Ok(Ok(session)) => {
                         // 验证当前活跃连接数不超过限制
                         let status = pool_clone.status();
@@ -147,7 +152,10 @@ async fn test_no_deadlock_high_concurrency() {
         }
 
         let results: Vec<_> = futures::future::join_all(handles).await;
-        let success_count = results.iter().filter(|r| *r.as_ref().unwrap_or(&false)).count();
+        let success_count = results
+            .iter()
+            .filter(|r| *r.as_ref().unwrap_or(&false))
+            .count();
 
         // 验证至少有部分任务成功（连接池可用）
         assert!(
@@ -161,7 +169,10 @@ async fn test_no_deadlock_high_concurrency() {
     }
 
     let status = pool.status();
-    assert_eq!(status.active, 0, "All sessions should be released after all rounds");
+    assert_eq!(
+        status.active, 0,
+        "All sessions should be released after all rounds"
+    );
 }
 
 /// 测试信号量许可 - 达到最大连接数后可继续获取
@@ -187,8 +198,14 @@ async fn test_semaphore_permit_reuse_after_max() {
     );
 
     // 第一轮：获取所有连接
-    let session1 = pool.get_session("admin").await.expect("Failed to get session 1");
-    let session2 = pool.get_session("admin").await.expect("Failed to get session 2");
+    let session1 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session 1");
+    let session2 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session 2");
 
     let status = pool.status();
     assert_eq!(status.active, 2, "Should have 2 active connections");
@@ -250,13 +267,19 @@ async fn test_pool_stress_rapid_acquire_release() {
     }
 
     let results: Vec<_> = futures::future::join_all(handles).await;
-    let success_count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
+    let success_count = results
+        .iter()
+        .filter(|r| r.as_ref().unwrap_or(&None).is_some())
+        .count();
 
     // 等待所有异步释放完成
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let status = pool.status();
-    assert_eq!(status.active, 0, "All sessions should be released after stress test");
+    assert_eq!(
+        status.active, 0,
+        "All sessions should be released after stress test"
+    );
     assert!(success_count > 0, "At least some operations should succeed");
 
     // 验证连接池仍然可用
@@ -289,8 +312,14 @@ async fn test_semaphore_fairness() {
     );
 
     // 获取所有连接
-    let session1 = pool.get_session("admin").await.expect("Failed to get session 1");
-    let session2 = pool.get_session("admin").await.expect("Failed to get session 2");
+    let session1 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session 1");
+    let session2 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session 2");
 
     // 启动多个等待任务
     let pool_clone = pool.clone();

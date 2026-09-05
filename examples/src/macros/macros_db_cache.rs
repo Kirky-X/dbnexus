@@ -18,7 +18,7 @@
 mod common;
 
 use dbnexus::sea_orm::entity::prelude::*;
-use dbnexus::{db_entity, CacheConfig};
+use dbnexus::{CacheConfig, db_entity};
 
 // ============================================
 // 定义 Article 实体（带 cache 子参数）
@@ -86,13 +86,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 3. cache_config() 方法 ---\n");
     let cache_config: CacheConfig = Model::cache_config();
     println!("  生成的 CacheConfig:");
-    println!("    policy_cache_capacity   = {}", cache_config.policy_cache_capacity);
+    println!(
+        "    policy_cache_capacity   = {}",
+        cache_config.policy_cache_capacity
+    );
     println!(
         "    sql_parse_cache_capacity = {}",
         cache_config.sql_parse_cache_capacity
     );
-    println!("    query_cache_capacity    = {}", cache_config.query_cache_capacity);
-    println!("    default_ttl             = {} 秒", cache_config.default_ttl);
+    println!(
+        "    query_cache_capacity    = {}",
+        cache_config.query_cache_capacity
+    );
+    println!(
+        "    default_ttl             = {} 秒",
+        cache_config.default_ttl
+    );
 
     // ============================================
     // 4. 创建 DbPool + Session
@@ -128,8 +137,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         author: "Alice".to_string(),
     };
     let created = Model::insert(&session, article1).await?;
-    println!("  ✓ 插入文章: id={}, title=\"{}\"", created.id, created.title);
-    println!("    缓存键: \"{}\" (可用于写入缓存)", Model::cache_key(created.id));
+    println!(
+        "  ✓ 插入文章: id={}, title=\"{}\"",
+        created.id, created.title
+    );
+    println!(
+        "    缓存键: \"{}\" (可用于写入缓存)",
+        Model::cache_key(created.id)
+    );
 
     let article2 = Model {
         id: 2,
@@ -138,7 +153,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         author: "Bob".to_string(),
     };
     let created2 = Model::insert(&session, article2).await?;
-    println!("  ✓ 插入文章: id={}, title=\"{}\"", created2.id, created2.title);
+    println!(
+        "  ✓ 插入文章: id={}, title=\"{}\"",
+        created2.id, created2.title
+    );
     println!("    缓存键: \"{}\"", Model::cache_key(created2.id));
 
     // READ
@@ -149,7 +167,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "  ✓ 查询文章: id={}, title=\"{}\", author=\"{}\"",
             a.id, a.title, a.author
         );
-        println!("    缓存键: \"{}\" (可用于读取/回填缓存)", Model::cache_key(a.id));
+        println!(
+            "    缓存键: \"{}\" (可用于读取/回填缓存)",
+            Model::cache_key(a.id)
+        );
     }
 
     // UPDATE
@@ -163,8 +184,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .await?;
-    println!("  ✓ 更新文章: id={}, 新 title=\"{}\"", updated.id, updated.title);
-    println!("    缓存键: \"{}\" (更新后应失效缓存)", Model::cache_key(updated.id));
+    println!(
+        "  ✓ 更新文章: id={}, 新 title=\"{}\"",
+        updated.id, updated.title
+    );
+    println!(
+        "    缓存键: \"{}\" (更新后应失效缓存)",
+        Model::cache_key(updated.id)
+    );
 
     // DELETE
     println!("\n[DELETE]");
@@ -215,14 +242,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✨ db_entity 宏 cache 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_entity(..., cache(ttl=60, strategy=\"lru\", max_capacity=5000))]  生成缓存配置");
+    println!(
+        "  - #[db_entity(..., cache(ttl=60, strategy=\"lru\", max_capacity=5000))]  生成缓存配置"
+    );
     println!("  - Model::CACHE_TTL           缓存 TTL（秒）");
     println!("  - Model::CACHE_STRATEGY      缓存策略名称");
     println!("  - Model::CACHE_MAX_CAPACITY  缓存最大容量");
     println!("  - Model::CACHE_ENABLED       缓存是否启用");
     println!("  - Model::cache_key(id)       生成缓存键 \"{{table_name}}:{{id}}\"");
     println!("  - Model::cache_config()      生成 CacheConfig 实例");
-    println!("\n⚠️  注意: #[db_entity] 的 cache 子参数仅生成配置常量和辅助方法，不自动执行缓存读写。");
+    println!(
+        "\n⚠️  注意: #[db_entity] 的 cache 子参数仅生成配置常量和辅助方法，不自动执行缓存读写。"
+    );
     println!("   开发者需在 CRUD 操作前后手动调用缓存 API 进行读写/失效。");
     println!("   常量用于统一管理缓存策略，避免硬编码。");
 

@@ -96,9 +96,14 @@ fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::
 
     for meta in parsed {
         if let syn::Meta::NameValue(nv) = meta {
-            let key = nv.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+            let key = nv
+                .path
+                .get_ident()
+                .map(|i| i.to_string())
+                .unwrap_or_default();
             if let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(s), ..
+                lit: syn::Lit::Str(s),
+                ..
             }) = &nv.value
             {
                 let value = s.value();
@@ -161,29 +166,38 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // table_name = "..."
             syn::Meta::NameValue(nv) if nv.path.is_ident("table_name") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s), ..
+                    lit: syn::Lit::Str(s),
+                    ..
                 }) = &nv.value
                 {
                     result.table_name = s.value();
                 } else {
-                    return Err(syn::Error::new(nv.value.span(), "table_name must be a string literal"));
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "table_name must be a string literal",
+                    ));
                 }
             }
             // primary_key = "..."
             syn::Meta::NameValue(nv) if nv.path.is_ident("primary_key") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s), ..
+                    lit: syn::Lit::Str(s),
+                    ..
                 }) = &nv.value
                 {
                     result.primary_key = s.value();
                 } else {
-                    return Err(syn::Error::new(nv.value.span(), "primary_key must be a string literal"));
+                    return Err(syn::Error::new(
+                        nv.value.span(),
+                        "primary_key must be a string literal",
+                    ));
                 }
             }
             // timestamps = true|false
             syn::Meta::NameValue(nv) if nv.path.is_ident("timestamps") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Bool(b), ..
+                    lit: syn::Lit::Bool(b),
+                    ..
                 }) = &nv.value
                 {
                     result.timestamps = b.value;
@@ -197,7 +211,8 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             // soft_delete = true|false
             syn::Meta::NameValue(nv) if nv.path.is_ident("soft_delete") => {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Bool(b), ..
+                    lit: syn::Lit::Bool(b),
+                    ..
                 }) = &nv.value
                 {
                     result.soft_delete = b.value;
@@ -234,8 +249,16 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
             _ => {
                 let name = match &meta {
                     syn::Meta::Path(p) => p.get_ident().map(|i| i.to_string()).unwrap_or_default(),
-                    syn::Meta::NameValue(nv) => nv.path.get_ident().map(|i| i.to_string()).unwrap_or_default(),
-                    syn::Meta::List(l) => l.path.get_ident().map(|i| i.to_string()).unwrap_or_default(),
+                    syn::Meta::NameValue(nv) => nv
+                        .path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default(),
+                    syn::Meta::List(l) => l
+                        .path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default(),
                 };
                 return Err(syn::Error::new(
                     meta.span(),
@@ -269,7 +292,11 @@ fn parse_nested_params(
         match meta {
             syn::Meta::NameValue(nv) => {
                 if let Some(ident) = nv.path.get_ident() {
-                    result.push((ident.to_string(), nv.path.span(), nv.value.to_token_stream()));
+                    result.push((
+                        ident.to_string(),
+                        nv.path.span(),
+                        nv.value.to_token_stream(),
+                    ));
                 }
             }
             syn::Meta::Path(p) => {
@@ -278,7 +305,11 @@ fn parse_nested_params(
                 }
             }
             syn::Meta::List(list) => {
-                let name = list.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                let name = list
+                    .path
+                    .get_ident()
+                    .map(|i| i.to_string())
+                    .unwrap_or_default();
                 return Err(syn::Error::new(
                     list.path.span(),
                     format!(
@@ -300,12 +331,16 @@ fn extract_string_array(tokens: &proc_macro2::TokenStream) -> Result<Vec<String>
             let mut strings = Vec::new();
             for elem in arr.elems {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s), ..
+                    lit: syn::Lit::Str(s),
+                    ..
                 }) = elem
                 {
                     strings.push(s.value());
                 } else {
-                    return Err(syn::Error::new(elem.span(), "Expected string literal in array"));
+                    return Err(syn::Error::new(
+                        elem.span(),
+                        "Expected string literal in array",
+                    ));
                 }
             }
             Ok(strings)
@@ -320,7 +355,8 @@ fn extract_string(tokens: &proc_macro2::TokenStream) -> Result<String, syn::Erro
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Str(s), ..
+            lit: syn::Lit::Str(s),
+            ..
         }) => Ok(s.value()),
         _ => Err(syn::Error::new(expr.span(), "Expected string literal")),
     }
@@ -331,7 +367,8 @@ fn extract_u64(tokens: &proc_macro2::TokenStream) -> Result<u64, syn::Error> {
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Int(i), ..
+            lit: syn::Lit::Int(i),
+            ..
         }) => Ok(i.base10_parse()?),
         _ => Err(syn::Error::new(expr.span(), "Expected integer literal")),
     }
@@ -342,7 +379,8 @@ fn extract_bool(tokens: &proc_macro2::TokenStream) -> Result<bool, syn::Error> {
     let expr: syn::Expr = syn::parse2(tokens.clone())?;
     match expr {
         syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Bool(b), ..
+            lit: syn::Lit::Bool(b),
+            ..
         }) => Ok(b.value),
         _ => Err(syn::Error::new(expr.span(), "Expected boolean literal")),
     }
@@ -434,11 +472,18 @@ struct AuditParams {
     roles: Vec<String>,
 }
 
-fn parse_audit_params(tokens: &proc_macro2::TokenStream, struct_name: &syn::Ident) -> Result<AuditParams, syn::Error> {
+fn parse_audit_params(
+    tokens: &proc_macro2::TokenStream,
+    struct_name: &syn::Ident,
+) -> Result<AuditParams, syn::Error> {
     let params = parse_nested_params(tokens)?;
     let mut table_name = String::new();
     let mut log_values = true;
-    let mut operations = vec!["INSERT".to_string(), "UPDATE".to_string(), "DELETE".to_string()];
+    let mut operations = vec![
+        "INSERT".to_string(),
+        "UPDATE".to_string(),
+        "DELETE".to_string(),
+    ];
     let mut roles = vec!["admin".to_string()];
 
     for (name, span, value_tokens) in params {
@@ -771,11 +816,13 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     //   - before_* 签名：fn(&mut ActiveModel) -> Result<(), E>
     //   - after_* 签名：fn(&Model) -> Result<(), E>
     // - 编译期签名校验（Task 7.9）：由编译器在调用点检查函数存在性和签名匹配
-    let needs_before_save = entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
+    let needs_before_save =
+        entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
     let needs_after_save = entity_args.hooks.has_after_save_hooks();
     let needs_before_delete = entity_args.hooks.before_delete.is_some();
     let needs_after_delete = entity_args.hooks.after_delete.is_some();
-    let needs_behavior = needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
+    let needs_behavior =
+        needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
 
     let (behavior_attr, behavior_impl) = if needs_behavior {
         // === before_save 生成 ===
@@ -1681,7 +1728,9 @@ impl DbRepositoryArgs {
                 Err(meta.error("unsupported property"))
             }
         });
-        parser.parse(args).expect("failed to parse db_repository arguments");
+        parser
+            .parse(args)
+            .expect("failed to parse db_repository arguments");
         if result.table.is_empty() {
             panic!("db_repository requires `table` parameter: #[db_repository(table = \"users\")]");
         }

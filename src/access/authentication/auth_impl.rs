@@ -27,10 +27,18 @@ impl AuthenticationManager {
     }
 
     /// 使用自定义配置创建认证管理器
-    pub fn with_config(jwt_secret: &[u8], access_expiration_secs: u64, refresh_expiration_secs: u64) -> Self {
+    pub fn with_config(
+        jwt_secret: &[u8],
+        access_expiration_secs: u64,
+        refresh_expiration_secs: u64,
+    ) -> Self {
         Self {
             password_hasher: PasswordHasher::new(),
-            jwt_manager: JwtManager::with_expiration(jwt_secret, access_expiration_secs, refresh_expiration_secs),
+            jwt_manager: JwtManager::with_expiration(
+                jwt_secret,
+                access_expiration_secs,
+                refresh_expiration_secs,
+            ),
             users: Arc::new(RwLock::new(HashMap::new())),
             max_users: super::DEFAULT_MAX_USERS,
         }
@@ -116,7 +124,12 @@ impl AuthenticationManager {
     /// # 错误
     ///
     /// 密码强度不足时返回 `AuthError::PasswordHash`
-    pub async fn register_user(&self, username: &str, password: &str, role: &str) -> AuthResult<()> {
+    pub async fn register_user(
+        &self,
+        username: &str,
+        password: &str,
+        role: &str,
+    ) -> AuthResult<()> {
         // 1. 验证密码强度
         self.password_hasher.validate_strength(password)?;
 
@@ -143,16 +156,21 @@ impl AuthenticationManager {
     pub async fn authenticate(&self, credentials: AuthCredentials) -> AuthResult<String> {
         // 1. 验证用户名
         let users = self.users.read().await;
-        let user = users.get(&credentials.username).ok_or(AuthError::InvalidCredentials)?;
+        let user = users
+            .get(&credentials.username)
+            .ok_or(AuthError::InvalidCredentials)?;
 
         // 2. 验证密码
         self.password_hasher
             .verify(&credentials.password, &user.password_hash)?;
 
         // 3. 生成 JWT token
-        let token = self
-            .jwt_manager
-            .generate_token(&user.id, &user.username, &user.role, TokenType::Access)?;
+        let token = self.jwt_manager.generate_token(
+            &user.id,
+            &user.username,
+            &user.role,
+            TokenType::Access,
+        )?;
 
         Ok(token)
     }
@@ -203,7 +221,9 @@ impl AuthenticationManager {
 /// - cost 字段非数字时返回 `AuthError::PasswordHash`
 fn validate_bcrypt_hash(hash: &str) -> AuthResult<()> {
     if hash.is_empty() {
-        return Err(AuthError::PasswordHash("password_hash must not be empty".to_string()));
+        return Err(AuthError::PasswordHash(
+            "password_hash must not be empty".to_string(),
+        ));
     }
 
     // bcrypt 哈希固定长度为 60 字节
@@ -216,7 +236,9 @@ fn validate_bcrypt_hash(hash: &str) -> AuthResult<()> {
 
     // 必须是纯 ASCII（bcrypt 哈希始终为 ASCII，防止多字节 UTF-8 输入导致切片 panic）
     if !hash.is_ascii() {
-        return Err(AuthError::PasswordHash("password_hash must be ASCII".to_string()));
+        return Err(AuthError::PasswordHash(
+            "password_hash must be ASCII".to_string(),
+        ));
     }
 
     // 必须以 $2a$、$2b$ 或 $2y$ 开头
@@ -411,7 +433,8 @@ mod tests {
         let user = User {
             id: "migrated-1".to_string(),
             username: "migrated_user".to_string(),
-            password_hash: "$2b$12$somefakebutnonemptyhashplaceholder012345678901234567890123456".to_string(),
+            password_hash: "$2b$12$somefakebutnonemptyhashplaceholder012345678901234567890123456"
+                .to_string(),
             role: "user".to_string(),
             email: Some("migrated@example.com".to_string()),
             created_at: None,

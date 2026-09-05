@@ -142,8 +142,9 @@ mod cache_tests {
         fn get<'a>(
             &'a self,
             key: &'a str,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>
-        {
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>,
+        > {
             Box::pin(async move {
                 let map = self.inner.lock().expect("mock cache lock poisoned");
                 Ok(map.get(key).cloned())
@@ -155,7 +156,8 @@ mod cache_tests {
             key: &'a str,
             value: Vec<u8>,
             _ttl: Option<Duration>,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), DbError>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), DbError>> + Send + 'a>>
+        {
             Box::pin(async move {
                 let mut map = self.inner.lock().expect("mock cache lock poisoned");
                 map.insert(key.to_string(), value);
@@ -166,7 +168,8 @@ mod cache_tests {
         fn delete<'a>(
             &'a self,
             key: &'a str,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), DbError>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), DbError>> + Send + 'a>>
+        {
             Box::pin(async move {
                 let mut map = self.inner.lock().expect("mock cache lock poisoned");
                 map.remove(key);
@@ -180,7 +183,10 @@ mod cache_tests {
         let cache = MockCacheProvider::new();
 
         // set a value
-        cache.set("key1", b"value1".to_vec(), None).await.expect("set failed");
+        cache
+            .set("key1", b"value1".to_vec(), None)
+            .await
+            .expect("set failed");
 
         // get returns the value
         let got = cache.get("key1").await.expect("get failed");
@@ -205,8 +211,14 @@ mod cache_tests {
     async fn test_cache_provider_overwrite() {
         let cache = MockCacheProvider::new();
 
-        cache.set("k", b"old".to_vec(), None).await.expect("set old");
-        cache.set("k", b"new".to_vec(), None).await.expect("set new");
+        cache
+            .set("k", b"old".to_vec(), None)
+            .await
+            .expect("set old");
+        cache
+            .set("k", b"new".to_vec(), None)
+            .await
+            .expect("set new");
 
         let got = cache.get("k").await.expect("get");
         assert_eq!(got, Some(b"new".to_vec()));
@@ -272,7 +284,10 @@ mod cache_tests {
     async fn test_cache_provider_dyn_dispatch() {
         let cache: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(MockCacheProvider::new());
 
-        cache.set("dyn", b"works".to_vec(), None).await.expect("set");
+        cache
+            .set("dyn", b"works".to_vec(), None)
+            .await
+            .expect("set");
         let got = cache.get("dyn").await.expect("get");
         assert_eq!(got, Some(b"works".to_vec()));
 

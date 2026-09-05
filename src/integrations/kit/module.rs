@@ -205,11 +205,13 @@ impl BuildObserver for DbNexusBuildObserver {
     }
 
     fn on_module_built(&self, _module_name: &'static str, _elapsed: Duration) {
-        self.built_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.built_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn on_build_error(&self, _module_name: &'static str, _error: &TraitKitError) {
-        self.error_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.error_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -265,11 +267,14 @@ mod tests {
             },
             ..Default::default()
         });
-        kit.register::<OxcacheModule>().expect("register OxcacheModule");
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool: Arc<dyn ConnectionPool + Send + Sync> =
-            kit.require::<DbNexusModule>().expect("require DbNexusModule");
+        let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
+            .require::<DbNexusModule>()
+            .expect("require DbNexusModule");
         // Verify the pool is usable.
         let _status = pool.status();
         let config = pool.config();
@@ -286,7 +291,8 @@ mod tests {
             ..Default::default()
         });
         // Register only DbNexusModule — OxcacheModule is missing.
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
         let err = kit.build().await.expect_err("build should fail");
         let msg = err.to_string();
         assert!(
@@ -336,11 +342,14 @@ mod tests {
             },
             ..Default::default()
         });
-        kit.register::<OxcacheModule>().expect("register OxcacheModule");
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool: Arc<dyn ConnectionPool + Send + Sync> =
-            kit.require::<DbNexusModule>().expect("require DbNexusModule");
+        let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
+            .require::<DbNexusModule>()
+            .expect("require DbNexusModule");
         // Before first use: pool eagerly creates min_connections, so health check
         // reports Healthy (connections are pre-warmed).
         let status = DbNexusModule::check(&pool);
@@ -385,7 +394,9 @@ mod tests {
 
         obs.on_build_error(
             "failing-module",
-            &TraitKitError::MissingCapability { key: "x".to_string() },
+            &TraitKitError::MissingCapability {
+                key: "x".to_string(),
+            },
         );
         assert_eq!(obs.built_count(), 2);
         assert_eq!(obs.error_count(), 1);
@@ -415,8 +426,10 @@ mod tests {
         });
 
         // Register modules.
-        kit.register::<OxcacheModule>().expect("register OxcacheModule");
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
 
         // Register lifecycle + health hooks.
         kit.register_lifecycle::<DbNexusModule>();

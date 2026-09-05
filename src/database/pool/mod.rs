@@ -31,7 +31,11 @@ use crate::foundation::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
-#[cfg(any(feature = "metrics", feature = "cache", feature = "oxcache-integration"))]
+#[cfg(any(
+    feature = "metrics",
+    feature = "cache",
+    feature = "oxcache-integration"
+))]
 use std::sync::Arc;
 
 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]

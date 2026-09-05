@@ -4,7 +4,9 @@
 //!
 //! 提供基于角色的访问控制（RBAC）的高级权限提供者，支持角色继承。
 
-use super::{PermissionAction, PermissionProvider, PermissionProviderError, RolePolicy, TablePermission};
+use super::{
+    PermissionAction, PermissionProvider, PermissionProviderError, RolePolicy, TablePermission,
+};
 
 use dashmap::DashMap;
 use std::collections::{HashSet, VecDeque};
@@ -225,7 +227,8 @@ impl AdvancedRbacProvider {
 
         // 缓存结果
         if self.inherited_roles_cache.len() < self.cache_capacity {
-            self.inherited_roles_cache.insert(role.to_string(), inherited.clone());
+            self.inherited_roles_cache
+                .insert(role.to_string(), inherited.clone());
         }
 
         inherited
@@ -511,7 +514,10 @@ mod tests {
         let provider = AdvancedRbacProvider::new();
 
         // 设置继承关系
-        provider.add_role_inheritance("child".to_string(), vec!["parent1".to_string(), "parent2".to_string()]);
+        provider.add_role_inheritance(
+            "child".to_string(),
+            vec!["parent1".to_string(), "parent2".to_string()],
+        );
 
         let inherited = provider.get_inherited_roles("child");
         assert!(inherited.iter().any(|role| role == "child"));
@@ -621,7 +627,10 @@ mod tests {
         );
 
         // 让另一个角色继承自定义角色
-        provider.add_role_inheritance("inherited_role".to_string(), vec!["custom_role".to_string()]);
+        provider.add_role_inheritance(
+            "inherited_role".to_string(),
+            vec!["custom_role".to_string()],
+        );
 
         // 验证继承
         assert!(
@@ -650,7 +659,10 @@ mod tests {
         provider.set_role_inheritances(vec![
             ("role_a".to_string(), vec!["admin".to_string()]),
             ("role_b".to_string(), vec!["readonly".to_string()]),
-            ("role_c".to_string(), vec!["role_a".to_string(), "role_b".to_string()]),
+            (
+                "role_c".to_string(),
+                vec!["role_a".to_string(), "role_b".to_string()],
+            ),
         ]);
 
         // Role C 应该继承 Role A 和 Role B 的权限
@@ -725,7 +737,8 @@ mod tests {
             if i == 0 {
                 provider.add_role_inheritance(format!("level_{}", i), vec!["admin".to_string()]);
             } else {
-                provider.add_role_inheritance(format!("level_{}", i), vec![format!("level_{}", i - 1)]);
+                provider
+                    .add_role_inheritance(format!("level_{}", i), vec![format!("level_{}", i - 1)]);
             }
         }
 
@@ -758,7 +771,8 @@ mod tests {
             if i == 0 {
                 provider.add_role_inheritance(format!("deep_{}", i), vec!["admin".to_string()]);
             } else {
-                provider.add_role_inheritance(format!("deep_{}", i), vec![format!("deep_{}", i - 1)]);
+                provider
+                    .add_role_inheritance(format!("deep_{}", i), vec![format!("deep_{}", i - 1)]);
             }
         }
 

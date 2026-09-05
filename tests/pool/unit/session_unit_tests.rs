@@ -68,7 +68,10 @@ async fn test_session_is_in_transaction_initial_false() {
 async fn test_session_begin_transaction_succeeds() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
-    session.begin_transaction().await.expect("begin should succeed");
+    session
+        .begin_transaction()
+        .await
+        .expect("begin should succeed");
     assert!(session.is_in_transaction().await);
 }
 
@@ -278,12 +281,23 @@ async fn test_session_batch_execute_multiple_inserts() {
     // batch_execute 用 INSERT（非 DDL，sql-parser 下 admin 绕过权限）
     let insert1 = format!("INSERT INTO {} (val) VALUES ('a')", table);
     let insert2 = format!("INSERT INTO {} (val) VALUES ('b')", table);
-    let results = session.batch_execute(vec![insert1.as_str(), insert2.as_str()]).await;
-    assert!(results.is_ok(), "batch_execute should succeed: {:?}", results.err());
+    let results = session
+        .batch_execute(vec![insert1.as_str(), insert2.as_str()])
+        .await;
+    assert!(
+        results.is_ok(),
+        "batch_execute should succeed: {:?}",
+        results.err()
+    );
     let results = results.unwrap();
     assert_eq!(results.len(), 2, "should return 2 results");
     for (i, r) in results.iter().enumerate() {
-        assert!(r.is_ok(), "result {} should be ok: {:?}", i, r.as_ref().err());
+        assert!(
+            r.is_ok(),
+            "result {} should be ok: {:?}",
+            i,
+            r.as_ref().err()
+        );
     }
 }
 
@@ -391,7 +405,10 @@ async fn test_session_mark_write_affects_should_use_master() {
     let pool = make_pool().await;
     let session = pool.get_session("admin").await.unwrap();
     session.mark_write().await;
-    assert!(session.should_use_master().await, "should use master after mark_write");
+    assert!(
+        session.should_use_master().await,
+        "should use master after mark_write"
+    );
 }
 
 // ============================================================================

@@ -284,11 +284,12 @@ impl DbPool {
         // 使用 Acquire 语义确保看到最新的值
         let mut current = self.inner.max_active.load(Ordering::Acquire);
         while active > current {
-            match self
-                .inner
-                .max_active
-                .compare_exchange(current, active, Ordering::SeqCst, Ordering::Acquire)
-            {
+            match self.inner.max_active.compare_exchange(
+                current,
+                active,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return,
                 Err(observed) => {
                     // CAS 失败，使用观察到的值重试
@@ -303,7 +304,10 @@ impl DbPool {
     /// 允许外部注入缓存实现，覆盖默认的内置缓存。
     /// 仅在 `cache` 特性启用时可用。
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-    pub fn set_cache_provider(&mut self, provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>) {
+    pub fn set_cache_provider(
+        &mut self,
+        provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>,
+    ) {
         self.cache_provider = Some(provider);
     }
 
@@ -347,9 +351,9 @@ impl DbPool {
     /// 使用配置创建连接池
     pub async fn with_config(config: DbConfig) -> DbResult<Self> {
         // 验证配置有效性（在创建任何连接前捕获非法参数）
-        config
-            .validate()
-            .map_err(|e| DbError::Config(i18n::t("pool-invalid-config", &[("error", e.to_string())])))?;
+        config.validate().map_err(|e| {
+            DbError::Config(i18n::t("pool-invalid-config", &[("error", e.to_string())]))
+        })?;
 
         // 创建连接（复用 create_connection 保持错误转换一致）
         let _connection = Self::create_connection(&config).await?;
@@ -361,7 +365,9 @@ impl DbPool {
         let pool = Self {
             inner: Arc::new(DbPoolInner {
                 config: Arc::new(config.clone()),
-                connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
+                connection_semaphore: Arc::new(Semaphore::new(
+                    config.pool_config.max_connections as usize,
+                )),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -423,7 +429,10 @@ impl DbPool {
     /// 直接通过 `DuckDbConnection::from_shared` 包装已有连接。
     /// 不执行 warmup / auto-migrate（调用方通过 Session API 自行管理迁移）。
     #[cfg(feature = "duckdb")]
-    pub fn with_existing_duckdb_connection(conn: duckdb::Connection, pool_size: usize) -> DbResult<Self> {
+    pub fn with_existing_duckdb_connection(
+        conn: duckdb::Connection,
+        pool_size: usize,
+    ) -> DbResult<Self> {
         let pool_size = pool_size.max(1);
 
         // 从已存在的连接创建 DuckDbConnection（内部 try_clone 填充池）
@@ -575,7 +584,9 @@ impl DbPool {
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: Arc::new(config.clone()),
-                connection_semaphore: Arc::new(Semaphore::new(config.pool_config.max_connections as usize)),
+                connection_semaphore: Arc::new(Semaphore::new(
+                    config.pool_config.max_connections as usize,
+                )),
                 idle_connections: AsyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
@@ -662,7 +673,9 @@ impl DbPool {
                 .build()
                 .await
                 .map_err(|_e| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                        sea_orm::ConnAcquireErr::Timeout,
+                    ))
                 })?,
         );
 
@@ -889,8 +902,10 @@ impl DbPool {
             crate::foundation::DatabaseType::Neo4j => {
                 #[cfg(feature = "neo4j")]
                 {
-                    let (uri, user, password) = crate::database::Neo4jConnection::parse_url(&config.url)?;
-                    let conn = crate::database::Neo4jConnection::new(&uri, &user, &password).await?;
+                    let (uri, user, password) =
+                        crate::database::Neo4jConnection::parse_url(&config.url)?;
+                    let conn =
+                        crate::database::Neo4jConnection::new(&uri, &user, &password).await?;
                     Ok(DbConnection::Neo4j(Arc::new(conn)))
                 }
                 #[cfg(not(feature = "neo4j"))]
@@ -941,16 +956,18 @@ impl DbPool {
                             }
                         }
                         Err(_) => {
-                            last_error = Some(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
-                                sea_orm::ConnAcquireErr::Timeout,
-                            )));
+                            last_error = Some(DbError::Connection(
+                                sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout),
+                            ));
                             break;
                         }
                     }
                 }
 
                 Err(last_error.unwrap_or_else(|| {
-                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                    DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                        sea_orm::ConnAcquireErr::Timeout,
+                    ))
                 }))
             });
         }
@@ -976,7 +993,9 @@ impl DbPool {
         if success_count == 0 && initial_connections > 0 {
             // 全部失败：返回第一个错误（显性化失败，避免静默成功）
             return Err(errors.into_iter().next().unwrap_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
+                DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
+                    sea_orm::ConnAcquireErr::Timeout,
+                ))
             }));
         }
 
@@ -1008,7 +1027,10 @@ impl DbPool {
                 let backend = Self::get_database_backend(&self.inner.config.url);
                 let result = timeout(
                     Duration::from_secs(5),
-                    sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
+                    sea_conn.execute_raw(sea_orm::Statement::from_string(
+                        backend,
+                        "SELECT 1".to_string(),
+                    )),
                 )
                 .await;
                 matches!(result, Ok(Ok(_)))
@@ -1080,7 +1102,10 @@ impl DbPool {
     /// # Returns
     ///
     /// 返回元组 (有效连接列表, 无效连接数量)
-    async fn validate_idle_connections(idle: &mut Vec<DbConnection>, config: &DbConfig) -> (Vec<DbConnection>, usize) {
+    async fn validate_idle_connections(
+        idle: &mut Vec<DbConnection>,
+        config: &DbConfig,
+    ) -> (Vec<DbConnection>, usize) {
         let backend = Self::get_database_backend(&config.url);
 
         // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
@@ -1093,22 +1118,31 @@ impl DbPool {
                 let is_valid = match &conn {
                     DbConnection::SeaOrm(sea_conn) => timeout(
                         Duration::from_secs(2),
-                        sea_conn.execute_raw(sea_orm::Statement::from_string(backend, "SELECT 1".to_string())),
+                        sea_conn.execute_raw(sea_orm::Statement::from_string(
+                            backend,
+                            "SELECT 1".to_string(),
+                        )),
                     )
                     .await
                     .is_ok_and(|result| result.is_ok()),
                     #[cfg(feature = "duckdb")]
-                    DbConnection::DuckDb(duck_conn) => timeout(Duration::from_secs(2), duck_conn.health_check())
-                        .await
-                        .is_ok_and(|result| result.is_ok()),
+                    DbConnection::DuckDb(duck_conn) => {
+                        timeout(Duration::from_secs(2), duck_conn.health_check())
+                            .await
+                            .is_ok_and(|result| result.is_ok())
+                    }
                     #[cfg(feature = "ladybug")]
-                    DbConnection::Ladybug(graph_conn) => timeout(Duration::from_secs(2), graph_conn.health_check())
-                        .await
-                        .is_ok_and(|result| result.is_ok()),
+                    DbConnection::Ladybug(graph_conn) => {
+                        timeout(Duration::from_secs(2), graph_conn.health_check())
+                            .await
+                            .is_ok_and(|result| result.is_ok())
+                    }
                     #[cfg(feature = "neo4j")]
-                    DbConnection::Neo4j(graph_conn) => timeout(Duration::from_secs(2), graph_conn.health_check())
-                        .await
-                        .is_ok_and(|result| result.is_ok()),
+                    DbConnection::Neo4j(graph_conn) => {
+                        timeout(Duration::from_secs(2), graph_conn.health_check())
+                            .await
+                            .is_ok_and(|result| result.is_ok())
+                    }
                 };
                 (conn, is_valid)
             })
@@ -1141,14 +1175,17 @@ impl DbPool {
         let config = &self.inner.config;
 
         // 使用辅助方法验证连接
-        let (valid_connections, removed_count) = Self::validate_idle_connections(&mut idle, config).await;
+        let (valid_connections, removed_count) =
+            Self::validate_idle_connections(&mut idle, config).await;
 
         // 重建空闲连接队列
         idle.extend(valid_connections);
 
         // 更新总连接数
         if removed_count > 0 {
-            self.inner.total_count.fetch_sub(removed_count as u32, Ordering::SeqCst);
+            self.inner
+                .total_count
+                .fetch_sub(removed_count as u32, Ordering::SeqCst);
         }
 
         removed_count as u32
@@ -1168,20 +1205,26 @@ impl DbPool {
         let config = &self.inner.config;
 
         // 使用辅助方法验证连接
-        let (valid_connections, invalid_count) = Self::validate_idle_connections(&mut idle, config).await;
+        let (valid_connections, invalid_count) =
+            Self::validate_idle_connections(&mut idle, config).await;
 
         let mut recreated_count = 0;
 
         if invalid_count > 0 {
             // 更新总连接数
-            self.inner.total_count.fetch_sub(invalid_count as u32, Ordering::SeqCst);
+            self.inner
+                .total_count
+                .fetch_sub(invalid_count as u32, Ordering::SeqCst);
 
             // 重建空闲队列（只保留有效连接）
             idle.extend(valid_connections);
 
             // 重新创建连接以维持最小连接数
             let current_idle = idle.len();
-            let needed = config.pool_config.min_connections.saturating_sub(current_idle as u32) as usize;
+            let needed = config
+                .pool_config
+                .min_connections
+                .saturating_sub(current_idle as u32) as usize;
 
             for _ in 0..needed {
                 match Self::create_connection(config).await {
@@ -1234,7 +1277,11 @@ impl DbPool {
     /// ```
     #[cfg(feature = "pool-health-check")]
     pub fn parse_health_check_interval(value: &str) -> u64 {
-        value.parse::<u64>().ok().map(|v| v.clamp(5, 300)).unwrap_or(30)
+        value
+            .parse::<u64>()
+            .ok()
+            .map(|v| v.clamp(5, 300))
+            .unwrap_or(30)
     }
 
     /// 启动后台连接健康检查任务
@@ -1316,7 +1363,8 @@ impl DbPool {
 
         let start = Instant::now();
 
-        let acquire_result = timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
+        let acquire_result =
+            timeout(timeout_duration, self.inner.connection_semaphore.acquire()).await;
         self.inner.wait_count.fetch_sub(1, Ordering::SeqCst);
 
         let permit = match acquire_result {
@@ -1400,11 +1448,12 @@ impl DbPool {
     fn update_max_waiters(&self, current_waiters: u32) {
         let mut current = self.inner.max_waiters.load(Ordering::Acquire);
         while current_waiters > current {
-            match self
-                .inner
-                .max_waiters
-                .compare_exchange(current, current_waiters, Ordering::SeqCst, Ordering::Acquire)
-            {
+            match self.inner.max_waiters.compare_exchange(
+                current,
+                current_waiters,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return,
                 Err(observed) => {
                     current = observed;
@@ -1658,7 +1707,8 @@ mod tests {
     #[test]
     fn test_ladybug_connection_is_graph() {
         let conn = DbConnection::Ladybug(Arc::new(
-            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+            crate::database::LadybugConnection::new(":memory:", 1)
+                .expect("Failed to create LadybugConnection"),
         ));
         assert!(conn.is_graph(), "Ladybug connection should be graph");
         assert!(!conn.is_duckdb(), "Ladybug connection should not be duckdb");
@@ -1668,7 +1718,8 @@ mod tests {
     #[test]
     fn test_ladybug_connection_as_graph_returns_ok() {
         let conn = DbConnection::Ladybug(Arc::new(
-            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+            crate::database::LadybugConnection::new(":memory:", 1)
+                .expect("Failed to create LadybugConnection"),
         ));
         let result = conn.as_graph();
         assert!(result.is_ok(), "as_graph() on Ladybug should return Ok");
@@ -1680,7 +1731,8 @@ mod tests {
     #[test]
     fn test_ladybug_connection_as_sea_orm_returns_err() {
         let conn = DbConnection::Ladybug(Arc::new(
-            crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+            crate::database::LadybugConnection::new(":memory:", 1)
+                .expect("Failed to create LadybugConnection"),
         ));
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Ladybug should return Err");
@@ -1720,13 +1772,17 @@ mod tests {
             .await
             .expect("create_connection for ladybug::memory: should succeed");
         let graph = conn.as_graph().expect("as_graph should succeed");
-        graph.health_check().await.expect("health_check should pass");
+        graph
+            .health_check()
+            .await
+            .expect("health_check should pass");
     }
 
     #[cfg(feature = "neo4j")]
     #[test]
     fn test_neo4j_connection_is_graph() {
-        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        let conn =
+            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
         assert!(conn.is_graph(), "Neo4j connection should be graph");
         assert!(!conn.is_duckdb(), "Neo4j connection should not be duckdb");
     }
@@ -1734,7 +1790,8 @@ mod tests {
     #[cfg(feature = "neo4j")]
     #[test]
     fn test_neo4j_connection_as_graph_returns_ok() {
-        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        let conn =
+            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
         let result = conn.as_graph();
         assert!(result.is_ok(), "as_graph() on Neo4j should return Ok");
         let graph = result.unwrap();
@@ -1744,7 +1801,8 @@ mod tests {
     #[cfg(feature = "neo4j")]
     #[test]
     fn test_neo4j_connection_as_sea_orm_returns_err() {
-        let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+        let conn =
+            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Neo4j should return Err");
     }
@@ -1753,7 +1811,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器，设置 NEO4J_URL/NEO4J_USER/NEO4J_PASSWORD 环境变量后运行"]
     async fn test_create_connection_neo4j() {
-        let url = std::env::var("NEO4J_URL").unwrap_or_else(|_| "neo4j://localhost:7687".to_string());
+        let url =
+            std::env::var("NEO4J_URL").unwrap_or_else(|_| "neo4j://localhost:7687".to_string());
         let config = DbConfig {
             url,
             pool_config: PoolConfig {
@@ -1797,7 +1856,8 @@ mod tests {
         #[cfg(feature = "ladybug")]
         {
             let conn = DbConnection::Ladybug(Arc::new(
-                crate::database::LadybugConnection::new(":memory:", 1).expect("Failed to create LadybugConnection"),
+                crate::database::LadybugConnection::new(":memory:", 1)
+                    .expect("Failed to create LadybugConnection"),
             ));
             let debug_str = format!("{conn:?}");
             assert!(
@@ -1807,9 +1867,13 @@ mod tests {
         }
         #[cfg(feature = "neo4j")]
         {
-            let conn = DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+            let conn =
+                DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
             let debug_str = format!("{conn:?}");
-            assert!(debug_str.contains("Neo4j"), "Debug should contain 'Neo4j': {debug_str}");
+            assert!(
+                debug_str.contains("Neo4j"),
+                "Debug should contain 'Neo4j': {debug_str}"
+            );
         }
     }
 
@@ -1869,14 +1933,16 @@ mod tests {
     #[tokio::test]
     async fn test_db_connection_is_duckdb_without_feature() {
         // Without duckdb feature, is_duckdb() always returns false
-        let conn = DbConnection::SeaOrm(sea_orm::Database::connect("sqlite::memory:").await.unwrap());
+        let conn =
+            DbConnection::SeaOrm(sea_orm::Database::connect("sqlite::memory:").await.unwrap());
         assert!(!conn.is_duckdb());
     }
 
     #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_db_connection_is_graph_seaorm() {
-        let conn = DbConnection::SeaOrm(sea_orm::Database::connect("sqlite::memory:").await.unwrap());
+        let conn =
+            DbConnection::SeaOrm(sea_orm::Database::connect("sqlite::memory:").await.unwrap());
         assert!(!conn.is_graph());
     }
 
@@ -1902,7 +1968,9 @@ mod tests {
             },
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // Test status() — 无 pool-warmup 时懒创建（total=0）；有 pool-warmup 时预创建
         let status = pool.status();
@@ -1931,7 +1999,9 @@ mod tests {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // Initially max_active is 0
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 0);
@@ -1957,7 +2027,10 @@ mod tests {
             ..Default::default()
         };
         let result = DbPool::create_connection(&config).await;
-        assert!(result.is_err(), "DuckDB connection should fail without duckdb feature");
+        assert!(
+            result.is_err(),
+            "DuckDB connection should fail without duckdb feature"
+        );
     }
 
     #[tokio::test]
@@ -1980,7 +2053,10 @@ mod tests {
             ..Default::default()
         };
         let result = DbPool::create_connection(&config).await;
-        assert!(result.is_err(), "Neo4j connection should fail without neo4j feature");
+        assert!(
+            result.is_err(),
+            "Neo4j connection should fail without neo4j feature"
+        );
     }
 
     #[cfg(feature = "permission")]
@@ -1988,7 +2064,10 @@ mod tests {
     fn test_pool_try_from_with_permission_returns_error() {
         let config = DbConfig::default();
         let result = DbPool::try_from(&config);
-        assert!(result.is_err(), "try_from should fail with permission feature enabled");
+        assert!(
+            result.is_err(),
+            "try_from should fail with permission feature enabled"
+        );
     }
 
     // ===== 补充测试：Debug trait, ConnectionPool trait, health check, release_connection =====
@@ -2020,7 +2099,9 @@ mod tests {
             },
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // Test ConnectionPool::status — 无 pool-warmup 时懒创建，有 pool-warmup 时预创建 min 个
         let status = ConnectionPool::status(&pool);
@@ -2054,7 +2135,9 @@ mod tests {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         let sea_conn = sea_orm::Database::connect("sqlite::memory:")
             .await
@@ -2078,7 +2161,9 @@ mod tests {
             },
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // Get 2 sessions (fills the semaphore)
         let session1 = pool.get_session("admin").await.expect("session 1");
@@ -2092,12 +2177,19 @@ mod tests {
 
         // Verify pool is consistent - idle should be <= max_connections
         let status = pool.status();
-        assert!(status.idle <= 2, "idle should be <= max_connections: {}", status.idle);
+        assert!(
+            status.idle <= 2,
+            "idle should be <= max_connections: {}",
+            status.idle
+        );
     }
 
     // ===== 补充测试：cache 方法, validate_role_name =====
 
-    #[cfg(all(any(feature = "cache", feature = "oxcache-integration"), feature = "sqlite"))]
+    #[cfg(all(
+        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "sqlite"
+    ))]
     #[tokio::test]
     async fn test_pool_set_and_get_cache_provider() {
         use crate::foundation::DbError;
@@ -2109,7 +2201,8 @@ mod tests {
             fn get<'a>(
                 &'a self,
                 _key: &'a str,
-            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>
+            {
                 Box::pin(async { Ok(None) })
             }
             fn set<'a>(
@@ -2120,7 +2213,10 @@ mod tests {
             ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
-            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+            fn delete<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
         }
@@ -2129,7 +2225,9 @@ mod tests {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        let mut pool = DbPool::with_config(config).await.expect("should create pool");
+        let mut pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // Initially no cache provider
         assert!(pool.cache_provider().is_none());
@@ -2159,7 +2257,8 @@ roles:
         let yaml_path = tmp_dir.join("test_perm_config.yaml");
         {
             let mut file = std::fs::File::create(&yaml_path).expect("create temp file");
-            file.write_all(yaml_content.as_bytes()).expect("write temp file");
+            file.write_all(yaml_content.as_bytes())
+                .expect("write temp file");
         }
 
         let config = DbConfig {
@@ -2167,11 +2266,17 @@ roles:
             permissions_path: Some(yaml_path.to_string_lossy().to_string()),
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // "admin" role exists in config -> should succeed
         let result = pool.get_session("admin").await;
-        assert!(result.is_ok(), "admin should be allowed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "admin should be allowed: {:?}",
+            result.err()
+        );
 
         // "unknown_role" does NOT exist in config -> should fail (covers line 812)
         let result = pool.get_session("unknown_role").await;
@@ -2199,15 +2304,25 @@ roles:
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         };
-        let pool = DbPool::with_config(config).await.expect("should create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
 
         // "admin" is a safe role -> should succeed
         let result = pool.get_session("admin").await;
-        assert!(result.is_ok(), "admin should be allowed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "admin should be allowed: {:?}",
+            result.err()
+        );
 
         // "system" is a safe role -> should succeed
         let result = pool.get_session("system").await;
-        assert!(result.is_ok(), "system should be allowed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "system should be allowed: {:?}",
+            result.err()
+        );
 
         // "hacker" is NOT a safe role -> should fail
         let result = pool.get_session("hacker").await;

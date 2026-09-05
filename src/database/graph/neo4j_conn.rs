@@ -68,9 +68,9 @@ impl Neo4jConnection {
     ///
     /// 连接失败时返回 `DbError::Connection`
     pub async fn new(uri: &str, user: &str, password: &str) -> DbResult<Self> {
-        let graph = neo4rs::Graph::new(uri, user, password)
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j connect: {e}"))))?;
+        let graph = neo4rs::Graph::new(uri, user, password).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j connect: {e}")))
+        })?;
         Ok(Self {
             graph: Some(Arc::new(graph)),
         })
@@ -105,12 +105,14 @@ impl Neo4jConnection {
                 if user.is_empty() {
                     let env_user = std::env::var("NEO4J_USER").map_err(|_| {
                         DbError::Connection(sea_orm::DbErr::Custom(
-                            "neo4j URL has no credentials and NEO4J_USER env var is not set".to_string(),
+                            "neo4j URL has no credentials and NEO4J_USER env var is not set"
+                                .to_string(),
                         ))
                     })?;
                     let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
                         DbError::Connection(sea_orm::DbErr::Custom(
-                            "neo4j URL has no credentials and NEO4J_PASSWORD env var is not set".to_string(),
+                            "neo4j URL has no credentials and NEO4J_PASSWORD env var is not set"
+                                .to_string(),
                         ))
                     })?;
                     Ok((uri, env_user, env_pass))
@@ -123,12 +125,14 @@ impl Neo4jConnection {
                 // 错误信息不回显原始 URL，避免凭据泄露（M-49 修复）
                 let env_user = std::env::var("NEO4J_USER").map_err(|_| {
                     DbError::Connection(sea_orm::DbErr::Custom(
-                        "neo4j URL is not a valid URL and NEO4J_USER env var is not set".to_string(),
+                        "neo4j URL is not a valid URL and NEO4J_USER env var is not set"
+                            .to_string(),
                     ))
                 })?;
                 let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
                     DbError::Connection(sea_orm::DbErr::Custom(
-                        "neo4j URL is not a valid URL and NEO4J_PASSWORD env var is not set".to_string(),
+                        "neo4j URL is not a valid URL and NEO4J_PASSWORD env var is not set"
+                            .to_string(),
                     ))
                 })?;
                 Ok((url.to_string(), env_user, env_pass))
@@ -160,25 +164,23 @@ impl std::fmt::Debug for Neo4jConnection {
 #[async_trait::async_trait]
 impl GraphConnection for Neo4jConnection {
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
-        let graph = self
-            .graph
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Neo4jConnection not connected (placeholder)".to_string()))?;
+        let graph = self.graph.as_ref().ok_or_else(|| {
+            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
+        })?;
 
-        let mut stream = graph
-            .execute(neo4rs::query(cypher))
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j execute: {e}"))))?;
+        let mut stream = graph.execute(neo4rs::query(cypher)).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j execute: {e}")))
+        })?;
 
         let mut rows = Vec::new();
-        while let Some(row) = stream
-            .next()
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}"))))?
-        {
-            let json_val: serde_json::Value = row
-                .to::<serde_json::Value>()
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row deserialize: {e}"))))?;
+        while let Some(row) = stream.next().await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}")))
+        })? {
+            let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "neo4j row deserialize: {e}"
+                )))
+            })?;
 
             let columns = match json_val {
                 serde_json::Value::Object(map) => map
@@ -190,7 +192,10 @@ impl GraphConnection for Neo4jConnection {
             rows.push(GraphRow { columns });
         }
 
-        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+        Ok(GraphExecResult::Query(GraphQueryResult {
+            rows,
+            rows_affected: 0,
+        }))
     }
 
     /// vuln-0005 修复：使用 `neo4rs::query(cypher).params(...)` 执行参数化查询
@@ -202,30 +207,30 @@ impl GraphConnection for Neo4jConnection {
         cypher: &str,
         params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        let graph = self
-            .graph
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Neo4jConnection not connected (placeholder)".to_string()))?;
+        let graph = self.graph.as_ref().ok_or_else(|| {
+            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
+        })?;
 
         let mut query = neo4rs::query(cypher);
         for (key, value) in params {
             query = attach_param_to_query(query, &key, value);
         }
 
-        let mut stream = graph
-            .execute(query)
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j execute (params): {e}"))))?;
+        let mut stream = graph.execute(query).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "neo4j execute (params): {e}"
+            )))
+        })?;
 
         let mut rows = Vec::new();
-        while let Some(row) = stream
-            .next()
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}"))))?
-        {
-            let json_val: serde_json::Value = row
-                .to::<serde_json::Value>()
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row deserialize: {e}"))))?;
+        while let Some(row) = stream.next().await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}")))
+        })? {
+            let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "neo4j row deserialize: {e}"
+                )))
+            })?;
 
             let columns = match json_val {
                 serde_json::Value::Object(map) => map
@@ -237,7 +242,10 @@ impl GraphConnection for Neo4jConnection {
             rows.push(GraphRow { columns });
         }
 
-        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+        Ok(GraphExecResult::Query(GraphQueryResult {
+            rows,
+            rows_affected: 0,
+        }))
     }
 
     async fn health_check(&self) -> DbResult<()> {
@@ -252,15 +260,13 @@ impl GraphConnection for Neo4jConnection {
     }
 
     async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
-        let graph = self
-            .graph
-            .as_ref()
-            .ok_or_else(|| DbError::Config("Neo4jConnection not connected (placeholder)".to_string()))?;
+        let graph = self.graph.as_ref().ok_or_else(|| {
+            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
+        })?;
 
-        let txn = graph
-            .start_txn()
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j start_txn: {e}"))))?;
+        let txn = graph.start_txn().await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j start_txn: {e}")))
+        })?;
 
         Ok(Box::new(Neo4jTransaction {
             txn: AsyncMutex::new(Some(txn)),
@@ -316,7 +322,9 @@ impl GraphTransaction for Neo4jTransaction {
     async fn commit(self: Box<Self>) -> DbResult<()> {
         let mut guard = self.txn.lock().await;
         let txn = guard.take().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom("neo4j transaction already consumed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(
+                "neo4j transaction already consumed".to_string(),
+            ))
         })?;
         drop(guard);
         txn.commit()
@@ -327,34 +335,37 @@ impl GraphTransaction for Neo4jTransaction {
     async fn rollback(self: Box<Self>) -> DbResult<()> {
         let mut guard = self.txn.lock().await;
         let txn = guard.take().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom("neo4j transaction already consumed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(
+                "neo4j transaction already consumed".to_string(),
+            ))
         })?;
         drop(guard);
-        txn.rollback()
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j rollback: {e}"))))
+        txn.rollback().await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j rollback: {e}")))
+        })
     }
 
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
         let mut guard = self.txn.lock().await;
         let txn = guard.as_mut().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom("neo4j transaction already consumed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(
+                "neo4j transaction already consumed".to_string(),
+            ))
         })?;
 
-        let mut stream = txn
-            .execute(neo4rs::query(cypher))
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn execute: {e}"))))?;
+        let mut stream = txn.execute(neo4rs::query(cypher)).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn execute: {e}")))
+        })?;
 
         let mut rows = Vec::new();
-        while let Some(row) = stream
-            .next(&mut *txn)
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}"))))?
-        {
-            let json_val: serde_json::Value = row
-                .to::<serde_json::Value>()
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row deserialize: {e}"))))?;
+        while let Some(row) = stream.next(&mut *txn).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}")))
+        })? {
+            let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "neo4j txn row deserialize: {e}"
+                )))
+            })?;
 
             let columns = match json_val {
                 serde_json::Value::Object(map) => map
@@ -366,7 +377,10 @@ impl GraphTransaction for Neo4jTransaction {
             rows.push(GraphRow { columns });
         }
 
-        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+        Ok(GraphExecResult::Query(GraphQueryResult {
+            rows,
+            rows_affected: 0,
+        }))
     }
 
     /// vuln-0005 修复：在事务内执行参数化 Cypher 查询
@@ -380,7 +394,9 @@ impl GraphTransaction for Neo4jTransaction {
     ) -> DbResult<GraphExecResult> {
         let mut guard = self.txn.lock().await;
         let txn = guard.as_mut().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom("neo4j transaction already consumed".to_string()))
+            DbError::Connection(sea_orm::DbErr::Custom(
+                "neo4j transaction already consumed".to_string(),
+            ))
         })?;
 
         let mut query = neo4rs::query(cypher);
@@ -388,20 +404,21 @@ impl GraphTransaction for Neo4jTransaction {
             query = attach_param_to_query(query, &key, value);
         }
 
-        let mut stream = txn
-            .execute(query)
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn execute (params): {e}"))))?;
+        let mut stream = txn.execute(query).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "neo4j txn execute (params): {e}"
+            )))
+        })?;
 
         let mut rows = Vec::new();
-        while let Some(row) = stream
-            .next(&mut *txn)
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}"))))?
-        {
-            let json_val: serde_json::Value = row
-                .to::<serde_json::Value>()
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row deserialize: {e}"))))?;
+        while let Some(row) = stream.next(&mut *txn).await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}")))
+        })? {
+            let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "neo4j txn row deserialize: {e}"
+                )))
+            })?;
 
             let columns = match json_val {
                 serde_json::Value::Object(map) => map
@@ -413,7 +430,10 @@ impl GraphTransaction for Neo4jTransaction {
             rows.push(GraphRow { columns });
         }
 
-        Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+        Ok(GraphExecResult::Query(GraphQueryResult {
+            rows,
+            rows_affected: 0,
+        }))
     }
 }
 
@@ -431,7 +451,11 @@ impl GraphTransaction for Neo4jTransaction {
 /// - 字符串 → `BoltType::String`
 /// - 数组 → `BoltType::List`（递归转换元素）
 /// - 对象 → `BoltType::Map`（递归转换值）
-fn attach_param_to_query(mut query: neo4rs::Query, key: &str, value: serde_json::Value) -> neo4rs::Query {
+fn attach_param_to_query(
+    mut query: neo4rs::Query,
+    key: &str,
+    value: serde_json::Value,
+) -> neo4rs::Query {
     let bolt_value = json_to_bolt_type(value);
     query = query.param(key, bolt_value);
     query
@@ -500,7 +524,10 @@ mod tests {
     fn test_parse_url_neo4j_no_credentials_returns_error() {
         // 无凭据且环境变量未设置时必须返回明确错误（LOW-001 修复）
         let result = Neo4jConnection::parse_url("neo4j://localhost:7687");
-        assert!(result.is_err(), "parse_url without credentials should error");
+        assert!(
+            result.is_err(),
+            "parse_url without credentials should error"
+        );
     }
 
     #[test]
@@ -615,7 +642,9 @@ mod tests {
                 assert_eq!(q.rows.len(), 1, "should return 1 row");
                 let value = &q.rows[0].columns[0].1;
                 match value {
-                    GraphValue::Scalar(s) => assert_eq!(s, &serde_json::json!(1), "should return scalar 1"),
+                    GraphValue::Scalar(s) => {
+                        assert_eq!(s, &serde_json::json!(1), "should return scalar 1")
+                    }
                     other => panic!("expected Scalar, got {other:?}"),
                 }
             }
@@ -641,9 +670,14 @@ mod tests {
             .await
             .expect("NEO4J_URL not set or connection failed");
         // 清理可能存在的测试数据
-        let _ = conn.execute_cypher("MATCH (n:T029Test) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029Test) DETACH DELETE n")
+            .await;
 
-        let txn = conn.begin_graph_txn().await.expect("begin_graph_txn should succeed");
+        let txn = conn
+            .begin_graph_txn()
+            .await
+            .expect("begin_graph_txn should succeed");
         txn.execute_cypher("CREATE (n:T029Test {name: 'Alice'})")
             .await
             .expect("create in txn should succeed");
@@ -669,7 +703,9 @@ mod tests {
         }
 
         // 清理
-        let _ = conn.execute_cypher("MATCH (n:T029Test) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029Test) DETACH DELETE n")
+            .await;
     }
 
     #[tokio::test]
@@ -679,9 +715,14 @@ mod tests {
             .await
             .expect("NEO4J_URL not set or connection failed");
         // 使用独立标签避免与 commit 测试并行运行时的数据竞争
-        let _ = conn.execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n")
+            .await;
 
-        let txn = conn.begin_graph_txn().await.expect("begin_graph_txn should succeed");
+        let txn = conn
+            .begin_graph_txn()
+            .await
+            .expect("begin_graph_txn should succeed");
         txn.execute_cypher("CREATE (n:T029RollbackTest {name: 'Bob'})")
             .await
             .expect("create in txn should succeed");
@@ -700,7 +741,9 @@ mod tests {
         }
 
         // 清理
-        let _ = conn.execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n")
+            .await;
     }
 
     // ===== json_to_bolt_type 全类型覆盖测试 =====
@@ -779,16 +822,21 @@ mod tests {
             .await
             .expect("NEO4J_URL not set or connection failed");
         // 清理
-        let _ = conn.execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n")
+            .await;
 
         // 参数化创建节点
         let params = HashMap::from([
             ("name".to_string(), serde_json::json!("Alice")),
             ("age".to_string(), serde_json::json!(30)),
         ]);
-        conn.execute_cypher_with_params("CREATE (n:T029ParamTest {name: $name, age: $age})", params)
-            .await
-            .expect("parameterized create should succeed");
+        conn.execute_cypher_with_params(
+            "CREATE (n:T029ParamTest {name: $name, age: $age})",
+            params,
+        )
+        .await
+        .expect("parameterized create should succeed");
 
         // 参数化查询
         let query_params = HashMap::from([("name".to_string(), serde_json::json!("Alice"))]);
@@ -807,6 +855,8 @@ mod tests {
         }
 
         // 清理
-        let _ = conn.execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n")
+            .await;
     }
 }

@@ -39,13 +39,20 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
 /// TEST-M-001: 迁移执行器创建测试
 #[tokio::test]
 async fn test_migration_executor_creation() {
-    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create test pool");
 
     // 获取会话
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 验证连接可用（获取连接但不使用，仅验证会话正常）
-    let _conn = session.connection().expect("Connection should be available");
+    let _conn = session
+        .connection()
+        .expect("Connection should be available");
 
     // 验证我们可以创建表（迁移执行器的基础）
     let table_name = format!(
@@ -73,9 +80,14 @@ async fn test_migration_executor_creation() {
 /// TEST-M-021: 迁移应用测试
 #[tokio::test]
 async fn test_migration_apply() {
-    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create test pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 创建测试表用于迁移测试
     let table_name = format!(
@@ -102,7 +114,9 @@ async fn test_migration_apply() {
     // 验证表已创建（使用 connection 直接查询，绕过 SQL 解析器对元数据查询的限制）
     let check_sql = table_exists_check_sql(pool.config().database_type().unwrap(), &table_name);
 
-    let conn = session.connection().expect("Connection should be available");
+    let conn = session
+        .connection()
+        .expect("Connection should be available");
     let result = conn.execute_unprepared(&check_sql).await;
     assert!(result.is_ok(), "Migration should be applied");
 
@@ -150,16 +164,24 @@ async fn test_migration_executor_first_run() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create test pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    let conn = session.connection().expect("Connection should be available");
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create test pool");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    let conn = session
+        .connection()
+        .expect("Connection should be available");
 
     // 创建临时目录存放迁移文件
     let migration_dir = TempDir::new().expect("Failed to create temp dir");
 
     // 创建一个简单的迁移文件
     let migration_file_path = migration_dir.path().join("001_create_test_table.sql");
-    let mut file = std::fs::File::create(&migration_file_path).expect("Failed to create migration file");
+    let mut file =
+        std::fs::File::create(&migration_file_path).expect("Failed to create migration file");
     let table_suffix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -193,11 +215,22 @@ async fn test_migration_executor_first_run() {
 
     // 再次运行迁移，验证幂等性（不会重复应用）
     let result = executor.run_migrations(migration_dir.path()).await;
-    assert!(result.is_ok(), "Second run should be idempotent: {:?}", result.err());
-    assert_eq!(result.unwrap(), 0, "No migration should be applied on second run");
+    assert!(
+        result.is_ok(),
+        "Second run should be idempotent: {:?}",
+        result.err()
+    );
+    assert_eq!(
+        result.unwrap(),
+        0,
+        "No migration should be applied on second run"
+    );
 
     // 清理测试表
     let _ = session
-        .execute_raw_ddl(&format!("DROP TABLE IF EXISTS test_first_run_{}", table_suffix))
+        .execute_raw_ddl(&format!(
+            "DROP TABLE IF EXISTS test_first_run_{}",
+            table_suffix
+        ))
         .await;
 }

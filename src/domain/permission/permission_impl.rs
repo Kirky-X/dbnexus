@@ -10,7 +10,9 @@ use super::*;
 ///
 /// # Errors
 /// 返回 `PermissionConfigError` 当配置验证失败时
-pub async fn new(config: PermissionConfig) -> Result<impl PermissionProvider, PermissionConfigError> {
+pub async fn new(
+    config: PermissionConfig,
+) -> Result<impl PermissionProvider, PermissionConfigError> {
     config.validate()?;
     impl_::default::YamlPermissionProvider::new(config)
         .await

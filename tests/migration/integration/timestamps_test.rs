@@ -33,7 +33,10 @@ async fn setup() -> dbnexus::DbPool {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let table = Model::schema(DbBackend::Sqlite);
     let conn = session.connection().expect("Failed to get connection");
@@ -52,7 +55,10 @@ async fn setup() -> dbnexus::DbPool {
 #[tokio::test]
 async fn test_insert_sets_both_timestamps() {
     let pool = setup().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 构造 ActiveModel — 不设置 created_at/updated_at
@@ -65,16 +71,28 @@ async fn test_insert_sets_both_timestamps() {
     .into();
 
     // 用 ActiveModel::insert 触发 before_save(insert=true)
-    let model: Model = active_model.insert(conn).await.expect("insert should succeed");
+    let model: Model = active_model
+        .insert(conn)
+        .await
+        .expect("insert should succeed");
     assert_eq!(model.id, 1);
 
     // 查询验证
-    let found: Option<Model> = Entity::find_by_id(1).one(conn).await.expect("query should succeed");
+    let found: Option<Model> = Entity::find_by_id(1)
+        .one(conn)
+        .await
+        .expect("query should succeed");
     let found = found.expect("record should exist");
 
     // 验证 created_at 和 updated_at 都被自动设置
-    assert!(found.created_at.is_some(), "created_at should be auto-set on insert");
-    assert!(found.updated_at.is_some(), "updated_at should be auto-set on insert");
+    assert!(
+        found.created_at.is_some(),
+        "created_at should be auto-set on insert"
+    );
+    assert!(
+        found.updated_at.is_some(),
+        "updated_at should be auto-set on insert"
+    );
 
     // 两者应该相等（同一时刻设置）
     let created = found.created_at.unwrap();
@@ -89,7 +107,10 @@ async fn test_insert_sets_both_timestamps() {
 #[tokio::test]
 async fn test_update_only_changes_updated_at() {
     let pool = setup().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 先插入一条记录
@@ -100,7 +121,10 @@ async fn test_update_only_changes_updated_at() {
         updated_at: None,
     }
     .into();
-    let _: Model = active_model.insert(conn).await.expect("insert should succeed");
+    let _: Model = active_model
+        .insert(conn)
+        .await
+        .expect("insert should succeed");
 
     // 查询获取原始时间戳
     let original: Model = Entity::find_by_id(1)
@@ -151,7 +175,10 @@ async fn test_update_only_changes_updated_at() {
 #[tokio::test]
 async fn test_timestamps_field_type_compiles() {
     let pool = setup().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
     // 正常插入 — 验证类型系统正常工作
@@ -164,6 +191,9 @@ async fn test_timestamps_field_type_compiles() {
     .into();
     let _: Model = am.insert(conn).await.expect("insert should succeed");
 
-    let found: Option<Model> = Entity::find_by_id(42).one(conn).await.expect("query should succeed");
+    let found: Option<Model> = Entity::find_by_id(42)
+        .one(conn)
+        .await
+        .expect("query should succeed");
     assert!(found.is_some(), "record should exist");
 }

@@ -25,7 +25,11 @@ async fn test_rate_limiter_single_acquire() {
     assert!(limiter.check("user1").await, "First acquire should succeed");
 
     // 验证剩余令牌数
-    assert_eq!(limiter.remaining("user1"), 4, "Should have 4 tokens remaining");
+    assert_eq!(
+        limiter.remaining("user1"),
+        4,
+        "Should have 4 tokens remaining"
+    );
 }
 
 /// TEST-RATELIMITER-U-002: 令牌耗尽测试
@@ -39,10 +43,17 @@ async fn test_rate_limiter_exhaustion() {
     assert!(limiter.check("user1").await, "3rd acquire should succeed");
 
     // 验证令牌已耗尽
-    assert_eq!(limiter.remaining("user1"), 0, "Should have 0 tokens remaining");
+    assert_eq!(
+        limiter.remaining("user1"),
+        0,
+        "Should have 0 tokens remaining"
+    );
 
     // 第 4 次应该失败
-    assert!(!limiter.check("user1").await, "4th acquire should fail (exhausted)");
+    assert!(
+        !limiter.check("user1").await,
+        "4th acquire should fail (exhausted)"
+    );
 
     // 验证剩余令牌仍然为 0
     assert_eq!(limiter.remaining("user1"), 0, "Should still have 0 tokens");
@@ -59,7 +70,10 @@ async fn test_rate_limiter_independent_keys() {
     assert!(!limiter.check("user1").await, "user1 should be exhausted");
 
     // user2 应该有独立的令牌池
-    assert!(limiter.check("user2").await, "user2 should have separate pool");
+    assert!(
+        limiter.check("user2").await,
+        "user2 should have separate pool"
+    );
     assert!(limiter.check("user2").await);
     assert!(!limiter.check("user2").await, "user2 should be exhausted");
 }
@@ -148,7 +162,11 @@ async fn test_rate_limiter_concurrent_multiple_keys() {
 
     // 每个键应该成功获取 50 次令牌（桶容量）
     for (i, result) in results.iter().enumerate() {
-        assert_eq!(*result, 50, "User {} should have exactly 50 successful acquires", i);
+        assert_eq!(
+            *result, 50,
+            "User {} should have exactly 50 successful acquires",
+            i
+        );
     }
 }
 
@@ -174,10 +192,17 @@ async fn test_rate_limiter_bucket_eviction() {
     assert_eq!(limiter.len(), 10, "Should have 10 buckets");
 
     // 创建第 11 个桶，应该触发 LRU 驱逐
-    assert!(limiter.check("user_new").await, "11th bucket creation should succeed");
+    assert!(
+        limiter.check("user_new").await,
+        "11th bucket creation should succeed"
+    );
 
     // 验证桶数量仍然为 10
-    assert_eq!(limiter.len(), 10, "Should still have 10 buckets after eviction");
+    assert_eq!(
+        limiter.len(),
+        10,
+        "Should still have 10 buckets after eviction"
+    );
 
     // 验证新桶存在
     assert!(
@@ -253,7 +278,10 @@ async fn test_rate_limiter_evicted_key_reuse() {
     let _remaining = limiter.remaining("user_0");
 
     // 无论如何，访问应该成功
-    assert!(limiter.check("user_0").await, "Evicted key should be reusable");
+    assert!(
+        limiter.check("user_0").await,
+        "Evicted key should be reusable"
+    );
 
     // 验证桶数量仍为 3
     assert_eq!(limiter.len(), 3, "Should have 3 buckets");
@@ -295,11 +323,18 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
 
     // 验证每个任务都成功获取了一些令牌
     for (i, result) in results.iter().enumerate() {
-        assert!(*result > 0, "Task {} should have acquired at least some tokens", i);
+        assert!(
+            *result > 0,
+            "Task {} should have acquired at least some tokens",
+            i
+        );
     }
 
     // 验证桶数量不超过限制
-    assert!(limiter.len() <= 10, "Bucket count should not exceed max_buckets (10)");
+    assert!(
+        limiter.len() <= 10,
+        "Bucket count should not exceed max_buckets (10)"
+    );
 }
 
 // ============================================================================

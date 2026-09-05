@@ -10,7 +10,8 @@
 //! - `ConfigError` 各变体 Display
 
 use dbnexus::foundation::{
-    CacheConfig, ConfigError, DatabaseType as FoundationDatabaseType, DbConfig, PoolConfig as FoundationPoolConfig,
+    CacheConfig, ConfigError, DatabaseType as FoundationDatabaseType, DbConfig,
+    PoolConfig as FoundationPoolConfig,
 };
 use std::time::Duration;
 
@@ -67,7 +68,10 @@ fn test_db_config_custom_values() {
     assert_eq!(config.pool_config.min_connections, 10);
     assert_eq!(config.admin_role, "root");
     assert!(config.auto_migrate);
-    assert_eq!(config.permissions_path, Some("/etc/permissions.yaml".to_string()));
+    assert_eq!(
+        config.permissions_path,
+        Some("/etc/permissions.yaml".to_string())
+    );
 }
 
 /// TEST-U-CONFIG-003: database_type() 应正确解析 postgres URL
@@ -77,7 +81,10 @@ fn test_db_config_database_type_postgres() {
         url: "postgres://user:pass@localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
+    assert_eq!(
+        config.database_type().unwrap(),
+        FoundationDatabaseType::Postgres
+    );
 }
 
 /// TEST-U-CONFIG-004: database_type() 应正确解析 postgresql:// 前缀
@@ -87,7 +94,10 @@ fn test_db_config_database_type_postgresql_scheme() {
         url: "postgresql://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
+    assert_eq!(
+        config.database_type().unwrap(),
+        FoundationDatabaseType::Postgres
+    );
 }
 
 /// TEST-U-CONFIG-005: database_type() 应正确解析 mysql URL
@@ -97,7 +107,10 @@ fn test_db_config_database_type_mysql() {
         url: "mysql://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::MySql);
+    assert_eq!(
+        config.database_type().unwrap(),
+        FoundationDatabaseType::MySql
+    );
 }
 
 /// TEST-U-CONFIG-006: database_type() 应将 sqlite URL 解析为 Sqlite
@@ -107,7 +120,10 @@ fn test_db_config_database_type_sqlite() {
         url: "sqlite::memory:".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Sqlite);
+    assert_eq!(
+        config.database_type().unwrap(),
+        FoundationDatabaseType::Sqlite
+    );
 }
 
 /// TEST-U-CONFIG-007: database_type() 应对未知协议返回错误（0.3.0 行为变更：不再默认 Sqlite）
@@ -127,7 +143,10 @@ fn test_db_config_database_type_case_insensitive() {
         url: "POSTGRES://localhost/db".to_string(),
         ..Default::default()
     };
-    assert_eq!(config.database_type().unwrap(), FoundationDatabaseType::Postgres);
+    assert_eq!(
+        config.database_type().unwrap(),
+        FoundationDatabaseType::Postgres
+    );
 }
 
 /// TEST-U-CONFIG-009: idle_timeout_duration() 应转换为 Duration
@@ -153,7 +172,10 @@ fn test_db_config_acquire_timeout_duration() {
         },
         ..Default::default()
     };
-    assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(3000));
+    assert_eq!(
+        config.acquire_timeout_duration(),
+        Duration::from_millis(3000)
+    );
 }
 
 /// TEST-U-CONFIG-011: migration_timeout_duration() 应转换为 Duration
@@ -188,7 +210,10 @@ fn test_db_config_clone() {
     };
     let cloned = config.clone();
     assert_eq!(config.url, cloned.url);
-    assert_eq!(config.pool_config.max_connections, cloned.pool_config.max_connections);
+    assert_eq!(
+        config.pool_config.max_connections,
+        cloned.pool_config.max_connections
+    );
 }
 
 // ============================================================================
@@ -215,7 +240,10 @@ fn test_foundation_pool_config_duration_conversions() {
         acquire_timeout: 8000,
     };
     assert_eq!(config.idle_timeout_duration(), Duration::from_secs(600));
-    assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(8000));
+    assert_eq!(
+        config.acquire_timeout_duration(),
+        Duration::from_millis(8000)
+    );
 }
 
 // ============================================================================
@@ -358,5 +386,9 @@ fn test_config_error_invalid_url_display() {
 fn test_config_error_unsupported_protocol_display() {
     let err = ConfigError::UnsupportedProtocol("foo://".to_string());
     let msg = err.to_string();
-    assert!(msg.contains("foo://") || msg.contains("protocol"), "msg = {}", msg);
+    assert!(
+        msg.contains("foo://") || msg.contains("protocol"),
+        "msg = {}",
+        msg
+    );
 }

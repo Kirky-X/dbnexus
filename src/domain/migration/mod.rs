@@ -50,4 +50,6 @@ pub use sql_reverser::*;
 pub use types::*;
 
 #[cfg(feature = "shard-migration")]
-pub use shard_orchestrator::{OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult};
+pub use shard_orchestrator::{
+    OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult,
+};

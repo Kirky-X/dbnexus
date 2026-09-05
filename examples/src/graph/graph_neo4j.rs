@@ -23,9 +23,9 @@
 
 use std::collections::HashMap;
 
+use dbnexus::Neo4jConnection;
 use dbnexus::database::GraphConnection;
 use dbnexus::database::GraphExecResult;
-use dbnexus::Neo4jConnection;
 
 // ============================================
 // 辅助函数
@@ -44,7 +44,11 @@ fn print_query_result(label: &str, result: &GraphExecResult) {
     if let GraphExecResult::Query(q) = result {
         println!("  {} ({} 行):", label, q.rows.len());
         for row in &q.rows {
-            let cols: Vec<String> = row.columns.iter().map(|(k, v)| format!("{}={:?}", k, v)).collect();
+            let cols: Vec<String> = row
+                .columns
+                .iter()
+                .map(|(k, v)| format!("{}={:?}", k, v))
+                .collect();
             println!("    {}", cols.join(", "));
         }
     }
@@ -67,7 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let url_cases = [
         ("neo4j://admin:secret@dbhost:7687", "带凭据的标准 URL"), // pragma: allowlist secret
-        ("neo4j+s://user:p%40ss@cluster.example.com:7687", "TLS 加密连接 URL"), // pragma: allowlist secret
+        (
+            "neo4j+s://user:p%40ss@cluster.example.com:7687",
+            "TLS 加密连接 URL",
+        ), // pragma: allowlist secret
         ("neo4j://user:pass@localhost", "默认端口 URL"),          // pragma: allowlist secret
     ];
 
@@ -78,7 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("    输入: {}", url);
                 println!("    URI:    {}", uri);
                 println!("    User:   {}", user);
-                println!("    Pass:   {}", if pass.is_empty() { "(空)" } else { "***" });
+                println!(
+                    "    Pass:   {}",
+                    if pass.is_empty() { "(空)" } else { "***" }
+                );
             }
             Err(e) => println!("  ✗ {} 解析失败: {}", desc, e),
         }
@@ -124,7 +134,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 创建测试节点
         println!("\n--- 4. 创建节点和查询 ---\n");
-        let _ = conn.execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
+            .await;
 
         conn.execute_cypher("CREATE (:DbNexusTest {name: 'Alice', score: 100})")
             .await?;
@@ -133,7 +145,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  ✓ 创建 2 个测试节点");
 
         let result = conn
-            .execute_cypher("MATCH (n:DbNexusTest) RETURN n.name AS name, n.score AS score ORDER BY n.name")
+            .execute_cypher(
+                "MATCH (n:DbNexusTest) RETURN n.name AS name, n.score AS score ORDER BY n.name",
+            )
             .await?;
         print_query_result("查询结果", &result);
 
@@ -164,7 +178,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         print_query_result("提交后总数", &result);
 
         // 清理
-        let _ = conn.execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n").await;
+        let _ = conn
+            .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
+            .await;
         println!("\n  ✓ 测试数据已清理");
     } else {
         // 无连接时的 API 使用模式演示
@@ -172,7 +188,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  连接后可执行的操作:");
         println!("    conn.execute_cypher(\"CREATE (:Person {{name: 'Alice'}})\")");
         println!("    conn.execute_cypher(\"MATCH (p:Person) RETURN p\")");
-        println!("    conn.execute_cypher_with_params(\"MATCH (p) WHERE p.name = $n RETURN p\", params)");
+        println!(
+            "    conn.execute_cypher_with_params(\"MATCH (p) WHERE p.name = $n RETURN p\", params)"
+        );
         println!("    conn.health_check().await");
         println!("    let txn = conn.begin_graph_txn().await?;");
         println!("    txn.execute_cypher(\"CREATE (:Person {{name: 'Bob'}})\").await?;");

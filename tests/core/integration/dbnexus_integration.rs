@@ -21,7 +21,9 @@ mod common;
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_new_basic() {
     let url = common::get_test_database_url();
-    let pool = DbPool::new(&url).await.expect("Failed to create DbPool with new()");
+    let pool = DbPool::new(&url)
+        .await
+        .expect("Failed to create DbPool with new()");
 
     // 验证连接池配置
     let config = pool.config();
@@ -151,9 +153,14 @@ async fn test_dbpool_try_from_with_permission() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_get_session() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert_eq!(session.role(), "admin");
 }
 
@@ -162,11 +169,19 @@ async fn test_get_session() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_get_session_multiple() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 获取多个会话
-    let session1 = pool.get_session("admin").await.expect("Failed to get session1");
-    let session2 = pool.get_session("admin").await.expect("Failed to get session2");
+    let session1 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session1");
+    let session2 = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session2");
 
     assert_eq!(session1.role(), "admin");
     assert_eq!(session2.role(), "admin");
@@ -181,7 +196,9 @@ async fn test_get_session_multiple() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_status() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     let status = pool.status();
 
@@ -196,10 +213,15 @@ async fn test_pool_status() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_health_check() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 获取会话后检查连接池健康状态
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let status = pool.status();
     assert!(status.active >= 1);
@@ -232,7 +254,9 @@ async fn test_pool_config_access() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 验证配置访问
     let pool_config = pool.config();
@@ -254,8 +278,13 @@ async fn test_pool_drop_cleanup() {
     let (config, _temp_dir) = common::get_test_config();
 
     {
-        let pool = DbPool::with_config(config).await.expect("Failed to create pool");
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
 
         let status = pool.status();
         assert!(status.active >= 1);
@@ -272,12 +301,23 @@ async fn test_pool_drop_with_multiple_sessions() {
     let (config, _temp_dir) = common::get_test_config();
 
     {
-        let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+        let pool = DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool");
 
         // 创建多个会话
-        let session1 = pool.get_session("admin").await.expect("Failed to get session1");
-        let session2 = pool.get_session("admin").await.expect("Failed to get session2");
-        let session3 = pool.get_session("admin").await.expect("Failed to get session3");
+        let session1 = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session1");
+        let session2 = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session2");
+        let session3 = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session3");
 
         let status = pool.status();
         assert!(status.active >= 3);
@@ -299,12 +339,20 @@ async fn test_pool_drop_with_multiple_sessions() {
 async fn test_pool_clone_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
 
-    let pool1 = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool1 = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
     let pool2 = pool1.clone();
 
     // 两个引用指向同一个连接池
-    let session1 = pool1.get_session("admin").await.expect("Failed to get session");
-    let session2 = pool2.get_session("admin").await.expect("Failed to get session");
+    let session1 = pool1
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    let session2 = pool2
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     assert_eq!(session1.role(), "admin");
     assert_eq!(session2.role(), "admin");
@@ -322,7 +370,9 @@ async fn test_pool_clone_succeeds() {
 async fn test_pool_drop_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
 
-    let pool1 = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool1 = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
     let pool2 = pool1.clone();
 
     drop(pool1);
@@ -582,7 +632,9 @@ async fn test_database_type_as_str() {
 async fn test_pool_clone() {
     let (config, _temp_dir) = common::get_test_config();
 
-    let pool1 = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool1 = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
     let pool2 = pool1.clone();
 
     // 验证克隆后的连接池共享内部状态
@@ -600,16 +652,26 @@ async fn test_pool_clone() {
 async fn test_pool_in_arc() {
     let (config, _temp_dir) = common::get_test_config();
 
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool"),
+    );
 
     // 在多任务间共享
     let pool_clone = pool.clone();
     let handle = tokio::spawn(async move {
-        let _session = pool_clone.get_session("admin").await.expect("Failed to get session");
+        let _session = pool_clone
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
     });
 
     // 主任务也可以使用
-    let _session = pool.get_session("admin").await.expect("Failed to get session");
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     handle.await.expect("Task panicked");
 }
@@ -619,14 +681,21 @@ async fn test_pool_in_arc() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_concurrent_session_access() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool"),
+    );
 
     let mut handles = Vec::new();
 
     for _ in 0..5 {
         let pool_clone = pool.clone();
         handles.push(tokio::spawn(async move {
-            let _session = pool_clone.get_session("admin").await.expect("Failed to get session");
+            let _session = pool_clone
+                .get_session("admin")
+                .await
+                .expect("Failed to get session");
         }));
     }
 
@@ -658,7 +727,9 @@ async fn test_pool_get_actual_config() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 获取实际应用的配置
     let actual_config = pool.get_actual_config();
@@ -685,7 +756,9 @@ async fn test_invalid_url_error() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_empty_role_handling() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 空角色应该被处理
     let result = pool.get_session("").await;
@@ -762,13 +835,18 @@ async fn test_config_boundary_values() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_lifecycle() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 获取会话前
     let _status_before = pool.status();
 
     let status_during = {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
 
         // 会话活跃时
         let status = pool.status();
@@ -806,7 +884,9 @@ async fn test_pool_warmup() {
         ..Default::default()
     };
 
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 预热后应该有初始连接
     let status = pool.status();
@@ -822,7 +902,9 @@ async fn test_pool_warmup() {
 ))]
 async fn test_clean_invalid_connections() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 清理无效连接（应该正常执行，即使没有无效连接）
     let _removed = pool.clean_invalid_connections().await;
@@ -840,7 +922,9 @@ async fn test_clean_invalid_connections() {
 ))]
 async fn test_validate_connections_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 验证并重建连接
     let result = pool.validate_and_recreate_connections().await;
@@ -856,7 +940,9 @@ async fn test_validate_connections_succeeds() {
 ))]
 async fn test_recreate_connections_succeeds() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 验证并重建连接
     let result = pool.validate_and_recreate_connections().await;
@@ -876,10 +962,15 @@ async fn test_recreate_connections_succeeds() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_connection_health_check() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     // 获取一个连接
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 会话内部有连接，连接池应该健康
     let status = pool.status();
@@ -893,7 +984,9 @@ async fn test_connection_health_check() {
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_status_fields() {
     let (config, _temp_dir) = common::get_test_config();
-    let pool = DbPool::with_config(config).await.expect("Failed to create pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create pool");
 
     let status = pool.status();
 
@@ -925,8 +1018,14 @@ async fn test_config_duration_conversion() {
     };
 
     assert_eq!(config.idle_timeout_duration(), Duration::from_secs(300));
-    assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(5000));
-    assert_eq!(config.migration_timeout_duration(), Duration::from_secs(120));
+    assert_eq!(
+        config.acquire_timeout_duration(),
+        Duration::from_millis(5000)
+    );
+    assert_eq!(
+        config.migration_timeout_duration(),
+        Duration::from_secs(120)
+    );
 }
 
 /// TEST-DBNEXUS-040: 配置 URL 访问测试
@@ -968,8 +1067,14 @@ async fn test_config_clone() {
 
     let cloned = config.clone();
 
-    assert_eq!(config.pool_config.max_connections, cloned.pool_config.max_connections);
-    assert_eq!(config.pool_config.min_connections, cloned.pool_config.min_connections);
+    assert_eq!(
+        config.pool_config.max_connections,
+        cloned.pool_config.max_connections
+    );
+    assert_eq!(
+        config.pool_config.min_connections,
+        cloned.pool_config.min_connections
+    );
     assert_eq!(config.admin_role, cloned.admin_role);
     assert_eq!(config.url, cloned.url);
 }
@@ -1019,7 +1124,11 @@ async fn test_multithreaded_access() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     let (config, _temp_dir) = common::get_test_config();
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool"),
+    );
 
     let success_count = Arc::new(AtomicUsize::new(0));
     let mut handles = Vec::new();
@@ -1060,7 +1169,11 @@ async fn test_pool_stress() {
         ..Default::default()
     };
 
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool"),
+    );
 
     let mut handles = Vec::new();
 

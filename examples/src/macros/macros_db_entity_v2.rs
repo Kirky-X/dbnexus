@@ -195,8 +195,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 验证 timestamps 已自动设置
-    assert!(inserted.created_at.is_some(), "created_at 应被 timestamps 自动设置");
-    assert!(inserted.updated_at.is_some(), "updated_at 应被 timestamps 自动设置");
+    assert!(
+        inserted.created_at.is_some(),
+        "created_at 应被 timestamps 自动设置"
+    );
+    assert!(
+        inserted.updated_at.is_some(),
+        "updated_at 应被 timestamps 自动设置"
+    );
     println!("  ✓ timestamps 自动设置验证通过\n");
 
     // ============================================

@@ -15,10 +15,14 @@
 //! ```
 
 use dbnexus::sea_orm::ConnectionTrait;
-use dbnexus::{Column, ColumnType, DbConfig, DbPool, Migration, MigrationExecutor, Table, TableChange};
+use dbnexus::{
+    Column, ColumnType, DbConfig, DbPool, Migration, MigrationExecutor, Table, TableChange,
+};
 
 /// 从连接池获取一个独立的 sea-orm 连接用于迁移执行器
-async fn connect_for_migration(url: &str) -> Result<sea_orm::DatabaseConnection, Box<dyn std::error::Error>> {
+async fn connect_for_migration(
+    url: &str,
+) -> Result<sea_orm::DatabaseConnection, Box<dyn std::error::Error>> {
     let conn = sea_orm::Database::connect(url).await?;
     Ok(conn)
 }

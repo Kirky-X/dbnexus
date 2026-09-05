@@ -10,7 +10,12 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait PermissionChecker: Send + Sync {
     /// 检查权限
-    async fn check(&self, role: &str, table: &str, action: PermissionAction) -> Result<bool, PermissionError>;
+    async fn check(
+        &self,
+        role: &str,
+        table: &str,
+        action: PermissionAction,
+    ) -> Result<bool, PermissionError>;
 }
 
 /// 策略管理能力

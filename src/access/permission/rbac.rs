@@ -4,7 +4,9 @@
 //!
 //! 提供基于角色的访问控制（RBAC）权限提供者。
 
-use super::{PermissionAction, PermissionProvider, PermissionProviderError, RolePolicy, TablePermission};
+use super::{
+    PermissionAction, PermissionProvider, PermissionProviderError, RolePolicy, TablePermission,
+};
 
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -47,7 +49,9 @@ impl RbacProvider {
     /// ```
     pub fn new() -> Self {
         let roles = DashMap::new();
-        Self { roles: Arc::new(roles) }
+        Self {
+            roles: Arc::new(roles),
+        }
     }
 
     /// 创建带有默认管理员角色的RBAC提供者
@@ -72,7 +76,9 @@ impl RbacProvider {
             },
         );
 
-        Self { roles: Arc::new(roles) }
+        Self {
+            roles: Arc::new(roles),
+        }
     }
 
     /// 添加角色策略
@@ -163,8 +169,14 @@ mod tests {
                 }],
             },
         );
-        assert!(p.check_access("user", "articles", PermissionAction::Select).unwrap());
-        assert!(!p.check_access("user", "articles", PermissionAction::Insert).unwrap());
+        assert!(
+            p.check_access("user", "articles", PermissionAction::Select)
+                .unwrap()
+        );
+        assert!(
+            !p.check_access("user", "articles", PermissionAction::Insert)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -179,14 +191,23 @@ mod tests {
                 }],
             },
         );
-        assert!(p.check_access("admin", "any_table", PermissionAction::Select).unwrap());
-        assert!(p.check_access("admin", "any_table", PermissionAction::Delete).unwrap());
+        assert!(
+            p.check_access("admin", "any_table", PermissionAction::Select)
+                .unwrap()
+        );
+        assert!(
+            p.check_access("admin", "any_table", PermissionAction::Delete)
+                .unwrap()
+        );
     }
 
     #[test]
     fn check_access_role_not_found() {
         let p = RbacProvider::new();
-        assert!(p.check_access("ghost", "t", PermissionAction::Select).is_err());
+        assert!(
+            p.check_access("ghost", "t", PermissionAction::Select)
+                .is_err()
+        );
     }
 
     #[test]

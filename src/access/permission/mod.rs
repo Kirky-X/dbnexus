@@ -32,8 +32,8 @@ pub use types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy,
 
 // 从 provider.rs 重导出
 pub use provider::{
-    MemoryPermissionProvider, PermissionProvider, PermissionProviderError, RefreshablePermissionProvider,
-    YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionProvider, PermissionProviderError,
+    RefreshablePermissionProvider, YamlPermissionProvider,
 };
 
 // 从 stats.rs 重导出

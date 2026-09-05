@@ -118,15 +118,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("  [User 实体]");
     println!("    table_name()         = {}", user::Model::table_name());
-    println!("    primary_key_column() = {}", user::Model::primary_key_column());
+    println!(
+        "    primary_key_column() = {}",
+        user::Model::primary_key_column()
+    );
 
     println!("\n  [Product 实体]");
-    println!("    table_name()         = {}", product::Model::table_name());
-    println!("    primary_key_column() = {}", product::Model::primary_key_column());
+    println!(
+        "    table_name()         = {}",
+        product::Model::table_name()
+    );
+    println!(
+        "    primary_key_column() = {}",
+        product::Model::primary_key_column()
+    );
 
     println!("\n  [Order 实体]");
     println!("    table_name()         = {}", order::Model::table_name());
-    println!("    primary_key_column() = {}", order::Model::primary_key_column());
+    println!(
+        "    primary_key_column() = {}",
+        order::Model::primary_key_column()
+    );
 
     // ============================================
     // 2. 展示实体关系声明
@@ -146,15 +158,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 使用宏生成的 table_name() 动态构建 DDL
     for (table_name, ddl) in [
-        (user::Model::table_name(),
-         format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)",
-                 user::Model::table_name())),
-        (product::Model::table_name(),
-         format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price REAL NOT NULL, stock INTEGER NOT NULL)",
-                 product::Model::table_name())),
-        (order::Model::table_name(),
-         format!("CREATE TABLE {} (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER NOT NULL, total_price REAL NOT NULL)",
-                 order::Model::table_name())),
+        (
+            user::Model::table_name(),
+            format!(
+                "CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)",
+                user::Model::table_name()
+            ),
+        ),
+        (
+            product::Model::table_name(),
+            format!(
+                "CREATE TABLE {} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price REAL NOT NULL, stock INTEGER NOT NULL)",
+                product::Model::table_name()
+            ),
+        ),
+        (
+            order::Model::table_name(),
+            format!(
+                "CREATE TABLE {} (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER NOT NULL, total_price REAL NOT NULL)",
+                order::Model::table_name()
+            ),
+        ),
     ] {
         session.execute_raw_ddl(&ddl).await?;
         println!("  ✓ 创建表: {} (DDL 来自 table_name())", table_name);
@@ -187,7 +211,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Model::table_name() -> &'static str      宏生成的表名访问器");
     println!("  - Model::primary_key_column() -> &'static str  宏生成的主键列名访问器");
     println!("  - Relation 枚举 + DeriveRelation            声明实体关系（has_many/belongs_to）");
-    println!("\n⚠️  注意: db_entity 是统一属性宏，替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit。");
+    println!(
+        "\n⚠️  注意: db_entity 是统一属性宏，替代旧版 DbEntity/db_crud/db_permission/db_cache/db_audit。"
+    );
     println!("   CRUD 方法、ActiveModelBehavior 均由宏自动生成，无需用户手写。");
 
     Ok(())
