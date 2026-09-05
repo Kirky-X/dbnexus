@@ -169,7 +169,9 @@ mod tests {
     async fn test_register_user_no_letter_rejected() {
         let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         // 无字母
-        let result = manager.register_user("u2", TEST_WEAK_NO_LETTER, "user").await;
+        let result = manager
+            .register_user("u2", TEST_WEAK_NO_LETTER, "user")
+            .await;
         assert!(
             matches!(result, Err(AuthError::PasswordHash(_))),
             "password without letter should be rejected"
@@ -180,7 +182,9 @@ mod tests {
     async fn test_register_user_no_digit_rejected() {
         let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
         // 无数字
-        let result = manager.register_user("u3", TEST_WEAK_NO_DIGIT, "user").await;
+        let result = manager
+            .register_user("u3", TEST_WEAK_NO_DIGIT, "user")
+            .await;
         assert!(
             matches!(result, Err(AuthError::PasswordHash(_))),
             "password without digit should be rejected"

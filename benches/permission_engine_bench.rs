@@ -39,7 +39,10 @@ fn populate_cache(cache: &PermissionCache, n: usize) {
             2 => PermissionAction::Update,
             _ => PermissionAction::Delete,
         };
-        cache.insert(&format!("role_{i}"), sample_policy(&format!("t{i}"), action));
+        cache.insert(
+            &format!("role_{i}"),
+            sample_policy(&format!("t{i}"), action),
+        );
     }
 }
 

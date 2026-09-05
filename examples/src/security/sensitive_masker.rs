@@ -98,7 +98,11 @@ fn main() {
     // ============================================
     println!("--- 6. 地址脱敏（保留省市） ---");
     print_mask("标准地址", "北京市朝阳区某某街道123号", MaskType::Address);
-    print_mask("省市完整", "广东省深圳市南山区科技园路1号", MaskType::Address);
+    print_mask(
+        "省市完整",
+        "广东省深圳市南山区科技园路1号",
+        MaskType::Address,
+    );
     print_mask("无行政区划", "某某街道123号456室", MaskType::Address);
     println!();
 

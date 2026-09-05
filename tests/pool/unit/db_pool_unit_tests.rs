@@ -28,7 +28,10 @@ mod common;
 #[tokio::test]
 async fn test_db_pool_new_sqlite_memory() {
     let pool = DbPool::new("sqlite::memory:").await;
-    assert!(pool.is_ok(), "DbPool::new should succeed for sqlite::memory:");
+    assert!(
+        pool.is_ok(),
+        "DbPool::new should succeed for sqlite::memory:"
+    );
     let pool = pool.unwrap();
     let status = pool.status();
     // 默认 min_connections=5，池会预热创建连接
@@ -190,7 +193,10 @@ async fn test_db_pool_get_actual_config() {
     let cfg1 = pool.config();
     let cfg2 = pool.get_actual_config();
     assert_eq!(cfg1.url, cfg2.url);
-    assert_eq!(cfg1.pool_config.max_connections, cfg2.pool_config.max_connections);
+    assert_eq!(
+        cfg1.pool_config.max_connections,
+        cfg2.pool_config.max_connections
+    );
 }
 
 // ============================================================================
@@ -289,7 +295,10 @@ async fn test_db_pool_max_connections_one() {
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
-    let _session = pool.get_session("admin").await.expect("first session should succeed");
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("first session should succeed");
     // session 持有期间连接被占用；drop 后释放
 }
 
@@ -334,7 +343,10 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
 
     // 完成后 status 应恢复（active 回到 0 或接近 0）
     let status = pool.status();
-    assert!(status.total >= status.active, "invariant violated: total >= active");
+    assert!(
+        status.total >= status.active,
+        "invariant violated: total >= active"
+    );
 }
 
 // ============================================================================
@@ -487,7 +499,10 @@ async fn test_check_connection_health_healthy_seaorm() {
 async fn test_clean_invalid_connections_healthy_pool() {
     let pool = common::make_sqlite_memory_pool().await;
     let removed = pool.clean_invalid_connections().await;
-    assert_eq!(removed, 0, "no invalid connections should be removed from healthy pool");
+    assert_eq!(
+        removed, 0,
+        "no invalid connections should be removed from healthy pool"
+    );
 }
 
 /// TEST-U-DPOOL-033: validate_and_recreate_connections 对健康池应返回 0

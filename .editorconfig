@@ -1,5 +1,4 @@
-# EditorConfig 配置
-# Docs: https://editorconfig.org/
+# EditorConfig — 跨编辑器/IDE 的基础格式约定。https://editorconfig.org
 root = true
 
 [*]
@@ -8,33 +7,26 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
-indent_size = 4
-
-[*.{rs,toml}]
-indent_style = space
-indent_size = 4
-max_line_length = 120
-
-# YAML 文件使用 2 空格缩进
-[*.{yml,yaml}]
-indent_style = space
 indent_size = 2
 
-# Markdown 文件不裁剪行尾空格（保留两个空格表示换行）
-[*.md]
-trim_trailing_whitespace = false
-max_line_length = off
+# 语言缩进覆盖(按社区惯例)
+[*.{rs,go}]
+indent_size = 4
 
-# Makefile 必须使用 Tab
+[*.{py,java,kt,scala}]
+indent_size = 4
+
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx}]
+indent_size = 4
+
+[*.{cs}]
+indent_size = 4
+
+[*.{php}]
+indent_size = 4
+
 [Makefile]
 indent_style = tab
 
-# Shell 脚本
-[*.sh]
-indent_style = space
-indent_size = 4
-
-# JSON 文件
-[*.json]
-indent_style = space
-indent_size = 2
+[*.{md,markdown}]
+trim_trailing_whitespace = false   # Markdown 行尾两空格 = 换行

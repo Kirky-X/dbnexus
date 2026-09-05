@@ -273,7 +273,8 @@ mod tests {
             properties: json!({"name": "Alice", "age": 30}),
         };
         let json_str = serde_json::to_string(&node).expect("serialize should succeed");
-        let restored: GraphNode = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphNode =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(node, restored);
     }
 
@@ -284,7 +285,8 @@ mod tests {
             properties: json!({}),
         };
         let json_str = serde_json::to_string(&node).expect("serialize should succeed");
-        let restored: GraphNode = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphNode =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(node, restored);
     }
 
@@ -299,7 +301,8 @@ mod tests {
             properties: json!({"since": "2024-01-01"}),
         };
         let json_str = serde_json::to_string(&rel).expect("serialize should succeed");
-        let restored: GraphRel = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphRel =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(rel, restored);
     }
 
@@ -312,7 +315,8 @@ mod tests {
             properties: json!(null),
         };
         let json_str = serde_json::to_string(&rel).expect("serialize should succeed");
-        let restored: GraphRel = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphRel =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(rel, restored);
     }
 
@@ -325,7 +329,8 @@ mod tests {
             properties: json!({"title": "Inception"}),
         });
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -338,7 +343,8 @@ mod tests {
             properties: json!({"role": "Cobb"}),
         });
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -355,7 +361,8 @@ mod tests {
             },
         ]);
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -363,7 +370,8 @@ mod tests {
     fn test_graph_value_scalar_variant() {
         let val = GraphValue::Scalar(json!(42));
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -371,7 +379,8 @@ mod tests {
     fn test_graph_value_scalar_string() {
         let val = GraphValue::Scalar(json!("hello"));
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -379,7 +388,8 @@ mod tests {
     fn test_graph_value_scalar_null() {
         let val = GraphValue::Scalar(json!(null));
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -387,7 +397,8 @@ mod tests {
     fn test_graph_value_empty_path() {
         let val = GraphValue::Path(vec![]);
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
-        let restored: GraphValue = serde_json::from_str(&json_str).expect("deserialize should succeed");
+        let restored: GraphValue =
+            serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
     }
 
@@ -500,7 +511,9 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("Alice"));
 
-        let result = conn.execute_cypher_with_params("RETURN $name", params).await;
+        let result = conn
+            .execute_cypher_with_params("RETURN $name", params)
+            .await;
         assert!(
             result.is_err(),
             "HD-1: default execute_cypher_with_params must return error, not silently fall back"

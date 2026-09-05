@@ -123,7 +123,9 @@ impl SensitiveMasker {
         let cleaned: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 7 {
-            return Err(SensitiveError::InvalidInput("Phone number too short".to_string()));
+            return Err(SensitiveError::InvalidInput(
+                "Phone number too short".to_string(),
+            ));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -145,14 +147,18 @@ impl SensitiveMasker {
         let parts: Vec<&str> = email.split('@').collect();
 
         if parts.len() != 2 {
-            return Err(SensitiveError::InvalidInput("Invalid email format".to_string()));
+            return Err(SensitiveError::InvalidInput(
+                "Invalid email format".to_string(),
+            ));
         }
 
         let local = parts[0];
         let domain = parts[1];
 
         if local.is_empty() {
-            return Err(SensitiveError::InvalidInput("Email local part is empty".to_string()));
+            return Err(SensitiveError::InvalidInput(
+                "Email local part is empty".to_string(),
+            ));
         }
 
         // 使用 chars() 安全处理 Unicode（避免非 ASCII 字节切片 panic）
@@ -176,7 +182,9 @@ impl SensitiveMasker {
 
         // 身份证号可以是15位或18位
         if cleaned.len() != 15 && cleaned.len() != 18 {
-            return Err(SensitiveError::InvalidInput("Invalid ID card length".to_string()));
+            return Err(SensitiveError::InvalidInput(
+                "Invalid ID card length".to_string(),
+            ));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -196,7 +204,9 @@ impl SensitiveMasker {
         let cleaned: String = card.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 8 {
-            return Err(SensitiveError::InvalidInput("Bank card number too short".to_string()));
+            return Err(SensitiveError::InvalidInput(
+                "Bank card number too short".to_string(),
+            ));
         }
 
         let chars: Vec<char> = cleaned.chars().collect();
@@ -274,9 +284,9 @@ impl SensitiveMasker {
         let len = chars.len();
 
         // 溢出保护：当保留长度 >= 数据长度时，无内容可脱敏，返回原始数据
-        let total_keep = keep_prefix
-            .checked_add(keep_suffix)
-            .ok_or_else(|| SensitiveError::InvalidInput("keep_prefix + keep_suffix overflow".to_string()))?;
+        let total_keep = keep_prefix.checked_add(keep_suffix).ok_or_else(|| {
+            SensitiveError::InvalidInput("keep_prefix + keep_suffix overflow".to_string())
+        })?;
         if total_keep >= len {
             return Ok(data.to_string());
         }
@@ -364,13 +374,22 @@ mod tests {
     #[test]
     fn test_mask_name() {
         // 两个字姓名
-        assert_eq!(SensitiveMasker::mask("张三", MaskType::Name).unwrap(), "张*");
+        assert_eq!(
+            SensitiveMasker::mask("张三", MaskType::Name).unwrap(),
+            "张*"
+        );
 
         // 三个字姓名
-        assert_eq!(SensitiveMasker::mask("李某某", MaskType::Name).unwrap(), "李**");
+        assert_eq!(
+            SensitiveMasker::mask("李某某", MaskType::Name).unwrap(),
+            "李**"
+        );
 
         // 四个字姓名
-        assert_eq!(SensitiveMasker::mask("欧阳明月", MaskType::Name).unwrap(), "欧***");
+        assert_eq!(
+            SensitiveMasker::mask("欧阳明月", MaskType::Name).unwrap(),
+            "欧***"
+        );
     }
 
     #[test]

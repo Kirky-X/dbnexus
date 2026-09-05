@@ -78,13 +78,21 @@ fn test_router_calculate_shard_consistency() {
 
     let dt_2023 = Utc.timestamp_opt(1686835200, 0).unwrap();
     let shard_2023 = router.calculate_shard(dt_2023, "");
-    assert_ne!(shard1, shard_2023, "Different years should give different shards");
+    assert_ne!(
+        shard1, shard_2023,
+        "Different years should give different shards"
+    );
 }
 
 /// TEST-SHARD-013: ShardConfig 连接字符串模板测试
 #[test]
 fn test_shard_config_template_parsing() {
-    let config = ShardConfig::new("yearly", 12, "orders", "postgresql://localhost/{shard}/{prefix}_{id}");
+    let config = ShardConfig::new(
+        "yearly",
+        12,
+        "orders",
+        "postgresql://localhost/{shard}/{prefix}_{id}",
+    );
 
     let shard_0 = config.generate_connection_string(0);
     let shard_5 = config.generate_connection_string(5);
@@ -100,7 +108,12 @@ fn test_shard_config_template_parsing() {
 /// TEST-SHARD-014: 路由器配置集成测试
 #[test]
 fn test_router_with_config_integration() {
-    let config = ShardConfig::new("monthly", 6, "products", "postgresql://localhost/{shard}/products.db");
+    let config = ShardConfig::new(
+        "monthly",
+        6,
+        "products",
+        "postgresql://localhost/{shard}/products.db",
+    );
 
     let router = ShardRouter::with_config_sync(&config);
 
@@ -218,7 +231,10 @@ fn test_router_default_no_divide_by_zero() {
     let router = ShardRouter::default();
     // 任何 key 都应返回 0（单一分片），不 panic
     let shard_id = router.shard_id_for_key("any_key");
-    assert_eq!(shard_id, 0, "default router with single shard should return 0");
+    assert_eq!(
+        shard_id, 0,
+        "default router with single shard should return 0"
+    );
 }
 
 /// TEST-SHARD-INT-011: shard_id_for_key 对不同 key 返回有效分片
@@ -227,7 +243,12 @@ fn test_shard_id_for_key_within_range() {
     let router = ShardRouter::with_strategy("hash", 8);
     for key in &["user_1", "user_2", "order_abc", "product_xyz"] {
         let shard_id = router.shard_id_for_key(key);
-        assert!(shard_id < 8, "shard_id {} should be < 8 for key {}", shard_id, key);
+        assert!(
+            shard_id < 8,
+            "shard_id {} should be < 8 for key {}",
+            shard_id,
+            key
+        );
     }
 }
 

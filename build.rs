@@ -17,7 +17,8 @@ fn main() {
     let _macro_include_path = Path::new(&out_dir).join("roles_include.rs");
 
     // 尝试读取 permissions.yaml
-    let permissions_path = env::var("DB_PERMISSIONS_PATH").unwrap_or_else(|_| "permissions.yaml".to_string());
+    let permissions_path =
+        env::var("DB_PERMISSIONS_PATH").unwrap_or_else(|_| "permissions.yaml".to_string());
 
     // 简单解析 YAML 提取角色名
     let roles: Vec<String> = if Path::new(&permissions_path).exists() {
@@ -69,7 +70,9 @@ fn main() {
                 found_roles.dedup();
 
                 if found_roles.is_empty() {
-                    eprintln!("Warning: No roles found in permissions.yaml. Using empty role list.");
+                    eprintln!(
+                        "Warning: No roles found in permissions.yaml. Using empty role list."
+                    );
                 }
 
                 found_roles
@@ -89,7 +92,8 @@ fn main() {
 
     // 生成角色数组代码
     let roles_array_code = if roles.is_empty() {
-        "// No roles defined in permissions.yaml - all roles are allowed at compile time".to_string()
+        "// No roles defined in permissions.yaml - all roles are allowed at compile time"
+            .to_string()
     } else {
         roles
             .iter()

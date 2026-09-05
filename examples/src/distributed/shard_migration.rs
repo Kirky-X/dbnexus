@@ -110,7 +110,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  │ {:>8} │ {:<8} │ [1, 2, 3]          │", i, "✅");
     }
     println!("  └──────────┴──────────┴────────────────────┘");
-    println!("  结果: total={}, success={}, failed=0", total_shards, total_shards);
+    println!(
+        "  结果: total={}, success={}, failed=0",
+        total_shards, total_shards
+    );
     println!();
 
     // 模拟部分失败场景
@@ -126,7 +129,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("  └──────────┴──────────┴────────────────────────────┘");
-    println!("  结果: total={}, success={}, failed=1", total_shards, total_shards - 1);
+    println!(
+        "  结果: total={}, success={}, failed=1",
+        total_shards,
+        total_shards - 1
+    );
     println!();
 
     // ============================================

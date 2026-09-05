@@ -16,9 +16,12 @@
 //! ```
 
 use async_trait::async_trait;
-use dbnexus::{SagaAction, SagaError, SagaExecutionResult, SagaOrchestrator, SagaStep, ShardConfig, ShardRouter};
-use std::sync::atomic::{AtomicBool, Ordering};
+use dbnexus::{
+    SagaAction, SagaError, SagaExecutionResult, SagaOrchestrator, SagaStep, ShardConfig,
+    ShardRouter,
+};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // ============================================
 // 自定义 Saga 动作

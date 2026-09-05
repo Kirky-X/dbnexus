@@ -24,7 +24,8 @@ use dbnexus::db_entity;
 use dbnexus::foundation::DatabaseType;
 use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::sea_orm::{
-    ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, Condition, DbBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
 };
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 
@@ -113,7 +114,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     let result = Model::insert_many(&session, users).await?;
-    println!("  ✓ insert_many 成功, last_insert_id = {:?}", result.last_insert_id);
+    println!(
+        "  ✓ insert_many 成功, last_insert_id = {:?}",
+        result.last_insert_id
+    );
 
     let total = Model::count(&session).await?;
     println!("  ✓ 当前总记录数: {}\n", total);
@@ -127,9 +131,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let select = Model::query(&session).await?;
     let conn = session.connection()?;
     let adults = select
-        .filter(Column::Age.gte(18))    // WHERE age >= 18
-        .order_by_desc(Column::Age)      // ORDER BY age DESC
-        .limit(2)                        // LIMIT 2
+        .filter(Column::Age.gte(18)) // WHERE age >= 18
+        .order_by_desc(Column::Age) // ORDER BY age DESC
+        .limit(2) // LIMIT 2
         .all(conn)
         .await?;
 
@@ -182,8 +186,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 验证更新结果
     let conn = session.connection()?;
     let bob = Entity::find_by_id(2).one(conn).await?.expect("Bob 应存在");
-    let diana = Entity::find_by_id(4).one(conn).await?.expect("Diana 应存在");
-    let alice = Entity::find_by_id(1).one(conn).await?.expect("Alice 应存在");
+    let diana = Entity::find_by_id(4)
+        .one(conn)
+        .await?
+        .expect("Diana 应存在");
+    let alice = Entity::find_by_id(1)
+        .one(conn)
+        .await?
+        .expect("Alice 应存在");
 
     println!("    Bob   (id=2): age {} → {}", 17, bob.age);
     println!("    Diana (id=4): age {} → {}", 16, diana.age);
@@ -206,7 +216,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 复合条件: age < 18 OR age > 28
     // 预期: Bob(17), Diana(17), Charlie(30) → 3 条
-    let cond = Condition::any().add(Column::Age.lt(18)).add(Column::Age.gt(28));
+    let cond = Condition::any()
+        .add(Column::Age.lt(18))
+        .add(Column::Age.gt(28));
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 100i64.into())];
 
     let affected = Model::update_many(&session, cond, updates).await?;
@@ -215,7 +227,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证
     let conn = session.connection()?;
-    let count_age_100 = Entity::find().filter(Column::Age.eq(100)).count(conn).await?;
+    let count_age_100 = Entity::find()
+        .filter(Column::Age.eq(100))
+        .count(conn)
+        .await?;
     println!("  ✓ age=100 的记录数: {}", count_age_100);
     assert_eq!(count_age_100, 3);
     println!("  ✓ 断言通过\n");

@@ -32,7 +32,9 @@ compile_error!("Cannot enable both 'postgres' and 'mysql' features");
     any(feature = "sqlite", feature = "duckdb"),
     any(feature = "postgres", feature = "mysql")
 ))]
-compile_error!("Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features");
+compile_error!(
+    "Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features"
+);
 
 // 规则 3：至少一个数据库后端（关系型或图 DB）
 // 注意：不使用 compile_error! 以便 cargo publish 能验证 default = [] 的包。
@@ -122,9 +124,9 @@ pub use crate::domain::DbCacheProvider;
 // Domain Permission 导出 (新架构)
 #[cfg(feature = "permission")]
 pub use crate::domain::{
-    PermissionAction as DomainPermissionAction, PermissionConfig as NewPermissionConfig, PermissionConfigError,
-    PermissionError as NewPermissionError, PermissionProvider, RolePolicy as DomainRolePolicy,
-    TablePermission as DomainTablePermission,
+    PermissionAction as DomainPermissionAction, PermissionConfig as NewPermissionConfig,
+    PermissionConfigError, PermissionError as NewPermissionError, PermissionProvider,
+    RolePolicy as DomainRolePolicy, TablePermission as DomainTablePermission,
 };
 
 // Database 导出
@@ -134,14 +136,16 @@ pub use crate::database::DbPoolBuilder;
 pub use crate::database::Session;
 #[cfg(feature = "migration")]
 pub use crate::database::{
-    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser, MigrationHistory,
-    MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+    Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser,
+    MigrationHistory, MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use crate::database::{ConnectionPool, DatabaseSession};
 
 // DuckDB 连接包装器导出（0.3.0 新增）
 #[cfg(feature = "sharding")]
-pub use crate::database::{ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
+pub use crate::database::{
+    ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy,
+};
 #[cfg(feature = "duckdb")]
 pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};
 
@@ -151,7 +155,8 @@ pub use crate::database::LadybugConnection;
 #[cfg(feature = "neo4j")]
 pub use crate::database::Neo4jConnection;
 pub use crate::database::{
-    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow,
+    GraphTransaction, GraphValue,
 };
 
 // Access 导出
@@ -163,15 +168,17 @@ pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResu
 pub use crate::access::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use crate::access::{
-    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache, PermissionCacheConfig,
-    PermissionConfig, PermissionContext, PermissionProvider as AccessPermissionProvider, PermissionProviderError,
-    RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission, YamlPermissionProvider,
+    MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache,
+    PermissionCacheConfig, PermissionConfig, PermissionContext,
+    PermissionProvider as AccessPermissionProvider, PermissionProviderError,
+    RolePolicy as AccessRolePolicy, TablePermission as AccessTablePermission,
+    YamlPermissionProvider,
 };
 
 #[cfg(feature = "authentication")]
 pub use crate::access::{
-    AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager, PasswordHasher, TokenType,
-    User,
+    AuthCredentials, AuthError, AuthResult, AuthenticationManager, JwtClaims, JwtManager,
+    PasswordHasher, TokenType, User,
 };
 
 #[cfg(feature = "sql-parser")]
@@ -189,23 +196,23 @@ pub use crate::access::contains_sql_injection;
 #[cfg(feature = "permission-engine")]
 #[cfg(feature = "permission")]
 pub use crate::access::permission_engine::{
-    PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext, PermissionDecision,
-    PermissionProvider as EnginePermissionProvider, PermissionResource, PermissionRule, PermissionSubject,
-    PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
-    YamlPermissionProvider as EngineYamlPermissionProvider,
+    PermissionAction as EnginePermissionAction, PermissionContext as PermissionEngineContext,
+    PermissionDecision, PermissionProvider as EnginePermissionProvider, PermissionResource,
+    PermissionRule, PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig,
+    RbacPermissionProvider, Role, YamlPermissionProvider as EngineYamlPermissionProvider,
 };
 
 // Observability 导出
 #[cfg(feature = "health-check")]
 pub use crate::observability::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
-    PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker,
+    HealthStatus, PoolHealthMetrics,
 };
 #[cfg(feature = "metrics")]
 pub use crate::observability::{
-    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
-    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
-    TransactionStats,
+    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles,
+    MetricsCollector, MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats,
+    SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };
 
 // Reliability 导出（retry feature）
@@ -218,28 +225,35 @@ pub use crate::database::replica::MySqlLagDetector;
 #[cfg(feature = "replica-routing")]
 pub use crate::database::replica::PostgresLagDetector;
 #[cfg(feature = "replica-routing")]
-pub use crate::database::replica::{ReplicaPool, ReplicationLag, ReplicationLagDetector, SqliteLagDetector};
+pub use crate::database::replica::{
+    ReplicaPool, ReplicationLag, ReplicationLagDetector, SqliteLagDetector,
+};
 
 // Scatter-Gather 导出（scatter-gather feature）
 #[cfg(feature = "scatter-gather")]
 pub use crate::database::{
-    AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ScatterResult, ShardError,
+    AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ScatterResult,
+    ShardError,
 };
 
 // Saga 分布式事务导出（saga feature）
 #[cfg(feature = "saga")]
 pub use crate::database::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator, SagaStatus, SagaStep,
-    SagaStepLog,
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator,
+    SagaStatus, SagaStep, SagaStepLog,
 };
 
 // 分片迁移编排导出（shard-migration feature）
 #[cfg(feature = "shard-migration")]
-pub use crate::domain::migration::{OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult};
+pub use crate::domain::migration::{
+    OrchestratedMigrationResult, ShardMigrationOrchestrator, ShardMigrationResult,
+};
 
 // 分布式 ID 生成器导出（distributed-id feature）
 #[cfg(feature = "distributed-id")]
-pub use crate::common::{DistributedIdGenerator, IdComponents, SnowflakeError, SnowflakeIdGenerator};
+pub use crate::common::{
+    DistributedIdGenerator, IdComponents, SnowflakeError, SnowflakeIdGenerator,
+};
 
 // MockMetrics 仅在测试或启用 `test-utils` feature 时导出（BREAKING: 从默认公共 API 移除）
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
@@ -248,14 +262,15 @@ pub use crate::observability::MockMetrics;
 // Storage 导出
 #[cfg(feature = "global-index")]
 pub use crate::storage::{
-    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
+    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
+    SyncEvent, SyncResult,
 };
 
 // Business 导出（直接从 domain::audit 导出，移除 business 中间层）
 #[cfg(feature = "audit")]
 pub use crate::domain::{
-    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
-    AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
+    AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
+    AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
 #[cfg(feature = "audit")]
 pub use crate::foundation::AuditResult;
@@ -302,7 +317,12 @@ pub use crate::i18n::{DbI18nFormatter, I18nError};
 
 // sea_orm is a non-optional dependency but is re-exported only under database
 // driver features to keep the API surface minimal in non-sea-orm builds.
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "duckdb"))]
+#[cfg(any(
+    feature = "sqlite",
+    feature = "postgres",
+    feature = "mysql",
+    feature = "duckdb"
+))]
 pub use sea_orm;
 
 // async_trait is a non-optional dependency; always available.

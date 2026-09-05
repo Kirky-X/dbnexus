@@ -40,8 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 标准 PostgreSQL 连接字符串格式：
     //   postgres://user:password@host:port/database
     //   postgresql://user:password@host:port/database
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/dbnexus_example".to_string());
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://postgres:postgres@localhost:5432/dbnexus_example".to_string()
+    });
 
     println!("连接字符串: {}", db_url);
 
@@ -112,7 +113,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
              ON CONFLICT (email) DO NOTHING",
         )
         .await?;
-    println!("✓ 插入操作完成 (rows_affected: {})", insert_result.rows_affected());
+    println!(
+        "✓ 插入操作完成 (rows_affected: {})",
+        insert_result.rows_affected()
+    );
 
     drop(session);
     println!("ℹ️  Session 释放");

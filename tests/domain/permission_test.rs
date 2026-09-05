@@ -16,8 +16,9 @@
 #[cfg(feature = "permission")]
 mod permission_tests {
     use dbnexus::domain::{
-        DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig, PermissionConfigError, PermissionError,
-        PermissionLifecycle, PolicyManager, PolicySet, RolePolicy, TablePermission, new, new_in_memory,
+        DefaultPolicy, PermissionAction, PermissionChecker, PermissionConfig,
+        PermissionConfigError, PermissionError, PermissionLifecycle, PolicyManager, PolicySet,
+        RolePolicy, TablePermission, new, new_in_memory,
     };
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -355,7 +356,9 @@ rate_limit_max_requests: 50
     #[tokio::test]
     async fn test_memory_permission_provider_check_admin() {
         let provider = new_in_memory();
-        let result: Result<bool, PermissionError> = provider.check("admin", "users", PermissionAction::Select).await;
+        let result: Result<bool, PermissionError> = provider
+            .check("admin", "users", PermissionAction::Select)
+            .await;
         assert!(result.is_ok());
         assert!(result.unwrap(), "admin should always be allowed");
     }
@@ -363,7 +366,9 @@ rate_limit_max_requests: 50
     #[tokio::test]
     async fn test_memory_permission_provider_check_unknown_role() {
         let provider = new_in_memory();
-        let result = provider.check("unknown_role", "users", PermissionAction::Select).await;
+        let result = provider
+            .check("unknown_role", "users", PermissionAction::Select)
+            .await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -401,7 +406,9 @@ rate_limit_max_requests: 50
         // shutdown 不应 panic
         provider.shutdown().await;
         // shutdown 后仍可访问（admin 仍允许）
-        let result = provider.check("admin", "users", PermissionAction::Select).await;
+        let result = provider
+            .check("admin", "users", PermissionAction::Select)
+            .await;
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -428,7 +435,8 @@ rate_limit_max_requests: 50
         // 应返回 InvalidValue 错误（包装 PermissionError::ParseError）
         // 注意：impl PermissionProvider 未实现 Debug，不能用 unwrap_err()
         match result {
-            Err(PermissionConfigError::InvalidValue { ref field, .. }) if field == "policy_path" => {}
+            Err(PermissionConfigError::InvalidValue { ref field, .. })
+                if field == "policy_path" => {}
             Err(other) => panic!("expected InvalidValue for policy_path, got {other:?}"),
             Ok(_) => panic!("expected error for nonexistent policy path"),
         }
@@ -712,16 +720,21 @@ editor:
     #[cfg(feature = "cache")]
     #[tokio::test]
     async fn test_with_cache_injection() {
-        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::builder().build().await.unwrap());
+        let cache: Arc<oxcache::Cache<String, RolePolicy>> =
+            Arc::new(oxcache::Cache::builder().build().await.unwrap());
         let cfg = PermissionConfig::default();
         let result = dbnexus::domain::with_cache(cfg, cache).await;
-        assert!(result.is_ok(), "with_cache should succeed with default config");
+        assert!(
+            result.is_ok(),
+            "with_cache should succeed with default config"
+        );
     }
 
     #[cfg(feature = "cache")]
     #[tokio::test]
     async fn test_with_cache_invalid_path() {
-        let cache: Arc<oxcache::Cache<String, RolePolicy>> = Arc::new(oxcache::Cache::builder().build().await.unwrap());
+        let cache: Arc<oxcache::Cache<String, RolePolicy>> =
+            Arc::new(oxcache::Cache::builder().build().await.unwrap());
         let cfg = PermissionConfig {
             policy_path: Some("/nonexistent/path/policy.yaml".into()),
             ..PermissionConfig::default()
@@ -742,7 +755,12 @@ editor:
         let manager: &dyn PolicyManager = &provider;
         let lifecycle: &dyn PermissionLifecycle = &provider;
 
-        assert!(checker.check("admin", "users", PermissionAction::Select).await.is_ok());
+        assert!(
+            checker
+                .check("admin", "users", PermissionAction::Select)
+                .await
+                .is_ok()
+        );
         assert!(manager.get_policy("anyone").await.is_ok());
         // T015 语义：空策略表 provider 不健康
         assert!(lifecycle.health_check().await.is_err());

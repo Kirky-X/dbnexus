@@ -81,11 +81,13 @@ impl DbI18nFormatter {
             reason: e.to_string(),
         })?;
 
-        let decimal_formatter = DecimalFormatter::try_new(parsed.clone().into(), DecimalFormatterOptions::default())
-            .map_err(|e| I18nError::FormatError(e.to_string()))?;
+        let decimal_formatter =
+            DecimalFormatter::try_new(parsed.clone().into(), DecimalFormatterOptions::default())
+                .map_err(|e| I18nError::FormatError(e.to_string()))?;
 
-        let plural_rules = PluralRules::try_new(parsed.clone().into(), PluralRulesOptions::default())
-            .map_err(|e| I18nError::FormatError(e.to_string()))?;
+        let plural_rules =
+            PluralRules::try_new(parsed.clone().into(), PluralRulesOptions::default())
+                .map_err(|e| I18nError::FormatError(e.to_string()))?;
 
         let collator = Collator::try_new(parsed.clone().into(), CollatorOptions::default())
             .map_err(|e| I18nError::FormatError(e.to_string()))?;
@@ -148,7 +150,8 @@ impl DbI18nFormatter {
     /// Returns [`I18nError::DateError`] if any component is out of range,
     /// or [`I18nError::FormatError`] if the formatter cannot be constructed.
     pub fn format_timestamp(&self, year: i32, month: u8, day: u8) -> Result<String, I18nError> {
-        let date = Date::try_new_iso(year, month, day).map_err(|e| I18nError::DateError(e.to_string()))?;
+        let date =
+            Date::try_new_iso(year, month, day).map_err(|e| I18nError::DateError(e.to_string()))?;
         let time = Time::try_new(0, 0, 0, 0).map_err(|e| I18nError::DateError(e.to_string()))?;
         let datetime = DateTime { date, time };
 
@@ -201,15 +204,24 @@ mod tests {
         // Polish (pl) has Few for count=2,3,4
         let fmt_pl = DbI18nFormatter::new("pl").expect("pl locale");
         let cat_few = fmt_pl.plural_category(2).expect("pl plural 2");
-        assert_eq!(cat_few, "Few", "Polish count=2 should be Few, got: {cat_few}");
+        assert_eq!(
+            cat_few, "Few",
+            "Polish count=2 should be Few, got: {cat_few}"
+        );
 
         // Many category: Arabic has Many for values 11..99 (e.g. 11)
         let cat_many = fmt_ar.plural_category(11).expect("ar plural 11");
-        assert_eq!(cat_many, "Many", "Arabic count=11 should be Many, got: {cat_many}");
+        assert_eq!(
+            cat_many, "Many",
+            "Arabic count=11 should be Many, got: {cat_many}"
+        );
 
         // Other: English count=0
         let cat_other = fmt_en.plural_category(0).expect("en plural 0");
-        assert_eq!(cat_other, "Other", "English count=0 should be Other, got: {cat_other}");
+        assert_eq!(
+            cat_other, "Other",
+            "English count=0 should be Other, got: {cat_other}"
+        );
     }
 
     #[test]
@@ -255,7 +267,9 @@ mod tests {
     #[test]
     fn test_format_migration_message_fr() {
         let fmt = DbI18nFormatter::new("fr-FR").expect("fr-FR locale");
-        let msg = fmt.format_migration_message(10).expect("fr migration message");
+        let msg = fmt
+            .format_migration_message(10)
+            .expect("fr migration message");
         assert!(msg.contains("migrations"), "fr message: got '{msg}'");
     }
 

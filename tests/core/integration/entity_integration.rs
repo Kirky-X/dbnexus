@@ -30,13 +30,21 @@ fn get_database_url() -> Option<String> {
     }
 
     if cfg!(feature = "postgres") {
-        let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
-        return Some(format!("postgres://dbnexus:{}@localhost:15433/dbnexus_test", password));
+        let password =
+            std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+        return Some(format!(
+            "postgres://dbnexus:{}@localhost:15433/dbnexus_test",
+            password
+        ));
     }
 
     if cfg!(feature = "mysql") {
-        let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
-        return Some(format!("mysql://dbnexus:{}@localhost:13308/dbnexus_test", password));
+        let password =
+            std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+        return Some(format!(
+            "mysql://dbnexus:{}@localhost:13308/dbnexus_test",
+            password
+        ));
     }
 
     None
@@ -359,7 +367,10 @@ async fn test_entity_crud_full_operations() {
 
     // READ
     let read = session
-        .execute_raw(&format!("SELECT * FROM {} WHERE name = 'CRUD Test'", CRUD_TEST_TABLE))
+        .execute_raw(&format!(
+            "SELECT * FROM {} WHERE name = 'CRUD Test'",
+            CRUD_TEST_TABLE
+        ))
         .await;
     assert!(read.is_ok(), "SELECT failed: {:?}", read.err());
 
@@ -374,7 +385,10 @@ async fn test_entity_crud_full_operations() {
 
     // DELETE
     let delete = session
-        .execute_raw(&format!("DELETE FROM {} WHERE name = 'CRUD Test'", CRUD_TEST_TABLE))
+        .execute_raw(&format!(
+            "DELETE FROM {} WHERE name = 'CRUD Test'",
+            CRUD_TEST_TABLE
+        ))
         .await;
     assert!(delete.is_ok(), "DELETE failed: {:?}", delete.err());
 
@@ -432,7 +446,11 @@ async fn test_entity_transaction_with_permissions() {
     let after_commit = session
         .execute_raw(&format!("SELECT COUNT(*) FROM {}", CRUD_TEST_TABLE))
         .await;
-    assert!(after_commit.is_ok(), "SELECT COUNT failed: {:?}", after_commit.err());
+    assert!(
+        after_commit.is_ok(),
+        "SELECT COUNT failed: {:?}",
+        after_commit.err()
+    );
 
     // Rollback test
     session.begin_transaction().await.unwrap();

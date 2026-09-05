@@ -13,14 +13,14 @@ pub mod metrics;
 // Re-exports
 #[cfg(feature = "health-check")]
 pub use health::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker, HealthStatus,
-    PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState, HealthChecker,
+    HealthStatus, PoolHealthMetrics,
 };
 #[cfg(all(feature = "metrics", any(test, feature = "test-utils")))]
 pub use metrics::MockMetrics;
 #[cfg(feature = "metrics")]
 pub use metrics::{
-    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles, MetricsCollector,
-    MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats, SlowQueryConfig, SlowQueryRecord, ThroughputStats,
-    TransactionStats,
+    ConnectionAcquireStats, HistogramBucket, HistogramStats, LatencyHistogram, LatencyPercentiles,
+    MetricsCollector, MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats,
+    SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };

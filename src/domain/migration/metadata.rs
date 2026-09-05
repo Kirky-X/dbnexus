@@ -138,7 +138,8 @@ impl MigrationMetadata {
     /// metadata.add_table_snapshot(snapshot);
     /// ```
     pub fn add_table_snapshot(&mut self, snapshot: TableSnapshot) {
-        self.table_snapshots.insert(snapshot.table_name.clone(), snapshot);
+        self.table_snapshots
+            .insert(snapshot.table_name.clone(), snapshot);
     }
 
     /// 获取表快照
@@ -174,7 +175,11 @@ mod tests {
 
     #[test]
     fn test_add_table_snapshot() {
-        let mut metadata = MigrationMetadata::new(1, "test".to_string(), "CREATE TABLE test (id INT);".to_string());
+        let mut metadata = MigrationMetadata::new(
+            1,
+            "test".to_string(),
+            "CREATE TABLE test (id INT);".to_string(),
+        );
         let snapshot = TableSnapshot::new("test");
         metadata.add_table_snapshot(snapshot);
         assert_eq!(metadata.table_snapshots.len(), 1);
@@ -183,7 +188,11 @@ mod tests {
 
     #[test]
     fn test_get_nonexistent_table() {
-        let metadata = MigrationMetadata::new(1, "test".to_string(), "CREATE TABLE test (id INT);".to_string());
+        let metadata = MigrationMetadata::new(
+            1,
+            "test".to_string(),
+            "CREATE TABLE test (id INT);".to_string(),
+        );
         assert!(metadata.get_table_snapshot("nonexistent").is_none());
     }
 }

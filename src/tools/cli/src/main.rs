@@ -110,12 +110,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 确保迁移目录存在
     if !cli.migrations_dir.exists() {
-        fs::create_dir_all(&cli.migrations_dir)
-            .map_err(|e| DbError::Config(i18n::t("cli-dir-create-failed", &[("error", e.to_string())])))?;
+        fs::create_dir_all(&cli.migrations_dir).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-dir-create-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
     }
 
     match &cli.command {
-        Commands::Create { description, directory } => {
+        Commands::Create {
+            description,
+            directory,
+        } => {
             create_migration(description, directory).await?;
         }
         Commands::Up { version } => {
@@ -149,13 +156,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// 创建新的迁移文件
 async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
     // 创建迁移目录（如果不存在）
-    fs::create_dir_all(directory)
-        .map_err(|e| DbError::Config(i18n::t("cli-dir-create-failed", &[("error", e.to_string())])))?;
+    fs::create_dir_all(directory).map_err(|e| {
+        DbError::Config(i18n::t(
+            "cli-dir-create-failed",
+            &[("error", e.to_string())],
+        ))
+    })?;
 
     // 生成时间戳作为版本号
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|e| DbError::Config(i18n::t("cli-timestamp-parse-failed", &[("error", e.to_string())])))?
+        .map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-timestamp-parse-failed",
+                &[("error", e.to_string())],
+            ))
+        })?
         .as_secs();
 
     // 验证并清理描述，防止路径遍历和特殊字符攻击
@@ -165,7 +181,9 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
         .collect::<String>();
 
     if sanitized_description.is_empty() {
-        return Err(DbError::Config(i18n::t_simple("cli-desc-special-chars-only")));
+        return Err(DbError::Config(i18n::t_simple(
+            "cli-desc-special-chars-only",
+        )));
     }
 
     if sanitized_description.len() > 100 {
@@ -192,12 +210,19 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
         created_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
     );
 
-    fs::write(&filepath, migration_content)
-        .map_err(|e| DbError::Config(i18n::t("cli-file-write-failed", &[("error", e.to_string())])))?;
+    fs::write(&filepath, migration_content).map_err(|e| {
+        DbError::Config(i18n::t(
+            "cli-file-write-failed",
+            &[("error", e.to_string())],
+        ))
+    })?;
 
     println!(
         "{}",
-        i18n::t("cli-migration-created", &[("path", filepath.display().to_string())])
+        i18n::t(
+            "cli-migration-created",
+            &[("path", filepath.display().to_string())]
+        )
     );
 
     Ok(())
@@ -213,25 +238,41 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
     let pool = match DbPool::new(database_url).await {
         Ok(pool) => pool,
         Err(e) => {
-            println!("\n{}", i18n::t("cli-db-connect-failed", &[("error", e.to_string())]));
+            println!(
+                "\n{}",
+                i18n::t("cli-db-connect-failed", &[("error", e.to_string())])
+            );
             return Ok(());
         }
     };
 
     // 获取数据库类型
-    let db_type = detect_database_type(database_url)
-        .map_err(|e| DbError::Config(i18n::t("cli-db-type-detect-failed", &[("error", e.to_string())])))?;
-    println!("\n{}", i18n::t("cli-db-type", &[("type", db_type.to_string())]));
+    let db_type = detect_database_type(database_url).map_err(|e| {
+        DbError::Config(i18n::t(
+            "cli-db-type-detect-failed",
+            &[("error", e.to_string())],
+        ))
+    })?;
+    println!(
+        "\n{}",
+        i18n::t("cli-db-type", &[("type", db_type.to_string())])
+    );
     println!(
         "{}",
-        i18n::t("cli-migrations-dir", &[("path", migrations_dir.display().to_string())])
+        i18n::t(
+            "cli-migrations-dir",
+            &[("path", migrations_dir.display().to_string())]
+        )
     );
 
     // 加载迁移历史
     let session = match pool.get_session("admin").await {
         Ok(session) => session,
         Err(e) => {
-            println!("\n{}", i18n::t("cli-session-failed", &[("error", e.to_string())]));
+            println!(
+                "\n{}",
+                i18n::t("cli-session-failed", &[("error", e.to_string())])
+            );
             return Ok(());
         }
     };
@@ -239,7 +280,10 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
     let mut executor = session.create_migration_executor(db_type)?;
 
     if let Err(e) = executor.load_history().await {
-        println!("\n{}", i18n::t("cli-history-load-failed", &[("error", e.to_string())]));
+        println!(
+            "\n{}",
+            i18n::t("cli-history-load-failed", &[("error", e.to_string())])
+        );
         println!("   {}", i18n::t_simple("cli-history-table-missing"));
         return Ok(());
     }
@@ -262,7 +306,10 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
             println!("   {}", i18n::t_simple("cli-latest-migration"));
             println!(
                 "{}",
-                i18n::t("cli-version", &[("version", latest_migration.version.to_string())])
+                i18n::t(
+                    "cli-version",
+                    &[("version", latest_migration.version.to_string())]
+                )
             );
             println!(
                 "{}",
@@ -273,7 +320,10 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
             );
             println!(
                 "{}",
-                i18n::t("cli-applied-at", &[("time", latest_migration.applied_at.to_string())])
+                i18n::t(
+                    "cli-applied-at",
+                    &[("time", latest_migration.applied_at.to_string())]
+                )
             );
         }
 
@@ -298,7 +348,10 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
 
     println!(
         "\n{}",
-        i18n::t("cli-local-files", &[("count", local_migrations.len().to_string())])
+        i18n::t(
+            "cli-local-files",
+            &[("count", local_migrations.len().to_string())]
+        )
     );
     println!(
         "{}",
@@ -336,7 +389,10 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
 
     // 显示数据库连接信息
     println!("\n{}", i18n::t_simple("cli-db-connected"));
-    println!("{}", i18n::t("cli-db-url", &[("url", mask_database_url(database_url))]));
+    println!(
+        "{}",
+        i18n::t("cli-db-url", &[("url", mask_database_url(database_url))])
+    );
 
     println!("\n{}", "─".repeat(60));
 
@@ -356,7 +412,10 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
     let pool = match DbPool::new(database_url).await {
         Ok(pool) => pool,
         Err(e) => {
-            println!("\n{}", i18n::t("cli-connection-failed", &[("error", e.to_string())]));
+            println!(
+                "\n{}",
+                i18n::t("cli-connection-failed", &[("error", e.to_string())])
+            );
             return Err(e);
         }
     };
@@ -377,14 +436,23 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
             })?;
 
             println!("\n{}", i18n::t_simple("cli-connection-success"));
-            println!("\n{}", i18n::t("cli-db-type", &[("type", db_type.to_string())]));
             println!(
-                "{}",
-                i18n::t("cli-connection-time", &[("duration", format!("{:?}", elapsed))])
+                "\n{}",
+                i18n::t("cli-db-type", &[("type", db_type.to_string())])
             );
             println!(
                 "{}",
-                i18n::t("cli-connection-url", &[("url", mask_database_url(database_url))])
+                i18n::t(
+                    "cli-connection-time",
+                    &[("duration", format!("{:?}", elapsed))]
+                )
+            );
+            println!(
+                "{}",
+                i18n::t(
+                    "cli-connection-url",
+                    &[("url", mask_database_url(database_url))]
+                )
             );
 
             // 显示连接池状态
@@ -392,15 +460,24 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
             let status = pool.status();
             println!(
                 "     - {}",
-                i18n::t("cli-total-connections", &[("count", status.total.to_string())])
+                i18n::t(
+                    "cli-total-connections",
+                    &[("count", status.total.to_string())]
+                )
             );
             println!(
                 "     - {}",
-                i18n::t("cli-active-connections", &[("count", status.active.to_string())])
+                i18n::t(
+                    "cli-active-connections",
+                    &[("count", status.active.to_string())]
+                )
             );
             println!(
                 "     - {}",
-                i18n::t("cli-idle-connections", &[("count", status.idle.to_string())])
+                i18n::t(
+                    "cli-idle-connections",
+                    &[("count", status.idle.to_string())]
+                )
             );
         }
         Err(e) => {
@@ -417,7 +494,11 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
 }
 
 /// 运行向上的迁移（应用迁移）
-async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_version: Option<u32>) -> DbResult<()> {
+async fn run_migrations_up(
+    database_url: &str,
+    migrations_dir: &Path,
+    target_version: Option<u32>,
+) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║  {:58}  ║", i18n::t_simple("cli-apply-title"));
     println!("╚══════════════════════════════════════════════════════════════╝");
@@ -425,10 +506,16 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_ver
     let pool = DbPool::new(database_url).await?;
     let db_type = detect_database_type(database_url)?;
 
-    println!("\n{}", i18n::t("cli-db-type", &[("type", db_type.to_string())]));
+    println!(
+        "\n{}",
+        i18n::t("cli-db-type", &[("type", db_type.to_string())])
+    );
     println!(
         "{}",
-        i18n::t("cli-migrations-dir", &[("path", migrations_dir.display().to_string())])
+        i18n::t(
+            "cli-migrations-dir",
+            &[("path", migrations_dir.display().to_string())]
+        )
     );
 
     // 创建迁移执行器
@@ -474,7 +561,10 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_ver
 
     println!(
         "\n📦 {}",
-        i18n::t("cli-found-pending", &[("count", to_apply.len().to_string())])
+        i18n::t(
+            "cli-found-pending",
+            &[("count", to_apply.len().to_string())]
+        )
     );
 
     if let Some(target) = target_version {
@@ -506,7 +596,10 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_ver
                 success_count += 1;
             }
             Err(e) => {
-                println!("❌ {}", i18n::t("cli-connection-failed", &[("error", e.to_string())]));
+                println!(
+                    "❌ {}",
+                    i18n::t("cli-connection-failed", &[("error", e.to_string())])
+                );
                 return Err(e);
             }
         }
@@ -528,7 +621,11 @@ async fn run_migrations_up(database_url: &str, migrations_dir: &Path, target_ver
 }
 
 /// 运行向下的迁移（回滚迁移）
-async fn run_migrations_down(database_url: &str, target_version: Option<u32>, rollback_all: bool) -> DbResult<()> {
+async fn run_migrations_down(
+    database_url: &str,
+    target_version: Option<u32>,
+    rollback_all: bool,
+) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║  {:58}  ║", i18n::t_simple("cli-rollback-title"));
     println!("╚══════════════════════════════════════════════════════════════╝");
@@ -536,7 +633,10 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
     let pool = DbPool::new(database_url).await?;
     let db_type = detect_database_type(database_url)?;
 
-    println!("\n{}", i18n::t("cli-db-type", &[("type", db_type.to_string())]));
+    println!(
+        "\n{}",
+        i18n::t("cli-db-type", &[("type", db_type.to_string())])
+    );
 
     // 创建迁移执行器
     let session = pool.get_session("admin").await?;
@@ -587,7 +687,10 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
     } else if let Some(target) = target_version {
         println!(
             "   {}",
-            i18n::t("cli-mode-rollback-version", &[("version", target.to_string())])
+            i18n::t(
+                "cli-mode-rollback-version",
+                &[("version", target.to_string())]
+            )
         );
     } else {
         println!("   {}", i18n::t_simple("cli-mode-rollback-last"));
@@ -613,7 +716,10 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
             "   {} ",
             i18n::t(
                 "cli-rolling-back",
-                &[("version", version.to_string()), ("description", description.clone())]
+                &[
+                    ("version", version.to_string()),
+                    ("description", description.clone())
+                ]
             )
         );
 
@@ -623,7 +729,10 @@ async fn run_migrations_down(database_url: &str, target_version: Option<u32>, ro
                 success_count += 1;
             }
             Err(e) => {
-                println!("❌ {}", i18n::t("cli-connection-failed", &[("error", e.to_string())]));
+                println!(
+                    "❌ {}",
+                    i18n::t("cli-connection-failed", &[("error", e.to_string())])
+                );
                 // 回滚失败时停止并返回错误，避免状态不一致
                 println!("\n⚠️  {}", i18n::t_simple("cli-rollback-error-stop"));
                 return Err(DbError::Migration(format!(
@@ -682,9 +791,13 @@ async fn rollback_migration(
 
     // 开始事务并执行回滚
     let conn = &executor.connection;
-    let txn: DatabaseTransaction = TransactionTrait::begin(conn).await.map_err(DbError::Connection)?;
+    let txn: DatabaseTransaction = TransactionTrait::begin(conn)
+        .await
+        .map_err(DbError::Connection)?;
 
-    txn.execute_raw(delete_sql).await.map_err(DbError::Connection)?;
+    txn.execute_raw(delete_sql)
+        .await
+        .map_err(DbError::Connection)?;
 
     txn.commit().await.map_err(DbError::Connection)?;
 
@@ -705,7 +818,12 @@ async fn generate_migration(
     // 生成时间戳作为版本号
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|e| DbError::Config(i18n::t("cli-timestamp-parse-failed", &[("error", e.to_string())])))?
+        .map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-timestamp-parse-failed",
+                &[("error", e.to_string())],
+            ))
+        })?
         .as_secs();
 
     // 如果提供了 schema 文件，尝试生成差异 SQL
@@ -714,10 +832,18 @@ async fn generate_migration(
     if let (Some(from), Some(to)) = (from_schema, to_schema) {
         println!("\n📄 {}", i18n::t_simple("cli-parsing-schema"));
 
-        let from_content = fs::read_to_string(from)
-            .map_err(|e| DbError::Config(i18n::t("cli-schema-read-source-failed", &[("error", e.to_string())])))?;
-        let to_content = fs::read_to_string(to)
-            .map_err(|e| DbError::Config(i18n::t("cli-schema-read-target-failed", &[("error", e.to_string())])))?;
+        let from_content = fs::read_to_string(from).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-schema-read-source-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
+        let to_content = fs::read_to_string(to).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-schema-read-target-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
 
         // 生成差异 SQL
         let diff_sql = generate_schema_diff_sql(&from_content, &to_content)?;
@@ -768,17 +894,28 @@ async fn generate_migration(
     if let Some(parent) = output.parent()
         && !parent.exists()
     {
-        fs::create_dir_all(parent)
-            .map_err(|e| DbError::Config(i18n::t("cli-output-dir-create-failed", &[("error", e.to_string())])))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            DbError::Config(i18n::t(
+                "cli-output-dir-create-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
     }
 
     // 写入文件
-    fs::write(output, migration_content)
-        .map_err(|e| DbError::Config(i18n::t("cli-file-write-failed", &[("error", e.to_string())])))?;
+    fs::write(output, migration_content).map_err(|e| {
+        DbError::Config(i18n::t(
+            "cli-file-write-failed",
+            &[("error", e.to_string())],
+        ))
+    })?;
 
     println!(
         "\n✓ {}",
-        i18n::t("cli-migration-created", &[("path", output.display().to_string())])
+        i18n::t(
+            "cli-migration-created",
+            &[("path", output.display().to_string())]
+        )
     );
 
     // 如果生成了实际 SQL，显示摘要
@@ -824,18 +961,27 @@ async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<
         println!("\n⚠️  {}", i18n::t_simple("cli-no-migration-files"));
         println!(
             "   {}",
-            i18n::t("cli-list-directory", &[("path", migrations_dir.display().to_string())])
+            i18n::t(
+                "cli-list-directory",
+                &[("path", migrations_dir.display().to_string())]
+            )
         );
         return Ok(());
     }
 
     println!(
         "\n{}",
-        i18n::t("cli-migrations-dir", &[("path", migrations_dir.display().to_string())])
+        i18n::t(
+            "cli-migrations-dir",
+            &[("path", migrations_dir.display().to_string())]
+        )
     );
     println!(
         "📦 {}\n",
-        i18n::t("cli-list-total-count", &[("count", migrations.len().to_string())])
+        i18n::t(
+            "cli-list-total-count",
+            &[("count", migrations.len().to_string())]
+        )
     );
 
     for (idx, migration) in migrations.iter().enumerate() {
@@ -858,8 +1004,8 @@ async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<
 /// 只返回已知支持的数据库类型，不支持时返回错误
 fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbError> {
     // 尝试解析 URL
-    let url =
-        url::Url::parse(database_url).map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
+    let url = url::Url::parse(database_url)
+        .map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
 
     // 获取协议scheme
     let scheme = url.scheme().to_lowercase();
@@ -869,8 +1015,12 @@ fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbE
         "postgres" | "postgresql" => Ok(MigrationDatabaseType::Postgres),
         "mysql" => Ok(MigrationDatabaseType::MySql),
         "sqlite" | "sqlite3" | "file" => Ok(MigrationDatabaseType::Sqlite),
-        "oci" | "oracle" => Err(DbError::Config("Oracle database is not supported".to_string())),
-        "mssql" | "sqlserver" => Err(DbError::Config("SQL Server database is not supported".to_string())),
+        "oci" | "oracle" => Err(DbError::Config(
+            "Oracle database is not supported".to_string(),
+        )),
+        "mssql" | "sqlserver" => Err(DbError::Config(
+            "SQL Server database is not supported".to_string(),
+        )),
         _ => Err(DbError::Config(format!(
             "Unsupported database protocol: '{}'. Supported protocols: sqlite, postgres, mysql",
             scheme

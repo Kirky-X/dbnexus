@@ -110,7 +110,9 @@ fn test_time_blind_lowercase() {
     );
     // MySQL: benchmark( (小写)
     assert!(
-        contains_sql_injection("select * from users where id = 1 and benchmark(10000000,sha1('test'))"),
+        contains_sql_injection(
+            "select * from users where id = 1 and benchmark(10000000,sha1('test'))"
+        ),
         "应该检测到小写的 'benchmark('"
     );
     // PostgreSQL: pg_sleep( (小写)
@@ -294,7 +296,9 @@ fn test_false_positives_lowercase() {
     );
     // 正常的 insert 语句（小写）
     assert!(
-        !contains_sql_injection("insert into users (name, email) values ('test', 'test@example.com')"),
+        !contains_sql_injection(
+            "insert into users (name, email) values ('test', 'test@example.com')"
+        ),
         "正常的 INSERT 不应被检测为注入"
     );
     // 正常的 update 语句（小写）
@@ -309,7 +313,9 @@ fn test_false_positives_lowercase() {
     );
     // 正常的 join 操作（小写）
     assert!(
-        !contains_sql_injection("select u.name, o.order_id from users u join orders o on u.id = o.user_id"),
+        !contains_sql_injection(
+            "select u.name, o.order_id from users u join orders o on u.id = o.user_id"
+        ),
         "正常的 JOIN 不应被检测为注入"
     );
 }
@@ -352,7 +358,10 @@ fn test_ddl_guard_vs_sql_injection() {
 fn test_complete_sql_security_flow() {
     // 1. 首先检查 SQL 注入（适用于 DML）
     let safe_sql = "SELECT * FROM users WHERE id = 1";
-    assert!(!contains_sql_injection(safe_sql), "安全的 SQL 不应被标记为注入");
+    assert!(
+        !contains_sql_injection(safe_sql),
+        "安全的 SQL 不应被标记为注入"
+    );
 
     // 2. DDL 操作应该通过 DdlGuard
     let ddl_sql = "CREATE TABLE test_table (id INT)";
@@ -373,5 +382,8 @@ fn test_complete_sql_security_flow() {
 
     // 4. 包含注入模式的 DML 应该被检测
     let injection_sql = "SELECT * FROM users WHERE id = 1 OR 1=1";
-    assert!(contains_sql_injection(injection_sql), "包含注入模式的 SQL 应该被检测");
+    assert!(
+        contains_sql_injection(injection_sql),
+        "包含注入模式的 SQL 应该被检测"
+    );
 }

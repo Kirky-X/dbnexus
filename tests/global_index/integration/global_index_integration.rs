@@ -43,7 +43,9 @@ async fn create_global_index() -> GlobalIndex {
 /// TEST-GIDX-INT-001: GlobalIndex 创建测试
 #[tokio::test]
 async fn test_global_index_creation() {
-    let pool = DbPool::new(&get_database_url()).await.expect("Failed to create DbPool");
+    let pool = DbPool::new(&get_database_url())
+        .await
+        .expect("Failed to create DbPool");
     let result = GlobalIndex::new(Arc::new(pool)).await;
 
     assert!(result.is_ok(), "GlobalIndex should be created successfully");
@@ -60,7 +62,10 @@ async fn test_global_index_invalid_connection() {
     let result = DbPool::new("invalid://connection:string").await;
 
     // 应该返回错误
-    assert!(result.is_err(), "Invalid connection string should return error");
+    assert!(
+        result.is_err(),
+        "Invalid connection string should return error"
+    );
 }
 
 /// TEST-GIDX-INT-003: GlobalIndex SQLite 内存数据库创建测试
@@ -81,7 +86,9 @@ async fn test_query_empty_index() {
     let global_index = create_global_index().await;
 
     // 查询不存在的索引
-    let result = global_index.query_by_index("orders", "user_id", "nonexistent").await;
+    let result = global_index
+        .query_by_index("orders", "user_id", "nonexistent")
+        .await;
 
     assert!(result.is_ok(), "Query should succeed even on empty index");
 
@@ -108,7 +115,9 @@ async fn test_query_single_index_entry() {
     assert!(sync_result.is_ok(), "Sync should succeed");
 
     // 查询索引
-    let result = global_index.query_by_index("orders", "user_id", "user_123").await;
+    let result = global_index
+        .query_by_index("orders", "user_id", "user_123")
+        .await;
 
     assert!(result.is_ok(), "Query should succeed");
 
@@ -153,7 +162,9 @@ async fn test_query_multiple_index_entries() {
     assert!(sync_result.is_ok());
 
     // 查询索引
-    let result = global_index.query_by_index("orders", "user_id", "user_123").await;
+    let result = global_index
+        .query_by_index("orders", "user_id", "user_123")
+        .await;
 
     assert!(result.is_ok());
 
@@ -324,7 +335,10 @@ async fn test_update_query_consistency() {
     global_index.batch_sync(vec![entry.clone()]).await.unwrap();
 
     // 第一次查询
-    let result1 = global_index.query_by_index("products", "sku", "SKU-001").await.unwrap();
+    let result1 = global_index
+        .query_by_index("products", "sku", "SKU-001")
+        .await
+        .unwrap();
     assert_eq!(result1.len(), 1);
 
     // 更新
@@ -339,7 +353,10 @@ async fn test_update_query_consistency() {
     global_index.batch_sync(vec![updated_entry]).await.unwrap();
 
     // 第二次查询
-    let result2 = global_index.query_by_index("products", "sku", "SKU-001").await.unwrap();
+    let result2 = global_index
+        .query_by_index("products", "sku", "SKU-001")
+        .await
+        .unwrap();
     assert_eq!(result2.len(), 1);
     assert_eq!(result2[0].shard_id, 10);
 }
@@ -370,7 +387,10 @@ async fn test_index_nonexistent_query() {
         .await
         .unwrap();
 
-    assert!(result.is_empty(), "Should return empty for nonexistent index value");
+    assert!(
+        result.is_empty(),
+        "Should return empty for nonexistent index value"
+    );
 }
 
 /// TEST-GIDX-INT-013: 索引不存在表名查询测试
@@ -384,7 +404,10 @@ async fn test_index_nonexistent_table_query() {
         .await;
 
     assert!(result.is_ok(), "Query should succeed for nonexistent table");
-    assert!(result.unwrap().is_empty(), "Should return empty for nonexistent table");
+    assert!(
+        result.unwrap().is_empty(),
+        "Should return empty for nonexistent table"
+    );
 }
 
 // ============================================================================
@@ -621,7 +644,11 @@ async fn test_index_data_integrity() {
 
     // 查询并验证数据完整性
     let result = global_index
-        .query_by_index("special_table", "complex_key", "value with spaces and 'quotes'")
+        .query_by_index(
+            "special_table",
+            "complex_key",
+            "value with spaces and 'quotes'",
+        )
         .await
         .unwrap();
 
@@ -757,7 +784,10 @@ async fn test_query_parameter_validation() {
     assert!(result.is_ok(), "Query with empty parameters should succeed");
 
     let entries = result.unwrap();
-    assert!(entries.is_empty(), "Empty parameters should return empty result");
+    assert!(
+        entries.is_empty(),
+        "Empty parameters should return empty result"
+    );
 }
 
 /// TEST-GIDX-INT-027: 重复同步测试
@@ -780,8 +810,15 @@ async fn test_duplicate_sync() {
     }
 
     // 应该只有一条记录（upsert 行为）
-    let result = global_index.query_by_index("duplicates", "key", "value").await.unwrap();
-    assert_eq!(result.len(), 1, "Duplicate syncs should result in single entry");
+    let result = global_index
+        .query_by_index("duplicates", "key", "value")
+        .await
+        .unwrap();
+    assert_eq!(
+        result.len(),
+        1,
+        "Duplicate syncs should result in single entry"
+    );
 }
 
 /// TEST-GIDX-INT-028: 混合操作测试
@@ -823,7 +860,10 @@ async fn test_mixed_operations() {
     global_index.batch_sync(vec![updated]).await.unwrap();
 
     // 验证更新
-    let result = global_index.query_by_index("mixed", "key", "value_0").await.unwrap();
+    let result = global_index
+        .query_by_index("mixed", "key", "value_0")
+        .await
+        .unwrap();
     assert_eq!(result[0].shard_id, 100);
 }
 

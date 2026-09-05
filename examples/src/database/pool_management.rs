@@ -54,7 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if status.total >= 5 {
         println!("  ✓ pool-warmup 生效：预建了 {} 个连接", status.total);
     } else {
-        println!("  ⚠ total={} < 5，可能部分预热失败（检查日志）", status.total);
+        println!(
+            "  ⚠ total={} < 5，可能部分预热失败（检查日志）",
+            status.total
+        );
     }
 
     println!();

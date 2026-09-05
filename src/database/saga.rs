@@ -139,7 +139,9 @@ pub struct InMemorySagaLog {
 impl InMemorySagaLog {
     /// 创建内存日志存储
     pub fn new() -> Self {
-        Self { logs: DashMap::new() }
+        Self {
+            logs: DashMap::new(),
+        }
     }
 
     /// 获取指定 saga 的日志
@@ -231,8 +233,11 @@ impl SagaOrchestrator {
         let mut completed_names: Vec<String> = Vec::new();
 
         // 预建步骤名→索引映射，补偿时 O(1) 查找替代线性扫描
-        let step_index_map: HashMap<&str, usize> =
-            steps.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
+        let step_index_map: HashMap<&str, usize> = steps
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.name.as_str(), i))
+            .collect();
 
         // 顺序执行每个步骤
         for step in &steps {
@@ -261,10 +266,14 @@ impl SagaOrchestrator {
 
                         // 逆序补偿已完成步骤
                         let mut compensated: Vec<String> = Vec::new();
-                        self.saga_log.update_status(&saga_id, SagaStatus::Compensating);
+                        self.saga_log
+                            .update_status(&saga_id, SagaStatus::Compensating);
 
-                        for (completed_name, completed_shard_id, _) in completed_steps.iter().rev() {
-                            if let Ok(Some(session)) = self.router.get_session(*completed_shard_id).await {
+                        for (completed_name, completed_shard_id, _) in completed_steps.iter().rev()
+                        {
+                            if let Ok(Some(session)) =
+                                self.router.get_session(*completed_shard_id).await
+                            {
                                 // O(1) 查找原始步骤的 compensation
                                 if let Some(&idx) = step_index_map.get(completed_name.as_str())
                                     && let Ok(()) = steps[idx].compensation.execute(&session).await

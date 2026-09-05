@@ -30,7 +30,8 @@ fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<St
     }
 
     // 验证标识符格式：只允许字母、数字、下划线，且不能以数字开头
-    static IDENTIFIER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap());
+    static IDENTIFIER_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap());
 
     if !IDENTIFIER_REGEX.is_match(identifier) {
         return Err(format!(
@@ -198,7 +199,10 @@ pub struct SchemaDiffer {
 impl SchemaDiffer {
     /// 创建新的 SchemaDiffer
     pub fn new(old_schema: Schema, new_schema: Schema) -> Self {
-        Self { old_schema, new_schema }
+        Self {
+            old_schema,
+            new_schema,
+        }
     }
 
     /// 计算差异并生成 Migration
@@ -442,11 +446,19 @@ impl SqlGenerator {
     }
 
     /// 生成列定义
-    fn generate_column_definition(&self, column: &Column, _pk_columns: &[String]) -> Result<String, String> {
+    fn generate_column_definition(
+        &self,
+        column: &Column,
+        _pk_columns: &[String],
+    ) -> Result<String, String> {
         // 验证列名
         let column_name = validate_sql_identifier(&column.name, "列名")?;
 
-        let mut def = format!("    {} {}", column_name, column.column_type.to_sql(self.db_type));
+        let mut def = format!(
+            "    {} {}",
+            column_name,
+            column.column_type.to_sql(self.db_type)
+        );
 
         // 自增列不需要指定
         if column.is_auto_increment && column.is_primary_key {
@@ -506,8 +518,10 @@ impl SqlGenerator {
         let table_name = validate_sql_identifier(&fk.table_name, "外键表名")?;
         let constraint_name = validate_sql_identifier(&fk.name, "外键约束名")?;
         let column_name = validate_sql_identifier(&fk.column_name, "外键列名")?;
-        let referenced_table_name = validate_sql_identifier(&fk.referenced_table_name, "外键引用表名")?;
-        let referenced_column_name = validate_sql_identifier(&fk.referenced_column_name, "外键引用列名")?;
+        let referenced_table_name =
+            validate_sql_identifier(&fk.referenced_table_name, "外键引用表名")?;
+        let referenced_column_name =
+            validate_sql_identifier(&fk.referenced_column_name, "外键引用列名")?;
 
         let mut sql = format!(
             "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({})",
@@ -533,7 +547,11 @@ impl SqlGenerator {
     }
 
     /// 生成添加列的 SQL
-    pub fn generate_add_column_sql(&self, table_name: &str, column: &Column) -> Result<String, String> {
+    pub fn generate_add_column_sql(
+        &self,
+        table_name: &str,
+        column: &Column,
+    ) -> Result<String, String> {
         // 验证表名
         let validated_table_name = validate_sql_identifier(table_name, "表名")?;
 
@@ -546,7 +564,11 @@ impl SqlGenerator {
     }
 
     /// 生成删除列的 SQL
-    pub fn generate_drop_column_sql(&self, table_name: &str, column_name: &str) -> Result<String, String> {
+    pub fn generate_drop_column_sql(
+        &self,
+        table_name: &str,
+        column_name: &str,
+    ) -> Result<String, String> {
         // 验证表名和列名
         let validated_table_name = validate_sql_identifier(table_name, "表名")?;
         let validated_column_name = validate_sql_identifier(column_name, "列名")?;
@@ -637,7 +659,10 @@ impl SqlGenerator {
 
                     for fk_name in removed_foreign_keys {
                         sql.push_str(&format!("-- 删除外键: {}\n", fk_name));
-                        sql.push_str(&format!("ALTER TABLE {} DROP CONSTRAINT {};\n", table_name, fk_name));
+                        sql.push_str(&format!(
+                            "ALTER TABLE {} DROP CONSTRAINT {};\n",
+                            table_name, fk_name
+                        ));
                     }
 
                     sql.push('\n');
@@ -776,7 +801,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table).expect("Failed to generate SQL");
+        let sql = pg
+            .generate_create_table_sql(&table)
+            .expect("Failed to generate SQL");
 
         assert!(sql.contains("CREATE TABLE users"));
         assert!(sql.contains("id INTEGER"));
@@ -921,7 +948,12 @@ mod tests {
 
     // ===== SchemaDiffer 测试 =====
 
-    fn make_column(name: &str, col_type: ColumnType, nullable: bool, default: Option<&str>) -> Column {
+    fn make_column(
+        name: &str,
+        col_type: ColumnType,
+        nullable: bool,
+        default: Option<&str>,
+    ) -> Column {
         Column {
             name: name.to_string(),
             column_type: col_type,
@@ -947,7 +979,10 @@ mod tests {
 
     #[test]
     fn test_diff_no_changes() {
-        let table = make_table("users", vec![make_column("id", ColumnType::Integer, false, None)]);
+        let table = make_table(
+            "users",
+            vec![make_column("id", ColumnType::Integer, false, None)],
+        );
         let mut old_schema = Schema::new(DatabaseType::Postgres);
         let mut new_schema = Schema::new(DatabaseType::Postgres);
         old_schema.add_table(table.clone());
@@ -960,8 +995,14 @@ mod tests {
 
     #[test]
     fn test_diff_column_type_changed() {
-        let old_table = make_table("users", vec![make_column("age", ColumnType::Integer, true, None)]);
-        let new_table = make_table("users", vec![make_column("age", ColumnType::BigInteger, true, None)]);
+        let old_table = make_table(
+            "users",
+            vec![make_column("age", ColumnType::Integer, true, None)],
+        );
+        let new_table = make_table(
+            "users",
+            vec![make_column("age", ColumnType::BigInteger, true, None)],
+        );
         let mut old_schema = Schema::new(DatabaseType::Postgres);
         let mut new_schema = Schema::new(DatabaseType::Postgres);
         old_schema.add_table(old_table);
@@ -983,7 +1024,10 @@ mod tests {
 
     #[test]
     fn test_diff_column_nullability_changed() {
-        let old_table = make_table("users", vec![make_column("name", ColumnType::String(None), true, None)]);
+        let old_table = make_table(
+            "users",
+            vec![make_column("name", ColumnType::String(None), true, None)],
+        );
         let new_table = make_table(
             "users",
             vec![make_column("name", ColumnType::String(None), false, None)],
@@ -1222,11 +1266,15 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = pg
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         assert!(sql.contains("CREATE TABLE orders"));
         assert!(sql.contains("PRIMARY KEY (id)"));
         assert!(sql.contains("CREATE INDEX idx_user_id ON orders (user_id)"));
-        assert!(sql.contains("ALTER TABLE orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)"));
+        assert!(sql.contains(
+            "ALTER TABLE orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)"
+        ));
         assert!(sql.contains("ON DELETE CASCADE"));
     }
 
@@ -1248,7 +1296,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = pg
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         assert!(sql.contains("CREATE UNIQUE INDEX idx_email ON users (email)"));
     }
 
@@ -1288,7 +1338,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = mysql.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = mysql
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         assert!(sql.contains("AUTO_INCREMENT"));
     }
 
@@ -1313,7 +1365,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = sqlite.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = sqlite
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         assert!(sql.contains("PRIMARY KEY AUTOINCREMENT"));
     }
 
@@ -1338,7 +1392,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = pg
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         assert!(sql.contains("DEFAULT 0"));
     }
 
@@ -1354,7 +1410,9 @@ mod tests {
             comment: None,
         };
 
-        let sql = pg.generate_create_table_sql(&table).expect("SQL generation failed");
+        let sql = pg
+            .generate_create_table_sql(&table)
+            .expect("SQL generation failed");
         // nullable 列不应包含 NOT NULL
         assert!(!sql.contains("NOT NULL"));
     }
@@ -1370,7 +1428,9 @@ mod tests {
             is_constraint: false,
         };
 
-        let sql = pg.generate_create_index_sql(&index).expect("SQL generation failed");
+        let sql = pg
+            .generate_create_index_sql(&index)
+            .expect("SQL generation failed");
         assert_eq!(sql, "CREATE INDEX idx_name ON users (name)");
     }
 
@@ -1385,8 +1445,13 @@ mod tests {
             is_constraint: false,
         };
 
-        let sql = pg.generate_create_index_sql(&index).expect("SQL generation failed");
-        assert_eq!(sql, "CREATE UNIQUE INDEX idx_multi ON users (first_name, last_name)");
+        let sql = pg
+            .generate_create_index_sql(&index)
+            .expect("SQL generation failed");
+        assert_eq!(
+            sql,
+            "CREATE UNIQUE INDEX idx_multi ON users (first_name, last_name)"
+        );
     }
 
     #[test]
@@ -1422,7 +1487,9 @@ mod tests {
     #[test]
     fn test_generate_drop_table_sql() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
-        let sql = pg.generate_drop_table_sql("users").expect("SQL generation failed");
+        let sql = pg
+            .generate_drop_table_sql("users")
+            .expect("SQL generation failed");
         assert_eq!(sql, "DROP TABLE users;");
     }
 
@@ -1514,7 +1581,9 @@ mod tests {
             vec![make_column("id", ColumnType::Integer, false, None)],
         )));
 
-        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        let sql = pg
+            .generate_migration_sql(&migration)
+            .expect("SQL generation failed");
         assert!(sql.contains("-- 创建表: users"));
         assert!(sql.contains("CREATE TABLE users"));
     }
@@ -1527,7 +1596,9 @@ mod tests {
             table_name: "users".to_string(),
         });
 
-        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        let sql = pg
+            .generate_migration_sql(&migration)
+            .expect("SQL generation failed");
         assert!(sql.contains("-- 删除表: users"));
         assert!(sql.contains("DROP TABLE users;"));
     }
@@ -1561,7 +1632,9 @@ mod tests {
             removed_foreign_keys: vec!["fk_old".to_string()],
         });
 
-        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        let sql = pg
+            .generate_migration_sql(&migration)
+            .expect("SQL generation failed");
         assert!(sql.contains("-- 修改表: users"));
         assert!(sql.contains("-- 添加列: age"));
         assert!(sql.contains("ALTER TABLE users ADD age INTEGER;"));
@@ -1572,7 +1645,9 @@ mod tests {
         assert!(sql.contains("-- 删除索引: idx_old"));
         assert!(sql.contains("DROP INDEX idx_old;"));
         assert!(sql.contains("-- 添加外键: fk_role"));
-        assert!(sql.contains("ALTER TABLE users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id)"));
+        assert!(sql.contains(
+            "ALTER TABLE users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id)"
+        ));
         assert!(sql.contains("ON DELETE SET NULL"));
         assert!(sql.contains("-- 删除外键: fk_old"));
         assert!(sql.contains("ALTER TABLE users DROP CONSTRAINT fk_old;"));
@@ -1583,7 +1658,9 @@ mod tests {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
         let migration = Migration::new(1, "empty".to_string());
 
-        let sql = pg.generate_migration_sql(&migration).expect("SQL generation failed");
+        let sql = pg
+            .generate_migration_sql(&migration)
+            .expect("SQL generation failed");
         assert!(sql.is_empty());
     }
 
@@ -1627,7 +1704,10 @@ mod tests {
             directory: "migrations".to_string(),
         };
         match cmd {
-            MigrationCommand::Create { description, directory } => {
+            MigrationCommand::Create {
+                description,
+                directory,
+            } => {
                 assert_eq!(description, "init");
                 assert_eq!(directory, "migrations");
             }
@@ -1650,9 +1730,13 @@ mod tests {
 
     #[test]
     fn test_migration_command_up_no_target() {
-        let cmd = MigrationCommand::Up { target_version: None };
+        let cmd = MigrationCommand::Up {
+            target_version: None,
+        };
         match cmd {
-            MigrationCommand::Up { target_version: None } => {}
+            MigrationCommand::Up {
+                target_version: None,
+            } => {}
             _ => panic!("expected Up with no target"),
         }
     }

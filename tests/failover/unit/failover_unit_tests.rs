@@ -38,7 +38,10 @@ fn test_failover_config_default_threshold() {
 #[test]
 fn test_failover_config_serde_roundtrip() {
     let config = FailoverConfig {
-        urls: vec!["postgres://host1/db".to_string(), "postgres://host2/db".to_string()],
+        urls: vec![
+            "postgres://host1/db".to_string(),
+            "postgres://host2/db".to_string(),
+        ],
         health_check_query: Some("SELECT 1".to_string()),
         failover_threshold: 5,
     };

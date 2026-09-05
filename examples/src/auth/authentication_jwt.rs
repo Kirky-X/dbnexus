@@ -134,7 +134,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // verify_token 使用 leeway = 0 严格过期检查，2s 后 token 必定失效
     println!("\n  测试过期 token (1s 过期，等待 2s)...");
     let expiring_manager = JwtManager::with_expiration(secret, 1, 1);
-    let expiring_token = expiring_manager.generate_token(user_id, username, role, TokenType::Access)?;
+    let expiring_token =
+        expiring_manager.generate_token(user_id, username, role, TokenType::Access)?;
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     let expired_result = expiring_manager.verify_token(&expiring_token);
     match &expired_result {

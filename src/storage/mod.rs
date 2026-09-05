@@ -9,5 +9,6 @@ pub mod global_index;
 
 #[cfg(feature = "global-index")]
 pub use global_index::{
-    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
+    GlobalIndex, IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED,
+    SyncEvent, SyncResult,
 };

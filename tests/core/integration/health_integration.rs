@@ -8,7 +8,8 @@
 mod health_tests {
     use dbnexus::DbPool;
     use dbnexus::{
-        CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus, PoolHealthMetrics,
+        CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus,
+        PoolHealthMetrics,
     };
     use std::sync::Arc;
     use std::time::Duration;
@@ -192,7 +193,8 @@ mod health_tests {
         let checker = HealthChecker::new(1);
         let result = checker.check().await;
         assert!(
-            matches!(result.status, HealthStatus::Degraded(_)) || matches!(result.status, HealthStatus::Unhealthy(_))
+            matches!(result.status, HealthStatus::Degraded(_))
+                || matches!(result.status, HealthStatus::Unhealthy(_))
         );
         assert!(result.latency > Duration::ZERO);
     }

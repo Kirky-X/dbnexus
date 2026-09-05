@@ -87,7 +87,11 @@ pub struct ScatterGatherExecutor {
 
 impl ScatterGatherExecutor {
     /// 创建执行器
-    pub fn new(router: Arc<ShardRouter>, timeout: Duration, partial_failure: PartialFailurePolicy) -> Self {
+    pub fn new(
+        router: Arc<ShardRouter>,
+        timeout: Duration,
+        partial_failure: PartialFailurePolicy,
+    ) -> Self {
         Self {
             router,
             timeout,

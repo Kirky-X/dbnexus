@@ -256,7 +256,9 @@ mod tests {
 
     #[test]
     fn test_builder_max_connections_with_url_only() {
-        let builder = DbPoolBuilder::new().url("sqlite::memory:").max_connections(30);
+        let builder = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .max_connections(30);
         let config = builder.config.unwrap();
         assert_eq!(config.pool_config.max_connections, 30);
         assert_eq!(config.url, "sqlite::memory:");
@@ -281,7 +283,9 @@ mod tests {
 
     #[test]
     fn test_builder_min_connections_with_url_only() {
-        let builder = DbPoolBuilder::new().url("sqlite::memory:").min_connections(5);
+        let builder = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .min_connections(5);
         let config = builder.config.unwrap();
         assert_eq!(config.pool_config.min_connections, 5);
     }
@@ -348,7 +352,8 @@ mod tests {
             fn get<'a>(
                 &'a self,
                 _key: &'a str,
-            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>
+            {
                 Box::pin(async { Ok(None) })
             }
             fn set<'a>(
@@ -359,7 +364,10 @@ mod tests {
             ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
-            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+            fn delete<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
         }
@@ -369,7 +377,10 @@ mod tests {
         assert!(builder.cache_provider.is_some());
     }
 
-    #[cfg(all(any(feature = "cache", feature = "oxcache-integration"), feature = "sqlite"))]
+    #[cfg(all(
+        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "sqlite"
+    ))]
     #[tokio::test]
     async fn test_builder_build_with_cache_provider() {
         use crate::foundation::DbError;
@@ -381,7 +392,8 @@ mod tests {
             fn get<'a>(
                 &'a self,
                 _key: &'a str,
-            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>> {
+            ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, DbError>> + Send + 'a>>
+            {
                 Box::pin(async { Ok(None) })
             }
             fn set<'a>(
@@ -392,7 +404,10 @@ mod tests {
             ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
-            fn delete<'a>(&'a self, _key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
+            fn delete<'a>(
+                &'a self,
+                _key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Send + 'a>> {
                 Box::pin(async { Ok(()) })
             }
         }

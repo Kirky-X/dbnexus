@@ -216,7 +216,8 @@ impl ConsistentHashStrategy {
         use std::hash::{Hash, Hasher};
 
         // 生成所有虚拟节点位置并排序
-        let mut positions: Vec<(u64, u32)> = Vec::with_capacity(total_shards as usize * virtual_nodes as usize);
+        let mut positions: Vec<(u64, u32)> =
+            Vec::with_capacity(total_shards as usize * virtual_nodes as usize);
 
         for shard_id in 0..total_shards {
             for vnode in 0..virtual_nodes {
@@ -402,10 +403,15 @@ impl ShardRouter {
             .collect();
 
         // 使用 FuturesUnordered 并行执行
-        let mut pool_stream = stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
+        let mut pool_stream =
+            stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
 
         // 收集结果
-        let mut results: Vec<(u32, String, Result<crate::database::DbPool, crate::foundation::DbError>)> = Vec::new();
+        let mut results: Vec<(
+            u32,
+            String,
+            Result<crate::database::DbPool, crate::foundation::DbError>,
+        )> = Vec::new();
 
         while let Some(result) = pool_stream.next().await {
             results.push(result);
@@ -424,7 +430,11 @@ impl ShardRouter {
                 }
                 Err(_e) => {
                     // 连接池创建失败，但仍注册分片
-                    router.register_shard(shard_id, name, format!("{}_{}", config.prefix, shard_id));
+                    router.register_shard(
+                        shard_id,
+                        name,
+                        format!("{}_{}", config.prefix, shard_id),
+                    );
                 }
             }
         }
@@ -437,7 +447,11 @@ impl ShardRouter {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
         for (shard_id, connection_string) in config.generate_all_connections() {
-            router.register_shard(shard_id, format!("{}_{}", config.prefix, shard_id), connection_string);
+            router.register_shard(
+                shard_id,
+                format!("{}_{}", config.prefix, shard_id),
+                connection_string,
+            );
         }
 
         router
@@ -806,8 +820,16 @@ mod tests {
         let mut router = ShardRouter::with_strategy("yearly", 12);
 
         // 2024 % 12 = 8, so register shard 8
-        router.register_shard(8, "db_2024".to_string(), "sqlite:./data/db_2024.db".to_string());
-        router.register_shard(5, "db_2025".to_string(), "sqlite:./data/db_2025.db".to_string());
+        router.register_shard(
+            8,
+            "db_2024".to_string(),
+            "sqlite:./data/db_2024.db".to_string(),
+        );
+        router.register_shard(
+            5,
+            "db_2025".to_string(),
+            "sqlite:./data/db_2025.db".to_string(),
+        );
 
         let dt = Utc.with_ymd_and_hms(2024, 6, 15, 0, 0, 0).unwrap();
         let calculated_shard = router.calculate_shard(dt, "");
@@ -825,7 +847,10 @@ mod tests {
     fn test_shard_config() {
         let config = ShardConfig::new("yearly", 12, "order", "postgresql://localhost/{shard}");
 
-        assert_eq!(config.generate_connection_string(4), "postgresql://localhost/order_4");
+        assert_eq!(
+            config.generate_connection_string(4),
+            "postgresql://localhost/order_4"
+        );
         assert_eq!(config.strategy, "yearly");
     }
 
@@ -853,7 +878,10 @@ mod tests {
         let shard1 = invalid_strategy.calculate(test_time, 12);
         let shard2 = default_strategy.calculate(test_time, 12);
 
-        assert_eq!(shard1, shard2, "Invalid strategy should fall back to default");
+        assert_eq!(
+            shard1, shard2,
+            "Invalid strategy should fall back to default"
+        );
     }
 
     #[test]
@@ -921,7 +949,9 @@ mod tests {
     fn test_consistent_hash_low_migration() {
         let strategy = ConsistentHashStrategy::default();
         let times: Vec<DateTime<Utc>> = (0..1000)
-            .map(|i| Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + chrono::Duration::seconds(i))
+            .map(|i| {
+                Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + chrono::Duration::seconds(i)
+            })
             .collect();
 
         // 计算 N=4 时的分片分配

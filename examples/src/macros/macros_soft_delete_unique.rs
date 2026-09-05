@@ -124,13 +124,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 验证 find_all 不返回软删除记录
     let active = Model::find_all(&session).await?;
     assert!(active.is_empty(), "find_all 不应返回软删除记录");
-    println!("  ✓ find_all() 返回 {} 条记录（已过滤软删除）", active.len());
+    println!(
+        "  ✓ find_all() 返回 {} 条记录（已过滤软删除）",
+        active.len()
+    );
 
     // 验证 find_with_deleted 返回软删除记录
     let with_deleted = Model::find_with_deleted(&session).await?;
-    assert_eq!(with_deleted.len(), 1, "find_with_deleted 应返回 1 条（含软删除）");
-    assert!(with_deleted[0].deleted_at.is_some(), "软删除记录的 deleted_at 应已设置");
-    println!("  ✓ find_with_deleted() 返回 {} 条记录（含软删除）", with_deleted.len());
+    assert_eq!(
+        with_deleted.len(),
+        1,
+        "find_with_deleted 应返回 1 条（含软删除）"
+    );
+    assert!(
+        with_deleted[0].deleted_at.is_some(),
+        "软删除记录的 deleted_at 应已设置"
+    );
+    println!(
+        "  ✓ find_with_deleted() 返回 {} 条记录（含软删除）",
+        with_deleted.len()
+    );
 
     // ============================================
     // 4. 用同一 email 重新注册（关键演示）
@@ -172,21 +185,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // find_with_deleted 返回全部记录（id=1 软删除 + id=2 活跃）
     let all = Model::find_with_deleted(&session).await?;
     assert_eq!(all.len(), 2, "应有 2 条记录（含软删除）");
-    println!("\n  ✓ find_with_deleted() 返回 {} 条记录（含软删除）:", all.len());
+    println!(
+        "\n  ✓ find_with_deleted() 返回 {} 条记录（含软删除）:",
+        all.len()
+    );
     for m in &all {
         let status = if m.deleted_at.is_some() {
             "已软删除"
         } else {
             "活跃"
         };
-        println!("    - id={}, email={}, name={}, 状态={}", m.id, m.email, m.name, status);
+        println!(
+            "    - id={}, email={}, name={}, 状态={}",
+            m.id, m.email, m.name, status
+        );
     }
 
     // find_only_deleted 仅返回软删除记录（id=1）
     let deleted = Model::find_only_deleted(&session).await?;
     assert_eq!(deleted.len(), 1, "应有 1 条软删除记录");
     assert_eq!(deleted[0].id, 1, "软删除记录应为 id=1");
-    println!("\n  ✓ find_only_deleted() 返回 {} 条软删除记录:", deleted.len());
+    println!(
+        "\n  ✓ find_only_deleted() 返回 {} 条软删除记录:",
+        deleted.len()
+    );
     for m in &deleted {
         println!(
             "    - id={}, email={}, name={}, deleted_at={:?}",
@@ -212,7 +234,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  SQLite/PostgreSQL 中 NULL 在唯一约束里互不相同，");
     println!("  UNIQUE(email, deleted_at) 不能阻止两条活跃记录（deleted_at=NULL）拥有相同 email。");
     println!("  应额外创建部分唯一索引：");
-    println!("    CREATE UNIQUE INDEX idx_members_email_active ON members(email) WHERE deleted_at IS NULL;");
+    println!(
+        "    CREATE UNIQUE INDEX idx_members_email_active ON members(email) WHERE deleted_at IS NULL;"
+    );
 
     Ok(())
 }

@@ -6,8 +6,8 @@
 
 use dbnexus::foundation::DatabaseType;
 use dbnexus::{
-    Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema, SchemaDiffer, SqlGenerator,
-    Table, TableChange,
+    Column, ColumnType, Index, Migration, MigrationFileParser, MigrationHistory, Schema,
+    SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 
 /// TEST-M-U-001: 迁移历史创建测试
@@ -444,12 +444,18 @@ fn test_column_type_to_sql() {
     assert_eq!(sqlite.generate_column_def(&ColumnType::Boolean), "INTEGER");
 
     // String
-    assert_eq!(pg.generate_column_def(&ColumnType::String(Some(100))), "VARCHAR(100)");
+    assert_eq!(
+        pg.generate_column_def(&ColumnType::String(Some(100))),
+        "VARCHAR(100)"
+    );
     assert_eq!(
         mysql.generate_column_def(&ColumnType::String(Some(100))),
         "VARCHAR(100)"
     );
-    assert_eq!(sqlite.generate_column_def(&ColumnType::String(Some(100))), "TEXT");
+    assert_eq!(
+        sqlite.generate_column_def(&ColumnType::String(Some(100))),
+        "TEXT"
+    );
 
     // JSON
     assert_eq!(pg.generate_column_def(&ColumnType::Json), "JSONB");

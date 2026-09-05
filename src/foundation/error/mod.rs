@@ -306,7 +306,10 @@ mod tests {
     #[test]
     fn test_pool_error_display() {
         let error = PoolError::AcquireTimeout;
-        assert_eq!(error.to_string(), "Failed to acquire connection within timeout");
+        assert_eq!(
+            error.to_string(),
+            "Failed to acquire connection within timeout"
+        );
 
         let error = PoolError::ConnectionFailed("network issue".to_string());
         assert!(error.to_string().contains("network issue"));

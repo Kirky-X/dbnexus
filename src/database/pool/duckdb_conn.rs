@@ -124,8 +124,11 @@ impl DuckDbConnection {
     pub fn with_pool_size(url: &str, pool_size: usize) -> Result<Self, DbError> {
         let pool_size = pool_size.max(1);
         let db_path = Self::parse_url(url);
-        let primary = duckdb::Connection::open(&db_path)
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB connection failed: {e}"))))?;
+        let primary = duckdb::Connection::open(&db_path).map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "DuckDB connection failed: {e}"
+            )))
+        })?;
 
         // 通过 try_clone 创建多个连接共享同一个数据库
         let mut pool = Vec::with_capacity(pool_size);
@@ -226,16 +229,20 @@ impl DuckDbConnection {
         let sql_owned = sql.to_string();
         let handle: JoinHandle<DbResult<(duckdb::Connection, DuckDbExecResult)>> =
             tokio::task::spawn_blocking(move || {
-                let rows_affected = conn
-                    .execute(&sql_owned, [])
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB execute failed: {e}"))))?;
+                let rows_affected = conn.execute(&sql_owned, []).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB execute failed: {e}"
+                    )))
+                })?;
                 Ok((conn, DuckDbExecResult { rows_affected }))
             });
 
         // permit 必须在 handle.await 之后 drop
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
         drop(permit);
 
         // 短锁：归还连接
@@ -267,9 +274,11 @@ impl DuckDbConnection {
         let sql_owned = sql.to_string();
         let handle: JoinHandle<DbResult<(duckdb::Connection, Vec<DuckDbRow>)>> =
             tokio::task::spawn_blocking(move || {
-                let mut stmt = conn
-                    .prepare(&sql_owned)
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB prepare failed: {e}"))))?;
+                let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB prepare failed: {e}"
+                    )))
+                })?;
 
                 // 使用 query_map 在闭包内通过 row.as_ref() 获取列信息
                 let rows = stmt
@@ -277,7 +286,13 @@ impl DuckDbConnection {
                         let stmt_ref = row.as_ref();
                         let column_count = stmt_ref.column_count();
                         let column_names: Vec<String> = (0..column_count)
-                            .map(|i| stmt_ref.column_name(i).ok().map(|s| s.to_string()).unwrap_or_default())
+                            .map(|i| {
+                                stmt_ref
+                                    .column_name(i)
+                                    .ok()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default()
+                            })
                             .collect();
 
                         let mut columns = Vec::with_capacity(column_count);
@@ -287,12 +302,18 @@ impl DuckDbConnection {
                         }
                         Ok(DuckDbRow { columns })
                     })
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB query failed: {e}"))))?;
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB query failed: {e}"
+                        )))
+                    })?;
 
                 let mut result = Vec::new();
                 for row_result in rows {
                     let row = row_result.map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB row fetch failed: {e}")))
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB row fetch failed: {e}"
+                        )))
                     })?;
                     result.push(row);
                 }
@@ -302,9 +323,11 @@ impl DuckDbConnection {
             });
 
         // permit 必须在 handle.await 之后 drop
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
         drop(permit);
 
         // 短锁：归还连接
@@ -327,7 +350,11 @@ impl DuckDbConnection {
     ///
     /// * `sql` - 含 `?` 占位符的 SQL 语句
     /// * `params` - 按占位符顺序排列的绑定值（`duckdb::types::Value`）
-    pub async fn execute_with_params(&self, sql: &str, params: Vec<DuckValue>) -> DbResult<DuckDbExecResult> {
+    pub async fn execute_with_params(
+        &self,
+        sql: &str,
+        params: Vec<DuckValue>,
+    ) -> DbResult<DuckDbExecResult> {
         let permit = self.acquire_permit().await?;
 
         let conn = {
@@ -352,9 +379,11 @@ impl DuckDbConnection {
                 Ok((conn, DuckDbExecResult { rows_affected }))
             });
 
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
         drop(permit);
 
         let (conn, exec_result) = result?;
@@ -376,7 +405,11 @@ impl DuckDbConnection {
     ///
     /// * `sql` - 含 `?` 占位符的 SQL 查询语句
     /// * `params` - 按占位符顺序排列的绑定值（`duckdb::types::Value`）
-    pub async fn query_with_params(&self, sql: &str, params: Vec<DuckValue>) -> DbResult<Vec<DuckDbRow>> {
+    pub async fn query_with_params(
+        &self,
+        sql: &str,
+        params: Vec<DuckValue>,
+    ) -> DbResult<Vec<DuckDbRow>> {
         let permit = self.acquire_permit().await?;
 
         let conn = {
@@ -391,16 +424,24 @@ impl DuckDbConnection {
         let sql_owned = sql.to_string();
         let handle: JoinHandle<DbResult<(duckdb::Connection, Vec<DuckDbRow>)>> =
             tokio::task::spawn_blocking(move || {
-                let mut stmt = conn
-                    .prepare(&sql_owned)
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB prepare failed: {e}"))))?;
+                let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB prepare failed: {e}"
+                    )))
+                })?;
 
                 let rows = stmt
                     .query_map(duckdb::params_from_iter(params), |row| {
                         let stmt_ref = row.as_ref();
                         let column_count = stmt_ref.column_count();
                         let column_names: Vec<String> = (0..column_count)
-                            .map(|i| stmt_ref.column_name(i).ok().map(|s| s.to_string()).unwrap_or_default())
+                            .map(|i| {
+                                stmt_ref
+                                    .column_name(i)
+                                    .ok()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default()
+                            })
                             .collect();
 
                         let mut columns = Vec::with_capacity(column_count);
@@ -410,12 +451,18 @@ impl DuckDbConnection {
                         }
                         Ok(DuckDbRow { columns })
                     })
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB query failed: {e}"))))?;
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB query failed: {e}"
+                        )))
+                    })?;
 
                 let mut result = Vec::new();
                 for row_result in rows {
                     let row = row_result.map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB row fetch failed: {e}")))
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB row fetch failed: {e}"
+                        )))
                     })?;
                     result.push(row);
                 }
@@ -423,9 +470,11 @@ impl DuckDbConnection {
                 Ok((conn, result))
             });
 
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
         drop(permit);
 
         let (conn, rows) = result?;
@@ -469,25 +518,34 @@ impl DuckDbConnection {
         let handle: JoinHandle<DbResult<(duckdb::Connection, Vec<DuckDbExecResult>)>> =
             tokio::task::spawn_blocking(move || {
                 let tx = conn.transaction().map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB begin transaction failed: {e}")))
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB begin transaction failed: {e}"
+                    )))
                 })?;
                 let mut results = Vec::with_capacity(statements.len());
                 for (sql, params) in statements {
-                    let rows_affected = tx.execute(&sql, duckdb::params_from_iter(params)).map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB transaction statement failed: {e}"
-                        )))
-                    })?;
+                    let rows_affected = tx
+                        .execute(&sql, duckdb::params_from_iter(params))
+                        .map_err(|e| {
+                            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                "DuckDB transaction statement failed: {e}"
+                            )))
+                        })?;
                     results.push(DuckDbExecResult { rows_affected });
                 }
-                tx.commit()
-                    .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("DuckDB commit failed: {e}"))))?;
+                tx.commit().map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB commit failed: {e}"
+                    )))
+                })?;
                 Ok((conn, results))
             });
 
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join failed: {e}"))))?;
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
         drop(permit);
 
         let (conn, results) = result?;
@@ -523,10 +581,9 @@ impl DuckDbConnection {
     ///
     /// 返回的 `SemaphorePermit` 在 drop 时自动释放，确保不会泄漏。
     async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
-        self.spawn_permit
-            .acquire()
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string())))
+        self.spawn_permit.acquire().await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+        })
     }
 }
 
@@ -553,7 +610,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_duckdb_connection_create_via_url() {
-        let conn = DuckDbConnection::new("duckdb::memory:").expect("Failed to create connection via URL");
+        let conn =
+            DuckDbConnection::new("duckdb::memory:").expect("Failed to create connection via URL");
         let _ = conn;
     }
 
@@ -610,12 +668,16 @@ mod tests {
             DuckDbConnection::parse_url("duckdb://path/to/file.db"),
             "path/to/file.db"
         );
-        assert_eq!(DuckDbConnection::parse_url("/absolute/path.db"), "/absolute/path.db");
+        assert_eq!(
+            DuckDbConnection::parse_url("/absolute/path.db"),
+            "/absolute/path.db"
+        );
     }
 
     #[tokio::test]
     async fn test_duckdb_concurrent_execute_respects_semaphore() {
-        let conn = Arc::new(DuckDbConnection::new(":memory:").expect("Failed to create connection"));
+        let conn =
+            Arc::new(DuckDbConnection::new(":memory:").expect("Failed to create connection"));
         conn.execute("CREATE TABLE concurrent_test (id INTEGER)")
             .await
             .expect("Failed to create table");
@@ -680,8 +742,8 @@ mod tests {
     /// v0.3.0 连接池优化验证：自定义连接池大小
     #[tokio::test]
     async fn test_duckdb_custom_pool_size() {
-        let conn =
-            DuckDbConnection::with_pool_size(":memory:", 2).expect("Failed to create connection with pool size 2");
+        let conn = DuckDbConnection::with_pool_size(":memory:", 2)
+            .expect("Failed to create connection with pool size 2");
         assert_eq!(conn.pool_size(), 2);
 
         // 验证基本功能正常
@@ -705,7 +767,8 @@ mod tests {
     #[tokio::test]
     async fn test_duckdb_pool_concurrent_queries_use_different_connections() {
         let conn = Arc::new(
-            DuckDbConnection::with_pool_size(":memory:", 4).expect("Failed to create connection with pool size 4"),
+            DuckDbConnection::with_pool_size(":memory:", 4)
+                .expect("Failed to create connection with pool size 4"),
         );
 
         // 建表并插入基础数据
@@ -787,7 +850,9 @@ mod tests {
             .expect("query");
         assert_eq!(rows.len(), 2);
         match &rows[0].get("val").expect("should have val") {
-            DuckValue::Double(f) => assert!((*f - (-0.001)).abs() < 1e-10, "first should be -0.001"),
+            DuckValue::Double(f) => {
+                assert!((*f - (-0.001)).abs() < 1e-10, "first should be -0.001")
+            }
             other => panic!("Expected Double, got {:?}", other),
         }
     }
@@ -859,7 +924,9 @@ mod tests {
         conn.execute("CREATE TABLE row_test (id INTEGER)")
             .await
             .expect("create table");
-        conn.execute("INSERT INTO row_test VALUES (42)").await.expect("insert");
+        conn.execute("INSERT INTO row_test VALUES (42)")
+            .await
+            .expect("insert");
 
         let rows = conn.query("SELECT id FROM row_test").await.expect("query");
         assert_eq!(rows.len(), 1);
@@ -867,7 +934,10 @@ mod tests {
             rows[0].get("nonexistent").is_none(),
             "get() with unknown column should return None"
         );
-        assert!(rows[0].get("").is_none(), "get() with empty string should return None");
+        assert!(
+            rows[0].get("").is_none(),
+            "get() with empty string should return None"
+        );
     }
 
     #[tokio::test]
@@ -878,7 +948,10 @@ mod tests {
             .expect("create table");
 
         // 查询空表 — 0 行但列结构已知
-        let rows = conn.query("SELECT a, b, c FROM empty_test").await.expect("query");
+        let rows = conn
+            .query("SELECT a, b, c FROM empty_test")
+            .await
+            .expect("query");
         assert_eq!(rows.len(), 0, "empty table should return 0 rows");
     }
 
@@ -886,13 +959,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_duckdb_connection_debug_format() {
-        let conn = DuckDbConnection::with_pool_size(":memory:", 3).expect("Failed to create connection");
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 3).expect("Failed to create connection");
         let debug_str = format!("{:?}", conn);
         assert!(
             debug_str.contains("DuckDbConnection"),
             "Debug should contain struct name"
         );
-        assert!(debug_str.contains("pool_size: 3"), "Debug should contain pool_size");
+        assert!(
+            debug_str.contains("pool_size: 3"),
+            "Debug should contain pool_size"
+        );
     }
 
     // ===== 文件数据库测试 =====
@@ -940,7 +1017,9 @@ mod tests {
     #[tokio::test]
     async fn test_duckdb_pool_exhaustion_queues_requests() {
         // pool_size=1，只有 1 个连接
-        let conn = Arc::new(DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection"));
+        let conn = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection"),
+        );
         conn.execute("CREATE TABLE queue_test (id INTEGER)")
             .await
             .expect("create table");

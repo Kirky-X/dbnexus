@@ -40,7 +40,8 @@ fn create_cache_sync(capacity: usize) -> Cache<String, RolePolicy> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
             // 在 tokio 运行时内，使用 block_in_place 避免 async 上下文死锁
-            tokio::task::block_in_place(|| handle.block_on(build_future)).expect("Failed to create cache")
+            tokio::task::block_in_place(|| handle.block_on(build_future))
+                .expect("Failed to create cache")
         }
         Err(_) => {
             // 无运行时，创建临时运行时
@@ -92,7 +93,10 @@ impl std::fmt::Debug for PermissionContext {
         f.debug_struct("PermissionContext")
             .field("role", &self.role)
             .field("rate_limiter", &self.rate_limiter.is_some())
-            .field("has_permission_provider", &self.permission_provider.is_some())
+            .field(
+                "has_permission_provider",
+                &self.permission_provider.is_some(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -124,7 +128,10 @@ impl PermissionContext {
     /// # Errors
     ///
     /// 如果 `cache_capacity` 为 0，返回 `InvalidCacheCapacity` 错误
-    pub async fn with_cache_size(role: String, cache_capacity: usize) -> Result<Self, PermissionError> {
+    pub async fn with_cache_size(
+        role: String,
+        cache_capacity: usize,
+    ) -> Result<Self, PermissionError> {
         let policy_cache = Cache::builder()
             .capacity(cache_capacity as u64)
             .build()
@@ -205,7 +212,10 @@ impl PermissionContext {
     ///
     /// let ctx = PermissionContext::with_config("admin".to_string(), &config).await;
     /// ```
-    pub async fn with_config(role: String, config: &crate::foundation::DbConfig) -> Result<Self, PermissionError> {
+    pub async fn with_config(
+        role: String,
+        config: &crate::foundation::DbConfig,
+    ) -> Result<Self, PermissionError> {
         let cache_capacity = config.cache_config.policy_cache_capacity as usize;
         Self::with_cache_size(role, cache_capacity).await
     }
@@ -555,7 +565,12 @@ impl PermissionContext {
     /// 若提供 `conditions`，当前实现会拒绝访问（fail-safe），
     /// 因为行级安全策略需要行级上下文（当前不可用）。
     /// 调用方应使用无条件的 `check_table_access` 进行表级权限检查。
-    pub async fn verify_operation(&self, table: &str, operation: &PermissionAction, conditions: Option<&str>) -> bool {
+    pub async fn verify_operation(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+        conditions: Option<&str>,
+    ) -> bool {
         // 基础权限检查
         if !self.check_table_access(table, operation).await {
             return false;
@@ -581,7 +596,10 @@ impl PermissionContext {
     /// # Returns
     ///
     /// 每个请求的检查结果
-    pub async fn batch_check_permissions(&self, permissions: &[(String, PermissionAction)]) -> Vec<bool> {
+    pub async fn batch_check_permissions(
+        &self,
+        permissions: &[(String, PermissionAction)],
+    ) -> Vec<bool> {
         let mut results = Vec::with_capacity(permissions.len());
 
         for (table, operation) in permissions {
@@ -680,8 +698,14 @@ mod tests {
             .unwrap();
         ctx.load_policy(&config).await.unwrap();
 
-        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
-        assert!(!ctx.check_table_access("users", &PermissionAction::Delete).await);
+        assert!(
+            ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Delete)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -703,7 +727,10 @@ mod tests {
         let ctx = PermissionContext::with_cache_size("missing_role".to_string(), 256)
             .await
             .unwrap();
-        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -722,17 +749,24 @@ mod tests {
             .collect(),
         };
 
-        let ctx = PermissionContext::with_cache_size_and_rate_limit("test_role".to_string(), 256, 1, 60)
-            .await
-            .unwrap();
+        let ctx =
+            PermissionContext::with_cache_size_and_rate_limit("test_role".to_string(), 256, 1, 60)
+                .await
+                .unwrap();
 
         // Load policy first
         ctx.load_policy(&config).await.unwrap();
 
         // First request should succeed
-        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(
+            ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
         // Second request should be rate limited
-        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
     }
 
     // ============================================================================
@@ -768,10 +802,22 @@ mod tests {
         let ctx = PermissionContext::new_with_provider("test_role".to_string(), cache, provider);
 
         // 缓存未命中时应该自动重新加载并检查权限
-        assert!(ctx.check_table_access("users", &PermissionAction::Select).await);
-        assert!(ctx.check_table_access("users", &PermissionAction::Insert).await);
-        assert!(!ctx.check_table_access("users", &PermissionAction::Delete).await);
-        assert!(!ctx.check_table_access("orders", &PermissionAction::Select).await);
+        assert!(
+            ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
+        assert!(
+            ctx.check_table_access("users", &PermissionAction::Insert)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Delete)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access("orders", &PermissionAction::Select)
+                .await
+        );
     }
 
     /// TEST-U-024: 缓存未命中时无权限提供者 - 安全拒绝
@@ -782,7 +828,10 @@ mod tests {
         let ctx = PermissionContext::new("test_role".to_string(), cache);
 
         // 缓存未命中且无权限提供者时应该安全拒绝
-        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
 
         // 验证统计信息
         let stats = ctx.check_stats().snapshot();
@@ -798,10 +847,14 @@ mod tests {
 
         // 创建权限上下文
         let cache = create_test_cache().await;
-        let ctx = PermissionContext::new_with_provider("non_existent_role".to_string(), cache, provider);
+        let ctx =
+            PermissionContext::new_with_provider("non_existent_role".to_string(), cache, provider);
 
         // 角色不存在时应该安全拒绝
-        assert!(!ctx.check_table_access("users", &PermissionAction::Select).await);
+        assert!(
+            !ctx.check_table_access("users", &PermissionAction::Select)
+                .await
+        );
 
         // 验证统计信息
         let stats = ctx.check_stats().snapshot();
@@ -847,7 +900,12 @@ mod tests {
         assert!(result);
 
         // 验证策略已加载到缓存
-        let cached = ctx.policy_cache.get(&"admin".to_string()).await.ok().flatten();
+        let cached = ctx
+            .policy_cache
+            .get(&"admin".to_string())
+            .await
+            .ok()
+            .flatten();
         assert!(cached.is_some());
     }
 
@@ -896,7 +954,10 @@ mod tests {
         let ctx = PermissionContext::new_with_provider("editor".to_string(), cache, provider);
 
         // 首次访问（缓存未命中，自动重新加载）
-        assert!(ctx.check_table_access("articles", &PermissionAction::Select).await);
+        assert!(
+            ctx.check_table_access("articles", &PermissionAction::Select)
+                .await
+        );
 
         // 验证缓存命中
         let stats_after_hit = ctx.check_stats().snapshot();
@@ -906,8 +967,14 @@ mod tests {
         ctx.clear_cache().await;
 
         // 再次访问（缓存未命中，自动重新加载）
-        assert!(ctx.check_table_access("articles", &PermissionAction::Insert).await);
-        assert!(!ctx.check_table_access("articles", &PermissionAction::Delete).await);
+        assert!(
+            ctx.check_table_access("articles", &PermissionAction::Insert)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access("articles", &PermissionAction::Delete)
+                .await
+        );
     }
 
     /// TEST-U-029: set_permission_provider 方法测试
@@ -939,15 +1006,24 @@ mod tests {
         let mut ctx = PermissionContext::new("viewer".to_string(), cache);
 
         // 首次访问（无权限提供者，应该拒绝）
-        assert!(!ctx.check_table_access("reports", &PermissionAction::Select).await);
+        assert!(
+            !ctx.check_table_access("reports", &PermissionAction::Select)
+                .await
+        );
 
         // 设置权限提供者
         ctx.set_permission_provider(provider);
 
         // 清除缓存后再次访问（现在应该能自动重新加载）
         ctx.clear_cache().await;
-        assert!(ctx.check_table_access("reports", &PermissionAction::Select).await);
-        assert!(!ctx.check_table_access("reports", &PermissionAction::Insert).await);
+        assert!(
+            ctx.check_table_access("reports", &PermissionAction::Select)
+                .await
+        );
+        assert!(
+            !ctx.check_table_access("reports", &PermissionAction::Insert)
+                .await
+        );
     }
 
     /// TEST-U-039: PermissionContext 使用 DbConfig 配置化缓存容量
@@ -1074,7 +1150,10 @@ mod tests {
 
         let provider = Arc::new(MemoryPermissionProvider::new());
         provider
-            .add_role("reports_role", config.roles.get("reports_role").unwrap().clone())
+            .add_role(
+                "reports_role",
+                config.roles.get("reports_role").unwrap().clone(),
+            )
             .await;
 
         let cache = create_test_cache().await;
@@ -1086,7 +1165,9 @@ mod tests {
 
         // 第一次访问：清除缓存 + 检查（无并发，无击穿）
         ctx.clear_cache().await;
-        let _ = ctx.check_table_access("reports", &PermissionAction::Select).await;
+        let _ = ctx
+            .check_table_access("reports", &PermissionAction::Select)
+            .await;
 
         let after_first = ctx.check_stats.snapshot();
         assert_eq!(
@@ -1100,7 +1181,9 @@ mod tests {
         for _ in 0..10 {
             let ctx_clone = ctx.clone();
             handles.push(tokio::spawn(async move {
-                ctx_clone.check_table_access("reports", &PermissionAction::Select).await
+                ctx_clone
+                    .check_table_access("reports", &PermissionAction::Select)
+                    .await
             }));
         }
         let results = futures::future::join_all(handles).await;
@@ -1149,15 +1232,21 @@ mod tests {
 
         // 执行一些访问以产生指标
         ctx.clear_cache().await;
-        ctx.check_table_access("users", &PermissionAction::Select).await;
-        ctx.check_table_access("users", &PermissionAction::Select).await;
-        ctx.check_table_access("orders", &PermissionAction::Select).await;
+        ctx.check_table_access("users", &PermissionAction::Select)
+            .await;
+        ctx.check_table_access("users", &PermissionAction::Select)
+            .await;
+        ctx.check_table_access("orders", &PermissionAction::Select)
+            .await;
 
         let (hit_rate, miss_count, _stampede_count, _cache_size) = ctx.get_cache_metrics().await;
 
         // 第一次 Select 产生缓存未命中，后续两次命中
         // 缓存命中率应大于 0（至少有后续命中）
-        assert!(hit_rate > 0.0, "Should have cache hit rate > 0 after previous access");
+        assert!(
+            hit_rate > 0.0,
+            "Should have cache hit rate > 0 after previous access"
+        );
         // 至少有一次未命中（首次访问触发加载）
         assert!(
             miss_count >= 1,
@@ -1190,9 +1279,15 @@ mod tests {
         ctx.load_policy(&config).await.unwrap();
 
         // 未授权表 → 拒绝
-        assert!(!ctx.verify_operation("orders", &PermissionAction::Select, None).await);
+        assert!(
+            !ctx.verify_operation("orders", &PermissionAction::Select, None)
+                .await
+        );
         // 授权表 + 无条件 → 允许
-        assert!(ctx.verify_operation("users", &PermissionAction::Select, None).await);
+        assert!(
+            ctx.verify_operation("users", &PermissionAction::Select, None)
+                .await
+        );
         // 授权表 + 行级条件 → fail-safe 拒绝（行级评估未实现，绝不因未评估条件放行）
         assert!(
             !ctx.verify_operation("users", &PermissionAction::Select, Some("tenant_id = 1"))

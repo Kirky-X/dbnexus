@@ -6,7 +6,8 @@
 
 use dbnexus::chrono::Utc;
 use dbnexus::{
-    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditStorage, MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditStorage,
+    MemoryAuditStorage,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -162,7 +163,11 @@ async fn test_audit_batch_operations() {
         ..Default::default()
     };
     let results: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
-    assert_eq!(results.len(), batch_size, "All batch events should be logged");
+    assert_eq!(
+        results.len(),
+        batch_size,
+        "All batch events should be logged"
+    );
 }
 
 /// TEST-AUDIT-008: 审计存储容量限制测试
@@ -200,7 +205,9 @@ async fn test_audit_all_event_types() {
 
     let _ = logger.log(AuditEvent::create("test", "1", "user")).await;
     let _ = logger.log(AuditEvent::read("test", "1", "user")).await;
-    let _ = logger.log(AuditEvent::update("test", "1", "user", None, None)).await;
+    let _ = logger
+        .log(AuditEvent::update("test", "1", "user", None, None))
+        .await;
     let _ = logger.log(AuditEvent::delete("test", "1", "admin")).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -275,7 +282,8 @@ async fn test_audit_query_by_user() {
         user_id: Some("alice".to_string()),
         ..Default::default()
     };
-    let alice_events: Vec<AuditEvent> = storage.query(&filters).await.expect("Query should succeed");
+    let alice_events: Vec<AuditEvent> =
+        storage.query(&filters).await.expect("Query should succeed");
     assert_eq!(alice_events.len(), 10, "Should find only alice's events");
 
     let filters = AuditQueryFilters {
@@ -293,10 +301,12 @@ async fn test_audit_operation_results() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    let success_event = AuditEvent::create("test", "1", "admin").with_result(dbnexus::AuditStatus::Success);
+    let success_event =
+        AuditEvent::create("test", "1", "admin").with_result(dbnexus::AuditStatus::Success);
     let _ = logger.log(success_event).await;
 
-    let failure_event = AuditEvent::create("test", "2", "admin").with_result(dbnexus::AuditStatus::Failure);
+    let failure_event =
+        AuditEvent::create("test", "2", "admin").with_result(dbnexus::AuditStatus::Failure);
     let _ = logger.log(failure_event).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;

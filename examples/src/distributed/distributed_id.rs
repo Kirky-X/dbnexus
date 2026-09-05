@@ -77,7 +77,10 @@ fn main() {
     // 验证解析结果
     let sample = generator.parse_id(ids[0]);
     println!("  详细解析（第一个 ID）:");
-    println!("  - timestamp_ms : {} ms (自定义 epoch 起算)", sample.timestamp_ms);
+    println!(
+        "  - timestamp_ms : {} ms (自定义 epoch 起算)",
+        sample.timestamp_ms
+    );
     println!("  - machine_id   : {}", sample.machine_id);
     println!("  - sequence     : {}", sample.sequence);
     println!();
@@ -122,11 +125,11 @@ fn main() {
     let mut handles = Vec::new();
 
     for t in 0..thread_count {
-        let gen = Arc::clone(&generator);
+        let id_gen = Arc::clone(&generator);
         handles.push(thread::spawn(move || {
             let mut local_ids = Vec::with_capacity(ids_per_thread);
             for _ in 0..ids_per_thread {
-                local_ids.push(gen.next_id().expect("generate ID"));
+                local_ids.push(id_gen.next_id().expect("generate ID"));
             }
             (t, local_ids)
         }));

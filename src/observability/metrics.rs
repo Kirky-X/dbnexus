@@ -216,7 +216,9 @@ impl LatencyHistogram {
     ///
     /// * `bucket_boundaries` - 桶边界定义（毫秒），如 [1, 5, 10, 50, 100, 500, 1000]
     pub fn new(bucket_boundaries: Vec<u64>) -> Self {
-        let counts: Vec<_> = (0..bucket_boundaries.len() + 1).map(|_| AtomicU64::new(0)).collect();
+        let counts: Vec<_> = (0..bucket_boundaries.len() + 1)
+            .map(|_| AtomicU64::new(0))
+            .collect();
 
         Self {
             buckets: bucket_boundaries,
@@ -615,7 +617,11 @@ impl ThroughputTrackerInner {
             total_operations: total,
             success_count: success,
             failure_count: failure,
-            error_rate: if total > 0 { failure as f64 / total as f64 } else { 0.0 },
+            error_rate: if total > 0 {
+                failure as f64 / total as f64
+            } else {
+                0.0
+            },
             avg_qps,
             window_qps: 0.0,
         }
@@ -816,7 +822,13 @@ impl MetricsCollector {
 
 impl MetricsCollector {
     /// 记录一次查询
-    pub fn record_query(&self, query_type: &str, duration: Duration, success: bool, bytes: Option<u64>) {
+    pub fn record_query(
+        &self,
+        query_type: &str,
+        duration: Duration,
+        success: bool,
+        bytes: Option<u64>,
+    ) {
         let latency_ns = duration.as_nanos() as u64;
         let duration_ms = duration.as_millis() as u64;
 
@@ -828,7 +840,9 @@ impl MetricsCollector {
             } else {
                 let new_metrics = Arc::new(QueryMetricsInner {
                     latency: RwLock::new(LatencyStorage::new()),
-                    histogram: LatencyHistogram::new(vec![1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000]),
+                    histogram: LatencyHistogram::new(vec![
+                        1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000,
+                    ]),
                     throughput: ThroughputTrackerInner::new(),
                     error_count: AtomicU64::new(0),
                 });
@@ -1197,15 +1211,30 @@ impl MetricsCollector {
         // 事务指标
         let txn_stats = self.transaction_stats();
         output.push_str("# TYPE dbnexus_transactions counter\n");
-        writeln!(output, "dbnexus_transactions_total {}", txn_stats.total_transactions).unwrap();
-        writeln!(output, "dbnexus_transactions_commit_total {}", txn_stats.commit_count).unwrap();
+        writeln!(
+            output,
+            "dbnexus_transactions_total {}",
+            txn_stats.total_transactions
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "dbnexus_transactions_commit_total {}",
+            txn_stats.commit_count
+        )
+        .unwrap();
         writeln!(
             output,
             "dbnexus_transactions_rollback_total {}",
             txn_stats.rollback_count
         )
         .unwrap();
-        writeln!(output, "dbnexus_transactions_failure_total {}", txn_stats.failure_count).unwrap();
+        writeln!(
+            output,
+            "dbnexus_transactions_failure_total {}",
+            txn_stats.failure_count
+        )
+        .unwrap();
         writeln!(
             output,
             "dbnexus_transactions_success_rate {:.2}",
@@ -1271,11 +1300,19 @@ impl MetricsCollector {
         let total = self.total_throughput();
         output.push_str("# TYPE dbnexus_total_throughput gauge\n");
         writeln!(output, "dbnexus_total_qps {:.2}", total.avg_qps).unwrap();
-        writeln!(output, "dbnexus_total_operations {}", total.total_operations).unwrap();
+        writeln!(
+            output,
+            "dbnexus_total_operations {}",
+            total.total_operations
+        )
+        .unwrap();
         writeln!(output, "dbnexus_error_rate {:.4}", total.error_rate).unwrap();
 
         output.push_str("# TYPE dbnexus_metrics_timestamp gauge\n");
-        output.push_str(&format!("dbnexus_metrics_timestamp {}\n", now.unix_timestamp()));
+        output.push_str(&format!(
+            "dbnexus_metrics_timestamp {}\n",
+            now.unix_timestamp()
+        ));
 
         output
     }
@@ -1514,9 +1551,15 @@ mod tests {
         assert_eq!(stats.count, 100);
 
         // 验证 P50 大约为 50ms
-        assert!(stats.latency_percentiles.p50_ns >= 49_000_000 && stats.latency_percentiles.p50_ns <= 51_000_000);
+        assert!(
+            stats.latency_percentiles.p50_ns >= 49_000_000
+                && stats.latency_percentiles.p50_ns <= 51_000_000
+        );
         // 验证 P99 大约为 99ms
-        assert!(stats.latency_percentiles.p99_ns >= 98_000_000 && stats.latency_percentiles.p99_ns <= 100_000_000);
+        assert!(
+            stats.latency_percentiles.p99_ns >= 98_000_000
+                && stats.latency_percentiles.p99_ns <= 100_000_000
+        );
     }
 
     /// TEST-U-041: 延迟直方图测试

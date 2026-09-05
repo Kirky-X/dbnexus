@@ -57,7 +57,10 @@ acquire_timeout: 5000
 
 #[tokio::test]
 async fn test_database_type() {
-    assert_eq!(DatabaseType::from_url("sqlite::memory:").unwrap(), DatabaseType::Sqlite);
+    assert_eq!(
+        DatabaseType::from_url("sqlite::memory:").unwrap(),
+        DatabaseType::Sqlite
+    );
     assert_eq!(
         DatabaseType::from_url("sqlite:///path/to/db").unwrap(),
         DatabaseType::Sqlite
@@ -152,7 +155,10 @@ async fn test_config_clone() {
 
     let cloned = config.clone();
     assert_eq!(config.url, cloned.url);
-    assert_eq!(config.pool_config.max_connections, cloned.pool_config.max_connections);
+    assert_eq!(
+        config.pool_config.max_connections,
+        cloned.pool_config.max_connections
+    );
 }
 
 #[tokio::test]

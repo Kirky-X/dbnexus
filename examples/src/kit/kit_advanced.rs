@@ -18,11 +18,11 @@
 
 use std::sync::Arc;
 
+use dbnexus::DbNexusModule;
 use dbnexus::database::ConnectionPool;
 use dbnexus::domain::permission;
 use dbnexus::foundation::{DbConfig, PoolConfig};
 use dbnexus::observability::{MetricsCollector, MetricsCollectorTrait};
-use dbnexus::DbNexusModule;
 use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
 use trait_kit::prelude::*;
 
@@ -59,7 +59,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     kit.register::<DbNexusModule>()
         .map_err(|e| format!("register DbNexusModule: {e}"))?;
 
-    let kit = kit.build().await.map_err(|e| format!("AsyncKit::build: {e}"))?;
+    let kit = kit
+        .build()
+        .await
+        .map_err(|e| format!("AsyncKit::build: {e}"))?;
 
     let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
         .require::<DbNexusModule>()
@@ -108,7 +111,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 同步连接池状态到指标
     let status = pool.status();
-    metrics.record_pool_usage(status.total as u32, status.active as u32, status.idle as u32);
+    metrics.record_pool_usage(
+        status.total as u32,
+        status.active as u32,
+        status.idle as u32,
+    );
     println!("  ✓ 已记录初始连接池指标");
 
     // ============================================
@@ -124,7 +131,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 权限检查
         let allowed = perm_provider
-            .check(test_role, test_table, dbnexus::domain::PermissionAction::Select)
+            .check(
+                test_role,
+                test_table,
+                dbnexus::domain::PermissionAction::Select,
+            )
             .await?;
 
         let duration = start.elapsed();
@@ -132,7 +143,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if allowed {
             // 通过连接池获取 Session 执行 SQL
             let query_session = pool.get_session(test_role).await?;
-            let _ = query_session.execute_raw("SELECT COUNT(*) FROM orders").await?;
+            let _ = query_session
+                .execute_raw("SELECT COUNT(*) FROM orders")
+                .await?;
             metrics.record_query("select", duration, true, None);
             println!("  请求 #{}: ✓ 权限通过，查询完成，耗时 {:?}", i, duration);
         } else {

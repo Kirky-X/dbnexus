@@ -5,7 +5,9 @@
 //! 配置解析通过 serde 直接反序列化
 
 use dbnexus::DbPool;
-use dbnexus::access::{PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission};
+use dbnexus::access::{
+    PermissionAction as Operation, PermissionConfig, RolePolicy, TablePermission,
+};
 use dbnexus::foundation::ConfigError;
 
 #[path = "../../common/mod.rs"]
@@ -13,7 +15,8 @@ mod common;
 
 /// 使用 serde_json 直接解析 JSON 配置（测试用）
 fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
-    serde_json::from_str(json).map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
+    serde_json::from_str(json)
+        .map_err(|e| ConfigError::InvalidFormat(format!("JSON deserialize error: {}", e)))
 }
 
 #[tokio::test]
@@ -21,9 +24,14 @@ fn parse_json_config(json: &str) -> Result<PermissionConfig, ConfigError> {
 #[allow(clippy::unwrap_used)]
 async fn test_permission_context_role() {
     let (config, _temp_dir) = common::get_test_config_with_permissions(true);
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
     // 使用配置中定义的 admin 角色
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     // 加载权限策略到缓存
     let perm_path = pool
         .config()
@@ -45,8 +53,8 @@ async fn test_permission_context_role() {
 }
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config =
-        parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap())
+        .expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)
@@ -61,9 +69,14 @@ async fn test_permission_context_role() {
 #[allow(clippy::unwrap_used)]
 async fn test_permission_check() {
     let (config, _temp_dir) = common::get_test_config_with_permissions(true);
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
     // admin 角色有所有权限
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     // 加载权限策略到缓存
     let perm_path = pool
         .config()
@@ -86,16 +99,21 @@ async fn test_permission_check() {
 }
 "#;
     std::fs::write(&perm_path, perm_content).expect("Failed to write permissions file");
-    let perm_config =
-        parse_json_config(&std::fs::read_to_string(&perm_path).unwrap()).expect("Failed to parse permission JSON");
+    let perm_config = parse_json_config(&std::fs::read_to_string(&perm_path).unwrap())
+        .expect("Failed to parse permission JSON");
     session
         .permission_ctx()
         .load_policy(&perm_config)
         .await
         .expect("Failed to load policy");
-    let result = session.check_permission("unknown_table", &Operation::Select).await;
+    let result = session
+        .check_permission("unknown_table", &Operation::Select)
+        .await;
     // admin 可以访问所有表，所以应该成功
-    assert!(result.is_ok(), "admin should have SELECT permission on any table");
+    assert!(
+        result.is_ok(),
+        "admin should have SELECT permission on any table"
+    );
 }
 
 #[test]
@@ -229,7 +247,9 @@ async fn test_permission_check_with_auto_load() {
         .expect("Failed to create permission context");
 
     // 手动加载策略到缓存
-    ctx.load_policy(&config).await.expect("Failed to load policy");
+    ctx.load_policy(&config)
+        .await
+        .expect("Failed to load policy");
 
     // 现在应该有权访问
     let result = ctx.check_table_access("users", &Operation::Select).await;
@@ -256,10 +276,15 @@ async fn test_join_and_subquery_cross_table_access_denied() {
     use dbnexus::foundation::DbError;
 
     let (config, _temp_dir) = common::get_test_config_with_permissions(true);
-    let pool = DbPool::with_config(config).await.expect("Failed to create test pool");
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
 
     // admin 创建 users / orders 两张表（user 角色只有 users 的 select 权限）
-    let admin = pool.get_session("admin").await.expect("Failed to get session");
+    let admin = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let users_table = "users";
     let orders_table = "orders";
     let _ = admin
@@ -276,7 +301,10 @@ async fn test_join_and_subquery_cross_table_access_denied() {
         .await;
     drop(admin);
 
-    let user_session = pool.get_session("user").await.expect("Failed to get session");
+    let user_session = pool
+        .get_session("user")
+        .await
+        .expect("Failed to get session");
 
     // 直接访问有权限的表：允许
     let ok = user_session.execute_raw("SELECT * FROM users").await;

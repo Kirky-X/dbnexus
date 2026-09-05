@@ -5,7 +5,9 @@
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::{Delete, FromTable, Query, Set, SetExpr, Statement, TableObject, TableWithJoins};
+use sqlparser::ast::{
+    Delete, FromTable, Query, Set, SetExpr, Statement, TableObject, TableWithJoins,
+};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
@@ -173,7 +175,8 @@ impl Default for SqlParser {
         // Note: This method may fail when called from an async context (like #[tokio::test])
         // because it uses block_on which cannot nest in an existing runtime.
         // For async contexts, use SqlParser::new().await instead.
-        tokio::runtime::Handle::current().block_on(async { Self::with_cache_size(DEFAULT_CACHE_SIZE).await })
+        tokio::runtime::Handle::current()
+            .block_on(async { Self::with_cache_size(DEFAULT_CACHE_SIZE).await })
     }
 }
 
@@ -219,7 +222,12 @@ impl SqlParser {
                 // Fallback cache on error - use block_on for synchronous fallback
                 // which is acceptable as a rare error case
                 tokio::runtime::Handle::current()
-                    .block_on(async { Cache::builder().capacity(DEFAULT_CACHE_SIZE as u64).build().await })
+                    .block_on(async {
+                        Cache::builder()
+                            .capacity(DEFAULT_CACHE_SIZE as u64)
+                            .build()
+                            .await
+                    })
                     .expect("Failed to create fallback cache")
             });
         Self {
@@ -335,11 +343,13 @@ impl SqlParser {
         // Check for variables that might indicate dynamic SQL
         if contains_variables(sql) {
             return Err(SqlParseError::ContainsVariables(
-                "SQL contains potentially dangerous variables. Use parameterized queries instead.".to_string(),
+                "SQL contains potentially dangerous variables. Use parameterized queries instead."
+                    .to_string(),
             ));
         }
 
-        let statements = Parser::parse_sql(&self.dialect, sql).map_err(|e| SqlParseError::ParseError(e.to_string()))?;
+        let statements = Parser::parse_sql(&self.dialect, sql)
+            .map_err(|e| SqlParseError::ParseError(e.to_string()))?;
 
         if statements.len() != 1 {
             return Err(SqlParseError::MultipleStatements);
@@ -421,7 +431,10 @@ impl SqlParser {
     /// # 缓存行为
     ///
     /// 此方法使用内部缓存来加速重复查询。
-    pub async fn parse_operation_async(&self, sql: &str) -> Result<Option<(String, PermissionAction)>, SqlParseError> {
+    pub async fn parse_operation_async(
+        &self,
+        sql: &str,
+    ) -> Result<Option<(String, PermissionAction)>, SqlParseError> {
         let parsed = self.parse_single(sql).await?;
 
         // 仅支持 DML 操作，其他操作返回 None
@@ -431,9 +444,10 @@ impl SqlParser {
             SqlOperationType::Update => Some(PermissionAction::Update),
             SqlOperationType::Delete => Some(PermissionAction::Delete),
             // DDL/DCL/Transaction/Other 操作不支持
-            SqlOperationType::Ddl | SqlOperationType::Dcl | SqlOperationType::Transaction | SqlOperationType::Other => {
-                None
-            }
+            SqlOperationType::Ddl
+            | SqlOperationType::Dcl
+            | SqlOperationType::Transaction
+            | SqlOperationType::Other => None,
         };
 
         // 只有当操作类型和表名都有效时才返回
@@ -441,7 +455,11 @@ impl SqlParser {
     }
 
     /// Classify a parsed statement into an operation
-    fn classify_statement(&self, statement: Statement, sql: String) -> Result<ParsedSqlOperation, SqlParseError> {
+    fn classify_statement(
+        &self,
+        statement: Statement,
+        sql: String,
+    ) -> Result<ParsedSqlOperation, SqlParseError> {
         let (operation_type, table_name, all_table_names) = match statement {
             Statement::Query(query) => {
                 let (primary, all) = extract_table_from_query(&query);
@@ -482,7 +500,9 @@ impl SqlParser {
                 let name = alter_table.name.to_string();
                 (SqlOperationType::Ddl, Some(name.clone()), vec![name])
             }
-            Statement::Drop { names, object_type, .. } => {
+            Statement::Drop {
+                names, object_type, ..
+            } => {
                 let is_table = format!("{:?}", object_type).contains("Table");
                 let table_name = if is_table && !names.is_empty() {
                     Some(names[0].to_string())
@@ -498,7 +518,11 @@ impl SqlParser {
             }
             Statement::Truncate(truncate) => {
                 let table_name = truncate.table_names.first().map(|t| t.name.to_string());
-                let all: Vec<String> = truncate.table_names.iter().map(|t| t.name.to_string()).collect();
+                let all: Vec<String> = truncate
+                    .table_names
+                    .iter()
+                    .map(|t| t.name.to_string())
+                    .collect();
                 (SqlOperationType::Ddl, table_name, all)
             }
             Statement::CreateIndex(create_index) => {
@@ -507,9 +531,9 @@ impl SqlParser {
             }
             Statement::Grant { .. } => (SqlOperationType::Dcl, None, Vec::new()),
             Statement::Revoke { .. } => (SqlOperationType::Dcl, None, Vec::new()),
-            Statement::StartTransaction { .. } | Statement::Commit { .. } | Statement::Rollback { .. } => {
-                (SqlOperationType::Transaction, None, Vec::new())
-            }
+            Statement::StartTransaction { .. }
+            | Statement::Commit { .. }
+            | Statement::Rollback { .. } => (SqlOperationType::Transaction, None, Vec::new()),
             Statement::Set(Set::SingleAssignment { variable, .. }) => {
                 let var_name = variable.to_string().to_lowercase();
                 if is_ddl_related_variable(&var_name) {
@@ -708,7 +732,9 @@ pub fn contains_sql_injection(sql: &str) -> bool {
         "UTL_INADDR.GET_HOST_NAME(",
     ];
 
-    INJECTION_PATTERNS.iter().any(|pattern| sql_upper.contains(pattern))
+    INJECTION_PATTERNS
+        .iter()
+        .any(|pattern| sql_upper.contains(pattern))
 }
 
 /// Check if SQL contains DDL operations
@@ -903,9 +929,14 @@ fn extract_query_tables(query: &Query, out: &mut Vec<String>) {
     }
 
     // WHERE / HAVING / PREWHERE / QUALIFY 中的子查询
-    for expr in [&select.prewhere, &select.selection, &select.having, &select.qualify]
-        .into_iter()
-        .flatten()
+    for expr in [
+        &select.prewhere,
+        &select.selection,
+        &select.having,
+        &select.qualify,
+    ]
+    .into_iter()
+    .flatten()
     {
         extract_subquery_tables(expr, out);
     }
@@ -915,7 +946,9 @@ fn extract_query_tables(query: &Query, out: &mut Vec<String>) {
 fn extract_subquery_tables(expr: &sqlparser::ast::Expr, out: &mut Vec<String>) {
     use sqlparser::ast::{Expr, FunctionArg, FunctionArgExpr};
     match expr {
-        Expr::Subquery(q) | Expr::InSubquery { subquery: q, .. } | Expr::Exists { subquery: q, .. } => {
+        Expr::Subquery(q)
+        | Expr::InSubquery { subquery: q, .. }
+        | Expr::Exists { subquery: q, .. } => {
             extract_query_tables(q, out);
         }
         Expr::Nested(e) => extract_subquery_tables(e, out),
@@ -928,7 +961,9 @@ fn extract_subquery_tables(expr: &sqlparser::ast::Expr, out: &mut Vec<String>) {
             extract_subquery_tables(a, out);
             extract_subquery_tables(b, out);
         }
-        Expr::Between { expr: e, low, high, .. } => {
+        Expr::Between {
+            expr: e, low, high, ..
+        } => {
             extract_subquery_tables(e, out);
             extract_subquery_tables(low, out);
             extract_subquery_tables(high, out);
@@ -940,7 +975,9 @@ fn extract_subquery_tables(expr: &sqlparser::ast::Expr, out: &mut Vec<String>) {
             }
         }
         Expr::InUnnest {
-            expr: e, array_expr, ..
+            expr: e,
+            array_expr,
+            ..
         } => {
             extract_subquery_tables(e, out);
             extract_subquery_tables(array_expr, out);
@@ -949,11 +986,18 @@ fn extract_subquery_tables(expr: &sqlparser::ast::Expr, out: &mut Vec<String>) {
             extract_subquery_tables(left, out);
             extract_subquery_tables(right, out);
         }
-        Expr::Like { expr: e, pattern, .. } | Expr::ILike { expr: e, pattern, .. } => {
+        Expr::Like {
+            expr: e, pattern, ..
+        }
+        | Expr::ILike {
+            expr: e, pattern, ..
+        } => {
             extract_subquery_tables(e, out);
             extract_subquery_tables(pattern, out);
         }
-        Expr::SimilarTo { expr: e, pattern, .. } => {
+        Expr::SimilarTo {
+            expr: e, pattern, ..
+        } => {
             extract_subquery_tables(e, out);
             extract_subquery_tables(pattern, out);
         }
@@ -1080,7 +1124,9 @@ mod tests {
     #[tokio::test]
     async fn test_parse_select() {
         let parser = SqlParser::new().await;
-        let result = parser.parse_single("SELECT * FROM users WHERE id = 1").await;
+        let result = parser
+            .parse_single("SELECT * FROM users WHERE id = 1")
+            .await;
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Select);
@@ -1090,7 +1136,9 @@ mod tests {
     #[tokio::test]
     async fn test_parse_insert() {
         let parser = SqlParser::new().await;
-        let result = parser.parse_single("INSERT INTO users (name) VALUES ('test')").await;
+        let result = parser
+            .parse_single("INSERT INTO users (name) VALUES ('test')")
+            .await;
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Insert);
@@ -1100,7 +1148,9 @@ mod tests {
     #[tokio::test]
     async fn test_parse_update() {
         let parser = SqlParser::new().await;
-        let result = parser.parse_single("UPDATE users SET name = 'test' WHERE id = 1").await;
+        let result = parser
+            .parse_single("UPDATE users SET name = 'test' WHERE id = 1")
+            .await;
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Update);
@@ -1121,7 +1171,9 @@ mod tests {
     async fn test_parse_grant() {
         let parser = SqlParser::new().await;
         // GenericDialect 可能不支持完整的 GRANT 语法，使用简化版本
-        let result = parser.parse_single("GRANT ALL PRIVILEGES ON users TO user1").await;
+        let result = parser
+            .parse_single("GRANT ALL PRIVILEGES ON users TO user1")
+            .await;
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
@@ -1130,9 +1182,14 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_statements_rejected() {
         let parser = SqlParser::new().await;
-        let result = parser.parse_single("SELECT * FROM users; SELECT * FROM posts").await;
+        let result = parser
+            .parse_single("SELECT * FROM users; SELECT * FROM posts")
+            .await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), SqlParseError::MultipleStatements));
+        assert!(matches!(
+            result.unwrap_err(),
+            SqlParseError::MultipleStatements
+        ));
     }
 
     #[tokio::test]
@@ -1146,9 +1203,14 @@ mod tests {
     #[tokio::test]
     async fn test_variables_detected() {
         let parser = SqlParser::new().await;
-        let result = parser.parse_single("SELECT * FROM users WHERE id = @userId").await;
+        let result = parser
+            .parse_single("SELECT * FROM users WHERE id = @userId")
+            .await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), SqlParseError::ContainsVariables(..)));
+        assert!(matches!(
+            result.unwrap_err(),
+            SqlParseError::ContainsVariables(..)
+        ));
     }
 
     #[tokio::test]
@@ -1175,8 +1237,12 @@ mod tests {
         // DDL operations are now blocked by security check
         // Testing with safe DML operations only
         assert!(!is_ddl_operation("SELECT * FROM users"));
-        assert!(!is_ddl_operation("INSERT INTO users (name) VALUES ('test')"));
-        assert!(!is_ddl_operation("UPDATE users SET name = 'test' WHERE id = 1"));
+        assert!(!is_ddl_operation(
+            "INSERT INTO users (name) VALUES ('test')"
+        ));
+        assert!(!is_ddl_operation(
+            "UPDATE users SET name = 'test' WHERE id = 1"
+        ));
         assert!(!is_ddl_operation("DELETE FROM users WHERE id = 1"));
     }
 
@@ -1202,11 +1268,15 @@ mod tests {
         let parser = SqlParser::new().await;
 
         // 第一次解析
-        let result1 = parser.parse_single("SELECT * FROM users WHERE id = 1").await;
+        let result1 = parser
+            .parse_single("SELECT * FROM users WHERE id = 1")
+            .await;
         assert!(result1.is_ok());
 
         // 第二次解析应该使用缓存
-        let result2 = parser.parse_single("SELECT * FROM users WHERE id = 1").await;
+        let result2 = parser
+            .parse_single("SELECT * FROM users WHERE id = 1")
+            .await;
         assert!(result2.is_ok());
 
         // 验证结果是相同的
@@ -1236,7 +1306,10 @@ mod tests {
         let p1 = SqlParser::shared().await;
         let p2 = SqlParser::shared().await;
         // 两次 shared() 返回同一个 Arc（ptr_eq）
-        assert!(Arc::ptr_eq(&p1, &p2), "shared() should return the same instance");
+        assert!(
+            Arc::ptr_eq(&p1, &p2),
+            "shared() should return the same instance"
+        );
     }
 
     #[tokio::test]
@@ -1257,7 +1330,10 @@ mod tests {
 
         // 验证缓存命中计数 > 0（第二次解析命中了第一次的缓存）
         let (hits, _misses) = p2.cache_stats();
-        assert!(hits > 0, "second parse should hit cache shared across shared() calls");
+        assert!(
+            hits > 0,
+            "second parse should hit cache shared across shared() calls"
+        );
     }
 
     // ==================== SQL 注入检测测试 ====================
@@ -1266,7 +1342,9 @@ mod tests {
     #[test]
     fn test_sql_injection_union() {
         // UNION SELECT
-        assert!(contains_sql_injection("SELECT * FROM users UNION SELECT * FROM admin"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users UNION SELECT * FROM admin"
+        ));
         // UNION ALL SELECT
         assert!(contains_sql_injection(
             "SELECT * FROM users UNION ALL SELECT * FROM admin"
@@ -1281,17 +1359,35 @@ mod tests {
     #[test]
     fn test_sql_injection_boolean_blind() {
         // OR 1=1 变体
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR 1=1"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR 1 =1"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR 1= 1"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR 1 = 1"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR 1=1"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR 1 =1"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR 1= 1"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR 1 = 1"
+        ));
         // OR TRUE/FALSE
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR TRUE"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 OR FALSE"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR TRUE"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 OR FALSE"
+        ));
         // AND 变体
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND 1=1"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND TRUE"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND FALSE"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND 1=1"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND TRUE"
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND FALSE"
+        ));
         // 注意：OR ''=' 和 OR '%'=' 模式在移除字符串字面量后不会被检测
         // 这是预期行为，因为字符串中的内容通常是用户输入
     }
@@ -1300,7 +1396,9 @@ mod tests {
     #[test]
     fn test_sql_injection_time_blind_mysql() {
         // SLEEP
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 AND SLEEP(5)"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 AND SLEEP(5)"
+        ));
         assert!(contains_sql_injection("SELECT SLEEP(10)"));
         // BENCHMARK
         assert!(contains_sql_injection(
@@ -1319,7 +1417,9 @@ mod tests {
         // PG_SLEEP_FOR
         assert!(contains_sql_injection("SELECT PG_SLEEP_FOR('5 minutes')"));
         // PG_SLEEP_UNTIL
-        assert!(contains_sql_injection("SELECT PG_SLEEP_UNTIL('2024-12-31')"));
+        assert!(contains_sql_injection(
+            "SELECT PG_SLEEP_UNTIL('2024-12-31')"
+        ));
     }
 
     /// 测试 SQL Server 时间盲注检测
@@ -1327,7 +1427,9 @@ mod tests {
     fn test_sql_injection_time_blind_sqlserver() {
         // WAITFOR DELAY
         assert!(contains_sql_injection("WAITFOR DELAY '0:0:5'"));
-        assert!(contains_sql_injection("SELECT * FROM users; WAITFOR DELAY '0:0:5'"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; WAITFOR DELAY '0:0:5'"
+        ));
         // WAITFOR TIME
         assert!(contains_sql_injection("WAITFOR TIME '12:00:00'"));
     }
@@ -1340,7 +1442,9 @@ mod tests {
             "SELECT * FROM users WHERE id = 1 AND DBMS_PIPE.RECEIVE_MESSAGE('test', 5) = 1"
         ));
         // DBMS_LOCK.SLEEP
-        assert!(contains_sql_injection("SELECT DBMS_LOCK.SLEEP(5) FROM dual"));
+        assert!(contains_sql_injection(
+            "SELECT DBMS_LOCK.SLEEP(5) FROM dual"
+        ));
     }
 
     /// 测试动态 SQL 执行检测
@@ -1351,11 +1455,15 @@ mod tests {
         // EXECUTE
         assert!(contains_sql_injection("EXECUTE('SELECT * FROM users')"));
         // SP_EXECUTESQL
-        assert!(contains_sql_injection("SP_EXECUTESQL N'SELECT * FROM users'"));
+        assert!(contains_sql_injection(
+            "SP_EXECUTESQL N'SELECT * FROM users'"
+        ));
         // XP_CMDSHELL
         assert!(contains_sql_injection("XP_CMDSHELL 'dir'"));
         assert!(contains_sql_injection("EXEC xp_cmdshell 'whoami'"));
-        assert!(contains_sql_injection("EXECUTE xp_cmdshell 'cat /etc/passwd'"));
+        assert!(contains_sql_injection(
+            "EXECUTE xp_cmdshell 'cat /etc/passwd'"
+        ));
     }
 
     /// 测试文件操作检测
@@ -1377,7 +1485,9 @@ mod tests {
     #[test]
     fn test_sql_injection_info_disclosure() {
         // INFORMATION_SCHEMA
-        assert!(contains_sql_injection("SELECT * FROM INFORMATION_SCHEMA.TABLES"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM INFORMATION_SCHEMA.TABLES"
+        ));
         // SYSOBJECTS/SYSCOLUMNS (SQL Server)
         assert!(contains_sql_injection("SELECT * FROM SYSOBJECTS"));
         assert!(contains_sql_injection("SELECT * FROM SYSCOLUMNS"));
@@ -1406,24 +1516,34 @@ mod tests {
             "SELECT * FROM users WHERE name = CHAR(97,100,109,105,110)"
         ));
         // CHR (Oracle/PostgreSQL)
-        assert!(contains_sql_injection("SELECT * FROM users WHERE name = CHR(65)"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE name = CHR(65)"
+        ));
         // CONCAT
         assert!(contains_sql_injection(
             "SELECT * FROM users WHERE name = CONCAT('ad','min')"
         ));
         // CONCAT_WS
-        assert!(contains_sql_injection("SELECT CONCAT_WS(',', 'a', 'b', 'c')"));
+        assert!(contains_sql_injection(
+            "SELECT CONCAT_WS(',', 'a', 'b', 'c')"
+        ));
         // 十六进制
-        assert!(contains_sql_injection("SELECT * FROM users WHERE name = 0x61646D696E"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE name = 0x61646D696E"
+        ));
     }
 
     /// 测试堆叠查询检测
     #[test]
     fn test_sql_injection_stacked_queries() {
         // ; DROP
-        assert!(contains_sql_injection("SELECT * FROM users; DROP TABLE users"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; DROP TABLE users"
+        ));
         // ; DELETE
-        assert!(contains_sql_injection("SELECT * FROM users; DELETE FROM users"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; DELETE FROM users"
+        ));
         // ; UPDATE
         assert!(contains_sql_injection(
             "SELECT * FROM users; UPDATE users SET admin = 1"
@@ -1433,7 +1553,9 @@ mod tests {
             "SELECT * FROM users; INSERT INTO users VALUES (1, 'hacker')"
         ));
         // ; TRUNCATE
-        assert!(contains_sql_injection("SELECT * FROM users; TRUNCATE TABLE users"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; TRUNCATE TABLE users"
+        ));
         // ; ALTER
         assert!(contains_sql_injection(
             "SELECT * FROM users; ALTER TABLE users ADD COLUMN hacked INT"
@@ -1443,22 +1565,32 @@ mod tests {
             "SELECT * FROM users; CREATE TABLE hacked (id INT)"
         ));
         // ; EXEC
-        assert!(contains_sql_injection("SELECT * FROM users; EXEC('malicious')"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; EXEC('malicious')"
+        ));
         // ; EXECUTE
-        assert!(contains_sql_injection("SELECT * FROM users; EXECUTE('malicious')"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users; EXECUTE('malicious')"
+        ));
     }
 
     /// 测试注释注入检测
     #[test]
     fn test_sql_injection_comments() {
         // -- 注释
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 -- "));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 --+"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 -- "
+        ));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 --+"
+        ));
         // # 注释 (MySQL)
         assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 #"));
         // /* */ 块注释 — 块注释本身即为注入迹象，应被检测
         assert!(contains_sql_injection("SELECT * /* comment */ FROM users"));
-        assert!(contains_sql_injection("SELECT * FROM users WHERE id = 1 /* bypass */"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users WHERE id = 1 /* bypass */"
+        ));
     }
 
     /// 测试其他危险模式检测
@@ -1470,7 +1602,9 @@ mod tests {
         assert!(contains_sql_injection("SELECT * FROM users ORDER BY 1--"));
         assert!(contains_sql_injection("SELECT * FROM users ORDER BY 1#"));
         // PROCEDURE ANALYSE (MySQL)
-        assert!(contains_sql_injection("SELECT * FROM users PROCEDURE ANALYSE()"));
+        assert!(contains_sql_injection(
+            "SELECT * FROM users PROCEDURE ANALYSE()"
+        ));
         // EXTRACTVALUE (MySQL XPath 注入)
         assert!(contains_sql_injection(
             "SELECT EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version())))"
@@ -1500,8 +1634,12 @@ mod tests {
     #[test]
     fn test_sql_injection_false_positives() {
         // 正常的 SELECT 语句不应被检测为注入
-        assert!(!contains_sql_injection("SELECT id, name FROM users WHERE id = 1"));
-        assert!(!contains_sql_injection("SELECT * FROM products WHERE price > 100"));
+        assert!(!contains_sql_injection(
+            "SELECT id, name FROM users WHERE id = 1"
+        ));
+        assert!(!contains_sql_injection(
+            "SELECT * FROM products WHERE price > 100"
+        ));
         assert!(!contains_sql_injection(
             "INSERT INTO users (name, email) VALUES ('test', 'test@example.com')"
         ));

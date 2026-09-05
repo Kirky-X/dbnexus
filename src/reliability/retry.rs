@@ -103,11 +103,17 @@ pub enum RetryError {
 impl fmt::Display for RetryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Exhausted { attempts, last_error } => {
+            Self::Exhausted {
+                attempts,
+                last_error,
+            } => {
                 write!(f, "Retry exhausted after {attempts} attempts: {last_error}")
             }
             Self::NonRetryable(err) => write!(f, "Non-retryable operation: {err}"),
-            Self::Timeout { timeout_ms, last_error } => {
+            Self::Timeout {
+                timeout_ms,
+                last_error,
+            } => {
                 write!(f, "Retry timed out after {timeout_ms}ms: {last_error}")
             }
         }
@@ -135,12 +141,18 @@ impl crate::i18n::error_ext::LocalizedMsg for RetryError {
 
     fn message_args(&self) -> Vec<(&str, String)> {
         match self {
-            Self::Exhausted { attempts, last_error } => vec![
+            Self::Exhausted {
+                attempts,
+                last_error,
+            } => vec![
                 ("attempts", attempts.to_string()),
                 ("last_error", last_error.to_string()),
             ],
             Self::NonRetryable(err) => vec![("error", err.to_string())],
-            Self::Timeout { timeout_ms, last_error } => vec![
+            Self::Timeout {
+                timeout_ms,
+                last_error,
+            } => vec![
                 ("timeout_ms", timeout_ms.to_string()),
                 ("last_error", last_error.to_string()),
             ],
@@ -204,7 +216,11 @@ impl RetryExecutor {
     ///
     /// 第 N 次重试的等待时间 = `min(initial_backoff * multiplier^N, max_backoff)`，
     /// 当 `jitter = true` 时添加 ±25% 的随机抖动。
-    pub async fn execute_with_retry<F, Fut, T>(policy: &RetryPolicy, operation: F, sql: &str) -> Result<T, RetryError>
+    pub async fn execute_with_retry<F, Fut, T>(
+        policy: &RetryPolicy,
+        operation: F,
+        sql: &str,
+    ) -> Result<T, RetryError>
     where
         F: Fn() -> Fut + Send + Sync,
         Fut: Future<Output = Result<T, DbError>> + Send,

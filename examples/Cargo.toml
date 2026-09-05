@@ -1,8 +1,8 @@
 [package]
 name = "dbnexus-examples"
-version = "0.6.0-rc.2"
-edition = "2021"
-rust-version = "1.85"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 publish = false
 
 # ============================================================
@@ -340,9 +340,8 @@ validator = { workspace = true }
 [features]
 default = []
 
-# 抑制 check-cfg 误报：#[db_entity] 等宏展开后的 #[cfg(feature = "...")]
-# 检查的是 dbnexus 依赖的特性，而非本 crate 的特性。这些特性已通过
-# [dependencies].dbnexus.features 启用，但 rustc 的 check-cfg  lint
-# 只检查本 crate 的 [features] 表，故产生误报告警。
-[lints.rust]
-unexpected_cfgs = "allow"
+# unexpected_cfgs 已上移至根 [workspace.lints.rust]（全 workspace 统一）：
+# #[db_entity] 等宏展开后的 #[cfg(feature = "...")] 检查的是 dbnexus 依赖的
+# 特性，rustc check-cfg lint 只查本 crate 的 [features] 表，故产生误报。
+[lints]
+workspace = true

@@ -16,7 +16,9 @@ use tempfile::TempDir;
 #[allow(dead_code)]
 pub async fn make_sqlite_memory_pool() -> dbnexus::DbPool {
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
-    dbnexus::DbPool::new(&url).await.expect("Failed to create test pool")
+    dbnexus::DbPool::new(&url)
+        .await
+        .expect("Failed to create test pool")
 }
 
 #[cfg(feature = "permission-engine")]
@@ -78,11 +80,16 @@ pub fn get_test_database_url() -> String {
 
     match test_db_type.as_str() {
         "postgres" => database_url.unwrap_or_else(|| {
-            let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
-            format!("postgres://dbnexus:{}@localhost:15433/dbnexus_test", password)
+            let password = std::env::var("TEST_DB_PASSWORD")
+                .unwrap_or_else(|_| "dbnexus_password".to_string());
+            format!(
+                "postgres://dbnexus:{}@localhost:15433/dbnexus_test",
+                password
+            )
         }),
         "mysql" => database_url.unwrap_or_else(|| {
-            let password = std::env::var("TEST_DB_PASSWORD").unwrap_or_else(|_| "dbnexus_password".to_string());
+            let password = std::env::var("TEST_DB_PASSWORD")
+                .unwrap_or_else(|_| "dbnexus_password".to_string());
             format!("mysql://dbnexus:{}@localhost:13308/dbnexus_test", password)
         }),
         _ => database_url.unwrap_or_else(|| "sqlite::memory:".to_string()),
@@ -106,7 +113,8 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
     if with_permissions {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let perm_file = temp_dir.path().join("test_permissions.yaml");
-        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT).expect("Failed to write test permissions file");
+        std::fs::write(&perm_file, TEST_PERMISSIONS_CONTENT)
+            .expect("Failed to write test permissions file");
         let perm_path = perm_file.to_string_lossy().to_string();
 
         // 使用结构体字面量构建配置
@@ -180,9 +188,18 @@ pub async fn cleanup_migration_versions(pool: &dbnexus::DbPool, versions: &[u32]
         return;
     }
     use dbnexus::sea_orm::ConnectionTrait;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
-    let conn = session.connection().expect("Connection should be available");
-    let placeholders = versions.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    let conn = session
+        .connection()
+        .expect("Connection should be available");
+    let placeholders = versions
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
     let _ = conn
         .execute_unprepared(&format!(
             "DELETE FROM dbnexus_migrations WHERE version IN ({})",
@@ -219,7 +236,10 @@ pub async fn create_test_table(session: &mut dbnexus::Session, table_name: &str)
 #[allow(dead_code)]
 pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
     let status = pool.status();
-    assert!(status.active <= status.total, "Active should not exceed total");
+    assert!(
+        status.active <= status.total,
+        "Active should not exceed total"
+    );
     assert_eq!(
         status.total,
         status.active + status.idle,
@@ -356,7 +376,10 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let table_name = generate_test_table_name("tracing_test");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 根据数据库类型使用不同的表结构
     let create_sql = if pool.config().url.contains("mysql") {
@@ -408,7 +431,10 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
 /// 清理追踪测试表
 #[allow(dead_code)]
 pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str) {
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
@@ -418,7 +444,9 @@ pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str
 ///
 /// 返回注入的 headers 和提取的追踪ID
 #[allow(dead_code)]
-pub async fn verify_trace_injection(pool: &dbnexus::DbPool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn verify_trace_injection(
+    pool: &dbnexus::DbPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _session = pool
         .get_session("admin")
         .await
@@ -472,7 +500,10 @@ pub async fn verify_trace_extraction(
 /// 测试连接池在追踪上下文下的行为
 #[allow(dead_code)]
 pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert!(!session.role().is_empty(), "Session should have a role");
 
     let status = pool.status();
@@ -487,7 +518,10 @@ pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
 ///
 /// 返回成功和失败的数量
 #[allow(dead_code)]
-pub async fn concurrent_trace_injection_test(pool: &dbnexus::DbPool, num_tasks: usize) -> (usize, usize) {
+pub async fn concurrent_trace_injection_test(
+    pool: &dbnexus::DbPool,
+    num_tasks: usize,
+) -> (usize, usize) {
     use futures::future::join_all;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -552,7 +586,9 @@ pub async fn verify_db_operation_with_trace(
 }
 
 /// 验证表名安全性（白名单验证）
-pub(crate) fn validate_table_name(table_name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub(crate) fn validate_table_name(
+    table_name: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // 只允许字母、数字、下划线
     if !table_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return Err(Box::new(std::io::Error::new(

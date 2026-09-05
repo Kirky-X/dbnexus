@@ -125,14 +125,20 @@ mod tests {
     fn test_format_migration_message_en() {
         let fmt = DbI18nFormatter::new("en").expect("en locale");
         let msg = fmt.format_migration_message(1).expect("migration message");
-        assert!(msg.contains("1"), "message should contain count: got '{msg}'");
+        assert!(
+            msg.contains("1"),
+            "message should contain count: got '{msg}'"
+        );
         assert!(
             msg.contains("migration") && msg.contains("applied"),
             "en migration message: got '{msg}'"
         );
 
         let msg2 = fmt.format_migration_message(5).expect("migration message");
-        assert!(msg2.contains("5"), "message should contain count: got '{msg2}'");
+        assert!(
+            msg2.contains("5"),
+            "message should contain count: got '{msg2}'"
+        );
     }
 
     #[test]
@@ -143,7 +149,10 @@ mod tests {
             msg.contains("已应用") && msg.contains("迁移"),
             "zh-CN migration message should contain Chinese text: got '{msg}'"
         );
-        assert!(msg.contains("1"), "message should contain count: got '{msg}'");
+        assert!(
+            msg.contains("1"),
+            "message should contain count: got '{msg}'"
+        );
     }
 
     #[test]
@@ -196,8 +205,14 @@ mod tests {
     fn test_format_timestamp() {
         let fmt = DbI18nFormatter::new("en-US").expect("en-US locale");
         let result = fmt.format_timestamp(2026, 7, 11).expect("timestamp");
-        assert!(result.contains("2026"), "timestamp should contain year: got '{result}'");
-        assert!(!result.is_empty(), "timestamp should be non-empty: got '{result}'");
+        assert!(
+            result.contains("2026"),
+            "timestamp should contain year: got '{result}'"
+        );
+        assert!(
+            !result.is_empty(),
+            "timestamp should be non-empty: got '{result}'"
+        );
     }
 
     #[test]
