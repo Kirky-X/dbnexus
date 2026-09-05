@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
 
@@ -47,6 +47,8 @@ jobs:
 
       - name: Check docs
         run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   # OpenSpec 规范检查 — 已移除（anomalyco/openspec 仓库已不存在）
   # 如需恢复，需找到新的 openspec 工具源
@@ -60,29 +62,18 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
 
-      - name: Cache cargo-deny
-        uses: actions/cache@v6
+      - name: Install tools
+        uses: taiki-e/install-action@v2
         with:
-          path: |
-            ~/.cargo/bin/cargo-deny
-            ~/.cargo/registry/index
-          key: ${{ runner.os }}-cargo-deny-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-deny-
+          tool: cargo-audit,cargo-deny
 
-      - name: Install cargo-deny
-        run: |
-          if [ ! -f ~/.cargo/bin/cargo-deny ]; then
-            cargo install --locked cargo-deny
-          fi
+      - name: cargo deny
+        run: cargo deny check
 
-      - name: Run cargo-deny check
-        run: cargo deny check licenses advisories
-
-      - name: Check for vulnerable dependencies
-        run: cargo deny check bans --show-stats
+      - name: cargo audit
+        run: cargo audit
 
   # 数据库矩阵测试
   test:
@@ -133,7 +124,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -208,7 +199,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: ${{ matrix.target }}
 
@@ -240,51 +231,33 @@ jobs:
     name: Code Coverage
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache tarpaulin
-        uses: actions/cache@v6
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
-          path: |
-            ~/.cargo/bin/cargo-tarpaulin
-            target
-          key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tarpaulin-
+          components: llvm-tools-preview
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - name: Install tarpaulin
-        run: |
-          if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
-            cargo install cargo-tarpaulin
-          fi
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
-      - name: Generate coverage
+      - name: Generate coverage (gate ≥80% lines)
         run: |
-          cargo tarpaulin --verbose --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --timeout 300 --out xml --exclude-files "**/tests/**"
+          cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 80 --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          files: ./cobertura.xml
-          directory: coverage-report
-          flags: unittests
-          name: codecov-umbrella
-
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v2
-        with:
-          parallel: true
-          flag-name: Unit Tests
+          files: ./lcov.info
 
   # 文档检查
   docs:
@@ -296,7 +269,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -308,6 +281,8 @@ jobs:
 
       - name: Build documentation
         run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
 
       - name: Check documentation links
         run: |
