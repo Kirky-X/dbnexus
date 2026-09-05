@@ -34,7 +34,8 @@ use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::database::graph::{
-    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow, GraphTransaction, GraphValue,
+    GraphConnection, GraphExecResult, GraphNode, GraphQueryResult, GraphRel, GraphRow,
+    GraphTransaction, GraphValue,
 };
 use crate::foundation::{DbError, DbResult};
 
@@ -98,8 +99,11 @@ impl LadybugConnection {
                 "ladybug database path contains path traversal characters '..': rejected for security".to_string(),
             )));
         }
-        let db = lbug::Database::new(&db_path, lbug::SystemConfig::default())
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Database::new failed: {e}"))))?;
+        let db = lbug::Database::new(&db_path, lbug::SystemConfig::default()).map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "ladybug Database::new failed: {e}"
+            )))
+        })?;
         Ok(Self {
             db: Arc::new(db),
             spawn_permit: Arc::new(Semaphore::new(pool_size)),
@@ -133,10 +137,9 @@ impl LadybugConnection {
 
     /// 获取 Semaphore 许可证，限制 spawn_blocking 并发数
     async fn acquire_permit(&self) -> DbResult<tokio::sync::SemaphorePermit<'_>> {
-        self.spawn_permit
-            .acquire()
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string())))
+        self.spawn_permit.acquire().await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+        })
     }
 }
 
@@ -159,14 +162,18 @@ impl GraphConnection for LadybugConnection {
         let permit = self.acquire_permit().await?;
         let db = self.db.clone();
         let cypher_owned = cypher.to_string();
-        let handle: JoinHandle<DbResult<GraphExecResult>> = tokio::task::spawn_blocking(move || {
-            let conn = lbug::Connection::new(&db)
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Connection::new: {e}"))))?;
-            execute_cypher_on_conn(&conn, &cypher_owned)
-        });
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}"))))?;
+        let handle: JoinHandle<DbResult<GraphExecResult>> =
+            tokio::task::spawn_blocking(move || {
+                let conn = lbug::Connection::new(&db).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "ladybug Connection::new: {e}"
+                    )))
+                })?;
+                execute_cypher_on_conn(&conn, &cypher_owned)
+            });
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}")))
+        })?;
         drop(permit);
         result
     }
@@ -183,14 +190,18 @@ impl GraphConnection for LadybugConnection {
         let permit = self.acquire_permit().await?;
         let db = self.db.clone();
         let cypher_owned = cypher.to_string();
-        let handle: JoinHandle<DbResult<GraphExecResult>> = tokio::task::spawn_blocking(move || {
-            let conn = lbug::Connection::new(&db)
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug Connection::new: {e}"))))?;
-            execute_cypher_with_params_on_conn(&conn, &cypher_owned, &params)
-        });
-        let result = handle
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}"))))?;
+        let handle: JoinHandle<DbResult<GraphExecResult>> =
+            tokio::task::spawn_blocking(move || {
+                let conn = lbug::Connection::new(&db).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "ladybug Connection::new: {e}"
+                    )))
+                })?;
+                execute_cypher_with_params_on_conn(&conn, &cypher_owned, &params)
+            });
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!("spawn_blocking join: {e}")))
+        })?;
         drop(permit);
         result
     }
@@ -213,17 +224,24 @@ impl GraphConnection for LadybugConnection {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string())))?;
+            .map_err(|_| {
+                DbError::Connection(sea_orm::DbErr::Custom("Semaphore closed".to_string()))
+            })?;
 
         let db = self.db.clone();
         let (tx, mut rx) = mpsc::channel::<TxnCommand>(8);
 
         let handle: JoinHandle<DbResult<()>> = tokio::task::spawn_blocking(move || {
             let conn = lbug::Connection::new(&db).map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug txn Connection::new: {e}")))
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "ladybug txn Connection::new: {e}"
+                )))
             })?;
-            conn.query("BEGIN TRANSACTION")
-                .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug BEGIN TRANSACTION: {e}"))))?;
+            conn.query("BEGIN TRANSACTION").map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                    "ladybug BEGIN TRANSACTION: {e}"
+                )))
+            })?;
 
             while let Some(cmd) = rx.blocking_recv() {
                 match cmd {
@@ -231,23 +249,29 @@ impl GraphConnection for LadybugConnection {
                         let result = execute_cypher_on_conn(&conn, &cypher);
                         let _ = reply.send(result);
                     }
-                    TxnCommand::ExecuteWithParams { cypher, params, reply } => {
+                    TxnCommand::ExecuteWithParams {
+                        cypher,
+                        params,
+                        reply,
+                    } => {
                         let result = execute_cypher_with_params_on_conn(&conn, &cypher, &params);
                         let _ = reply.send(result);
                     }
                     TxnCommand::Commit { reply } => {
-                        let result = conn
-                            .query("COMMIT")
-                            .map(|_| ())
-                            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug COMMIT: {e}"))));
+                        let result = conn.query("COMMIT").map(|_| ()).map_err(|e| {
+                            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                "ladybug COMMIT: {e}"
+                            )))
+                        });
                         let _ = reply.send(result);
                         return Ok(());
                     }
                     TxnCommand::Rollback { reply } => {
-                        let result = conn
-                            .query("ROLLBACK")
-                            .map(|_| ())
-                            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug ROLLBACK: {e}"))));
+                        let result = conn.query("ROLLBACK").map(|_| ()).map_err(|e| {
+                            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                "ladybug ROLLBACK: {e}"
+                            )))
+                        });
                         let _ = reply.send(result);
                         return Ok(());
                     }
@@ -334,10 +358,14 @@ impl GraphTransaction for LadybugTransaction {
         self.tx
             .send(TxnCommand::Commit { reply: reply_tx })
             .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
-        let result = reply_rx
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?;
+            .map_err(|_| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "txn thread already closed".to_string(),
+                ))
+            })?;
+        let result = reply_rx.await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+        })?;
         // 等待 blocking 线程退出
         if let Some(handle) = self.handle.take() {
             let _ = handle.await;
@@ -350,10 +378,14 @@ impl GraphTransaction for LadybugTransaction {
         self.tx
             .send(TxnCommand::Rollback { reply: reply_tx })
             .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
-        let result = reply_rx
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?;
+            .map_err(|_| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "txn thread already closed".to_string(),
+                ))
+            })?;
+        let result = reply_rx.await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+        })?;
         if let Some(handle) = self.handle.take() {
             let _ = handle.await;
         }
@@ -368,10 +400,14 @@ impl GraphTransaction for LadybugTransaction {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
-        reply_rx
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?
+            .map_err(|_| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "txn thread already closed".to_string(),
+                ))
+            })?;
+        reply_rx.await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+        })?
     }
 
     /// vuln-0005 修复：通过 actor channel 转发参数化查询到 blocking 线程
@@ -391,10 +427,14 @@ impl GraphTransaction for LadybugTransaction {
                 reply: reply_tx,
             })
             .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn thread already closed".to_string())))?;
-        reply_rx
-            .await
-            .map_err(|_| DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string())))?
+            .map_err(|_| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "txn thread already closed".to_string(),
+                ))
+            })?;
+        reply_rx.await.map_err(|_| {
+            DbError::Connection(sea_orm::DbErr::Custom("txn reply dropped".to_string()))
+        })?
     }
 }
 
@@ -418,7 +458,10 @@ fn execute_cypher_on_conn(conn: &lbug::Connection, cypher: &str) -> DbResult<Gra
             .collect();
         rows.push(GraphRow { columns });
     }
-    Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+    Ok(GraphExecResult::Query(GraphQueryResult {
+        rows,
+        rows_affected: 0,
+    }))
 }
 
 /// 在 blocking 线程内通过指定 Connection 执行参数化 Cypher 查询（vuln-0005 修复）
@@ -431,9 +474,9 @@ fn execute_cypher_with_params_on_conn(
     cypher: &str,
     params: &HashMap<String, serde_json::Value>,
 ) -> DbResult<GraphExecResult> {
-    let mut prepared = conn
-        .prepare(cypher)
-        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug prepare: {e}"))))?;
+    let mut prepared = conn.prepare(cypher).map_err(|e| {
+        DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug prepare: {e}")))
+    })?;
 
     // 将 serde_json::Value 转换为 lbug::Value（按 (key, value) 对的 vec 传入）
     let lbug_params: Vec<(&str, lbug::Value)> = params
@@ -441,9 +484,11 @@ fn execute_cypher_with_params_on_conn(
         .map(|(k, v)| (k.as_str(), json_to_lbug_value(v)))
         .collect();
 
-    let mut result = conn
-        .execute(&mut prepared, lbug_params)
-        .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("ladybug execute (prepared): {e}"))))?;
+    let mut result = conn.execute(&mut prepared, lbug_params).map_err(|e| {
+        DbError::Connection(sea_orm::DbErr::Custom(format!(
+            "ladybug execute (prepared): {e}"
+        )))
+    })?;
 
     let column_names = result.get_column_names();
     let num_tuples = result.get_num_tuples();
@@ -456,7 +501,10 @@ fn execute_cypher_with_params_on_conn(
             .collect();
         rows.push(GraphRow { columns });
     }
-    Ok(GraphExecResult::Query(GraphQueryResult { rows, rows_affected: 0 }))
+    Ok(GraphExecResult::Query(GraphQueryResult {
+        rows,
+        rows_affected: 0,
+    }))
 }
 
 /// 将 `serde_json::Value` 转换为 `lbug::Value`（用于 prepared statement 参数绑定）
@@ -528,7 +576,9 @@ fn map_lbug_value(value: &lbug::Value) -> GraphValue {
         | lbug::Value::TimestampNs(t)
         | lbug::Value::TimestampMs(t)
         | lbug::Value::TimestampSec(t) => GraphValue::Scalar(serde_json::json!(t.to_string())),
-        lbug::Value::InternalID(id) => GraphValue::Scalar(serde_json::json!(format!("{}:{}", id.table_id, id.offset))),
+        lbug::Value::InternalID(id) => {
+            GraphValue::Scalar(serde_json::json!(format!("{}:{}", id.table_id, id.offset)))
+        }
         lbug::Value::UUID(u) => GraphValue::Scalar(serde_json::json!(u.to_string())),
         lbug::Value::Decimal(d) => GraphValue::Scalar(serde_json::json!(d.to_string())),
         // 复合类型 → JSON
@@ -542,7 +592,10 @@ fn map_lbug_value(value: &lbug::Value) -> GraphValue {
         lbug::Value::Struct(fields) => {
             let mut map = serde_json::Map::new();
             for (name, value) in fields {
-                map.insert(name.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+                map.insert(
+                    name.clone(),
+                    graph_value_to_json_scalar(&map_lbug_value(value)),
+                );
             }
             GraphValue::Scalar(serde_json::Value::Object(map))
         }
@@ -565,7 +618,10 @@ fn map_lbug_value(value: &lbug::Value) -> GraphValue {
 fn map_lbug_node(node: &lbug::NodeVal) -> GraphNode {
     let mut map = serde_json::Map::new();
     for (key, value) in node.get_properties() {
-        map.insert(key.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+        map.insert(
+            key.clone(),
+            graph_value_to_json_scalar(&map_lbug_value(value)),
+        );
     }
     GraphNode {
         label: node.get_label_name().clone(),
@@ -577,7 +633,10 @@ fn map_lbug_node(node: &lbug::NodeVal) -> GraphNode {
 fn map_lbug_rel(rel: &lbug::RelVal) -> GraphRel {
     let mut map = serde_json::Map::new();
     for (key, value) in rel.get_properties() {
-        map.insert(key.clone(), graph_value_to_json_scalar(&map_lbug_value(value)));
+        map.insert(
+            key.clone(),
+            graph_value_to_json_scalar(&map_lbug_value(value)),
+        );
     }
     GraphRel {
         rel_type: rel.get_label_name().clone(),
@@ -605,28 +664,34 @@ mod tests {
 
     #[test]
     fn test_ladybug_new_memory_default_pool_size() {
-        let conn = LadybugConnection::new(":memory:", DEFAULT_POOL_SIZE).expect("Failed to create memory connection");
+        let conn = LadybugConnection::new(":memory:", DEFAULT_POOL_SIZE)
+            .expect("Failed to create memory connection");
         assert_eq!(conn.pool_size(), DEFAULT_POOL_SIZE);
         assert_eq!(DEFAULT_POOL_SIZE, 4);
     }
 
     #[test]
     fn test_ladybug_new_memory_via_url() {
-        let conn = LadybugConnection::new("ladybug::memory:", 4).expect("Failed to create connection via URL");
+        let conn = LadybugConnection::new("ladybug::memory:", 4)
+            .expect("Failed to create connection via URL");
         assert_eq!(conn.pool_size(), 4);
     }
 
     #[test]
     fn test_ladybug_with_pool_size_minimum_1() {
-        let conn =
-            LadybugConnection::with_pool_size(":memory:", 0).expect("Failed to create connection with pool_size=0");
-        assert_eq!(conn.pool_size(), 1, "pool_size should be clamped to minimum 1");
+        let conn = LadybugConnection::with_pool_size(":memory:", 0)
+            .expect("Failed to create connection with pool_size=0");
+        assert_eq!(
+            conn.pool_size(),
+            1,
+            "pool_size should be clamped to minimum 1"
+        );
     }
 
     #[test]
     fn test_ladybug_with_pool_size_custom() {
-        let conn =
-            LadybugConnection::with_pool_size(":memory:", 8).expect("Failed to create connection with pool_size=8");
+        let conn = LadybugConnection::with_pool_size(":memory:", 8)
+            .expect("Failed to create connection with pool_size=8");
         assert_eq!(conn.pool_size(), 8);
     }
 
@@ -657,7 +722,10 @@ mod tests {
 
     #[test]
     fn test_ladybug_parse_url_raw_path() {
-        assert_eq!(LadybugConnection::parse_url("/absolute/path.db"), "/absolute/path.db");
+        assert_eq!(
+            LadybugConnection::parse_url("/absolute/path.db"),
+            "/absolute/path.db"
+        );
     }
 
     #[test]
@@ -731,7 +799,9 @@ mod tests {
             .await
             .expect("match should succeed");
         match match_result {
-            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 1, "should see 1 person after DDL+CREATE"),
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should see 1 person after DDL+CREATE")
+            }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
     }
@@ -798,7 +868,10 @@ mod tests {
             .await
             .expect("create table");
 
-        let txn = conn.begin_graph_txn().await.expect("begin txn should succeed");
+        let txn = conn
+            .begin_graph_txn()
+            .await
+            .expect("begin txn should succeed");
         txn.execute_cypher("CREATE (:Person {name: 'Alice'})")
             .await
             .expect("create in txn");
@@ -810,7 +883,9 @@ mod tests {
             .await
             .expect("match after commit");
         match result {
-            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 1, "should see 1 person after commit"),
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 1, "should see 1 person after commit")
+            }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
     }
@@ -822,7 +897,10 @@ mod tests {
             .await
             .expect("create table");
 
-        let txn = conn.begin_graph_txn().await.expect("begin txn should succeed");
+        let txn = conn
+            .begin_graph_txn()
+            .await
+            .expect("begin txn should succeed");
         txn.execute_cypher("CREATE (:Person {name: 'Alice'})")
             .await
             .expect("create in txn");
@@ -834,7 +912,9 @@ mod tests {
             .await
             .expect("match after rollback");
         match result {
-            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 0, "should see 0 persons after rollback"),
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 0, "should see 0 persons after rollback")
+            }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
     }
@@ -896,7 +976,10 @@ mod tests {
 
     #[test]
     fn test_map_lbug_value_internal_id() {
-        let val = lbug::Value::InternalID(lbug::InternalID { offset: 5, table_id: 2 });
+        let val = lbug::Value::InternalID(lbug::InternalID {
+            offset: 5,
+            table_id: 2,
+        });
         let mapped = map_lbug_value(&val);
         assert_eq!(mapped, GraphValue::Scalar(serde_json::json!("2:5")));
     }
@@ -1025,7 +1108,9 @@ mod tests {
 
         // 查询关系
         let result = conn
-            .execute_cypher("MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a.name AS src, b.name AS dst")
+            .execute_cypher(
+                "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a.name AS src, b.name AS dst",
+            )
             .await
             .expect("query relationship");
         match result {
@@ -1062,7 +1147,9 @@ mod tests {
             .await
             .expect("empty match should succeed");
         match result {
-            GraphExecResult::Query(q) => assert_eq!(q.rows.len(), 0, "empty table should return 0 rows"),
+            GraphExecResult::Query(q) => {
+                assert_eq!(q.rows.len(), 0, "empty table should return 0 rows")
+            }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
     }

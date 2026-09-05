@@ -63,7 +63,12 @@ impl ColumnChange {
     /// * `table_name` - 表名
     /// * `column_name` - 列名
     /// * `value` - 新值（类型名、新列名等）
-    pub fn new(change_type: ColumnChangeType, table_name: String, column_name: String, value: String) -> Self {
+    pub fn new(
+        change_type: ColumnChangeType,
+        table_name: String,
+        column_name: String,
+        value: String,
+    ) -> Self {
         let new_column_name = match change_type {
             ColumnChangeType::RenameColumn => Some(value.clone()),
             _ => None,

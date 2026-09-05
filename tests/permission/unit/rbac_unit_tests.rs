@@ -9,7 +9,8 @@
 //! - 边界条件和错误处理
 
 use dbnexus::access::{
-    PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy, TablePermission,
+    PermissionAction, PermissionProvider, PermissionProviderError, RbacProvider, RolePolicy,
+    TablePermission,
 };
 
 // ============================================================================
@@ -188,11 +189,17 @@ fn test_rbac_check_access_allowed() {
 
     // 检查允许的操作
     let result = provider.check_access("user", "users", PermissionAction::Select);
-    assert!(result.is_ok(), "check_access user SELECT users should be ok");
+    assert!(
+        result.is_ok(),
+        "check_access user SELECT users should be ok"
+    );
     assert!(result.unwrap(), "user SELECT users should be allowed");
 
     let result = provider.check_access("user", "users", PermissionAction::Insert);
-    assert!(result.is_ok(), "check_access user INSERT users should be ok");
+    assert!(
+        result.is_ok(),
+        "check_access user INSERT users should be ok"
+    );
     assert!(result.unwrap(), "user INSERT users should be allowed");
 }
 
@@ -213,11 +220,17 @@ fn test_rbac_check_access_denied() {
 
     // 检查拒绝的操作
     let result = provider.check_access("user", "users", PermissionAction::Delete);
-    assert!(result.is_ok(), "check_access user DELETE users should be ok");
+    assert!(
+        result.is_ok(),
+        "check_access user DELETE users should be ok"
+    );
     assert!(!result.unwrap(), "user DELETE users should be denied");
 
     let result = provider.check_access("user", "users", PermissionAction::Update);
-    assert!(result.is_ok(), "check_access user UPDATE users should be ok");
+    assert!(
+        result.is_ok(),
+        "check_access user UPDATE users should be ok"
+    );
     assert!(!result.unwrap(), "user UPDATE users should be denied");
 }
 

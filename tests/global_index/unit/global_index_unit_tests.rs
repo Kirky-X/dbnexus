@@ -4,7 +4,9 @@
 //!
 //! 测试 IndexEntry、SyncEvent、SyncResult 等基础数据结构
 
-use dbnexus::{IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult};
+use dbnexus::{
+    IndexEntry, SYNC_STATUS_FAILED, SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SyncEvent, SyncResult,
+};
 
 // ============================================================================
 // IndexEntry 测试
@@ -323,9 +325,15 @@ fn test_sync_status_constants() {
 #[test]
 fn test_sync_status_constants_uniqueness() {
     let statuses = [SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SYNC_STATUS_FAILED];
-    let unique_count = statuses.iter().collect::<std::collections::HashSet<_>>().len();
+    let unique_count = statuses
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
 
-    assert_eq!(unique_count, 3, "All sync status constants should be unique");
+    assert_eq!(
+        unique_count, 3,
+        "All sync status constants should be unique"
+    );
 }
 
 // ============================================================================
@@ -363,10 +371,14 @@ fn test_index_entry_vector_operations() {
 
     // 按索引值分组
     let grouped: std::collections::HashMap<String, Vec<&IndexEntry>> =
-        entries.iter().fold(std::collections::HashMap::new(), |mut acc, entry| {
-            acc.entry(entry.index_value.clone()).or_default().push(entry);
-            acc
-        });
+        entries
+            .iter()
+            .fold(std::collections::HashMap::new(), |mut acc, entry| {
+                acc.entry(entry.index_value.clone())
+                    .or_default()
+                    .push(entry);
+                acc
+            });
 
     assert_eq!(grouped.get("user_123").unwrap().len(), 2);
     assert_eq!(grouped.get("user_456").unwrap().len(), 1);
@@ -399,7 +411,10 @@ fn test_index_entry_filtering() {
         },
     ];
 
-    let orders: Vec<&IndexEntry> = entries.iter().filter(|e| e.table_name == "orders").collect();
+    let orders: Vec<&IndexEntry> = entries
+        .iter()
+        .filter(|e| e.table_name == "orders")
+        .collect();
 
     assert_eq!(orders.len(), 2);
 
@@ -477,9 +492,18 @@ fn test_sync_event_vector_operations() {
     assert_eq!(events.len(), 3);
 
     // 统计各类型事件数量
-    let insert_count = events.iter().filter(|e| matches!(e, SyncEvent::Insert(_))).count();
-    let update_count = events.iter().filter(|e| matches!(e, SyncEvent::Update(_))).count();
-    let delete_count = events.iter().filter(|e| matches!(e, SyncEvent::Delete(_))).count();
+    let insert_count = events
+        .iter()
+        .filter(|e| matches!(e, SyncEvent::Insert(_)))
+        .count();
+    let update_count = events
+        .iter()
+        .filter(|e| matches!(e, SyncEvent::Update(_)))
+        .count();
+    let delete_count = events
+        .iter()
+        .filter(|e| matches!(e, SyncEvent::Delete(_)))
+        .count();
 
     assert_eq!(insert_count, 1);
     assert_eq!(update_count, 1);

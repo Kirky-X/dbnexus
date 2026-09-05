@@ -1,8 +1,8 @@
-# Dependabot configuration
+# Dependabot 配置 — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
-  # Rust 依赖更新（Cargo.toml / Cargo.lock）
+  # Rust 依赖更新(Cargo.toml / Cargo.lock)— 主 crate 与 workspace 根
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
@@ -10,6 +10,8 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
@@ -18,11 +20,61 @@ updates:
       prefix: "deps"
       include: "scope"
     groups:
-      # 将 patch 版本更新合并为单个 PR
+      # patch 版本更新合并为单个 PR
       patch-updates:
         update-types:
           - "patch"
-      # 将 minor 版本更新合并为单个 PR
+      # minor 版本更新合并为单个 PR
+      minor-updates:
+        update-types:
+          - "minor"
+
+  # Rust 依赖更新 — dbnexus-examples 子 crate
+  - package-ecosystem: "cargo"
+    directory: "/examples"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      patch-updates:
+        update-types:
+          - "patch"
+      minor-updates:
+        update-types:
+          - "minor"
+
+  # Rust 依赖更新 — dbnexus-cli 子 crate
+  - package-ecosystem: "cargo"
+    directory: "/src/tools/cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      patch-updates:
+        update-types:
+          - "patch"
       minor-updates:
         update-types:
           - "minor"
@@ -35,6 +87,8 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels:
       - "dependencies"

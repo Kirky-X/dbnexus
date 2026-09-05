@@ -15,7 +15,8 @@
 //! ```
 
 use dbnexus::{
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus, PoolHealthMetrics,
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus,
+    PoolHealthMetrics,
 };
 use std::time::Duration;
 
@@ -79,7 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  state = {}", breaker.state().await);
 
     // 阶段一：连续失败触发 Open
-    println!("\n  [阶段一] 连续失败 {} 次 → 触发 Open", config.failure_threshold);
+    println!(
+        "\n  [阶段一] 连续失败 {} 次 → 触发 Open",
+        config.failure_threshold
+    );
     for i in 1..=config.failure_threshold {
         breaker.record_failure().await;
         let status = breaker.status().await;
@@ -96,11 +100,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let can_exec = breaker.can_execute().await;
     println!(
         "  can_execute() = {:?}",
-        can_exec.map(|_| "allowed").map_err(|e| format!("blocked: {}", e))
+        can_exec
+            .map(|_| "allowed")
+            .map_err(|e| format!("blocked: {}", e))
     );
 
     // 阶段三：等待超时后触发 Open → HalfOpen
-    println!("\n  [阶段三] 等待 {}ms 超时 → 转为 HalfOpen", config.timeout_ms);
+    println!(
+        "\n  [阶段三] 等待 {}ms 超时 → 转为 HalfOpen",
+        config.timeout_ms
+    );
     tokio::time::sleep(Duration::from_millis(150)).await;
     // 调用 can_execute 触发状态转换
     let _ = breaker.can_execute().await;
@@ -110,7 +119,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ 熔断器进入半开状态 (HalfOpen)，允许试探性请求");
 
     // 阶段四：连续成功触发 HalfOpen → Closed
-    println!("\n  [阶段四] 连续成功 {} 次 → 恢复 Closed", config.success_threshold);
+    println!(
+        "\n  [阶段四] 连续成功 {} 次 → 恢复 Closed",
+        config.success_threshold
+    );
     for i in 1..=config.success_threshold {
         breaker.record_success().await;
         let status = breaker.status().await;

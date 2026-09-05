@@ -179,7 +179,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add(Column::Stock.gt(0))
         .add(Column::Price.lt(50.0));
     let affordable = Model::find_by_condition(&session, affordable_cond).await?;
-    println!("\n  [stock > 0 AND price < 50.0] 共 {} 条:", affordable.len());
+    println!(
+        "\n  [stock > 0 AND price < 50.0] 共 {} 条:",
+        affordable.len()
+    );
     for p in &affordable {
         println!(
             "    - id={}, name={}, price={:.2}, stock={}",
@@ -275,7 +278,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✨ db_entity 宏 CRUD 示例完成！");
     println!("========================================");
     println!("\n📚 关键概念:");
-    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏自动生成 CRUD 方法");
+    println!(
+        "  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏自动生成 CRUD 方法"
+    );
     println!("  - Model::insert(&session, model)     插入记录");
     println!("  - Model::find_by_id(&session, id)    按主键查询");
     println!("  - Model::find_all(&session)          查询全部");

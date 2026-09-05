@@ -3,8 +3,8 @@
 //! 默认权限提供者实现（YAML 文件）
 
 use crate::domain::{
-    PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle, PermissionProvider,
-    PolicyManager, RolePolicy,
+    PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle,
+    PermissionProvider, PolicyManager, RolePolicy,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -59,12 +59,12 @@ impl YamlPermissionProvider {
     /// 加载策略文件
     async fn load_policies(&self) -> Result<(), PermissionError> {
         if let Some(path) = &self.config.policy_path {
-            let content = tokio::fs::read_to_string(path)
-                .await
-                .map_err(|e| PermissionError::ParseError(format!("Failed to read {}: {}", path, e)))?;
+            let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+                PermissionError::ParseError(format!("Failed to read {}: {}", path, e))
+            })?;
 
-            let policies: HashMap<String, RolePolicy> =
-                serde_yaml_ng::from_str(&content).map_err(|e| PermissionError::ParseError(e.to_string()))?;
+            let policies: HashMap<String, RolePolicy> = serde_yaml_ng::from_str(&content)
+                .map_err(|e| PermissionError::ParseError(e.to_string()))?;
 
             // 将策略存入缓存
             #[cfg(feature = "cache")]
@@ -83,7 +83,12 @@ impl YamlPermissionProvider {
 
 #[async_trait]
 impl PermissionChecker for YamlPermissionProvider {
-    async fn check(&self, role: &str, table: &str, action: PermissionAction) -> Result<bool, PermissionError> {
+    async fn check(
+        &self,
+        role: &str,
+        table: &str,
+        action: PermissionAction,
+    ) -> Result<bool, PermissionError> {
         // 管理员始终允许
         if role == self.config.admin_role {
             return Ok(true);
@@ -118,9 +123,9 @@ impl PolicyManager for YamlPermissionProvider {
 impl PermissionLifecycle for YamlPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
         if let Some(path) = &self.config.policy_path {
-            tokio::fs::read(path)
-                .await
-                .map_err(|e| anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e))?;
+            tokio::fs::read(path).await.map_err(|e| {
+                anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e)
+            })?;
         }
         Ok(())
     }

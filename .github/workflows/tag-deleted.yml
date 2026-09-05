@@ -2,16 +2,13 @@ name: Tag Deleted
 
 on:
   delete:
-    branches:
-      - main
-      - develop
 
 permissions:
   contents: write
 
 jobs:
   cleanup:
-    name: Cleanup on Tag Delete
+    name: Cleanup Release
     if: github.event.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -19,89 +16,53 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Get tag name
-        id: tag
+        id: get_tag
         run: |
           TAG_NAME="${{ github.event.ref }}"
           VERSION="${TAG_NAME#v}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "🗑️  Tag deleted: $TAG_NAME"
-
-      - name: Check for GitHub Release
-        id: release
-        run: |
-          TAG_NAME="${{ steps.tag.outputs.tag_name }}"
-          RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
-
-          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
-          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
-            echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
-            echo "release_exists=true" >> $GITHUB_OUTPUT
-            echo "✅ Found release: $(echo "$RESPONSE" | jq -r '.name // "N/A"')"
-          else
-            echo "release_exists=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Delete GitHub Release
-        if: steps.release.outputs.release_exists == 'true'
         run: |
-          TAG_NAME="${{ steps.tag.outputs.tag_name }}"
-          RELEASE_ID="${{ steps.release.outputs.release_id }}"
+          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
 
-          curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          # 查找对应的 release
+          RELEASE_ID=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME" \
+            | jq -r '.id')
 
-          echo "✅ Release deleted"
+          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
+            echo "Deleting release $RELEASE_ID for tag $TAG_NAME"
+            curl -X DELETE \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+            echo "✅ GitHub Release deleted successfully"
+          else
+            echo "⚠️ No release found for tag $TAG_NAME"
+          fi
 
-      - name: Summary
+      - name: Warning about crates.io
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📊 Cleanup Summary"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Tag: ${{ steps.tag.outputs.tag_name }}"
-          echo "Version: ${{ steps.tag.outputs.version }}"
-          echo "Release deleted: ${{ steps.release.outputs.release_exists }}"
-          echo ""
-          echo "⚠️  crates.io 限制说明"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "crates.io 不支持删除已发布的版本。"
-          echo ""
-          echo "选项 1: Yank 版本（标记为不推荐）"
-          echo "  cargo yank --version $VERSION <crate-name>"
-          echo ""
-          echo "选项 2: 联系 crates.io 支持"
-          echo "  https://crates.io/policies"
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          cat << 'EOF'
 
-  # 清理分支删除的资源
-  branch-cleanup:
-    name: Branch Cleanup
-    if: github.event.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Get branch name
-        id: branch
-        run: |
-          BRANCH_NAME="${{ github.event.ref }}"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "🌿 Branch deleted: $BRANCH_NAME"
+          ⚠️  IMPORTANT: crates.io Limitation
+          =====================================
 
-      - name: Summary
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📊 Branch Cleanup Summary"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Branch: ${{ steps.branch.outputs.branch_name }}"
-          echo ""
-          echo "ℹ️  注意：删除分支不会自动清理相关资源。"
-          echo "如果需要清理 CI 缓存，请手动操作或联系管理员。"
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          crates.io does NOT support deleting published versions.
+          The version ${{ steps.get_tag.outputs.version }} will remain published.
+
+          Options:
+          1. Yank the version (marks it as not recommended):
+             cargo yank --version ${{ steps.get_tag.outputs.version }} <crate-name>
+
+          2. Contact crates.io support for exceptional circumstances:
+             https://crates.io/policies
+
+          Note: Yanking prevents new projects from depending on this version,
+          but existing projects can still use it.
+
+          EOF

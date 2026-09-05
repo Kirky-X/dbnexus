@@ -50,7 +50,8 @@ impl SqlReverser {
     /// let down_sql = reverser.reverse(up_sql).unwrap();
     /// ```
     pub fn reverse(&self, up_sql: &str) -> Result<String, String> {
-        let statements = Parser::parse_sql(&self.dialect, up_sql).map_err(|e| format!("Failed to parse SQL: {}", e))?;
+        let statements = Parser::parse_sql(&self.dialect, up_sql)
+            .map_err(|e| format!("Failed to parse SQL: {}", e))?;
 
         let mut down_statements = Vec::new();
 
@@ -73,19 +74,29 @@ impl SqlReverser {
                 let table_name = alter_table.name.to_string();
                 self.reverse_alter_table(&table_name, &alter_table.operations)
             }
-            _ => Err(format!("Unsupported statement type for reversal: {:?}", stmt)),
+            _ => Err(format!(
+                "Unsupported statement type for reversal: {:?}",
+                stmt
+            )),
         }
     }
 
     /// 逆向ALTER TABLE操作
-    fn reverse_alter_table(&self, table_name: &str, operations: &[AlterTableOperation]) -> Result<String, String> {
+    fn reverse_alter_table(
+        &self,
+        table_name: &str,
+        operations: &[AlterTableOperation],
+    ) -> Result<String, String> {
         let mut down_operations = Vec::new();
 
         for op in operations {
             match op {
                 AlterTableOperation::AddColumn { column_def, .. } => {
                     let column_name = &column_def.name.value;
-                    down_operations.push(format!("ALTER TABLE {} DROP COLUMN {}", table_name, column_name));
+                    down_operations.push(format!(
+                        "ALTER TABLE {} DROP COLUMN {}",
+                        table_name, column_name
+                    ));
                 }
                 AlterTableOperation::RenameColumn {
                     old_column_name,

@@ -39,13 +39,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dml_cases = [
         ("SELECT * FROM users WHERE id = 1", "SELECT", "users"),
-        ("SELECT name, email FROM users WHERE active = 1", "SELECT", "users"),
+        (
+            "SELECT name, email FROM users WHERE active = 1",
+            "SELECT",
+            "users",
+        ),
         (
             "INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')",
             "INSERT",
             "users",
         ),
-        ("UPDATE users SET name = 'Bob' WHERE id = 1", "UPDATE", "users"),
+        (
+            "UPDATE users SET name = 'Bob' WHERE id = 1",
+            "UPDATE",
+            "users",
+        ),
         ("DELETE FROM users WHERE id = 1", "DELETE", "users"),
         (
             "SELECT u.name, o.id FROM users u JOIN orders o ON u.id = o.user_id",

@@ -196,7 +196,10 @@ async fn test_pool_status_after_session_acquire() {
     let initial_status = pool.status();
 
     {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         let status = pool.status();
 
         // 获取会话后，active 应该增加
@@ -261,7 +264,10 @@ async fn test_pool_max_connections_limit() {
     // 获取所有连接
     let mut sessions = Vec::new();
     for _ in 0..max_connections {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         sessions.push(session);
     }
 
@@ -285,7 +291,10 @@ async fn test_pool_max_connections_limit() {
 
     // 释放后应该可以重新获取
     let session = pool.get_session("admin").await;
-    assert!(session.is_ok(), "Should be able to get session after releasing");
+    assert!(
+        session.is_ok(),
+        "Should be able to get session after releasing"
+    );
 }
 
 /// TEST-U-POOL-012: 测试连接复用
@@ -311,7 +320,10 @@ async fn test_pool_connection_reuse() {
 
     // 获取并释放连接多次
     for _ in 0..5 {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         drop(session);
     }
 
@@ -356,7 +368,10 @@ async fn test_pool_concurrent_connection_acquire() {
     let results: Vec<_> = futures::future::join_all(handles).await;
 
     // 统计成功获取的数量
-    let success_count = results.iter().filter(|r| r.as_ref().unwrap_or(&None).is_some()).count();
+    let success_count = results
+        .iter()
+        .filter(|r| r.as_ref().unwrap_or(&None).is_some())
+        .count();
 
     // 由于最大连接数是 5，应该只有部分成功
     assert!(success_count <= 5, "Should not exceed max connections");
@@ -400,7 +415,10 @@ async fn test_pool_acquire_timeout() {
     );
 
     // 获取唯一的连接
-    let _session = pool.get_session("admin").await.expect("Failed to get session");
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 尝试获取第二个连接应该超时
     let pool_clone = pool.clone();
@@ -444,7 +462,10 @@ async fn test_pool_timeout_then_release() {
     );
 
     // 获取连接
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 在另一个任务中尝试获取（会超时）
     let pool_clone = pool.clone();
@@ -475,7 +496,10 @@ fn test_pool_timeout_duration_conversion() {
         ..Default::default()
     };
 
-    assert_eq!(config.acquire_timeout_duration(), Duration::from_millis(3000));
+    assert_eq!(
+        config.acquire_timeout_duration(),
+        Duration::from_millis(3000)
+    );
 }
 
 // ============================================================================
@@ -493,7 +517,10 @@ async fn test_pool_session_auto_release() {
     let initial_status = pool.status();
 
     {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         // session 在此作用域结束时自动释放
     }
 
@@ -521,7 +548,10 @@ async fn test_pool_borrow_count_tracking() {
 
     // 借用连接多次
     for _ in 0..3 {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         // session 在此释放
     }
 
@@ -558,7 +588,10 @@ async fn test_pool_max_active_tracking() {
     // 同时获取多个连接
     let mut sessions = Vec::new();
     for _ in 0..3 {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         sessions.push(session);
     }
 
@@ -593,7 +626,10 @@ async fn test_pool_status_consistency() {
             "Status invariant should hold"
         );
 
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         let status = pool.status();
         assert_eq!(
             status.total,
@@ -628,9 +664,15 @@ async fn test_connection_lifecycle_via_status() {
 
     // 获取连接并验证状态
     {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         let status = pool.status();
-        assert!(status.borrow_count >= 1, "borrow_count should be at least 1");
+        assert!(
+            status.borrow_count >= 1,
+            "borrow_count should be at least 1"
+        );
     }
 
     // 连接释放后验证
@@ -651,7 +693,10 @@ async fn test_connection_lifecycle_borrow_tracking() {
 
     // 多次借用连接
     for _ in 0..5 {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
     }
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -686,12 +731,18 @@ async fn test_connection_lifecycle_max_active_tracking() {
     // 同时获取多个连接
     let mut sessions = Vec::new();
     for _ in 0..3 {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         sessions.push(session);
     }
 
     let status_during = pool.status();
-    assert!(status_during.max_active >= 3, "max_active should be at least 3");
+    assert!(
+        status_during.max_active >= 3,
+        "max_active should be at least 3"
+    );
 
     // 释放所有连接
     drop(sessions);
@@ -699,7 +750,10 @@ async fn test_connection_lifecycle_max_active_tracking() {
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     let final_status = pool.status();
-    assert!(final_status.max_active >= 3, "max_active should retain historical peak");
+    assert!(
+        final_status.max_active >= 3,
+        "max_active should retain historical peak"
+    );
     assert_eq!(final_status.active, 0, "active should be 0 after release");
 }
 
@@ -728,7 +782,10 @@ async fn test_connection_lifecycle_wait_tracking() {
     );
 
     // 获取唯一的连接
-    let _session = pool.get_session("admin").await.expect("Failed to get session");
+    let _session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let initial_wait_count = pool.status().wait_count;
 
@@ -760,17 +817,26 @@ fn test_pool_config_default_values_reasonable() {
     };
 
     // 验证默认值在合理范围内
-    assert!(config.pool_config.max_connections > 0, "max_connections should be > 0");
+    assert!(
+        config.pool_config.max_connections > 0,
+        "max_connections should be > 0"
+    );
     assert!(
         config.pool_config.max_connections <= 1000,
         "max_connections should be <= 1000"
     );
-    assert!(config.pool_config.min_connections > 0, "min_connections should be > 0");
+    assert!(
+        config.pool_config.min_connections > 0,
+        "min_connections should be > 0"
+    );
     assert!(
         config.pool_config.min_connections <= config.pool_config.max_connections,
         "min <= max"
     );
-    assert!(config.pool_config.idle_timeout >= 30, "idle_timeout should be >= 30");
+    assert!(
+        config.pool_config.idle_timeout >= 30,
+        "idle_timeout should be >= 30"
+    );
     assert!(
         config.pool_config.acquire_timeout >= 1000,
         "acquire_timeout should be >= 1000"
@@ -804,7 +870,10 @@ async fn test_pool_single_connection() {
 
     // 获取并释放连接
     {
-        let _session = pool.get_session("admin").await.expect("Failed to get session");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         let status = pool.status();
         assert_eq!(status.active, 1);
     }
@@ -851,7 +920,10 @@ async fn test_pool_rapid_acquire_release() {
 
     // 快速获取和释放
     for _ in 0..100 {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         drop(session);
     }
 
@@ -874,7 +946,10 @@ async fn test_pool_rapid_acquire_release() {
 async fn test_session_role() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert_eq!(session.role(), "admin");
 }
 
@@ -886,17 +961,26 @@ async fn test_session_role() {
 async fn test_session_transaction_state() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 初始不在事务中
     assert!(!session.is_in_transaction().await);
 
     // 开始事务
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
 
     // 提交事务
-    session.commit().await.expect("Failed to commit transaction");
+    session
+        .commit()
+        .await
+        .expect("Failed to commit transaction");
     assert!(!session.is_in_transaction().await);
 }
 
@@ -908,14 +992,23 @@ async fn test_session_transaction_state() {
 async fn test_session_transaction_rollback() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 开始事务
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
 
     // 回滚事务
-    session.rollback().await.expect("Failed to rollback transaction");
+    session
+        .rollback()
+        .await
+        .expect("Failed to rollback transaction");
     assert!(!session.is_in_transaction().await);
 }
 
@@ -927,10 +1020,16 @@ async fn test_session_transaction_rollback() {
 async fn test_session_double_begin_transaction() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 开始事务
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
 
     // 再次开始事务应该失败
     let result = session.begin_transaction().await;
@@ -948,7 +1047,10 @@ async fn test_session_double_begin_transaction() {
 async fn test_session_commit_without_transaction() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 没有事务时提交应该失败
     let result = session.commit().await;
@@ -1214,8 +1316,14 @@ async fn test_wait_count_increments_during_contention() {
 
     // 获取初始状态
     let initial_status = pool.status();
-    assert_eq!(initial_status.wait_count, 0, "Initial wait_count should be 0");
-    assert_eq!(initial_status.max_waiters, 0, "Initial max_waiters should be 0");
+    assert_eq!(
+        initial_status.wait_count, 0,
+        "Initial wait_count should be 0"
+    );
+    assert_eq!(
+        initial_status.max_waiters, 0,
+        "Initial max_waiters should be 0"
+    );
 
     // 发送 4 个并发请求（超过 max_connections=2）
     let handles: Vec<_> = (0..4)
@@ -1233,7 +1341,10 @@ async fn test_wait_count_increments_during_contention() {
 
     // 等待所有请求完成
     let results: Vec<_> = futures::future::join_all(handles).await;
-    let success_count = results.iter().filter(|r| r.as_ref().is_ok_and(|r| r.is_ok())).count();
+    let success_count = results
+        .iter()
+        .filter(|r| r.as_ref().is_ok_and(|r| r.is_ok()))
+        .count();
 
     // 验证至少有部分请求成功
     assert!(
@@ -1334,11 +1445,16 @@ async fn test_max_waiters_tracks_historical_peak() {
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_release_connection_no_leak() {
-    let (pool, _temp_dir) = common::create_test_pool().await.expect("Failed to create pool");
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create pool");
 
     // 连续 acquire + release 1000 次
     for _ in 0..1000 {
-        let session = pool.get_session("admin").await.expect("Failed to get session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get session");
         drop(session); // 触发 release_connection
     }
 

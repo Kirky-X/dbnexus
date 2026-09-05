@@ -34,7 +34,9 @@ fn get_database_url() -> Option<String> {
 async fn build_router_with_pools(n: u32) -> Option<ShardRouter> {
     let url = get_database_url()?;
     let config = ShardConfig::new("hash", n, "shard_session", &url);
-    let router = ShardRouter::with_config(&config).await.expect("router init");
+    let router = ShardRouter::with_config(&config)
+        .await
+        .expect("router init");
     Some(router)
 }
 
@@ -70,7 +72,12 @@ fn test_shard_id_for_key_distribution() {
     for i in 0..256 {
         let key = format!("user_{}", i);
         let shard = router.shard_id_for_key(&key);
-        assert!(shard < 16, "shard_id {} out of range for key {}", shard, key);
+        assert!(
+            shard < 16,
+            "shard_id {} out of range for key {}",
+            shard,
+            key
+        );
         unique_shards.insert(shard);
     }
 
@@ -139,7 +146,9 @@ async fn test_get_session_for_shard_with_id() {
 
     let expected_shard_id = router.shard_id_for_key("user_99");
 
-    let result = router.get_session_for_shard_with_id("user_99", "admin").await;
+    let result = router
+        .get_session_for_shard_with_id("user_99", "admin")
+        .await;
     assert!(
         result.is_ok(),
         "get_session_for_shard_with_id should succeed: {:?}",
@@ -197,7 +206,10 @@ fn test_enforce_shard_binding_cross_shard_rejects() {
             break;
         }
     }
-    assert!(!conflict_key.is_empty(), "test setup failed: no conflict key found");
+    assert!(
+        !conflict_key.is_empty(),
+        "test setup failed: no conflict key found"
+    );
 
     let result = router.enforce_shard_binding(base_shard, &conflict_key);
     assert!(result.is_err(), "cross-shard binding should be rejected");
@@ -237,7 +249,9 @@ async fn test_session_routing_end_to_end() {
 
     // Step 1: 路由获取 Session
     let primary_key = "user_42";
-    let result = router.get_session_for_shard_with_id(primary_key, "admin").await;
+    let result = router
+        .get_session_for_shard_with_id(primary_key, "admin")
+        .await;
     assert!(result.is_ok(), "routing should succeed: {:?}", result.err());
     let (_session, bound_shard_id) = result.unwrap();
 

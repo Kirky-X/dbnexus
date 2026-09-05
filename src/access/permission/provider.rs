@@ -122,7 +122,9 @@ pub trait PermissionProvider: Send + Sync {
 /// 此 trait 与 `PermissionProvider` 分离，以确保 `PermissionProvider` 是 dyn compatible。
 pub trait RefreshablePermissionProvider: PermissionProvider {
     /// 刷新配置（如果支持动态加载）
-    fn refresh(&mut self) -> impl std::future::Future<Output = Result<(), PermissionProviderError>> + Send;
+    fn refresh(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<(), PermissionProviderError>> + Send;
 }
 
 /// YAML 文件权限提供者
@@ -151,7 +153,10 @@ impl YamlPermissionProvider {
     pub fn new(path: &str) -> Result<Self, PermissionProviderError> {
         let config = match std::fs::read_to_string(path) {
             Ok(content) => Self::parse_yaml_content(&content, path).map_err(|e| {
-                PermissionProviderError::LoadError(format!("YAML parse error (path='{}'): {}", path, e))
+                PermissionProviderError::LoadError(format!(
+                    "YAML parse error (path='{}'): {}",
+                    path, e
+                ))
             })?,
             Err(e) => {
                 return Err(PermissionProviderError::LoadError(format!(
@@ -174,7 +179,8 @@ impl YamlPermissionProvider {
     fn parse_yaml_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
         #[cfg(feature = "yaml")]
         {
-            serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+            serde_yaml_ng::from_str(content)
+                .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
         }
         #[cfg(not(feature = "yaml"))]
         {
@@ -234,10 +240,14 @@ impl RefreshablePermissionProvider for YamlPermissionProvider {
 ///
 /// YAML 是 JSON 的超集，因此 `serde_yaml_ng` 同时兼容 JSON 输入，
 /// 无需根据 `json` feature 切换解析器。
-async fn parse_permission_yaml_async(content: &str, source: &str) -> Result<PermissionConfig, String> {
+async fn parse_permission_yaml_async(
+    content: &str,
+    source: &str,
+) -> Result<PermissionConfig, String> {
     #[cfg(feature = "yaml")]
     {
-        serde_yaml_ng::from_str(content).map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+        serde_yaml_ng::from_str(content)
+            .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
     }
     #[cfg(not(feature = "yaml"))]
     {
@@ -358,10 +368,19 @@ mod tests {
             },
         )
         .await;
-        assert!(p.check_access("reader", "docs", PermissionAction::Select).unwrap());
-        assert!(!p.check_access("reader", "docs", PermissionAction::Delete).unwrap());
+        assert!(
+            p.check_access("reader", "docs", PermissionAction::Select)
+                .unwrap()
+        );
+        assert!(
+            !p.check_access("reader", "docs", PermissionAction::Delete)
+                .unwrap()
+        );
         // non-existent role returns Ok(false) from PermissionConfig, never Err
-        assert!(!p.check_access("ghost", "docs", PermissionAction::Select).unwrap());
+        assert!(
+            !p.check_access("ghost", "docs", PermissionAction::Select)
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -412,9 +431,18 @@ mod tests {
             },
         );
         let p = YamlPermissionProvider::from_config(config);
-        assert!(p.check_access("viewer", "reports", PermissionAction::Select).unwrap());
-        assert!(!p.check_access("viewer", "reports", PermissionAction::Update).unwrap());
-        assert!(!p.check_access("viewer", "secret", PermissionAction::Select).unwrap());
+        assert!(
+            p.check_access("viewer", "reports", PermissionAction::Select)
+                .unwrap()
+        );
+        assert!(
+            !p.check_access("viewer", "reports", PermissionAction::Update)
+                .unwrap()
+        );
+        assert!(
+            !p.check_access("viewer", "secret", PermissionAction::Select)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -448,7 +476,8 @@ mod tests {
         // 创建临时文件
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_permissions_valid.yaml");
-        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        let yaml_content =
+            r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
         let p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
@@ -462,7 +491,8 @@ mod tests {
         assert!(policy.is_some(), "admin policy should be Some");
         // 验证权限检查
         assert!(
-            p.check_access("admin", "any_table", PermissionAction::Select).unwrap(),
+            p.check_access("admin", "any_table", PermissionAction::Select)
+                .unwrap(),
             "admin should have Select on any_table"
         );
 
@@ -501,7 +531,10 @@ mod tests {
         config.roles.insert("admin".into(), RolePolicy::default());
         let mut p = YamlPermissionProvider::from_config(config);
         let result = p.refresh().await;
-        assert!(result.is_ok(), "refresh on pathless provider should return Ok");
+        assert!(
+            result.is_ok(),
+            "refresh on pathless provider should return Ok"
+        );
     }
 
     /// refresh 成功路径：文件存在且有效
@@ -509,7 +542,8 @@ mod tests {
     async fn yaml_provider_refresh_valid_file_succeeds() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_refresh_valid.yaml");
-        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        let yaml_content =
+            r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
         let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
@@ -541,7 +575,8 @@ mod tests {
     async fn yaml_provider_refresh_file_deleted_returns_err() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_refresh_deleted.yaml");
-        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        let yaml_content =
+            r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
         let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
@@ -563,7 +598,8 @@ mod tests {
     async fn yaml_provider_refresh_malformed_returns_err() {
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_refresh_malformed.yaml");
-        let yaml_content = r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
+        let yaml_content =
+            r#"{"roles": {"admin": {"tables": [{"name": "*", "operations": ["select"]}]}}}"#;
         std::fs::write(&file_path, yaml_content).expect("failed to write temp file");
 
         let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
@@ -596,7 +632,8 @@ mod tests {
         let mut p = YamlPermissionProvider::from_config(config);
         // 调用 trait 方法
         use super::RefreshablePermissionProvider;
-        let result = <YamlPermissionProvider as RefreshablePermissionProvider>::refresh(&mut p).await;
+        let result =
+            <YamlPermissionProvider as RefreshablePermissionProvider>::refresh(&mut p).await;
         assert!(result.is_ok());
     }
 }

@@ -197,7 +197,9 @@ mod tests {
             new_column: sample_column(),
         };
         match c {
-            ColumnChange::ModifyColumn { ref column_name, .. } => assert_eq!(column_name, "name"),
+            ColumnChange::ModifyColumn {
+                ref column_name, ..
+            } => assert_eq!(column_name, "name"),
             _ => panic!("expected ModifyColumn"),
         }
     }

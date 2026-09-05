@@ -10,7 +10,7 @@ resolver = "2"
 [workspace.package]
 version = "0.6.0-rc.2"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.97.1"
 authors = ["Kirky.X"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/dbnexus"
@@ -46,6 +46,10 @@ dbnexus-macros = { path = "macros", version = "0.6.0-rc.2" }
 validator = { version = "0.21", features = ["derive"] }
 
 [workspace.lints.rust]
+# 抑制 check-cfg 误报：宏展开后的 #[cfg(feature = "...")] 检查的是依赖 crate 的
+# 特性而非本 crate 的 [features] 表（如 dbnexus-examples 中 #[db_entity] 展开的
+# cfg），rustc check-cfg lint 只查本 crate [features]，故统一 allow。
+unexpected_cfgs = "allow"
 
 [workspace.lints.clippy]
 # 允许测试中多次引用 common 模块
@@ -718,3 +722,15 @@ version = "0.28"
 # 所有示例由独立的 dbnexus-examples crate（examples/Cargo.toml）管理，
 # 其二进制文件通过 [[bin]] 注册，不在此处注册 [[example]]。
 # autoexamples = false 已在 [package] 中设置，防止 Cargo 自动发现 examples/src/*.rs。
+
+# ============================================================================
+# Profiles — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
+# ============================================================================
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.bench]
+inherits = "release"

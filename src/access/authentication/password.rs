@@ -369,7 +369,10 @@ impl PasswordHasher {
     /// # Errors
     ///
     /// 密码不满足策略要求时返回 `AuthError::PasswordHash`。
-    pub fn validate_strength_with_policy(policy: &PasswordPolicy, password: &str) -> AuthResult<()> {
+    pub fn validate_strength_with_policy(
+        policy: &PasswordPolicy,
+        password: &str,
+    ) -> AuthResult<()> {
         policy.validate(password)
     }
 }
@@ -524,7 +527,10 @@ mod tests {
             policy.max_len, MAX_PASSWORD_LEN,
             "default max_len must match original const"
         );
-        assert!(!policy.blacklist.is_empty(), "default blacklist must be non-empty");
+        assert!(
+            !policy.blacklist.is_empty(),
+            "default blacklist must be non-empty"
+        );
         // 已知黑名单项必须存在
         assert!(
             policy.blacklist.iter().any(|p| p == "password123!"),
@@ -559,7 +565,9 @@ mod tests {
             ..Default::default()
         };
         let hasher = PasswordHasher::with_policy(custom_policy);
-        let hash = hasher.hash(TEST_VALID_PASSWORD).expect("hash should succeed");
+        let hash = hasher
+            .hash(TEST_VALID_PASSWORD)
+            .expect("hash should succeed");
         // bcrypt hash 格式: $2b$<cost>$<salt+hash>
         let cost_str = hash.split('$').nth(2).expect("hash should have cost field");
         assert_eq!(cost_str, "10", "custom policy must use cost=10");
@@ -667,7 +675,8 @@ mod tests {
         };
         // "Password123!" 在默认黑名单中，但空黑名单应接受（仍满足复杂度）
         assert!(
-            PasswordHasher::validate_strength_with_policy(&empty_blacklist_policy, "Password123!").is_ok(),
+            PasswordHasher::validate_strength_with_policy(&empty_blacklist_policy, "Password123!")
+                .is_ok(),
             "Empty blacklist must accept Password123! (still passes complexity)"
         );
     }
@@ -680,7 +689,12 @@ mod tests {
             ..Default::default()
         };
         // 各种大小写变体都应被拒绝
-        for variant in &["Forbidden@2024", "FORBIDDEN@2024", "forbidden@2024", "FoRbIdDeN@2024"] {
+        for variant in &[
+            "Forbidden@2024",
+            "FORBIDDEN@2024",
+            "forbidden@2024",
+            "FoRbIdDeN@2024",
+        ] {
             assert!(
                 PasswordHasher::validate_strength_with_policy(&custom_policy, variant).is_err(),
                 "Blacklist must match case-insensitively: {variant}"

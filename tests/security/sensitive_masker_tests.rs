@@ -15,7 +15,11 @@ use dbnexus::{MaskType, SensitiveError, SensitiveMasker};
 #[test]
 fn test_mask_email() {
     let result = SensitiveMasker::mask("alice@example.com", MaskType::Email);
-    assert!(result.is_ok(), "mask email should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mask email should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
     assert!(masked.contains("@"), "masked email should retain @");
     assert!(masked.contains("example.com"), "domain should be retained");
@@ -39,7 +43,11 @@ fn test_mask_email_short() {
 #[test]
 fn test_mask_phone() {
     let result = SensitiveMasker::mask("13812345678", MaskType::Phone);
-    assert!(result.is_ok(), "mask phone should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mask phone should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
     assert!(masked.starts_with("138"), "should retain first 3 digits");
     assert!(masked.ends_with("5678"), "should retain last 4 digits");
@@ -51,7 +59,11 @@ fn test_mask_phone() {
 fn test_mask_phone_invalid() {
     // 太短的手机号
     let result = SensitiveMasker::mask("123", MaskType::Phone);
-    assert!(result.is_err(), "invalid phone should return error, got: {:?}", result);
+    assert!(
+        result.is_err(),
+        "invalid phone should return error, got: {:?}",
+        result
+    );
     match result {
         Err(SensitiveError::InvalidInput(_)) => { /* expected */ }
         Err(e) => panic!("expected InvalidInput, got {:?}", e),
@@ -64,7 +76,11 @@ fn test_mask_phone_invalid() {
 fn test_mask_id_card() {
     // 18 位身份证
     let result = SensitiveMasker::mask("110101199001011234", MaskType::IdCard);
-    assert!(result.is_ok(), "mask id card should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mask id card should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
     assert!(masked.starts_with("1101"), "should retain first 4 chars");
     assert!(masked.ends_with("1234"), "should retain last 4 chars");
@@ -76,7 +92,11 @@ fn test_mask_id_card() {
 fn test_mask_credit_card() {
     // 16 位银行卡号
     let result = SensitiveMasker::mask("6222021234567890", MaskType::BankCard);
-    assert!(result.is_ok(), "mask bank card should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mask bank card should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
     assert!(masked.starts_with("6222"), "should retain first 4 digits");
     assert!(masked.ends_with("7890"), "should retain last 4 digits");
@@ -92,9 +112,16 @@ fn test_mask_credit_card() {
 fn test_mask_email_unicode_local_part() {
     // 中文本地部分（每个字符 3 字节）
     let result = SensitiveMasker::mask("测试@example.com", MaskType::Email);
-    assert!(result.is_ok(), "unicode email should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "unicode email should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
-    assert!(masked.ends_with("@example.com"), "domain should be retained");
+    assert!(
+        masked.ends_with("@example.com"),
+        "domain should be retained"
+    );
     assert!(masked.contains('*'), "should contain asterisks");
 
     // 单字符中文本地部分
@@ -107,7 +134,11 @@ fn test_mask_email_unicode_local_part() {
 
     // emoji 本地部分（4 字节字符）
     let result = SensitiveMasker::mask("😀@emoji.com", MaskType::Email);
-    assert!(result.is_ok(), "emoji email should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "emoji email should succeed: {:?}",
+        result.err()
+    );
 }
 
 /// TEST-MASK-007: 自定义脱敏
@@ -120,7 +151,11 @@ fn test_mask_custom() {
             keep_suffix: 4,
         },
     );
-    assert!(result.is_ok(), "mask custom should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "mask custom should succeed: {:?}",
+        result.err()
+    );
     let masked = result.unwrap();
     assert!(masked.starts_with("sens"), "should retain first 4 chars");
     assert!(masked.ends_with("here"), "should retain last 4 chars");

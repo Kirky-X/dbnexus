@@ -38,8 +38,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::with_config(config).await?;
     println!("✓ 连接池创建成功");
     println!("  - 数据库 URL: {}", pool.config().url);
-    println!("  - 最大连接数: {}", pool.config().pool_config.max_connections);
-    println!("  - 最小连接数: {}", pool.config().pool_config.min_connections);
+    println!(
+        "  - 最大连接数: {}",
+        pool.config().pool_config.max_connections
+    );
+    println!(
+        "  - 最小连接数: {}",
+        pool.config().pool_config.min_connections
+    );
     println!("  - 管理员角色: {}", pool.config().admin_role);
 
     // ============================================

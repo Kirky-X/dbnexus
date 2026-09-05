@@ -63,10 +63,15 @@ fn test_database_type_debug() {
 /// TEST-U-COMMON-007: serde Serialize/Deserialize round-trip 应保持相等
 #[test]
 fn test_database_type_serde_round_trip() {
-    let cases = [DatabaseType::Sqlite, DatabaseType::Postgres, DatabaseType::MySql];
+    let cases = [
+        DatabaseType::Sqlite,
+        DatabaseType::Postgres,
+        DatabaseType::MySql,
+    ];
     for original in cases {
         let json = serde_json::to_string(&original).expect("serialize should succeed");
-        let restored: DatabaseType = serde_json::from_str(&json).expect("deserialize should succeed");
+        let restored: DatabaseType =
+            serde_json::from_str(&json).expect("deserialize should succeed");
         assert_eq!(original, restored, "round-trip failed for {:?}", original);
     }
 }

@@ -81,12 +81,18 @@ fn test_mask_empty_string_all_types() {
 fn test_mask_whitespace_only_input() {
     match SensitiveMasker::mask("   ", MaskType::Name) {
         Err(SensitiveError::InvalidInput(_)) => {}
-        other => panic!("expected InvalidInput for whitespace-only name, got {:?}", other),
+        other => panic!(
+            "expected InvalidInput for whitespace-only name, got {:?}",
+            other
+        ),
     }
 
     match SensitiveMasker::mask("\t\n", MaskType::Address) {
         Err(SensitiveError::InvalidInput(_)) => {}
-        other => panic!("expected InvalidInput for whitespace-only address, got {:?}", other),
+        other => panic!(
+            "expected InvalidInput for whitespace-only address, got {:?}",
+            other
+        ),
     }
 }
 
@@ -127,13 +133,19 @@ fn test_mask_below_minimum_length() {
     // BankCard: 7 位数字（小于 8）
     match SensitiveMasker::mask("1234567", MaskType::BankCard) {
         Err(SensitiveError::InvalidInput(_)) => {}
-        other => panic!("expected InvalidInput for 7-digit bank card, got {:?}", other),
+        other => panic!(
+            "expected InvalidInput for 7-digit bank card, got {:?}",
+            other
+        ),
     }
 
     // IdCard: 14 位（非 15 或 18）
     match SensitiveMasker::mask("12345678901234", MaskType::IdCard) {
         Err(SensitiveError::InvalidInput(_)) => {}
-        other => panic!("expected InvalidInput for 14-digit id card, got {:?}", other),
+        other => panic!(
+            "expected InvalidInput for 14-digit id card, got {:?}",
+            other
+        ),
     }
 }
 
@@ -561,7 +573,10 @@ mod sharding_advanced {
 
         // 未注册任何分片，route 应返回 None
         let result = router.route(now);
-        assert!(result.is_none(), "route to unregistered shard should be None");
+        assert!(
+            result.is_none(),
+            "route to unregistered shard should be None"
+        );
     }
 
     /// set_pool 对未注册分片应返回错误
@@ -574,7 +589,10 @@ mod sharding_advanced {
 
         // 尝试为未注册的分片设置 pool
         let result = router.set_pool(999, arc_pool);
-        assert!(result.is_err(), "set_pool for unregistered shard should error");
+        assert!(
+            result.is_err(),
+            "set_pool for unregistered shard should error"
+        );
     }
 
     /// 策略名称验证 — 所有 4 种策略
@@ -634,15 +652,24 @@ mod sharding_advanced {
     #[test]
     fn test_yearly_strategy_shard_id_validation() {
         let yearly = create_strategy("yearly");
-        assert!(!yearly.is_valid_shard_id(0, 12), "yearly: shard_id 0 should be invalid");
-        assert!(yearly.is_valid_shard_id(1, 12), "yearly: shard_id 1 should be valid");
+        assert!(
+            !yearly.is_valid_shard_id(0, 12),
+            "yearly: shard_id 0 should be invalid"
+        );
+        assert!(
+            yearly.is_valid_shard_id(1, 12),
+            "yearly: shard_id 1 should be valid"
+        );
     }
 
     /// is_valid_shard_id — 月策略要求 shard_id < total_shards
     #[test]
     fn test_monthly_strategy_shard_id_validation() {
         let monthly = create_strategy("monthly");
-        assert!(monthly.is_valid_shard_id(0, 12), "monthly: shard_id 0 should be valid");
+        assert!(
+            monthly.is_valid_shard_id(0, 12),
+            "monthly: shard_id 0 should be valid"
+        );
         assert!(
             monthly.is_valid_shard_id(11, 12),
             "monthly: shard_id 11 should be valid"
@@ -681,15 +708,27 @@ mod sharding_advanced {
         router.register_shard(1, "s1".to_string(), "c1".to_string());
 
         // 克隆不应受影响
-        assert_eq!(cloned.all_shards().len(), 1, "clone should not see new shard");
-        assert_eq!(router.all_shards().len(), 2, "original should have 2 shards");
+        assert_eq!(
+            cloned.all_shards().len(),
+            1,
+            "clone should not see new shard"
+        );
+        assert_eq!(
+            router.all_shards().len(),
+            2,
+            "original should have 2 shards"
+        );
     }
 }
 
 // ============================================================================
 // GlobalIndex batch_sync 边界测试（global-index + sqlite feature）
 // ============================================================================
-#[cfg(all(feature = "global-index", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+#[cfg(all(
+    feature = "global-index",
+    feature = "sqlite",
+    feature = "runtime-tokio-rustls"
+))]
 mod global_index_advanced {
     use dbnexus::{GlobalIndex, IndexEntry};
 
@@ -708,7 +747,9 @@ mod global_index_advanced {
         static COUNTER: AtomicU64 = AtomicU64::new(1000);
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
         let url = format!("sqlite:file:dbnexus_e2e_{}?mode=memory&cache=shared", id);
-        let pool = dbnexus::DbPool::new(&url).await.expect("Failed to create DbPool");
+        let pool = dbnexus::DbPool::new(&url)
+            .await
+            .expect("Failed to create DbPool");
         GlobalIndex::new(std::sync::Arc::new(pool))
             .await
             .expect("Failed to create GlobalIndex")
@@ -729,7 +770,10 @@ mod global_index_advanced {
         assert!(result.errors.is_empty());
 
         // 验证最后一条
-        let queried = index.query_by_index("users", "id", "499").await.expect("query failed");
+        let queried = index
+            .query_by_index("users", "id", "499")
+            .await
+            .expect("query failed");
         assert_eq!(queried.len(), 1);
     }
 
@@ -738,7 +782,15 @@ mod global_index_advanced {
     async fn test_batch_sync_just_over_chunk_size() {
         let index = create_index().await;
         let entries: Vec<IndexEntry> = (0..501)
-            .map(|i| make_entry("items", &format!("item_{}", i), i % 8, "sku", &i.to_string()))
+            .map(|i| {
+                make_entry(
+                    "items",
+                    &format!("item_{}", i),
+                    i % 8,
+                    "sku",
+                    &i.to_string(),
+                )
+            })
             .collect();
 
         let result = index.batch_sync(entries).await.expect("batch_sync failed");
@@ -752,7 +804,15 @@ mod global_index_advanced {
     async fn test_batch_sync_two_full_chunks() {
         let index = create_index().await;
         let entries: Vec<IndexEntry> = (0..1000)
-            .map(|i| make_entry("orders", &format!("order_{}", i), i % 16, "order_id", &i.to_string()))
+            .map(|i| {
+                make_entry(
+                    "orders",
+                    &format!("order_{}", i),
+                    i % 16,
+                    "order_id",
+                    &i.to_string(),
+                )
+            })
             .collect();
 
         let result = index.batch_sync(entries).await.expect("batch_sync failed");
@@ -761,8 +821,22 @@ mod global_index_advanced {
         assert_eq!(result.failed_count, 0);
 
         // 验证首尾
-        assert!(index.query_by_index("orders", "order_id", "0").await.unwrap().len() == 1);
-        assert!(index.query_by_index("orders", "order_id", "999").await.unwrap().len() == 1);
+        assert!(
+            index
+                .query_by_index("orders", "order_id", "0")
+                .await
+                .unwrap()
+                .len()
+                == 1
+        );
+        assert!(
+            index
+                .query_by_index("orders", "order_id", "999")
+                .await
+                .unwrap()
+                .len()
+                == 1
+        );
     }
 
     /// batch_sync 重复条目 — upsert 语义
@@ -781,11 +855,17 @@ mod global_index_advanced {
         assert_eq!(result.synced_count, 1);
 
         // 旧值应不存在
-        let old = index.query_by_index("users", "email", "old@example.com").await.unwrap();
+        let old = index
+            .query_by_index("users", "email", "old@example.com")
+            .await
+            .unwrap();
         assert!(old.is_empty(), "old value should be gone after upsert");
 
         // 新值存在且 shard_id 更新
-        let new = index.query_by_index("users", "email", "new@example.com").await.unwrap();
+        let new = index
+            .query_by_index("users", "email", "new@example.com")
+            .await
+            .unwrap();
         assert_eq!(new.len(), 1);
         assert_eq!(new[0].shard_id, 1, "shard_id should be updated");
     }
@@ -807,14 +887,29 @@ mod global_index_advanced {
 
         // 分别查询不同表
         assert_eq!(
-            index.query_by_index("users", "email", "a@x.com").await.unwrap().len(),
+            index
+                .query_by_index("users", "email", "a@x.com")
+                .await
+                .unwrap()
+                .len(),
             1
         );
         assert_eq!(
-            index.query_by_index("orders", "order_id", "100").await.unwrap().len(),
+            index
+                .query_by_index("orders", "order_id", "100")
+                .await
+                .unwrap()
+                .len(),
             1
         );
-        assert_eq!(index.query_by_index("products", "sku", "ABC").await.unwrap().len(), 1);
+        assert_eq!(
+            index
+                .query_by_index("products", "sku", "ABC")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     /// batch_sync 大 shard_id 值（接近 u32::MAX）
@@ -825,7 +920,10 @@ mod global_index_advanced {
         let result = index.batch_sync(vec![entry]).await.unwrap();
         assert!(result.success);
 
-        let queried = index.query_by_index("shard_test", "key", "value").await.unwrap();
+        let queried = index
+            .query_by_index("shard_test", "key", "value")
+            .await
+            .unwrap();
         assert_eq!(queried.len(), 1);
         assert_eq!(
             queried[0].shard_id,
@@ -858,7 +956,10 @@ mod global_index_advanced {
         index.batch_sync(vec![entry]).await.unwrap();
 
         // 正确 table + 正确 value + 错误 key
-        let results = index.query_by_index("users", "phone", "test@x.com").await.unwrap();
+        let results = index
+            .query_by_index("users", "phone", "test@x.com")
+            .await
+            .unwrap();
         assert!(results.is_empty(), "wrong index_key should return empty");
     }
 
@@ -879,12 +980,17 @@ mod global_index_advanced {
 // ============================================================================
 #[cfg(feature = "authentication")]
 mod authentication_advanced {
-    use dbnexus::{AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User};
+    use dbnexus::{
+        AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType,
+        User,
+    };
 
     const SECRET: &[u8] = b"e2e_advanced_test_secret_key_2026";
 
     fn make_hashed_user(username: &str, password: &str, role: &str) -> User {
-        let hash = PasswordHasher::new().hash(password).expect("hash should succeed");
+        let hash = PasswordHasher::new()
+            .hash(password)
+            .expect("hash should succeed");
         User {
             id: format!("uid_{}", username),
             username: username.to_string(),
@@ -902,7 +1008,12 @@ mod authentication_advanced {
         // 添加含特殊字符的角色到有效角色列表
         mgr.add_valid_role("role:admin".to_string());
         let token = mgr
-            .generate_token("user-id-123", "user_name@test", "role:admin", TokenType::Access)
+            .generate_token(
+                "user-id-123",
+                "user_name@test",
+                "role:admin",
+                TokenType::Access,
+            )
             .expect("generate_token should succeed");
 
         let claims = mgr.verify_token(&token).expect("verify should succeed");
@@ -915,7 +1026,9 @@ mod authentication_advanced {
     #[tokio::test]
     async fn test_token_type_mismatch_access_as_refresh() {
         let mgr = JwtManager::new(SECRET);
-        let access_token = mgr.generate_token("u1", "alice", "admin", TokenType::Access).unwrap();
+        let access_token = mgr
+            .generate_token("u1", "alice", "admin", TokenType::Access)
+            .unwrap();
 
         match mgr.verify_refresh_token(&access_token) {
             Err(AuthError::InvalidToken) => {}
@@ -927,7 +1040,9 @@ mod authentication_advanced {
     #[tokio::test]
     async fn test_token_type_mismatch_refresh_as_access() {
         let mgr = JwtManager::new(SECRET);
-        let refresh_token = mgr.generate_token("u1", "alice", "admin", TokenType::Refresh).unwrap();
+        let refresh_token = mgr
+            .generate_token("u1", "alice", "admin", TokenType::Refresh)
+            .unwrap();
 
         match mgr.verify_access_token(&refresh_token) {
             Err(AuthError::InvalidToken) => {}
@@ -1021,7 +1136,9 @@ mod authentication_advanced {
         .expect("first authenticate should succeed");
 
         // 删除用户
-        mgr.remove_user("alice").await.expect("remove should succeed");
+        mgr.remove_user("alice")
+            .await
+            .expect("remove should succeed");
 
         // 再次认证应失败
         match mgr
@@ -1082,7 +1199,9 @@ mod authentication_advanced {
     #[tokio::test]
     async fn test_refresh_token_flow() {
         let mgr = AuthenticationManager::new(SECRET);
-        mgr.add_user(make_hashed_user("bob", "Pass123", "user")).await.unwrap(); // pragma: allowlist secret
+        mgr.add_user(make_hashed_user("bob", "Pass123", "user"))
+            .await
+            .unwrap(); // pragma: allowlist secret
 
         // 使用相同 secret 的 JwtManager 生成 refresh token
         let jwt = JwtManager::new(SECRET);
@@ -1090,8 +1209,12 @@ mod authentication_advanced {
             .generate_token("uid_bob", "bob", "user", TokenType::Refresh)
             .unwrap();
 
-        let new_access = mgr.refresh_token(&refresh_token).expect("refresh should succeed");
-        let claims = mgr.verify_token(&new_access).expect("verify should succeed");
+        let new_access = mgr
+            .refresh_token(&refresh_token)
+            .expect("refresh should succeed");
+        let claims = mgr
+            .verify_token(&new_access)
+            .expect("verify should succeed");
         assert_eq!(claims.username, "bob");
         assert_eq!(claims.token_type, TokenType::Access);
     }
@@ -1121,7 +1244,9 @@ mod authentication_advanced {
     #[tokio::test]
     async fn test_custom_expiration() {
         let mgr = AuthenticationManager::with_config(SECRET, 60, 3600);
-        mgr.register_user("alice", "StrongPass@123", "admin").await.unwrap();
+        mgr.register_user("alice", "StrongPass@123", "admin")
+            .await
+            .unwrap();
 
         let token = mgr
             .authenticate(AuthCredentials {
@@ -1148,7 +1273,10 @@ mod i18n_advanced {
     fn test_format_number_zero() {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         let result = fmt.format_number(0.0_f64).expect("format zero");
-        assert!(result.contains('0'), "zero should contain 0: got '{result}'");
+        assert!(
+            result.contains('0'),
+            "zero should contain 0: got '{result}'"
+        );
     }
 
     /// format_number 边界：负数
@@ -1156,7 +1284,10 @@ mod i18n_advanced {
     fn test_format_number_negative() {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         let result = fmt.format_number(-1234.56_f64).expect("format negative");
-        assert!(result.contains('-'), "negative should contain minus: got '{result}'");
+        assert!(
+            result.contains('-'),
+            "negative should contain minus: got '{result}'"
+        );
     }
 
     /// format_number 边界：NaN 和 Infinity 应返回错误
@@ -1250,15 +1381,23 @@ mod i18n_advanced {
     fn test_format_row_count_zero() {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         let result = fmt.format_row_count(0).expect("format 0 rows");
-        assert!(result.contains('0'), "0 rows should contain 0: got '{result}'");
+        assert!(
+            result.contains('0'),
+            "0 rows should contain 0: got '{result}'"
+        );
     }
 
     /// format_migration_message 边界：0 条迁移
     #[test]
     fn test_format_migration_message_zero() {
         let fmt = DbI18nFormatter::new("en").expect("locale");
-        let msg = fmt.format_migration_message(0).expect("migration message 0");
-        assert!(msg.contains("0"), "message should contain count: got '{msg}'");
+        let msg = fmt
+            .format_migration_message(0)
+            .expect("migration message 0");
+        assert!(
+            msg.contains("0"),
+            "message should contain count: got '{msg}'"
+        );
         assert!(
             msg.contains("migrations applied"),
             "0 should use plural form: got '{msg}'"
@@ -1320,7 +1459,10 @@ mod i18n_advanced {
     fn test_format_timestamp_valid() {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         let result = fmt.format_timestamp(2026, 7, 22).expect("timestamp");
-        assert!(result.contains("2026"), "should contain year: got '{result}'");
+        assert!(
+            result.contains("2026"),
+            "should contain year: got '{result}'"
+        );
     }
 
     /// format_timestamp 闰年 2月29日
@@ -1329,7 +1471,10 @@ mod i18n_advanced {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         // 2024 是闰年
         let result = fmt.format_timestamp(2024, 2, 29).expect("leap day");
-        assert!(result.contains("2024"), "should contain year: got '{result}'");
+        assert!(
+            result.contains("2024"),
+            "should contain year: got '{result}'"
+        );
     }
 
     /// format_timestamp 非闰年 2月29日应失败
@@ -1348,7 +1493,10 @@ mod i18n_advanced {
     fn test_format_timestamp_dec_31() {
         let fmt = DbI18nFormatter::new("en-US").expect("locale");
         let result = fmt.format_timestamp(2026, 12, 31).expect("dec 31");
-        assert!(result.contains("2026"), "should contain year: got '{result}'");
+        assert!(
+            result.contains("2026"),
+            "should contain year: got '{result}'"
+        );
     }
 }
 
@@ -1393,8 +1541,13 @@ mod pool_health_metrics_advanced {
     #[test]
     fn test_is_healthy_with_idle() {
         let metrics = PoolHealthMetrics::new();
-        metrics.idle_connections.store(1, std::sync::atomic::Ordering::Relaxed);
-        assert!(metrics.is_healthy(), "should be healthy with idle connections");
+        metrics
+            .idle_connections
+            .store(1, std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            metrics.is_healthy(),
+            "should be healthy with idle connections"
+        );
     }
 
     /// is_healthy: 活跃 < 总数时为 true
@@ -1407,14 +1560,19 @@ mod pool_health_metrics_advanced {
         metrics
             .active_connections
             .store(5, std::sync::atomic::Ordering::Relaxed);
-        assert!(metrics.is_healthy(), "should be healthy when active < total");
+        assert!(
+            metrics.is_healthy(),
+            "should be healthy when active < total"
+        );
     }
 
     /// is_healthy: 全部忙碌时为 false
     #[test]
     fn test_is_healthy_all_busy() {
         let metrics = PoolHealthMetrics::new();
-        metrics.total_connections.store(5, std::sync::atomic::Ordering::Relaxed);
+        metrics
+            .total_connections
+            .store(5, std::sync::atomic::Ordering::Relaxed);
         metrics
             .active_connections
             .store(5, std::sync::atomic::Ordering::Relaxed);
@@ -1435,22 +1593,31 @@ mod pool_health_metrics_advanced {
     #[test]
     fn test_should_create_when_exhausted() {
         let metrics = PoolHealthMetrics::new();
-        metrics.total_connections.store(5, std::sync::atomic::Ordering::Relaxed);
+        metrics
+            .total_connections
+            .store(5, std::sync::atomic::Ordering::Relaxed);
         metrics
             .active_connections
             .store(5, std::sync::atomic::Ordering::Relaxed);
-        assert!(metrics.should_create_connection(3), "should create when pool exhausted");
+        assert!(
+            metrics.should_create_connection(3),
+            "should create when pool exhausted"
+        );
     }
 
     /// should_create_connection: 有空闲时为 false
     #[test]
     fn test_should_not_create_when_idle_available() {
         let metrics = PoolHealthMetrics::new();
-        metrics.total_connections.store(5, std::sync::atomic::Ordering::Relaxed);
+        metrics
+            .total_connections
+            .store(5, std::sync::atomic::Ordering::Relaxed);
         metrics
             .active_connections
             .store(3, std::sync::atomic::Ordering::Relaxed);
-        metrics.idle_connections.store(2, std::sync::atomic::Ordering::Relaxed);
+        metrics
+            .idle_connections
+            .store(2, std::sync::atomic::Ordering::Relaxed);
         assert!(
             !metrics.should_create_connection(3),
             "should not create when idle available"

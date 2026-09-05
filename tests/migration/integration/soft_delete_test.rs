@@ -31,7 +31,10 @@ async fn setup_with_seed() -> dbnexus::DbPool {
     let pool = dbnexus::DbPool::new("sqlite::memory:")
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 用 schema() 建表
     let table = Model::schema(DbBackend::Sqlite);
@@ -77,18 +80,27 @@ async fn setup_with_seed() -> dbnexus::DbPool {
 #[tokio::test]
 async fn test_find_all_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 初始 find_all 返回 3 条
-    let all = Model::find_all(&session).await.expect("find_all should succeed");
+    let all = Model::find_all(&session)
+        .await
+        .expect("find_all should succeed");
     assert_eq!(all.len(), 3, "initially should have 3 records");
 
     // 软删除 id=2
-    let affected = Model::delete(&session, 2).await.expect("delete should succeed");
+    let affected = Model::delete(&session, 2)
+        .await
+        .expect("delete should succeed");
     assert_eq!(affected, 1, "should soft-delete 1 record");
 
     // find_all 现在返回 2 条（排除已软删除的 id=2）
-    let all = Model::find_all(&session).await.expect("find_all should succeed");
+    let all = Model::find_all(&session)
+        .await
+        .expect("find_all should succeed");
     assert_eq!(all.len(), 2, "find_all should exclude soft-deleted record");
     assert!(
         all.iter().all(|m| m.id != 2),
@@ -121,21 +133,35 @@ async fn test_find_all_excludes_soft_deleted() {
 #[tokio::test]
 async fn test_find_by_id_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 初始 find_by_id(2) 返回 Some
-    let found = Model::find_by_id(&session, 2).await.expect("find_by_id should succeed");
+    let found = Model::find_by_id(&session, 2)
+        .await
+        .expect("find_by_id should succeed");
     assert!(found.is_some(), "record 2 should exist before soft delete");
 
     // 软删除 id=2
-    Model::delete(&session, 2).await.expect("delete should succeed");
+    Model::delete(&session, 2)
+        .await
+        .expect("delete should succeed");
 
     // find_by_id(2) 现在返回 None（已软删除）
-    let found = Model::find_by_id(&session, 2).await.expect("find_by_id should succeed");
-    assert!(found.is_none(), "find_by_id should return None for soft-deleted record");
+    let found = Model::find_by_id(&session, 2)
+        .await
+        .expect("find_by_id should succeed");
+    assert!(
+        found.is_none(),
+        "find_by_id should return None for soft-deleted record"
+    );
 
     // find_by_id(1) 仍然返回 Some（未软删除）
-    let found = Model::find_by_id(&session, 1).await.expect("find_by_id should succeed");
+    let found = Model::find_by_id(&session, 1)
+        .await
+        .expect("find_by_id should succeed");
     assert!(found.is_some(), "record 1 should still exist");
 }
 
@@ -143,10 +169,15 @@ async fn test_find_by_id_excludes_soft_deleted() {
 #[tokio::test]
 async fn test_delete_soft_force_delete_physical() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 软删除 id=1
-    let affected = Model::delete(&session, 1).await.expect("soft delete should succeed");
+    let affected = Model::delete(&session, 1)
+        .await
+        .expect("soft delete should succeed");
     assert_eq!(affected, 1, "should soft-delete 1 record");
 
     // 验证记录仍在数据库中（deleted_at 已设置）
@@ -154,7 +185,10 @@ async fn test_delete_soft_force_delete_physical() {
         .await
         .expect("find_with_deleted should succeed");
     assert_eq!(with_deleted.len(), 3, "record should still exist in DB");
-    let deleted_record = with_deleted.iter().find(|m| m.id == 1).expect("record 1 should exist");
+    let deleted_record = with_deleted
+        .iter()
+        .find(|m| m.id == 1)
+        .expect("record 1 should exist");
     assert!(
         deleted_record.deleted_at.is_some(),
         "soft-deleted record should have deleted_at set"
@@ -170,7 +204,11 @@ async fn test_delete_soft_force_delete_physical() {
     let with_deleted = Model::find_with_deleted(&session)
         .await
         .expect("find_with_deleted should succeed");
-    assert_eq!(with_deleted.len(), 2, "record should be physically removed from DB");
+    assert_eq!(
+        with_deleted.len(),
+        2,
+        "record should be physically removed from DB"
+    );
     assert!(
         with_deleted.iter().all(|m| m.id != 1),
         "force-deleted record should not exist"
@@ -181,15 +219,22 @@ async fn test_delete_soft_force_delete_physical() {
 #[tokio::test]
 async fn test_count_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 初始 count = 3
     let count = Model::count(&session).await.expect("count should succeed");
     assert_eq!(count, 3, "initial count should be 3");
 
     // 软删除 id=1 和 id=2
-    Model::delete(&session, 1).await.expect("delete should succeed");
-    Model::delete(&session, 2).await.expect("delete should succeed");
+    Model::delete(&session, 1)
+        .await
+        .expect("delete should succeed");
+    Model::delete(&session, 2)
+        .await
+        .expect("delete should succeed");
 
     // count 现在应该 = 1（排除 2 条已软删除）
     let count = Model::count(&session).await.expect("count should succeed");
@@ -203,18 +248,25 @@ async fn test_count_excludes_soft_deleted() {
 #[tokio::test]
 async fn test_delete_many_soft_delete_batch() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 批量软删除 id=1 和 id=3
     use dbnexus::sea_orm::ColumnTrait;
-    let cond = sea_orm::Condition::any().add(Column::Id.eq(1)).add(Column::Id.eq(3));
+    let cond = sea_orm::Condition::any()
+        .add(Column::Id.eq(1))
+        .add(Column::Id.eq(3));
     let affected = Model::delete_many(&session, cond)
         .await
         .expect("delete_many should succeed");
     assert_eq!(affected, 2, "should soft-delete 2 records");
 
     // find_all 仅返回 id=2
-    let all = Model::find_all(&session).await.expect("find_all should succeed");
+    let all = Model::find_all(&session)
+        .await
+        .expect("find_all should succeed");
     assert_eq!(all.len(), 1, "only 1 record should remain visible");
     assert_eq!(all[0].id, 2, "remaining record should be id=2");
 
@@ -232,16 +284,24 @@ async fn test_delete_many_soft_delete_batch() {
 #[tokio::test]
 async fn test_auto_injected_deleted_at_field() {
     let pool = setup_with_seed().await;
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // 软删除 id=1
-    Model::delete(&session, 1).await.expect("delete should succeed");
+    Model::delete(&session, 1)
+        .await
+        .expect("delete should succeed");
 
     // 通过 find_with_deleted 获取记录，验证 deleted_at 字段存在且已设置
     let with_deleted = Model::find_with_deleted(&session)
         .await
         .expect("find_with_deleted should succeed");
-    let deleted = with_deleted.iter().find(|m| m.id == 1).expect("record 1 should exist");
+    let deleted = with_deleted
+        .iter()
+        .find(|m| m.id == 1)
+        .expect("record 1 should exist");
 
     // 访问 deleted_at 字段 — 如果字段未注入，此行会编译失败
     assert!(

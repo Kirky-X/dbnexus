@@ -3,8 +3,8 @@
 //! 内存权限提供者实现
 
 use crate::domain::{
-    PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle, PermissionProvider,
-    PolicyManager, RolePolicy,
+    PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle,
+    PermissionProvider, PolicyManager, RolePolicy,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -34,7 +34,12 @@ impl Default for MemoryPermissionProvider {
 
 #[async_trait]
 impl PermissionChecker for MemoryPermissionProvider {
-    async fn check(&self, role: &str, table: &str, action: PermissionAction) -> Result<bool, PermissionError> {
+    async fn check(
+        &self,
+        role: &str,
+        table: &str,
+        action: PermissionAction,
+    ) -> Result<bool, PermissionError> {
         // 管理员始终允许
         if role == self.config.admin_role {
             return Ok(true);

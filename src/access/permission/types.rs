@@ -210,14 +210,20 @@ impl PermissionConfig {
         for (role_name, policy) in &self.roles {
             // 检查角色是否有表权限配置
             if policy.tables.is_empty() {
-                errors.push(format!("Role '{}' has no table permissions defined", role_name));
+                errors.push(format!(
+                    "Role '{}' has no table permissions defined",
+                    role_name
+                ));
             }
 
             // 检查每个表权限
             for table_perm in &policy.tables {
                 // 检查表名是否为空
                 if table_perm.name.trim().is_empty() {
-                    errors.push(format!("Role '{}' has a table permission with empty name", role_name));
+                    errors.push(format!(
+                        "Role '{}' has a table permission with empty name",
+                        role_name
+                    ));
                 }
 
                 // 检查操作列表是否为空
@@ -230,7 +236,11 @@ impl PermissionConfig {
             }
         }
 
-        if errors.is_empty() { Ok(()) } else { Err(errors) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     /// 验证并返回验证结果
@@ -530,7 +540,9 @@ mod tests {
     /// TEST-U-016: PermissionConfig 验证测试 - 空角色
     #[test]
     fn test_permission_config_validation_empty_roles() {
-        let config = PermissionConfig { roles: HashMap::new() };
+        let config = PermissionConfig {
+            roles: HashMap::new(),
+        };
 
         let result = config.validate();
         assert!(result.is_err());
@@ -557,7 +569,11 @@ mod tests {
         let result = config.validate();
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("has no table permissions")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("has no table permissions"))
+        );
     }
 
     /// TEST-U-018: PermissionConfig 验证测试 - 空操作列表
@@ -582,7 +598,11 @@ mod tests {
         let result = config.validate();
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("has no operations defined")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("has no operations defined"))
+        );
     }
 
     // ========================================================================
@@ -595,7 +615,10 @@ mod tests {
     fn test_graph_permission_context_admin_bypass() {
         let ctx = GraphPermissionContext::new("admin", "admin");
         let result = ctx.check_graph_access(PermissionAction::Traverse);
-        assert!(result.is_ok(), "admin role should bypass graph permission check");
+        assert!(
+            result.is_ok(),
+            "admin role should bypass graph permission check"
+        );
     }
 
     /// TEST-GRAPH-PERM-002: 非 admin 角色调用 check_graph_access 应返回 Err

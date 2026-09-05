@@ -67,7 +67,9 @@ mod replica_integration {
 
 #[cfg(feature = "scatter-gather")]
 mod scatter_integration {
-    use dbnexus::{AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterResult, ShardError};
+    use dbnexus::{
+        AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterResult, ShardError,
+    };
 
     #[test]
     fn test_scatter_result_aggregation() {

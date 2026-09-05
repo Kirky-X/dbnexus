@@ -66,5 +66,9 @@ fn bench_enforce_shard_binding_conflict(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_shard_id_for_key, bench_enforce_shard_binding_conflict);
+criterion_group!(
+    benches,
+    bench_shard_id_for_key,
+    bench_enforce_shard_binding_conflict
+);
 criterion_main!(benches);

@@ -82,13 +82,22 @@ fn main() {
     println!("\n─── 哈希分片：不同时间戳的路由结果 ───\n");
 
     let timestamps = vec![
-        ("2024-01-01 00:00", Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()),
-        ("2024-06-15 12:00", Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap()),
+        (
+            "2024-01-01 00:00",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+        ),
+        (
+            "2024-06-15 12:00",
+            Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap(),
+        ),
         (
             "2024-12-31 23:59",
             Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 0).unwrap(),
         ),
-        ("2025-03-20 08:30", Utc.with_ymd_and_hms(2025, 3, 20, 8, 30, 0).unwrap()),
+        (
+            "2025-03-20 08:30",
+            Utc.with_ymd_and_hms(2025, 3, 20, 8, 30, 0).unwrap(),
+        ),
     ];
 
     for (label, ts) in &timestamps {

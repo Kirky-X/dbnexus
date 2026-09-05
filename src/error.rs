@@ -116,7 +116,11 @@ pub struct QueryErrorReport {
 
 impl QueryErrorReport {
     /// 创建新的查询错误报告
-    pub fn new(category: ErrorCategory, message: impl Into<String>, suggestion: impl Into<String>) -> Self {
+    pub fn new(
+        category: ErrorCategory,
+        message: impl Into<String>,
+        suggestion: impl Into<String>,
+    ) -> Self {
         Self {
             category,
             message: message.into(),
@@ -243,14 +247,15 @@ mod tests {
 
     #[test]
     fn test_query_error_report_with_table() {
-        let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "check perms").with_table("users");
+        let report = QueryErrorReport::new(ErrorCategory::Permission, "denied", "check perms")
+            .with_table("users");
         assert_eq!(report.table.as_deref(), Some("users"));
     }
 
     #[test]
     fn test_query_error_report_with_operation() {
-        let report =
-            QueryErrorReport::new(ErrorCategory::InjectionRisk, "injection", "use params").with_operation("SELECT");
+        let report = QueryErrorReport::new(ErrorCategory::InjectionRisk, "injection", "use params")
+            .with_operation("SELECT");
         assert_eq!(report.operation.as_deref(), Some("SELECT"));
     }
 

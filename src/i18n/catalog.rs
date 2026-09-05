@@ -529,8 +529,15 @@ mod tests {
 
     #[test]
     fn test_fluent_en_with_args() {
-        let result = format_from_bundle("en", "config-missing-field", &[("field", "dbnexus.url".to_string())]);
-        assert_eq!(result, Some("Missing required configuration: dbnexus.url".to_string()));
+        let result = format_from_bundle(
+            "en",
+            "config-missing-field",
+            &[("field", "dbnexus.url".to_string())],
+        );
+        assert_eq!(
+            result,
+            Some("Missing required configuration: dbnexus.url".to_string())
+        );
     }
 
     #[test]
@@ -538,9 +545,15 @@ mod tests {
         let result = format_from_bundle(
             "zh",
             "perm-denied",
-            &[("operation", "DELETE".to_string()), ("resource", "users".to_string())],
+            &[
+                ("operation", "DELETE".to_string()),
+                ("resource", "users".to_string()),
+            ],
         );
-        assert_eq!(result, Some("对 users 的 DELETE 操作权限被拒绝".to_string()));
+        assert_eq!(
+            result,
+            Some("对 users 的 DELETE 操作权限被拒绝".to_string())
+        );
     }
 
     #[test]
@@ -562,9 +575,15 @@ mod tests {
         let result = format_from_bundle(
             "en",
             "session-permission-denied",
-            &[("action", "SELECT".to_string()), ("table", "users".to_string())],
+            &[
+                ("action", "SELECT".to_string()),
+                ("table", "users".to_string()),
+            ],
         );
-        assert_eq!(result, Some("Permission denied for SELECT on users".to_string()));
+        assert_eq!(
+            result,
+            Some("Permission denied for SELECT on users".to_string())
+        );
     }
 
     #[test]

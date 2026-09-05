@@ -87,7 +87,9 @@ impl crate::i18n::error_ext::LocalizedMsg for ConfigError {
         match self {
             Self::MissingField(field) => vec![("field", field.clone())],
             Self::InvalidCacheCapacity(reason) => vec![("reason", reason.clone())],
-            Self::InvalidValue { key, message } => vec![("key", key.clone()), ("message", message.clone())],
+            Self::InvalidValue { key, message } => {
+                vec![("key", key.clone()), ("message", message.clone())]
+            }
             Self::InvalidFormat(reason) => vec![("reason", reason.clone())],
             Self::FileNotFound(path) => vec![("path", path.clone())],
             Self::IoError(reason) => vec![("reason", reason.clone())],
@@ -329,7 +331,10 @@ impl DatabaseType {
     pub fn from_url(url: &str) -> Result<Self, crate::error::DbNexusError> {
         // 处理 SQLite 特殊格式 sqlite::memory: / sqlite3::memory:
         let lower = url.to_lowercase();
-        if lower == "sqlite::memory:" || lower.starts_with("sqlite://") || lower.starts_with("sqlite3://") {
+        if lower == "sqlite::memory:"
+            || lower.starts_with("sqlite://")
+            || lower.starts_with("sqlite3://")
+        {
             return Ok(DatabaseType::Sqlite);
         }
         if lower.starts_with("duckdb:") {
@@ -340,12 +345,17 @@ impl DatabaseType {
             return Ok(DatabaseType::Ladybug);
         }
         // 处理 Neo4j 图数据库格式 neo4j: / neo4j+s: / neo4j+ssc:
-        if lower.starts_with("neo4j:") || lower.starts_with("neo4j+s:") || lower.starts_with("neo4j+ssc:") {
+        if lower.starts_with("neo4j:")
+            || lower.starts_with("neo4j+s:")
+            || lower.starts_with("neo4j+ssc:")
+        {
             return Ok(DatabaseType::Neo4j);
         }
 
         let parsed = url::Url::parse(url).map_err(|_| {
-            crate::error::DbNexusError::UnsupportedDatabaseScheme(format!("failed to parse URL: {url}"))
+            crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
+                "failed to parse URL: {url}"
+            ))
         })?;
 
         match parsed.scheme() {
@@ -355,9 +365,9 @@ impl DatabaseType {
             "duckdb" => Ok(DatabaseType::DuckDb),
             "lbug" | "ladybug" => Ok(DatabaseType::Ladybug),
             "neo4j" | "neo4j+s" | "neo4j+ssc" => Ok(DatabaseType::Neo4j),
-            other => Err(crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
-                "'{other}' is not a supported database scheme"
-            ))),
+            other => Err(crate::error::DbNexusError::UnsupportedDatabaseScheme(
+                format!("'{other}' is not a supported database scheme"),
+            )),
         }
     }
 
@@ -824,7 +834,10 @@ mod tests {
             ConfigError::IoError("read fail".into()).to_string(),
             "IO error: read fail"
         );
-        assert_eq!(ConfigError::InvalidUrl("bad".into()).to_string(), "Invalid URL: bad");
+        assert_eq!(
+            ConfigError::InvalidUrl("bad".into()).to_string(),
+            "Invalid URL: bad"
+        );
         assert_eq!(
             ConfigError::UnsupportedProtocol("ftp".into()).to_string(),
             "Unsupported database protocol: ftp"
@@ -1018,7 +1031,10 @@ mod tests {
 
     #[test]
     fn test_database_type_from_url_sqlite() {
-        assert_eq!(DatabaseType::from_url("sqlite::memory:").unwrap(), DatabaseType::Sqlite);
+        assert_eq!(
+            DatabaseType::from_url("sqlite::memory:").unwrap(),
+            DatabaseType::Sqlite
+        );
         assert_eq!(
             DatabaseType::from_url("sqlite://test.db").unwrap(),
             DatabaseType::Sqlite
@@ -1027,12 +1043,18 @@ mod tests {
 
     #[test]
     fn test_database_type_from_url_duckdb() {
-        assert_eq!(DatabaseType::from_url("duckdb::memory:").unwrap(), DatabaseType::DuckDb);
+        assert_eq!(
+            DatabaseType::from_url("duckdb::memory:").unwrap(),
+            DatabaseType::DuckDb
+        );
         assert_eq!(
             DatabaseType::from_url("duckdb://test.db").unwrap(),
             DatabaseType::DuckDb
         );
-        assert_eq!(DatabaseType::from_url("duckdb:test.ddb").unwrap(), DatabaseType::DuckDb);
+        assert_eq!(
+            DatabaseType::from_url("duckdb:test.ddb").unwrap(),
+            DatabaseType::DuckDb
+        );
     }
 
     #[test]
@@ -1042,7 +1064,10 @@ mod tests {
             DatabaseType::from_url("lbug://test.lbug").unwrap(),
             DatabaseType::Ladybug
         );
-        assert_eq!(DatabaseType::from_url("lbug:test.lbug").unwrap(), DatabaseType::Ladybug);
+        assert_eq!(
+            DatabaseType::from_url("lbug:test.lbug").unwrap(),
+            DatabaseType::Ladybug
+        );
         // ladybug: scheme（完整名）
         assert_eq!(
             DatabaseType::from_url("ladybug://test.lbug").unwrap(),
@@ -1183,7 +1208,8 @@ mod tests {
         ];
         for original in cases {
             let json = serde_json::to_string(&original).expect("serialize should succeed");
-            let restored: DatabaseType = serde_json::from_str(&json).expect("deserialize should succeed");
+            let restored: DatabaseType =
+                serde_json::from_str(&json).expect("deserialize should succeed");
             assert_eq!(original, restored, "round-trip failed for {:?}", original);
         }
     }
@@ -1318,8 +1344,14 @@ mod tests {
         assert_eq!(deserialized.pool_config.min_connections, 2);
         assert_eq!(deserialized.pool_config.idle_timeout, 100);
         assert_eq!(deserialized.pool_config.acquire_timeout, 3000);
-        assert_eq!(deserialized.permissions_path, Some("/tmp/perms.yaml".to_string()));
-        assert_eq!(deserialized.migrations_dir, Some(PathBuf::from("/tmp/migrations")));
+        assert_eq!(
+            deserialized.permissions_path,
+            Some("/tmp/perms.yaml".to_string())
+        );
+        assert_eq!(
+            deserialized.migrations_dir,
+            Some(PathBuf::from("/tmp/migrations"))
+        );
         assert!(deserialized.auto_migrate);
         assert_eq!(deserialized.migration_timeout, 120);
         assert_eq!(deserialized.admin_role, "root");

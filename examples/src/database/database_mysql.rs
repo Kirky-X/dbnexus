@@ -107,7 +107,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let insert_result = session
         .execute_raw("INSERT IGNORE INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
         .await?;
-    println!("✓ 插入操作完成 (rows_affected: {})", insert_result.rows_affected());
+    println!(
+        "✓ 插入操作完成 (rows_affected: {})",
+        insert_result.rows_affected()
+    );
 
     drop(session);
     println!("ℹ️  Session 释放");

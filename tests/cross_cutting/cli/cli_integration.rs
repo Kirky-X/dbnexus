@@ -46,7 +46,9 @@ mod cli_tests {
             .args(["create", "--help"])
             .assert()
             .success()
-            .stdout(predicate::str::contains("description").or(predicate::str::contains("DESCRIPTION")));
+            .stdout(
+                predicate::str::contains("description").or(predicate::str::contains("DESCRIPTION")),
+            );
     }
 
     /// TEST-CLI-003: 状态命令 - 基础功能测试
@@ -143,7 +145,10 @@ DROP TABLE test_table;
     /// TEST-CLI-009: CLI 生成命令帮助测试
     #[test]
     fn test_cli_generate_help() {
-        cli_command().args(["generate", "--help"]).assert().success();
+        cli_command()
+            .args(["generate", "--help"])
+            .assert()
+            .success();
     }
 
     /// TEST-CLI-010: CLI 向下命令带版本测试
@@ -173,8 +178,11 @@ CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY);
 DROP TABLE test_table;
 "#;
 
-        std::fs::write(temp_dir.path().join("1700000000_test_migration.sql"), migration_content)
-            .expect("Failed to write migration file");
+        std::fs::write(
+            temp_dir.path().join("1700000000_test_migration.sql"),
+            migration_content,
+        )
+        .expect("Failed to write migration file");
 
         let output = cli_command()
             .arg("--database-url")
@@ -223,7 +231,9 @@ DROP TABLE test_table_{};
                 i, i, i, i
             );
             std::fs::write(
-                temp_dir.path().join(format!("170000000{}_test_migration_{}.sql", i, i)),
+                temp_dir
+                    .path()
+                    .join(format!("170000000{}_test_migration_{}.sql", i, i)),
                 migration_content,
             )
             .expect("Failed to write migration file");

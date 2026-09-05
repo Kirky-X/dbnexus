@@ -159,7 +159,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let attempts = counter.load(Ordering::SeqCst);
             println!("  ✅ 正确返回 Exhausted 错误！");
             println!("  - 错误类型   : RetryError::Exhausted");
-            println!("  - 总尝试次数 : {} (1 首次 + {} 重试)", attempts, policy.max_retries);
+            println!(
+                "  - 总尝试次数 : {} (1 首次 + {} 重试)",
+                attempts, policy.max_retries
+            );
             println!("  - 错误信息   : {}", e);
         }
     }
@@ -181,11 +184,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("  自定义策略:");
     println!("  - max_retries      : {}", custom_policy.max_retries);
-    println!("  - initial_backoff  : {} ms", custom_policy.initial_backoff_ms);
+    println!(
+        "  - initial_backoff  : {} ms",
+        custom_policy.initial_backoff_ms
+    );
     println!("  - max_backoff      : {} ms", custom_policy.max_backoff_ms);
     println!("  - multiplier       : {:.1}", custom_policy.multiplier);
     println!("  - jitter           : {}", custom_policy.jitter);
-    println!("  - overall_timeout  : {:?} ms", custom_policy.overall_timeout_ms);
+    println!(
+        "  - overall_timeout  : {:?} ms",
+        custom_policy.overall_timeout_ms
+    );
     println!();
 
     // 展示退避时间序列

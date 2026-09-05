@@ -45,7 +45,10 @@ fn test_ids_are_monotonically_increasing() {
     let mut prev_id = 0u64;
     for _ in 0..10_000 {
         let id = id_gen.next_id().expect("ID generation should succeed");
-        assert!(id > prev_id, "IDs must be monotonically increasing: {id} <= {prev_id}");
+        assert!(
+            id > prev_id,
+            "IDs must be monotonically increasing: {id} <= {prev_id}"
+        );
         prev_id = id;
     }
 }
@@ -98,8 +101,9 @@ fn test_parse_id_roundtrip() {
     let components = id_gen.parse_id(id);
 
     // 重新组装 ID 应等于原始 ID
-    let recomposed =
-        (components.timestamp_ms << 22) | ((components.machine_id as u64) << 12) | (components.sequence as u64);
+    let recomposed = (components.timestamp_ms << 22)
+        | ((components.machine_id as u64) << 12)
+        | (components.sequence as u64);
     assert_eq!(recomposed, id);
 }
 
@@ -119,7 +123,11 @@ fn test_concurrent_id_generation_no_duplicates() {
         handles.push(thread::spawn(move || {
             let mut ids = Vec::with_capacity(ids_per_thread);
             for _ in 0..ids_per_thread {
-                ids.push(id_gen_clone.next_id().expect("ID generation should succeed"));
+                ids.push(
+                    id_gen_clone
+                        .next_id()
+                        .expect("ID generation should succeed"),
+                );
             }
             ids
         }));
@@ -148,7 +156,11 @@ fn test_concurrent_ids_monotonically_increasing_per_thread() {
         handles.push(thread::spawn(move || {
             let mut ids = Vec::with_capacity(ids_per_thread);
             for _ in 0..ids_per_thread {
-                ids.push(id_gen_clone.next_id().expect("ID generation should succeed"));
+                ids.push(
+                    id_gen_clone
+                        .next_id()
+                        .expect("ID generation should succeed"),
+                );
             }
             ids
         }));

@@ -139,7 +139,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证文件已创建
     let metadata = std::fs::metadata(db_path)?;
-    println!("\n✓ 数据库文件已创建: {} ({} 字节)", db_path, metadata.len());
+    println!(
+        "\n✓ 数据库文件已创建: {} ({} 字节)",
+        db_path,
+        metadata.len()
+    );
 
     // 清理示例文件
     drop(file_pool);

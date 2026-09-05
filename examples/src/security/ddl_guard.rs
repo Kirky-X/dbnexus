@@ -65,8 +65,14 @@ fn main() {
             "CREATE TABLE",
             "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))",
         ),
-        ("CREATE TABLE 小写", "create table products (id int, price real)"),
-        ("CREATE OR REPLACE", "CREATE OR REPLACE TABLE sessions (id INT)"),
+        (
+            "CREATE TABLE 小写",
+            "create table products (id int, price real)",
+        ),
+        (
+            "CREATE OR REPLACE",
+            "CREATE OR REPLACE TABLE sessions (id INT)",
+        ),
         (
             "ALTER TABLE ADD COLUMN",
             "ALTER TABLE users ADD COLUMN email VARCHAR(255)",
@@ -111,7 +117,11 @@ fn main() {
             blocked += 1;
         }
     }
-    println!("\n  危险 DDL 拦截：{}/{} 成功\n", blocked, dangerous_cases.len());
+    println!(
+        "\n  危险 DDL 拦截：{}/{} 成功\n",
+        blocked,
+        dangerous_cases.len()
+    );
 
     // ============================================
     // 3. 非 DDL 语句（DML，应被拦截）
@@ -199,7 +209,10 @@ fn main() {
             }
         }
     }
-    println!("\n  审计结果：{} 通过，{} 拦截", allowed_count, blocked_count);
+    println!(
+        "\n  审计结果：{} 通过，{} 拦截",
+        allowed_count, blocked_count
+    );
 
     println!("\n========================================");
     println!("✨ DDL 安全守卫示例完成！");

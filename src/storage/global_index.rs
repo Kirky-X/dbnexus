@@ -161,7 +161,8 @@ impl GlobalIndex {
         }
 
         let total = entries.len();
-        let (total_synced, all_errors) = self.chunk_and_upsert(&entries, BATCH_SYNC_CHUNK_SIZE).await;
+        let (total_synced, all_errors) =
+            self.chunk_and_upsert(&entries, BATCH_SYNC_CHUNK_SIZE).await;
 
         let failed_count = total.saturating_sub(total_synced);
         Ok(SyncResult {
@@ -176,7 +177,11 @@ impl GlobalIndex {
     ///
     /// 即使部分批次失败也会继续处理后续批次（部分成功语义），
     /// 失败信息累积到返回的错误列表中。
-    async fn chunk_and_upsert(&self, entries: &[IndexEntry], chunk_size: usize) -> (usize, Vec<String>) {
+    async fn chunk_and_upsert(
+        &self,
+        entries: &[IndexEntry],
+        chunk_size: usize,
+    ) -> (usize, Vec<String>) {
         let mut total_synced = 0usize;
         let mut all_errors: Vec<String> = Vec::new();
 
@@ -202,7 +207,10 @@ impl GlobalIndex {
             let active_models: Vec<ActiveModel> = chunk
                 .iter()
                 .map(|entry| {
-                    let id = format!("{}:{}:{}", entry.table_name, entry.index_key, entry.record_id);
+                    let id = format!(
+                        "{}:{}:{}",
+                        entry.table_name, entry.index_key, entry.record_id
+                    );
                     ActiveModel {
                         id: Set(id),
                         table_name: Set(entry.table_name.clone()),
@@ -390,7 +398,10 @@ mod tests {
         let index = create_global_index().await;
         let entry = make_entry("users", "user_1", 1, "email", "test@example.com");
 
-        let result = index.batch_sync(vec![entry]).await.expect("batch_sync failed");
+        let result = index
+            .batch_sync(vec![entry])
+            .await
+            .expect("batch_sync failed");
         assert!(result.success);
         assert_eq!(result.synced_count, 1);
         assert_eq!(result.failed_count, 0);
@@ -436,11 +447,17 @@ mod tests {
 
         // 第一次插入
         let entry_v1 = make_entry("users", "user_1", 0, "email", "old@example.com");
-        index.batch_sync(vec![entry_v1]).await.expect("first sync failed");
+        index
+            .batch_sync(vec![entry_v1])
+            .await
+            .expect("first sync failed");
 
         // 第二次插入相同 id 但不同 value（upsert）
         let entry_v2 = make_entry("users", "user_1", 1, "email", "new@example.com");
-        let result = index.batch_sync(vec![entry_v2]).await.expect("second sync failed");
+        let result = index
+            .batch_sync(vec![entry_v2])
+            .await
+            .expect("second sync failed");
         assert!(result.success);
         assert_eq!(result.synced_count, 1);
 
@@ -523,7 +540,10 @@ mod tests {
         assert_eq!(result.failed_count, 0);
 
         // 验证条目数
-        let queried = index.query_by_index("users", "id", "599").await.expect("query failed");
+        let queried = index
+            .query_by_index("users", "id", "599")
+            .await
+            .expect("query failed");
         assert_eq!(queried.len(), 1);
         assert_eq!(queried[0].record_id, "user_599");
     }

@@ -102,10 +102,12 @@ impl TokenBucket {
             if current == 0 {
                 return false;
             }
-            match self
-                .tokens
-                .compare_exchange(current, current - 1, Ordering::AcqRel, Ordering::Acquire)
-            {
+            match self.tokens.compare_exchange(
+                current,
+                current - 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return true,
                 Err(_) => continue, // 其他线程已修改，重试
             }
@@ -152,11 +154,19 @@ impl TokenBucket {
                 let mut inner_retries = 0u32;
                 loop {
                     let current_tokens = self.tokens.load(Ordering::Relaxed);
-                    let new_tokens = std::cmp::min(current_tokens.saturating_add(tokens_to_add), self.max_tokens);
+                    let new_tokens = std::cmp::min(
+                        current_tokens.saturating_add(tokens_to_add),
+                        self.max_tokens,
+                    );
 
                     if self
                         .tokens
-                        .compare_exchange(current_tokens, new_tokens, Ordering::AcqRel, Ordering::Relaxed)
+                        .compare_exchange(
+                            current_tokens,
+                            new_tokens,
+                            Ordering::AcqRel,
+                            Ordering::Relaxed,
+                        )
                         .is_ok()
                     {
                         return;
@@ -199,7 +209,12 @@ impl RateLimiter {
     /// * `window_duration` - 时间窗口大小
     /// * `max_buckets` - 最大桶数量限制（防止内存泄漏）
     /// * `burst_capacity` - 突发容量（桶的最大令牌数），默认为 max_requests
-    pub fn new(max_requests: u32, window_duration: Duration, max_buckets: usize, burst_capacity: u32) -> Self {
+    pub fn new(
+        max_requests: u32,
+        window_duration: Duration,
+        max_buckets: usize,
+        burst_capacity: u32,
+    ) -> Self {
         Self {
             max_requests,
             window_duration,
@@ -509,7 +524,12 @@ mod tests {
     /// 验证令牌桶在高并发场景下的正确性。
     #[tokio::test]
     async fn test_token_bucket_concurrent_safety() {
-        let limiter = Arc::new(RateLimiter::new(100, std::time::Duration::from_secs(1), 10000, 100));
+        let limiter = Arc::new(RateLimiter::new(
+            100,
+            std::time::Duration::from_secs(1),
+            10000,
+            100,
+        ));
         let mut handles = vec![];
 
         // 启动 10 个并发任务，每个尝试获取 15 个令牌
@@ -546,7 +566,12 @@ mod tests {
     /// 验证单个键在高并发竞争下的正确性。
     #[tokio::test]
     async fn test_token_bucket_single_key_concurrent() {
-        let limiter = Arc::new(RateLimiter::new(50, std::time::Duration::from_secs(3600), 10000, 50));
+        let limiter = Arc::new(RateLimiter::new(
+            50,
+            std::time::Duration::from_secs(3600),
+            10000,
+            50,
+        ));
         let mut handles = vec![];
 
         // 启动 10 个并发任务，竞争同一个键
@@ -652,10 +677,17 @@ mod tests {
 
         // 精确测试：应该允许 5 个请求，拒绝第 6 个
         for i in 1..=5 {
-            assert!(limiter.check("user1").await, "Request {} should be allowed", i);
+            assert!(
+                limiter.check("user1").await,
+                "Request {} should be allowed",
+                i
+            );
         }
 
-        assert!(!limiter.check("user1").await, "6th request should be denied");
+        assert!(
+            !limiter.check("user1").await,
+            "6th request should be denied"
+        );
 
         // 验证剩余令牌
         assert_eq!(limiter.remaining("user1"), 0);
@@ -688,7 +720,12 @@ mod tests {
     /// 测试无 panic、无数据竞争、令牌计数准确。
     #[tokio::test]
     async fn test_token_bucket_high_concurrent_stress() {
-        let limiter = Arc::new(RateLimiter::new(200, std::time::Duration::from_secs(3600), 10000, 200));
+        let limiter = Arc::new(RateLimiter::new(
+            200,
+            std::time::Duration::from_secs(3600),
+            10000,
+            200,
+        ));
         let mut handles = vec![];
 
         // 启动 60 个并发任务，每个尝试获取 5 个令牌（共 300 次请求）
@@ -738,7 +775,10 @@ mod tests {
         let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000, 1);
 
         // 第一次请求：tokens 从 1 变为 0，fetch_sub 返回 1，应该允许
-        assert!(limiter.check("precision_user").await, "First request should be allowed");
+        assert!(
+            limiter.check("precision_user").await,
+            "First request should be allowed"
+        );
         assert_eq!(limiter.remaining("precision_user"), 0);
 
         // 第二次请求：tokens 为 0，fetch_sub 返回 0，应该拒绝并归还令牌

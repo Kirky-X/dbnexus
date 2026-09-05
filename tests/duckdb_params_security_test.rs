@@ -62,7 +62,10 @@ async fn params_roundtrip_and_injection_safety() {
         .await
         .expect("参数化查询");
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].get("name"), Some(&DuckValue::Text(injected.to_string())));
+    assert_eq!(
+        rows[0].get("name"),
+        Some(&DuckValue::Text(injected.to_string()))
+    );
     assert_eq!(rows[0].get("age"), Some(&DuckValue::Int(30)));
     assert_eq!(rows[0].get("score"), Some(&DuckValue::Double(1.5)));
 
@@ -140,7 +143,11 @@ async fn sqlparser_gate_accepts_duckdb_dialect() {
         .execute_duckdb("SELECT v FROM t_conflict WHERE k = 'a'")
         .await
         .expect("查询");
-    assert_eq!(final_rows[0].get("v"), Some(&DuckValue::Int(2)), "upsert 应覆盖为 2");
+    assert_eq!(
+        final_rows[0].get("v"),
+        Some(&DuckValue::Int(2)),
+        "upsert 应覆盖为 2"
+    );
 }
 
 #[tokio::test]
@@ -164,7 +171,10 @@ async fn transaction_batch_atomic_commit_and_rollback() {
                 "INSERT INTO t_ledger (id, amount) VALUES (?, ?)".to_string(),
                 vec![DuckValue::Int(2), DuckValue::Double(20.0)],
             ),
-            ("DELETE FROM t_ledger WHERE id = ?".to_string(), vec![DuckValue::Int(1)]),
+            (
+                "DELETE FROM t_ledger WHERE id = ?".to_string(),
+                vec![DuckValue::Int(1)],
+            ),
         ])
         .await
         .expect("事务提交");
@@ -176,7 +186,11 @@ async fn transaction_batch_atomic_commit_and_rollback() {
         .execute_duckdb("SELECT COUNT(*) AS c FROM t_ledger")
         .await
         .expect("查询");
-    assert_eq!(rows[0].get("c"), Some(&DuckValue::BigInt(1)), "提交后应剩 1 行");
+    assert_eq!(
+        rows[0].get("c"),
+        Some(&DuckValue::BigInt(1)),
+        "提交后应剩 1 行"
+    );
 
     // 回滚路径：第 2 条语句失败（引用不存在的表）→ 第 1 条的插入被回滚
     let err = session
@@ -197,7 +211,11 @@ async fn transaction_batch_atomic_commit_and_rollback() {
         .execute_duckdb("SELECT COUNT(*) AS c FROM t_ledger WHERE id = 99")
         .await
         .expect("查询");
-    assert_eq!(rows[0].get("c"), Some(&DuckValue::BigInt(0)), "回滚后 id=99 不应存在");
+    assert_eq!(
+        rows[0].get("c"),
+        Some(&DuckValue::BigInt(0)),
+        "回滚后 id=99 不应存在"
+    );
 }
 
 #[tokio::test]
@@ -216,7 +234,10 @@ async fn file_pool_single_connection_survives_sequential_sessions() {
             .await
             .expect("建表");
         session
-            .execute_duckdb_raw_with_params("INSERT INTO t_seq (v) VALUES (?)", vec![DuckValue::Int(i)])
+            .execute_duckdb_raw_with_params(
+                "INSERT INTO t_seq (v) VALUES (?)",
+                vec![DuckValue::Int(i)],
+            )
             .await
             .expect("插入");
         drop(session);

@@ -191,7 +191,10 @@ pub struct AuditConfig {
 #[async_trait]
 pub trait AuditStorage: Send + Sync {
     /// 存储审计事件
-    async fn store(&self, event: &AuditEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn store(
+        &self,
+        event: &AuditEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// 查询审计事件
     async fn query(
@@ -200,7 +203,10 @@ pub trait AuditStorage: Send + Sync {
     ) -> Result<Vec<AuditEvent>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// 清理旧日志
-    async fn cleanup(&self, before: &DateTime<Utc>) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn cleanup(
+        &self,
+        before: &DateTime<Utc>,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// 审计查询过滤器
@@ -276,7 +282,13 @@ mod tests {
     async fn test_audit_event_update() {
         let before = r#"{"name": "old"}"#;
         let after = r#"{"name": "new"}"#;
-        let event = AuditEvent::update("users", "1", "admin", Some(before.to_string()), Some(after.to_string()));
+        let event = AuditEvent::update(
+            "users",
+            "1",
+            "admin",
+            Some(before.to_string()),
+            Some(after.to_string()),
+        );
 
         assert_eq!(event.operation, AuditOperation::Update);
         assert_eq!(event.before_value, Some(before.to_string()));
@@ -306,7 +318,10 @@ mod tests {
         assert_eq!(event.session_id, "s");
 
         let storage = MemoryAuditStorage::default();
-        storage.store(&event).await.expect("Storage operation should succeed");
+        storage
+            .store(&event)
+            .await
+            .expect("Storage operation should succeed");
         assert_eq!(storage.event_count().await, 1);
     }
 
@@ -353,7 +368,10 @@ mod tests {
             storage.clone(),
         );
 
-        logger.log_create("t", "1", "u", Some("v".to_string())).await.unwrap();
+        logger
+            .log_create("t", "1", "u", Some("v".to_string()))
+            .await
+            .unwrap();
         logger.log_read("t", "1", "u").await.unwrap();
         logger
             .log_update("t", "1", "u", Some("b".to_string()), Some("a".to_string()))
@@ -419,8 +437,8 @@ mod tests {
         let config = AuditConfig::default();
         let logger = AuditLogger::with_config(config, storage);
 
-        let event =
-            AuditEvent::create("users", "1", "admin").with_after_value(r#"{"password": "secret123", "name": "test"}"#);
+        let event = AuditEvent::create("users", "1", "admin")
+            .with_after_value(r#"{"password": "secret123", "name": "test"}"#);
 
         logger.log(event).await.unwrap();
 
@@ -450,9 +468,15 @@ mod tests {
         assert_eq!(AuditOperation::Delete.to_string(), "DELETE");
         assert_eq!(AuditOperation::Login.to_string(), "LOGIN");
         assert_eq!(AuditOperation::Logout.to_string(), "LOGOUT");
-        assert_eq!(AuditOperation::PermissionChange.to_string(), "PERMISSION_CHANGE");
+        assert_eq!(
+            AuditOperation::PermissionChange.to_string(),
+            "PERMISSION_CHANGE"
+        );
         assert_eq!(AuditOperation::ConfigChange.to_string(), "CONFIG_CHANGE");
-        assert_eq!(AuditOperation::Other("custom_op".to_string()).to_string(), "CUSTOM_OP");
+        assert_eq!(
+            AuditOperation::Other("custom_op".to_string()).to_string(),
+            "CUSTOM_OP"
+        );
         assert_eq!(AuditOperation::default().to_string(), "UNKNOWN");
 
         assert_eq!(AuditSeverity::Info.to_string(), "INFO");
@@ -523,7 +547,10 @@ mod tests {
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].entity_id, "9");
 
-        let removed = storage.cleanup(&(now - chrono::Duration::minutes(1))).await.unwrap();
+        let removed = storage
+            .cleanup(&(now - chrono::Duration::minutes(1)))
+            .await
+            .unwrap();
         assert_eq!(removed, 1);
         assert_eq!(storage.event_count().await, 1);
     }
@@ -555,7 +582,12 @@ mod tests {
         });
 
         logger
-            .log_delete("users", "2", "admin", Some(r#"{\"password\":\"x\"}"#.to_string()))
+            .log_delete(
+                "users",
+                "2",
+                "admin",
+                Some(r#"{\"password\":\"x\"}"#.to_string()),
+            )
             .await
             .unwrap();
         assert!(called.load(Ordering::SeqCst));
@@ -568,7 +600,8 @@ mod tests {
         config.sensitive_fields.push("user.password".to_string());
         let logger = AuditLogger::with_config(config, storage);
 
-        let after_value = r#"{"password":"p","_password":"p2","data":"c2VjcmV0","user.password":"v"}"#;
+        let after_value =
+            r#"{"password":"p","_password":"p2","data":"c2VjcmV0","user.password":"v"}"#;
         let event = AuditEvent::create("users", "1", "admin").with_after_value(after_value);
         logger.log(event).await.unwrap();
 
@@ -661,10 +694,10 @@ mod tests {
     fn test_sanitize_value_max_depth() {
         // 构建一个超过最大深度的嵌套 JSON（使用非敏感字段名）
         let mut deep_value = serde_json::Value::Object(serde_json::Map::new());
-        deep_value
-            .as_object_mut()
-            .unwrap()
-            .insert("deep_data".to_string(), serde_json::Value::String("value".to_string()));
+        deep_value.as_object_mut().unwrap().insert(
+            "deep_data".to_string(),
+            serde_json::Value::String("value".to_string()),
+        );
 
         for i in 0..12 {
             let mut new_obj = serde_json::Map::new();
@@ -766,10 +799,16 @@ mod tests {
         );
         assert_eq!(parsed["user"]["settings"]["config"]["secret"], "[REDACTED]");
         // 验证非敏感字段保持不变
-        assert_eq!(parsed["user"]["auth_data"]["auth_list"][0]["auth_type"], "bearer");
+        assert_eq!(
+            parsed["user"]["auth_data"]["auth_list"][0]["auth_type"],
+            "bearer"
+        );
         assert_eq!(parsed["user"]["settings"]["config"]["name"], "production");
         assert_eq!(parsed["metadata"]["count"], 10);
-        assert_eq!(parsed["metadata"]["tags"], serde_json::json!(["tag1", "tag2"]));
+        assert_eq!(
+            parsed["metadata"]["tags"],
+            serde_json::json!(["tag1", "tag2"])
+        );
     }
 
     #[test]

@@ -15,8 +15,9 @@
 //! ```
 
 use dbnexus::access::permission_engine::{
-    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider, PermissionResource, PermissionRule,
-    PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider, Role,
+    PermissionAction, PermissionContext, PermissionDecision, PermissionProvider,
+    PermissionResource, PermissionRule, PermissionSubject, PolicyDecisionPoint,
+    PolicyDecisionPointConfig, RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
 
@@ -25,7 +26,13 @@ use std::sync::Arc;
 // ============================================
 
 /// 快速创建一条权限规则
-fn rule(name: &str, priority: i32, subject: &str, resource: &str, allow: &[PermissionAction]) -> PermissionRule {
+fn rule(
+    name: &str,
+    priority: i32,
+    subject: &str,
+    resource: &str,
+    allow: &[PermissionAction],
+) -> PermissionRule {
     PermissionRule {
         name: name.to_string(),
         priority,
@@ -99,7 +106,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     provider.add_permission(
         "editor",
-        rule("editor_users_ro", 50, "*", "users", &[PermissionAction::Select]),
+        rule(
+            "editor_users_ro",
+            50,
+            "*",
+            "users",
+            &[PermissionAction::Select],
+        ),
     );
 
     // viewer 角色：只读
@@ -111,7 +124,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     provider.add_permission(
         "viewer",
-        rule("viewer_articles_ro", 10, "*", "articles", &[PermissionAction::Select]),
+        rule(
+            "viewer_articles_ro",
+            10,
+            "*",
+            "articles",
+            &[PermissionAction::Select],
+        ),
     );
 
     // 将用户映射到角色
@@ -234,8 +253,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(first_resource) = resources.first() {
             // get_allowed_actions 是 PermissionProvider trait 的方法，直接在 provider 上调用
-            let actions = provider.get_allowed_actions(user, &first_resource.name).await;
-            println!("    {} 对 {} 的操作: {:?}", user, first_resource.name, actions);
+            let actions = provider
+                .get_allowed_actions(user, &first_resource.name)
+                .await;
+            println!(
+                "    {} 对 {} 的操作: {:?}",
+                user, first_resource.name, actions
+            );
         }
     }
 
@@ -257,7 +281,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!("  请求 {}: {:?}", i, decision);
     }
-    println!("  统计: {} 允许, {} 拒绝（限流）", allowed_count, denied_count);
+    println!(
+        "  统计: {} 允许, {} 拒绝（限流）",
+        allowed_count, denied_count
+    );
 
     println!("\n========================================");
     println!("✨ 权限引擎与 PDP 示例完成！");

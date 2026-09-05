@@ -315,17 +315,35 @@ mod tests {
     #[test]
     fn column_type_to_sql_integer() {
         assert_eq!(ColumnType::Integer.to_sql(DatabaseType::Sqlite), "INTEGER");
-        assert_eq!(ColumnType::Integer.to_sql(DatabaseType::Postgres), "INTEGER");
+        assert_eq!(
+            ColumnType::Integer.to_sql(DatabaseType::Postgres),
+            "INTEGER"
+        );
         assert_eq!(ColumnType::Integer.to_sql(DatabaseType::MySql), "INTEGER");
     }
 
     #[test]
     fn column_type_to_sql_string() {
-        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Sqlite), "TEXT");
-        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::Postgres), "VARCHAR(255)");
-        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::MySql), "VARCHAR(255)");
-        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::DuckDb), "VARCHAR(255)");
-        assert_eq!(ColumnType::String(Some(64)).to_sql(DatabaseType::MySql), "VARCHAR(64)");
+        assert_eq!(
+            ColumnType::String(None).to_sql(DatabaseType::Sqlite),
+            "TEXT"
+        );
+        assert_eq!(
+            ColumnType::String(None).to_sql(DatabaseType::Postgres),
+            "VARCHAR(255)"
+        );
+        assert_eq!(
+            ColumnType::String(None).to_sql(DatabaseType::MySql),
+            "VARCHAR(255)"
+        );
+        assert_eq!(
+            ColumnType::String(None).to_sql(DatabaseType::DuckDb),
+            "VARCHAR(255)"
+        );
+        assert_eq!(
+            ColumnType::String(Some(64)).to_sql(DatabaseType::MySql),
+            "VARCHAR(64)"
+        );
         assert_eq!(
             ColumnType::String(Some(128)).to_sql(DatabaseType::DuckDb),
             "VARCHAR(128)"
@@ -335,7 +353,10 @@ mod tests {
     #[test]
     fn column_type_to_sql_boolean() {
         assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Sqlite), "INTEGER");
-        assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::Postgres), "BOOLEAN");
+        assert_eq!(
+            ColumnType::Boolean.to_sql(DatabaseType::Postgres),
+            "BOOLEAN"
+        );
         assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::MySql), "BOOLEAN");
         assert_eq!(ColumnType::Boolean.to_sql(DatabaseType::DuckDb), "BOOLEAN");
     }
@@ -350,7 +371,10 @@ mod tests {
 
     #[test]
     fn column_type_to_sql_custom() {
-        assert_eq!(ColumnType::Custom("UUID".into()).to_sql(DatabaseType::Sqlite), "UUID");
+        assert_eq!(
+            ColumnType::Custom("UUID".into()).to_sql(DatabaseType::Sqlite),
+            "UUID"
+        );
     }
 
     #[test]
@@ -460,27 +484,45 @@ mod tests {
     fn test_column_type_to_sql_big_integer() {
         // SQLite 的 BigInteger 映射为 INTEGER（SQLite 的 INTEGER 是 64 位，
         // 且 AUTOINCREMENT 只允许 INTEGER）
-        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Sqlite), "INTEGER");
-        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::Postgres), "BIGINT");
+        assert_eq!(
+            ColumnType::BigInteger.to_sql(DatabaseType::Sqlite),
+            "INTEGER"
+        );
+        assert_eq!(
+            ColumnType::BigInteger.to_sql(DatabaseType::Postgres),
+            "BIGINT"
+        );
         assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::MySql), "BIGINT");
     }
 
     #[test]
     fn test_column_type_to_sql_float_double() {
         assert_eq!(ColumnType::Float.to_sql(DatabaseType::Postgres), "FLOAT");
-        assert_eq!(ColumnType::Double.to_sql(DatabaseType::Postgres), "DOUBLE PRECISION");
-        assert_eq!(ColumnType::Double.to_sql(DatabaseType::MySql), "DOUBLE PRECISION");
+        assert_eq!(
+            ColumnType::Double.to_sql(DatabaseType::Postgres),
+            "DOUBLE PRECISION"
+        );
+        assert_eq!(
+            ColumnType::Double.to_sql(DatabaseType::MySql),
+            "DOUBLE PRECISION"
+        );
     }
 
     #[test]
     fn test_column_type_to_sql_date_time_types() {
         assert_eq!(ColumnType::Date.to_sql(DatabaseType::Postgres), "DATE");
         assert_eq!(ColumnType::Time.to_sql(DatabaseType::Postgres), "TIME");
-        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::Postgres), "TIMESTAMP");
+        assert_eq!(
+            ColumnType::Timestamp.to_sql(DatabaseType::Postgres),
+            "TIMESTAMP"
+        );
 
         // DateTime 有数据库特定行为
         assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::MySql), "DATETIME");
-        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::Postgres), "TIMESTAMP");
+        assert_eq!(
+            ColumnType::DateTime.to_sql(DatabaseType::Postgres),
+            "TIMESTAMP"
+        );
         assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::Sqlite), "TEXT");
     }
 
@@ -592,7 +634,10 @@ mod tests {
             file_path: "m2.sql".into(),
         });
 
-        let all = [Migration::new(1, "v1".into()), Migration::new(2, "v2".into())];
+        let all = [
+            Migration::new(1, "v1".into()),
+            Migration::new(2, "v2".into()),
+        ];
         let pending = h.get_pending_migrations(&all);
         assert!(pending.is_empty());
     }
@@ -636,7 +681,10 @@ mod tests {
         // applied_at 应该是当前时间（不为空，且能解析为有效时间）
         let now = time::OffsetDateTime::now_utc();
         let diff = restored.applied_at - now;
-        assert!(diff.whole_seconds().abs() < 5, "timestamp should be close to now");
+        assert!(
+            diff.whole_seconds().abs() < 5,
+            "timestamp should be close to now"
+        );
     }
 
     // ===== 补充测试：DuckDb 分支覆盖 =====
@@ -644,7 +692,10 @@ mod tests {
     #[test]
     fn test_column_type_to_sql_duckdb_string() {
         // String(None) for DuckDb -> VARCHAR(255)
-        assert_eq!(ColumnType::String(None).to_sql(DatabaseType::DuckDb), "VARCHAR(255)");
+        assert_eq!(
+            ColumnType::String(None).to_sql(DatabaseType::DuckDb),
+            "VARCHAR(255)"
+        );
         // String(Some(128)) for DuckDb -> VARCHAR(128)
         assert_eq!(
             ColumnType::String(Some(128)).to_sql(DatabaseType::DuckDb),
@@ -659,7 +710,10 @@ mod tests {
 
     #[test]
     fn test_column_type_to_sql_duckdb_datetime() {
-        assert_eq!(ColumnType::DateTime.to_sql(DatabaseType::DuckDb), "TIMESTAMP");
+        assert_eq!(
+            ColumnType::DateTime.to_sql(DatabaseType::DuckDb),
+            "TIMESTAMP"
+        );
     }
 
     #[test]
@@ -670,12 +724,21 @@ mod tests {
     #[test]
     fn test_column_type_to_sql_duckdb_others() {
         // BigInteger, Float, Double, Date, Time, Timestamp, Binary, Custom
-        assert_eq!(ColumnType::BigInteger.to_sql(DatabaseType::DuckDb), "BIGINT");
+        assert_eq!(
+            ColumnType::BigInteger.to_sql(DatabaseType::DuckDb),
+            "BIGINT"
+        );
         assert_eq!(ColumnType::Float.to_sql(DatabaseType::DuckDb), "FLOAT");
-        assert_eq!(ColumnType::Double.to_sql(DatabaseType::DuckDb), "DOUBLE PRECISION");
+        assert_eq!(
+            ColumnType::Double.to_sql(DatabaseType::DuckDb),
+            "DOUBLE PRECISION"
+        );
         assert_eq!(ColumnType::Date.to_sql(DatabaseType::DuckDb), "DATE");
         assert_eq!(ColumnType::Time.to_sql(DatabaseType::DuckDb), "TIME");
-        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::DuckDb), "TIMESTAMP");
+        assert_eq!(
+            ColumnType::Timestamp.to_sql(DatabaseType::DuckDb),
+            "TIMESTAMP"
+        );
         assert_eq!(ColumnType::Binary.to_sql(DatabaseType::DuckDb), "BLOB");
         assert_eq!(
             ColumnType::Custom("MY_TYPE".into()).to_sql(DatabaseType::DuckDb),
@@ -689,16 +752,21 @@ mod tests {
         assert_eq!(ColumnType::Float.to_sql(DatabaseType::MySql), "FLOAT");
         assert_eq!(ColumnType::Date.to_sql(DatabaseType::MySql), "DATE");
         assert_eq!(ColumnType::Time.to_sql(DatabaseType::MySql), "TIME");
-        assert_eq!(ColumnType::Timestamp.to_sql(DatabaseType::MySql), "TIMESTAMP");
+        assert_eq!(
+            ColumnType::Timestamp.to_sql(DatabaseType::MySql),
+            "TIMESTAMP"
+        );
     }
 
     #[test]
     fn test_column_type_to_sql_graph_db_panics() {
         // Use catch_unwind to test panic branches (tarpaulin tracks coverage through catch_unwind)
-        let result = std::panic::catch_unwind(|| ColumnType::String(None).to_sql(DatabaseType::Ladybug));
+        let result =
+            std::panic::catch_unwind(|| ColumnType::String(None).to_sql(DatabaseType::Ladybug));
         assert!(result.is_err(), "Ladybug String(None) should panic");
 
-        let result = std::panic::catch_unwind(|| ColumnType::String(Some(10)).to_sql(DatabaseType::Neo4j));
+        let result =
+            std::panic::catch_unwind(|| ColumnType::String(Some(10)).to_sql(DatabaseType::Neo4j));
         assert!(result.is_err(), "Neo4j String(Some) should panic");
 
         let result = std::panic::catch_unwind(|| ColumnType::Boolean.to_sql(DatabaseType::Ladybug));
@@ -771,14 +839,16 @@ impl From<MigrationVersion> for SerializableMigrationVersion {
 
 impl From<SerializableMigrationVersion> for MigrationVersion {
     fn from(sm: SerializableMigrationVersion) -> Self {
-        let applied_at =
-            match time::OffsetDateTime::parse(&sm.applied_at, &time::format_description::well_known::Rfc3339) {
-                Ok(dt) => dt,
-                Err(_) => {
-                    // 解析失败，使用当前时间
-                    time::OffsetDateTime::now_utc()
-                }
-            };
+        let applied_at = match time::OffsetDateTime::parse(
+            &sm.applied_at,
+            &time::format_description::well_known::Rfc3339,
+        ) {
+            Ok(dt) => dt,
+            Err(_) => {
+                // 解析失败，使用当前时间
+                time::OffsetDateTime::now_utc()
+            }
+        };
         Self {
             version: sm.version,
             description: sm.description,
@@ -827,7 +897,10 @@ impl MigrationHistory {
     }
 
     /// 获取待应用的迁移版本
-    pub fn get_pending_migrations<'a>(&self, all_migrations: &'a [Migration]) -> Vec<&'a Migration> {
+    pub fn get_pending_migrations<'a>(
+        &self,
+        all_migrations: &'a [Migration],
+    ) -> Vec<&'a Migration> {
         all_migrations
             .iter()
             .filter(|m| !self.is_version_applied(m.version))

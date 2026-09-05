@@ -37,12 +37,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("已设置的环境变量:");
-    println!("  - DATABASE_URL       = {}", std::env::var("DATABASE_URL")?);
-    println!("  - DB_MAX_CONNECTIONS = {}", std::env::var("DB_MAX_CONNECTIONS")?);
-    println!("  - DB_MIN_CONNECTIONS = {}", std::env::var("DB_MIN_CONNECTIONS")?);
-    println!("  - DB_IDLE_TIMEOUT    = {}", std::env::var("DB_IDLE_TIMEOUT")?);
-    println!("  - DB_ACQUIRE_TIMEOUT = {}", std::env::var("DB_ACQUIRE_TIMEOUT")?);
-    println!("  - DB_ADMIN_ROLE      = {}", std::env::var("DB_ADMIN_ROLE")?);
+    println!(
+        "  - DATABASE_URL       = {}",
+        std::env::var("DATABASE_URL")?
+    );
+    println!(
+        "  - DB_MAX_CONNECTIONS = {}",
+        std::env::var("DB_MAX_CONNECTIONS")?
+    );
+    println!(
+        "  - DB_MIN_CONNECTIONS = {}",
+        std::env::var("DB_MIN_CONNECTIONS")?
+    );
+    println!(
+        "  - DB_IDLE_TIMEOUT    = {}",
+        std::env::var("DB_IDLE_TIMEOUT")?
+    );
+    println!(
+        "  - DB_ACQUIRE_TIMEOUT = {}",
+        std::env::var("DB_ACQUIRE_TIMEOUT")?
+    );
+    println!(
+        "  - DB_ADMIN_ROLE      = {}",
+        std::env::var("DB_ADMIN_ROLE")?
+    );
 
     // ============================================
     // 2. 从环境变量加载配置
@@ -55,13 +73,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n📋 解析后的 DbConfig:");
     println!("  - url              : {}", config.url);
-    println!("  - max_connections   : {}", config.pool_config.max_connections);
-    println!("  - min_connections   : {}", config.pool_config.min_connections);
-    println!("  - idle_timeout (s)  : {}", config.pool_config.idle_timeout);
-    println!("  - acquire_timeout(ms): {}", config.pool_config.acquire_timeout);
+    println!(
+        "  - max_connections   : {}",
+        config.pool_config.max_connections
+    );
+    println!(
+        "  - min_connections   : {}",
+        config.pool_config.min_connections
+    );
+    println!(
+        "  - idle_timeout (s)  : {}",
+        config.pool_config.idle_timeout
+    );
+    println!(
+        "  - acquire_timeout(ms): {}",
+        config.pool_config.acquire_timeout
+    );
     println!("  - admin_role        : {}", config.admin_role);
     println!("  - auto_migrate      : {}", config.auto_migrate);
-    println!("  - database_type     : {}", config.database_type().unwrap());
+    println!(
+        "  - database_type     : {}",
+        config.database_type().unwrap()
+    );
 
     println!("\n💾 缓存配置:");
     println!(
@@ -76,7 +109,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  - query_cache_capacity  : {}",
         config.cache_config.query_cache_capacity
     );
-    println!("  - default_ttl (s)       : {}", config.cache_config.default_ttl);
+    println!(
+        "  - default_ttl (s)       : {}",
+        config.cache_config.default_ttl
+    );
 
     println!("\n========================================");
     println!("✨ 环境变量配置示例完成！");

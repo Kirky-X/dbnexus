@@ -46,8 +46,9 @@ use std::time::{Duration, Instant};
 
 /// 预编译的正则表达式，用于检测路径遍历攻击模式
 /// 使用 LazyLock 确保线程安全的单次初始化
-static PATH_TRAVERSAL_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid"));
+static PATH_TRAVERSAL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\.\.|%2e%2e|%252e%252e|\\/|\\\\").expect("Regex pattern should be valid")
+});
 
 /// 检查配置路径是否安全
 ///
@@ -68,7 +69,10 @@ fn is_safe_config_path(path: &str) -> bool {
     if path_buf.is_absolute() {
         // 允许的配置目录前缀
         let allowed_prefixes = ["/etc/dbnexus/", "/opt/dbnexus/config/", "./config/", "./"];
-        if allowed_prefixes.iter().any(|prefix| path.starts_with(prefix)) {
+        if allowed_prefixes
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+        {
             return true;
         }
         // 也允许系统临时目录（用于测试场景）
@@ -181,7 +185,11 @@ pub struct PermissionContext {
 
 impl PermissionContext {
     /// 创建权限上下文
-    pub fn new(subject: PermissionSubject, resource: PermissionResource, action: PermissionAction) -> Self {
+    pub fn new(
+        subject: PermissionSubject,
+        resource: PermissionResource,
+        action: PermissionAction,
+    ) -> Self {
         Self {
             subject,
             resource,
@@ -287,7 +295,10 @@ fn evaluate_condition(condition: &str, context: &PermissionContext) -> bool {
             let key = key.trim();
             let expected = expected.trim();
             // 先查 attributes，再查 environment
-            let actual = context.attributes.get(key).or_else(|| context.environment.get(key));
+            let actual = context
+                .attributes
+                .get(key)
+                .or_else(|| context.environment.get(key));
             match actual {
                 Some(val) if val == expected => continue,
                 _ => return false,
@@ -494,19 +505,25 @@ impl PolicyDecisionPointBuilder {
     ///
     /// 如果未设置权限提供者，将 panic
     pub fn build(self) -> PolicyDecisionPoint {
-        let provider = self.provider.expect("Provider is required for PolicyDecisionPoint");
+        let provider = self
+            .provider
+            .expect("Provider is required for PolicyDecisionPoint");
 
         PolicyDecisionPoint {
             provider,
             cache: DashMap::new(),
             cache_ttl_seconds: self.cache_ttl_seconds.unwrap_or(DEFAULT_CACHE_TTL_SECONDS),
             cache_enabled: self.cache_enabled.unwrap_or(true),
-            rate_limit_max_requests: self.rate_limit_max_requests.unwrap_or(DEFAULT_RATE_LIMIT_MAX_REQUESTS),
+            rate_limit_max_requests: self
+                .rate_limit_max_requests
+                .unwrap_or(DEFAULT_RATE_LIMIT_MAX_REQUESTS),
             rate_limit_window_seconds: self
                 .rate_limit_window_seconds
                 .unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
             rate_limit_store: DashMap::new(),
-            default_decision: self.default_decision.unwrap_or(PermissionDecision::NotApplicable),
+            default_decision: self
+                .default_decision
+                .unwrap_or(PermissionDecision::NotApplicable),
         }
     }
 }
@@ -578,7 +595,11 @@ impl PolicyDecisionPoint {
     }
 
     /// 创建带速率限制配置的策略决策点
-    pub fn with_rate_limit(provider: Arc<dyn PermissionProvider>, max_requests: u32, window_seconds: u32) -> Self {
+    pub fn with_rate_limit(
+        provider: Arc<dyn PermissionProvider>,
+        max_requests: u32,
+        window_seconds: u32,
+    ) -> Self {
         Self {
             provider,
             cache: DashMap::new(),
@@ -597,7 +618,10 @@ impl PolicyDecisionPoint {
     /// - `default_decision`：当提供者返回 `NotApplicable` 时使用的默认决策
     /// - `cache_ttl_seconds`：缓存 TTL
     /// - `cache_enabled`：是否启用缓存
-    pub fn with_config(provider: Arc<dyn PermissionProvider>, config: PolicyDecisionPointConfig) -> Self {
+    pub fn with_config(
+        provider: Arc<dyn PermissionProvider>,
+        config: PolicyDecisionPointConfig,
+    ) -> Self {
         Self {
             provider,
             cache: DashMap::new(),
@@ -621,10 +645,13 @@ impl PolicyDecisionPoint {
         let window_duration = Duration::from_secs(self.rate_limit_window_seconds as u64);
 
         // 获取或创建速率限制条目
-        let mut entry = self.rate_limit_store.entry(key.clone()).or_insert(RateLimitEntry {
-            count: 0,
-            window_start: now,
-        });
+        let mut entry = self
+            .rate_limit_store
+            .entry(key.clone())
+            .or_insert(RateLimitEntry {
+                count: 0,
+                window_start: now,
+            });
 
         // 检查窗口是否过期
         if now.duration_since(entry.window_start) >= window_duration {
@@ -696,7 +723,10 @@ impl PolicyDecisionPoint {
     }
 
     /// 批量检查权限
-    pub async fn check_batch(&self, contexts: Vec<PermissionContext>) -> Vec<(PermissionContext, PermissionDecision)> {
+    pub async fn check_batch(
+        &self,
+        contexts: Vec<PermissionContext>,
+    ) -> Vec<(PermissionContext, PermissionDecision)> {
         let mut results = Vec::with_capacity(contexts.len());
 
         for context in contexts {
@@ -757,7 +787,8 @@ impl PolicyDecisionPoint {
     /// 更新缓存（带时间戳）
     fn update_cache(&self, key: &str, decision: PermissionDecision) {
         // DashMap 直接写入，无需锁
-        self.cache.insert(key.to_string(), CachedDecision::new(decision));
+        self.cache
+            .insert(key.to_string(), CachedDecision::new(decision));
     }
 }
 
@@ -874,7 +905,11 @@ impl YamlPermissionProvider {
 impl PermissionProvider for YamlPermissionProvider {
     async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
         // 加载配置（如果需要）
-        let age = self.last_refresh.read().map(|r| r.elapsed()).unwrap_or_default();
+        let age = self
+            .last_refresh
+            .read()
+            .map(|r| r.elapsed())
+            .unwrap_or_default();
         if age.as_secs() > 60
             && let Err(e) = self.load_config().await
         {
@@ -1078,7 +1113,10 @@ impl RbacPermissionProvider {
     /// 将角色分配给主体（用户）
     pub fn add_role_to_subject(&self, subject: &str, role: &str) {
         if let Ok(mut mapping) = self.role_mapping.write() {
-            mapping.entry(subject.to_string()).or_default().push(role.to_string());
+            mapping
+                .entry(subject.to_string())
+                .or_default()
+                .push(role.to_string());
         }
     }
 
@@ -1427,7 +1465,12 @@ mod tests {
         // 前 10 次请求应该成功
         for i in 0..10 {
             let result = pdp.check("admin", "users", "SELECT").await;
-            assert_eq!(result, PermissionDecision::Allow, "Request {} should be allowed", i);
+            assert_eq!(
+                result,
+                PermissionDecision::Allow,
+                "Request {} should be allowed",
+                i
+            );
         }
 
         // 第 11 次请求应该被速率限制
@@ -1465,7 +1508,10 @@ mod tests {
     async fn test_permission_decision_types() {
         assert_eq!(PermissionDecision::Allow, PermissionDecision::Allow);
         assert_eq!(PermissionDecision::Deny, PermissionDecision::Deny);
-        assert_eq!(PermissionDecision::NotApplicable, PermissionDecision::NotApplicable);
+        assert_eq!(
+            PermissionDecision::NotApplicable,
+            PermissionDecision::NotApplicable
+        );
 
         let error_decision = PermissionDecision::Error("Test error".to_string());
         assert!(matches!(error_decision, PermissionDecision::Error(msg) if msg == "Test error"));

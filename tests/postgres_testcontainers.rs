@@ -73,7 +73,10 @@ async fn test_postgres_connection() {
         .await
         .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
     assert_eq!(session.role(), "admin");
 
     let status = pool.status();
@@ -96,7 +99,10 @@ async fn test_postgres_crud_insert() {
         .await
         .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl(
@@ -124,7 +130,10 @@ async fn test_postgres_crud_update_delete() {
         .await
         .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl(
@@ -162,7 +171,10 @@ async fn test_postgres_transaction_rollback() {
         .await
         .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl(
@@ -174,7 +186,10 @@ async fn test_postgres_transaction_rollback() {
         .await
         .expect("Failed to create table");
 
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO accounts (email) VALUES ('bob@example.com')")
@@ -206,7 +221,10 @@ async fn test_postgres_transaction_commit() {
         .await
         .expect("Failed to create pool");
 
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl(
@@ -218,7 +236,10 @@ async fn test_postgres_transaction_commit() {
         .await
         .expect("Failed to create table");
 
-    session.begin_transaction().await.expect("Failed to begin transaction");
+    session
+        .begin_transaction()
+        .await
+        .expect("Failed to begin transaction");
 
     session
         .execute_raw("INSERT INTO orders_txn_commit (order_no) VALUES ('ORD-001')")
@@ -253,7 +274,10 @@ async fn test_postgres_data_types() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     // PostgreSQL 特有数据类型
     session
@@ -299,10 +323,15 @@ async fn test_postgres_null_handling() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
-        .execute_raw_ddl("CREATE TABLE null_test (id SERIAL PRIMARY KEY, nullable_col VARCHAR(100))")
+        .execute_raw_ddl(
+            "CREATE TABLE null_test (id SERIAL PRIMARY KEY, nullable_col VARCHAR(100))",
+        )
         .await
         .expect("Failed to create table");
 
@@ -328,7 +357,10 @@ async fn test_postgres_syntax_error_returns_error() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute_raw("SELEC * FORM nonexistent").await;
     assert!(result.is_err(), "Syntax error should return error");
@@ -340,10 +372,16 @@ async fn test_postgres_table_not_exists_returns_error() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     let result = session.execute_raw("SELECT * FROM nonexistent_table").await;
-    assert!(result.is_err(), "Query on nonexistent table should return error");
+    assert!(
+        result.is_err(),
+        "Query on nonexistent table should return error"
+    );
 }
 
 #[tokio::test]
@@ -352,7 +390,10 @@ async fn test_postgres_duplicate_key_returns_error() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE pk_test (id INTEGER PRIMARY KEY, value VARCHAR(50))")
@@ -380,15 +421,22 @@ async fn test_postgres_aggregate_query() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
-        .execute_raw_ddl("CREATE TABLE sales (id SERIAL PRIMARY KEY, product VARCHAR(50), amount DECIMAL(10,2))")
+        .execute_raw_ddl(
+            "CREATE TABLE sales (id SERIAL PRIMARY KEY, product VARCHAR(50), amount DECIMAL(10,2))",
+        )
         .await
         .expect("Failed to create table");
 
     session
-        .execute_raw("INSERT INTO sales (product, amount) VALUES ('A', 100.50), ('A', 200.00), ('B', 50.00)")
+        .execute_raw(
+            "INSERT INTO sales (product, amount) VALUES ('A', 100.50), ('A', 200.00), ('B', 50.00)",
+        )
         .await
         .expect("Failed to insert");
 
@@ -407,7 +455,10 @@ async fn test_postgres_join_query() {
     let pool = DbPool::with_config(make_config(url))
         .await
         .expect("Failed to create pool");
-    let session = pool.get_session("admin").await.expect("Failed to get session");
+    let session = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
 
     session
         .execute_raw_ddl("CREATE TABLE customers (id SERIAL PRIMARY KEY, name VARCHAR(100))")
@@ -425,7 +476,9 @@ async fn test_postgres_join_query() {
         .expect("Failed to insert customers");
 
     session
-        .execute_raw("INSERT INTO orders (customer_id, total) VALUES (1, 100.00), (1, 200.00), (2, 50.00)")
+        .execute_raw(
+            "INSERT INTO orders (customer_id, total) VALUES (1, 100.00), (1, 200.00), (2, 50.00)",
+        )
         .await
         .expect("Failed to insert orders");
 
@@ -455,7 +508,10 @@ async fn test_postgres_health_check() {
     // 通过产品连接健康 API 验证（execute_raw 的 SELECT 1 会被
     // sql-parser+permission 的「无表名拒绝」拦截，health 应走专用通道）
     let session = pool.get_session("admin").await;
-    assert!(session.is_ok(), "get_session should succeed with healthy connection");
+    assert!(
+        session.is_ok(),
+        "get_session should succeed with healthy connection"
+    );
 
     let session = session.unwrap();
     let conn = session.connection().expect("session connection available");
@@ -472,11 +528,18 @@ async fn test_postgres_concurrent_access() {
 
     let (_container, url) = setup_postgres().await;
     let config = make_config(url);
-    let pool = Arc::new(DbPool::with_config(config).await.expect("Failed to create pool"));
+    let pool = Arc::new(
+        DbPool::with_config(config)
+            .await
+            .expect("Failed to create pool"),
+    );
 
     // 创建测试表
     {
-        let session = pool.get_session("admin").await.expect("Failed to get setup session");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("Failed to get setup session");
         session
             .execute_raw_ddl("CREATE TABLE concurrent_test (id INTEGER, value INTEGER)")
             .await

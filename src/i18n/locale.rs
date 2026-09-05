@@ -48,7 +48,7 @@ fn detect_locale() -> Locale {
 ///
 /// Resolution order:
 /// 1. Override set via [`set_locale()`]
-/// 2. Global default (detected once on first access via [`detect_locale()`])
+/// 2. Global default (detected once on first access via `detect_locale()`)
 pub fn current_locale() -> Locale {
     // Check override first
     if let Ok(guard) = OVERRIDE_LOCALE.read()
@@ -75,14 +75,18 @@ pub fn set_locale(locale: &str) -> Result<(), super::I18nError> {
         reason: e.to_string(),
     })?;
 
-    let mut guard = OVERRIDE_LOCALE.write().expect("locale override RwLock poisoned");
+    let mut guard = OVERRIDE_LOCALE
+        .write()
+        .expect("locale override RwLock poisoned");
     *guard = Some(parsed);
     Ok(())
 }
 
 /// Clear the locale override, reverting to auto-detected locale.
 pub fn clear_locale_override() {
-    let mut guard = OVERRIDE_LOCALE.write().expect("locale override RwLock poisoned");
+    let mut guard = OVERRIDE_LOCALE
+        .write()
+        .expect("locale override RwLock poisoned");
     *guard = None;
 }
 
@@ -102,7 +106,10 @@ mod tests {
         let locale = detect_locale();
         // Should always return a valid locale (at minimum "en")
         let locale_str = locale.to_string();
-        assert!(!locale_str.is_empty(), "detected locale should not be empty");
+        assert!(
+            !locale_str.is_empty(),
+            "detected locale should not be empty"
+        );
     }
 
     #[test]
@@ -173,7 +180,10 @@ mod tests {
         let detected = detect_locale();
         // Should return a valid locale (either sys-locale or "en" fallback)
         let locale_str = detected.to_string();
-        assert!(!locale_str.is_empty(), "detect_locale should return a valid locale");
+        assert!(
+            !locale_str.is_empty(),
+            "detect_locale should return a valid locale"
+        );
     }
 
     #[test]

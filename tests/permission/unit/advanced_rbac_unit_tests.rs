@@ -9,7 +9,9 @@
 //! - 权限冲突解决
 //! - 缓存机制
 
-use dbnexus::access::{AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission};
+use dbnexus::access::{
+    AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission,
+};
 
 // ============================================================================
 // 角色继承链解析测试
@@ -190,7 +192,11 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
     // 设置多重继承
     provider.add_role_inheritance(
         "combined".to_string(),
-        vec!["role_a".to_string(), "role_b".to_string(), "role_c".to_string()],
+        vec![
+            "role_a".to_string(),
+            "role_b".to_string(),
+            "role_c".to_string(),
+        ],
     );
 
     // combined 应该继承所有父角色的权限
@@ -421,7 +427,10 @@ fn test_rbac_permissions_multiple_parents_merges_access() {
     );
 
     // 设置继承
-    provider.add_role_inheritance("combined".to_string(), vec!["reader".to_string(), "writer".to_string()]);
+    provider.add_role_inheritance(
+        "combined".to_string(),
+        vec!["reader".to_string(), "writer".to_string()],
+    );
 
     // combined 应该拥有所有合并的权限
     assert!(
@@ -642,7 +651,10 @@ fn test_rbac_get_direct_parents_returns_parents() {
     let provider = AdvancedRbacProvider::new();
 
     // 添加继承关系
-    provider.add_role_inheritance("child".to_string(), vec!["parent1".to_string(), "parent2".to_string()]);
+    provider.add_role_inheritance(
+        "child".to_string(),
+        vec!["parent1".to_string(), "parent2".to_string()],
+    );
 
     // 获取直接父角色
     let parents = provider.get_direct_parents("child");
@@ -684,7 +696,10 @@ fn test_rbac_set_inheritances_batch_sets_links() {
     provider.set_role_inheritances(vec![
         ("role_a".to_string(), vec!["admin".to_string()]),
         ("role_b".to_string(), vec!["readonly".to_string()]),
-        ("role_c".to_string(), vec!["role_a".to_string(), "role_b".to_string()]),
+        (
+            "role_c".to_string(),
+            vec!["role_a".to_string(), "role_b".to_string()],
+        ),
     ]);
 
     // 验证继承关系已设置
@@ -842,7 +857,10 @@ fn test_rbac_concurrent_check_returns_allow() {
     // 启动多个线程进行并发权限检查
     for _ in 0..10 {
         let p = provider.clone();
-        let handle = thread::spawn(move || p.check_access("manager", "users", PermissionAction::Select).unwrap());
+        let handle = thread::spawn(move || {
+            p.check_access("manager", "users", PermissionAction::Select)
+                .unwrap()
+        });
         handles.push(handle);
     }
 

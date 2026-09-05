@@ -15,7 +15,9 @@
 //! cargo run --bin scatter_gather
 //! ```
 
-use dbnexus::{AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ShardConfig, ShardRouter};
+use dbnexus::{
+    AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ShardConfig, ShardRouter,
+};
 use std::sync::Arc;
 use std::time::Duration;
 

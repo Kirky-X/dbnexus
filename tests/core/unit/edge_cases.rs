@@ -129,7 +129,10 @@ mod config_boundary_tests {
             ..Default::default()
         };
         // 配置已创建
-        assert_eq!(config.url, "postgresql://invalid-hostname-that-does-not-exist/db");
+        assert_eq!(
+            config.url,
+            "postgresql://invalid-hostname-that-does-not-exist/db"
+        );
     }
 }
 
@@ -196,7 +199,11 @@ mod sql_parser_boundary_tests {
     #[tokio::test]
     async fn test_comment_injection() {
         let parser = SqlParser::new().await;
-        let malicious_sqls = vec!["SELECT 1 -- comment", "SELECT 1 /* comment */", "SELECT 1 # comment"];
+        let malicious_sqls = vec![
+            "SELECT 1 -- comment",
+            "SELECT 1 /* comment */",
+            "SELECT 1 # comment",
+        ];
 
         for sql in malicious_sqls {
             let result = parser.parse_single(sql).await;
@@ -209,8 +216,8 @@ mod sql_parser_boundary_tests {
 mod permission_boundary_tests {
     use dbnexus::access::permission_engine::PermissionContext;
     use dbnexus::{
-        EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource, PermissionSubject,
-        PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider,
+        EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource,
+        PermissionSubject, PolicyDecisionPoint, PolicyDecisionPointConfig, RbacPermissionProvider,
     };
     use std::sync::Arc;
 
@@ -265,7 +272,10 @@ mod permission_boundary_tests {
         );
 
         let decision = pdp.check_permission(&context).await;
-        assert!(matches!(decision, PermissionDecision::Allow) || matches!(decision, PermissionDecision::Deny));
+        assert!(
+            matches!(decision, PermissionDecision::Allow)
+                || matches!(decision, PermissionDecision::Deny)
+        );
     }
 
     #[tokio::test]
@@ -291,7 +301,13 @@ mod permission_boundary_tests {
         let provider = Arc::new(RbacPermissionProvider::new());
         let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
 
-        let system_tables = vec!["pg_catalog", "information_schema", "mysql", "sys", "INFORMATION_SCHEMA"];
+        let system_tables = vec![
+            "pg_catalog",
+            "information_schema",
+            "mysql",
+            "sys",
+            "INFORMATION_SCHEMA",
+        ];
 
         for table in system_tables {
             let result = pdp.check("admin", table, "SELECT").await;
@@ -432,11 +448,17 @@ mod concurrency_boundary_tests {
             .expect("Failed to create pool");
 
         // 占用唯一一个连接
-        let _session = pool.get_session("admin").await.expect("First session should succeed");
+        let _session = pool
+            .get_session("admin")
+            .await
+            .expect("First session should succeed");
 
         // 第二个请求应因 acquire_timeout 触发失败
         let result = pool.get_session("admin").await;
-        assert!(result.is_err(), "Second session should fail due to pool exhaustion");
+        assert!(
+            result.is_err(),
+            "Second session should fail due to pool exhaustion"
+        );
     }
 }
 
@@ -470,7 +492,10 @@ mod path_traversal_tests {
 
     #[tokio::test]
     async fn test_null_byte_injection() {
-        let malicious_urls = vec!["sqlite:///\0/config.db", "sqlite:///path/to\0/../etc/passwd"];
+        let malicious_urls = vec![
+            "sqlite:///\0/config.db",
+            "sqlite:///path/to\0/../etc/passwd",
+        ];
 
         for url in malicious_urls {
             // 配置会被创建

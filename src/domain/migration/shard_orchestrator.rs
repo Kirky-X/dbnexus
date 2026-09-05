@@ -61,7 +61,10 @@ impl ShardMigrationOrchestrator {
     /// 执行跨分片迁移编排
     ///
     /// 扫描指定目录获取迁移文件，对每个分片独立执行。
-    pub async fn orchestrate_migration(&self, _migrations_dir: &Path) -> OrchestratedMigrationResult {
+    pub async fn orchestrate_migration(
+        &self,
+        _migrations_dir: &Path,
+    ) -> OrchestratedMigrationResult {
         let shards = self.router.all_shards();
         let total_shards = shards.len() as u32;
 
@@ -120,7 +123,10 @@ impl ShardMigrationOrchestrator {
         Self::summarize(total_shards, results)
     }
 
-    fn summarize(total_shards: u32, results: Vec<ShardMigrationResult>) -> OrchestratedMigrationResult {
+    fn summarize(
+        total_shards: u32,
+        results: Vec<ShardMigrationResult>,
+    ) -> OrchestratedMigrationResult {
         let success_count = results.iter().filter(|r| r.success).count() as u32;
         let failed_shards: Vec<_> = results.iter().filter(|r| !r.success).cloned().collect();
 

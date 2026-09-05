@@ -13,8 +13,8 @@
 use dbnexus::access::permission_engine::PermissionContext;
 #[cfg(feature = "permission-engine")]
 use dbnexus::{
-    EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource, PermissionRule,
-    PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
+    EnginePermissionAction as PermissionAction, PermissionDecision, PermissionResource,
+    PermissionRule, PermissionSubject, PolicyDecisionPoint, RbacPermissionProvider, Role,
 };
 
 #[cfg(feature = "permission-engine")]
@@ -274,7 +274,11 @@ async fn test_pdp_cache_second_check_returns_allow() {
 
     // 第一次检查
     let result1 = pdp.check("admin_user", "users", "SELECT").await;
-    assert_eq!(result1, PermissionDecision::Allow, "First check should succeed");
+    assert_eq!(
+        result1,
+        PermissionDecision::Allow,
+        "First check should succeed"
+    );
 
     // 第二次检查应该从缓存获取
     let result2 = pdp.check("admin_user", "users", "SELECT").await;
@@ -744,7 +748,10 @@ fn test_permission_action_serialization_roundtrips() {
 fn test_permission_decision_equality_compares_correctly() {
     assert_eq!(PermissionDecision::Allow, PermissionDecision::Allow);
     assert_eq!(PermissionDecision::Deny, PermissionDecision::Deny);
-    assert_eq!(PermissionDecision::NotApplicable, PermissionDecision::NotApplicable);
+    assert_eq!(
+        PermissionDecision::NotApplicable,
+        PermissionDecision::NotApplicable
+    );
     assert_ne!(PermissionDecision::Allow, PermissionDecision::Deny);
 }
 
@@ -775,7 +782,8 @@ async fn test_pdp_concurrent_check_returns_allow() {
 
     for _ in 0..10 {
         let pdp_clone = pdp.clone();
-        let handle = tokio::spawn(async move { pdp_clone.check("admin_user", "users", "SELECT").await });
+        let handle =
+            tokio::spawn(async move { pdp_clone.check("admin_user", "users", "SELECT").await });
         handles.push(handle);
     }
 

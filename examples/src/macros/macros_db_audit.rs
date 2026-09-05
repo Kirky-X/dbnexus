@@ -20,8 +20,8 @@ mod common;
 
 use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::{
-    db_entity, AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
-    MemoryAuditStorage,
+    AuditConfig, AuditEvent, AuditLogger, AuditOperation, AuditQueryFilters, AuditSeverity,
+    MemoryAuditStorage, db_entity,
 };
 use std::sync::Arc;
 
@@ -146,7 +146,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Model::AUDIT_TABLE_NAME
     );
     session.execute_raw_ddl(&audit_table_ddl).await?;
-    println!("  ✓ {} 表创建成功 (使用 AUDIT_TABLE_NAME)", Model::AUDIT_TABLE_NAME);
+    println!(
+        "  ✓ {} 表创建成功 (使用 AUDIT_TABLE_NAME)",
+        Model::AUDIT_TABLE_NAME
+    );
 
     // ============================================
     // 4. CRUD 操作 + 审计日志记录
@@ -166,10 +169,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ 插入产品: id={}, name={}", created.id, created.name);
 
     if should_audit("CREATE", role) {
-        let event = AuditEvent::create("products", &created.id.to_string(), role).with_after_value(&format!(
-            r#"{{"name":"{}","price":{},"stock":{}}}"#,
-            created.name, created.price, created.stock
-        ));
+        let event = AuditEvent::create("products", &created.id.to_string(), role).with_after_value(
+            &format!(
+                r#"{{"name":"{}","price":{},"stock":{}}}"#,
+                created.name, created.price, created.stock
+            ),
+        );
         logger.log(event).await?;
         println!("  ✓ 审计日志已记录 (operation=CREATE, role={})", role);
     } else {

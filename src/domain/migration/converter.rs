@@ -126,7 +126,11 @@ pub fn convert_table(stmt: &TableCreateStatement) -> Table {
         .map(|c| c.name.clone())
         .collect();
 
-    let indexes: Vec<Index> = stmt.get_indexes().iter().map(|idx| convert_index(idx, &name)).collect();
+    let indexes: Vec<Index> = stmt
+        .get_indexes()
+        .iter()
+        .map(|idx| convert_index(idx, &name))
+        .collect();
 
     let foreign_keys: Vec<ForeignKey> = stmt
         .get_foreign_key_create_stmts()
@@ -311,7 +315,8 @@ fn convert_fk_action(action: SeaFKAction) -> ForeignKeyAction {
 mod tests {
     use super::*;
     use sea_orm::sea_query::{
-        ColumnDef, ForeignKey, ForeignKeyAction as SeaFKAction, Index, Table as SeaTable, TableCreateStatement,
+        ColumnDef, ForeignKey, ForeignKeyAction as SeaFKAction, Index, Table as SeaTable,
+        TableCreateStatement,
     };
 
     /// 辅助函数：创建一个简单的 users 表 `TableCreateStatement`
@@ -679,7 +684,10 @@ mod tests {
 
         // 注意：Sea-ORM 生成的 TableCreateStatement 中，unique 约束可能作为索引出现
         // 检查是否有名为 "idx_products_category" 的索引
-        let has_idx = table.indexes.iter().any(|i| i.name == "idx_products_category");
+        let has_idx = table
+            .indexes
+            .iter()
+            .any(|i| i.name == "idx_products_category");
         if has_idx {
             let idx = table
                 .indexes
@@ -698,7 +706,10 @@ mod tests {
         let table = convert_table(&stmt);
 
         // email 列有 unique 约束，应该映射为索引
-        let email_idx = table.indexes.iter().find(|i| i.columns.contains(&"email".to_string()));
+        let email_idx = table
+            .indexes
+            .iter()
+            .find(|i| i.columns.contains(&"email".to_string()));
         if let Some(idx) = email_idx {
             assert!(idx.is_unique);
         }
@@ -747,11 +758,17 @@ mod tests {
         use sea_orm::sea_query::ColumnType as SeaCT;
         // Directly test convert_column_type for exotic types
         assert_eq!(convert_column_type(&SeaCT::Blob), ColumnType::Binary);
-        assert_eq!(convert_column_type(&SeaCT::Timestamp), ColumnType::Timestamp);
+        assert_eq!(
+            convert_column_type(&SeaCT::Timestamp),
+            ColumnType::Timestamp
+        );
         assert_eq!(convert_column_type(&SeaCT::Time), ColumnType::Time);
         assert_eq!(convert_column_type(&SeaCT::Date), ColumnType::Date);
         assert_eq!(convert_column_type(&SeaCT::Double), ColumnType::Double);
-        assert_eq!(convert_column_type(&SeaCT::Char(Some(1))), ColumnType::String(Some(1)));
+        assert_eq!(
+            convert_column_type(&SeaCT::Char(Some(1))),
+            ColumnType::String(Some(1))
+        );
         assert_eq!(
             convert_column_type(&SeaCT::Uuid),
             ColumnType::Custom("uuid".to_string())
@@ -815,7 +832,10 @@ mod tests {
             name: sea_orm::sea_query::Alias::new("my_enum").into_iden(),
             variants: vec![],
         };
-        assert_eq!(convert_column_type(&enum_ct), ColumnType::Custom("my_enum".to_string()));
+        assert_eq!(
+            convert_column_type(&enum_ct),
+            ColumnType::Custom("my_enum".to_string())
+        );
     }
 
     #[test]

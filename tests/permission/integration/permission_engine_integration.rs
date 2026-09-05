@@ -9,8 +9,9 @@
 //! - 权限缓存和刷新
 
 use dbnexus::{
-    EnginePermissionAction as PermissionAction, EnginePermissionProvider, EngineYamlPermissionProvider,
-    PermissionDecision, PermissionRule, PolicyDecisionPoint, RbacPermissionProvider, Role,
+    EnginePermissionAction as PermissionAction, EnginePermissionProvider,
+    EngineYamlPermissionProvider, PermissionDecision, PermissionRule, PolicyDecisionPoint,
+    RbacPermissionProvider, Role,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -91,8 +92,9 @@ async fn test_yaml_permission_provider_creation_succeeds() {
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
 
-    let provider = EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
-        .expect("Failed to create YAML provider");
+    let provider =
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider");
 
     // 使用 PolicyDecisionPoint 来验证权限提供者功能
     let pdp = PolicyDecisionPoint::new(Arc::new(provider));
@@ -138,11 +140,19 @@ async fn test_yaml_permission_check_returns_correct_decisions() {
 
     // user 不能 DELETE users
     let result = pdp.check("user", "users", "DELETE").await;
-    assert_eq!(result, PermissionDecision::Deny, "user DELETE users should be denied");
+    assert_eq!(
+        result,
+        PermissionDecision::Deny,
+        "user DELETE users should be denied"
+    );
 
     // user 可以 SELECT users
     let result = pdp.check("user", "users", "SELECT").await;
-    assert_eq!(result, PermissionDecision::Allow, "user SELECT users should be allowed");
+    assert_eq!(
+        result,
+        PermissionDecision::Allow,
+        "user SELECT users should be allowed"
+    );
 
     // guest 不能访问 users
     let result = pdp.check("guest", "users", "SELECT").await;

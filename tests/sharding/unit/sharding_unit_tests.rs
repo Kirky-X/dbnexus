@@ -54,7 +54,10 @@ fn test_hash_strategy_different_timestamps() {
 
     // 不同时间戳应该产生不同的哈希值（可能相同但不强制）
     let unique_shards = std::collections::HashSet::from([shard1, shard2, shard3]);
-    assert!(!unique_shards.is_empty(), "Should have at least one unique shard");
+    assert!(
+        !unique_shards.is_empty(),
+        "Should have at least one unique shard"
+    );
 }
 
 /// TEST-SHARD-UNIT-004: 哈希分片策略边界值测试 - 单分片
@@ -233,9 +236,21 @@ fn test_shard_config_connection_string_generation() {
     let conn_5 = config.generate_connection_string(5);
     let conn_11 = config.generate_connection_string(11);
 
-    assert!(conn_0.contains("orders_0"), "Should contain orders_0: {}", conn_0);
-    assert!(conn_5.contains("orders_5"), "Should contain orders_5: {}", conn_5);
-    assert!(conn_11.contains("orders_11"), "Should contain orders_11: {}", conn_11);
+    assert!(
+        conn_0.contains("orders_0"),
+        "Should contain orders_0: {}",
+        conn_0
+    );
+    assert!(
+        conn_5.contains("orders_5"),
+        "Should contain orders_5: {}",
+        conn_5
+    );
+    assert!(
+        conn_11.contains("orders_11"),
+        "Should contain orders_11: {}",
+        conn_11
+    );
 }
 
 /// TEST-SHARD-UNIT-016: ShardConfig 生成所有连接字符串测试
@@ -276,11 +291,17 @@ fn test_strategy_factory_aliases() {
 
     let yearly = create_strategy("yearly");
     let year = create_strategy("year");
-    assert_eq!(yearly.calculate(test_time, 12), year.calculate(test_time, 12));
+    assert_eq!(
+        yearly.calculate(test_time, 12),
+        year.calculate(test_time, 12)
+    );
 
     let monthly = create_strategy("monthly");
     let month = create_strategy("month");
-    assert_eq!(monthly.calculate(test_time, 100), month.calculate(test_time, 100));
+    assert_eq!(
+        monthly.calculate(test_time, 100),
+        month.calculate(test_time, 100)
+    );
 
     let daily = create_strategy("daily");
     let day = create_strategy("day");
@@ -334,7 +355,11 @@ fn test_shard_router_registration() {
 
     router.register_shard(0, "db_0".to_string(), "sqlite:./data/db_0.db".to_string());
     router.register_shard(5, "db_5".to_string(), "sqlite:./data/db_5.db".to_string());
-    router.register_shard(11, "db_11".to_string(), "sqlite:./data/db_11.db".to_string());
+    router.register_shard(
+        11,
+        "db_11".to_string(),
+        "sqlite:./data/db_11.db".to_string(),
+    );
 
     let shards = router.all_shards();
     assert_eq!(shards.len(), 3);
@@ -351,7 +376,11 @@ fn test_shard_router_route() {
     let mut router = ShardRouter::with_strategy("yearly", 12);
 
     // 2024 % 12 = 8
-    router.register_shard(8, "db_2024".to_string(), "sqlite:./data/db_2024.db".to_string());
+    router.register_shard(
+        8,
+        "db_2024".to_string(),
+        "sqlite:./data/db_2024.db".to_string(),
+    );
 
     let dt = Utc.with_ymd_and_hms(2024, 6, 15, 0, 0, 0).unwrap();
     let shard = router.route(dt);
@@ -515,7 +544,10 @@ fn test_shard_migration_impact() {
     let migration_rate = migrated_count as f64 / keys.len() as f64;
     // 简单哈希的迁移率会比较高，这符合预期
     assert!(migration_rate > 0.0, "Some keys should migrate");
-    println!("Migration rate from 10 to 11 shards: {:.2}%", migration_rate * 100.0);
+    println!(
+        "Migration rate from 10 to 11 shards: {:.2}%",
+        migration_rate * 100.0
+    );
 }
 
 // ============================================================================
@@ -555,7 +587,10 @@ fn test_shard_hotspot_detection_distribution() {
         .collect();
 
     println!("Access distribution: {:?}", access_counts);
-    println!("Average access: {:.0}, Hotspots: {:?}", avg_access, hotspots);
+    println!(
+        "Average access: {:.0}, Hotspots: {:?}",
+        avg_access, hotspots
+    );
 
     // 验证总访问次数
     assert_eq!(total_access, 10000);
@@ -618,7 +653,11 @@ fn test_hash_sharding_uniformity() {
     // 计算分布的统计信息
     let total: u32 = counts.iter().sum();
     let avg = total as f64 / total_shards as f64;
-    let variance: f64 = counts.iter().map(|&c| (c as f64 - avg).powi(2)).sum::<f64>() / total_shards as f64;
+    let variance: f64 = counts
+        .iter()
+        .map(|&c| (c as f64 - avg).powi(2))
+        .sum::<f64>()
+        / total_shards as f64;
     let std_dev = variance.sqrt();
 
     let coefficient_of_variation = std_dev / avg;
@@ -766,7 +805,11 @@ fn test_cross_shard_query_routing() {
 
     // 注册所有12个月的分片
     for i in 0..12 {
-        router.register_shard(i, format!("month_{}", i), format!("sqlite:./data/month_{}.db", i));
+        router.register_shard(
+            i,
+            format!("month_{}", i),
+            format!("sqlite:./data/month_{}.db", i),
+        );
     }
 
     // 模拟跨分片查询：获取所有分片
@@ -819,11 +862,15 @@ fn test_cross_shard_aggregation_preparation() {
     let dt = Utc::now();
 
     // 收集每个 key 对应的分片
-    let mut shard_key_map: std::collections::HashMap<u32, Vec<String>> = std::collections::HashMap::new();
+    let mut shard_key_map: std::collections::HashMap<u32, Vec<String>> =
+        std::collections::HashMap::new();
 
     for key in &target_keys {
         let shard_id = router.calculate_shard(dt, key);
-        shard_key_map.entry(shard_id).or_default().push(key.to_string());
+        shard_key_map
+            .entry(shard_id)
+            .or_default()
+            .push(key.to_string());
     }
 
     // 验证分片映射
@@ -851,7 +898,10 @@ fn test_shard_routing_consistency() {
     let results: Vec<u32> = (0..100).map(|_| router.calculate_shard(dt, key)).collect();
 
     let first = results[0];
-    assert!(results.iter().all(|&r| r == first), "Routing should be consistent");
+    assert!(
+        results.iter().all(|&r| r == first),
+        "Routing should be consistent"
+    );
 }
 
 // ============================================================================
@@ -885,8 +935,16 @@ fn test_shard_router_clone_independence() {
 
     // 克隆应该独立：原始未受影响，克隆体也未受影响
     assert_eq!(router.all_shards().len(), 0, "original should be unchanged");
-    assert_eq!(router_clone.all_shards().len(), 0, "clone should be unchanged");
-    assert_eq!(router_mut.all_shards().len(), 1, "mutant should have 1 shard");
+    assert_eq!(
+        router_clone.all_shards().len(),
+        0,
+        "clone should be unchanged"
+    );
+    assert_eq!(
+        router_mut.all_shards().len(),
+        1,
+        "mutant should have 1 shard"
+    );
 }
 
 // ============================================================================
@@ -1010,7 +1068,11 @@ impl ShardingStrategy for ModuloStrategy {
     fn calculate(&self, timestamp: DateTime<Utc>, total_shards: u32) -> u32 {
         // 简单取模：与 YearlyStrategy 等价但 name 不同，便于验证策略被实际使用
         let year = timestamp.year() as u32;
-        if total_shards == 0 { 0 } else { year % total_shards }
+        if total_shards == 0 {
+            0
+        } else {
+            year % total_shards
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -1082,7 +1144,10 @@ fn test_shard_router_new_with_custom_strategy() {
     // 注册分片 1 后，route() 应返回该分片
     router.register_shard(1, "db_1".to_string(), "sqlite:./data/db_1.db".to_string());
     let shard = router.route(dt_2024);
-    assert!(shard.is_some(), "shard 1 should be routable after registration");
+    assert!(
+        shard.is_some(),
+        "shard 1 should be routable after registration"
+    );
     assert_eq!(shard.unwrap().shard_id, 1, "ModuloStrategy: 2024 % 7 = 1");
 }
 
@@ -1091,7 +1156,10 @@ fn test_shard_router_new_with_custom_strategy() {
 fn test_get_pool_returns_none_when_no_pool_registered() {
     let router = ShardRouter::with_strategy("hash", 4);
 
-    assert!(router.get_pool(0).is_none(), "get_pool must be None before set_pool");
+    assert!(
+        router.get_pool(0).is_none(),
+        "get_pool must be None before set_pool"
+    );
     assert!(router.get_pool(1).is_none());
     assert!(
         router.get_pool(99).is_none(),
@@ -1105,7 +1173,10 @@ fn test_get_pool_returns_none_when_no_pool_registered() {
         router.get_pool(0).is_none(),
         "get_pool must still be None after register_shard (no pool)"
     );
-    assert!(!router.has_pool(0), "has_pool must be false after register_shard only");
+    assert!(
+        !router.has_pool(0),
+        "has_pool must be false after register_shard only"
+    );
 }
 
 /// TEST-SHARD-UNIT-054: get_session 未注册连接池时返回 Ok(None)
@@ -1200,7 +1271,9 @@ async fn test_get_session_for_shard_with_id_returns_err_when_no_pool() {
     let mut router = ShardRouter::with_strategy("hash", 4);
     router.register_shard(0, "db_0".to_string(), "sqlite::memory:".to_string());
 
-    let result = router.get_session_for_shard_with_id("user_42", "admin").await;
+    let result = router
+        .get_session_for_shard_with_id("user_42", "admin")
+        .await;
     let err_msg = match result {
         Err(e) => format!("{}", e),
         Ok(_) => panic!("get_session_for_shard_with_id must return Err when no pool"),
