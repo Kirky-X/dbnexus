@@ -596,7 +596,10 @@ required-features = ["health-check", "sqlite"]
 [[test]]
 name = "edge_cases"
 path = "tests/core/unit/edge_cases.rs"
-required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine"]
+# sqlite：经 common::make_sqlite_memory_pool 依赖 sqlite::memory:（embedded
+# 专属）；多库运行需先对目标内并发测试做表名唯一化改造（否则共享库下
+# CREATE TABLE 同名冲突），阶段 2 验收记录为后续改进项
+required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine", "sqlite"]
 
 # Cache 集成测试 - CacheConfig/moka Cache（Convergence 注册）
 [[test]]
@@ -671,10 +674,16 @@ path = "tests/pool/integration/pool_integration.rs"
 required-features = ["sqlite"]
 
 # E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）
+# 位于 tests/e2e/ 目录承载（阶段 2 验收：e2e_* 不得裸放 tests/ 顶层）
+# required-features 修正（阶段 2 验收）：原含 authentication，但 CI 口径
+# （<db>,default-no-db,all-optional）的 feature 闭包不含 authentication，
+# 目标因此从未编译运行；文件按 cfg(feature) 隔离设计，authentication
+# 模块在无该 feature 时自动跳过，故移出 required-features（其激活验证
+# 归入组合矩阵：sqlite+all-optional+authentication）
 [[test]]
 name = "e2e_advanced"
-path = "tests/e2e_advanced.rs"
-required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding", "global-index", "authentication"]
+path = "tests/e2e/e2e_advanced.rs"
+required-features = ["sqlite", "runtime-tokio-rustls", "health-check", "sharding"]
 
 # Retry 单元测试 - RetryPolicy/is_idempotent_operation/RetryExecutor
 [[test]]
@@ -713,10 +722,14 @@ path = "tests/distributed_id/unit/distributed_id_tests.rs"
 required-features = ["distributed-id"]
 
 # 分布式能力端到端集成测试
+# 位于 tests/e2e/ 目录承载（阶段 2 验收：e2e_* 不得裸放 tests/ 顶层）
+# required-features 修正（阶段 2 验收）：原含聚合名 distributed-capabilities，
+# 但 CI 口径的 all-optional 仅列其 7 个成员不列聚合名，目标因此从未编译
+# 运行；文件按成员级 cfg(feature) 隔离，移除聚合名后 CI 口径下全部激活
 [[test]]
 name = "e2e_distributed"
-path = "tests/e2e_distributed.rs"
-required-features = ["sqlite", "runtime-tokio-rustls", "distributed-capabilities"]
+path = "tests/e2e/e2e_distributed.rs"
+required-features = ["sqlite", "runtime-tokio-rustls"]
 
 [dev-dependencies.testcontainers]
 version = "0.28"

@@ -340,11 +340,19 @@ fn test_ddl_guard_vs_sql_injection() {
         "合法的 CREATE TABLE 应该通过 DDL Guard"
     );
 
-    // DDL Guard 禁止的操作
+    // DDL Guard 边界（真实行为核正，阶段 2 验收）：自 0540954 起白名单放行
+    // DropTable（迁移场景，见 ddl_guard.rs ALLOWED_DDL_STATEMENTS），原断言
+    // “DROP TABLE 应被拒”已过时；未列入白名单且命中 FORBIDDEN_PATTERNS 的
+    // DROP DATABASE 仍被拒
     let result = guard.validate("DROP TABLE users");
     assert!(
+        matches!(result, Ok(DdlValidationResult::Allowed)),
+        "DROP TABLE 应被 admin 白名单放行（迁移场景）"
+    );
+    let result = guard.validate("DROP DATABASE users");
+    assert!(
         matches!(result, Ok(DdlValidationResult::Forbidden(_))),
-        "DROP TABLE 应该被 DDL Guard 拒绝"
+        "DROP DATABASE 应被 DDL Guard 拒绝"
     );
 
     // SQL 注入检测应该独立工作
