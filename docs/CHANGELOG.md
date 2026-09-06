@@ -432,7 +432,7 @@ dbnexus = { version = "0.2", features = ["embedded"] }
 
 - **Acquire duration histogram** (`metrics` feature): `MetricsCollector` now records `connection_acquire_duration` histograms with 100ms/500ms/1s/3s/5s/10s buckets. Slow acquires (>1s) increment `slow_acquires` counter. Timeout events are classified by level and counted separately.
 
-- **Prometheus metrics export** (`metrics` feature): `MetricsCollector` now exports Prometheus-format metrics via `to_prometheus()`:
+- **Prometheus metrics export** (`metrics` feature): `MetricsCollector` now exports Prometheus-format metrics via `export_prometheus()`:
   - `dbnexus_pool_connections_total / active / idle` (gauges)
   - `dbnexus_connection_acquire_slow_total` (counter)
   - `dbnexus_connection_timeout_total{level="warn|error|critical"}` (counter)
