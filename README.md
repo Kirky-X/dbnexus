@@ -104,7 +104,7 @@
 ```toml
 [dependencies]
 dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
 ```
 
