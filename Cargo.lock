@@ -1510,6 +1510,7 @@ dependencies = [
 name = "dbnexus-macros"
 version = "0.6.0-rc.2"
 dependencies = [
+ "dbnexus",
  "proc-macro2",
  "quote",
  "regex",
