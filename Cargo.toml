@@ -12,7 +12,7 @@ version = "0.6.0-rc.2"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky.X"]
-license = "MIT"
+license-file = "LICENSE"
 repository = "https://github.com/Kirky-X/dbnexus"
 documentation = "https://docs.rs/dbnexus"
 keywords = ["database", "orm", "sea-orm", "sql"]
@@ -65,7 +65,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 repository.workspace = true
 documentation.workspace = true
 keywords.workspace = true
@@ -321,7 +321,9 @@ required-features = ["sql-parser", "permission"]
 [[test]]
 name = "core_session_transaction"
 path = "tests/core/integration/session_transaction.rs"
-required-features = ["permission"]
+# sqlite：全部用例经 common helper 依赖 sqlite::memory:（embedded 专属），
+# 无 sqlite 驱动组（postgres/mysql/duckdb）下必 panic，故门控至 embedded 组
+required-features = ["permission", "sqlite"]
 
 [[test]]
 name = "core_permission_integration"
@@ -341,12 +343,13 @@ required-features = ["audit"]
 [[test]]
 name = "migration_integration"
 path = "tests/migration/integration/integration.rs"
-required-features = ["migration", "auto-migrate"]
+required-features = ["migration", "auto-migrate", "sqlite"]
 
 [[test]]
 name = "migration_auto_migrate"
 path = "tests/migration/integration/auto_migrate.rs"
-required-features = ["auto-migrate"]
+# sqlite：用例硬编码 sqlite::memory:（embedded 专属，同上）
+required-features = ["auto-migrate", "sqlite"]
 
 [[test]]
 name = "migration_schema_macro"
@@ -422,12 +425,14 @@ required-features = ["cli-tests"]
 [[test]]
 name = "cross_cutting_concurrency"
 path = "tests/cross_cutting/integration/concurrency.rs"
-required-features = ["permission"]
+# sqlite：用例经 common helper 依赖 sqlite::memory:（embedded 专属，同上）
+required-features = ["permission", "sqlite"]
 
 [[test]]
 name = "cross_cutting_multi_db"
 path = "tests/cross_cutting/integration/multi_db.rs"
-required-features = ["migration"]
+# sqlite：用例经 common helper 依赖 sqlite::memory:（embedded 专属，同上）
+required-features = ["migration", "sqlite"]
 
 # Docker testcontainers 集成测试 - PostgreSQL（需要 Docker 环境）
 [[test]]

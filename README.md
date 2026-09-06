@@ -590,7 +590,7 @@ cargo clippy --no-default-features --features sqlite,default-no-db,all-optional 
 
 ## 📄 许可证
 
-本项目基于 [MIT 许可证](LICENSE) 发布。
+本项目基于 MIT + Commons Clause 许可证发布，商业使用需单独授权。详见 [LICENSE](LICENSE)。
 
 ---
 
