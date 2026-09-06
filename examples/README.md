@@ -1,325 +1,200 @@
-# DBNexus Examples
+# DBNexus 示例索引
 
-本目录包含 DBNexus 的所有功能示例，帮助您快速了解和使用 DBNexus 的各项特性。
+本目录是独立子 crate `dbnexus-examples`，收录 DBNexus 的全部功能示例，与 `Cargo.toml` 中的 `[[bin]]` 清单一一对应（共 51 个已注册 bin）。
 
-**注意**：这是一个独立的 Rust 项目（`dbnexus-examples`），通过 `examples/Cargo.toml` 管理。
+**Rust 版本要求：1.97.1+**（与 workspace 的 `rust-version` 一致）。
 
-## 📋 目录
+## 目录
 
-- [快速开始](#快速开始)
-- [基础模块](#基础模块-basic)
-- [配置模块](#配置模块-config)
-- [数据库模块](#数据库模块-database)
-- [权限模块](#权限模块-permission)
-- [安全模块](#安全模块-security)
-- [认证与审计](#认证与审计-auth)
-- [可观测性模块](#可观测性模块-observability)
-- [宏模块](#宏模块-macros)
-- [图数据库模块](#图数据库模块-graph)
-- [分布式能力](#分布式能力-distributed)
-- [可靠性模块](#可靠性模块-reliability)
-- [国际化模块](#国际化模块-i18n)
-- [集成适配器](#集成适配器-integrations)
-- [缓存功能](#缓存功能-cache)
-- [Kit 能力管理](#kit-能力管理-kit)
-- [通用模块](#通用模块-common)
-- [运行示例](#运行示例)
+- [基础模块 (basic/)](#基础模块-basic)
+- [权限模块 (permission/)](#权限模块-permission)
+- [安全模块 (security/)](#安全模块-security)
+- [配置模块 (config/)](#配置模块-config)
+- [数据库模块 (database/)](#数据库模块-database)
+- [可观测性模块 (observability/)](#可观测性模块-observability)
+- [认证与审计模块 (auth/)](#认证与审计模块-auth)
+- [宏模块 (macros/)](#宏模块-macros)
+- [图数据库模块 (graph/)](#图数据库模块-graph)
+- [分布式能力 (distributed/)](#分布式能力-distributed)
+- [可靠性模块 (reliability/)](#可靠性模块-reliability)
+- [通用模块 (common/)](#通用模块-common)
+- [集成适配器 (integrations/)](#集成适配器-integrations)
+- [Kit 能力管理 (kit/)](#kit-能力管理-kit)
+- [批量运行与编译](#批量运行与编译)
+- [已启用的 feature](#已启用的-feature)
+- [相关文档](#相关文档)
 
-## 快速开始
-
-### basic_connection
-最基础的连接池示例，展示 DbPool 和 Session 的创建：
+运行命令统一为：
 
 ```bash
-cargo run --bin basic_connection
+cargo run -p dbnexus-examples --bin <示例名>
 ```
 
-### basic_crud
-基础 CRUD 操作，展示 `#[db_entity]` 宏的使用：
-
-```bash
-cargo run --bin basic_crud
-```
-
-### basic_transaction
-事务管理（begin/commit/rollback），包含转账场景：
-
-```bash
-cargo run --bin basic_transaction
-```
+（在仓库根目录或 `examples/` 目录下均可执行。）
 
 ## 基础模块 (basic/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `basic_connection` | `basic/basic_connection.rs` | 连接池 + Session + PoolStatus |
-| `basic_crud` | `basic/basic_crud.rs` | `#[db_entity]` 宏 + CRUD 操作 |
-| `basic_transaction` | `basic/basic_transaction.rs` | 事务 begin/commit/rollback |
-
-## 配置模块 (config/)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `config_env` | `config/config_env.rs` | 环境变量配置 |
-| `config_yaml` | `config/config_yaml.rs` | YAML 配置文件 |
-| `config_toml` | `config/config_toml.rs` | TOML 配置文件 |
-| `config_presets` | `config/config_presets.rs` | 预设配置对比（embedded/microservice/monolith/enterprise） |
-
-## 数据库模块 (database/)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `database_sqlite` | `database/database_sqlite.rs` | SQLite 内存 + 文件模式 |
-| `database_postgres` | `database/database_postgres.rs` | PostgreSQL 连接 + 优雅降级 |
-| `database_mysql` | `database/database_mysql.rs` | MySQL 连接 + 优雅降级 |
-| `duckdb_query` | `database/duckdb_query.rs` | DuckDB 分析型查询 |
-| `migration` | `database/migration.rs` | 迁移定义/应用/历史/回滚 |
-| `sharding` | `database/sharding.rs` | 4 种分片策略 + 路由 |
-| `global_index` | `database/global_index.rs` | 全局索引 CRUD + SyncEvent |
-| `pool_management` | `database/pool_management.rs` | 连接池 warmup/health-check/auto-migrate |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `basic_connection` | 创建 SQLite 内存连接池，演示 `DbPool`、`Session` 与池配置的基础用法 | `cargo run -p dbnexus-examples --bin basic_connection` |
+| `basic_crud` | 用 `#[db_entity(...)]` 宏定义实体并执行增删改查 | `cargo run -p dbnexus-examples --bin basic_crud` |
+| `basic_transaction` | 演示 `Session` 的事务 API（begin/commit/rollback） | `cargo run -p dbnexus-examples --bin basic_transaction` |
 
 ## 权限模块 (permission/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `permission_rbac` | `permission/permission_rbac.rs` | MemoryPermissionProvider + RBAC |
-| `permission_yaml` | `permission/permission_yaml.rs` | YAML 策略加载/解析 |
-| `permission_macro` | `permission/permission_macro.rs` | `#[db_entity(permissions(...))]` 宏 |
-| `permission_engine` | `permission/permission_engine.rs` | PDP + RBAC + 速率限制 |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `permission_rbac` | 用 `MemoryPermissionProvider` 演示 admin/manager/guest 三角色的 RBAC 权限控制 | `cargo run -p dbnexus-examples --bin permission_rbac` |
+| `permission_yaml` | 用 `YamlPermissionProvider` 从 YAML 字符串解析并加载权限策略 | `cargo run -p dbnexus-examples --bin permission_yaml` |
+| `permission_macro` | 演示 `#[db_entity(..., permissions(...))]` 子参数为实体标注角色与操作 | `cargo run -p dbnexus-examples --bin permission_macro` |
+| `permission_engine` | 演示策略决策点 `PolicyDecisionPoint` 的配置与权限判定 | `cargo run -p dbnexus-examples --bin permission_engine` |
 
 ## 安全模块 (security/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `sql_parser` | `security/sql_parser.rs` | SQL 解析 + 操作类型提取 |
-| `sql_injection_detection` | `security/sql_injection_detection.rs` | 注入检测 + Unicode 防护 |
-| `ddl_guard` | `security/ddl_guard.rs` | DDL AST 安全验证 |
-| `sensitive_masker` | `security/sensitive_masker.rs` | 7 种脱敏类型 |
-| `rate_limiter` | `security/rate_limiter.rs` | 令牌桶速率限制 |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `sql_parser` | 用 `SqlParser` 解析 SELECT/INSERT/UPDATE/DELETE/CREATE/DROP 等语句并提取操作类型 | `cargo run -p dbnexus-examples --bin sql_parser` |
+| `sql_injection_detection` | 用 `contains_sql_injection` 检测 UNION/OR 1=1/注释注入/堆叠查询等多种注入模式 | `cargo run -p dbnexus-examples --bin sql_injection_detection` |
+| `ddl_guard` | 用 `DdlGuard` 基于 AST 验证 DDL 语句的安全性 | `cargo run -p dbnexus-examples --bin ddl_guard` |
+| `sensitive_masker` | 用 `SensitiveMasker` 对手机号、邮箱等不同类型的敏感数据脱敏 | `cargo run -p dbnexus-examples --bin sensitive_masker` |
+| `rate_limiter` | 用 `RateLimiter` 基于令牌桶算法进行速率限制 | `cargo run -p dbnexus-examples --bin rate_limiter` |
 
-## 认证与审计 (auth/)
+## 配置模块 (config/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `authentication_jwt` | `auth/authentication_jwt.rs` | JWT 签发/验证/刷新 |
-| `authentication_password` | `auth/authentication_password.rs` | bcrypt 哈希 + 用户管理 |
-| `audit_logging` | `auth/audit_logging.rs` | 审计日志完整流程 |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `config_env` | 通过 `DATABASE_URL`、`DB_MAX_CONNECTIONS` 等环境变量创建 `DbConfig` | `cargo run -p dbnexus-examples --bin config_env` |
+| `config_yaml` | 通过 YAML 字符串创建 `DbConfig` 并构建连接池 | `cargo run -p dbnexus-examples --bin config_yaml` |
+| `config_toml` | 通过 TOML 字符串创建 `DbConfig` 并构建连接池 | `cargo run -p dbnexus-examples --bin config_toml` |
+| `config_presets` | 对比 embedded/microservice/monolith/enterprise 四种预设的 feature 差异 | `cargo run -p dbnexus-examples --bin config_presets` |
+
+## 数据库模块 (database/)
+
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `database_sqlite` | 演示 SQLite 内存模式与文件模式两种运行方式的 DDL/DML 操作 | `cargo run -p dbnexus-examples --bin database_sqlite` |
+| `database_postgres` | 连接 PostgreSQL 执行基本操作；无可用服务时优雅降级退出 | `cargo run -p dbnexus-examples --bin database_postgres` |
+| `database_mysql` | 连接 MySQL 执行基本操作；无可用服务时优雅降级退出 | `cargo run -p dbnexus-examples --bin database_mysql` |
+| `migration` | 用 `MigrationExecutor` 定义、应用迁移，查看历史并手动回滚（执行反向 SQL） | `cargo run -p dbnexus-examples --bin migration` |
+| `sharding` | 用 `ShardRouter` 演示 yearly/monthly/daily/hash 分片策略与路由 | `cargo run -p dbnexus-examples --bin sharding` |
+| `global_index` | 用 `GlobalIndex` 管理跨分片全局索引，并展示 `SyncResult`/`SyncEvent` 类型 | `cargo run -p dbnexus-examples --bin global_index` |
+| `pool_management` | 演示连接池 pool-warmup、pool-health-check、auto-migrate 三大生命周期特性 | `cargo run -p dbnexus-examples --bin pool_management` |
+| `duckdb_query` | 用 `DuckDbConnection` 演示 DuckDB 内存库的建表、插入与分析查询 | `cargo run -p dbnexus-examples --bin duckdb_query` |
 
 ## 可观测性模块 (observability/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `metrics_prometheus` | `observability/metrics_prometheus.rs` | Prometheus 指标导出 |
-| `health_check` | `observability/health_check.rs` | HealthChecker + CircuitBreaker |
-| `latency_histogram` | `observability/latency_histogram.rs` | 延迟直方图 + 慢查询 |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `metrics_prometheus` | 用 `MetricsCollector` 同步池状态、记录查询指标并导出 Prometheus 格式 | `cargo run -p dbnexus-examples --bin metrics_prometheus` |
+| `health_check` | 演示 `HealthChecker` 健康检查与 `CircuitBreaker` 熔断器的完整流程 | `cargo run -p dbnexus-examples --bin health_check` |
+| `latency_histogram` | 演示 `LatencyHistogram` 延迟直方图、百分位统计与慢查询记录 | `cargo run -p dbnexus-examples --bin latency_histogram` |
+
+## 认证与审计模块 (auth/)
+
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `authentication_jwt` | 用 `JwtManager` 生成并验证 access/refresh 两类 JWT token | `cargo run -p dbnexus-examples --bin authentication_jwt` |
+| `authentication_password` | 用 `PasswordHasher`（bcrypt）与 `AuthenticationManager` 演示密码哈希与用户认证 | `cargo run -p dbnexus-examples --bin authentication_password` |
+| `audit_logging` | 用 `AuditLogger` 演示审计日志完整流程（敏感字段、告警操作、容量等配置） | `cargo run -p dbnexus-examples --bin audit_logging` |
 
 ## 宏模块 (macros/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `macros_db_entity` | `macros/macros_db_entity.rs` | 多实体定义 + 关系 |
-| `macros_db_crud` | `macros/macros_db_crud.rs` | 8 种 CRUD 方法 + 批量 + 分页 |
-| `macros_db_audit` | `macros/macros_db_audit.rs` | audit 子参数集成 |
-| `macros_db_cache` | `macros/macros_db_cache.rs` | cache 子参数集成 |
-| `macros_soft_delete_unique` | `macros/macros_soft_delete_unique.rs` | 软删除 + 复合唯一约束 |
-| `macros_db_entity_v2` | `macros/macros_db_entity_v2.rs` | timestamps + validate + hooks |
-| `macros_advanced_query` | `macros/macros_advanced_query.rs` | schema/query/paginate/batch |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `macros_db_entity` | 用 `#[db_entity]` 宏定义多实体（User/Product/Order）与关系 | `cargo run -p dbnexus-examples --bin macros_db_entity` |
+| `macros_db_crud` | 演示宏生成的完整 CRUD 方法，含批量插入、批量删除与分页查询 | `cargo run -p dbnexus-examples --bin macros_db_crud` |
+| `macros_db_audit` | 演示 `audit(...)` 子参数生成的审计常量与审计日志集成 | `cargo run -p dbnexus-examples --bin macros_db_audit` |
+| `macros_db_cache` | 演示 `cache(...)` 子参数生成的缓存配置常量与方法 | `cargo run -p dbnexus-examples --bin macros_db_cache` |
+| `macros_soft_delete_unique` | `soft_delete` 配合复合唯一约束 `UNIQUE(email, deleted_at)` 解决软删除后的唯一冲突 | `cargo run -p dbnexus-examples --bin macros_soft_delete_unique` |
+| `macros_db_entity_v2` | 演示 timestamps、validate、hooks 三大行为特性 | `cargo run -p dbnexus-examples --bin macros_db_entity_v2` |
+| `macros_advanced_query` | 演示宏生成的高级查询与批量操作（schema/query/paginate/batch） | `cargo run -p dbnexus-examples --bin macros_advanced_query` |
 
 ## 图数据库模块 (graph/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `graph_ladybug` | `graph/graph_ladybug.rs` | Ladybug 嵌入式图数据库（DDL/节点/关系/事务） |
-| `graph_neo4j` | `graph/graph_neo4j.rs` | Neo4j 服务器端图数据库（URL 解析/优雅降级/事务） |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `graph_neo4j` | 演示 `Neo4jConnection` 的 URL 解析、环境变量凭据回退与连接失败时的优雅降级（无服务器时仅演示降级） | `cargo run -p dbnexus-examples --bin graph_neo4j` |
+
+`graph_ladybug`（Ladybug 嵌入式图数据库，DDL/节点/关系操作）**未注册为 `[[bin]]`**：它需要 `ladybug` feature，而该 feature 与 `duckdb` 存在 mbedtls 链接冲突，故需单独编译（见 `Cargo.toml` 内注释）：
 
 ```bash
-# Ladybug（嵌入式，无需外部服务器）
-cargo run --bin graph_ladybug
-
-# Neo4j（需要 Neo4j 服务器，无服务器时演示优雅降级）
-cargo run --bin graph_neo4j
-NEO4J_URL=neo4j://user:pass@localhost:7687 cargo run --bin graph_neo4j  # pragma: allowlist secret
+cargo build --bin graph_ladybug --no-default-features \
+  --features "runtime-tokio-rustls,sqlite,cache,ladybug"
 ```
 
 ## 分布式能力 (distributed/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `distributed_id` | `distributed/distributed_id.rs` | SnowflakeIdGenerator + ID 解析 + 并发安全 |
-| `saga` | `distributed/saga.rs` | SagaOrchestrator + SagaAction + 补偿事务 |
-| `scatter_gather` | `distributed/scatter_gather.rs` | ScatterGatherExecutor + 聚合函数 |
-| `replica_routing` | `distributed/replica_routing.rs` | ReplicaConfig + FailoverConfig + 读写分离 |
-| `shard_migration` | `distributed/shard_migration.rs` | ShardMigrationOrchestrator + 并行/串行迁移 |
-
-```bash
-cargo run --bin distributed_id
-cargo run --bin saga
-cargo run --bin scatter_gather
-cargo run --bin replica_routing
-cargo run --bin shard_migration
-```
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `distributed_id` | 用 `SnowflakeIdGenerator` 生成并解析分布式 ID | `cargo run -p dbnexus-examples --bin distributed_id` |
+| `saga` | 用 `SagaOrchestrator` 演示正向动作 + 补偿动作的分布式事务编排 | `cargo run -p dbnexus-examples --bin saga` |
+| `scatter_gather` | 用 `ScatterGatherExecutor` 演示跨分片并行查询与结果聚合 | `cargo run -p dbnexus-examples --bin scatter_gather` |
+| `replica_routing` | 用 `ReplicaConfig` 演示副本配置与读写分离路由 | `cargo run -p dbnexus-examples --bin replica_routing` |
+| `shard_migration` | 用 `ShardMigrationOrchestrator` 演示分片迁移编排 | `cargo run -p dbnexus-examples --bin shard_migration` |
 
 ## 可靠性模块 (reliability/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `retry` | `reliability/retry.rs` | RetryExecutor + 指数退避 + 幂等性判断 |
-| `failover` | `reliability/failover.rs` | FailoverConfig + CircuitBreaker 协同 |
-
-```bash
-cargo run --bin retry
-cargo run --bin failover
-```
-
-## 国际化模块 (i18n)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `i18n_formatting` | `common/i18n_formatting.rs` | ICU4X locale 感知格式化（数字/日期/复数/排序） |
-
-```bash
-cargo run --bin i18n_formatting
-```
-
-## 集成适配器 (integrations/)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `oxcache_adapter` | `integrations/oxcache_adapter.rs` | OxcacheDbCacheAdapter 适配 oxcache 到 DbCacheProvider |
-
-```bash
-cargo run --bin oxcache_adapter
-```
-
-## 缓存功能 (cache)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `cache_standalone` | `common/cache_standalone.rs` | 自定义 DbCacheProvider 实现 + DbPoolBuilder 集成 |
-
-```bash
-cargo run --bin cache_standalone
-```
-
-## Kit 能力管理 (kit/)
-
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `kit_usage` | `kit/kit_usage.rs` | DbNexusKit 能力注册/发现/替换 |
-| `kit_advanced` | `kit/kit_advanced.rs` | pool + permission + metrics 三能力组合 |
-
-```bash
-cargo run --bin kit_usage
-cargo run --bin kit_advanced
-```
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `retry` | 用 `RetryExecutor` 演示重试策略（最大重试、指数退避、抖动） | `cargo run -p dbnexus-examples --bin retry` |
+| `failover` | 用 `FailoverConfig` 演示连接故障转移链的配置与使用 | `cargo run -p dbnexus-examples --bin failover` |
 
 ## 通用模块 (common/)
 
-| 示例 | 文件 | 说明 |
-|------|------|------|
-| `error_handling` | `common/error_handling.rs` | QueryErrorReport + ErrorCategory |
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `error_handling` | 演示 `QueryErrorReport` 与 `ErrorCategory` 的结构化错误报告 | `cargo run -p dbnexus-examples --bin error_handling` |
+| `i18n_formatting` | 用 `DbI18nFormatter` 演示 locale 感知的数字、日期等格式化 | `cargo run -p dbnexus-examples --bin i18n_formatting` |
+| `cache_standalone` | 实现自定义 `DbCacheProvider` 并演示其独立使用 | `cargo run -p dbnexus-examples --bin cache_standalone` |
 
-## 运行示例
+## 集成适配器 (integrations/)
 
-### 基本运行
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `oxcache_adapter` | 用 `OxcacheDbCacheAdapter` 将 oxcache 缓存后端适配为 `DbCacheProvider` | `cargo run -p dbnexus-examples --bin oxcache_adapter` |
+
+## Kit 能力管理 (kit/)
+
+| 示例 | 说明 | 运行命令 |
+|------|------|----------|
+| `kit_usage` | 用 `DbNexusModule` 与 trait-kit 的 `AsyncKit` 演示模块注册、构建与连接池能力获取 | `cargo run -p dbnexus-examples --bin kit_usage` |
+| `kit_advanced` | 演示通过 AsyncKit 依赖注入驱动的多能力数据库操作 | `cargo run -p dbnexus-examples --bin kit_advanced` |
+
+## 批量运行与编译
 
 ```bash
-cd examples
+# 在 examples/ 目录下逐个运行全部 51 个已注册示例
+bash test_all_examples.sh
+
+# 编译全部示例
+cargo build -p dbnexus-examples --all-targets
 ```
 
-#### 方式 1：直接运行特定示例
+说明：
 
-```bash
-cargo run --bin basic_connection
-cargo run --bin graph_ladybug
-cargo run --bin i18n_formatting
-```
+- `database_postgres`、`database_mysql`、`graph_neo4j` 在没有可用数据库服务时会优雅降级退出，无需预先部署服务即可运行。
+- `graph_ladybug` 不在上述清单内（未注册为 bin），编译方式见[图数据库模块](#图数据库模块-graph)。
 
-#### 方式 2：编译所有示例
+## 已启用的 feature
 
-```bash
-cargo build --all-targets
-```
+示例所需的 feature 已在 `Cargo.toml` 的 `dbnexus` 依赖中统一启用：
 
-### Feature Flags
+- **数据库**：`sqlite`、`duckdb`、`neo4j`（`ladybug` 因与 `duckdb` 的 mbedtls 链接冲突未启用，仅供 `graph_ladybug` 单独编译时使用）
+- **运行时**：`runtime-tokio-rustls`
+- **安全与权限**：`permission`、`permission-engine`、`sql-parser`、`authentication`、`validation`
+- **配置**：`yaml`、`config-toml`、`config-env`
+- **数据管理**：`cache`、`migration`、`auto-migrate`、`sharding`、`global-index`、`pool-warmup`、`pool-health-check`
+- **可观测性**：`metrics`、`health-check`、`audit`
+- **宏**：`macros`
+- **分布式**：`retry`、`failover`、`replica-routing`、`scatter-gather`、`shard-migration`、`saga`、`distributed-id`
+- **集成**：`oxcache-integration`、`kit`
+- **序列化**：`with-json`、`with-time`
 
-所有必要的 features 已在 `Cargo.toml` 中默认启用，包括：
+## 相关文档
 
-#### 数据库驱动
-- `sqlite` — SQLite 嵌入式数据库
-- `duckdb` — DuckDB 分析型数据库
-- `ladybug` — Ladybug 嵌入式图数据库
-- `neo4j` — Neo4j 图数据库服务器
+- [用户指南](../docs/USER_GUIDE.md)
+- [API 参考](../docs/API_REFERENCE.md)
+- [安全文档](../docs/SECURITY.md)
+- [示例清单 Cargo.toml](Cargo.toml)
 
-#### 核心特性
-- `permission` / `permission-engine` — 权限控制
-- `sql-parser` — SQL 解析器
-- `macros` — 过程宏
-- `cache` — 缓存功能
-
-#### 企业特性
-- `metrics` — Prometheus 指标
-- `health-check` — 健康检查
-- `tracing` — OpenTelemetry 追踪
-- `audit` — 审计日志
-- `authentication` — JWT 认证
-
-#### 数据管理
-- `migration` / `auto-migrate` — 数据库迁移
-- `sharding` — 数据分片
-- `global-index` — 全局索引
-
-#### 分布式能力
-- `retry` — 运行时重试 + 指数退避
-- `failover` — 连接故障转移
-- `replica-routing` — 副本路由（读写分离）
-- `scatter-gather` — 跨分片查询引擎
-- `shard-migration` — 分片迁移编排
-- `saga` — 分布式事务 Saga 编排器
-- `distributed-id` — 分布式 ID 生成器（Snowflake）
-
-#### 集成
-- `oxcache-integration` — Oxcache 缓存适配器
-- `kit` — trait-kit AsyncKit 模块系统
-
-## 示例文件结构
-
-每个示例文件都遵循统一的结构：
-
-```rust
-// Copyright (c) 2026 Kirky.X
-// SPDX-License-Identifier: MIT
-//! 示例标题
-//!
-//! 示例描述
-//!
-//! # 运行示例
-//!
-//! ```bash
-//! cargo run --bin <name>
-//! ```
-
-use dbnexus::{...};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 示例代码
-    Ok(())
-}
-```
-
-## 获取帮助
-
-1. 查看示例文件中的注释和文档
-2. 查看 [用户指南](../docs/USER_GUIDE.md)
-3. 查看 [API 文档](../docs/API_REFERENCE.md)
-4. 在 [GitHub Issues](https://github.com/Kirky-X/dbnexus/issues) 提问
-
-## 贡献
-
-欢迎贡献新的示例！请确保：
-
-1. 遵循现有的示例文件结构
-2. 添加清晰的注释和文档
-3. 包含运行说明
-4. 确保示例可以正确编译和运行
+欢迎贡献新示例：请遵循现有示例文件的结构（文件头版权注释 + `//!` 文档 + 运行说明），并在 `Cargo.toml` 中注册对应的 `[[bin]]`。
