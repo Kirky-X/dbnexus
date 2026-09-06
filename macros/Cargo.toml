@@ -25,7 +25,9 @@ sea-orm = { workspace = true, default-features = false, features = ["macros"] }
 # trybuild ui 用例经 dbnexus::db_entity 引宏（dev-dep 循环合法）；
 # permission 供 db_entity_with_permissions 展开引用 access/domain::permission
 # 阶段 2 验收补齐，使 db_entity_tests 真实可运行（CI exclude 本 crate，从未运行过）
-dbnexus = { path = "..", version = "0.6.0-rc.2", default-features = false, features = ["macros", "permission"] }
+# path-only：publish 时 dev-deps 被剔除、不参与 registry 解析（带 version 会在
+# 主包同名版本发布前形成循环解析失败）；本地联调走 path 取主仓工作区码
+dbnexus = { path = "..", default-features = false, features = ["macros", "permission"] }
 
 [lints]
 workspace = true
