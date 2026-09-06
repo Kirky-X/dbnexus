@@ -1,12 +1,15 @@
-# API 参考
+# 📘 Dbnexus API 参考
 
 DBNexus 的完整 API 文档。
 
-## 目录
+## 📋 目录
+
+<details open>
+<summary>📑 目录（点击展开）</summary>
 
 - [核心类型](#核心类型)
-- [连接池 API](#连接池-api)
-- [会话 API](#会话-api)
+- [连接池 API（DbPool）](#dbpool)
+- [会话 API（Session）](#session)
 - [配置 API](#配置-api)
 - [权限 API](#权限-api)
 - [过程宏](#过程宏)
@@ -15,6 +18,8 @@ DBNexus 的完整 API 文档。
 - [0.3.0 新增 API](#030-新增-api)
 - [0.4.0 新增 API](#040-新增-api)
 - [重试 API](#重试-api)
+
+</details>
 
 ---
 
@@ -858,7 +863,7 @@ pub type Operation = PermissionAction;
 ```rust
 use dbnexus::MetricsCollector;
 
-let collector = MetricsCollector::new(&pool);
+let collector = MetricsCollector::new();
 println!("{}", collector.export_prometheus());
 ```
 
