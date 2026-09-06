@@ -4,7 +4,7 @@
 
 ## 开发环境
 
-- **Rust 1.91+**（edition 2024）
+- **Rust 1.97.1+**（edition 2024）
 - **Git**（配置了 pre-commit hooks）
 - **Docker**（可选，用于 PostgreSQL/MySQL 集成测试）
 

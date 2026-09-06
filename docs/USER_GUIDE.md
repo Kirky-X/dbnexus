@@ -53,7 +53,7 @@
 ```toml
 [dependencies]
 dbnexus = "0.6.0-rc.2"
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 ```
 
 ### 2. 选择特性
