@@ -178,7 +178,14 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
     );
 }
 
-/// TEST-U-SESS-012: execute_raw_ddl DROP TABLE 应被 DdlGuard 拒绝（安全设计）
+/// TEST-U-SESS-012: execute_raw_ddl 对 DropTable/DropDatabase 的白名单边界
+///
+/// 真实行为核正（阶段 2 验收）：自 0540954 起 admin 路径 DdlGuard 白名单放行
+/// DropTable（迁移事务混合 DDL+DML 场景，表级权限由 security_gate 前置检查，
+/// 见 `ddl_guard.rs` 的 ALLOWED_DDL_STATEMENTS 注释；后续 6487866/aad4601
+/// 持续演化白名单）。原断言“DROP TABLE 应被拒（仅允许 DROP INDEX/VIEW）”
+/// 已过时，按真实行为改为：DropTable 放行 + 未列入白名单的 DropDatabase 拒绝
+/// （双向边界，保持安全语义覆盖）。
 #[tokio::test]
 async fn test_session_execute_raw_ddl_drop_table() {
     let pool = make_pool().await;
@@ -187,14 +194,24 @@ async fn test_session_execute_raw_ddl_drop_table() {
     // 先创建
     let create_sql = format!("CREATE TABLE {} (id INTEGER PRIMARY KEY)", table);
     session.execute_raw_ddl(&create_sql).await.unwrap();
-    // 再删除 — DdlGuard 安全设计禁止 DROP TABLE（仅允许 DROP INDEX/VIEW）
+    // DropTable 在 admin 白名单内 → 正常执行（真实行为）
     let drop_sql = format!("DROP TABLE {}", table);
-    let result = session.execute_raw_ddl(&drop_sql).await;
-    assert!(result.is_err(), "DROP TABLE should be rejected by DdlGuard");
+    session
+        .execute_raw_ddl(&drop_sql)
+        .await
+        .unwrap_or_else(|e| panic!("DropTable should be allowed by admin whitelist, got: {e:?}"));
+    // 反向边界：DROP DATABASE 命中 FORBIDDEN_PATTERNS 字符串拦截层 → 拒绝
+    let result = session
+        .execute_raw_ddl("DROP DATABASE dbnexus_forbidden")
+        .await;
+    assert!(
+        result.is_err(),
+        "DropDatabase should be rejected by DdlGuard"
+    );
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Permission(ref msg) if msg.contains("DropTable")),
-        "expected DdlGuard rejection for DropTable, got {:?}",
+        matches!(err, DbError::Permission(ref msg) if msg.contains("DROP DATABASE")),
+        "expected DdlGuard rejection for DROP DATABASE, got {:?}",
         err
     );
 }
