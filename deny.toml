@@ -57,12 +57,12 @@ license-files = [{ path = "../LICENSE", hash = 0xfb13e7ad }]
 [[licenses.clarify]]
 name = "oxcache"
 expression = "MIT"
-license-files = [{ path = "../oxcache/LICENSE", hash = 0xfb13e7ad }]
+license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [[licenses.clarify]]
 name = "trait-kit"
 expression = "MIT"
-license-files = [{ path = "../trait-kit/LICENSE", hash = 0xfb13e7ad }]
+license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [bans]
 multiple-versions = "warn"
