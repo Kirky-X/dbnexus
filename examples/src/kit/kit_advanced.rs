@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! DbNexusModule 高级示例：DI 驱动的多能力数据库操作
 //!
-//! 在 [`kit_usage`](crate::kit_usage) 基础上演示更复杂的 `AsyncKit` + `DbNexusModule` 场景：
+//! 在 `kit_usage` 基础上演示更复杂的 `AsyncKit` + `DbNexusModule` 场景：
 //! - 通过 AsyncKit DI 获取数据库连接池
 //! - 结合 `MetricsCollector` 记录查询指标
 //! - 结合 `PermissionProvider` 执行权限检查
