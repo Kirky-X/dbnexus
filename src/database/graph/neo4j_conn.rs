@@ -7,7 +7,7 @@
 //! # 架构说明
 //!
 //! [`Neo4jConnection`] 封装 `Arc<neo4rs::Graph>`，`neo4rs::Graph` 内部已维护连接池，
-//! 因此无需像 [`LadybugConnection`](crate::database::LadybugConnection) 那样自建
+//! 因此无需像 `LadybugConnection` 那样自建
 //! `Semaphore` 限流。每次 `execute_cypher` 通过 `Graph::execute` 获取
 //! `DetachedRowStream`，迭代行并映射到 [`GraphRow`]。
 //!
