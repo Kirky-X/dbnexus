@@ -1,12 +1,10 @@
 name: Release
 
-# tag 推送 → create-release（先行）→ publish-crates
-# 主包 dbnexus 是库 crate（无 [[bin]]），通过 crates.io 发布，无需交叉编译二进制。
-# dbnexus-cli 同样通过 crates.io 发布（cargo install dbnexus-cli 安装）。
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,15 +15,17 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  # 1. 创建 GitHub Release（先行，产出 upload_url 供后续 job 使用）
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
-      upload_url: ${{ steps.create-release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,10 +36,9 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📌 Version: $VERSION"
+          echo "Version: $VERSION"
 
       - name: Create GitHub Release
-        id: create-release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
@@ -50,7 +49,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2. 发布到 crates.io
   publish-crates:
     name: Publish to crates.io
     needs: create-release
@@ -88,8 +86,8 @@ jobs:
 
       - name: Verify publication
         run: |
-          echo "✅ All crates published!"
-          echo "📦 Check:"
+          echo "All crates published!"
+          echo "Check:"
           echo "  - https://crates.io/crates/dbnexus"
           echo "  - https://crates.io/crates/dbnexus-macros"
           echo "  - https://crates.io/crates/dbnexus-cli"

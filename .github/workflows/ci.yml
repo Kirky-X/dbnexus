@@ -1,3 +1,4 @@
+# CI 质量门禁:fmt / clippy / check / test / cross-platform / doc / security / coverage
 name: CI
 
 on:
@@ -14,71 +15,56 @@ env:
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # 基础检查 - 快速反馈
-  lint:
-    name: Lint
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
-          components: rustfmt, clippy
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
         with:
           shared-key: lint
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Run clippy
         run: cargo clippy --no-default-features --features sqlite,default-no-db,all-optional --all-targets --workspace --exclude dbnexus-examples --exclude dbnexus-macros -- -D warnings
 
-      - name: Check docs
-        run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional
-        env:
-          RUSTDOCFLAGS: -D warnings
-
-  # OpenSpec 规范检查 — 已移除（anomalyco/openspec 仓库已不存在）
-  # 如需恢复，需找到新的 openspec 工具源
-
-  # 安全审计
-  security:
-    name: Security Audit
+  check:
+    name: Check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Check default features
+        run: cargo check --workspace --no-default-features --features sqlite,default-no-db,all-optional
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
-
-      - name: Install tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-audit,cargo-deny
-
-      - name: cargo deny
-        run: cargo deny check
-
-      - name: cargo audit
-        run: cargo audit
-
-  # 数据库矩阵测试
   test:
     name: Test (${{ matrix.db }})
-    needs: [lint, security]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -122,18 +108,12 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.db }}-${{ runner.os }}
-
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Set up database environment
         run: |
           echo "TEST_DB_TYPE=${{ matrix.db }}" >> $GITHUB_ENV
@@ -144,7 +124,6 @@ jobs:
           elif [ "${{ matrix.db }}" == "mysql" ]; then
             echo "DATABASE_URL=mysql://dbnexus:dbnexus_password@localhost:3306/dbnexus_test" >> $GITHUB_ENV
           fi
-
       - name: Wait for database
         run: |
           if [ "${{ matrix.db }}" == "postgres" ]; then
@@ -167,20 +146,13 @@ jobs:
               sleep 2
             done
           fi
-
       - name: Run tests
-        # Exclude dbnexus-examples (hardcodes sqlite+duckdb in [dependencies]) and
-        # dbnexus-macros (hardcodes sqlite in [dev-dependencies]). Both conflict
-        # with mysql/postgres matrix testing via feature unification.
         run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
-
       - name: Run doc tests
         run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
-  # 跨平台构建检查
   build:
-    name: Build (${{ matrix.os }}-${{ matrix.db }})
-    needs: [lint, security]
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -197,148 +169,80 @@ jobs:
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: ${{ matrix.target }}
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.db }}-${{ runner.os }}
-
       - name: Install protoc (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Install protoc (macOS)
         if: runner.os == 'macOS'
         run: brew install protobuf
-
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc -y
-
       - name: Build
         run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --target ${{ matrix.target }}
-
       - name: Build release
         run: cargo build --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --target ${{ matrix.target }} --release
 
-  # 代码覆盖率
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: docs
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Build documentation
+        run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      - name: cargo deny
+        run: cargo deny check
+      - name: cargo audit
+        run: cargo audit
+
   coverage:
-    name: Code Coverage
-    needs: test
+    name: Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: llvm-tools-preview
-
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-
       - name: Generate coverage (gate ≥80% lines)
         run: |
           cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 80 --lcov --output-path lcov.info
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           files: ./lcov.info
-
-  # 文档检查
-  docs:
-    name: Documentation
-    needs: [lint]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: docs
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Build documentation
-        run: cargo doc --no-deps --no-default-features --features sqlite,default-no-db,all-optional --workspace
-        env:
-          RUSTDOCFLAGS: -D warnings
-
-      - name: Check documentation links
-        run: |
-          # 验证文档构建成功
-          ls -la target/doc/dbnexus/
-
-      - name: Verify docs.rs configuration
-        run: |
-          # 检查 docs.rs 配置是否正确
-          cargo metadata --format-version 1 | jq -r '.packages[0].metadata["docs.rs"]'
-
-  # 依赖更新检查
-  dependabot:
-    name: Dependency Updates
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Check for outdated dependencies
-        run: |
-          cargo outdated --root-deps-only --exit-code 1 || echo "OUTDATED=true" >> $GITHUB_ENV
-
-      - name: Report outdated dependencies
-        if: env.OUTDATED == 'true'
-        run: |
-          echo "⚠️  Some dependencies are outdated"
-          cargo outdated --root-deps-only
-
-  # 提交状态汇总
-  status:
-    name: Status Check
-    needs: [test, build, coverage, docs]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: always()
-    steps:
-      - name: Check status
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📊 CI Status Summary"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "✅ Lint: ${{ needs.lint.result }}"
-          echo "✅ Security: ${{ needs.security.result }}"
-          echo "✅ Test: ${{ needs.test.result }}"
-          echo "✅ Build: ${{ needs.build.result }}"
-          echo "✅ Coverage: ${{ needs.coverage.result }}"
-          echo "✅ Documentation: ${{ needs.docs.result }}"
-          echo ""
-          if [[ "${{ needs.test.result }}" == "success" ]] && \
-             [[ "${{ needs.build.result }}" == "success" ]]; then
-            echo "🎉 All critical checks passed!"
-            exit 0
-          else
-            echo "❌ Some checks failed"
-            exit 1
-          fi

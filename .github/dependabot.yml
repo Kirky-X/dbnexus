@@ -2,7 +2,7 @@
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
-  # Rust 依赖更新(Cargo.toml / Cargo.lock)— 主 crate 与 workspace 根
+  # Rust 依赖更新(Cargo.toml / Cargo.lock)— workspace 根
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
