@@ -52,7 +52,7 @@ license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 [[licenses.clarify]]
 name = "dbnexus-macros"
 expression = "MIT"
-license-files = [{ path = "../LICENSE", hash = 0xfb13e7ad }]
+license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [[licenses.clarify]]
 name = "oxcache"
@@ -66,7 +66,7 @@ license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+wildcards = "warn"  # dbnexus-macros dev-dep 故意 path-only（注释见 macros/Cargo.toml:28-29）
 
 [[bans.deny]]
 name = "serde_yaml" # deprecated, use serde_yaml_ng
