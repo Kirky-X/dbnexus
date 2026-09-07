@@ -201,7 +201,7 @@ pub struct PasswordPolicy {
 
     /// 常见弱密码黑名单（大小写不敏感匹配，LD-3：可自定义）
     ///
-    /// 默认值为 [`COMMON_PASSWORDS`] 的 Vec 转换。调用方可：
+    /// 默认值为 `COMMON_PASSWORDS` 的 Vec 转换。调用方可：
     /// - 追加企业专属弱密码
     /// - 替换为自定义黑名单
     /// - 清空（仅依赖复杂度检查，不推荐）

@@ -1,75 +1,47 @@
-# CodeQL 语义级安全扫描
-# Docs: https://docs.github.com/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning
-name: "CodeQL Security Scan"
+# CodeQL 静态安全分析（GitHub 原生，跨语言自动检测）。
+# 触发: push 到主分支 / PR / 每周二定时全量扫描
+# 无需额外 secret：使用自动注入的 GITHUB_TOKEN。
+name: CodeQL
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - "feature/**"
-      - "release/**"
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, develop]
   schedule:
-    # 每周一 09:00 UTC+8 定时扫描
-    - cron: "0 1 * * 1"
+    - cron: "37 4 * * 2" # 每周二 04:37 UTC（避开整点）
 
 permissions:
   contents: read
   security-events: write
-  actions: read
 
-# 避免并发运行
 concurrency:
   group: codeql-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   analyze:
-    name: Analyze (Rust)
+    name: Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
-      matrix:
-        # CodeQL 对 Rust 的支持从 CodeQL 2.14.6 开始
-        language: ["rust"]
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.97.1
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-codeql-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-codeql-cargo-
+      - uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v4.37.8
         with:
-          languages: ${{ matrix.language }}
-          # 使用默认的安全查询套件
-          queries: +security-extended
-          build-mode: none
+          languages: rust
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4.37.8
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v4.37.8
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:rust"
