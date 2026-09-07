@@ -3583,6 +3583,8 @@ dependencies = [
 [[package]]
 name = "oxcache"
 version = "0.5.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a554d0bfa5cf5fe2b70718d46c19de465dc95615a08e704efa7bce302052cf51"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5605,6 +5607,8 @@ dependencies = [
 [[package]]
 name = "trait-kit"
 version = "0.5.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c42ac2757a63f328830f85ba42387a06ee475791dbf260cb9107014c5969dab1"
 
 [[package]]
 name = "try-lock"
