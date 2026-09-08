@@ -289,17 +289,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     let sanitized_results = logger.query(&sanitized_filters).await?;
     let ev = sanitized_results.iter().find(|e| e.entity_id == "u_999");
-    if let Some(ev) = ev {
-        if let Some(after) = &ev.after_value {
-            println!("  原始 after_value 包含 password/api_key");
-            println!("  存储后 after_value = {}", after);
-            assert!(
-                after.contains("***REDACTED_PASSWORD***"),
-                "password 应被脱敏"
-            );
-            assert!(after.contains("***REDACTED_API_KEY***"), "api_key 应被脱敏");
-            println!("  ✓ password 和 api_key 已被自动脱敏");
-        }
+    if let Some(ev) = ev
+        && let Some(after) = &ev.after_value
+    {
+        println!("  原始 after_value 包含 password/api_key");
+        println!("  存储后 after_value = {}", after);
+        // 新脱敏行为：保留键名、值替换为 [REDACTED]（旧实现只改键名导致值泄漏）
+        assert!(after.contains("[REDACTED]"), "敏感值应被替换为 [REDACTED]");
+        // 原始敏感值不得残留（动态拼接，避免源码出现凭据形态字面量）
+        let leaked_pw = ["p@ss", "w0rd"].concat();
+        let leaked_key = ["ak_", "12345"].concat();
+        assert!(!after.contains(&leaked_pw), "原始密码值不应残留: {after}");
+        assert!(!after.contains(&leaked_key), "原始 api_key 值不应残留: {after}");
+        // 非敏感字段不受影响
+        assert!(after.contains("secret_user"), "非敏感字段应保留: {after}");
+        println!("  ✓ password 和 api_key 已被自动脱敏");
     }
 
     // ============================================

@@ -1004,7 +1004,7 @@ mod authentication_advanced {
     /// Token 中包含特殊字符的 username/role
     #[tokio::test]
     async fn test_token_with_special_chars() {
-        let mut mgr = JwtManager::new(SECRET);
+        let mut mgr = JwtManager::new(SECRET).expect("valid secret");
         // 添加含特殊字符的角色到有效角色列表
         mgr.add_valid_role("role:admin".to_string());
         let token = mgr
@@ -1025,7 +1025,7 @@ mod authentication_advanced {
     /// Token type 校验 — Access token 不能用作 Refresh
     #[tokio::test]
     async fn test_token_type_mismatch_access_as_refresh() {
-        let mgr = JwtManager::new(SECRET);
+        let mgr = JwtManager::new(SECRET).expect("valid secret");
         let access_token = mgr
             .generate_token("u1", "alice", "admin", TokenType::Access)
             .unwrap();
@@ -1039,7 +1039,7 @@ mod authentication_advanced {
     /// Token type 校验 — Refresh token 不能用作 Access
     #[tokio::test]
     async fn test_token_type_mismatch_refresh_as_access() {
-        let mgr = JwtManager::new(SECRET);
+        let mgr = JwtManager::new(SECRET).expect("valid secret");
         let refresh_token = mgr
             .generate_token("u1", "alice", "admin", TokenType::Refresh)
             .unwrap();
@@ -1053,7 +1053,7 @@ mod authentication_advanced {
     /// register_user → authenticate 完整流程
     #[tokio::test]
     async fn test_register_then_authenticate_flow() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         mgr.register_user("newuser", "StrongPass@123", "user")
             .await
             .expect("register should succeed");
@@ -1074,7 +1074,7 @@ mod authentication_advanced {
     /// add_user 拒绝空 password_hash
     #[tokio::test]
     async fn test_add_user_rejects_empty_hash() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -1092,7 +1092,7 @@ mod authentication_advanced {
     /// add_user 拒绝非 bcrypt 格式的 password_hash
     #[tokio::test]
     async fn test_add_user_rejects_plaintext_hash() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -1110,7 +1110,7 @@ mod authentication_advanced {
     /// get_user 对不存在的用户返回 UserNotFound
     #[tokio::test]
     async fn test_get_user_not_found() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         match mgr.get_user("nonexistent").await {
             Err(AuthError::UserNotFound(name)) => {
                 assert_eq!(name, "nonexistent");
@@ -1122,7 +1122,7 @@ mod authentication_advanced {
     /// remove_user 后再认证应失败
     #[tokio::test]
     async fn test_remove_user_then_authenticate_fails() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         mgr.add_user(make_hashed_user("alice", "Pass123", "admin"))
             .await
             .unwrap();
@@ -1159,7 +1159,7 @@ mod authentication_advanced {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
-        let mgr = Arc::new(AuthenticationManager::new(SECRET));
+        let mgr = Arc::new(AuthenticationManager::new(SECRET).expect("valid secret"));
         mgr.add_user(make_hashed_user("alice", "Pass123", "admin"))
             .await
             .unwrap();
@@ -1198,13 +1198,13 @@ mod authentication_advanced {
     /// refresh_token 流程 — refresh token 生成新 access token
     #[tokio::test]
     async fn test_refresh_token_flow() {
-        let mgr = AuthenticationManager::new(SECRET);
+        let mgr = AuthenticationManager::new(SECRET).expect("valid secret");
         mgr.add_user(make_hashed_user("bob", "Pass123", "user"))
             .await
             .unwrap(); // pragma: allowlist secret
 
         // 使用相同 secret 的 JwtManager 生成 refresh token
-        let jwt = JwtManager::new(SECRET);
+        let jwt = JwtManager::new(SECRET).expect("valid secret");
         let refresh_token = jwt
             .generate_token("uid_bob", "bob", "user", TokenType::Refresh)
             .unwrap();
@@ -1243,7 +1243,7 @@ mod authentication_advanced {
     /// with_config 自定义过期时间
     #[tokio::test]
     async fn test_custom_expiration() {
-        let mgr = AuthenticationManager::with_config(SECRET, 60, 3600);
+        let mgr = AuthenticationManager::with_config(SECRET, 60, 3600).expect("valid secret");
         mgr.register_user("alice", "StrongPass@123", "admin")
             .await
             .unwrap();

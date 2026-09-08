@@ -17,41 +17,52 @@ impl AuthenticationManager {
     /// # 参数
     ///
     /// * `jwt_secret` - JWT 签名密钥（建议从环境变量读取）
-    pub fn new(jwt_secret: &[u8]) -> Self {
-        Self {
+    /// # 错误
+    ///
+    /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
+    pub fn new(jwt_secret: &[u8]) -> AuthResult<Self> {
+        Ok(Self {
             password_hasher: PasswordHasher::new(),
-            jwt_manager: JwtManager::new(jwt_secret),
+            jwt_manager: JwtManager::new(jwt_secret)?,
             users: Arc::new(RwLock::new(HashMap::new())),
             max_users: super::DEFAULT_MAX_USERS,
-        }
+        })
     }
 
     /// 使用自定义配置创建认证管理器
+    ///
+    /// # 错误
+    ///
+    /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
     pub fn with_config(
         jwt_secret: &[u8],
         access_expiration_secs: u64,
         refresh_expiration_secs: u64,
-    ) -> Self {
-        Self {
+    ) -> AuthResult<Self> {
+        Ok(Self {
             password_hasher: PasswordHasher::new(),
             jwt_manager: JwtManager::with_expiration(
                 jwt_secret,
                 access_expiration_secs,
                 refresh_expiration_secs,
-            ),
+            )?,
             users: Arc::new(RwLock::new(HashMap::new())),
             max_users: super::DEFAULT_MAX_USERS,
-        }
+        })
     }
 
     /// 使用自定义用户上限创建认证管理器
-    pub fn with_max_users(jwt_secret: &[u8], max_users: usize) -> Self {
-        Self {
+    ///
+    /// # 错误
+    ///
+    /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
+    pub fn with_max_users(jwt_secret: &[u8], max_users: usize) -> AuthResult<Self> {
+        Ok(Self {
             password_hasher: PasswordHasher::new(),
-            jwt_manager: JwtManager::new(jwt_secret),
+            jwt_manager: JwtManager::new(jwt_secret)?,
             users: Arc::new(RwLock::new(HashMap::new())),
             max_users,
-        }
+        })
     }
 
     /// 添加或更新用户（直接插入已哈希的 User）
@@ -118,7 +129,7 @@ impl AuthenticationManager {
     /// # 参数
     ///
     /// * `username` - 用户名（同时作为内部用户 ID）
-    /// * `password` - 明文密码（需通过强度检查：≥8 字符 + 含字母 + 含数字）
+    /// * `password` - 明文密码（需通过强度检查：≥12 字符 + 含大写字母、小写字母、数字、特殊字符）
     /// * `role` - 用户角色
     ///
     /// # 错误
@@ -314,7 +325,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝空 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_empty_hash() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -333,7 +344,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝非 bcrypt 格式的 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_plaintext_hash() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -352,7 +363,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user 接受有效 bcrypt 哈希
     #[tokio::test]
     async fn test_vuln_0002_add_user_accepts_valid_bcrypt() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let hasher = PasswordHasher::new();
         let hash = hasher.hash("ValidPass@123").unwrap();
         let user = User {
@@ -370,7 +381,7 @@ mod tests {
     /// vuln-0002 回归测试：add_user_unchecked 不验证 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_unchecked_skips_validation() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -394,7 +405,7 @@ mod tests {
     /// 验证两者职责清晰分离：公共 API 强制安全，内部 API 跳过验证。
     #[tokio::test]
     async fn test_hd3_add_user_vs_unchecked_role_separation() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
         // 构造无效 password_hash 的 User
         let make_user = || User {
@@ -427,7 +438,7 @@ mod tests {
     /// 确保迁移场景（如批量导入）的数据完整性。
     #[tokio::test]
     async fn test_hd3_add_user_unchecked_data_round_trip() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx");
+        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
         // 内部 API 写入（模拟迁移场景）
         let user = User {

@@ -4,10 +4,10 @@
 
 use super::models::{AuthError, AuthResult, JwtClaims, TokenType};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// JWT 访问令牌默认过期时间（秒）
 const ACCESS_TOKEN_EXPIRATION_SECS: u64 = 3600; // 1 hour
@@ -21,6 +21,13 @@ const DEFAULT_VALID_ROLES: &[&str] = &["admin", "user", "readonly", "readwrite"]
 /// jti 全局计数器
 static JTI_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// 撤销集合容量上限。
+///
+/// 超过此上限后，新插入会先淘汰过期条目，仍达上限则逐出 Instant 最旧条目。
+/// 语义边界：极端场景下单实例内 >10,000 个未过期的已轮换 jti 同时存在时，
+/// 最旧条目可能被逐出，理论上允许其重放。逐出优先过期项 + 上限足够大，风险可接受。
+const MAX_REVOKED_JTIS: usize = 10_000;
+
 /// JWT 管理器
 pub struct JwtManager {
     encoding_key: EncodingKey,
@@ -30,7 +37,8 @@ pub struct JwtManager {
     /// 有效角色白名单，防止 `generate_token` 注入任意角色
     valid_roles: HashSet<String>,
     /// 已撤销的 refresh token jti 集合（refresh token rotation 保护）
-    revoked_refresh_jtis: Mutex<HashSet<String>>,
+    /// 值类型 `Instant` 记录插入时刻，用于过期淘汰。
+    revoked_refresh_jtis: Mutex<HashMap<String, Instant>>,
 }
 
 impl JwtManager {
@@ -43,48 +51,48 @@ impl JwtManager {
     /// # 错误
     ///
     /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
-    pub fn new(secret: &[u8]) -> Self {
+    pub fn new(secret: &[u8]) -> AuthResult<Self> {
         // HS256 要求至少 256 bits（32 字节）密钥
         if secret.len() < 32 {
-            panic!(
+            return Err(AuthError::TokenGeneration(format!(
                 "JWT secret must be at least 32 bytes (256 bits) for HS256, got {} bytes",
                 secret.len()
-            );
+            )));
         }
-        Self {
+        Ok(Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoding_key: DecodingKey::from_secret(secret),
             access_expiration_secs: ACCESS_TOKEN_EXPIRATION_SECS,
             refresh_expiration_secs: REFRESH_TOKEN_EXPIRATION_SECS,
             valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
-            revoked_refresh_jtis: Mutex::new(HashSet::new()),
-        }
+            revoked_refresh_jtis: Mutex::new(HashMap::new()),
+        })
     }
 
     /// 使用自定义过期时间创建 JWT 管理器
     ///
     /// # 错误
     ///
-    /// 密钥短于 32 字节时 panic。
+    /// 密钥短于 32 字节时返回 `AuthError::TokenGeneration`。
     pub fn with_expiration(
         secret: &[u8],
         access_expiration_secs: u64,
         refresh_expiration_secs: u64,
-    ) -> Self {
+    ) -> AuthResult<Self> {
         if secret.len() < 32 {
-            panic!(
+            return Err(AuthError::TokenGeneration(format!(
                 "JWT secret must be at least 32 bytes (256 bits) for HS256, got {} bytes",
                 secret.len()
-            );
+            )));
         }
-        Self {
+        Ok(Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoding_key: DecodingKey::from_secret(secret),
             access_expiration_secs,
             refresh_expiration_secs,
             valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
-            revoked_refresh_jtis: Mutex::new(HashSet::new()),
-        }
+            revoked_refresh_jtis: Mutex::new(HashMap::new()),
+        })
     }
 
     /// 添加自定义有效角色
@@ -187,7 +195,7 @@ impl JwtManager {
         }
         // H-3: 检查 refresh token 是否已被撤销
         if let Ok(revoked) = self.revoked_refresh_jtis.lock()
-            && revoked.contains(&claims.jti)
+            && revoked.contains_key(&claims.jti)
         {
             return Err(AuthError::InvalidToken);
         }
@@ -202,7 +210,8 @@ impl JwtManager {
 
         // H-3: 撤销旧 refresh token（refresh token rotation）
         if let Ok(mut revoked) = self.revoked_refresh_jtis.lock() {
-            revoked.insert(claims.jti.clone());
+            Self::evict_revoked_entries(&mut revoked, self.refresh_expiration_secs);
+            revoked.insert(claims.jti, Instant::now());
         }
 
         self.generate_token(
@@ -211,6 +220,29 @@ impl JwtManager {
             &claims.role,
             TokenType::Access,
         )
+    }
+
+    /// 淘汰撤销集合中的过期条目，并在达上限时逐出最旧条目。
+    ///
+    /// 淘汰策略：
+    /// 1. 移除 `inserted_at + token_duration < now` 的条目（超过 refresh token 有效期无保留价值）
+    /// 2. 若仍达 `MAX_REVOKED_JTIS` 上限，移除 `Instant` 最旧的条目
+    fn evict_revoked_entries(revoked: &mut HashMap<String, Instant>, refresh_expiration_secs: u64) {
+        let now = Instant::now();
+        let token_duration = std::time::Duration::from_secs(refresh_expiration_secs);
+        revoked.retain(|_, inserted_at| now.duration_since(*inserted_at) < token_duration);
+
+        // 淘汰后仍达上限，循环移除 Instant 最旧的条目直到低于上限
+        while revoked.len() >= MAX_REVOKED_JTIS {
+            let oldest_key = revoked
+                .iter()
+                .min_by_key(|(_, instant)| *instant)
+                .map(|(key, _)| key.clone());
+            match oldest_key {
+                Some(key) => { revoked.remove(&key); }
+                None => break,
+            }
+        }
     }
 }
 
@@ -222,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_generate_and_verify_token() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         let token = manager
             .generate_token("user123", "testuser", "admin", TokenType::Access)
@@ -236,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_token_types() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         let access_token = manager
             .generate_token("user123", "testuser", "admin", TokenType::Access)
@@ -255,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_invalid_token() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         let result = manager.verify_token("invalid.token.here");
         assert!(matches!(result, Err(AuthError::InvalidToken)));
@@ -263,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_refresh_token() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         let refresh_token = manager
             .generate_token("user123", "testuser", "admin", TokenType::Refresh)
@@ -278,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_custom_expiration() {
-        let manager = JwtManager::with_expiration(TEST_SECRET, 60, 3600);
+        let manager = JwtManager::with_expiration(TEST_SECRET, 60, 3600).expect("valid secret");
 
         let token = manager
             .generate_token("user123", "testuser", "admin", TokenType::Access)
@@ -294,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_verify_access_token_accepts_access() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let access_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Access)
             .unwrap();
@@ -304,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_verify_access_token_rejects_refresh() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let refresh_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Refresh)
             .unwrap();
@@ -318,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_verify_refresh_token_accepts_refresh() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let refresh_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Refresh)
             .unwrap();
@@ -328,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_verify_refresh_token_rejects_access() {
-        let manager = JwtManager::new(TEST_SECRET);
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let access_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Access)
             .unwrap();
@@ -337,6 +369,104 @@ mod tests {
         assert!(
             matches!(result, Err(AuthError::InvalidToken)),
             "access token should be rejected by verify_refresh_token"
+        );
+    }
+
+    // ============================================================================
+    // HIGH-001: JwtManager 构造函数短密钥拒绝测试（T001）
+    // ============================================================================
+
+    /// 19 字节密钥（<32），`new` 应返回 Err 而非 panic
+    #[test]
+    fn test_new_rejects_short_secret() {
+        let short_secret = b"dbnexus-demo-secret"; // 19 bytes
+        assert_eq!(short_secret.len(), 19);
+        match JwtManager::new(short_secret) {
+            Err(AuthError::TokenGeneration(ref msg)) => {
+                assert!(msg.contains("32"), "error should mention 32 bytes, got: {}", msg);
+                assert!(msg.contains("19"), "error should mention 19 bytes, got: {}", msg);
+            }
+            other => panic!("expected Err(TokenGeneration), got Ok or wrong error variant: {}", 
+                match other { Ok(_) => "Ok(...)".to_string(), Err(e) => format!("Err({})", e) }),
+        }
+    }
+
+    /// 19 字节密钥（<32），`with_expiration` 应返回 Err 而非 panic
+    #[test]
+    fn test_with_expiration_rejects_short_secret() {
+        let short_secret = b"dbnexus-demo-secret"; // 19 bytes
+        assert_eq!(short_secret.len(), 19);
+        match JwtManager::with_expiration(short_secret, 60, 3600) {
+            Err(AuthError::TokenGeneration(ref msg)) => {
+                assert!(msg.contains("32"), "error should mention 32 bytes, got: {}", msg);
+                assert!(msg.contains("19"), "error should mention 19 bytes, got: {}", msg);
+            }
+            other => panic!("expected Err(TokenGeneration), got Ok or wrong error variant: {}", 
+                match other { Ok(_) => "Ok(...)".to_string(), Err(e) => format!("Err({})", e) }),
+        }
+    }
+
+    // ============================================================================
+    // HIGH-002: 撤销集合有界性测试（T006 Red）
+    // ============================================================================
+
+    /// 向撤销集合插入超过 MAX_REVOKED_JTIS 的条目后，集合长度应有上限，
+    /// 且最早插入的条目应已被逐出。
+    #[test]
+    fn test_revoked_jtis_bounded() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let mut revoked = manager.revoked_refresh_jtis.lock().unwrap();
+
+        // 插入 MAX_REVOKED_JTIS + 100 条不同 jti
+        let total = MAX_REVOKED_JTIS + 100;
+        for i in 0..total {
+            revoked.insert(format!("test-jti-{}", i), Instant::now());
+        }
+
+        // 调用淘汰逻辑
+        JwtManager::evict_revoked_entries(&mut revoked, manager.refresh_expiration_secs);
+
+        // 集合长度应不超过上限
+        assert!(
+            revoked.len() <= MAX_REVOKED_JTIS,
+            "revoked set should be bounded to MAX_REVOKED_JTIS ({}), got {}",
+            MAX_REVOKED_JTIS,
+            revoked.len()
+        );
+
+        // 最早插入的条目应已被逐出
+        assert!(
+            !revoked.contains_key("test-jti-0"),
+            "earliest inserted jti should have been evicted"
+        );
+    }
+
+    // ============================================================================
+    // HIGH-002: 轮换重放防护测试（T008）
+    // ============================================================================
+
+    /// refresh token 刷新成功后，旧 refresh token 应被撤销，
+    /// 再次用旧 token 调 verify_refresh_token 必须返回 Err。
+    #[test]
+    fn test_refresh_token_rotation_revokes_old_token() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+
+        // 签发 refresh token
+        let refresh_token = manager
+            .generate_token("user1", "alice", "admin", TokenType::Refresh)
+            .expect("generate refresh token should succeed");
+
+        // 刷新成功（内部会撤销旧 refresh token）
+        let _new_access = manager
+            .refresh_access_token(&refresh_token)
+            .expect("refresh should succeed");
+
+        // 旧 refresh token 应已被撤销
+        let result = manager.verify_refresh_token(&refresh_token);
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken)),
+            "old refresh token should be revoked after rotation, got {:?}",
+            result.map(|_| "Ok(...)".to_string())
         );
     }
 }

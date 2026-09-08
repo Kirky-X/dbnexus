@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // ⚠️ 生产环境请从环境变量或密钥管理服务读取 secret，不要硬编码
     let secret = b"dbnexus-demo-secret-key-please-change-in-production";
-    let manager = JwtManager::new(secret);
+    let manager = JwtManager::new(secret)?;
     println!("✓ JwtManager 创建成功（使用默认过期时间：access=1h, refresh=7d）\n");
 
     // ============================================
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 6. 自定义过期时间
     // ============================================
     println!("\n--- 自定义过期时间 ---");
-    let short_manager = JwtManager::with_expiration(secret, 60, 3600);
+    let short_manager = JwtManager::with_expiration(secret, 60, 3600)?;
     let short_token = short_manager.generate_token(user_id, username, role, TokenType::Access)?;
     let short_claims = short_manager.verify_token(&short_token)?;
     println!("  ✓ access=60s, refresh=3600s");
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 模拟过期 token：使用 1 秒过期时间生成后立即等待 2 秒
     // verify_token 使用 leeway = 0 严格过期检查，2s 后 token 必定失效
     println!("\n  测试过期 token (1s 过期，等待 2s)...");
-    let expiring_manager = JwtManager::with_expiration(secret, 1, 1);
+    let expiring_manager = JwtManager::with_expiration(secret, 1, 1)?;
     let expiring_token =
         expiring_manager.generate_token(user_id, username, role, TokenType::Access)?;
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;

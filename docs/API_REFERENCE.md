@@ -922,7 +922,7 @@ JWT 认证 + 密码强度验证，基于 `jsonwebtoken` + `bcrypt`。
 ```rust
 use dbnexus::{AuthenticationManager, JwtManager, PasswordHasher, TokenType};
 
-let auth = AuthenticationManager::new(secret);
+let auth = AuthenticationManager::new(secret)?;
 
 // 注册用户（执行 validate_strength → hash → insert 完整流程）
 let user = auth.register_user("alice", "strong_password", "admin").await?;

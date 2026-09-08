@@ -891,8 +891,8 @@ features = ["authentication"]
 
 API 说明：
 
-- `AuthenticationManager::new(jwt_secret: &[u8]) -> Self` — 创建认证管理器（密钥为字节切片）
-- `AuthenticationManager::with_config(jwt_secret, access_exp_secs, refresh_exp_secs) -> Self` — 自定义过期时间
+- `AuthenticationManager::new(jwt_secret: &[u8]) -> AuthResult<Self>` — 创建认证管理器（密钥为字节切片，≥32 字节）
+- `AuthenticationManager::with_config(jwt_secret, access_exp_secs, refresh_exp_secs) -> AuthResult<Self>` — 自定义过期时间
 - `manager.register_user(username, password, role) -> AuthResult<()>` — 注册用户（async，含密码强度校验和哈希）
 - `manager.authenticate(credentials: AuthCredentials) -> AuthResult<String>` — 验证凭据并生成 JWT（async）
 - `manager.verify_token(token: &str) -> AuthResult<JwtClaims>` — 验证 JWT（同步方法）
@@ -907,9 +907,9 @@ use dbnexus::{AuthenticationManager, AuthCredentials};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // JWT 密钥（建议从环境变量读取，至少 32 字节）
     let secret = b"my-secret-key-32-bytes-long-xxxxx";
-    let manager = AuthenticationManager::new(secret);
+    let manager = AuthenticationManager::new(secret)?;
 
-    // 注册用户（密码需通过强度检查：≥8 字符 + 含字母 + 含数字）
+    // 注册用户（密码需通过强度检查：≥12 字符 + 含大写字母、小写字母、数字、特殊字符）
     manager.register_user("alice", "password123", "admin").await?;
 
     // 认证

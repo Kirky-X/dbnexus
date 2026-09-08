@@ -39,7 +39,7 @@ fn make_user(username: &str, password: &str, role: &str) -> User {
 }
 
 async fn make_manager_with_user() -> AuthenticationManager {
-    let mgr = AuthenticationManager::new(TEST_SECRET);
+    let mgr = AuthenticationManager::new(TEST_SECRET).expect("valid secret");
     mgr.add_user(make_user("alice", TEST_PASSWORD, "admin"))
         .await
         .expect("add_user should succeed");
@@ -53,7 +53,7 @@ async fn make_manager_with_user() -> AuthenticationManager {
 /// TEST-AUTH-JWT-001: JWT 签发与验证往返
 #[tokio::test]
 async fn test_jwt_issue_and_verify() {
-    let mgr = JwtManager::new(TEST_SECRET);
+    let mgr = JwtManager::new(TEST_SECRET).expect("valid secret");
 
     let token = mgr
         .generate_token("user_1", "alice", "admin", TokenType::Access)
@@ -74,7 +74,7 @@ async fn test_jwt_issue_and_verify() {
 #[tokio::test]
 async fn test_jwt_expired() {
     // 使用 1 秒过期时间创建 manager
-    let mgr = JwtManager::with_expiration(TEST_SECRET, 1, 1);
+    let mgr = JwtManager::with_expiration(TEST_SECRET, 1, 1).expect("valid secret");
     let token = mgr
         .generate_token("user_2", "bob", "user", TokenType::Access)
         .expect("generate_token should succeed");
@@ -94,7 +94,7 @@ async fn test_jwt_expired() {
 /// TEST-AUTH-JWT-003: JWT 篡改后验证应返回 InvalidToken
 #[tokio::test]
 async fn test_jwt_tampered() {
-    let mgr = JwtManager::new(TEST_SECRET);
+    let mgr = JwtManager::new(TEST_SECRET).expect("valid secret");
     let token = mgr
         .generate_token("user_3", "carol", "user", TokenType::Access)
         .expect("generate_token should succeed");
@@ -122,8 +122,8 @@ async fn test_jwt_tampered() {
 /// TEST-AUTH-JWT-004: 不同密钥签发的 JWT 验证应失败（无效签名）
 #[tokio::test]
 async fn test_jwt_invalid_signature() {
-    let signer = JwtManager::new(TEST_SECRET);
-    let verifier = JwtManager::new(ALT_SECRET);
+    let signer = JwtManager::new(TEST_SECRET).expect("valid secret");
+    let verifier = JwtManager::new(ALT_SECRET).expect("valid secret");
 
     let token = signer
         .generate_token("user_4", "dave", "user", TokenType::Access)

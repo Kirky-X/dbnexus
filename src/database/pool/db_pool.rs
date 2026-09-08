@@ -777,7 +777,7 @@ impl DbPool {
     /// use dbnexus::{DbPool, authentication::AuthenticationManager};
     ///
     /// // 安全用法：先验证Token，再从Token中提取角色
-    /// let auth_manager = AuthenticationManager::new(&jwt_secret);
+    /// let auth_manager = AuthenticationManager::new(&jwt_secret)?;
     /// let claims = auth_manager.verify_token(token)?;
     /// let session = pool.get_session(&claims.role).await?;
     ///

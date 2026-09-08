@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. AuthenticationManager — 用户管理
     // ============================================
     println!("\n--- 3. AuthenticationManager 用户管理 ---");
-    let manager = AuthenticationManager::new(b"dbnexus-demo-secret");
+    let manager = AuthenticationManager::new(b"dbnexus-demo-secret-key-32bytes-ok!!")?;
 
     // 添加用户
     println!("\n  [添加用户]");
@@ -176,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- 5. Token 刷新流程 ---");
     // AuthenticationManager 内部的 jwt_manager 是私有的，
     // 这里使用相同 secret 创建独立 JwtManager 来签发 refresh token（生产中通常由登录接口返回）
-    let jwt_for_refresh = JwtManager::new(b"dbnexus-demo-secret");
+    let jwt_for_refresh = JwtManager::new(b"dbnexus-demo-secret-key-32bytes-ok!!")?;
     let refresh_token =
         jwt_for_refresh.generate_token("u_001", "alice", "admin", TokenType::Refresh)?;
     let new_access = manager.refresh_token(&refresh_token)?;
