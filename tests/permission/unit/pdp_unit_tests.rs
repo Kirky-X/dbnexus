@@ -176,18 +176,18 @@ async fn test_pdp_check_not_applicable_returns_not_applicable() {
     );
 }
 
-/// TEST-PDP-U-004: 未知操作返回错误
+/// TEST-PDP-U-004: 未知操作默认拒绝（fail-closed）
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_unknown_action_returns_default_decision() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
-    // 未知操作应该返回 Error
+    // 未知操作应 fail-closed 拒绝，避免暴露支持的 action 集合
     let result = pdp.check("admin_user", "users", "UNKNOWN").await;
     assert!(
-        matches!(result, PermissionDecision::Error(_)),
-        "Unknown action should return Error"
+        matches!(result, PermissionDecision::Deny),
+        "Unknown action should be denied (fail-closed)"
     );
 }
 

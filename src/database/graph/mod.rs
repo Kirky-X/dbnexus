@@ -68,8 +68,16 @@ pub enum GraphValue {
     Node(GraphNode),
     /// 关系
     Rel(GraphRel),
-    /// 路径（节点序列）
-    Path(Vec<GraphNode>),
+    /// 路径 = 节点序列 + 连接边序列
+    ///
+    /// `rels[i]` 语义上连接 `nodes[i]` 与 `nodes[i + 1]`；部分驱动（如 Ladybug
+    /// RecursiveRel）返回的 nodes/rels 数量可能不满足该不变式，按驱动原样保留，不做裁剪。
+    Path {
+        /// 路径上的节点序列
+        nodes: Vec<GraphNode>,
+        /// 连接节点的边序列
+        rels: Vec<GraphRel>,
+    },
     /// 标量值（数字、字符串、布尔等）
     Scalar(serde_json::Value),
 }
@@ -350,20 +358,74 @@ mod tests {
 
     #[test]
     fn test_graph_value_path_variant() {
-        let val = GraphValue::Path(vec![
-            GraphNode {
-                label: "A".to_string(),
+        let val = GraphValue::Path {
+            nodes: vec![
+                GraphNode {
+                    label: "A".to_string(),
+                    properties: json!({}),
+                },
+                GraphNode {
+                    label: "B".to_string(),
+                    properties: json!({}),
+                },
+            ],
+            rels: vec![GraphRel {
+                rel_type: "KNOWS".to_string(),
+                src_id: 1,
+                dst_id: 2,
                 properties: json!({}),
-            },
-            GraphNode {
-                label: "B".to_string(),
-                properties: json!({}),
-            },
-        ]);
+            }],
+        };
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
         let restored: GraphValue =
             serde_json::from_str(&json_str).expect("deserialize should succeed");
         assert_eq!(val, restored);
+    }
+
+    /// RICE 10：Path 变体必须携带边信息，匹配消费方能同时拿到节点与边
+    #[test]
+    fn test_graph_value_path_consumer_can_access_rels() {
+        let val = GraphValue::Path {
+            nodes: vec![
+                GraphNode {
+                    label: "A".to_string(),
+                    properties: json!({"name": "Alice"}),
+                },
+                GraphNode {
+                    label: "B".to_string(),
+                    properties: json!({"name": "Bob"}),
+                },
+                GraphNode {
+                    label: "C".to_string(),
+                    properties: json!({"name": "Carol"}),
+                },
+            ],
+            rels: vec![
+                GraphRel {
+                    rel_type: "KNOWS".to_string(),
+                    src_id: 1,
+                    dst_id: 2,
+                    properties: json!({}),
+                },
+                GraphRel {
+                    rel_type: "KNOWS".to_string(),
+                    src_id: 2,
+                    dst_id: 3,
+                    properties: json!({}),
+                },
+            ],
+        };
+        match val {
+            GraphValue::Path { nodes, rels } => {
+                assert_eq!(nodes.len(), 3, "path should keep all nodes");
+                assert_eq!(rels.len(), 2, "path should keep connecting edges");
+                assert_eq!(rels[0].src_id, 1);
+                assert_eq!(rels[0].dst_id, 2);
+                assert_eq!(rels[1].src_id, 2);
+                assert_eq!(rels[1].dst_id, 3);
+            }
+            other => panic!("expected Path variant, got {other:?}"),
+        }
     }
 
     #[test]
@@ -395,7 +457,10 @@ mod tests {
 
     #[test]
     fn test_graph_value_empty_path() {
-        let val = GraphValue::Path(vec![]);
+        let val = GraphValue::Path {
+            nodes: vec![],
+            rels: vec![],
+        };
         let json_str = serde_json::to_string(&val).expect("serialize should succeed");
         let restored: GraphValue =
             serde_json::from_str(&json_str).expect("deserialize should succeed");

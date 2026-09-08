@@ -499,12 +499,14 @@ impl LatencyStorage {
         sorted.sort();
 
         let len = sorted.len();
-        let p50_idx = (len as f64 * 0.50) as usize;
-        let p75_idx = (len as f64 * 0.75) as usize;
-        let p90_idx = (len as f64 * 0.90) as usize;
-        let p95_idx = (len as f64 * 0.95) as usize;
-        let p99_idx = (len as f64 * 0.99) as usize;
-        let p999_idx = (len as f64 * 0.999) as usize;
+        // 防御性钳制：浮点换算取整后索引理论上恒 < len，但一旦系数调整
+        // （如 p=1.0）会越界 panic；统一钳制到 len - 1（len >= 1 已由空集早退保证）
+        let p50_idx = ((len as f64 * 0.50) as usize).min(len - 1);
+        let p75_idx = ((len as f64 * 0.75) as usize).min(len - 1);
+        let p90_idx = ((len as f64 * 0.90) as usize).min(len - 1);
+        let p95_idx = ((len as f64 * 0.95) as usize).min(len - 1);
+        let p99_idx = ((len as f64 * 0.99) as usize).min(len - 1);
+        let p999_idx = ((len as f64 * 0.999) as usize).min(len - 1);
 
         LatencyPercentiles {
             p50_ns: sorted[p50_idx],
@@ -1560,6 +1562,38 @@ mod tests {
             stats.latency_percentiles.p99_ns >= 98_000_000
                 && stats.latency_percentiles.p99_ns <= 100_000_000
         );
+    }
+
+    /// TEST-U-053: percentiles 索引钳制测试
+    ///
+    /// `len as f64 * p` 换算的索引必须钳制到 `len - 1`：len=1 与 len=1000 时
+    /// 均不 panic，且各百分位保持有序（p50 <= p90 <= p99 <= p999）。
+    #[test]
+    fn test_percentile_index_clamped() {
+        // len = 1：所有百分位都应取唯一样本
+        let mut storage = LatencyStorage::new();
+        storage.record(42);
+        let p = storage.percentiles();
+        assert_eq!(p.p50_ns, 42);
+        assert_eq!(p.p999_ns, 42);
+
+        // len = 1000：百分位不越界且有序
+        let mut storage = LatencyStorage::new();
+        for i in 1..=1000u64 {
+            storage.record(i);
+        }
+        let p = storage.percentiles();
+        assert_eq!(p.sample_count, 1000);
+        assert!(
+            p.p50_ns <= p.p90_ns && p.p90_ns <= p.p99_ns && p.p99_ns <= p.p999_ns,
+            "percentiles out of order: p50={}, p90={}, p99={}, p999={}",
+            p.p50_ns,
+            p.p90_ns,
+            p.p99_ns,
+            p.p999_ns
+        );
+        // 样本为 1..=1000ns，钳制后的索引取值必须落在样本范围内
+        assert!((1..=1000).contains(&p.p999_ns));
     }
 
     /// TEST-U-041: 延迟直方图测试

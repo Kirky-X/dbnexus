@@ -7,7 +7,6 @@
 
 #![cfg(feature = "auto-migrate")]
 
-use dbnexus::DbConfig;
 use dbnexus::DbPool;
 use dbnexus::foundation::DatabaseType;
 use std::fs;
@@ -253,7 +252,7 @@ async fn test_migration_config_from_env() {
 
     // 执行测试逻辑，确保在任何情况下都清理环境变量
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let config = DbConfig::from_env().expect("Failed to create config from env");
+        let config = dbnexus::DbConfig::from_env().expect("Failed to create config from env");
 
         assert!(config.auto_migrate);
         assert!(config.migrations_dir.is_some());

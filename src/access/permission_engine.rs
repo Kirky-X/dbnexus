@@ -77,11 +77,22 @@ fn is_safe_config_path(path: &str) -> bool {
         }
         // 也允许系统临时目录（用于测试场景）
         let temp_dir = std::env::temp_dir();
-        return path.starts_with(temp_dir.to_str().unwrap_or(""));
+        return path_allowed_under(path, &temp_dir);
     }
 
     // 相对路径检查
     !path.contains("..") && !path.contains('\\')
+}
+
+/// 检查路径是否位于指定目录前缀之内
+///
+/// `temp_dir` 无法转为 UTF-8 或为空前缀时返回 false（fail-closed），
+/// 避免 `starts_with("")` 恒真导致前缀检查失效。
+fn path_allowed_under(path: &str, temp_dir: &std::path::Path) -> bool {
+    match temp_dir.to_str() {
+        Some(prefix) if !prefix.is_empty() => path.starts_with(prefix),
+        _ => false,
+    }
 }
 
 /// 权限资源
@@ -709,8 +720,8 @@ impl PolicyDecisionPoint {
             "INSERT" => PermissionAction::Insert,
             "UPDATE" => PermissionAction::Update,
             "DELETE" => PermissionAction::Delete,
-            // 未知操作返回错误，拒绝访问（安全考虑）
-            _ => return PermissionDecision::Error(format!("Unknown action: {}", action)),
+            // 未知操作默认拒绝（fail-closed）
+            _ => return PermissionDecision::Deny,
         };
 
         let context = PermissionContext::new(
@@ -1578,5 +1589,46 @@ mod tests {
         // 验证角色存在
         assert!(provider.has_role("base_user"));
         assert!(provider.has_role("premium_user"));
+    }
+
+    #[test]
+    fn test_path_allowed_under_prefix_match() {
+        // 正常前缀：临时目录内的路径允许
+        assert!(path_allowed_under(
+            "/tmp/dbnexus/policies.yaml",
+            std::path::Path::new("/tmp")
+        ));
+    }
+
+    #[test]
+    fn test_path_allowed_under_prefix_mismatch() {
+        // 非前缀：临时目录外的路径拒绝
+        assert!(!path_allowed_under(
+            "/etc/passwd",
+            std::path::Path::new("/tmp")
+        ));
+    }
+
+    #[test]
+    fn test_path_allowed_under_empty_prefix_fails_closed() {
+        // 空前缀（模拟 temp_dir 非 UTF-8 时回退为空串的场景）必须 fail-closed
+        assert!(!path_allowed_under("/etc/passwd", std::path::Path::new("")));
+    }
+
+    #[tokio::test]
+    async fn test_check_unknown_action_denies() {
+        // 未知操作默认拒绝（fail-closed），不再返回 Error
+        let provider = Arc::new(RbacPermissionProvider::new());
+        let pdp = PolicyDecisionPoint::new(provider);
+
+        assert_eq!(
+            pdp.check("admin", "users", "DROP").await,
+            PermissionDecision::Deny
+        );
+        // 小写未知操作同样拒绝
+        assert_eq!(
+            pdp.check("admin", "users", "unknown").await,
+            PermissionDecision::Deny
+        );
     }
 }

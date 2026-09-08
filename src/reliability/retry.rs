@@ -255,6 +255,17 @@ impl RetryExecutor {
             let backoff = Self::calculate_backoff(policy, attempt);
             tokio::time::sleep(backoff).await;
 
+            // 退避睡眠可能已越过 deadline：醒来后必须重查，
+            // 否则再执行一次 operation 会使总耗时超出 overall_timeout 最多一个 backoff
+            if let Some(timeout) = deadline
+                && start.elapsed() >= timeout
+            {
+                return Err(RetryError::Timeout {
+                    timeout_ms: timeout.as_millis() as u64,
+                    last_error,
+                });
+            }
+
             match operation().await {
                 Ok(val) => return Ok(val),
                 Err(e) => last_error = e,
@@ -284,5 +295,88 @@ impl RetryExecutor {
         } else {
             Duration::from_millis(capped_ms as u64)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// 总体超时必须在退避睡眠醒来后（而非仅 sleep 前）重新检查：
+    /// overall_timeout=50ms、初始退避=200ms 时，首次失败后的 sleep 会直接越过
+    /// deadline，若不重查就会再执行一次 operation（超时偏差最多一个 backoff）。
+    #[tokio::test]
+    async fn test_overall_timeout_checked_after_sleep() {
+        let policy = RetryPolicy {
+            max_retries: 5,
+            initial_backoff_ms: 200,
+            jitter: false,
+            overall_timeout_ms: Some(50),
+            ..Default::default()
+        };
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err::<u32, _>(DbError::Query("boom".to_string()))
+                }
+            },
+            "SELECT 1",
+        )
+        .await;
+
+        match result {
+            Err(RetryError::Timeout {
+                timeout_ms,
+                last_error,
+            }) => {
+                assert_eq!(timeout_ms, 50);
+                assert!(last_error.to_string().contains("boom"));
+            }
+            other => panic!("expected RetryError::Timeout, got {:?}", other),
+        }
+        // 仅首次执行 1 次；未修复时 sleep 200ms 后会执行第 2 次
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    /// 回归：未配置总体超时（deadline = None）时，重试循环行为不变
+    #[tokio::test]
+    async fn test_retry_without_timeout_still_succeeds() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            initial_backoff_ms: 1,
+            jitter: false,
+            overall_timeout_ms: None,
+            ..Default::default()
+        };
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    // 第 1 次失败，第 2 次成功
+                    if c.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err(DbError::Query("transient".to_string()))
+                    } else {
+                        Ok(42u32)
+                    }
+                }
+            },
+            "SELECT 1",
+        )
+        .await;
+
+        assert_eq!(result.expect("should succeed on 2nd attempt"), 42);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }

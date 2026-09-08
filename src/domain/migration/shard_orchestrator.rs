@@ -47,6 +47,9 @@ pub struct OrchestratedMigrationResult {
 ///
 /// 遍历所有分片连接池，对每个分片执行相同迁移文件。
 /// 支持并行和串行模式，部分失败不阻断其他分片。
+///
+/// 注意：分片级迁移执行尚未接入 `MigrationExecutor`，当前为占位实现，
+/// `orchestrate_migration` 会对每个分片返回 `success: false` 的失败结果。
 pub struct ShardMigrationOrchestrator {
     router: Arc<ShardRouter>,
     parallel: bool,
@@ -60,7 +63,8 @@ impl ShardMigrationOrchestrator {
 
     /// 执行跨分片迁移编排
     ///
-    /// 扫描指定目录获取迁移文件，对每个分片独立执行。
+    /// 当前为占位实现：不会对任何分片执行迁移，返回的每个分片结果
+    /// 均为 `success: false` 且 `error` 说明尚未实现。
     pub async fn orchestrate_migration(
         &self,
         _migrations_dir: &Path,
@@ -85,12 +89,16 @@ impl ShardMigrationOrchestrator {
         for shard_info in shards {
             let shard_id = shard_info.shard_id;
             futures.push(async move {
-                // 每个分片独立迁移（此处为框架占位，实际需创建 MigrationExecutor）
+                // 占位实现：分片级迁移尚未接入 MigrationExecutor，未执行任何迁移。
+                // 返回明确的失败结果，避免向调用方报告虚假成功。
                 ShardMigrationResult {
                     shard_id,
-                    success: true,
+                    success: false,
                     applied_versions: Vec::new(),
-                    error: None,
+                    error: Some(
+                        "分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移"
+                            .to_string(),
+                    ),
                 }
             });
         }
@@ -114,9 +122,12 @@ impl ShardMigrationOrchestrator {
             let shard_id = shard_info.shard_id;
             results.push(ShardMigrationResult {
                 shard_id,
-                success: true,
+                success: false,
                 applied_versions: Vec::new(),
-                error: None,
+                error: Some(
+                    "分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移"
+                        .to_string(),
+                ),
             });
         }
 
@@ -135,6 +146,66 @@ impl ShardMigrationOrchestrator {
             success_count,
             failed_shards,
             results,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造一个注册了 `shard_count` 个分片信息的路由器（无需真实连接池）
+    fn make_router(shard_count: u32) -> Arc<ShardRouter> {
+        let mut router = ShardRouter::with_strategy("yearly", shard_count);
+        for shard_id in 0..shard_count {
+            router.register_shard(
+                shard_id,
+                format!("shard_{}", shard_id),
+                format!("sqlite://shard_{}.db", shard_id),
+            );
+        }
+        Arc::new(router)
+    }
+
+    /// 并行编排为占位实现：每个分片返回 success=false 且 error 非空（虚假成功已修复）
+    #[tokio::test]
+    async fn test_orchestrate_parallel_reports_unimplemented_failure() {
+        let orchestrator = ShardMigrationOrchestrator::new(make_router(2), true);
+        let result = orchestrator
+            .orchestrate_migration(Path::new("./migrations"))
+            .await;
+
+        assert_eq!(result.total_shards, 2);
+        assert_eq!(result.results.len(), 2);
+        assert_eq!(result.success_count, 0, "占位实现不应报告任何成功分片");
+        assert_eq!(result.failed_shards.len(), 2);
+        for shard in &result.results {
+            assert!(!shard.success);
+            assert!(shard.error.is_some(), "error 应说明尚未实现");
+            assert!(
+                shard.error.as_deref().unwrap().contains("尚未实现"),
+                "实际错误: {:?}",
+                shard.error
+            );
+            assert!(shard.applied_versions.is_empty());
+        }
+    }
+
+    /// 串行编排同样返回诚实失败
+    #[tokio::test]
+    async fn test_orchestrate_serial_reports_unimplemented_failure() {
+        let orchestrator = ShardMigrationOrchestrator::new(make_router(3), false);
+        let result = orchestrator
+            .orchestrate_migration(Path::new("./migrations"))
+            .await;
+
+        assert_eq!(result.total_shards, 3);
+        assert_eq!(result.results.len(), 3);
+        assert_eq!(result.success_count, 0);
+        assert_eq!(result.failed_shards.len(), 3);
+        for shard in &result.results {
+            assert!(!shard.success);
+            assert!(shard.error.is_some());
         }
     }
 }

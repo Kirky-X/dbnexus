@@ -899,15 +899,32 @@ fn extract_table_from_query(query: &Query) -> (Option<String>, Vec<String>) {
     (primary, all_tables)
 }
 
-/// 递归提取 Query 中所有被引用的表（FROM/JOIN/派生表/WHERE/HAVING 子查询）
+/// 递归提取 Query 中所有被引用的表（FROM/JOIN/派生表/WHERE/HAVING 子查询/集合操作）
 ///
 /// 供权限检查使用：只检查主表会让受限角色通过 JOIN/子查询越权访问未授权表，
 /// 因此必须收集语句涉及的**全部**表。
 fn extract_query_tables(query: &Query, out: &mut Vec<String>) {
-    let SetExpr::Select(select) = query.body.as_ref() else {
-        return;
-    };
+    extract_set_expr_tables(query.body.as_ref(), out);
+}
 
+/// 递归提取 SetExpr（查询主体）中引用的表
+///
+/// 处理 `SELECT` 主体、UNION/INTERSECT/EXCEPT 集合操作（左右递归）以及
+/// 括号包裹的子查询（`SetExpr::Query`）；其余变体（VALUES 等）不涉及 FROM 表，跳过。
+fn extract_set_expr_tables(set_expr: &SetExpr, out: &mut Vec<String>) {
+    match set_expr {
+        SetExpr::Select(select) => extract_select_tables(select, out),
+        SetExpr::Query(query) => extract_query_tables(query, out),
+        SetExpr::SetOperation { left, right, .. } => {
+            extract_set_expr_tables(left, out);
+            extract_set_expr_tables(right, out);
+        }
+        _ => {}
+    }
+}
+
+/// 从单个 Select 语句提取全部表（FROM/JOIN/派生表/WHERE/HAVING 子查询）
+fn extract_select_tables(select: &sqlparser::ast::Select, out: &mut Vec<String>) {
     for from_item in &select.from {
         // 主表 / JOIN 表（含派生表内层子查询）
         match &from_item.relation {
@@ -1244,6 +1261,68 @@ mod tests {
             "UPDATE users SET name = 'test' WHERE id = 1"
         ));
         assert!(!is_ddl_operation("DELETE FROM users WHERE id = 1"));
+    }
+
+    // ========== extract_query_tables 集合操作测试 ==========
+
+    /// 解析 SQL 并提取全部引用表（仅用于测试的辅助函数）
+    fn extract_tables(sql: &str) -> Vec<String> {
+        let dialect = GenericDialect {};
+        let stmts = Parser::parse_sql(&dialect, sql).expect("解析失败");
+        let mut out = Vec::new();
+        if let Some(Statement::Query(query)) = stmts.first() {
+            extract_query_tables(query, &mut out);
+        }
+        out
+    }
+
+    /// 集合操作必须提取两侧的表（此前 UNION 整体返回空列表，
+    /// 下游权限检查对空列表 fail-closed 会误拒合法查询）
+    #[test]
+    fn test_extract_tables_set_operations() {
+        assert_eq!(
+            extract_tables("SELECT * FROM a UNION SELECT * FROM b"),
+            vec!["a", "b"]
+        );
+        assert_eq!(
+            extract_tables("SELECT * FROM a UNION ALL SELECT * FROM b"),
+            vec!["a", "b"]
+        );
+        assert_eq!(
+            extract_tables("SELECT * FROM a INTERSECT SELECT * FROM b"),
+            vec!["a", "b"]
+        );
+        assert_eq!(
+            extract_tables("SELECT * FROM a EXCEPT SELECT * FROM b"),
+            vec!["a", "b"]
+        );
+    }
+
+    /// 括号嵌套的集合操作：SetExpr::Query 与嵌套 SetOperation 均需递归处理
+    #[test]
+    fn test_extract_tables_nested_set_operations() {
+        assert_eq!(
+            extract_tables("(SELECT * FROM a) UNION (SELECT * FROM b)"),
+            vec!["a", "b"]
+        );
+        assert_eq!(
+            extract_tables("SELECT * FROM a UNION ALL (SELECT * FROM b UNION SELECT * FROM c)"),
+            vec!["a", "b", "c"]
+        );
+    }
+
+    /// 回归：单个 SELECT（含 JOIN 与子查询）的提取行为不变
+    #[test]
+    fn test_extract_tables_single_select() {
+        assert_eq!(extract_tables("SELECT * FROM users"), vec!["users"]);
+        assert_eq!(
+            extract_tables(
+                "SELECT u.id FROM users u \
+                 JOIN orders o ON u.id = o.uid \
+                 WHERE u.id IN (SELECT uid FROM audit)"
+            ),
+            vec!["users", "orders", "audit"]
+        );
     }
 
     #[tokio::test]

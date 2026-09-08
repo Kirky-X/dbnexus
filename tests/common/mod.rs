@@ -182,6 +182,19 @@ pub fn generate_test_migration_base_version() -> u32 {
 /// 版本记录会让 `run_migrations` 误判为已应用（返回 0），导致
 /// `applied == N` 断言失败。运行迁移前删除本测试将要使用的版本记录，
 /// 保证每次运行幂等。
+///
+/// cfg 门控与 lib.rs 的 `pub use sea_orm` 一致（任一 db 驱动 feature）：
+/// 函数体经 `dbnexus::sea_orm::ConnectionTrait` 操作真实数据库，
+/// 无 db 驱动的测试目标（如 permission_engine_integration）下整段剔除，
+/// 保证 `--features "permission-engine,test-utils"` 也能编译。
+/// 调用方（migration_integration / migration_auto_migrate）的
+/// required-features 均含 sqlite，不受影响。
+#[cfg(any(
+    feature = "sqlite",
+    feature = "postgres",
+    feature = "mysql",
+    feature = "duckdb"
+))]
 #[allow(dead_code)]
 pub async fn cleanup_migration_versions(pool: &dbnexus::DbPool, versions: &[u32]) {
     if versions.is_empty() {

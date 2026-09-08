@@ -59,6 +59,9 @@ impl YamlPermissionProvider {
     /// 加载策略文件
     async fn load_policies(&self) -> Result<(), PermissionError> {
         if let Some(path) = &self.config.policy_path {
+            // 读取前校验路径安全性（构造时不一定调用过 validate）
+            PermissionConfig::validate_policy_path(path)?;
+
             let content = tokio::fs::read_to_string(path).await.map_err(|e| {
                 PermissionError::ParseError(format!("Failed to read {}: {}", path, e))
             })?;
@@ -123,6 +126,9 @@ impl PolicyManager for YamlPermissionProvider {
 impl PermissionLifecycle for YamlPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
         if let Some(path) = &self.config.policy_path {
+            // 读取前校验路径安全性（与 load_policies 共用同一校验）
+            PermissionConfig::validate_policy_path(path)?;
+
             tokio::fs::read(path).await.map_err(|e| {
                 anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e)
             })?;
@@ -179,5 +185,43 @@ mod tests {
         let result = provider.health_check().await;
         std::fs::remove_file(&path).unwrap();
         assert!(result.is_ok(), "可读策略文件必须健康: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn health_check_rejects_relative_policy_path() {
+        let config = PermissionConfig {
+            policy_path: Some("relative/permissions.yaml".to_string()),
+            ..PermissionConfig::default()
+        };
+        let provider = make_provider(config);
+        assert!(provider.health_check().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn health_check_rejects_parent_dir_policy_path() {
+        let config = PermissionConfig {
+            policy_path: Some("/etc/../tmp/permissions.yaml".to_string()),
+            ..PermissionConfig::default()
+        };
+        let provider = make_provider(config);
+        assert!(provider.health_check().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn load_policies_rejects_unsafe_policy_path() {
+        let provider = make_provider(PermissionConfig {
+            policy_path: Some("relative/permissions.yaml".to_string()),
+            ..PermissionConfig::default()
+        });
+        assert!(provider.load_policies().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn new_rejects_unsafe_policy_path() {
+        let config = PermissionConfig {
+            policy_path: Some("../escape.yaml".to_string()),
+            ..PermissionConfig::default()
+        };
+        assert!(YamlPermissionProvider::new(config).await.is_err());
     }
 }

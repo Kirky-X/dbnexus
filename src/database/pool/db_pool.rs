@@ -250,15 +250,6 @@ impl DbPoolInner {
         // 异步路径：在 tokio 运行时中执行
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::spawn(async move {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    // 同步代码段保护
-                }));
-                if result.is_err() {
-                    inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
-                    inner_clone.connection_semaphore.add_permits(1);
-                    return;
-                }
-
                 let mut idle = inner_clone.idle_connections.lock().await;
                 if idle.len() < inner_clone.config.pool_config.max_connections as usize {
                     idle.push(conn);
@@ -392,8 +383,8 @@ impl DbPool {
             cache_provider: None,
         };
 
-        // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），发出安全警告
-        super::audit::warn_if_default_admin_role_used(&config.admin_role);
+        // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
+        super::audit::warn_and_record_default_admin_role(&config.admin_role);
 
         // 启动后台健康检查任务
         #[cfg(feature = "pool-health-check")]
@@ -484,8 +475,8 @@ impl DbPool {
             cache_provider: None,
         };
 
-        // 安全审计：检查默认 admin 角色
-        super::audit::warn_if_default_admin_role_used(&config.admin_role);
+        // 安全审计：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
+        super::audit::warn_and_record_default_admin_role(&config.admin_role);
 
         // 启动后台健康检查
         #[cfg(feature = "pool-health-check")]
@@ -579,8 +570,8 @@ impl DbPool {
     /// 如果配置验证失败，返回错误
     #[cfg(not(feature = "permission"))]
     pub fn try_from(config: &DbConfig) -> Result<Self, ConfigError> {
-        // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），发出安全警告
-        super::audit::warn_if_default_admin_role_used(&config.admin_role);
+        // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
+        super::audit::warn_and_record_default_admin_role(&config.admin_role);
         Ok(Self {
             inner: Arc::new(DbPoolInner {
                 config: Arc::new(config.clone()),
@@ -2033,6 +2024,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "ladybug"))]
     #[tokio::test]
     async fn test_create_connection_ladybug_not_enabled() {
         let config = DbConfig {
@@ -2046,6 +2038,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "neo4j"))]
     #[tokio::test]
     async fn test_create_connection_neo4j_not_enabled() {
         let config = DbConfig {
@@ -2151,7 +2144,7 @@ mod tests {
     #[tokio::test]
     async fn test_release_connection_pool_full() {
         // Test release_connection when idle pool is at capacity
-        // This exercises lines 249-250 (total_count decrement path)
+        // This exercises the total_count decrement path (idle pool at capacity)
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             pool_config: PoolConfig {
@@ -2181,6 +2174,29 @@ mod tests {
             status.idle <= 2,
             "idle should be <= max_connections: {}",
             status.idle
+        );
+    }
+
+    /// vuln-0001 回归测试：使用默认 admin 角色创建池时记录安全审计事件
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_default_admin_role_records_audit_event() {
+        use crate::database::pool::audit::admin_bypass_count;
+
+        let before = admin_bypass_count();
+
+        // DbConfig::default() 的 admin_role 为默认值 "admin"
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        };
+        let _pool = DbPool::with_config(config)
+            .await
+            .expect("should create pool");
+
+        assert!(
+            admin_bypass_count() > before,
+            "默认 admin 角色创建池应触发审计记录"
         );
     }
 

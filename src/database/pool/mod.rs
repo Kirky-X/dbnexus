@@ -4,7 +4,9 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-mod audit;
+// audit 公开：admin bypass 审计环的观测 API（admin_bypass_count /
+// take_admin_bypass_events）需供外部 crate 观测，模块必须公开可达
+pub mod audit;
 mod db_pool;
 mod pool_impl;
 mod session;

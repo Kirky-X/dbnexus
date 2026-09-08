@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_migrations_up(&cli.database_url, &cli.migrations_dir, *version).await?;
         }
         Commands::Down { version, all } => {
-            run_migrations_down(&cli.database_url, *version, *all).await?;
+            run_migrations_down(&cli.database_url, &cli.migrations_dir, *version, *all).await?;
         }
         Commands::Status => {
             show_status(&cli.database_url, &cli.migrations_dir).await?;
@@ -242,7 +242,8 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
                 "\n{}",
                 i18n::t("cli-db-connect-failed", &[("error", e.to_string())])
             );
-            return Ok(());
+            // 向上传播错误，使进程非零退出（吞错会掩盖连接故障）
+            return Err(e);
         }
     };
 
@@ -273,7 +274,8 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
                 "\n{}",
                 i18n::t("cli-session-failed", &[("error", e.to_string())])
             );
-            return Ok(());
+            // 向上传播错误，使进程非零退出
+            return Err(e);
         }
     };
 
@@ -285,7 +287,8 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
             i18n::t("cli-history-load-failed", &[("error", e.to_string())])
         );
         println!("   {}", i18n::t_simple("cli-history-table-missing"));
-        return Ok(());
+        // 向上传播错误，使进程非零退出
+        return Err(e);
     }
 
     let applied_count = executor.history().applied_migrations.len();
@@ -623,6 +626,7 @@ async fn run_migrations_up(
 /// 运行向下的迁移（回滚迁移）
 async fn run_migrations_down(
     database_url: &str,
+    migrations_dir: &Path,
     target_version: Option<u32>,
     rollback_all: bool,
 ) -> DbResult<()> {
@@ -641,6 +645,9 @@ async fn run_migrations_down(
     // 创建迁移执行器
     let session = pool.get_session("admin").await?;
     let mut executor = session.create_migration_executor(db_type)?;
+
+    // 扫描本地迁移文件（回滚需要迁移文件内容以提取 DOWN SQL）
+    let migration_files = executor.scan_migrations(migrations_dir)?;
 
     // 加载迁移历史
     executor.load_history().await?;
@@ -723,7 +730,17 @@ async fn run_migrations_down(
             )
         );
 
-        match rollback_migration(&mut executor, *version, db_type).await {
+        // 回滚必须先执行 DOWN SQL，因此需要找到版本对应的迁移文件
+        let Some(migration_file) = find_migration_file(&migration_files, *version) else {
+            println!("❌");
+            println!("\n⚠️  {}", i18n::t_simple("cli-rollback-error-stop"));
+            return Err(DbError::Migration(format!(
+                "未找到迁移 v{} ({}) 的迁移文件，无法执行 DOWN 回滚",
+                version, description
+            )));
+        };
+
+        match rollback_migration(&mut executor, *version, migration_file).await {
             Ok(_) => {
                 println!("✓");
                 success_count += 1;
@@ -758,50 +775,28 @@ async fn run_migrations_down(
     Ok(())
 }
 
+/// 在扫描结果中按版本号查找迁移文件
+///
+/// 回滚需要迁移文件内容以提取 DOWN SQL，找不到对应文件时返回 `None`
+fn find_migration_file(
+    files: &[dbnexus::MigrationFile],
+    version: u32,
+) -> Option<&dbnexus::MigrationFile> {
+    files.iter().find(|f| f.version() == version)
+}
+
 /// 回滚单个迁移
+///
+/// 通过 `MigrationExecutor::rollback_version` 在同一事务内先执行迁移文件的 DOWN SQL，
+/// 成功后再删除 `dbnexus_migrations` 历史行：
+/// - 无 DOWN 段时返回"该迁移无可回滚的 DOWN 部分"错误；
+/// - DOWN 执行失败时不删除历史记录并返回错误。
 async fn rollback_migration(
     executor: &mut MigrationExecutor,
     version: u32,
-    db_type: MigrationDatabaseType,
+    migration_file: &dbnexus::MigrationFile,
 ) -> DbResult<()> {
-    use sea_orm::{ConnectionTrait, DatabaseTransaction, TransactionTrait};
-
-    // 使用参数化查询防止 SQL 注入
-    let backend = match db_type {
-        MigrationDatabaseType::Postgres => sea_orm::DbBackend::Postgres,
-        MigrationDatabaseType::MySql => sea_orm::DbBackend::MySql,
-        MigrationDatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
-        // DuckDB 走独立连接路径，不通过 SeaORM DbBackend 执行迁移回滚
-        MigrationDatabaseType::DuckDb => {
-            return Err(DbError::Config(
-                "Migration rollback for DuckDB is not supported via SeaORM backend".to_string(),
-            ));
-        }
-        MigrationDatabaseType::Ladybug | MigrationDatabaseType::Neo4j => {
-            return Err(DbError::Config(
-                "Migration rollback for graph databases is not supported".to_string(),
-            ));
-        }
-    };
-    let delete_sql = sea_orm::Statement::from_sql_and_values(
-        backend,
-        "DELETE FROM dbnexus_migrations WHERE version = ?".to_string(),
-        vec![version.into()],
-    );
-
-    // 开始事务并执行回滚
-    let conn = &executor.connection;
-    let txn: DatabaseTransaction = TransactionTrait::begin(conn)
-        .await
-        .map_err(DbError::Connection)?;
-
-    txn.execute_raw(delete_sql)
-        .await
-        .map_err(DbError::Connection)?;
-
-    txn.commit().await.map_err(DbError::Connection)?;
-
-    Ok(())
+    executor.rollback_version(version, migration_file).await
 }
 
 /// 生成迁移文件
@@ -1038,4 +1033,104 @@ fn mask_database_url(url: &str) -> String {
             url.to_string()
         })
         .unwrap_or_else(|_| url.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== DOWN 提取（rollback 前置校验依赖的逻辑） =====
+
+    #[test]
+    fn test_extract_down_sql_present() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let down = MigrationExecutor::extract_down_sql(content).expect("应提取到 DOWN SQL");
+        assert_eq!(down, "DROP TABLE users;");
+    }
+
+    #[test]
+    fn test_extract_down_sql_case_insensitive() {
+        let content = "-- up:\nALTER TABLE users ADD COLUMN c TEXT;\n-- down:\nALTER TABLE users DROP COLUMN c;\n";
+        let down = MigrationExecutor::extract_down_sql(content).expect("应提取到 DOWN SQL");
+        assert!(down.contains("DROP COLUMN c"));
+    }
+
+    /// DOWN 缺失时的错误分支：extract 返回 None → rollback 报"无可回滚的 DOWN 部分"
+    #[test]
+    fn test_extract_down_sql_missing_yields_no_rollback_error() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n";
+        assert!(MigrationExecutor::extract_down_sql(content).is_none());
+
+        let file = dbnexus::MigrationFile::new(
+            1,
+            "no_down".to_string(),
+            PathBuf::from("/migrations/001_no_down.sql"),
+            content.to_string(),
+        );
+        let err = DbError::Migration(format!(
+            "迁移 v{} ({}) 无可回滚的 DOWN 部分",
+            file.version(),
+            file.description()
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("无可回滚的 DOWN 部分"), "实际错误: {}", msg);
+    }
+
+    // ===== find_migration_file =====
+
+    #[test]
+    fn test_find_migration_file_by_version() {
+        let files = vec![
+            dbnexus::MigrationFile::new(
+                1,
+                "create_users".to_string(),
+                PathBuf::from("/migrations/001_create_users.sql"),
+                "-- UP:\nCREATE TABLE users (id INTEGER);\n".to_string(),
+            ),
+            dbnexus::MigrationFile::new(
+                2,
+                "add_column".to_string(),
+                PathBuf::from("/migrations/002_add_column.sql"),
+                "-- UP:\nALTER TABLE users ADD COLUMN c TEXT;\n".to_string(),
+            ),
+        ];
+
+        let found = find_migration_file(&files, 2).expect("应找到 v2 的迁移文件");
+        assert_eq!(found.version(), 2);
+        assert_eq!(found.description(), "add_column");
+
+        // 找不到对应版本时返回 None → rollback 路径报"未找到迁移文件"
+        assert!(find_migration_file(&files, 3).is_none());
+    }
+
+    // ===== 既有纯逻辑辅助 =====
+
+    #[test]
+    fn test_mask_database_url_hides_password() {
+        let masked = mask_database_url("postgres://user:secret@localhost:5432/db");
+        assert!(!masked.contains("secret"));
+        assert!(masked.contains("*****"));
+    }
+
+    #[test]
+    fn test_detect_database_type_supported() {
+        assert!(matches!(
+            detect_database_type("postgres://u:p@localhost/db"),
+            Ok(MigrationDatabaseType::Postgres)
+        ));
+        assert!(matches!(
+            detect_database_type("mysql://u:p@localhost/db"),
+            Ok(MigrationDatabaseType::MySql)
+        ));
+        assert!(matches!(
+            detect_database_type("sqlite://data.db"),
+            Ok(MigrationDatabaseType::Sqlite)
+        ));
+    }
+
+    #[test]
+    fn test_detect_database_type_unsupported() {
+        assert!(detect_database_type("foo://localhost/db").is_err());
+        assert!(detect_database_type("not a url").is_err());
+    }
 }

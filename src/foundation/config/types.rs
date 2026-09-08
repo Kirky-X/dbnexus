@@ -781,13 +781,17 @@ impl DbConfig {
 
     /// 验证数据库配置有效性
     ///
-    /// 委托调用 `CacheConfig::validate()` 并验证连接池字段。
+    /// 校验 `url` 非空，并委托调用 `CacheConfig::validate()` 与连接池字段验证。
     ///
     /// # Errors
     ///
+    /// - `url` 为空时返回 `ConfigError::MissingUrl`
     /// - 缓存容量为 0 时返回 `ConfigError::InvalidCacheCapacity`
     /// - `max_connections == 0` 或 `min_connections > max_connections` 返回 `ConfigError::InvalidValue`
     pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.url.is_empty() {
+            return Err(ConfigError::MissingUrl);
+        }
         self.cache_config.validate()?;
         self.pool_config.validate()?;
         Ok(())
@@ -1272,11 +1276,16 @@ mod tests {
 
     #[test]
     fn test_db_config_validate_delegates_to_cache_and_pool() {
-        // Default should be valid
-        assert!(DbConfig::default().validate().is_ok());
+        // url 非空的 Default 配置应有效
+        let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_ok());
 
         // Invalid cache config should fail
         let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
             cache_config: CacheConfig {
                 policy_cache_capacity: 0,
                 ..Default::default()
@@ -1287,6 +1296,7 @@ mod tests {
 
         // Invalid pool config should fail
         let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
             pool_config: PoolConfig {
                 max_connections: 0,
                 ..Default::default()
@@ -1297,6 +1307,7 @@ mod tests {
 
         // min > max should fail
         let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
             pool_config: PoolConfig {
                 min_connections: 100,
                 max_connections: 5,
@@ -1305,6 +1316,33 @@ mod tests {
             ..Default::default()
         };
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_db_config_validate_rejects_missing_url() {
+        // Default 的 url 为空串，validate 必须返回 MissingUrl
+        assert!(matches!(
+            DbConfig::default().validate(),
+            Err(ConfigError::MissingUrl)
+        ));
+    }
+
+    #[test]
+    fn test_db_config_validate_rejects_empty_url() {
+        let cfg = DbConfig {
+            url: "".into(),
+            ..Default::default()
+        };
+        assert!(matches!(cfg.validate(), Err(ConfigError::MissingUrl)));
+    }
+
+    #[test]
+    fn test_db_config_validate_accepts_valid_url() {
+        let cfg = DbConfig {
+            url: "sqlite::memory:".into(),
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_ok());
     }
 
     #[test]

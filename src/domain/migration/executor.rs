@@ -133,6 +133,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            // 不可达：DuckDB 连接在 as_sea_orm 处被拒绝，走不到 MigrationExecutor，仅编译兜底
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
                 panic!("Graph databases do not participate in relational migrations")
@@ -363,6 +364,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            // 不可达：DuckDB 连接在 as_sea_orm 处被拒绝，走不到 MigrationExecutor，仅编译兜底
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
                 panic!("Graph databases do not participate in relational migrations")
@@ -478,6 +480,66 @@ impl MigrationFile {
     pub fn content(&self) -> &str {
         &self.content
     }
+}
+
+/// UP / DOWN 标记集合（大小写不敏感）
+///
+/// 供标记行查找（`find_marker_line`）与迁移文件校验（`MigrationFileParser`）共用，
+/// 保证"验证"与"提取"对标记的判定口径一致，故放在 `auto-migrate` 门控之外。
+const UP_MARKERS: [&str; 6] = ["-- UP:", "-- up:", "-- UP", "-- up", "UP:", "UP"];
+const DOWN_MARKERS: [&str; 6] = [
+    "-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN",
+];
+
+/// 判断一行（trim 后）是否以某个标记开头（大小写不敏感）
+///
+/// - 带冒号（`-- UP:`、`UP:`）与注释形（`-- UP`）标记自带边界，做纯前缀匹配；
+/// - 裸词标记（`UP` / `DOWN`）额外要求标记后是行尾或非单词字符，
+///   避免把 `updated_at`、`download_url` 这类以 up/down 开头的标识符误判为标记行。
+fn line_matches_marker(line: &str, markers: &[&str]) -> bool {
+    let trimmed = line.trim();
+    markers.iter().any(|marker| {
+        // get 保证按字符边界取前缀，避免多字节字符下的切片 panic
+        let Some(prefix) = trimmed.get(..marker.len()) else {
+            return false;
+        };
+        if !prefix.eq_ignore_ascii_case(marker) {
+            return false;
+        }
+        if !marker.starts_with("--") && !marker.ends_with(':') {
+            // 裸词标记要求词边界：标记后不能紧跟字母/数字/下划线
+            return trimmed[marker.len()..]
+                .chars()
+                .next()
+                .is_none_or(|next| !next.is_alphanumeric() && next != '_');
+        }
+        true
+    })
+}
+
+/// 在内容中查找标记所在的行
+///
+/// 逐行扫描：对每行 trim 后做大小写不敏感的"以 marker 开头"判断，命中即返回
+/// 该行边界 `(行起始偏移, 行结束偏移)`（行结束偏移包含换行符）。
+///
+/// 相比旧的全文子串搜索：
+/// - `-- Down:` 等混合大小写标记可被识别（旧实现按字节精确匹配会漏判）；
+/// - 裸标记 `DOWN` 只在行首（trim 后）匹配，不再命中行中间的单词。
+fn find_marker_line(content: &str, markers: &[&str]) -> Option<(usize, usize)> {
+    let mut rest = content;
+    let mut line_start = 0usize;
+    while let Some(nl) = rest.find('\n') {
+        if line_matches_marker(&rest[..nl], markers) {
+            return Some((line_start, line_start + nl + 1));
+        }
+        line_start += nl + 1;
+        rest = &rest[nl + 1..];
+    }
+    // 末行（不以换行符结尾）
+    if line_matches_marker(rest, markers) {
+        return Some((line_start, content.len()));
+    }
+    None
 }
 
 /// 自动迁移执行器
@@ -643,6 +705,7 @@ impl MigrationExecutor {
             DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
             DatabaseType::MySql => sea_orm::DbBackend::MySql,
             DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            // 不可达：DuckDB 连接在 as_sea_orm 处被拒绝，走不到 MigrationExecutor，仅编译兜底
             DatabaseType::DuckDb => sea_orm::DbBackend::Postgres,
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
                 panic!("Graph databases do not participate in relational migrations")
@@ -687,30 +750,8 @@ impl MigrationExecutor {
 
     /// 从迁移文件中提取 UP SQL
     fn extract_up_sql(content: &str) -> &str {
-        fn find_marker_line(content: &str, markers: &[&str]) -> Option<(usize, usize)> {
-            for marker in markers {
-                if let Some(pos) = content.find(marker) {
-                    let line_start = content[..pos].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-                    let line_end = content[pos..]
-                        .find('\n')
-                        .map(|idx| pos + idx + 1)
-                        .unwrap_or(content.len());
-                    return Some((line_start, line_end));
-                }
-            }
-            None
-        }
-
-        let up_marker = find_marker_line(
-            content,
-            &["-- UP:", "-- up:", "-- UP", "-- up", "UP:", "UP"],
-        );
-        let down_marker = find_marker_line(
-            content,
-            &[
-                "-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN",
-            ],
-        );
+        let up_marker = find_marker_line(content, &UP_MARKERS);
+        let down_marker = find_marker_line(content, &DOWN_MARKERS);
 
         match (up_marker, down_marker) {
             (Some((_, up_end)), Some((down_start, _))) if down_start > up_end => {
@@ -721,6 +762,110 @@ impl MigrationExecutor {
             (None, None) => content,
         }
         .trim()
+    }
+
+    /// 从迁移文件中提取 DOWN SQL
+    ///
+    /// 与 `extract_up_sql` 对称：存在 DOWN 标记时返回标记行之后的内容（可能为空）；
+    /// 返回 `None` 表示迁移文件没有 DOWN 标记（即无可回滚部分）。
+    ///
+    /// 注意：仅含注释/空白的 DOWN 段同样按原文返回（`Some`，语义不变）；
+    /// 拒绝"假回滚"由 `rollback_version` 负责（剥离注释后无可执行语句即报错）。
+    pub fn extract_down_sql(content: &str) -> Option<&str> {
+        find_marker_line(content, &DOWN_MARKERS).map(|(_, down_end)| content[down_end..].trim())
+    }
+
+    /// 判断 DOWN 段剥离 `--` 行注释与空白后是否仍含可执行内容
+    ///
+    /// 逐行检查：跳过空行与以 `--` 开头的注释行，其余行视为可执行内容。
+    /// 这是保守的语法级判断（不校验 SQL 语句本身的合法性），块注释 `/* */` 不在处理范围。
+    fn down_has_executable_sql(down_sql: &str) -> bool {
+        down_sql
+            .lines()
+            .map(str::trim)
+            .any(|line| !line.is_empty() && !line.starts_with("--"))
+    }
+
+    /// 回滚单个迁移文件
+    ///
+    /// 在同一事务内执行迁移文件的 DOWN SQL，成功后删除 `dbnexus_migrations`
+    /// 表中对应版本的历史行；DOWN SQL 执行失败时整体回滚，历史记录保持不变。
+    ///
+    /// # Arguments
+    ///
+    /// * `version` - 待回滚的迁移版本号（与历史表中的 version 一致）
+    /// * `migration_file` - 迁移文件（用于提取 DOWN SQL）
+    ///
+    /// # Errors
+    ///
+    /// - 迁移文件没有 DOWN 标记时返回 `DbError::Migration`（不删除历史记录）；
+    /// - DOWN 标记存在但剥离 `--` 行注释与空白后不含可执行语句（如模板占位未填写）
+    ///   时返回 `DbError::Migration`（不删除历史记录，避免"假回滚"）；
+    /// - DOWN SQL 或删除历史行执行失败时返回 `DbError::Connection`（事务回滚）。
+    pub async fn rollback_version(
+        &self,
+        version: u32,
+        migration_file: &MigrationFile,
+    ) -> Result<(), DbError> {
+        // 无 DOWN 段的迁移无法回滚，提前返回明确错误（不删除历史记录）
+        let down_sql = Self::extract_down_sql(&migration_file.content).ok_or_else(|| {
+            DbError::Migration(format!(
+                "迁移 v{} ({}) 无可回滚的 DOWN 部分",
+                version, migration_file.description
+            ))
+        })?;
+
+        // 模板生成的迁移常带未填写的 DOWN 段（仅 `--` 注释/空白）。execute_unprepared
+        // 执行纯注释 SQL 会"成功"（0 行受影响），若据此删除历史行会造成"假回滚"：
+        // DOWN 实际未执行，版本却被标记为已回滚。因此剥离注释与空白后必须仍存在
+        // 可执行内容，否则拒绝回滚（历史行保留）。
+        if !Self::down_has_executable_sql(down_sql) {
+            return Err(DbError::Migration(
+                "DOWN 段存在但不含可执行语句，拒绝回滚以避免假回滚".to_string(),
+            ));
+        }
+
+        let backend = match self.sql_generator.db_type {
+            DatabaseType::Postgres => sea_orm::DbBackend::Postgres,
+            DatabaseType::MySql => sea_orm::DbBackend::MySql,
+            DatabaseType::Sqlite => sea_orm::DbBackend::Sqlite,
+            // DuckDB 连接在 as_sea_orm 处被拒绝，走不到 MigrationExecutor；
+            // 显式报错，避免生成误导性的 Postgres 占位符 SQL
+            DatabaseType::DuckDb => {
+                return Err(DbError::Config(
+                    "DuckDB connections do not support SeaORM-based migration rollback".to_string(),
+                ));
+            }
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                return Err(DbError::Config(
+                    "Graph databases do not participate in relational migrations".to_string(),
+                ));
+            }
+        };
+
+        // 开始事务：DOWN SQL 与历史行删除原子提交
+        let txn = self.connection.begin().await.map_err(DbError::Connection)?;
+
+        if !down_sql.is_empty() {
+            txn.execute_unprepared(down_sql)
+                .await
+                .map_err(DbError::Connection)?;
+        }
+
+        // 删除迁移历史记录（使用参数化查询防止 SQL 注入）
+        let delete_sql = format!(
+            "DELETE FROM dbnexus_migrations WHERE version = {}",
+            build_placeholder_list(backend, 1)
+        );
+        let stmt =
+            sea_orm::Statement::from_sql_and_values(backend, delete_sql, vec![version.into()]);
+
+        txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
+
+        // 提交事务
+        txn.commit().await.map_err(DbError::Connection)?;
+
+        Ok(())
     }
 }
 
@@ -757,13 +902,11 @@ impl MigrationFileParser {
 
     /// 验证SQL语法（基本验证）
     fn validate_sql_syntax(content: &str) -> Result<(), String> {
-        // 检查是否包含基本的SQL语句
-        let has_up = content.contains("UP")
-            || content.contains("up")
-            || content.to_uppercase().contains("-- UP");
-        let has_down = content.contains("DOWN")
-            || content.contains("down")
-            || content.to_uppercase().contains("-- DOWN");
+        // UP/DOWN 标记检测复用 find_marker_line，与 extract_up_sql / extract_down_sql
+        // 的提取口径保持一致（按行、大小写不敏感前缀匹配），
+        // 避免"验证认定有标记、提取却找不到"的口径分裂
+        let has_up = find_marker_line(content, &UP_MARKERS).is_some();
+        let has_down = find_marker_line(content, &DOWN_MARKERS).is_some();
 
         if !has_up && !has_down {
             // 如果没有UP/DOWN标记，只要包含SQL语句即可
@@ -1186,6 +1329,216 @@ mod tests {
     }
 
     // =====================================================================
+    // extract_down_sql
+    // =====================================================================
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_with_up_and_down() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
+        let result = MigrationExecutor::extract_down_sql(content);
+        let down = result.expect("应提取到 DOWN SQL");
+        assert_eq!(down, "DROP TABLE users;");
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_case_insensitive_markers() {
+        let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- down:\nDROP TABLE t;\n";
+        let result = MigrationExecutor::extract_down_sql(content);
+        let down = result.expect("应提取到 DOWN SQL");
+        assert_eq!(down, "DROP TABLE t;");
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_only_down() {
+        let content = "-- DOWN:\nDROP TABLE users;\n";
+        let result = MigrationExecutor::extract_down_sql(content);
+        let down = result.expect("应提取到 DOWN SQL");
+        assert_eq!(down, "DROP TABLE users;");
+    }
+
+    /// DOWN 段仅注释/空白（模板占位未填写）时拒绝回滚，且历史行保留——不发生"假回滚"
+    ///
+    /// 旧契约（已废弃）：仅注释的 DOWN 段会被当作 SQL 执行（0 行"成功"）后删除历史行，
+    /// 用模板生成迁移的用户会得到假回滚；现改为显式报错。
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_rollback_version_down_only_comments_rejected() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        // 典型模板生成的迁移：DOWN 标记后只有注释占位，未填写真实回滚语句
+        let file = MigrationFile::new(
+            1,
+            "template_down".to_string(),
+            PathBuf::from("/migrations/001_template_down.sql"),
+            "-- UP:\nCREATE TABLE template_down_test (id INTEGER);\n-- DOWN: Rollback migration\n-- Reversal of migration SQL goes here\n"
+                .to_string(),
+        );
+
+        executor.apply_migration_file_public(&file).await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+
+        let result = executor.rollback_version(1, &file).await;
+        assert!(result.is_err(), "仅注释的 DOWN 段应拒绝回滚");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("不含可执行语句"), "实际错误: {}", err);
+
+        // 历史行未被删除：未发生假回滚
+        executor.load_history().await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+    }
+
+    /// 对照：DOWN 段为注释 + 真实语句时正常回滚（注释不阻碍回滚）
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_rollback_version_down_comments_plus_statement_succeeds() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        let file = MigrationFile::new(
+            1,
+            "down_with_comments".to_string(),
+            PathBuf::from("/migrations/001_down_with_comments.sql"),
+            "-- UP:\nCREATE TABLE down_comment_test (id INTEGER);\n-- DOWN:\n-- 模板注释：回滚说明\nDROP TABLE down_comment_test;\n"
+                .to_string(),
+        );
+
+        executor.apply_migration_file_public(&file).await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+
+        executor.rollback_version(1, &file).await.unwrap();
+
+        // 历史行已删除
+        executor.load_history().await.unwrap();
+        assert!(executor.get_all_versions().is_empty());
+        // DOWN SQL 已执行：表已不存在
+        let dropped = executor
+            .connection
+            .execute_unprepared("DROP TABLE down_comment_test")
+            .await;
+        assert!(
+            dropped.is_err(),
+            "DOWN SQL 未执行，down_comment_test 仍存在"
+        );
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_missing_marker_returns_none() {
+        let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n";
+        let result = MigrationExecutor::extract_down_sql(content);
+        // 无 DOWN 标记时返回 None，表示无可回滚部分
+        assert!(result.is_none());
+    }
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_no_markers_returns_none() {
+        let content = "CREATE TABLE users (id INTEGER);";
+        let result = MigrationExecutor::extract_down_sql(content);
+        assert!(result.is_none());
+    }
+
+    // =====================================================================
+    // find_marker_line 按行、大小写不敏感前缀匹配
+    // =====================================================================
+
+    /// find_marker_line 命中时返回整行边界（含换行符），未命中返回 None
+    #[test]
+    fn test_find_marker_line_returns_line_bounds() {
+        let content = "CREATE TABLE t (id INTEGER);\n-- DOWN: 模板注释\nDROP TABLE t;\n";
+        let (start, end) = find_marker_line(content, &DOWN_MARKERS).unwrap();
+        assert_eq!(&content[start..end], "-- DOWN: 模板注释\n");
+        assert!(find_marker_line("no markers here", &UP_MARKERS).is_none());
+    }
+
+    /// 混合大小写 `-- Down:`：旧全文精确搜索匹配不到，现应能识别
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_down_sql_mixed_case_down_marker() {
+        let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- Down:\nDROP TABLE t;\n";
+        let down =
+            MigrationExecutor::extract_down_sql(content).expect("应识别 -- Down: 标记");
+        assert_eq!(down, "DROP TABLE t;");
+    }
+
+    /// 裸标记 `Up:` / `DOWN`（大小写不敏感，行首匹配）
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_bare_mixed_case_markers() {
+        let content = "Up:\nCREATE TABLE t (id INTEGER);\nDOWN\nDROP TABLE t;\n";
+        let up = MigrationExecutor::extract_up_sql(content);
+        assert!(up.contains("CREATE TABLE t"));
+        assert!(!up.contains("DROP TABLE"));
+        let down = MigrationExecutor::extract_down_sql(content).expect("应识别裸 DOWN 标记");
+        assert_eq!(down, "DROP TABLE t;");
+    }
+
+    /// 回归：UP 段内以 up/down 开头的标识符（如列名 updated_at / download_url）
+    /// 不得被裸标记 UP / DOWN 误判为标记行而截断 UP 段（词边界守卫）
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_extract_up_sql_not_truncated_by_up_down_prefixed_identifiers() {
+        let content = "-- UP:\nCREATE TABLE posts (\n    id INTEGER PRIMARY KEY,\n    updated_at TIMESTAMP,\n    download_url TEXT\n);\n-- DOWN:\nDROP TABLE posts;\n";
+        let up = MigrationExecutor::extract_up_sql(content);
+        assert!(up.contains("updated_at"), "UP 段不应被 updated_at 截断");
+        assert!(up.contains("download_url"), "UP 段不应被 download_url 截断");
+        assert!(up.contains(");"));
+        assert!(!up.contains("DROP TABLE"));
+        let down = MigrationExecutor::extract_down_sql(content).unwrap();
+        assert_eq!(down, "DROP TABLE posts;");
+    }
+
+    /// validate 与提取共用 find_marker_line 后口径一致：
+    /// 纯文本中的 "down" 单词不再让无标记、无 SQL 的文件绕过校验
+    #[test]
+    fn test_migration_file_parser_marker_detection_line_based() {
+        // 旧实现 contains("down") 会把纯文本误判为含 DOWN 标记而放行；
+        // 现按行匹配，无标记且无 SQL 关键字时应报错
+        let content = "download the file here\n";
+        assert!(MigrationFileParser::parse_migration_file(content).is_err());
+        // 标记行大小写不敏感：`-- Up:` / `-- Down:` 可通过校验
+        assert!(MigrationFileParser::parse_migration_file("-- Up:\n-- Down:\n").is_ok());
+    }
+
+    // =====================================================================
+    // down_has_executable_sql
+    // =====================================================================
+
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_down_has_executable_sql() {
+        // 空与纯空白
+        assert!(!MigrationExecutor::down_has_executable_sql(""));
+        assert!(!MigrationExecutor::down_has_executable_sql("  \n\t\n"));
+        // 模板占位：仅注释
+        assert!(!MigrationExecutor::down_has_executable_sql(
+            "-- DOWN: Rollback migration\n-- Reversal of migration SQL goes here\n"
+        ));
+        // 真实语句
+        assert!(MigrationExecutor::down_has_executable_sql("DROP TABLE t;"));
+        // 注释 + 真实语句 → 仍可执行
+        assert!(MigrationExecutor::down_has_executable_sql(
+            "-- 说明\nDROP TABLE t;"
+        ));
+        // 语句行尾注释仍视为可执行
+        assert!(MigrationExecutor::down_has_executable_sql(
+            "DROP TABLE t; -- 说明"
+        ));
+    }
+
+    // =====================================================================
     // MigrationExecutor - scan_migrations (需要 auto-migrate)
     // =====================================================================
 
@@ -1520,6 +1873,109 @@ mod tests {
             "apply_migration_file_public failed: {:?}",
             result.err()
         );
+        assert_eq!(executor.get_all_versions(), vec![1]);
+    }
+
+    // =====================================================================
+    // rollback_version
+    // =====================================================================
+
+    /// 正常回滚：DOWN SQL 与历史行删除在同一事务内完成
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_rollback_version_applies_down_and_deletes_history() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        let file = MigrationFile::new(
+            1,
+            "create_rollback_test".to_string(),
+            PathBuf::from("/migrations/001_create_rollback_test.sql"),
+            "-- UP:\nCREATE TABLE rollback_test (id INTEGER);\n-- DOWN:\nDROP TABLE rollback_test;\n"
+                .to_string(),
+        );
+
+        executor.apply_migration_file_public(&file).await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+
+        executor.rollback_version(1, &file).await.unwrap();
+
+        // 历史行已被删除（用新执行器从数据库重新加载验证）
+        let connection = executor.connection.clone();
+        let mut executor2 = MigrationExecutor::new(connection, DatabaseType::Sqlite);
+        executor2.load_history().await.unwrap();
+        assert!(executor2.get_all_versions().is_empty());
+
+        // DOWN SQL 已执行：表已被删除，再次 DROP 应失败
+        let dropped = executor
+            .connection
+            .execute_unprepared("DROP TABLE rollback_test")
+            .await;
+        assert!(dropped.is_err(), "DOWN SQL 未执行，rollback_test 仍存在");
+    }
+
+    /// 无 DOWN 段时返回明确错误，且不删除历史记录
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_rollback_version_missing_down_section() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        let file = MigrationFile::new(
+            1,
+            "no_down".to_string(),
+            PathBuf::from("/migrations/001_no_down.sql"),
+            "-- UP:\nCREATE TABLE no_down_test (id INTEGER);\n".to_string(),
+        );
+
+        executor.apply_migration_file_public(&file).await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+
+        let result = executor.rollback_version(1, &file).await;
+        assert!(result.is_err(), "无 DOWN 段的迁移应回滚失败");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("无可回滚的 DOWN 部分"), "实际错误: {}", err);
+
+        // 历史记录保持不变
+        executor.load_history().await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+    }
+
+    /// DOWN SQL 执行失败时整体回滚，历史记录保留
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_rollback_version_down_failure_keeps_history() {
+        let mut executor = create_sqlite_executor().await;
+        executor.load_history().await.unwrap();
+
+        let file = MigrationFile::new(
+            1,
+            "bad_down".to_string(),
+            PathBuf::from("/migrations/001_bad_down.sql"),
+            "-- UP:\nCREATE TABLE bad_down_test (id INTEGER);\n-- DOWN:\nTHIS IS NOT VALID SQL;\n"
+                .to_string(),
+        );
+
+        executor.apply_migration_file_public(&file).await.unwrap();
+        assert_eq!(executor.get_all_versions(), vec![1]);
+
+        let result = executor.rollback_version(1, &file).await;
+        assert!(result.is_err(), "非法 DOWN SQL 应导致回滚失败");
+
+        // 事务回滚后历史记录保留
+        executor.load_history().await.unwrap();
         assert_eq!(executor.get_all_versions(), vec![1]);
     }
 

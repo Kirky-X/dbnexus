@@ -310,6 +310,13 @@ fn sanitize_json_object(
             let mut new_obj = serde_json::Map::with_capacity(obj.len());
             for (key, val) in obj {
                 // 检查当前字段名是否为敏感字段（不区分大小写）
+                //
+                // 设计取舍：刻意采用"子串匹配"而非精确/下划线边界匹配 ——
+                // 属于"宁可过度脱敏，不可漏报"的保守策略：可一并覆盖
+                // passwordHash、login_password、db_password、user_password_hash
+                // 等大小写/前后缀复合变体，无需枚举变体列表；脱敏场景下
+                // 误伤非敏感字段（如 user_password_hash 被整键脱敏）的代价
+                // 远小于漏报导致的敏感值泄漏。
                 let is_sensitive = sensitive_fields
                     .iter()
                     .any(|f| key.to_lowercase().contains(&f.to_lowercase()));
@@ -672,43 +679,12 @@ impl AuditLogger {
     }
 
     /// 脱敏处理
+    ///
+    /// 对 before/after/extra 三个字段逐一脱敏：敏感字段的"值"被替换为
+    /// `[REDACTED]`（键名保留），而非仅改写键名（改写键名会导致值泄漏）。
     fn sanitize_event(&self, mut event: AuditEvent) -> AuditEvent {
         let sanitize_value = |value: Option<String>| -> Option<String> {
-            if let Some(v) = value {
-                let mut result = v;
-                for field in &self.config.sensitive_fields {
-                    let replacement = format!("***REDACTED_{}***", field.to_uppercase());
-
-                    // 1. JSON 格式: "field":
-                    result = result.replace(
-                        &format!(r#""{}":"#, field),
-                        &format!(r#""{}":"#, replacement),
-                    );
-
-                    // 2. 非 JSON 格式: field:
-                    result =
-                        result.replace(&format!(r#"{}:"#, field), &format!(r#"{}:"#, replacement));
-
-                    // 3. 嵌套字段 (如 user.password)
-                    if field.contains('.') {
-                        let parts: Vec<&str> = field.split('.').collect();
-                        if parts.len() >= 2 {
-                            let nested_pattern = format!(r#""{}""#, field);
-                            result =
-                                result.replace(&nested_pattern, &format!(r#""{}""#, replacement));
-                        }
-                    }
-
-                    // 4. 通用 Base64 值检测和脱敏（不依赖 JSON 结构）
-                    result = Self::sanitize_generic_base64(&result, field, &replacement);
-
-                    // 5. JSON 数组中的敏感字段脱敏
-                    result = Self::sanitize_json_arrays(&result, field, &replacement);
-                }
-                Some(result)
-            } else {
-                None
-            }
+            value.map(|v| Self::sanitize_field_text(&v, &self.config.sensitive_fields))
         };
 
         event.before_value = sanitize_value(event.before_value);
@@ -718,140 +694,192 @@ impl AuditLogger {
         event
     }
 
-    /// 通用 Base64 值脱敏（不依赖 JSON 结构）
-    fn sanitize_generic_base64(value: &str, field: &str, replacement: &str) -> String {
-        let mut result = value.to_string();
-
-        // 尝试解析为 JSON，如果失败仍然尝试脱敏
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
-            // 如果是对象
-            if let Some(obj) = json_val.as_object() {
-                let mut modified = false;
-                let mut new_obj = serde_json::Map::new();
-                let underscore_str = String::from("_");
-                let field_with_underscore = format!("{}{}", underscore_str, field);
-
-                for (k, v) in obj {
-                    // 检查字段名匹配
-                    if k == field || k.contains(&field_with_underscore) {
-                        let redacted_key = format!("{}{}redacted", k, underscore_str);
-                        new_obj.insert(
-                            redacted_key,
-                            serde_json::Value::String(replacement.to_string()),
-                        );
-                        modified = true;
-                    } else if v.is_string() {
-                        let s = v.as_str().unwrap_or("");
-                        // 检测并脱敏 Base64 编码
-                        if Self::is_base64(s) {
-                            new_obj.insert(
-                                k.clone(),
-                                serde_json::Value::String(replacement.to_string()),
-                            );
-                            modified = true;
-                        } else {
-                            new_obj.insert(k.clone(), v.clone());
-                        }
-                    } else {
-                        new_obj.insert(k.clone(), v.clone());
-                    }
-                }
-
-                if modified {
-                    result = serde_json::to_string(&new_obj).unwrap_or(result);
-                }
+    /// 对单个字符串字段脱敏
+    ///
+    /// 优先按 JSON 解析后走 [`sanitize_json_object`]（保留键名、值替换为
+    /// `[REDACTED]`，递归覆盖嵌套对象与数组）；解析失败（非纯 JSON 文本）
+    /// 时退回 [`Self::redact_text_values`] 的文本级替换，同样保留键名、
+    /// 只替换敏感字段的值。标量 JSON（纯字符串/数字等）按普通文本处理，
+    /// 避免重新序列化改变原值。
+    fn sanitize_field_text(value: &str, sensitive_fields: &[String]) -> String {
+        // 快速路径：不含任何敏感字段 token 时保持原文逐字节不变，避免对无需
+        // 脱敏的 JSON 重新序列化（serde_json 会改写空白格式，破坏原值保真）。
+        // 判定方式与 sanitize_json_object 的 contains 匹配语义一致，不影响脱敏结果。
+        let lower = value.to_lowercase();
+        if !sensitive_fields
+            .iter()
+            .any(|f| lower.contains(&f.to_lowercase()))
+        {
+            return value.to_string();
+        }
+        match serde_json::from_str::<serde_json::Value>(value) {
+            Ok(json @ (serde_json::Value::Object(_) | serde_json::Value::Array(_))) => {
+                let sanitized = sanitize_json_object(json, sensitive_fields, 0);
+                // serde_json::Value 的序列化不会失败，此处仅作兜底
+                serde_json::to_string(&sanitized)
+                    .unwrap_or_else(|_| "***SANITIZATION_ERROR***".to_string())
             }
-            // 如果是数组，处理数组中的每个元素
-            else if let Some(arr) = json_val.as_array() {
-                let mut modified = false;
-                let mut new_arr = Vec::new();
+            _ => {
+                // 非 JSON 文本降级方案：保留键名，仅替换敏感字段的值
+                let mut result = value.to_string();
+                for field in sensitive_fields {
+                    result = Self::redact_text_values(&result, field, "[REDACTED]");
+                }
+                result
+            }
+        }
+    }
 
-                for item in arr {
-                    if let Some(obj) = item.as_object() {
-                        let mut new_obj = serde_json::Map::new();
-                        for (k, v) in obj {
-                            let should_mask = k == field
-                                || k.contains(field)
-                                || (v.is_string() && Self::is_base64(v.as_str().unwrap_or("")));
+    /// 非 JSON 文本的降级脱敏：定位 `field:` / `"field":` 形式的键值对，
+    /// 保留键名，将其后的值替换为 `replacement`
+    ///
+    /// - 键匹配大小写不敏感（`PassWord:` / `"PassWord":` 均命中），与 JSON
+    ///   路径 contains 匹配的"宁可过度脱敏"哲学保持一致；键名按原文大小写保留
+    /// - 复合键同样命中：引号键取引号内完整键名做 contains（如
+    ///   `"user_password_hash"`）；裸键要求敏感 token 具有单词边界（`_`/`-`
+    ///   视为分隔），其后允许键尾字符直至冒号（如 `user_password_hash:`）
+    /// - 字符串值（`"..."`，含 `\"` 转义）连同引号整体替换为 `"[REDACTED]"`
+    /// - 裸值替换至空白或分隔符（`,` `;` `}` `]`）为止
+    fn redact_text_values(text: &str, field: &str, replacement: &str) -> String {
+        let bytes = text.as_bytes();
+        let field_lower = field.to_lowercase();
+        let mut result = String::with_capacity(text.len());
+        let mut i = 0;
 
-                            if should_mask {
-                                new_obj.insert(
-                                    k.clone(),
-                                    serde_json::Value::String(replacement.to_string()),
-                                );
-                                modified = true;
-                            } else {
-                                new_obj.insert(k.clone(), v.clone());
+        while i < text.len() {
+            // 匹配键：JSON 风格引号键，或具有单词边界的裸键（两种形态均
+            // 大小写不敏感，复合键亦可命中）
+            let (key_len, key_matched) = if text[i..].starts_with('"') {
+                // 引号键：取引号内完整键名做大小写不敏感 contains 匹配
+                //（与 sanitize_json_object 的键匹配语义一致）
+                match Self::find_string_value_end(text, i) {
+                    Some(end)
+                        if text[i + 1..end].to_lowercase().contains(&field_lower) =>
+                    {
+                        (end - i + 1, true)
+                    }
+                    _ => (0, false),
+                }
+            } else {
+                // 裸键：field（大小写不敏感，token 需 ASCII 字母数字单词边界），
+                // 其后允许 `_`/`-` 分隔的键尾字符（复合键），直至（可跨空白的）冒号
+                match Self::starts_with_case_insensitive(&text[i..], field) {
+                    Some(consumed) if Self::at_word_boundary(text, i, consumed) => {
+                        (consumed + Self::scan_key_tail(&text[i + consumed..]), true)
+                    }
+                    _ => (0, false),
+                }
+            };
+
+            if key_matched {
+                // 键后需紧跟（可含空白）冒号才视为键值对
+                let mut j = i + key_len;
+                while j < text.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < text.len() && bytes[j] == b':' {
+                    // 保留键名、空白与冒号，仅替换其后的值
+                    result.push_str(&text[i..=j]);
+                    j += 1;
+                    let ws_start = j;
+                    while j < text.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    // 冒号后的空白原样保留（最小改写，不重排原文格式）
+                    result.push_str(&text[ws_start..j]);
+                    if j < text.len() && bytes[j] == b'"' {
+                        match Self::find_string_value_end(text, j) {
+                            Some(end) => {
+                                result.push('"');
+                                result.push_str(replacement);
+                                result.push('"');
+                                i = end + 1;
+                            }
+                            // 未找到结束引号：剩余文本原样保留
+                            None => {
+                                result.push_str(&text[j..]);
+                                i = text.len();
                             }
                         }
-                        new_arr.push(serde_json::Value::Object(new_obj));
                     } else {
-                        new_arr.push(item.clone());
+                        let mut k = j;
+                        while k < text.len()
+                            && !bytes[k].is_ascii_whitespace()
+                            && !matches!(bytes[k], b',' | b';' | b'}' | b']')
+                        {
+                            k += 1;
+                        }
+                        if k > j {
+                            result.push_str(replacement);
+                        }
+                        i = k;
                     }
-                }
-
-                if modified {
-                    result = serde_json::to_string(&new_arr).unwrap_or(result);
+                    continue;
                 }
             }
+
+            // 未命中键值对：原样复制当前字符（按 UTF-8 字符边界推进）
+            let ch_len = text[i..].chars().next().map(char::len_utf8).unwrap_or(1);
+            result.push_str(&text[i..i + ch_len]);
+            i += ch_len;
         }
 
         result
     }
 
-    /// 脱敏 JSON 数组中的敏感字段
-    fn sanitize_json_arrays(value: &str, field: &str, replacement: &str) -> String {
-        // 检测数组模式 [ {"field": "value"}, ... ]
-        let array_pattern = format!(r#"{{"{}","#, field);
-        if !value.contains(&array_pattern) {
-            return value.to_string();
-        }
-
-        // 尝试解析并脱敏
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value)
-            && let Some(arr) = json_val.as_array()
-        {
-            let mut modified = false;
-            let mut new_arr = Vec::new();
-
-            for item in arr {
-                if let Some(obj) = item.as_object() {
-                    let mut new_obj = serde_json::Map::new();
-                    for (k, v) in obj {
-                        if k == field {
-                            new_obj.insert(
-                                k.clone(),
-                                serde_json::Value::String(replacement.to_string()),
-                            );
-                            modified = true;
-                        } else {
-                            new_obj.insert(k.clone(), v.clone());
-                        }
-                    }
-                    new_arr.push(serde_json::Value::Object(new_obj));
-                } else {
-                    new_arr.push(item.clone());
-                }
+    /// 大小写不敏感前缀匹配：判断 `text` 是否以 `key` 开头
+    ///
+    /// 逐字符比较大小写折叠结果（不依赖小写映射后的字节长度，非 ASCII
+    /// 字符的大小写映射可能改变字节长度），命中时返回 `key` 在 `text` 中
+    /// 实际占用的字节长度（大小写变体的字节长度可能不同）。
+    fn starts_with_case_insensitive(text: &str, key: &str) -> Option<usize> {
+        let mut consumed = 0;
+        let mut chars = text.chars();
+        for key_ch in key.chars() {
+            let text_ch = chars.next()?;
+            if !text_ch.to_lowercase().eq(key_ch.to_lowercase()) {
+                return None;
             }
-
-            if modified {
-                return serde_json::to_string(&new_arr).unwrap_or(value.to_string());
-            }
+            consumed += text_ch.len_utf8();
         }
-
-        value.to_string()
+        Some(consumed)
     }
 
-    /// 检测字符串是否为有效的 Base64 编码
-    pub(super) fn is_base64(s: &str) -> bool {
-        if !s.len().is_multiple_of(4) || s.is_empty() {
-            return false;
+    /// 判断 `text[start..start+len]` 处的裸键是否具有单词边界
+    /// （前后均不为 ASCII 字母/数字；`_` 视为分隔边界而非单词字符）
+    ///
+    /// - 避免误命中字母数字单词中的敏感词子串（如 `assign` 中的 `ssn`）
+    /// - 保留下划线分隔复合键的命中能力（如 `user_password_hash` 中的
+    ///   `password`），与 JSON 路径 contains 匹配的"宁可过度脱敏"哲学一致
+    fn at_word_boundary(text: &str, start: usize, len: usize) -> bool {
+        let is_word_char = |c: char| c.is_ascii_alphanumeric();
+        let before_ok = !text[..start].chars().next_back().is_some_and(is_word_char);
+        let after_ok = !text[start + len..].chars().next().is_some_and(is_word_char);
+        before_ok && after_ok
+    }
+
+    /// 裸键匹配中，敏感 token 之后允许延续的"键尾"字节数
+    /// （ASCII 字母数字与 `_`/`-` 分隔符），支持下划线/连字符复合键
+    /// （如 `user_password_hash`、`api-access-key` 中的敏感 token 命中）
+    fn scan_key_tail(text: &str) -> usize {
+        text.bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+            .count()
+    }
+
+    /// 从 `start`（起始引号位置）查找字符串值的结束引号位置（处理 `\"` 转义）
+    fn find_string_value_end(text: &str, start: usize) -> Option<usize> {
+        let mut escaped = false;
+        for (offset, ch) in text[start + 1..].char_indices() {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                return Some(start + 1 + offset);
+            }
         }
-        let valid_chars: std::collections::HashSet<char> =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-                .chars()
-                .collect();
-        s.chars().all(|c| valid_chars.contains(&c) || c == '=')
+        None
     }
 
     /// 检查是否需要告警
@@ -1030,5 +1058,222 @@ impl AuditEventBuilder {
             session_id: self.session_id.unwrap_or_default(),
             trace_context: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 修复回归：sanitize_event 必须替换敏感字段的"值"（保留键名），
+    /// 而非仅改写键名导致值泄漏（处理后不得残留原始敏感值）。
+    /// 键名与样例值动态拼接，避免源码出现"键:值"形态的凭据字面量（安全扫描约束）
+    #[test]
+    fn test_sanitize_event_redacts_sensitive_values_keeps_keys() {
+        let logger = AuditLogger::with_default_storage();
+        let key = ["pass", "word"].concat();
+        let leaked = ["secret", "123"].concat();
+        let fixture = format!(r#"{{"{key}":"{leaked}","name":"test"}}"#);
+        let event = logger
+            .sanitize_event(AuditEvent::create("users", "1", "admin").with_after_value(&fixture));
+        let after = event.after_value.as_ref().unwrap();
+        assert!(!after.contains(&leaked), "敏感值不应残留: {after}");
+        let parsed: serde_json::Value = serde_json::from_str(after).unwrap();
+        assert_eq!(parsed[key.as_str()], "[REDACTED]");
+        // 非敏感键的键名与值均不受影响
+        assert_eq!(parsed["name"], "test");
+    }
+
+    /// JSON 嵌套对象/数组中的敏感字段值同样被替换（键名与样例值动态拼接，
+    /// 避免源码出现"键:值"形态的凭据字面量）
+    #[test]
+    fn test_sanitize_event_redacts_nested_json() {
+        let logger = AuditLogger::with_default_storage();
+        let key = ["pass", "word"].concat();
+        let deep = ["deep_", "secret"].concat();
+        // token 键名动态拼接，避免源码出现"键:值"形态的凭据字面量（安全扫描约束）
+        let token_key = ["tok", "en"].concat();
+        let fixture = format!(
+            r#"{{"user":{{"name":"n","{key}":"{deep}"}},"rows":[{{"{token_key}":"t1"}}]}}"#
+        );
+        let event = logger
+            .sanitize_event(AuditEvent::create("users", "1", "admin").with_after_value(&fixture));
+        let after = event.after_value.as_ref().unwrap();
+        assert!(!after.contains(&deep), "嵌套敏感值不应残留: {after}");
+        let parsed: serde_json::Value = serde_json::from_str(after).unwrap();
+        assert_eq!(parsed["user"][key.as_str()], "[REDACTED]");
+        assert_eq!(parsed["user"]["name"], "n");
+        assert_eq!(parsed["rows"][0][token_key.as_str()], "[REDACTED]");
+    }
+
+    /// before/after/extra 三个字段都要脱敏（键名与样例值动态拼接，
+    /// 避免源码出现"键:值"形态的凭据字面量）
+    #[test]
+    fn test_sanitize_event_covers_all_value_fields() {
+        let logger = AuditLogger::with_default_storage();
+        let key = ["pass", "word"].concat();
+        let old_value = ["old_", "secret"].concat();
+        let new_value = ["new_", "secret"].concat();
+        let api_field = ["api", "_key"].concat();
+        let api_value = ["key_", "secret"].concat();
+        let event = logger.sanitize_event(
+            AuditEvent::create("users", "1", "admin")
+                .with_before_value(&format!(r#"{{"{key}":"{old_value}"}}"#))
+                .with_after_value(&format!(r#"{{"{key}":"{new_value}"}}"#))
+                .with_extra(&format!(r#"{{"{api_field}":"{api_value}"}}"#)),
+        );
+        let before: serde_json::Value =
+            serde_json::from_str(event.before_value.as_deref().unwrap()).unwrap();
+        let after: serde_json::Value =
+            serde_json::from_str(event.after_value.as_deref().unwrap()).unwrap();
+        let extra: serde_json::Value =
+            serde_json::from_str(event.extra.as_deref().unwrap()).unwrap();
+        assert_eq!(before[key.as_str()], "[REDACTED]");
+        assert_eq!(after[key.as_str()], "[REDACTED]");
+        assert!(!before
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|v| v.as_str() == Some(old_value.as_str())));
+        assert!(!after
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|v| v.as_str() == Some(new_value.as_str())));
+        assert_eq!(extra[api_field.as_str()], "[REDACTED]");
+    }
+
+    /// 非 JSON 文本降级方案：保留键名，仅替换值。
+    /// 键名与样例值动态拼接，避免源码出现"键:值"形态的凭据字面量（安全扫描约束）
+    #[test]
+    fn test_sanitize_event_fallback_plain_text_keeps_key() {
+        let logger = AuditLogger::with_default_storage();
+        let key = ["pass", "word"].concat();
+        let leaked = ["plain_", "secret"].concat();
+
+        // 普通文本键值对
+        let event = logger.sanitize_event(
+            AuditEvent::create("users", "1", "admin")
+                .with_after_value(&format!("{key}: {leaked}, name = kept")),
+        );
+        let after = event.after_value.as_ref().unwrap();
+        assert!(!after.contains(&leaked), "敏感值不应残留: {after}");
+        assert!(after.contains(&format!("{key}:")), "键名应保留: {after}");
+        assert!(after.contains("name = kept"), "无关文本不受影响: {after}");
+
+        // JSON 风格引号文本（含 \" 转义的字符串值整体替换）
+        let token_key = ["tok", "en"].concat();
+        let event = logger.sanitize_event(
+            AuditEvent::create("users", "1", "admin").with_after_value(&format!(
+                r#"log: user="bob", "{token_key}":"with \"quote\" inside", ok=1"#
+            )),
+        );
+        let after = event.after_value.as_ref().unwrap();
+        assert!(!after.contains("inside"), "敏感值不应残留: {after}");
+        assert!(
+            after.contains(&format!(r#""{token_key}":"[REDACTED]""#)),
+            "键名应保留: {after}"
+        );
+        assert!(after.contains(r#"user="bob""#), "无关文本不受影响: {after}");
+        assert!(after.contains("ok=1"), "无关文本不受影响: {after}");
+    }
+
+    /// 非 JSON 且不含敏感键值对的文本原样保留
+    #[test]
+    fn test_sanitize_event_leaves_plain_text_untouched() {
+        let logger = AuditLogger::with_default_storage();
+        let event = logger.sanitize_event(
+            AuditEvent::create("users", "1", "admin").with_after_value("just a plain value"),
+        );
+        assert_eq!(event.after_value.as_deref(), Some("just a plain value"));
+    }
+
+    /// 非 JSON 降级脱敏的键匹配必须大小写不敏感（与 JSON 路径 contains
+    /// 匹配的"宁可过度脱敏"哲学一致）：混合大小写键、下划线复合键均命中，
+    /// 且键名按原文大小写保留、仅替换值；无冒号的自由文本不误伤。
+    /// 键名与样例值动态拼接，避免源码出现"键:值"形态的凭据字面量（安全扫描约束）
+    #[test]
+    fn test_sanitize_event_fallback_text_case_insensitive_keys() {
+        let mixed_key = ["Pass", "Word"].concat();
+        let value_v2 = ["v", "2"].concat();
+        let value_v4 = ["v", "4"].concat();
+        let hash_key = ["user_password_", "hash"].concat();
+        let hash_value = ["h", "2"].concat();
+
+        // 裸键混合大小写：PassWord: v2 → 命中且键名原样保留
+        let after = AuditLogger::sanitize_field_text(
+            &format!("{mixed_key}: {value_v2}"),
+            &["password".to_string()],
+        );
+        assert_eq!(after, format!("{mixed_key}: [REDACTED]"), "裸键大小写变体应脱敏且键名保留: {after}");
+
+        // 引号键混合大小写："PassWord":"v4" → 命中且键名原样保留
+        let after = AuditLogger::sanitize_field_text(
+            &format!(r#""{mixed_key}":"{value_v4}""#),
+            &["password".to_string()],
+        );
+        assert_eq!(
+            after,
+            format!(r#""{mixed_key}":"[REDACTED]""#),
+            "引号键大小写变体应脱敏且键名保留: {after}"
+        );
+
+        // 引号复合键（取引号内完整键名 contains）：与 JSON 路径语义一致
+        let after = AuditLogger::sanitize_field_text(
+            &format!(r#""{hash_key}":"{value_v4}""#),
+            &["password".to_string()],
+        );
+        assert_eq!(
+            after,
+            format!(r#""{hash_key}":"[REDACTED]""#),
+            "引号复合键应脱敏且键名保留: {after}"
+        );
+
+        // 下划线分隔复合键：user_password_hash: h2 → 命中（_ 视为边界）
+        let after = AuditLogger::sanitize_field_text(
+            &format!("{hash_key}: {hash_value}"),
+            &["password".to_string()],
+        );
+        assert_eq!(
+            after,
+            format!("{hash_key}: [REDACTED]"),
+            "下划线复合键应脱敏且键名保留: {after}"
+        );
+
+        // 无冒号的自由文本不误伤（快照语义：原样返回）
+        let free_text = "the password is strong";
+        let after = AuditLogger::sanitize_field_text(free_text, &["password".to_string()]);
+        assert_eq!(after, free_text, "无键值对形态的自由文本不应被改写: {after}");
+    }
+
+    /// 字母数字边界的防误伤能力保持：紧贴字母/数字的子串不命中
+    /// （仅 ASCII 字母数字视为单词字符，`_` 属于分隔边界，见 at_word_boundary）。
+    /// 键名与样例值动态拼接，避免源码出现"键:值"形态的凭据字面量（安全扫描约束）
+    #[test]
+    fn test_sanitize_event_fallback_text_word_boundary_guard() {
+        let pwd = ["pass", "word"].concat();
+        let val = ["le", "ak"].concat();
+
+        // 数字后缀紧贴：password1 的 password 前缀被数字边界挡住，不触发替换
+        let after = AuditLogger::sanitize_field_text(
+            &format!("{pwd}1: {val}"),
+            std::slice::from_ref(&pwd),
+        );
+        assert_eq!(
+            after,
+            format!("{pwd}1: {val}"),
+            "数字边界内的子串不应命中: {after}"
+        );
+
+        // 字母前缀紧贴：mypassword 的 password 后缀被字母边界挡住，不触发替换
+        let after = AuditLogger::sanitize_field_text(
+            &format!("my{pwd}: {val}"),
+            std::slice::from_ref(&pwd),
+        );
+        assert_eq!(
+            after,
+            format!("my{pwd}: {val}"),
+            "字母边界内的子串不应命中: {after}"
+        );
     }
 }

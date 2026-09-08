@@ -10,7 +10,16 @@ use std::time::{Duration, Instant};
 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
 use std::collections::HashMap;
 
-#[cfg(all(test, any(feature = "ladybug", feature = "permission")))]
+// DbPool 测试导入的 cfg 必须与实际使用点一致：
+// - graph_tests / vuln_0005_tests：ladybug
+// - vuln_0001_tests：permission + sqlite（测试用 sqlite::memory: 真实建池）
+// - session_basic_tests（仅 sqlite）使用全限定 super::super::DbPool，不依赖本导入。
+// 若只门控 permission（不含 sqlite），permission 单开组合下 vuln_0001_tests 整体
+// 被 cfg 掉，导入悬空触发 unused import 警告。
+#[cfg(all(
+    test,
+    any(feature = "ladybug", all(feature = "permission", feature = "sqlite"))
+))]
 use super::DbPool;
 #[cfg(feature = "permission")]
 use super::audit::audit_admin_bypass;
@@ -166,7 +175,7 @@ impl Session {
         operation: &PermissionAction,
     ) -> Result<(), DbError> {
         // Admin 角色绕过权限检查（拥有完全控制权）
-        // vuln-0001 修复：admin bypass 仍记录审计日志以保留审计链
+        // vuln-0001 修复：admin bypass 仍记录审计事件（进程级审计环）以保留审计链
         if self.role == self.pool_inner.admin_role {
             audit_admin_bypass(&self.role, table, operation);
             return Ok(());
@@ -1455,7 +1464,7 @@ impl Session {
             };
 
             // Admin 角色绕过权限检查
-            // vuln-0001 修复：admin bypass 仍记录审计日志
+            // vuln-0001 修复：admin bypass 仍记录审计事件（进程级审计环）以保留审计链
             if self.role == self.pool_inner.admin_role {
                 audit_admin_bypass(&self.role, _table_name, &action);
             } else if !self

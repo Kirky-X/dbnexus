@@ -547,10 +547,13 @@ fn map_lbug_value(value: &lbug::Value) -> GraphValue {
     match value {
         lbug::Value::Node(node) => GraphValue::Node(map_lbug_node(node)),
         lbug::Value::Rel(rel) => GraphValue::Rel(map_lbug_rel(rel)),
-        lbug::Value::RecursiveRel { nodes, rels: _ } => {
-            let path_nodes: Vec<GraphNode> = nodes.iter().map(map_lbug_node).collect();
-            GraphValue::Path(path_nodes)
-        }
+        // RICE 10 修复：RecursiveRel 同时映射 nodes 与 rels，路径不再丢弃边信息。
+        // 复用 map_lbug_rel（与 Rel 变体相同的映射函数）；若驱动返回的
+        // rels 数量与 nodes - 1 不符，按驱动原样保留，不做裁剪。
+        lbug::Value::RecursiveRel { nodes, rels } => GraphValue::Path {
+            nodes: nodes.iter().map(map_lbug_node).collect(),
+            rels: rels.iter().map(map_lbug_rel).collect(),
+        },
         // 标量值
         lbug::Value::Null(_) => GraphValue::Scalar(serde_json::Value::Null),
         lbug::Value::Bool(b) => GraphValue::Scalar(serde_json::json!(b)),
@@ -652,7 +655,11 @@ fn graph_value_to_json_scalar(value: &GraphValue) -> serde_json::Value {
         GraphValue::Scalar(s) => s.clone(),
         GraphValue::Node(n) => serde_json::to_value(n).unwrap_or(serde_json::Value::Null),
         GraphValue::Rel(r) => serde_json::to_value(r).unwrap_or(serde_json::Value::Null),
-        GraphValue::Path(p) => serde_json::to_value(p).unwrap_or(serde_json::Value::Null),
+        // 路径序列化为 {nodes, rels}，与 GraphValue::Path 变体的 serde 输出结构一致
+        GraphValue::Path { nodes, rels } => serde_json::json!({
+            "nodes": nodes,
+            "rels": rels,
+        }),
     }
 }
 
@@ -1005,11 +1012,11 @@ mod tests {
 
     #[test]
     fn test_map_lbug_value_double() {
-        let val = lbug::Value::Double(3.14);
+        let val = lbug::Value::Double(std::f64::consts::PI);
         let mapped = map_lbug_value(&val);
         match mapped {
             GraphValue::Scalar(serde_json::Value::Number(n)) => {
-                assert!((n.as_f64().unwrap() - 3.14).abs() < 1e-10);
+                assert!((n.as_f64().unwrap() - std::f64::consts::PI).abs() < 1e-10);
             }
             other => panic!("expected Number scalar, got {other:?}"),
         }
@@ -1128,6 +1135,135 @@ mod tests {
                     }
                     other => panic!("expected String Scalars, got {other:?}"),
                 }
+            }
+            GraphExecResult::Write { .. } => panic!("expected Query variant"),
+        }
+    }
+
+    // ===== 路径（RecursiveRel）映射测试（RICE 10 修复） =====
+
+    /// 构造 RecursiveRel 值后映射，nodes 与 rels 必须同时保留且长度一致
+    #[test]
+    fn test_map_lbug_value_recursive_rel_keeps_rels() {
+        // 驱动语义：RecursiveRel.nodes 为内部节点序列，不含起点节点，
+        // 故仅构造 n2/n3（编号与 offset 对齐便于断言）
+        let n2 = lbug::NodeVal::new(
+            lbug::InternalID {
+                offset: 1,
+                table_id: 1,
+            },
+            "Person",
+        );
+        let n3 = lbug::NodeVal::new(
+            lbug::InternalID {
+                offset: 2,
+                table_id: 1,
+            },
+            "Person",
+        );
+        let mut r1 = lbug::RelVal::new(
+            lbug::InternalID {
+                offset: 0,
+                table_id: 1,
+            },
+            lbug::InternalID {
+                offset: 1,
+                table_id: 1,
+            },
+            "Knows",
+        );
+        r1.add_property("since".to_string(), lbug::Value::Int64(2020));
+        let r2 = lbug::RelVal::new(
+            lbug::InternalID {
+                offset: 1,
+                table_id: 1,
+            },
+            lbug::InternalID {
+                offset: 2,
+                table_id: 1,
+            },
+            "Knows",
+        );
+        let val = lbug::Value::RecursiveRel {
+            nodes: vec![n2, n3], // 驱动语义：内部节点不含起点（按原样保留）
+            rels: vec![r1, r2],
+        };
+
+        let mapped = map_lbug_value(&val);
+        match mapped {
+            GraphValue::Path { nodes, rels } => {
+                assert_eq!(nodes.len(), 2, "all driver nodes must be kept");
+                assert_eq!(rels.len(), 2, "edges must no longer be discarded");
+                // 边信息完整：类型 + 起止节点 + 属性
+                assert_eq!(rels[0].rel_type, "Knows");
+                assert_eq!(rels[0].src_id, 0);
+                assert_eq!(rels[0].dst_id, 1);
+                assert_eq!(rels[0].properties, serde_json::json!({"since": 2020}));
+                assert_eq!(rels[1].src_id, 1);
+                assert_eq!(rels[1].dst_id, 2);
+            }
+            other => panic!("expected Path variant, got {other:?}"),
+        }
+    }
+
+    /// 端到端：变量长度路径查询返回 RecursiveRel，映射后 nodes/rels 同时可取
+    #[tokio::test]
+    async fn test_ladybug_path_query_returns_nodes_and_rels() {
+        let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
+        conn.execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
+            .await
+            .expect("create person table");
+        conn.execute_cypher("CREATE REL TABLE Knows(FROM Person TO Person)")
+            .await
+            .expect("create rel table");
+        conn.execute_cypher("CREATE (:Person {name: 'Alice'})")
+            .await
+            .expect("create alice");
+        conn.execute_cypher("CREATE (:Person {name: 'Bob'})")
+            .await
+            .expect("create bob");
+        conn.execute_cypher("CREATE (:Person {name: 'Carol'})")
+            .await
+            .expect("create carol");
+        conn.execute_cypher(
+            "MATCH (a:Person {name: 'Alice'}), (b:Person {name: 'Bob'}) CREATE (a)-[:Knows]->(b)",
+        )
+        .await
+        .expect("create alice->bob");
+        conn.execute_cypher(
+            "MATCH (a:Person {name: 'Bob'}), (c:Person {name: 'Carol'}) CREATE (a)-[:Knows]->(c)",
+        )
+        .await
+        .expect("create bob->carol");
+
+        let result = conn
+            .execute_cypher("MATCH p = (a:Person {name: 'Alice'})-[:Knows*1..2]->(b) RETURN p")
+            .await
+            .expect("path query should succeed");
+        match result {
+            GraphExecResult::Query(q) => {
+                // *1..2 匹配到两条路径：Alice→Bob（1 跳）与 Alice→Bob→Carol（2 跳）
+                assert_eq!(q.rows.len(), 2, "should return 2 paths (1-hop and 2-hop)");
+                let mut total_hops = 0;
+                for row in &q.rows {
+                    match &row.columns[0].1 {
+                        GraphValue::Path { nodes, rels } => {
+                            assert!(nodes.len() >= 2, "path should contain nodes");
+                            assert_eq!(
+                                rels.len(),
+                                nodes.len() - 1,
+                                "each hop contributes one edge"
+                            );
+                            assert!(
+                                rels.iter().all(|r| r.rel_type == "Knows"),
+                                "all edges should be Knows"
+                            );
+                            total_hops += rels.len();
+                        }
+                        other => panic!("expected Path variant, got {other:?}"),
+                    }
+                }
+                assert_eq!(total_hops, 3, "1-hop + 2-hop paths carry 3 edges in total");
             }
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }

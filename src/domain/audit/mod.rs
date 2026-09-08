@@ -446,8 +446,13 @@ mod tests {
         let results = logger.query(&filters).await.unwrap();
         let after_value = results[0].after_value.as_ref().unwrap();
 
-        // 密码应该被脱敏
-        assert!(after_value.contains("***REDACTED_PASSWORD***"));
+        // 密码值应被脱敏（键名保留，值替换为 [REDACTED]）
+        assert!(
+            !after_value.contains("secret123"),
+            "敏感值不应残留: {after_value}"
+        );
+        let parsed: serde_json::Value = serde_json::from_str(after_value).unwrap();
+        assert_eq!(parsed["password"], "[REDACTED]");
         assert!(after_value.contains("name"));
     }
 
@@ -594,7 +599,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_audit_sanitization_base64_and_nested_field() {
+    async fn test_audit_sanitization_suffix_and_nested_field() {
         let storage = Arc::new(MemoryAuditStorage::new(100));
         let mut config = AuditConfig::default();
         config.sensitive_fields.push("user.password".to_string());
@@ -607,15 +612,13 @@ mod tests {
 
         let results = logger.query(&AuditQueryFilters::default()).await.unwrap();
         let stored = results[0].after_value.as_ref().unwrap();
-        assert!(stored.contains("***REDACTED_PASSWORD***"));
-        assert!(stored.contains("_password_redacted"));
-        assert!(stored.contains(r#""data":"***REDACTED_PASSWORD***""#));
-        assert!(stored.contains("***REDACTED_USER.PASSWORD***"));
-
-        assert!(!AuditLogger::is_base64(""));
-        assert!(!AuditLogger::is_base64("abc"));
-        assert!(!AuditLogger::is_base64("!!!!"));
-        assert!(AuditLogger::is_base64("c2VjcmV0"));
+        // 敏感键（含前后缀变体与点号嵌套字段）的值替换为 [REDACTED]，键名保留
+        let parsed: serde_json::Value = serde_json::from_str(stored).unwrap();
+        assert_eq!(parsed["password"], "[REDACTED]");
+        assert_eq!(parsed["_password"], "[REDACTED]");
+        assert_eq!(parsed["user.password"], "[REDACTED]");
+        // 非敏感键的键名与值均不受影响
+        assert_eq!(parsed["data"], "c2VjcmV0");
     }
 
     #[tokio::test]

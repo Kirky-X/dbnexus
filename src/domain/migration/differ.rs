@@ -600,6 +600,207 @@ impl SqlGenerator {
         }
     }
 
+    /// 生成列变更的 SQL（针对 `ColumnChange`）
+    ///
+    /// 新增/删除列复用既有生成逻辑，类型/可空性/默认值变更按方言生成 ALTER 语句：
+    /// - Postgres/DuckDb：`ALTER TABLE t ALTER COLUMN c TYPE ... / SET NOT NULL / ...`
+    /// - MySQL：类型变更用 `MODIFY COLUMN`，默认值用 `ALTER COLUMN c SET/DROP DEFAULT`
+    /// - SQLite：不支持 `ALTER COLUMN`，与 `generate_drop_column_sql` 一致输出说明注释
+    pub fn generate_alter_column_sql(
+        &self,
+        table_name: &str,
+        change: &ColumnChange,
+    ) -> Result<String, String> {
+        match change {
+            // 新增/删除列直接复用既有生成逻辑
+            ColumnChange::AddColumn(column) => self.generate_add_column_sql(table_name, column),
+            ColumnChange::RemoveColumn { column_name } => {
+                self.generate_drop_column_sql(table_name, column_name)
+            }
+            ColumnChange::RenameColumn { old_name, new_name } => {
+                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+                let validated_old_name = validate_sql_identifier(old_name, "列名")?;
+                let validated_new_name = validate_sql_identifier(new_name, "新列名")?;
+
+                match self.db_type {
+                    DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
+                        "Graph databases do not support relational ALTER TABLE operations"
+                            .to_string(),
+                    ),
+                    _ => Ok(format!(
+                        "ALTER TABLE {} RENAME COLUMN {} TO {};",
+                        validated_table_name, validated_old_name, validated_new_name
+                    )),
+                }
+            }
+            ColumnChange::ModifyColumn {
+                column_name,
+                new_column,
+            } => {
+                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+
+                match self.db_type {
+                    // MySQL 的 MODIFY COLUMN 需要完整列定义，复用列定义生成
+                    DatabaseType::MySql => {
+                        let col_def = self.generate_column_definition(new_column, &Vec::new())?;
+                        Ok(format!(
+                            "ALTER TABLE {} MODIFY COLUMN {};",
+                            validated_table_name,
+                            col_def.trim_start_matches("    ")
+                        ))
+                    }
+                    DatabaseType::Postgres | DatabaseType::DuckDb => {
+                        let mut sql = format!(
+                            "ALTER TABLE {} ALTER COLUMN {} TYPE {};",
+                            validated_table_name,
+                            validated_column_name,
+                            new_column.column_type.to_sql(self.db_type)
+                        );
+                        sql.push_str(&format!(
+                            "\nALTER TABLE {} ALTER COLUMN {} {};",
+                            validated_table_name,
+                            validated_column_name,
+                            if new_column.is_nullable {
+                                "DROP NOT NULL"
+                            } else {
+                                "SET NOT NULL"
+                            }
+                        ));
+                        if let Some(default) = &new_column.default_value {
+                            sql.push_str(&format!(
+                                "\nALTER TABLE {} ALTER COLUMN {} SET DEFAULT {};",
+                                validated_table_name,
+                                validated_column_name,
+                                sanitize_default_value(default)
+                            ));
+                        }
+                        Ok(sql)
+                    }
+                    DatabaseType::Sqlite => {
+                        // SQLite 不支持 ALTER COLUMN，需要重建表
+                        Ok(format!(
+                            "-- SQLite 不支持修改列定义，请手动重建表 {} 以调整列 {}",
+                            validated_table_name, validated_column_name
+                        ))
+                    }
+                    DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
+                        "Graph databases do not support relational ALTER TABLE operations"
+                            .to_string(),
+                    ),
+                }
+            }
+            ColumnChange::TypeChanged {
+                column_name,
+                new_type,
+                ..
+            } => {
+                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+
+                match self.db_type {
+                    DatabaseType::Postgres | DatabaseType::DuckDb => Ok(format!(
+                        "ALTER TABLE {} ALTER COLUMN {} TYPE {};",
+                        validated_table_name,
+                        validated_column_name,
+                        new_type.to_sql(self.db_type)
+                    )),
+                    DatabaseType::MySql => Ok(format!(
+                        "ALTER TABLE {} MODIFY COLUMN {} {};",
+                        validated_table_name,
+                        validated_column_name,
+                        new_type.to_sql(self.db_type)
+                    )),
+                    DatabaseType::Sqlite => {
+                        // SQLite 不支持 ALTER COLUMN，需要重建表
+                        Ok(format!(
+                            "-- SQLite 不支持修改列类型，请手动重建表 {} 以调整列 {} 的类型",
+                            validated_table_name, validated_column_name
+                        ))
+                    }
+                    DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
+                        "Graph databases do not support relational ALTER TABLE operations"
+                            .to_string(),
+                    ),
+                }
+            }
+            ColumnChange::NullabilityChanged {
+                column_name,
+                new_nullable,
+                ..
+            } => {
+                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+
+                match self.db_type {
+                    DatabaseType::Postgres | DatabaseType::DuckDb => Ok(format!(
+                        "ALTER TABLE {} ALTER COLUMN {} {};",
+                        validated_table_name,
+                        validated_column_name,
+                        if *new_nullable {
+                            "DROP NOT NULL"
+                        } else {
+                            "SET NOT NULL"
+                        }
+                    )),
+                    // MySQL 修改可空性必须走 MODIFY COLUMN 且需要完整列定义，
+                    // 而 NullabilityChanged 不携带列类型，无法生成合法 SQL，输出说明注释
+                    DatabaseType::MySql | DatabaseType::Sqlite => Ok(format!(
+                        "-- {} 不支持直接修改列可空性，请手动重建表 {} 以调整列 {} 的 NOT NULL 约束",
+                        if matches!(self.db_type, DatabaseType::MySql) {
+                            "MySQL"
+                        } else {
+                            "SQLite"
+                        },
+                        validated_table_name,
+                        validated_column_name
+                    )),
+                    DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
+                        "Graph databases do not support relational ALTER TABLE operations"
+                            .to_string(),
+                    ),
+                }
+            }
+            ColumnChange::DefaultChanged {
+                column_name,
+                new_default,
+                ..
+            } => {
+                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+
+                match self.db_type {
+                    // MySQL 支持 `ALTER COLUMN c SET/DROP DEFAULT`，无需完整列定义
+                    DatabaseType::MySql | DatabaseType::Postgres | DatabaseType::DuckDb => {
+                        match new_default {
+                            Some(default) => Ok(format!(
+                                "ALTER TABLE {} ALTER COLUMN {} SET DEFAULT {};",
+                                validated_table_name,
+                                validated_column_name,
+                                sanitize_default_value(default)
+                            )),
+                            None => Ok(format!(
+                                "ALTER TABLE {} ALTER COLUMN {} DROP DEFAULT;",
+                                validated_table_name, validated_column_name
+                            )),
+                        }
+                    }
+                    DatabaseType::Sqlite => {
+                        // SQLite 不支持 ALTER COLUMN，需要重建表
+                        Ok(format!(
+                            "-- SQLite 不支持修改列默认值，请手动重建表 {} 以调整列 {} 的默认值",
+                            validated_table_name, validated_column_name
+                        ))
+                    }
+                    DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
+                        "Graph databases do not support relational ALTER TABLE operations"
+                            .to_string(),
+                    ),
+                }
+            }
+        }
+    }
+
     /// 生成迁移的完整 SQL
     pub fn generate_migration_sql(&self, migration: &Migration) -> Result<String, String> {
         let mut sql = String::new();
@@ -618,15 +819,21 @@ impl SqlGenerator {
                 }
                 TableChange::AlterTable {
                     table_name,
+                    column_changes,
                     added_columns,
                     removed_columns,
                     added_indexes,
                     removed_indexes,
                     added_foreign_keys,
                     removed_foreign_keys,
-                    ..
                 } => {
                     sql.push_str(&format!("-- 修改表: {}\n", table_name));
+
+                    // 列变更（类型/可空性/默认值等），此前被 `..` 丢弃导致从不生成 SQL
+                    for change in column_changes {
+                        sql.push_str(&self.generate_alter_column_sql(table_name, change)?);
+                        sql.push('\n');
+                    }
 
                     for col in added_columns {
                         sql.push_str(&format!("-- 添加列: {}\n", col.name));
@@ -1570,6 +1777,227 @@ mod tests {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
         let result = pg.generate_drop_column_sql("1invalid", "age");
         assert!(result.is_err());
+    }
+
+    // ===== generate_alter_column_sql 测试 =====
+
+    #[test]
+    fn test_generate_alter_column_sql_type_changed_postgres() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let change = ColumnChange::TypeChanged {
+            column_name: "age".to_string(),
+            old_type: ColumnType::Integer,
+            new_type: ColumnType::BigInteger,
+        };
+        let sql = pg
+            .generate_alter_column_sql("users", &change)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ALTER COLUMN age TYPE BIGINT;");
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_type_changed_mysql() {
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let change = ColumnChange::TypeChanged {
+            column_name: "age".to_string(),
+            old_type: ColumnType::Integer,
+            new_type: ColumnType::BigInteger,
+        };
+        let sql = mysql
+            .generate_alter_column_sql("users", &change)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users MODIFY COLUMN age BIGINT;");
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_type_changed_sqlite_comment() {
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
+        let change = ColumnChange::TypeChanged {
+            column_name: "age".to_string(),
+            old_type: ColumnType::Integer,
+            new_type: ColumnType::BigInteger,
+        };
+        let sql = sqlite
+            .generate_alter_column_sql("users", &change)
+            .expect("SQL generation failed");
+        // SQLite 不支持 ALTER COLUMN，输出说明注释而非非法 SQL
+        assert!(sql.contains("-- SQLite 不支持修改列类型"));
+        assert!(sql.contains("age"));
+        assert!(!sql.contains("ALTER TABLE"));
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_nullability_changed_postgres() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+
+        let set_not_null = ColumnChange::NullabilityChanged {
+            column_name: "name".to_string(),
+            old_nullable: true,
+            new_nullable: false,
+        };
+        let sql = pg
+            .generate_alter_column_sql("users", &set_not_null)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ALTER COLUMN name SET NOT NULL;");
+
+        let drop_not_null = ColumnChange::NullabilityChanged {
+            column_name: "name".to_string(),
+            old_nullable: false,
+            new_nullable: true,
+        };
+        let sql = pg
+            .generate_alter_column_sql("users", &drop_not_null)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ALTER COLUMN name DROP NOT NULL;");
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_nullability_changed_mysql_comment() {
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let change = ColumnChange::NullabilityChanged {
+            column_name: "name".to_string(),
+            old_nullable: true,
+            new_nullable: false,
+        };
+        let sql = mysql
+            .generate_alter_column_sql("users", &change)
+            .expect("SQL generation failed");
+        // MySQL 需要完整列定义（MODIFY COLUMN），此处输出说明注释
+        assert!(sql.contains("-- MySQL 不支持直接修改列可空性"));
+        assert!(sql.contains("name"));
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_default_changed_postgres() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+
+        let set_default = ColumnChange::DefaultChanged {
+            column_name: "status".to_string(),
+            old_default: Some("0".to_string()),
+            new_default: Some("1".to_string()),
+        };
+        let sql = pg
+            .generate_alter_column_sql("users", &set_default)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ALTER COLUMN status SET DEFAULT 1;");
+
+        let drop_default = ColumnChange::DefaultChanged {
+            column_name: "status".to_string(),
+            old_default: Some("0".to_string()),
+            new_default: None,
+        };
+        let sql = pg
+            .generate_alter_column_sql("users", &drop_default)
+            .expect("SQL generation failed");
+        assert_eq!(sql, "ALTER TABLE users ALTER COLUMN status DROP DEFAULT;");
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_default_changed_mysql() {
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let set_default = ColumnChange::DefaultChanged {
+            column_name: "status".to_string(),
+            old_default: None,
+            new_default: Some("active".to_string()),
+        };
+        let sql = mysql
+            .generate_alter_column_sql("users", &set_default)
+            .expect("SQL generation failed");
+        // 普通字符串默认值应被加上引号
+        assert_eq!(
+            sql,
+            "ALTER TABLE users ALTER COLUMN status SET DEFAULT 'active';"
+        );
+    }
+
+    #[test]
+    fn test_generate_alter_column_sql_invalid_column_name() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let change = ColumnChange::TypeChanged {
+            column_name: "invalid-col".to_string(),
+            old_type: ColumnType::Integer,
+            new_type: ColumnType::BigInteger,
+        };
+        let result = pg.generate_alter_column_sql("users", &change);
+        assert!(result.is_err());
+    }
+
+    // ===== generate_migration_sql 中列变更的端到端测试 =====
+
+    /// 纯列变更（无新增/删除列等）时也应生成 ALTER SQL，而不是空 SQL
+    #[test]
+    fn test_generate_migration_sql_column_changes_only() {
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let mut migration = Migration::new(1, "alter users".to_string());
+        migration.add_table_change(TableChange::AlterTable {
+            table_name: "users".to_string(),
+            column_changes: vec![
+                ColumnChange::TypeChanged {
+                    column_name: "age".to_string(),
+                    old_type: ColumnType::Integer,
+                    new_type: ColumnType::BigInteger,
+                },
+                ColumnChange::NullabilityChanged {
+                    column_name: "name".to_string(),
+                    old_nullable: true,
+                    new_nullable: false,
+                },
+                ColumnChange::DefaultChanged {
+                    column_name: "status".to_string(),
+                    old_default: None,
+                    new_default: Some("1".to_string()),
+                },
+            ],
+            added_columns: vec![],
+            removed_columns: vec![],
+            added_indexes: vec![],
+            removed_indexes: vec![],
+            added_foreign_keys: vec![],
+            removed_foreign_keys: vec![],
+        });
+
+        let sql = pg
+            .generate_migration_sql(&migration)
+            .expect("SQL generation failed");
+        assert!(!sql.trim().is_empty(), "纯列变更不应产出空 SQL");
+        assert!(sql.contains("-- 修改表: users"));
+        assert!(sql.contains("ALTER TABLE users ALTER COLUMN age TYPE BIGINT;"));
+        assert!(sql.contains("ALTER TABLE users ALTER COLUMN name SET NOT NULL;"));
+        assert!(sql.contains("ALTER TABLE users ALTER COLUMN status SET DEFAULT 1;"));
+    }
+
+    /// diff 出的三种列变更经 generate_migration_sql 各自生成正确 SQL
+    #[test]
+    fn test_diff_column_changes_generate_sql() {
+        let old_table = make_table(
+            "users",
+            vec![
+                make_column("age", ColumnType::Integer, true, None),
+                make_column("status", ColumnType::Integer, false, Some("0")),
+            ],
+        );
+        let new_table = make_table(
+            "users",
+            vec![
+                make_column("age", ColumnType::BigInteger, true, None),
+                make_column("status", ColumnType::Integer, false, Some("1")),
+            ],
+        );
+        let mut old_schema = Schema::new(DatabaseType::Postgres);
+        let mut new_schema = Schema::new(DatabaseType::Postgres);
+        old_schema.add_table(old_table);
+        new_schema.add_table(new_table);
+
+        let differ = SchemaDiffer::new(old_schema, new_schema);
+        let migrations = differ.diff();
+        assert_eq!(migrations.len(), 1);
+
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        let sql = pg
+            .generate_migration_sql(&migrations[0])
+            .expect("SQL generation failed");
+        assert!(sql.contains("ALTER TABLE users ALTER COLUMN age TYPE BIGINT;"));
+        assert!(sql.contains("ALTER TABLE users ALTER COLUMN status SET DEFAULT 1;"));
     }
 
     #[test]

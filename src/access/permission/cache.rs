@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 
 use super::provider::PermissionProvider;
 use super::types::RolePolicy;
@@ -103,6 +103,32 @@ impl std::fmt::Debug for PermissionCache {
 impl Default for PermissionCache {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 原子节流占位：检查 `key` 距上次刷新是否已超过 `interval`。
+///
+/// 通过 `DashMap::entry` 持有分片写锁完成"检查 + 占位"（通过则立即写入当前时间），
+/// 消除 check-then-act 竞态——并发调用只允许一个调用方通过并执行刷新。
+/// 占位时间戳即刷新发起时刻，与既有语义一致（节流窗口从刷新发起起算；
+/// 刷新失败不回滚，成功后由 `insert` 更新条目时间戳）。
+fn try_reserve_refresh(
+    last_refresh: &DashMap<String, Instant>,
+    key: &str,
+    interval: Duration,
+) -> bool {
+    match last_refresh.entry(key.to_string()) {
+        Entry::Occupied(mut occupied) => {
+            if occupied.get().elapsed() < interval {
+                return false;
+            }
+            *occupied.get_mut() = Instant::now();
+            true
+        }
+        Entry::Vacant(vacant) => {
+            vacant.insert(Instant::now());
+            true
+        }
     }
 }
 
@@ -219,13 +245,10 @@ impl PermissionCache {
     /// 使用 `refresh_interval` 节流，防止短时间内重复刷新。
     /// 刷新失败时保留旧值并记录 warn 日志。
     pub async fn refresh(&self, key: &str) {
-        // 节流：检查上次刷新时间
-        if let Some(last) = self.last_refresh.get(key)
-            && last.elapsed() < self.config.refresh_interval
-        {
+        // 节流：原子"检查并占位"，避免 check-then-act 竞态导致并发重复刷新
+        if !try_reserve_refresh(&self.last_refresh, key, self.config.refresh_interval) {
             return;
         }
-        self.last_refresh.insert(key.to_string(), Instant::now());
 
         let provider = match &self.provider {
             Some(p) => p.clone(),
@@ -251,20 +274,18 @@ impl PermissionCache {
         if self.provider.is_none() {
             return;
         }
-        // 节流检查
-        if let Some(last) = self.last_refresh.get(key)
-            && last.elapsed() < self.config.refresh_interval
-        {
+        // 节流 + 占位必须在调用线程内（spawn 之前）原子完成：
+        // 若 insert 延迟到 spawn 的任务内，并发的 get 在占位写入前仍会通过节流检查，
+        // 造成重复派生后台任务
+        if !try_reserve_refresh(&self.last_refresh, key, self.config.refresh_interval) {
             return;
         }
         let key_owned = key.to_string();
         let provider = self.provider.clone().unwrap();
         // Arc<DashMap> clone 是廉价的引用计数，spawn 任务写入会反映到原 cache
         let inner = self.inner.clone();
-        let last_refresh = self.last_refresh.clone();
 
         tokio::spawn(async move {
-            last_refresh.insert(key_owned.clone(), Instant::now());
             match provider.get_role_policy(&key_owned) {
                 Some(new_policy) => {
                     let entry = CacheEntry {
@@ -299,6 +320,9 @@ impl Clone for PermissionCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::access::permission::PermissionProviderError;
     use crate::access::{PermissionAction, TablePermission};
 
     fn sample_policy(table: &str) -> RolePolicy {
@@ -368,5 +392,248 @@ mod tests {
         assert!(cache.get("a").is_none());
         cache.clear();
         assert!(cache.is_empty());
+    }
+
+    /// 计数 provider：统计 get_role_policy 调用次数，并阻塞一段时间
+    /// 放大并发窗口（模拟慢 provider）
+    struct CountingProvider {
+        calls: AtomicUsize,
+        /// provider 内部阻塞时长（放大竞态窗口 / 模拟慢源）
+        delay: Duration,
+    }
+
+    impl CountingProvider {
+        fn new() -> Self {
+            Self::with_delay(Duration::from_millis(50))
+        }
+
+        fn with_delay(delay: Duration) -> Self {
+            Self {
+                calls: AtomicUsize::new(0),
+                delay,
+            }
+        }
+    }
+
+    impl PermissionProvider for CountingProvider {
+        fn get_role_policy(&self, _role: &str) -> Option<RolePolicy> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(self.delay);
+            Some(sample_policy("users"))
+        }
+
+        fn check_access(
+            &self,
+            role: &str,
+            table: &str,
+            operation: PermissionAction,
+        ) -> Result<bool, PermissionProviderError> {
+            Ok(self.get_role_policy(role).is_some_and(|p| {
+                p.tables
+                    .iter()
+                    .any(|t| t.name == table && t.operations.contains(&operation))
+            }))
+        }
+
+        fn get_roles(&self) -> Vec<String> {
+            vec!["admin".to_string()]
+        }
+    }
+
+    /// 节流占位必须原子：并发 refresh 同一 key 时 provider 只应被调用 1 次
+    /// （未修复的 check-then-act 竞态下 8 个并发都会通过节流检查）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_concurrent_refresh_single_provider_call() {
+        let provider = Arc::new(CountingProvider::new());
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(1))
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_provider(provider.clone());
+        cache.insert("admin", sample_policy("users"));
+        // 等待条目过期，使 refresh 走完整刷新路径
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let cache = cache.clone();
+            handles.push(tokio::spawn(async move {
+                cache.refresh("admin").await;
+            }));
+        }
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// maybe_spawn_refresh 的占位必须在 spawn 前由调用线程写入：
+    /// 并发 get 过期 key 只应派生一次后台刷新
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_concurrent_get_single_background_refresh() {
+        let provider = Arc::new(CountingProvider::new());
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(1))
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_stale_while_revalidate(true)
+            .with_provider(provider.clone());
+        cache.insert("admin", sample_policy("users"));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let cache = cache.clone();
+            handles.push(tokio::spawn(async move {
+                let _ = cache.get("admin");
+            }));
+        }
+        for h in handles {
+            h.await.unwrap();
+        }
+        // 等待后台刷新任务执行完毕
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    }
+
+    // =========================================================================
+    // 强同步并发回归测试（Barrier 多轮竞速版）
+    //
+    // 上面两个普通并发测试的任务各自独立 spawn，抵达节流检查的时间点分散，
+    // 竞态窗口（纳秒到微秒级）难以命中——盲审实证：把实现改回 check-then-act
+    // 后二者依然通过，回归保护力不足。以下测试改用 `tokio::sync::Barrier`
+    // 强同步 + 多轮独立竞速：
+    //
+    // - Barrier + 倒计数锁步放行：16 个任务先在 Barrier 汇合，再经原子倒
+    //   计数（race_start）近似同时起跑，把"检查 → 占位"窗口重叠到同一时刻；
+    //   worker_threads = 16 保证竞速时每个任务独占线程（真实并行）；
+    // - 多轮：每轮开始前 `invalidate` 清空节流时间戳，重开一个互相独立的
+    //   竞态窗口。单轮能否命中取决于线程唤醒抖动（概率事件），多轮累积后
+    //   回退到非原子 check-then-act 的实现会被稳定捕获（自证实验：回退后
+    //   refresh 版测试连续 8/8 FAILED，每轮多穿透 1-8 次 provider 调用）；
+    // - provider 内部 sleep 数十毫秒放大窗口：一旦多个竞速者同时穿透节流，
+    //   重复的 provider 调用会被 AtomicUsize 计数捕获。
+    //
+    // 断言：provider 恰好每轮被调用 1 次（原子占位下每轮确定恰好 1 次穿透，
+    // 连续 10 次运行无假阳性）。
+    //
+    // 原有两个普通并发测试保留：它们覆盖常规 spawn 并发下的端到端行为，
+    // 与 Barrier 版的"竞态探测器"定位互补。
+    // =========================================================================
+
+    /// 竞速任务数（与 worker_threads 相同，保证放行时全员并行）
+    const RACE_TASKS: usize = 16;
+    /// 独立竞速轮数（单轮命中是概率事件，多轮累积保证稳定检出）
+    const RACE_ROUNDS: usize = 24;
+
+    /// 竞速起跑线：Barrier 负责全员汇合，但 futex 唤醒有微秒级抖动，
+    /// 不足以命中纳秒级竞态窗口。汇合后各任务对原子倒计数做 fetch_sub
+    /// 并等待归零——最后一个减到 0 的任务立即起跑，其余任务在一个缓存行
+    /// 传播周期内观察到 0 并同时起跑，实现近似锁步放行。
+    ///
+    /// 等待采用"短自旋 + yield"混合：纯自旋会阻塞 worker 线程，若同一线程
+    /// 的任务队列中还有未 poll 的竞速者，会使其永远无法运行（倒计数无法
+    /// 归零）导致死锁；短自旋保证计数临近归零时纳秒级起跑，兜底 yield
+    /// 保证饿死不可能发生。
+    async fn race_start(barrier: &tokio::sync::Barrier, latch: &AtomicUsize) {
+        barrier.wait().await;
+        latch.fetch_sub(1, Ordering::AcqRel);
+        while latch.load(Ordering::Acquire) != 0 {
+            for _ in 0..4096 {
+                std::hint::spin_loop();
+                if latch.load(Ordering::Acquire) == 0 {
+                    return;
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+
+    /// 强同步并发 refresh：每轮 Barrier 汇合 + 原子倒计数锁步放行后，
+    /// RACE_TASKS 个任务同时调用 refresh，节流占位必须原子——
+    /// 每轮 provider 只应被调用 1 次
+    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    async fn test_barrier_refresh_racers_single_provider_call() {
+        // 20ms/轮 × 16 轮：控制测试耗时的同时保留"数十毫秒级"窗口放大
+        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
+        let cache = PermissionCache::new()
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_provider(provider.clone());
+
+        // refresh 不依赖缓存条目，每轮清空节流表即可重开竞态窗口
+        let barrier = Arc::new(tokio::sync::Barrier::new(RACE_TASKS));
+        for _ in 0..RACE_ROUNDS {
+            cache.invalidate("admin");
+            let latch = Arc::new(AtomicUsize::new(RACE_TASKS));
+            let mut handles = Vec::with_capacity(RACE_TASKS);
+            for _ in 0..RACE_TASKS {
+                let cache = cache.clone();
+                let barrier = barrier.clone();
+                let latch = latch.clone();
+                handles.push(tokio::spawn(async move {
+                    race_start(&barrier, &latch).await;
+                    cache.refresh("admin").await;
+                }));
+            }
+            for h in handles {
+                h.await.unwrap();
+            }
+        }
+
+        assert_eq!(
+            provider.calls.load(Ordering::SeqCst),
+            RACE_ROUNDS,
+            "锁步放行后每轮并发 refresh 仍只允许 1 次 provider 调用"
+        );
+    }
+
+    /// 强同步 refresh/get 混合路径：两条刷新路径共享同一 last_refresh 节流表，
+    /// 每轮锁步放行后同时触发，总 provider 调用次数（含后台刷新）每轮仍应为 1
+    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    async fn test_barrier_mixed_refresh_and_get_single_provider_call() {
+        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(1))
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_stale_while_revalidate(true)
+            .with_provider(provider.clone());
+
+        let barrier = Arc::new(tokio::sync::Barrier::new(RACE_TASKS));
+        for _ in 0..RACE_ROUNDS {
+            // invalidate 同时清空条目与节流表，隔离上一轮（含后台任务）的写入
+            cache.invalidate("admin");
+            cache.insert("admin", sample_policy("users"));
+            // 等待条目过期（ttl = 1ms），使 get 走 maybe_spawn_refresh 后台路径
+            tokio::time::sleep(Duration::from_millis(3)).await;
+
+            let latch = Arc::new(AtomicUsize::new(RACE_TASKS));
+            let mut handles = Vec::with_capacity(RACE_TASKS);
+            for i in 0..RACE_TASKS {
+                let cache = cache.clone();
+                let barrier = barrier.clone();
+                let latch = latch.clone();
+                handles.push(tokio::spawn(async move {
+                    race_start(&barrier, &latch).await;
+                    if i % 2 == 0 {
+                        // 偶数任务走显式 refresh 路径
+                        cache.refresh("admin").await;
+                    } else {
+                        // 奇数任务走 get 过期 key → maybe_spawn_refresh 后台路径
+                        let _ = cache.get("admin");
+                    }
+                }));
+            }
+            for h in handles {
+                h.await.unwrap();
+            }
+        }
+        // 等待最后一轮 get 派生的后台刷新任务执行完毕（provider 内部 sleep 20ms）
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(
+            provider.calls.load(Ordering::SeqCst),
+            RACE_ROUNDS,
+            "refresh 与 get 两条路径并发时每轮仍只允许 1 次 provider 调用"
+        );
     }
 }
