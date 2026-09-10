@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0-rc.2"
+version = "0.6.0-rc.3"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky.X"]
@@ -127,15 +127,15 @@ permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限�
 # 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization"]
 macros = ["dbnexus-macros"]
-cache = ["dep:oxcache"]  # 缓存功能（基于 oxcache）
+cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
 # trait-kit 0.4 AsyncKit integration (DbNexusModule). Pulls in trait-kit
 # with the `async` feature only — default features are disabled (Rule 6).
 # `oxcache-integration` enables the OxcacheDbCacheAdapter; `kit` adds the
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
-oxcache-integration = ["dep:oxcache"]
-kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", ]
+oxcache-integration = ["dep:oxcache", "arc-swap"]
+kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
@@ -255,11 +255,11 @@ arc-swap = { version = "1.7", optional = true }
 # Lock-free connection pool queue (crossbeam-deque)
 crossbeam-deque = { version = "0.8", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
-oxcache = { version = "0.5.0-rc.2", optional = true }
+oxcache = { version = "0.5.0-rc.4", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern (Phase 2/3 of trait-kit-async-integration).
-trait-kit = { version = "0.5.0-rc.2", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.3", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.1", optional = true, features = ["bundled"] }
@@ -731,6 +731,13 @@ name = "e2e_distributed"
 path = "tests/e2e/e2e_distributed.rs"
 required-features = ["sqlite", "runtime-tokio-rustls"]
 
+# Kit feature gate — 验证 `kit` feature 拉入 `trait-kit/observer` 后
+# `DbNexusBuildObserver` 可用且 AsyncKit 构建管线正常计数
+[[test]]
+name = "kit_feature_gate"
+path = "tests/kit_feature_gate.rs"
+required-features = ["kit", "sqlite", "runtime-tokio-rustls"]
+
 [dev-dependencies.testcontainers]
 version = "0.28"
 
@@ -752,3 +759,10 @@ strip = true
 
 [profile.bench]
 inherits = "release"
+
+# ============================================================================
+# Local development patches (rc3 hardening)
+# ============================================================================
+[patch.crates-io]
+oxcache = { path = "../oxcache" }
+trait-kit = { path = "../trait-kit" }

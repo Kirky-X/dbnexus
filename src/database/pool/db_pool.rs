@@ -7,7 +7,7 @@
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
 use crate::i18n;
-#[cfg(feature = "permission")]
+#[cfg(any(feature = "permission", feature = "cache", feature = "oxcache-integration"))]
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
@@ -170,9 +170,6 @@ impl std::fmt::Debug for DbConnection {
 pub struct DbPool {
     /// 内部连接池
     inner: Arc<DbPoolInner>,
-    /// 缓存提供者（DI 注入点，feature-gated behind `cache` or `oxcache-integration`）
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-    cache_provider: Option<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 }
 
 pub(crate) struct DbPoolInner {
@@ -223,6 +220,10 @@ pub(crate) struct DbPoolInner {
 
     /// 最大活跃连接数
     pub(super) max_active: AtomicU32,
+
+    /// 缓存提供者（DI 注入点，ArcSwapOption 无锁读取 — COW 模式）
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    pub(crate) cache_provider: ArcSwapOption<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 }
 
 impl DbPoolInner {
@@ -299,15 +300,19 @@ impl DbPool {
         &mut self,
         provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>,
     ) {
-        self.cache_provider = Some(provider);
+        // ArcSwapOption::store 原子替换，无锁且线程安全。
+        // Session 持有的 Arc<DbPoolInner> 读端通过 load() 自动看到最新值。
+        self.inner.cache_provider.store(Some(Arc::new(provider)));
     }
 
     /// 获取缓存提供者引用
     ///
     /// 返回当前注入的缓存提供者，如果未注入则返回 `None`。
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-    pub fn cache_provider(&self) -> Option<&Arc<dyn crate::domain::DbCacheProvider + Send + Sync>> {
-        self.cache_provider.as_ref()
+    pub fn cache_provider(
+        &self,
+    ) -> Option<Arc<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>> {
+        self.inner.cache_provider.load().clone()
     }
 
     /// 创建新的连接池
@@ -378,9 +383,9 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
+                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                cache_provider: ArcSwapOption::new(None),
             }),
-            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-            cache_provider: None,
         };
 
         // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
@@ -470,9 +475,9 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
+                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                cache_provider: ArcSwapOption::new(None),
             }),
-            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-            cache_provider: None,
         };
 
         // 安全审计：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
@@ -590,9 +595,9 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
+                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                cache_provider: ArcSwapOption::new(None),
             }),
-            #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
-            cache_provider: None,
         })
     }
 
@@ -2254,6 +2259,85 @@ mod tests {
 
         // Now cache provider should be Some (covers lines 319-320)
         assert!(pool.cache_provider().is_some());
+    }
+
+    /// T032：未注入 cache_provider 时，query_cache_get 返回 None（直通）。
+    #[cfg(all(
+        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "sqlite"
+    ))]
+    #[tokio::test]
+    async fn test_query_cache_miss_without_provider() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("session");
+        // No cache_provider injected → query_cache_get returns None
+        let result = session.query_cache_get("any_key").await;
+        assert!(result.is_none(), "expected None without cache_provider");
+    }
+
+    /// T032：注入 cache_provider 后，query_cache_set 存储数据并可经 query_cache_get 命中。
+    #[cfg(all(
+        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "sqlite"
+    ))]
+    #[tokio::test]
+    async fn test_query_cache_hit_with_provider() {
+        use std::future::Future;
+        use std::pin::Pin;
+        use std::collections::HashMap;
+        use std::sync::Mutex as StdMutex;
+
+        /// In-memory DbCacheProvider for testing.
+        struct MemCacheProvider {
+            data: StdMutex<HashMap<String, Vec<u8>>>,
+        }
+        impl crate::domain::DbCacheProvider for MemCacheProvider {
+            fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, crate::foundation::DbError>> + Send + 'a>> {
+                Box::pin(async move {
+                    let data = self.data.lock().unwrap();
+                    Ok(data.get(key).cloned())
+                })
+            }
+            fn set<'a>(&'a self, key: &'a str, value: Vec<u8>, _ttl: Option<std::time::Duration>) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>> {
+                Box::pin(async move {
+                    let mut data = self.data.lock().unwrap();
+                    data.insert(key.to_string(), value);
+                    Ok(())
+                })
+            }
+            fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>> {
+                Box::pin(async move {
+                    let mut data = self.data.lock().unwrap();
+                    data.remove(key);
+                    Ok(())
+                })
+            }
+        }
+
+        let mut pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let provider = Arc::new(MemCacheProvider {
+            data: StdMutex::new(HashMap::new()),
+        });
+        pool.set_cache_provider(provider);
+
+        let session = pool
+            .get_session("admin")
+            .await
+            .expect("session");
+
+        // Cache miss initially
+        let miss = session.query_cache_get("select:users").await;
+        assert!(miss.is_none(), "expected cache miss initially");
+
+        // Store a value
+        session.query_cache_set("select:users", b"cached_result".to_vec()).await;
+
+        // Cache hit
+        let hit = session.query_cache_get("select:users").await;
+        assert_eq!(hit, Some(b"cached_result".to_vec()), "expected cache hit");
     }
 
     #[cfg(all(feature = "permission", feature = "sqlite"))]

@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. 使用 Refresh Token 刷新 Access Token
     // ============================================
     println!("\n--- 刷新 Access Token ---");
-    let new_access_token = manager.refresh_access_token(&refresh_token)?;
+    let new_access_token = manager.refresh_access_token(&refresh_token).await?;
     println!("  ✓ 使用 refresh token 生成新的 access token");
     println!(
         "    新 token (前 40 字符): {}...",
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 使用 access token 尝试刷新（应失败，因为不是 refresh token）
-    let wrong_refresh = manager.refresh_access_token(&access_token);
+    let wrong_refresh = manager.refresh_access_token(&access_token).await;
     match &wrong_refresh {
         Err(AuthError::InvalidToken) => {
             println!("  ✓ 用 access token 刷新被正确拒绝: InvalidToken");

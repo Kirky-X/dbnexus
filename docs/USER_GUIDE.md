@@ -896,7 +896,7 @@ API 说明：
 - `manager.register_user(username, password, role) -> AuthResult<()>` — 注册用户（async，含密码强度校验和哈希）
 - `manager.authenticate(credentials: AuthCredentials) -> AuthResult<String>` — 验证凭据并生成 JWT（async）
 - `manager.verify_token(token: &str) -> AuthResult<JwtClaims>` — 验证 JWT（同步方法）
-- `manager.refresh_token(refresh_token: &str) -> AuthResult<String>` — 刷新访问令牌
+- `manager.refresh_token(refresh_token: &str) -> AuthResult<String>` — 刷新访问令牌（async）
 
 关联类型：`AuthCredentials`（字段：`username`、`password`）、`JwtClaims`（字段：`sub`、`username`、`role`、`exp`、`iat`、`token_type`）。
 

@@ -545,6 +545,10 @@ impl Session {
                 }
             }
 
+            // T031：慢查询检测——在查询执行前记录起始时间
+            #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+            let query_start = std::time::Instant::now();
+
             // v0.3.0 性能优化：短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
             let tx_opt: Option<Arc<DatabaseTransaction>> = {
                 let state = self.state.write().await;
@@ -575,26 +579,39 @@ impl Session {
                                 .map_err(DbError::Connection)
                         };
                         match result {
-                            Ok(exec_result) => return Ok(exec_result),
+                            Ok(exec_result) => {
+                                // T031：记录查询指标（含慢查询检测）
+                                #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+                                self.record_execute_metrics(query_start, true);
+                                return Ok(exec_result);
+                            }
                             Err(e) => last_error = Some(e),
                         }
                     }
+                    // T031：重试耗尽，记录失败
+                    #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+                    self.record_execute_metrics(query_start, false);
                     return Err(last_error.unwrap());
                 }
             }
 
             // 无重试路径（retry 未启用或非幂等操作）
-            if let Some(tx) = tx_opt {
-                return tx
-                    .execute_unprepared(sql)
+            let result = if let Some(tx) = tx_opt {
+                tx.execute_unprepared(sql)
                     .await
-                    .map_err(DbError::Connection);
-            }
+                    .map_err(DbError::Connection)
+            } else {
+                let conn = self.connection()?;
+                conn.execute_unprepared(sql)
+                    .await
+                    .map_err(DbError::Connection)
+            };
 
-            let conn = self.connection()?;
-            conn.execute_unprepared(sql)
-                .await
-                .map_err(DbError::Connection)
+            // T031：记录查询指标（含慢查询检测）
+            #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+            self.record_execute_metrics(query_start, result.is_ok());
+
+            result
         }
     }
 
@@ -1425,6 +1442,45 @@ impl Session {
     #[cfg(all(not(feature = "metrics"), feature = "permission"))]
     fn record_query_metrics(&self, _query_type: &str, _duration: Duration, _success: bool) {
         // No-op when metrics feature is disabled
+    }
+
+    /// T031：记录 `execute_raw` 查询指标（含慢查询检测）。
+    ///
+    /// 将查询耗时经 `MetricsCollector::record_query` 录入指标收集器，
+    /// 内部自动比对 `SlowQueryConfig` 阈值并记录慢查询事件。
+    /// `metrics` feature 未启用时此方法不存在（零开销）。
+    #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+    fn record_execute_metrics(&self, start: std::time::Instant, success: bool) {
+        if let Some(metrics) = &self.metrics_collector {
+            metrics.record_query("execute_raw", start.elapsed(), success, None);
+        }
+    }
+
+    /// T032：查询缓存——检查 `cache_provider` 是否有缓存的查询结果。
+    ///
+    /// 返回 `Some(bytes)` 表示缓存命中，`None` 表示未命中。
+    /// 仅在 `cache`/`oxcache-integration` feature 启用且已注入 `cache_provider` 时有效。
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    pub async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>> {
+        // ArcSwapOption::load() 返回 Guard，clone 内部 Arc 后立即释放 Guard，
+        // 避免跨 .await 持有 Guard。
+        let provider = self.pool_inner.cache_provider.load().clone()?;
+        provider.get(key).await.ok().flatten()
+    }
+
+    /// T032：查询缓存——将查询结果存入 `cache_provider`。
+    ///
+    /// TTL 取自 `CacheConfig.default_ttl`。
+    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    pub async fn query_cache_set(&self, key: &str, value: Vec<u8>) {
+        let provider = match self.pool_inner.cache_provider.load().clone() {
+            Some(p) => p,
+            None => return,
+        };
+        let ttl = std::time::Duration::from_secs(
+            self.pool_inner.config.cache_config.default_ttl,
+        );
+        let _ = provider.set(key, value, Some(ttl)).await;
     }
 
     /// 记录查询指标并标记写操作

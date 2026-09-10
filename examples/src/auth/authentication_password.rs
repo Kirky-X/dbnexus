@@ -179,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let jwt_for_refresh = JwtManager::new(b"dbnexus-demo-secret-key-32bytes-ok!!")?;
     let refresh_token =
         jwt_for_refresh.generate_token("u_001", "alice", "admin", TokenType::Refresh)?;
-    let new_access = manager.refresh_token(&refresh_token)?;
+    let new_access = manager.refresh_token(&refresh_token).await?;
     println!("  ✓ 用 refresh token 换取新 access token");
     let new_claims = manager.verify_token(&new_access)?;
     println!(

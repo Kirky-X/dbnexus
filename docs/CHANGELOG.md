@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.3] - 2026-09-10
+
+### Added
+
+- **JWT 撤销 TTL 化**：`JwtManager` 支持可选 `DbCacheProvider` 分布式撤销缓存（`oxcache-integration` feature），撤销条目 TTL 等于令牌剩余有效期，本地 HashMap 保持同步快速路径
+- **慢查询检测接线**：`Session::execute_raw` 在所有返回路径前插入计时，超 `SlowQueryConfig` 阈值自动记录到 `MetricsCollector`
+- **缓存 DI 闭环**：`Session` 新增 `query_cache_get`/`query_cache_set` 方法，通过注入的 `DbCacheProvider` 驱动只读查询结果缓存；`cache_provider` 字段移入 `DbPoolInner` 并用 `ArcSwapOption` 无锁读取
+- **kit observer 修复**：`kit` feature 显式包含 `trait-kit/observer`；新增 `tests/kit_feature_gate.rs` 门控集成测试
+
+### Changed
+
+- **Saga 补偿不再静默**：补偿失败记录到 `SagaStepLog`，新增 `CompensationFailed` 终态，不再吞掉补偿错误
+- `cache_provider` 存储从 `Option<Arc<...>>` 改为 `ArcSwapOption<Arc<...>>`，消除 unsafe 写入（`#![forbid(unsafe_code)]` 兼容）
+- `arc-swap` 依赖扩展到 `cache` 和 `oxcache-integration` feature
+
+### Fixed
+
+- `verify_refresh_token` / `refresh_access_token` 改为 async，级联更新所有调用点（测试、示例、文档）
+
 ## [0.6.0-rc.2] - 2026-09-03
 
 ### BREAKING CHANGES

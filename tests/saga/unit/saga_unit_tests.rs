@@ -16,6 +16,8 @@ fn test_saga_status_equality() {
     assert_eq!(SagaStatus::Failed, SagaStatus::Failed);
     assert_ne!(SagaStatus::Running, SagaStatus::Completed);
     assert_ne!(SagaStatus::Failed, SagaStatus::Compensating);
+    assert_ne!(SagaStatus::Failed, SagaStatus::CompensationFailed);
+    assert_ne!(SagaStatus::CompensationFailed, SagaStatus::Failed);
 }
 
 #[test]

@@ -192,8 +192,8 @@ impl AuthenticationManager {
     }
 
     /// 刷新访问令牌
-    pub fn refresh_token(&self, refresh_token: &str) -> AuthResult<String> {
-        self.jwt_manager.refresh_access_token(refresh_token)
+    pub async fn refresh_token(&self, refresh_token: &str) -> AuthResult<String> {
+        self.jwt_manager.refresh_access_token(refresh_token).await
     }
 
     /// 获取用户信息

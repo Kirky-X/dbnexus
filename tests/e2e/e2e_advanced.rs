@@ -1211,6 +1211,7 @@ mod authentication_advanced {
 
         let new_access = mgr
             .refresh_token(&refresh_token)
+            .await
             .expect("refresh should succeed");
         let claims = mgr
             .verify_token(&new_access)

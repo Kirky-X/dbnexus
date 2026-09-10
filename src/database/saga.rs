@@ -101,8 +101,10 @@ pub enum SagaStatus {
     Completed,
     /// 正在补偿
     Compensating,
-    /// 已失败
+    /// 已失败（正向动作失败，补偿全部成功）
     Failed,
+    /// 补偿失败（正向动作失败且至少一个补偿操作也失败）
+    CompensationFailed,
 }
 
 /// 单步执行日志
@@ -266,6 +268,7 @@ impl SagaOrchestrator {
 
                         // 逆序补偿已完成步骤
                         let mut compensated: Vec<String> = Vec::new();
+                        let mut compensation_failed = false;
                         self.saga_log
                             .update_status(&saga_id, SagaStatus::Compensating);
 
@@ -275,20 +278,40 @@ impl SagaOrchestrator {
                                 self.router.get_session(*completed_shard_id).await
                             {
                                 // O(1) 查找原始步骤的 compensation
-                                if let Some(&idx) = step_index_map.get(completed_name.as_str())
-                                    && let Ok(()) = steps[idx].compensation.execute(&session).await
-                                {
-                                    compensated.push(completed_name.clone());
+                                if let Some(&idx) = step_index_map.get(completed_name.as_str()) {
+                                    match steps[idx].compensation.execute(&session).await {
+                                        Ok(()) => {
+                                            compensated.push(completed_name.clone());
+                                        }
+                                        Err(comp_err) => {
+                                            // 补偿失败：记录结构化事件，不吞错
+                                            log.steps.push(SagaStepLog {
+                                                name: completed_name.clone(),
+                                                shard_id: *completed_shard_id,
+                                                action_success: true,
+                                                compensation_success: Some(false),
+                                                error: Some(format!(
+                                                    "compensation failed: {comp_err}"
+                                                )),
+                                            });
+                                            compensation_failed = true;
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        self.saga_log.update_status(&saga_id, SagaStatus::Failed);
+                        let final_status = if compensation_failed {
+                            SagaStatus::CompensationFailed
+                        } else {
+                            SagaStatus::Failed
+                        };
+                        self.saga_log.update_status(&saga_id, final_status);
 
                         return SagaExecutionResult {
                             saga_id,
                             success: false,
-                            status: SagaStatus::Failed,
+                            status: final_status,
                             completed_steps: completed_names,
                             compensated_steps: compensated,
                             failure: Some(SagaFailure {
@@ -327,9 +350,11 @@ impl SagaOrchestrator {
                     };
                 }
             }
-            // 由于无法 move Box<dyn SagaAction> out of &step，简化处理
+            // 占位：`Box<dyn SagaAction>` 无法从 `&step` move 出来，
+            // 补偿操作在上方逆序循环中直接引用原始 `steps` 索引。
+            // 此 NoopAction 仅用于填充 `completed_steps` 元组的第三字段，
+            // 不参与实际补偿逻辑。
             completed_steps.push((step.name.clone(), step.shard_id, {
-                // 占位：实际补偿在上面的逆序循环中直接引用原始 steps
                 struct NoopAction;
                 #[async_trait]
                 impl SagaAction for NoopAction {

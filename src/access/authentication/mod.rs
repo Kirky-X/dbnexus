@@ -144,7 +144,7 @@ mod tests {
             .unwrap();
 
         // 刷新访问令牌
-        let new_access_token = manager.refresh_token(&refresh_token).unwrap();
+        let new_access_token = manager.refresh_token(&refresh_token).await.unwrap();
 
         let claims = manager.verify_token(&new_access_token).unwrap();
         assert_eq!(claims.username, "testuser");

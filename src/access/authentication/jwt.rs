@@ -7,7 +7,12 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+#[cfg(feature = "oxcache-integration")]
+use std::sync::Arc;
+#[cfg(feature = "oxcache-integration")]
+use crate::domain::DbCacheProvider;
 
 /// JWT 访问令牌默认过期时间（秒）
 const ACCESS_TOKEN_EXPIRATION_SECS: u64 = 3600; // 1 hour
@@ -39,6 +44,13 @@ pub struct JwtManager {
     /// 已撤销的 refresh token jti 集合（refresh token rotation 保护）
     /// 值类型 `Instant` 记录插入时刻，用于过期淘汰。
     revoked_refresh_jtis: Mutex<HashMap<String, Instant>>,
+    /// T030：可选的分布式撤销缓存（经 `oxcache-integration` feature 启用）。
+    ///
+    /// 注入后，撤销操作同时写入本地 HashMap + 远程缓存（key=jti，ttl=令牌剩余有效期），
+    /// 验证时先查本地集合并命中后短路，未命中则查远程缓存。
+    /// 未注入时行为不变（纯本地 HashMap）。
+    #[cfg(feature = "oxcache-integration")]
+    revocation_cache: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
 }
 
 impl JwtManager {
@@ -66,6 +78,8 @@ impl JwtManager {
             refresh_expiration_secs: REFRESH_TOKEN_EXPIRATION_SECS,
             valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
             revoked_refresh_jtis: Mutex::new(HashMap::new()),
+            #[cfg(feature = "oxcache-integration")]
+            revocation_cache: None,
         })
     }
 
@@ -92,6 +106,8 @@ impl JwtManager {
             refresh_expiration_secs,
             valid_roles: DEFAULT_VALID_ROLES.iter().map(|s| s.to_string()).collect(),
             revoked_refresh_jtis: Mutex::new(HashMap::new()),
+            #[cfg(feature = "oxcache-integration")]
+            revocation_cache: None,
         })
     }
 
@@ -100,6 +116,19 @@ impl JwtManager {
     /// 扩展角色白名单，允许 `generate_token` 接受自定义角色。
     pub fn add_valid_role(&mut self, role: String) {
         self.valid_roles.insert(role);
+    }
+
+    /// T030：注入分布式撤销缓存。
+    ///
+    /// 注入后，撤销操作同时写入本地 HashMap + 远程缓存（key=jti，ttl=令牌剩余有效期），
+    /// 验证时先查本地集合，未命中则查远程缓存。
+    #[cfg(feature = "oxcache-integration")]
+    pub fn with_revocation_cache(
+        &mut self,
+        cache: Arc<dyn DbCacheProvider + Send + Sync>,
+    ) -> &mut Self {
+        self.revocation_cache = Some(cache);
+        self
     }
 
     /// 生成 JWT Token
@@ -188,16 +217,24 @@ impl JwtManager {
     /// 在 [`verify_token`](Self::verify_token) 基础上额外校验 `token_type`，
     /// 确保 access token 不能用作 refresh token（防止 token 混用）。
     /// 同时检查 token 是否已被撤销（refresh token rotation 保护）。
-    pub fn verify_refresh_token(&self, token: &str) -> AuthResult<JwtClaims> {
+    pub async fn verify_refresh_token(&self, token: &str) -> AuthResult<JwtClaims> {
         let claims = self.verify_token(token)?;
         if claims.token_type != TokenType::Refresh {
             return Err(AuthError::InvalidToken);
         }
         // H-3: 检查 refresh token 是否已被撤销
+        // 先查本地集合（短路），未命中再查远程缓存（T030）
         if let Ok(revoked) = self.revoked_refresh_jtis.lock()
             && revoked.contains_key(&claims.jti)
         {
             return Err(AuthError::InvalidToken);
+        }
+        // T030：查远程撤销缓存（异步）
+        #[cfg(feature = "oxcache-integration")]
+        if let Some(ref cache) = self.revocation_cache {
+            if let Ok(Some(_)) = cache.get(&format!("revoked_jti:{}", claims.jti)).await {
+                return Err(AuthError::InvalidToken);
+            }
         }
         Ok(claims)
     }
@@ -205,13 +242,27 @@ impl JwtManager {
     /// 刷新访问令牌（带 refresh token rotation）
     ///
     /// 刷新成功后自动撤销旧的 refresh token，防止重放攻击。
-    pub fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
-        let claims = self.verify_refresh_token(refresh_token)?;
+    pub async fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
+        let claims = self.verify_refresh_token(refresh_token).await?;
 
         // H-3: 撤销旧 refresh token（refresh token rotation）
         if let Ok(mut revoked) = self.revoked_refresh_jtis.lock() {
             Self::evict_revoked_entries(&mut revoked, self.refresh_expiration_secs);
-            revoked.insert(claims.jti, Instant::now());
+            revoked.insert(claims.jti.clone(), Instant::now());
+        }
+
+        // T030：同步写入远程撤销缓存（TTL = 令牌剩余有效期）
+        #[cfg(feature = "oxcache-integration")]
+        if let Some(ref cache) = self.revocation_cache {
+            let cache_key = format!("revoked_jti:{}", claims.jti);
+            let remaining_ttl = self.compute_remaining_ttl(&claims);
+            // 异步写入不阻塞刷新路径（fire-and-forget，失败时本地 HashMap 已保护）
+            let cache_clone = cache.clone();
+            tokio::spawn(async move {
+                let _ = cache_clone
+                    .set(&cache_key, vec![1], Some(remaining_ttl))
+                    .await;
+            });
         }
 
         self.generate_token(
@@ -220,6 +271,21 @@ impl JwtManager {
             &claims.role,
             TokenType::Access,
         )
+    }
+
+    /// 计算令牌剩余有效期（T030：用于远程缓存 TTL）。
+    #[cfg(feature = "oxcache-integration")]
+    fn compute_remaining_ttl(&self, claims: &JwtClaims) -> Duration {
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let exp_secs = claims.exp as u64;
+        if exp_secs > now_secs {
+            Duration::from_secs(exp_secs - now_secs)
+        } else {
+            Duration::ZERO
+        }
     }
 
     /// 淘汰撤销集合中的过期条目，并在达上限时逐出最旧条目。
@@ -293,15 +359,15 @@ mod tests {
         assert!(matches!(result, Err(AuthError::InvalidToken)));
     }
 
-    #[test]
-    fn test_refresh_token() {
+    #[tokio::test]
+    async fn test_refresh_token() {
         let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         let refresh_token = manager
             .generate_token("user123", "testuser", "admin", TokenType::Refresh)
             .unwrap();
 
-        let new_access_token = manager.refresh_access_token(&refresh_token).unwrap();
+        let new_access_token = manager.refresh_access_token(&refresh_token).await.unwrap();
 
         let claims = manager.verify_token(&new_access_token).unwrap();
         assert_eq!(claims.sub, "user123");
@@ -348,24 +414,24 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_verify_refresh_token_accepts_refresh() {
+    #[tokio::test]
+    async fn test_verify_refresh_token_accepts_refresh() {
         let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let refresh_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Refresh)
             .unwrap();
-        let claims = manager.verify_refresh_token(&refresh_token).unwrap();
+        let claims = manager.verify_refresh_token(&refresh_token).await.unwrap();
         assert_eq!(claims.token_type, TokenType::Refresh);
     }
 
-    #[test]
-    fn test_verify_refresh_token_rejects_access() {
+    #[tokio::test]
+    async fn test_verify_refresh_token_rejects_access() {
         let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
         let access_token = manager
             .generate_token("user1", "alice", "admin", TokenType::Access)
             .unwrap();
         // access token 不应用作 refresh token
-        let result = manager.verify_refresh_token(&access_token);
+        let result = manager.verify_refresh_token(&access_token).await;
         assert!(
             matches!(result, Err(AuthError::InvalidToken)),
             "access token should be rejected by verify_refresh_token"
@@ -447,8 +513,8 @@ mod tests {
 
     /// refresh token 刷新成功后，旧 refresh token 应被撤销，
     /// 再次用旧 token 调 verify_refresh_token 必须返回 Err。
-    #[test]
-    fn test_refresh_token_rotation_revokes_old_token() {
+    #[tokio::test]
+    async fn test_refresh_token_rotation_revokes_old_token() {
         let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
 
         // 签发 refresh token
@@ -459,10 +525,11 @@ mod tests {
         // 刷新成功（内部会撤销旧 refresh token）
         let _new_access = manager
             .refresh_access_token(&refresh_token)
+            .await
             .expect("refresh should succeed");
 
         // 旧 refresh token 应已被撤销
-        let result = manager.verify_refresh_token(&refresh_token);
+        let result = manager.verify_refresh_token(&refresh_token).await;
         assert!(
             matches!(result, Err(AuthError::InvalidToken)),
             "old refresh token should be revoked after rotation, got {:?}",

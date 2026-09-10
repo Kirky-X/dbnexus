@@ -166,7 +166,7 @@ impl AsyncHealthCheck for DbNexusModule {
 /// kit.with_observer(Arc::new(DbNexusBuildObserver::new()));
 /// ```
 ///
-/// Requires `trait-kit/observability` feature (pulled in by `kit`).
+/// Requires `trait-kit/observer` feature (pulled in by `kit`).
 pub struct DbNexusBuildObserver {
     built_count: std::sync::atomic::AtomicU64,
     error_count: std::sync::atomic::AtomicU64,
@@ -329,6 +329,7 @@ mod tests {
     /// Health check on a freshly built pool reports `Unhealthy` (lazy init —
     /// no connections established until first use). This is correct behavior:
     /// the pool is functional but hasn't created connections yet.
+    #[cfg(feature = "pool-warmup")]
     #[tokio::test]
     async fn health_check_unhealthy_before_first_use() {
         let mut kit = AsyncKit::new();
@@ -411,6 +412,7 @@ mod tests {
     }
 
     /// Full kit integration with lifecycle + health + observer.
+    #[cfg(feature = "pool-warmup")]
     #[tokio::test]
     async fn full_kit_with_lifecycle_health_observer() {
         let mut kit = AsyncKit::new();
@@ -457,6 +459,6 @@ mod tests {
         );
 
         // Shutdown exercises lifecycle on_shutdown (default no-op for us).
-        kit.shutdown();
+        kit.shutdown_async().await;
     }
 }
