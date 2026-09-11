@@ -15,12 +15,25 @@
 - **慢查询检测接线**：`Session::execute_raw` 在所有返回路径前插入计时，超 `SlowQueryConfig` 阈值自动记录到 `MetricsCollector`
 - **缓存 DI 闭环**：`Session` 新增 `query_cache_get`/`query_cache_set` 方法，通过注入的 `DbCacheProvider` 驱动只读查询结果缓存；`cache_provider` 字段移入 `DbPoolInner` 并用 `ArcSwapOption` 无锁读取
 - **kit observer 修复**：`kit` feature 显式包含 `trait-kit/observer`；新增 `tests/kit_feature_gate.rs` 门控集成测试
+- **统一行查询 API（T401）**：`DbPool::query_rows` 返回真实数据行，scatter-gather 行取回修复并支持跨分片 SUM/COUNT/AVG 聚合合并
+- **Saga 持久化恢复（T402）**：SagaLog 落库表 + 启动恢复未完成 saga（续跑/补偿），补偿失败可人工重放
+- **字段级自动脱敏与 RLS（T403/T404）**：`data-protection` feature——查询出口统一脱敏（mask/哈希/截断）与行级安全谓词自动注入（admin bypass 通道保留）
+- **confers 热重载（T405）**：`config-confers` feature——权限策略/池参数经 confers watch 热更新（ArcSwap COW 原子换装）
+- **结构化健康导出（T406）**：`DbPool::health_snapshot()` 汇聚池饱和度/副本状态/慢查询计数为单个 JSON，供 HTTP /healthz 与 kit 健康聚合消费
+- **COPY 批量写入（T407）**：`copy` feature——COPY FROM STDIN 语句构建与 text 行编码（pg 协议路径特性门控，非 pg 后端显式拒绝）
+- **DB 审计存储（T408）**：`DbAuditStorage`（audit+sql-parser 门控，saga_logs 同款 DDL/upsert/query 模式），与内存实现并列可注入
+- **权限变更审计链（T409）**：PermissionAuditChain HMAC-SHA256(prev‖event) 链式签名 + `verify_permission_chain` 篡改/删除/重排检测（RFC 4231 向量校验）
+- **OTel 导出桥（T412）**：`otel` feature——健康快照指标（池饱和度/等待/慢查询）导出 OTLP/HTTP JSON 信封（手工 HTTP/1.1 客户端零新增依赖），传输失败 stdout fallback 兜底，mock collector 单测
+- **Kit 全能力注册（T413）**：`DbNexusCacheModule`/`DbNexusAuditModule`/`DbNexusHealthModule` 卫星模块——池/缓存/审计/健康四能力均可独立 require；`kit` feature 隐含 `audit`/`sql-parser`/`health-check` 全能力闭包
 
 ### Changed
 
 - **Saga 补偿不再静默**：补偿失败记录到 `SagaStepLog`，新增 `CompensationFailed` 终态，不再吞掉补偿错误
 - `cache_provider` 存储从 `Option<Arc<...>>` 改为 `ArcSwapOption<Arc<...>>`，消除 unsafe 写入（`#![forbid(unsafe_code)]` 兼容）
 - `arc-swap` 依赖扩展到 `cache` 和 `oxcache-integration` feature
+- **Retry 自动接线（T410）**：`query_rows` 幂等行查询自动应用 RetryPolicy 退避重试（SELECT 重试/写类不重试契约）
+- **副本负载均衡（T411）**：`replica-routing` 真实实现——读写分离路由 + 副本 weight/(1+latency) 确定性选择 + 连续失败剔除与半开恢复，副本状态对接健康导出
+- `DbNexusModule` 能力类型改为 `Arc<DbPool>`（T413 前置），仍可按 `ConnectionPool` trait 对象使用
 
 ### Fixed
 

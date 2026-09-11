@@ -118,7 +118,7 @@ roles:
 
     #[tokio::test]
     async fn test_hot_reload_swaps_permission_config() {
-        use confers::{ChangeEvent, ChangeSource, ChangeStream, InMemoryChangeStream};
+        use confers::{ChangeEvent, ChangeSource, ChangeStream};
 
         let url = std::env::temp_dir().join(format!("dbnexus_hr_{}.db", std::process::id()));
         let db_url = format!("sqlite:{}?mode=rwc", url.display());

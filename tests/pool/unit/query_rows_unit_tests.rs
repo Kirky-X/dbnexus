@@ -10,9 +10,9 @@
     feature = "sql-parser"
 ))]
 
-use std::sync::Arc;
-use std::time::Duration;
-
+// scatter-gather 跨分片行查询（T426 门禁：无 scatter-gather feature 时其余
+// 用例仍需可编译运行，故按 feature 隔离）
+#[cfg(feature = "scatter-gather")]
 use dbnexus::{AggregateFunction, PartialFailurePolicy, ScatterGatherExecutor, ShardRouter};
 
 #[tokio::test]
@@ -58,8 +58,12 @@ async fn test_query_rows_returns_data_rows() {
     let _ = std::fs::remove_file(&db_path);
 }
 
+#[cfg(feature = "scatter-gather")]
 #[tokio::test]
 async fn test_scatter_query_rows_with_aggregate() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
     // 两个独立临时文件库作为分片（sqlite::memory: 每连接独立，跨连接建表不可见）
     let tmp0 = std::env::temp_dir().join(format!("dbnexus_t401_s0_{}.db", std::process::id()));
     let tmp1 = std::env::temp_dir().join(format!("dbnexus_t401_s1_{}.db", std::process::id()));
@@ -133,7 +137,6 @@ async fn test_scatter_query_rows_with_aggregate() {
 async fn test_query_rows_masking_and_rls() {
     use dbnexus::{
         access::data_protection::{DataProtection, MaskStrategy, MaskingEngine, RlsEngine},
-        DbPool,
     };
     use std::sync::Arc;
 
