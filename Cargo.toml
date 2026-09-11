@@ -153,6 +153,7 @@ pool-warmup = ["futures"]  # 连接池预热
 observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
+otel = ["health-check"]  # T412：OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback，手工 HTTP 客户端无新增依赖）
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
@@ -537,6 +538,12 @@ required-features = ["sqlite", "copy", "runtime-tokio-rustls"]
 name = "audit_db_storage_tests"
 path = "tests/audit/unit/audit_db_storage_tests.rs"
 required-features = ["audit", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T412 - OTel 导出桥（mock collector）
+[[test]]
+name = "otel_export_tests"
+path = "tests/metrics/otel_export_tests.rs"
+required-features = ["otel", "sqlite", "health-check", "runtime-tokio-rustls"]
 
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
