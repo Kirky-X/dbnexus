@@ -125,7 +125,9 @@ neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
-sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization"]
+sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization", "sea-orm/with-json"]
+data-protection = ["dep:sha2"]  # T403/T404：字段脱敏与行级安全
+config-confers = ["dep:confers", "confers/change-stream", "permission"]  # T405：confers 配置热重载
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
@@ -135,7 +137,8 @@ cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
 oxcache-integration = ["dep:oxcache", "arc-swap"]
-kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer"]
+# T413：kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
+kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
@@ -151,6 +154,7 @@ pool-warmup = ["futures"]  # 连接池预热
 observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
+otel = ["health-check"]  # T412：OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback，手工 HTTP 客户端无新增依赖）
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
@@ -169,6 +173,7 @@ retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sq
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
+copy = []  # COPY 批量写入（T407：构建 COPY FROM STDIN 语句与 text 行编码；协议传输路径在 postgres 驱动组下经 #cfg(feature="postgres") 门控）
 shard-migration = ["migration", "sharding"]  # 分片迁移编排
 saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
@@ -238,6 +243,8 @@ sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
+sha2 = { version = "0.10", optional = true }
+confers = { version = "0.6.0-rc.3", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
@@ -509,6 +516,36 @@ name = "pool_db_pool_unit_tests"
 path = "tests/pool/unit/db_pool_unit_tests.rs"
 required-features = ["sqlite", "permission", "pool-warmup", "runtime-tokio-rustls"]
 
+# T401 - 统一行查询 API 与 scatter-gather 行查询
+[[test]]
+name = "pool_query_rows_unit_tests"
+path = "tests/pool/unit/query_rows_unit_tests.rs"
+required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T406 - 结构化健康导出（health_snapshot）
+[[test]]
+name = "pool_health_snapshot_unit_tests"
+path = "tests/pool/unit/health_snapshot_unit_tests.rs"
+required-features = ["sqlite", "health-check", "runtime-tokio-rustls"]
+
+# T407 - COPY 批量写入契约测试（pg 协议路径另行门控）
+[[test]]
+name = "copy_contract_tests"
+path = "tests/copy/unit/copy_contract_tests.rs"
+required-features = ["sqlite", "copy", "runtime-tokio-rustls"]
+
+# T408 - DB 审计存储（DbAuditStorage）
+[[test]]
+name = "audit_db_storage_tests"
+path = "tests/audit/unit/audit_db_storage_tests.rs"
+required-features = ["audit", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T412 - OTel 导出桥（mock collector）
+[[test]]
+name = "otel_export_tests"
+path = "tests/metrics/otel_export_tests.rs"
+required-features = ["otel", "sqlite", "health-check", "runtime-tokio-rustls"]
+
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
 name = "core_config_unit_tests"
@@ -766,3 +803,4 @@ inherits = "release"
 [patch.crates-io]
 oxcache = { path = "../oxcache" }
 trait-kit = { path = "../trait-kit" }
+confers = { path = "../confers" }

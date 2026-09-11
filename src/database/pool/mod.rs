@@ -8,6 +8,8 @@
 // take_admin_bypass_events）需供外部 crate 观测，模块必须公开可达
 pub mod audit;
 mod db_pool;
+#[cfg(feature = "health-check")]
+pub mod health_export;
 mod pool_impl;
 mod session;
 

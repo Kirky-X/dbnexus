@@ -22,6 +22,14 @@ pub mod replica;
 #[cfg(feature = "scatter-gather")]
 pub mod scatter;
 
+/// T405：confers 配置热重载集成（config-confers feature）
+#[cfg(feature = "config-confers")]
+pub mod config_confers;
+
+/// COPY 批量写入（T407，copy feature；协议传输路径在 postgres 驱动组下启用）
+#[cfg(feature = "copy")]
+pub mod copy;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;
@@ -56,9 +64,16 @@ pub use scatter::{
 // Saga re-exports
 #[cfg(feature = "saga")]
 pub use saga::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator,
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
+    SagaLogStore, SagaOrchestrator, SagaRecovery,
     SagaStatus, SagaStep, SagaStepLog,
 };
+#[cfg(all(feature = "saga", feature = "sql-parser"))]
+pub use saga::DbSagaLog;
+
+// COPY 批量写入 re-exports（T407）
+#[cfg(feature = "copy")]
+pub use copy::{CopyFormat, CopyStatement, encode_copy_rows};
 
 // 图数据库 re-exports
 #[cfg(feature = "ladybug")]

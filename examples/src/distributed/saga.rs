@@ -175,7 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // 查看 Saga 日志
-    if let Some(log) = orchestrator.get_saga_log(&result.saga_id) {
+    if let Some(log) = orchestrator.get_saga_log(&result.saga_id).await {
         println!("  Saga 日志:");
         println!("  - saga_id: {}", log.saga_id);
         println!("  - 状态   : {:?}", log.status);
@@ -261,6 +261,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - SagaOrchestrator::new(router)");
     println!("  - SagaStep {{ name, shard_id, action, compensation }}");
     println!("  - orchestrator.execute_saga(steps) -> SagaExecutionResult");
-    println!("  - orchestrator.get_saga_log(saga_id) -> Option<SagaLog>");
+    println!("  - orchestrator.get_saga_log(saga_id).await -> Option<SagaLog>");
     Ok(())
 }

@@ -9,6 +9,9 @@
 pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
+// T412：OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback）
+#[cfg(feature = "otel")]
+pub mod otel;
 
 // Re-exports
 #[cfg(feature = "health-check")]
@@ -24,3 +27,5 @@ pub use metrics::{
     MetricsCollector, MetricsCollectorTrait, MetricsError, PoolMetrics, QueryStats,
     SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };
+#[cfg(feature = "otel")]
+pub use otel::{HttpTransport, OtelConfig, OtelExporter, OtelMetricEvent, OtlpTransport};

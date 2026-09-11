@@ -16,6 +16,14 @@ pub mod permission_engine;
 #[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
+/// T403/T404：字段级脱敏与行级安全（data-protection feature）
+#[cfg(feature = "data-protection")]
+pub mod data_protection;
+
+/// T409：权限变更审计链（HMAC-SHA256 链式签名，data-protection feature）
+#[cfg(feature = "data-protection")]
+pub mod permission_audit_chain;
+
 // Re-exports: security
 #[cfg(feature = "sql-parser")]
 pub use security::{DdlGuard, DdlValidationResult};

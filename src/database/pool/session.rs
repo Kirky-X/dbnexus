@@ -27,6 +27,8 @@ use super::db_pool::DbPoolInner;
 use super::{DatabaseConnection, DbConnection};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::SqlParser;
+#[cfg(all(feature = "sql-parser", not(feature = "permission")))]
+use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::is_ddl_operation;
 #[cfg(feature = "sql-parser")]
@@ -127,7 +129,11 @@ impl Session {
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
         #[cfg(feature = "metrics")]
-        let metrics = pool_inner.metrics_collector.clone();
+        let metrics = pool_inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone();
 
         Session {
             connection: Some(connection),
@@ -463,6 +469,13 @@ impl Session {
     }
 
     /// 执行原始 SQL（带权限检查）
+    ///
+    /// # 自动重试语义（T410 文档化）
+    ///
+    /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时：
+    /// - **幂等操作**（SELECT/SHOW/EXPLAIN 前缀，见 `is_idempotent_operation`）
+    ///   失败后自动按指数退避重试（至多 `max_retries` 次）
+    /// - **写类操作**（INSERT/UPDATE/DELETE/DDL）绝不重试，避免副作用重复
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
@@ -613,6 +626,310 @@ impl Session {
 
             result
         }
+    }
+
+    /// 统一行查询 API（T401）：执行 SELECT 并返回数据行（JSON 对象数组）
+    ///
+    /// 与 `execute_raw` 共用同一套解析与表级权限检查，但仅允许 SELECT，
+    /// 并返回真实数据行（`serde_json::Value` 对象数组）而非 ExecResult，
+    /// 供 scatter-gather、数据 API 网关等上层消费。
+    ///
+    /// # 自动重试语义（T410）
+    ///
+    /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时，行查询失败
+    /// 自动按指数退避重试（与 `execute_raw` 幂等路径同口径）。
+    pub async fn query_rows(&self, sql: &str) -> DbResult<Vec<serde_json::Value>> {
+        #[cfg(not(feature = "sql-parser"))]
+        {
+            let _ = sql;
+            return Err(DbError::Permission(
+                "query_rows requires the sql-parser feature to be enabled".to_string(),
+            ));
+        }
+
+        #[cfg(feature = "sql-parser")]
+        {
+            // 与 execute_raw 一致：DDL 一律拒绝
+            if is_ddl_operation(sql) {
+                return Err(DbError::Permission(
+                    "DDL operations are not allowed in this context".to_string(),
+                ));
+            }
+
+            #[cfg(all(feature = "sql-parser", feature = "permission"))]
+            {
+                let parser = SqlParser::shared().await;
+                match parser.parse_single(sql).await {
+                    Ok(parsed) => {
+                        // 行查询只允许 SELECT
+                        if parsed.operation_type != SqlOperationType::Select {
+                            return Err(DbError::Permission(
+                                "query_rows only allows SELECT statements".to_string(),
+                            ));
+                        }
+                        if parsed.all_table_names.is_empty() {
+                            return Err(DbError::Permission(
+                                "Failed to extract table name for permission checking".to_string(),
+                            ));
+                        }
+                        for table in &parsed.all_table_names {
+                            if table.is_empty() || is_invalid_table_name(table) {
+                                return Err(DbError::Permission(
+                                    "Failed to extract table name for permission checking"
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                        // Admin 角色绕过权限检查；非 admin 逐表校验 Select 权限
+                        if self.role != self.pool_inner.admin_role {
+                            for table in &parsed.all_table_names {
+                                if !self
+                                    .permission_ctx
+                                    .check_table_access(table, &PermissionAction::Select)
+                                    .await
+                                {
+                                    return Err(permission_denied(
+                                        &PermissionAction::Select,
+                                        table,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // 解析失败：admin 放行（对齐 execute_raw 路径），非 admin 拒绝（安全默认）
+                        if self.role != self.pool_inner.admin_role {
+                            return Err(DbError::Permission(
+                                "Failed to parse SQL statement for permission checking"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // T031：慢查询检测——与 execute_raw 同口径
+            #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+            let query_start = std::time::Instant::now();
+
+            // 短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
+            let tx_opt: Option<Arc<DatabaseTransaction>> = {
+                let state = self.state.write().await;
+                state.transaction.clone()
+            };
+
+            // T401：方言感知执行（SeaORM 2.0 无整行 JSON 提取 API，分方言处理）
+            // T410：retry feature——幂等行查询自动重试（与 execute_raw 同口径：
+            // RetryPolicy 存在且 SQL 判定为幂等（SELECT/SHOW/EXPLAIN 前缀）时
+            // 逐次退避重试；query_rows 仅放行 SELECT，天然幂等）
+            #[cfg(feature = "retry")]
+            let result = {
+                let policy = self
+                    .pool_inner
+                    .config
+                    .retry_policy
+                    .as_ref()
+                    .filter(|_| crate::reliability::is_idempotent_operation(sql));
+                match policy {
+                    Some(policy) => {
+                        let mut last_error: Option<DbError> = None;
+                        let mut success: Option<Vec<serde_json::Value>> = None;
+                        for attempt in 0..=policy.max_retries {
+                            if attempt > 0 {
+                                let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
+                                tokio::time::sleep(backoff).await;
+                            }
+                            match self.query_rows_execute(sql, tx_opt.clone()).await {
+                                Ok(rows) => {
+                                    success = Some(rows);
+                                    break;
+                                }
+                                Err(e) => last_error = Some(e),
+                            }
+                        }
+                        match success {
+                            Some(rows) => Ok(rows),
+                            None => Err(last_error.unwrap()),
+                        }
+                    }
+                    None => self.query_rows_execute(sql, tx_opt).await,
+                }
+            };
+
+            #[cfg(not(feature = "retry"))]
+            let result = self.query_rows_execute(sql, tx_opt).await;
+
+            #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+            self.record_execute_metrics(query_start, result.is_ok());
+
+            result
+        }
+    }
+
+    /// T401 内部：按方言执行行查询并转为 JSON 行
+    #[cfg(feature = "sql-parser")]
+    ///
+    /// - **PostgreSQL**：`SELECT row_to_json(sub.*) FROM (<sql>) sub` 包装，单列 JSON 精确提取
+    /// - **SQLite**：主表列经 `pragma_table_info` 内省 + 逐列类型探测（i64→f64→String→Null）
+    /// - **MySQL / 图后端 / DuckDB**：MVP 未覆盖，返回明确错误（DuckDB 请使用 `execute_duckdb`）
+    async fn query_rows_execute(
+        &self,
+        sql: &str,
+        tx_opt: Option<Arc<DatabaseTransaction>>,
+    ) -> DbResult<Vec<serde_json::Value>> {
+        use sea_orm::ConnectionTrait;
+
+        // 图后端 / DuckDB 连接不支持 SeaORM 行查询，给出明确错误
+        if let Some(conn_arc) = self.connection.as_ref() {
+            if conn_arc.as_sea_orm().is_err() {
+                return Err(DbError::Query(
+                    "query_rows MVP supports SeaORM backends only (postgres/sqlite); \
+                     use execute_duckdb or graph APIs for other backends"
+                        .to_string(),
+                ));
+            }
+        }
+
+        let backend = if let Some(tx) = tx_opt.as_ref() {
+            tx.get_database_backend()
+        } else {
+            self.connection()?.get_database_backend()
+        };
+
+        #[allow(unused_variables)]
+        let primary_table: Option<String> = {
+            #[cfg(feature = "sql-parser")]
+            {
+                let parser = SqlParser::shared().await;
+                match parser.parse_single(sql).await {
+                    Ok(parsed) if parsed.all_table_names.len() == 1 => {
+                        Some(parsed.all_table_names[0].clone())
+                    }
+                    _ => None,
+                }
+            }
+            #[cfg(not(feature = "sql-parser"))]
+            {
+                let _ = sql;
+                None
+            }
+        };
+
+        // T404：RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
+        // 无 permission feature 时 primary_table 为 None，注入自动失效）
+        #[cfg(feature = "data-protection")]
+        let sql_for_fetch = {
+            let dp = { self.pool_inner.data_protection.read().await.clone() };
+            let is_admin = self.role == self.pool_inner.admin_role;
+            if !is_admin {
+                if let Some(rls) = dp.rls.as_ref() {
+                    rls.inject(sql, primary_table.as_deref())
+                } else {
+                    sql.to_string()
+                }
+            } else {
+                sql.to_string()
+            }
+        };
+        #[cfg(not(feature = "data-protection"))]
+        let sql_for_fetch = sql.to_string();
+
+        match backend {
+            #[cfg(feature = "postgres")]
+            sea_orm::DbBackend::Postgres => {
+                // postgres：row_to_json 包装（零列名依赖、类型精确）
+                let wrapped = format!(
+                    "SELECT row_to_json(sub.*) AS row_data FROM ({}) AS sub",
+                    sql.trim_end().trim_end_matches(';')
+                );
+                let stmt = sea_orm::Statement::from_string(backend, wrapped);
+                let rows = if let Some(tx) = tx_opt.as_ref() {
+                    tx.query_all_raw(stmt).await
+                } else {
+                    self.connection()?.query_all_raw(stmt).await
+                }
+                .map_err(DbError::Connection)?;
+                let mut out = Vec::with_capacity(rows.len());
+                for r in rows {
+                    let v = r
+                        .try_get::<serde_json::Value>("", "row_data")
+                        .map_err(DbError::Connection)?;
+                    out.push(v);
+                }
+                #[cfg(feature = "data-protection")]
+                self.apply_masking(&mut out).await;
+                return Ok(out);
+            }
+            #[cfg(feature = "sqlite")]
+            sea_orm::DbBackend::Sqlite => {
+                // sqlite：主表列内省 + 类型探测（MVP：单表查询）
+                let table = primary_table.as_deref().ok_or_else(|| {
+                    DbError::Query(
+                        "query_rows on sqlite (MVP) requires a single-table SELECT statement"
+                            .to_string(),
+                    )
+                })?;
+                let cols = self.sqlite_table_columns(table, tx_opt.as_ref()).await?;
+                let stmt = sea_orm::Statement::from_string(backend, sql_for_fetch.clone());
+                let rows = if let Some(tx) = tx_opt.as_ref() {
+                    tx.query_all_raw(stmt).await
+                } else {
+                    self.connection()?.query_all_raw(stmt).await
+                }
+                .map_err(DbError::Connection)?;
+                let mut out: Vec<serde_json::Value> =
+                    rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
+                #[cfg(feature = "data-protection")]
+                self.apply_masking(&mut out).await;
+                return Ok(out);
+            }
+            _ => {
+                return Err(DbError::Query(
+                    "query_rows MVP supports postgres/sqlite backends only".to_string(),
+                ))
+            }
+        };
+        // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
+    }
+
+    /// T403：查询出口字段脱敏
+    #[cfg(feature = "data-protection")]
+    async fn apply_masking(&self, rows: &mut Vec<serde_json::Value>) {
+        let dp = { self.pool_inner.data_protection.read().await.clone() };
+        if let Some(m) = dp.masking.as_ref() {
+            m.apply(rows);
+        }
+    }
+
+    /// T401 内部（sqlite）：主表列名（pragma_table_info）
+    #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
+    async fn sqlite_table_columns(
+        &self,
+        table: &str,
+        tx_opt: Option<&Arc<DatabaseTransaction>>,
+    ) -> DbResult<Vec<String>> {
+        use sea_orm::ConnectionTrait;
+        let stmt = sea_orm::Statement::from_string(
+            sea_orm::DbBackend::Sqlite,
+            format!(
+                "SELECT name FROM pragma_table_info('{}')",
+                table.replace('\'', "")
+            ),
+        );
+        let rows = if let Some(tx) = tx_opt {
+            tx.query_all_raw(stmt).await
+        } else {
+            self.connection()?.query_all_raw(stmt).await
+        }
+        .map_err(DbError::Connection)?;
+        let mut cols = Vec::with_capacity(rows.len());
+        for r in rows {
+            let name: Option<String> = r.try_get::<Option<String>>("", "name").ok().flatten();
+            if let Some(n) = name {
+                cols.push(n);
+            }
+        }
+        Ok(cols)
     }
 
     /// 计算重试退避时间（retry feature 内部辅助方法）
@@ -1550,7 +1867,25 @@ impl Session {
     }
 }
 
-#[cfg(feature = "permission")]
+/// T401（sqlite）：单行 → JSON 对象（逐列类型探测：i64 → f64 → String → Null）
+#[cfg(all(feature = "sqlite", feature = "sql-parser"))]
+fn sqlite_row_to_json(row: &sea_orm::QueryResult, cols: &[String]) -> serde_json::Value {
+    let mut obj = serde_json::Map::with_capacity(cols.len());
+    for name in cols {
+        let v = if let Ok(Some(x)) = row.try_get::<Option<i64>>("", name) {
+            serde_json::Value::from(x)
+        } else if let Ok(Some(x)) = row.try_get::<Option<f64>>("", name) {
+            serde_json::Value::from(x)
+        } else if let Ok(Some(x)) = row.try_get::<Option<String>>("", name) {
+            serde_json::Value::from(x)
+        } else {
+            serde_json::Value::Null
+        };
+        obj.insert(name.clone(), v);
+    }
+    serde_json::Value::Object(obj)
+}
+
 fn is_invalid_table_name(table_name: &str) -> bool {
     let table_name = table_name.trim();
     if table_name.is_empty() {

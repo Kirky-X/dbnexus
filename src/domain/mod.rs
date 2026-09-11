@@ -31,6 +31,9 @@ pub use audit::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, BuildError, MemoryAuditStorage,
 };
+// T408：DB 持久化审计存储
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub use audit::DbAuditStorage;
 
 #[cfg(feature = "migration")]
 pub use migration::{

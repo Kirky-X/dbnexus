@@ -957,6 +957,11 @@ impl MetricsCollector {
         self.slow_queries.read().iter().cloned().collect()
     }
 
+    /// 获取慢查询配置快照（T406 健康导出用）
+    pub fn slow_query_config_snapshot(&self) -> SlowQueryConfig {
+        self.slow_query_config.read().clone()
+    }
+
     /// 设置慢查询阈值
     pub fn set_slow_query_threshold(&self, threshold_ms: u64) {
         let mut config = self.slow_query_config.write();

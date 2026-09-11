@@ -215,6 +215,16 @@ pub use crate::observability::{
     SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };
 
+// T406 健康导出（health-check feature）：副本状态提供者类型
+#[cfg(feature = "health-check")]
+pub use crate::database::pool::health_export::ReplicaHealthProvider;
+
+// T409 权限变更审计链（data-protection feature）
+#[cfg(feature = "data-protection")]
+pub use crate::access::permission_audit_chain::{
+    ChainEntry, PermissionAuditChain, PermissionChangeRecord, verify_permission_chain,
+};
+
 // Reliability 导出（retry feature）
 #[cfg(feature = "retry")]
 pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};
@@ -226,7 +236,8 @@ pub use crate::database::replica::MySqlLagDetector;
 pub use crate::database::replica::PostgresLagDetector;
 #[cfg(feature = "replica-routing")]
 pub use crate::database::replica::{
-    ReplicaPool, ReplicationLag, ReplicationLagDetector, SqliteLagDetector,
+    ReplicaLoadBalancer, ReplicaNode, ReplicaPool, ReplicationLag, ReplicationLagDetector,
+    SqliteLagDetector,
 };
 
 // Scatter-Gather 导出（scatter-gather feature）
@@ -239,9 +250,12 @@ pub use crate::database::{
 // Saga 分布式事务导出（saga feature）
 #[cfg(feature = "saga")]
 pub use crate::database::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator,
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
+    SagaLogStore, SagaOrchestrator, SagaRecovery,
     SagaStatus, SagaStep, SagaStepLog,
 };
+#[cfg(all(feature = "saga", feature = "sql-parser"))]
+pub use crate::database::DbSagaLog;
 
 // 分片迁移编排导出（shard-migration feature）
 #[cfg(feature = "shard-migration")]
@@ -272,6 +286,8 @@ pub use crate::domain::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub use crate::domain::DbAuditStorage;
 #[cfg(feature = "audit")]
 pub use crate::foundation::AuditResult;
 

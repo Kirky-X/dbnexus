@@ -168,8 +168,8 @@ impl std::fmt::Debug for DbConnection {
 /// 连接池管理器
 #[derive(Clone)]
 pub struct DbPool {
-    /// 内部连接池
-    inner: Arc<DbPoolInner>,
+    /// 内部连接池（pub(crate)：T406 health_export 等同 crate 兄弟模块可扩展 DbPool 方法）
+    pub(crate) inner: Arc<DbPoolInner>,
 }
 
 pub(crate) struct DbPoolInner {
@@ -205,9 +205,10 @@ pub(crate) struct DbPoolInner {
     /// 管理员角色名称
     pub(super) admin_role: String,
 
-    /// 指标收集器（可选，用于 metrics 特性）
+    /// 指标收集器（可选，用于 metrics 特性；T406 起支持运行时注入）
     #[cfg(feature = "metrics")]
-    pub(crate) metrics_collector: Option<Arc<MetricsCollector>>,
+    pub(crate) metrics_collector:
+        std::sync::RwLock<Option<Arc<MetricsCollector>>>,
 
     /// 等待计数
     pub(super) wait_count: AtomicU32,
@@ -224,6 +225,15 @@ pub(crate) struct DbPoolInner {
     /// 缓存提供者（DI 注入点，ArcSwapOption 无锁读取 — COW 模式）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub(crate) cache_provider: ArcSwapOption<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
+
+    /// 数据保护配置（T403/T404：脱敏 + RLS，运行时整体换装）
+    #[cfg(feature = "data-protection")]
+    pub(crate) data_protection: tokio::sync::RwLock<crate::access::data_protection::DataProtection>,
+
+    /// 副本健康状态提供者（T406：health_snapshot 的 replicas 数据源，T411 副本路由可注入）
+    #[cfg(feature = "health-check")]
+    pub(crate) replica_health_provider:
+        std::sync::RwLock<Option<crate::database::pool::health_export::ReplicaHealthProvider>>,
 }
 
 impl DbPoolInner {
@@ -378,13 +388,19 @@ impl DbPool {
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
-                metrics_collector: None,
+                metrics_collector: std::sync::RwLock::new(None),
                 wait_count: AtomicU32::new(0),
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
+                #[cfg(feature = "health-check")]
+                replica_health_provider: std::sync::RwLock::new(None),
             }),
         };
 
@@ -470,13 +486,19 @@ impl DbPool {
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
-                metrics_collector: None,
+                metrics_collector: std::sync::RwLock::new(None),
                 wait_count: AtomicU32::new(0),
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
+                #[cfg(feature = "health-check")]
+                replica_health_provider: std::sync::RwLock::new(None),
             }),
         };
 
@@ -590,13 +612,19 @@ impl DbPool {
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
-                metrics_collector: None,
+                metrics_collector: std::sync::RwLock::new(None),
                 wait_count: AtomicU32::new(0),
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
+                #[cfg(feature = "health-check")]
+                replica_health_provider: std::sync::RwLock::new(None),
             }),
         })
     }
@@ -741,10 +769,14 @@ impl DbPool {
         }
     }
 
-    /// 获取指标收集器（如果已设置）
+    /// 获取指标收集器（如果已设置；T406 起可经 `set_metrics_collector` 运行时注入）
     #[cfg(feature = "metrics")]
-    pub fn metrics(&self) -> Option<&Arc<MetricsCollector>> {
-        self.inner.metrics_collector.as_ref()
+    pub fn metrics(&self) -> Option<Arc<MetricsCollector>> {
+        self.inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone()
     }
 
     /// 获取实际应用的配置
@@ -799,6 +831,39 @@ impl DbPool {
         let session = Session::new(connection, self.inner.clone(), role.to_string());
 
         Ok(session)
+    }
+
+    /// 统一行查询 API（T401）：以指定角色执行 SELECT 并返回数据行
+    ///
+    /// 内部经 `get_session` → `Session::query_rows`，共享解析/权限/慢查询口径；
+    /// 非 SELECT 或未授权表将返回权限错误。
+    pub async fn query_rows(&self, sql: &str, role: &str) -> DbResult<Vec<serde_json::Value>> {
+        let session = self.get_session(role).await?;
+        session.query_rows(sql).await
+    }
+
+    /// T403/T404：注入数据保护配置（字段脱敏 + RLS 谓词）
+    #[cfg(feature = "data-protection")]
+    pub async fn set_data_protection(
+        &self,
+        dp: crate::access::data_protection::DataProtection,
+    ) {
+        *self.inner.data_protection.write().await = dp;
+    }
+
+    /// T405 前置：运行时替换权限配置（角色策略缓存同步换装）
+    ///
+    /// 供配置热重载（confers watch）与测试注入使用。
+    #[cfg(feature = "permission")]
+    pub async fn set_permission_config(
+        &self,
+        config: crate::access::permission::PermissionConfig,
+    ) -> DbResult<()> {
+        for (role_name, policy) in &config.roles {
+            let _ = self.inner.policy_cache.set(role_name, policy).await;
+        }
+        self.inner.permission_config.store(Some(Arc::new(config)));
+        Ok(())
     }
 
     /// 验证角色名称是否在权限配置中定义
@@ -1349,7 +1414,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果获取连接超时（池耗尽）或创建连接失败，返回错误
-    async fn acquire_connection(&self) -> DbResult<DbConnection> {
+    pub(crate) async fn acquire_connection(&self) -> DbResult<DbConnection> {
         // 步骤 0: 记录等待计数
         let waiters = self.inner.wait_count.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_max_waiters(waiters);
@@ -1417,7 +1482,7 @@ impl DbPool {
     #[cfg(feature = "metrics")]
     #[inline]
     fn record_acquire_duration(&self, start: Instant) {
-        if let Some(ref collector) = self.inner.metrics_collector {
+        if let Some(collector) = self.inner.metrics_collector.read().expect("metrics_collector lock").clone() {
             collector.record_connection_acquire_duration(start.elapsed());
         }
     }
@@ -1431,7 +1496,7 @@ impl DbPool {
     #[inline]
     fn record_acquire_timeout(&self, start: Instant) {
         let elapsed_ms = start.elapsed().as_millis() as u64;
-        if let Some(ref collector) = self.inner.metrics_collector {
+        if let Some(collector) = self.inner.metrics_collector.read().expect("metrics_collector lock").clone() {
             collector.record_connection_timeout_level(elapsed_ms);
         }
     }
@@ -1472,7 +1537,8 @@ impl DbPool {
     ///
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
-    #[cfg(feature = "auto-migrate")]
+    /// （T407：cfg 收窄为实际调用方——copy_in（postgres）与迁移路径（auto-migrate））
+    #[cfg(any(feature = "auto-migrate", feature = "postgres"))]
     pub(crate) fn release_connection(&self, conn: DbConnection) {
         DbPoolInner::release_connection(&self.inner, conn);
     }
@@ -1531,7 +1597,13 @@ impl DbPool {
     pub fn pool_metrics(&self) -> PoolMetrics {
         let wait_count = self.inner.wait_count.load(Ordering::SeqCst);
         let max_waiters = self.inner.max_waiters.load(Ordering::SeqCst);
-        if let Some(ref collector) = self.inner.metrics_collector {
+        let collector = self
+            .inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone();
+        if let Some(collector) = collector {
             let stats = collector.connection_acquire_stats();
             PoolMetrics {
                 slow_acquires: stats.slow_acquires,

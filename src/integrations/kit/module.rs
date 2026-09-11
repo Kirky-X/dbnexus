@@ -40,7 +40,9 @@ use trait_kit::prelude::*;
 
 use oxcache::integrations::kit::OxcacheModule;
 
-use crate::database::{ConnectionPool, DbPoolBuilder};
+#[cfg(test)]
+use crate::database::ConnectionPool;
+use crate::database::{DbPool, DbPoolBuilder};
 use crate::foundation::DbConfig;
 use crate::foundation::DbError;
 use crate::integrations::OxcacheDbCacheAdapter;
@@ -52,9 +54,20 @@ use crate::integrations::OxcacheDbCacheAdapter;
 /// `kit.set_config(DbConfig { ... })`, then `kit.build().await` and retrieve
 /// the capability with `kit.require::<DbNexusModule>()`.
 ///
-/// The returned `Arc<dyn ConnectionPool + Send + Sync>` is a fully initialized
-/// database connection pool. The `OxcacheDbCacheAdapter` is injected via
+/// The returned `Arc<DbPool>` is a fully initialized database connection
+/// pool. The `OxcacheDbCacheAdapter` is injected via
 /// `DbPoolBuilder::cache_provider()`, enabling cache DI through the kit.
+///
+/// # T413 全能力注册
+///
+/// 除池能力外，dbnexus kit 模块族还提供（各自独立注册、可单独 require）：
+///
+/// | Module | Capability | Feature gate |
+/// |--------|------------|--------------|
+/// | [`DbNexusModule`] | `Arc<DbPool>`（池） | `kit` |
+/// | [`DbNexusCacheModule`] | `Arc<dyn DbCacheProvider + Send + Sync>`（缓存） | `oxcache-integration`（`kit` 隐含） |
+/// | [`DbNexusAuditModule`] | `Arc<dyn AuditStorage>`（审计，DB 持久化） | `audit` + `sql-parser`（`kit` 隐含） |
+/// | [`DbNexusHealthModule`] | [`DbHealthCapability`]（健康快照） | `health-check`（`kit` 隐含） |
 pub struct DbNexusModule;
 
 impl ModuleMeta for DbNexusModule {
@@ -72,7 +85,7 @@ impl ModuleMeta for DbNexusModule {
 }
 
 impl AsyncAutoBuilder for DbNexusModule {
-    type Capability = Arc<dyn ConnectionPool + Send + Sync>;
+    type Capability = Arc<DbPool>;
     type Error = DbError;
 
     fn build<'a>(
@@ -99,8 +112,148 @@ impl AsyncAutoBuilder for DbNexusModule {
                 .build()
                 .await?;
 
-            // 5. Return as Arc<dyn ConnectionPool + Send + Sync>.
-            Ok(Arc::new(pool) as Arc<dyn ConnectionPool + Send + Sync>)
+            // 5. Return the concrete pool (T413：卫星模块经它派生审计/健康能力).
+            Ok(Arc::new(pool))
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// T413：全能力注册 — 缓存 / 审计 / 健康卫星模块
+// ---------------------------------------------------------------------------
+
+/// Cache capability module（T413）：把 `OxcacheModule` 后端适配为
+/// dbnexus [`DbCacheProvider`](crate::domain::DbCacheProvider) 并作为独立
+/// Kit 能力暴露。
+///
+/// `kit.build()` 后经 `kit.require::<DbNexusCacheModule>()` 获取；下游
+/// 模块可在 `ModuleMeta::dependencies()` 声明对该能力的依赖。
+///
+/// Requires `oxcache-integration` feature（`kit` 隐含）。
+pub struct DbNexusCacheModule;
+
+impl ModuleMeta for DbNexusCacheModule {
+    const NAME: &'static str = "dbnexus-cache";
+
+    fn dependencies() -> &'static [(&'static str, TypeId)] {
+        static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
+        DEPS.get_or_init(|| vec![("oxcache", TypeId::of::<OxcacheModule>())]).as_slice()
+    }
+}
+
+impl AsyncAutoBuilder for DbNexusCacheModule {
+    type Capability = Arc<dyn crate::domain::DbCacheProvider + Send + Sync>;
+    type Error = DbError;
+
+    fn build<'a>(
+        kit: &'a AsyncKit,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
+        Box::pin(async move {
+            let cache_cap = kit
+                .require::<OxcacheModule>()
+                .map_err(|e| DbError::Config(format!("require OxcacheModule: {e}")))?;
+            let adapter = OxcacheDbCacheAdapter::new(cache_cap);
+            Ok(Arc::new(adapter) as Arc<dyn crate::domain::DbCacheProvider + Send + Sync>)
+        })
+    }
+}
+
+/// DB 持久化审计能力模块（T413）：基于池能力构建
+/// [`DbAuditStorage`](crate::domain::DbAuditStorage)（幂等建表后）并以
+/// `Arc<dyn AuditStorage>` 暴露。
+///
+/// `kit.build()` 后经 `kit.require::<DbNexusAuditModule>()` 获取。
+///
+/// Requires `audit` + `sql-parser` features（`kit` 隐含）。
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub struct DbNexusAuditModule;
+
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+impl ModuleMeta for DbNexusAuditModule {
+    const NAME: &'static str = "dbnexus-audit";
+
+    fn dependencies() -> &'static [(&'static str, TypeId)] {
+        static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
+        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())]).as_slice()
+    }
+}
+
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+impl AsyncAutoBuilder for DbNexusAuditModule {
+    type Capability = Arc<dyn crate::domain::AuditStorage>;
+    type Error = DbError;
+
+    fn build<'a>(
+        kit: &'a AsyncKit,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
+        Box::pin(async move {
+            let pool = kit
+                .require::<DbNexusModule>()
+                .map_err(|e| DbError::Config(format!("require DbNexusModule: {e}")))?;
+            let storage = crate::domain::DbAuditStorage::new(pool);
+            storage
+                .init()
+                .await
+                .map_err(|e| DbError::Config(format!("audit storage init: {e}")))?;
+            Ok(Arc::new(storage) as Arc<dyn crate::domain::AuditStorage>)
+        })
+    }
+}
+
+/// 健康能力句柄（T413）：包装池句柄，暴露结构化健康快照
+/// （T406 `DbPool::health_snapshot`）。
+///
+/// 由 [`DbNexusHealthModule`] 作为 Kit 能力产出，Clone 廉价（内含单个 Arc）。
+#[cfg(feature = "health-check")]
+#[derive(Clone)]
+pub struct DbHealthCapability {
+    pool: Arc<DbPool>,
+}
+
+#[cfg(feature = "health-check")]
+impl DbHealthCapability {
+    /// 结构化健康快照（池饱和度/副本状态/慢查询计数 JSON）
+    pub async fn snapshot(&self) -> serde_json::Value {
+        self.pool.health_snapshot().await
+    }
+
+    /// 底层池句柄（需要更细粒度健康数据时使用）
+    pub fn pool(&self) -> &Arc<DbPool> {
+        &self.pool
+    }
+}
+
+/// 健康能力模块（T413）：把池的结构化健康导出包装为独立 Kit 能力。
+///
+/// `kit.build()` 后经 `kit.require::<DbNexusHealthModule>()` 获取。
+///
+/// Requires `health-check` feature（`kit` 隐含）。
+#[cfg(feature = "health-check")]
+pub struct DbNexusHealthModule;
+
+#[cfg(feature = "health-check")]
+impl ModuleMeta for DbNexusHealthModule {
+    const NAME: &'static str = "dbnexus-health";
+
+    fn dependencies() -> &'static [(&'static str, TypeId)] {
+        static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
+        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())]).as_slice()
+    }
+}
+
+#[cfg(feature = "health-check")]
+impl AsyncAutoBuilder for DbNexusHealthModule {
+    type Capability = DbHealthCapability;
+    type Error = DbError;
+
+    fn build<'a>(
+        kit: &'a AsyncKit,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
+        Box::pin(async move {
+            let pool = kit
+                .require::<DbNexusModule>()
+                .map_err(|e| DbError::Config(format!("require DbNexusModule: {e}")))?;
+            Ok(DbHealthCapability { pool })
         })
     }
 }
@@ -246,7 +399,7 @@ mod tests {
     #[test]
     fn dbnexus_module_satisfies_async_auto_builder_bounds() {
         fn assert_cap<T: Clone + Send + Sync + 'static>() {}
-        assert_cap::<Arc<dyn ConnectionPool + Send + Sync>>();
+        assert_cap::<Arc<DbPool>>();
         fn assert_err<T: std::error::Error + Send + 'static>() {}
         assert_err::<DbError>();
     }
@@ -272,10 +425,10 @@ mod tests {
         kit.register::<DbNexusModule>()
             .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
-            .require::<DbNexusModule>()
-            .expect("require DbNexusModule");
-        // Verify the pool is usable.
+        let pool = kit.require::<DbNexusModule>().expect("require DbNexusModule");
+        // Verify the pool is usable — T413：能力类型为 Arc<DbPool>，仍可按
+        // ConnectionPool trait 对象使用（向下兼容断言）。
+        let pool: Arc<dyn ConnectionPool + Send + Sync> = pool;
         let _status = pool.status();
         let config = pool.config();
         assert_eq!(config.url, "sqlite::memory:");
@@ -348,9 +501,7 @@ mod tests {
         kit.register::<DbNexusModule>()
             .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
-            .require::<DbNexusModule>()
-            .expect("require DbNexusModule");
+        let pool = kit.require::<DbNexusModule>().expect("require DbNexusModule");
         // Before first use: pool eagerly creates min_connections, so health check
         // reports Healthy (connections are pre-warmed).
         let status = DbNexusModule::check(&pool);
@@ -460,5 +611,108 @@ mod tests {
 
         // Shutdown exercises lifecycle on_shutdown (default no-op for us).
         kit.shutdown_async().await;
+    }
+
+    // ========================================================================
+    // T413：全能力注册 — 池/缓存/审计/健康全部能力可 require
+    // ========================================================================
+
+    /// T413 bounds：新增卫星模块满足 `AsyncAutoBuilder` trait bounds。
+    #[test]
+    fn t413_satellite_modules_satisfy_bounds() {
+        fn assert_cap<T: Clone + Send + Sync + 'static>() {}
+        assert_cap::<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>();
+        #[cfg(all(feature = "audit", feature = "sql-parser"))]
+        assert_cap::<Arc<dyn crate::domain::AuditStorage>>();
+        #[cfg(feature = "health-check")]
+        assert_cap::<DbHealthCapability>();
+    }
+
+    /// T413 #1：缓存能力可 require — get/set 经 `DbCacheProvider` 走 oxcache 后端。
+    #[tokio::test]
+    async fn t413_cache_capability_requireable() {
+        let mut kit = AsyncKit::new();
+        kit.set_config(OxcacheConfig::default());
+        kit.set_config(DbConfig {
+            url: "sqlite::memory:".to_string(),
+            ..Default::default()
+        });
+        kit.register::<OxcacheModule>().expect("register OxcacheModule");
+        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<DbNexusCacheModule>()
+            .expect("register DbNexusCacheModule");
+        let kit = kit.build().await.expect("AsyncKit::build");
+
+        let cache: Arc<dyn crate::domain::DbCacheProvider + Send + Sync> =
+            kit.require::<DbNexusCacheModule>().expect("require cache");
+        cache.set("t413-key", b"t413-value".to_vec(), None).await.expect("cache set");
+        let got = cache.get("t413-key").await.expect("cache get");
+        assert_eq!(got.as_deref(), Some(&b"t413-value"[..]), "缓存能力应可读写");
+    }
+
+    /// T413 #2：全能力注册端到端 — 池/缓存/审计/健康四能力在构建后全部
+    /// 可 require 且可用（审计走临时文件库，规避 sqlite 内存库每连接独立）。
+    #[cfg(all(feature = "audit", feature = "sql-parser", feature = "health-check"))]
+    #[tokio::test]
+    async fn t413_all_capabilities_requireable() {
+        let db_path = std::env::temp_dir().join(format!("dbnexus_t413_{}.db", std::process::id()));
+        let url = format!("sqlite:{}?mode=rwc", db_path.display());
+
+        let mut kit = AsyncKit::new();
+        kit.set_config(OxcacheConfig::default());
+        kit.set_config(DbConfig {
+            url,
+            pool_config: crate::foundation::PoolConfig {
+                max_connections: 5,
+                min_connections: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        kit.register::<OxcacheModule>().expect("register OxcacheModule");
+        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<DbNexusCacheModule>()
+            .expect("register DbNexusCacheModule");
+        kit.register::<DbNexusAuditModule>()
+            .expect("register DbNexusAuditModule");
+        kit.register::<DbNexusHealthModule>()
+            .expect("register DbNexusHealthModule");
+        let kit = kit.build().await.expect("AsyncKit::build should build all four modules");
+
+        // 1. 池能力
+        let pool = kit.require::<DbNexusModule>().expect("require pool");
+        assert!(pool.config().url.contains("t413"), "池能力可用");
+
+        // 2. 缓存能力
+        let cache = kit
+            .require::<DbNexusCacheModule>()
+            .expect("require cache");
+        cache.set("k", b"v".to_vec(), None).await.expect("cache set");
+        assert_eq!(cache.get("k").await.expect("cache get").as_deref(), Some(&b"v"[..]));
+
+        // 3. 审计能力（DB 持久化存储）
+        let audit = kit.require::<DbNexusAuditModule>().expect("require audit");
+        let event = crate::domain::AuditEvent::create("t413_entities", "42", "admin");
+        audit.store(&event).await.expect("audit store");
+        let events = audit
+            .query(&crate::domain::AuditQueryFilters::default())
+            .await
+            .expect("audit query");
+        assert!(
+            events
+                .iter()
+                .any(|e| e.entity_type == "t413_entities" && e.entity_id == "42"),
+            "审计能力应可写入并查回事件"
+        );
+
+        // 4. 健康能力
+        let health = kit.require::<DbNexusHealthModule>().expect("require health");
+        let snapshot = health.snapshot().await;
+        assert!(
+            snapshot["pool"]["saturation"].is_number() && snapshot["status"].is_string(),
+            "健康能力应输出结构化快照: {snapshot}"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
     }
 }
