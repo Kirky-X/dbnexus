@@ -137,7 +137,8 @@ cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern (Phase 2/3).
 oxcache-integration = ["dep:oxcache", "arc-swap"]
-kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer"]
+# T413：kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
+kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（Task 21：合并原 config-yaml 别名）
