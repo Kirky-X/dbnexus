@@ -80,6 +80,7 @@ mod scatter_integration {
                 error: "timeout".to_string(),
             }],
             aggregated: Some(AggregateValue::Count(450)),
+            shard_rows: vec![],
         };
         assert_eq!(result.shard_row_counts.len(), 3);
         assert_eq!(result.failed_shards.len(), 1);

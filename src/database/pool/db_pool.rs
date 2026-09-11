@@ -801,6 +801,15 @@ impl DbPool {
         Ok(session)
     }
 
+    /// 统一行查询 API（T401）：以指定角色执行 SELECT 并返回数据行
+    ///
+    /// 内部经 `get_session` → `Session::query_rows`，共享解析/权限/慢查询口径；
+    /// 非 SELECT 或未授权表将返回权限错误。
+    pub async fn query_rows(&self, sql: &str, role: &str) -> DbResult<Vec<serde_json::Value>> {
+        let session = self.get_session(role).await?;
+        session.query_rows(sql).await
+    }
+
     /// 验证角色名称是否在权限配置中定义
     ///
     /// 仅在权限配置文件存在且成功加载时验证角色。

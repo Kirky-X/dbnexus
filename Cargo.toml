@@ -125,7 +125,7 @@ neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取）
 # Task 21：移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
-sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization"]
+sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization", "sea-orm/with-json"]
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
@@ -508,6 +508,12 @@ required-features = ["sqlite", "permission", "sql-parser", "runtime-tokio-rustls
 name = "pool_db_pool_unit_tests"
 path = "tests/pool/unit/db_pool_unit_tests.rs"
 required-features = ["sqlite", "permission", "pool-warmup", "runtime-tokio-rustls"]
+
+# T401 - 统一行查询 API 与 scatter-gather 行查询
+[[test]]
+name = "pool_query_rows_unit_tests"
+path = "tests/pool/unit/query_rows_unit_tests.rs"
+required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
 
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
