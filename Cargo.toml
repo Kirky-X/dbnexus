@@ -171,6 +171,7 @@ retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sq
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
+copy = []  # COPY 批量写入（T407：构建 COPY FROM STDIN 语句与 text 行编码；协议传输路径在 postgres 驱动组下经 #cfg(feature="postgres") 门控）
 shard-migration = ["migration", "sharding"]  # 分片迁移编排
 saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
@@ -524,6 +525,12 @@ required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
 name = "pool_health_snapshot_unit_tests"
 path = "tests/pool/unit/health_snapshot_unit_tests.rs"
 required-features = ["sqlite", "health-check", "runtime-tokio-rustls"]
+
+# T407 - COPY 批量写入契约测试（pg 协议路径另行门控）
+[[test]]
+name = "copy_contract_tests"
+path = "tests/copy/unit/copy_contract_tests.rs"
+required-features = ["sqlite", "copy", "runtime-tokio-rustls"]
 
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]

@@ -1414,7 +1414,7 @@ impl DbPool {
     /// # Errors
     ///
     /// 如果获取连接超时（池耗尽）或创建连接失败，返回错误
-    async fn acquire_connection(&self) -> DbResult<DbConnection> {
+    pub(crate) async fn acquire_connection(&self) -> DbResult<DbConnection> {
         // 步骤 0: 记录等待计数
         let waiters = self.inner.wait_count.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_max_waiters(waiters);
@@ -1537,7 +1537,7 @@ impl DbPool {
     ///
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
-    #[cfg(feature = "auto-migrate")]
+    /// （T407：去 cfg 门控——copy_in 等扩展路径同样需要归还连接）
     pub(crate) fn release_connection(&self, conn: DbConnection) {
         DbPoolInner::release_connection(&self.inner, conn);
     }

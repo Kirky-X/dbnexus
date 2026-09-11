@@ -26,6 +26,10 @@ pub mod scatter;
 #[cfg(feature = "config-confers")]
 pub mod config_confers;
 
+/// COPY 批量写入（T407，copy feature；协议传输路径在 postgres 驱动组下启用）
+#[cfg(feature = "copy")]
+pub mod copy;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;
@@ -66,6 +70,10 @@ pub use saga::{
 };
 #[cfg(all(feature = "saga", feature = "sql-parser"))]
 pub use saga::DbSagaLog;
+
+// COPY 批量写入 re-exports（T407）
+#[cfg(feature = "copy")]
+pub use copy::{CopyFormat, CopyStatement, encode_copy_rows};
 
 // 图数据库 re-exports
 #[cfg(feature = "ladybug")]
