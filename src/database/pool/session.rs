@@ -761,6 +761,25 @@ impl Session {
             }
         };
 
+        // T404：RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
+        // 无 permission feature 时 primary_table 为 None，注入自动失效）
+        #[cfg(feature = "data-protection")]
+        let sql_for_fetch = {
+            let dp = { self.pool_inner.data_protection.read().await.clone() };
+            let is_admin = self.role == self.pool_inner.admin_role;
+            if !is_admin {
+                if let Some(rls) = dp.rls.as_ref() {
+                    rls.inject(sql, primary_table.as_deref())
+                } else {
+                    sql.to_string()
+                }
+            } else {
+                sql.to_string()
+            }
+        };
+        #[cfg(not(feature = "data-protection"))]
+        let sql_for_fetch = sql.to_string();
+
         match backend {
             #[cfg(feature = "postgres")]
             sea_orm::DbBackend::Postgres => {
@@ -783,6 +802,7 @@ impl Session {
                         .map_err(DbError::Connection)?;
                     out.push(v);
                 }
+                self.apply_masking(&mut out).await;
                 return Ok(out);
             }
             #[cfg(feature = "sqlite")]
@@ -795,14 +815,17 @@ impl Session {
                     )
                 })?;
                 let cols = self.sqlite_table_columns(table, tx_opt.as_ref()).await?;
-                let stmt = sea_orm::Statement::from_string(backend, sql.to_string());
+                let stmt = sea_orm::Statement::from_string(backend, sql_for_fetch.clone());
                 let rows = if let Some(tx) = tx_opt.as_ref() {
                     tx.query_all_raw(stmt).await
                 } else {
                     self.connection()?.query_all_raw(stmt).await
                 }
                 .map_err(DbError::Connection)?;
-                return Ok(rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect());
+                let mut out: Vec<serde_json::Value> =
+                    rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
+                self.apply_masking(&mut out).await;
+                return Ok(out);
             }
             _ => {
                 return Err(DbError::Query(
@@ -811,6 +834,15 @@ impl Session {
             }
         };
         // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
+    }
+
+    /// T403：查询出口字段脱敏
+    #[cfg(feature = "data-protection")]
+    async fn apply_masking(&self, rows: &mut Vec<serde_json::Value>) {
+        let dp = { self.pool_inner.data_protection.read().await.clone() };
+        if let Some(m) = dp.masking.as_ref() {
+            m.apply(rows);
+        }
     }
 
     /// T401 内部（sqlite）：主表列名（pragma_table_info）

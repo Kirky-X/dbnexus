@@ -224,6 +224,10 @@ pub(crate) struct DbPoolInner {
     /// 缓存提供者（DI 注入点，ArcSwapOption 无锁读取 — COW 模式）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub(crate) cache_provider: ArcSwapOption<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
+
+    /// 数据保护配置（T403/T404：脱敏 + RLS，运行时整体换装）
+    #[cfg(feature = "data-protection")]
+    pub(crate) data_protection: tokio::sync::RwLock<crate::access::data_protection::DataProtection>,
 }
 
 impl DbPoolInner {
@@ -385,6 +389,10 @@ impl DbPool {
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
             }),
         };
 
@@ -477,6 +485,10 @@ impl DbPool {
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
             }),
         };
 
@@ -597,6 +609,10 @@ impl DbPool {
                 max_active: AtomicU32::new(0),
                 #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
                 cache_provider: ArcSwapOption::new(None),
+                #[cfg(feature = "data-protection")]
+                data_protection: tokio::sync::RwLock::new(
+                    crate::access::data_protection::DataProtection::default(),
+                ),
             }),
         })
     }
@@ -808,6 +824,30 @@ impl DbPool {
     pub async fn query_rows(&self, sql: &str, role: &str) -> DbResult<Vec<serde_json::Value>> {
         let session = self.get_session(role).await?;
         session.query_rows(sql).await
+    }
+
+    /// T403/T404：注入数据保护配置（字段脱敏 + RLS 谓词）
+    #[cfg(feature = "data-protection")]
+    pub async fn set_data_protection(
+        &self,
+        dp: crate::access::data_protection::DataProtection,
+    ) {
+        *self.inner.data_protection.write().await = dp;
+    }
+
+    /// T405 前置：运行时替换权限配置（角色策略缓存同步换装）
+    ///
+    /// 供配置热重载（confers watch）与测试注入使用。
+    #[cfg(feature = "permission")]
+    pub async fn set_permission_config(
+        &self,
+        config: crate::access::permission::PermissionConfig,
+    ) -> DbResult<()> {
+        for (role_name, policy) in &config.roles {
+            let _ = self.inner.policy_cache.set(role_name, policy).await;
+        }
+        self.inner.permission_config.store(Some(Arc::new(config)));
+        Ok(())
     }
 
     /// 验证角色名称是否在权限配置中定义

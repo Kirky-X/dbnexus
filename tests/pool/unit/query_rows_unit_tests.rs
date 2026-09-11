@@ -123,3 +123,93 @@ async fn test_scatter_query_rows_with_aggregate() {
     let _ = std::fs::remove_file(&tmp0);
     let _ = std::fs::remove_file(&tmp1);
 }
+
+// ============================================================================
+// T403/T404：query_rows 出口脱敏 + RLS 谓词注入（data-protection feature）
+// ============================================================================
+
+#[cfg(all(feature = "data-protection", feature = "permission"))]
+#[tokio::test]
+async fn test_query_rows_masking_and_rls() {
+    use dbnexus::{
+        access::data_protection::{DataProtection, MaskStrategy, MaskingEngine, RlsEngine},
+        DbPool,
+    };
+    use std::sync::Arc;
+
+    let db_path =
+        std::env::temp_dir().join(format!("dbnexus_dp_{}.db", std::process::id()));
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+    let admin = pool.get_session("admin").await.unwrap();
+    admin
+        .execute_raw_ddl("CREATE TABLE orders (id INTEGER PRIMARY KEY, email TEXT NOT NULL, tenant_id TEXT NOT NULL, amount REAL NOT NULL)")
+        .await
+        .unwrap();
+    admin
+        .execute_raw("INSERT INTO orders (id, email, tenant_id, amount) VALUES (1, 'alice@example.com', 't-100', 10.0)")
+        .await
+        .unwrap();
+    admin
+        .execute_raw("INSERT INTO orders (id, email, tenant_id, amount) VALUES (2, 'bob@example.com', 't-200', 20.0)")
+        .await
+        .unwrap();
+
+    // 为 default 角色授予 orders 表 select 权限（RLS 谓词由此角色触发）
+    let mut roles = std::collections::HashMap::new();
+    roles.insert(
+        "admin".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "*".to_string(),
+                operations: vec![
+                    dbnexus::access::permission::PermissionAction::Select,
+                    dbnexus::access::permission::PermissionAction::Insert,
+                    dbnexus::access::permission::PermissionAction::Update,
+                    dbnexus::access::permission::PermissionAction::Delete,
+                ],
+            }],
+        },
+    );
+    roles.insert(
+        "default".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "orders".to_string(),
+                operations: vec![dbnexus::access::permission::PermissionAction::Select],
+            }],
+        },
+    );
+    pool.set_permission_config(dbnexus::access::permission::PermissionConfig { roles })
+        .await
+        .unwrap();
+
+    // 配置：email 脱敏（哈希）+ orders 表 tenant_id RLS（仅 t-100 可见）
+    pool.set_data_protection(DataProtection {
+        masking: Some(Arc::new(MaskingEngine::new().rule("email", MaskStrategy::Hash))),
+        rls: Some(Arc::new(RlsEngine::new().policy("orders", "tenant_id", "t-100"))),
+    })
+    .await;
+
+    // admin（管理通道）：不注入 RLS，但出口仍脱敏
+    let rows = pool
+        .query_rows("SELECT id, email, tenant_id FROM orders ORDER BY id", "admin")
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2, "admin 不受 RLS 限制");
+    let email = rows[0]["email"].as_str().unwrap();
+    assert_eq!(email.len(), 64, "admin 出口同样脱敏");
+    assert!(!email.contains('@'));
+    assert_eq!(rows[0]["tenant_id"], "t-100");
+
+    // 非 admin（无权限配置的默认策略允许 default 角色）→ RLS 注入生效
+    let rows_rls = pool
+        .query_rows("SELECT id, tenant_id FROM orders", "default")
+        .await
+        .unwrap();
+    assert_eq!(rows_rls.len(), 1, "RLS 谓词应只放行 t-100");
+    assert_eq!(rows_rls[0]["tenant_id"], "t-100");
+
+    let _ = std::fs::remove_file(&db_path);
+}
