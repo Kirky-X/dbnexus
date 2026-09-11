@@ -165,6 +165,12 @@ pub use crate::access::{DdlGuard, DdlValidationResult};
 // T416 统一 DDL 守卫端口与装饰器（白名单/干跑/审计）
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{AuditingDdlGuard, DdlAuditRecord, DdlGuardPolicy, DryRunDdlGuard};
+// T417 统一注入检测引擎
+pub use crate::access::{InjectionEngine, InjectionRule, RuleCategory};
+
+// T418 泛型仓储（repository feature）
+#[cfg(feature = "repository")]
+pub use crate::database::repository::{JsonRepository, Repository};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

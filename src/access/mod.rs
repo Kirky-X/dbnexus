@@ -14,6 +14,7 @@ pub mod authentication;
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
 #[cfg(feature = "sql-parser")]
+pub mod injection_engine;
 pub mod sql_parser;
 
 /// T403/T404：字段级脱敏与行级安全（data-protection feature）
@@ -27,6 +28,7 @@ pub mod permission_audit_chain;
 // Re-exports: security
 #[cfg(feature = "sql-parser")]
 pub use security::{AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard};
+pub use injection_engine::{InjectionEngine, InjectionRule, RuleCategory};
 pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 // Re-exports: permission

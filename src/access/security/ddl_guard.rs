@@ -28,9 +28,6 @@ const ALLOWED_DDL_STATEMENTS: &[&str] = &[
     "Delete",
 ];
 
-/// 禁止的 SQL 模式（AST 无法捕获的模式，如字符串拼接注入）
-const FORBIDDEN_PATTERNS: &[&str] = &["DROP DATABASE", "DROP ALL"];
-
 /// DDL 验证结果
 #[derive(Debug, Clone)]
 pub enum DdlValidationResult {
@@ -232,14 +229,15 @@ impl DdlGuard {
         }
 
         // 第一步：检查禁止的字符串模式（捕获 AST 无法检测的注入）
-        let sql_upper = sql_trimmed.to_uppercase();
-        for pattern in FORBIDDEN_PATTERNS {
-            if sql_upper.contains(pattern) {
-                return Ok(DdlValidationResult::Forbidden(format!(
-                    "Contains forbidden pattern: {}",
-                    pattern
-                )));
-            }
+        // T417：禁用模式表已合并至统一注入引擎（scan_ddl 管线口径不变）
+        if let Some(rule) = crate::access::InjectionEngine::global()
+            .scan_ddl(sql_trimmed)
+            .first()
+        {
+            return Ok(DdlValidationResult::Forbidden(format!(
+                "Contains forbidden pattern: {}",
+                rule.pattern
+            )));
         }
 
         // 第二步：AST 解析验证

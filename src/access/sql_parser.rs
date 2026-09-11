@@ -3,7 +3,6 @@
 //! SQL Parser module using sqlparser for enhanced SQL parsing and validation.
 //! This module provides robust SQL operation detection and permission action mapping.
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{
     Delete, FromTable, Query, Set, SetExpr, Statement, TableObject, TableWithJoins,
@@ -11,7 +10,6 @@ use sqlparser::ast::{
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -570,37 +568,10 @@ impl SqlParser {
 /// `?` prepared-statement 占位符**不算**危险变量：它是参数绑定的安全形态，
 /// 值通过 prepared statement 传递，数据库不会将其解析为 SQL 代码。
 fn contains_variables(sql: &str) -> bool {
-    // Remove string literals first to avoid false positives
-    let sql_without_strings = remove_string_literals(sql);
-
-    // Enhanced detection patterns for SQL injection and dynamic SQL variables
-    static PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
-        vec![
-            // Named parameters: @variable, :variable
-            Regex::new(r"@[\w]+").expect("Regex pattern should be valid"),
-            Regex::new(r":[a-zA-Z_][\w]*").expect("Regex pattern should be valid"),
-            // Shell/PHP variables: $variable, ${variable}
-            Regex::new(r"\$\{?[\w]+\}?").expect("Regex pattern should be valid"),
-            // Percent-encoded parameters: %variable%
-            Regex::new(r"%[\w]+%").expect("Regex pattern should be valid"),
-            // Hex literals that might be used to bypass filters
-            Regex::new(r"0x[0-9A-Fa-f]+").expect("Regex pattern should be valid"),
-            // NOTE：`?` prepared-statement 占位符不再视为危险变量——它是参数绑定的
-            // 安全形态（值经 prepared statement 传递，数据库不解析为 SQL），
-            // 依赖参数化 API 的调用方（如 execute_duckdb_with_params）必须放行。
-        ]
-    });
-
-    if PATTERNS.is_empty() {
-        return false;
-    }
-
-    for pattern in PATTERNS.iter() {
-        if pattern.is_match(&sql_without_strings) {
-            return true;
-        }
-    }
-    false
+    // T417：委托统一注入检测引擎（变量正则已合并至 InjectionEngine；
+    // `?` prepared-statement 占位符仍不算危险变量——参数绑定的安全形态，
+    // 依赖参数化 API 的调用方（如 execute_duckdb_with_params）必须放行）
+    crate::access::injection_engine::InjectionEngine::global().has_dynamic_variables(sql)
 }
 
 /// Check if SQL contains potential SQL injection patterns
@@ -625,116 +596,9 @@ fn contains_variables(sql: &str) -> bool {
 /// 在检测前会先对 SQL 进行 Unicode 规范化（NFKC），防止攻击者使用
 /// 视觉相似但 Unicode 编码不同的字符绕过检测。
 pub fn contains_sql_injection(sql: &str) -> bool {
-    // 第一步：Unicode 规范化（NFKC）
-    // 将视觉相似的字符统一化，防止 Unicode 绕过攻击
-    let normalized = normalize_unicode(sql);
-
-    // 第二步：检查块注释标记（在移除前检测，因为注释本身即为注入迹象）
-    if normalized.contains("/*") {
-        return true;
-    }
-
-    // 第三步：移除字符串字面量
-    let sql_without_strings = remove_string_literals(&normalized);
-    // 第四步：移除块注释
-    let sql_without_comments = strip_block_comments(&sql_without_strings);
-    let sql_upper = sql_without_comments.to_uppercase();
-
-    // 静态模式表：放在 static 而非栈上，避免每次调用重新分配；
-    // 数据在只读段，CPU L1 cache 友好，分支预测命中率高。
-    // 注：模式含多词子串（如 "UNION SELECT"），无法用 HashSet 精确匹配，
-    // 必须做子串扫描。Aho-Corasick 可进一步优化但需外部 crate。
-    static INJECTION_PATTERNS: &[&str] = &[
-        // === UNION 注入 ===
-        "UNION SELECT",
-        "UNION ALL SELECT",
-        "UNION DISTINCT SELECT",
-        // === 布尔盲注 ===
-        " OR 1=1",
-        " OR 1 =1",
-        " OR 1= 1",
-        " OR 1 = 1",
-        " OR TRUE",
-        " OR FALSE",
-        " AND 1=1",
-        " AND TRUE",
-        " AND FALSE",
-        // === 时间盲注 - MySQL ===
-        "SLEEP(",
-        "BENCHMARK(",
-        // === 时间盲注 - PostgreSQL ===
-        "PG_SLEEP(",
-        "PG_SLEEP_FOR(",
-        "PG_SLEEP_UNTIL(",
-        // === 时间盲注 - SQL Server ===
-        "WAITFOR DELAY",
-        "WAITFOR TIME",
-        // === 时间盲注 - Oracle ===
-        "DBMS_PIPE.RECEIVE_MESSAGE(",
-        "DBMS_LOCK.SLEEP(",
-        // === 动态 SQL 执行 ===
-        "EXEC(",
-        "EXECUTE(",
-        "SP_EXECUTESQL",
-        "XP_CMDSHELL",
-        " xp_",
-        "EXEC xp_",
-        "EXECUTE xp_",
-        // === 文件操作 ===
-        "LOAD_FILE(",
-        "INTO OUTFILE",
-        "INTO DUMPFILE",
-        // === 信息泄露 ===
-        "INFORMATION_SCHEMA",
-        "SYSOBJECTS",
-        "SYSCOLUMNS",
-        "SYS.TABLES",
-        "SYS.COLUMNS",
-        "SYS.DATABASES",
-        "MYSQL.USER",
-        "PG_USER",
-        "PG_SHADOW",
-        "ALL_TABLES",
-        "ALL_COLUMNS",
-        "ALL_TAB_COLUMNS",
-        "USER_TABLES",
-        "USER_TAB_COLUMNS",
-        // === 编码绕过 ===
-        "CHAR(",
-        "CHR(",
-        "CONCAT(",
-        "CONCAT_WS(",
-        "0X",
-        // === 堆叠查询 ===
-        "; DROP",
-        "; DELETE",
-        "; UPDATE",
-        "; INSERT",
-        "; TRUNCATE",
-        "; ALTER",
-        "; CREATE",
-        "; EXEC",
-        "; EXECUTE",
-        // === 注释注入 ===
-        "-- ",
-        "--+",
-        "#",
-        // === 其他危险模式 ===
-        "HAVING 1=1",
-        "ORDER BY 1--",
-        "ORDER BY 1#",
-        "PROCEDURE ANALYSE(",
-        "EXTRACTVALUE(",
-        "UPDATEXML(",
-        "XMLTYPE(",
-        "UTL_HTTP.REQUEST(",
-        "UTL_INADDR.GET_HOST_ADDRESS(",
-        "UTL_INADDR.GET_HOST_NAME(",
-    ];
-
-    INJECTION_PATTERNS
-        .iter()
-        .any(|pattern| sql_upper.contains(pattern))
+    // T417：委托统一注入检测引擎（规则集合并 + 去重见 injection_engine 模块文档；
+    // parity 测试保证与合并前遗留规则表判定一致）
+    crate::access::injection_engine::InjectionEngine::global().is_suspicious_relational(sql)
 }
 
 /// Check if SQL contains DDL operations
@@ -765,7 +629,7 @@ fn contains_ddl_operation(sql: &str) -> bool {
 ///
 /// 单引号和双引号内容被视为字符串字面量并替换为空格。
 /// 反引号（MySQL 标识符引用）保留原始内容，因为它是标识符引用而非字符串字面量。
-fn remove_string_literals(sql: &str) -> String {
+pub(crate) fn remove_string_literals(sql: &str) -> String {
     let mut result = String::new();
     let mut in_string = false;
     let mut string_char = ' ';
@@ -816,7 +680,7 @@ fn remove_string_literals(sql: &str) -> String {
 }
 
 /// 移除 SQL 中的块注释（`/* ... */`），用等长空格替换以保持位置信息
-fn strip_block_comments(sql: &str) -> String {
+pub(crate) fn strip_block_comments(sql: &str) -> String {
     let mut result = String::with_capacity(sql.len());
     let mut chars = sql.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -856,7 +720,7 @@ fn strip_block_comments(sql: &str) -> String {
 /// - 全角字符转为半角字符（如 `ＳＥＬＥＣＴ` -> `SELECT`）
 /// - 兼容性分解（如 `ﬃ` -> `ffi`）
 /// - 组合字符规范化
-fn normalize_unicode(sql: &str) -> String {
+pub(crate) fn normalize_unicode(sql: &str) -> String {
     sql.nfkc().collect()
 }
 

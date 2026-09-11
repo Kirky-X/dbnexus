@@ -1997,25 +1997,27 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         }
     }
 
-    // 4. 块注释检测：`/* */`
-    if cypher.contains("/*") || cypher.contains("*/") {
+    // 4/5. T417：块注释与危险过程检测经统一注入引擎（规则表合并 + 去重）
+    let findings = crate::access::InjectionEngine::global().scan_graph(cypher);
+    // 块注释（`/* */`）：任一标记命中即拒绝（与合并前第 4 步口径一致）
+    if findings
+        .iter()
+        .any(|rule| rule.category == crate::access::RuleCategory::Comment)
+    {
         return Err(DbError::Permission(
             "Cypher query contains block comment '/* */' - potential injection".to_string(),
         ));
     }
-
-    // 5. 危险过程调用检测：`CALL apoc.`（APOC 是 Neo4j 管理员过程库，可执行系统操作）
-    //
-    // 其他危险过程（如 `dbms.`、`db.`）也在黑名单中，防止提权 / 系统访问。
-    let cypher_lower = cypher.to_ascii_lowercase();
-    const DANGEROUS_CALLS: &[&str] = &["call apoc.", "call dbms.", "call db.", "call tx."];
-    for &dangerous in DANGEROUS_CALLS {
-        if cypher_lower.contains(dangerous) {
-            return Err(DbError::Permission(format!(
-                "Cypher query calls dangerous procedure ('{}') - potential privilege escalation",
-                dangerous
-            )));
-        }
+    // 危险过程调用：`CALL apoc.`（APOC 是 Neo4j 管理员过程库，可执行系统操作）；
+    // 其他危险过程（如 `dbms.`、`db.`）也在黑名单中，防止提权 / 系统访问
+    if let Some(rule) = findings
+        .iter()
+        .find(|rule| rule.category == crate::access::RuleCategory::GraphProcedure)
+    {
+        return Err(DbError::Permission(format!(
+            "Cypher query calls dangerous procedure ('{}') - potential privilege escalation",
+            rule.pattern
+        )));
     }
 
     Ok(())
