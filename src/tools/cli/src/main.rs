@@ -18,16 +18,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[command(name = "dbnexus-migrate")]
 #[command(about = "DBNexus 数据库迁移工具", long_about = None)]
 struct Cli {
-    /// 数据库连接字符串
-    #[arg(short, long, env = "DATABASE_URL")]
-    database_url: String,
+    /// 数据库连接字符串（global：可置于子命令前后任意位置）
+    #[arg(short, long, env = "DATABASE_URL", global = true)]
+    database_url: Option<String>,
 
     /// 配置文件路径
     #[arg(short, long)]
     config: Option<PathBuf>,
 
-    /// 迁移文件目录
-    #[arg(short, long, default_value = "./migrations")]
+    /// 迁移文件目录（global：可置于子命令前后任意位置）
+    #[arg(short, long, default_value = "./migrations", global = true)]
     migrations_dir: PathBuf,
 
     /// 手动指定语言 (en, zh)
@@ -96,12 +96,75 @@ enum Commands {
 
     /// 列出所有迁移文件
     List,
+
+    /// 应用迁移目录中的所有待应用迁移（T415 机器可读输出，退出码 0/1/2）
+    Migrate {
+        /// 目标版本号（可选，默认为所有待应用迁移）
+        #[arg(long)]
+        version: Option<u32>,
+    },
+
+    /// 数据库健康检查（JSON 输出，退出码 0 健康 / 1 不健康 / 2 用法错误）
+    Health,
+
+    /// 管理员用户增删 MVP（dbnexus_users 表，JSON 输出）
+    User {
+        #[command(subcommand)]
+        action: UserAction,
+    },
+}
+
+/// `user` 子命令动作（T415）
+#[derive(Subcommand)]
+enum UserAction {
+    /// 新增用户
+    Add {
+        /// 用户名（1-64 位字母/数字/_.-）
+        #[arg(long)]
+        username: String,
+
+        /// 密码（存储加盐 SHA-256 摘要，MVP；生产建议接 authentication bcrypt）
+        #[arg(long)]
+        password: String,
+
+        /// 角色（1-64 位字母/数字/_-，默认 admin）
+        #[arg(long, default_value = "admin")]
+        role: String,
+    },
+
+    /// 删除用户
+    Remove {
+        /// 用户名
+        #[arg(long)]
+        username: String,
+    },
+
+    /// 列出用户
+    List,
+}
+
+/// CLI 退出码契约（T415）：0 成功 / 1 运行时失败 / 2 用法或配置错误
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitCode {
+    /// 成功
+    Ok = 0,
+    /// 运行时失败（连接失败、迁移失败、目标不存在等）
+    RuntimeFailure = 1,
+    /// 用法或配置错误（参数非法、URL 协议不支持等）
+    UsageError = 2,
 }
 
 /// 程序入口
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    // global 参数解析（clap 不允许 required global，此处统一收敛）
+    let database_url: String = cli.database_url.unwrap_or_else(|| {
+        eprintln!("error: --database-url is required (or set DATABASE_URL)");
+        std::process::exit(ExitCode::UsageError as i32);
+    });
+    let database_url = &database_url;
 
     // 初始化语言设置
     if let Some(ref lang) = cli.lang {
@@ -126,16 +189,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             create_migration(description, directory).await?;
         }
         Commands::Up { version } => {
-            run_migrations_up(&cli.database_url, &cli.migrations_dir, *version).await?;
+            run_migrations_up(&database_url, &cli.migrations_dir, *version).await?;
         }
         Commands::Down { version, all } => {
-            run_migrations_down(&cli.database_url, &cli.migrations_dir, *version, *all).await?;
+            run_migrations_down(&database_url, &cli.migrations_dir, *version, *all).await?;
         }
         Commands::Status => {
-            show_status(&cli.database_url, &cli.migrations_dir).await?;
+            show_status(&database_url, &cli.migrations_dir).await?;
         }
         Commands::TestConnection => {
-            test_connection(&cli.database_url).await?;
+            test_connection(&database_url).await?;
         }
         Commands::Generate {
             from_schema,
@@ -146,7 +209,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_migration(from_schema, to_schema, output, description).await?;
         }
         Commands::List => {
-            list_migrations(&cli.database_url, &cli.migrations_dir).await?;
+            list_migrations(&database_url, &cli.migrations_dir).await?;
+        }
+        // T415 运维子命令：JSON 输出 + 退出码契约（0 成功 / 1 运行时失败 / 2 用法错误）
+        Commands::Migrate { version } => {
+            let code = run_migrate_json(&database_url, &cli.migrations_dir, *version).await;
+            std::process::exit(code as i32);
+        }
+        Commands::Health => {
+            let code = run_health_json(&database_url).await;
+            std::process::exit(code as i32);
+        }
+        Commands::User { action } => {
+            let code = run_user_command(&database_url, action).await;
+            std::process::exit(code as i32);
         }
     }
 
@@ -993,6 +1069,385 @@ async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<
     Ok(())
 }
 
+// ============================================================================
+// T415 运维子命令（migrate / health / user）— 机器可读 JSON + 退出码 0/1/2
+// ============================================================================
+
+/// 输出一行 JSON 到 stdout
+fn print_json(value: &serde_json::Value) {
+    println!("{}", serde_json::to_string(value).unwrap_or_default());
+}
+
+/// 校验用户名/角色名：1-64 位字母、数字、下划线、点、连字符
+fn is_valid_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
+}
+
+/// 用户表 DDL（T415 user 子命令存储）
+fn users_table_ddl() -> &'static str {
+    "CREATE TABLE IF NOT EXISTS dbnexus_users (\
+username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, \
+role TEXT NOT NULL, created_at TEXT NOT NULL)"
+}
+
+/// 加盐 SHA-256 口令摘要（MVP：存储格式 `sha256$<salt_hex>$<digest_hex>`）
+///
+/// 生产部署建议启用 authentication feature 走 bcrypt；此 MVP 保证明文口令不落库。
+fn hash_password(password: &str, salt_hex: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(salt_hex.as_bytes());
+    hasher.update(b":");
+    hasher.update(password.as_bytes());
+    let digest = hasher.finalize();
+    format!("sha256${salt_hex}${}", to_hex(&digest))
+}
+
+/// 生成随机盐（系统时钟纳秒熵 + 进程 ID，MVP 口径）
+fn new_salt() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    to_hex(&nanos.to_le_bytes()).chars().take(16).collect()
+}
+
+/// 字节转十六进制（避免引入 hex 依赖）
+fn to_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(char::from_digit((b >> 4) as u32, 16).unwrap_or('0'));
+        out.push(char::from_digit((b & 0x0f) as u32, 16).unwrap_or('0'));
+    }
+    out
+}
+
+/// 应用迁移目录中的所有待应用迁移（JSON 输出）
+///
+/// 退出码：0 全部应用成功（含无待应用）/ 1 迁移执行失败 / 2 连接或 URL 配置错误
+async fn run_migrate_json(
+    database_url: &str,
+    migrations_dir: &Path,
+    target_version: Option<u32>,
+) -> ExitCode {
+    let pool = match DbPool::new(database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "connect_failed", "error": e.to_string()
+            }));
+            return classify_connect_error(database_url);
+        }
+    };
+
+    let db_type = match detect_database_type(database_url) {
+        Ok(t) => t,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "unsupported_url", "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+
+    let session = match pool.get_session("admin").await {
+        Ok(s) => s,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "session_failed", "error": e.to_string()
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+    let mut executor = match session.create_migration_executor(db_type) {
+        Ok(e) => e,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "executor_failed", "error": e.to_string()
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+
+    let migrations = match executor.scan_migrations(migrations_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "scan_failed", "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+
+    if let Err(e) = executor.load_history().await {
+        print_json(&serde_json::json!({
+            "status": "error", "error_code": "history_failed", "error": e.to_string()
+        }));
+        return ExitCode::RuntimeFailure;
+    }
+
+    let applied_versions: std::collections::HashSet<u32> = executor
+        .history()
+        .applied_migrations
+        .iter()
+        .map(|m| m.version)
+        .collect();
+
+    let mut to_apply: Vec<_> = migrations
+        .iter()
+        .filter(|m| !applied_versions.contains(&m.version()))
+        .filter(|m| match target_version {
+            Some(target) => m.version() <= target,
+            None => true,
+        })
+        .collect();
+    to_apply.sort_by_key(|m| m.version());
+
+    let mut applied: Vec<serde_json::Value> = Vec::new();
+    for migration in &to_apply {
+        match executor.apply_migration_file_public(migration).await {
+            Ok(_) => applied.push(serde_json::json!({
+                "version": migration.version(),
+                "description": migration.description(),
+            })),
+            Err(e) => {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "migration_failed",
+                    "applied": applied, "error": e.to_string()
+                }));
+                return ExitCode::RuntimeFailure;
+            }
+        }
+    }
+
+    print_json(&serde_json::json!({
+        "status": "ok",
+        "applied": applied,
+        "pending_total": to_apply.len(),
+        "already_applied": migrations.len() - to_apply.len(),
+        "url": mask_database_url(database_url),
+    }));
+    ExitCode::Ok
+}
+
+/// 数据库健康检查（JSON 输出）
+///
+/// 退出码：0 健康 / 1 不健康（连接或查询失败）/ 2 用法错误（URL 协议不支持等）
+async fn run_health_json(database_url: &str) -> ExitCode {
+    // URL 协议合法性先行校验 → 用法错误
+    if detect_database_type(database_url).is_err() {
+        print_json(&serde_json::json!({
+            "status": "unhealthy",
+            "checks": { "url": "invalid" },
+            "error": "unsupported database URL protocol"
+        }));
+        return ExitCode::UsageError;
+    }
+
+    let start = std::time::Instant::now();
+    let pool = match DbPool::new(database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "unhealthy",
+                "checks": { "connect": "fail" },
+                "error": e.to_string(),
+                "url": mask_database_url(database_url),
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+
+    // 权限检查需可提取表名，故用 sqlite_master 而非 SELECT 1（CLI 默认启用 permission）；
+    // 空库 sqlite_master 为空集属正常状态，查询成功即视为健康
+    let query_latency = match pool
+        .query_rows("SELECT name FROM sqlite_master LIMIT 1", "admin")
+        .await
+    {
+        Ok(_) => Some(start.elapsed().as_millis() as u64),
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "unhealthy",
+                "checks": { "connect": "ok", "query": "fail" },
+                "error": e.to_string(),
+                "url": mask_database_url(database_url),
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+
+    let status = pool.status();
+    print_json(&serde_json::json!({
+        "status": "healthy",
+        "checks": { "connect": "ok", "query": "ok" },
+        "query_latency_ms": query_latency,
+        "connections": {
+            "total": status.total,
+            "active": status.active,
+            "idle": status.idle,
+        },
+        "url": mask_database_url(database_url),
+    }));
+    ExitCode::Ok
+}
+
+/// 管理员用户增删（MVP，JSON 输出）
+async fn run_user_command(database_url: &str, action: &UserAction) -> ExitCode {
+    // 参数校验 → 用法错误
+    let (username, role): (&str, &str) = match action {
+        UserAction::Add {
+            username,
+            password,
+            role,
+        } => {
+            if !is_valid_identifier(username) {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "invalid_username",
+                    "error": "username must be 1-64 chars of [A-Za-z0-9_.-]"
+                }));
+                return ExitCode::UsageError;
+            }
+            if password.is_empty() {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "empty_password",
+                    "error": "password must not be empty"
+                }));
+                return ExitCode::UsageError;
+            }
+            if !is_valid_identifier(role) {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "invalid_role",
+                    "error": "role must be 1-64 chars of [A-Za-z0-9_.-]"
+                }));
+                return ExitCode::UsageError;
+            }
+            (username, role)
+        }
+        UserAction::Remove { username } => {
+            if !is_valid_identifier(username) {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "invalid_username",
+                    "error": "username must be 1-64 chars of [A-Za-z0-9_.-]"
+                }));
+                return ExitCode::UsageError;
+            }
+            (username, "")
+        }
+        UserAction::List => ("", ""),
+    };
+
+    let pool = match DbPool::new(database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "connect_failed", "error": e.to_string()
+            }));
+            return classify_connect_error(database_url);
+        }
+    };
+
+    let session = match pool.get_session("admin").await {
+        Ok(s) => s,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "session_failed", "error": e.to_string()
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+
+    // 建表（幂等）
+    if let Err(e) = session.execute_raw_ddl(users_table_ddl()).await {
+        print_json(&serde_json::json!({
+            "status": "error", "error_code": "table_create_failed", "error": e.to_string()
+        }));
+        return ExitCode::RuntimeFailure;
+    }
+
+    match action {
+        UserAction::Add { password, .. } => {
+            let salt = new_salt();
+            let hash = hash_password(password, &salt);
+            let created_at = chrono::Utc::now().to_rfc3339();
+            // 主键冲突 → 视为运行时失败（用户已存在）
+            let insert = format!(
+                "INSERT INTO dbnexus_users (username, password_hash, role, created_at) \
+VALUES ('{username}', '{hash}', '{role}', '{created_at}')"
+            );
+            if let Err(e) = session.execute_raw(&insert).await {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "user_exists_or_insert_failed",
+                    "username": username, "error": e.to_string()
+                }));
+                return ExitCode::RuntimeFailure;
+            }
+            print_json(&serde_json::json!({
+                "status": "ok", "action": "add", "username": username, "role": role
+            }));
+            ExitCode::Ok
+        }
+        UserAction::Remove { username } => {
+            let delete = format!("DELETE FROM dbnexus_users WHERE username = '{username}'");
+            match session.execute_raw(&delete).await {
+                Ok(result) => {
+                    if result.rows_affected() == 0 {
+                        print_json(&serde_json::json!({
+                            "status": "error", "error_code": "user_not_found",
+                            "username": username
+                        }));
+                        return ExitCode::RuntimeFailure;
+                    }
+                    print_json(&serde_json::json!({
+                        "status": "ok", "action": "remove", "username": username
+                    }));
+                    ExitCode::Ok
+                }
+                Err(e) => {
+                    print_json(&serde_json::json!({
+                        "status": "error", "error_code": "remove_failed",
+                        "username": username, "error": e.to_string()
+                    }));
+                    ExitCode::RuntimeFailure
+                }
+            }
+        }
+        UserAction::List => match pool.query_rows(
+            "SELECT username, role, created_at FROM dbnexus_users ORDER BY username",
+            "admin",
+        )
+        .await
+        {
+            Ok(rows) => {
+                print_json(&serde_json::json!({
+                    "status": "ok", "action": "list", "users": rows, "count": rows.len()
+                }));
+                ExitCode::Ok
+            }
+            Err(e) => {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "list_failed", "error": e.to_string()
+                }));
+                ExitCode::RuntimeFailure
+            }
+        },
+    }
+}
+
+/// 连接失败按 URL 合法性分类退出码：协议不支持 → 用法错误，其余 → 运行时失败
+fn classify_connect_error(database_url: &str) -> ExitCode {
+    if url::Url::parse(database_url).is_err() {
+        return ExitCode::UsageError;
+    }
+    match detect_database_type(database_url) {
+        Ok(_) => ExitCode::RuntimeFailure,
+        Err(_) => ExitCode::UsageError,
+    }
+}
+
 /// 检测数据库类型（增强版）
 ///
 /// 使用 URL 解析器验证数据库 URL 格式，
@@ -1132,5 +1587,78 @@ mod tests {
     fn test_detect_database_type_unsupported() {
         assert!(detect_database_type("foo://localhost/db").is_err());
         assert!(detect_database_type("not a url").is_err());
+    }
+
+    // ===== T415 运维 CLI：标识符校验 / 口令摘要 / 退出码契约 =====
+
+    #[test]
+    fn test_is_valid_identifier() {
+        assert!(is_valid_identifier("admin"));
+        assert!(is_valid_identifier("ops_user-1.a"));
+        assert!(!is_valid_identifier("")); // 空
+        assert!(!is_valid_identifier("a b")); // 空格
+        assert!(!is_valid_identifier("用户")); // 非ASCII
+        assert!(!is_valid_identifier("'; DROP TABLE t; --")); // 注入尝试
+        assert!(!is_valid_identifier(&"x".repeat(65))); // 超长
+        assert!(is_valid_identifier(&"x".repeat(64))); // 边界
+    }
+
+    #[test]
+    fn test_hash_password_format_and_salt_uniqueness() {
+        let salt = new_salt();
+        let h1 = hash_password("s3cret", &salt);
+        let h2 = hash_password("s3cret", &new_salt());
+        // 格式 sha256$<salt>$<digest>
+        let parts: Vec<&str> = h1.split('$').collect();
+        assert_eq!(parts[0], "sha256");
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[2].len(), 64); // SHA-256 hex
+        // 明文不出现
+        assert!(!h1.contains("s3cret"));
+        // 不同盐 → 不同摘要
+        assert_ne!(h1, h2);
+        // 同盐确定性
+        assert_eq!(h1, hash_password("s3cret", &salt));
+    }
+
+    #[test]
+    fn test_to_hex() {
+        assert_eq!(to_hex(&[0x00, 0x0f, 0xff]), "000fff");
+        assert_eq!(to_hex(&[]), "");
+    }
+
+    #[test]
+    fn test_users_table_ddl_has_all_columns() {
+        let ddl = users_table_ddl();
+        for col in ["username", "password_hash", "role", "created_at"] {
+            assert!(ddl.contains(col), "DDL 缺少列 {col}: {ddl}");
+        }
+        assert!(ddl.contains("PRIMARY KEY"));
+    }
+
+    #[test]
+    fn test_exit_code_contract() {
+        // 0 成功 / 1 运行时失败 / 2 用法错误
+        assert_eq!(ExitCode::Ok as i32, 0);
+        assert_eq!(ExitCode::RuntimeFailure as i32, 1);
+        assert_eq!(ExitCode::UsageError as i32, 2);
+    }
+
+    #[test]
+    fn test_classify_connect_error_exit_codes() {
+        // 协议不支持 → 用法错误 2
+        assert_eq!(
+            classify_connect_error("foo://localhost/db"),
+            ExitCode::UsageError
+        );
+        assert_eq!(
+            classify_connect_error("oracle://localhost/db"),
+            ExitCode::UsageError
+        );
+        // 合法协议（运行期才会失败的连接）→ 运行时失败 1
+        assert_eq!(
+            classify_connect_error("sqlite:/tmp/dbnexus_t415_nonexistent_dir_x/db.db?mode=rwc"),
+            ExitCode::RuntimeFailure
+        );
     }
 }
