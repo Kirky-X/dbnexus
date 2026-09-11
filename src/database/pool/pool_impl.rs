@@ -137,6 +137,15 @@ impl DbPoolBuilder {
         self
     }
 
+    /// 注入统一 DDL 守卫策略（T416：白名单/干跑/审计经 `DdlGuardPolicy` 端口）
+    ///
+    /// 注入后 `execute_raw_ddl` / DuckDB 安全门等全部 DDL 路径经该策略校验与审计。
+    #[cfg(feature = "sql-parser")]
+    pub fn ddl_guard(mut self, guard: std::sync::Arc<dyn crate::access::DdlGuardPolicy>) -> Self {
+        self.ddl_guard = Some(guard);
+        self
+    }
+
     /// 构建 DbPool
     ///
     /// # Errors
@@ -177,6 +186,12 @@ impl DbPoolBuilder {
         #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
         if let Some(cache_provider) = self.cache_provider {
             pool.set_cache_provider(cache_provider);
+        }
+
+        // 注入统一 DDL 守卫策略（T416，如果设置）
+        #[cfg(feature = "sql-parser")]
+        if let Some(guard) = self.ddl_guard {
+            pool.set_ddl_guard(guard);
         }
 
         // 注意：以下值已通过 config 设置，不需要额外调用 setter 方法

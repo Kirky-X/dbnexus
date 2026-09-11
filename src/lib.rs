@@ -162,6 +162,9 @@ pub use crate::database::{
 // Access 导出
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{DdlGuard, DdlValidationResult};
+// T416 统一 DDL 守卫端口与装饰器（白名单/干跑/审计）
+#[cfg(feature = "sql-parser")]
+pub use crate::access::{AuditingDdlGuard, DdlAuditRecord, DdlGuardPolicy, DryRunDdlGuard};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

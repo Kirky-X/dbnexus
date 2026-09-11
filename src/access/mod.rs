@@ -26,7 +26,7 @@ pub mod permission_audit_chain;
 
 // Re-exports: security
 #[cfg(feature = "sql-parser")]
-pub use security::{DdlGuard, DdlValidationResult};
+pub use security::{AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard};
 pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 // Re-exports: permission

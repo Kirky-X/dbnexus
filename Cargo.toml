@@ -529,6 +529,12 @@ name = "pool_query_rows_unit_tests"
 path = "tests/pool/unit/query_rows_unit_tests.rs"
 required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
 
+# T416 - 统一 DDL 守卫端口（白名单/干跑/审计）
+[[test]]
+name = "pool_ddl_guard_policy_tests"
+path = "tests/pool/unit/ddl_guard_policy_tests.rs"
+required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
+
 # T406 - 结构化健康导出（health_snapshot）
 [[test]]
 name = "pool_health_snapshot_unit_tests"

@@ -32,7 +32,7 @@ use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::is_ddl_operation;
 #[cfg(feature = "sql-parser")]
-use crate::access::{DdlGuard, DdlValidationResult};
+use crate::access::{DdlGuard, DdlGuardPolicy, DdlValidationResult};
 // SqlOperationType 仅在 permission 权限检查路径（parse_operation_async 结果映射）使用
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::SqlOperationType;
@@ -945,6 +945,42 @@ impl Session {
         Duration::from_millis(capped_ms as u64)
     }
 
+    /// T416：统一 DDL 守卫漏斗 —— 全部 DDL 执行路径共用单一入口
+    ///
+    /// 消费 [`DdlGuardPolicy`] 端口（白名单/干跑/审计统一；默认内置白名单守卫，
+    /// 可经 `DbPool::set_ddl_guard` / `DbPoolBuilder::ddl_guard` 注入自定义策略），
+    /// 决策到 `DbError` 的映射与既有分散检查保持一致：
+    /// - `Allowed` → 放行
+    /// - `Forbidden(reason)` → `DbError::Permission`
+    /// - `ParseError(error)` → `DbError::Config`
+    #[cfg(feature = "sql-parser")]
+    pub(crate) fn enforce_ddl_guard(&self, sql: &str) -> DbResult<()> {
+        let injected = self
+            .pool_inner
+            .ddl_guard
+            .read()
+            .expect("ddl_guard lock poisoned")
+            .clone();
+        let result = match injected {
+            Some(guard) => run_ddl_policy(guard.as_ref(), sql)?,
+            None => {
+                let guard = DdlGuard::new();
+                run_ddl_policy(&guard, sql)?
+            }
+        };
+        match result {
+            DdlValidationResult::Allowed => Ok(()),
+            DdlValidationResult::Forbidden(reason) => Err(DbError::Permission(i18n::t(
+                "session-ddl-not-allowed",
+                &[("reason", reason.to_string())],
+            ))),
+            DdlValidationResult::ParseError(error) => Err(DbError::Config(i18n::t(
+                "session-ddl-parse-failed",
+                &[("error", error.to_string())],
+            ))),
+        }
+    }
+
     /// 执行 DDL 操作（允许创建表、删除表等操作）
     ///
     /// 此方法专门用于执行 DDL 操作，绕过常规的 DDL 检查。
@@ -970,34 +1006,9 @@ impl Session {
             )));
         }
 
-        // DDL 安全验证（基于 AST 解析，防止注入绕过）
+        // DDL 安全验证（T416：统一守卫漏斗，替代分散的 DdlGuard::new() 检查）
         #[cfg(feature = "sql-parser")]
-        {
-            let guard = DdlGuard::new();
-            match guard.validate(sql) {
-                Ok(DdlValidationResult::Allowed) => {
-                    // 通过验证，继续执行
-                }
-                Ok(DdlValidationResult::Forbidden(reason)) => {
-                    return Err(DbError::Permission(i18n::t(
-                        "session-ddl-not-allowed",
-                        &[("reason", reason.to_string())],
-                    )));
-                }
-                Ok(DdlValidationResult::ParseError(error)) => {
-                    return Err(DbError::Config(i18n::t(
-                        "session-ddl-parse-failed",
-                        &[("error", error.to_string())],
-                    )));
-                }
-                Err(error) => {
-                    return Err(DbError::Config(i18n::t(
-                        "session-ddl-validation-error",
-                        &[("error", error.to_string())],
-                    )));
-                }
-            }
-        }
+        self.enforce_ddl_guard(sql)?;
 
         // 执行 SQL
         let conn = self.connection()?;
@@ -1029,22 +1040,8 @@ impl Session {
                     self.role, self.pool_inner.admin_role
                 )));
             }
-            let guard = DdlGuard::new();
-            return match guard.validate(sql) {
-                Ok(DdlValidationResult::Allowed) => Ok(()),
-                Ok(DdlValidationResult::Forbidden(reason)) => Err(DbError::Permission(i18n::t(
-                    "session-ddl-not-allowed",
-                    &[("reason", reason.to_string())],
-                ))),
-                Ok(DdlValidationResult::ParseError(error)) => Err(DbError::Config(i18n::t(
-                    "session-ddl-parse-failed",
-                    &[("error", error.to_string())],
-                ))),
-                Err(error) => Err(DbError::Config(i18n::t(
-                    "session-ddl-validation-error",
-                    &[("error", error.to_string())],
-                ))),
-            };
+            // T416：统一守卫漏斗（白名单/干跑/审计经 DdlGuardPolicy 端口）
+            return self.enforce_ddl_guard(sql);
         }
 
         // 非 DDL：表级权限检查
@@ -1338,36 +1335,15 @@ impl Session {
         {
             if is_ddl_operation(sql) {
                 if self.role == self.pool_inner.admin_role {
-                    // admin role 通过 DdlGuard AST 验证后直接执行，不再走 parse_operation 权限检查
-                    // （DDL 语句无法被 parse_operation_async 正确解析，会返回 Err）
-                    let guard = DdlGuard::new();
-                    match guard.validate(sql) {
-                        Ok(DdlValidationResult::Allowed) => {
-                            let conn = self.connection.as_ref().ok_or_else(|| {
-                                DbError::Config("Connection not available".to_string())
-                            })?;
-                            let duck_conn = conn.as_duckdb()?;
-                            return duck_conn.execute(sql).await;
-                        }
-                        Ok(DdlValidationResult::Forbidden(reason)) => {
-                            return Err(DbError::Permission(i18n::t(
-                                "session-ddl-not-allowed",
-                                &[("reason", reason.to_string())],
-                            )));
-                        }
-                        Ok(DdlValidationResult::ParseError(error)) => {
-                            return Err(DbError::Config(i18n::t(
-                                "session-ddl-parse-failed",
-                                &[("error", error.to_string())],
-                            )));
-                        }
-                        Err(error) => {
-                            return Err(DbError::Config(i18n::t(
-                                "session-ddl-validation-error",
-                                &[("error", error.to_string())],
-                            )));
-                        }
-                    }
+                    // T416：统一守卫漏斗 —— admin role 通过守卫验证后直接执行，
+                    // 不再走 parse_operation 权限检查（DDL 语句无法被
+                    // parse_operation_async 正确解析，会返回 Err）
+                    self.enforce_ddl_guard(sql)?;
+                    let conn = self.connection.as_ref().ok_or_else(|| {
+                        DbError::Config("Connection not available".to_string())
+                    })?;
+                    let duck_conn = conn.as_duckdb()?;
+                    return duck_conn.execute(sql).await;
                 } else {
                     return Err(DbError::Permission(format!(
                         "DDL operations are only allowed for admin role in DuckDB context. Current role: '{}', Admin role: '{}'",
@@ -1884,6 +1860,22 @@ fn sqlite_row_to_json(row: &sea_orm::QueryResult, cols: &[String]) -> serde_json
         obj.insert(name.clone(), v);
     }
     serde_json::Value::Object(obj)
+}
+
+/// T416：对单一守卫策略执行校验并触发审计钩子
+///
+/// 校验失败（策略自身返回 `Err`）映射为 `DbError::Config`，与既有
+/// `session-ddl-validation-error` 语义一致。
+#[cfg(feature = "sql-parser")]
+fn run_ddl_policy(policy: &dyn DdlGuardPolicy, sql: &str) -> DbResult<DdlValidationResult> {
+    let result = policy.validate(sql).map_err(|error| {
+        DbError::Config(i18n::t(
+            "session-ddl-validation-error",
+            &[("error", error.to_string())],
+        ))
+    })?;
+    policy.audit(sql, &result);
+    Ok(result)
 }
 
 fn is_invalid_table_name(table_name: &str) -> bool {

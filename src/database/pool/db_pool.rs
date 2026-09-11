@@ -6,6 +6,8 @@
 
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
+#[cfg(feature = "sql-parser")]
+use crate::access::DdlGuardPolicy;
 use crate::i18n;
 #[cfg(any(feature = "permission", feature = "cache", feature = "oxcache-integration"))]
 use arc_swap::ArcSwapOption;
@@ -234,6 +236,10 @@ pub(crate) struct DbPoolInner {
     #[cfg(feature = "health-check")]
     pub(crate) replica_health_provider:
         std::sync::RwLock<Option<crate::database::pool::health_export::ReplicaHealthProvider>>,
+
+    /// DDL 守卫策略（T416：白名单/干跑/审计统一端口；None = 内置白名单 DdlGuard）
+    #[cfg(feature = "sql-parser")]
+    pub(crate) ddl_guard: std::sync::RwLock<Option<std::sync::Arc<dyn DdlGuardPolicy>>>,
 }
 
 impl DbPoolInner {
@@ -313,6 +319,19 @@ impl DbPool {
         // ArcSwapOption::store 原子替换，无锁且线程安全。
         // Session 持有的 Arc<DbPoolInner> 读端通过 load() 自动看到最新值。
         self.inner.cache_provider.store(Some(Arc::new(provider)));
+    }
+
+    /// 注入统一 DDL 守卫策略（T416：白名单/干跑/审计经 `DdlGuardPolicy` 端口）
+    ///
+    /// 注入后全部 DDL 执行路径（`execute_raw_ddl` / DuckDB 安全门）经该策略校验；
+    /// 未注入时使用内置 AST 白名单守卫。
+    #[cfg(feature = "sql-parser")]
+    pub fn set_ddl_guard(&self, guard: std::sync::Arc<dyn DdlGuardPolicy>) {
+        *self
+            .inner
+            .ddl_guard
+            .write()
+            .expect("ddl_guard lock poisoned") = Some(guard);
     }
 
     /// 获取缓存提供者引用
@@ -401,6 +420,8 @@ impl DbPool {
                 ),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
+                #[cfg(feature = "sql-parser")]
+                ddl_guard: std::sync::RwLock::new(None),
             }),
         };
 
@@ -499,6 +520,8 @@ impl DbPool {
                 ),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
+                #[cfg(feature = "sql-parser")]
+                ddl_guard: std::sync::RwLock::new(None),
             }),
         };
 
@@ -625,6 +648,8 @@ impl DbPool {
                 ),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
+                #[cfg(feature = "sql-parser")]
+                ddl_guard: std::sync::RwLock::new(None),
             }),
         })
     }

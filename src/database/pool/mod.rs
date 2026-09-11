@@ -185,4 +185,7 @@ pub struct DbPoolBuilder {
     /// 缓存提供者（DI 注入点，优先于内部缓存）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
+    /// 统一 DDL 守卫策略（T416：白名单/干跑/审计端口注入点）
+    #[cfg(feature = "sql-parser")]
+    ddl_guard: Option<std::sync::Arc<dyn crate::access::DdlGuardPolicy>>,
 }

@@ -32,7 +32,7 @@ const ALLOWED_DDL_STATEMENTS: &[&str] = &[
 const FORBIDDEN_PATTERNS: &[&str] = &["DROP DATABASE", "DROP ALL"];
 
 /// DDL 验证结果
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DdlValidationResult {
     /// 验证通过
     Allowed,
@@ -40,6 +40,158 @@ pub enum DdlValidationResult {
     Forbidden(String),
     /// SQL 解析失败
     ParseError(String),
+}
+
+/// DDL 守卫决策审计记录（T416）
+#[derive(Debug, Clone)]
+pub struct DdlAuditRecord {
+    /// 被校验的 SQL
+    pub sql: String,
+    /// 是否放行
+    pub allowed: bool,
+    /// 拦截/解析失败原因（放行时为 None）
+    pub reason: Option<String>,
+}
+
+impl DdlAuditRecord {
+    /// 从校验结果构造记录
+    fn from_result(sql: &str, result: &DdlValidationResult) -> Self {
+        match result {
+            DdlValidationResult::Allowed => Self {
+                sql: sql.to_string(),
+                allowed: true,
+                reason: None,
+            },
+            DdlValidationResult::Forbidden(reason) => Self {
+                sql: sql.to_string(),
+                allowed: false,
+                reason: Some(reason.clone()),
+            },
+            DdlValidationResult::ParseError(error) => Self {
+                sql: sql.to_string(),
+                allowed: false,
+                reason: Some(error.clone()),
+            },
+        }
+    }
+}
+
+/// 统一 DDL 守卫端口（T416）
+///
+/// 白名单（内置 [`DdlGuard`]）、干跑（[`DryRunDdlGuard`]）、审计
+/// （[`AuditingDdlGuard`]）经同一入口接入；Session 的全部 DDL 路径
+/// （`execute_raw_ddl` / DuckDB 安全门）收敛到单一漏斗消费本端口，
+/// 替代此前各执行路径内分散的 `DdlGuard::new()` + 决策映射。
+///
+/// 支持经 `DbPoolBuilder::ddl_guard` / `DbPool::set_ddl_guard` 注入自定义策略。
+pub trait DdlGuardPolicy: Send + Sync {
+    /// 验证 SQL 是否可执行（语义与内置白名单守卫一致）
+    fn validate(&self, sql: &str) -> Result<DdlValidationResult, String>;
+
+    /// 决策审计钩子：每次校验给出决策后调用（默认 NoOp）
+    fn audit(&self, _sql: &str, _result: &DdlValidationResult) {}
+}
+
+/// 审计装饰器（T416）：把守卫决策流式转发到外部 sink
+///
+/// 组合任意 [`DdlGuardPolicy`]，决策（放行/拦截/解析失败）实时回调，
+/// 供上层接入结构化审计日志/DB 审计存储。
+pub struct AuditingDdlGuard {
+    inner: std::sync::Arc<dyn DdlGuardPolicy>,
+    sink: std::sync::Arc<dyn Fn(&DdlAuditRecord) + Send + Sync>,
+}
+
+impl AuditingDdlGuard {
+    /// 包装内部策略并指定审计 sink
+    pub fn new(
+        inner: std::sync::Arc<dyn DdlGuardPolicy>,
+        sink: std::sync::Arc<dyn Fn(&DdlAuditRecord) + Send + Sync>,
+    ) -> Self {
+        Self { inner, sink }
+    }
+}
+
+impl DdlGuardPolicy for AuditingDdlGuard {
+    fn validate(&self, sql: &str) -> Result<DdlValidationResult, String> {
+        self.inner.validate(sql)
+    }
+
+    fn audit(&self, sql: &str, result: &DdlValidationResult) {
+        (self.sink)(&DdlAuditRecord::from_result(sql, result));
+    }
+}
+
+/// 干跑装饰器（T416）：记录全部决策、不改变放行语义
+///
+/// - 作为守卫注入时行为与内部策略一致，同时留存决策记录（`records()`）；
+/// - 独立用于预检：`plan()` 对一组语句给出逐条决策，不执行任何语句。
+pub struct DryRunDdlGuard {
+    inner: std::sync::Arc<dyn DdlGuardPolicy>,
+    records: std::sync::Mutex<Vec<DdlAuditRecord>>,
+}
+
+impl DryRunDdlGuard {
+    /// 包装内部策略
+    pub fn new(inner: std::sync::Arc<dyn DdlGuardPolicy>) -> Self {
+        Self {
+            inner,
+            records: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// 干跑一组语句：逐条决策并记录，不执行
+    pub fn plan(&self, statements: &[&str]) -> Vec<DdlAuditRecord> {
+        statements
+            .iter()
+            .map(|sql| {
+                let record = match self.inner.validate(sql) {
+                    Ok(decision) => DdlAuditRecord::from_result(sql, &decision),
+                    Err(error) => DdlAuditRecord {
+                        sql: sql.to_string(),
+                        allowed: false,
+                        reason: Some(error),
+                    },
+                };
+                self.records.lock().expect("dry-run records").push(record.clone());
+                record
+            })
+            .collect()
+    }
+
+    /// 全部已记录决策（干跑审计视图）
+    pub fn records(&self) -> Vec<DdlAuditRecord> {
+        self.records.lock().expect("dry-run records").clone()
+    }
+
+    /// 语句是否会被放行（干跑单条查询，决策同样记录）
+    pub fn would_allow(&self, sql: &str) -> bool {
+        matches!(
+            DdlGuardPolicy::validate(self, sql),
+            Ok(DdlValidationResult::Allowed)
+        )
+    }
+}
+
+impl DdlGuardPolicy for DryRunDdlGuard {
+    fn validate(&self, sql: &str) -> Result<DdlValidationResult, String> {
+        let result = self.inner.validate(sql);
+        let record = match &result {
+            Ok(decision) => DdlAuditRecord::from_result(sql, decision),
+            Err(error) => DdlAuditRecord {
+                sql: sql.to_string(),
+                allowed: false,
+                reason: Some(error.clone()),
+            },
+        };
+        self.records.lock().expect("dry-run records").push(record);
+        result
+    }
+}
+
+impl DdlGuardPolicy for DdlGuard {
+    fn validate(&self, sql: &str) -> Result<DdlValidationResult, String> {
+        DdlGuard::validate(self, sql)
+    }
 }
 
 /// DDL 安全守卫
@@ -310,6 +462,94 @@ mod tests {
         assert!(matches!(
             result,
             DdlValidationResult::Forbidden(ref msg) if msg.contains("Empty")
+        ));
+    }
+
+    // ===== T416：统一守卫端口（白名单/干跑/审计） =====
+
+    use std::sync::Arc;
+
+    /// 拒绝一切的测试策略（验证端口可注入自定义实现）
+    struct DenyAllGuard;
+
+    impl DdlGuardPolicy for DenyAllGuard {
+        fn validate(&self, _sql: &str) -> Result<DdlValidationResult, String> {
+            Ok(DdlValidationResult::Forbidden("deny all".to_string()))
+        }
+    }
+
+    #[test]
+    fn test_policy_trait_object_whitelist_guard() {
+        // 内置白名单守卫经 trait 对象使用（Session 漏斗的默认路径）
+        let policy: Arc<dyn DdlGuardPolicy> = Arc::new(DdlGuard::new());
+        assert!(matches!(
+            policy.validate("CREATE TABLE t (id INT)"),
+            Ok(DdlValidationResult::Allowed)
+        ));
+        assert!(matches!(
+            policy.validate("DROP DATABASE x"),
+            Ok(DdlValidationResult::Forbidden(_))
+        ));
+    }
+
+    #[test]
+    fn test_policy_trait_object_custom_injection() {
+        let policy: Arc<dyn DdlGuardPolicy> = Arc::new(DenyAllGuard);
+        assert!(matches!(
+            policy.validate("CREATE TABLE t (id INT)"),
+            Ok(DdlValidationResult::Forbidden(ref msg)) if msg.contains("deny all")
+        ));
+    }
+
+    #[test]
+    fn test_auditing_guard_forwards_decisions_to_sink() {
+        let events: Arc<std::sync::Mutex<Vec<DdlAuditRecord>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink_events = events.clone();
+        let auditing = AuditingDdlGuard::new(
+            Arc::new(DdlGuard::new()),
+            Arc::new(move |record: &DdlAuditRecord| {
+                sink_events.lock().unwrap().push(DdlAuditRecord {
+                    sql: record.sql.clone(),
+                    allowed: record.allowed,
+                    reason: record.reason.clone(),
+                });
+            }),
+        );
+
+        // 混合决策：放行 + 拦截（对齐 Session 漏斗用法：validate 后触发 audit）
+        let allowed = auditing.validate("CREATE TABLE t (id INT)").unwrap();
+        auditing.audit("CREATE TABLE t (id INT)", &allowed);
+        let forbidden = auditing.validate("DROP DATABASE prod").unwrap();
+        auditing.audit("DROP DATABASE prod", &forbidden);
+
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 2, "audit 钩子应逐决策转发");
+        assert!(events[0].allowed);
+        assert!(!events[1].allowed);
+        assert!(events[1].reason.as_deref().unwrap().contains("DROP DATABASE"));
+    }
+
+    #[test]
+    fn test_dry_run_guard_records_and_plans() {
+        let dry = DryRunDdlGuard::new(Arc::new(DdlGuard::new()));
+
+        // 单条干跑查询
+        assert!(dry.would_allow("CREATE TABLE t (id INT)"));
+        assert!(!dry.would_allow("DROP DATABASE prod"));
+        assert_eq!(dry.records().len(), 2, "would_allow 应记录决策");
+
+        // 批量预检：不执行，逐条给出决策
+        let plan = dry.plan(&["ALTER TABLE t ADD COLUMN c INT", "GRANT ALL ON t TO x"]);
+        assert_eq!(plan.len(), 2);
+        assert!(plan[0].allowed);
+        assert!(!plan[1].allowed, "GRANT 不在白名单，应标记拦截");
+        assert_eq!(dry.records().len(), 4, "plan 决策并入记录");
+
+        // 作为守卫注入时语义与内部策略一致
+        assert!(matches!(
+            DdlGuardPolicy::validate(&dry, "CREATE INDEX i ON t (c)"),
+            Ok(DdlValidationResult::Allowed)
         ));
     }
 }
