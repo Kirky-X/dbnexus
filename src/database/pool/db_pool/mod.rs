@@ -4,12 +4,12 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-#[cfg(feature = "permission")]
 // T425 大文件拆分：按职责纯移动的子模块（行为不变）
 mod access;
 mod health;
 mod status;
 
+#[cfg(feature = "permission")]
 use crate::access::RolePolicy;
 #[cfg(feature = "sql-parser")]
 use crate::access::DdlGuardPolicy;

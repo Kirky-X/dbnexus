@@ -25,6 +25,15 @@
 - **权限变更审计链（T409）**：PermissionAuditChain HMAC-SHA256(prev‖event) 链式签名 + `verify_permission_chain` 篡改/删除/重排检测（RFC 4231 向量校验）
 - **OTel 导出桥（T412）**：`otel` feature——健康快照指标（池饱和度/等待/慢查询）导出 OTLP/HTTP JSON 信封（手工 HTTP/1.1 客户端零新增依赖），传输失败 stdout fallback 兜底，mock collector 单测
 - **Kit 全能力注册（T413）**：`DbNexusCacheModule`/`DbNexusAuditModule`/`DbNexusHealthModule` 卫星模块——池/缓存/审计/健康四能力均可独立 require；`kit` feature 隐含 `audit`/`sql-parser`/`health-check` 全能力闭包
+- **端到端性能基准（T414）**：`benches/e2e_bench.rs`——池获取/简单查询/批量写三基准（sqlite 临时文件库），`docs/PERFORMANCE.md` 记录本机基线
+- **运维 CLI（T415）**：`dbnexus-cli` 新增 `migrate`（应用迁移目录）/`health`（健康 JSON）/`user`（管理员增删 MVP，`dbnexus_users` 表加盐 SHA-256）子命令，统一 JSON 输出 + 退出码 0/1/2 契约（13 单测 + 6 assert_cmd e2e）
+- **统一注入检测引擎（T417）**：`InjectionEngine`——关系型/DDL/图三处规则表合并为单一注册表并按子串包含去重（4 条冗余剪除），parity 测试锁定与遗留规则表的误报轮廓一致
+- **泛型仓储（T418）**：`repository` feature——`Repository<T>` CRUD 端口 + `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 query_rows 管道）+ `impl_json_repository!` 实现宏
+- **数据 API 网关（T419）**：`data-api` feature——`DataApiGateway` 实体→JSON 查询端点生成器（表/列白名单投影 + eq/contains 过滤 + 排序白名单 + 分页钳制 + manifest 导出），供 sdforge 数据集成
+- **prepare 缓存（T420）**：`prepare-cache` feature——`PreparedStatementCache` 语句级 LRU（池级就绪标记 + 命中/淘汰指标，`enable_prepare_cache` + `Session::execute_cached`）
+- **权限统一门面（T421）**：`permission-facade` feature——`PermissionFacade::apply` 一处配置全局生效（RBAC 角色策略 + 字段脱敏 + RLS 谓词组合换装，支持热重放）
+- **查询 DSL 宏（T422）**：`query-dsl` feature——`q!` 类型安全查询片段（ident 列引用 + literal 值 + AND 条件组合 + 排序/分页，标识符/值注入免疫）
+- **实体事件总线 + Outbox（T423）**：`entity-events` feature——`EntityEvent`/`EntityEventBus` + `DbOutboxStore`（pending/dispatched 状态）+ `OutboxDispatcher`（dispatch_once + spawn 后台轮询）
 
 ### Changed
 
@@ -33,6 +42,9 @@
 - `arc-swap` 依赖扩展到 `cache` 和 `oxcache-integration` feature
 - **Retry 自动接线（T410）**：`query_rows` 幂等行查询自动应用 RetryPolicy 退避重试（SELECT 重试/写类不重试契约）
 - **副本负载均衡（T411）**：`replica-routing` 真实实现——读写分离路由 + 副本 weight/(1+latency) 确定性选择 + 连续失败剔除与半开恢复，副本状态对接健康导出
+- **DDL 守卫规范化（T416）**：`DdlGuardPolicy` 统一端口（白名单/干跑/审计装饰器），Session 三处分散 DDL 检查收敛为单一漏斗，支持 `DbPoolBuilder::ddl_guard`/`DbPool::set_ddl_guard` 注入
+- **错误体系统一（T424）**：`ErrorCode` 统一错误码表（分段数值码 + 机器可读名）+ `UnifiedDbError` 顶层结构（与 `foundation::DbError`/`DbNexusError` 双向 `From` 兼容层，JSON 形态与 `QueryErrorReport` 桥接）
+- **大文件拆分（T425）**：`db_pool.rs` 拆为 `db_pool/{mod,access,health,status}.rs`、`saga.rs` 拆为 `saga/{mod,types,store,orchestrator}.rs`——纯移动 + `pub use` 路径兼容，既有测试全绿护航
 - `DbNexusModule` 能力类型改为 `Arc<DbPool>`（T413 前置），仍可按 `ConnectionPool` trait 对象使用
 
 ### Fixed

@@ -19,7 +19,9 @@
 //! ```
 
 use crate::database::DbPool;
-use crate::foundation::{DbError, DbResult};
+#[cfg(not(all(feature = "permission", feature = "data-protection")))]
+use crate::foundation::DbError;
+use crate::foundation::DbResult;
 
 #[cfg(feature = "permission")]
 use crate::access::permission::{PermissionConfig, RolePolicy};
@@ -123,6 +125,8 @@ impl<'a> PermissionFacade<'a> {
 // 依赖 unwrap_or_default 惰性构造
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[cfg(all(feature = "permission", feature = "data-protection"))]
     #[test]
     fn test_config_builder_accumulates_rules() {
