@@ -479,6 +479,13 @@ path = "benches/metrics_bench.rs"
 harness = false
 required-features = ["metrics"]
 
+# T414 - 端到端性能基准（池获取/简单查询/批量写，sqlite 临时文件库）
+[[bench]]
+name = "e2e_bench"
+path = "benches/e2e_bench.rs"
+harness = false
+required-features = ["sqlite", "runtime-tokio-rustls", "sql-parser"]
+
 # tests/mod.rs 需要 sqlite 特性才能正确运行
 # 因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
 [[test]]

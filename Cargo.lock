@@ -1574,10 +1574,16 @@ dependencies = [
 name = "dbnexus-cli"
 version = "0.6.0-rc.3"
 dependencies = [
+ "assert_cmd",
  "chrono",
  "clap",
  "dbnexus",
+ "predicates",
  "sea-orm",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "url",
 ]
