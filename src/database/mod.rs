@@ -38,6 +38,10 @@ pub mod repository;
 #[cfg(feature = "data-api")]
 pub mod data_api;
 
+/// 查询 DSL 宏（T422：q! 类型安全查询片段）
+#[cfg(feature = "query-dsl")]
+pub mod query_dsl;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;

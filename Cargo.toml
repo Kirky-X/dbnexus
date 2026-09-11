@@ -177,6 +177,8 @@ copy = []  # COPY 批量写入（T407：构建 COPY FROM STDIN 语句与 text �
 repository = []  # T418：泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
 data-api = ["repository"]  # T419：数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
 prepare-cache = []  # T420：语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
+permission-facade = ["permission", "data-protection"]  # T421：权限统一门面（RBAC+脱敏+RLS 单一入口）
+query-dsl = []  # T422：查询 DSL 宏 q!（类型安全查询片段：ident 列引用 + literal 值 + AND 条件组合）
 shard-migration = ["migration", "sharding"]  # 分片迁移编排
 saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
@@ -555,6 +557,18 @@ required-features = ["data-api", "sqlite", "sql-parser", "runtime-tokio-rustls"]
 name = "prepare_cache_tests"
 path = "tests/prepare_cache_tests.rs"
 required-features = ["prepare-cache", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T421 - 权限统一门面（RBAC + 脱敏 + RLS 一处配置全局生效）
+[[test]]
+name = "permission_facade_tests"
+path = "tests/permission_facade_tests.rs"
+required-features = ["permission-facade", "sqlite", "runtime-tokio-rustls"]
+
+# T422 - 查询 DSL 宏（q! 类型安全片段）
+[[test]]
+name = "query_dsl_tests"
+path = "tests/query_dsl_tests.rs"
+required-features = ["query-dsl", "sqlite", "sql-parser", "runtime-tokio-rustls"]
 
 # T406 - 结构化健康导出（health_snapshot）
 [[test]]

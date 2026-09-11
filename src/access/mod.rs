@@ -26,6 +26,10 @@ pub mod data_protection;
 #[cfg(feature = "data-protection")]
 pub mod permission_audit_chain;
 
+/// T421：权限统一门面（RBAC + 脱敏 + RLS 单一入口）
+#[cfg(all(feature = "permission", feature = "data-protection"))]
+pub mod permission_facade;
+
 // Re-exports: security
 #[cfg(feature = "sql-parser")]
 pub use security::{AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard};

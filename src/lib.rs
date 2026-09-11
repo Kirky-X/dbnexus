@@ -183,6 +183,14 @@ pub use crate::database::data_api::{
 pub use crate::database::pool::{
     PoolPrepareCache, PrepareCacheStats, PreparedStatementCache,
 };
+
+// T421 权限统一门面（permission + data-protection feature）
+#[cfg(all(feature = "permission", feature = "data-protection"))]
+pub use crate::access::permission_facade::{PermissionFacade, PermissionFacadeConfig};
+
+// T422 查询 DSL（query-dsl feature）
+#[cfg(feature = "query-dsl")]
+pub use crate::database::query_dsl::{DslCondition, DslOp, QueryFragment};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
