@@ -175,6 +175,7 @@ replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
 copy = []  # COPY 批量写入（T407：构建 COPY FROM STDIN 语句与 text 行编码；协议传输路径在 postgres 驱动组下经 #cfg(feature="postgres") 门控）
 repository = []  # T418：泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
+data-api = ["repository"]  # T419：数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
 shard-migration = ["migration", "sharding"]  # 分片迁移编排
 saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
@@ -230,7 +231,7 @@ monolith = [
 enterprise = ["postgres", "monolith", "permission-engine"]
 
 # 所有可选功能（不包括数据库驱动）
-all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository"]
+all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api"]
 
 [dependencies]
 # Workspace dependencies
@@ -541,6 +542,12 @@ required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
 name = "repository_trait_tests"
 path = "tests/repository_trait_tests.rs"
 required-features = ["repository", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T419 - 数据 API 网关（表/列白名单 + 分页 + 过滤）
+[[test]]
+name = "data_api_gateway_tests"
+path = "tests/data_api_gateway_tests.rs"
+required-features = ["data-api", "sqlite", "sql-parser", "runtime-tokio-rustls"]
 
 # T406 - 结构化健康导出（health_snapshot）
 [[test]]

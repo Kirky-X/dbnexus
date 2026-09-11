@@ -171,6 +171,12 @@ pub use crate::access::{InjectionEngine, InjectionRule, RuleCategory};
 // T418 泛型仓储（repository feature）
 #[cfg(feature = "repository")]
 pub use crate::database::repository::{JsonRepository, Repository};
+
+// T419 数据 API 网关（data-api feature，供 sdforge T716 对接）
+#[cfg(feature = "data-api")]
+pub use crate::database::data_api::{
+    DataApiGateway, Filter, FilterOp, ListRequest, ListResponse, OrderDirection, TableEndpoint,
+};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

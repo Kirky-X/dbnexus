@@ -34,6 +34,10 @@ pub mod copy;
 #[cfg(feature = "repository")]
 pub mod repository;
 
+/// 数据 API 网关雏形（T419：表/列白名单 + 分页 + 过滤，供 sdforge 对接）
+#[cfg(feature = "data-api")]
+pub mod data_api;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;
