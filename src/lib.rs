@@ -215,6 +215,10 @@ pub use crate::observability::{
     SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };
 
+// T406 健康导出（health-check feature）：副本状态提供者类型
+#[cfg(feature = "health-check")]
+pub use crate::database::pool::health_export::ReplicaHealthProvider;
+
 // Reliability 导出（retry feature）
 #[cfg(feature = "retry")]
 pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};

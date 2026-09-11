@@ -129,7 +129,11 @@ impl Session {
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
         #[cfg(feature = "metrics")]
-        let metrics = pool_inner.metrics_collector.clone();
+        let metrics = pool_inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone();
 
         Session {
             connection: Some(connection),

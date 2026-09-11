@@ -519,6 +519,12 @@ name = "pool_query_rows_unit_tests"
 path = "tests/pool/unit/query_rows_unit_tests.rs"
 required-features = ["sqlite", "sql-parser", "runtime-tokio-rustls"]
 
+# T406 - 结构化健康导出（health_snapshot）
+[[test]]
+name = "pool_health_snapshot_unit_tests"
+path = "tests/pool/unit/health_snapshot_unit_tests.rs"
+required-features = ["sqlite", "health-check", "runtime-tokio-rustls"]
+
 # Core 单元测试 - 配置类型（DbConfig、CacheConfig、DatabaseType）
 [[test]]
 name = "core_config_unit_tests"
