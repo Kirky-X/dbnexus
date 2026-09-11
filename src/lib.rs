@@ -279,6 +279,8 @@ pub use crate::domain::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub use crate::domain::DbAuditStorage;
 #[cfg(feature = "audit")]
 pub use crate::foundation::AuditResult;
 

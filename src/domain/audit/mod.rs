@@ -27,6 +27,13 @@
 
 mod audit_impl;
 
+/// T408：DB 持久化审计存储（audit + sql-parser feature）
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub mod audit_db;
+
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub use audit_db::DbAuditStorage;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
