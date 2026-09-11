@@ -42,6 +42,10 @@ pub mod data_api;
 #[cfg(feature = "query-dsl")]
 pub mod query_dsl;
 
+/// 实体事件总线 + Outbox（T423：变更事件 + 后台投递 + 索引同步消费）
+#[cfg(feature = "entity-events")]
+pub mod entity_events;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;

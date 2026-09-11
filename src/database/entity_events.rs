@@ -104,6 +104,16 @@ impl EntityEvent {
         Self::new(entity, EntityAction::Insert, entity_id)
     }
 
+    /// Update 事件
+    pub fn update(entity: &str, entity_id: &str) -> Self {
+        Self::new(entity, EntityAction::Update, entity_id)
+    }
+
+    /// Delete 事件
+    pub fn delete(entity: &str, entity_id: &str) -> Self {
+        Self::new(entity, EntityAction::Delete, entity_id)
+    }
+
     /// 附加负载
     pub fn with_payload(mut self, payload: Value) -> Self {
         self.payload = Some(payload);
@@ -159,12 +169,28 @@ pub trait OutboxStore: Send + Sync {
 }
 
 /// 基于 DbPool 的 outbox 表实现（T423）
+#[derive(Clone)]
 pub struct DbOutboxStore {
     pool: std::sync::Arc<DbPool>,
     table: String,
 }
 
 impl DbOutboxStore {
+    /// 建 outbox 表（幂等 DDL）
+    ///
+    /// # Errors
+    ///
+    /// DDL 执行失败（连接/权限）时返回 `DbError`
+    pub async fn ensure_table(&self) -> DbResult<()> {
+        let sql = format!(
+            "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, action TEXT NOT NULL, entity_id TEXT NOT NULL, payload TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER)",
+            self.table
+        );
+        let session = self.pool.get_session("admin").await?;
+        session.execute_raw_ddl(&sql).await?;
+        Ok(())
+    }
+
     /// 创建存储（默认 outbox 表名 `dbnexus_outbox`）
     ///
     /// # Errors
@@ -236,7 +262,16 @@ impl OutboxStore for DbOutboxStore {
             else {
                 continue;
             };
-            let payload = row.get("payload").cloned().filter(|v| !v.is_null());
+            // payload 以 JSON 文本存储：能解析则还原为结构化 Value，否则保留原文本
+            let payload: Option<Value> = match row
+                .get("payload")
+                .and_then(|v| v.as_str().map(String::from))
+            {
+                Some(text) => {
+                    Some(serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text)))
+                }
+                None => None,
+            };
             let occurred_at_ms = row
                 .get("created_at")
                 .and_then(|v| v.as_u64())

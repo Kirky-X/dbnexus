@@ -191,6 +191,13 @@ pub use crate::access::permission_facade::{PermissionFacade, PermissionFacadeCon
 // T422 查询 DSL（query-dsl feature）
 #[cfg(feature = "query-dsl")]
 pub use crate::database::query_dsl::{DslCondition, DslOp, QueryFragment};
+
+// T423 实体事件总线 + Outbox（entity-events feature）
+#[cfg(feature = "entity-events")]
+pub use crate::database::entity_events::{
+    DbOutboxStore, EntityAction, EntityEvent, EntityEventBus, InMemoryEntityEventBus,
+    OutboxDispatcher, OutboxStore,
+};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

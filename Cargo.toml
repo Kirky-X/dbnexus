@@ -179,6 +179,7 @@ data-api = ["repository"]  # T419：数据 API 网关雏形（实体→JSON 查�
 prepare-cache = []  # T420：语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
 permission-facade = ["permission", "data-protection"]  # T421：权限统一门面（RBAC+脱敏+RLS 单一入口）
 query-dsl = []  # T422：查询 DSL 宏 q!（类型安全查询片段：ident 列引用 + literal 值 + AND 条件组合）
+entity-events = ["repository"]  # T423：实体事件总线 + Outbox（复用仓储标识符/字面量工具 + 变更事件持久化 + 后台投递 + 总线消费）
 shard-migration = ["migration", "sharding"]  # 分片迁移编排
 saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
@@ -569,6 +570,12 @@ required-features = ["permission-facade", "sqlite", "runtime-tokio-rustls"]
 name = "query_dsl_tests"
 path = "tests/query_dsl_tests.rs"
 required-features = ["query-dsl", "sqlite", "sql-parser", "runtime-tokio-rustls"]
+
+# T423 - 实体事件总线 + Outbox（sqlite）
+[[test]]
+name = "entity_events_tests"
+path = "tests/entity_events_tests.rs"
+required-features = ["entity-events", "sqlite", "sql-parser", "runtime-tokio-rustls"]
 
 # T406 - 结构化健康导出（health_snapshot）
 [[test]]
