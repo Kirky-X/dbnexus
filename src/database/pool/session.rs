@@ -802,6 +802,7 @@ impl Session {
                         .map_err(DbError::Connection)?;
                     out.push(v);
                 }
+                #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
                 return Ok(out);
             }
@@ -824,6 +825,7 @@ impl Session {
                 .map_err(DbError::Connection)?;
                 let mut out: Vec<serde_json::Value> =
                     rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
+                #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
                 return Ok(out);
             }

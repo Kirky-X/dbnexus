@@ -22,6 +22,10 @@ pub mod replica;
 #[cfg(feature = "scatter-gather")]
 pub mod scatter;
 
+/// T405：confers 配置热重载集成（config-confers feature）
+#[cfg(feature = "config-confers")]
+pub mod config_confers;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;

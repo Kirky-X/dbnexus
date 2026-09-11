@@ -127,6 +127,7 @@ permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限�
 # 启用带缓存的权限控制请使用：permission + cache
 sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization", "sea-orm/with-json"]
 data-protection = ["dep:sha2"]  # T403/T404：字段脱敏与行级安全
+config-confers = ["dep:confers", "confers/change-stream", "permission"]  # T405：confers 配置热重载
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
@@ -240,6 +241,7 @@ time = { workspace = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 sha2 = { version = "0.10", optional = true }
+confers = { version = "0.6.0-rc.3", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
@@ -774,3 +776,4 @@ inherits = "release"
 [patch.crates-io]
 oxcache = { path = "../oxcache" }
 trait-kit = { path = "../trait-kit" }
+confers = { path = "../confers" }
