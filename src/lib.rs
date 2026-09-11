@@ -101,6 +101,9 @@ mod generated_roles;
 // Common 导出 (新架构)
 pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
+// T424 统一错误码表 + 顶层错误结构（保留既有错误类型 From 兼容层）
+pub use crate::error::{ErrorCode, UnifiedDbError};
+
 // DatabaseType 统一在 foundation::config
 pub use crate::foundation::DatabaseType;
 
