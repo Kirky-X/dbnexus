@@ -219,6 +219,12 @@ pub use crate::observability::{
 #[cfg(feature = "health-check")]
 pub use crate::database::pool::health_export::ReplicaHealthProvider;
 
+// T409 权限变更审计链（data-protection feature）
+#[cfg(feature = "data-protection")]
+pub use crate::access::permission_audit_chain::{
+    ChainEntry, PermissionAuditChain, PermissionChangeRecord, verify_permission_chain,
+};
+
 // Reliability 导出（retry feature）
 #[cfg(feature = "retry")]
 pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};

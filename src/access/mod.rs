@@ -20,6 +20,10 @@ pub mod sql_parser;
 #[cfg(feature = "data-protection")]
 pub mod data_protection;
 
+/// T409：权限变更审计链（HMAC-SHA256 链式签名，data-protection feature）
+#[cfg(feature = "data-protection")]
+pub mod permission_audit_chain;
+
 // Re-exports: security
 #[cfg(feature = "sql-parser")]
 pub use security::{DdlGuard, DdlValidationResult};
