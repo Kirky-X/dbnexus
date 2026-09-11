@@ -469,6 +469,13 @@ impl Session {
     }
 
     /// 执行原始 SQL（带权限检查）
+    ///
+    /// # 自动重试语义（T410 文档化）
+    ///
+    /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时：
+    /// - **幂等操作**（SELECT/SHOW/EXPLAIN 前缀，见 `is_idempotent_operation`）
+    ///   失败后自动按指数退避重试（至多 `max_retries` 次）
+    /// - **写类操作**（INSERT/UPDATE/DELETE/DDL）绝不重试，避免副作用重复
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
@@ -626,6 +633,11 @@ impl Session {
     /// 与 `execute_raw` 共用同一套解析与表级权限检查，但仅允许 SELECT，
     /// 并返回真实数据行（`serde_json::Value` 对象数组）而非 ExecResult，
     /// 供 scatter-gather、数据 API 网关等上层消费。
+    ///
+    /// # 自动重试语义（T410）
+    ///
+    /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时，行查询失败
+    /// 自动按指数退避重试（与 `execute_raw` 幂等路径同口径）。
     pub async fn query_rows(&self, sql: &str) -> DbResult<Vec<serde_json::Value>> {
         #[cfg(not(feature = "sql-parser"))]
         {
@@ -707,6 +719,44 @@ impl Session {
             };
 
             // T401：方言感知执行（SeaORM 2.0 无整行 JSON 提取 API，分方言处理）
+            // T410：retry feature——幂等行查询自动重试（与 execute_raw 同口径：
+            // RetryPolicy 存在且 SQL 判定为幂等（SELECT/SHOW/EXPLAIN 前缀）时
+            // 逐次退避重试；query_rows 仅放行 SELECT，天然幂等）
+            #[cfg(feature = "retry")]
+            let result = {
+                let policy = self
+                    .pool_inner
+                    .config
+                    .retry_policy
+                    .as_ref()
+                    .filter(|_| crate::reliability::is_idempotent_operation(sql));
+                match policy {
+                    Some(policy) => {
+                        let mut last_error: Option<DbError> = None;
+                        let mut success: Option<Vec<serde_json::Value>> = None;
+                        for attempt in 0..=policy.max_retries {
+                            if attempt > 0 {
+                                let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
+                                tokio::time::sleep(backoff).await;
+                            }
+                            match self.query_rows_execute(sql, tx_opt.clone()).await {
+                                Ok(rows) => {
+                                    success = Some(rows);
+                                    break;
+                                }
+                                Err(e) => last_error = Some(e),
+                            }
+                        }
+                        match success {
+                            Some(rows) => Ok(rows),
+                            None => Err(last_error.unwrap()),
+                        }
+                    }
+                    None => self.query_rows_execute(sql, tx_opt).await,
+                }
+            };
+
+            #[cfg(not(feature = "retry"))]
             let result = self.query_rows_execute(sql, tx_opt).await;
 
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
