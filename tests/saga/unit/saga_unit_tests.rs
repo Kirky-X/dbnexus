@@ -201,3 +201,195 @@ fn test_in_memory_saga_log_default() {
     let store = InMemorySagaLog::default();
     assert!(store.get("any").is_none());
 }
+
+// ============================================================================
+// T402：SagaLogStore 内存实现 + 补偿重放测试
+// ============================================================================
+
+#[test]
+fn test_memory_store_persist_and_load_pending() {
+    let store = InMemorySagaLog::new();
+    use dbnexus::SagaLogStore;
+    futures_now::block_on(async {
+        let log = SagaLog {
+            saga_id: "s-1".to_string(),
+            status: SagaStatus::Running,
+            steps: vec![SagaStepLog {
+                name: "step1".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        store.persist(&log).await.unwrap();
+        assert!(dbnexus::SagaLogStore::get(&store, "s-1").await.unwrap().is_some());
+        let pending = dbnexus::SagaLogStore::load_pending(&store).await.unwrap();
+        assert_eq!(pending.len(), 1);
+
+        let mut done = log.clone();
+        done.status = SagaStatus::Completed;
+        store.persist(&done).await.unwrap();
+        assert!(dbnexus::SagaLogStore::load_pending(&store).await.unwrap().is_empty());
+    });
+}
+
+/// futures-now 风格的阻塞辅助（复用 tokio runtime 单线程执行）
+mod futures_now {
+    pub fn block_on<F: std::future::Future>(fut: F) -> <F as std::future::Future>::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(fut)
+    }
+}
+
+// ============================================================================
+// T402：DbSagaLog 持久化 + 启动恢复 + 补偿重放
+// ============================================================================
+
+#[cfg(feature = "sql-parser")]
+mod db_saga_recovery_tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+
+    use dbnexus::{
+        DbPool, DbSagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
+        SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog, ShardRouter,
+    };
+
+    struct OkAction;
+    struct FailCompAction;
+
+    #[async_trait]
+    impl dbnexus::SagaAction for OkAction {
+        async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
+            Ok(())
+        }
+        fn name(&self) -> &str {
+            "ok"
+        }
+    }
+
+    #[async_trait]
+    impl dbnexus::SagaAction for FailCompAction {
+        async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
+            Err(SagaError::CompensationFailed("comp boom".to_string()))
+        }
+        fn name(&self) -> &str {
+            "fail-comp"
+        }
+    }
+
+    fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
+        let path =
+            std::env::temp_dir().join(format!("dbnexus_saga_{}_{}.db", tag, std::process::id()));
+        (format!("sqlite:{}?mode=rwc", path.display()), path)
+    }
+
+    #[tokio::test]
+    async fn test_db_saga_log_persist_and_recover_and_replay() {
+        let (url, path) = temp_db_url("persist");
+        let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+        let mut router = ShardRouter::with_strategy("hash", 1);
+        router.register_shard(0, "s0".to_string(), url.clone());
+        router.set_pool(0, pool.clone()).unwrap();
+
+        let db_store = Arc::new(DbSagaLog::new(pool.clone()));
+        db_store.init().await.unwrap();
+        let store: Arc<dyn SagaLogStore> = db_store;
+
+        let orchestrator = SagaOrchestrator::new_with_log_store(Arc::new(router), store.clone());
+
+        // saga：step1 正向成功、step2 正向失败 → Failed（日志持久化）
+        let steps = vec![
+            SagaStep {
+                name: "step1".to_string(),
+                shard_id: 0,
+                action: Box::new(OkAction),
+                compensation: Box::new(OkAction),
+            },
+            SagaStep {
+                name: "step2".to_string(),
+                shard_id: 0,
+                action: Box::new(FailCompAction2),
+                compensation: Box::new(OkAction),
+            },
+        ];
+        struct FailCompAction2;
+        #[async_trait]
+        impl dbnexus::SagaAction for FailCompAction2 {
+            async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
+                Err(SagaError::ExecutionFailed("forward boom".to_string()))
+            }
+            fn name(&self) -> &str {
+                "fail-forward"
+            }
+        }
+        let result = orchestrator.execute_saga(steps).await;
+        assert_eq!(result.status, SagaStatus::Failed);
+
+        // 持久化断言：可从存储读回
+        let stored = store.get(&result.saga_id).await.unwrap().unwrap();
+
+
+        assert_eq!(stored.status, SagaStatus::Failed);
+        assert_eq!(stored.steps.len(), 2);
+        assert!(stored.steps[0].action_success);
+
+        // 模拟"重启"：用同库新建存储，注入一条 Running 中断日志
+        let interrupted = SagaLog {
+            saga_id: "rec-1".to_string(),
+            status: SagaStatus::Running,
+            steps: vec![SagaStepLog {
+                name: "step1".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        store.persist(&interrupted).await.unwrap();
+        let pending = SagaRecovery::new(store.clone()).list_pending().await.unwrap();
+        assert_eq!(pending.len(), 1, "Running 中断日志应出现在恢复列表");
+        assert_eq!(pending[0].saga_id, "rec-1");
+
+        // 重放补偿（补偿成功）→ 终态 Failed
+        let replay_steps = vec![SagaStep {
+            name: "step1".to_string(),
+            shard_id: 0,
+            action: Box::new(OkAction),
+            compensation: Box::new(OkAction),
+        }];
+        let replay: SagaExecutionResult = orchestrator
+            .compensate_recovered("rec-1", &replay_steps)
+            .await;
+        assert_eq!(replay.status, SagaStatus::Failed);
+        assert_eq!(replay.compensated_steps, vec!["step1"]);
+
+        // 补偿失败重放 → CompensationFailed（可再次重放）
+        let failing_steps = vec![SagaStep {
+            name: "step1".to_string(),
+            shard_id: 0,
+            action: Box::new(OkAction),
+            compensation: Box::new(FailCompAction),
+        }];
+        store.persist(&interrupted).await.unwrap();
+        let replay2 = orchestrator
+            .compensate_recovered("rec-1", &failing_steps)
+            .await;
+        assert_eq!(replay2.status, SagaStatus::CompensationFailed);
+
+        // 重试补偿（成功补偿覆盖上次失败）
+        store.persist(&interrupted).await.unwrap();
+        let replay3 = orchestrator
+            .compensate_recovered("rec-1", &replay_steps)
+            .await;
+        assert_eq!(replay3.status, SagaStatus::Failed);
+
+        let _ = std::fs::remove_file(&path);
+    }
+}

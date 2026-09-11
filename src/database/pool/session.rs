@@ -27,6 +27,8 @@ use super::db_pool::DbPoolInner;
 use super::{DatabaseConnection, DbConnection};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::SqlParser;
+#[cfg(all(feature = "sql-parser", not(feature = "permission")))]
+use crate::access::SqlParser;
 #[cfg(feature = "sql-parser")]
 use crate::access::is_ddl_operation;
 #[cfg(feature = "sql-parser")]
@@ -711,6 +713,7 @@ impl Session {
     }
 
     /// T401 内部：按方言执行行查询并转为 JSON 行
+    #[cfg(feature = "sql-parser")]
     ///
     /// - **PostgreSQL**：`SELECT row_to_json(sub.*) FROM (<sql>) sub` 包装，单列 JSON 精确提取
     /// - **SQLite**：主表列经 `pragma_table_info` 内省 + 逐列类型探测（i64→f64→String→Null）
@@ -739,13 +742,22 @@ impl Session {
             self.connection()?.get_database_backend()
         };
 
+        #[allow(unused_variables)]
         let primary_table: Option<String> = {
-            let parser = SqlParser::shared().await;
-            match parser.parse_single(sql).await {
-                Ok(parsed) if parsed.all_table_names.len() == 1 => {
-                    Some(parsed.all_table_names[0].clone())
+            #[cfg(feature = "sql-parser")]
+            {
+                let parser = SqlParser::shared().await;
+                match parser.parse_single(sql).await {
+                    Ok(parsed) if parsed.all_table_names.len() == 1 => {
+                        Some(parsed.all_table_names[0].clone())
+                    }
+                    _ => None,
                 }
-                _ => None,
+            }
+            #[cfg(not(feature = "sql-parser"))]
+            {
+                let _ = sql;
+                None
             }
         };
 
@@ -802,7 +814,7 @@ impl Session {
     }
 
     /// T401 内部（sqlite）：主表列名（pragma_table_info）
-    #[cfg(feature = "sqlite")]
+    #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
     async fn sqlite_table_columns(
         &self,
         table: &str,
@@ -1767,9 +1779,8 @@ impl Session {
     }
 }
 
-#[cfg(feature = "permission")]
 /// T401（sqlite）：单行 → JSON 对象（逐列类型探测：i64 → f64 → String → Null）
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "sqlite", feature = "sql-parser"))]
 fn sqlite_row_to_json(row: &sea_orm::QueryResult, cols: &[String]) -> serde_json::Value {
     let mut obj = serde_json::Map::with_capacity(cols.len());
     for name in cols {

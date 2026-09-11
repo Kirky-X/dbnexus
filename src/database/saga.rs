@@ -107,6 +107,30 @@ pub enum SagaStatus {
     CompensationFailed,
 }
 
+impl SagaStatus {
+    /// T402：持久化用小写标识
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SagaStatus::Running => "running",
+            SagaStatus::Completed => "completed",
+            SagaStatus::Compensating => "compensating",
+            SagaStatus::Failed => "failed",
+            SagaStatus::CompensationFailed => "compensation_failed",
+        }
+    }
+
+    /// T402：从存储标识解析
+    pub fn from_str_kind(s: &str) -> SagaStatus {
+        match s {
+            "completed" => SagaStatus::Completed,
+            "compensating" => SagaStatus::Compensating,
+            "failed" => SagaStatus::Failed,
+            "compensation_failed" | "compensation-failed" => SagaStatus::CompensationFailed,
+            _ => SagaStatus::Running,
+        }
+    }
+}
+
 /// 单步执行日志
 #[derive(Debug, Clone)]
 pub struct SagaStepLog {
@@ -171,6 +195,193 @@ impl Default for InMemorySagaLog {
 }
 
 // ============================================================================
+// SagaLogStore trait（T402：日志存储端口，内存/DB 实现）
+// ============================================================================
+
+/// Saga 日志存储端口（T402）
+///
+/// 内存实现为默认；`DbSagaLog`（`sql-parser` feature）提供基于数据库的持久化。
+#[async_trait]
+pub trait SagaLogStore: Send + Sync {
+    /// 插入/覆盖指定 saga 的整条日志（幂等 upsert）
+    async fn persist(&self, log: &SagaLog) -> Result<(), String>;
+
+    /// 加载未终结（Running/Compensating）的 saga 日志（启动恢复用）
+    async fn load_pending(&self) -> Result<Vec<SagaLog>, String>;
+
+    /// 按 saga_id 获取日志
+    async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String>;
+}
+
+#[async_trait]
+impl SagaLogStore for InMemorySagaLog {
+    async fn persist(&self, log: &SagaLog) -> Result<(), String> {
+        self.logs.insert(log.saga_id.clone(), log.clone());
+        Ok(())
+    }
+
+    async fn load_pending(&self) -> Result<Vec<SagaLog>, String> {
+        Ok(self
+            .logs
+            .iter()
+            .map(|r| r.value().clone())
+            .filter(|l| matches!(l.status, SagaStatus::Running | SagaStatus::Compensating))
+            .collect())
+    }
+
+    async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String> {
+        Ok(InMemorySagaLog::get(self, saga_id))
+    }
+}
+
+/// DB 持久化 Saga 日志存储（T402，`sql-parser` feature）
+///
+/// 复用 dbnexus 自身的连接池执行 DDL/UPSERT，行查询经统一 API `query_rows`。
+/// 步骤日志以 JSON 文本列存储，无需为公共类型引入 serde 依赖。
+#[cfg(feature = "sql-parser")]
+pub struct DbSagaLog {
+    pool: Arc<crate::database::DbPool>,
+}
+
+#[cfg(feature = "sql-parser")]
+impl DbSagaLog {
+    /// 创建存储（表按需幂等创建：首次 persist/get/load 前调用 `init`）
+    pub fn new(pool: Arc<crate::database::DbPool>) -> Self {
+        Self { pool }
+    }
+
+    /// 建表（幂等）
+    pub async fn init(&self) -> Result<(), String> {
+        let session = self
+            .pool
+            .get_session("admin")
+            .await
+            .map_err(|e| e.to_string())?;
+        session
+            .execute_raw_ddl(
+                "CREATE TABLE IF NOT EXISTS saga_logs (\
+                 saga_id TEXT PRIMARY KEY, status TEXT NOT NULL, \
+                 steps TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(feature = "sql-parser")]
+#[async_trait]
+impl SagaLogStore for DbSagaLog {
+    async fn persist(&self, log: &SagaLog) -> Result<(), String> {
+        self.init().await?;
+        let steps_text = saga_steps_to_json(&log.steps).to_string();
+        let status = log.status.as_str();
+        // updated_at 用客户端时间戳（跨 sqlite/postgres 方言安全）
+        let updated_at = chrono::Utc::now().to_rfc3339();
+        let sql = format!(
+            "INSERT INTO saga_logs (saga_id, status, steps, updated_at) \
+             VALUES ('{}', '{}', '{}', '{}') \
+             ON CONFLICT(saga_id) DO UPDATE SET status = excluded.status, \
+             steps = excluded.steps, updated_at = excluded.updated_at",
+            log.saga_id.replace('\'', "''"),
+            status,
+            steps_text.replace('\'', "''"),
+            updated_at,
+        );
+        let session = self.pool.get_session("admin").await.map_err(|e| e.to_string())?;
+        session.execute_raw(&sql).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    async fn load_pending(&self) -> Result<Vec<SagaLog>, String> {
+        let rows = self
+            .pool
+            .query_rows(
+                "SELECT saga_id, status, steps FROM saga_logs \
+                 WHERE status IN ('running', 'compensating')",
+                "admin",
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(rows.iter().filter_map(saga_log_from_row).collect())
+    }
+
+    async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String> {
+        let rows = self
+            .pool
+            .query_rows(
+                &format!(
+                    "SELECT saga_id, status, steps FROM saga_logs WHERE saga_id = '{}'",
+                    saga_id.replace('\'', "''")
+                ),
+                "admin",
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(rows.first().and_then(saga_log_from_row))
+    }
+}
+
+/// T402：步骤日志 → JSON（避免公共类型引入 serde derive）
+#[cfg(feature = "sql-parser")]
+fn saga_steps_to_json(steps: &[SagaStepLog]) -> serde_json::Value {
+    serde_json::Value::Array(
+        steps
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "name": s.name,
+                    "shard_id": s.shard_id,
+                    "action_success": s.action_success,
+                    "compensation_success": s.compensation_success,
+                    "error": s.error,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// T401 行 → SagaLog（postgres/sqlite 通用列名约定）
+#[cfg(feature = "sql-parser")]
+fn saga_log_from_row(row: &serde_json::Value) -> Option<SagaLog> {
+    let saga_id = row.get("saga_id")?.as_str()?.to_string();
+    let status = row
+        .get("status")
+        .and_then(|v| v.as_str())
+        .map(SagaStatus::from_str_kind)
+        .unwrap_or(SagaStatus::Running);
+    let steps = row
+        .get("steps")
+        .and_then(|v| v.as_str())
+        .and_then(|txt| serde_json::from_str::<serde_json::Value>(txt).ok())
+        .and_then(|v| v.as_array().cloned())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| {
+                    Some(SagaStepLog {
+                        name: s.get("name")?.as_str()?.to_string(),
+                        shard_id: s.get("shard_id")?.as_u64()? as u32,
+                        action_success: s
+                            .get("action_success")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        compensation_success: s
+                            .get("compensation_success")
+                            .and_then(|v| v.as_bool()),
+                        error: s.get("error").and_then(|v| v.as_str()).map(str::to_string),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(SagaLog {
+        saga_id,
+        status,
+        steps,
+    })
+}
+
+// ============================================================================
 // SagaExecutionResult
 // ============================================================================
 
@@ -201,6 +412,30 @@ pub struct SagaFailure {
 }
 
 // ============================================================================
+// SagaRecovery（T402：启动恢复）
+// ============================================================================
+
+/// Saga 启动恢复器：从日志存储加载未完成（Running/Compensating）的 saga。
+///
+/// 典型用法：进程启动时 `list_pending()` 找到中断的 saga，随后经
+/// `SagaOrchestrator::compensate_recovered()` 重放补偿（步骤定义由调用方重供）。
+pub struct SagaRecovery {
+    store: Arc<dyn SagaLogStore>,
+}
+
+impl SagaRecovery {
+    /// 创建恢复器
+    pub fn new(store: Arc<dyn SagaLogStore>) -> Self {
+        Self { store }
+    }
+
+    /// 列出未完成（Running/Compensating）的 saga 日志
+    pub async fn list_pending(&self) -> Result<Vec<SagaLog>, String> {
+        self.store.load_pending().await
+    }
+}
+
+// ============================================================================
 // SagaOrchestrator
 // ============================================================================
 
@@ -209,15 +444,107 @@ pub struct SagaFailure {
 /// 按顺序执行每个步骤的 action，失败时逆序执行补偿操作。
 pub struct SagaOrchestrator {
     router: Arc<ShardRouter>,
-    saga_log: Arc<InMemorySagaLog>,
+    saga_log: Arc<dyn SagaLogStore>,
 }
 
 impl SagaOrchestrator {
-    /// 创建编排器
+    /// 创建编排器（默认内存日志存储）
     pub fn new(router: Arc<ShardRouter>) -> Self {
         Self {
             router,
             saga_log: Arc::new(InMemorySagaLog::new()),
+        }
+    }
+
+    /// 创建编排器并注入自定义日志存储（T402：`DbSagaLog` 持久化 + 启动恢复）
+    pub fn new_with_log_store(router: Arc<ShardRouter>, saga_log: Arc<dyn SagaLogStore>) -> Self {
+        Self { router, saga_log }
+    }
+
+    /// T402：对已持久化的未完成 saga 重放补偿
+    ///
+    /// 调用方需重新提供步骤定义（`SagaStep` 携带不可序列化的 action）；
+    /// 对日志中「正向已成功」的步骤逆序执行补偿，任一补偿失败进入
+    /// `CompensationFailed` 终态（可再次调用本方法重放）。
+    pub async fn compensate_recovered(
+        &self,
+        saga_id: &str,
+        steps: &[SagaStep],
+    ) -> SagaExecutionResult {
+        let stored = match self.saga_log.get(saga_id).await {
+            Ok(Some(log)) => log,
+            _ => {
+                return SagaExecutionResult {
+                    saga_id: saga_id.to_string(),
+                    success: false,
+                    status: SagaStatus::Failed,
+                    completed_steps: Vec::new(),
+                    compensated_steps: Vec::new(),
+                    failure: Some(SagaFailure {
+                        step_name: saga_id.to_string(),
+                        error: "recovered saga log not found".to_string(),
+                    }),
+                };
+            }
+        };
+
+        let mut log = stored.clone();
+        let mut compensated: Vec<String> = Vec::new();
+        let mut replay_failed = false;
+        log.status = SagaStatus::Compensating;
+        let _ = self.saga_log.persist(&log).await;
+
+        let step_index_map: HashMap<&str, usize> = steps
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.name.as_str(), i))
+            .collect();
+
+        // 逆序对「正向成功」的步骤执行补偿（快照后遍历，避免借用冲突）
+        let replay_list: Vec<SagaStepLog> = log
+            .steps
+            .iter()
+            .filter(|s| s.action_success)
+            .rev()
+            .cloned()
+            .collect();
+        for step_log in replay_list {
+            let Some(&idx) = step_index_map.get(step_log.name.as_str()) else {
+                continue;
+            };
+            if let Ok(Some(session)) = self.router.get_session(step_log.shard_id).await {
+                match steps[idx].compensation.execute(&session).await {
+                    Ok(()) => compensated.push(step_log.name.clone()),
+                    Err(comp_err) => {
+                        replay_failed = true;
+                        log.steps.push(SagaStepLog {
+                            name: step_log.name.clone(),
+                            shard_id: step_log.shard_id,
+                            action_success: true,
+                            compensation_success: Some(false),
+                            error: Some(format!("compensation replay failed: {comp_err}")),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 以「本次重放」的补偿结果定终态（重试语义：上次失败可被本次成功覆盖）
+        let final_status = if replay_failed {
+            SagaStatus::CompensationFailed
+        } else {
+            SagaStatus::Failed
+        };
+        log.status = final_status;
+        let _ = self.saga_log.persist(&log).await;
+
+        SagaExecutionResult {
+            saga_id: saga_id.to_string(),
+            success: false,
+            status: final_status,
+            completed_steps: Vec::new(),
+            compensated_steps: compensated,
+            failure: None,
         }
     }
 
@@ -229,7 +556,8 @@ impl SagaOrchestrator {
             status: SagaStatus::Running,
             steps: Vec::new(),
         };
-        self.saga_log.insert(log.clone());
+        // T402：初始状态持久化（best-effort，失败不阻断 saga 执行）
+        let _ = self.saga_log.persist(&log).await;
 
         let mut completed_steps: Vec<(String, u32, Box<dyn SagaAction>)> = Vec::new();
         let mut completed_names: Vec<String> = Vec::new();
@@ -255,7 +583,8 @@ impl SagaOrchestrator {
                             error: None,
                         });
                         completed_names.push(step.name.clone());
-                        // 注意：由于 Box<dyn SagaAction> 不能 clone，补偿步骤在失败时由原始 steps 处理
+                        // T402：每步落盘（best-effort，持久化失败不中断 saga）
+                        let _ = self.saga_log.persist(&log).await;
                     }
                     Err(e) => {
                         log.steps.push(SagaStepLog {
@@ -269,8 +598,8 @@ impl SagaOrchestrator {
                         // 逆序补偿已完成步骤
                         let mut compensated: Vec<String> = Vec::new();
                         let mut compensation_failed = false;
-                        self.saga_log
-                            .update_status(&saga_id, SagaStatus::Compensating);
+                        log.status = SagaStatus::Compensating;
+                        let _ = self.saga_log.persist(&log).await;
 
                         for (completed_name, completed_shard_id, _) in completed_steps.iter().rev()
                         {
@@ -306,7 +635,8 @@ impl SagaOrchestrator {
                         } else {
                             SagaStatus::Failed
                         };
-                        self.saga_log.update_status(&saga_id, final_status);
+                        log.status = final_status;
+                        let _ = self.saga_log.persist(&log).await;
 
                         return SagaExecutionResult {
                             saga_id,
@@ -322,7 +652,8 @@ impl SagaOrchestrator {
                     }
                 },
                 Err(e) => {
-                    self.saga_log.update_status(&saga_id, SagaStatus::Failed);
+                    log.status = SagaStatus::Failed;
+                    let _ = self.saga_log.persist(&log).await;
                     return SagaExecutionResult {
                         saga_id,
                         success: false,
@@ -336,7 +667,8 @@ impl SagaOrchestrator {
                     };
                 }
                 Ok(None) => {
-                    self.saga_log.update_status(&saga_id, SagaStatus::Failed);
+                    log.status = SagaStatus::Failed;
+                    let _ = self.saga_log.persist(&log).await;
                     return SagaExecutionResult {
                         saga_id,
                         success: false,
@@ -370,7 +702,8 @@ impl SagaOrchestrator {
         }
 
         // 全部成功
-        self.saga_log.update_status(&saga_id, SagaStatus::Completed);
+        log.status = SagaStatus::Completed;
+        let _ = self.saga_log.persist(&log).await;
         SagaExecutionResult {
             saga_id,
             success: true,
@@ -381,8 +714,8 @@ impl SagaOrchestrator {
         }
     }
 
-    /// 获取 Saga 日志
-    pub fn get_saga_log(&self, saga_id: &str) -> Option<SagaLog> {
-        self.saga_log.get(saga_id)
+    /// 获取 Saga 日志（T402：经日志存储异步获取）
+    pub async fn get_saga_log(&self, saga_id: &str) -> Option<SagaLog> {
+        self.saga_log.get(saga_id).await.ok().flatten()
     }
 }

@@ -239,9 +239,12 @@ pub use crate::database::{
 // Saga 分布式事务导出（saga feature）
 #[cfg(feature = "saga")]
 pub use crate::database::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator,
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
+    SagaLogStore, SagaOrchestrator, SagaRecovery,
     SagaStatus, SagaStep, SagaStepLog,
 };
+#[cfg(all(feature = "saga", feature = "sql-parser"))]
+pub use crate::database::DbSagaLog;
 
 // 分片迁移编排导出（shard-migration feature）
 #[cfg(feature = "shard-migration")]

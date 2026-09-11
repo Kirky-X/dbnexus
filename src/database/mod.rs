@@ -56,9 +56,12 @@ pub use scatter::{
 // Saga re-exports
 #[cfg(feature = "saga")]
 pub use saga::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaOrchestrator,
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
+    SagaLogStore, SagaOrchestrator, SagaRecovery,
     SagaStatus, SagaStep, SagaStepLog,
 };
+#[cfg(all(feature = "saga", feature = "sql-parser"))]
+pub use saga::DbSagaLog;
 
 // 图数据库 re-exports
 #[cfg(feature = "ladybug")]
