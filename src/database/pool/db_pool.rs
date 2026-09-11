@@ -240,6 +240,11 @@ pub(crate) struct DbPoolInner {
     /// DDL 守卫策略（T416：白名单/干跑/审计统一端口；None = 内置白名单 DdlGuard）
     #[cfg(feature = "sql-parser")]
     pub(crate) ddl_guard: std::sync::RwLock<Option<std::sync::Arc<dyn DdlGuardPolicy>>>,
+
+    /// 语句级 prepared statement LRU 缓存（T420；None = 不启用缓存路径）
+    #[cfg(feature = "prepare-cache")]
+    pub(crate) prepare_cache:
+        std::sync::RwLock<Option<std::sync::Arc<crate::database::pool::prepare_cache::PoolPrepareCache>>>,
 }
 
 impl DbPoolInner {
@@ -334,6 +339,33 @@ impl DbPool {
             .expect("ddl_guard lock poisoned") = Some(guard);
     }
 
+    /// 启用语句级 prepared statement LRU 缓存（T420）
+    ///
+    /// 启用后 `Session::execute_cached` 经缓存记录语句就绪状态与命中指标；
+    /// 未启用时该路径等价于 `execute_raw`。
+    #[cfg(feature = "prepare-cache")]
+    pub fn enable_prepare_cache(&self, capacity: usize) {
+        *self
+            .inner
+            .prepare_cache
+            .write()
+            .expect("prepare_cache lock poisoned") =
+            Some(std::sync::Arc::new(
+                crate::database::pool::prepare_cache::PoolPrepareCache::new(capacity),
+            ));
+    }
+
+    /// prepare 缓存统计快照（未启用缓存时返回 None）
+    #[cfg(feature = "prepare-cache")]
+    pub fn prepare_cache_stats(&self) -> Option<crate::database::pool::PrepareCacheStats> {
+        self.inner
+            .prepare_cache
+            .read()
+            .expect("prepare_cache lock poisoned")
+            .as_ref()
+            .map(|cache| cache.stats())
+    }
+
     /// 获取缓存提供者引用
     ///
     /// 返回当前注入的缓存提供者，如果未注入则返回 `None`。
@@ -422,6 +454,8 @@ impl DbPool {
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]
                 ddl_guard: std::sync::RwLock::new(None),
+                #[cfg(feature = "prepare-cache")]
+                prepare_cache: std::sync::RwLock::new(None),
             }),
         };
 
@@ -522,6 +556,8 @@ impl DbPool {
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]
                 ddl_guard: std::sync::RwLock::new(None),
+                #[cfg(feature = "prepare-cache")]
+                prepare_cache: std::sync::RwLock::new(None),
             }),
         };
 
@@ -650,6 +686,8 @@ impl DbPool {
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]
                 ddl_guard: std::sync::RwLock::new(None),
+                #[cfg(feature = "prepare-cache")]
+                prepare_cache: std::sync::RwLock::new(None),
             }),
         })
     }

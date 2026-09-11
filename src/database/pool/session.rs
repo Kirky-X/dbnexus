@@ -945,6 +945,28 @@ impl Session {
         Duration::from_millis(capped_ms as u64)
     }
 
+    /// T420：语句级缓存感知执行路径
+    ///
+    /// 启用池级 prepare 缓存时，先在 LRU 中登记/命中语句就绪状态
+    /// （命中指标经 `DbPool::prepare_cache_stats` 观察），再走 `execute_raw`
+    /// 的完整防御链执行；未启用缓存时等价于 `execute_raw`。
+    #[cfg(feature = "prepare-cache")]
+    pub async fn execute_cached(&self, sql: &str) -> DbResult<ExecResult> {
+        let cache = self
+            .pool_inner
+            .prepare_cache
+            .read()
+            .expect("prepare_cache lock poisoned")
+            .clone();
+        match cache {
+            Some(cache) => {
+                let _hit = cache.get_or_prepare(sql, |_| ());
+                self.execute_raw(sql).await
+            }
+            None => self.execute_raw(sql).await,
+        }
+    }
+
     /// T416：统一 DDL 守卫漏斗 —— 全部 DDL 执行路径共用单一入口
     ///
     /// 消费 [`DdlGuardPolicy`] 端口（白名单/干跑/审计统一；默认内置白名单守卫，

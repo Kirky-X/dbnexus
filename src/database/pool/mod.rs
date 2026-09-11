@@ -11,6 +11,8 @@ mod db_pool;
 #[cfg(feature = "health-check")]
 pub mod health_export;
 mod pool_impl;
+#[cfg(feature = "prepare-cache")]
+pub mod prepare_cache;
 mod session;
 
 #[cfg(feature = "duckdb")]
@@ -23,6 +25,9 @@ pub use session::Session;
 
 #[cfg(feature = "duckdb")]
 pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
+// T420：语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
+#[cfg(feature = "prepare-cache")]
+pub use prepare_cache::{PoolPrepareCache, PrepareCacheStats, PreparedStatementCache};
 
 // 导出迁移执行器供内部使用
 #[cfg(feature = "migration")]
@@ -188,4 +193,7 @@ pub struct DbPoolBuilder {
     /// 统一 DDL 守卫策略（T416：白名单/干跑/审计端口注入点）
     #[cfg(feature = "sql-parser")]
     ddl_guard: Option<std::sync::Arc<dyn crate::access::DdlGuardPolicy>>,
+    /// prepare 缓存容量（T420；None = 不启用）
+    #[cfg(feature = "prepare-cache")]
+    prepare_cache_capacity: Option<usize>,
 }

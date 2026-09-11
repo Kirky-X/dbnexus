@@ -13,8 +13,9 @@ pub mod security;
 pub mod authentication;
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
-#[cfg(feature = "sql-parser")]
+/// T417：统一注入检测引擎（无外部依赖；关系型管线方法按 sql-parser 门控）
 pub mod injection_engine;
+#[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
 /// T403/T404：字段级脱敏与行级安全（data-protection feature）

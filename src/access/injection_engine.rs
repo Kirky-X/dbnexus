@@ -505,7 +505,8 @@ mod tests {
         }
 
         // 块注释标记走管线早退分支（与遗留 contains_sql_injection 的前置检查同位），
-        // 不参与匹配阶段语料对比
+        // 不参与匹配阶段语料对比（scan_relational 仅在 sql-parser 下编译）
+        #[cfg(feature = "sql-parser")]
         assert!(
             !InjectionEngine::global()
                 .scan_relational("SELECT /* HIDDEN */ 1")

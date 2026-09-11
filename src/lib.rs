@@ -177,6 +177,12 @@ pub use crate::database::repository::{JsonRepository, Repository};
 pub use crate::database::data_api::{
     DataApiGateway, Filter, FilterOp, ListRequest, ListResponse, OrderDirection, TableEndpoint,
 };
+
+// T420 语句级 prepared statement LRU 缓存（prepare-cache feature）
+#[cfg(feature = "prepare-cache")]
+pub use crate::database::pool::{
+    PoolPrepareCache, PrepareCacheStats, PreparedStatementCache,
+};
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

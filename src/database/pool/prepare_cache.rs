@@ -27,6 +27,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+/// 池级缓存实例别名（T420：DbPool 集成口径 —— 就绪标记 + 命中率指标；
+/// 下游如需缓存驱动句柄可用自定义 V 的 PreparedStatementCache）
+pub type PoolPrepareCache = PreparedStatementCache<()>;
+
 /// 缓存命中率统计（T420）
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PrepareCacheStats {
@@ -88,26 +92,22 @@ impl<V> PreparedStatementCache<V> {
         sql: impl Into<Arc<str>>,
         prepare: impl FnOnce(&str) -> V,
     ) -> (Arc<V>, bool) {
+        let key: Arc<str> = sql.into();
         let mut state = self.inner.lock().expect("prepare cache lock");
         state.clock += 1;
         let clock = state.clock;
 
         // 命中路径：刷新访问时钟
-        if let Some(entry) = state.map.get_mut(&sql) {
+        if let Some(entry) = state.map.get_mut(&key) {
             entry.last_used = clock;
-            state.hits += 1;
-            let hits = state.hits;
-            let size = state.map.len();
             let value = Arc::clone(&entry.value);
-            drop(state);
-            let _ = (hits, size);
+            state.hits += 1;
             return (value, true);
         }
 
         // 未命中：执行 prepare
         state.misses += 1;
-        let sql: Arc<str> = sql.into();
-        let value = Arc::new(prepare(&sql));
+        let value = Arc::new(prepare(&key));
 
         // 容量已满 → 淘汰最久未使用条目
         if state.map.len() >= self.capacity {
@@ -123,9 +123,9 @@ impl<V> PreparedStatementCache<V> {
         }
 
         state.map.insert(
-            Arc::clone(&sql),
+            Arc::clone(&key),
             Entry {
-                sql: Arc::clone(&sql),
+                sql: Arc::clone(&key),
                 value: Arc::clone(&value),
                 last_used: clock,
             },
@@ -190,21 +190,18 @@ mod tests {
     fn test_lru_eviction_respects_recency() {
         let cache: PreparedStatementCache<()> = PreparedStatementCache::new(2);
 
-        cache.get_or_prepare("a", |_| ());
-        cache.get_or_prepare("b", |_| ());
+        assert!(!cache.get_or_prepare("a", |_| ()).1, "a 首次未命中");
+        assert!(!cache.get_or_prepare("b", |_| ()).1, "b 首次未命中");
         // 访问 a → b 成为最久未使用
-        cache.get_or_prepare("a", |_| ());
-        // 插入 c → 淘汰 b
-        cache.get_or_prepare("c", |_| ());
-
-        let (_, b_hit) = cache.get_or_prepare("b", |_| ());
-        assert!(!b_hit, "b 应已被淘汰");
-        let (_, a_hit) = cache.get_or_prepare("a", |_| ());
-        assert!(a_hit, "a 应仍在缓存");
+        assert!(cache.get_or_prepare("a", |_| ()).1);
+        // 插入 c → 容量满，淘汰 b
+        assert!(!cache.get_or_prepare("c", |_| ()).1);
 
         let stats = cache.stats();
         assert_eq!(stats.evictions, 1);
         assert_eq!(stats.size, 2);
         assert_eq!(cache.capacity(), 2);
+        // b 已被淘汰（重新探测为未命中）
+        assert!(!cache.get_or_prepare("b", |_| ()).1, "b 应已被淘汰");
     }
 }
