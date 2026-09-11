@@ -236,7 +236,8 @@ pub use crate::database::replica::MySqlLagDetector;
 pub use crate::database::replica::PostgresLagDetector;
 #[cfg(feature = "replica-routing")]
 pub use crate::database::replica::{
-    ReplicaPool, ReplicationLag, ReplicationLagDetector, SqliteLagDetector,
+    ReplicaLoadBalancer, ReplicaNode, ReplicaPool, ReplicationLag, ReplicationLagDetector,
+    SqliteLagDetector,
 };
 
 // Scatter-Gather 导出（scatter-gather feature）

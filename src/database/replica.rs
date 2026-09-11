@@ -396,3 +396,226 @@ mod tests {
         );
     }
 }
+
+// ============================================================================
+// T411：副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
+// ============================================================================
+
+use std::sync::Mutex;
+
+/// 副本节点（T411）：池 + lag 探测器 + 选择权重
+pub struct ReplicaNode {
+    /// 节点名（观测/剔除状态键）
+    pub name: String,
+    /// 副本连接池
+    pub pool: Arc<DbPool>,
+    /// 选择权重（>0；同延迟下高权重副本被优先选中）
+    pub weight: u32,
+    /// lag 探测器（决定该副本当前是否可承接读流量）
+    pub lag_detector: Box<dyn ReplicationLagDetector>,
+}
+
+/// 节点运行时状态（观测快照与剔除判定）
+struct NodeState {
+    node: ReplicaNode,
+    /// 连续失败次数（探测失败 / lag 超阈值 / 会话获取失败均计）
+    consecutive_failures: u32,
+    /// 最近一次探测延迟（毫秒；None = 尚未探测）
+    last_latency_ms: Option<u64>,
+    /// 最近一次探测是否健康（乐观初始：未被探测证伪前视为健康）
+    last_healthy: bool,
+}
+
+impl NodeState {
+    fn score(&self) -> f64 {
+        let latency = self.last_latency_ms.unwrap_or(0) as f64;
+        self.node.weight as f64 / (1.0 + latency)
+    }
+}
+
+/// 副本负载均衡器（T411）
+///
+/// - **读写分离**：`get_write_session` 恒走主库；`get_read_session` 从副本
+///   选择，全部副本不可用时回退主库（绝不把读请求路由到状态不明的副本）
+/// - **权重/延迟选择**：候选副本按 `weight / (1 + 探测延迟ms)` 打分取最高
+///   （确定性，无随机），等权重下低延迟副本胜出
+/// - **故障剔除**：连续失败达阈值（默认 3）的副本被剔除（跳过探测与选择），
+///   `revive_all` 提供半开重探入口（调用方可按周期调用）
+/// - **可观测**：`snapshot()` 输出各节点健康 JSON（T406
+///   `ReplicaHealthProvider` 形态），`last_selected_replica()` 记录最近承接
+///   读流量的副本名
+pub struct ReplicaLoadBalancer {
+    primary: Arc<DbPool>,
+    nodes: Mutex<Vec<NodeState>>,
+    failure_threshold: u32,
+    last_selected: Mutex<Option<String>>,
+}
+
+impl ReplicaLoadBalancer {
+    /// 创建负载均衡器（主库 + 副本节点集合）
+    ///
+    /// MVP 约定：剔除阈值固定为 3；副本自身 lag 阈值由节点探测器
+    /// （如 `PostgresLagDetector`）承载。`config` 保留在签名中以对齐
+    /// 既有 `ReplicaConfig` 配置口径。
+    pub fn new(
+        primary: Arc<DbPool>,
+        nodes: Vec<ReplicaNode>,
+        _config: crate::foundation::ReplicaConfig,
+    ) -> Self {
+        let states = nodes
+            .into_iter()
+            .map(|node| NodeState {
+                node,
+                consecutive_failures: 0,
+                last_latency_ms: None,
+                last_healthy: true,
+            })
+            .collect();
+        Self {
+            primary,
+            nodes: Mutex::new(states),
+            failure_threshold: 3,
+            last_selected: Mutex::new(None),
+        }
+    }
+
+    /// 故障剔除阈值（连续失败次数）
+    pub fn failure_threshold(&self) -> u32 {
+        self.failure_threshold
+    }
+
+    /// 最近一次成功承接读流量的副本名（None = 尚未命中或已回退主库）
+    pub fn last_selected_replica(&self) -> Option<String> {
+        self.last_selected.lock().expect("balancer lock").clone()
+    }
+
+    /// 指定副本是否已被剔除
+    pub fn is_replica_evicted(&self, name: &str) -> bool {
+        self.nodes
+            .lock()
+            .expect("balancer lock")
+            .iter()
+            .any(|s| s.node.name == name && s.consecutive_failures >= self.failure_threshold)
+    }
+
+    /// 复活全部副本（清除失败计数，供周期性半开重探）
+    pub fn revive_all(&self) {
+        let mut nodes = self.nodes.lock().expect("balancer lock");
+        for s in nodes.iter_mut() {
+            s.consecutive_failures = 0;
+        }
+    }
+
+    /// 节点状态快照（同步读取存储态，无探测；T406 健康导出可注入）
+    pub fn snapshot(&self) -> Vec<serde_json::Value> {
+        self.nodes
+            .lock()
+            .expect("balancer lock")
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "name": s.node.name,
+                    "weight": s.node.weight,
+                    "healthy": s.last_healthy,
+                    "evicted": s.consecutive_failures >= self.failure_threshold,
+                    "consecutive_failures": s.consecutive_failures,
+                    "last_probe_latency_ms": s.last_latency_ms,
+                })
+            })
+            .collect()
+    }
+
+    /// 写会话：恒走主库
+    pub async fn get_write_session(
+        &self,
+        role: &str,
+    ) -> crate::foundation::DbResult<crate::Session> {
+        self.primary.get_session(role).await
+    }
+
+    /// 读会话：探测各未剔除副本 → 健康者按权重/延迟打分 → 最高分承接；
+    /// 全部不可用（lag 超阈值 / 探测失败 / 被剔除）时回退主库
+    pub async fn get_read_session(
+        &self,
+        role: &str,
+    ) -> crate::foundation::DbResult<crate::Session> {
+        // 1. 快照未剔除候选（短临界区）
+        let candidates: Vec<usize> = {
+            let nodes = self.nodes.lock().expect("balancer lock");
+            nodes
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.consecutive_failures < self.failure_threshold)
+                .map(|(i, _)| i)
+                .collect()
+        };
+
+        // 2. 逐个探测（锁外 await）：健康性 + 探测延迟（探测器内耗时即延迟样本）
+        let mut probed: Vec<(usize, bool, Option<u64>)> = Vec::with_capacity(candidates.len());
+        for idx in candidates {
+            let (probe, latency_ms) = {
+                let nodes = self.nodes.lock().expect("balancer lock");
+                let start = std::time::Instant::now();
+                let probe = nodes[idx].node.lag_detector.detect_lag(&nodes[idx].node.pool).await;
+                let latency_ms = start.elapsed().as_millis() as u64;
+                (probe, Some(latency_ms))
+            };
+            let healthy = matches!(&probe, Ok(lag) if lag.is_caught_up);
+            probed.push((idx, healthy, latency_ms));
+        }
+
+        // 3. 回写探测结果并按分数排序候选（短临界区）
+        let ranked: Vec<usize> = {
+            let mut nodes = self.nodes.lock().expect("balancer lock");
+            for (idx, healthy, latency) in &probed {
+                let state = &mut nodes[*idx];
+                state.last_healthy = *healthy;
+                state.last_latency_ms = *latency;
+                if *healthy {
+                    state.consecutive_failures = 0;
+                } else {
+                    state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+                }
+            }
+            let mut order: Vec<usize> = probed
+                .iter()
+                .filter(|(_, healthy, _)| *healthy)
+                .map(|(idx, _, _)| *idx)
+                .collect();
+            order.sort_by(|a, b| {
+                nodes[*b]
+                    .score()
+                    .partial_cmp(&nodes[*a].score())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            order
+        };
+
+        // 4. 按分数顺序尝试取会话；任一成功即记录并返回
+        for idx in ranked {
+            let result = {
+                let nodes = self.nodes.lock().expect("balancer lock");
+                nodes[idx].node.pool.get_session(role).await
+            };
+            match result {
+                Ok(session) => {
+                    let name = {
+                        let nodes = self.nodes.lock().expect("balancer lock");
+                        nodes[idx].node.name.clone()
+                    };
+                    *self.last_selected.lock().expect("balancer lock") = Some(name);
+                    return Ok(session);
+                }
+                Err(_) => {
+                    let mut nodes = self.nodes.lock().expect("balancer lock");
+                    nodes[idx].consecutive_failures =
+                        nodes[idx].consecutive_failures.saturating_add(1);
+                }
+            }
+        }
+
+        // 5. 全部副本不可用 → 回退主库
+        *self.last_selected.lock().expect("balancer lock") = None;
+        self.primary.get_session(role).await
+    }
+}
