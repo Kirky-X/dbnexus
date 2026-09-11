@@ -30,6 +30,10 @@ pub mod config_confers;
 #[cfg(feature = "copy")]
 pub mod copy;
 
+/// 泛型仓储（T418：Repository<T> CRUD 端口 + JSON 行参考实现 + 实现宏）
+#[cfg(feature = "repository")]
+pub mod repository;
+
 /// 分布式事务 Saga 编排器（saga feature）
 #[cfg(feature = "saga")]
 pub mod saga;
