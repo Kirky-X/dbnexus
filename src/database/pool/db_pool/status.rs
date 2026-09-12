@@ -65,7 +65,9 @@ impl DbPool {
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
     /// 与迁移路径（auto-migrate））
-    #[cfg(any(feature = "auto-migrate", feature = "postgres"))]
+    // 消费方：auto-migrate 迁移路径、copy 门控下的 postgres copy_in。
+    // postgres 单独存在而无 copy/auto-migrate 时无消费方，方法不参与编译。
+    #[cfg(any(feature = "auto-migrate", all(feature = "postgres", feature = "copy")))]
     pub(crate) fn release_connection(&self, conn: DbConnection) {
         DbPoolInner::release_connection(&self.inner, conn);
     }
