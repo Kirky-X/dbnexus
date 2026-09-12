@@ -19,6 +19,11 @@ use dbnexus::observability::otel::{
 };
 use dbnexus::DbPool;
 
+/// 在字节缓冲中定位子序列（此处用于查找 HTTP 头部结束标记 `\r\n\r\n`）
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
     let path =
         std::env::temp_dir().join(format!("dbnexus_t412_{}_{}.db", tag, std::process::id()));
@@ -181,12 +186,36 @@ async fn test_otel_http_transport_against_mock_collector_socket() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
 
-    // mock collector：accept 一个连接，读取完整请求，回 200
+    // mock collector：accept 一个连接，读满整个请求（头部 + Content-Length 声明
+    // 的主体）后回 200。单次 read 会与请求体分片到达竞争，必须循环读满。
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        let mut buf = vec![0u8; 8192];
-        let n = stream.read(&mut buf).unwrap();
-        let request = String::from_utf8_lossy(&buf[..n]).to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut buf: Vec<u8> = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let (header_end, content_length) = loop {
+            let n = stream.read(&mut chunk).expect("read request headers");
+            buf.extend_from_slice(&chunk[..n]);
+            if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&buf[..pos]).to_ascii_lowercase();
+                let length = headers
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                break (pos + 4, length);
+            }
+            assert!(std::time::Instant::now() < deadline, "timeout reading headers");
+        };
+        while buf.len() < header_end + content_length {
+            let n = stream.read(&mut chunk).expect("read request body");
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            assert!(std::time::Instant::now() < deadline, "timeout reading body");
+        }
+        let request = String::from_utf8_lossy(&buf).to_string();
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .unwrap();

@@ -77,14 +77,14 @@ mod t411_replica_load_balancer_tests {
     }
 
     impl MockDetector {
-        fn caught_up() -> Box<Self> {
-            Box::new(Self { caught_up: true, delay_ms: 0 })
+        fn caught_up() -> Arc<Self> {
+            Arc::new(Self { caught_up: true, delay_ms: 0 })
         }
-        fn lagging() -> Box<Self> {
-            Box::new(Self { caught_up: false, delay_ms: 0 })
+        fn lagging() -> Arc<Self> {
+            Arc::new(Self { caught_up: false, delay_ms: 0 })
         }
-        fn slow(delay_ms: u64) -> Box<Self> {
-            Box::new(Self { caught_up: true, delay_ms })
+        fn slow(delay_ms: u64) -> Arc<Self> {
+            Arc::new(Self { caught_up: true, delay_ms })
         }
     }
 
@@ -112,7 +112,11 @@ mod t411_replica_load_balancer_tests {
         }
     }
 
-    async fn replica_node(tag: &str, weight: u32, detector: Box<dyn ReplicationLagDetector>) -> ReplicaNode {
+    async fn replica_node(
+        tag: &str,
+        weight: u32,
+        detector: Arc<dyn ReplicationLagDetector>,
+    ) -> ReplicaNode {
         ReplicaNode {
             name: tag.to_string(),
             pool: Arc::new(DbPool::new(&temp_db_url(tag)).await.unwrap()),
@@ -206,7 +210,7 @@ mod t411_replica_load_balancer_tests {
     #[tokio::test]
     async fn test_t411_failure_eviction_and_recovery() {
         let primary = Arc::new(DbPool::new(&temp_db_url("primary")).await.unwrap());
-        let node = replica_node("replica-bad", 1, Box::new(FailingDetector)).await;
+        let node = replica_node("replica-bad", 1, Arc::new(FailingDetector)).await;
         let mut config = ReplicaConfig::default();
         config.replica_urls = vec!["replica-bad".to_string()];
         let balancer = ReplicaLoadBalancer::new(primary.clone(), vec![node], config);

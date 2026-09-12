@@ -294,7 +294,8 @@ mod db_saga_recovery_tests {
         let (url, path) = temp_db_url("persist");
         let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
 
-        let mut router = ShardRouter::with_strategy("hash", 1);
+        let mut router = ShardRouter::with_strategy("hash", 1)
+            .with_session_role("admin");
         router.register_shard(0, "s0".to_string(), url.clone());
         router.set_pool(0, pool.clone()).unwrap();
 
@@ -389,6 +390,127 @@ mod db_saga_recovery_tests {
             .compensate_recovered("rec-1", &replay_steps)
             .await;
         assert_eq!(replay3.status, SagaStatus::Failed);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// 日志中的步骤未在重供定义中找到：无法补偿 → CompensationFailed
+    ///（不得把"漏补偿"报告为干净失败）
+    #[tokio::test]
+    async fn test_replay_unknown_step_is_compensation_failed() {
+        let (url, path) = temp_db_url("unknown-step");
+        let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+        let mut router = ShardRouter::with_strategy("hash", 1)
+            .with_session_role("admin");
+        router.register_shard(0, "s0".to_string(), url.clone());
+        router.set_pool(0, pool.clone()).unwrap();
+
+        let db_store = Arc::new(DbSagaLog::new(pool.clone()));
+        db_store.init().await.unwrap();
+        let store: Arc<dyn SagaLogStore> = db_store;
+        let orchestrator = SagaOrchestrator::new_with_log_store(Arc::new(router), store.clone());
+
+        // 中断日志含一个重供定义里不存在的步骤
+        let interrupted = SagaLog {
+            saga_id: "rec-unknown".to_string(),
+            status: SagaStatus::Running,
+            steps: vec![
+                SagaStepLog {
+                    name: "known".to_string(),
+                    shard_id: 0,
+                    action_success: true,
+                    compensation_success: None,
+                    error: None,
+                },
+                SagaStepLog {
+                    name: "vanished".to_string(),
+                    shard_id: 0,
+                    action_success: true,
+                    compensation_success: None,
+                    error: None,
+                },
+            ],
+        };
+        store.persist(&interrupted).await.unwrap();
+
+        let replay_steps = vec![SagaStep {
+            name: "known".to_string(),
+            shard_id: 0,
+            action: Box::new(OkAction),
+            compensation: Box::new(OkAction),
+        }];
+        let replay = orchestrator
+            .compensate_recovered("rec-unknown", &replay_steps)
+            .await;
+        assert_eq!(
+            replay.status,
+            SagaStatus::CompensationFailed,
+            "存在无法补偿的步骤时不得报告干净失败"
+        );
+        assert_eq!(replay.compensated_steps, vec!["known"]);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// 补偿失败条目原地更新：连续重放不产生重复步骤日志
+    #[tokio::test]
+    async fn test_replay_failure_updates_entry_in_place() {
+        let (url, path) = temp_db_url("in-place");
+        let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+        let mut router = ShardRouter::with_strategy("hash", 1)
+            .with_session_role("admin");
+        router.register_shard(0, "s0".to_string(), url.clone());
+        router.set_pool(0, pool.clone()).unwrap();
+
+        let db_store = Arc::new(DbSagaLog::new(pool.clone()));
+        db_store.init().await.unwrap();
+        let store: Arc<dyn SagaLogStore> = db_store;
+        let orchestrator = SagaOrchestrator::new_with_log_store(Arc::new(router), store.clone());
+
+        let interrupted = SagaLog {
+            saga_id: "rec-inplace".to_string(),
+            status: SagaStatus::Running,
+            steps: vec![SagaStepLog {
+                name: "step1".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        store.persist(&interrupted).await.unwrap();
+
+        let failing_steps = vec![SagaStep {
+            name: "step1".to_string(),
+            shard_id: 0,
+            action: Box::new(OkAction),
+            compensation: Box::new(FailCompAction),
+        }];
+        let replay1 = orchestrator
+            .compensate_recovered("rec-inplace", &failing_steps)
+            .await;
+        assert_eq!(replay1.status, SagaStatus::CompensationFailed);
+
+        // 不重置日志，直接重试成功：日志条目数应保持 1（原地更新而非追加）
+        let replay_steps = vec![SagaStep {
+            name: "step1".to_string(),
+            shard_id: 0,
+            action: Box::new(OkAction),
+            compensation: Box::new(OkAction),
+        }];
+        let replay2 = orchestrator
+            .compensate_recovered("rec-inplace", &replay_steps)
+            .await;
+        assert_eq!(replay2.status, SagaStatus::Failed);
+
+        let stored = store.get("rec-inplace").await.unwrap().unwrap();
+        assert_eq!(
+            stored.steps.len(),
+            1,
+            "补偿失败应原地更新条目，不得追加重复条目"
+        );
 
         let _ = std::fs::remove_file(&path);
     }

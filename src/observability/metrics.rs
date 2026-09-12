@@ -207,6 +207,8 @@ pub struct LatencyHistogram {
     counts: Vec<AtomicU64>,
     /// 总样本数
     total: AtomicU64,
+    /// 累计延迟（毫秒；Prometheus `_sum` 输出来源）
+    sum_ms: AtomicU64,
 }
 
 impl LatencyHistogram {
@@ -224,12 +226,14 @@ impl LatencyHistogram {
             buckets: bucket_boundaries,
             counts,
             total: AtomicU64::new(0),
+            sum_ms: AtomicU64::new(0),
         }
     }
 
     /// 记录一次延迟
     pub fn record(&self, duration: Duration) {
         let latency_ms = duration.as_millis() as u64;
+        self.sum_ms.fetch_add(latency_ms, Ordering::SeqCst);
         let mut bucket_idx = 0;
 
         for (idx, boundary) in self.buckets.iter().enumerate() {
@@ -282,6 +286,7 @@ impl LatencyHistogram {
 
         HistogramStats {
             total_samples: total,
+            sum_ms: self.sum_ms(),
             buckets: bucket_stats,
         }
     }
@@ -292,6 +297,12 @@ impl LatencyHistogram {
             c.store(0, Ordering::SeqCst);
         }
         self.total.store(0, Ordering::SeqCst);
+        self.sum_ms.store(0, Ordering::SeqCst);
+    }
+
+    /// 累计延迟（毫秒）
+    pub fn sum_ms(&self) -> u64 {
+        self.sum_ms.load(Ordering::SeqCst)
     }
 }
 
@@ -313,6 +324,8 @@ pub struct HistogramBucket {
 pub struct HistogramStats {
     /// 总样本数
     pub total_samples: u64,
+    /// 累计延迟（毫秒；Prometheus `_sum` 输出来源）
+    pub sum_ms: u64,
     /// 桶统计
     pub buckets: Vec<HistogramBucket>,
 }
@@ -1071,6 +1084,8 @@ impl MetricsCollector {
         let mut map = self.query_metrics.write();
         for metrics in map.values() {
             metrics.latency.write().clear();
+            // 桶计数与累计延迟同步清零，保持与 latency 存储一致
+            metrics.histogram.reset();
             // 无法重置原子计数器，但它们会在下次统计时被覆盖
         }
         map.clear();
@@ -1207,7 +1222,12 @@ impl MetricsCollector {
             acquire_stats.acquire_histogram.total_samples
         )
         .unwrap();
-        writeln!(output, "dbnexus_pool_acquire_duration_seconds_sum {}", 0.0).unwrap();
+        writeln!(
+            output,
+            "dbnexus_pool_acquire_duration_seconds_sum {}",
+            acquire_stats.acquire_histogram.sum_ms as f64 / 1000.0
+        )
+        .unwrap();
         writeln!(
             output,
             "dbnexus_pool_acquire_duration_seconds_count {}",
@@ -1340,7 +1360,9 @@ impl MetricsCollectorTrait for MetricsCollector {
     }
 
     fn record_connection(&self, duration: Duration) {
-        let start = Instant::now();
+        // 延迟直方图与成功/超时/失败分类同源记录；<100ms 视为成功获取，
+        // 100ms-1s 视为等待超时边缘，>1s 视为异常慢获取
+        self.record_connection_acquire_duration(duration);
         if duration.as_millis() < 100 {
             self.record_connection_acquire_success();
         } else if duration.as_millis() < 1000 {
@@ -1348,7 +1370,6 @@ impl MetricsCollectorTrait for MetricsCollector {
         } else {
             self.record_connection_acquire_failure();
         }
-        let _ = start;
     }
 
     fn record_transaction(&self, duration: Duration, success: bool) {

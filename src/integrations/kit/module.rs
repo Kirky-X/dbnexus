@@ -478,12 +478,12 @@ mod tests {
         assert_obs::<DbNexusBuildObserver>();
     }
 
-    /// Health check on a freshly built pool reports `Unhealthy` (lazy init —
-    /// no connections established until first use). This is correct behavior:
-    /// the pool is functional but hasn't created connections yet.
+    /// Health check on a pool built with `pool-warmup` reports `Healthy`:
+    /// the pool eagerly creates `min_connections` at build time, so the
+    /// pre-warmed connections satisfy the health probe.
     #[cfg(feature = "pool-warmup")]
     #[tokio::test]
-    async fn health_check_unhealthy_before_first_use() {
+    async fn health_check_healthy_after_pool_warmup() {
         let mut kit = AsyncKit::new();
         kit.set_config(OxcacheConfig::default());
         kit.set_config(DbConfig {

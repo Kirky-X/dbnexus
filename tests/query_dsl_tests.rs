@@ -62,6 +62,33 @@ fn test_string_value_escaping() {
     assert_eq!(fragment.to_sql(), "SELECT id FROM users WHERE name = 'O''Brien'");
 }
 
+/// Rust 源码转义序列在生成 SQL 前被解码（换行不再以字面 `\n` 形态进入语句）
+#[test]
+fn test_escape_sequences_decoded() {
+    use dbnexus::database::query_dsl::literal_from_token;
+
+    // \n 解码为真实换行
+    assert_eq!(literal_from_token("\"line1\\nline2\""), "'line1\nline2'");
+    // \t / \r / \0
+    assert_eq!(literal_from_token("\"a\\tb\""), "'a\tb'");
+    assert_eq!(literal_from_token("\"a\\rb\""), "'a\rb'");
+    assert_eq!(literal_from_token("\"a\\0b\""), "'a\0b'");
+    // \\ 与 \" 解码
+    assert_eq!(literal_from_token("\"a\\\\b\""), "'a\\b'");
+    assert_eq!(literal_from_token("\"a\\\"b\""), "'a\"b'");
+    // 解码后的单引号仍经 SQL 标准转义（防逃逸不变量）
+    assert_eq!(literal_from_token("\"a\\'b\""), "'a''b'");
+    // 双反斜杠 + n：解码为字面 `\n` 两字符（非换行），反斜杠原样保留
+    assert_eq!(literal_from_token("\"a\\\\nb\""), "'a\\nb'");
+    // 未知转义原样保留（\x.. 不支持，保持原文不失真）
+    assert_eq!(literal_from_token("\"a\\x41b\""), "'a\\x41b'");
+    // \u{...} 码点解码
+    assert_eq!(literal_from_token("\"a\\u{4e2d}b\""), "'a中b'");
+    // 非字符串字面量原样透传
+    assert_eq!(literal_from_token("42"), "42");
+    assert_eq!(literal_from_token("true"), "true");
+}
+
 /// select * 形态
 #[test]
 fn test_select_star() {
