@@ -692,10 +692,17 @@ impl ConnectionAcquireMetricsInner {
         self.failure_count.fetch_add(1, Ordering::SeqCst);
     }
 
-    /// 记录连接获取延迟
+    /// 记录连接获取延迟（成功时调用，计入尝试与成功数）
     fn record_acquire_duration(&self, duration: Duration) {
         self.total_attempts.fetch_add(1, Ordering::SeqCst);
         self.success_count.fetch_add(1, Ordering::SeqCst);
+        self.record_acquire_latency(duration);
+    }
+
+    /// 仅记录延迟直方图与慢获取阈值，不触碰尝试/成功计数——
+    /// 供分类计数（成功/超时/失败）之外的纯延迟观测复用，
+    /// 避免 record_connection 同一事件双计入账。
+    fn record_acquire_latency(&self, duration: Duration) {
         self.acquire_duration.record(duration);
         // 慢获取阈值: 3000ms
         if duration.as_millis() as u64 >= 3000 {
@@ -1362,7 +1369,7 @@ impl MetricsCollectorTrait for MetricsCollector {
     fn record_connection(&self, duration: Duration) {
         // 延迟直方图与成功/超时/失败分类同源记录；<100ms 视为成功获取，
         // 100ms-1s 视为等待超时边缘，>1s 视为异常慢获取
-        self.record_connection_acquire_duration(duration);
+        self.connection_acquire.record_acquire_latency(duration);
         if duration.as_millis() < 100 {
             self.record_connection_acquire_success();
         } else if duration.as_millis() < 1000 {
