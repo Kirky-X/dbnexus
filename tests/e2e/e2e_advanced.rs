@@ -1030,7 +1030,7 @@ mod authentication_advanced {
             .generate_token("u1", "alice", "admin", TokenType::Access)
             .unwrap();
 
-        match mgr.verify_refresh_token(&access_token) {
+        match mgr.verify_refresh_token(&access_token).await {
             Err(AuthError::InvalidToken) => {}
             other => panic!("expected InvalidToken, got {:?}", other),
         }

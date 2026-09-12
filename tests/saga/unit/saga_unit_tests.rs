@@ -256,7 +256,7 @@ mod db_saga_recovery_tests {
     use async_trait::async_trait;
 
     use dbnexus::{
-        DbPool, DbSagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
+        DbSagaLog, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
         SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog, ShardRouter,
     };
 

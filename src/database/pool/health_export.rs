@@ -135,8 +135,6 @@ impl DbPool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // saturation 语义：零连接池满载、活跃占比 clamp
     #[test]
     fn test_saturation_semantics_reference() {

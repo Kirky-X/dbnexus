@@ -272,8 +272,11 @@ mod tests {
     /// 使用共享内存模式，确保连接池中多个连接可以访问同一个内存数据库。
     /// 每个测试使用独立库名（cache=shared 的命名内存库为进程级共享），
     /// 避免并行测试对同一主键 upsert 互相覆盖导致查询断言失败。
+    /// 消费方全部在 sqlite 门控的数据库测试内。
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     static TEST_DB_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     async fn create_global_index() -> GlobalIndex {
         let n = TEST_DB_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let url = format!("sqlite:file:global_index_lib_test_{n}?mode=memory&cache=shared");

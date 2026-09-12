@@ -44,9 +44,8 @@ pub struct PrepareCacheStats {
     pub size: usize,
 }
 
-/// 缓存条目：语句与调用方准备产物
+/// 缓存条目：调用方准备产物（SQL 由 map 键承载，条目不重复存储）
 struct Entry<V> {
-    sql: Arc<str>,
     value: Arc<V>,
     /// LRU 访问时钟（每次命中/插入递增，容量淘汰时剔除最小者）
     last_used: u64,
@@ -130,7 +129,6 @@ impl<V> PreparedStatementCache<V> {
         state.map.insert(
             Arc::clone(&key),
             Entry {
-                sql: Arc::clone(&key),
                 value: Arc::clone(&value),
                 last_used: clock,
             },

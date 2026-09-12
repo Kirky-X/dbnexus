@@ -929,6 +929,8 @@ impl MigrationFileParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // TableChange 仅被下方 sqlite 门控的迁移落地测试使用
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     use crate::domain::TableChange;
 
     // =====================================================================

@@ -244,7 +244,8 @@ mod permission_boundary_tests {
         let provider = Arc::new(RbacPermissionProvider::new());
         let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
         let result = pdp.check("admin", "users", "INVALID_ACTION").await;
-        assert!(matches!(result, PermissionDecision::Error(_)));
+        // 未知操作按 PolicyDecisionPoint::check 的 fail-closed 契约直接拒绝
+        assert!(matches!(result, PermissionDecision::Deny));
     }
 
     #[tokio::test]
@@ -252,7 +253,7 @@ mod permission_boundary_tests {
         let provider = Arc::new(RbacPermissionProvider::new());
         let pdp = PolicyDecisionPoint::with_config(provider, PolicyDecisionPointConfig::default());
         let result = pdp.check("admin", "users", "").await;
-        assert!(matches!(result, PermissionDecision::Error(_)));
+        assert!(matches!(result, PermissionDecision::Deny));
     }
 
     #[tokio::test]

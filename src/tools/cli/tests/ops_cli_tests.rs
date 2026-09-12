@@ -6,6 +6,7 @@
 //! （0 成功 / 1 运行时失败 / 2 用法错误）。
 
 use assert_cmd::Command;
+#[cfg(feature = "sqlite")]
 use std::path::PathBuf;
 
 /// 定位 dbnexus-cli 二进制
@@ -13,7 +14,8 @@ fn cli() -> Command {
     Command::cargo_bin("dbnexus-cli").expect("dbnexus-cli binary")
 }
 
-/// 唯一临时 sqlite 文件库 URL
+/// 唯一临时 sqlite 文件库 URL（仅 sqlite 驱动构建可执行）
+#[cfg(feature = "sqlite")]
 fn temp_db_url(tag: &str) -> (PathBuf, String) {
     let path = std::env::temp_dir().join(format!(
         "dbnexus_t415_cli_{}_{}.db",
@@ -33,6 +35,7 @@ fn parse_json_line(stdout: &str) -> serde_json::Value {
     serde_json::from_str(line).expect("stdout 末行应为合法 JSON")
 }
 
+#[cfg(feature = "sqlite")]
 #[test]
 fn test_health_healthy_exit_0() {
     let (path, url) = temp_db_url("health_ok");
@@ -48,6 +51,7 @@ fn test_health_healthy_exit_0() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[cfg(feature = "sqlite")]
 #[test]
 fn test_health_unreachable_exit_1() {
     // 指向不存在目录的 sqlite 文件 → 连接失败 → 不健康（退出码 1）
@@ -76,6 +80,7 @@ fn test_health_invalid_url_exit_2() {
     assert_eq!(json["checks"]["url"], "invalid");
 }
 
+#[cfg(feature = "sqlite")]
 #[test]
 fn test_migrate_applies_directory_exit_0() {
     let (path, url) = temp_db_url("migrate");
@@ -128,6 +133,7 @@ fn test_migrate_applies_directory_exit_0() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "sqlite")]
 #[test]
 fn test_user_add_list_remove_lifecycle() {
     let (path, url) = temp_db_url("user");
@@ -182,6 +188,7 @@ fn test_user_add_list_remove_lifecycle() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[cfg(feature = "sqlite")]
 #[test]
 fn test_user_invalid_args_exit_2() {
     let (path, url) = temp_db_url("user_bad");

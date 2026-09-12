@@ -816,7 +816,10 @@ impl Session {
 
         // RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
         // 无 permission feature 时 primary_table 为 None，注入自动失效）
+        // postgres 取数臂按 MVP 设计使用原始 sql 做 row_to_json 包装，
+        // 注入产物仅 sqlite 臂消费——sqlite 关闭时该绑定不参与编译使用。
         #[cfg(feature = "data-protection")]
+        #[cfg_attr(not(feature = "sqlite"), allow(unused_variables))]
         let sql_for_fetch = {
             let dp = { self.pool_inner.data_protection.read().await.clone() };
             let is_admin = self.role == self.pool_inner.admin_role;
@@ -831,6 +834,7 @@ impl Session {
             }
         };
         #[cfg(not(feature = "data-protection"))]
+        #[cfg_attr(not(feature = "sqlite"), allow(unused_variables))]
         let sql_for_fetch = sql.to_string();
 
         match backend {
