@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/dbnexus.png" alt="DBNexus Logo" width="200">
+<img src="docs/assets/dbnexus.png" alt="DBNexus Logo" width="180">
 
 [![CI Status](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/dbnexus.svg)](https://crates.io/crates/dbnexus) [![Docs.rs](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus) [![Downloads](https://img.shields.io/crates/d/dbnexus.svg)](https://crates.io/crates/dbnexus) [![License](https://img.shields.io/crates/l/dbnexus.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/dbnexus/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/dbnexus)
 
@@ -17,17 +17,19 @@
 ## 📋 Table of Contents
 
 <details open>
-<summary>📑 Table of Contents (Click to expand)</summary>
+<summary>📑 Table of Contents</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)
   - [📦 Installation](#-installation)
-  - [💡 Basic Usage](#-basic-usage)
-  - [🔒 Permission Control](#-permission-control)
+  - [💡 Minimal Example](#-minimal-example)
+  - [🧭 Core Concepts](#-core-concepts)
 - [🎨 Feature Flags](#-feature-flags)
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
 - [🏗️ Architecture](#️-architecture)
+- [🔗 Core Execution Path](#-core-execution-path)
+- [🌐 Database Support](#-database-support)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
@@ -45,53 +47,70 @@
 
 ## ✨ Features
 
-A high-performance, secure, and feature-rich database access layer built on Sea-ORM. DBNexus provides a **declarative** database access approach:
+DBNexus is built on Sea-ORM and provides a **declarative** database access approach: one macro defines the entity, one permission layer guards every SQL statement, and one set of features tailors the build.
 
-| ✨ Type Safe | 🔒 Permission Control | 🏊 Smart Pooling | 📊 Enterprise Monitoring |
-|:---------:|:----------:|:--------------:|:--------:|
-| Compile-time checks | Table-level RBAC | RAII auto-management | Prometheus metrics |
+<div align="center">
 
-### 🎯 Core Features (Always Available)
+<table>
+<tr>
+<td align="center" width="25%">🔒<br><b>Secure by Design</b><br>Unsafe forbidden crate-wide; table-level RBAC covers JOINs and subqueries</td>
+<td align="center" width="25%">🧩<br><b>Declarative Macros</b><br><code>#[db_entity]</code> generates permission-checked CRUD methods</td>
+<td align="center" width="25%">🗄️<br><b>Multi-Database</b><br>SQLite / PostgreSQL / MySQL / DuckDB / Ladybug / Neo4j</td>
+<td align="center" width="25%">📊<br><b>Observable & Reliable</b><br>Prometheus metrics, health checks, retry and circuit breaker</td>
+</tr>
+</table>
 
-| Status | Feature | Description |
-|:----:|------|------|
-| ✅ | **Connection Pooling** | RAII-style automatic connection lifecycle management |
-| ✅ | **Permission Control** | Role-based table-level access control (RBAC) |
-| ✅ | **Procedural Macros** | Auto-generate CRUD methods and permission checks |
-| ✅ | **SQL Parser** | Extract operation type and target table |
-| ✅ | **Transaction Support** | Complete transaction management |
-| ✅ | **Multi-Database Support** | SQLite, PostgreSQL, MySQL, DuckDB, Ladybug, Neo4j |
+</div>
 
-### ⚡ Enterprise Features (Optional)
+### 🎯 Core Foundation (no optional features required)
 
-| Status | Feature | Description |
-|:----:|------|------|
-| 🔍 | **Metrics Monitoring** | Prometheus metrics export (`metrics` feature) |
-| 📝 | **Audit Logging** | Automatic audit for all operations (`audit` feature) |
-| 🗄️ | **Database Migration** | Automatic migration execution (`migration` feature) |
-| 🔀 | **Data Sharding** | Support for sharding strategies (`sharding` feature) |
-| 🌐 | **Global Index** | Cross-shard queries (`global-index` feature) |
-| 💾 | **Caching** | oxcache cache (moka L1 backend internally) (`cache` feature) |
-| 🩺 | **Permission Health Check** | Memory provider validates policy table capacity, YAML provider validates policy file readability (`permission` feature) |
-| 🔐 | **Permission Engine** | Advanced permission system (`permission-engine` feature) |
-| 🛡️ | **JWT Authentication** | JWT + password strength validation (`authentication` feature) |
-| 🌍 | **Internationalization** | ICU4X locale-aware formatting (core feature, always available) |
-| 🔁 | **Retry** | Exponential backoff + idempotency check (`retry` feature) |
-| 🔄 | **Failover** | CircuitBreaker state machine (`failover` feature) |
-| 🌐 | **Replica Routing** | Read/write splitting (`replica-routing` feature) |
-| 📡 | **Scatter-Gather** | Cross-shard aggregate queries (`scatter-gather` feature) |
-| 🧩 | **Saga Transactions** | Distributed transaction orchestration (`saga` feature) |
-| 🔢 | **Distributed ID** | Snowflake ID generation (`distributed-id` feature) |
+| Capability | Description |
+|------|------|
+| **Connection Pooling** | RAII-style connection lifecycle; pool state maintained with atomics, lock-free on hot paths |
+| **Transactions** | Complete transaction management with `begin_transaction` / `commit` / rollback and RAII guarantees |
+| **Unified Errors** | `ErrorCode` table + `QueryErrorReport` structured error reporting (unified in 0.6.0-rc.3) |
+| **Configuration** | `DbConfig` / `PoolConfig` with environment variable / YAML / TOML sources |
+| **Internationalization** | ICU4X + Fluent locale-aware formatting (core feature, always compiled) |
 
-### 📦 Feature Presets
+### ⚙️ Core Optional Features (`default-no-db` aggregate)
 
-| Preset | Features | Use Case |
-|------|------|----------|
-| `embedded` | `runtime-tokio-rustls`, `sqlite`, `config-env` | Ultra-minimal for embedded/edge devices |
-| `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
-| `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, `distributed-capabilities` | Monolithic application (includes all 7 distributed capabilities) |
-| `enterprise` | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| `all-optional` | `cache`, `observability`, `data-management`, `security`, `migration`, `retry`, `failover`, `replica-routing`, `scatter-gather`, `shard-migration`, `saga`, `distributed-id` | 12 individual features (manually add database drivers and other features) |
+| Capability | Description |
+|------|------|
+| **Permission Control** (`permission`) | Role-based table-level access control (RBAC); hard-depends on `sql-parser` to prevent injection bypass |
+| **SQL Parsing** (`sql-parser`) | Operation type and table extraction, injection detection, cached parse results |
+| **Procedural Macros** (`macros`) | `#[db_entity]` / `#[db_repository]` generate permission-checked CRUD |
+| **Environment Config** (`config-env`) | `DbConfig::from_env` reads configuration directly from environment variables |
+
+### ⚡ Enterprise Features (opt-in)
+
+| Feature | Description |
+|------|------|
+| `metrics` | Prometheus-format metrics export with slow-query detection |
+| `audit` | Audit logging; admin bypass operations are recorded as well |
+| `migration` / `auto-migrate` | Database migrations and automatic migration execution |
+| `sharding` | Data sharding: consistent-hash strategies and session-level shard routing |
+| `global-index` | Cross-shard global index |
+| `cache` | oxcache cache (moka L1 backend), lock-free `ArcSwap` reads |
+| `permission-engine` | Advanced permission engine: policy decision point, role inheritance, caching and rate limiting |
+| `authentication` | JWT authentication (access/refresh token distinction) + bcrypt password policy |
+| `data-protection` 🆕 | Field-level masking (mask/hash/truncate) and row-level security predicate injection |
+| `permission-facade` 🆕 | RBAC + masking + RLS unified facade, configure once and it applies everywhere |
+| `query-dsl` 🆕 | `q!` type-safe query fragment macro, immune to identifier and value injection |
+| `repository` / `data-api` 🆕 | Generic `Repository<T>`; entity-to-JSON data API gateway |
+| `prepare-cache` 🆕 | Statement-level prepared statement LRU cache with hit-rate metrics |
+| `copy` 🆕 | COPY FROM STDIN statement building (pg protocol path gated per driver) |
+| `entity-events` 🆕 | Entity event bus + Outbox persistent dispatch |
+| `otel` 🆕 | Health snapshot metrics exported via OTLP/HTTP (stdout fallback) |
+| `kit` | trait-kit AsyncKit integration; register once for pool/cache/audit/health capabilities |
+| `config-confers` 🆕 | confers hot config reload (atomic `ArcSwap` swap) |
+| `retry` | Runtime retry: idempotency check + exponential backoff |
+| `failover` | Connection failover: CircuitBreaker state machine coordinated with health checks |
+| `replica-routing` | Replica routing read/write splitting: weight/latency-aware selection with half-open recovery |
+| `scatter-gather` | Cross-shard aggregate queries with SUM / COUNT / AVG merging |
+| `saga` | Saga distributed transactions: persistent log, startup recovery, compensation orchestration |
+| `distributed-id` | Snowflake distributed ID generation |
+
+> 🆕 marks capabilities added in 0.6.0-rc.3; see the [Changelog](docs/CHANGELOG.md) for the full list.
 
 ---
 
@@ -99,22 +118,28 @@ A high-performance, secure, and feature-rich database access layer built on Sea-
 
 ### 📦 Installation
 
-Add this to your `Cargo.toml`:
+Requirements: Rust **1.97.1+** (pinned by `rust-toolchain.toml`, edition 2024), plus at least one runtime and one database driver feature.
+
+```bash
+cargo add dbnexus --features runtime-tokio-rustls,sqlite,permission,macros
+cargo add tokio --features rt-multi-thread,macros
+```
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "permission", "sql-parser", "macros", "config-env"] }
-tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
-sea-orm = { version = "2.0.0-rc.42", features = ["macros"] }
+dbnexus = { version = "0.6.0-rc.3", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-### 💡 Basic Usage
+> `permission` force-enables `sql-parser` and `cache` (verified at compile time to prevent SQL injection bypassing permission checks). `default = []`: every feature must be enabled explicitly.
 
-**Step 1: Define Entity**
+### 💡 Minimal Example
+
+Define an entity and get macro-generated CRUD (adapted from [examples/src/basic/basic_crud.rs](examples/src/basic/basic_crud.rs); `ActiveModelBehavior` is implemented by the macro):
 
 ```rust
 use dbnexus::{DbPool, db_entity};
-use sea_orm::entity::prelude::*;
+use dbnexus::sea_orm::entity::prelude::*;
 
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -129,215 +154,185 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-impl ActiveModelBehavior for ActiveModel {}
-```
-
-**Step 2: Create Connection Pool**
-
-```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Pool + admin session (RAII: the connection returns to the pool on drop)
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
+
+    // Macro-generated CRUD: every statement goes through parsing and table-level permission checks
+    let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
+    Model::insert(&session, user).await?;
+
+    let users = Model::find_all(&session).await?;
+    println!("Found {} users", users.len());
     Ok(())
 }
-```
-
-**Step 3: Insert Data**
-
-```rust
-let user = Model {
-    id: 1,
-    name: "Alice".to_string(),
-    email: "alice@example.com".to_string(),
-};
-Model::insert(&session, user).await?;
-```
-
-**Step 4: Query Data**
-
-```rust
-let users = Model::find_all(&session).await?;
-println!("Found {} users", users.len());
 ```
 
 <details>
-<summary>🎬 Complete Example (Runnable)</summary>
+<summary>🎬 Permission Control: unauthorized roles are denied</summary>
 
 ```rust
-use dbnexus::{DbPool, db_entity};
-use sea_orm::entity::prelude::*;
+// The admin role is allowed by default (safe default without a permission config file)
+let session = pool.get_session("admin").await?;
+Model::find_all(&session).await?;
 
-#[db_entity(table_name = "users", primary_key = "id")]
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "users")]
-pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-}
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pool = DbPool::new("sqlite::memory:").await?;
-    let session = pool.get_session("admin").await?;
-    let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
-    Model::insert(&session, user).await?;
-    Ok(())
-}
+// A guest role not defined in the policy is denied; tables not granted are denied too
+let session = pool.get_session("guest").await?;
+Model::find_all(&session).await?; // Error: permission denied
 ```
 
 </details>
 
-### 🔒 Permission Control
+### 🧭 Core Concepts
 
-```rust
-use dbnexus::{DbPool, db_entity};
-use sea_orm::entity::prelude::*;
-
-#[db_entity(table_name = "users", primary_key = "id")]
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "users")]
-pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i64,
-    pub name: String,
-}
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
-
-// Admin can access
-let session = pool.get_session("admin").await?;
-Model::find_all(&session).await?;
-
-// Regular user will be denied
-let session = pool.get_session("guest").await?;
-Model::find_all(&session).await?; // Error: Permission denied
-```
+| Concept | One-liner |
+|------|-----------|
+| `DbPool` | Pool entry point, built from a URL or `DbConfig`, owns the connection lifecycle |
+| `Session` | Role-scoped session handle, RAII connection return, hosts transactions and execution channels |
+| `#[db_entity]` | One macro generates the Sea-ORM entity model + 8 permission-checked CRUD methods |
+| Permission policy | Role → table → action RBAC policy (memory or YAML); JOIN/subquery tables are checked too |
+| Feature gating | Driver mutual exclusion enforced at compile time via `compile_error!`; disabled capabilities cost nothing |
 
 ---
 
 ## 🎨 Feature Flags
 
-### Database Drivers (choose one)
+`default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly. Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive; mixing them fails the build.
+
+### Runtimes (mutually exclusive, pick one)
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `runtime-tokio-rustls` | Tokio runtime + rustls TLS | No |
+| `runtime-tokio-native-tls` | Tokio runtime + native-tls | No |
+| `runtime-async-std` | async-std runtime | No |
+
+### Database Drivers
+
+Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers.
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `sqlite` | Embedded SQLite (sea-orm/sqlx-sqlite) | No |
+| `postgres` | PostgreSQL (sea-orm/sqlx-postgres) | No |
+| `mysql` | MySQL (sea-orm/sqlx-mysql) | No |
+| `duckdb` | Embedded analytical DuckDB (new in 0.3.0) | No |
+| `ladybug` | Embedded Ladybug graph database, formerly Kuzu (new in 0.4.0) | No |
+| `neo4j` | Neo4j graph database server (new in 0.4.0) | No |
+
+### Core Capabilities
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `permission` | Table-level RBAC; hard-depends on `sql-parser` and enables `yaml` + `cache` | No |
+| `sql-parser` | SQL parsing, table extraction and injection detection; auto-enables `cache` | No |
+| `macros` | `dbnexus-macros` procedural macros (`db_entity` / `db_repository`) | No |
+| `default-no-db` | Driver-less default aggregate (runtime + permission + sql-parser + macros + config-env + with-time) for CI driver-matrix testing | No |
+
+### Data Access & Integrations
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `cache` | oxcache cache (moka L1 backend) + lock-free `ArcSwap` reads | No |
+| `oxcache-integration` | OxcacheDbCacheAdapter | No |
+| `kit` | trait-kit AsyncKit integration with the full pool/cache/audit/health capability closure | No |
+| `repository` | Generic `Repository<T>` CRUD port + `impl_json_repository!` macro | No |
+| `data-api` | Data API gateway: entity-to-JSON query endpoints (allowlist + filtering + pagination) | No |
+| `prepare-cache` | Statement-level prepared statement LRU cache | No |
+| `query-dsl` | `q!` type-safe query fragment macro | No |
+| `entity-events` | Entity event bus + Outbox | No |
+| `copy` | COPY FROM STDIN batch-write statement building | No |
+| `data-protection` | Field masking and row-level security predicate injection | No |
+| `permission-facade` | RBAC + masking + RLS unified facade | No |
+| `config-confers` | confers hot config reload | No |
+
+### Observability
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `metrics` | Prometheus-format metrics export (with slow-query detection) | No |
+| `health-check` | Health check module and `health_snapshot` structured export | No |
+| `observability` | `metrics` + `health-check` aggregate | No |
+| `otel` | OTLP/HTTP JSON envelope export bridge | No |
+
+### Data Management
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `migration` | Database migrations | No |
+| `auto-migrate` | Automatic migration execution | No |
+| `sharding` | Data sharding (strategies and session-level routing) | No |
+| `global-index` | Cross-shard global index | No |
+| `data-management` | Aggregate of the four above | No |
+
+### Distributed Capabilities
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `retry` | Runtime retry + exponential backoff (idempotency check) | No |
+| `failover` | Connection failover (CircuitBreaker + health checks) | No |
+| `replica-routing` | Replica routing read/write splitting | No |
+| `scatter-gather` | Cross-shard aggregate query executor | No |
+| `shard-migration` | Shard migration orchestration | No |
+| `saga` | Saga distributed transaction orchestration (persistent recovery) | No |
+| `distributed-id` | Snowflake distributed ID | No |
+| `distributed-capabilities` | Aggregate of the seven above | No |
+
+### Security & Compliance
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `audit` | Audit logging (operations + user context) | No |
+| `permission-engine` | Advanced permission engine (depends on `permission`) | No |
+| `authentication` | JWT authentication + bcrypt password strength policy | No |
+| `security` | `audit` + `permission-engine` aggregate | No |
+
+<details>
+<summary>📦 Typing, config sources, pool enhancements and dev-tool flags</summary>
+
+| Flag | Description | Default |
+|------|------|:----:|
+| `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm type bridges (JSON / time / chrono / UUID fields) | No |
+| `validation` | validator-based data validation | No |
+| `json` | Direct serde_json deserialization support | No |
+| `yaml` | YAML permission/config file parsing | No |
+| `config-toml` | TOML config support (no extra dependency) | No |
+| `config-env` | Environment variable config (no extra dependency) | No |
+| `pool-health-check` | Connection pool health checks | No |
+| `pool-warmup` | Connection pool warmup | No |
+| `dev` / `dev-full` | Developer convenience aggregates | No |
+| `bench` | criterion benchmark dependencies | No |
+| `test-utils` | Test utilities (tempfile / assert_cmd) | No |
+| `cli-tests` | CLI integration test gating | No |
+
+</details>
+
+### Presets
+
+| Preset | Features | Use Case |
+|------|------|----------|
+| `embedded` | `runtime-tokio-rustls`, `sqlite`, `config-env` | Ultra-minimal for embedded/edge devices |
+| `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
+| `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, all 7 distributed capabilities | Monolithic application |
+| `enterprise` | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
+| `all-optional` | 15 optional features except database drivers (cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache) | Full-feature verification (add drivers manually) |
+
+### Usage Examples
 
 ```toml
-# SQLite (embedded)
-dbnexus = { version = "0.6.0-rc.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
-
-# PostgreSQL
-dbnexus = { version = "0.6.0-rc.2", features = ["postgres"] }
-
-# MySQL
-dbnexus = { version = "0.6.0-rc.2", features = ["mysql"] }
-
-# DuckDB (embedded analytical database, new in 0.3.0)
-dbnexus = { version = "0.6.0-rc.2", features = ["duckdb"] }
-
-# Ladybug (embedded graph database, new in 0.4.0)
-dbnexus = { version = "0.6.0-rc.2", features = ["ladybug"] }
-
-# Neo4j (graph database server, new in 0.4.0)
-dbnexus = { version = "0.6.0-rc.2", features = ["neo4j"] }
-```
-
-### Protocol-Compatible Databases
-
-DBNexus supports the following protocol-compatible databases via standard protocols (no extra feature needed, just use the corresponding protocol driver):
-
-| Database | Compatible Protocol | Description |
-|----------|---------------------|-------------|
-| CockroachDB | PostgreSQL | Distributed SQL database |
-| YugabyteDB | PostgreSQL | Distributed PostgreSQL |
-| TiDB | MySQL | Distributed HTAP database |
-| MariaDB | MySQL | MySQL-compatible fork |
-| Aurora | PostgreSQL/MySQL | AWS cloud-native database |
-
-### Runtimes
-
-```toml
-# Tokio with RustLS (default)
-dbnexus = { version = "0.6.0-rc.2", features = ["runtime-tokio-rustls"] }
-
-# Tokio with Native TLS
-dbnexus = { version = "0.6.0-rc.2", features = ["runtime-tokio-native-tls"] }
-
-# AsyncStd
-dbnexus = { version = "0.6.0-rc.2", features = ["runtime-async-std"] }
-```
-
-### Core Features
-
-```toml
-# Permission control (auto-enables sql-parser + yaml + cache features; sql-parser is mandatory to prevent SQL injection bypass)
-dbnexus = { version = "0.6.0-rc.2", features = ["permission"] }
-
-# SQL parsing (auto-enables cache feature)
-dbnexus = { version = "0.6.0-rc.2", features = ["sql-parser"] }
-
-# Procedural macros
-dbnexus = { version = "0.6.0-rc.2", features = ["macros"] }
-```
-
-### Using Presets (Recommended)
-
-```toml
-# Embedded/Edge devices (minimal)
-dbnexus = { version = "0.6.0-rc.2", features = ["embedded"] }
+# Embedded/edge devices (minimal)
+dbnexus = { version = "0.6.0-rc.3", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0-rc.2", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.3", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0-rc.2", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.3", features = ["monolith"] }
 
-# Enterprise (all features)
-dbnexus = { version = "0.6.0-rc.2", features = ["enterprise"] }
-```
-
-### Optional Features
-
-```toml
-# Observability (metrics + health-check)
-dbnexus = { version = "0.6.0-rc.2", features = ["observability"] }
-
-# Data management (migration + sharding + global-index)
-dbnexus = { version = "0.6.0-rc.2", features = ["data-management"] }
-
-# Security (audit + permission-engine)
-dbnexus = { version = "0.6.0-rc.2", features = ["security"] }
-
-# Individual features
-dbnexus = { version = "0.6.0-rc.2", features = [
-    "metrics",          # Prometheus metrics
-    "audit",            # Audit logging
-    "migration",        # Database migration
-    "sharding",         # Data sharding
-    "global-index",     # Cross-shard global index
-    "permission-engine", # Advanced permission engine (requires cache)
-    "authentication",   # JWT authentication + password strength validation
-    "distributed-capabilities" # Distributed capabilities aggregate (retry/failover/replica-routing/scatter-gather/shard-migration/saga/distributed-id)
-    # i18n is now a core feature, always available without explicit enabling
-] }
-```
-
-### Configuration
-
-```toml
-dbnexus = { version = "0.6.0-rc.2", features = [
-    "yaml",            # YAML config support
-    "config-toml",     # TOML config support
-    "config-env",      # Environment variables (default)
-] }
+# Enterprise (full features)
+dbnexus = { version = "0.6.0-rc.3", features = ["enterprise"] }
 ```
 
 ---
@@ -345,33 +340,36 @@ dbnexus = { version = "0.6.0-rc.2", features = [
 ## 📚 Documentation
 
 | Document | Description |
-|----------|-------------|
+|------|------|
 | [📖 User Guide](docs/USER_GUIDE.md) | Complete tutorial from installation to advanced usage |
 | [📘 API Reference](docs/API_REFERENCE.md) | Detailed description of all public APIs |
-| [🏗️ Architecture](docs/ARCHITECTURE.md) | Design philosophy and internal implementation |
-| [🔒 Security](docs/SECURITY.md) | Security design and best practices |
+| [🏗️ Architecture](docs/ARCHITECTURE.md) | Design philosophy, module breakdown, data flow, security/performance design |
+| [📊 Performance Baseline](docs/PERFORMANCE.md) | End-to-end benchmark data and reproduction commands |
+| [🔒 Security](docs/SECURITY.md) | Defense-in-depth design, best practices and vulnerability reporting |
 | [📋 Changelog](docs/CHANGELOG.md) | Change records for every version |
-| [🤝 Contributing](docs/CONTRIBUTING.md) | How to participate in development |
+| [🤝 Contributing](docs/CONTRIBUTING.md) | TDD workflow, code conventions, commit/PR process |
+| [🧪 Test Scenarios](docs/TEST_SCENARIOS.md) | Test pyramid baseline, driver-group matrix and E2E scenarios |
 | [📦 Online API Docs](https://docs.rs/dbnexus) | Latest documentation auto-generated by docs.rs |
+| [📦 crates.io](https://crates.io/crates/dbnexus) | Release page |
 
 ---
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **51 binary targets** in total (as of 0.6.0-rc.3):
 
 ```bash
 cd examples
 
 # Run a single example (each example is a bin target)
-cargo run --bin basic_connection
+cargo run --bin basic_crud --features "sqlite,permission,macros"
 
 # Build all examples
 cargo build --all-targets
 ```
 
 | Module | Examples | Description |
-|--------|----------|-------------|
+|------|------|------|
 | Basics | `basic_connection`, `basic_crud`, `basic_transaction` | Connection pool / `#[db_entity]` CRUD / transactions |
 | Config | `config_env`, `config_yaml`, `config_toml`, `config_presets` | Env vars / YAML / TOML / preset comparison |
 | Database | `database_sqlite`, `database_postgres`, `database_mysql`, `duckdb_query`, `migration`, `sharding`, `global_index`, `pool_management` | Driver connections / OLAP queries / migration / sharding / global index / pool management |
@@ -380,7 +378,7 @@ cargo build --all-targets
 | Auth & Audit | `authentication_jwt`, `authentication_password`, `audit_logging` | JWT / password hashing / audit logging |
 | Observability | `metrics_prometheus`, `health_check`, `latency_histogram` | Metrics / health check & circuit breaker / latency histogram |
 | Macros | `macros_db_entity`, `macros_db_crud`, `macros_db_audit`, `macros_db_cache`, `macros_soft_delete_unique`, `macros_db_entity_v2`, `macros_advanced_query` | Full macro capabilities (CRUD/audit/cache/soft-delete/hooks/pagination) |
-| Graph Databases | `graph_ladybug`*, `graph_neo4j` | Ladybug embedded graph DB / Neo4j server (*`graph_ladybug` is not registered as a bin due to an mbedtls link conflict with `duckdb`; build separately: `cargo build --bin graph_ladybug --no-default-features --features "runtime-tokio-rustls,sqlite,cache,ladybug"`) |
+| Graph Databases | `graph_ladybug`*, `graph_neo4j` | Ladybug embedded graph DB / Neo4j server |
 | Distributed Capabilities | `distributed_id`, `saga`, `scatter_gather`, `replica_routing`, `shard_migration` | Snowflake ID / Saga / cross-shard aggregation / read-write splitting / shard migration |
 | Reliability | `retry`, `failover` | Retry with backoff / circuit-breaker failover |
 | Internationalization | `i18n_formatting` | ICU4X locale-aware formatting |
@@ -388,13 +386,14 @@ cargo build --all-targets
 | Kit | `kit_usage`, `kit_advanced` | Capability registration / multi-capability composition |
 | Common | `error_handling` | Structured error reporting |
 
-See [examples/README.md](examples/README.md) for full details.
+\* `graph_ladybug` is not registered as a bin due to an mbedtls link conflict with `duckdb`; build it separately: `cargo build --bin graph_ladybug --no-default-features --features "runtime-tokio-rustls,sqlite,cache,ladybug"`.
 
-> **Note**: `dbnexus-examples` is set to `publish = false` and managed within the workspace.
+See [examples/README.md](examples/README.md) for full details.
 
 ### 📝 Code Snippets
 
-#### Advanced Configuration
+<details>
+<summary>⚙️ Advanced configuration and environment variables</summary>
 
 ```rust
 use dbnexus::{DbPool, DbConfig, PoolConfig};
@@ -413,8 +412,6 @@ let config = DbConfig {
 let pool = DbPool::with_config(config).await?;
 ```
 
-#### Environment Variables
-
 ```bash
 export DATABASE_URL="postgresql://user:pass@localhost/db"
 export DB_MAX_CONNECTIONS=20
@@ -427,7 +424,10 @@ let config = dbnexus::DbConfig::from_env()?;
 let pool = dbnexus::DbPool::with_config(config).await?;
 ```
 
-#### Transactions
+</details>
+
+<details>
+<summary>🔄 Transactions and monitoring</summary>
 
 ```rust
 let session = pool.get_session("admin").await?;
@@ -443,8 +443,6 @@ Model::insert(&session, user2).await?;
 session.commit().await?;
 ```
 
-#### Monitoring
-
 ```rust
 use dbnexus::{DbPool, MetricsCollector};
 
@@ -459,33 +457,151 @@ let metrics = MetricsCollector::new();
 println!("{}", metrics.export_prometheus());
 ```
 
+</details>
+
 ---
 
 ## 🏗️ Architecture
 
+DBNexus follows a layered module design: `foundation` provides the config and error base; the `database` module hosts the connection pool, Session, migrations, sharding, Saga and scatter-gather; the `access` module concentrates SQL parsing, the permission engine, authentication and masking; the `domain` module holds domain abstractions for permission/audit/migration; `observability` and `reliability` provide metrics/health and retry/failover respectively. All optional capabilities are trimmed at compile time via feature gates, and the `dbnexus-macros` proc-macro crate generates permission-checked CRUD code for entities at compile time.
+
 ```mermaid
-graph TD
-    A[Application Layer<br/>Your code using DbPool and Session] --> B[DBNexus API Layer<br/>DbPool, Session<br/>Permission checking<br/>Transaction management]
-    B --> C[Feature Modules<br/>Config, Permission, Metrics<br/>Migration, Sharding, Audit]
-    C --> D[Connection Pool<br/>Connection lifecycle management<br/>Health checking<br/>RAII guarantees]
-    D --> E[Sea-ORM / SQLx<br/>Database drivers<br/>Query builder]
+flowchart TD
+    APP["Application code"]
+    MAC["dbnexus-macros proc macros<br/>db_entity and db_repository"]
+    API["database module<br/>DbPool / Session / transactions / migration / sharding / Saga"]
+    ACC["access module<br/>sql_parser / permission / auth / masking"]
+    DOM["domain module<br/>permission / audit / migration abstractions"]
+    OBS["observability module<br/>metrics / health / otel"]
+    REL["reliability module<br/>retry"]
+    STO["storage module<br/>global_index"]
+    INT["integrations module<br/>oxcache / trait-kit"]
+    I18N["i18n module<br/>ICU4X locale formatting"]
+    FND["foundation module<br/>config / error"]
+    DRV["Database driver layer<br/>Sea-ORM / SQLx / lbug / neo4rs"]
+    DB[("SQLite / PostgreSQL / MySQL<br/>DuckDB / Ladybug / Neo4j")]
+
+    MAC -.->|generates permission-checked CRUD at compile time| APP
+    APP --> API
+    API --> ACC
+    ACC --> DOM
+    API --> OBS
+    API --> REL
+    API --> STO
+    API --> INT
+    API --> I18N
+    ACC --> FND
+    API --> FND
+    API --> DRV
+    DRV --> DB
 ```
 
 See the [Architecture document](docs/ARCHITECTURE.md) for design philosophy, module breakdown, data flow, and security/performance design.
 
 ---
 
+## 🔗 Core Execution Path
+
+The real execution pipeline of `Session::execute_raw` under the `sql-parser` + `permission` feature combination (source: [src/database/pool/session.rs](src/database/pool/session.rs)):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as Application
+    participant Pool as DbPool
+    participant Sess as Session
+    participant Parser as SqlParser shared
+    participant Perm as Permission Context
+    participant DB as Sea-ORM Driver
+
+    App->>Pool: get_session with role
+    Pool->>Pool: validate role and permission config
+    Pool-->>App: return Session handle
+    App->>Sess: execute_raw with SQL
+    Sess->>Sess: reject DDL statements
+    Sess->>Parser: parse_single
+    Parser-->>Sess: operation type and all table names
+    Sess->>Perm: per-table permission check
+    alt any table denied
+        Sess-->>App: return permission denied error
+    else all allowed
+        Sess->>DB: execute_unprepared
+        DB-->>Sess: execution result
+        Sess-->>App: return ExecResult
+    end
+```
+
+Path notes:
+
+- **Safe default on parse failure**: the admin role is allowed, non-admin roles are denied; no silent fallback
+- **Full cross-table coverage**: every target table in JOINs / subqueries goes through the permission check (completed in rc.2)
+- **Automatic idempotent retry**: with the `retry` feature, idempotent statements such as SELECT are retried with exponential backoff; write statements are never retried
+- **Slow-query observability**: with the `metrics` feature, execution time is recorded and anything above the `SlowQueryConfig` threshold lands in `MetricsCollector` (wired in rc.3)
+- **Auditable admin**: the admin role bypasses per-table permission checks, but bypass operations are recorded by the `audit` feature
+
+---
+
+## 🌐 Database Support
+
+| Driver feature | Database | Type | Introduced |
+|----------|--------|------|----------|
+| `sqlite` | SQLite | Embedded relational | Initial |
+| `postgres` | PostgreSQL | Server relational | Initial |
+| `mysql` | MySQL | Server relational | Initial |
+| `duckdb` | DuckDB | Embedded analytical | 0.3.0 |
+| `ladybug` | Ladybug (formerly Kuzu) | Embedded graph | 0.4.0 |
+| `neo4j` | Neo4j | Graph server | 0.4.0 |
+
+Protocol-compatible databases (no extra feature needed, just use the corresponding protocol driver):
+
+| Database | Compatible Protocol | Description |
+|--------|----------|------|
+| CockroachDB | PostgreSQL | Distributed SQL database |
+| YugabyteDB | PostgreSQL | Distributed PostgreSQL |
+| TiDB | MySQL | Distributed HTAP database |
+| MariaDB | MySQL | MySQL-compatible fork |
+| Aurora | PostgreSQL/MySQL | AWS cloud-native database |
+
+> Known limitation: enabling `duckdb` and `ladybug` together hits an mbedtls duplicate-symbol link conflict; verify multiple drivers with grouped feature combinations (see the [Roadmap](#️-roadmap)).
+
+---
+
 ## 🧪 Testing
+
+### Test strategy matrix
+
+| Layer | Location | Description |
+|------|------|------|
+| Unit tests | `#[cfg(test)]` in `src/**` | Self-tests for error/config/domain modules, run with `--lib` |
+| Integration tests | `tests/**` (unit / integration layout) | Explicitly registered `[[test]]` targets, feature-gated |
+| E2E scenarios | `tests/e2e/` | Boundary/exception/distributed end-to-end, isolated via `cfg(feature)` |
+| Container-level | `postgres_testcontainers` / `mysql_testcontainers` | testcontainers with per-test container isolation |
+| Doc tests | doc tests | Run separately in CI via `cargo test --doc` |
+| Benchmarks | [benches/](benches/) | 5 criterion benchmarks (see [Performance](#-performance)) |
+
+### Test scale (as of 0.6.0-rc.3)
+
+| Metric | Value | Source |
+|------|------|------|
+| Total test functions | 2389 `#[test]` / `#[tokio::test]` | grep count (src 1066 + tests 1321 + macros 2) |
+| Registered test targets | 79 `[[test]]` | `Cargo.toml` |
+| Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
+| Coverage gate | ≥ 80% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
+
+### Commands (identical to CI)
 
 ```bash
 # Full test suite (CI standard feature combination; sqlite/postgres/mysql/duckdb drivers are mutually exclusive, do NOT use --all-features)
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
-# Run integration tests with another database backend (PostgreSQL/MySQL require Docker)
+# Run integration tests against another database backend (CI provides PostgreSQL 15 / MySQL 8.0 via service containers)
 cargo test --no-default-features --features postgres,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
+
+# Doc tests
+cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 ```
 
-> Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time (`compile_error!`); verify multiple drivers via grouped feature combinations.
+> Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time (`compile_error!`); verify multiple drivers via grouped feature combinations. Scenario definitions and the driver-group matrix are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
 ---
 
@@ -493,21 +609,31 @@ cargo test --no-default-features --features postgres,default-no-db,all-optional 
 
 DBNexus follows the zero-cost abstraction principle; its performance characteristics are guaranteed at the design level:
 
-- **Zero-cost feature gating**: optional capabilities such as `metrics` are compiled out via `#[cfg(feature = ...)]` — a no-op with zero overhead when disabled
-- **Lock-free counters**: pool state (`PoolStatus`) is maintained with atomic types, lock-free on hot paths
-- **Async first**: all I/O uses `async/await`; read-heavy state uses `RwLock`; atomics use `AcqRel` ordering to reduce unnecessary global synchronization
-- **Connection pool strategy**: pool + LRU connection reuse (avoids handshake overhead), max-connection limits, minimum-connection warmup, health checks to evict dead connections
-- **Hot path optimizations** (0.5.1): static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing, etc.
+- **Zero-cost feature gating**: optional capabilities are compiled out via `#[cfg(feature = ...)]` — a no-op with zero overhead when disabled
+- **Lock-free hot paths**: pool state uses atomics; permission config is read via lock-free `ArcSwap`; atomics use `AcqRel` ordering
+- **Async first**: all I/O uses `async/await`; read-heavy state uses `RwLock`
+- **Pool strategy**: LRU connection reuse, max-connection limits, minimum-connection warmup, health checks to evict dead connections
+- **Hot path optimizations** (0.5.1): static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing
 
-### Benchmarks
+### End-to-end benchmarks
 
-The repository ships 4 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench` (under [benches/](benches/)):
+The repository ships 5 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench` (under [benches/](benches/)). Run:
 
 ```bash
 cargo bench
 ```
 
-The table below shows cumulative results of two optimization rounds on Linux x86_64 (release profile, lto=thin) as of 2026-08-14 (full report in [benches/baseline-after.md](benches/baseline-after.md)):
+The end-to-end baseline below is excerpted from [docs/PERFORMANCE.md](docs/PERFORMANCE.md) (2026-09-11, WSL2 linux x86_64, 12 logical cores, rustc 1.97.1, bench profile, sqlite temp-file database; single-sample local reference, not an SLA):
+
+| Benchmark | Path | Baseline (median) |
+|------|------|----------------|
+| `e2e_pool/get_session_admin` | `DbPool::get_session` handle acquisition (permission check + pool accounting) | ≈ 0.24 µs |
+| `e2e_query/query_rows_select_single` | `DbPool::query_rows` full row-query pipeline (parse → permission → execute → JSON output) | ≈ 480 µs |
+| `e2e_write/execute_raw_insert_x64` | `Session::execute_raw` INSERT loop, 64 rows/iteration | ≈ 708 ms/iteration (≈ 11 ms/row) |
+
+### Historical optimization comparison
+
+Cumulative results of two platform optimization rounds, excerpted from [benches/baseline-after.md](benches/baseline-after.md) (2026-08-14, Linux x86_64, release profile, lto=thin):
 
 | Benchmark | Original Baseline | After Optimization | Cumulative Change |
 |-----------|-------------------|--------------------|-------------------|
@@ -524,15 +650,19 @@ All 6 benchmarks improved with no regressions; the average cumulative improvemen
 
 ## 🔒 Security
 
-DBNexus is built with security in mind:
+DBNexus is built with security in mind; its defense-in-depth design spans five layers (full design in the [Security document](docs/SECURITY.md)):
 
-- **No unsafe code** — `#![forbid(unsafe_code)]` in all library code
-- **Permission enforcement** — role-based table-level access control (RBAC), covering JOIN/subquery cross-table paths
-- **SQL injection prevention** — parameterized queries by default, `SqlParser` table extraction and injection detection, `DdlGuard` AST validation
-- **Config path validation** — protection against path traversal attacks; connection URL parse errors never echo credentials
-- **Rate limiting** — token-bucket rate limiting on permission checks to prevent abuse
+| Layer | Mechanisms |
+|------|------|
+| Compile-time | Crate-wide `#![forbid(unsafe_code)]`; mixing embedded and server-side drivers fails via `compile_error!`; missing feature dependencies fail the build, no silent degradation |
+| Runtime permissions | Table-level RBAC covering JOIN/subquery cross-table paths; TTL permission cache + singleflight against cache stampede; token-bucket rate limiting |
+| Injection defense | Parameterized queries by default; `SqlParser` table extraction and the unified `InjectionEngine` (Unicode normalization aware); `DdlGuard` AST validation with DDL restricted to admin; parameterized channel for graph queries |
+| Auth & config | JWT access/refresh token distinction and TTL-based revocation cache; bcrypt password policy; path traversal validation; URL parse errors never echo credentials |
+| Audit & masking | `audit` logs with full operation and user context (admin bypasses recorded); `SensitiveMasker` multi-type masking and row-level security |
 
-For the full defense-in-depth design, vulnerability reporting process, and security best practices, see the [Security document](docs/SECURITY.md).
+Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicates, exemptions documented in [deny.toml](deny.toml)) and `cargo audit` ([audit.toml](audit.toml)), plus CodeQL semantic scanning, Dependabot automatic updates, and pre-commit private-key scanning.
+
+**Vulnerability reporting**: please do not report through public issues. Use the private GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/advisories/new) channel ("Report a vulnerability"). Response commitment: acknowledgment within 48 hours, initial assessment within 7 days (see [SECURITY.md](SECURITY.md)).
 
 ---
 
@@ -549,7 +679,7 @@ For the full defense-in-depth design, vulnerability reporting process, and secur
 - [ ] Resolve the mbedtls duplicate-symbol link conflict when `duckdb` and `ladybug` are enabled together (multi-driver verification currently uses grouped feature combinations)
 - [ ] Follow up on Medium items filed during code quality reviews
 
-> Items compiled from the workspace acceptance plan and the [CHANGELOG.md](docs/CHANGELOG.md).
+> Items compiled from the [CHANGELOG.md](docs/CHANGELOG.md) and repository acceptance records.
 
 ---
 
@@ -557,7 +687,14 @@ For the full defense-in-depth design, vulnerability reporting process, and secur
 
 Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first for the TDD workflow, code conventions, and commit/PR process.
 
-### Development Setup
+### Development environment
+
+| Item | Requirement |
+|----|------|
+| Toolchain | Rust 1.97.1 (pinned by `rust-toolchain.toml`, edition 2024) |
+| Git hooks | lefthook / pre-commit (install via `./scripts/install-pre-commit.sh`; bypassing with `--no-verify` is forbidden) |
+| Commit messages | Conventional Commits (`feat` / `fix` / `docs` / `refactor` etc., enforced by the commit-msg hook) |
+| Quality gates | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, `cargo audit`, ≥ 80% line coverage |
 
 ```bash
 # Clone repository
@@ -582,15 +719,15 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.6.0-rc.3 | 2026-09-10 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands |
 | 0.6.0-rc.2 | 2026-09-03 | Removed the `tracing` feature; strict four-driver mutual exclusion (compile-time `compile_error!`); completed JOIN/subquery cross-table permission checks; `h2` security upgrade |
 | 0.5.1 | 2026-08-06 | Hot path performance optimizations (static injection detection table, `Session` RwLock, `DbConfig` Arc sharing, etc.); removed deprecated builder methods |
-| 0.5.0 | 2026-08-04 | Added 7 distributed capability examples (`saga`/`scatter_gather`/`replica_routing` etc.); API and architecture doc sync |
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT + Commons Clause License. Commercial use requires separate authorization. See [LICENSE](LICENSE).
+This project is licensed under **MIT + Commons Clause**: the MIT license with the additional Commons Clause condition — the right to sell the Software or use it commercially is not granted without separate written authorization. See [LICENSE](LICENSE).
 
 ---
 
@@ -598,6 +735,8 @@ This project is licensed under the MIT + Commons Clause License. Commercial use 
 
 - [Sea-ORM](https://www.sea-ql.org/SeaORM/) - The excellent ORM framework DBNexus is built on
 - [SQLx](https://github.com/launchbadge/sqlx) - Async SQL toolkit
+- [sqlparser](https://github.com/apache/datafusion-sqlparser-rs) - SQL dialect parsing powering permission checks and injection defense
+- [ICU4X](https://github.com/unicode-org/icu4x) - Unicode internationalization components powering locale-aware formatting
 - The Rust community for amazing tools and libraries
 
 ---
