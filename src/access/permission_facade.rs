@@ -19,7 +19,7 @@
 //! ```
 
 use crate::database::DbPool;
-#[cfg(not(all(feature = "permission", feature = "data-protection")))]
+#[cfg(not(any(feature = "permission", feature = "data-protection")))]
 use crate::foundation::DbError;
 use crate::foundation::DbResult;
 
@@ -105,10 +105,10 @@ impl<'a> PermissionFacade<'a> {
             })
             .await;
 
-        #[cfg(not(all(feature = "permission", feature = "data-protection")))]
+        #[cfg(not(any(feature = "permission", feature = "data-protection")))]
         {
-            // 纯 permission 或纯 data-protection 的部分启用由各自 feature 分支覆盖；
-            // 两者皆缺时 facade 无可生效面
+            // 两者皆缺时 facade 无可生效面（本模块仅在双 feature 下编译，此块
+            // 为 cfg 组合的语义自洽保留）；error 文案与 condition 对应
             let _ = &self.pool;
             return Err(DbError::Config(
                 "PermissionFacade requires 'permission' and/or 'data-protection' features"

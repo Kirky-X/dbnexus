@@ -142,8 +142,6 @@ pub struct RlsPolicy {
     pub value: String,
 }
 
-/// RLS 引擎：策略集合
-
 /// RLS 引擎：策略集 + 绕过控制
 #[derive(Debug, Clone, Default)]
 pub struct RlsEngine {

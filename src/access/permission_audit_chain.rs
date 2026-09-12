@@ -158,7 +158,8 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
 
 /// 权限变更审计链
 ///
-/// 线程安全：append 经互斥锁串行化（多写者不交错）。
+/// 无内部互斥锁：`append` 经 `&mut self` 独占借用串行化（借用检查器
+/// 保证多写者不交错），跨线程共享需调用方自行加锁或按 `Send` 值传递。
 pub struct PermissionAuditChain {
     key: Vec<u8>,
     prev_hash: [u8; CHAIN_HASH_LEN],
@@ -287,7 +288,7 @@ mod tests {
 
     #[test]
     fn hmac_long_key_normalized() {
-        // RFC 4231 Test Case 6：131 字节密钥（超块长 → 先哈希再使用的合法解释）
+        // RFC 4231 Test Case 5：131 字节 0xAA 密钥（超块长 → 先哈希再使用）
         let key = [0xaa; 131];
         let expected = "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54";
         let mac = hmac_sha256(&key, b"Test Using Larger Than Block-Size Key - Hash Key First");

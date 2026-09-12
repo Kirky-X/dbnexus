@@ -26,7 +26,7 @@ use std::sync::Arc;
 /// 经 confers `ChangeStream` 驱动权限配置原子换装的后台任务
 ///
 /// - `keep`：事件过滤器（返回 true 才触发换装）
-/// - `load`：事件 → `PermissionConfig` 映射（解析失败返回 Err 以跳过本次）
+/// - `load`：事件 → `PermissionConfig` 映射（解析失败仅跳过该事件，循环继续）
 ///
 /// 返回的 JoinHandle 在 Drop 前持续运行；测试中可 abort。
 #[cfg(feature = "permission")]
@@ -59,20 +59,24 @@ where
             if !keep(&event) {
                 continue;
             }
-            match load(&event) {
-                Ok(config) => {
-                    pool.set_permission_config(config)
-                        .await
-                        .map_err(|e| format!("permission hot reload failed: {e}"))?;
-                }
+            // 单个事件失败（解析失败 / 换装失败 / ack 失败）只跳过本次并确认，
+            // 不终止重载循环——坏事件不得让后续合法配置变更全部失联
+            let apply_result = match load(&event) {
+                Ok(config) => pool
+                    .set_permission_config(config)
+                    .await
+                    .map_err(|e| format!("permission hot reload failed: {e}")),
                 Err(e) => {
                     // 解析失败的变更事件跳过（fail-closed：不换装坏配置）
-                    return Err(format!("skip invalid permission event: {e}"));
+                    Err(format!("skip invalid permission event: {e}"))
                 }
+            };
+            if let Err(e) = apply_result {
+                eprintln!("[dbnexus] permission hot reload: {e}");
             }
-            let _ = confers::ChangeStream::ack(&*stream, event.version)
-                .await
-                .map_err(|e| format!("confers ack failed: {e}"))?;
+            if let Err(e) = confers::ChangeStream::ack(&*stream, event.version).await {
+                eprintln!("[dbnexus] confers ack failed: {e}");
+            }
         }
         Ok(())
     })
