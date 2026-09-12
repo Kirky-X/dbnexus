@@ -185,30 +185,34 @@ impl crate::database::DbPool {
                 ));
             }
             let conn = self.acquire_connection().await?;
-            let sea_conn = conn.as_sea_orm()?;
-            let pg_pool = sea_conn.get_postgres_connection_pool();
-            let sql = statement.build();
-            let payload = encode_copy_rows(rows);
-            let mut copy_in = pg_pool.copy_in_raw(&sql).await.map_err(|e| {
-                crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
-                    sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
-                ))
-            })?;
-            copy_in
-                .send(payload.into_bytes())
-                .await
-                .map_err(|e| {
+            // 无论成功失败都归还连接：错误路径漏归还将永久占用池槽位
+            let outcome: crate::foundation::DbResult<u64> = async {
+                let sea_conn = conn.as_sea_orm()?;
+                let pg_pool = sea_conn.get_postgres_connection_pool();
+                let sql = statement.build();
+                let payload = encode_copy_rows(rows);
+                let mut copy_in = pg_pool.copy_in_raw(&sql).await.map_err(|e| {
                     crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
                         sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
                     ))
                 })?;
-            let inserted = copy_in.finish().await.map_err(|e| {
-                crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
-                    sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
-                ))
-            })?;
+                copy_in
+                    .send(payload.into_bytes())
+                    .await
+                    .map_err(|e| {
+                        crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
+                            sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
+                        ))
+                    })?;
+                copy_in.finish().await.map_err(|e| {
+                    crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
+                        sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
+                    ))
+                })
+            }
+            .await;
             self.release_connection(conn);
-            Ok(inserted)
+            return outcome;
         }
 
         #[cfg(not(feature = "postgres"))]

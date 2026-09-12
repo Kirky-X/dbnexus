@@ -316,6 +316,9 @@ pub struct ShardRouter {
     shards: HashMap<u32, ShardInfo>,
     /// 分片连接池映射（DashMap 支持无锁并发读写）
     pools: DashMap<u32, Arc<crate::database::DbPool>>,
+    /// `get_session` 使用的执行角色（默认 "default"；permission feature 下
+    /// 该角色需存在于权限配置或安全默认策略中，可经 `with_session_role` 调整）
+    session_role: String,
 }
 
 impl Default for ShardRouter {
@@ -327,6 +330,7 @@ impl Default for ShardRouter {
             strategy: Box::new(YearlyStrategy),
             shards: HashMap::new(),
             pools: DashMap::new(),
+            session_role: "default".to_string(),
         }
     }
 }
@@ -342,6 +346,7 @@ impl Clone for ShardRouter {
             strategy: self.strategy.boxed_clone(),
             shards: self.shards.clone(),
             pools,
+            session_role: self.session_role.clone(),
         }
     }
 }
@@ -354,6 +359,7 @@ impl ShardRouter {
             strategy: Box::new(strategy),
             shards: HashMap::new(),
             pools: DashMap::new(),
+            session_role: "default".to_string(),
         }
     }
 
@@ -364,7 +370,17 @@ impl ShardRouter {
             strategy: create_strategy(strategy),
             shards: HashMap::new(),
             pools: DashMap::new(),
+            session_role: "default".to_string(),
         }
+    }
+
+    /// 指定 `get_session` 的执行角色
+    ///
+    /// permission feature 下默认角色 "default" 未在权限配置中定义时会被
+    /// 安全默认策略拒绝，此时应改用已配置的角色（如 "admin"）。
+    pub fn with_session_role(mut self, role: impl Into<String>) -> Self {
+        self.session_role = role.into();
+        self
     }
 
     /// 使用配置创建路由器（异步初始化连接池）- 并行优化版本
@@ -559,7 +575,7 @@ impl ShardRouter {
         shard_id: u32,
     ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
         if let Some(pool) = self.get_pool(shard_id) {
-            let session = pool.get_session("default").await?;
+            let session = pool.get_session(&self.session_role).await?;
             Ok(Some(session))
         } else {
             Ok(None)

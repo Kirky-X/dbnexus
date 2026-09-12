@@ -41,6 +41,19 @@ pub struct SagaFailure {
     pub error: String,
 }
 
+/// 将补偿失败结果原地写回该步骤的既有日志条目（保留单条记录，
+/// 后续重放按 `action_success` 仍会重试该步骤）
+fn mark_compensation_failed(log: &mut SagaLog, step_name: &str, error: &str) {
+    if let Some(entry) = log
+        .steps
+        .iter_mut()
+        .find(|s| s.name == step_name && s.action_success)
+    {
+        entry.compensation_success = Some(false);
+        entry.error = Some(error.to_string());
+    }
+}
+
 // ============================================================================
 // SagaRecovery
 // ============================================================================
@@ -140,6 +153,9 @@ impl SagaOrchestrator {
             .collect();
         for step_log in replay_list {
             let Some(&idx) = step_index_map.get(step_log.name.as_str()) else {
+                // 日志中的步骤未在重供定义中找到：该步骤无法补偿，不能视为重放成功
+                //（终态进入 CompensationFailed，调用方可补齐步骤定义后再次重放）
+                replay_failed = true;
                 continue;
             };
             if let Ok(Some(session)) = self.router.get_session(step_log.shard_id).await {
@@ -147,13 +163,9 @@ impl SagaOrchestrator {
                     Ok(()) => compensated.push(step_log.name.clone()),
                     Err(comp_err) => {
                         replay_failed = true;
-                        log.steps.push(SagaStepLog {
-                            name: step_log.name.clone(),
-                            shard_id: step_log.shard_id,
-                            action_success: true,
-                            compensation_success: Some(false),
-                            error: Some(format!("compensation replay failed: {comp_err}")),
-                        });
+                        // 原地更新既有条目（补偿结果记录在原步骤上，避免重复条目
+                        // 导致后续重放对同一步骤补偿多次）
+                        mark_compensation_failed(&mut log, &step_log.name, &format!("compensation replay failed: {comp_err}"));
                     }
                 }
             }
@@ -243,17 +255,13 @@ impl SagaOrchestrator {
                                             compensated.push(completed_name.clone());
                                         }
                                         Err(comp_err) => {
-                                            // 补偿失败：记录结构化事件，不吞错
-                                            log.steps.push(SagaStepLog {
-                                                name: completed_name.clone(),
-                                                shard_id: *completed_shard_id,
-                                                action_success: true,
-                                                compensation_success: Some(false),
-                                                error: Some(format!(
-                                                    "compensation failed: {comp_err}"
-                                                )),
-                                            });
+                                            // 补偿失败：原地更新既有条目，不吞错
                                             compensation_failed = true;
+                                            mark_compensation_failed(
+                                                &mut log,
+                                                completed_name,
+                                                &format!("compensation failed: {comp_err}"),
+                                            );
                                         }
                                     }
                                 }

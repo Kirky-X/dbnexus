@@ -93,7 +93,12 @@ impl<V> PreparedStatementCache<V> {
         prepare: impl FnOnce(&str) -> V,
     ) -> (Arc<V>, bool) {
         let key: Arc<str> = sql.into();
-        let mut state = self.inner.lock().expect("prepare cache lock");
+        // 锁中毒可恢复：条目状态在 prepare 调用点前后均保持一致，取回内部
+        // 数据继续服务（避免单次 panic 永久杀死整个缓存）
+        let mut state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.clock += 1;
         let clock = state.clock;
 
@@ -135,7 +140,10 @@ impl<V> PreparedStatementCache<V> {
 
     /// 当前统计快照
     pub fn stats(&self) -> PrepareCacheStats {
-        let state = self.inner.lock().expect("prepare cache lock");
+        let state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         PrepareCacheStats {
             hits: state.hits,
             misses: state.misses,

@@ -43,7 +43,11 @@ impl DbPoolBuilder {
     /// # Returns
     ///
     /// 返回构造器自身以支持链式调用
-    pub fn config(mut self, config: DbConfig) -> Self {
+    pub fn config(mut self, mut config: DbConfig) -> Self {
+        // 先前显式设置的 admin_role 优先于 config 自带值（顺序无关语义）
+        if let Some(role) = self.admin_role.take() {
+            config.admin_role = role;
+        }
         self.config = Some(config);
         self
     }
@@ -58,10 +62,9 @@ impl DbPoolBuilder {
     ///
     /// 返回构造器自身以支持链式调用
     pub fn admin_role(mut self, admin_role: &str) -> Self {
+        self.admin_role = Some(admin_role.to_string());
         if let Some(ref mut config) = self.config {
             config.admin_role = admin_role.to_string();
-        } else {
-            self.admin_role = Some(admin_role.to_string());
         }
         self
     }
@@ -96,17 +99,21 @@ impl DbPoolBuilder {
     pub fn max_connections(mut self, max_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
             config.pool_config.max_connections = max_connections;
-        } else if let Some(ref url) = self.url {
-            // 如果只有 url，创建一个默认配置然后修改
-            let config = DbConfig {
-                url: url.clone(),
-                pool_config: PoolConfig {
-                    max_connections,
+        } else {
+            // url/config 之后再就绪：先暂存，build 时统一应用（顺序无关）
+            self.pending_max_connections = Some(max_connections);
+            if let Some(ref url) = self.url {
+                let config = DbConfig {
+                    url: url.clone(),
+                    pool_config: PoolConfig {
+                        max_connections,
+                        ..Default::default()
+                    },
                     ..Default::default()
-                },
-                ..Default::default()
-            };
-            self.config = Some(config);
+                };
+                self.config = Some(config);
+                self.pending_max_connections = None;
+            }
         }
         self
     }
@@ -123,16 +130,20 @@ impl DbPoolBuilder {
     pub fn min_connections(mut self, min_connections: u32) -> Self {
         if let Some(ref mut config) = self.config {
             config.pool_config.min_connections = min_connections;
-        } else if let Some(ref url) = self.url {
-            let config = DbConfig {
-                url: url.clone(),
-                pool_config: PoolConfig {
-                    min_connections,
+        } else {
+            self.pending_min_connections = Some(min_connections);
+            if let Some(ref url) = self.url {
+                let config = DbConfig {
+                    url: url.clone(),
+                    pool_config: PoolConfig {
+                        min_connections,
+                        ..Default::default()
+                    },
                     ..Default::default()
-                },
-                ..Default::default()
-            };
-            self.config = Some(config);
+                };
+                self.config = Some(config);
+                self.pending_min_connections = None;
+            }
         }
         self
     }
@@ -164,7 +175,7 @@ impl DbPoolBuilder {
     /// 返回新创建的 DbPool 实例
     pub async fn build(self) -> DbResult<DbPool> {
         // 确定最终配置
-        let config = if let Some(config) = self.config {
+        let mut config = if let Some(config) = self.config {
             config
         } else if let Some(url) = self.url {
             // 从 url 创建默认配置
@@ -184,6 +195,14 @@ impl DbPoolBuilder {
                 "Either url or config must be provided".to_string(),
             )));
         };
+
+        // 应用先于 url/config 设置的显式池参数（setter 顺序无关，显式调用优先）
+        if let Some(max) = self.pending_max_connections {
+            config.pool_config.max_connections = max;
+        }
+        if let Some(min) = self.pending_min_connections {
+            config.pool_config.min_connections = min;
+        }
 
         // 创建 pool
         #[allow(unused_mut)]
@@ -270,6 +289,56 @@ mod tests {
     fn test_builder_admin_role_without_config() {
         let builder = DbPoolBuilder::new().admin_role("super_admin");
         assert_eq!(builder.admin_role.as_deref(), Some("super_admin"));
+    }
+
+    /// admin_role 在 config 之前设置不应丢失（顺序无关）
+    #[test]
+    fn test_builder_admin_role_before_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            admin_role: "old_admin".to_string(),
+            ..Default::default()
+        };
+        let builder = DbPoolBuilder::new().admin_role("new_admin").config(config);
+        assert_eq!(
+            builder.config.unwrap().admin_role,
+            "new_admin",
+            "先设 admin_role 再设 config 应保留显式值"
+        );
+    }
+
+    /// max_connections 在 url 之前设置不应丢失（经暂存在 build 时应用）
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_builder_max_connections_before_url() {
+        let pool = DbPoolBuilder::new()
+            .max_connections(30)
+            .url("sqlite::memory:")
+            .build()
+            .await
+            .expect("should build pool");
+        assert_eq!(pool.config().pool_config.max_connections, 30);
+    }
+
+    /// max_connections 在 config 之前设置应覆盖 config 自带值
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_builder_max_connections_before_config() {
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            pool_config: PoolConfig {
+                max_connections: 15,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let pool = DbPoolBuilder::new()
+            .max_connections(30)
+            .config(config)
+            .build()
+            .await
+            .expect("should build pool");
+        assert_eq!(pool.config().pool_config.max_connections, 30);
     }
 
     #[test]

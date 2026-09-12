@@ -236,7 +236,7 @@ pub struct ReplicaPool {
     /// 副本连接池
     pool: Arc<DbPool>,
     /// lag 检测器
-    lag_detector: Box<dyn ReplicationLagDetector>,
+    lag_detector: Arc<dyn ReplicationLagDetector>,
     /// 最大允许延迟（秒）
     ///
     /// 路由判定只依赖检测器折算进 `is_caught_up` 的阈值结果（见 `get_read_session`），
@@ -249,7 +249,7 @@ impl ReplicaPool {
     /// 创建副本连接池
     pub fn new(
         pool: Arc<DbPool>,
-        lag_detector: Box<dyn ReplicationLagDetector>,
+        lag_detector: Arc<dyn ReplicationLagDetector>,
         max_lag_seconds: f64,
     ) -> Self {
         Self {
@@ -412,7 +412,10 @@ pub struct ReplicaNode {
     /// 选择权重（>0；同延迟下高权重副本被优先选中）
     pub weight: u32,
     /// lag 探测器（决定该副本当前是否可承接读流量）
-    pub lag_detector: Box<dyn ReplicationLagDetector>,
+    ///
+    /// Arc 共享：均衡器探测时先在锁内克隆引用、锁外 await，
+    /// 避免跨 await 持锁（保证 `get_read_session` future 可跨线程 spawn）。
+    pub lag_detector: Arc<dyn ReplicationLagDetector>,
 }
 
 /// 节点运行时状态（观测快照与剔除判定）
@@ -550,18 +553,22 @@ impl ReplicaLoadBalancer {
                 .collect()
         };
 
-        // 2. 逐个探测（锁外 await）：健康性 + 探测延迟（探测器内耗时即延迟样本）
+        // 2. 逐个探测（锁内仅克隆引用，锁外 await——不跨 await 持锁）：
+        //    健康性 + 探测延迟（探测器内耗时即延迟样本）
         let mut probed: Vec<(usize, bool, Option<u64>)> = Vec::with_capacity(candidates.len());
         for idx in candidates {
-            let (probe, latency_ms) = {
+            let (pool, detector) = {
                 let nodes = self.nodes.lock().expect("balancer lock");
-                let start = std::time::Instant::now();
-                let probe = nodes[idx].node.lag_detector.detect_lag(&nodes[idx].node.pool).await;
-                let latency_ms = start.elapsed().as_millis() as u64;
-                (probe, Some(latency_ms))
+                (
+                    Arc::clone(&nodes[idx].node.pool),
+                    Arc::clone(&nodes[idx].node.lag_detector),
+                )
             };
+            let start = std::time::Instant::now();
+            let probe = detector.detect_lag(&pool).await;
+            let latency_ms = start.elapsed().as_millis() as u64;
             let healthy = matches!(&probe, Ok(lag) if lag.is_caught_up);
-            probed.push((idx, healthy, latency_ms));
+            probed.push((idx, healthy, Some(latency_ms)));
         }
 
         // 3. 回写探测结果并按分数排序候选（短临界区）

@@ -187,6 +187,10 @@ pub struct DbPoolBuilder {
     config: Option<DbConfig>,
     /// 管理员角色名称（可选，默认使用配置中的值）
     admin_role: Option<String>,
+    /// 暂存的连接池参数（url/config 之前设置时先保存，build 时统一应用）
+    pending_max_connections: Option<u32>,
+    /// 暂存的最小连接数（同上）
+    pending_min_connections: Option<u32>,
     /// 缓存提供者（DI 注入点，优先于内部缓存）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,

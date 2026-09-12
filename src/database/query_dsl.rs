@@ -150,11 +150,63 @@ impl QueryFragment {
     }
 }
 
+/// 解码 Rust 源码字符串转义序列（单遍扫描；`\` 后为未知转义时按原样保留）
+fn unescape_rust_string(inner: &str) -> String {
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some('0') => out.push('\0'),
+            Some('\\') => out.push('\\'),
+            Some('"') => out.push('"'),
+            Some('\'') => out.push('\''),
+            Some('u') => {
+                // `\u{...}` 形式：取花括号内十六进制码点；格式非法时原样回填
+                let mut hex = String::new();
+                let mut closed = false;
+                if chars.next() == Some('{') {
+                    for hc in chars.by_ref() {
+                        if hc == '}' {
+                            closed = true;
+                            break;
+                        }
+                        hex.push(hc);
+                    }
+                }
+                match (closed, u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)) {
+                    (true, Some(ch)) => out.push(ch),
+                    _ => {
+                        out.push_str("\\u{");
+                        out.push_str(&hex);
+                        if closed {
+                            out.push('}');
+                        }
+                    }
+                }
+            }
+            Some(other) => {
+                // 未知/不支持转义（\x.. 等）：保留原文，保证值不失真
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 /// 宏 literal token 文本 → SQL 字面量（内部）
 ///
 /// `stringify!` 保留字面量原始文本：字符串字面量带引号（如 `"active"`），
 /// 数值/布尔为裸文本（如 `10`、`true`）。据此分流：
-/// - 字符串：剥引号 + SQL 标准转义（单引号加倍）；
+/// - 字符串：剥引号 + 解码 Rust 转义序列 + SQL 标准转义（单引号加倍）；
 /// - 数值/布尔：文本直接作为 SQL 字面量（token 无法携带任意 SQL）。
 pub fn literal_from_token(token: &str) -> String {
     let trimmed = token.trim();
@@ -164,8 +216,7 @@ pub fn literal_from_token(token: &str) -> String {
             || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''));
     if is_quoted {
         let inner = &trimmed[1..trimmed.len() - 1];
-        // 反转义常见序列（stringify! 保留源码转义形态）
-        let unescaped = inner.replace("\\\"", "\"").replace("\\\\", "\\");
+        let unescaped = unescape_rust_string(inner);
         format!("'{}'", unescaped.replace('\'', "''"))
     } else {
         trimmed.to_string()

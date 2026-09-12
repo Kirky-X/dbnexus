@@ -211,17 +211,21 @@ impl DbPool {
         // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
 
-        // 从 DbConnection 提取 SeaORM 连接用于迁移执行器
-        let connection_for_migration = connection.as_sea_orm()?.clone();
+        // 无论成功失败都归还连接：错误路径漏归还将永久占用池槽位
+        let outcome: Result<u32, DbError> = async {
+            // 从 DbConnection 提取 SeaORM 连接用于迁移执行器
+            let connection_for_migration = connection.as_sea_orm()?.clone();
 
-        let mut executor = MigrationExecutor::new(connection_for_migration, db_type);
+            let mut executor = MigrationExecutor::new(connection_for_migration, db_type);
 
-        let applied = executor.run_migrations(migrations_dir).await?;
+            executor.run_migrations(migrations_dir).await
+        }
+        .await;
 
         // 归还连接到池中
         self.release_connection(connection);
 
-        Ok(applied)
+        outcome
     }
 
 }
