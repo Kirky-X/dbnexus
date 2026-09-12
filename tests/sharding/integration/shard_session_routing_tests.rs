@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 分片路由 Session 集成测试 (T068)
+//! 分片路由 Session 集成测试
 //!
 //! 测试 v0.3.0 新增的 ShardRouter 分片路由 API：
 //! - `shard_id_for_key`: 纯哈希分片键路由

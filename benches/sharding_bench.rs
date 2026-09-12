@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 分片路由性能基准测试（T092）
+//! 分片路由性能基准测试
 //!
 //! 衡量 `ShardRouter` 的核心路由开销：
 //! - 分片路由计算（`shard_id_for_key` 纯哈希计算）

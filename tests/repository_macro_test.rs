@@ -7,7 +7,7 @@
 use dbnexus::{DbPool, db_repository};
 
 // ============================================================================
-// T027: 宏展开编译期验证
+// 宏展开编译期验证
 // ============================================================================
 
 /// 使用 db_repository 宏定义仓储
@@ -20,7 +20,7 @@ fn _assert_trait_impl(repo: &TestUserRepository) -> &dyn TestUserRepositoryTrait
 }
 
 // ============================================================================
-// T027: 运行时 CRUD 验证
+// 运行时 CRUD 验证
 // ============================================================================
 
 /// 创建测试用 SQLite 共享内存池
@@ -48,7 +48,7 @@ async fn setup_test_table(pool: &DbPool) {
         .expect("create table");
 }
 
-/// T027: insert + find_by_id 端到端测试
+/// insert + find_by_id 端到端测试
 #[tokio::test]
 async fn test_repository_insert_and_find_by_id() {
     let pool = create_test_pool().await;
@@ -70,7 +70,7 @@ async fn test_repository_insert_and_find_by_id() {
     assert_eq!(row["id"], 1);
 }
 
-/// T027: find_all 测试
+/// find_all 测试
 #[tokio::test]
 async fn test_repository_find_all() {
     let pool = create_test_pool().await;
@@ -95,7 +95,7 @@ async fn test_repository_find_all() {
     assert_eq!(results.len(), 2, "should find 2 records");
 }
 
-/// T027: update 测试
+/// update 测试
 #[tokio::test]
 async fn test_repository_update() {
     let pool = create_test_pool().await;
@@ -118,7 +118,7 @@ async fn test_repository_update() {
     assert!(result.is_some(), "record should still exist after update");
 }
 
-/// T027: delete_by_id 测试
+/// delete_by_id 测试
 #[tokio::test]
 async fn test_repository_delete_by_id() {
     let pool = create_test_pool().await;
@@ -138,7 +138,7 @@ async fn test_repository_delete_by_id() {
     assert!(result.is_none(), "record should be deleted");
 }
 
-/// T027: find_by_id 查询不存在的记录
+/// find_by_id 查询不存在的记录
 #[tokio::test]
 async fn test_repository_find_by_id_not_found() {
     let pool = create_test_pool().await;

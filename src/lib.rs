@@ -101,7 +101,7 @@ mod generated_roles;
 // Common 导出 (新架构)
 pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
 
-// T424 统一错误码表 + 顶层错误结构（保留既有错误类型 From 兼容层）
+// 统一错误码表 + 顶层错误结构（保留既有错误类型 From 兼容层）
 pub use crate::error::{ErrorCode, UnifiedDbError};
 
 // DatabaseType 统一在 foundation::config
@@ -165,37 +165,37 @@ pub use crate::database::{
 // Access 导出
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{DdlGuard, DdlValidationResult};
-// T416 统一 DDL 守卫端口与装饰器（白名单/干跑/审计）
+// 统一 DDL 守卫端口与装饰器（白名单/干跑/审计）
 #[cfg(feature = "sql-parser")]
 pub use crate::access::{AuditingDdlGuard, DdlAuditRecord, DdlGuardPolicy, DryRunDdlGuard};
-// T417 统一注入检测引擎
+// 统一注入检测引擎
 pub use crate::access::{InjectionEngine, InjectionRule, RuleCategory};
 
-// T418 泛型仓储（repository feature）
+// 泛型仓储（repository feature）
 #[cfg(feature = "repository")]
 pub use crate::database::repository::{JsonRepository, Repository};
 
-// T419 数据 API 网关（data-api feature，供 sdforge T716 对接）
+// 数据 API 网关（data-api feature，供 sdforge 对接）
 #[cfg(feature = "data-api")]
 pub use crate::database::data_api::{
     DataApiGateway, Filter, FilterOp, ListRequest, ListResponse, OrderDirection, TableEndpoint,
 };
 
-// T420 语句级 prepared statement LRU 缓存（prepare-cache feature）
+// 语句级 prepared statement LRU 缓存（prepare-cache feature）
 #[cfg(feature = "prepare-cache")]
 pub use crate::database::pool::{
     PoolPrepareCache, PrepareCacheStats, PreparedStatementCache,
 };
 
-// T421 权限统一门面（permission + data-protection feature）
+// 权限统一门面（permission + data-protection feature）
 #[cfg(all(feature = "permission", feature = "data-protection"))]
 pub use crate::access::permission_facade::{PermissionFacade, PermissionFacadeConfig};
 
-// T422 查询 DSL（query-dsl feature）
+// 查询 DSL（query-dsl feature）
 #[cfg(feature = "query-dsl")]
 pub use crate::database::query_dsl::{DslCondition, DslOp, QueryFragment};
 
-// T423 实体事件总线 + Outbox（entity-events feature）
+// 实体事件总线 + Outbox（entity-events feature）
 #[cfg(feature = "entity-events")]
 pub use crate::database::entity_events::{
     DbOutboxStore, EntityAction, EntityEvent, EntityEventBus, InMemoryEntityEventBus,
@@ -254,11 +254,11 @@ pub use crate::observability::{
     SlowQueryConfig, SlowQueryRecord, ThroughputStats, TransactionStats,
 };
 
-// T406 健康导出（health-check feature）：副本状态提供者类型
+// 健康导出（health-check feature）：副本状态提供者类型
 #[cfg(feature = "health-check")]
 pub use crate::database::pool::health_export::ReplicaHealthProvider;
 
-// T409 权限变更审计链（data-protection feature）
+// 权限变更审计链（data-protection feature）
 #[cfg(feature = "data-protection")]
 pub use crate::access::permission_audit_chain::{
     ChainEntry, PermissionAuditChain, PermissionChangeRecord, verify_permission_chain,

@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 权限统一门面（T421）
+//! 权限统一门面
 //!
-//! 把 RBAC（T405 前置的角色策略换装）、字段级脱敏（T403）与 RLS 行级安全
-//! （T404）组合为**单一入口**：一处配置，全局生效——query_rows 出口自动
+//! 把 RBAC（前置的角色策略换装）、字段级脱敏与 RLS 行级安全
+//! 组合为**单一入口**：一处配置，全局生效——query_rows 出口自动
 //! 脱敏、SELECT 自动注入租户谓词、表访问经角色策略校验。
 //!
 //! # 示例
@@ -28,7 +28,7 @@ use crate::access::permission::{PermissionConfig, RolePolicy};
 #[cfg(feature = "data-protection")]
 use crate::access::data_protection::{DataProtection, MaskStrategy, MaskingEngine, RlsEngine};
 
-/// 权限统一配置（T421）：RBAC + 脱敏 + RLS 三合一
+/// 权限统一配置：RBAC + 脱敏 + RLS 三合一
 #[derive(Debug, Default)]
 pub struct PermissionFacadeConfig {
     /// RBAC 角色策略（None = 不调整既有角色策略）
@@ -72,10 +72,10 @@ impl PermissionFacadeConfig {
     }
 }
 
-/// 权限统一门面（T421）
+/// 权限统一门面
 ///
 /// 绑定连接池；`apply` 把组合配置一次性换装到池上，对后续全部
-/// `query_rows` / 表访问生效（与 T403/T404/T405 运行时换装同机制）。
+/// `query_rows` / 表访问生效（与运行时换装同机制）。
 pub struct PermissionFacade<'a> {
     pool: &'a DbPool,
 }

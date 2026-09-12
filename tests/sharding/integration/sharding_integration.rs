@@ -253,10 +253,10 @@ fn test_shard_id_for_key_within_range() {
 }
 
 // ============================================================================
-// T021: add_shard / remove_shard 动态分片管理测试
+// add_shard / remove_shard 动态分片管理测试
 // ============================================================================
 
-/// T021: add_shard 支持运行时动态添加分片连接池（&self 调用，无需 &mut self）
+/// add_shard 支持运行时动态添加分片连接池（&self 调用，无需 &mut self）
 #[tokio::test]
 async fn test_add_shard_dynamic() {
     let Some(url) = get_database_url() else {
@@ -279,7 +279,7 @@ async fn test_add_shard_dynamic() {
     assert!(router.has_pool(2));
 }
 
-/// T021: remove_shard 支持运行时动态移除分片（&self 调用）
+/// remove_shard 支持运行时动态移除分片（&self 调用）
 #[tokio::test]
 async fn test_remove_shard_dynamic() {
     let Some(url) = get_database_url() else {
@@ -302,7 +302,7 @@ async fn test_remove_shard_dynamic() {
     assert!(removed.is_none());
 }
 
-/// T021: add_shard/remove_shard 并发安全性（DashMap 无锁并发）
+/// add_shard/remove_shard 并发安全性（DashMap 无锁并发）
 #[tokio::test]
 async fn test_shard_dynamic_concurrent_safety() {
     let Some(url) = get_database_url() else {

@@ -9,7 +9,7 @@
 pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
-// T412：OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback）
+// OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback）
 #[cfg(feature = "otel")]
 pub mod otel;
 

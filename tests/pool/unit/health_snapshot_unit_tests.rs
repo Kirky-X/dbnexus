@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T406：结构化健康导出（DbPool::health_snapshot）测试
+//! 结构化健康导出（DbPool::health_snapshot）测试
 //!
 //! 需要 sqlite + health-check + runtime-tokio-rustls feature。
 
@@ -100,7 +100,7 @@ async fn test_health_snapshot_unhealthy_without_connections() {
 }
 
 // ============================================================================
-// 副本状态提供者注入（T411 副本路由可接入）
+// 副本状态提供者注入（副本路由可接入）
 // ============================================================================
 
 #[tokio::test]

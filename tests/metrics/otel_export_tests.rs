@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T412：OTel 导出桥（`otel` feature）测试
+//! OTel 导出桥（`otel` feature）测试
 //!
 //! 慢查询/池指标事件导出 OTLP（MVP：手工 HTTP/1.1 otlp-http 客户端 +
 //! stdout fallback）；mock collector（内存传输 + 本地 socket mock server）单测。

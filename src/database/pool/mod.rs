@@ -25,7 +25,7 @@ pub use session::Session;
 
 #[cfg(feature = "duckdb")]
 pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
-// T420：语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
+// 语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
 #[cfg(feature = "prepare-cache")]
 pub use prepare_cache::{PoolPrepareCache, PrepareCacheStats, PreparedStatementCache};
 
@@ -190,10 +190,10 @@ pub struct DbPoolBuilder {
     /// 缓存提供者（DI 注入点，优先于内部缓存）
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
-    /// 统一 DDL 守卫策略（T416：白名单/干跑/审计端口注入点）
+    /// 统一 DDL 守卫策略
     #[cfg(feature = "sql-parser")]
     ddl_guard: Option<std::sync::Arc<dyn crate::access::DdlGuardPolicy>>,
-    /// prepare 缓存容量（T420；None = 不启用）
+    /// prepare 缓存容量（None = 不启用）
     #[cfg(feature = "prepare-cache")]
     prepare_cache_capacity: Option<usize>,
 }

@@ -3,7 +3,7 @@
 //! `OxcacheDbCacheAdapter` — adapts `oxcache::backend::CacheBackend` to
 //! dbnexus's [`DbCacheProvider`] trait.
 //!
-//! Phase 4 T027+T028 of the `trait-kit-async-integration` change. Wraps the
+//! Wraps the
 //! cache capability produced by `OxcacheModule` (`Arc<dyn CacheBackend +
 //! Send + Sync>`) so dbnexus internals can consume it through the
 //! `DbCacheProvider` abstraction without depending on oxcache types directly.
@@ -14,7 +14,7 @@
 //! 1. **`Arc<oxcache::Cache>` → `Arc<dyn CacheBackend + Send + Sync>`**:
 //!    `design.md` Decision 2 (lines 245-247) and `spec.md` R-dbnexus-module-002
 //!    wrote the field as `cache: Arc<oxcache::Cache>`. The actual
-//!    `OxcacheModule` (Phase 2, `oxcache/src/integrations/kit/module.rs`)
+//!    `OxcacheModule` (`oxcache/src/integrations/kit/module.rs`)
 //!    returns `Arc<dyn CacheBackend + Send + Sync>` because `UnifiedCache`
 //!    is not object-safe (documented in OxcacheModule's module-level docs).
 //!    This adapter follows the actual OxcacheModule capability type.
@@ -30,7 +30,7 @@ use crate::foundation::DbError;
 
 /// Adapter that wraps an oxcache `CacheBackend` as a `DbCacheProvider`.
 ///
-/// Constructed in `DbNexusModule::build()` (Phase 4 T029/T030) from the
+/// Constructed in `DbNexusModule::build()` from the
 /// `Arc<dyn CacheBackend + Send + Sync>` capability produced by
 /// `OxcacheModule`. The adapter proxies `get`/`set`/`delete` calls to the
 /// underlying oxcache backend and maps `oxcache::OxCacheError` to `DbError`.
@@ -196,7 +196,7 @@ mod tests {
 
     /// R-dbnexus-module-002 #7: adapter works through dyn dispatch
     /// (`Arc<dyn DbCacheProvider + Send + Sync>`) — the path
-    /// `DbNexusModule::build()` will use in T029/T030.
+    /// `DbNexusModule::build()` will use.
     #[tokio::test]
     async fn adapter_dyn_dispatch() {
         let adapter: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(make_adapter());

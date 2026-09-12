@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T421：权限统一门面测试
+//! 权限统一门面测试
 //!
 //! 一处配置（RBAC + 字段脱敏 + RLS）经 PermissionFacade::apply 全局生效：
 //! 出口脱敏、租户谓词注入、角色访问控制，以及二次 apply 的热换装。

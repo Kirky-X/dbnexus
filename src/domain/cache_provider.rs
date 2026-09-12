@@ -213,7 +213,7 @@ mod tests {
 
     /// R-dbnexus-module-001 #7: trait can be used through a trait object
     /// (`Arc<dyn DbCacheProvider + Send + Sync>`) — the dyn dispatch path
-    /// that `DbNexusModule::build` will use in T029/T030.
+    /// that `DbNexusModule::build` will use.
     #[tokio::test]
     async fn db_cache_provider_dyn_dispatch_works() {
         let cache: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(MockCacheProvider::new());

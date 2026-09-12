@@ -4,7 +4,7 @@
 //!
 //! 提供数据库连接池的创建、管理和自动修正功能
 
-// T425 大文件拆分：按职责纯移动的子模块（行为不变）
+// 大文件拆分：按职责纯移动的子模块（行为不变）
 mod access;
 mod health;
 mod status;
@@ -175,7 +175,7 @@ impl std::fmt::Debug for DbConnection {
 /// 连接池管理器
 #[derive(Clone)]
 pub struct DbPool {
-    /// 内部连接池（pub(crate)：T406 health_export 等同 crate 兄弟模块可扩展 DbPool 方法）
+    /// 内部连接池（pub(crate)：health_export 等 crate 兄弟模块可扩展 DbPool 方法）
     pub(crate) inner: Arc<DbPoolInner>,
 }
 
@@ -212,7 +212,7 @@ pub(crate) struct DbPoolInner {
     /// 管理员角色名称
     pub(super) admin_role: String,
 
-    /// 指标收集器（可选，用于 metrics 特性；T406 起支持运行时注入）
+    /// 指标收集器（可选，用于 metrics 特性；支持运行时注入）
     #[cfg(feature = "metrics")]
     pub(crate) metrics_collector:
         std::sync::RwLock<Option<Arc<MetricsCollector>>>,
@@ -233,20 +233,20 @@ pub(crate) struct DbPoolInner {
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
     pub(crate) cache_provider: ArcSwapOption<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 
-    /// 数据保护配置（T403/T404：脱敏 + RLS，运行时整体换装）
+    /// 数据保护配置（脱敏 + RLS，运行时整体换装）
     #[cfg(feature = "data-protection")]
     pub(crate) data_protection: tokio::sync::RwLock<crate::access::data_protection::DataProtection>,
 
-    /// 副本健康状态提供者（T406：health_snapshot 的 replicas 数据源，T411 副本路由可注入）
+    /// 副本健康状态提供者
     #[cfg(feature = "health-check")]
     pub(crate) replica_health_provider:
         std::sync::RwLock<Option<crate::database::pool::health_export::ReplicaHealthProvider>>,
 
-    /// DDL 守卫策略（T416：白名单/干跑/审计统一端口；None = 内置白名单 DdlGuard）
+    /// DDL 守卫策略
     #[cfg(feature = "sql-parser")]
     pub(crate) ddl_guard: std::sync::RwLock<Option<std::sync::Arc<dyn DdlGuardPolicy>>>,
 
-    /// 语句级 prepared statement LRU 缓存（T420；None = 不启用缓存路径）
+    /// 语句级 prepared statement LRU 缓存（None = 不启用缓存路径）
     #[cfg(feature = "prepare-cache")]
     pub(crate) prepare_cache:
         std::sync::RwLock<Option<std::sync::Arc<crate::database::pool::prepare_cache::PoolPrepareCache>>>,
@@ -774,7 +774,7 @@ impl DbPool {
         }
     }
 
-    /// 获取指标收集器（如果已设置；T406 起可经 `set_metrics_collector` 运行时注入）
+    /// 获取指标收集器（如果已设置；可经 `set_metrics_collector` 运行时注入）
     #[cfg(feature = "metrics")]
     pub fn metrics(&self) -> Option<Arc<MetricsCollector>> {
         self.inner
@@ -1531,7 +1531,7 @@ mod tests {
         assert!(pool.cache_provider().is_some());
     }
 
-    /// T032：未注入 cache_provider 时，query_cache_get 返回 None（直通）。
+    /// 未注入 cache_provider 时，query_cache_get 返回 None（直通）。
     #[cfg(all(
         any(feature = "cache", feature = "oxcache-integration"),
         feature = "sqlite"
@@ -1548,7 +1548,7 @@ mod tests {
         assert!(result.is_none(), "expected None without cache_provider");
     }
 
-    /// T032：注入 cache_provider 后，query_cache_set 存储数据并可经 query_cache_get 命中。
+    /// 注入 cache_provider 后，query_cache_set 存储数据并可经 query_cache_get 命中。
     #[cfg(all(
         any(feature = "cache", feature = "oxcache-integration"),
         feature = "sqlite"

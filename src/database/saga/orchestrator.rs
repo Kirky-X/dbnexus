@@ -42,7 +42,7 @@ pub struct SagaFailure {
 }
 
 // ============================================================================
-// SagaRecovery（T402：启动恢复）
+// SagaRecovery
 // ============================================================================
 
 /// Saga 启动恢复器：从日志存储加载未完成（Running/Compensating）的 saga。
@@ -86,12 +86,12 @@ impl SagaOrchestrator {
         }
     }
 
-    /// 创建编排器并注入自定义日志存储（T402：`DbSagaLog` 持久化 + 启动恢复）
+    /// 创建编排器并注入自定义日志存储
     pub fn new_with_log_store(router: Arc<ShardRouter>, saga_log: Arc<dyn SagaLogStore>) -> Self {
         Self { router, saga_log }
     }
 
-    /// T402：对已持久化的未完成 saga 重放补偿
+    /// 对已持久化的未完成 saga 重放补偿
     ///
     /// 调用方需重新提供步骤定义（`SagaStep` 携带不可序列化的 action）；
     /// 对日志中「正向已成功」的步骤逆序执行补偿，任一补偿失败进入
@@ -186,7 +186,7 @@ impl SagaOrchestrator {
             status: SagaStatus::Running,
             steps: Vec::new(),
         };
-        // T402：初始状态持久化（best-effort，失败不阻断 saga 执行）
+        // 初始状态持久化（best-effort，失败不阻断 saga 执行）
         let _ = self.saga_log.persist(&log).await;
 
         let mut completed_steps: Vec<(String, u32, Box<dyn SagaAction>)> = Vec::new();
@@ -213,7 +213,7 @@ impl SagaOrchestrator {
                             error: None,
                         });
                         completed_names.push(step.name.clone());
-                        // T402：每步落盘（best-effort，持久化失败不中断 saga）
+                        // 每步落盘（best-effort，持久化失败不中断 saga）
                         let _ = self.saga_log.persist(&log).await;
                     }
                     Err(e) => {
@@ -344,7 +344,7 @@ impl SagaOrchestrator {
         }
     }
 
-    /// 获取 Saga 日志（T402：经日志存储异步获取）
+    /// 获取 Saga 日志
     pub async fn get_saga_log(&self, saga_id: &str) -> Option<SagaLog> {
         self.saga_log.get(saga_id).await.ok().flatten()
     }

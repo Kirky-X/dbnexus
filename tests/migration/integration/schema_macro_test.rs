@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Task 4.9: schema() 方法集成测试
+//! schema() 方法集成测试
 //!
 //! 验证 `#[db_entity]` 宏生成的 `schema(backend)` 方法：
 //! 1. 返回的 `Table` 结构包含完整表名/列/主键信息
@@ -27,7 +27,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-/// Task 4.9 Scenario 1: schema() 返回完整 Table
+/// Scenario 1: schema() 返回完整 Table
 ///
 /// 验证 `Model::schema(DbBackend::Sqlite)` 返回的 `Table` 包含：
 /// - 正确的表名
@@ -73,7 +73,7 @@ async fn test_schema_returns_complete_table() {
     );
 }
 
-/// Task 4.9 Scenario 2: schema() 返回的 Table 可直接喂 Migration，apply_migration 成功建表
+/// Scenario 2: schema() 返回的 Table 可直接喂 Migration，apply_migration 成功建表
 #[tokio::test]
 async fn test_schema_table_applied_by_executor() {
     // 使用内存 SQLite 数据库
@@ -120,7 +120,7 @@ async fn test_schema_table_applied_by_executor() {
     );
 }
 
-/// Task 4.9 Scenario 3: 验证 schema() 生成的表可被 sea-orm EntityTrait 正常查询
+/// Scenario 3: 验证 schema() 生成的表可被 sea-orm EntityTrait 正常查询
 ///
 /// 确保宏生成的 schema() 产出的 Table 结构与 Sea-ORM Entity 定义一致，
 /// 不会出现列名/类型不匹配的问题。

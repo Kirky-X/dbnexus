@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! COPY 批量写入（T407，`copy` feature）
+//! COPY 批量写入（`copy` feature）
 //!
 //! PostgreSQL `COPY FROM STDIN` 批量插入路径（比逐行 INSERT 高一个数量级）：
 //!
@@ -16,14 +16,14 @@
 
 use crate::foundation::DbError;
 
-/// COPY 数据格式（T407 MVP：仅 text 格式；CSV/binary 留扩展）
+/// COPY 数据格式（MVP：仅 text 格式；CSV/binary 留扩展）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CopyFormat {
     /// PG 文本格式（默认）
     Text,
 }
 
-/// COPY FROM STDIN 语句（T407）
+/// COPY FROM STDIN 语句
 ///
 /// 标识符在构建期经白名单校验（字母/数字/下划线/点），生成语句为
 /// `COPY "<table>" ("<col>", ...) FROM STDIN`；双引号包裹标识符使保留字
@@ -66,7 +66,7 @@ impl CopyStatement {
         })
     }
 
-    /// 数据格式（T407 MVP 恒为 Text）
+    /// 数据格式（MVP 恒为 Text）
     pub fn format(&self) -> CopyFormat {
         self.format
     }
@@ -161,7 +161,7 @@ fn escape_copy_text(s: &str) -> String {
 }
 
 impl crate::database::DbPool {
-    /// COPY 批量写入（T407）：按语句将行数据经 COPY 协议送入 postgres
+    /// COPY 批量写入：按语句将行数据经 COPY 协议送入 postgres
     ///
     /// # 契约
     ///

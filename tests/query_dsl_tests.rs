@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T422：查询 DSL 宏 `q!` 测试
+//! 查询 DSL 宏 `q!` 测试
 //!
 //! 覆盖基础投影、条件组合（AND）、排序、分页、字符串转义、
 //! `select *` 形态，以及宏产物经 `query_rows` 的端到端执行。

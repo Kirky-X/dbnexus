@@ -65,7 +65,7 @@ async fn setup() -> dbnexus::DbPool {
     pool
 }
 
-/// Task 7.10: 无效邮箱触发验证错误
+/// 无效邮箱触发验证错误
 #[tokio::test]
 async fn test_validate_email_invalid() {
     let pool = setup().await;
@@ -110,7 +110,7 @@ async fn test_validate_email_invalid() {
     );
 }
 
-/// Task 7.10: 有效邮箱通过验证
+/// 有效邮箱通过验证
 #[tokio::test]
 async fn test_validate_email_valid() {
     let pool = setup().await;
@@ -144,7 +144,7 @@ async fn test_validate_email_valid() {
     assert_eq!(count, 1, "1 record should be inserted");
 }
 
-/// Task 7.11: name 长度不足触发验证错误
+/// name 长度不足触发验证错误
 #[tokio::test]
 async fn test_validate_length_too_short() {
     let pool = setup().await;
@@ -179,7 +179,7 @@ async fn test_validate_length_too_short() {
     );
 }
 
-/// Task 7.12: 验证失败短路 — 不执行 timestamps
+/// 验证失败短路 — 不执行 timestamps
 ///
 /// 如果验证失败，before_save 应该在验证步骤就返回错误，
 /// 不应该继续执行 timestamps 逻辑（虽然这里无法直接验证 timestamps 是否执行，
@@ -218,7 +218,7 @@ async fn test_validation_short_circuits_timestamps() {
     );
 }
 
-/// Task 7.10+7.11: 多字段验证同时失败
+/// 多字段验证同时失败
 #[tokio::test]
 async fn test_validate_multiple_fields_fail() {
     let pool = setup().await;
@@ -249,7 +249,7 @@ async fn test_validate_multiple_fields_fail() {
     );
 }
 
-/// Task 7.4 验证: validate + timestamps 组合 — 有效数据应设置时间戳
+/// validate + timestamps 组合 — 有效数据应设置时间戳
 #[tokio::test]
 async fn test_validate_and_timestamps_combined() {
     let pool = setup().await;

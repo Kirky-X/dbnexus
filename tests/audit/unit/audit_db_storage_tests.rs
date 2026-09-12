@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T408：AuditStorage 的 DB 实现（DbAuditStorage）sqlite 单测
+//! AuditStorage 的 DB 实现（DbAuditStorage）sqlite 单测
 //!
 //! saga_logs 同款模式：DDL IF NOT EXISTS + upsert + query_rows 读取/清理。
 //! 不开 permission feature（对齐 saga_unit_tests db 测试模式）。

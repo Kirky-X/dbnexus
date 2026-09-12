@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 审计事件的 DB 持久化存储（T408，`audit` + `sql-parser` feature）
+//! 审计事件的 DB 持久化存储（`audit` + `sql-parser` feature）
 //!
 //! [`DbAuditStorage`](crate::domain::audit::audit_db::DbAuditStorage) 实现既有
 //! [`AuditStorage`](super::AuditStorage) 端口，与内存实现（`MemoryAuditStorage`）
 //! 并列可选：`AuditLogger` 按同一端口注入任一后端。
 //!
-//! 模式与 `DbSagaLog`（T402）同款：
+//! 模式与 `DbSagaLog`同款：
 //! - DDL `CREATE TABLE IF NOT EXISTS`（幂等 init）
 //! - 写入 upsert（同 id 覆盖）
 //! - 行读取/清理经统一行查询 `query_rows`（admin 角色，不依赖 permission feature）
@@ -20,7 +20,7 @@ use chrono::{DateTime, Utc};
 
 use super::{AuditEvent, AuditStorage};
 
-/// DB 审计存储（T408）
+/// DB 审计存储
 ///
 /// 复用 dbnexus 自身的连接池执行 DDL/UPSERT；查询与清理经 `DbPool::query_rows`
 /// 与 `Session::execute_raw`。默认以 admin 角色执行（审计为内部管控面）。

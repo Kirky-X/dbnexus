@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 语句级 prepared statement LRU 缓存（T420）
+//! 语句级 prepared statement LRU 缓存
 //!
 //! 按连接池复用的语句缓存端口：以 SQL 文本为键做容量有界 LRU，
 //! `get_or_prepare` 保证同一语句的准备逻辑（校验/解析/驱动 prepare）
@@ -27,11 +27,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-/// 池级缓存实例别名（T420：DbPool 集成口径 —— 就绪标记 + 命中率指标；
+/// 池级缓存实例别名（DbPool 集成口径 —— 就绪标记 + 命中率指标；
 /// 下游如需缓存驱动句柄可用自定义 V 的 PreparedStatementCache）
 pub type PoolPrepareCache = PreparedStatementCache<()>;
 
-/// 缓存命中率统计（T420）
+/// 缓存命中率统计
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PrepareCacheStats {
     /// 命中次数
@@ -52,7 +52,7 @@ struct Entry<V> {
     last_used: u64,
 }
 
-/// 语句级 LRU 缓存（T420）
+/// 语句级 LRU 缓存
 ///
 /// 线程安全（内部 `Mutex`）；容量上限在构造时固定，淘汰策略为
 /// 最近最少使用（按访问时钟）。

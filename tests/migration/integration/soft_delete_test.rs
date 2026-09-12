@@ -76,7 +76,7 @@ async fn setup_with_seed() -> dbnexus::DbPool {
     pool
 }
 
-/// Task 6.10: find_all 不返回已软删除记录，find_with_deleted 返回全部
+/// find_all 不返回已软删除记录，find_with_deleted 返回全部
 #[tokio::test]
 async fn test_find_all_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
@@ -129,7 +129,7 @@ async fn test_find_all_excludes_soft_deleted() {
     );
 }
 
-/// Task 6.10: find_by_id 不返回已软删除记录
+/// find_by_id 不返回已软删除记录
 #[tokio::test]
 async fn test_find_by_id_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
@@ -165,7 +165,7 @@ async fn test_find_by_id_excludes_soft_deleted() {
     assert!(found.is_some(), "record 1 should still exist");
 }
 
-/// Task 6.11: delete 软删除，force_delete 物理删除
+/// delete 软删除，force_delete 物理删除
 #[tokio::test]
 async fn test_delete_soft_force_delete_physical() {
     let pool = setup_with_seed().await;
@@ -215,7 +215,7 @@ async fn test_delete_soft_force_delete_physical() {
     );
 }
 
-/// Task 6.12: count 自动过滤已软删除记录
+/// count 自动过滤已软删除记录
 #[tokio::test]
 async fn test_count_excludes_soft_deleted() {
     let pool = setup_with_seed().await;
@@ -244,7 +244,7 @@ async fn test_count_excludes_soft_deleted() {
     );
 }
 
-/// Task 6.10: delete_many 批量软删除
+/// delete_many 批量软删除
 #[tokio::test]
 async fn test_delete_many_soft_delete_batch() {
     let pool = setup_with_seed().await;
@@ -277,7 +277,7 @@ async fn test_delete_many_soft_delete_batch() {
     assert_eq!(only_deleted.len(), 2, "should have 2 soft-deleted records");
 }
 
-/// Task 6.5 验证: soft_delete=true 自动注入 deleted_at 字段
+/// soft_delete=true 自动注入 deleted_at 字段
 ///
 /// 此测试通过编译验证：Model 没有显式定义 deleted_at 字段，
 /// 但 soft_delete=true 时宏自动注入了该字段，代码可以访问 deleted_at。

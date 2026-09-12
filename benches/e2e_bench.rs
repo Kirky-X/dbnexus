@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 端到端性能基准（T414）
+//! 端到端性能基准
 //!
 //! 衡量真实数据库路径（sqlite 临时文件库）上的端到端开销：
 //! - 池获取：`DbPool::get_session`（权限校验 + 池信号量 + 连接建立）
@@ -23,7 +23,7 @@ use std::hint::black_box;
 /// 建立临时文件库池并准备 `t_e2e` 表与初始行。
 ///
 /// sqlite::memory: 的每个池化连接是独立内存库，跨连接建表不可见，
-/// 故与 T401 测试口径一致使用 `sqlite:<path>?mode=rwc` 临时文件库。
+/// 故与 `query_rows` 测试口径一致使用 `sqlite:<path>?mode=rwc` 临时文件库。
 async fn setup_pool(batch_rows: usize) -> (DbPool, std::path::PathBuf) {
     let db_path = std::env::temp_dir().join(format!(
         "dbnexus_t414_e2e_{}_{}.db",

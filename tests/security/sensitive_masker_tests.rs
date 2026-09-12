@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! SensitiveMasker 外部测试（T085-T087）
+//! SensitiveMasker 外部测试
 //!
 //! 通过公共 API `SensitiveMasker::mask(data, mask_type)` 测试各类脱敏场景。
 //! 覆盖正常输入、短输入、无效输入、边界条件。
@@ -8,7 +8,7 @@
 use dbnexus::{MaskType, SensitiveError, SensitiveMasker};
 
 // ============================================================================
-// T086: 脱敏测试
+// 脱敏测试
 // ============================================================================
 
 /// TEST-MASK-001: 邮箱脱敏

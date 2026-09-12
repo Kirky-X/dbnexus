@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 结构化健康导出（T406，`health-check` feature）
+//! 结构化健康导出（`health-check` feature）
 //!
 //! `DbPool::health_snapshot()` 汇聚既有健康数据为单个 JSON 文档，供
 //! HTTP `/healthz`、trait-kit 健康聚合等上层直接消费：
@@ -8,7 +8,7 @@
 //! - **池饱和度**：复用 `DbPool::status()`（total/active/idle/wait/借用计数）
 //!   并派生 `saturation`（活跃/总连接，零连接池取 1.0 满载语义）
 //! - **副本状态**：经 `set_replica_health_provider` 注入的提供者输出
-//!   （T411 副本路由可接入；未注入时为空数组）
+//!   （副本路由可接入；未注入时为空数组）
 //! - **慢查询计数**：metrics collector 注入后来自 `MetricsCollector`
 //!   慢查询环（未注入时计数为 0）
 //!
@@ -24,14 +24,14 @@ use std::sync::Arc;
 
 use crate::database::pool::DbPool;
 
-/// 副本健康状态提供者（T406）
+/// 副本健康状态提供者
 ///
 /// 返回的 JSON 对象数组将原样进入 `health_snapshot().replicas`；
-/// T411 副本负载均衡路由可注入其真实副本状态。
+/// 副本负载均衡路由可注入其真实副本状态。
 pub type ReplicaHealthProvider = Arc<dyn Fn() -> Vec<serde_json::Value> + Send + Sync>;
 
 impl DbPool {
-    /// 注册/清除副本健康状态提供者（运行时可重设，供 T411 副本路由接入）
+    /// 注册/清除副本健康状态提供者（运行时可重设，供副本路由接入）
     ///
     /// `None` 清除既有提供者（快照回到空 `replicas`）。
     #[cfg(feature = "health-check")]
@@ -43,7 +43,7 @@ impl DbPool {
             .expect("replica_health_provider lock") = provider;
     }
 
-    /// 结构化健康快照（T406）：池饱和度 + 副本状态 + 慢查询计数
+    /// 结构化健康快照：池饱和度 + 副本状态 + 慢查询计数
     ///
     /// 返回的 JSON 供 HTTP 健康端点 / kit 健康聚合直接输出；
     /// `status` 语义与 `AsyncHealthCheck for DbNexusModule` 对齐：
@@ -122,7 +122,7 @@ impl DbPool {
         })
     }
 
-    /// 注入/清除 metrics collector（T406 前置：池查询指标与慢查询记录的数据源）
+    /// 注入/清除 metrics collector（池查询指标与慢查询记录的数据源）
     ///
     /// 既有 `Session` 执行路径已从 `pool_inner.metrics_collector` 读取指标采集器，
     /// 此 setter 打通运行时注入（与 `set_permission_config` 同款模式），使

@@ -55,7 +55,7 @@ pub enum AggregateValue {
 }
 
 impl AggregateFunction {
-    /// T401：对跨分片行数据计算聚合值（修复此前 aggregated 恒为 None 的缺陷）
+    /// 对跨分片行数据计算聚合值（修复此前 aggregated 恒为 None 的缺陷）
     ///
     /// 数值列从 JSON 行中提取（`row[col]` 为 Number 才计入）；
     /// COUNT 基于行数，AVG 在无数值样本时返回 None，其余空数据返回中性值。
@@ -108,7 +108,7 @@ impl AggregateFunction {
     }
 }
 
-/// T401：从 JSON 行提取数值列
+/// 从 JSON 行提取数值列
 fn extract_numeric(row: &serde_json::Value, col: &str) -> Option<f64> {
     match row.get(col) {
         Some(serde_json::Value::Number(n)) => n.as_f64(),
@@ -134,7 +134,7 @@ pub struct ScatterResult {
     pub failed_shards: Vec<ShardError>,
     /// 聚合结果（可选）
     pub aggregated: Option<AggregateValue>,
-    /// T401：各分片返回的真实数据行 (shard_id, rows)——取回的数据行而非仅行数
+    /// 各分片返回的真实数据行 (shard_id, rows)——取回的数据行而非仅行数
     pub shard_rows: Vec<(u32, Vec<serde_json::Value>)>,
 }
 
@@ -168,7 +168,7 @@ impl ScatterGatherExecutor {
         self.scatter_query_rows(sql, role, None).await
     }
 
-    /// T401：scatter-gather 行查询——取回各分片真实数据行并可选聚合
+    /// scatter-gather 行查询——取回各分片真实数据行并可选聚合
     ///
     /// 与旧 `scatter_query` 的差异：
     /// 1. 各分片结果可取回数据行（`shard_rows`），不再只保留行数；

@@ -137,14 +137,14 @@ impl DbPoolBuilder {
         self
     }
 
-    /// 启用语句级 prepared statement LRU 缓存（T420）
+    /// 启用语句级 prepared statement LRU 缓存
     #[cfg(feature = "prepare-cache")]
     pub fn prepare_cache(mut self, capacity: usize) -> Self {
         self.prepare_cache_capacity = Some(capacity);
         self
     }
 
-    /// 注入统一 DDL 守卫策略（T416：白名单/干跑/审计经 `DdlGuardPolicy` 端口）
+    /// 注入统一 DDL 守卫策略
     ///
     /// 注入后 `execute_raw_ddl` / DuckDB 安全门等全部 DDL 路径经该策略校验与审计。
     #[cfg(feature = "sql-parser")]
@@ -195,13 +195,13 @@ impl DbPoolBuilder {
             pool.set_cache_provider(cache_provider);
         }
 
-        // 注入统一 DDL 守卫策略（T416，如果设置）
+        // 注入统一 DDL 守卫策略（如果设置）
         #[cfg(feature = "sql-parser")]
         if let Some(guard) = self.ddl_guard {
             pool.set_ddl_guard(guard);
         }
 
-        // 启用语句级 prepare 缓存（T420，如果设置）
+        // 启用语句级 prepare 缓存（如果设置）
         #[cfg(feature = "prepare-cache")]
         if let Some(capacity) = self.prepare_cache_capacity {
             pool.enable_prepare_cache(capacity);

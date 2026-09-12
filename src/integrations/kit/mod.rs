@@ -12,7 +12,7 @@
 pub mod module;
 
 pub use module::{DbNexusBuildObserver, DbNexusCacheModule, DbNexusModule};
-// T413：全能力注册 — 审计/健康能力模块（按各自 feature 门控）
+// 全能力注册 — 审计/健康能力模块（按各自 feature 门控）
 #[cfg(all(feature = "audit", feature = "sql-parser"))]
 pub use module::DbNexusAuditModule;
 #[cfg(feature = "health-check")]

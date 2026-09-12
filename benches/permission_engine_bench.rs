@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 权限引擎性能基准测试（T091）
+//! 权限引擎性能基准测试
 //!
 //! 衡量 `PermissionCache` 的核心操作开销：
 //! - 角色策略加载（`insert`）

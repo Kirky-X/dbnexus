@@ -13,20 +13,20 @@ pub mod security;
 pub mod authentication;
 #[cfg(feature = "permission-engine")]
 pub mod permission_engine;
-/// T417：统一注入检测引擎（无外部依赖；关系型管线方法按 sql-parser 门控）
+/// 统一注入检测引擎（无外部依赖；关系型管线方法按 sql-parser 门控）
 pub mod injection_engine;
 #[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
-/// T403/T404：字段级脱敏与行级安全（data-protection feature）
+/// 字段级脱敏与行级安全（data-protection feature）
 #[cfg(feature = "data-protection")]
 pub mod data_protection;
 
-/// T409：权限变更审计链（HMAC-SHA256 链式签名，data-protection feature）
+/// 权限变更审计链（HMAC-SHA256 链式签名，data-protection feature）
 #[cfg(feature = "data-protection")]
 pub mod permission_audit_chain;
 
-/// T421：权限统一门面（RBAC + 脱敏 + RLS 单一入口）
+/// 权限统一门面（RBAC + 脱敏 + RLS 单一入口）
 #[cfg(all(feature = "permission", feature = "data-protection"))]
 pub mod permission_facade;
 

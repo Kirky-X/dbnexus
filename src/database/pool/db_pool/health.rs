@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T425 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
+//! 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
 
 use super::*;
 

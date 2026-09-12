@@ -285,12 +285,12 @@ async fn test_retry_policy_zero_retries() {
 }
 
 // ============================================================================
-// T410：Retry 自动接线（Session 执行路径）
+// Retry 自动接线（Session 执行路径）
 // ============================================================================
 //
 // SELECT/SHOW/EXPLAIN（幂等）类查询经 RetryPolicy 自动重试；写类（INSERT/
 // UPDATE/DELETE/DDL）不重试。接线位置：Session::execute_raw（rc3 既有）与
-// Session::query_rows（T410 补齐）。通过退避耗尽的时间下界观察重试是否生效
+// Session::query_rows。通过退避耗尽的时间下界观察重试是否生效
 // （jitter=false → 退避确定性）。
 
 #[cfg(all(

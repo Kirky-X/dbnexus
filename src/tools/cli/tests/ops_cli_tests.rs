@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T415 运维 CLI 端到端测试（assert_cmd 驱动真实二进制）
+//! 运维 CLI 端到端测试（assert_cmd 驱动真实二进制）
 //!
 //! 覆盖 `migrate` / `health` / `user` 三个运维子命令的 JSON 输出与退出码契约
 //! （0 成功 / 1 运行时失败 / 2 用法错误）。

@@ -27,7 +27,7 @@
 
 mod audit_impl;
 
-/// T408：DB 持久化审计存储（audit + sql-parser feature）
+/// DB 持久化审计存储（audit + sql-parser feature）
 #[cfg(all(feature = "audit", feature = "sql-parser"))]
 pub mod audit_db;
 

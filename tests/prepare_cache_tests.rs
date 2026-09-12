@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T420：语句级 prepared statement LRU 缓存测试
+//! 语句级 prepared statement LRU 缓存测试
 //!
 //! 覆盖池级缓存启用后 `execute_cached` 的命中断言、LRU 容量淘汰，
 //! 以及未启用时的直通等价行为。

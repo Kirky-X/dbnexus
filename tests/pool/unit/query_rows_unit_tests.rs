@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T401：统一行查询 API（query_rows）与 scatter-gather 行查询测试
+//! 统一行查询 API（query_rows）与 scatter-gather 行查询测试
 //!
 //! 需要 sqlite + sql-parser + runtime-tokio-rustls feature。
 
@@ -10,7 +10,7 @@
     feature = "sql-parser"
 ))]
 
-// scatter-gather 跨分片行查询（T426 门禁：无 scatter-gather feature 时其余
+// scatter-gather 跨分片行查询（门禁：无 scatter-gather feature 时其余
 // 用例仍需可编译运行，故按 feature 隔离）
 #[cfg(feature = "scatter-gather")]
 use dbnexus::{AggregateFunction, PartialFailurePolicy, ScatterGatherExecutor, ShardRouter};
@@ -129,7 +129,7 @@ async fn test_scatter_query_rows_with_aggregate() {
 }
 
 // ============================================================================
-// T403/T404：query_rows 出口脱敏 + RLS 谓词注入（data-protection feature）
+// query_rows 出口脱敏 + RLS 谓词注入（data-protection feature）
 // ============================================================================
 
 #[cfg(all(feature = "data-protection", feature = "permission"))]

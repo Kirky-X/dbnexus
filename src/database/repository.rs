@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 泛型仓储（T418）
+//! 泛型仓储
 //!
 //! 提供类型安全的 `Repository<T>` CRUD 端口与基于 `DbPool` 行查询管道的
 //! JSON 行实现（`JsonRepository`），并配套 [`impl_json_repository!`] 宏为
@@ -9,7 +9,7 @@
 //! # 设计口径
 //!
 //! - 实体约束为 `Serialize + DeserializeOwned`：行进出统一走
-//!   `serde_json::Value`（与 T401 `query_rows` 出口一致）；
+//!   `serde_json::Value`（与 `query_rows` 出口一致）；
 //! - 底层执行复用 `DbPool::query_rows` / `Session::execute_raw`，自动继承
 //!   解析校验/权限检查/注入检测/慢查询统计整条防御链；
 //! - 表名与列名做标识符白名单校验（防注入），字符串值按 SQL 标准转义
@@ -38,7 +38,7 @@ use serde_json::Value;
 use crate::database::DbPool;
 use crate::foundation::{DbError, DbResult};
 
-/// 泛型仓储 CRUD 端口（T418）
+/// 泛型仓储 CRUD 端口
 ///
 /// `T` 为实体类型（`Serialize + DeserializeOwned`）。实现方决定存储后端
 /// （`JsonRepository` 为 DbPool JSON 行实现的参考实现）。
@@ -98,7 +98,7 @@ pub(crate) fn sql_literal(value: &Value) -> DbResult<String> {
     }
 }
 
-/// 基于 `DbPool` 行查询管道的 `Repository<T>` 参考实现（T418）
+/// 基于 `DbPool` 行查询管道的 `Repository<T>` 参考实现
 ///
 /// 行数据以 `serde_json::Value` 对象承载（与 `query_rows` 出口一致），
 /// 实体经 serde 与行对象互转。
@@ -279,7 +279,7 @@ where
     }
 }
 
-/// 为具体实体一键生成 `Repository<T>` 实现（T418）
+/// 为具体实体一键生成 `Repository<T>` 实现
 ///
 /// 生成的实现内部委托 [`JsonRepository`]（每次调用按声明的表名构造，
 /// 无共享状态）。实体需 `Serialize + DeserializeOwned`，承载结构体需

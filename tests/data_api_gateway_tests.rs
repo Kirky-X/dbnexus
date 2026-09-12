@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T419：数据 API 网关测试
+//! 数据 API 网关测试
 //!
 //! 覆盖列白名单投影、过滤（eq/contains）、排序、分页与总数、
 //! 未暴露列/未知端点的拒绝语义，以及 manifest 导出。

@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! `DbNexusModule` — trait-kit 0.4 `AsyncKit` integration for dbnexus.
 //!
-//! Phase 4 (T029 Red / T030 Green) of the `trait-kit-async-integration`
-//! change. Wires dbnexus's database pool into the `AsyncKit` dependency
+//! Wires dbnexus's database pool into the `AsyncKit` dependency
 //! injection framework, depending on `OxcacheModule` for cache capability.
 //!
 //! # Design divergences from `design.md` / `spec.md` (Rule 7: expose, don't
@@ -58,7 +57,7 @@ use crate::integrations::OxcacheDbCacheAdapter;
 /// pool. The `OxcacheDbCacheAdapter` is injected via
 /// `DbPoolBuilder::cache_provider()`, enabling cache DI through the kit.
 ///
-/// # T413 全能力注册
+/// # 全能力注册
 ///
 /// 除池能力外，dbnexus kit 模块族还提供（各自独立注册、可单独 require）：
 ///
@@ -112,17 +111,17 @@ impl AsyncAutoBuilder for DbNexusModule {
                 .build()
                 .await?;
 
-            // 5. Return the concrete pool (T413：卫星模块经它派生审计/健康能力).
+            // 5. Return the concrete pool .
             Ok(Arc::new(pool))
         })
     }
 }
 
 // ---------------------------------------------------------------------------
-// T413：全能力注册 — 缓存 / 审计 / 健康卫星模块
+// 全能力注册 — 缓存 / 审计 / 健康卫星模块
 // ---------------------------------------------------------------------------
 
-/// Cache capability module（T413）：把 `OxcacheModule` 后端适配为
+/// Cache capability module：把 `OxcacheModule` 后端适配为
 /// dbnexus [`DbCacheProvider`](crate::domain::DbCacheProvider) 并作为独立
 /// Kit 能力暴露。
 ///
@@ -158,7 +157,7 @@ impl AsyncAutoBuilder for DbNexusCacheModule {
     }
 }
 
-/// DB 持久化审计能力模块（T413）：基于池能力构建
+/// DB 持久化审计能力模块：基于池能力构建
 /// [`DbAuditStorage`](crate::domain::DbAuditStorage)（幂等建表后）并以
 /// `Arc<dyn AuditStorage>` 暴露。
 ///
@@ -200,8 +199,8 @@ impl AsyncAutoBuilder for DbNexusAuditModule {
     }
 }
 
-/// 健康能力句柄（T413）：包装池句柄，暴露结构化健康快照
-/// （T406 `DbPool::health_snapshot`）。
+/// 健康能力句柄：包装池句柄，暴露结构化健康快照
+/// （`DbPool::health_snapshot`）。
 ///
 /// 由 [`DbNexusHealthModule`] 作为 Kit 能力产出，Clone 廉价（内含单个 Arc）。
 #[cfg(feature = "health-check")]
@@ -223,7 +222,7 @@ impl DbHealthCapability {
     }
 }
 
-/// 健康能力模块（T413）：把池的结构化健康导出包装为独立 Kit 能力。
+/// 健康能力模块：把池的结构化健康导出包装为独立 Kit 能力。
 ///
 /// `kit.build()` 后经 `kit.require::<DbNexusHealthModule>()` 获取。
 ///
@@ -426,7 +425,7 @@ mod tests {
             .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
         let pool = kit.require::<DbNexusModule>().expect("require DbNexusModule");
-        // Verify the pool is usable — T413：能力类型为 Arc<DbPool>，仍可按
+        // Verify the pool is usable — 能力类型为 Arc<DbPool>，仍可按
         // ConnectionPool trait 对象使用（向下兼容断言）。
         let pool: Arc<dyn ConnectionPool + Send + Sync> = pool;
         let _status = pool.status();
@@ -614,10 +613,10 @@ mod tests {
     }
 
     // ========================================================================
-    // T413：全能力注册 — 池/缓存/审计/健康全部能力可 require
+    // 全能力注册 — 池/缓存/审计/健康全部能力可 require
     // ========================================================================
 
-    /// T413 bounds：新增卫星模块满足 `AsyncAutoBuilder` trait bounds。
+    /// 新增卫星模块满足 `AsyncAutoBuilder` trait bounds。
     #[test]
     fn t413_satellite_modules_satisfy_bounds() {
         fn assert_cap<T: Clone + Send + Sync + 'static>() {}
@@ -628,7 +627,7 @@ mod tests {
         assert_cap::<DbHealthCapability>();
     }
 
-    /// T413 #1：缓存能力可 require — get/set 经 `DbCacheProvider` 走 oxcache 后端。
+    /// 缓存能力可 require — get/set 经 `DbCacheProvider` 走 oxcache 后端。
     #[tokio::test]
     async fn t413_cache_capability_requireable() {
         let mut kit = AsyncKit::new();
@@ -650,7 +649,7 @@ mod tests {
         assert_eq!(got.as_deref(), Some(&b"t413-value"[..]), "缓存能力应可读写");
     }
 
-    /// T413 #2：全能力注册端到端 — 池/缓存/审计/健康四能力在构建后全部
+    /// 全能力注册端到端 — 池/缓存/审计/健康四能力在构建后全部
     /// 可 require 且可用（审计走临时文件库，规避 sqlite 内存库每连接独立）。
     #[cfg(all(feature = "audit", feature = "sql-parser", feature = "health-check"))]
     #[tokio::test]

@@ -208,7 +208,7 @@ mod soft_delete_uuid_entity {
     /// `delete` 和 `force_delete` 的泛型化签名（约束为 `Into<sea_orm::Value>`）。
     ///
     /// `#[db_entity]` 宏在 soft_delete=true 时自动注入 `deleted_at: Option<OffsetDateTime>` 字段
-    /// （Task 6.5），并生成 `force_delete` 方法。
+    /// 并生成 `force_delete` 方法。
     #[db_entity(
         table_name = "soft_delete_uuid",
         primary_key = "id",

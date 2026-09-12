@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! Sea-ORM `TableCreateStatement` → `migration::schema::Table` 转换器
 //!
-//! ## 映射表（Task 4.1）
+//! ## 映射表
 //!
 //! ### TableCreateStatement → migration::schema::Table
 //!
@@ -416,7 +416,7 @@ mod tests {
             .to_owned()
     }
 
-    // ===== Task 4.4: 基本列类型映射测试 =====
+    // ===== 基本列类型映射测试 =====
 
     #[test]
     fn test_convert_integer_column() {
@@ -571,7 +571,7 @@ mod tests {
         assert!(age_col.default_value.is_some());
     }
 
-    // ===== Task 4.5: 主键映射测试 =====
+    // ===== 主键映射测试 =====
 
     #[test]
     fn test_convert_primary_key() {
@@ -612,7 +612,7 @@ mod tests {
         assert!(table.primary_key_columns.contains(&"b".to_string()));
     }
 
-    // ===== Task 4.6: 外键映射测试 =====
+    // ===== 外键映射测试 =====
 
     #[test]
     fn test_convert_foreign_key() {
@@ -675,7 +675,7 @@ mod tests {
         }
     }
 
-    // ===== Task 4.7: 索引映射测试 =====
+    // ===== 索引映射测试 =====
 
     #[test]
     fn test_convert_index() {

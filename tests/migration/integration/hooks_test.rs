@@ -58,7 +58,7 @@ fn reset_counters() {
 fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
     BEFORE_INSERT_CALLS.fetch_add(1, Ordering::SeqCst);
 
-    // Task 7.15: 验证 timestamps 在 before_insert 之前执行
+    // 验证 timestamps 在 before_insert 之前执行
     // timestamps=true 时，insert 应已设置 updated_at = Set(Some(now))
     match &am.updated_at {
         sea_orm::ActiveValue::Set(Some(_)) => {
@@ -86,11 +86,11 @@ fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
     Ok(())
 }
 
-/// after_insert 钩子：记录调用 + 验证可读取已保存数据（Task 7.14）
+/// after_insert 钩子：记录调用 + 验证可读取已保存数据
 fn after_insert_hook(model: &Model) -> Result<(), sea_orm::DbErr> {
     AFTER_INSERT_CALLS.fetch_add(1, Ordering::SeqCst);
 
-    // Task 7.14: 读取已保存数据
+    // 读取已保存数据
     // model.id 应为已分配的 ID
     AFTER_INSERT_MODEL_ID.store(model.id as usize, Ordering::SeqCst);
 
@@ -220,7 +220,7 @@ async fn setup() -> (dbnexus::DbPool, std::sync::MutexGuard<'static, ()>) {
 // 测试用例
 // ============================================================================
 
-/// Task 7.13: `before_insert` 钩子在 insert 时触发，`before_update` 在 update 时触发
+/// `before_insert` 钩子在 insert 时触发，`before_update` 在 update 时触发
 #[tokio::test]
 async fn test_before_insert_and_before_update_hooks_trigger() {
     let (pool, _guard) = setup().await;
@@ -277,7 +277,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
     );
 }
 
-/// Task 7.14: `after_insert` 钩子可读取已保存数据
+/// `after_insert` 钩子可读取已保存数据
 #[tokio::test]
 async fn test_after_insert_hook_reads_saved_data() {
     let (pool, _guard) = setup().await;
@@ -320,7 +320,7 @@ async fn test_after_insert_hook_reads_saved_data() {
     );
 }
 
-/// Task 7.14 续: `after_update` 钩子在 update 时触发
+/// `after_update` 钩子在 update 时触发
 #[tokio::test]
 async fn test_after_update_hook_triggers_on_update() {
     let (pool, _guard) = setup().await;
@@ -365,7 +365,7 @@ async fn test_after_update_hook_triggers_on_update() {
     );
 }
 
-/// Task 7.15: hook 内 `updated_at` 已被 timestamps 设置（验证编排顺序）
+/// hook 内 `updated_at` 已被 timestamps 设置（验证编排顺序）
 ///
 /// 编排顺序：validate → timestamps → user_hooks
 /// before_insert 钩子执行时，timestamps 应已设置 updated_at = Set(Some(now))
@@ -408,7 +408,7 @@ async fn test_hook_orchestration_order_timestamps_before_hooks() {
     );
 }
 
-/// Task 7.13 续: `before_delete` 和 `after_delete` 钩子在删除时触发
+/// `before_delete` 和 `after_delete` 钩子在删除时触发
 #[tokio::test]
 async fn test_delete_hooks_trigger() {
     let (pool, _guard) = setup().await;
@@ -455,7 +455,7 @@ async fn test_delete_hooks_trigger() {
     );
 }
 
-/// Task 7.8: hook 失败应短路（不继续执行后续操作）
+/// hook 失败应短路（不继续执行后续操作）
 #[tokio::test]
 async fn test_hook_failure_short_circuits() {
     let (pool, _guard) = setup().await;

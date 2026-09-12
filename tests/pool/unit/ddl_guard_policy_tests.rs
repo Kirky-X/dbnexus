@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T416：统一 DDL 守卫端口测试
+//! 统一 DDL 守卫端口测试
 //!
 //! 验证 `DdlGuardPolicy` 端口（白名单/干跑/审计）经 Session 统一漏斗生效：
 //! 默认内置白名单守卫行为不变；注入自定义/审计/干跑策略后全部 DDL 路径生效。

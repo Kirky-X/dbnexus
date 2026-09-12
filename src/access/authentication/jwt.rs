@@ -44,7 +44,7 @@ pub struct JwtManager {
     /// 已撤销的 refresh token jti 集合（refresh token rotation 保护）
     /// 值类型 `Instant` 记录插入时刻，用于过期淘汰。
     revoked_refresh_jtis: Mutex<HashMap<String, Instant>>,
-    /// T030：可选的分布式撤销缓存（经 `oxcache-integration` feature 启用）。
+    /// 可选的分布式撤销缓存（经 `oxcache-integration` feature 启用）。
     ///
     /// 注入后，撤销操作同时写入本地 HashMap + 远程缓存（key=jti，ttl=令牌剩余有效期），
     /// 验证时先查本地集合并命中后短路，未命中则查远程缓存。
@@ -118,7 +118,7 @@ impl JwtManager {
         self.valid_roles.insert(role);
     }
 
-    /// T030：注入分布式撤销缓存。
+    /// 注入分布式撤销缓存。
     ///
     /// 注入后，撤销操作同时写入本地 HashMap + 远程缓存（key=jti，ttl=令牌剩余有效期），
     /// 验证时先查本地集合，未命中则查远程缓存。
@@ -223,13 +223,13 @@ impl JwtManager {
             return Err(AuthError::InvalidToken);
         }
         // H-3: 检查 refresh token 是否已被撤销
-        // 先查本地集合（短路），未命中再查远程缓存（T030）
+        // 先查本地集合（短路），未命中再查远程缓存
         if let Ok(revoked) = self.revoked_refresh_jtis.lock()
             && revoked.contains_key(&claims.jti)
         {
             return Err(AuthError::InvalidToken);
         }
-        // T030：查远程撤销缓存（异步）
+        // 查远程撤销缓存（异步）
         #[cfg(feature = "oxcache-integration")]
         if let Some(ref cache) = self.revocation_cache {
             if let Ok(Some(_)) = cache.get(&format!("revoked_jti:{}", claims.jti)).await {
@@ -251,7 +251,7 @@ impl JwtManager {
             revoked.insert(claims.jti.clone(), Instant::now());
         }
 
-        // T030：同步写入远程撤销缓存（TTL = 令牌剩余有效期）
+        // 同步写入远程撤销缓存（TTL = 令牌剩余有效期）
         #[cfg(feature = "oxcache-integration")]
         if let Some(ref cache) = self.revocation_cache {
             let cache_key = format!("revoked_jti:{}", claims.jti);
@@ -273,7 +273,7 @@ impl JwtManager {
         )
     }
 
-    /// 计算令牌剩余有效期（T030：用于远程缓存 TTL）。
+    /// 计算令牌剩余有效期。
     #[cfg(feature = "oxcache-integration")]
     fn compute_remaining_ttl(&self, claims: &JwtClaims) -> Duration {
         let now_secs = SystemTime::now()
@@ -439,7 +439,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-001: JwtManager 构造函数短密钥拒绝测试（T001）
+    // HIGH-001: JwtManager 构造函数短密钥拒绝测试
     // ============================================================================
 
     /// 19 字节密钥（<32），`new` 应返回 Err 而非 panic
@@ -473,7 +473,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-002: 撤销集合有界性测试（T006 Red）
+    // HIGH-002: 撤销集合有界性测试
     // ============================================================================
 
     /// 向撤销集合插入超过 MAX_REVOKED_JTIS 的条目后，集合长度应有上限，
@@ -508,7 +508,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-002: 轮换重放防护测试（T008）
+    // HIGH-002: 轮换重放防护测试
     // ============================================================================
 
     /// refresh token 刷新成功后，旧 refresh token 应被撤销，

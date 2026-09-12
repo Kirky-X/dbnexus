@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 权限变更审计链（T409，`data-protection` feature）
+//! 权限变更审计链（`data-protection` feature）
 //!
 //! 权限变更事件（RBAC/RLS/脱敏配置变更）经 HMAC-SHA256 链式签名：
 //! `hmac_n = HMAC-SHA256(key, prev_hash_n || canonical_event_n)`，
@@ -68,7 +68,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 // 权限变更事件记录
 // ============================================================================
 
-/// 权限变更事件记录（T409）
+/// 权限变更事件记录
 ///
 /// 链条的最小事件单元：谁（actor）对哪个角色（role）做了什么（action），
 /// `detail` 为可扩展 JSON 文本（如新策略快照的摘要）。
@@ -113,7 +113,7 @@ impl PermissionChangeRecord {
 // 链条条目与链
 // ============================================================================
 
-/// 链条条目（T409）
+/// 链条条目
 ///
 /// `event_json` 为事件的规范化 JSON 文本；`prev_hash`/`hmac` 为十六进制。
 #[derive(Debug, Clone, PartialEq)]
@@ -156,7 +156,7 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// 权限变更审计链（T409）
+/// 权限变更审计链
 ///
 /// 线程安全：append 经互斥锁串行化（多写者不交错）。
 pub struct PermissionAuditChain {
@@ -226,7 +226,7 @@ impl PermissionAuditChain {
     }
 }
 
-/// 校验权限变更审计链（T409）
+/// 校验权限变更审计链
 ///
 /// 逐条重算 `HMAC(key, prev_hash || canonical_event)` 并检查：
 /// 1. `seq` 连续（0 起）

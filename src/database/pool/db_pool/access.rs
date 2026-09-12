@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T425 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
+//! 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
 
 use super::*;
 
@@ -19,7 +19,7 @@ impl DbPool {
         self.inner.cache_provider.store(Some(Arc::new(provider)));
     }
 
-    /// 注入统一 DDL 守卫策略（T416：白名单/干跑/审计经 `DdlGuardPolicy` 端口）
+    /// 注入统一 DDL 守卫策略
     ///
     /// 注入后全部 DDL 执行路径（`execute_raw_ddl` / DuckDB 安全门）经该策略校验；
     /// 未注入时使用内置 AST 白名单守卫。
@@ -32,7 +32,7 @@ impl DbPool {
             .expect("ddl_guard lock poisoned") = Some(guard);
     }
 
-    /// 启用语句级 prepared statement LRU 缓存（T420）
+    /// 启用语句级 prepared statement LRU 缓存
     ///
     /// 启用后 `Session::execute_cached` 经缓存记录语句就绪状态与命中指标；
     /// 未启用时该路径等价于 `execute_raw`。
@@ -112,7 +112,7 @@ impl DbPool {
         Ok(session)
     }
 
-    /// 统一行查询 API（T401）：以指定角色执行 SELECT 并返回数据行
+    /// 统一行查询 API：以指定角色执行 SELECT 并返回数据行
     ///
     /// 内部经 `get_session` → `Session::query_rows`，共享解析/权限/慢查询口径；
     /// 非 SELECT 或未授权表将返回权限错误。
@@ -121,7 +121,7 @@ impl DbPool {
         session.query_rows(sql).await
     }
 
-    /// T403/T404：注入数据保护配置（字段脱敏 + RLS 谓词）
+    /// 注入数据保护配置（字段脱敏 + RLS 谓词）
     #[cfg(feature = "data-protection")]
     pub async fn set_data_protection(
         &self,
@@ -130,7 +130,7 @@ impl DbPool {
         *self.inner.data_protection.write().await = dp;
     }
 
-    /// T405 前置：运行时替换权限配置（角色策略缓存同步换装）
+    /// 运行时替换权限配置（角色策略缓存同步换装）
     ///
     /// 供配置热重载（confers watch）与测试注入使用。
     #[cfg(feature = "permission")]

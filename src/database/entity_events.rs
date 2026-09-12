@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 实体事件总线 + Outbox（T423）
+//! 实体事件总线 + Outbox
 //!
 //! 实体变更（Insert/Update/Delete）产生结构化事件，经 **Outbox 表**持久化
 //! （业务写入路径就地登记，MVP：独立记录入口），由**后台投递器**轮询
@@ -36,7 +36,7 @@ use serde_json::Value;
 use crate::database::DbPool;
 use crate::foundation::{DbError, DbResult};
 
-/// 实体变更动作（T423）
+/// 实体变更动作
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityAction {
     /// 插入
@@ -68,7 +68,7 @@ impl EntityAction {
     }
 }
 
-/// 实体变更事件（T423）
+/// 实体变更事件
 #[derive(Debug, Clone)]
 pub struct EntityEvent {
     /// 实体表名
@@ -121,14 +121,14 @@ impl EntityEvent {
     }
 }
 
-/// 实体事件总线端口（T423）
+/// 实体事件总线端口
 #[async_trait]
 pub trait EntityEventBus: Send + Sync {
     /// 发布事件（向全部订阅者投递）
     async fn publish(&self, event: &EntityEvent) -> DbResult<()>;
 }
 
-/// 内存事件总线：mpsc 每订阅者一通道（T423 MVP）
+/// 内存事件总线：mpsc 每订阅者一通道（MVP）
 #[derive(Default)]
 pub struct InMemoryEntityEventBus {
     senders: tokio::sync::Mutex<Vec<tokio::sync::mpsc::UnboundedSender<EntityEvent>>>,
@@ -157,7 +157,7 @@ impl EntityEventBus for InMemoryEntityEventBus {
     }
 }
 
-/// Outbox 存储端口（T423）
+/// Outbox 存储端口
 #[async_trait]
 pub trait OutboxStore: Send + Sync {
     /// 登记（业务侧事务内写入的落点）
@@ -168,7 +168,7 @@ pub trait OutboxStore: Send + Sync {
     async fn mark_dispatched(&self, id: u64) -> DbResult<()>;
 }
 
-/// 基于 DbPool 的 outbox 表实现（T423）
+/// 基于 DbPool 的 outbox 表实现
 #[derive(Clone)]
 pub struct DbOutboxStore {
     pool: std::sync::Arc<DbPool>,
@@ -301,7 +301,7 @@ impl OutboxStore for DbOutboxStore {
     }
 }
 
-/// Outbox 后台投递器（T423）
+/// Outbox 后台投递器
 pub struct OutboxDispatcher;
 
 impl OutboxDispatcher {

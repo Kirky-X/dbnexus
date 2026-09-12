@@ -82,11 +82,11 @@ pub enum PoolError {
 // 此处 re-export `domain::permission::error::PermissionError`，保持
 // `foundation::error::PermissionError` 路径可用，避免破坏既有引用路径。
 //
-// BREAKING（Task 13）：旧版 foundation 定义被删除，统一到 domain 版本：
+// BREAKING：旧版 foundation 定义被删除，统一到 domain 版本：
 // - `InvalidConfig` 变体重命名为 `InvalidPolicy`
 // - 新增独有变体 `ParseError`
 // - 错误消息大小写变化（如 "Role not found" → "role not found"）
-// access::permission::types::PermissionError 保留不动，待 Phase 4 Task 18 整体删除。
+// access::permission::types::PermissionError 保留不动。
 #[cfg(feature = "permission")]
 pub use crate::domain::PermissionError;
 

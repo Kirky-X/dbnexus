@@ -97,7 +97,7 @@ async fn setup_with_seed() -> dbnexus::DbPool {
     pool
 }
 
-/// Task 5.5: query().filter().order_by().limit().all() 链式调用
+/// query().filter().order_by().limit().all() 链式调用
 #[tokio::test]
 async fn test_query_chain_filter_order_limit() {
     let pool = setup_with_seed().await;
@@ -131,7 +131,7 @@ async fn test_query_chain_filter_order_limit() {
     assert_eq!(adults[1].name, "Alice", "second should be Alice (age 25)");
 }
 
-/// Task 5.6: paginate().fetch_page(n) + num_pages() + num_items()
+/// paginate().fetch_page(n) + num_pages() + num_items()
 #[tokio::test]
 async fn test_paginate_fetch_page_and_counts() {
     let pool = setup_with_seed().await;
@@ -172,7 +172,7 @@ async fn test_paginate_fetch_page_and_counts() {
     assert_eq!(page2.len(), 1, "page 2 (last) should have 1 item");
 }
 
-/// Task 5.7: insert_many 批量插入
+/// insert_many 批量插入
 ///
 /// 验证：插入后行数正确，last_insert_id 返回，且各记录可独立查询
 #[tokio::test]
@@ -246,7 +246,7 @@ async fn test_insert_many_batch_insert() {
     }
 }
 
-/// Task 5.8: update_many 条件批量更新
+/// update_many 条件批量更新
 ///
 /// 验证：filter(age < 18) + updates(status="minor") → 受影响行数 = 2
 #[tokio::test]

@@ -470,7 +470,7 @@ impl Session {
 
     /// 执行原始 SQL（带权限检查）
     ///
-    /// # 自动重试语义（T410 文档化）
+    /// # 自动重试语义
     ///
     /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时：
     /// - **幂等操作**（SELECT/SHOW/EXPLAIN 前缀，见 `is_idempotent_operation`）
@@ -558,7 +558,7 @@ impl Session {
                 }
             }
 
-            // T031：慢查询检测——在查询执行前记录起始时间
+            // 慢查询检测——在查询执行前记录起始时间
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             let query_start = std::time::Instant::now();
 
@@ -593,7 +593,7 @@ impl Session {
                         };
                         match result {
                             Ok(exec_result) => {
-                                // T031：记录查询指标（含慢查询检测）
+                                // 记录查询指标（含慢查询检测）
                                 #[cfg(all(feature = "metrics", feature = "sql-parser"))]
                                 self.record_execute_metrics(query_start, true);
                                 return Ok(exec_result);
@@ -601,7 +601,7 @@ impl Session {
                             Err(e) => last_error = Some(e),
                         }
                     }
-                    // T031：重试耗尽，记录失败
+                    // 重试耗尽，记录失败
                     #[cfg(all(feature = "metrics", feature = "sql-parser"))]
                     self.record_execute_metrics(query_start, false);
                     return Err(last_error.unwrap());
@@ -620,7 +620,7 @@ impl Session {
                     .map_err(DbError::Connection)
             };
 
-            // T031：记录查询指标（含慢查询检测）
+            // 记录查询指标（含慢查询检测）
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             self.record_execute_metrics(query_start, result.is_ok());
 
@@ -628,13 +628,13 @@ impl Session {
         }
     }
 
-    /// 统一行查询 API（T401）：执行 SELECT 并返回数据行（JSON 对象数组）
+    /// 统一行查询 API：执行 SELECT 并返回数据行（JSON 对象数组）
     ///
     /// 与 `execute_raw` 共用同一套解析与表级权限检查，但仅允许 SELECT，
     /// 并返回真实数据行（`serde_json::Value` 对象数组）而非 ExecResult，
     /// 供 scatter-gather、数据 API 网关等上层消费。
     ///
-    /// # 自动重试语义（T410）
+    /// # 自动重试语义
     ///
     /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时，行查询失败
     /// 自动按指数退避重试（与 `execute_raw` 幂等路径同口径）。
@@ -708,7 +708,7 @@ impl Session {
                 }
             }
 
-            // T031：慢查询检测——与 execute_raw 同口径
+            // 慢查询检测——与 execute_raw 同口径
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             let query_start = std::time::Instant::now();
 
@@ -718,8 +718,8 @@ impl Session {
                 state.transaction.clone()
             };
 
-            // T401：方言感知执行（SeaORM 2.0 无整行 JSON 提取 API，分方言处理）
-            // T410：retry feature——幂等行查询自动重试（与 execute_raw 同口径：
+            // 方言感知执行（SeaORM 2.0 无整行 JSON 提取 API，分方言处理）
+            // retry feature——幂等行查询自动重试（与 execute_raw 同口径：
             // RetryPolicy 存在且 SQL 判定为幂等（SELECT/SHOW/EXPLAIN 前缀）时
             // 逐次退避重试；query_rows 仅放行 SELECT，天然幂等）
             #[cfg(feature = "retry")]
@@ -766,7 +766,7 @@ impl Session {
         }
     }
 
-    /// T401 内部：按方言执行行查询并转为 JSON 行
+    /// 内部：按方言执行行查询并转为 JSON 行
     #[cfg(feature = "sql-parser")]
     ///
     /// - **PostgreSQL**：`SELECT row_to_json(sub.*) FROM (<sql>) sub` 包装，单列 JSON 精确提取
@@ -815,7 +815,7 @@ impl Session {
             }
         };
 
-        // T404：RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
+        // RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
         // 无 permission feature 时 primary_table 为 None，注入自动失效）
         #[cfg(feature = "data-protection")]
         let sql_for_fetch = {
@@ -893,7 +893,7 @@ impl Session {
         // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
     }
 
-    /// T403：查询出口字段脱敏
+    /// 查询出口字段脱敏
     #[cfg(feature = "data-protection")]
     async fn apply_masking(&self, rows: &mut Vec<serde_json::Value>) {
         let dp = { self.pool_inner.data_protection.read().await.clone() };
@@ -902,7 +902,7 @@ impl Session {
         }
     }
 
-    /// T401 内部（sqlite）：主表列名（pragma_table_info）
+    /// 内部（sqlite）：主表列名（pragma_table_info）
     #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
     async fn sqlite_table_columns(
         &self,
@@ -946,7 +946,7 @@ impl Session {
         Duration::from_millis(capped_ms as u64)
     }
 
-    /// T420：语句级缓存感知执行路径
+    /// 语句级缓存感知执行路径
     ///
     /// 启用池级 prepare 缓存时，先在 LRU 中登记/命中语句就绪状态
     /// （命中指标经 `DbPool::prepare_cache_stats` 观察），再走 `execute_raw`
@@ -968,7 +968,7 @@ impl Session {
         }
     }
 
-    /// T416：统一 DDL 守卫漏斗 —— 全部 DDL 执行路径共用单一入口
+    /// 统一 DDL 守卫漏斗 —— 全部 DDL 执行路径共用单一入口
     ///
     /// 消费 [`DdlGuardPolicy`] 端口（白名单/干跑/审计统一；默认内置白名单守卫，
     /// 可经 `DbPool::set_ddl_guard` / `DbPoolBuilder::ddl_guard` 注入自定义策略），
@@ -1029,7 +1029,7 @@ impl Session {
             )));
         }
 
-        // DDL 安全验证（T416：统一守卫漏斗，替代分散的 DdlGuard::new() 检查）
+        // DDL 安全验证
         #[cfg(feature = "sql-parser")]
         self.enforce_ddl_guard(sql)?;
 
@@ -1063,7 +1063,7 @@ impl Session {
                     self.role, self.pool_inner.admin_role
                 )));
             }
-            // T416：统一守卫漏斗（白名单/干跑/审计经 DdlGuardPolicy 端口）
+            // 统一守卫漏斗（白名单/干跑/审计经 DdlGuardPolicy 端口）
             return self.enforce_ddl_guard(sql);
         }
 
@@ -1358,7 +1358,7 @@ impl Session {
         {
             if is_ddl_operation(sql) {
                 if self.role == self.pool_inner.admin_role {
-                    // T416：统一守卫漏斗 —— admin role 通过守卫验证后直接执行，
+                    // 统一守卫漏斗 —— admin role 通过守卫验证后直接执行，
                     // 不再走 parse_operation 权限检查（DDL 语句无法被
                     // parse_operation_async 正确解析，会返回 Err）
                     self.enforce_ddl_guard(sql)?;
@@ -1760,7 +1760,7 @@ impl Session {
         // No-op when metrics feature is disabled
     }
 
-    /// T031：记录 `execute_raw` 查询指标（含慢查询检测）。
+    /// 记录 `execute_raw` 查询指标（含慢查询检测）。
     ///
     /// 将查询耗时经 `MetricsCollector::record_query` 录入指标收集器，
     /// 内部自动比对 `SlowQueryConfig` 阈值并记录慢查询事件。
@@ -1772,7 +1772,7 @@ impl Session {
         }
     }
 
-    /// T032：查询缓存——检查 `cache_provider` 是否有缓存的查询结果。
+    /// 查询缓存——检查 `cache_provider` 是否有缓存的查询结果。
     ///
     /// 返回 `Some(bytes)` 表示缓存命中，`None` 表示未命中。
     /// 仅在 `cache`/`oxcache-integration` feature 启用且已注入 `cache_provider` 时有效。
@@ -1784,7 +1784,7 @@ impl Session {
         provider.get(key).await.ok().flatten()
     }
 
-    /// T032：查询缓存——将查询结果存入 `cache_provider`。
+    /// 查询缓存——将查询结果存入 `cache_provider`。
     ///
     /// TTL 取自 `CacheConfig.default_ttl`。
     #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
@@ -1866,7 +1866,7 @@ impl Session {
     }
 }
 
-/// T401（sqlite）：单行 → JSON 对象（逐列类型探测：i64 → f64 → String → Null）
+/// sqlite：单行 → JSON 对象（逐列类型探测：i64 → f64 → String → Null）
 #[cfg(all(feature = "sqlite", feature = "sql-parser"))]
 fn sqlite_row_to_json(row: &sea_orm::QueryResult, cols: &[String]) -> serde_json::Value {
     let mut obj = serde_json::Map::with_capacity(cols.len());
@@ -1885,7 +1885,7 @@ fn sqlite_row_to_json(row: &sea_orm::QueryResult, cols: &[String]) -> serde_json
     serde_json::Value::Object(obj)
 }
 
-/// T416：对单一守卫策略执行校验并触发审计钩子
+/// 对单一守卫策略执行校验并触发审计钩子
 ///
 /// 校验失败（策略自身返回 `Err`）映射为 `DbError::Config`，与既有
 /// `session-ddl-validation-error` 语义一致。
@@ -2020,7 +2020,7 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         }
     }
 
-    // 4/5. T417：块注释与危险过程检测经统一注入引擎（规则表合并 + 去重）
+    // 4/5. 块注释与危险过程检测经统一注入引擎（规则表合并 + 去重）
     let findings = crate::access::InjectionEngine::global().scan_graph(cypher);
     // 块注释（`/* */`）：任一标记命中即拒绝（与合并前第 4 步口径一致）
     if findings
@@ -2185,7 +2185,6 @@ mod graph_tests {
             .expect("Failed to create Ladybug pool")
     }
 
-    // ===== T032: is_in_transaction 图事务支持 =====
 
     /// TEST-GRAPH-TXN-001: 图连接初始 is_in_transaction 为 false
     #[tokio::test]
@@ -2239,7 +2238,6 @@ mod graph_tests {
         );
     }
 
-    // ===== T033: begin/commit/rollback 图事务分发 =====
 
     /// TEST-GRAPH-TXN-005: 图事务 begin → execute_cypher → commit 端到端
     #[tokio::test]
@@ -2352,7 +2350,6 @@ mod graph_tests {
         assert!(result.is_err(), "rollback without transaction should fail");
     }
 
-    // ===== T034: execute_cypher 测试 =====
 
     /// TEST-GRAPH-EXEC-001: 不在事务中 execute_cypher("RETURN 1") 返回结果
     #[tokio::test]

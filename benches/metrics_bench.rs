@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 指标系统性能基准测试（T093）
+//! 指标系统性能基准测试
 //!
 //! 衡量 `MetricsCollector` 与 `LatencyHistogram` 的核心操作开销：
 //! - P50/P90/P99 计算（`record_query` + `get_query_stats` + 百分位读取）

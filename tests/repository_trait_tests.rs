@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T418：泛型仓储 `Repository<T>` CRUD 端到端测试
+//! 泛型仓储 `Repository<T>` CRUD 端到端测试
 //!
 //! 覆盖：`JsonRepository` 参考实现的完整 CRUD 循环、分页、转义注入安全，
 //! 以及 `impl_json_repository!` 宏生成的具体实现。

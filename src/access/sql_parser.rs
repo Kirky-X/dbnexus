@@ -568,7 +568,7 @@ impl SqlParser {
 /// `?` prepared-statement 占位符**不算**危险变量：它是参数绑定的安全形态，
 /// 值通过 prepared statement 传递，数据库不会将其解析为 SQL 代码。
 fn contains_variables(sql: &str) -> bool {
-    // T417：委托统一注入检测引擎（变量正则已合并至 InjectionEngine；
+    // 委托统一注入检测引擎（变量正则已合并至 InjectionEngine；
     // `?` prepared-statement 占位符仍不算危险变量——参数绑定的安全形态，
     // 依赖参数化 API 的调用方（如 execute_duckdb_with_params）必须放行）
     crate::access::injection_engine::InjectionEngine::global().has_dynamic_variables(sql)
@@ -596,7 +596,7 @@ fn contains_variables(sql: &str) -> bool {
 /// 在检测前会先对 SQL 进行 Unicode 规范化（NFKC），防止攻击者使用
 /// 视觉相似但 Unicode 编码不同的字符绕过检测。
 pub fn contains_sql_injection(sql: &str) -> bool {
-    // T417：委托统一注入检测引擎（规则集合并 + 去重见 injection_engine 模块文档；
+    // 委托统一注入检测引擎（规则集合并 + 去重见 injection_engine 模块文档；
     // parity 测试保证与合并前遗留规则表判定一致）
     crate::access::injection_engine::InjectionEngine::global().is_suspicious_relational(sql)
 }

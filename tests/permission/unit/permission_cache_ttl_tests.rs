@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! PermissionCache TTL + SWR 单元测试（v0.3.0 T063 新增）
+//! PermissionCache TTL + SWR 单元测试
 //!
 //! 覆盖：
 //! - 默认配置、TTL/refresh_interval/SWR 链式构造

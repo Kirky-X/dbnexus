@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Task 6.1-6.3 验证: timestamps = true 自动时间戳集成测试
+//! timestamps = true 自动时间戳集成测试
 //!
 //! 验证 `#[db_entity(table_name = "...", primary_key = "...", timestamps = true)]`：
 //! - insert 时自动设置 `created_at` + `updated_at`
@@ -51,7 +51,7 @@ async fn setup() -> dbnexus::DbPool {
     pool
 }
 
-/// Task 6.2 验证: insert 时自动设置 created_at + updated_at
+/// insert 时自动设置 created_at + updated_at
 #[tokio::test]
 async fn test_insert_sets_both_timestamps() {
     let pool = setup().await;
@@ -103,7 +103,7 @@ async fn test_insert_sets_both_timestamps() {
     );
 }
 
-/// Task 6.2 验证: update 时仅更新 updated_at，created_at 保持不变
+/// update 时仅更新 updated_at，created_at 保持不变
 #[tokio::test]
 async fn test_update_only_changes_updated_at() {
     let pool = setup().await;
@@ -168,7 +168,7 @@ async fn test_update_only_changes_updated_at() {
     assert_eq!(found.name, "updated");
 }
 
-/// Task 6.3 验证: timestamps=true 要求 Model 包含 created_at/updated_at 字段
+/// timestamps=true 要求 Model 包含 created_at/updated_at 字段
 ///
 /// 此测试通过实际编译验证：如果字段缺失或类型错误，编译会失败。
 /// 这里我们验证字段类型为 Option<time::OffsetDateTime> 时一切正常。

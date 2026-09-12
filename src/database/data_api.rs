@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 数据 API 网关雏形（T419）
+//! 数据 API 网关雏形
 //!
 //! 实体 → JSON 查询端点生成器：为声明的表端点（表/列白名单 + 分页 + 过滤 +
 //! 排序）提供可被上层 Web 框架（如 sdforge）直接包装为 HTTP 端点的
@@ -11,7 +11,7 @@
 //! - **列白名单**：SELECT 仅返回声明暴露的列；过滤/排序列同样必须
 //!   在白名单内，违规返回 `DbError::Permission`（可映射 HTTP 403/400）；
 //! - **标识符校验**：表名/列名一律 `is_safe_identifier` 白名单校验；
-//! - **值传递**：过滤值经 `sql_literal` 标准转义（复用 T418 仓储实现），
+//! - **值传递**：过滤值经 `sql_literal` 标准转义（复用仓储实现），
 //!   并沿用 `query_rows`/`execute_raw` 的整条注入防御链；
 //! - **分页上限**：`max_page_size` 硬上限，超出自动钳制。
 //!
@@ -38,7 +38,7 @@ use crate::database::repository::{is_safe_identifier, sql_literal};
 use crate::database::DbPool;
 use crate::foundation::{DbError, DbResult};
 
-/// 单表查询端点声明（T419）
+/// 单表查询端点声明
 #[derive(Debug, Clone)]
 pub struct TableEndpoint {
     /// 物理表名
@@ -111,7 +111,7 @@ impl TableEndpoint {
     }
 }
 
-/// 过滤比较算子（T419）
+/// 过滤比较算子
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterOp {
     /// 相等
@@ -145,7 +145,7 @@ impl FilterOp {
     }
 }
 
-/// 过滤条件（T419）
+/// 过滤条件
 #[derive(Debug, Clone)]
 pub struct Filter {
     /// 过滤列（必须在端点列白名单内）
@@ -168,7 +168,7 @@ impl Filter {
     }
 }
 
-/// 排序方向（T419）
+/// 排序方向
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderDirection {
     /// 升序
@@ -177,7 +177,7 @@ pub enum OrderDirection {
     Desc,
 }
 
-/// 列表查询请求（T419）
+/// 列表查询请求
 #[derive(Debug, Clone, Default)]
 pub struct ListRequest {
     /// 页码（1 起）
@@ -190,7 +190,7 @@ pub struct ListRequest {
     pub order: Option<(String, OrderDirection)>,
 }
 
-/// 列表查询响应（T419，可直接序列化为 JSON 响应体）
+/// 列表查询响应（可直接序列化为 JSON 响应体）
 #[derive(Debug, Clone, Serialize)]
 pub struct ListResponse {
     /// 当页数据行（仅白名单列）
@@ -203,7 +203,7 @@ pub struct ListResponse {
     pub total: u64,
 }
 
-/// 数据 API 网关（T419）
+/// 数据 API 网关
 ///
 /// 持有池与端点注册表；全部查询以声明的角色执行（默认 admin，
 /// 生产部署建议换成最小权限角色）。

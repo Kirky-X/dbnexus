@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T425 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
+//! 大文件拆分：自 db_pool.rs 按职责纯移动的 impl 块（行为不变）。
 
 use super::*;
 
@@ -64,7 +64,7 @@ impl DbPool {
     ///
     /// 此方法会归还信号量许可，确保连接池可以继续接受新的连接请求。
     /// 使用 tokio::spawn 在后台执行异步操作，避免阻塞调用者。
-    /// （T407：cfg 收窄为实际调用方——copy_in（postgres）与迁移路径（auto-migrate））
+    /// 与迁移路径（auto-migrate））
     #[cfg(any(feature = "auto-migrate", feature = "postgres"))]
     pub(crate) fn release_connection(&self, conn: DbConnection) {
         DbPoolInner::release_connection(&self.inner, conn);

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T407：COPY 批量写入契约测试
+//! COPY 批量写入契约测试
 //!
 //! - COPY 协议是 PostgreSQL 专属路径（`postgres` + `copy` feature 下启用协议传输）；
 //!   sqlite 环境无 COPY 协议，本契约测试断言：语句构建/行编码纯函数可用，

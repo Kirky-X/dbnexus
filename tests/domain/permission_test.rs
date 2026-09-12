@@ -395,7 +395,7 @@ rate_limit_max_requests: 50
 
     #[tokio::test]
     async fn test_memory_permission_provider_health_check() {
-        // T015 语义：内存 provider 策略表为空（无注入路径）= 未初始化，报不健康
+        // 语义：内存 provider 策略表为空（无注入路径）= 未初始化，报不健康
         let provider = new_in_memory();
         assert!(provider.health_check().await.is_err());
     }
@@ -762,7 +762,7 @@ editor:
                 .is_ok()
         );
         assert!(manager.get_policy("anyone").await.is_ok());
-        // T015 语义：空策略表 provider 不健康
+        // 语义：空策略表 provider 不健康
         assert!(lifecycle.health_check().await.is_err());
         lifecycle.shutdown().await;
     }

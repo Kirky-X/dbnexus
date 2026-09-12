@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 统一注入检测引擎（T417）
+//! 统一注入检测引擎
 //!
 //! 此前注入检测规则散落在三处独立实现中：
 //! 1. `sql_parser::contains_sql_injection` 的关系型静态模式表；
@@ -27,7 +27,7 @@
 
 use std::sync::LazyLock;
 
-/// 注入规则类别（T417：统一规则集的分类维度）
+/// 注入规则类别
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RuleCategory {
     /// UNION 注入（UNION SELECT 等）
@@ -59,7 +59,7 @@ pub enum RuleCategory {
     GraphProcedure,
 }
 
-/// 统一注入规则（T417）
+/// 统一注入规则
 #[derive(Debug)]
 pub struct InjectionRule {
     /// 稳定规则 ID（审计/日志引用）

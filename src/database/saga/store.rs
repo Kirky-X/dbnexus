@@ -61,10 +61,10 @@ impl Default for InMemorySagaLog {
 }
 
 // ============================================================================
-// SagaLogStore trait（T402：日志存储端口，内存/DB 实现）
+// SagaLogStore trait
 // ============================================================================
 
-/// Saga 日志存储端口（T402）
+/// Saga 日志存储端口
 ///
 /// 内存实现为默认；`DbSagaLog`（`sql-parser` feature）提供基于数据库的持久化。
 #[async_trait]
@@ -100,7 +100,7 @@ impl SagaLogStore for InMemorySagaLog {
     }
 }
 
-/// DB 持久化 Saga 日志存储（T402，`sql-parser` feature）
+/// DB 持久化 Saga 日志存储（`sql-parser` feature）
 ///
 /// 复用 dbnexus 自身的连接池执行 DDL/UPSERT，行查询经统一 API `query_rows`。
 /// 步骤日志以 JSON 文本列存储，无需为公共类型引入 serde 依赖。
@@ -188,7 +188,7 @@ impl SagaLogStore for DbSagaLog {
     }
 }
 
-/// T402：步骤日志 → JSON（避免公共类型引入 serde derive）
+/// 步骤日志 → JSON（避免公共类型引入 serde derive）
 #[cfg(feature = "sql-parser")]
 fn saga_steps_to_json(steps: &[SagaStepLog]) -> serde_json::Value {
     serde_json::Value::Array(
@@ -207,7 +207,7 @@ fn saga_steps_to_json(steps: &[SagaStepLog]) -> serde_json::Value {
     )
 }
 
-/// T401 行 → SagaLog（postgres/sqlite 通用列名约定）
+/// 查询行 → SagaLog（postgres/sqlite 通用列名约定）
 #[cfg(feature = "sql-parser")]
 fn saga_log_from_row(row: &serde_json::Value) -> Option<SagaLog> {
     let saga_id = row.get("saga_id")?.as_str()?.to_string();

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! OTel 导出桥（T412，`otel` feature）
+//! OTel 导出桥（`otel` feature）
 //!
 //! 将 dbnexus 观测数据（池饱和度/等待计数/慢查询计数等健康快照指标）导出为
 //! OTLP/HTTP JSON 形态（`resourceMetrics` 信封）：
@@ -10,7 +10,7 @@
 //! - **stdout fallback**：传输失败且 `stdout_fallback = true` 时逐事件输出
 //!   JSON 行（自定义输出通道经 [`StdoutExporter`] 注入）
 //! - **事件源**：[`metric_events_from_health_snapshot`] 直接消费
-//!   `DbPool::health_snapshot()`（T406），上层典型用法：
+//!   `DbPool::health_snapshot()`，上层典型用法：
 //!
 //! ```rust,no_run
 //! # async fn example(pool: std::sync::Arc<dbnexus::DbPool>) {
@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-/// OTLP 指标事件（T412）
+/// OTLP 指标事件
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OtelMetricEvent {
     /// 指标名（如 `dbnexus.pool.saturation`）
@@ -41,7 +41,7 @@ pub struct OtelMetricEvent {
     pub time_unix_nano: u64,
 }
 
-/// OTLP 传输抽象（T412：mock collector / 真实 HTTP 皆可实现）
+/// OTLP 传输抽象
 #[async_trait]
 pub trait OtlpTransport: Send + Sync {
     /// 发送 OTLP 请求体（JSON 形态）到端点
@@ -120,7 +120,7 @@ fn http_post(endpoint: &str, body: &[u8], timeout_ms: u64) -> Result<(), String>
     }
 }
 
-/// stdout fallback 导出器（T412）
+/// stdout fallback 导出器
 ///
 /// 默认输出为 `println!` JSON 行；上层/测试可注入自定义输出通道。
 pub struct StdoutExporter {
@@ -152,7 +152,7 @@ impl Default for StdoutExporter {
     }
 }
 
-/// OTel 导出配置（T412）
+/// OTel 导出配置
 #[derive(Debug, Clone)]
 pub struct OtelConfig {
     /// OTLP/HTTP 端点（如 `http://collector:4318/v1/metrics`）
@@ -176,7 +176,7 @@ impl Default for OtelConfig {
     }
 }
 
-/// OTel 导出桥（T412）
+/// OTel 导出桥
 pub struct OtelExporter {
     config: OtelConfig,
     transport: Arc<dyn OtlpTransport>,
@@ -212,7 +212,7 @@ impl OtelExporter {
         }
     }
 
-    /// 导出健康快照指标（T406 health_snapshot → OTLP metrics）
+    /// 导出健康快照指标（health_snapshot → OTLP metrics）
     ///
     /// 传输失败且 `stdout_fallback` 开启时逐事件输出 JSON 行并视为成功。
     pub async fn export_health_snapshot(

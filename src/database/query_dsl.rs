@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! 查询 DSL 宏（T422）
+//! 查询 DSL 宏
 //!
 //! `q!` 以声明式语法生成类型安全的 SELECT 查询片段：
 //!
@@ -26,7 +26,7 @@
 //!   不接受任意文本；
 //! - 多个条件以 `AND` 组合（条件组合 MVP：AND 语义）。
 
-/// 运算符（T422）
+/// 运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DslOp {
     /// `==`
@@ -57,7 +57,7 @@ impl DslOp {
     }
 }
 
-/// 查询条件（T422）
+/// 查询条件
 #[derive(Debug, Clone)]
 pub struct DslCondition {
     /// 列名
@@ -68,7 +68,7 @@ pub struct DslCondition {
     pub literal: String,
 }
 
-/// 查询片段（T422）：`q!` 的产物
+/// 查询片段：`q!` 的产物
 ///
 /// 持有结构化的表/列/条件/排序/分页信息；`to_sql()` 组装为 SELECT 语句。
 /// 片段各部分均源自宏的 ident/literal 片段，天然免疫标识符与值注入。
@@ -150,7 +150,7 @@ impl QueryFragment {
     }
 }
 
-/// 宏 literal token 文本 → SQL 字面量（T422 内部）
+/// 宏 literal token 文本 → SQL 字面量（内部）
 ///
 /// `stringify!` 保留字面量原始文本：字符串字面量带引号（如 `"active"`），
 /// 数值/布尔为裸文本（如 `10`、`true`）。据此分流：
@@ -172,7 +172,7 @@ pub fn literal_from_token(token: &str) -> String {
     }
 }
 
-/// 值 → SQL 文本（T422 内部：委托 literal_from_token）
+/// 值 → SQL 文本（内部：委托 literal_from_token）
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __dsl_value {
@@ -181,7 +181,7 @@ macro_rules! __dsl_value {
     };
 }
 
-/// 运算符 token → DslOp（T422 内部）
+/// 运算符 token → DslOp（内部）
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __dsl_op {
@@ -205,7 +205,7 @@ macro_rules! __dsl_op {
     };
 }
 
-/// 条件组合（T422 内部递归：多条件逐条登记，AND 语义在 to_sql 组装）
+/// 条件组合（内部递归：多条件逐条登记，AND 语义在 to_sql 组装）
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __dsl_conditions {
@@ -226,7 +226,7 @@ macro_rules! __dsl_conditions {
     };
 }
 
-/// 查询 DSL 宏（T422）
+/// 查询 DSL 宏
 ///
 /// 语法（MVP）：
 ///

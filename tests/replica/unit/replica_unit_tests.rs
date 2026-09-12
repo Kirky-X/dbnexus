@@ -49,7 +49,7 @@ fn test_replica_config_empty_urls() {
 }
 
 // ============================================================================
-// T411：副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
+// 副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
 // ============================================================================
 
 #[cfg(all(feature = "replica-routing", feature = "sqlite", feature = "runtime-tokio-rustls"))]
@@ -246,7 +246,7 @@ mod t411_replica_load_balancer_tests {
         assert_eq!(snapshot[0]["name"], "replica-snap");
         assert_eq!(snapshot[0]["healthy"], true);
 
-        // 与 T406 健康导出对接：快照经 ReplicaHealthProvider 进入 health_snapshot
+        // 与健康导出对接：快照经 ReplicaHealthProvider 进入 health_snapshot
         let provider_balancer = balancer.clone();
         primary
             .set_replica_health_provider(Some(Arc::new(move || provider_balancer.snapshot())))

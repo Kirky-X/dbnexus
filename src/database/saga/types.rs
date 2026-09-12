@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use crate::database::Session;
 
 // ============================================================================
-// Saga 核心类型（T425 纯移动自 saga.rs）
+// Saga 核心类型（纯移动自 saga.rs）
 // ============================================================================
 
 // ============================================================================
@@ -108,7 +108,7 @@ pub enum SagaStatus {
 }
 
 impl SagaStatus {
-    /// T402：持久化用小写标识
+    /// 持久化用小写标识
     pub fn as_str(&self) -> &'static str {
         match self {
             SagaStatus::Running => "running",
@@ -119,7 +119,7 @@ impl SagaStatus {
         }
     }
 
-    /// T402：从存储标识解析
+    /// 从存储标识解析
     pub fn from_str_kind(s: &str) -> SagaStatus {
         match s {
             "completed" => SagaStatus::Completed,

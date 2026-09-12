@@ -39,7 +39,7 @@ pub enum DdlValidationResult {
     ParseError(String),
 }
 
-/// DDL 守卫决策审计记录（T416）
+/// DDL 守卫决策审计记录
 #[derive(Debug, Clone)]
 pub struct DdlAuditRecord {
     /// 被校验的 SQL
@@ -73,7 +73,7 @@ impl DdlAuditRecord {
     }
 }
 
-/// 统一 DDL 守卫端口（T416）
+/// 统一 DDL 守卫端口
 ///
 /// 白名单（内置 [`DdlGuard`]）、干跑（[`DryRunDdlGuard`]）、审计
 /// （[`AuditingDdlGuard`]）经同一入口接入；Session 的全部 DDL 路径
@@ -89,7 +89,7 @@ pub trait DdlGuardPolicy: Send + Sync {
     fn audit(&self, _sql: &str, _result: &DdlValidationResult) {}
 }
 
-/// 审计装饰器（T416）：把守卫决策流式转发到外部 sink
+/// 审计装饰器：把守卫决策流式转发到外部 sink
 ///
 /// 组合任意 [`DdlGuardPolicy`]，决策（放行/拦截/解析失败）实时回调，
 /// 供上层接入结构化审计日志/DB 审计存储。
@@ -118,7 +118,7 @@ impl DdlGuardPolicy for AuditingDdlGuard {
     }
 }
 
-/// 干跑装饰器（T416）：记录全部决策、不改变放行语义
+/// 干跑装饰器：记录全部决策、不改变放行语义
 ///
 /// - 作为守卫注入时行为与内部策略一致，同时留存决策记录（`records()`）；
 /// - 独立用于预检：`plan()` 对一组语句给出逐条决策，不执行任何语句。
@@ -229,7 +229,7 @@ impl DdlGuard {
         }
 
         // 第一步：检查禁止的字符串模式（捕获 AST 无法检测的注入）
-        // T417：禁用模式表已合并至统一注入引擎（scan_ddl 管线口径不变）
+        // 禁用模式表已合并至统一注入引擎（scan_ddl 管线口径不变）
         if let Some(rule) = crate::access::InjectionEngine::global()
             .scan_ddl(sql_trimmed)
             .first()
@@ -463,7 +463,6 @@ mod tests {
         ));
     }
 
-    // ===== T416：统一守卫端口（白名单/干跑/审计） =====
 
     use std::sync::Arc;
 

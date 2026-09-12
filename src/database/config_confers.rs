@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! confers 配置热重载集成（T405，`config-confers` feature）
+//! confers 配置热重载集成（`config-confers` feature）
 //!
 //! 经 confers 的 `ChangeStream` 订阅配置变更事件，回调映射为
 //! `PermissionConfig` 后原子换装（`DbPool::set_permission_config`，
@@ -66,7 +66,7 @@ where
                         .map_err(|e| format!("permission hot reload failed: {e}"))?;
                 }
                 Err(e) => {
-                    // T405：解析失败的变更事件跳过（fail-closed：不换装坏配置）
+                    // 解析失败的变更事件跳过（fail-closed：不换装坏配置）
                     return Err(format!("skip invalid permission event: {e}"));
                 }
             }

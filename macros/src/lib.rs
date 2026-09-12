@@ -39,11 +39,11 @@ struct DbEntityArgs {
     has_cache: bool,
     /// audit 参数已解析（可选）
     has_audit: bool,
-    /// permissions 嵌套参数原始 token（Phase 3 实现解析）
+    /// permissions 嵌套参数原始 token
     permissions_tokens: Option<proc_macro2::TokenStream>,
-    /// cache 嵌套参数原始 token（Phase 3 实现解析）
+    /// cache 嵌套参数原始 token
     cache_tokens: Option<proc_macro2::TokenStream>,
-    /// audit 嵌套参数原始 token（Phase 3 实现解析）
+    /// audit 嵌套参数原始 token
     audit_tokens: Option<proc_macro2::TokenStream>,
 }
 
@@ -151,7 +151,7 @@ fn parse_hooks_args(tokens: proc_macro2::TokenStream) -> Result<HooksArgs, syn::
 /// - `timestamps = true` （可选，布尔字面量）
 /// - `soft_delete = true` （可选，布尔字面量）
 /// - `validate` （可选，布尔开关，无值）
-/// - `hooks(...)` （可选，嵌套参数，Phase 3 实现）
+/// - `hooks(...)` （可选，嵌套参数）
 /// - `permissions(...)` （可选，嵌套参数）
 /// - `cache(...)` （可选，嵌套参数）
 /// - `audit(...)` （可选，嵌套参数）
@@ -527,10 +527,10 @@ fn parse_audit_params(
 ///
 /// # 可选参数
 ///
-/// - `timestamps = true` — 启用自动时间戳（Phase 3 实现）
-/// - `soft_delete = true` — 启用软删除（Phase 3 实现）
-/// - `validate` — 启用数据验证（Phase 3 实现）
-/// - `hooks(...)` — 事件钩子（Phase 3 实现）
+/// - `timestamps = true` — 启用自动时间戳
+/// - `soft_delete = true` — 启用软删除
+/// - `validate` — 启用数据验证
+/// - `hooks(...)` — 事件钩子
 /// - `permissions(...)` — 权限控制
 /// - `cache(...)` — 缓存配置
 /// - `audit(...)` — 审计配置
@@ -612,7 +612,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         syn::Ident::new(&pascal, proc_macro2::Span::call_site())
     };
 
-    // Task 6.5: soft_delete = true 时自动注入 deleted_at 字段（若用户未定义）
+    // soft_delete = true 时自动注入 deleted_at 字段（若用户未定义）
     //
     // 检查 struct 是否已有 deleted_at 字段，如果没有且 soft_delete=true，则自动添加。
     // 修改 input 会影响 #input 的输出，确保 DeriveEntityModel 能看到 deleted_at 字段。
@@ -801,7 +801,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // Task 6.2/7.4/7.6-7.8: 生成 ActiveModelBehavior 实现
+    // 生成 ActiveModelBehavior 实现
     //
     // 编排顺序（before_save 内）：validate → timestamps → user_hooks（任一失败短路）
     //
@@ -815,7 +815,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     // - 用户钩子：before_insert/before_update 基于 `insert` 参数分派
     //   - before_* 签名：fn(&mut ActiveModel) -> Result<(), E>
     //   - after_* 签名：fn(&Model) -> Result<(), E>
-    // - 编译期签名校验（Task 7.9）：由编译器在调用点检查函数存在性和签名匹配
+    // - 编译期签名校验：由编译器在调用点检查函数存在性和签名匹配
     let needs_before_save =
         entity_args.validate || entity_args.timestamps || entity_args.hooks.has_before_save_hooks();
     let needs_after_save = entity_args.hooks.has_after_save_hooks();
@@ -864,7 +864,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {}
             };
 
-            // 用户钩子逻辑（Task 7.6-7.8）
+            // 用户钩子逻辑
             // 编排顺序：validate → timestamps → user_hooks
             let before_insert_ident = entity_args
                 .hooks
@@ -1052,18 +1052,18 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         (quote! {}, quote! {})
     };
 
-    // Task 6.6-6.8: soft_delete = true 时生成条件 token
+    // soft_delete = true 时生成条件 token
     //
-    // - find 方法加 `WHERE deleted_at IS NULL` 过滤（Task 6.6）
-    // - delete 方法变为 `UPDATE SET deleted_at = now WHERE ... AND deleted_at IS NULL`（Task 6.7）
-    // - 新增 find_with_deleted/find_only_deleted/force_delete 方法（Task 6.8）
+    // - find 方法加 `WHERE deleted_at IS NULL` 过滤
+    // - delete 方法变为 `UPDATE SET deleted_at = now WHERE ... AND deleted_at IS NULL`
+    // - 新增 find_with_deleted/find_only_deleted/force_delete 方法
     let soft_delete_filter = if entity_args.soft_delete {
         quote! { .filter(Column::DeletedAt.is_null()) }
     } else {
         quote! {}
     };
 
-    // soft_delete=true 时的 delete 方法体（Task 6.7）
+    // soft_delete=true 时的 delete 方法体
     let soft_delete_methods = if entity_args.soft_delete {
         quote! {
             /// 软删除：根据主键设置 deleted_at（带权限控制）
@@ -1654,9 +1654,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         // 宏生成 `impl ActiveModelBehavior for ActiveModel`
-        // - timestamps=true: 生成 before_save 自动设置 created_at/updated_at（Task 6.2）
-        // - validate=true: 生成 before_save 调用 validator::Validate::validate（Task 7.4）
-        // - hooks(...): 生成 before_save/after_save/before_delete/after_delete 调用用户钩子（Task 7.6-7.8）
+        // - timestamps=true: 生成 before_save 自动设置 created_at/updated_at
+        // - validate=true: 生成 before_save 调用 validator::Validate::validate
+        // - hooks(...): 生成 before_save/after_save/before_delete/after_delete 调用用户钩子
         // - 无以上参数: 空实现（保留 Sea-ORM 默认行为）
         // 用户手写此 impl 会触发 conflicting implementations 编译错误（安全失败）
         // - 注意：Sea-ORM 的 ActiveModelBehavior trait 标注了 #[async_trait]，
@@ -1671,7 +1671,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 // ============================================================================
-// 辅助函数（保留供 Phase 3 hooks/permissions/cache/audit 实现使用）
+// 辅助函数（保留供 hooks/permissions/cache/audit 实现使用）
 // ============================================================================
 
 /// 验证角色名格式

@@ -22,27 +22,27 @@ pub mod replica;
 #[cfg(feature = "scatter-gather")]
 pub mod scatter;
 
-/// T405：confers 配置热重载集成（config-confers feature）
+/// confers 配置热重载集成（config-confers feature）
 #[cfg(feature = "config-confers")]
 pub mod config_confers;
 
-/// COPY 批量写入（T407，copy feature；协议传输路径在 postgres 驱动组下启用）
+/// COPY 批量写入（copy feature；协议传输路径在 postgres 驱动组下启用）
 #[cfg(feature = "copy")]
 pub mod copy;
 
-/// 泛型仓储（T418：Repository<T> CRUD 端口 + JSON 行参考实现 + 实现宏）
+/// 泛型仓储
 #[cfg(feature = "repository")]
 pub mod repository;
 
-/// 数据 API 网关雏形（T419：表/列白名单 + 分页 + 过滤，供 sdforge 对接）
+/// 数据 API 网关雏形
 #[cfg(feature = "data-api")]
 pub mod data_api;
 
-/// 查询 DSL 宏（T422：q! 类型安全查询片段）
+/// 查询 DSL 宏
 #[cfg(feature = "query-dsl")]
 pub mod query_dsl;
 
-/// 实体事件总线 + Outbox（T423：变更事件 + 后台投递 + 索引同步消费）
+/// 实体事件总线 + Outbox
 #[cfg(feature = "entity-events")]
 pub mod entity_events;
 
@@ -87,7 +87,7 @@ pub use saga::{
 #[cfg(all(feature = "saga", feature = "sql-parser"))]
 pub use saga::DbSagaLog;
 
-// COPY 批量写入 re-exports（T407）
+// COPY 批量写入 re-exports
 #[cfg(feature = "copy")]
 pub use copy::{CopyFormat, CopyStatement, encode_copy_rows};
 

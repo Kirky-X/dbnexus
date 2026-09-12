@@ -259,7 +259,7 @@ async fn test_pool_exhaustion_alert_levels() {
     let _ = _holder.await;
 }
 
-/// T007: 并发 get_session 无锁读安全性验证（ArcSwap COW）
+/// 并发 get_session 无锁读安全性验证（ArcSwap COW）
 ///
 /// 启动 10 个 tokio task 并发调用 `get_session("admin")`，
 /// 验证无 panic 且全部成功返回 Session（验证 ArcSwap 的无锁读安全性）。

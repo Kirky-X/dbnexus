@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T423：实体事件总线 + Outbox 测试（sqlite）
+//! 实体事件总线 + Outbox 测试（sqlite）
 //!
 //! 覆盖：事件登记 → 单轮投递 → 总线订阅者接收 → 状态标记已投递；
 //! 未投递事件可重放；后台投递器端到端冒烟。

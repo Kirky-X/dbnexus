@@ -97,7 +97,7 @@ enum Commands {
     /// 列出所有迁移文件
     List,
 
-    /// 应用迁移目录中的所有待应用迁移（T415 机器可读输出，退出码 0/1/2）
+    /// 应用迁移目录中的所有待应用迁移（机器可读输出，退出码 0/1/2）
     Migrate {
         /// 目标版本号（可选，默认为所有待应用迁移）
         #[arg(long)]
@@ -114,7 +114,7 @@ enum Commands {
     },
 }
 
-/// `user` 子命令动作（T415）
+/// `user` 子命令动作
 #[derive(Subcommand)]
 enum UserAction {
     /// 新增用户
@@ -143,7 +143,7 @@ enum UserAction {
     List,
 }
 
-/// CLI 退出码契约（T415）：0 成功 / 1 运行时失败 / 2 用法或配置错误
+/// CLI 退出码契约：0 成功 / 1 运行时失败 / 2 用法或配置错误
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExitCode {
     /// 成功
@@ -211,7 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::List => {
             list_migrations(&database_url, &cli.migrations_dir).await?;
         }
-        // T415 运维子命令：JSON 输出 + 退出码契约（0 成功 / 1 运行时失败 / 2 用法错误）
+        // 运维子命令：JSON 输出 + 退出码契约（0 成功 / 1 运行时失败 / 2 用法错误）
         Commands::Migrate { version } => {
             let code = run_migrate_json(&database_url, &cli.migrations_dir, *version).await;
             std::process::exit(code as i32);
@@ -1070,7 +1070,7 @@ async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<
 }
 
 // ============================================================================
-// T415 运维子命令（migrate / health / user）— 机器可读 JSON + 退出码 0/1/2
+// 运维子命令（migrate / health / user）— 机器可读 JSON + 退出码 0/1/2
 // ============================================================================
 
 /// 输出一行 JSON 到 stdout
@@ -1087,7 +1087,7 @@ fn is_valid_identifier(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
 }
 
-/// 用户表 DDL（T415 user 子命令存储）
+/// 用户表 DDL（user 子命令存储）
 fn users_table_ddl() -> &'static str {
     "CREATE TABLE IF NOT EXISTS dbnexus_users (\
 username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, \
@@ -1589,7 +1589,6 @@ mod tests {
         assert!(detect_database_type("not a url").is_err());
     }
 
-    // ===== T415 运维 CLI：标识符校验 / 口令摘要 / 退出码契约 =====
 
     #[test]
     fn test_is_valid_identifier() {
