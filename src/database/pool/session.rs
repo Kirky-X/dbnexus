@@ -1904,6 +1904,8 @@ fn run_ddl_policy(policy: &dyn DdlGuardPolicy, sql: &str) -> DbResult<DdlValidat
     Ok(result)
 }
 
+// 消费方均在 all(sql-parser, permission) 门控的表名校验路径内。
+#[cfg(all(feature = "sql-parser", feature = "permission"))]
 fn is_invalid_table_name(table_name: &str) -> bool {
     let table_name = table_name.trim();
     if table_name.is_empty() {
