@@ -201,9 +201,10 @@ impl From<DbNexusError> for UnifiedDbError {
     fn from(err: DbNexusError) -> Self {
         let code = match &err {
             #[cfg(feature = "permission")]
-            DbNexusError::Permission(_) | DbNexusError::PermissionConfig(_) => {
-                ErrorCode::PermissionConfig
-            }
+            // 权限拒绝（2000）与权限配置错误（2001）分段映射，与错误码表契约一致
+            DbNexusError::Permission(_) => ErrorCode::PermissionDenied,
+            #[cfg(feature = "permission")]
+            DbNexusError::PermissionConfig(_) => ErrorCode::PermissionConfig,
             DbNexusError::UnsupportedDatabaseScheme(_) => ErrorCode::SqlSyntax,
         };
         Self::new(code, err.to_string())
@@ -219,7 +220,10 @@ impl From<UnifiedDbError> for crate::foundation::DbError {
             None => err.message,
         };
         match err.code {
-            ErrorCode::Connection => crate::foundation::DbError::Query(text),
+            // Connection 变体持有 DbErr；文本经 Custom 包装保持类别不丢失
+            ErrorCode::Connection => {
+                crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(text))
+            }
             ErrorCode::PermissionDenied | ErrorCode::PermissionConfig => {
                 crate::foundation::DbError::Permission(text)
             }
@@ -229,6 +233,10 @@ impl From<UnifiedDbError> for crate::foundation::DbError {
             ErrorCode::InjectionRisk | ErrorCode::SqlSyntax | ErrorCode::Query => {
                 crate::foundation::DbError::Query(text)
             }
+            // validation feature 启用时映射回 Validation 变体；未启用时退化为 Query
+            #[cfg(feature = "validation")]
+            ErrorCode::Validation => crate::foundation::DbError::Validation(text),
+            #[cfg(not(feature = "validation"))]
             ErrorCode::Validation => crate::foundation::DbError::Query(text),
             ErrorCode::Unknown | ErrorCode::Config => crate::foundation::DbError::Config(text),
         }
@@ -433,7 +441,7 @@ impl From<DbNexusError> for QueryErrorReport {
 }
 
 #[cfg(test)]
-mod t424_tests {
+mod error_code_tests {
     use super::*;
 
     /// 错误码表：数值分段与机器可读名稳定
@@ -490,6 +498,39 @@ mod t424_tests {
         let unified = UnifiedDbError::new(ErrorCode::Migration, "bad migration");
         let legacy: crate::foundation::DbError = unified.into();
         assert!(matches!(legacy, crate::foundation::DbError::Migration(_)));
+    }
+
+    /// 反向映射保持错误类别：Connection/Query/Config 不被吞成其他变体
+    #[test]
+    fn test_reverse_mapping_preserves_variant() {
+        let unified = UnifiedDbError::new(ErrorCode::Connection, "conn refused");
+        let legacy: crate::foundation::DbError = unified.into();
+        assert!(
+            matches!(legacy, crate::foundation::DbError::Connection(_)),
+            "Connection 码应映射回 Connection 变体"
+        );
+
+        let unified = UnifiedDbError::new(ErrorCode::Query, "bad query");
+        let legacy: crate::foundation::DbError = unified.into();
+        assert!(matches!(legacy, crate::foundation::DbError::Query(_)));
+    }
+
+    /// 正向映射分段：权限拒绝 → 2000，权限配置错误 → 2001
+    #[cfg(feature = "permission")]
+    #[test]
+    fn test_forward_mapping_permission_segments() {
+        let denied: UnifiedDbError = DbNexusError::Permission(crate::domain::PermissionError::Denied {
+            resource: "users".to_string(),
+            operation: "DELETE".to_string(),
+        })
+        .into();
+        assert_eq!(denied.code(), ErrorCode::PermissionDenied);
+
+        let config_err: UnifiedDbError = DbNexusError::PermissionConfig(
+            crate::domain::PermissionConfigError::MissingField("roles".to_string()),
+        )
+        .into();
+        assert_eq!(config_err.code(), ErrorCode::PermissionConfig);
     }
 
     /// 统一错误 → 查询错误报告（码段 → 类别）

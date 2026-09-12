@@ -88,6 +88,30 @@ async fn test_pending_events_survive_for_replay() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// 含单引号的 entity/entity_id 经转义后可安全落库并原样取回
+#[tokio::test]
+async fn test_record_escapes_quote_bearing_fields() {
+    let (store, path) = temp_store("escape").await;
+    let bus = Arc::new(InMemoryEntityEventBus::default());
+    let mut rx = bus.subscribe().await;
+
+    store
+        .record(&EntityEvent::insert("order_items", "o'brien-1"))
+        .await
+        .expect("record with quote in entity_id");
+
+    let dispatched = OutboxDispatcher::dispatch_once(store.as_ref(), bus.as_ref(), 10)
+        .await
+        .expect("dispatch once");
+    assert_eq!(dispatched, 1, "转义后的记录应正常登记与投递");
+
+    let event = rx.recv().await.expect("event");
+    assert_eq!(event.entity, "order_items");
+    assert_eq!(event.entity_id, "o'brien-1", "单引号字段应无损往返");
+
+    let _ = std::fs::remove_file(&path);
+}
+
 /// 后台投递器：登记事件后由后台任务自动投递到订阅者
 #[tokio::test]
 async fn test_background_dispatcher_smoke() {
