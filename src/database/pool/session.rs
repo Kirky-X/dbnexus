@@ -458,7 +458,6 @@ impl Session {
     /// 创建迁移执行器（仅内部使用）
     ///
     /// 用于迁移功能，将底层连接包装成 MigrationExecutor
-    #[allow(dead_code)]
     #[cfg(feature = "migration")]
     pub fn create_migration_executor(
         &self,

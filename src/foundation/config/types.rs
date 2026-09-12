@@ -460,8 +460,8 @@ impl std::fmt::Display for DatabaseType {
 ///
 /// 定义故障转移链：当主库不可用时自动切换到备用 URL。
 /// 与 CircuitBreaker 协同工作，连续失败达到阈值时触发切换。
+#[cfg(feature = "failover")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct FailoverConfig {
     /// 有序 URL 列表：[primary, replica1, replica2, ...]
     /// 第一个为 primary，后续为故障转移目标
@@ -474,6 +474,7 @@ pub struct FailoverConfig {
     pub failover_threshold: u32,
 }
 
+#[cfg(feature = "failover")]
 impl Default for FailoverConfig {
     fn default() -> Self {
         Self {
@@ -484,7 +485,7 @@ impl Default for FailoverConfig {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(feature = "failover")]
 fn default_failover_threshold() -> u32 {
     3
 }
@@ -497,8 +498,8 @@ fn default_failover_threshold() -> u32 {
 ///
 /// 基于复制 lag 检测的读写分离配置。
 /// 当副本延迟超过阈值时自动回退到主库。
+#[cfg(feature = "replica-routing")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct ReplicaConfig {
     /// 副本数据库 URL 列表
     pub replica_urls: Vec<String>,
@@ -510,6 +511,7 @@ pub struct ReplicaConfig {
     pub lag_check_interval_secs: u64,
 }
 
+#[cfg(feature = "replica-routing")]
 impl Default for ReplicaConfig {
     fn default() -> Self {
         Self {
@@ -520,11 +522,11 @@ impl Default for ReplicaConfig {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(feature = "replica-routing")]
 fn default_max_lag_seconds() -> f64 {
     5.0
 }
-#[allow(dead_code)]
+#[cfg(feature = "replica-routing")]
 fn default_lag_check_interval() -> u64 {
     10
 }
@@ -1412,6 +1414,7 @@ mod tests {
 
     // ===== 补充测试：FailoverConfig / ReplicaConfig Default =====
 
+    #[cfg(feature = "failover")]
     #[test]
     fn test_failover_config_default() {
         let cfg = FailoverConfig::default();
@@ -1420,6 +1423,7 @@ mod tests {
         assert_eq!(cfg.failover_threshold, 3);
     }
 
+    #[cfg(feature = "replica-routing")]
     #[test]
     fn test_replica_config_default() {
         let cfg = ReplicaConfig::default();

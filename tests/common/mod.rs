@@ -224,7 +224,10 @@ pub async fn cleanup_migration_versions(pool: &dbnexus::DbPool, versions: &[u32]
 /// 清理测试表
 ///
 /// 在指定的会话上删除测试表
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "共享测试助手，与建表助手配套备用，尚无测试二进制引用"
+)]
 pub async fn cleanup_test_table(session: &mut dbnexus::Session, table_name: &str) {
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
@@ -234,7 +237,10 @@ pub async fn cleanup_test_table(session: &mut dbnexus::Session, table_name: &str
 /// 创建测试表
 ///
 /// 在指定的会话上创建简单的测试表
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "共享测试助手，与清理助手配套备用，尚无测试二进制引用"
+)]
 pub async fn create_test_table(session: &mut dbnexus::Session, table_name: &str) {
     session
         .execute_raw_ddl(&format!(
@@ -246,7 +252,10 @@ pub async fn create_test_table(session: &mut dbnexus::Session, table_name: &str)
 }
 
 /// 测试断言帮助 - 验证连接池状态
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "共享测试断言助手备用，尚无测试二进制引用"
+)]
 pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
     let status = pool.status();
     assert!(
@@ -261,7 +270,10 @@ pub fn assert_pool_healthy(pool: &dbnexus::DbPool) {
 }
 
 /// 测试断言帮助 - 验证会话有效
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "共享测试断言助手备用，尚无测试二进制引用"
+)]
 pub fn assert_session_valid(session: &mut dbnexus::Session) {
     assert!(!session.role().is_empty(), "Session should have a role");
     // 使用公开的 execute_raw 方法来验证连接可用
@@ -273,7 +285,10 @@ pub fn assert_session_valid(session: &mut dbnexus::Session) {
 ///
 /// 辅助函数，用于在测试中并行运行多个异步任务
 #[cfg(feature = "permission-engine")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "共享测试并行助手备用，尚无测试二进制引用"
+)]
 pub async fn run_parallel_tasks<F, T>(tasks: Vec<F>) -> Vec<T>
 where
     F: std::future::Future<Output = T> + Send + 'static,
@@ -384,7 +399,10 @@ pub async fn create_test_pool() -> Result<(dbnexus::DbPool, Option<TempDir>), db
 /// 创建用于追踪测试的测试表
 ///
 /// 返回表名和临时目录
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let table_name = generate_test_table_name("tracing_test");
@@ -442,7 +460,10 @@ pub async fn create_tracing_test_table(pool: &dbnexus::DbPool) -> (String, TempD
 }
 
 /// 清理追踪测试表
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str) {
     let session = pool
         .get_session("admin")
@@ -456,7 +477,10 @@ pub async fn cleanup_tracing_test_table(pool: &dbnexus::DbPool, table_name: &str
 /// 验证追踪上下文注入
 ///
 /// 返回注入的 headers 和提取的追踪ID
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn verify_trace_injection(
     pool: &dbnexus::DbPool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -485,7 +509,10 @@ pub async fn verify_trace_injection(
 /// 验证追踪上下文提取
 ///
 /// 返回提取的追踪ID
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn verify_trace_extraction(
     traceparent: &str,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
@@ -511,7 +538,10 @@ pub async fn verify_trace_extraction(
 }
 
 /// 测试连接池在追踪上下文下的行为
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
     let session = pool
         .get_session("admin")
@@ -530,7 +560,10 @@ pub async fn test_pool_with_trace_context(pool: &dbnexus::DbPool) {
 /// 并发测试追踪上下文注入
 ///
 /// 返回成功和失败的数量
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn concurrent_trace_injection_test(
     pool: &dbnexus::DbPool,
     num_tasks: usize,
@@ -561,7 +594,10 @@ pub async fn concurrent_trace_injection_test(
 }
 
 /// 验证数据库操作与追踪上下文关联
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "追踪测试套件助手，套件尚未接入任何测试二进制"
+)]
 pub async fn verify_db_operation_with_trace(
     pool: &dbnexus::DbPool,
     table_name: &str,
