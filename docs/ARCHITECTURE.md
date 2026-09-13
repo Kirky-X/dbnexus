@@ -2,20 +2,22 @@
 
 DBNexus 是一个基于 Sea-ORM 构建的企业级 Rust 数据库抽象层。本文档描述其设计理念、系统架构、模块划分、数据流以及安全与性能设计。
 
+> 周边文档：[📖 用户指南](USER_GUIDE.md) ｜ [📘 API 参考](API_REFERENCE.md) ｜ [🔒 安全文档](SECURITY.md) ｜ [📊 性能基线](PERFORMANCE.md)
+
 ## 📋 目录
 
 <details open>
-<summary>📑 目录（点击展开）</summary>
+<summary>📑 目录</summary>
 
 - [概述](#概述)
 - [设计原则](#设计原则)
 - [系统架构](#系统架构)
-- [模块架构](#模块架构)
-- [核心组件](#核心组件)
-- [数据流](#数据流)
+- [模块划分](#模块划分)
+- [核心执行管道](#核心执行管道)
 - [安全架构](#安全架构)
 - [性能架构](#性能架构)
 - [可扩展性架构](#可扩展性架构)
+- [小结](#小结)
 
 </details>
 
@@ -23,15 +25,15 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级 Rust 数据库抽象层。本
 
 ## 概述
 
-DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵循**分层设计**，具有清晰的关注点分离，使开发者能够通过特性门控选择他们需要的确切功能。
+DBNexus 的架构遵循**分层设计**，具有清晰的关注点分离，使开发者能够通过特性门控选择他们需要的确切功能。
 
-### 关键架构目标
+**关键架构目标**：
 
-1. **模块化** - 特性门控编译以获得最小二进制文件
-2. **安全性** - 基于 RAII 的资源管理和编译时保证
-3. **性能** - 异步优先设计与高效连接池
-4. **可扩展性** - 可插拔组件（权限引擎、缓存策略）
-5. **可观测性** - 内置指标和审计日志（可选特性）
+1. **模块化** — 特性门控编译以获得最小二进制文件
+2. **安全性** — 基于 RAII 的资源管理和编译时保证
+3. **性能** — 异步优先设计与高效连接池
+4. **可扩展性** — 可插拔组件（权限引擎、缓存策略、DDL 守卫）
+5. **可观测性** — 内置指标和审计日志（可选特性）
 
 ---
 
@@ -45,594 +47,380 @@ DBNexus 是一个基于 Sea-ORM 构建的企业级数据库抽象层。架构遵
 {
     let session = pool.get_session("admin").await?;
     // 使用会话...
-    // 当会话被丢弃时连接自动释放
+    // 当会话被丢弃时连接自动归还连接池
 }
 ```
 
-**优势：**
-- 自动连接清理
-- 无需手动资源管理
-- 异常安全保证
+**优势**：自动连接清理、无需手动资源管理、异常安全保证。
 
 ### 2. 特性门控架构
 
-特性被组织成逻辑组并在编译时启用：
+特性被组织成逻辑组并在编译时启用（完整特性表见 [README](../README.md#-特性标志)）：
 
-**核心特性（始终可用）：**
-- 带 RAII 管理的连接池
-- 基本配置管理
-- 数据库驱动选择（SQLite、PostgreSQL、MySQL、DuckDB、Ladybug、Neo4j）
-- ICU4X 国际化格式化（locale 感知的数字/日期/复数/排序）
+**核心基座（始终可用）**：RAII 连接池、基本配置管理、ICU4X 国际化格式化。
 
-**可选核心特性：**
-- `permission` - 基于角色的访问控制
-- `sql-parser` - 用于权限检查的 SQL 解析（含 SQL 注入检测）
-- `macros` - 用于代码生成的过程宏
+**核心可选特性（`default-no-db` 聚合）**：`permission`（RBAC 权限）、`sql-parser`（SQL 解析与注入检测）、`macros`（过程宏）、`config-env`（环境变量配置）。
 
-**企业特性（可选）：**
-- `metrics` - Prometheus 指标收集
-- `audit` - 全面审计日志
-- `migration` - 数据库迁移管理
-- `sharding` - 数据分片支持（0.3.0 增强：会话级分片路由）
-- `cache` - oxcache 缓存（内部 moka L1 后端）
-- `authentication` - JWT 认证 + 密码强度验证（0.3.0 新增）
-- `health-check` - 健康检查 + 熔断器（0.3.0 新增）
-- `permission-engine` - 高级权限引擎（RBAC + ABAC）
-- `global-index` - 跨分片全局索引
-- `ladybug` - 嵌入式图数据库（0.4.0 新增）
-- `neo4j` - Neo4j 图数据库服务器（0.4.0 新增）
-- `kit` - trait-kit 能力管理集成（0.4.0 新增）
+**企业特性（可选）**：`metrics`、`audit`、`migration`、`sharding`、`cache`、`authentication`、`health-check`、`permission-engine`、`global-index`、`ladybug`、`neo4j`、`kit` 等。
 
-**特性依赖关系（编译时强制）：**
+**特性依赖关系（编译时强制）**：
 
 | 特性 | 依赖 | 原因 |
 |------|------|------|
-| `permission` | → `sql-parser`（强制） | 防止 SQL 注入绕过权限检查；同时传递依赖 `dashmap`、`futures`、`yaml` |
-| `sql-parser` | → `cache`（自动启用） | 缓存解析结果以提升性能；同时依赖 `sqlparser`、`regex`、`unicode-normalization` |
-| `permission-engine` | → `cache`、`dashmap`、`futures`、`regex`、`permission` | 高级权限引擎需要缓存策略决策、并发 map、异步和正则支持 |
+| `permission` | `sql-parser`（强制）、`dashmap`、`futures`、`yaml`、`arc-swap` | 防止 SQL 注入绕过权限检查；dashmap 用于并发权限上下文，yaml 用于策略解析，arc-swap 用于无锁配置读取 |
+| `sql-parser` | `cache`（自动启用）、`sqlparser`、`regex`、`unicode-normalization` | 缓存解析结果以提升性能 |
+| `permission-engine` | `permission`、`cache`、`dashmap`、`futures`、`regex` | 高级权限引擎需要基础权限类型、缓存策略决策与并发支持 |
 
-> 这些依赖关系在 `src/lib.rs` 中通过 `compile_error!` 宏强制检查，缺失依赖将导致编译失败。
+> 这些依赖关系在 `src/lib.rs` 中通过 `compile_error!` 宏强制检查，缺失依赖将导致编译失败；数据库驱动（嵌入式与服务器端）混用同样在编译期报错，无逃生门。
 
 ### 3. 异步优先设计
 
-所有 I/O 操作都使用带有 Tokio 的 `async/await`：
+所有 I/O 操作都基于 Tokio 的 `async/await`：
 
-- `RwLock` 用于读多写少的共享状态，`Mutex` 用于写密集路径
-- `Notify` 用于高效条件等待
-- `tokio::spawn` 用于后台任务
+- `RwLock` 用于读多写少的共享状态（如 `Session` 内部状态），`Mutex` 用于写密集路径（如图操作互斥 `graph_op_mutex`）
+- `Notify` 用于连接可用性的条件等待，`Semaphore` 用于并发限制
+- `tokio::spawn` 用于后台任务（权限缓存热加载、Outbox 投递等）
 
 ### 4. 类型安全抽象
 
 编译时保证防止常见错误：
 
-- **数据库驱动互斥**：只能启用一个数据库驱动
-- **权限验证**：编译时角色验证
-- **类型安全**：所有数据库操作都是类型安全的
+- **数据库驱动互斥**：嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动混用直接编译失败
+- **特性依赖校验**：`permission` / `sql-parser` / `permission-engine` 缺少必需依赖时编译失败，无静默降级
+- **类型安全**：实体操作经 `#[db_entity]` 宏生成，主键类型泛型化
 
 ---
 
 ## 系统架构
 
-### 高层级分层图
+DBNexus 的模块全景与依赖方向如下（与 [README 架构图](../README.md#️-架构)一致）：
 
 ```mermaid
-graph TD
-    A[应用层<br/>使用 DbPool 和 Session 的代码] --> B[DBNexus API 层<br/>DbPool、Session<br/>权限检查<br/>事务管理]
-    B --> C[特性模块<br/>配置、权限、指标<br/>迁移、分片、审计]
-    C --> D[连接池<br/>连接生命周期管理<br/>健康检查<br/>RAII 保证]
-    D --> E[Sea-ORM / SQLx<br/>数据库驱动<br/>查询构建器]
+flowchart TD
+    APP["应用代码"]
+    MAC["dbnexus-macros 过程宏<br/>db_entity 与 db_repository"]
+    API["database 模块<br/>DbPool / Session / 事务 / 迁移 / 分片 / Saga"]
+    ACC["access 模块<br/>sql_parser / permission / 认证 / 脱敏"]
+    DOM["domain 模块<br/>permission / audit / migration 领域抽象"]
+    OBS["observability 模块<br/>metrics / health / otel"]
+    REL["reliability 模块<br/>retry"]
+    STO["storage 模块<br/>global_index"]
+    INT["integrations 模块<br/>oxcache / trait-kit"]
+    I18N["i18n 模块<br/>ICU4X locale 格式化"]
+    FND["foundation 模块<br/>config / error"]
+    DRV["数据库驱动层<br/>Sea-ORM / SQLx / lbug / neo4rs"]
+    DB[("SQLite / PostgreSQL / MySQL<br/>DuckDB / Ladybug / Neo4j")]
+
+    MAC -.->|编译期生成带权限检查的 CRUD| APP
+    APP --> API
+    API --> ACC
+    ACC --> DOM
+    API --> OBS
+    API --> REL
+    API --> STO
+    API --> INT
+    API --> I18N
+    ACC --> FND
+    API --> FND
+    API --> DRV
+    DRV --> DB
 ```
 
-### 组件交互流程
+**组件交互流程**：
 
-1. **应用程序**从 `DbPool` 请求具有特定角色的会话
-2. **DbPool** 验证角色并创建带有数据库连接的 `Session`
-3. **Session** 处理所有数据库操作并进行自动权限检查
-4. **权限系统**基于角色策略验证表访问
-5. **连接**在会话被丢弃时自动返回到池中
+1. 应用程序从 `DbPool` 请求具有特定角色的会话
+2. `DbPool` 校验角色并创建持有数据库连接的 `Session`
+3. `Session` 处理所有数据库操作并进行逐表权限检查
+4. 权限系统基于角色策略验证表访问（带 TTL 缓存与限流）
+5. 连接在会话被丢弃时自动归还连接池
 
-### 关键实现细节
+**关键实现细节**：
 
-- **连接池**：使用 `RwLock` + 原子计数器管理连接状态
-- **权限缓存**：角色策略的 oxcache 缓存（内部 moka L1 后端）以提高性能
-- **健康检查**：后台任务定期验证空闲连接
-- **RAII 管理**：会话丢弃时连接自动释放
+- **连接池**：`RwLock` + 原子计数器管理连接状态，`Notify` 唤醒等待者
+- **权限缓存**：TTL 缓存 + singleflight 请求合并，权限配置经 `ArcSwap` 无锁读取
+- **健康检查**：后台任务定期验证空闲连接（`pool-health-check` 特性）
+- **RAII 管理**：会话丢弃时连接自动归还
 
 ---
 
-## 模块架构
+## 模块划分
 
-DBNexus 采用清晰的分层架构，每层有明确职责。各层通过 `src/lib.rs` 统一声明和导出。
+DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs` 统一声明和导出。
 
-### 0. 顶层模块
+### 顶层
 
-统一错误类型和模块声明。
+| 模块 | 职责 |
+|------|------|
+| `lib.rs` | 模块声明、编译期特性互斥检查、公共 API 导出 |
+| `error.rs` | `DbNexusError`、`ErrorCode`、`UnifiedDbError`、`QueryErrorReport`（顶层统一错误体系） |
+| `generated_roles.rs` | 编译时生成的角色常量（由 `#[db_entity]` 宏生成） |
+| `tools/cli/` | `dbnexus-cli` 运维 CLI（`create` / `up` / `migrate` / `health` / `user` 子命令） |
 
-- `lib.rs` — 模块声明、编译期特性互斥检查、公共 API 导出
-- `error.rs` — `DbNexusError`、`DbNexusResult`、`ErrorCategory`、`QueryErrorReport`（顶层统一错误类型）
-
-### 1. 公共类型层 (`common/`)
+### 公共类型层 `common/`
 
 零依赖的基础类型，被所有层共用。
 
-- `common/mod.rs` — 模块入口
-- `common/error.rs` — `DbNexusError`、`DbNexusResult`、`ErrorCategory`、`QueryErrorReport`（顶层统一错误类型）
+### 基础层 `foundation/`
 
-### 2. 基础层 (`foundation/`)
+配置和错误处理的基础设施，无业务逻辑：
 
-配置和错误处理的基础设施，无业务逻辑。
+- `foundation/config/` — 配置系统（`DbConfig`、`CacheConfig`、`PoolConfig`、`DatabaseType`、`ConfigError`，纯数据结构经 serde 反序列化）
+- `foundation/error/` — 子错误类型（`DbError`、`AuditError`、`MigrationError` 等）
 
-- `foundation/mod.rs` — 模块入口，re-export config/error 及 Sea-ORM trait（`ActiveModelTrait`、`EntityTrait`、`Condition`、`Set`）
-- `foundation/config/` — 配置系统（纯数据结构，通过 serde 反序列化）
-  - `mod.rs` — 模块入口
-  - `types.rs` — `DbConfig`、`CacheConfig`、`PoolConfig`、`DatabaseType`、`ConfigError`
-- `foundation/error/` — 子错误类型
-  - `mod.rs` — `DbError`、`DbResult`、`AuditError`、`MigrationError`、`MigrationResult`、`ConfigResult`、`PermissionResult`、`PoolResult`
+### 领域层 `domain/`
 
-> **注意**：顶层统一错误类型 `DbNexusError` 定义在 `common/error.rs`，本层定义各模块的子错误类型。
+业务领域接口和数据模型：
 
-### 3. 领域层 (`domain/`)
+- `domain/audit/` — 审计领域（`AuditLogger`、`AuditEvent`、`AuditStorage` 及内存/数据库存储实现，cfg = `audit`）
+- `domain/migration/` — 迁移领域：`schema.rs` 等基础模块始终可用（供 `#[db_entity]` 生成的 `schema()` 方法使用）；`executor.rs`、`differ.rs` 等执行模块 cfg = `migration`
+- `domain/permission/` — 权限领域接口（`PermissionProvider`、`PermissionChecker`、`PolicyManager` trait 与配置类型，cfg = `permission`）
+- `domain/cache_provider.rs` — `DbCacheProvider` 缓存抽象 trait
 
-业务领域接口和数据模型，可依赖 foundation 层和第三方库。
+### 数据库层 `database/`
 
-- `domain/mod.rs` — 模块入口
-- `domain/audit/` — 审计领域（cfg = "audit"）
-  - `mod.rs` — `AuditLogger`、`AuditEvent`、`AuditEventBuilder`、`AuditOperation`、`AuditSeverity`、`AuditStatus`、`AuditStorage`、`MemoryAuditStorage`、`AuditContext`、`AuditQueryFilters`、`AuditConfig`
-- `domain/migration/` — 迁移领域
-  - `mod.rs` — 模块入口
-  - `schema.rs`、`types.rs`、`converter.rs`、`metadata.rs`、`column_changes.rs` — 基础模块（始终可用，供 `#[db_entity]` 宏生成的 `schema()` 方法使用）
-  - `executor.rs`、`differ.rs`、`sql_reverser.rs` — 执行模块（cfg = "migration"，依赖 `sqlparser` 和 `regex`）
-- `domain/permission/` — 权限领域接口（cfg = "permission"）
-  - `mod.rs` — `PermissionProvider`、`PermissionChecker`、`PolicyManager`、`PermissionLifecycle` trait，工厂函数 `new`/`with_cache`/`new_in_memory`
-  - `interface.rs` — trait 定义
-  - `config.rs` — `PermissionConfig`、`DefaultPolicy`
-  - `types.rs` — `PermissionAction`、`RolePolicy`、`TablePermission`、`PolicySet`
-  - `error.rs` — `PermissionError`、`PermissionConfigError`
-  - `impl_/` — 实现（`default.rs` = `YamlPermissionProvider`，`memory.rs` = `MemoryPermissionProvider`）
+数据库连接、会话与数据平面：
 
-### 4. 数据库层 (`database/`)
+| 模块 | 职责 | 门控 |
+|------|------|------|
+| `pool/db_pool/` | `DbPool`（`access` / `health` / `status` 三分部）、`PoolStatus` | 核心 |
+| `pool/session.rs` | `Session`（RAII 会话，承载事务、权限检查、慢查询计时、图操作互斥） | 核心 |
+| `pool/pool_impl.rs` | 连接池内部实现（原子计数器 + `Notify` + `Semaphore`） | 核心 |
+| `pool/prepare_cache.rs` | 语句级 prepared statement LRU 缓存 | `prepare-cache` |
+| `pool/health_export.rs` | `health_snapshot` 结构化健康导出 | `health-check` |
+| `pool/audit.rs` | 安全审计（admin 旁路操作审计） | `audit` |
+| `pool/duckdb_conn.rs` | `DuckDbConnection`（连接池化，spawn_blocking 桥接） | `duckdb` |
+| `graph/` | `GraphConnection` trait、`LadybugConnection`、`Neo4jConnection`、图事务 | `ladybug` / `neo4j` |
+| `sharding.rs` | `ShardRouter`、分片策略（yearly / monthly / daily / hash / consistent-hash） | `sharding` |
+| `scatter.rs` | 跨分片 Scatter-Gather 查询执行器 | `scatter-gather` |
+| `saga/` | Saga 分布式事务编排器（SagaLog 落库 + 启动恢复） | `saga` |
+| `replica.rs` | 副本路由读写分离（weight 与延迟感知选择） | `replica-routing` |
+| `migration/` | 运行时迁移执行器 | `migration` |
+| `repository.rs` | `Repository<T>` CRUD 端口 + `JsonRepository` 参考实现 | `repository` |
+| `data_api.rs` | `DataApiGateway` 实体到 JSON 查询端点生成器 | `data-api` |
+| `entity_events.rs` | 实体事件总线 + Outbox 持久化投递 | `entity-events` |
+| `query_dsl.rs` | `q!` 类型安全查询片段宏 | `query-dsl` |
+| `copy.rs` | COPY FROM STDIN 语句构建与 text 行编码 | `copy` |
+| `config_confers.rs` | confers 配置热重载（ArcSwap 原子换装） | `config-confers` |
 
-数据库连接、会话和分片管理。
+### 访问层 `access/`
 
-- `database/mod.rs` — 模块入口
-- `database/pool/` — 连接池
-  - `mod.rs` — `ConnectionPool` trait、`DatabaseSession` trait、`DbPoolBuilder`、`DbConnection` 枚举、`PoolStatus`
-  - `db_pool.rs` — `DbPool`、`DatabaseConnection` 类型别名
-  - `session.rs` — `Session`（RAII 会话，drop 时自动归还连接）
-  - `duckdb_conn.rs` — `DuckDbConnection`、`DuckDbRow`、`DuckDbExecResult`（cfg = "duckdb"，0.3.0 新增）
-  - `pool_impl.rs` — 连接池内部实现
-  - `audit.rs` — 安全审计日志（admin 旁路操作审计）
-- `database/graph/` — 图数据库（0.4.0 新增）
-  - `mod.rs` — `GraphConnection` trait、`GraphTransaction` trait、`GraphNode`、`GraphRel`、`GraphRow`、`GraphValue`、`GraphExecResult`、`GraphQueryResult`
-  - `ladybug_conn.rs` — `LadybugConnection`（cfg = "ladybug"，嵌入式图数据库）
-  - `neo4j_conn.rs` — `Neo4jConnection`（cfg = "neo4j"，Neo4j 服务器）
-- `database/sharding.rs` — `ShardRouter`、`ShardConfig`、`ShardingStrategy` trait、`create_strategy`（cfg = "sharding"）
-- `database/migration/` — 运行时迁移执行器（cfg = "migration"，重导出 `domain::migration`）
+权限控制、安全检查、认证：
 
-### 5. 访问层 (`access/`)
-
-权限控制、安全检查、认证。
-
-- `access/mod.rs` — 模块入口
-- `access/permission/` — 运行时 RBAC 权限（cfg = "permission"）
-  - `mod.rs` — 模块入口，re-export 各子模块
-  - `types.rs` — `PermissionAction`、`PermissionConfig`、`RolePolicy`、`TablePermission`、`PermissionError`
-  - `context.rs` — `PermissionContext`（缓存 + 速率限制 + 缓存击穿防护，cfg = "cache"）
-  - `cache.rs` — `PermissionCache`、`PermissionCacheConfig`（TTL + SWR 缓存，0.3.0 新增）
-  - `provider.rs` — `PermissionProvider` trait、`MemoryPermissionProvider`、`YamlPermissionProvider`、`RefreshablePermissionProvider`
-  - `rate_limiter.rs` — `RateLimiter`（速率限制）
-  - `stats.rs` — `PermissionCheckStats`、`CacheStats`（权限统计）
-  - `rbac.rs` — `RbacProvider`（RBAC 实现）
-  - `advanced.rs` — `AdvancedRbacProvider`（高级权限功能）
-- `access/security/` — 安全模块
-  - `mod.rs` — 模块入口
-  - `ddl_guard.rs` — `DdlGuard`、`DdlValidationResult`（cfg = "sql-parser"，AST-based DDL 验证）
-  - `sensitive.rs` — `SensitiveMasker`、`MaskType`、`SensitiveError`、`SensitiveResult`（数据脱敏）
-- `access/authentication/` — JWT 认证（cfg = "authentication"，0.3.0 新增）
-  - `mod.rs` — `AuthenticationManager`、`AuthCredentials`、`AuthResult`、`AuthError`
-  - `jwt.rs` — `JwtManager`、`JwtClaims`、`TokenType`
-  - `password.rs` — `PasswordHasher`（bcrypt 哈希 + 密码强度验证）
-  - `models.rs` — `User`、`AuthCredentials` 数据模型
-- `access/permission_engine.rs` — `PolicyDecisionPoint`、`RbacPermissionProvider`、`PermissionRule`、`PermissionDecision`、`PermissionSubject`、`PermissionResource`、`Role`（cfg = "permission-engine"，RBAC + ABAC 高级权限引擎）
-- `access/sql_parser.rs` — `SqlParser`、`SqlParseError`、`is_ddl_operation`、`contains_sql_injection`（cfg = "sql-parser"）
+| 模块 | 职责 | 门控 |
+|------|------|------|
+| `permission/` | 运行时 RBAC：`PermissionContext`（缓存 + 限流 + 击穿防护）、`PermissionCache`、`RateLimiter`、`RbacProvider` 等 | `permission` |
+| `sql_parser.rs` | `SqlParser`（操作类型与表名提取）、`is_ddl_operation`、`contains_sql_injection` | `sql-parser` |
+| `injection_engine.rs` | `InjectionEngine` 统一注入检测引擎（关系型 / DDL / 图单一注册表） | `sql-parser` |
+| `security/ddl_guard.rs` | `DdlGuard`（AST 校验）、`DdlGuardPolicy` 端口与审计/干跑装饰器 | `sql-parser` |
+| `security/sensitive.rs` | `SensitiveMasker` 数据脱敏 | 核心 |
+| `authentication/` | `AuthenticationManager`、`JwtManager`、`PasswordHasher` | `authentication` |
+| `permission_engine.rs` | `PolicyDecisionPoint`（RBAC + ABAC 策略决策点） | `permission-engine` |
+| `permission_facade.rs` | `PermissionFacade` 权限统一门面（RBAC + 脱敏 + RLS 组合换装） | `permission-facade` |
+| `permission_audit_chain.rs` | 权限变更审计链（HMAC-SHA256 链式签名 + 篡改检测） | `audit` |
+| `data_protection.rs` | 字段级自动脱敏（mask / 哈希 / 截断）与行级安全谓词注入 | `data-protection` |
 
 #### 双 Permission 实现说明
 
 项目中存在两套 permission 实现，分工明确：
 
 - **`domain/permission/`** — 权限**领域接口层**，提供 trait 定义（`PermissionProvider`、`PermissionChecker`、`PolicyManager`、`PermissionLifecycle`）和配置类型。适用于仅需接口或配置类型的场景。
-- **`access/permission/`** — 权限**运行时实现层**，提供 `PermissionContext`（缓存 + 速率限制 + 缓存击穿防护）、`RateLimiter`、`RbacProvider`/`AdvancedRbacProvider`、统计等运行时能力。适用于需要运行时上下文/缓存/速率限制的场景。
+- **`access/permission/`** — 权限**运行时实现层**，提供 `PermissionContext`（缓存 + 速率限制 + 缓存击穿防护）、`RateLimiter`、`RbacProvider` 等运行时能力。适用于需要运行时上下文/缓存/速率限制的场景。
 
-两层互补共存，非"已弃用"关系。新代码如需运行时上下文/缓存/速率限制，使用 `access/permission`；如仅需接口或配置类型，使用 `domain/permission`。
+两层互补共存，非"已弃用"关系。
 
-### 6. 观测层 (`observability/`)
+### 观测层 `observability/`
 
-可观测性基础设施。
+- `observability/metrics.rs` — `MetricsCollector`（Prometheus 导出、查询延迟百分位、慢查询检测，cfg = `metrics`）
+- `observability/health.rs` — `HealthChecker`、`CircuitBreaker`（cfg = `health-check`）
 
-- `observability/mod.rs` — 模块入口
-- `observability/metrics.rs` — `MetricsCollector`、`MetricsCollectorTrait`、`QueryStats`、`LatencyPercentiles`、`LatencyHistogram`、`PoolMetrics`、`SlowQueryRecord`、`ThroughputStats`、`ConnectionAcquireStats`、`TransactionStats`（cfg = "metrics"，Prometheus 指标导出）
-- `observability/health.rs` — `HealthChecker`、`HealthStatus`、`HealthCheckResult`、`CircuitBreaker`、`CircuitBreakerConfig`、`CircuitBreakerState`、`PoolHealthMetrics`（cfg = "health-check"，健康检查 + 熔断器）
+### 可靠性层 `reliability/`
 
-### 7. 可靠性层 (`reliability/`)
+- `reliability/retry.rs` — `RetryPolicy`、`RetryExecutor`（运行时重试 + 指数退避，仅幂等查询自动重试，cfg = `retry`）
 
-运行时容错能力（重试、故障转移等）。
+### 存储层 `storage/`
 
-- `reliability/mod.rs` — 模块入口
-- `reliability/retry.rs` — `RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation`（cfg = "retry"，运行时重试 + 指数退避，仅幂等查询自动重试）
+- `storage/global_index.rs` — `GlobalIndex` 跨分片全局索引（cfg = `global-index`）
 
-### 8. 存储层 (`storage/`)
+### 集成层 `integrations/`
 
-- `storage/mod.rs` — 模块入口
-- `storage/global_index.rs` — `GlobalIndex`、`IndexEntry`、`SyncEvent`、`SyncResult`、`SYNC_STATUS_PENDING`、`SYNC_STATUS_SYNCED`、`SYNC_STATUS_FAILED` 常量（cfg = "global-index"，跨分片全局索引）
+- `integrations/kit/` — `DbNexusModule` 及缓存/审计/健康卫星模块（cfg = `kit`，trait-kit AsyncKit 集成）
+- `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = `oxcache-integration`）
 
-### 9. 工具包层 (`kit/`)
+### 国际化模块 `i18n/`
 
-基于 `trait-kit` 的统一能力管理。
-
-- `integrations/kit/mod.rs` — `DbNexusModule`（cfg = "kit"，trait-kit 0.4 异步集成）
-- `integrations/kit/module.rs` — `DbNexusModule` 实现
-- `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = "oxcache-integration"）
-- `integrations/mod.rs` — 模块入口
-
-### 10. 国际化模块 (`i18n/`)
-
-基于 ICU4X 的 locale 感知格式化（核心特性，始终可用）。
-
-- `i18n/mod.rs` — 模块入口
-- `i18n/i18n_impl.rs` — `DbI18nFormatter`、`I18nError`
-
-### 自动生成模块
-
-- `generated_roles.rs` — 编译时生成的角色常量（由 `#[db_entity]` 宏生成，`mod generated_roles;` 声明）
+- `i18n/i18n_impl.rs` — `DbI18nFormatter`（ICU4X locale 感知格式化，核心特性始终可用）
 
 ---
 
-## 核心组件
+## 核心执行管道
 
-### 1. 过程宏系统
+### 过程宏系统
 
-**目的：**编译时代码生成以减少样板代码
+`#[db_entity]` 在编译期生成带权限检查的 CRUD 方法（生成方法全表见 [API 参考](API_REFERENCE.md#db_entity)）：
 
-**提供的宏：**
+**输入**：
 
-| 宏 | 目的 |
-|--------|---------|
-| `#[db_entity(...)]` | 统一的属性宏，将结构体映射到数据库表并生成 CRUD 方法、缓存、审计等功能 |
-
-**宏扩展示例：**
-
-**输入：**
 ```rust
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-struct User {
+struct Model {
     #[sea_orm(primary_key)]
     id: i64,
     name: String,
 }
 ```
 
-**生成的代码（简化）：**
-```rust
-impl User {
-    // CRUD 方法（0.4.2：find_by_id/find_by_ids/delete 主键泛型化，支持 i64/Uuid/String 等任意主键类型）
-    pub async fn insert(session: &Session, value: User) -> DbResult<User> { /* ... */ }
-    pub async fn find_by_id<PK>(session: &Session, pk: PK) -> DbResult<Option<User>>
-    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>
-    { /* ... */ }
-    pub async fn find_by_ids<PK>(session: &Session, pks: Vec<PK>) -> DbResult<Vec<User>>
-    where PK: Into<sea_orm::Value>
-    { /* ... */ }
-    pub async fn update(session: &Session, value: User) -> DbResult<User> { /* ... */ }
-    // delete 约束随 soft_delete 宏参数变化：
-    // - soft_delete=false（默认）：Into<PrimaryKey::ValueType>（对接 Entity::find_by_id）
-    // - soft_delete=true：         Into<sea_orm::Value>（对接 Column::eq）
-    // soft_delete=true 实体还会额外生成 force_delete 方法（约束同 Into<sea_orm::Value>）。
-    pub async fn delete<PK>(session: &Session, pk: PK) -> DbResult<()>
-    where PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>
-    { /* ... */ }
+**生成的代码（简化）**：
 
-    // 实体方法
+```rust
+impl Model {
+    pub async fn insert(session: &Session, value: Model) -> DbResult<Model> { /* ... */ }
+    pub async fn find_by_id<PK>(session: &Session, pk: PK) -> DbResult<Option<Model>>
+    where
+        PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>
+    { /* ... */ }
+    pub async fn find_all(session: &Session) -> DbResult<Vec<Model>> { /* ... */ }
+    // update / delete / delete_many / count / exists / find_by_ids ...
+
     pub const TABLE_NAME: &str = "users";
     pub const PRIMARY_KEY: &str = "id";
 }
 ```
 
-### 2. SQL 解析器
-
-**目的：**从 SQL 中提取操作类型和目标表
-
-**支持的操作：**
-
-```rust
-pub enum SqlOperationType {
-    Select,    // SELECT 查询
-    Insert,    // INSERT 语句
-    Update,    // UPDATE 语句
-    Delete,    // DELETE 语句
-    Ddl,       // CREATE/ALTER/DROP/TRUNCATE
-    Dcl,       // GRANT/REVOKE
-    Transaction, // BEGIN/COMMIT/ROLLBACK
-    Other,      // 其他所有
-}
-```
-
-**使用：**
-
-```rust
-let parser = SqlParser::new();
-let (table_name, operation) = parser.parse_operation("SELECT * FROM users WHERE id = 1")?;
-
-// 返回: ("users", SqlOperationType::Select)
-```
-
-### 3. 健康检查系统
-
-**目的：**维护连接池健康
-
-**架构：**
-
-```mermaid
-flowchart TD
-    Start[后台任务<br/>tokio::spawn] --> Interval[间隔触发<br/>每 N 秒]
-
-    Interval --> Validate[验证空闲连接]
-    Validate --> Execute[执行 SELECT 1]
-    Execute --> CheckValid{是否有效？}
-
-    CheckValid -->|是| Keep[保留连接]
-    CheckValid -->|否| Remove[移除连接]
-
-    Keep --> Recreate[重新创建连接<br/>以维持 min_connections]
-    Remove --> Recreate
-
-    Recreate --> Interval
-```
-
-**健康检查实现：**
-
-```rust
-pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::DbErr> {
-    let mut invalid_count = 0;
-
-    for conn in idle_connections.drain(..) {
-        let is_valid = timeout(Duration::from_secs(2), conn.execute_raw("SELECT 1"))
-            .await
-            .is_ok_and(|result| result.is_ok());
-
-        if is_valid {
-            valid_connections.push(conn);
-        } else {
-            invalid_count += 1;
-        }
-    }
-
-    // 重新创建以维持最小值
-    let needed = min_connections - valid_connections.len();
-    for _ in 0..needed {
-        let new_conn = create_connection().await?;
-        valid_connections.push(new_conn);
-    }
-
-    Ok(invalid_count)
-}
-```
-
----
-
-## 数据流
-
 ### 查询流
 
+`Session::execute_raw` 的真实执行管道（`sql-parser` + `permission` 特性组合）：
+
 ```mermaid
 sequenceDiagram
-    participant App as 应用程序
-    participant CRUD as #[db_entity]
-    participant Session as Session
-    participant PermCtx as PermissionContext
-    participant Parser as SQL 解析器
-    participant SeaORM as Sea-ORM
-    participant Audit as 审计日志
+    autonumber
+    participant App as 应用代码
+    participant Sess as Session
+    participant Parser as SqlParser 共享单例
+    participant Perm as 权限上下文
+    participant DB as Sea-ORM 驱动
 
-    App->>CRUD: 1. User::find_by_id(&session, 1)
-    CRUD->>CRUD: 2. 检查权限
-    CRUD->>Session: 3. check_permission("users", "SELECT")
-
-    Session->>PermCtx: PermissionContext.check_table_access()
-    PermCtx->>PermCtx: 速率限制检查
-    PermCtx->>PermCtx: LRU 缓存查找
-    PermCtx->>PermCtx: 加载策略并评估
-    PermCtx-->>Session: 返回允许/拒绝
-
-    Session-->>CRUD: 权限结果
-    CRUD->>SeaORM: 4. 构建 Sea-ORM 查询
-    CRUD->>Session: 5. execute(query)
-
-    Session->>Parser: 6. SQL 解析器验证操作类型
-    Parser-->>Session: 返回验证的查询
-
-    Session->>SeaORM: 7. 通过 Sea-ORM 执行
-    SeaORM-->>Session: 8. 返回结果
-    Session-->>CRUD: 返回结果
-    CRUD-->>App: 返回结果
-
-    App->>Audit: 9. 审计日志条目（如果启用）
+    App->>Sess: execute_raw 传入 SQL
+    Sess->>Sess: 拒绝 DDL 语句
+    Sess->>Parser: parse_single 解析语句
+    Parser-->>Sess: 操作类型与全部表名
+    Sess->>Perm: 逐表检查表级权限
+    alt 任一表未授权
+        Sess-->>App: 返回权限拒绝错误
+    else 全部放行
+        Sess->>DB: execute_unprepared 执行
+        DB-->>Sess: 执行结果
+        Sess-->>App: 返回 ExecResult
+    end
 ```
 
-### 写流（带事务）
+路径要点：
+
+- **解析失败安全默认**：admin 角色放行，非 admin 角色拒绝，不做静默降级
+- **跨表全覆盖**：JOIN / 子查询涉及的目标表逐一纳入权限检查
+- **幂等自动重试**：`retry` 特性下，SELECT 等幂等语句失败后按指数退避重试
+- **慢查询观测**：`metrics` 特性下记录执行耗时，超阈值自动记入 `MetricsCollector`
+
+### 写流（带缓存与审计）
 
 ```mermaid
 sequenceDiagram
-    participant App as 应用程序
-    participant Session as Session
-    participant PermCtx as 权限上下文
-    participant SeaORM as Sea-ORM
+    participant App as 应用代码
+    participant Sess as Session
+    participant Perm as 权限上下文
+    participant DB as Sea-ORM 驱动
     participant Cache as 缓存
     participant Audit as 审计日志
 
-    App->>Session: 1. User::insert(&session, user)
-    Session->>Session: 2. begin_transaction()
+    App->>Sess: insert 写入请求
+    Sess->>Perm: 逐表权限检查
+    Perm-->>Sess: 允许或拒绝
+    Sess->>DB: 通过 Sea-ORM 执行
+    DB-->>Sess: 执行结果
+    Sess->>Cache: 缓存失效，如果启用
+    Sess->>Audit: 记录审计，如果启用
+    Sess-->>App: 返回成功
+    Note over Sess: 出错时 rollback
+```
 
-    Session->>PermCtx: 3. 权限检查（在 "users" 上的 INSERT）
-    PermCtx-->>Session: 返回允许/拒绝
+### 健康检查循环（`pool-health-check` 特性）
 
-    Session->>SeaORM: 4. 通过 Sea-ORM 插入
-    SeaORM-->>Session: 返回结果
-
-    Session->>Cache: 5. 缓存失效（如果启用）
-    Session->>Audit: 6. 审计日志（如果启用）
-
-    Session->>Session: 7. commit()
-    Session-->>App: 8. 返回成功
-
-    Note over Session: 如果错误:<br/>rollback()
+```mermaid
+flowchart TD
+    A["后台任务 tokio::spawn"] --> B["间隔触发"]
+    B --> C["取出空闲连接"]
+    C --> D{"SELECT 1 探活"}
+    D -->|有效| E["保留连接"]
+    D -->|无效| F["移除连接并计数"]
+    E --> G["按需重建以维持 min_connections"]
+    F --> G
+    G --> B
 ```
 
 ---
 
 ## 安全架构
 
-### 纵深防御
+纵深防御自下而上分为五层，每层机制的详细说明见[安全文档](SECURITY.md#-安全设计概览)：
 
 ```mermaid
-graph TD
-    subgraph Layer1["第 1 层：编译时保证"]
-        Unsafe[禁止不安全代码]
-        DriverMutual[数据库驱动互斥]
-        PermMacro[权限宏验证]
-    end
-
-    subgraph Layer2["第 2 层：运行时权限检查"]
-        RoleAccess[基于角色的表访问]
-        OpPerm[操作级权限]
-        RateLimit[权限检查速率限制]
-    end
-
-    subgraph Layer3["第 3 层：SQL 注入防护"]
-        ParamQueries[参数化查询]
-        SQLParser[SQL 解析器验证]
-        DDLBlock[DDL 操作阻止]
-        MultiStmt[多语句预防]
-    end
-
-    subgraph Layer4["第 4 层：配置安全"]
-        PathPrev[路径遍历预防]
-        URLWhitelist[URL 白名单]
-        EnvSanitize[环境变量清理]
-    end
-
-    subgraph Layer5["第 5 层：审计跟踪"]
-        OpLog[完整操作日志]
-        UserTrack[用户上下文跟踪]
-        ErrorCapture[错误捕获]
-    end
-
-    Layer1 --> Layer2
-    Layer2 --> Layer3
-    Layer3 --> Layer4
-    Layer4 --> Layer5
+flowchart TD
+    L1["第 1 层 编译时保证<br/>forbid unsafe / 驱动互斥 / 特性依赖校验"]
+    L2["第 2 层 运行时权限<br/>表级 RBAC / TTL 缓存与 singleflight / 令牌桶限流"]
+    L3["第 3 层 注入防护<br/>参数化查询 / SqlParser 与统一注入引擎 / DdlGuard"]
+    L4["第 4 层 认证与配置<br/>JWT 令牌区分校验 / bcrypt 密码策略 / 路径遍历防护"]
+    L5["第 5 层 审计与脱敏<br/>完整操作日志 / SensitiveMasker"]
+    L1 --> L2
+    L2 --> L3
+    L3 --> L4
+    L4 --> L5
 ```
 
-### 权限模型
+**权限检查算法**（`PermissionContext::check_table_access`）：
 
-```mermaid
-graph TD
-    subgraph PermConfig["权限配置 (YAML)"]
-        Roles[角色]
-    end
-
-    subgraph Admin["admin"]
-        AdminTables[表: *<br/>所有操作]
-    end
-
-    subgraph Manager["manager"]
-        ManagerTables[表: users, orders]
-        ManagerOps[操作: SELECT, INSERT, UPDATE]
-    end
-
-    subgraph User["user"]
-        UserTables[表: users]
-        UserOps[操作: SELECT]
-    end
-
-    Roles --> Admin
-    Roles --> Manager
-    Roles --> User
-
-    Admin --> AdminTables
-    Manager --> ManagerTables
-    ManagerTables --> ManagerOps
-    User --> UserTables
-    UserTables --> UserOps
-
-    subgraph Algorithm["权限检查算法"]
-        Step1[1. 从会话获取角色]
-        Step2[2. 查找角色策略<br/>（或使用缓存）]
-        Step3{3. 是 "*"？}
-        Step4[3a. 授予所有访问]
-        Step5[3b. 检查操作列表]
-        Step6[4. 对于特定表：<br/>检查操作列表]
-        Step7[5. 返回允许/拒绝]
-    end
-
-    Step1 --> Step2
-    Step2 --> Step3
-    Step3 -->|是| Step4
-    Step3 -->|否| Step5
-    Step5 --> Step6
-    Step4 --> Step7
-    Step6 --> Step7
-```
+1. 从会话获取角色
+2. 查找角色策略（带 TTL 缓存 + singleflight 合并）
+3. 命中通配符表 `"*"` 则授予所有访问
+4. 否则检查该表的操作列表（SELECT / INSERT / UPDATE / DELETE 等）
+5. 返回允许或拒绝；每次检查均受令牌桶限流约束
 
 ---
 
 ## 性能架构
 
-### 零成本抽象
+### 零成本特性门控
+
+可选功能经 `#[cfg(feature = ...)]` 编译期裁剪，未启用时零开销。以 `Session::record_metric` 为例，整个方法体仅在 `metrics` 特性下编译：
 
 ```rust
-// 特性门控编译
 #[cfg(feature = "metrics")]
-pub fn track_metric(&self, name: &str, value: u64) {
-    // 指标代码
-}
-
-#[cfg(not(feature = "metrics"))]
-pub fn track_metric(&self, name: &str, value: u64) {
-    // 无操作 - 编译时移除
-}
+pub fn record_metric(&self, operation: &str, table_name: &str, success: bool) { /* ... */ }
 ```
 
-### 无锁计数器
+### 无锁热路径
 
-```rust
-pub struct PoolStatus {
-    pub total: AtomicU32,      // 无锁
-    pub active: AtomicU32,     // 无锁
-    pub wait_count: AtomicU32,  // 无锁
-}
-```
+- 连接池计数器（`active_count`、`wait_count`、`borrow_count` 等）全部为 `AtomicU32` / `AtomicU64`，快照类型 `PoolStatus` 返回普通整型
+- 权限配置与缓存 Provider 经 `ArcSwap` 无锁读取（COW 模式）
+- 原子操作采用 `AcqRel` / `Relaxed` 内存序，减少不必要的全局同步开销
 
-### 异步操作
+### 异步与锁策略
 
 - 所有 I/O 使用 `async/await`
-- `RwLock` 用于读多写少的共享状态（Session 内部状态），允许并发读
+- `RwLock` 用于读多写少的共享状态（`Session` 内部状态），允许并发读
 - `Mutex` 仅用于写密集路径（图操作互斥）
-- `Notify` 而不是条件变量（避免忙等待）
-- `AcqRel` 内存序替代 `SeqCst`，减少不必要的全局同步开销
+- `Notify` 替代条件变量（避免忙等待）
 
-### 连接池
+### 连接池策略
 
-```
-策略: 池 + LRU
+| 策略 | 说明 |
+|------|------|
+| 连接复用 | 避免 TCP 握手开销 |
+| 最大连接限制 | 防止连接耗尽，超限等待者经 `Notify` 唤醒 |
+| 最小连接维持 | 预热连接，避免冷启动 |
+| 健康检查 | 移除死连接并按需重建 |
 
-优势:
-├── 重用连接（避免 TCP 握手）
-├── 限制最大连接（防止耗尽）
-├── 维持最小值（避免冷启动）
-└── 健康检查（移除死连接）
-```
+基准数据与复现命令见[性能基线](PERFORMANCE.md)。
 
 ---
 
@@ -642,84 +430,45 @@ pub struct PoolStatus {
 
 ```mermaid
 flowchart TD
-    App[应用程序] --> ShardRouter[分片路由器]
-
-    ShardRouter --> Yearly[年度策略]
-    ShardRouter --> Monthly[月度策略]
-    ShardRouter --> Hash[哈希策略]
-
-    Yearly --> Shard2024[shard_2024]
-    Monthly --> Shard2024_01[shard_2024_01]
-    Hash --> ShardHash[shard_{hash key % N}]
-
-    App --> QueryRouting[查询路由]
-    QueryRouting --> GlobalIndex[全局索引<br/>可选]
-    GlobalIndex --> Route[路由到正确分片]
+    A["应用程序"] --> B["分片路由器"]
+    B --> C["年度策略"]
+    B --> D["月度策略"]
+    B --> E["哈希策略"]
+    C --> F["按时间路由到分片"]
+    D --> F
+    E --> G["按 key 哈希路由到分片"]
+    A --> H["全局索引<br/>跨分片查询 可选"]
+    H --> F
 ```
 
 ### 垂直扩展（缓存）
 
 ```mermaid
 flowchart TD
-    Start[查询请求] --> CheckCache[检查缓存]
-
-    CheckCache --> Hit{缓存命中？}
-    Hit -->|是| ReturnCached[返回缓存值]
-    Hit -->|否| DBQuery[数据库查询]
-
-    DBQuery --> UpdateCache[更新缓存<br/>写透]
-    UpdateCache --> ReturnDB[返回结果]
-
-    ReturnCached --> End[结束]
-    ReturnDB --> End
-```
-
-### 基于特性的扩展
-
-```mermaid
-graph TD
-    subgraph Minimal["最小部署"]
-        SQLite[SQLite]
-        config_env[config-env]
-        oxcache[oxcache]
-        sql_parser[sql-parser]
-    end
-
-    subgraph Microservice["微服务部署"]
-        PostgreSQL[PostgreSQL]
-        permission[permission]
-        pool_health_check[pool-health-check]
-        config_yaml[yaml]
-    end
-
-    subgraph Enterprise["企业部署"]
-        AllFeatures[所有可选特性]
-        metrics[metrics]
-        audit[audit]
-        sharding[sharding]
-    end
-
-    AllFeatures --> metrics
-    AllFeatures --> audit
-    AllFeatures --> sharding
+    A["查询请求"] --> B{"缓存命中？"}
+    B -->|是| C["返回缓存值"]
+    B -->|否| D["数据库查询"]
+    D --> E["更新缓存"]
+    E --> F["返回结果"]
 ```
 
 ---
 
-## 结论
+## 小结
 
 DBNexus 架构设计具有：
 
-1. **模块化** - 清晰的关注点分离，特性门控
-2. **安全性** - RAII、编译时保证、无不安全代码
-3. **性能** - 异步优先、尽可能无锁、高效池化
-4. **安全性** - 多层防御、RBAC、审计跟踪
-5. **可扩展性** - 可插拔组件、基于 trait 的设计
-6. **可观测性** - 指标、跟踪、内置审计日志
+1. **模块化** — 清晰的关注点分离，特性门控
+2. **安全性** — RAII、编译时保证、全库禁用 unsafe、多层纵深防御
+3. **性能** — 异步优先、无锁热路径、高效池化
+4. **可扩展性** — 可插拔组件、基于 trait 的设计
+5. **可观测性** — 指标、健康检查、内置审计日志
 
 这种架构使 DBNexus 能够从嵌入式设备扩展到企业部署，同时保持简单性和人体工程学。
 
 更多组件细节，请参见：
-- [API 参考](API_REFERENCE.md)
-- [用户指南](USER_GUIDE.md)
-- [Rust 文档](https://docs.rs/dbnexus)
+
+- [📘 API 参考](API_REFERENCE.md)
+- [📖 用户指南](USER_GUIDE.md)
+- [🔒 安全文档](SECURITY.md)
+- [📦 在线 API 文档](https://docs.rs/dbnexus)

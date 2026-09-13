@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+<details open>
+<summary>📑 版本索引</summary>
+
+- [Unreleased](#unreleased)
+- [0.6.0-rc.3 - 2026-09-10](#060-rc3---2026-09-10)
+- [0.6.0-rc.2 - 2026-09-03](#060-rc2---2026-09-03)
+- [0.5.1 - 2026-08-06](#051---2026-08-06)
+- [0.5.0 - 2026-08-04](#050---2026-08-04)
+- [0.4.4 - 2026-07-23](#044---2026-07-23)
+- [0.4.3 - 2026-07-22](#043---2026-07-22)
+- [0.4.2 - 2026-07-22](#042---2026-07-22)
+- [0.4.0 - 2026-07-13](#040---2026-07-13)
+- [0.3.4 - 2026-07-12](#034---2026-07-12)
+- [0.3.3 - 2026-07-11](#033---2026-07-11)
+- [0.3.0 - 2026-07-03](#030---2026-07-03)
+- [0.2.0 - 2026-06-27](#020---2026-06-27)
+- [0.1.2 - Previous Release](#012---previous-release)
+
+</details>
+
 ## [Unreleased]
 
 ## [0.6.0-rc.3] - 2026-09-10
@@ -583,6 +603,11 @@ cargo build
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
 
+[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.3...HEAD
+[0.6.0-rc.3]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.2...v0.6.0-rc.3
+[0.6.0-rc.2]: https://github.com/Kirky-X/dbnexus/compare/v0.5.1...v0.6.0-rc.2
+[0.5.1]: https://github.com/Kirky-X/dbnexus/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/Kirky-X/dbnexus/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/Kirky-X/dbnexus/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Kirky-X/dbnexus/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Kirky-X/dbnexus/compare/v0.4.0...v0.4.2
