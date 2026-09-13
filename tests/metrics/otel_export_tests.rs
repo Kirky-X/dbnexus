@@ -14,10 +14,10 @@
 
 use std::sync::Arc;
 
-use dbnexus::observability::otel::{
-    metric_events_from_health_snapshot, OtelConfig, OtelExporter, OtlpTransport,
-};
 use dbnexus::DbPool;
+use dbnexus::observability::otel::{
+    OtelConfig, OtelExporter, OtlpTransport, metric_events_from_health_snapshot,
+};
 
 /// 在字节缓冲中定位子序列（此处用于查找 HTTP 头部结束标记 `\r\n\r\n`）
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -25,8 +25,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
-    let path =
-        std::env::temp_dir().join(format!("dbnexus_t412_{}_{}.db", tag, std::process::id()));
+    let path = std::env::temp_dir().join(format!("dbnexus_t412_{}_{}.db", tag, std::process::id()));
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
@@ -47,10 +46,16 @@ async fn test_otel_events_from_health_snapshot() {
     let events = metric_events_from_health_snapshot(&snap);
     assert!(!events.is_empty(), "健康快照应映射出指标事件");
     let names: Vec<&str> = events.iter().map(|e| e.name.as_str()).collect();
-    assert!(names.contains(&"dbnexus.pool.saturation"), "池饱和度事件缺失: {names:?}");
+    assert!(
+        names.contains(&"dbnexus.pool.saturation"),
+        "池饱和度事件缺失: {names:?}"
+    );
     assert!(names.contains(&"dbnexus.pool.wait_count"));
     assert!(names.contains(&"dbnexus.slow_queries.count"));
-    let saturation = events.iter().find(|e| e.name == "dbnexus.pool.saturation").unwrap();
+    let saturation = events
+        .iter()
+        .find(|e| e.name == "dbnexus.pool.saturation")
+        .unwrap();
     assert!((0.0..=1.0).contains(&saturation.value));
     let _ = std::fs::remove_file(&path);
 }
@@ -110,8 +115,7 @@ async fn test_otel_export_to_mock_collector() {
     // OTLP 请求体形态：resourceMetrics → resource(service.name) → scopeMetrics → metrics[]
     let rm = &body["resourceMetrics"][0];
     assert_eq!(
-        rm["resource"]["attributes"][0]["key"],
-        "service.name",
+        rm["resource"]["attributes"][0]["key"], "service.name",
         "OTLP 信封应含 resource 属性"
     );
     let metrics = rm["scopeMetrics"][0]["metrics"].as_array().unwrap();
@@ -166,10 +170,7 @@ async fn test_otel_stdout_fallback_on_transport_failure() {
     let lines = fallback_lines.lock().unwrap();
     assert!(!lines.is_empty(), "传输失败时应输出 stdout fallback 行");
     let parsed: serde_json::Value = serde_json::from_str(&lines[0]).unwrap();
-    assert!(
-        parsed["name"].is_string(),
-        "fallback 行应为指标事件 JSON"
-    );
+    assert!(parsed["name"].is_string(), "fallback 行应为指标事件 JSON");
 
     let _ = std::fs::remove_file(&path);
 }
@@ -205,7 +206,10 @@ async fn test_otel_http_transport_against_mock_collector_socket() {
                     .unwrap_or(0);
                 break (pos + 4, length);
             }
-            assert!(std::time::Instant::now() < deadline, "timeout reading headers");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timeout reading headers"
+            );
         };
         while buf.len() < header_end + content_length {
             let n = stream.read(&mut chunk).expect("read request body");
@@ -237,7 +241,10 @@ async fn test_otel_http_transport_against_mock_collector_socket() {
         .unwrap();
 
     let request = server.join().unwrap();
-    assert!(request.starts_with("POST /v1/metrics HTTP/1.1\r\n"), "应发出 OTLP metrics POST: {request}");
+    assert!(
+        request.starts_with("POST /v1/metrics HTTP/1.1\r\n"),
+        "应发出 OTLP metrics POST: {request}"
+    );
     assert!(request.contains("Content-Type: application/json"));
     // 请求体应包含指标名
     assert!(request.contains("dbnexus.pool.saturation"));

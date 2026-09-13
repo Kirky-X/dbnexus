@@ -23,10 +23,10 @@ use crate::database::DbPool;
 use crate::foundation::DbError;
 use crate::foundation::DbResult;
 
-#[cfg(feature = "permission")]
-use crate::access::permission::{PermissionConfig, RolePolicy};
 #[cfg(feature = "data-protection")]
 use crate::access::data_protection::{DataProtection, MaskStrategy, MaskingEngine, RlsEngine};
+#[cfg(feature = "permission")]
+use crate::access::permission::{PermissionConfig, RolePolicy};
 
 /// 权限统一配置：RBAC + 脱敏 + RLS 三合一
 #[derive(Debug, Default)]

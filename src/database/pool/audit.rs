@@ -7,9 +7,9 @@
 //!
 //! # 功能
 //!
-//! - [`audit_admin_bypass`]: admin 角色绕过权限检查时记录审计事件（进程级审计环）
+//! - `audit_admin_bypass`: admin 角色绕过权限检查时记录审计事件（进程级审计环）
 //! - [`warn_if_default_admin_role_used`]: 检查是否使用了默认 admin 角色
-//! - [`warn_and_record_default_admin_role`]: 检查并记录默认 admin 角色告警事件
+//! - `warn_and_record_default_admin_role`: 检查并记录默认 admin 角色告警事件
 //! - [`admin_bypass_count`] / [`take_admin_bypass_events`]: 审计事件观测接口
 
 use std::collections::VecDeque;
@@ -310,8 +310,10 @@ mod tests {
         let _cloned = marker_events[0].clone();
 
         // take 取出即清空：标记事件不再残留
-        assert!(public_audit::take_admin_bypass_events()
-            .iter()
-            .all(|e| e.role != "public-path-marker"));
+        assert!(
+            public_audit::take_admin_bypass_events()
+                .iter()
+                .all(|e| e.role != "public-path-marker")
+        );
     }
 }

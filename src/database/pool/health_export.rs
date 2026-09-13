@@ -128,8 +128,15 @@ impl DbPool {
     /// 此 setter 打通运行时注入（与 `set_permission_config` 同款模式），使
     /// `health_snapshot` 的慢查询计数反映真实数据。
     #[cfg(all(feature = "health-check", feature = "metrics"))]
-    pub async fn set_metrics_collector(&self, collector: Option<Arc<crate::observability::MetricsCollector>>) {
-        *self.inner.metrics_collector.write().expect("metrics_collector lock") = collector;
+    pub async fn set_metrics_collector(
+        &self,
+        collector: Option<Arc<crate::observability::MetricsCollector>>,
+    ) {
+        *self
+            .inner
+            .metrics_collector
+            .write()
+            .expect("metrics_collector lock") = collector;
     }
 }
 

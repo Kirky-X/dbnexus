@@ -12,9 +12,9 @@
 ))]
 
 use dbnexus::{
+    DbPool, PermissionFacade, PermissionFacadeConfig,
     access::data_protection::MaskStrategy,
     access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission},
-    DbPool, PermissionFacade, PermissionFacadeConfig,
 };
 use std::collections::HashMap;
 
@@ -37,7 +37,9 @@ fn rbac_roles(default_tables: Vec<TablePermission>) -> HashMap<String, RolePolic
     );
     roles.insert(
         "default".to_string(),
-        RolePolicy { tables: default_tables },
+        RolePolicy {
+            tables: default_tables,
+        },
     );
     roles
 }
@@ -90,7 +92,10 @@ async fn test_facade_single_config_global_effect() {
 
     // admin：不受 RLS 限制，但出口同样脱敏
     let admin_rows = pool
-        .query_rows("SELECT id, email, tenant_id FROM orders ORDER BY id", "admin")
+        .query_rows(
+            "SELECT id, email, tenant_id FROM orders ORDER BY id",
+            "admin",
+        )
         .await
         .expect("admin query");
     assert_eq!(admin_rows.len(), 2, "admin 不受 RLS 限制");

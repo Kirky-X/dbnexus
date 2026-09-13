@@ -20,8 +20,7 @@ use dbnexus::{
 };
 
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
-    let path =
-        std::env::temp_dir().join(format!("dbnexus_t408_{}_{}.db", tag, std::process::id()));
+    let path = std::env::temp_dir().join(format!("dbnexus_t408_{}_{}.db", tag, std::process::id()));
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
@@ -160,12 +159,16 @@ async fn test_db_audit_init_is_idempotent_and_auditlogger_compat() {
     storage.init().await.unwrap();
 
     // 可作为 AuditLogger 的存储后端（与内存实现并列）
-    let logger = dbnexus::AuditLogger::with_config(
-        dbnexus::AuditConfig::default(),
-        Arc::new(storage),
-    );
+    let logger =
+        dbnexus::AuditLogger::with_config(dbnexus::AuditConfig::default(), Arc::new(storage));
     logger
-        .log_update("users", "7", "admin", Some("b".to_string()), Some("a".to_string()))
+        .log_update(
+            "users",
+            "7",
+            "admin",
+            Some("b".to_string()),
+            Some("a".to_string()),
+        )
         .await
         .unwrap();
 

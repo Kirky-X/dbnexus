@@ -47,9 +47,7 @@ where
     let mut rx = match stream.subscribe().await {
         Ok(rx) => rx,
         Err(e) => {
-            return tokio::spawn(async move {
-                Err(format!("confers subscribe failed: {e}"))
-            });
+            return tokio::spawn(async move { Err(format!("confers subscribe failed: {e}")) });
         }
     };
 
@@ -91,8 +89,7 @@ pub fn parse_permission_config(
     if trimmed.starts_with('{') {
         serde_json::from_str(text).map_err(|e| e.to_string())
     } else {
-        crate::access::permission::PermissionConfig::from_yaml_str(text)
-            .map_err(|e| e.to_string())
+        crate::access::permission::PermissionConfig::from_yaml_str(text).map_err(|e| e.to_string())
     }
 }
 
@@ -115,7 +112,8 @@ roles:
 
     #[test]
     fn test_parse_permission_config_json() {
-        let json = r#"{"roles": {"analyst": {"tables": [{"name": "orders", "operations": ["select"]}]}}}"#;
+        let json =
+            r#"{"roles": {"analyst": {"tables": [{"name": "orders", "operations": ["select"]}]}}}"#;
         let config = parse_permission_config(json).unwrap();
         assert!(config.roles.contains_key("analyst"));
     }

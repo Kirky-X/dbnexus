@@ -699,8 +699,7 @@ impl Session {
                         // 解析失败：admin 放行（对齐 execute_raw 路径），非 admin 拒绝（安全默认）
                         if self.role != self.pool_inner.admin_role {
                             return Err(DbError::Permission(
-                                "Failed to parse SQL statement for permission checking"
-                                    .to_string(),
+                                "Failed to parse SQL statement for permission checking".to_string(),
                             ));
                         }
                     }
@@ -779,14 +778,14 @@ impl Session {
         use sea_orm::ConnectionTrait;
 
         // 图后端 / DuckDB 连接不支持 SeaORM 行查询，给出明确错误
-        if let Some(conn_arc) = self.connection.as_ref() {
-            if conn_arc.as_sea_orm().is_err() {
-                return Err(DbError::Query(
-                    "query_rows MVP supports SeaORM backends only (postgres/sqlite); \
-                     use execute_duckdb or graph APIs for other backends"
-                        .to_string(),
-                ));
-            }
+        if let Some(conn_arc) = self.connection.as_ref()
+            && conn_arc.as_sea_orm().is_err()
+        {
+            return Err(DbError::Query(
+                "query_rows MVP supports SeaORM backends only (postgres/sqlite); \
+                 use execute_duckdb or graph APIs for other backends"
+                    .to_string(),
+            ));
         }
 
         let backend = if let Some(tx) = tx_opt.as_ref() {
@@ -861,7 +860,7 @@ impl Session {
                 }
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
-                return Ok(out);
+                Ok(out)
             }
             #[cfg(feature = "sqlite")]
             sea_orm::DbBackend::Sqlite => {
@@ -885,14 +884,12 @@ impl Session {
                     rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
-                return Ok(out);
+                Ok(out)
             }
-            _ => {
-                return Err(DbError::Query(
-                    "query_rows MVP supports postgres/sqlite backends only".to_string(),
-                ))
-            }
-        };
+            _ => Err(DbError::Query(
+                "query_rows MVP supports postgres/sqlite backends only".to_string(),
+            )),
+        }
         // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
     }
 
@@ -1365,9 +1362,10 @@ impl Session {
                     // 不再走 parse_operation 权限检查（DDL 语句无法被
                     // parse_operation_async 正确解析，会返回 Err）
                     self.enforce_ddl_guard(sql)?;
-                    let conn = self.connection.as_ref().ok_or_else(|| {
-                        DbError::Config("Connection not available".to_string())
-                    })?;
+                    let conn = self
+                        .connection
+                        .as_ref()
+                        .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
                     let duck_conn = conn.as_duckdb()?;
                     return duck_conn.execute(sql).await;
                 } else {
@@ -1796,9 +1794,7 @@ impl Session {
             Some(p) => p,
             None => return,
         };
-        let ttl = std::time::Duration::from_secs(
-            self.pool_inner.config.cache_config.default_ttl,
-        );
+        let ttl = std::time::Duration::from_secs(self.pool_inner.config.cache_config.default_ttl);
         let _ = provider.set(key, value, Some(ttl)).await;
     }
 
@@ -2190,7 +2186,6 @@ mod graph_tests {
             .expect("Failed to create Ladybug pool")
     }
 
-
     /// TEST-GRAPH-TXN-001: 图连接初始 is_in_transaction 为 false
     #[tokio::test]
     async fn test_graph_session_is_in_transaction_initial_false() {
@@ -2242,7 +2237,6 @@ mod graph_tests {
             "should not be in transaction after rollback"
         );
     }
-
 
     /// TEST-GRAPH-TXN-005: 图事务 begin → execute_cypher → commit 端到端
     #[tokio::test]
@@ -2354,7 +2348,6 @@ mod graph_tests {
         let result = session.rollback().await;
         assert!(result.is_err(), "rollback without transaction should fail");
     }
-
 
     /// TEST-GRAPH-EXEC-001: 不在事务中 execute_cypher("RETURN 1") 返回结果
     #[tokio::test]

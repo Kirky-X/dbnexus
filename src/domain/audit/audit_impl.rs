@@ -753,9 +753,7 @@ impl AuditLogger {
                 // 引号键：取引号内完整键名做大小写不敏感 contains 匹配
                 //（与 sanitize_json_object 的键匹配语义一致）
                 match Self::find_string_value_end(text, i) {
-                    Some(end)
-                        if text[i + 1..end].to_lowercase().contains(&field_lower) =>
-                    {
+                    Some(end) if text[i + 1..end].to_lowercase().contains(&field_lower) => {
                         (end - i + 1, true)
                     }
                     _ => (0, false),
@@ -1130,16 +1128,20 @@ mod tests {
             serde_json::from_str(event.extra.as_deref().unwrap()).unwrap();
         assert_eq!(before[key.as_str()], "[REDACTED]");
         assert_eq!(after[key.as_str()], "[REDACTED]");
-        assert!(!before
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|v| v.as_str() == Some(old_value.as_str())));
-        assert!(!after
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|v| v.as_str() == Some(new_value.as_str())));
+        assert!(
+            !before
+                .as_object()
+                .unwrap()
+                .values()
+                .any(|v| v.as_str() == Some(old_value.as_str()))
+        );
+        assert!(
+            !after
+                .as_object()
+                .unwrap()
+                .values()
+                .any(|v| v.as_str() == Some(new_value.as_str()))
+        );
         assert_eq!(extra[api_field.as_str()], "[REDACTED]");
     }
 
@@ -1163,11 +1165,10 @@ mod tests {
 
         // JSON 风格引号文本（含 \" 转义的字符串值整体替换）
         let token_key = ["tok", "en"].concat();
-        let event = logger.sanitize_event(
-            AuditEvent::create("users", "1", "admin").with_after_value(&format!(
-                r#"log: user="bob", "{token_key}":"with \"quote\" inside", ok=1"#
-            )),
-        );
+        let event =
+            logger.sanitize_event(AuditEvent::create("users", "1", "admin").with_after_value(
+                &format!(r#"log: user="bob", "{token_key}":"with \"quote\" inside", ok=1"#),
+            ));
         let after = event.after_value.as_ref().unwrap();
         assert!(!after.contains("inside"), "敏感值不应残留: {after}");
         assert!(
@@ -1205,7 +1206,11 @@ mod tests {
             &format!("{mixed_key}: {value_v2}"),
             &["password".to_string()],
         );
-        assert_eq!(after, format!("{mixed_key}: [REDACTED]"), "裸键大小写变体应脱敏且键名保留: {after}");
+        assert_eq!(
+            after,
+            format!("{mixed_key}: [REDACTED]"),
+            "裸键大小写变体应脱敏且键名保留: {after}"
+        );
 
         // 引号键混合大小写："PassWord":"v4" → 命中且键名原样保留
         let after = AuditLogger::sanitize_field_text(
@@ -1243,7 +1248,10 @@ mod tests {
         // 无冒号的自由文本不误伤（快照语义：原样返回）
         let free_text = "the password is strong";
         let after = AuditLogger::sanitize_field_text(free_text, &["password".to_string()]);
-        assert_eq!(after, free_text, "无键值对形态的自由文本不应被改写: {after}");
+        assert_eq!(
+            after, free_text,
+            "无键值对形态的自由文本不应被改写: {after}"
+        );
     }
 
     /// 字母数字边界的防误伤能力保持：紧贴字母/数字的子串不命中
@@ -1255,10 +1263,8 @@ mod tests {
         let val = ["le", "ak"].concat();
 
         // 数字后缀紧贴：password1 的 password 前缀被数字边界挡住，不触发替换
-        let after = AuditLogger::sanitize_field_text(
-            &format!("{pwd}1: {val}"),
-            std::slice::from_ref(&pwd),
-        );
+        let after =
+            AuditLogger::sanitize_field_text(&format!("{pwd}1: {val}"), std::slice::from_ref(&pwd));
         assert_eq!(
             after,
             format!("{pwd}1: {val}"),

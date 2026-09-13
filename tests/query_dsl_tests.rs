@@ -12,7 +12,7 @@
     feature = "runtime-tokio-rustls"
 ))]
 
-use dbnexus::{q, QueryFragment};
+use dbnexus::{QueryFragment, q};
 
 /// 基础投影：ident 列名 + 表名
 #[test]
@@ -42,14 +42,20 @@ fn test_order_and_limit() {
         order by created_at desc
         limit 20
     };
-    assert_eq!(fragment.to_sql(), "SELECT id FROM orders ORDER BY created_at DESC LIMIT 20");
+    assert_eq!(
+        fragment.to_sql(),
+        "SELECT id FROM orders ORDER BY created_at DESC LIMIT 20"
+    );
 
     let fragment = q! {
         select [id] from orders
         order by id asc
         limit 5
     };
-    assert_eq!(fragment.to_sql(), "SELECT id FROM orders ORDER BY id ASC LIMIT 5");
+    assert_eq!(
+        fragment.to_sql(),
+        "SELECT id FROM orders ORDER BY id ASC LIMIT 5"
+    );
 }
 
 /// 字符串值内的单引号经标准转义（值逃逸不可能：literal token + 转义）
@@ -59,7 +65,10 @@ fn test_string_value_escaping() {
         select [id] from users
         where name == "O'Brien"
     };
-    assert_eq!(fragment.to_sql(), "SELECT id FROM users WHERE name = 'O''Brien'");
+    assert_eq!(
+        fragment.to_sql(),
+        "SELECT id FROM users WHERE name = 'O''Brien'"
+    );
 }
 
 /// Rust 源码转义序列在生成 SQL 前被解码（换行不再以字面 `\n` 形态进入语句）
@@ -121,7 +130,9 @@ async fn test_macro_fragment_executes_end_to_end() {
         .await
         .expect("create table");
     admin
-        .execute_raw("INSERT INTO t422_users (id, name, age) VALUES (1, 'alice', 30), (2, 'bob', 15)")
+        .execute_raw(
+            "INSERT INTO t422_users (id, name, age) VALUES (1, 'alice', 30), (2, 'bob', 15)",
+        )
         .await
         .expect("insert");
 
@@ -130,7 +141,10 @@ async fn test_macro_fragment_executes_end_to_end() {
         where age > 18
         order by id desc
     };
-    let rows = pool.query_rows(&fragment.to_sql(), "admin").await.expect("query");
+    let rows = pool
+        .query_rows(&fragment.to_sql(), "admin")
+        .await
+        .expect("query");
     assert_eq!(rows.len(), 1, "成人过滤应只剩 alice");
     assert_eq!(rows[0]["name"], "alice");
 

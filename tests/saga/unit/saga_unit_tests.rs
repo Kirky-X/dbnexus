@@ -223,14 +223,24 @@ fn test_memory_store_persist_and_load_pending() {
             }],
         };
         store.persist(&log).await.unwrap();
-        assert!(dbnexus::SagaLogStore::get(&store, "s-1").await.unwrap().is_some());
+        assert!(
+            dbnexus::SagaLogStore::get(&store, "s-1")
+                .await
+                .unwrap()
+                .is_some()
+        );
         let pending = dbnexus::SagaLogStore::load_pending(&store).await.unwrap();
         assert_eq!(pending.len(), 1);
 
         let mut done = log.clone();
         done.status = SagaStatus::Completed;
         store.persist(&done).await.unwrap();
-        assert!(dbnexus::SagaLogStore::load_pending(&store).await.unwrap().is_empty());
+        assert!(
+            dbnexus::SagaLogStore::load_pending(&store)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 
@@ -256,8 +266,8 @@ mod db_saga_recovery_tests {
     use async_trait::async_trait;
 
     use dbnexus::{
-        DbSagaLog, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
-        SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog, ShardRouter,
+        DbSagaLog, SagaError, SagaExecutionResult, SagaLog, SagaLogStore, SagaOrchestrator,
+        SagaRecovery, SagaStatus, SagaStep, SagaStepLog, ShardRouter,
     };
 
     struct OkAction;
@@ -294,8 +304,7 @@ mod db_saga_recovery_tests {
         let (url, path) = temp_db_url("persist");
         let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
 
-        let mut router = ShardRouter::with_strategy("hash", 1)
-            .with_session_role("admin");
+        let mut router = ShardRouter::with_strategy("hash", 1).with_session_role("admin");
         router.register_shard(0, "s0".to_string(), url.clone());
         router.set_pool(0, pool.clone()).unwrap();
 
@@ -336,7 +345,6 @@ mod db_saga_recovery_tests {
         // 持久化断言：可从存储读回
         let stored = store.get(&result.saga_id).await.unwrap().unwrap();
 
-
         assert_eq!(stored.status, SagaStatus::Failed);
         assert_eq!(stored.steps.len(), 2);
         assert!(stored.steps[0].action_success);
@@ -354,7 +362,10 @@ mod db_saga_recovery_tests {
             }],
         };
         store.persist(&interrupted).await.unwrap();
-        let pending = SagaRecovery::new(store.clone()).list_pending().await.unwrap();
+        let pending = SagaRecovery::new(store.clone())
+            .list_pending()
+            .await
+            .unwrap();
         assert_eq!(pending.len(), 1, "Running 中断日志应出现在恢复列表");
         assert_eq!(pending[0].saga_id, "rec-1");
 
@@ -401,8 +412,7 @@ mod db_saga_recovery_tests {
         let (url, path) = temp_db_url("unknown-step");
         let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
 
-        let mut router = ShardRouter::with_strategy("hash", 1)
-            .with_session_role("admin");
+        let mut router = ShardRouter::with_strategy("hash", 1).with_session_role("admin");
         router.register_shard(0, "s0".to_string(), url.clone());
         router.set_pool(0, pool.clone()).unwrap();
 
@@ -459,8 +469,7 @@ mod db_saga_recovery_tests {
         let (url, path) = temp_db_url("in-place");
         let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
 
-        let mut router = ShardRouter::with_strategy("hash", 1)
-            .with_session_role("admin");
+        let mut router = ShardRouter::with_strategy("hash", 1).with_session_role("admin");
         router.register_shard(0, "s0".to_string(), url.clone());
         router.set_pool(0, pool.clone()).unwrap();
 

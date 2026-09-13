@@ -12,9 +12,7 @@
     feature = "runtime-tokio-rustls"
 ))]
 
-use dbnexus::{
-    DataApiGateway, Filter, ListRequest, OrderDirection, TableEndpoint,
-};
+use dbnexus::{DataApiGateway, Filter, ListRequest, OrderDirection, TableEndpoint};
 use std::sync::Arc;
 
 async fn setup_gateway(tag: &str) -> (DataApiGateway, std::path::PathBuf) {
@@ -59,7 +57,13 @@ async fn test_list_whitelist_projection_and_pagination() {
     let (gateway, path) = setup_gateway("list").await;
 
     let resp = gateway
-        .list("users", &ListRequest { page: 1, ..Default::default() })
+        .list(
+            "users",
+            &ListRequest {
+                page: 1,
+                ..Default::default()
+            },
+        )
         .await
         .expect("list");
     // default_page_size=3 生效（page_size=0 → 默认）
@@ -74,7 +78,13 @@ async fn test_list_whitelist_projection_and_pagination() {
 
     // 第 2 页
     let page2 = gateway
-        .list("users", &ListRequest { page: 2, ..Default::default() })
+        .list(
+            "users",
+            &ListRequest {
+                page: 2,
+                ..Default::default()
+            },
+        )
         .await
         .expect("page 2");
     assert_eq!(page2.items.len(), 3);
@@ -109,10 +119,7 @@ async fn test_list_filters() {
             &ListRequest {
                 page: 1,
                 page_size: 50,
-                filters: vec![
-                    Filter::contains("name", "user_"),
-                    Filter::eq("age", 25),
-                ],
+                filters: vec![Filter::contains("name", "user_"), Filter::eq("age", 25)],
                 ..Default::default()
             },
         )
@@ -209,7 +216,13 @@ async fn test_rejects_unexposed_columns_and_unknown_endpoint() {
 
     // page=0 → Config
     let err = gateway
-        .list("users", &ListRequest { page: 0, ..Default::default() })
+        .list(
+            "users",
+            &ListRequest {
+                page: 0,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap_err();
     assert!(format!("{err}").contains("page starts at 1"));

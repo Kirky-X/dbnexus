@@ -11,7 +11,7 @@
     feature = "runtime-tokio-rustls"
 ))]
 
-use dbnexus::{DdlAuditRecord, DdlGuardPolicy, DdlValidationResult, DbPool, DbPoolBuilder};
+use dbnexus::{DbPool, DbPoolBuilder, DdlAuditRecord, DdlGuardPolicy, DdlValidationResult};
 use std::sync::{Arc, Mutex};
 
 /// 拒绝一切的测试策略（验证端口可注入自定义实现）
@@ -19,25 +19,20 @@ struct DenyAllGuard;
 
 impl DdlGuardPolicy for DenyAllGuard {
     fn validate(&self, _sql: &str) -> Result<DdlValidationResult, String> {
-        Ok(DdlValidationResult::Forbidden("deny all (test)".to_string()))
+        Ok(DdlValidationResult::Forbidden(
+            "deny all (test)".to_string(),
+        ))
     }
 
     fn audit(&self, sql: &str, _result: &DdlValidationResult) {
-        AUDIT_LOG
-            .lock()
-            .unwrap()
-            .push(format!("deny_all:{sql}"));
+        AUDIT_LOG.lock().unwrap().push(format!("deny_all:{sql}"));
     }
 }
 
 static AUDIT_LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 fn temp_url(tag: &str) -> String {
-    let path = std::env::temp_dir().join(format!(
-        "dbnexus_t416_{}_{}.db",
-        tag,
-        std::process::id()
-    ));
+    let path = std::env::temp_dir().join(format!("dbnexus_t416_{}_{}.db", tag, std::process::id()));
     let _ = std::fs::remove_file(&path);
     format!("sqlite:{}?mode=rwc", path.display())
 }

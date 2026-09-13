@@ -13,9 +13,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::time::Duration;
 
 #[cfg(feature = "oxcache-integration")]
-use std::sync::Arc;
-#[cfg(feature = "oxcache-integration")]
 use crate::domain::DbCacheProvider;
+#[cfg(feature = "oxcache-integration")]
+use std::sync::Arc;
 
 /// JWT 访问令牌默认过期时间（秒）
 const ACCESS_TOKEN_EXPIRATION_SECS: u64 = 3600; // 1 hour
@@ -308,7 +308,9 @@ impl JwtManager {
                 .min_by_key(|(_, instant)| *instant)
                 .map(|(key, _)| key.clone());
             match oldest_key {
-                Some(key) => { revoked.remove(&key); }
+                Some(key) => {
+                    revoked.remove(&key);
+                }
                 None => break,
             }
         }
@@ -452,11 +454,24 @@ mod tests {
         assert_eq!(short_secret.len(), 19);
         match JwtManager::new(short_secret) {
             Err(AuthError::TokenGeneration(ref msg)) => {
-                assert!(msg.contains("32"), "error should mention 32 bytes, got: {}", msg);
-                assert!(msg.contains("19"), "error should mention 19 bytes, got: {}", msg);
+                assert!(
+                    msg.contains("32"),
+                    "error should mention 32 bytes, got: {}",
+                    msg
+                );
+                assert!(
+                    msg.contains("19"),
+                    "error should mention 19 bytes, got: {}",
+                    msg
+                );
             }
-            other => panic!("expected Err(TokenGeneration), got Ok or wrong error variant: {}", 
-                match other { Ok(_) => "Ok(...)".to_string(), Err(e) => format!("Err({})", e) }),
+            other => panic!(
+                "expected Err(TokenGeneration), got Ok or wrong error variant: {}",
+                match other {
+                    Ok(_) => "Ok(...)".to_string(),
+                    Err(e) => format!("Err({})", e),
+                }
+            ),
         }
     }
 
@@ -467,11 +482,24 @@ mod tests {
         assert_eq!(short_secret.len(), 19);
         match JwtManager::with_expiration(short_secret, 60, 3600) {
             Err(AuthError::TokenGeneration(ref msg)) => {
-                assert!(msg.contains("32"), "error should mention 32 bytes, got: {}", msg);
-                assert!(msg.contains("19"), "error should mention 19 bytes, got: {}", msg);
+                assert!(
+                    msg.contains("32"),
+                    "error should mention 32 bytes, got: {}",
+                    msg
+                );
+                assert!(
+                    msg.contains("19"),
+                    "error should mention 19 bytes, got: {}",
+                    msg
+                );
             }
-            other => panic!("expected Err(TokenGeneration), got Ok or wrong error variant: {}", 
-                match other { Ok(_) => "Ok(...)".to_string(), Err(e) => format!("Err({})", e) }),
+            other => panic!(
+                "expected Err(TokenGeneration), got Ok or wrong error variant: {}",
+                match other {
+                    Ok(_) => "Ok(...)".to_string(),
+                    Err(e) => format!("Err({})", e),
+                }
+            ),
         }
     }
 

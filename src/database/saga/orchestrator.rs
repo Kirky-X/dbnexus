@@ -165,7 +165,11 @@ impl SagaOrchestrator {
                         replay_failed = true;
                         // 原地更新既有条目（补偿结果记录在原步骤上，避免重复条目
                         // 导致后续重放对同一步骤补偿多次）
-                        mark_compensation_failed(&mut log, &step_log.name, &format!("compensation replay failed: {comp_err}"));
+                        mark_compensation_failed(
+                            &mut log,
+                            &step_log.name,
+                            &format!("compensation replay failed: {comp_err}"),
+                        );
                     }
                 }
             }
@@ -357,4 +361,3 @@ impl SagaOrchestrator {
         self.saga_log.get(saga_id).await.ok().flatten()
     }
 }
-

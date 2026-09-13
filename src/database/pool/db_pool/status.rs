@@ -9,7 +9,13 @@ impl DbPool {
     #[cfg(feature = "metrics")]
     #[inline]
     pub(super) fn record_acquire_duration(&self, start: Instant) {
-        if let Some(collector) = self.inner.metrics_collector.read().expect("metrics_collector lock").clone() {
+        if let Some(collector) = self
+            .inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone()
+        {
             collector.record_connection_acquire_duration(start.elapsed());
         }
     }
@@ -23,7 +29,13 @@ impl DbPool {
     #[inline]
     pub(super) fn record_acquire_timeout(&self, start: Instant) {
         let elapsed_ms = start.elapsed().as_millis() as u64;
-        if let Some(collector) = self.inner.metrics_collector.read().expect("metrics_collector lock").clone() {
+        if let Some(collector) = self
+            .inner
+            .metrics_collector
+            .read()
+            .expect("metrics_collector lock")
+            .clone()
+        {
             collector.record_connection_timeout_level(elapsed_ms);
         }
     }
@@ -229,5 +241,4 @@ impl DbPool {
 
         outcome
     }
-
 }

@@ -34,8 +34,8 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::database::repository::{is_safe_identifier, sql_literal};
 use crate::database::DbPool;
+use crate::database::repository::{is_safe_identifier, sql_literal};
 use crate::foundation::{DbError, DbResult};
 
 /// 单表查询端点声明
@@ -88,7 +88,9 @@ impl TableEndpoint {
     pub fn with_orderable(mut self, orderable: &[&str]) -> DbResult<Self> {
         let orderable: Vec<String> = orderable.iter().map(|c| c.to_string()).collect();
         if orderable.is_empty()
-            || orderable.iter().any(|c| !is_safe_identifier(c) || !self.columns.contains(c))
+            || orderable
+                .iter()
+                .any(|c| !is_safe_identifier(c) || !self.columns.contains(c))
         {
             return Err(DbError::Config(
                 "data-api orderable columns must be safe identifiers within the column whitelist"
@@ -159,12 +161,20 @@ pub struct Filter {
 impl Filter {
     /// 等值过滤
     pub fn eq(column: &str, value: impl Into<Value>) -> Self {
-        Self { column: column.to_string(), op: FilterOp::Eq, value: value.into() }
+        Self {
+            column: column.to_string(),
+            op: FilterOp::Eq,
+            value: value.into(),
+        }
     }
 
     /// 子串包含过滤
     pub fn contains(column: &str, value: impl Into<Value>) -> Self {
-        Self { column: column.to_string(), op: FilterOp::Contains, value: value.into() }
+        Self {
+            column: column.to_string(),
+            op: FilterOp::Contains,
+            value: value.into(),
+        }
     }
 }
 
@@ -269,9 +279,9 @@ impl DataApiGateway {
     }
 
     fn endpoint(&self, name: &str) -> DbResult<&TableEndpoint> {
-        self.endpoints.get(name).ok_or_else(|| {
-            DbError::Config(format!("unknown data-api endpoint: '{name}'"))
-        })
+        self.endpoints
+            .get(name)
+            .ok_or_else(|| DbError::Config(format!("unknown data-api endpoint: '{name}'")))
     }
 
     /// 行投影后过滤：sqlite 行内省方言会把全部表列补回（未投影列为 Null），
@@ -341,7 +351,12 @@ impl DataApiGateway {
                 continue;
             }
             let literal = sql_literal(&filter.value)?;
-            where_clauses.push(format!("{} {} {}", filter.column, filter.op.as_sql(), literal));
+            where_clauses.push(format!(
+                "{} {} {}",
+                filter.column,
+                filter.op.as_sql(),
+                literal
+            ));
         }
         let where_sql = if where_clauses.is_empty() {
             String::new()
@@ -369,10 +384,7 @@ impl DataApiGateway {
         };
 
         // 总数（MVP：主列全量取回后计行数——sqlite 行内省方言不保留聚合列）
-        let count_sql = format!(
-            "SELECT {} FROM {}{}",
-            ep.columns[0], ep.table, where_sql
-        );
+        let count_sql = format!("SELECT {} FROM {}{}", ep.columns[0], ep.table, where_sql);
         let total = self.pool.query_rows(&count_sql, &self.role).await?.len() as u64;
 
         let offset = (req.page - 1) * page_size;

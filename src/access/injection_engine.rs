@@ -101,9 +101,7 @@ impl InjectionEngine {
     pub fn scan(&self, prepared: &str, categories: &[RuleCategory]) -> Vec<&InjectionRule> {
         self.rules
             .iter()
-            .filter(|rule| {
-                categories.contains(&rule.category) && prepared.contains(rule.pattern)
-            })
+            .filter(|rule| categories.contains(&rule.category) && prepared.contains(rule.pattern))
             .collect()
     }
 
@@ -114,7 +112,9 @@ impl InjectionEngine {
     /// → 移除块注释 → 大写 → 子串扫描。
     #[cfg(feature = "sql-parser")]
     pub fn scan_relational(&self, sql: &str) -> Vec<&InjectionRule> {
-        use crate::access::sql_parser::{normalize_unicode, remove_string_literals, strip_block_comments};
+        use crate::access::sql_parser::{
+            normalize_unicode, remove_string_literals, strip_block_comments,
+        };
 
         // 第一步：Unicode 规范化（NFKC），防止 Unicode 绕过
         let normalized = normalize_unicode(sql);
@@ -133,18 +133,21 @@ impl InjectionEngine {
         let without_comments = strip_block_comments(&without_strings);
         let prepared = without_comments.to_uppercase();
 
-        self.scan(&prepared, &[
-            RuleCategory::Union,
-            RuleCategory::BooleanBlind,
-            RuleCategory::TimeBlind,
-            RuleCategory::DynamicExec,
-            RuleCategory::FileOps,
-            RuleCategory::InfoLeak,
-            RuleCategory::Encoding,
-            RuleCategory::Stacked,
-            RuleCategory::Comment,
-            RuleCategory::Other,
-        ])
+        self.scan(
+            &prepared,
+            &[
+                RuleCategory::Union,
+                RuleCategory::BooleanBlind,
+                RuleCategory::TimeBlind,
+                RuleCategory::DynamicExec,
+                RuleCategory::FileOps,
+                RuleCategory::InfoLeak,
+                RuleCategory::Encoding,
+                RuleCategory::Stacked,
+                RuleCategory::Comment,
+                RuleCategory::Other,
+            ],
+        )
     }
 
     /// 关系型管线布尔口径（等价合并前的 `contains_sql_injection`）
@@ -181,10 +184,15 @@ impl InjectionEngine {
     /// （不做字符串剥离，图查询无对应预处理）。
     pub fn scan_graph(&self, cypher: &str) -> Vec<&InjectionRule> {
         let prepared = cypher.to_ascii_lowercase();
-        self.scan(&prepared, &[RuleCategory::Comment, RuleCategory::GraphProcedure])
-            .into_iter()
-            .filter(|rule| rule.pattern.starts_with("call ") || rule.pattern == "/*" || rule.pattern == "*/")
-            .collect()
+        self.scan(
+            &prepared,
+            &[RuleCategory::Comment, RuleCategory::GraphProcedure],
+        )
+        .into_iter()
+        .filter(|rule| {
+            rule.pattern.starts_with("call ") || rule.pattern == "/*" || rule.pattern == "*/"
+        })
+        .collect()
     }
 
     /// 构建全局规则表（合并 + 去重剪枝）
@@ -196,12 +204,20 @@ impl InjectionEngine {
             //   包含关系，各自独立保留）
             ("union.select", RuleCategory::Union, "UNION SELECT"),
             ("union.all_select", RuleCategory::Union, "UNION ALL SELECT"),
-            ("union.distinct_select", RuleCategory::Union, "UNION DISTINCT SELECT"),
+            (
+                "union.distinct_select",
+                RuleCategory::Union,
+                "UNION DISTINCT SELECT",
+            ),
             // === 布尔盲注 ===
             ("bool.or_1eq1", RuleCategory::BooleanBlind, " OR 1=1"),
             ("bool.or_1sp1", RuleCategory::BooleanBlind, " OR 1 =1"),
             ("bool.or_1sp_eq1", RuleCategory::BooleanBlind, " OR 1= 1"),
-            ("bool.or_1sp_eq_sp1", RuleCategory::BooleanBlind, " OR 1 = 1"),
+            (
+                "bool.or_1sp_eq_sp1",
+                RuleCategory::BooleanBlind,
+                " OR 1 = 1",
+            ),
             ("bool.or_true", RuleCategory::BooleanBlind, " OR TRUE"),
             ("bool.or_false", RuleCategory::BooleanBlind, " OR FALSE"),
             ("bool.and_1eq1", RuleCategory::BooleanBlind, " AND 1=1"),
@@ -212,20 +228,44 @@ impl InjectionEngine {
             ("time.benchmark", RuleCategory::TimeBlind, "BENCHMARK("),
             // === 时间盲注 - PostgreSQL ===
             ("time.pg_sleep", RuleCategory::TimeBlind, "PG_SLEEP("),
-            ("time.pg_sleep_for", RuleCategory::TimeBlind, "PG_SLEEP_FOR("),
-            ("time.pg_sleep_until", RuleCategory::TimeBlind, "PG_SLEEP_UNTIL("),
+            (
+                "time.pg_sleep_for",
+                RuleCategory::TimeBlind,
+                "PG_SLEEP_FOR(",
+            ),
+            (
+                "time.pg_sleep_until",
+                RuleCategory::TimeBlind,
+                "PG_SLEEP_UNTIL(",
+            ),
             // === 时间盲注 - SQL Server ===
-            ("time.waitfor_delay", RuleCategory::TimeBlind, "WAITFOR DELAY"),
+            (
+                "time.waitfor_delay",
+                RuleCategory::TimeBlind,
+                "WAITFOR DELAY",
+            ),
             ("time.waitfor_time", RuleCategory::TimeBlind, "WAITFOR TIME"),
             // === 时间盲注 - Oracle ===
-            ("time.dbms_pipe", RuleCategory::TimeBlind, "DBMS_PIPE.RECEIVE_MESSAGE("),
-            ("time.dbms_lock", RuleCategory::TimeBlind, "DBMS_LOCK.SLEEP("),
+            (
+                "time.dbms_pipe",
+                RuleCategory::TimeBlind,
+                "DBMS_PIPE.RECEIVE_MESSAGE(",
+            ),
+            (
+                "time.dbms_lock",
+                RuleCategory::TimeBlind,
+                "DBMS_LOCK.SLEEP(",
+            ),
             // === 动态 SQL 执行 ===
             // （"; EXECUTE" 被 "; EXEC" 包含；"EXEC xp_"/"EXECUTE xp_" 被 " xp_"
             //   包含——三条冗余模式已在去重中剪除，见模块文档）
             ("exec.exec", RuleCategory::DynamicExec, "EXEC("),
             ("exec.execute", RuleCategory::DynamicExec, "EXECUTE("),
-            ("exec.sp_executesql", RuleCategory::DynamicExec, "SP_EXECUTESQL"),
+            (
+                "exec.sp_executesql",
+                RuleCategory::DynamicExec,
+                "SP_EXECUTESQL",
+            ),
             ("exec.xp_cmdshell", RuleCategory::DynamicExec, "XP_CMDSHELL"),
             ("exec.xp_generic", RuleCategory::DynamicExec, " xp_"),
             // === 文件操作 ===
@@ -233,20 +273,36 @@ impl InjectionEngine {
             ("file.into_outfile", RuleCategory::FileOps, "INTO OUTFILE"),
             ("file.into_dumpfile", RuleCategory::FileOps, "INTO DUMPFILE"),
             // === 信息泄露 ===
-            ("info.information_schema", RuleCategory::InfoLeak, "INFORMATION_SCHEMA"),
+            (
+                "info.information_schema",
+                RuleCategory::InfoLeak,
+                "INFORMATION_SCHEMA",
+            ),
             ("info.sysobjects", RuleCategory::InfoLeak, "SYSOBJECTS"),
             ("info.syscolumns", RuleCategory::InfoLeak, "SYSCOLUMNS"),
             ("info.sys_tables", RuleCategory::InfoLeak, "SYS.TABLES"),
             ("info.sys_columns", RuleCategory::InfoLeak, "SYS.COLUMNS"),
-            ("info.sys_databases", RuleCategory::InfoLeak, "SYS.DATABASES"),
+            (
+                "info.sys_databases",
+                RuleCategory::InfoLeak,
+                "SYS.DATABASES",
+            ),
             ("info.mysql_user", RuleCategory::InfoLeak, "MYSQL.USER"),
             ("info.pg_user", RuleCategory::InfoLeak, "PG_USER"),
             ("info.pg_shadow", RuleCategory::InfoLeak, "PG_SHADOW"),
             ("info.all_tables", RuleCategory::InfoLeak, "ALL_TABLES"),
             ("info.all_columns", RuleCategory::InfoLeak, "ALL_COLUMNS"),
-            ("info.all_tab_columns", RuleCategory::InfoLeak, "ALL_TAB_COLUMNS"),
+            (
+                "info.all_tab_columns",
+                RuleCategory::InfoLeak,
+                "ALL_TAB_COLUMNS",
+            ),
             ("info.user_tables", RuleCategory::InfoLeak, "USER_TABLES"),
-            ("info.user_tab_columns", RuleCategory::InfoLeak, "USER_TAB_COLUMNS"),
+            (
+                "info.user_tab_columns",
+                RuleCategory::InfoLeak,
+                "USER_TAB_COLUMNS",
+            ),
             // === 编码绕过 ===
             ("enc.char", RuleCategory::Encoding, "CHAR("),
             ("enc.chr", RuleCategory::Encoding, "CHR("),
@@ -272,18 +328,34 @@ impl InjectionEngine {
             //   与 "-- " 无包含关系，保留）
             ("other.having_tautology", RuleCategory::Other, "HAVING 1=1"),
             ("other.order_by_dash", RuleCategory::Other, "ORDER BY 1--"),
-            ("other.procedure_analyse", RuleCategory::Other, "PROCEDURE ANALYSE("),
+            (
+                "other.procedure_analyse",
+                RuleCategory::Other,
+                "PROCEDURE ANALYSE(",
+            ),
             ("other.extractvalue", RuleCategory::Other, "EXTRACTVALUE("),
             ("other.updatexml", RuleCategory::Other, "UPDATEXML("),
             ("other.xmltype", RuleCategory::Other, "XMLTYPE("),
             ("other.utl_http", RuleCategory::Other, "UTL_HTTP.REQUEST("),
-            ("other.utl_inaddr_host", RuleCategory::Other, "UTL_INADDR.GET_HOST_ADDRESS("),
-            ("other.utl_inaddr_name", RuleCategory::Other, "UTL_INADDR.GET_HOST_NAME("),
+            (
+                "other.utl_inaddr_host",
+                RuleCategory::Other,
+                "UTL_INADDR.GET_HOST_ADDRESS(",
+            ),
+            (
+                "other.utl_inaddr_name",
+                RuleCategory::Other,
+                "UTL_INADDR.GET_HOST_NAME(",
+            ),
         ];
 
         // --- DDL 管线规则（来源：ddl_guard::FORBIDDEN_PATTERNS） ---
         const DDL: &[(&str, RuleCategory, &str)] = &[
-            ("ddl.drop_database", RuleCategory::DdlForbidden, "DROP DATABASE"),
+            (
+                "ddl.drop_database",
+                RuleCategory::DdlForbidden,
+                "DROP DATABASE",
+            ),
             ("ddl.drop_all", RuleCategory::DdlForbidden, "DROP ALL"),
         ];
 
@@ -293,8 +365,16 @@ impl InjectionEngine {
             // （关系型管线经 scan_relational 的早退分支消费，见模块文档）
             ("comment.block_marker", RuleCategory::Comment, "/*"),
             ("graph.block_comment_close", RuleCategory::Comment, "*/"),
-            ("graph.call_apoc", RuleCategory::GraphProcedure, "call apoc."),
-            ("graph.call_dbms", RuleCategory::GraphProcedure, "call dbms."),
+            (
+                "graph.call_apoc",
+                RuleCategory::GraphProcedure,
+                "call apoc.",
+            ),
+            (
+                "graph.call_dbms",
+                RuleCategory::GraphProcedure,
+                "call dbms.",
+            ),
             ("graph.call_db", RuleCategory::GraphProcedure, "call db."),
             ("graph.call_tx", RuleCategory::GraphProcedure, "call tx."),
         ];
@@ -443,21 +523,23 @@ mod tests {
 
     /// 引擎匹配口径（关系型类别全集）
     fn engine_contains(prepared_upper: &str) -> bool {
-        !InjectionEngine::global().scan(
-            prepared_upper,
-            &[
-                RuleCategory::Union,
-                RuleCategory::BooleanBlind,
-                RuleCategory::TimeBlind,
-                RuleCategory::DynamicExec,
-                RuleCategory::FileOps,
-                RuleCategory::InfoLeak,
-                RuleCategory::Encoding,
-                RuleCategory::Stacked,
-                RuleCategory::Comment,
-                RuleCategory::Other,
-            ],
-        ).is_empty()
+        !InjectionEngine::global()
+            .scan(
+                prepared_upper,
+                &[
+                    RuleCategory::Union,
+                    RuleCategory::BooleanBlind,
+                    RuleCategory::TimeBlind,
+                    RuleCategory::DynamicExec,
+                    RuleCategory::FileOps,
+                    RuleCategory::InfoLeak,
+                    RuleCategory::Encoding,
+                    RuleCategory::Stacked,
+                    RuleCategory::Comment,
+                    RuleCategory::Other,
+                ],
+            )
+            .is_empty()
     }
 
     /// 误报对比（攻击语料 + 良性语料）：引擎与遗留表判定逐一一致
@@ -525,9 +607,7 @@ mod tests {
         let relational_count = engine
             .rules
             .iter()
-            .filter(|rule| {
-                !rule.id.starts_with("graph.") && rule.id != "comment.block_marker"
-            })
+            .filter(|rule| !rule.id.starts_with("graph.") && rule.id != "comment.block_marker")
             .filter(|rule| {
                 matches!(
                     rule.category,

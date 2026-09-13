@@ -63,11 +63,7 @@ impl AggregateFunction {
         &self,
         shard_rows: &[(u32, Vec<serde_json::Value>)],
     ) -> Option<AggregateValue> {
-        let all_rows = || {
-            shard_rows
-                .iter()
-                .flat_map(|(_, rows)| rows.iter())
-        };
+        let all_rows = || shard_rows.iter().flat_map(|(_, rows)| rows.iter());
         match self {
             AggregateFunction::Count => {
                 let total: usize = shard_rows.iter().map(|(_, rows)| rows.len()).sum();

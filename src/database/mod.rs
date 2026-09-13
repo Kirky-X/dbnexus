@@ -78,14 +78,13 @@ pub use scatter::{
 };
 
 // Saga re-exports
-#[cfg(feature = "saga")]
-pub use saga::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
-    SagaLogStore, SagaOrchestrator, SagaRecovery,
-    SagaStatus, SagaStep, SagaStepLog,
-};
 #[cfg(all(feature = "saga", feature = "sql-parser"))]
 pub use saga::DbSagaLog;
+#[cfg(feature = "saga")]
+pub use saga::{
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
+    SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog,
+};
 
 // COPY 批量写入 re-exports
 #[cfg(feature = "copy")]

@@ -3,7 +3,7 @@
 //! 泛型仓储
 //!
 //! 提供类型安全的 `Repository<T>` CRUD 端口与基于 `DbPool` 行查询管道的
-//! JSON 行实现（`JsonRepository`），并配套 [`impl_json_repository!`] 宏为
+//! JSON 行实现（`JsonRepository`），并配套 `impl_json_repository!` 宏为
 //! 具体实体一键生成 `Repository<T>` 实现。
 //!
 //! # 设计口径
@@ -31,8 +31,8 @@
 //! ```
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::database::DbPool;
@@ -91,8 +91,9 @@ pub(crate) fn sql_literal(value: &Value) -> DbResult<String> {
         Value::Number(n) => Ok(n.to_string()),
         Value::String(s) => Ok(format!("'{}'", s.replace('\'', "''"))),
         Value::Array(_) | Value::Object(_) => {
-            let json = serde_json::to_string(value)
-                .map_err(|e| DbError::Config(format!("entity nested value serialize failed: {e}")))?;
+            let json = serde_json::to_string(value).map_err(|e| {
+                DbError::Config(format!("entity nested value serialize failed: {e}"))
+            })?;
             Ok(format!("'{}'", json.replace('\'', "''")))
         }
     }
@@ -149,9 +150,9 @@ impl JsonRepository {
     }
 
     fn entity_object<T: Serialize>(&self, entity: &T) -> DbResult<serde_json::Map<String, Value>> {
-        match serde_json::to_value(entity).map_err(|e| {
-            DbError::Config(format!("entity serialize failed: {e}"))
-        })? {
+        match serde_json::to_value(entity)
+            .map_err(|e| DbError::Config(format!("entity serialize failed: {e}")))?
+        {
             Value::Object(map) => Ok(map),
             _ => Err(DbError::Config(
                 "repository entity must serialize to a JSON object".to_string(),
@@ -263,7 +264,10 @@ where
     }
 
     async fn delete(&self, pool: &DbPool, id: i64) -> DbResult<u64> {
-        let sql = format!("DELETE FROM {} WHERE {} = {}", self.table, self.id_column, id);
+        let sql = format!(
+            "DELETE FROM {} WHERE {} = {}",
+            self.table, self.id_column, id
+        );
         let session = pool.get_session(&self.role).await?;
         let exec = session.execute_raw(&sql).await?;
         Ok(exec.rows_affected())
@@ -443,7 +447,17 @@ mod tests {
     fn test_json_repository_validates_identifiers() {
         assert!(JsonRepository::new("users").is_ok());
         assert!(JsonRepository::new("users; DROP TABLE x").is_err());
-        assert!(JsonRepository::new("users").unwrap().with_id_column("key").is_ok());
-        assert!(JsonRepository::new("users").unwrap().with_id_column("1bad").is_err());
+        assert!(
+            JsonRepository::new("users")
+                .unwrap()
+                .with_id_column("key")
+                .is_ok()
+        );
+        assert!(
+            JsonRepository::new("users")
+                .unwrap()
+                .with_id_column("1bad")
+                .is_err()
+        );
     }
 }

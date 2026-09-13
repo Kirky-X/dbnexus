@@ -136,7 +136,8 @@ impl ModuleMeta for DbNexusCacheModule {
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
-        DEPS.get_or_init(|| vec![("oxcache", TypeId::of::<OxcacheModule>())]).as_slice()
+        DEPS.get_or_init(|| vec![("oxcache", TypeId::of::<OxcacheModule>())])
+            .as_slice()
     }
 }
 
@@ -173,7 +174,8 @@ impl ModuleMeta for DbNexusAuditModule {
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
-        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())]).as_slice()
+        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())])
+            .as_slice()
     }
 }
 
@@ -236,7 +238,8 @@ impl ModuleMeta for DbNexusHealthModule {
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
-        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())]).as_slice()
+        DEPS.get_or_init(|| vec![("dbnexus", TypeId::of::<DbNexusModule>())])
+            .as_slice()
     }
 }
 
@@ -424,7 +427,9 @@ mod tests {
         kit.register::<DbNexusModule>()
             .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool = kit.require::<DbNexusModule>().expect("require DbNexusModule");
+        let pool = kit
+            .require::<DbNexusModule>()
+            .expect("require DbNexusModule");
         // Verify the pool is usable — 能力类型为 Arc<DbPool>，仍可按
         // ConnectionPool trait 对象使用（向下兼容断言）。
         let pool: Arc<dyn ConnectionPool + Send + Sync> = pool;
@@ -500,7 +505,9 @@ mod tests {
         kit.register::<DbNexusModule>()
             .expect("register DbNexusModule");
         let kit = kit.build().await.expect("AsyncKit::build");
-        let pool = kit.require::<DbNexusModule>().expect("require DbNexusModule");
+        let pool = kit
+            .require::<DbNexusModule>()
+            .expect("require DbNexusModule");
         // Before first use: pool eagerly creates min_connections, so health check
         // reports Healthy (connections are pre-warmed).
         let status = DbNexusModule::check(&pool);
@@ -636,15 +643,20 @@ mod tests {
             url: "sqlite::memory:".to_string(),
             ..Default::default()
         });
-        kit.register::<OxcacheModule>().expect("register OxcacheModule");
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
         kit.register::<DbNexusCacheModule>()
             .expect("register DbNexusCacheModule");
         let kit = kit.build().await.expect("AsyncKit::build");
 
         let cache: Arc<dyn crate::domain::DbCacheProvider + Send + Sync> =
             kit.require::<DbNexusCacheModule>().expect("require cache");
-        cache.set("t413-key", b"t413-value".to_vec(), None).await.expect("cache set");
+        cache
+            .set("t413-key", b"t413-value".to_vec(), None)
+            .await
+            .expect("cache set");
         let got = cache.get("t413-key").await.expect("cache get");
         assert_eq!(got.as_deref(), Some(&b"t413-value"[..]), "缓存能力应可读写");
     }
@@ -668,26 +680,35 @@ mod tests {
             },
             ..Default::default()
         });
-        kit.register::<OxcacheModule>().expect("register OxcacheModule");
-        kit.register::<DbNexusModule>().expect("register DbNexusModule");
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
+        kit.register::<DbNexusModule>()
+            .expect("register DbNexusModule");
         kit.register::<DbNexusCacheModule>()
             .expect("register DbNexusCacheModule");
         kit.register::<DbNexusAuditModule>()
             .expect("register DbNexusAuditModule");
         kit.register::<DbNexusHealthModule>()
             .expect("register DbNexusHealthModule");
-        let kit = kit.build().await.expect("AsyncKit::build should build all four modules");
+        let kit = kit
+            .build()
+            .await
+            .expect("AsyncKit::build should build all four modules");
 
         // 1. 池能力
         let pool = kit.require::<DbNexusModule>().expect("require pool");
         assert!(pool.config().url.contains("t413"), "池能力可用");
 
         // 2. 缓存能力
-        let cache = kit
-            .require::<DbNexusCacheModule>()
-            .expect("require cache");
-        cache.set("k", b"v".to_vec(), None).await.expect("cache set");
-        assert_eq!(cache.get("k").await.expect("cache get").as_deref(), Some(&b"v"[..]));
+        let cache = kit.require::<DbNexusCacheModule>().expect("require cache");
+        cache
+            .set("k", b"v".to_vec(), None)
+            .await
+            .expect("cache set");
+        assert_eq!(
+            cache.get("k").await.expect("cache get").as_deref(),
+            Some(&b"v"[..])
+        );
 
         // 3. 审计能力（DB 持久化存储）
         let audit = kit.require::<DbNexusAuditModule>().expect("require audit");
@@ -705,7 +726,9 @@ mod tests {
         );
 
         // 4. 健康能力
-        let health = kit.require::<DbNexusHealthModule>().expect("require health");
+        let health = kit
+            .require::<DbNexusHealthModule>()
+            .expect("require health");
         let snapshot = health.snapshot().await;
         assert!(
             snapshot["pool"]["saturation"].is_number() && snapshot["status"].is_string(),

@@ -164,7 +164,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("error: --database-url is required (or set DATABASE_URL)");
         std::process::exit(ExitCode::UsageError as i32);
     });
-    let database_url = &database_url;
 
     // 初始化语言设置
     if let Some(ref lang) = cli.lang {
@@ -1415,11 +1414,12 @@ VALUES ('{username}', '{hash}', '{role}', '{created_at}')"
                 }
             }
         }
-        UserAction::List => match pool.query_rows(
-            "SELECT username, role, created_at FROM dbnexus_users ORDER BY username",
-            "admin",
-        )
-        .await
+        UserAction::List => match pool
+            .query_rows(
+                "SELECT username, role, created_at FROM dbnexus_users ORDER BY username",
+                "admin",
+            )
+            .await
         {
             Ok(rows) => {
                 print_json(&serde_json::json!({
@@ -1588,7 +1588,6 @@ mod tests {
         assert!(detect_database_type("foo://localhost/db").is_err());
         assert!(detect_database_type("not a url").is_err());
     }
-
 
     #[test]
     fn test_is_valid_identifier() {

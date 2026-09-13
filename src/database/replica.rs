@@ -6,6 +6,7 @@
 //! 以及 `ReplicaPool` 副本连接池，根据复制延迟自动决策路由。
 
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use sea_orm::{ConnectionTrait, Statement};
@@ -280,128 +281,9 @@ impl ReplicaPool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ===== parse_pg_wal_lag 测试 =====
-
-    #[test]
-    fn test_parse_pg_wal_lag_zero() {
-        assert_eq!(parse_pg_wal_lag("0"), Some(0));
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_positive_integer() {
-        assert_eq!(parse_pg_wal_lag("1048576"), Some(1048576));
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_trims_whitespace() {
-        assert_eq!(parse_pg_wal_lag("  42\n"), Some(42));
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_fractional_truncates() {
-        // numeric 带小数输出，截断为整数字节
-        assert_eq!(parse_pg_wal_lag("123.7"), Some(123));
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_negative_invalid() {
-        assert_eq!(parse_pg_wal_lag("-1"), None);
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_garbage_invalid() {
-        assert_eq!(parse_pg_wal_lag("abc"), None);
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_empty_invalid() {
-        assert_eq!(parse_pg_wal_lag(""), None);
-    }
-
-    #[test]
-    fn test_parse_pg_wal_lag_nan_invalid() {
-        assert_eq!(parse_pg_wal_lag("NaN"), None);
-    }
-
-    // ===== parse_mysql_seconds_behind 测试 =====
-
-    #[test]
-    fn test_parse_mysql_seconds_behind_numeric() {
-        assert_eq!(
-            parse_mysql_seconds_behind(SecondsBehindRaw::Value(5)),
-            Some(5.0)
-        );
-    }
-
-    #[test]
-    fn test_parse_mysql_seconds_behind_zero() {
-        assert_eq!(
-            parse_mysql_seconds_behind(SecondsBehindRaw::Value(0)),
-            Some(0.0)
-        );
-    }
-
-    #[test]
-    fn test_parse_mysql_seconds_behind_null_broken_replication() {
-        // NULL 表示复制中断，无法确认已同步
-        assert_eq!(parse_mysql_seconds_behind(SecondsBehindRaw::Null), None);
-    }
-
-    #[test]
-    fn test_parse_mysql_seconds_behind_missing_column() {
-        assert_eq!(
-            parse_mysql_seconds_behind(SecondsBehindRaw::MissingColumn),
-            None
-        );
-    }
-
-    #[test]
-    fn test_parse_mysql_seconds_behind_negative_invalid() {
-        assert_eq!(
-            parse_mysql_seconds_behind(SecondsBehindRaw::Value(-3)),
-            None
-        );
-    }
-
-    // ===== is_caught_up 阈值判定语义测试 =====
-
-    #[test]
-    fn test_pg_caught_up_respects_max_lag_bytes() {
-        // 与 detect_lag 中的判定逻辑一致：lag <= max_lag_bytes 才算追上
-        let detector = PostgresLagDetector::default();
-        let lag = parse_pg_wal_lag("1048576").unwrap(); // 1MB < 10MB
-        assert!(lag <= detector.max_lag_bytes);
-        let huge = parse_pg_wal_lag("20971520").unwrap(); // 20MB > 10MB
-        assert!(huge > detector.max_lag_bytes);
-        // 解析失败 → 保守判定未追上
-        assert!(!parse_pg_wal_lag("bad").is_some_and(|lag| lag <= detector.max_lag_bytes));
-    }
-
-    #[test]
-    fn test_mysql_caught_up_respects_max_lag_seconds() {
-        // 与 detect_lag 中的判定逻辑一致：秒数 <= max_lag_seconds 才算追上
-        let detector = MySqlLagDetector::default();
-        let ok = parse_mysql_seconds_behind(SecondsBehindRaw::Value(3)).unwrap();
-        assert!(ok <= detector.max_lag_seconds);
-        let late = parse_mysql_seconds_behind(SecondsBehindRaw::Value(30)).unwrap();
-        assert!(late > detector.max_lag_seconds);
-        // NULL/缺列 → None → 保守判定未追上（get_read_session 回退主库）
-        assert!(
-            !parse_mysql_seconds_behind(SecondsBehindRaw::Null)
-                .is_some_and(|s| s <= detector.max_lag_seconds)
-        );
-    }
-}
-
 // ============================================================================
 // 副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
 // ============================================================================
-
-use std::sync::Mutex;
 
 /// 副本节点：池 + lag 探测器 + 选择权重
 pub struct ReplicaNode {
@@ -600,10 +482,12 @@ impl ReplicaLoadBalancer {
 
         // 4. 按分数顺序尝试取会话；任一成功即记录并返回
         for idx in ranked {
-            let result = {
+            // 锁内仅克隆 Arc，await 必须发生在锁外（MutexGuard 非 Send）
+            let pool = {
                 let nodes = self.nodes.lock().expect("balancer lock");
-                nodes[idx].node.pool.get_session(role).await
+                Arc::clone(&nodes[idx].node.pool)
             };
+            let result = pool.get_session(role).await;
             match result {
                 Ok(session) => {
                     let name = {
@@ -624,5 +508,122 @@ impl ReplicaLoadBalancer {
         // 5. 全部副本不可用 → 回退主库
         *self.last_selected.lock().expect("balancer lock") = None;
         self.primary.get_session(role).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== parse_pg_wal_lag 测试 =====
+
+    #[test]
+    fn test_parse_pg_wal_lag_zero() {
+        assert_eq!(parse_pg_wal_lag("0"), Some(0));
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_positive_integer() {
+        assert_eq!(parse_pg_wal_lag("1048576"), Some(1048576));
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_trims_whitespace() {
+        assert_eq!(parse_pg_wal_lag("  42\n"), Some(42));
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_fractional_truncates() {
+        // numeric 带小数输出，截断为整数字节
+        assert_eq!(parse_pg_wal_lag("123.7"), Some(123));
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_negative_invalid() {
+        assert_eq!(parse_pg_wal_lag("-1"), None);
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_garbage_invalid() {
+        assert_eq!(parse_pg_wal_lag("abc"), None);
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_empty_invalid() {
+        assert_eq!(parse_pg_wal_lag(""), None);
+    }
+
+    #[test]
+    fn test_parse_pg_wal_lag_nan_invalid() {
+        assert_eq!(parse_pg_wal_lag("NaN"), None);
+    }
+
+    // ===== parse_mysql_seconds_behind 测试 =====
+
+    #[test]
+    fn test_parse_mysql_seconds_behind_numeric() {
+        assert_eq!(
+            parse_mysql_seconds_behind(SecondsBehindRaw::Value(5)),
+            Some(5.0)
+        );
+    }
+
+    #[test]
+    fn test_parse_mysql_seconds_behind_zero() {
+        assert_eq!(
+            parse_mysql_seconds_behind(SecondsBehindRaw::Value(0)),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn test_parse_mysql_seconds_behind_null_broken_replication() {
+        // NULL 表示复制中断，无法确认已同步
+        assert_eq!(parse_mysql_seconds_behind(SecondsBehindRaw::Null), None);
+    }
+
+    #[test]
+    fn test_parse_mysql_seconds_behind_missing_column() {
+        assert_eq!(
+            parse_mysql_seconds_behind(SecondsBehindRaw::MissingColumn),
+            None
+        );
+    }
+
+    #[test]
+    fn test_parse_mysql_seconds_behind_negative_invalid() {
+        assert_eq!(
+            parse_mysql_seconds_behind(SecondsBehindRaw::Value(-3)),
+            None
+        );
+    }
+
+    // ===== is_caught_up 阈值判定语义测试 =====
+
+    #[test]
+    fn test_pg_caught_up_respects_max_lag_bytes() {
+        // 与 detect_lag 中的判定逻辑一致：lag <= max_lag_bytes 才算追上
+        let detector = PostgresLagDetector::default();
+        let lag = parse_pg_wal_lag("1048576").unwrap(); // 1MB < 10MB
+        assert!(lag <= detector.max_lag_bytes);
+        let huge = parse_pg_wal_lag("20971520").unwrap(); // 20MB > 10MB
+        assert!(huge > detector.max_lag_bytes);
+        // 解析失败 → 保守判定未追上
+        assert!(!parse_pg_wal_lag("bad").is_some_and(|lag| lag <= detector.max_lag_bytes));
+    }
+
+    #[test]
+    fn test_mysql_caught_up_respects_max_lag_seconds() {
+        // 与 detect_lag 中的判定逻辑一致：秒数 <= max_lag_seconds 才算追上
+        let detector = MySqlLagDetector::default();
+        let ok = parse_mysql_seconds_behind(SecondsBehindRaw::Value(3)).unwrap();
+        assert!(ok <= detector.max_lag_seconds);
+        let late = parse_mysql_seconds_behind(SecondsBehindRaw::Value(30)).unwrap();
+        assert!(late > detector.max_lag_seconds);
+        // NULL/缺列 → None → 保守判定未追上（get_read_session 回退主库）
+        assert!(
+            !parse_mysql_seconds_behind(SecondsBehindRaw::Null)
+                .is_some_and(|s| s <= detector.max_lag_seconds)
+        );
     }
 }

@@ -168,7 +168,13 @@ impl UnifiedDbError {
 
 impl fmt::Display for UnifiedDbError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}:{}] {}", self.code.code(), self.code.name(), self.message)?;
+        write!(
+            f,
+            "[{}:{}] {}",
+            self.code.code(),
+            self.code.name(),
+            self.message
+        )?;
         if let Some(source) = &self.source_text {
             write!(f, " (source: {source})")?;
         }
@@ -262,10 +268,12 @@ impl crate::i18n::error_ext::LocalizedMsg for ErrorCode {
     }
 
     fn message_args(&self) -> Vec<(&str, String)> {
-        vec![("code", self.code().to_string()), ("name", self.name().to_string())]
+        vec![
+            ("code", self.code().to_string()),
+            ("name", self.name().to_string()),
+        ]
     }
 }
-
 
 /// 查询错误类别
 ///
@@ -469,7 +477,10 @@ mod error_code_tests {
         assert_eq!(json["message"], "select denied on orders");
         assert_eq!(json["source"], "role policy missing");
         let display = err.to_string();
-        assert!(display.contains("[2000:PermissionDenied]"), "display: {display}");
+        assert!(
+            display.contains("[2000:PermissionDenied]"),
+            "display: {display}"
+        );
         assert!(display.contains("select denied on orders"));
     }
 
@@ -519,11 +530,12 @@ mod error_code_tests {
     #[cfg(feature = "permission")]
     #[test]
     fn test_forward_mapping_permission_segments() {
-        let denied: UnifiedDbError = DbNexusError::Permission(crate::domain::PermissionError::Denied {
-            resource: "users".to_string(),
-            operation: "DELETE".to_string(),
-        })
-        .into();
+        let denied: UnifiedDbError =
+            DbNexusError::Permission(crate::domain::PermissionError::Denied {
+                resource: "users".to_string(),
+                operation: "DELETE".to_string(),
+            })
+            .into();
         assert_eq!(denied.code(), ErrorCode::PermissionDenied);
 
         let config_err: UnifiedDbError = DbNexusError::PermissionConfig(

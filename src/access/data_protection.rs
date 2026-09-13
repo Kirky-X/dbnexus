@@ -63,7 +63,11 @@ impl MaskingEngine {
     }
 
     /// 对单值应用策略
-    pub fn apply_value(&self, strategy: &MaskStrategy, value: &serde_json::Value) -> serde_json::Value {
+    pub fn apply_value(
+        &self,
+        strategy: &MaskStrategy,
+        value: &serde_json::Value,
+    ) -> serde_json::Value {
         let s = match value {
             serde_json::Value::String(s) => s.clone(),
             serde_json::Value::Null => return serde_json::Value::Null,
@@ -108,7 +112,9 @@ impl MaskingEngine {
             return;
         }
         for row in rows.iter_mut() {
-            let Some(obj) = row.as_object_mut() else { continue };
+            let Some(obj) = row.as_object_mut() else {
+                continue;
+            };
             for rule in &self.rules {
                 if let Some(v) = obj.get_mut(&rule.column) {
                     let masked = self.apply_value(&rule.strategy, v);
@@ -151,11 +157,18 @@ pub struct RlsEngine {
 impl RlsEngine {
     /// 创建引擎
     pub fn new() -> Self {
-        Self { policies: Vec::new() }
+        Self {
+            policies: Vec::new(),
+        }
     }
 
     /// 追加策略
-    pub fn policy(mut self, table: impl Into<String>, column: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn policy(
+        mut self,
+        table: impl Into<String>,
+        column: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
         self.policies.push(RlsPolicy {
             table: table.into(),
             column: column.into(),
@@ -199,9 +212,7 @@ impl RlsEngine {
 fn contains_where(sql: &str) -> bool {
     let lower = sql.to_ascii_lowercase();
     // 粗略判断：避免把 "where" 误判进字符串字面量的场景交给 MVP 边界
-    lower.contains(" where ")
-        || lower.starts_with("where ")
-        || lower.contains(")where ")
+    lower.contains(" where ") || lower.starts_with("where ") || lower.contains(")where ")
 }
 
 use std::sync::Arc;
@@ -274,7 +285,10 @@ mod tests {
         let out2 = rls.inject("SELECT * FROM orders WHERE amount > 10", Some("orders"));
         assert!(out2.ends_with("AND tenant_id = 't-100'"));
         // 非目标表不注入
-        assert_eq!(rls.inject("SELECT * FROM users", Some("users")), "SELECT * FROM users");
+        assert_eq!(
+            rls.inject("SELECT * FROM users", Some("users")),
+            "SELECT * FROM users"
+        );
         // 无主表不注入
         assert_eq!(rls.inject("SELECT 1", None), "SELECT 1");
     }

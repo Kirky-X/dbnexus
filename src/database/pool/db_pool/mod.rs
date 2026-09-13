@@ -9,12 +9,16 @@ mod access;
 mod health;
 mod status;
 
-#[cfg(feature = "permission")]
-use crate::access::RolePolicy;
 #[cfg(feature = "sql-parser")]
 use crate::access::DdlGuardPolicy;
+#[cfg(feature = "permission")]
+use crate::access::RolePolicy;
 use crate::i18n;
-#[cfg(any(feature = "permission", feature = "cache", feature = "oxcache-integration"))]
+#[cfg(any(
+    feature = "permission",
+    feature = "cache",
+    feature = "oxcache-integration"
+))]
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
@@ -214,8 +218,7 @@ pub(crate) struct DbPoolInner {
 
     /// 指标收集器（可选，用于 metrics 特性；支持运行时注入）
     #[cfg(feature = "metrics")]
-    pub(crate) metrics_collector:
-        std::sync::RwLock<Option<Arc<MetricsCollector>>>,
+    pub(crate) metrics_collector: std::sync::RwLock<Option<Arc<MetricsCollector>>>,
 
     /// 等待计数
     pub(super) wait_count: AtomicU32,
@@ -248,8 +251,9 @@ pub(crate) struct DbPoolInner {
 
     /// 语句级 prepared statement LRU 缓存（None = 不启用缓存路径）
     #[cfg(feature = "prepare-cache")]
-    pub(crate) prepare_cache:
-        std::sync::RwLock<Option<std::sync::Arc<crate::database::pool::prepare_cache::PoolPrepareCache>>>,
+    pub(crate) prepare_cache: std::sync::RwLock<
+        Option<std::sync::Arc<crate::database::pool::prepare_cache::PoolPrepareCache>>,
+    >,
 }
 
 impl DbPoolInner {
@@ -552,7 +556,6 @@ impl DbPool {
     /// ```
     "###
     )]
-
     ///
     /// # Errors
     ///
@@ -894,7 +897,6 @@ impl DbPool {
             }
         }
     }
-
 }
 /// DbPool 的优雅关闭
 impl Drop for DbPool {
@@ -1539,10 +1541,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_cache_miss_without_provider() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
-        let session = pool
-            .get_session("admin")
-            .await
-            .expect("session");
+        let session = pool.get_session("admin").await.expect("session");
         // No cache_provider injected → query_cache_get returns None
         let result = session.query_cache_get("any_key").await;
         assert!(result.is_none(), "expected None without cache_provider");
@@ -1555,9 +1554,9 @@ mod tests {
     ))]
     #[tokio::test]
     async fn test_query_cache_hit_with_provider() {
+        use std::collections::HashMap;
         use std::future::Future;
         use std::pin::Pin;
-        use std::collections::HashMap;
         use std::sync::Mutex as StdMutex;
 
         /// In-memory DbCacheProvider for testing.
@@ -1565,20 +1564,39 @@ mod tests {
             data: StdMutex<HashMap<String, Vec<u8>>>,
         }
         impl crate::domain::DbCacheProvider for MemCacheProvider {
-            fn get<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, crate::foundation::DbError>> + Send + 'a>> {
+            fn get<'a>(
+                &'a self,
+                key: &'a str,
+            ) -> Pin<
+                Box<
+                    dyn Future<Output = Result<Option<Vec<u8>>, crate::foundation::DbError>>
+                        + Send
+                        + 'a,
+                >,
+            > {
                 Box::pin(async move {
                     let data = self.data.lock().unwrap();
                     Ok(data.get(key).cloned())
                 })
             }
-            fn set<'a>(&'a self, key: &'a str, value: Vec<u8>, _ttl: Option<std::time::Duration>) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>> {
+            fn set<'a>(
+                &'a self,
+                key: &'a str,
+                value: Vec<u8>,
+                _ttl: Option<std::time::Duration>,
+            ) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>>
+            {
                 Box::pin(async move {
                     let mut data = self.data.lock().unwrap();
                     data.insert(key.to_string(), value);
                     Ok(())
                 })
             }
-            fn delete<'a>(&'a self, key: &'a str) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>> {
+            fn delete<'a>(
+                &'a self,
+                key: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), crate::foundation::DbError>> + Send + 'a>>
+            {
                 Box::pin(async move {
                     let mut data = self.data.lock().unwrap();
                     data.remove(key);
@@ -1593,17 +1611,16 @@ mod tests {
         });
         pool.set_cache_provider(provider);
 
-        let session = pool
-            .get_session("admin")
-            .await
-            .expect("session");
+        let session = pool.get_session("admin").await.expect("session");
 
         // Cache miss initially
         let miss = session.query_cache_get("select:users").await;
         assert!(miss.is_none(), "expected cache miss initially");
 
         // Store a value
-        session.query_cache_set("select:users", b"cached_result".to_vec()).await;
+        session
+            .query_cache_set("select:users", b"cached_result".to_vec())
+            .await;
 
         // Cache hit
         let hit = session.query_cache_get("select:users").await;

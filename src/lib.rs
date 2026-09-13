@@ -183,9 +183,7 @@ pub use crate::database::data_api::{
 
 // 语句级 prepared statement LRU 缓存（prepare-cache feature）
 #[cfg(feature = "prepare-cache")]
-pub use crate::database::pool::{
-    PoolPrepareCache, PrepareCacheStats, PreparedStatementCache,
-};
+pub use crate::database::pool::{PoolPrepareCache, PrepareCacheStats, PreparedStatementCache};
 
 // 权限统一门面（permission + data-protection feature）
 #[cfg(all(feature = "permission", feature = "data-protection"))]
@@ -196,12 +194,12 @@ pub use crate::access::permission_facade::{PermissionFacade, PermissionFacadeCon
 pub use crate::database::query_dsl::{DslCondition, DslOp, QueryFragment};
 
 // 实体事件总线 + Outbox（entity-events feature）
+pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 #[cfg(feature = "entity-events")]
 pub use crate::database::entity_events::{
     DbOutboxStore, EntityAction, EntityEvent, EntityEventBus, InMemoryEntityEventBus,
     OutboxDispatcher, OutboxStore,
 };
-pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
 pub use crate::access::GraphPermissionContext;
@@ -287,14 +285,13 @@ pub use crate::database::{
 };
 
 // Saga 分布式事务导出（saga feature）
-#[cfg(feature = "saga")]
-pub use crate::database::{
-    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog,
-    SagaLogStore, SagaOrchestrator, SagaRecovery,
-    SagaStatus, SagaStep, SagaStepLog,
-};
 #[cfg(all(feature = "saga", feature = "sql-parser"))]
 pub use crate::database::DbSagaLog;
+#[cfg(feature = "saga")]
+pub use crate::database::{
+    InMemorySagaLog, SagaAction, SagaError, SagaExecutionResult, SagaLog, SagaLogStore,
+    SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog,
+};
 
 // 分片迁移编排导出（shard-migration feature）
 #[cfg(feature = "shard-migration")]
@@ -320,13 +317,13 @@ pub use crate::storage::{
 };
 
 // Business 导出（直接从 domain::audit 导出，移除 business 中间层）
+#[cfg(all(feature = "audit", feature = "sql-parser"))]
+pub use crate::domain::DbAuditStorage;
 #[cfg(feature = "audit")]
 pub use crate::domain::{
     AuditConfig, AuditContext, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation,
     AuditQueryFilters, AuditSeverity, AuditStatus, AuditStorage, MemoryAuditStorage,
 };
-#[cfg(all(feature = "audit", feature = "sql-parser"))]
-pub use crate::domain::DbAuditStorage;
 #[cfg(feature = "audit")]
 pub use crate::foundation::AuditResult;
 

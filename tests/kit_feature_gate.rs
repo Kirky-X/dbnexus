@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use dbnexus::integrations::kit::{DbNexusBuildObserver, DbNexusModule};
 use dbnexus::foundation::{DbConfig, PoolConfig};
+use dbnexus::integrations::kit::{DbNexusBuildObserver, DbNexusModule};
 use oxcache::integrations::kit::OxcacheConfig;
 use trait_kit::{AsyncKit, BuildObserver};
 

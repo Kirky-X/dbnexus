@@ -104,9 +104,7 @@ fn validate_identifier(name: &str) -> Result<(), ()> {
     }
     let first = name.chars().next().unwrap();
     let valid = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.';
-    if !(first.is_ascii_alphabetic() || first == '_')
-        || !name.chars().all(valid)
-    {
+    if !(first.is_ascii_alphabetic() || first == '_') || !name.chars().all(valid) {
         return Err(());
     }
     // 不允许连续点（空段）
@@ -196,14 +194,11 @@ impl crate::database::DbPool {
                         sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
                     ))
                 })?;
-                copy_in
-                    .send(payload.into_bytes())
-                    .await
-                    .map_err(|e| {
-                        crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
-                            sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
-                        ))
-                    })?;
+                copy_in.send(payload.into_bytes()).await.map_err(|e| {
+                    crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
+                        sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),
+                    ))
+                })?;
                 copy_in.finish().await.map_err(|e| {
                     crate::foundation::DbError::Connection(sea_orm::DbErr::Conn(
                         sea_orm::RuntimeErr::SqlxError(std::sync::Arc::new(e)),

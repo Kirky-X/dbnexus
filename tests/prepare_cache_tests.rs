@@ -64,8 +64,14 @@ async fn test_builder_enabled_cache_and_eviction_accounting() {
         .await
         .expect("create table");
 
-    admin.execute_cached("INSERT INTO t420 VALUES (1, 'a')").await.expect("s1");
-    admin.execute_cached("INSERT INTO t420 VALUES (2, 'b')").await.expect("s2");
+    admin
+        .execute_cached("INSERT INTO t420 VALUES (1, 'a')")
+        .await
+        .expect("s1");
+    admin
+        .execute_cached("INSERT INTO t420 VALUES (2, 'b')")
+        .await
+        .expect("s2");
 
     let stats = pool.prepare_cache_stats().expect("cache enabled");
     assert_eq!(stats.misses, 2, "两条不同语句均未命中");
@@ -86,7 +92,10 @@ async fn test_disabled_cache_is_passthrough() {
         .execute_cached("INSERT INTO t420 (id, val) VALUES (1, 'a')")
         .await
         .expect("passthrough execute");
-    let rows = pool.query_rows("SELECT val FROM t420", "admin").await.unwrap();
+    let rows = pool
+        .query_rows("SELECT val FROM t420", "admin")
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 1);
 
     let _ = std::fs::remove_file(&path);

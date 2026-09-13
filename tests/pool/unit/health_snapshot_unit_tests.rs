@@ -13,8 +13,7 @@
 use std::sync::Arc;
 
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
-    let path =
-        std::env::temp_dir().join(format!("dbnexus_t406_{}_{}.db", tag, std::process::id()));
+    let path = std::env::temp_dir().join(format!("dbnexus_t406_{}_{}.db", tag, std::process::id()));
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
@@ -35,8 +34,10 @@ async fn test_health_snapshot_shape_and_fields() {
 
     // 顶层字段：status + pool + slow_queries + replicas
     assert!(
-        obj.contains_key("status") && obj.contains_key("pool")
-            && obj.contains_key("slow_queries") && obj.contains_key("replicas"),
+        obj.contains_key("status")
+            && obj.contains_key("pool")
+            && obj.contains_key("slow_queries")
+            && obj.contains_key("replicas"),
         "快照应含 status/pool/slow_queries/replicas，实际键: {:?}",
         obj.keys().collect::<Vec<_>>()
     );
@@ -54,8 +55,13 @@ async fn test_health_snapshot_shape_and_fields() {
     assert!(pool_obj["active"].is_u64(), "pool.active 缺失");
     assert!(pool_obj["idle"].is_u64(), "pool.idle 缺失");
     assert!(pool_obj["wait_count"].is_u64(), "pool.wait_count 缺失");
-    assert!(pool_obj["max_connections"].is_u64(), "pool.max_connections 缺失");
-    let saturation = pool_obj["saturation"].as_f64().expect("pool.saturation 缺失");
+    assert!(
+        pool_obj["max_connections"].is_u64(),
+        "pool.max_connections 缺失"
+    );
+    let saturation = pool_obj["saturation"]
+        .as_f64()
+        .expect("pool.saturation 缺失");
     assert!(
         (0.0..=1.0).contains(&saturation),
         "饱和度应在 [0,1]，实际: {saturation}"
@@ -94,7 +100,11 @@ async fn test_health_snapshot_unhealthy_without_connections() {
         "零连接池应报 unhealthy，实际: {snap}"
     );
     assert_eq!(snap["pool"]["total"].as_u64().unwrap(), 0);
-    assert_eq!(snap["pool"]["saturation"].as_f64().unwrap(), 1.0, "零连接池饱和度应取 1.0（满载语义）");
+    assert_eq!(
+        snap["pool"]["saturation"].as_f64().unwrap(),
+        1.0,
+        "零连接池饱和度应取 1.0（满载语义）"
+    );
 
     let _ = std::fs::remove_file(&path);
 }

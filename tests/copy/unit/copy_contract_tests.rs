@@ -8,18 +8,13 @@
 //! - pg 协议传输路径在 postgres 驱动组下经 `#[cfg(feature = "postgres")]` 编译门控，
 //!   无 pg 服务器环境不执行传输断言（MVP 口径，真实联调留给使用方）。
 
-#![cfg(all(
-    feature = "runtime-tokio-rustls",
-    feature = "sqlite",
-    feature = "copy"
-))]
+#![cfg(all(feature = "runtime-tokio-rustls", feature = "sqlite", feature = "copy"))]
 
-use dbnexus::database::copy::{CopyFormat, CopyStatement};
 use dbnexus::DbError;
+use dbnexus::database::copy::{CopyFormat, CopyStatement};
 
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
-    let path =
-        std::env::temp_dir().join(format!("dbnexus_t407_{}_{}.db", tag, std::process::id()));
+    let path = std::env::temp_dir().join(format!("dbnexus_t407_{}_{}.db", tag, std::process::id()));
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
@@ -33,8 +28,7 @@ fn test_copy_statement_build_text() {
         .expect("合法标识符应通过校验");
     let sql = stmt.build();
     assert_eq!(
-        sql,
-        r#"COPY "t_copy" ("id", "name") FROM STDIN"#,
+        sql, r#"COPY "t_copy" ("id", "name") FROM STDIN"#,
         "语句应为 postgres 文本格式 COPY FROM STDIN，实际: {sql}"
     );
     // format() 幂等（可重复取）

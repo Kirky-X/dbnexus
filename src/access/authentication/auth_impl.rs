@@ -325,7 +325,8 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝空 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_empty_hash() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -344,7 +345,8 @@ mod tests {
     /// vuln-0002 回归测试：add_user 必须拒绝非 bcrypt 格式的 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_rejects_plaintext_hash() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -363,7 +365,8 @@ mod tests {
     /// vuln-0002 回归测试：add_user 接受有效 bcrypt 哈希
     #[tokio::test]
     async fn test_vuln_0002_add_user_accepts_valid_bcrypt() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let hasher = PasswordHasher::new();
         let hash = hasher.hash("ValidPass@123").unwrap();
         let user = User {
@@ -381,7 +384,8 @@ mod tests {
     /// vuln-0002 回归测试：add_user_unchecked 不验证 password_hash
     #[tokio::test]
     async fn test_vuln_0002_add_user_unchecked_skips_validation() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         let user = User {
             id: "u1".to_string(),
             username: "test".to_string(),
@@ -405,7 +409,8 @@ mod tests {
     /// 验证两者职责清晰分离：公共 API 强制安全，内部 API 跳过验证。
     #[tokio::test]
     async fn test_hd3_add_user_vs_unchecked_role_separation() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
         // 构造无效 password_hash 的 User
         let make_user = || User {
@@ -438,7 +443,8 @@ mod tests {
     /// 确保迁移场景（如批量导入）的数据完整性。
     #[tokio::test]
     async fn test_hd3_add_user_unchecked_data_round_trip() {
-        let mgr = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let mgr =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
         // 内部 API 写入（模拟迁移场景）
         let user = User {

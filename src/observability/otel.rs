@@ -215,10 +215,7 @@ impl OtelExporter {
     /// 导出健康快照指标（health_snapshot → OTLP metrics）
     ///
     /// 传输失败且 `stdout_fallback` 开启时逐事件输出 JSON 行并视为成功。
-    pub async fn export_health_snapshot(
-        &self,
-        snapshot: &serde_json::Value,
-    ) -> Result<(), String> {
+    pub async fn export_health_snapshot(&self, snapshot: &serde_json::Value) -> Result<(), String> {
         let events = metric_events_from_health_snapshot(snapshot);
         let body = build_otlp_metrics_request(&self.config.service_name, &events);
         match self.transport.send(&self.config.endpoint, &body).await {
@@ -257,10 +254,18 @@ pub fn metric_events_from_health_snapshot(snapshot: &serde_json::Value) -> Vec<O
         push("dbnexus.pool.saturation", saturation, None);
     }
     if let Some(wait_count) = pool["wait_count"].as_u64() {
-        push("dbnexus.pool.wait_count", wait_count as f64, Some("{connections}"));
+        push(
+            "dbnexus.pool.wait_count",
+            wait_count as f64,
+            Some("{connections}"),
+        );
     }
     if let Some(slow_count) = snapshot["slow_queries"]["count"].as_u64() {
-        push("dbnexus.slow_queries.count", slow_count as f64, Some("{query}"));
+        push(
+            "dbnexus.slow_queries.count",
+            slow_count as f64,
+            Some("{query}"),
+        );
     }
     events
 }

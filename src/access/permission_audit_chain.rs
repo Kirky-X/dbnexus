@@ -89,7 +89,11 @@ pub struct PermissionChangeRecord {
 
 impl PermissionChangeRecord {
     /// 创建变更记录（时间为当前 UTC RFC 3339）
-    pub fn new(role: impl Into<String>, action: impl Into<String>, actor: impl Into<String>) -> Self {
+    pub fn new(
+        role: impl Into<String>,
+        action: impl Into<String>,
+        actor: impl Into<String>,
+    ) -> Self {
         let at = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_default();
@@ -291,7 +295,10 @@ mod tests {
         // RFC 4231 Test Case 5：131 字节 0xAA 密钥（超块长 → 先哈希再使用）
         let key = [0xaa; 131];
         let expected = "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54";
-        let mac = hmac_sha256(&key, b"Test Using Larger Than Block-Size Key - Hash Key First");
+        let mac = hmac_sha256(
+            &key,
+            b"Test Using Larger Than Block-Size Key - Hash Key First",
+        );
         assert_eq!(hex_encode(&mac), expected);
     }
 
@@ -304,7 +311,11 @@ mod tests {
         assert_eq!(e0.seq, 0);
         assert_eq!(e0.prev_hash, hex_encode(&GENESIS_HASH));
 
-        let e1 = chain.append(&PermissionChangeRecord::new("analyst", "policy_updated", "op"));
+        let e1 = chain.append(&PermissionChangeRecord::new(
+            "analyst",
+            "policy_updated",
+            "op",
+        ));
         assert_eq!(e1.seq, 1);
         assert_eq!(e1.prev_hash, e0.hmac, "第二条 prev_hash 应为第一条 hmac");
 
@@ -320,7 +331,10 @@ mod tests {
 
         // 篡改事件内容
         entries[0].event_json = entries[0].event_json.replace("role_added", "role_removed");
-        assert!(!verify_permission_chain(&entries, b"key"), "篡改事件应被检出");
+        assert!(
+            !verify_permission_chain(&entries, b"key"),
+            "篡改事件应被检出"
+        );
 
         // 篡改签名
         let mut entries2 = chain.entries().to_vec();
@@ -332,7 +346,11 @@ mod tests {
     fn test_verify_detects_deletion_and_reordering() {
         let mut chain = PermissionAuditChain::new(b"key");
         chain.append(&PermissionChangeRecord::new("admin", "role_added", "op"));
-        chain.append(&PermissionChangeRecord::new("analyst", "policy_updated", "op"));
+        chain.append(&PermissionChangeRecord::new(
+            "analyst",
+            "policy_updated",
+            "op",
+        ));
         chain.append(&PermissionChangeRecord::new("guest", "role_removed", "op"));
 
         // 删除中间条目 → seq 跳跃 + prev 断裂
@@ -343,7 +361,10 @@ mod tests {
             .filter(|(i, _)| *i != 1)
             .map(|(_, e)| e.clone())
             .collect();
-        assert!(!verify_permission_chain(&deleted, b"key"), "删除条目应被检出");
+        assert!(
+            !verify_permission_chain(&deleted, b"key"),
+            "删除条目应被检出"
+        );
 
         // 重排
         let mut reordered = entries.clone();

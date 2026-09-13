@@ -42,10 +42,9 @@ impl DbPool {
             .inner
             .prepare_cache
             .write()
-            .expect("prepare_cache lock poisoned") =
-            Some(std::sync::Arc::new(
-                crate::database::pool::prepare_cache::PoolPrepareCache::new(capacity),
-            ));
+            .expect("prepare_cache lock poisoned") = Some(std::sync::Arc::new(
+            crate::database::pool::prepare_cache::PoolPrepareCache::new(capacity),
+        ));
     }
 
     /// prepare 缓存统计快照（未启用缓存时返回 None）
@@ -123,10 +122,7 @@ impl DbPool {
 
     /// 注入数据保护配置（字段脱敏 + RLS 谓词）
     #[cfg(feature = "data-protection")]
-    pub async fn set_data_protection(
-        &self,
-        dp: crate::access::data_protection::DataProtection,
-    ) {
+    pub async fn set_data_protection(&self, dp: crate::access::data_protection::DataProtection) {
         *self.inner.data_protection.write().await = dp;
     }
 
@@ -186,5 +182,4 @@ impl DbPool {
 
         Ok(())
     }
-
 }

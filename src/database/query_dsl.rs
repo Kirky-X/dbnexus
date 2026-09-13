@@ -180,7 +180,10 @@ fn unescape_rust_string(inner: &str) -> String {
                         hex.push(hc);
                     }
                 }
-                match (closed, u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)) {
+                match (
+                    closed,
+                    u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32),
+                ) {
                     (true, Some(ch)) => out.push(ch),
                     _ => {
                         out.push_str("\\u{");

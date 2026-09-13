@@ -68,7 +68,12 @@ async fn test_json_repository_crud_roundtrip() {
     assert_eq!(found.age, 30);
 
     // update（主键列不参与 SET）
-    let updated = User { name: "Alice II".to_string(), email: found.email.clone(), age: 31, id: 7 };
+    let updated = User {
+        name: "Alice II".to_string(),
+        email: found.email.clone(),
+        age: 31,
+        id: 7,
+    };
     let affected = repo.update(&pool, 7, &updated).await.expect("update");
     assert_eq!(affected, 1);
     let reread: User = repo.find_by_id(&pool, 7).await.unwrap().unwrap();
@@ -92,11 +97,21 @@ async fn test_json_repository_pagination_and_count() {
     let repo = JsonRepository::new("t418_users").expect("repo");
 
     for i in 1..=5i64 {
-        let user = User { id: i, name: format!("u{i}"), email: format!("u{i}@x.com"), age: i };
+        let user = User {
+            id: i,
+            name: format!("u{i}"),
+            email: format!("u{i}@x.com"),
+            age: i,
+        };
         repo.insert(&pool, &user).await.expect("insert");
     }
 
-    assert_eq!(Repository::<User>::count(&repo, &pool).await.expect("count"), 5);
+    assert_eq!(
+        Repository::<User>::count(&repo, &pool)
+            .await
+            .expect("count"),
+        5
+    );
 
     let page0: Vec<User> = repo.find_all(&pool, 2, 0).await.expect("page 0");
     let page1: Vec<User> = repo.find_all(&pool, 2, 2).await.expect("page 1");
@@ -107,8 +122,7 @@ async fn test_json_repository_pagination_and_count() {
     assert_eq!(page1[0].age, 3);
 
     // find_by_id 不存在的行 → None
-    let missing: Option<User> =
-        repo.find_by_id(&pool, 99_999).await.expect("find missing");
+    let missing: Option<User> = repo.find_by_id(&pool, 99_999).await.expect("find missing");
     assert!(missing.is_none());
 
     let _ = std::fs::remove_file(&path);
@@ -126,12 +140,19 @@ async fn test_string_values_with_quotes_roundtrip() {
         email: "x'y@z.com".to_string(),
         age: 1,
     };
-    repo.insert(&pool, &tricky).await.expect("insert with quotes");
+    repo.insert(&pool, &tricky)
+        .await
+        .expect("insert with quotes");
     let read: User = repo.find_by_id(&pool, 11).await.unwrap().unwrap();
     assert_eq!(read.name, "O'Brien");
     assert_eq!(read.email, "x'y@z.com");
     // 表仍然健在（未被注入破坏）
-    assert_eq!(Repository::<User>::count(&repo, &pool).await.expect("count"), 1);
+    assert_eq!(
+        Repository::<User>::count(&repo, &pool)
+            .await
+            .expect("count"),
+        1
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -144,10 +165,23 @@ async fn test_macro_generated_repository() {
 
     assert_eq!(repo.table(), "t418_users");
 
-    let user = User { id: 21, name: "Bob".to_string(), email: "bob@x.com".to_string(), age: 22 };
+    let user = User {
+        id: 21,
+        name: "Bob".to_string(),
+        email: "bob@x.com".to_string(),
+        age: 22,
+    };
     repo.insert(&pool, &user).await.expect("insert");
     let found = repo.find_by_id(&pool, 21).await.unwrap().unwrap();
-    assert_eq!(found, User { id: 21, name: "Bob".to_string(), email: "bob@x.com".to_string(), age: 22 });
+    assert_eq!(
+        found,
+        User {
+            id: 21,
+            name: "Bob".to_string(),
+            email: "bob@x.com".to_string(),
+            age: 22
+        }
+    );
     // 宏生成的实现：T 已由 impl 固定，方法调用可直接推断
     assert_eq!(repo.count(&pool).await.expect("count"), 1);
     assert_eq!(repo.delete(&pool, 21).await.expect("delete"), 1);

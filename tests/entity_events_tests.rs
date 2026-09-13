@@ -13,8 +13,7 @@
 ))]
 
 use dbnexus::{
-    DbOutboxStore, EntityAction, EntityEvent, InMemoryEntityEventBus, OutboxDispatcher,
-    OutboxStore,
+    DbOutboxStore, EntityAction, EntityEvent, InMemoryEntityEventBus, OutboxDispatcher, OutboxStore,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,7 +36,9 @@ async fn test_record_dispatch_once_and_mark() {
     let mut rx = bus.subscribe().await;
 
     store
-        .record(&EntityEvent::insert("users", "1").with_payload(serde_json::json!({"name": "alice"})))
+        .record(
+            &EntityEvent::insert("users", "1").with_payload(serde_json::json!({"name": "alice"})),
+        )
         .await
         .expect("record 1");
     store
@@ -73,8 +74,14 @@ async fn test_record_dispatch_once_and_mark() {
 async fn test_pending_events_survive_for_replay() {
     let (store, path) = temp_store("replay").await;
     // 只登记，不投递
-    store.record(&EntityEvent::insert("orders", "7")).await.expect("record");
-    store.record(&EntityEvent::insert("orders", "8")).await.expect("record");
+    store
+        .record(&EntityEvent::insert("orders", "7"))
+        .await
+        .expect("record");
+    store
+        .record(&EntityEvent::insert("orders", "8"))
+        .await
+        .expect("record");
 
     // 只取第一条（模拟批处理中断）
     let pending = store.fetch_pending(1).await.expect("fetch pending");
@@ -128,7 +135,10 @@ async fn test_background_dispatcher_smoke() {
         shutdown.clone(),
     );
 
-    store.record(&EntityEvent::delete("users", "9")).await.expect("record");
+    store
+        .record(&EntityEvent::delete("users", "9"))
+        .await
+        .expect("record");
 
     let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
         .await

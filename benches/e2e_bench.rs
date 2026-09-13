@@ -50,9 +50,7 @@ fn bench_pool_acquire(c: &mut Criterion) {
     group.sample_size(30);
     group.bench_function("get_session_admin", |b| {
         b.iter(|| {
-            black_box(
-                rt.block_on(async { pool.get_session("admin").await.expect("get_session") }),
-            )
+            black_box(rt.block_on(async { pool.get_session("admin").await.expect("get_session") }))
         })
     });
     group.finish();
@@ -77,13 +75,11 @@ fn bench_simple_query(c: &mut Criterion) {
     group.sample_size(30);
     group.bench_function("query_rows_select_single", |b| {
         b.iter(|| {
-            black_box(
-                rt.block_on(async {
-                    pool.query_rows("SELECT id, val FROM t_e2e WHERE id = 1", "admin")
-                        .await
-                        .expect("query_rows")
-                }),
-            )
+            black_box(rt.block_on(async {
+                pool.query_rows("SELECT id, val FROM t_e2e WHERE id = 1", "admin")
+                    .await
+                    .expect("query_rows")
+            }))
         })
     });
     group.finish();

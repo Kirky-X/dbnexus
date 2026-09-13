@@ -346,7 +346,9 @@ mod t410_session_retry_wiring_tests {
 
         // 对照：无重试策略的同一查询应立即失败（< 250ms）
         let (url2, path2) = temp_db_url("qr_select_nop");
-        let pool2 = DbPool::with_config(config_with_policy_no_retry(url2.clone())).await.unwrap();
+        let pool2 = DbPool::with_config(config_with_policy_no_retry(url2.clone()))
+            .await
+            .unwrap();
         let start2 = Instant::now();
         let _ = pool2
             .query_rows("SELECT * FROM missing_table_t410", "admin")

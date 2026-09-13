@@ -28,10 +28,7 @@ fn temp_db_url(tag: &str) -> (PathBuf, String) {
 }
 
 fn parse_json_line(stdout: &str) -> serde_json::Value {
-    let line = stdout
-        .lines()
-        .last()
-        .expect("至少输出一行 JSON");
+    let line = stdout.lines().last().expect("至少输出一行 JSON");
     serde_json::from_str(line).expect("stdout 末行应为合法 JSON")
 }
 
@@ -141,8 +138,16 @@ fn test_user_add_list_remove_lifecycle() {
     // add
     let output = cli()
         .args([
-            "user", "add", "--username", "ops_admin", "--password", "s3cret!", "--role", "admin",
-            "--database-url", &url,
+            "user",
+            "add",
+            "--username",
+            "ops_admin",
+            "--password",
+            "s3cret!",
+            "--role",
+            "admin",
+            "--database-url",
+            &url,
         ])
         .output()
         .expect("run user add");
@@ -155,7 +160,14 @@ fn test_user_add_list_remove_lifecycle() {
     // 重复 add → 用户已存在（运行时失败 1）
     let dup = cli()
         .args([
-            "user", "add", "--username", "ops_admin", "--password", "x", "--database-url", &url,
+            "user",
+            "add",
+            "--username",
+            "ops_admin",
+            "--password",
+            "x",
+            "--database-url",
+            &url,
         ])
         .output()
         .expect("run duplicate add");
@@ -173,14 +185,28 @@ fn test_user_add_list_remove_lifecycle() {
 
     // remove
     let rm = cli()
-        .args(["user", "remove", "--username", "ops_admin", "--database-url", &url])
+        .args([
+            "user",
+            "remove",
+            "--username",
+            "ops_admin",
+            "--database-url",
+            &url,
+        ])
         .output()
         .expect("run user remove");
     assert_eq!(rm.status.code(), Some(0));
 
     // 删除不存在的用户 → 运行时失败 1
     let rm2 = cli()
-        .args(["user", "remove", "--username", "ops_admin", "--database-url", &url])
+        .args([
+            "user",
+            "remove",
+            "--username",
+            "ops_admin",
+            "--database-url",
+            &url,
+        ])
         .output()
         .expect("run user remove again");
     assert_eq!(rm2.status.code(), Some(1), "删除不存在用户应退出 1");
@@ -195,7 +221,14 @@ fn test_user_invalid_args_exit_2() {
     // 非法用户名 → 用法错误 2
     let output = cli()
         .args([
-            "user", "add", "--username", "bad user!", "--password", "x", "--database-url", &url,
+            "user",
+            "add",
+            "--username",
+            "bad user!",
+            "--password",
+            "x",
+            "--database-url",
+            &url,
         ])
         .output()
         .expect("run invalid add");
@@ -206,7 +239,14 @@ fn test_user_invalid_args_exit_2() {
     // 空密码 → 用法错误 2
     let output2 = cli()
         .args([
-            "user", "add", "--username", "ok_user", "--password", "", "--database-url", &url,
+            "user",
+            "add",
+            "--username",
+            "ok_user",
+            "--password",
+            "",
+            "--database-url",
+            &url,
         ])
         .output()
         .expect("run empty password");

@@ -9,7 +9,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use dashmap::DashMap;
 
-
 use super::types::*;
 
 /// Saga 执行日志
@@ -154,7 +153,11 @@ impl SagaLogStore for DbSagaLog {
             steps_text.replace('\'', "''"),
             updated_at,
         );
-        let session = self.pool.get_session("admin").await.map_err(|e| e.to_string())?;
+        let session = self
+            .pool
+            .get_session("admin")
+            .await
+            .map_err(|e| e.to_string())?;
         session.execute_raw(&sql).await.map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -250,4 +253,3 @@ fn saga_log_from_row(row: &serde_json::Value) -> Option<SagaLog> {
 // ============================================================================
 // SagaExecutionResult
 // ============================================================================
-

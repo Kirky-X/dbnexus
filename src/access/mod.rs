@@ -11,10 +11,10 @@ pub mod security;
 // 单文件模块
 #[cfg(feature = "authentication")]
 pub mod authentication;
-#[cfg(feature = "permission-engine")]
-pub mod permission_engine;
 /// 统一注入检测引擎（无外部依赖；关系型管线方法按 sql-parser 门控）
 pub mod injection_engine;
+#[cfg(feature = "permission-engine")]
+pub mod permission_engine;
 #[cfg(feature = "sql-parser")]
 pub mod sql_parser;
 
@@ -31,9 +31,11 @@ pub mod permission_audit_chain;
 pub mod permission_facade;
 
 // Re-exports: security
-#[cfg(feature = "sql-parser")]
-pub use security::{AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard};
 pub use injection_engine::{InjectionEngine, InjectionRule, RuleCategory};
+#[cfg(feature = "sql-parser")]
+pub use security::{
+    AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard,
+};
 pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 
 // Re-exports: permission

@@ -9,5 +9,7 @@ mod ddl_guard;
 mod sensitive;
 
 #[cfg(feature = "sql-parser")]
-pub use ddl_guard::{AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard};
+pub use ddl_guard::{
+    AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard,
+};
 pub use sensitive::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};

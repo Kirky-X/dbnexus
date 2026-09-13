@@ -1470,8 +1470,7 @@ mod tests {
     #[test]
     fn test_extract_down_sql_mixed_case_down_marker() {
         let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- Down:\nDROP TABLE t;\n";
-        let down =
-            MigrationExecutor::extract_down_sql(content).expect("应识别 -- Down: 标记");
+        let down = MigrationExecutor::extract_down_sql(content).expect("应识别 -- Down: 标记");
         assert_eq!(down, "DROP TABLE t;");
     }
 

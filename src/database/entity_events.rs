@@ -236,7 +236,12 @@ impl OutboxStore for DbOutboxStore {
         let entity_id = Self::sql_value(&Value::String(event.entity_id.clone()));
         let sql = format!(
             "INSERT INTO {} (entity, action, entity_id, payload, status, created_at) VALUES ({}, '{}', {}, {}, 'pending', {})",
-            self.table, entity, event.action.as_str(), entity_id, payload, event.occurred_at_ms
+            self.table,
+            entity,
+            event.action.as_str(),
+            entity_id,
+            payload,
+            event.occurred_at_ms
         );
         let session = self.pool.get_session("admin").await?;
         let exec = session.execute_raw(&sql).await?;
@@ -262,7 +267,9 @@ impl OutboxStore for DbOutboxStore {
             let Some(action) = EntityAction::from_str_raw(&action_text) else {
                 continue;
             };
-            let Some(entity_id) = row.get("entity_id").and_then(|v| v.as_str().map(String::from))
+            let Some(entity_id) = row
+                .get("entity_id")
+                .and_then(|v| v.as_str().map(String::from))
             else {
                 continue;
             };

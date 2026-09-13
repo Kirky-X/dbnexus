@@ -52,7 +52,11 @@ fn test_replica_config_empty_urls() {
 // 副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
 // ============================================================================
 
-#[cfg(all(feature = "replica-routing", feature = "sqlite", feature = "runtime-tokio-rustls"))]
+#[cfg(all(
+    feature = "replica-routing",
+    feature = "sqlite",
+    feature = "runtime-tokio-rustls"
+))]
 mod t411_replica_load_balancer_tests {
     use std::sync::Arc;
 
@@ -62,11 +66,8 @@ mod t411_replica_load_balancer_tests {
     use dbnexus::{DbPool, ReplicaConfig, ReplicaLoadBalancer, ReplicaNode};
 
     fn temp_db_url(tag: &str) -> String {
-        let path = std::env::temp_dir().join(format!(
-            "dbnexus_t411_{}_{}.db",
-            tag,
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("dbnexus_t411_{}_{}.db", tag, std::process::id()));
         format!("sqlite:{}?mode=rwc", path.display())
     }
 
@@ -78,13 +79,22 @@ mod t411_replica_load_balancer_tests {
 
     impl MockDetector {
         fn caught_up() -> Arc<Self> {
-            Arc::new(Self { caught_up: true, delay_ms: 0 })
+            Arc::new(Self {
+                caught_up: true,
+                delay_ms: 0,
+            })
         }
         fn lagging() -> Arc<Self> {
-            Arc::new(Self { caught_up: false, delay_ms: 0 })
+            Arc::new(Self {
+                caught_up: false,
+                delay_ms: 0,
+            })
         }
         fn slow(delay_ms: u64) -> Arc<Self> {
-            Arc::new(Self { caught_up: true, delay_ms })
+            Arc::new(Self {
+                caught_up: true,
+                delay_ms,
+            })
         }
     }
 
@@ -96,7 +106,11 @@ mod t411_replica_load_balancer_tests {
             }
             Ok(ReplicationLag {
                 lag_bytes: None,
-                lag_seconds: if self.caught_up { Some(0.0) } else { Some(999.0) },
+                lag_seconds: if self.caught_up {
+                    Some(0.0)
+                } else {
+                    Some(999.0)
+                },
                 is_caught_up: self.caught_up,
             })
         }
@@ -129,11 +143,8 @@ mod t411_replica_load_balancer_tests {
     async fn test_t411_read_write_split_routing() {
         let primary = Arc::new(DbPool::new(&temp_db_url("primary")).await.unwrap());
         let node = replica_node("replica-a", 1, MockDetector::caught_up()).await;
-        let balancer = ReplicaLoadBalancer::new(
-            primary.clone(),
-            vec![node],
-            ReplicaConfig::default(),
-        );
+        let balancer =
+            ReplicaLoadBalancer::new(primary.clone(), vec![node], ReplicaConfig::default());
 
         // 写路由：始终主库（last_selected 不变）
         let _w = balancer.get_write_session("admin").await.unwrap();
@@ -174,11 +185,8 @@ mod t411_replica_load_balancer_tests {
         let primary = Arc::new(DbPool::new(&temp_db_url("primary")).await.unwrap());
         let slow = replica_node("replica-slow", 1, MockDetector::slow(60)).await;
         let fast = replica_node("replica-fast", 1, MockDetector::caught_up()).await;
-        let balancer = ReplicaLoadBalancer::new(
-            primary.clone(),
-            vec![slow, fast],
-            ReplicaConfig::default(),
-        );
+        let balancer =
+            ReplicaLoadBalancer::new(primary.clone(), vec![slow, fast], ReplicaConfig::default());
 
         balancer.get_read_session("admin").await.unwrap();
         assert_eq!(
@@ -211,8 +219,10 @@ mod t411_replica_load_balancer_tests {
     async fn test_t411_failure_eviction_and_recovery() {
         let primary = Arc::new(DbPool::new(&temp_db_url("primary")).await.unwrap());
         let node = replica_node("replica-bad", 1, Arc::new(FailingDetector)).await;
-        let mut config = ReplicaConfig::default();
-        config.replica_urls = vec!["replica-bad".to_string()];
+        let config = ReplicaConfig {
+            replica_urls: vec!["replica-bad".to_string()],
+            ..Default::default()
+        };
         let balancer = ReplicaLoadBalancer::new(primary.clone(), vec![node], config);
 
         // 连续失败达阈值（默认 3）→ 剔除
@@ -230,7 +240,10 @@ mod t411_replica_load_balancer_tests {
 
         // 恢复：手动复活（半开重探入口）
         balancer.revive_all();
-        assert!(!balancer.is_replica_evicted("replica-bad"), "revive 应清除剔除状态");
+        assert!(
+            !balancer.is_replica_evicted("replica-bad"),
+            "revive 应清除剔除状态"
+        );
     }
 
     #[tokio::test]

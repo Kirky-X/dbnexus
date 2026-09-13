@@ -149,7 +149,10 @@ impl DryRunDdlGuard {
                         reason: Some(error),
                     },
                 };
-                self.records.lock().expect("dry-run records").push(record.clone());
+                self.records
+                    .lock()
+                    .expect("dry-run records")
+                    .push(record.clone());
                 record
             })
             .collect()
@@ -463,7 +466,6 @@ mod tests {
         ));
     }
 
-
     use std::sync::Arc;
 
     /// 拒绝一切的测试策略（验证端口可注入自定义实现）
@@ -524,7 +526,13 @@ mod tests {
         assert_eq!(events.len(), 2, "audit 钩子应逐决策转发");
         assert!(events[0].allowed);
         assert!(!events[1].allowed);
-        assert!(events[1].reason.as_deref().unwrap().contains("DROP DATABASE"));
+        assert!(
+            events[1]
+                .reason
+                .as_deref()
+                .unwrap()
+                .contains("DROP DATABASE")
+        );
     }
 
     #[test]

@@ -47,7 +47,8 @@ mod tests {
     const TEST_WEAK_NO_DIGIT: &str = "OnlyLetters";
 
     async fn create_test_manager() -> AuthenticationManager {
-        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let manager =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
         // 添加测试用户
         let password_hash = manager.password_hasher.hash(TEST_PASSWORD).unwrap();
@@ -156,7 +157,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_weak_password_rejected() {
-        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let manager =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         // 太短
         let result = manager.register_user("u1", TEST_WEAK_SHORT, "user").await;
         assert!(
@@ -167,7 +169,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_no_letter_rejected() {
-        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let manager =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         // 无字母
         let result = manager
             .register_user("u2", TEST_WEAK_NO_LETTER, "user")
@@ -180,7 +183,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_no_digit_rejected() {
-        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let manager =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         // 无数字
         let result = manager
             .register_user("u3", TEST_WEAK_NO_DIGIT, "user")
@@ -193,7 +197,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_user_strong_password_succeeds_and_authenticates() {
-        let manager = AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
+        let manager =
+            AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
         manager
             .register_user("alice", TEST_STRONG_PASSWORD, "admin")
             .await

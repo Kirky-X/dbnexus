@@ -175,7 +175,10 @@ fn test_shard_error_clone() {
 fn test_compute_from_rows_count() {
     use dbnexus::AggregateFunction;
     let rows = vec![
-        (0u32, vec![serde_json::json!({"id": 1}), serde_json::json!({"id": 2})]),
+        (
+            0u32,
+            vec![serde_json::json!({"id": 1}), serde_json::json!({"id": 2})],
+        ),
         (1u32, vec![serde_json::json!({"id": 3})]),
     ];
     let agg = AggregateFunction::Count.compute_from_rows(&rows);
@@ -189,7 +192,13 @@ fn test_compute_from_rows_count() {
 fn test_compute_from_rows_sum_avg_min_max() {
     use dbnexus::AggregateFunction;
     let rows = vec![
-        (0u32, vec![serde_json::json!({"val": 10.0}), serde_json::json!({"val": 20.0})]),
+        (
+            0u32,
+            vec![
+                serde_json::json!({"val": 10.0}),
+                serde_json::json!({"val": 20.0}),
+            ],
+        ),
         (1u32, vec![serde_json::json!({"val": 30.0})]),
     ];
     match AggregateFunction::Sum("val".to_string()).compute_from_rows(&rows) {
@@ -219,9 +228,21 @@ fn test_compute_from_rows_empty_and_missing_column() {
         AggregateFunction::Sum("v".to_string()).compute_from_rows(&empty),
         Some(AggregateValue::Sum(v)) if v == 0.0
     ));
-    assert!(AggregateFunction::Avg("v".to_string()).compute_from_rows(&empty).is_none());
-    assert!(AggregateFunction::Min("v".to_string()).compute_from_rows(&empty).is_none());
+    assert!(
+        AggregateFunction::Avg("v".to_string())
+            .compute_from_rows(&empty)
+            .is_none()
+    );
+    assert!(
+        AggregateFunction::Min("v".to_string())
+            .compute_from_rows(&empty)
+            .is_none()
+    );
     // 行存在但列缺失：AVG None
     let rows = vec![(0u32, vec![serde_json::json!({"other": 1.0})])];
-    assert!(AggregateFunction::Avg("v".to_string()).compute_from_rows(&rows).is_none());
+    assert!(
+        AggregateFunction::Avg("v".to_string())
+            .compute_from_rows(&rows)
+            .is_none()
+    );
 }

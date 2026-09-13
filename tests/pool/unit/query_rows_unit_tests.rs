@@ -38,7 +38,8 @@ async fn test_query_rows_returns_data_rows() {
         .unwrap();
 
     // 统一行查询：返回真实数据行
-    let rows = pool.query_rows("SELECT id, val FROM t_qr ORDER BY id", "admin")
+    let rows = pool
+        .query_rows("SELECT id, val FROM t_qr ORDER BY id", "admin")
         .await
         .unwrap();
     assert_eq!(rows.len(), 2, "应返回 2 行数据");
@@ -135,13 +136,12 @@ async fn test_scatter_query_rows_with_aggregate() {
 #[cfg(all(feature = "data-protection", feature = "permission"))]
 #[tokio::test]
 async fn test_query_rows_masking_and_rls() {
-    use dbnexus::{
-        access::data_protection::{DataProtection, MaskStrategy, MaskingEngine, RlsEngine},
+    use dbnexus::access::data_protection::{
+        DataProtection, MaskStrategy, MaskingEngine, RlsEngine,
     };
     use std::sync::Arc;
 
-    let db_path =
-        std::env::temp_dir().join(format!("dbnexus_dp_{}.db", std::process::id()));
+    let db_path = std::env::temp_dir().join(format!("dbnexus_dp_{}.db", std::process::id()));
     let url = format!("sqlite:{}?mode=rwc", db_path.display());
     let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
 
@@ -190,14 +190,23 @@ async fn test_query_rows_masking_and_rls() {
 
     // 配置：email 脱敏（哈希）+ orders 表 tenant_id RLS（仅 t-100 可见）
     pool.set_data_protection(DataProtection {
-        masking: Some(Arc::new(MaskingEngine::new().rule("email", MaskStrategy::Hash))),
-        rls: Some(Arc::new(RlsEngine::new().policy("orders", "tenant_id", "t-100"))),
+        masking: Some(Arc::new(
+            MaskingEngine::new().rule("email", MaskStrategy::Hash),
+        )),
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "orders",
+            "tenant_id",
+            "t-100",
+        ))),
     })
     .await;
 
     // admin（管理通道）：不注入 RLS，但出口仍脱敏
     let rows = pool
-        .query_rows("SELECT id, email, tenant_id FROM orders ORDER BY id", "admin")
+        .query_rows(
+            "SELECT id, email, tenant_id FROM orders ORDER BY id",
+            "admin",
+        )
         .await
         .unwrap();
     assert_eq!(rows.len(), 2, "admin 不受 RLS 限制");

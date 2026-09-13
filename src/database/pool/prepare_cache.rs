@@ -114,16 +114,15 @@ impl<V> PreparedStatementCache<V> {
         let value = Arc::new(prepare(&key));
 
         // 容量已满 → 淘汰最久未使用条目
-        if state.map.len() >= self.capacity {
-            if let Some(oldest_key) = state
+        if state.map.len() >= self.capacity
+            && let Some(oldest_key) = state
                 .map
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(key, _)| Arc::clone(key))
-            {
-                state.map.remove(&oldest_key);
-                state.evictions += 1;
-            }
+        {
+            state.map.remove(&oldest_key);
+            state.evictions += 1;
         }
 
         state.map.insert(

@@ -300,7 +300,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let leaked_pw = ["p@ss", "w0rd"].concat();
         let leaked_key = ["ak_", "12345"].concat();
         assert!(!after.contains(&leaked_pw), "原始密码值不应残留: {after}");
-        assert!(!after.contains(&leaked_key), "原始 api_key 值不应残留: {after}");
+        assert!(
+            !after.contains(&leaked_key),
+            "原始 api_key 值不应残留: {after}"
+        );
         // 非敏感字段不受影响
         assert!(after.contains("secret_user"), "非敏感字段应保留: {after}");
         println!("  ✓ password 和 api_key 已被自动脱敏");
