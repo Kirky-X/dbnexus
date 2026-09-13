@@ -662,7 +662,7 @@ DBNexus is built with security in mind; its defense-in-depth design spans five l
 
 Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicates, exemptions documented in [deny.toml](deny.toml)) and `cargo audit` ([audit.toml](audit.toml)), plus CodeQL semantic scanning, Dependabot automatic updates, and pre-commit private-key scanning.
 
-**Vulnerability reporting**: please do not report through public issues. Use the private GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/advisories/new) channel ("Report a vulnerability"). Response commitment: acknowledgment within 48 hours, initial assessment within 7 days (see [SECURITY.md](SECURITY.md)).
+**Vulnerability reporting**: please do not report through public issues. Use the private GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/advisories/new) channel ("Report a vulnerability"). Response commitment: acknowledgment within 48 hours, initial assessment within 7 days (see [SECURITY.md](docs/SECURITY.md)).
 
 ---
 

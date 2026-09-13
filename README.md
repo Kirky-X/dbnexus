@@ -662,7 +662,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 供应链安全：CI 常开 `cargo deny check`（许可证/公告/重复依赖，豁免留痕于 [deny.toml](deny.toml)）与 `cargo audit`（[audit.toml](audit.toml)），CodeQL 语义扫描与 Dependabot 自动更新，pre-commit 私钥扫描拦截。
 
-**漏洞报告**：请勿通过公开 Issue 提交。请使用 GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/advisories/new) 私密通道（"Report a vulnerability"）。响应承诺：48 小时内确认，7 天内给出初步评估（见 [SECURITY.md](SECURITY.md)）。
+**漏洞报告**：请勿通过公开 Issue 提交。请使用 GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/advisories/new) 私密通道（"Report a vulnerability"）。响应承诺：48 小时内确认，7 天内给出初步评估（见 [SECURITY.md](docs/SECURITY.md)）。
 
 ---
 
