@@ -39,8 +39,6 @@ Define entities with derive macros; connection pooling, permissions, auditing, a
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
 - [🏗️ Architecture](#️-architecture)
-- [🔗 Core Execution Path](#-core-execution-path)
-- [🌐 Database Support](#-database-support)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
@@ -404,17 +402,13 @@ DBNexus follows a layered module design: `foundation` provides the config and er
 
 The layered module design, per-layer responsibilities and the full module overview diagram are detailed in the [Architecture document](docs/ARCHITECTURE.md#系统架构) (design philosophy, module breakdown, data flow, and security/performance design).
 
----
-
-## 🔗 Core Execution Path
+### 🔗 Core Execution Path
 
 Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → per-table permission check → driver execution"; on parse failure the admin role is allowed and non-admin roles are denied, every target table in JOINs / subqueries is checked (completed in rc.2), and the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session.rs](src/database/pool/session.rs)).
 
 See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行管道) for the full sequence diagram and path notes.
 
----
-
-## 🌐 Database Support
+### 🌐 Database Support
 
 | Driver feature | Database | Type | Introduced |
 |----------|--------|------|----------|
