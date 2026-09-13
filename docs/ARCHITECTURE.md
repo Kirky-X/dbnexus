@@ -93,7 +93,7 @@ DBNexus 的架构遵循**分层设计**，具有清晰的关注点分离，使�
 
 ## 系统架构
 
-DBNexus 的模块全景与依赖方向如下（与 [README 架构图](../README.md#️-架构)一致）：
+DBNexus 的模块全景与依赖方向如下：
 
 ```mermaid
 flowchart TD

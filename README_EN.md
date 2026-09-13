@@ -222,16 +222,7 @@ Model::find_all(&session).await?; // Error: permission denied
 
 ### Database Drivers
 
-Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers.
-
-| Flag | Description | Default |
-|------|------|:----:|
-| `sqlite` | Embedded SQLite (sea-orm/sqlx-sqlite) | No |
-| `postgres` | PostgreSQL (sea-orm/sqlx-postgres) | No |
-| `mysql` | MySQL (sea-orm/sqlx-mysql) | No |
-| `duckdb` | Embedded analytical DuckDB (new in 0.3.0) | No |
-| `ladybug` | Embedded Ladybug graph database, formerly Kuzu (new in 0.4.0) | No |
-| `neo4j` | Neo4j graph database server (new in 0.4.0) | No |
+Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers. `sqlite` / `postgres` / `mysql` are backed by the corresponding sea-orm/sqlx drivers, while `duckdb` (embedded analytical), `ladybug` (formerly Kuzu) and `neo4j` use their own native bindings; see [Database Support](#-database-support) for each driver's database, type and introduction version.
 
 ### Core Capabilities
 
@@ -403,72 +394,7 @@ See [examples/README.md](examples/README.md) for full details.
 
 ### 📝 Code Snippets
 
-<details>
-<summary>⚙️ Advanced configuration and environment variables</summary>
-
-```rust
-use dbnexus::{DbPool, DbConfig, PoolConfig};
-
-let config = DbConfig {
-    url: "postgresql://user:pass@localhost/db".to_string(),
-    pool_config: PoolConfig {
-        max_connections: 20,
-        min_connections: 5,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-    },
-    ..Default::default()
-};
-
-let pool = DbPool::with_config(config).await?;
-```
-
-```bash
-export DATABASE_URL="postgresql://user:pass@localhost/db"
-export DB_MAX_CONNECTIONS=20
-export DB_MIN_CONNECTIONS=5
-export DB_ADMIN_ROLE=admin
-```
-
-```rust
-let config = dbnexus::DbConfig::from_env()?;
-let pool = dbnexus::DbPool::with_config(config).await?;
-```
-
-</details>
-
-<details>
-<summary>🔄 Transactions and monitoring</summary>
-
-```rust
-let session = pool.get_session("admin").await?;
-
-// Begin transaction
-session.begin_transaction().await?;
-
-// Multiple operations
-Model::insert(&session, user1).await?;
-Model::insert(&session, user2).await?;
-
-// Commit
-session.commit().await?;
-```
-
-```rust
-use dbnexus::{DbPool, MetricsCollector};
-
-let pool = DbPool::new("postgresql://localhost/db").await?;
-
-// Get pool status
-let status = pool.status();
-println!("Active: {}, Idle: {}", status.active, status.idle);
-
-// Export Prometheus metrics
-let metrics = MetricsCollector::new();
-println!("{}", metrics.export_prometheus());
-```
-
-</details>
+More code snippets on advanced configuration and environment variables, transactions and monitoring can be found in the [User Guide](docs/USER_GUIDE.md) (configuration, transactions and metrics chapters) and the [API Reference](docs/API_REFERENCE.md).
 
 ---
 
@@ -476,79 +402,15 @@ println!("{}", metrics.export_prometheus());
 
 DBNexus follows a layered module design: `foundation` provides the config and error base; the `database` module hosts the connection pool, Session, migrations, sharding, Saga and scatter-gather; the `access` module concentrates SQL parsing, the permission engine, authentication and masking; the `domain` module holds domain abstractions for permission/audit/migration; `observability` and `reliability` provide metrics/health and retry/failover respectively. All optional capabilities are trimmed at compile time via feature gates, and the `dbnexus-macros` proc-macro crate generates permission-checked CRUD code for entities at compile time.
 
-```mermaid
-flowchart TD
-    APP["Application code"]
-    MAC["dbnexus-macros proc macros<br/>db_entity and db_repository"]
-    API["database module<br/>DbPool / Session / transactions / migration / sharding / Saga"]
-    ACC["access module<br/>sql_parser / permission / auth / masking"]
-    DOM["domain module<br/>permission / audit / migration abstractions"]
-    OBS["observability module<br/>metrics / health / otel"]
-    REL["reliability module<br/>retry"]
-    STO["storage module<br/>global_index"]
-    INT["integrations module<br/>oxcache / trait-kit"]
-    I18N["i18n module<br/>ICU4X locale formatting"]
-    FND["foundation module<br/>config / error"]
-    DRV["Database driver layer<br/>Sea-ORM / SQLx / lbug / neo4rs"]
-    DB[("SQLite / PostgreSQL / MySQL<br/>DuckDB / Ladybug / Neo4j")]
-
-    MAC -.->|generates permission-checked CRUD at compile time| APP
-    APP --> API
-    API --> ACC
-    ACC --> DOM
-    API --> OBS
-    API --> REL
-    API --> STO
-    API --> INT
-    API --> I18N
-    ACC --> FND
-    API --> FND
-    API --> DRV
-    DRV --> DB
-```
-
-See the [Architecture document](docs/ARCHITECTURE.md) for design philosophy, module breakdown, data flow, and security/performance design.
+The layered module design, per-layer responsibilities and the full module overview diagram are detailed in the [Architecture document](docs/ARCHITECTURE.md#系统架构) (design philosophy, module breakdown, data flow, and security/performance design).
 
 ---
 
 ## 🔗 Core Execution Path
 
-The real execution pipeline of `Session::execute_raw` under the `sql-parser` + `permission` feature combination (source: [src/database/pool/session.rs](src/database/pool/session.rs)):
+Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → per-table permission check → driver execution"; on parse failure the admin role is allowed and non-admin roles are denied, every target table in JOINs / subqueries is checked (completed in rc.2), and the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session.rs](src/database/pool/session.rs)).
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant App as Application
-    participant Pool as DbPool
-    participant Sess as Session
-    participant Parser as SqlParser shared
-    participant Perm as Permission Context
-    participant DB as Sea-ORM Driver
-
-    App->>Pool: get_session with role
-    Pool->>Pool: validate role and permission config
-    Pool-->>App: return Session handle
-    App->>Sess: execute_raw with SQL
-    Sess->>Sess: reject DDL statements
-    Sess->>Parser: parse_single
-    Parser-->>Sess: operation type and all table names
-    Sess->>Perm: per-table permission check
-    alt any table denied
-        Sess-->>App: return permission denied error
-    else all allowed
-        Sess->>DB: execute_unprepared
-        DB-->>Sess: execution result
-        Sess-->>App: return ExecResult
-    end
-```
-
-Path notes:
-
-- **Safe default on parse failure**: the admin role is allowed, non-admin roles are denied; no silent fallback
-- **Full cross-table coverage**: every target table in JOINs / subqueries goes through the permission check (completed in rc.2)
-- **Automatic idempotent retry**: with the `retry` feature, idempotent statements such as SELECT are retried with exponential backoff; write statements are never retried
-- **Slow-query observability**: with the `metrics` feature, execution time is recorded and anything above the `SlowQueryConfig` threshold lands in `MetricsCollector` (wired in rc.3)
-- **Auditable admin**: the admin role bypasses per-table permission checks, but bypass operations are recorded by the `audit` feature
+See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行管道) for the full sequence diagram and path notes.
 
 ---
 
@@ -581,14 +443,7 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 ### Test strategy matrix
 
-| Layer | Location | Description |
-|------|------|------|
-| Unit tests | `#[cfg(test)]` in `src/**` | Self-tests for error/config/domain modules, run with `--lib` |
-| Integration tests | `tests/**` (unit / integration layout) | Explicitly registered `[[test]]` targets, feature-gated |
-| E2E scenarios | `tests/e2e/` | Boundary/exception/distributed end-to-end, isolated via `cfg(feature)` |
-| Container-level | `postgres_testcontainers` / `mysql_testcontainers` | testcontainers with per-test container isolation |
-| Doc tests | doc tests | Run separately in CI via `cargo test --doc` |
-| Benchmarks | [benches/](benches/) | 5 criterion benchmarks (see [Performance](#-performance)) |
+Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicitly registered integration targets under `tests/**` (feature-gated), end-to-end scenarios in `tests/e2e/` (isolated via `cfg(feature)`), `postgres_testcontainers` / `mysql_testcontainers` container-level tests (per-test container isolation), doc tests (run separately in CI via `cargo test --doc`), and criterion benchmarks under [benches/](benches/) (see [Performance](#-performance)). The test pyramid baseline, driver-group matrix and E2E scenario definitions are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
 ### Test scale (as of 0.6.0-rc.3)
 
@@ -612,50 +467,21 @@ cargo test --no-default-features --features postgres,default-no-db,all-optional 
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 ```
 
-> Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time (`compile_error!`); verify multiple drivers via grouped feature combinations. Scenario definitions and the driver-group matrix are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
+> Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time (`compile_error!`); verify multiple drivers via grouped feature combinations.
 
 ---
 
 ## 📊 Performance
 
-DBNexus follows the zero-cost abstraction principle; its performance characteristics are guaranteed at the design level:
-
-- **Zero-cost feature gating**: optional capabilities are compiled out via `#[cfg(feature = ...)]` — a no-op with zero overhead when disabled
-- **Lock-free hot paths**: pool state uses atomics; permission config is read via lock-free `ArcSwap`; atomics use `AcqRel` ordering
-- **Async first**: all I/O uses `async/await`; read-heavy state uses `RwLock`
-- **Pool strategy**: LRU connection reuse, max-connection limits, minimum-connection warmup, health checks to evict dead connections
-- **Hot path optimizations** (0.5.1): static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing
+DBNexus follows the zero-cost abstraction principle; its performance characteristics are guaranteed at the design level: zero-cost feature gating (compiled out via `#[cfg(feature = ...)]`), lock-free hot paths (pool state via atomics, permission config and cache provider read via lock-free `ArcSwap`, `AcqRel` ordering), async first (all I/O uses `async/await`, read-heavy state uses `RwLock`), pool strategy (LRU connection reuse, max-connection limits, minimum-connection warmup, health checks to evict dead connections), plus the 0.5.1 hot-path optimizations (static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing). See [Architecture · Performance](docs/ARCHITECTURE.md#性能架构) for the design details.
 
 ### End-to-end benchmarks
 
-The repository ships 5 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench` (under [benches/](benches/)). Run:
-
-```bash
-cargo bench
-```
-
-The end-to-end baseline below is excerpted from [docs/PERFORMANCE.md](docs/PERFORMANCE.md) (2026-09-11, WSL2 linux x86_64, 12 logical cores, rustc 1.97.1, bench profile, sqlite temp-file database; single-sample local reference, not an SLA):
-
-| Benchmark | Path | Baseline (median) |
-|------|------|----------------|
-| `e2e_pool/get_session_admin` | `DbPool::get_session` handle acquisition (permission check + pool accounting) | ≈ 0.24 µs |
-| `e2e_query/query_rows_select_single` | `DbPool::query_rows` full row-query pipeline (parse → permission → execute → JSON output) | ≈ 480 µs |
-| `e2e_write/execute_raw_insert_x64` | `Session::execute_raw` INSERT loop, 64 rows/iteration | ≈ 708 ms/iteration (≈ 11 ms/row) |
+The repository ships 5 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench` (under [benches/](benches/), run via `cargo bench`). The end-to-end baseline (sampled 2026-09-11, not an SLA): `DbPool::get_session` handle acquisition ≈ 0.24 µs, `DbPool::query_rows` single-row full pipeline ≈ 480 µs, `Session::execute_raw` 64-row INSERT loop ≈ 708 ms/iteration (≈ 11 ms/row). The measurement environment, per-item interpretation and reproduction commands live in [Performance Baseline · End-to-end baseline](docs/PERFORMANCE.md#端到端基线).
 
 ### Historical optimization comparison
 
-Cumulative results of two platform optimization rounds, excerpted from [benches/baseline-after.md](benches/baseline-after.md) (2026-08-14, Linux x86_64, release profile, lto=thin):
-
-| Benchmark | Original Baseline | After Optimization | Cumulative Change |
-|-----------|-------------------|--------------------|-------------------|
-| shard_id_for_key | 2.9725 – 3.0496 µs | 2.8871 – 2.9188 µs | -3.9% |
-| enforce_shard_binding_conflict | 5.8179 – 5.9490 µs | 5.4019 – 5.5934 µs | -5.5% |
-| prometheus_export | 4.2057 – 4.3566 µs | 4.0485 – 4.1789 µs | -3.1% |
-| histogram_record | 882.21 – 888.70 ns | 796.62 – 804.15 ns | -9.4% |
-| permission_cache_hit | 8.8730 – 8.9906 µs | 8.1415 – 8.1825 µs | -8.3% |
-| permission_cache_miss | 3.6778 – 3.7570 µs | 3.5827 – 3.6179 µs | -2.8% |
-
-All 6 benchmarks improved with no regressions; the average cumulative improvement is about 5.5%.
+The cumulative results of the two platform optimization rounds (all 6 benchmarks improved with no regressions, about 5.5% on average) are recorded in [benches/baseline-after.md](benches/baseline-after.md) and [Performance Baseline · Historical comparison](docs/PERFORMANCE.md#历史优化对照).
 
 ---
 
@@ -696,31 +522,7 @@ Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicate
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first for the TDD workflow, code conventions, and commit/PR process.
-
-### Development environment
-
-| Item | Requirement |
-|----|------|
-| Toolchain | Rust 1.97.1 (pinned by `rust-toolchain.toml`, edition 2024) |
-| Git hooks | lefthook / pre-commit (install via `./scripts/install-pre-commit.sh`; bypassing with `--no-verify` is forbidden) |
-| Commit messages | Conventional Commits (`feat` / `fix` / `docs` / `refactor` etc., enforced by the commit-msg hook) |
-| Quality gates | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, `cargo audit`, ≥ 80% line coverage |
-
-```bash
-# Clone repository
-git clone https://github.com/Kirky-X/dbnexus.git
-cd dbnexus
-
-# Install pre-commit hooks
-./scripts/install-pre-commit.sh
-
-# Run tests (CI feature combination)
-cargo test --no-default-features --features sqlite,default-no-db,all-optional
-
-# Run linter
-cargo clippy --no-default-features --features sqlite,default-no-db,all-optional --all-targets -- -D warnings
-```
+Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first for the TDD workflow, the development environment requirements (Rust 1.97.1 toolchain, lefthook / pre-commit hooks — installed via `./scripts/install-pre-commit.sh`, bypassing with `--no-verify` is forbidden, Conventional Commits commit messages) and the quality gates (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, `cargo audit`, ≥ 80% line coverage), as well as the commit/PR process.
 
 ---
 

@@ -797,19 +797,7 @@ let hits = engine.scan_ddl("DROP DATABASE production");
 
 ### DDL 守卫 `DdlGuard`（`sql-parser` 特性）
 
-基于 AST 的 DDL 验证，配合统一注入检测引擎拦截危险模式。完整说明与白名单见[用户指南 · DDL 安全守卫](USER_GUIDE.md#ddl-安全守卫)。
-
-```rust
-use dbnexus::{DdlGuard, DdlValidationResult};
-
-let guard = DdlGuard::new();
-match guard.validate("CREATE TABLE users (id INT)") {
-    Ok(DdlValidationResult::Allowed) => println!("放行"),
-    Ok(DdlValidationResult::Forbidden(reason)) => println!("拦截: {}", reason),
-    Ok(DdlValidationResult::ParseError(err)) => println!("解析失败: {}", err),
-    Err(err) => println!("校验错误: {}", err),
-}
-```
+基于 AST 的 DDL 验证，配合统一注入检测引擎拦截危险模式。完整说明、三态结果、白名单与示例见[用户指南 · DDL 安全守卫](USER_GUIDE.md#ddl-安全守卫)。
 
 守卫策略可替换：`DdlGuardPolicy` 端口 + `AuditingDdlGuard`（审计装饰器）/ `DryRunDdlGuard`（干跑），经 `DbPoolBuilder::ddl_guard` / `DbPool::set_ddl_guard` 注入。
 

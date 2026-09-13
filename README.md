@@ -222,16 +222,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ### 数据库驱动
 
-关系型驱动四选一（编译期互斥）；图数据库驱动可与关系型驱动共存。
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `sqlite` | SQLite 嵌入式（sea-orm/sqlx-sqlite） | 否 |
-| `postgres` | PostgreSQL（sea-orm/sqlx-postgres） | 否 |
-| `mysql` | MySQL（sea-orm/sqlx-mysql） | 否 |
-| `duckdb` | DuckDB 嵌入式分析型数据库（0.3.0 新增） | 否 |
-| `ladybug` | Ladybug 嵌入式图数据库，原 Kuzu（0.4.0 新增） | 否 |
-| `neo4j` | Neo4j 图数据库服务器（0.4.0 新增） | 否 |
+关系型驱动四选一（编译期互斥）；图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库、类型与引入版本见[数据库支持](#-数据库支持)。
 
 ### 核心能力
 
@@ -403,72 +394,7 @@ cargo build --all-targets
 
 ### 📝 代码片段
 
-<details>
-<summary>⚙️ 高级配置与环境变量</summary>
-
-```rust
-use dbnexus::{DbPool, DbConfig, PoolConfig};
-
-let config = DbConfig {
-    url: "postgresql://user:pass@localhost/db".to_string(),
-    pool_config: PoolConfig {
-        max_connections: 20,
-        min_connections: 5,
-        idle_timeout: 300,
-        acquire_timeout: 5000,
-    },
-    ..Default::default()
-};
-
-let pool = DbPool::with_config(config).await?;
-```
-
-```bash
-export DATABASE_URL="postgresql://user:pass@localhost/db"
-export DB_MAX_CONNECTIONS=20
-export DB_MIN_CONNECTIONS=5
-export DB_ADMIN_ROLE=admin
-```
-
-```rust
-let config = dbnexus::DbConfig::from_env()?;
-let pool = dbnexus::DbPool::with_config(config).await?;
-```
-
-</details>
-
-<details>
-<summary>🔄 事务与监控</summary>
-
-```rust
-let session = pool.get_session("admin").await?;
-
-// 开始事务
-session.begin_transaction().await?;
-
-// 多个操作
-Model::insert(&session, user1).await?;
-Model::insert(&session, user2).await?;
-
-// 提交
-session.commit().await?;
-```
-
-```rust
-use dbnexus::{DbPool, MetricsCollector};
-
-let pool = DbPool::new("postgresql://localhost/db").await?;
-
-// 获取连接池状态
-let status = pool.status();
-println!("活跃: {}, 空闲: {}", status.active, status.idle);
-
-// 导出 Prometheus 指标
-let metrics = MetricsCollector::new();
-println!("{}", metrics.export_prometheus());
-```
-
-</details>
+高级配置与环境变量、事务与监控等更多代码片段见[用户指南](docs/USER_GUIDE.md)（配置、事务、指标章节）与 [API 参考](docs/API_REFERENCE.md)。
 
 ---
 
@@ -476,79 +402,15 @@ println!("{}", metrics.export_prometheus());
 
 DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`database` 模块承载连接池、Session、迁移、分片、Saga 与 scatter-gather，`access` 模块集中 SQL 解析、权限引擎、认证与脱敏，`domain` 模块沉淀权限/审计/迁移的领域抽象，`observability` 与 `reliability` 分别提供指标健康与重试容错。所有可选能力经特性门控编译期裁剪，过程宏 `dbnexus-macros` 在编译期为实体生成带权限检查的 CRUD 代码。
 
-```mermaid
-flowchart TD
-    APP["应用代码"]
-    MAC["dbnexus-macros 过程宏<br/>db_entity 与 db_repository"]
-    API["database 模块<br/>DbPool / Session / 事务 / 迁移 / 分片 / Saga"]
-    ACC["access 模块<br/>sql_parser / permission / 认证 / 脱敏"]
-    DOM["domain 模块<br/>permission / audit / migration 领域抽象"]
-    OBS["observability 模块<br/>metrics / health / otel"]
-    REL["reliability 模块<br/>retry"]
-    STO["storage 模块<br/>global_index"]
-    INT["integrations 模块<br/>oxcache / trait-kit"]
-    I18N["i18n 模块<br/>ICU4X locale 格式化"]
-    FND["foundation 模块<br/>config / error"]
-    DRV["数据库驱动层<br/>Sea-ORM / SQLx / lbug / neo4rs"]
-    DB[("SQLite / PostgreSQL / MySQL<br/>DuckDB / Ladybug / Neo4j")]
-
-    MAC -.->|编译期生成带权限检查的 CRUD| APP
-    APP --> API
-    API --> ACC
-    ACC --> DOM
-    API --> OBS
-    API --> REL
-    API --> STO
-    API --> INT
-    API --> I18N
-    ACC --> FND
-    API --> FND
-    API --> DRV
-    DRV --> DB
-```
-
-详细的设计理念、模块划分、数据流与安全/性能设计见 [架构文档](docs/ARCHITECTURE.md)。
+分层模块设计、各层职责与模块全景图的详细设计（设计理念、模块划分、数据流与安全/性能设计）见[架构文档](docs/ARCHITECTURE.md#系统架构)。
 
 ---
 
 ## 🔗 核心执行路径
 
-`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下的真实执行管道（源码见 [src/database/pool/session.rs](src/database/pool/session.rs)）：
+`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下的真实执行管道：`get_session` 校验角色后，语句经"拒绝 DDL → 解析 → 逐表权限检查 → 驱动执行"返回；解析失败时 admin 角色放行、非 admin 角色拒绝，JOIN / 子查询涉及的目标表逐一受检（rc.2 补全）；`retry` 幂等重试、`metrics` 慢查询观测与 `audit` 的 admin 绕过记录均挂接于此管道（源码见 [src/database/pool/session.rs](src/database/pool/session.rs)）。
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant App as 应用代码
-    participant Pool as DbPool
-    participant Sess as Session
-    participant Parser as SqlParser 共享单例
-    participant Perm as 权限上下文
-    participant DB as Sea-ORM 驱动
-
-    App->>Pool: get_session 指定角色
-    Pool->>Pool: 校验角色与权限配置
-    Pool-->>App: 返回 Session 句柄
-    App->>Sess: execute_raw 传入 SQL
-    Sess->>Sess: 拒绝 DDL 语句
-    Sess->>Parser: parse_single 解析语句
-    Parser-->>Sess: 操作类型与全部表名
-    Sess->>Perm: 逐表检查表级权限
-    alt 任一表未授权
-        Sess-->>App: 返回权限拒绝错误
-    else 全部放行
-        Sess->>DB: execute_unprepared 执行
-        DB-->>Sess: 执行结果
-        Sess-->>App: 返回 ExecResult
-    end
-```
-
-路径要点：
-
-- **解析失败安全默认**：admin 角色放行，非 admin 角色拒绝，不做静默降级
-- **跨表全覆盖**：JOIN / 子查询涉及的目标表逐一纳入权限检查（rc.2 补全）
-- **幂等自动重试**：`retry` 特性下，SELECT 等幂等语句失败后按指数退避重试，写类语句不重试
-- **慢查询观测**：`metrics` 特性下记录执行耗时，超过 `SlowQueryConfig` 阈值自动记入 `MetricsCollector`（rc.3 接线）
-- **admin 可审计**：admin 绕过逐表权限检查，但绕过操作会被 `audit` 特性记录
+完整时序图与路径要点见[架构文档 · 核心执行管道](docs/ARCHITECTURE.md#核心执行管道)。
 
 ---
 
@@ -581,14 +443,7 @@ sequenceDiagram
 
 ### 测试策略矩阵
 
-| 层级 | 承载 | 说明 |
-|------|------|------|
-| 单元测试 | `src/**` 内 `#[cfg(test)]` | 错误/配置/领域模块自测，随 `--lib` 运行 |
-| 集成测试 | `tests/**`（unit / integration 分层目录） | 显式注册的 `[[test]]` 目标，按 feature 门控 |
-| E2E 场景 | `tests/e2e/` | 边界/异常/分布式端到端，按 `cfg(feature)` 隔离 |
-| 容器级测试 | `postgres_testcontainers` / `mysql_testcontainers` | testcontainers 每测试独立容器隔离 |
-| 文档测试 | doc tests | CI 单独运行 `cargo test --doc` |
-| 基准测试 | [benches/](benches/) | 5 个 criterion 基准（见[性能](#-性能)） |
+测试分六层承载：`src/**` 内 `#[cfg(test)]` 单元测试、`tests/**` 显式注册的集成测试目标（按 feature 门控）、`tests/e2e/` 端到端场景（按 `cfg(feature)` 隔离）、`postgres_testcontainers` / `mysql_testcontainers` 容器级测试（每测试独立容器隔离）、doc tests（CI 单独运行 `cargo test --doc`）与 [benches/](benches/) 基准测试（见[性能](#-性能)）。金字塔基线、驱动组矩阵与 E2E 场景定义详见 [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)。
 
 ### 测试规模（截至 0.6.0-rc.3）
 
@@ -612,50 +467,21 @@ cargo test --no-default-features --features postgres,default-no-db,all-optional 
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 ```
 
-> 嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动在编译期严格互斥（`compile_error!`），验证多驱动时按分组特性组合运行。场景定义与驱动组矩阵详见 [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)。
+> 嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动在编译期严格互斥（`compile_error!`），验证多驱动时按分组特性组合运行。
 
 ---
 
 ## 📊 性能
 
-DBNexus 遵循零成本抽象原则，性能相关能力均为设计层面保证：
-
-- **零成本特性门控**：可选功能经 `#[cfg(feature = ...)]` 编译期裁剪，未启用时为零开销空实现
-- **无锁热路径**：池状态用原子类型维护；权限配置经 `ArcSwap` 无锁读取；原子操作采用 `AcqRel` 内存序
-- **异步优先**：全部 I/O 使用 `async/await`；读多写少状态使用 `RwLock`
-- **连接池策略**：LRU 复用连接、限制最大连接、预热最小连接、健康检查剔除死连接
-- **热路径优化**（0.5.1）：注入检测模式表静态化、Saga 补偿查找预索引、`Session` 并发读优化、`DbConfig` Arc 共享
+DBNexus 遵循零成本抽象原则，性能相关能力均为设计层面保证：零成本特性门控（`#[cfg(feature = ...)]` 编译期裁剪）、无锁热路径（池状态原子维护、权限配置与缓存 Provider 经 `ArcSwap` 无锁读取、`AcqRel` 内存序）、异步优先（全部 I/O `async/await`，读多写少状态用 `RwLock`）、连接池策略（LRU 复用、最大连接限制、最小连接预热、健康检查剔除死连接），以及 0.5.1 热路径优化（注入检测模式表静态化、Saga 补偿查找预索引、`Session` 并发读优化、`DbConfig` Arc 共享）。设计细节见[架构文档 · 性能架构](docs/ARCHITECTURE.md#性能架构)。
 
 ### 端到端基准
 
-仓库内置 5 个 criterion 基准：`permission_bench`、`permission_engine_bench`、`sharding_bench`、`metrics_bench`、`e2e_bench`（位于 [benches/](benches/)）。运行：
-
-```bash
-cargo bench
-```
-
-以下端到端基线摘自 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)（2026-09-11，WSL2 linux x86_64 12 逻辑核，rustc 1.97.1，bench profile，sqlite 临时文件库；为本机一次性采样对照参考，非 SLA）：
-
-| 基准 | 路径 | 基线（中位数） |
-|------|------|----------------|
-| `e2e_pool/get_session_admin` | `DbPool::get_session` 句柄获取（权限校验 + 池记账） | ≈ 0.24 µs |
-| `e2e_query/query_rows_select_single` | `DbPool::query_rows` 完整行查询管道（解析→权限→执行→JSON 出口） | ≈ 480 µs |
-| `e2e_write/execute_raw_insert_x64` | `Session::execute_raw` 循环 INSERT，64 行/迭代 | ≈ 708 ms/迭代（≈ 11 ms/行） |
+仓库内置 5 个 criterion 基准：`permission_bench`、`permission_engine_bench`、`sharding_bench`、`metrics_bench`、`e2e_bench`（位于 [benches/](benches/)，`cargo bench` 运行）。端到端基线（2026-09-11 采样，非 SLA）：`DbPool::get_session` 句柄获取 ≈ 0.24 µs、`DbPool::query_rows` 单行完整管道 ≈ 480 µs、`Session::execute_raw` 64 行循环 INSERT ≈ 708 ms/迭代（≈ 11 ms/行）。测量环境、逐项解读与复现命令见[性能基线 · 端到端基线](docs/PERFORMANCE.md#端到端基线)。
 
 ### 历史优化对照
 
-两轮平台优化的累计结果摘自 [benches/baseline-after.md](benches/baseline-after.md)（2026-08-14，Linux x86_64，release profile，lto=thin）：
-
-| 基准项 | 原始基线 | 优化后 | 累计变化 |
-|--------|----------|--------|---------|
-| shard_id_for_key | 2.9725 – 3.0496 µs | 2.8871 – 2.9188 µs | -3.9% |
-| enforce_shard_binding_conflict | 5.8179 – 5.9490 µs | 5.4019 – 5.5934 µs | -5.5% |
-| prometheus_export | 4.2057 – 4.3566 µs | 4.0485 – 4.1789 µs | -3.1% |
-| histogram_record | 882.21 – 888.70 ns | 796.62 – 804.15 ns | -9.4% |
-| permission_cache_hit | 8.8730 – 8.9906 µs | 8.1415 – 8.1825 µs | -8.3% |
-| permission_cache_miss | 3.6778 – 3.7570 µs | 3.5827 – 3.6179 µs | -2.8% |
-
-6 项基准全部正向提升、无回退，平均累计提升约 5.5%。
+两轮平台优化的累计结果（6 项基准全部正向提升、无回退，平均累计提升约 5.5%）见 [benches/baseline-after.md](benches/baseline-after.md) 与[性能基线 · 历史优化对照](docs/PERFORMANCE.md#历史优化对照)。
 
 ---
 
@@ -696,31 +522,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 ## 🤝 参与贡献
 
-欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、代码规范与提交/PR 流程。
-
-### 开发环境
-
-| 项 | 要求 |
-|----|------|
-| 工具链 | Rust 1.97.1（`rust-toolchain.toml` 锁定，edition 2024） |
-| Git 钩子 | lefthook / pre-commit（`./scripts/install-pre-commit.sh` 安装，禁止 `--no-verify` 绕过） |
-| 提交信息 | Conventional Commits（`feat` / `fix` / `docs` / `refactor` 等，commit-msg 钩子校验） |
-| 质量门禁 | `cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 80% |
-
-```bash
-# 克隆仓库
-git clone https://github.com/Kirky-X/dbnexus.git
-cd dbnexus
-
-# 安装 pre-commit 钩子
-./scripts/install-pre-commit.sh
-
-# 运行测试（CI 特性组合）
-cargo test --no-default-features --features sqlite,default-no-db,all-optional
-
-# 运行 linter
-cargo clippy --no-default-features --features sqlite,default-no-db,all-optional --all-targets -- -D warnings
-```
+欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装脚本 `./scripts/install-pre-commit.sh`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 80%），以及提交/PR 流程。
 
 ---
 

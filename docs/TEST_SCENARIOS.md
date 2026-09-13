@@ -91,10 +91,7 @@
 
 | 组合 | 覆盖 | 结果 |
 |------|------|------|
-| sqlite,default-no-db,all-optional | sqlite 组全量 | 1712/0 |
-| postgres,default-no-db,all-optional | postgres 组全量（无 URL，tc 自起） | 见台账 |
-| mysql,default-no-db,all-optional | mysql 组全量（tc 自起单独实证） | 1276/0 |
-| duckdb,default-no-db,all-optional | duckdb 组全量（CI 缺席补验） | 1300/0 |
+| `<db>,default-no-db,all-optional`（`<db>` ∈ sqlite / postgres / mysql / duckdb） | 四个驱动组全量 | 见[测试金字塔基线](#测试金字塔基线)的驱动组全量结果 |
 | sqlite+all-optional+authentication | e2e_advanced 全模块激活 | 86/0 |
 | 驱动互斥 | embedded 与 server-side 混合编译失败（无逃生门） | 组合验证不适用 --all-features |
 

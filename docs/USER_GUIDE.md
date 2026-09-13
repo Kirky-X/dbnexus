@@ -81,7 +81,7 @@ dbnexus = { version = "0.6.0-rc.3", features = ["runtime-tokio-rustls", "postgre
 dbnexus = { version = "0.6.0-rc.3", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
-**重要**：关系型驱动（SQLite / PostgreSQL / MySQL / DuckDB）之间一次只能启用一个，混用在编译期直接报错。图数据库驱动（Ladybug / Neo4j）可与关系型驱动共存。
+**重要**：关系型驱动之间一次只能启用一个，混用在编译期直接报错。
 
 ### 验证安装
 
@@ -218,20 +218,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### 配置参数
 
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `url` | `String` | 必需 | 数据库连接 URL |
-| `max_connections` | `u32` | 20 | 最大池大小 |
-| `min_connections` | `u32` | 5 | 最小池大小 |
-| `idle_timeout` | `u64` | 300 | 空闲连接超时（秒） |
-| `acquire_timeout` | `u64` | 5000 | 连接获取超时（毫秒） |
-| `permissions_path` | `Option<String>` | None | 权限配置路径 |
-| `migrations_dir` | `Option<PathBuf>` | None | 迁移目录 |
-| `auto_migrate` | `bool` | false | 自动运行迁移 |
-| `migration_timeout` | `u64` | 60 | 迁移超时（秒） |
-| `admin_role` | `String` | "admin" | 管理员角色名称 |
-| `warmup_timeout` | `u64` | 30 | 连接池预热超时（秒） |
-| `warmup_retries` | `u32` | 3 | 连接池预热重试次数 |
+全部配置字段的类型、默认值与对应环境变量见 [API 参考 · 配置 API](API_REFERENCE.md#️-配置-api)。
 
 > `PoolConfig` 的字段经 `#[serde(flatten)]` 扁平化，YAML/JSON 中直接写 `max_connections` 等键即可；Rust 代码中通过 `config.pool_config.max_connections` 访问。
 
@@ -258,26 +245,7 @@ pub struct Model {
 }
 ```
 
-**必需参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `table_name = "..."` | 数据库表名 |
-| `primary_key = "..."` | 主键字段名 |
-| `#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]` | Sea-ORM 实体派生 |
-| `#[sea_orm(table_name = "...")]` | Sea-ORM 表名声明 |
-| `#[sea_orm(primary_key)]` | 标记主键字段 |
-
-**可选参数：**
-
-| 参数 | 描述 | 特性要求 |
-|------|------|----------|
-| `timestamps = true` | 自动管理 `created_at` / `updated_at` 字段 | `with-time` |
-| `soft_delete = true` | 自动注入 `deleted_at` 字段并改写删除语义 | 无 |
-| `validate` | 集成 `validator` crate 声明式验证 | `validation` |
-| `cache(...)` | 生成实体级缓存配置 | `cache` |
-| `audit(...)` | 生成审计配置 | `audit` |
-| `hooks(...)` | 配置生命周期钩子（校验 → 时间戳 → 用户钩子） | 无 |
+`table_name` 与 `primary_key` 为必需参数；`timestamps` / `soft_delete` / `validate` / `cache(...)` / `audit(...)` / `hooks(...)` 等可选参数及其特性要求见 [API 参考 · 过程宏](API_REFERENCE.md#️-过程宏)的 `#[db_entity]` 参数表。
 
 > 使用 `chrono::DateTime` / `uuid::Uuid` 等字段类型时，需启用对应的 `with-chrono` / `with-uuid` 类型桥接特性。
 
@@ -529,19 +497,7 @@ Model::insert(&user_session, user).await?;     // 错误：权限被拒绝
 
 ### 通配符表
 
-使用 `"*"` 授予对所有表的访问权限：
-
-```yaml
-roles:
-  admin:
-    tables:
-      - name: "*"  # 所有表
-        operations:
-          - select
-          - insert
-          - update
-          - delete
-```
+定义权限策略示例中 admin 角色的 `"*"` 即通配符表：匹配所有表，并授予该角色列出的全部操作。
 
 ### 操作级控制
 
@@ -654,21 +610,7 @@ version = "0.6.0-rc.3"
 features = ["cache"]
 ```
 
-实现 `DbCacheProvider` trait 或使用内置适配器（`oxcache-integration` 特性提供 `OxcacheDbCacheAdapter`，适配 oxcache）：
-
-```rust
-use dbnexus::{DbCacheProvider, DbPoolBuilder};
-
-// 自定义缓存实现（完整示例见 examples/cache_standalone）
-let custom_cache: std::sync::Arc<dyn DbCacheProvider + Send + Sync> =
-    std::sync::Arc::new(my_cache);
-
-let pool = DbPoolBuilder::new()
-    .config(config)
-    .cache_provider(custom_cache)
-    .build()
-    .await?;
-```
+实现 `DbCacheProvider` trait（自定义缓存完整示例见 `examples/cache_standalone`）或使用内置适配器（`oxcache-integration` 特性提供 `OxcacheDbCacheAdapter`，适配 oxcache），经 `DbPoolBuilder::cache_provider` 注入即可；注入代码与 Provider 抽象说明见 [API 参考 · Kit 与缓存集成](API_REFERENCE.md#-kit-与缓存集成)。
 
 `#[db_entity(... cache(...))]` 宏参数则为实体生成缓存配置常量（`CACHE_TTL` / `CACHE_STRATEGY` / `CACHE_MAX_CAPACITY`）与 `cache_key()` 辅助方法，供缓存层使用：
 
@@ -697,25 +639,11 @@ version = "0.6.0-rc.3"
 features = ["metrics"]
 ```
 
-收集和导出指标：
+经 `MetricsCollector` 收集池指标与查询统计（含 P99 延迟百分位），并导出 Prometheus 格式；完整代码见 [API 参考 · 可观测性 API](API_REFERENCE.md#-可观测性-api)：
 
 ```rust
-use dbnexus::MetricsCollector;
-
 let collector = MetricsCollector::new();
-
-// 获取池指标
-let pool_metrics = collector.pool_status();
-println!("活跃连接: {}", pool_metrics.active);
-
-// 获取查询指标
-if let Some(stats) = collector.get_query_stats("SELECT") {
-    println!("P99 延迟: {}ns", stats.latency_percentiles.p99_ns);
-}
-
-// 导出 Prometheus 格式
-let prometheus_metrics = collector.export_prometheus();
-println!("{}", prometheus_metrics);
+println!("{}", collector.export_prometheus());
 ```
 
 ### 审计日志
@@ -751,23 +679,7 @@ version = "0.6.0-rc.3"
 features = ["duckdb"]
 ```
 
-URL 格式支持：
-
-| 格式 | 含义 |
-|------|------|
-| `:memory:` 或 `duckdb::memory:` | 内存数据库 |
-| `duckdb:path/to/file.db` | 文件数据库 |
-| `duckdb://path/to/file.db` | 文件数据库（URL 格式） |
-
-API 说明：
-
-- `DuckDbConnection::new(url: &str) -> Result<Self, DbError>` — 创建连接（默认连接池大小 4）
-- `DuckDbConnection::with_pool_size(url: &str, pool_size: usize) -> Result<Self, DbError>` — 指定连接池大小
-- `conn.execute(sql: &str) -> DbResult<DuckDbExecResult>` — 执行 DDL/DML，返回受影响行数
-- `conn.query(sql: &str) -> DbResult<Vec<DuckDbRow>>` — 执行查询，返回行集合
-- `conn.health_check() -> DbResult<()>` — 健康检查（执行 `SELECT 1`）
-
-`DuckDbRow` 通过列名获取值：`row.get("column_name") -> Option<&DuckValue>`。
+URL 格式与 `DuckDbConnection` 的完整 API 说明见 [API 参考 · DuckDB 数据库](API_REFERENCE.md#️-duckdb-数据库)。`DuckDbRow` 通过列名获取值：`row.get("column_name") -> Option<&DuckValue>`。
 
 ```rust
 use dbnexus::DuckDbConnection;
@@ -806,16 +718,7 @@ version = "0.6.0-rc.3"
 features = ["authentication"]
 ```
 
-API 说明：
-
-- `AuthenticationManager::new(jwt_secret: &[u8]) -> AuthResult<Self>` — 创建认证管理器（密钥为字节切片，不少于 32 字节）
-- `AuthenticationManager::with_config(jwt_secret, access_exp_secs, refresh_exp_secs) -> AuthResult<Self>` — 自定义过期时间
-- `manager.register_user(username, password, role) -> AuthResult<()>` — 注册用户（async，含密码强度校验和 bcrypt 哈希）
-- `manager.authenticate(credentials: AuthCredentials) -> AuthResult<String>` — 验证凭据并生成 JWT（async）
-- `manager.verify_token(token: &str) -> AuthResult<JwtClaims>` — 验证 JWT（同步方法）
-- `manager.refresh_token(refresh_token: &str) -> AuthResult<String>` — 刷新访问令牌（async）
-
-关联类型：`AuthCredentials`（字段：`username`、`password`）、`JwtClaims`（字段：`sub`、`username`、`role`、`exp`、`iat`、`token_type`）。
+方法签名与导出类型见 [API 参考 · 认证系统](API_REFERENCE.md#-认证系统)。关联类型：`AuthCredentials`（字段：`username`、`password`）、`JwtClaims`（字段：`sub`、`username`、`role`、`exp`、`iat`、`token_type`）。
 
 ```rust
 use dbnexus::{AuthenticationManager, AuthCredentials};
@@ -844,8 +747,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-
-> 访问令牌与刷新令牌区分校验：`verify_access_token` / `verify_refresh_token` 会额外校验 `token_type`，防止刷新令牌冒用为访问令牌。
 
 ### DDL 安全守卫
 
@@ -906,16 +807,7 @@ version = "0.6.0-rc.3"
 features = ["sharding"]
 ```
 
-API 说明：
-
-- `ShardRouter::new(strategy: S, total_shards: u32) -> Self` — 使用策略实例创建（`S: ShardingStrategy + 'static`）
-- `ShardRouter::with_strategy(strategy: &str, total_shards: u32) -> Self` — 按策略名创建（同步方法）
-- `ShardRouter::with_config(config: &ShardConfig) -> Result<Self, DbError>` — 异步、并行初始化所有分片连接池
-- `router.shard_id_for_key(shard_key: &str) -> u32` — 根据 key 计算分片 ID
-- `router.calculate_shard(timestamp: DateTime<Utc>, key: &str) -> u32` — 按时间 + key 计算分片
-- `router.get_session_for_shard(shard_key, role) -> Result<Session, DbError>` — 获取分片对应的 Session（async）
-
-`create_strategy(name)` 工厂支持 `"yearly"`、`"monthly"`、`"daily"`、`"hash"`、`"consistent-hash"` 策略名，未知名称回退到默认的 `YearlyStrategy`。
+`ShardRouter` 方法签名与 `create_strategy` 策略工厂（含未知策略名的回退行为）见 [API 参考 · 分片与分布式能力](API_REFERENCE.md#️-分片与分布式能力)。
 
 ```rust
 use dbnexus::ShardRouter;
@@ -965,21 +857,13 @@ fn process_input(input: &UserInput) -> Result<(), DbError> {
 
 ### 图数据库（需要 `ladybug` 或 `neo4j` 特性）
 
-DBNexus 通过 `GraphConnection` trait 统一抽象图数据库。图数据库与关系型数据库不互斥，可混合使用。
+DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库与关系型数据库不互斥、可混合使用。`LadybugConnection` / `Neo4jConnection` 构造与 `execute_cypher` / `query_cypher` 等方法签名、导出类型见 [API 参考 · 图数据库](API_REFERENCE.md#-图数据库)；裸 Cypher 执行已废弃，统一使用 `execute_cypher_with_params` 参数化通道（带注入防护）。
 
 ```toml
 [dependencies.dbnexus]
 version = "0.6.0-rc.3"
 features = ["ladybug"]  # 或 "neo4j"
 ```
-
-API 说明：
-
-- `LadybugConnection::new(url: &str) -> Result<Self, DbError>` — 创建嵌入式图数据库连接
-- `Neo4jConnection::new(url, user, pass) -> Result<Self, DbError>` — 创建 Neo4j 服务器连接（async）
-- `conn.execute_cypher(cypher: &str) -> Result<GraphExecResult, DbError>` — 执行 Cypher 语句
-- `conn.query_cypher(cypher: &str) -> Result<GraphQueryResult, DbError>` — 查询图数据
-- `session.execute_cypher(cypher: &str) -> Result<GraphExecResult, DbError>` — 通过 Session 执行（支持图事务）
 
 ```rust
 use dbnexus::{GraphConnection, LadybugConnection};
@@ -999,19 +883,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-> 裸 Cypher 执行已废弃：统一使用 `execute_cypher_with_params` 参数化通道（带注入防护）。
-
 ### 国际化格式化（核心特性，始终可用）
 
-基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。国际化是系统核心组件，无需额外启用任何特性：
-
-```rust
-use dbnexus::DbI18nFormatter;
-
-let formatter = DbI18nFormatter::new("zh-CN")?;
-// locale 感知的数字格式化
-let formatted = formatter.format_number(1234567.89)?;
-```
+基于 ICU4X 的 locale 感知数字/日期/复数/排序格式化。国际化是系统核心组件，无需额外启用任何特性；`DbI18nFormatter` 的构造与用法见 [API 参考 · 国际化](API_REFERENCE.md#-国际化)。
 
 ---
 
