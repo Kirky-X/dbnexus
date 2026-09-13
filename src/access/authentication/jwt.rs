@@ -7,7 +7,10 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+// Duration 仅被 oxcache-integration 门控的 compute_remaining_ttl 消费
+#[cfg(feature = "oxcache-integration")]
+use std::time::Duration;
 
 #[cfg(feature = "oxcache-integration")]
 use std::sync::Arc;
