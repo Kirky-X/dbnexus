@@ -14,16 +14,27 @@
 
 ---
 
+<div align="center" style="padding: 32px; margin: 24px 0">
+
+### 🗄️ Declarative Multi-Database Access
+
+Define entities with derive macros; connection pooling, permissions, auditing, and caching are built in:
+
+<table style="width:100%; border-collapse: collapse">
+<tr><td align="center" width="25%" style="padding: 12px">🛡️<br><b>Security Built In</b><br><span style="color:#64748B">SQL parsing, per-table permissions, injection defense</span></td><td align="center" width="25%" style="padding: 12px">🧩<br><b>Declarative Macros</b><br><span style="color:#64748B">derive macros generate entity and repository boilerplate</span></td><td align="center" width="25%" style="padding: 12px">🌐<br><b>Multi-Database</b><br><span style="color:#64748B">SQLite, PostgreSQL, MySQL, DuckDB, Ladybug, Neo4j</span></td><td align="center" width="25%" style="padding: 12px">📊<br><b>Observable & Reliable</b><br><span style="color:#64748B">connection metrics, retry with backoff, slow-query tracing</span></td></tr>
+</table>
+
+</div>
+
+---
+
 ## 📋 Table of Contents
 
 <details open>
-<summary>📑 Table of Contents</summary>
+<summary>📑 目录</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)
-  - [📦 Installation](#-installation)
-  - [💡 Minimal Example](#-minimal-example)
-  - [🧭 Core Concepts](#-core-concepts)
 - [🎨 Feature Flags](#-feature-flags)
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)

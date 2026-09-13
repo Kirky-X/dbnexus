@@ -14,6 +14,20 @@
 
 ---
 
+<div align="center" style="padding: 32px; margin: 24px 0">
+
+### 🗄️ 声明式多数据库访问
+
+通过派生宏定义实体，连接池、权限、审计与缓存由框架内建：
+
+<table style="width:100%; border-collapse: collapse">
+<tr><td align="center" width="25%" style="padding: 12px">🛡️<br><b>安全内建</b><br><span style="color:#64748B">SQL 解析 逐表权限 注入防护</span></td><td align="center" width="25%" style="padding: 12px">🧩<br><b>声明式宏</b><br><span style="color:#64748B">派生宏生成实体与仓储样板</span></td><td align="center" width="25%" style="padding: 12px">🌐<br><b>多数据库</b><br><span style="color:#64748B">SQLite PostgreSQL MySQL DuckDB Ladybug Neo4j</span></td><td align="center" width="25%" style="padding: 12px">📊<br><b>可观测可靠</b><br><span style="color:#64748B">连接指标 熔断重试 慢查询追踪</span></td></tr>
+</table>
+
+</div>
+
+---
+
 ## 📋 目录
 
 <details open>
@@ -21,9 +35,6 @@
 
 - [✨ 功能特性](#-功能特性)
 - [🚀 快速开始](#-快速开始)
-  - [📦 安装](#-安装)
-  - [💡 最小示例](#-最小示例)
-  - [🧭 核心概念](#-核心概念)
 - [🎨 特性标志](#-特性标志)
 - [📚 文档](#-文档)
 - [💻 示例](#-示例)
