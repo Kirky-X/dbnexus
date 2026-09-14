@@ -58,39 +58,37 @@
 
 DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方式：一个宏定义实体，一层权限守住每条 SQL，一组特性按需裁剪。
 
-<div align="center">
-
-<table>
+<table style="width:100%; border-collapse: collapse">
 <tr>
-<td align="center" width="25%">🔒<br><b>安全内建</b><br>全库禁用 unsafe，表级 RBAC 覆盖 JOIN 与子查询</td>
-<td align="center" width="25%">🧩<br><b>声明式宏</b><br><code>#[db_entity]</code> 生成带权限检查的 CRUD 方法</td>
-<td align="center" width="25%">🗄️<br><b>多数据库</b><br>SQLite / PostgreSQL / MySQL / DuckDB / Ladybug / Neo4j</td>
-<td align="center" width="25%">📊<br><b>可观测可靠</b><br>Prometheus 指标、健康检查、重试与熔断</td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>安全内建</b><br><span style="color:#64748B">全库禁用 unsafe，表级 RBAC 覆盖 JOIN 与子查询</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧩 <b>声明式宏</b><br><span style="color:#64748B"><code>#[db_entity]</code> 生成带权限检查的 CRUD 方法</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🗄️ <b>多数据库</b><br><span style="color:#64748B">SQLite / PostgreSQL / MySQL / DuckDB / Ladybug / Neo4j</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">📊 <b>可观测可靠</b><br><span style="color:#64748B">Prometheus 指标、健康检查、重试与熔断</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔄 <b>连接池与事务</b><br><span style="color:#64748B">RAII 风格连接生命周期、池状态原子维护；<code>begin_transaction</code> / <code>commit</code> / 回滚完整事务管理</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧾 <b>统一错误体系</b><br><span style="color:#64748B"><code>ErrorCode</code> 错误码表 + <code>QueryErrorReport</code> 结构化错误报告</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">⚙️ <b>配置管理</b><br><span style="color:#64748B"><code>DbConfig</code> / <code>PoolConfig</code>，环境变量 / YAML / TOML 多配置源</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌍 <b>国际化</b><br><span style="color:#64748B">ICU4X + Fluent locale 感知格式化（核心特性，始终编译）</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>权限控制</b><br><span style="color:#64748B"><code>permission</code>：基于角色的表级访问控制（RBAC），强制依赖 <code>sql-parser</code> 防止注入绕过</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔍 <b>SQL 解析</b><br><span style="color:#64748B"><code>sql-parser</code>：操作类型与表名提取、注入检测，解析结果缓存</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">📦 <b>过程宏与环境变量配置</b><br><span style="color:#64748B"><code>macros</code> 提供 <code>#[db_repository]</code> 等宏；<code>config-env</code> 支持 <code>DbConfig::from_env</code> 直读环境变量</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🏢 <b>企业级特性按需装配</b><br><span style="color:#64748B">metrics / audit / migration / sharding / authentication / saga 等 20+ 特性门控启用，见下方折叠清单</span></td>
 </tr>
 </table>
 
-</div>
+核心基座（无可选特性依赖）与 `default-no-db` 聚合能力已列入上表；其余企业级特性均按 feature 门控、按需启用，完整清单见下方折叠。
 
-### 🎯 核心基座（无可选特性依赖）
-
-| 能力 | 说明 |
-|------|------|
-| **连接池管理** | RAII 风格连接生命周期；池状态由原子类型维护，热路径无锁 |
-| **事务支持** | `begin_transaction` / `commit` / 回滚的完整事务管理，RAII 保证资源释放 |
-| **统一错误体系** | `ErrorCode` 错误码表 + `QueryErrorReport` 结构化错误报告（0.6.0-rc.3 统一） |
-| **配置管理** | `DbConfig` / `PoolConfig`，环境变量 / YAML / TOML 多配置源 |
-| **国际化** | ICU4X + Fluent locale 感知格式化（核心特性，始终编译） |
-
-### ⚙️ 核心可选特性（`default-no-db` 聚合）
-
-| 能力 | 说明 |
-|------|------|
-| **权限控制**（`permission`） | 基于角色的表级访问控制（RBAC），强制依赖 `sql-parser` 防止注入绕过 |
-| **SQL 解析**（`sql-parser`） | 操作类型与表名提取、注入检测，解析结果缓存 |
-| **过程宏**（`macros`） | `#[db_entity]` / `#[db_repository]` 生成带权限检查的 CRUD |
-| **环境变量配置**（`config-env`） | `DbConfig::from_env` 直接读取环境变量 |
-
-### ⚡ 企业级特性（按需启用）
+<details>
+<summary>🏢 企业级特性完整清单（按需启用）</summary>
 
 | 特性 | 说明 |
 |------|------|
@@ -120,6 +118,8 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `distributed-id` | Snowflake 分布式 ID 生成 |
 
 > 🆕 为 0.6.0-rc.3 新增能力，完整清单见 [CHANGELOG](docs/CHANGELOG.md)。
+
+</details>
 
 ---
 
