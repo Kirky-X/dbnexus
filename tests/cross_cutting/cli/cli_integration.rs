@@ -28,7 +28,7 @@ mod cli_tests {
         cmd
     }
 
-    /// TEST-CLI-001: CLI 帮助命令测试
+    /// CLI 帮助命令测试
     #[test]
     #[allow(deprecated)]
     fn test_cli_help() {
@@ -39,7 +39,7 @@ mod cli_tests {
             .stdout(predicate::str::contains("USAGE").or(predicate::str::contains("Usage")));
     }
 
-    /// TEST-CLI-002: CLI 子命令帮助测试
+    /// CLI 子命令帮助测试
     #[test]
     fn test_cli_subcommand_help() {
         cli_command()
@@ -51,7 +51,7 @@ mod cli_tests {
             );
     }
 
-    /// TEST-CLI-003: 状态命令 - 基础功能测试
+    /// 状态命令 - 基础功能测试
     #[tokio::test]
     async fn test_cli_status_basic() {
         cli_command()
@@ -62,7 +62,7 @@ mod cli_tests {
             .success();
     }
 
-    /// TEST-CLI-004: 状态命令 - 数据库连接测试
+    /// 状态命令 - 数据库连接测试
     #[tokio::test]
     async fn test_cli_status_database_connection() {
         let assert_result = cli_command()
@@ -73,7 +73,7 @@ mod cli_tests {
         assert_result.success();
     }
 
-    /// TEST-CLI-005: 迁移创建命令 - 基础测试
+    /// 迁移创建命令 - 基础测试
     #[tokio::test]
     async fn test_cli_create_migration() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -88,7 +88,7 @@ mod cli_tests {
             .success();
     }
 
-    /// TEST-CLI-006: 迁移向上命令 - 基础测试
+    /// 迁移向上命令 - 基础测试
     #[tokio::test]
     async fn test_cli_up_migration() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -125,7 +125,7 @@ DROP TABLE test_table;
         );
     }
 
-    /// TEST-CLI-007: 迁移向下命令 - 基础测试
+    /// 迁移向下命令 - 基础测试
     #[tokio::test]
     async fn test_cli_down_migration() {
         cli_command()
@@ -136,13 +136,13 @@ DROP TABLE test_table;
             .success();
     }
 
-    /// TEST-CLI-008: CLI 参数解析测试 - 无效参数
+    /// CLI 参数解析测试 - 无效参数
     #[test]
     fn test_cli_invalid_args() {
         cli_command().args(["--invalid-option"]).assert().failure();
     }
 
-    /// TEST-CLI-009: CLI 生成命令帮助测试
+    /// CLI 生成命令帮助测试
     #[test]
     fn test_cli_generate_help() {
         cli_command()
@@ -151,7 +151,7 @@ DROP TABLE test_table;
             .success();
     }
 
-    /// TEST-CLI-010: CLI 向下命令带版本测试
+    /// CLI 向下命令带版本测试
     #[tokio::test]
     async fn test_cli_down_with_version() {
         cli_command()
@@ -164,7 +164,7 @@ DROP TABLE test_table;
             .success();
     }
 
-    /// TEST-CLI-011: CLI 向上命令带版本测试
+    /// CLI 向上命令带版本测试
     #[tokio::test]
     async fn test_cli_up_with_version() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -201,7 +201,7 @@ DROP TABLE test_table;
         );
     }
 
-    /// TEST-CLI-012: CLI 完整状态测试
+    /// CLI 完整状态测试
     #[tokio::test]
     async fn test_cli_full_status() {
         cli_command()
@@ -213,7 +213,7 @@ DROP TABLE test_table;
             .stdout(predicate::str::contains("迁移状态").or(predicate::str::contains("Migration")));
     }
 
-    /// TEST-CLI-013: CLI 向上迁移测试（多版本）
+    /// CLI 向上迁移测试（多版本）
     #[tokio::test]
     async fn test_cli_up_multiple_migrations() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -254,7 +254,7 @@ DROP TABLE test_table_{};
         );
     }
 
-    /// TEST-CLI-014: CLI 帮助显示所有命令
+    /// CLI 帮助显示所有命令
     #[test]
     fn test_cli_help_shows_all_commands() {
         cli_command()
@@ -268,7 +268,7 @@ DROP TABLE test_table_{};
             .stdout(predicate::str::contains("generate"));
     }
 
-    /// TEST-CLI-015: CLI 状态命令输出格式测试
+    /// CLI 状态命令输出格式测试
     #[tokio::test]
     async fn test_cli_status_output_format() {
         let assert_result = cli_command()

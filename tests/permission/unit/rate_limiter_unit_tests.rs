@@ -16,7 +16,7 @@ use std::time::Duration;
 // 基本功能测试
 // ============================================================================
 
-/// TEST-RATELIMITER-U-001: 单次令牌获取
+/// 单次令牌获取
 #[tokio::test]
 async fn test_rate_limiter_single_acquire() {
     let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
@@ -32,7 +32,7 @@ async fn test_rate_limiter_single_acquire() {
     );
 }
 
-/// TEST-RATELIMITER-U-002: 令牌耗尽测试
+/// 令牌耗尽测试
 #[tokio::test]
 async fn test_rate_limiter_exhaustion() {
     let limiter = RateLimiter::new(3, Duration::from_secs(60), 10000, 3);
@@ -59,7 +59,7 @@ async fn test_rate_limiter_exhaustion() {
     assert_eq!(limiter.remaining("user1"), 0, "Should still have 0 tokens");
 }
 
-/// TEST-RATELIMITER-U-003: 不同键独立计数
+/// 不同键独立计数
 #[tokio::test]
 async fn test_rate_limiter_independent_keys() {
     let limiter = RateLimiter::new(2, Duration::from_secs(60), 10000, 2);
@@ -82,7 +82,7 @@ async fn test_rate_limiter_independent_keys() {
 // 并发测试（50 任务）
 // ============================================================================
 
-/// TEST-RATELIMITER-U-004: 50 任务并发获取测试
+/// 50 任务并发获取测试
 ///
 /// 验证高并发场景下的正确性，50 个并发任务竞争同一个键。
 #[tokio::test]
@@ -127,7 +127,7 @@ async fn test_rate_limiter_concurrent_50_tasks() {
     );
 }
 
-/// TEST-RATELIMITER-U-005: 多键并发测试
+/// 多键并发测试
 ///
 /// 验证多个键在并发场景下的独立性。
 #[tokio::test]
@@ -174,7 +174,7 @@ async fn test_rate_limiter_concurrent_multiple_keys() {
 // 桶驱逐测试
 // ============================================================================
 
-/// TEST-RATELIMITER-U-006: 桶驱逐测试（达到最大容量）
+/// 桶驱逐测试（达到最大容量）
 ///
 /// 验证当桶数量达到 max_buckets 限制时，最久未访问的桶会被驱逐。
 #[tokio::test]
@@ -211,7 +211,7 @@ async fn test_rate_limiter_bucket_eviction() {
     );
 }
 
-/// TEST-RATELIMITER-U-007: LRU 驱逐顺序验证
+/// LRU 驱逐顺序验证
 ///
 /// 验证驱逐的是最久未访问的桶。
 #[tokio::test]
@@ -256,7 +256,7 @@ async fn test_rate_limiter_lru_eviction_order() {
     );
 }
 
-/// TEST-RATELIMITER-U-008: 驱逐后新桶可用性
+/// 驱逐后新桶可用性
 ///
 /// 验证被驱逐的键重新访问时会创建新桶。
 #[tokio::test]
@@ -287,7 +287,7 @@ async fn test_rate_limiter_evicted_key_reuse() {
     assert_eq!(limiter.len(), 3, "Should have 3 buckets");
 }
 
-/// TEST-RATELIMITER-U-009: 并发场景下的驱逐安全性
+/// 并发场景下的驱逐安全性
 ///
 /// 验证高并发场景下驱逐操作的安全性。
 #[tokio::test]
@@ -341,7 +341,7 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
 // 边界条件测试
 // ============================================================================
 
-/// TEST-RATELIMITER-U-010: max_buckets = 1 的极端情况
+/// max_buckets = 1 的极端情况
 #[tokio::test]
 async fn test_rate_limiter_max_buckets_one() {
     let limiter = RateLimiter::new(10, Duration::from_secs(60), 1, 10);
@@ -362,7 +362,7 @@ async fn test_rate_limiter_max_buckets_one() {
     );
 }
 
-/// TEST-RATELIMITER-U-011: 重置功能
+/// 重置功能
 #[tokio::test]
 async fn test_rate_limiter_reset() {
     let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
@@ -382,7 +382,7 @@ async fn test_rate_limiter_reset() {
     assert!(limiter.check("user1").await);
 }
 
-/// TEST-RATELIMITER-U-012: cleanup 方法测试
+/// cleanup 方法测试
 #[tokio::test]
 async fn test_rate_limiter_cleanup() {
     let limiter = RateLimiter::new(10, Duration::from_secs(1), 10000, 10);

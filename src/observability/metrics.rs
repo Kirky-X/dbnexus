@@ -291,7 +291,7 @@ impl LatencyHistogram {
         }
     }
 
-    /// 原子重置所有桶计数（v0.3.0 性能优化：支持无锁 reset）
+    /// 原子重置所有桶计数
     pub fn reset(&self) {
         for c in &self.counts {
             c.store(0, Ordering::SeqCst);
@@ -561,9 +561,9 @@ pub struct MetricsCollector {
     /// 查询错误计数
     query_errors: Arc<AtomicU64>,
 
-    /// 连接获取指标（v0.3.0：移除 RwLock，内部全为 AtomicU64，无锁访问）
+    /// 连接获取指标
     connection_acquire: Arc<ConnectionAcquireMetricsInner>,
-    /// 事务指标（v0.3.0：移除 RwLock，内部全为 AtomicU64，无锁访问）
+    /// 事务指标
     transaction: Arc<TransactionMetricsInner>,
 
     /// 慢查询记录（最近 N 条）
@@ -743,7 +743,7 @@ impl ConnectionAcquireMetricsInner {
         }
     }
 
-    /// 重置所有计数器（v0.3.0 性能优化：移除 RwLock 后用于替代 `*inner = Inner::new()`）
+    /// 重置所有计数器`）
     fn reset(&self) {
         self.total_attempts.store(0, Ordering::SeqCst);
         self.success_count.store(0, Ordering::SeqCst);
@@ -804,7 +804,7 @@ impl TransactionMetricsInner {
         }
     }
 
-    /// 重置所有事务计数器（v0.3.0 性能优化：移除 RwLock 后用于替代 `*inner = Inner::new()`）
+    /// 重置所有事务计数器`）
     fn reset(&self) {
         self.total_transactions.store(0, Ordering::SeqCst);
         self.commit_count.store(0, Ordering::SeqCst);
@@ -1100,7 +1100,7 @@ impl MetricsCollector {
         let mut slow = self.slow_queries.write();
         slow.clear();
 
-        // v0.3.0：移除 RwLock 后改用原子 reset() 替代整体替换
+        // 移除 RwLock 后改用原子 reset() 替代整体替换
         self.connection_acquire.reset();
         self.transaction.reset();
     }
@@ -1500,7 +1500,7 @@ impl MetricsCollectorTrait for MockMetrics {
 mod tests {
     use super::*;
 
-    /// TEST-U-047: MockMetrics 基本功能测试
+    /// MockMetrics 基本功能测试
     #[test]
     fn test_mock_metrics_basic() {
         let mock = MockMetrics::new();
@@ -1524,7 +1524,7 @@ mod tests {
         mock.clear();
     }
 
-    /// TEST-U-048: MockMetrics Clone 测试
+    /// MockMetrics Clone 测试
     #[test]
     fn test_mock_metrics_clone() {
         let mock1 = MockMetrics::new();
@@ -1539,7 +1539,7 @@ mod tests {
         assert_eq!(mock2.export_prometheus(), String::new());
     }
 
-    /// TEST-U-049: MockMetrics 作为 trait 对象使用
+    /// MockMetrics 作为 trait 对象使用
     #[test]
     fn test_mock_metrics_trait_object() {
         use std::sync::Arc;
@@ -1562,7 +1562,7 @@ mod tests {
         mock.clear();
     }
 
-    /// TEST-U-050: MockMetrics 与 MetricsCollector Trait 兼容性测试
+    /// MockMetrics 与 MetricsCollector Trait 兼容性测试
     #[test]
     fn test_mock_metrics_trait_compatibility() {
         // 验证 MockMetrics 实现了所有 MetricsCollectorTrait 的方法
@@ -1597,7 +1597,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-053: percentiles 索引钳制测试
+    /// percentiles 索引钳制测试
     ///
     /// `len as f64 * p` 换算的索引必须钳制到 `len - 1`：len=1 与 len=1000 时
     /// 均不 panic，且各百分位保持有序（p50 <= p90 <= p99 <= p999）。
@@ -1629,7 +1629,7 @@ mod tests {
         assert!((1..=1000).contains(&p.p999_ns));
     }
 
-    /// TEST-U-041: 延迟直方图测试
+    /// 延迟直方图测试
     #[test]
     fn test_latency_histogram() {
         let collector = MetricsCollector::new();
@@ -1644,7 +1644,7 @@ mod tests {
         assert_eq!(stats.histogram.total_samples, 4);
     }
 
-    /// TEST-U-042: 吞吐量测试
+    /// 吞吐量测试
     #[test]
     fn test_throughput() {
         let collector = MetricsCollector::new();
@@ -1660,7 +1660,7 @@ mod tests {
         assert!((total.error_rate - 0.333).abs() < 0.01);
     }
 
-    /// TEST-U-043: 连接获取指标测试
+    /// 连接获取指标测试
     #[test]
     fn test_connection_acquire_metrics() {
         let collector = MetricsCollector::new();
@@ -1682,7 +1682,7 @@ mod tests {
         assert_eq!(stats.total_attempts, 58);
     }
 
-    /// TEST-U-044: 事务指标测试
+    /// 事务指标测试
     #[test]
     fn test_transaction_metrics() {
         let collector = MetricsCollector::new();
@@ -1704,7 +1704,7 @@ mod tests {
         assert_eq!(stats.total_transactions, 125);
     }
 
-    /// TEST-U-045: Prometheus 导出测试
+    /// Prometheus 导出测试
     #[test]
     fn test_prometheus_export() {
         let collector = MetricsCollector::new();
@@ -1720,7 +1720,7 @@ mod tests {
         assert!(prometheus.contains("dbnexus_total_qps"));
     }
 
-    /// TEST-U-046: 慢查询记录测试
+    /// 慢查询记录测试
     #[test]
     fn test_slow_query_recording() {
         let collector = MetricsCollector::new();
@@ -1734,7 +1734,7 @@ mod tests {
         assert_eq!(slow[0].duration_ms, 100);
     }
 
-    /// TEST-U-051: 无锁 reset 验证（v0.3.0 性能优化）
+    /// 无锁 reset 验证
     ///
     /// 验证移除 RwLock 后 reset() 仍能正确清零所有计数器。
     #[test]
@@ -1773,7 +1773,7 @@ mod tests {
         assert!(collector.slow_queries().is_empty());
     }
 
-    /// TEST-U-052: 无锁并发访问验证（v0.3.0 性能优化）
+    /// 无锁并发访问验证
     ///
     /// 验证移除 RwLock 后多线程并发记录指标不会 panic 或数据竞争。
     #[test]

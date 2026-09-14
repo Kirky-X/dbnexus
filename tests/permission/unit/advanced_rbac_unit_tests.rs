@@ -17,7 +17,7 @@ use dbnexus::access::{
 // 角色继承链解析测试
 // ============================================================================
 
-/// TEST-ADV-U-001: 单层继承 - 子角色继承父角色权限
+/// 单层继承 - 子角色继承父角色权限
 #[test]
 fn test_rbac_inheritance_single_level_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -52,7 +52,7 @@ fn test_rbac_inheritance_single_level_grants_access() {
     );
 }
 
-/// TEST-ADV-U-002: 多层继承链 - 三层继承
+/// 多层继承链 - 三层继承
 #[test]
 fn test_rbac_inheritance_multi_level_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -117,7 +117,7 @@ fn test_rbac_inheritance_multi_level_chain_grants_access() {
     ); // from top
 }
 
-/// TEST-ADV-U-003: 深层继承链 - 五层继承
+/// 深层继承链 - 五层继承
 #[test]
 fn test_rbac_inheritance_deep_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -153,7 +153,7 @@ fn test_rbac_inheritance_deep_chain_grants_access() {
 // 多重继承测试
 // ============================================================================
 
-/// TEST-ADV-U-004: 多重继承 - 继承多个父角色
+/// 多重继承 - 继承多个父角色
 #[test]
 fn test_rbac_inheritance_multiple_parents_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -217,7 +217,7 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
     );
 }
 
-/// TEST-ADV-U-005: 菱形继承结构
+/// 菱形继承结构
 #[test]
 fn test_rbac_inheritance_diamond_structure_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -303,7 +303,7 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
 // 循环继承检测测试
 // ============================================================================
 
-/// TEST-ADV-U-006: 直接循环继承 A -> B -> A
+/// 直接循环继承 A -> B -> A
 #[test]
 fn test_direct_circular_inheritance() {
     let provider = AdvancedRbacProvider::new();
@@ -343,7 +343,7 @@ fn test_direct_circular_inheritance() {
     assert!(result.unwrap());
 }
 
-/// TEST-ADV-U-007: 间接循环继承 A -> B -> C -> A
+/// 间接循环继承 A -> B -> C -> A
 #[test]
 fn test_indirect_circular_inheritance() {
     let provider = AdvancedRbacProvider::new();
@@ -372,7 +372,7 @@ fn test_indirect_circular_inheritance() {
     assert!(result.unwrap());
 }
 
-/// TEST-ADV-U-008: 自引用循环 A -> A
+/// 自引用循环 A -> A
 #[test]
 fn test_rbac_inheritance_self_reference_terminates_safely() {
     let provider = AdvancedRbacProvider::new();
@@ -400,7 +400,7 @@ fn test_rbac_inheritance_self_reference_terminates_safely() {
 // 权限冲突解决测试
 // ============================================================================
 
-/// TEST-ADV-U-009: 权限合并 - 多个父角色的权限合并
+/// 权限合并 - 多个父角色的权限合并
 #[test]
 fn test_rbac_permissions_multiple_parents_merges_access() {
     let provider = AdvancedRbacProvider::new();
@@ -455,7 +455,7 @@ fn test_rbac_permissions_multiple_parents_merges_access() {
     );
 }
 
-/// TEST-ADV-U-010: 权限优先级 - 子角色权限覆盖父角色
+/// 权限优先级 - 子角色权限覆盖父角色
 #[test]
 fn test_rbac_permissions_child_role_extends_access() {
     let provider = AdvancedRbacProvider::new();
@@ -506,7 +506,7 @@ fn test_rbac_permissions_child_role_extends_access() {
     );
 }
 
-/// TEST-ADV-U-011: 通配符权限继承
+/// 通配符权限继承
 #[test]
 fn test_rbac_inheritance_wildcard_grants_access() {
     let provider = AdvancedRbacProvider::new();
@@ -544,7 +544,7 @@ fn test_rbac_inheritance_wildcard_grants_access() {
 // 缓存机制测试
 // ============================================================================
 
-/// TEST-ADV-U-012: 继承缓存基本功能
+/// 继承缓存基本功能
 #[test]
 fn test_rbac_cache_first_check_populates_cache() {
     let provider = AdvancedRbacProvider::new();
@@ -561,7 +561,7 @@ fn test_rbac_cache_first_check_populates_cache() {
     assert!(provider.cache_size() > 0);
 }
 
-/// TEST-ADV-U-013: 缓存清除
+/// 缓存清除
 #[test]
 fn test_rbac_cache_clear_empties_cache() {
     let provider = AdvancedRbacProvider::new();
@@ -577,7 +577,7 @@ fn test_rbac_cache_clear_empties_cache() {
     assert_eq!(provider.cache_size(), 0);
 }
 
-/// TEST-ADV-U-014: 添加角色时清除相关缓存
+/// 添加角色时清除相关缓存
 #[test]
 fn test_rbac_cache_role_add_invalidates_cache() {
     let provider = AdvancedRbacProvider::new();
@@ -606,7 +606,7 @@ fn test_rbac_cache_role_add_invalidates_cache() {
     assert_eq!(provider.cache_size(), 0);
 }
 
-/// TEST-ADV-U-015: 添加继承关系时清除缓存
+/// 添加继承关系时清除缓存
 #[test]
 fn test_rbac_cache_inheritance_add_invalidates_cache() {
     let provider = AdvancedRbacProvider::new();
@@ -629,7 +629,7 @@ fn test_rbac_cache_inheritance_add_invalidates_cache() {
 // 继承管理方法测试
 // ============================================================================
 
-/// TEST-ADV-U-016: has_inheritance 方法
+/// has_inheritance 方法
 #[test]
 fn test_rbac_has_inheritance_returns_correct_bool() {
     let provider = AdvancedRbacProvider::new();
@@ -645,7 +645,7 @@ fn test_rbac_has_inheritance_returns_correct_bool() {
     assert!(!provider.has_inheritance("nonexistent"));
 }
 
-/// TEST-ADV-U-017: get_direct_parents 方法
+/// get_direct_parents 方法
 #[test]
 fn test_rbac_get_direct_parents_returns_parents() {
     let provider = AdvancedRbacProvider::new();
@@ -668,7 +668,7 @@ fn test_rbac_get_direct_parents_returns_parents() {
     assert!(provider.get_direct_parents("nonexistent").is_none());
 }
 
-/// TEST-ADV-U-018: remove_inheritance 方法
+/// remove_inheritance 方法
 #[test]
 fn test_rbac_remove_inheritance_removes_link() {
     let provider = AdvancedRbacProvider::new();
@@ -687,7 +687,7 @@ fn test_rbac_remove_inheritance_removes_link() {
     assert!(!removed_again);
 }
 
-/// TEST-ADV-U-019: set_role_inheritances 批量设置
+/// set_role_inheritances 批量设置
 #[test]
 fn test_rbac_set_inheritances_batch_sets_links() {
     let provider = AdvancedRbacProvider::new();
@@ -724,7 +724,7 @@ fn test_rbac_set_inheritances_batch_sets_links() {
 // 默认角色测试
 // ============================================================================
 
-/// TEST-ADV-U-020: 默认 admin 角色权限
+/// 默认 admin 角色权限
 #[test]
 fn test_rbac_default_admin_role_has_all_permissions() {
     let provider = AdvancedRbacProvider::new();
@@ -752,7 +752,7 @@ fn test_rbac_default_admin_role_has_all_permissions() {
     );
 }
 
-/// TEST-ADV-U-021: 默认 readonly 角色权限
+/// 默认 readonly 角色权限
 #[test]
 fn test_rbac_default_readonly_role_has_select_only() {
     let provider = AdvancedRbacProvider::new();
@@ -780,7 +780,7 @@ fn test_rbac_default_readonly_role_has_select_only() {
     );
 }
 
-/// TEST-ADV-U-022: 默认 readwrite 角色权限
+/// 默认 readwrite 角色权限
 #[test]
 fn test_rbac_default_readwrite_role_denies_delete() {
     let provider = AdvancedRbacProvider::new();
@@ -808,7 +808,7 @@ fn test_rbac_default_readwrite_role_denies_delete() {
     );
 }
 
-/// TEST-ADV-U-023: get_roles 方法
+/// get_roles 方法
 #[test]
 fn test_rbac_get_roles_returns_defaults() {
     let provider = AdvancedRbacProvider::new();
@@ -819,7 +819,7 @@ fn test_rbac_get_roles_returns_defaults() {
     assert!(roles.contains(&"readwrite".to_string()));
 }
 
-/// TEST-ADV-U-024: 未定义角色的访问
+/// 未定义角色的访问
 #[test]
 fn test_rbac_undefined_role_denies_access() {
     let provider = AdvancedRbacProvider::new();
@@ -841,7 +841,7 @@ fn test_rbac_undefined_role_denies_access() {
 // 并发测试
 // ============================================================================
 
-/// TEST-ADV-U-025: 并发继承解析
+/// 并发继承解析
 #[test]
 fn test_rbac_concurrent_check_returns_allow() {
     use std::sync::Arc;
@@ -870,7 +870,7 @@ fn test_rbac_concurrent_check_returns_allow() {
     }
 }
 
-/// TEST-ADV-U-026: 并发添加角色和继承
+/// 并发添加角色和继承
 #[test]
 fn test_rbac_concurrent_add_completes_safely() {
     use std::sync::Arc;

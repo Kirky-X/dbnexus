@@ -344,7 +344,7 @@ impl GraphPermissionContext {
 mod tests {
     use super::*;
 
-    /// TEST-U-010: Operation (PermissionAction) Display 实现测试
+    /// Operation (PermissionAction) Display 实现测试
     #[test]
     fn test_operation_display() {
         assert_eq!(PermissionAction::Select.to_string(), "SELECT");
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(PermissionAction::Delete.to_string(), "DELETE");
     }
 
-    /// TEST-U-010-graph: 图操作变体 Display 测试（ladybug/neo4j feature）
+    /// 图操作变体 Display 测试（ladybug/neo4j feature）
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_operation_display_graph_variants() {
@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(PermissionAction::Match.to_string(), "MATCH");
     }
 
-    /// TEST-U-010-graph-construct: 图操作变体可构造且可比较
+    /// 图操作变体可构造且可比较
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_operation_graph_variants_construct() {
@@ -372,7 +372,7 @@ mod tests {
         assert_ne!(match_op, PermissionAction::Delete);
     }
 
-    /// TEST-U-011: RolePolicy allows 测试
+    /// RolePolicy allows 测试
     #[test]
     fn test_role_policy_allows() {
         let policy = RolePolicy {
@@ -398,7 +398,7 @@ mod tests {
         assert!(!policy.allows("orders", &PermissionAction::Update));
     }
 
-    /// TEST-U-012: PermissionConfig YAML 解析测试（通过 serde_yaml_ng）
+    /// PermissionConfig YAML 解析测试（通过 serde_yaml_ng）
     #[cfg(feature = "yaml")]
     #[test]
     fn test_permission_config_yaml_parsing() {
@@ -443,7 +443,7 @@ mod tests {
         assert!(config.get_role_policy("guest").is_none());
     }
 
-    /// TEST-U-012b: PermissionConfig YAML 解析测试（使用结构体构造）
+    /// PermissionConfig YAML 解析测试（使用结构体构造）
     #[test]
     fn test_permission_config_yaml_parsing_struct() {
         let config = PermissionConfig {
@@ -490,7 +490,7 @@ mod tests {
         assert!(config.get_role_policy("guest").is_none());
     }
 
-    /// TEST-U-014: PermissionConfig check_access 测试
+    /// PermissionConfig check_access 测试
     #[test]
     fn test_permission_config_check_access() {
         let config = PermissionConfig {
@@ -514,7 +514,7 @@ mod tests {
         assert!(!config.check_access("guest", "users", PermissionAction::Select));
     }
 
-    /// TEST-U-015: PermissionConfig 验证测试 - 有效配置
+    /// PermissionConfig 验证测试 - 有效配置
     #[test]
     fn test_permission_config_validation_valid() {
         let config = PermissionConfig {
@@ -537,7 +537,7 @@ mod tests {
         assert!(config.validate_with_first_error().is_ok());
     }
 
-    /// TEST-U-016: PermissionConfig 验证测试 - 空角色
+    /// PermissionConfig 验证测试 - 空角色
     #[test]
     fn test_permission_config_validation_empty_roles() {
         let config = PermissionConfig {
@@ -550,7 +550,7 @@ mod tests {
         assert!(errors.iter().any(|e| e.contains("No roles defined")));
     }
 
-    /// TEST-U-017: PermissionConfig 验证测试 - 空表权限
+    /// PermissionConfig 验证测试 - 空表权限
     #[test]
     fn test_permission_config_validation_empty_table_permissions() {
         let config = PermissionConfig {
@@ -576,7 +576,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-018: PermissionConfig 验证测试 - 空操作列表
+    /// PermissionConfig 验证测试 - 空操作列表
     #[test]
     fn test_permission_config_validation_empty_operations() {
         let config = PermissionConfig {
@@ -609,7 +609,7 @@ mod tests {
     // GraphPermissionContext 测试
     // ========================================================================
 
-    /// TEST-GRAPH-PERM-001: admin 角色调用 check_graph_access 应返回 Ok
+    /// admin 角色调用 check_graph_access 应返回 Ok
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_admin_bypass() {
@@ -621,7 +621,7 @@ mod tests {
         );
     }
 
-    /// TEST-GRAPH-PERM-002: 非 admin 角色调用 check_graph_access 应返回 Err
+    /// 非 admin 角色调用 check_graph_access 应返回 Err
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_non_admin_denied() {
@@ -636,7 +636,7 @@ mod tests {
         );
     }
 
-    /// TEST-GRAPH-PERM-003: admin 角色对所有图操作都返回 Ok
+    /// admin 角色对所有图操作都返回 Ok
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_admin_all_actions() {
@@ -646,7 +646,7 @@ mod tests {
         assert!(ctx.check_graph_access(PermissionAction::Select).is_ok());
     }
 
-    /// TEST-GRAPH-PERM-004: 非 admin 角色对所有图操作都返回 Err
+    /// 非 admin 角色对所有图操作都返回 Err
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_non_admin_all_actions_denied() {
@@ -656,7 +656,7 @@ mod tests {
         assert!(ctx.check_graph_access(PermissionAction::Select).is_err());
     }
 
-    /// TEST-GRAPH-PERM-005: 错误消息包含角色名和管理员角色名
+    /// 错误消息包含角色名和管理员角色名
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_error_message_contains_roles() {

@@ -11,7 +11,7 @@ include!(concat!(env!("OUT_DIR"), "/generated_roles.rs"));
 mod tests {
     use super::*;
 
-    /// TEST-U-019: 生成角色验证测试
+    /// 生成角色验证测试
     #[test]
     fn test_generated_roles_basic() {
         // 验证函数存在且可调用

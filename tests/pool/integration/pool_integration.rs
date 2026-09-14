@@ -181,7 +181,7 @@ async fn test_connection_acquire_with_small_pool() {
     assert!(count >= 2);
 }
 
-/// TEST-I-POOL-004: 验证池耗尽时触发正确的告警级别
+/// 验证池耗尽时触发正确的告警级别
 ///
 /// 当连接池饱和时，并发请求应触发超时，验证：
 /// 1. 超时错误被正确记录

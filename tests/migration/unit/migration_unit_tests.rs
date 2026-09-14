@@ -10,7 +10,7 @@ use dbnexus::{
     SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 
-/// TEST-M-U-001: 迁移历史创建测试
+/// 迁移历史创建测试
 #[test]
 fn test_migration_history_creation() {
     let history = MigrationHistory::new();
@@ -19,7 +19,7 @@ fn test_migration_history_creation() {
     assert_eq!(history.get_latest_version(), None);
 }
 
-/// TEST-M-U-002: 迁移历史添加测试
+/// 迁移历史添加测试
 #[test]
 fn test_migration_history_add() {
     let mut history = MigrationHistory::new();
@@ -39,7 +39,7 @@ fn test_migration_history_add() {
     assert!(!history.is_version_applied(2));
 }
 
-/// TEST-M-U-003: 迁移历史排序测试
+/// 迁移历史排序测试
 #[test]
 fn test_migration_history_sorted() {
     let mut history = MigrationHistory::new();
@@ -72,7 +72,7 @@ fn test_migration_history_sorted() {
     assert_eq!(history.applied_migrations[2].version, 3);
 }
 
-/// TEST-M-U-004: 迁移文件解析测试
+/// 迁移文件解析测试
 #[test]
 fn test_migration_file_parser_basic() {
     let content = r#"-- Migration: create_users_table
@@ -100,7 +100,7 @@ DROP TABLE users;
     assert!(full_content.contains("CREATE TABLE"));
 }
 
-/// TEST-M-U-005: 迁移文件解析 - 无描述
+/// 迁移文件解析 - 无描述
 #[test]
 fn test_migration_file_parser_no_description() {
     let content = r#"-- UP
@@ -119,7 +119,7 @@ DROP TABLE users;
     assert_eq!(description, "Migration");
 }
 
-/// TEST-M-U-006: 迁移文件语法验证 - 有效SQL
+/// 迁移文件语法验证 - 有效SQL
 #[test]
 fn test_migration_file_valid_syntax() {
     let content = r#"-- Migration: create_table
@@ -133,7 +133,7 @@ DROP TABLE test;
     assert!(result.is_ok());
 }
 
-/// TEST-M-U-007: 迁移文件语法验证 - 无效SQL
+/// 迁移文件语法验证 - 无效SQL
 #[test]
 fn test_migration_file_invalid_syntax() {
     let content = r#"-- Migration: invalid
@@ -145,7 +145,7 @@ No SQL statements here
     assert!(result.is_err());
 }
 
-/// TEST-M-U-008: SQL生成器创建测试
+/// SQL生成器创建测试
 #[test]
 fn test_sql_generator_creation() {
     let pg_gen = SqlGenerator::new(DatabaseType::Postgres);
@@ -157,7 +157,7 @@ fn test_sql_generator_creation() {
     assert_eq!(sqlite_gen.db_type, DatabaseType::Sqlite);
 }
 
-/// TEST-M-U-009: 创建表SQL生成测试
+/// 创建表SQL生成测试
 #[test]
 fn test_create_table_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -201,7 +201,7 @@ fn test_create_table_sql_generation() {
     assert!(sql.contains("PRIMARY KEY (id)"));
 }
 
-/// TEST-M-U-010: 删除表SQL生成测试
+/// 删除表SQL生成测试
 #[test]
 fn test_drop_table_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Sqlite);
@@ -211,7 +211,7 @@ fn test_drop_table_sql_generation() {
     assert_eq!(sql, "DROP TABLE test_table;");
 }
 
-/// TEST-M-U-011: 添加列SQL生成测试
+/// 添加列SQL生成测试
 #[test]
 fn test_add_column_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -233,7 +233,7 @@ fn test_add_column_sql_generation() {
     assert!(sql.contains("age INTEGER"));
 }
 
-/// TEST-M-U-012: 创建索引SQL生成测试
+/// 创建索引SQL生成测试
 #[test]
 fn test_create_index_sql_generation() {
     let generator = SqlGenerator::new(DatabaseType::MySql);
@@ -254,7 +254,7 @@ fn test_create_index_sql_generation() {
     assert!(sql.contains("email"));
 }
 
-/// TEST-M-U-013: Schema创建测试
+/// Schema创建测试
 #[test]
 fn test_schema_creation() {
     let schema = Schema::new(DatabaseType::Postgres);
@@ -263,7 +263,7 @@ fn test_schema_creation() {
     assert!(schema.tables.is_empty());
 }
 
-/// TEST-M-U-014: Schema表操作测试
+/// Schema表操作测试
 #[test]
 fn test_schema_table_operations() {
     let mut schema = Schema::new(DatabaseType::Sqlite);
@@ -287,7 +287,7 @@ fn test_schema_table_operations() {
     assert_eq!(retrieved.unwrap().name, "users");
 }
 
-/// TEST-M-U-015: Schema差异检测 - 新增表
+/// Schema差异检测 - 新增表
 #[test]
 fn test_schema_diff_new_table() {
     let old_schema = Schema::new(DatabaseType::Postgres);
@@ -326,7 +326,7 @@ fn test_schema_diff_new_table() {
     }
 }
 
-/// TEST-M-U-016: Schema差异检测 - 删除表
+/// Schema差异检测 - 删除表
 #[test]
 fn test_schema_diff_drop_table() {
     let mut old_schema = Schema::new(DatabaseType::Postgres);
@@ -355,7 +355,7 @@ fn test_schema_diff_drop_table() {
     }
 }
 
-/// TEST-M-U-017: Schema差异检测 - 修改表
+/// Schema差异检测 - 修改表
 #[test]
 fn test_schema_diff_alter_table() {
     let mut old_schema = Schema::new(DatabaseType::Postgres);
@@ -426,7 +426,7 @@ fn test_schema_diff_alter_table() {
     }
 }
 
-/// TEST-M-U-018: 列类型SQL生成测试
+/// 列类型SQL生成测试
 #[test]
 fn test_column_type_to_sql() {
     let pg = SqlGenerator::new(DatabaseType::Postgres);
@@ -463,7 +463,7 @@ fn test_column_type_to_sql() {
     assert_eq!(sqlite.generate_column_def(&ColumnType::Json), "TEXT");
 }
 
-/// TEST-M-U-019: 迁移创建测试
+/// 迁移创建测试
 #[test]
 fn test_migration_creation() {
     let migration = Migration::new(1, "test_migration".to_string());
@@ -474,7 +474,7 @@ fn test_migration_creation() {
     assert!(migration.sql.is_none());
 }
 
-/// TEST-M-U-020: 迁移历史获取待应用迁移测试
+/// 迁移历史获取待应用迁移测试
 #[test]
 fn test_migration_history_pending() {
     let mut history = MigrationHistory::new();
@@ -500,7 +500,7 @@ fn test_migration_history_pending() {
     assert_eq!(pending[1].version, 3);
 }
 
-/// TEST-M-U-021: 迁移文件解析测试
+/// 迁移文件解析测试
 #[test]
 fn test_migration_parse_succeeds() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);
@@ -529,7 +529,7 @@ fn test_migration_parse_succeeds() {
     assert!(sql.contains("CREATE TABLE test"));
 }
 
-/// TEST-M-U-021: 迁移文件生成测试
+/// 迁移文件生成测试
 #[test]
 fn test_migration_generate_succeeds() {
     let generator = SqlGenerator::new(DatabaseType::Postgres);

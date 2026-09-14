@@ -341,7 +341,7 @@ impl PermissionProvider for AdvancedRbacProvider {
 mod tests {
     use super::*;
 
-    /// TEST-ADV-001: 基础角色权限检查
+    /// 基础角色权限检查
     #[test]
     fn test_advanced_rbac_basic_check() {
         let provider = AdvancedRbacProvider::new();
@@ -391,7 +391,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-002: 角色继承 - 子角色继承父角色权限
+    /// 角色继承 - 子角色继承父角色权限
     #[test]
     fn test_role_inheritance() {
         let provider = AdvancedRbacProvider::new();
@@ -417,7 +417,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-003: 多重继承 - 角色继承多个父角色
+    /// 多重继承 - 角色继承多个父角色
     #[test]
     fn test_multiple_inheritance() {
         let provider = AdvancedRbacProvider::new();
@@ -455,7 +455,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-004: 继承链 - 多层角色继承
+    /// 继承链 - 多层角色继承
     #[test]
     fn test_inheritance_chain() {
         let provider = AdvancedRbacProvider::new();
@@ -483,7 +483,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-005: 循环继承检测
+    /// 循环继承检测
     #[test]
     fn test_circular_inheritance() {
         let provider = AdvancedRbacProvider::new();
@@ -508,7 +508,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// TEST-ADV-006: get_inherited_roles 方法
+    /// get_inherited_roles 方法
     #[test]
     fn test_get_inherited_roles() {
         let provider = AdvancedRbacProvider::new();
@@ -526,7 +526,7 @@ mod tests {
         assert_eq!(inherited.len(), 3);
     }
 
-    /// TEST-ADV-007: has_inheritance 方法
+    /// has_inheritance 方法
     #[test]
     fn test_has_inheritance() {
         let provider = AdvancedRbacProvider::new();
@@ -537,7 +537,7 @@ mod tests {
         assert!(provider.has_inheritance("manager"));
     }
 
-    /// TEST-ADV-008: remove_inheritance 方法
+    /// remove_inheritance 方法
     #[test]
     fn test_remove_inheritance() {
         let provider = AdvancedRbacProvider::new();
@@ -550,7 +550,7 @@ mod tests {
         assert!(!provider.has_inheritance("manager"));
     }
 
-    /// TEST-ADV-009: 缓存功能
+    /// 缓存功能
     #[test]
     fn test_cache_functionality() {
         let provider = AdvancedRbacProvider::new();
@@ -571,7 +571,7 @@ mod tests {
         assert_eq!(provider.cache_size(), 0);
     }
 
-    /// TEST-ADV-010: 自定义角色添加
+    /// 自定义角色添加
     #[test]
     fn test_custom_role_addition() {
         let provider = AdvancedRbacProvider::new();
@@ -610,7 +610,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-011: 继承自定义角色
+    /// 继承自定义角色
     #[test]
     fn test_inherit_custom_role() {
         let provider = AdvancedRbacProvider::new();
@@ -640,7 +640,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-012: get_roles 方法
+    /// get_roles 方法
     #[test]
     fn test_get_roles() {
         let provider = AdvancedRbacProvider::new();
@@ -651,7 +651,7 @@ mod tests {
         assert!(roles.contains(&"readwrite".to_string()));
     }
 
-    /// TEST-ADV-013: 批量设置继承关系
+    /// 批量设置继承关系
     #[test]
     fn test_batch_inheritances() {
         let provider = AdvancedRbacProvider::new();
@@ -678,7 +678,7 @@ mod tests {
         ); // from role_b -> readonly
     }
 
-    /// TEST-ADV-014: 未定义角色的访问拒绝
+    /// 未定义角色的访问拒绝
     #[test]
     fn test_undefined_role_denied() {
         let provider = AdvancedRbacProvider::new();
@@ -691,7 +691,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-015: 通配符表名匹配
+    /// 通配符表名匹配
     #[test]
     fn test_wildcard_table_matching() {
         let provider = AdvancedRbacProvider::new();
@@ -716,7 +716,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-016: 继承深度限制 - 深度在限制内
+    /// 继承深度限制 - 深度在限制内
     #[test]
     fn test_inheritance_depth_within_limit() {
         let provider = AdvancedRbacProvider::new();
@@ -750,7 +750,7 @@ mod tests {
         );
     }
 
-    /// TEST-ADV-017: 继承深度限制 - 超过限制
+    /// 继承深度限制 - 超过限制
     #[test]
     fn test_inheritance_depth_exceeds_limit() {
         let provider = AdvancedRbacProvider::new();
@@ -782,7 +782,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// TEST-ADV-018: get_inherited_roles 返回自身
+    /// get_inherited_roles 返回自身
     #[test]
     fn test_get_inherited_roles_returns_self() {
         let provider = AdvancedRbacProvider::new();
@@ -793,7 +793,7 @@ mod tests {
         assert_eq!(inherited.len(), 1);
     }
 
-    /// TEST-ADV-019: 循环继承不导致无限循环（迭代方式）
+    /// 循环继承不导致无限循环（迭代方式）
     #[test]
     fn test_circular_inheritance_no_infinite_loop_iterative() {
         let provider = AdvancedRbacProvider::new();

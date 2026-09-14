@@ -56,7 +56,7 @@ use tokio::sync::RwLock;
 struct SessionState {
     /// 事务对象（用于真实的事务管理）
     ///
-    /// v0.3.0 性能优化：使用 `Arc<DatabaseTransaction>` 而非 `DatabaseTransaction`，
+    /// 性能优化：使用 `Arc<DatabaseTransaction>` 而非 `DatabaseTransaction`，
     /// 因为 sea-orm 的 `DatabaseTransaction` 未实现 `Clone`，使用 `Arc` 包装后
     /// 可在 `execute_raw` 中短锁 clone 后锁外执行 async DB 操作，避免持锁 await。
     transaction: Option<Arc<DatabaseTransaction>>,
@@ -215,7 +215,7 @@ impl Session {
 
     /// 开始事务
     ///
-    /// v0.3.0 性能优化：短锁模式，避免持锁期间 async DB 调用。
+    /// 性能优化：短锁模式，避免持锁期间 async DB 调用。
     /// 流程：短锁检查 → 锁外 begin → 短锁写入（含并发冲突处理）
     ///
     /// 图事务双轨：按连接类型分发到关系型（SeaORM）或图（GraphConnection）事务路径。
@@ -302,7 +302,7 @@ impl Session {
 
     /// 提交事务
     ///
-    /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 commit。
+    /// 性能优化：短锁模式，take transaction 后锁外执行 commit。
     ///
     /// 图事务双轨：优先检查 graph_transaction，有则提交图事务，否则走 SeaORM 逻辑。
     ///
@@ -363,7 +363,7 @@ impl Session {
 
     /// 回滚事务
     ///
-    /// v0.3.0 性能优化：短锁模式，take transaction 后锁外执行 rollback。
+    /// 性能优化：短锁模式，take transaction 后锁外执行 rollback。
     ///
     /// 图事务双轨：优先检查 graph_transaction，有则回滚图事务，否则走 SeaORM 逻辑。
     ///
@@ -561,7 +561,7 @@ impl Session {
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             let query_start = std::time::Instant::now();
 
-            // v0.3.0 性能优化：短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
+            // 性能优化：短锁 clone Arc<DatabaseTransaction>，锁外执行 async DB 调用
             let tx_opt: Option<Arc<DatabaseTransaction>> = {
                 let state = self.state.write().await;
                 state.transaction.clone()
@@ -2186,7 +2186,7 @@ mod graph_tests {
             .expect("Failed to create Ladybug pool")
     }
 
-    /// TEST-GRAPH-TXN-001: 图连接初始 is_in_transaction 为 false
+    /// 图连接初始 is_in_transaction 为 false
     #[tokio::test]
     async fn test_graph_session_is_in_transaction_initial_false() {
         let pool = make_ladybug_pool().await;
@@ -2197,7 +2197,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-TXN-002: begin_transaction 后 is_in_transaction 为 true
+    /// begin_transaction 后 is_in_transaction 为 true
     #[tokio::test]
     async fn test_graph_session_begin_sets_in_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2212,7 +2212,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-TXN-003: begin + commit 后 is_in_transaction 为 false
+    /// begin + commit 后 is_in_transaction 为 false
     #[tokio::test]
     async fn test_graph_session_commit_clears_in_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2225,7 +2225,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-TXN-004: begin + rollback 后 is_in_transaction 为 false
+    /// begin + rollback 后 is_in_transaction 为 false
     #[tokio::test]
     async fn test_graph_session_rollback_clears_in_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2238,7 +2238,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-TXN-005: 图事务 begin → execute_cypher → commit 端到端
+    /// 图事务 begin → execute_cypher → commit 端到端
     #[tokio::test]
     async fn test_graph_transaction_commit_e2e() {
         let pool = make_ladybug_pool().await;
@@ -2279,7 +2279,7 @@ mod graph_tests {
         }
     }
 
-    /// TEST-GRAPH-TXN-006: 图事务 begin → execute_cypher → rollback 端到端
+    /// 图事务 begin → execute_cypher → rollback 端到端
     #[tokio::test]
     async fn test_graph_transaction_rollback_e2e() {
         let pool = make_ladybug_pool().await;
@@ -2315,7 +2315,7 @@ mod graph_tests {
         }
     }
 
-    /// TEST-GRAPH-TXN-007: 重复 begin 应返回 Transaction 错误
+    /// 重复 begin 应返回 Transaction 错误
     #[tokio::test]
     async fn test_graph_double_begin_fails() {
         let pool = make_ladybug_pool().await;
@@ -2331,7 +2331,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-TXN-008: 无事务时 commit 应返回错误
+    /// 无事务时 commit 应返回错误
     #[tokio::test]
     async fn test_graph_commit_without_transaction_fails() {
         let pool = make_ladybug_pool().await;
@@ -2340,7 +2340,7 @@ mod graph_tests {
         assert!(result.is_err(), "commit without transaction should fail");
     }
 
-    /// TEST-GRAPH-TXN-009: 无事务时 rollback 应返回错误
+    /// 无事务时 rollback 应返回错误
     #[tokio::test]
     async fn test_graph_rollback_without_transaction_fails() {
         let pool = make_ladybug_pool().await;
@@ -2349,7 +2349,7 @@ mod graph_tests {
         assert!(result.is_err(), "rollback without transaction should fail");
     }
 
-    /// TEST-GRAPH-EXEC-001: 不在事务中 execute_cypher("RETURN 1") 返回结果
+    /// 不在事务中 execute_cypher("RETURN 1") 返回结果
     #[tokio::test]
     async fn test_execute_cypher_without_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2371,7 +2371,7 @@ mod graph_tests {
         }
     }
 
-    /// TEST-GRAPH-EXEC-002: 在事务中 execute_cypher 委托给事务句柄
+    /// 在事务中 execute_cypher 委托给事务句柄
     #[tokio::test]
     async fn test_execute_cypher_in_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2408,7 +2408,7 @@ mod graph_tests {
         session.commit().await.expect("commit");
     }
 
-    /// TEST-GRAPH-EXEC-003: CREATE NODE TABLE + CREATE + MATCH 端到端
+    /// CREATE NODE TABLE + CREATE + MATCH 端到端
     #[tokio::test]
     async fn test_execute_cypher_e2e_create_match() {
         let pool = make_ladybug_pool().await;
@@ -2461,7 +2461,7 @@ mod graph_tests {
         }
     }
 
-    /// TEST-GRAPH-EXEC-004: 无效 Cypher 返回错误
+    /// 无效 Cypher 返回错误
     #[tokio::test]
     async fn test_execute_cypher_invalid_returns_error() {
         let pool = make_ladybug_pool().await;
@@ -2472,7 +2472,7 @@ mod graph_tests {
         assert!(result.is_err(), "invalid cypher should return error");
     }
 
-    /// TEST-GRAPH-EXEC-005: 事务内多次 execute_cypher 使用同一事务句柄
+    /// 事务内多次 execute_cypher 使用同一事务句柄
     #[tokio::test]
     async fn test_execute_cypher_multiple_in_transaction() {
         let pool = make_ladybug_pool().await;
@@ -2520,7 +2520,7 @@ mod graph_tests {
         session.commit().await.expect("commit");
     }
 
-    /// TEST-GRAPH-EXEC-006: 非 admin 角色调用 execute_cypher_with_params 应被拒绝（permission feature）
+    /// 非 admin 角色调用 execute_cypher_with_params 应被拒绝（permission feature）
     #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_execute_cypher_non_admin_denied() {
@@ -2539,7 +2539,7 @@ mod graph_tests {
         );
     }
 
-    /// TEST-GRAPH-EXEC-007: admin 角色 execute_cypher_with_params 成功（permission feature）
+    /// admin 角色 execute_cypher_with_params 成功（permission feature）
     #[cfg(feature = "permission")]
     #[tokio::test]
     async fn test_execute_cypher_admin_allowed() {

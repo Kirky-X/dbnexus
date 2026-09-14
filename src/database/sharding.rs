@@ -614,7 +614,7 @@ impl ShardRouter {
         (hasher.finish() % self.total_shards as u64) as u32
     }
 
-    /// 根据 `shard_key` 路由到分片并返回对应 Session（v0.3.0 新增）
+    /// 根据 `shard_key` 路由到分片并返回对应 Session
     ///
     /// 内部流程：
     /// 1. 使用 [`shard_id_for_key`](Self::shard_id_for_key) 计算 `shard_id`

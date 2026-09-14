@@ -165,7 +165,7 @@ impl JwtManager {
             TokenType::Refresh => now + self.refresh_expiration_secs as usize,
         };
 
-        // M-1: 生成唯一 jti（全局计数器 + 时间戳）
+        // 生成唯一 jti（全局计数器 + 时间戳）
         let jti_count = JTI_COUNTER.fetch_add(1, Ordering::SeqCst);
         let jti = format!("{}-{}-{}", user_id, now, jti_count);
 

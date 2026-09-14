@@ -40,7 +40,7 @@ async fn create_global_index() -> GlobalIndex {
 // 全局索引创建测试
 // ============================================================================
 
-/// TEST-GIDX-INT-001: GlobalIndex 创建测试
+/// GlobalIndex 创建测试
 #[tokio::test]
 async fn test_global_index_creation() {
     let pool = DbPool::new(&get_database_url())
@@ -55,7 +55,7 @@ async fn test_global_index_creation() {
     let _ = global_index;
 }
 
-/// TEST-GIDX-INT-002: GlobalIndex 无效连接字符串测试
+/// GlobalIndex 无效连接字符串测试
 #[tokio::test]
 async fn test_global_index_invalid_connection() {
     // 使用无效的连接字符串创建 DbPool 应该失败
@@ -68,7 +68,7 @@ async fn test_global_index_invalid_connection() {
     );
 }
 
-/// TEST-GIDX-INT-003: GlobalIndex SQLite 内存数据库创建测试
+/// GlobalIndex SQLite 内存数据库创建测试
 #[tokio::test]
 async fn test_global_index_sqlite_memory() {
     let result = create_global_index().await;
@@ -80,7 +80,7 @@ async fn test_global_index_sqlite_memory() {
 // 全局索引查询测试
 // ============================================================================
 
-/// TEST-GIDX-INT-004: 空索引查询测试
+/// 空索引查询测试
 #[tokio::test]
 async fn test_query_empty_index() {
     let global_index = create_global_index().await;
@@ -96,7 +96,7 @@ async fn test_query_empty_index() {
     assert!(entries.is_empty(), "Empty index should return empty result");
 }
 
-/// TEST-GIDX-INT-005: 单条索引查询测试
+/// 单条索引查询测试
 #[tokio::test]
 async fn test_query_single_index_entry() {
     let global_index = create_global_index().await;
@@ -127,7 +127,7 @@ async fn test_query_single_index_entry() {
     assert_eq!(entries[0].shard_id, 0);
 }
 
-/// TEST-GIDX-INT-006: 多条索引查询测试
+/// 多条索引查询测试
 #[tokio::test]
 async fn test_query_multiple_index_entries() {
     let global_index = create_global_index().await;
@@ -172,7 +172,7 @@ async fn test_query_multiple_index_entries() {
     assert_eq!(entries.len(), 3, "Should find all three entries");
 }
 
-/// TEST-GIDX-INT-007: 不同表名查询测试
+/// 不同表名查询测试
 #[tokio::test]
 async fn test_query_different_tables() {
     let global_index = create_global_index().await;
@@ -214,7 +214,7 @@ async fn test_query_different_tables() {
     assert_eq!(products[0].table_name, "products");
 }
 
-/// TEST-GIDX-INT-008: 不同索引键查询测试
+/// 不同索引键查询测试
 #[tokio::test]
 async fn test_query_different_index_keys() {
     let global_index = create_global_index().await;
@@ -257,7 +257,7 @@ async fn test_query_different_index_keys() {
 // 全局索引更新测试
 // ============================================================================
 
-/// TEST-GIDX-INT-009: 索引更新测试
+/// 索引更新测试
 #[tokio::test]
 async fn test_index_update() {
     let global_index = create_global_index().await;
@@ -295,7 +295,7 @@ async fn test_index_update() {
     assert_eq!(result[0].shard_id, 5, "Shard ID should be updated");
 }
 
-/// TEST-GIDX-INT-010: 批量更新测试
+/// 批量更新测试
 #[tokio::test]
 async fn test_batch_update() {
     let global_index = create_global_index().await;
@@ -318,7 +318,7 @@ async fn test_batch_update() {
     assert_eq!(result.failed_count, 0);
 }
 
-/// TEST-GIDX-INT-011: 更新后查询一致性测试
+/// 更新后查询一致性测试
 #[tokio::test]
 async fn test_update_query_consistency() {
     let global_index = create_global_index().await;
@@ -365,7 +365,7 @@ async fn test_update_query_consistency() {
 // 全局索引删除测试
 // ============================================================================
 
-/// TEST-GIDX-INT-012: 索引不存在查询测试（模拟删除场景）
+/// 索引不存在查询测试（模拟删除场景）
 #[tokio::test]
 async fn test_index_nonexistent_query() {
     let global_index = create_global_index().await;
@@ -393,7 +393,7 @@ async fn test_index_nonexistent_query() {
     );
 }
 
-/// TEST-GIDX-INT-013: 索引不存在表名查询测试
+/// 索引不存在表名查询测试
 #[tokio::test]
 async fn test_index_nonexistent_table_query() {
     let global_index = create_global_index().await;
@@ -414,7 +414,7 @@ async fn test_index_nonexistent_table_query() {
 // 跨分片索引同步测试
 // ============================================================================
 
-/// TEST-GIDX-INT-014: 多分片索引同步测试
+/// 多分片索引同步测试
 #[tokio::test]
 async fn test_multi_shard_sync() {
     let global_index = create_global_index().await;
@@ -470,7 +470,7 @@ async fn test_multi_shard_sync() {
     assert_eq!(user_456_orders.len(), 1);
 }
 
-/// TEST-GIDX-INT-015: 分片 ID 范围测试
+/// 分片 ID 范围测试
 #[tokio::test]
 async fn test_shard_id_range() {
     let global_index = create_global_index().await;
@@ -492,7 +492,7 @@ async fn test_shard_id_range() {
     assert_eq!(result.synced_count, 100);
 }
 
-/// TEST-GIDX-INT-016: 大量分片同步性能测试
+/// 大量分片同步性能测试
 #[tokio::test]
 async fn test_large_shard_sync() {
     let global_index = create_global_index().await;
@@ -519,7 +519,7 @@ async fn test_large_shard_sync() {
 // 索引一致性检查测试
 // ============================================================================
 
-/// TEST-GIDX-INT-017: 索引一致性基本测试
+/// 索引一致性基本测试
 #[tokio::test]
 async fn test_index_consistency_basic() {
     let global_index = create_global_index().await;
@@ -546,7 +546,7 @@ async fn test_index_consistency_basic() {
     }
 }
 
-/// TEST-GIDX-INT-018: 并发查询一致性测试
+/// 并发查询一致性测试
 #[tokio::test]
 async fn test_concurrent_query_consistency() {
     use std::sync::Arc;
@@ -585,7 +585,7 @@ async fn test_concurrent_query_consistency() {
     }
 }
 
-/// TEST-GIDX-INT-019: 并发同步一致性测试
+/// 并发同步一致性测试
 #[tokio::test]
 async fn test_concurrent_sync_consistency() {
     use std::sync::Arc;
@@ -626,7 +626,7 @@ async fn test_concurrent_sync_consistency() {
     }
 }
 
-/// TEST-GIDX-INT-020: 索引数据完整性测试
+/// 索引数据完整性测试
 #[tokio::test]
 async fn test_index_data_integrity() {
     let global_index = create_global_index().await;
@@ -662,7 +662,7 @@ async fn test_index_data_integrity() {
 // 边界条件测试
 // ============================================================================
 
-/// TEST-GIDX-INT-021: 空条目批量同步测试
+/// 空条目批量同步测试
 #[tokio::test]
 async fn test_empty_batch_sync() {
     let global_index = create_global_index().await;
@@ -675,7 +675,7 @@ async fn test_empty_batch_sync() {
     assert_eq!(result.failed_count, 0);
 }
 
-/// TEST-GIDX-INT-022: 大批量同步测试
+/// 大批量同步测试
 #[tokio::test]
 async fn test_large_batch_sync() {
     let global_index = create_global_index().await;
@@ -697,7 +697,7 @@ async fn test_large_batch_sync() {
     assert_eq!(result.synced_count, 5000);
 }
 
-/// TEST-GIDX-INT-023: Unicode 索引值测试
+/// Unicode 索引值测试
 #[tokio::test]
 async fn test_unicode_index_values() {
     let global_index = create_global_index().await;
@@ -721,7 +721,7 @@ async fn test_unicode_index_values() {
     assert_eq!(result[0].record_id, "记录_001");
 }
 
-/// TEST-GIDX-INT-024: JSON 索引值测试
+/// JSON 索引值测试
 #[tokio::test]
 async fn test_json_index_value() {
     let global_index = create_global_index().await;
@@ -746,7 +746,7 @@ async fn test_json_index_value() {
     assert_eq!(result.len(), 1);
 }
 
-/// TEST-GIDX-INT-025: 最大分片 ID 测试
+/// 最大分片 ID 测试
 #[tokio::test]
 async fn test_max_shard_id() {
     let global_index = create_global_index().await;
@@ -774,7 +774,7 @@ async fn test_max_shard_id() {
 // 错误处理测试
 // ============================================================================
 
-/// TEST-GIDX-INT-026: 查询参数验证测试
+/// 查询参数验证测试
 #[tokio::test]
 async fn test_query_parameter_validation() {
     let global_index = create_global_index().await;
@@ -790,7 +790,7 @@ async fn test_query_parameter_validation() {
     );
 }
 
-/// TEST-GIDX-INT-027: 重复同步测试
+/// 重复同步测试
 #[tokio::test]
 async fn test_duplicate_sync() {
     let global_index = create_global_index().await;
@@ -821,7 +821,7 @@ async fn test_duplicate_sync() {
     );
 }
 
-/// TEST-GIDX-INT-028: 混合操作测试
+/// 混合操作测试
 #[tokio::test]
 async fn test_mixed_operations() {
     let global_index = create_global_index().await;
@@ -871,7 +871,7 @@ async fn test_mixed_operations() {
 // 性能相关测试
 // ============================================================================
 
-/// TEST-GIDX-INT-029: 查询性能测试
+/// 查询性能测试
 #[tokio::test]
 async fn test_query_performance() {
     let global_index = create_global_index().await;
@@ -908,7 +908,7 @@ async fn test_query_performance() {
     );
 }
 
-/// TEST-GIDX-INT-030: 连接复用测试
+/// 连接复用测试
 #[tokio::test]
 async fn test_connection_reuse() {
     let global_index = create_global_index().await;

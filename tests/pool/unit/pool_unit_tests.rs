@@ -15,7 +15,7 @@ mod common;
 // 配置初始化测试
 // ============================================================================
 
-/// TEST-U-POOL-001: 测试 DbPoolBuilder 基本配置初始化
+/// 测试 DbPoolBuilder 基本配置初始化
 ///
 /// 验证使用 DbPoolBuilder 可以正确初始化连接池配置。
 #[tokio::test]
@@ -45,7 +45,7 @@ async fn test_pool_builder_basic_initialization() {
     assert_eq!(pool.config().admin_role, "admin");
 }
 
-/// TEST-U-POOL-002: 测试 DbPoolBuilder 默认值
+/// 测试 DbPoolBuilder 默认值
 ///
 /// 验证未设置的配置项使用合理的默认值。
 #[tokio::test]
@@ -61,7 +61,7 @@ async fn test_pool_builder_default_values() {
     assert_eq!(pool.config().admin_role, "admin");
 }
 
-/// TEST-U-POOL-003: 测试 DbPoolBuilder 链式配置
+/// 测试 DbPoolBuilder 链式配置
 ///
 /// 验证 DbPoolBuilder 的链式 API 正确工作。
 #[tokio::test]
@@ -86,7 +86,7 @@ async fn test_pool_builder_chained_configuration() {
     assert_eq!(pool.config().pool_config.min_connections, 3);
 }
 
-/// TEST-U-POOL-004: 测试配置边界值 - 最小连接数等于最大连接数
+/// 测试配置边界值 - 最小连接数等于最大连接数
 ///
 /// 验证 min_connections == max_connections 时连接池正常工作。
 #[tokio::test]
@@ -111,7 +111,7 @@ async fn test_pool_config_min_equals_max() {
     assert_eq!(pool.config().pool_config.min_connections, 5);
 }
 
-/// TEST-U-POOL-005: 测试配置验证 - min > max
+/// 测试配置验证 - min > max
 ///
 /// 验证 min_connections > max_connections 时配置值被设置。
 /// 注意：DbConfig 结构体不会在创建时验证，验证会在 DbPool 创建时进行。
@@ -132,7 +132,7 @@ fn test_pool_config_validation_min_greater_than_max() {
     assert!(config.pool_config.max_connections < config.pool_config.min_connections);
 }
 
-/// TEST-U-POOL-006: 测试配置验证 - 零连接数
+/// 测试配置验证 - 零连接数
 ///
 /// 验证 max_connections = 0 时配置值被设置。
 #[test]
@@ -151,7 +151,7 @@ fn test_pool_config_validation_zero_max_connections() {
     assert_eq!(config.pool_config.max_connections, 0);
 }
 
-/// TEST-U-POOL-007: 测试配置验证 - 空 URL
+/// 测试配置验证 - 空 URL
 ///
 /// 验证 URL 为空时配置值被设置。
 #[test]
@@ -169,7 +169,7 @@ fn test_pool_config_validation_empty_url() {
 // 连接池状态测试
 // ============================================================================
 
-/// TEST-U-POOL-008: 测试连接池初始状态
+/// 测试连接池初始状态
 ///
 /// 验证连接池创建后的初始状态正确。
 #[tokio::test]
@@ -185,7 +185,7 @@ async fn test_pool_initial_status() {
     assert_eq!(status.total, status.active + status.idle);
 }
 
-/// TEST-U-POOL-009: 测试获取会话后状态变化
+/// 测试获取会话后状态变化
 ///
 /// 验证获取会话后连接池状态正确更新。
 #[tokio::test]
@@ -212,7 +212,7 @@ async fn test_pool_status_after_session_acquire() {
     assert_eq!(final_status.active, 0);
 }
 
-/// TEST-U-POOL-010: 测试 PoolStatus 结构体
+/// 测试 PoolStatus 结构体
 ///
 /// 验证 PoolStatus 包含所有必要的字段。
 #[tokio::test]
@@ -238,7 +238,7 @@ async fn test_pool_status_structure() {
 // 最大连接数限制测试
 // ============================================================================
 
-/// TEST-U-POOL-011: 测试最大连接数限制
+/// 测试最大连接数限制
 ///
 /// 验证连接池不会超过配置的最大连接数。
 #[tokio::test]
@@ -297,7 +297,7 @@ async fn test_pool_max_connections_limit() {
     );
 }
 
-/// TEST-U-POOL-012: 测试连接复用
+/// 测试连接复用
 ///
 /// 验证连接释放后可以被复用。
 #[tokio::test]
@@ -332,7 +332,7 @@ async fn test_pool_connection_reuse() {
     assert!(status.total <= 2);
 }
 
-/// TEST-U-POOL-013: 测试并发获取连接
+/// 测试并发获取连接
 ///
 /// 验证并发场景下连接池正确管理连接数。
 #[tokio::test]
@@ -390,7 +390,7 @@ async fn test_pool_concurrent_connection_acquire() {
 // 连接超时处理测试
 // ============================================================================
 
-/// TEST-U-POOL-014: 测试连接获取超时
+/// 测试连接获取超时
 ///
 /// 验证连接池在无法获取连接时正确超时。
 #[tokio::test]
@@ -437,7 +437,7 @@ async fn test_pool_acquire_timeout() {
     assert!(elapsed < Duration::from_secs(2), "Should not wait too long");
 }
 
-/// TEST-U-POOL-015: 测试超时后连接释放可获取
+/// 测试超时后连接释放可获取
 ///
 /// 验证超时后释放的连接可以被重新获取。
 #[tokio::test]
@@ -481,7 +481,7 @@ async fn test_pool_timeout_then_release() {
     let _ = timeout_task.await;
 }
 
-/// TEST-U-POOL-016: 测试配置的超时值正确应用
+/// 测试配置的超时值正确应用
 ///
 /// 验证配置的 acquire_timeout 正确转换为 Duration。
 #[test]
@@ -506,7 +506,7 @@ fn test_pool_timeout_duration_conversion() {
 // 连接泄漏检测测试
 // ============================================================================
 
-/// TEST-U-POOL-017: 测试会话自动释放
+/// 测试会话自动释放
 ///
 /// 验证 Session 在 drop 时自动释放连接。
 #[tokio::test]
@@ -535,7 +535,7 @@ async fn test_pool_session_auto_release() {
     );
 }
 
-/// TEST-U-POOL-018: 测试连接泄漏检测 - borrow_count 追踪
+/// 测试连接泄漏检测 - borrow_count 追踪
 ///
 /// 验证 borrow_count 正确追踪连接借用次数。
 #[tokio::test]
@@ -565,7 +565,7 @@ async fn test_pool_borrow_count_tracking() {
     );
 }
 
-/// TEST-U-POOL-019: 测试连接泄漏检测 - max_active 追踪
+/// 测试连接泄漏检测 - max_active 追踪
 ///
 /// 验证 max_active 正确追踪历史峰值连接数。
 #[tokio::test]
@@ -609,7 +609,7 @@ async fn test_pool_max_active_tracking() {
     assert_eq!(final_status.active, 0);
 }
 
-/// TEST-U-POOL-020: 测试连接池状态一致性
+/// 测试连接池状态一致性
 ///
 /// 验证在各种操作后连接池状态保持一致。
 #[tokio::test]
@@ -654,7 +654,7 @@ async fn test_pool_status_consistency() {
 // 注意: ConnectionLifecycle 是内部实现细节，不对外暴露。
 // 以下测试通过公共 API 间接验证连接生命周期管理。
 
-/// TEST-U-POOL-021: 测试连接生命周期 - 通过状态追踪
+/// 测试连接生命周期 - 通过状态追踪
 ///
 /// 验证连接池正确追踪连接的使用情况。
 #[tokio::test]
@@ -681,7 +681,7 @@ async fn test_connection_lifecycle_via_status() {
     assert_eq!(final_status.active, 0, "active should be 0 after release");
 }
 
-/// TEST-U-POOL-022: 测试连接生命周期 - 借用计数追踪
+/// 测试连接生命周期 - 借用计数追踪
 ///
 /// 验证 borrow_count 正确追踪所有借用操作。
 #[tokio::test]
@@ -708,7 +708,7 @@ async fn test_connection_lifecycle_borrow_tracking() {
     );
 }
 
-/// TEST-U-POOL-023: 测试连接生命周期 - 最大活跃连接追踪
+/// 测试连接生命周期 - 最大活跃连接追踪
 ///
 /// 验证 max_active 正确追踪历史峰值。
 #[tokio::test]
@@ -757,7 +757,7 @@ async fn test_connection_lifecycle_max_active_tracking() {
     assert_eq!(final_status.active, 0, "active should be 0 after release");
 }
 
-/// TEST-U-POOL-024: 测试连接生命周期 - 等待计数追踪
+/// 测试连接生命周期 - 等待计数追踪
 ///
 /// 验证 wait_count 正确追踪等待请求。
 #[tokio::test]
@@ -806,7 +806,7 @@ async fn test_connection_lifecycle_wait_tracking() {
 // 注意: ConfigCorrector 和 set_* 方法是内部实现细节，不对外暴露。
 // 以下测试通过公共 API 验证配置行为。
 
-/// TEST-U-POOL-027: 测试配置默认值合理性
+/// 测试配置默认值合理性
 ///
 /// 验证配置的默认值在合理范围内。
 #[test]
@@ -847,7 +847,7 @@ fn test_pool_config_default_values_reasonable() {
 // 边界条件测试
 // ============================================================================
 
-/// TEST-U-POOL-028: 测试单连接池
+/// 测试单连接池
 ///
 /// 验证 max_connections = 1 时连接池正常工作。
 #[tokio::test]
@@ -885,7 +885,7 @@ async fn test_pool_single_connection() {
     assert!(status.total <= 1);
 }
 
-/// TEST-U-POOL-029: 测试大连接池配置
+/// 测试大连接池配置
 ///
 /// 验证大连接数配置时连接池正常工作。
 #[tokio::test]
@@ -910,7 +910,7 @@ async fn test_pool_large_connection_pool() {
     assert_eq!(pool.config().pool_config.min_connections, 10);
 }
 
-/// TEST-U-POOL-030: 测试快速获取释放连接
+/// 测试快速获取释放连接
 ///
 /// 验证快速获取和释放连接不会导致问题。
 #[tokio::test]
@@ -938,7 +938,7 @@ async fn test_pool_rapid_acquire_release() {
 // Session 测试
 // ============================================================================
 
-/// TEST-U-POOL-031: 测试 Session 角色获取
+/// 测试 Session 角色获取
 ///
 /// 验证 Session 正确返回角色名称。
 #[tokio::test]
@@ -953,7 +953,7 @@ async fn test_session_role() {
     assert_eq!(session.role(), "admin");
 }
 
-/// TEST-U-POOL-032: 测试 Session 事务状态
+/// 测试 Session 事务状态
 ///
 /// 验证 Session 正确追踪事务状态。
 #[tokio::test]
@@ -984,7 +984,7 @@ async fn test_session_transaction_state() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-POOL-033: 测试 Session 事务回滚
+/// 测试 Session 事务回滚
 ///
 /// 验证 Session 正确处理事务回滚。
 #[tokio::test]
@@ -1012,7 +1012,7 @@ async fn test_session_transaction_rollback() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-POOL-034: 测试 Session 重复开始事务失败
+/// 测试 Session 重复开始事务失败
 ///
 /// 验证在事务中再次开始事务会失败。
 #[tokio::test]
@@ -1039,7 +1039,7 @@ async fn test_session_double_begin_transaction() {
     );
 }
 
-/// TEST-U-POOL-035: 测试 Session 无事务时提交失败
+/// 测试 Session 无事务时提交失败
 ///
 /// 验证不在事务中时提交会失败。
 #[tokio::test]
@@ -1064,7 +1064,7 @@ async fn test_session_commit_without_transaction() {
 // URL 脱敏测试
 // ============================================================================
 
-/// TEST-U-POOL-036: 测试 URL 脱敏 - 带密码
+/// 测试 URL 脱敏 - 带密码
 ///
 /// 验证 URL 包含密码时，可以通过字段访问获取。
 #[test]
@@ -1079,7 +1079,7 @@ fn test_url_sanitization_with_password() {
     assert!(config.url.contains("secret_password"));
 }
 
-/// TEST-U-POOL-037: 测试 URL 脱敏 - SQLite 内存数据库
+/// 测试 URL 脱敏 - SQLite 内存数据库
 ///
 /// 验证 SQLite 内存数据库 URL 不被修改。
 #[test]
@@ -1092,7 +1092,7 @@ fn test_url_sanitization_sqlite_memory() {
     assert_eq!(config.url, "sqlite::memory:");
 }
 
-/// TEST-U-POOL-038: 测试 URL 脱敏 - 无密码
+/// 测试 URL 脱敏 - 无密码
 ///
 /// 验证无密码 URL 正确处理。
 #[test]
@@ -1109,7 +1109,7 @@ fn test_url_sanitization_no_password() {
 // 数据库类型测试
 // ============================================================================
 
-/// TEST-U-POOL-039: 测试数据库类型解析
+/// 测试数据库类型解析
 ///
 /// 验证 DatabaseType 正确解析各种 URL。
 #[test]
@@ -1138,7 +1138,7 @@ fn test_database_type_parsing() {
     );
 }
 
-/// TEST-U-POOL-040: 测试数据库类型显示
+/// 测试数据库类型显示
 ///
 /// 验证 DatabaseType 的 Display 实现。
 #[test]
@@ -1154,7 +1154,7 @@ fn test_database_type_display() {
 // PoolConfig 测试
 // ============================================================================
 
-/// TEST-U-POOL-041: 测试 PoolConfig 创建
+/// 测试 PoolConfig 创建
 ///
 /// 验证 PoolConfig 正确创建和访问。
 #[test]
@@ -1174,7 +1174,7 @@ fn test_pool_config_creation() {
     assert_eq!(config.acquire_timeout, 5000);
 }
 
-/// TEST-U-POOL-042: 测试 PoolConfig 默认值
+/// 测试 PoolConfig 默认值
 ///
 /// 验证 PoolConfig 默认值合理。
 #[test]
@@ -1193,7 +1193,7 @@ fn test_pool_config_defaults() {
 // 健康检查间隔边界值测试
 // ============================================================================
 
-/// TEST-U-POOL-043: 测试健康检查间隔 - 默认值
+/// 测试健康检查间隔 - 默认值
 ///
 /// 验证未设置环境变量时使用默认值 30 秒。
 #[test]
@@ -1204,7 +1204,7 @@ fn test_health_check_interval_default() {
     assert_eq!(interval, 30, "默认健康检查间隔应为 30 秒");
 }
 
-/// TEST-U-POOL-044: 测试健康检查间隔 - 下边界值 0
+/// 测试健康检查间隔 - 下边界值 0
 ///
 /// 验证环境变量设置为 0 时，被限制为最小值 5 秒。
 #[test]
@@ -1214,7 +1214,7 @@ fn test_health_check_interval_lower_bound_zero() {
     assert_eq!(interval, 5, "健康检查间隔 0 应被限制为最小值 5 秒");
 }
 
-/// TEST-U-POOL-045: 测试健康检查间隔 - 下边界值 5
+/// 测试健康检查间隔 - 下边界值 5
 ///
 /// 验证环境变量设置为 5 时，保持不变（最小有效值）。
 #[test]
@@ -1224,7 +1224,7 @@ fn test_health_check_interval_lower_bound_five() {
     assert_eq!(interval, 5, "健康检查间隔 5 应保持不变");
 }
 
-/// TEST-U-POOL-046: 测试健康检查间隔 - 上边界值 300
+/// 测试健康检查间隔 - 上边界值 300
 ///
 /// 验证环境变量设置为 300 时，保持不变（最大有效值）。
 #[test]
@@ -1234,7 +1234,7 @@ fn test_health_check_interval_upper_bound_300() {
     assert_eq!(interval, 300, "健康检查间隔 300 应保持不变");
 }
 
-/// TEST-U-POOL-047: 测试健康检查间隔 - 超出上边界值 1000
+/// 测试健康检查间隔 - 超出上边界值 1000
 ///
 /// 验证环境变量设置为 1000 时，被限制为最大值 300 秒。
 #[test]
@@ -1244,7 +1244,7 @@ fn test_health_check_interval_upper_bound_exceeded() {
     assert_eq!(interval, 300, "健康检查间隔 1000 应被限制为最大值 300 秒");
 }
 
-/// TEST-U-POOL-048: 测试健康检查间隔 - 有效中间值
+/// 测试健康检查间隔 - 有效中间值
 ///
 /// 验证环境变量设置为有效中间值 60 时，保持不变。
 #[test]
@@ -1254,7 +1254,7 @@ fn test_health_check_interval_valid_middle_value() {
     assert_eq!(interval, 60, "健康检查间隔 60 应保持不变");
 }
 
-/// TEST-U-POOL-049: 测试健康检查间隔 - 无效字符串
+/// 测试健康检查间隔 - 无效字符串
 ///
 /// 验证环境变量设置为无效字符串时，使用默认值 30 秒。
 #[test]
@@ -1264,7 +1264,7 @@ fn test_health_check_interval_invalid_string() {
     assert_eq!(interval, 30, "无效字符串应使用默认值 30 秒");
 }
 
-/// TEST-U-POOL-050: 测试健康检查间隔 - 边界内值 1
+/// 测试健康检查间隔 - 边界内值 1
 ///
 /// 验证环境变量设置为 1 时，被限制为最小值 5 秒。
 #[test]
@@ -1274,7 +1274,7 @@ fn test_health_check_interval_below_minimum() {
     assert_eq!(interval, 5, "健康检查间隔 1 应被限制为最小值 5 秒");
 }
 
-/// TEST-U-POOL-051: 测试健康检查间隔 - 边界内值 301
+/// 测试健康检查间隔 - 边界内值 301
 ///
 /// 验证环境变量设置为 301 时，被限制为最大值 300 秒。
 #[test]
@@ -1288,7 +1288,7 @@ fn test_health_check_interval_above_maximum() {
 // 连接池等待者计数测试
 // ============================================================================
 
-/// TEST-U-POOL-030: 验证 wait_count 在并发获取时正确递增和递减
+/// 验证 wait_count 在并发获取时正确递增和递减
 ///
 /// 创建一个小容量连接池，发送超过容量的并发请求，
 /// 验证 wait_count 在等待期间 > 0，获取完成后恢复到合理水平。
@@ -1370,7 +1370,7 @@ async fn test_wait_count_increments_during_contention() {
     );
 }
 
-/// TEST-U-POOL-031: 验证 max_waiters 记录历史峰值
+/// 验证 max_waiters 记录历史峰值
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_max_waiters_tracks_historical_peak() {

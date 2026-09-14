@@ -16,7 +16,7 @@ mod common;
 // DbNexus 初始化测试
 // ============================================================================
 
-/// TEST-DBNEXUS-001: DbPool::new() 基本初始化测试
+/// DbPool::new() 基本初始化测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_new_basic() {
@@ -32,7 +32,7 @@ async fn test_dbpool_new_basic() {
     assert!(config.pool_config.min_connections > 0);
 }
 
-/// TEST-DBNEXUS-002: DbPool::with_config() 使用配置初始化测试
+/// DbPool::with_config() 使用配置初始化测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_with_config() {
@@ -60,7 +60,7 @@ async fn test_dbpool_with_config() {
     assert_eq!(pool.config().admin_role, "admin");
 }
 
-/// TEST-DBNEXUS-003: DbPool::try_from_config() 从配置结构体初始化测试
+/// DbPool::try_from_config() 从配置结构体初始化测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_dbpool_try_from_config() {
@@ -84,7 +84,7 @@ async fn test_dbpool_try_from_config() {
     assert_eq!(pool.config().pool_config.min_connections, 1);
 }
 
-/// TEST-DBNEXUS-004: DbPool::try_from() 同步初始化测试（无权限特性）
+/// DbPool::try_from() 同步初始化测试（无权限特性）
 #[tokio::test]
 #[cfg(all(
     not(feature = "permission"),
@@ -112,7 +112,7 @@ async fn test_dbpool_try_from_sync() {
     assert_eq!(status.idle, 0);
 }
 
-/// TEST-DBNEXUS-005: DbPool 初始化测试（带权限特性）
+/// DbPool 初始化测试（带权限特性）
 ///
 /// 注意：此测试使用 with_config 而非 try_from，
 /// 因为 try_from 使用 block_on 无法在 tokio 异步测试环境中运行
@@ -148,7 +148,7 @@ async fn test_dbpool_try_from_with_permission() {
 // DbNexus 连接测试
 // ============================================================================
 
-/// TEST-DBNEXUS-006: 获取会话测试
+/// 获取会话测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_get_session() {
@@ -164,7 +164,7 @@ async fn test_get_session() {
     assert_eq!(session.role(), "admin");
 }
 
-/// TEST-DBNEXUS-007: 多次获取会话测试
+/// 多次获取会话测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_get_session_multiple() {
@@ -191,7 +191,7 @@ async fn test_get_session_multiple() {
     assert!(status.active >= 2);
 }
 
-/// TEST-DBNEXUS-008: 连接池状态测试
+/// 连接池状态测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_status() {
@@ -208,7 +208,7 @@ async fn test_pool_status() {
     assert_eq!(status.idle, status.total.saturating_sub(status.active));
 }
 
-/// TEST-DBNEXUS-009: 连接池健康检查测试
+/// 连接池健康检查测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_health_check() {
@@ -236,7 +236,7 @@ async fn test_pool_health_check() {
     assert!(status.idle >= 1 || status.total == 0);
 }
 
-/// TEST-DBNEXUS-010: 连接池配置获取测试
+/// 连接池配置获取测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_config_access() {
@@ -271,7 +271,7 @@ async fn test_pool_config_access() {
 // DbNexus 关闭测试
 // ============================================================================
 
-/// TEST-DBNEXUS-011: 连接池 Drop 自动关闭测试
+/// 连接池 Drop 自动关闭测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_drop_cleanup() {
@@ -294,7 +294,7 @@ async fn test_pool_drop_cleanup() {
     // 此测试主要验证 Drop 不会 panic
 }
 
-/// TEST-DBNEXUS-012: 多会话场景下的连接池关闭测试
+/// 多会话场景下的连接池关闭测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_drop_with_multiple_sessions() {
@@ -333,7 +333,7 @@ async fn test_pool_drop_with_multiple_sessions() {
     // 验证所有资源正常释放
 }
 
-/// TEST-DBNEXUS-013: 克隆连接池测试
+/// 克隆连接池测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_clone_succeeds() {
@@ -364,7 +364,7 @@ async fn test_pool_clone_succeeds() {
     assert_eq!(status1.active, status2.active);
 }
 
-/// TEST-DBNEXUS-013: 连接池关闭测试
+/// 连接池关闭测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_drop_succeeds() {
@@ -388,7 +388,7 @@ async fn test_pool_drop_succeeds() {
 // DbPoolBuilder 构建测试
 // ============================================================================
 
-/// TEST-DBNEXUS-014: DbPoolBuilder 基本构建测试
+/// DbPoolBuilder 基本构建测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_builder_basic() {
@@ -410,7 +410,7 @@ async fn test_builder_basic() {
     assert_eq!(pool.config().pool_config.min_connections, 5);
 }
 
-/// TEST-DBNEXUS-015: DbPoolBuilder 链式调用测试
+/// DbPoolBuilder 链式调用测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_builder_chaining() {
@@ -439,7 +439,7 @@ async fn test_builder_chaining() {
     assert_eq!(pool.config().admin_role, "superuser");
 }
 
-/// TEST-DBNEXUS-016: DbPoolBuilder 使用配置构建测试
+/// DbPoolBuilder 使用配置构建测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_builder_with_config() {
@@ -471,7 +471,7 @@ async fn test_builder_with_config() {
     assert_eq!(pool.config().admin_role, "root");
 }
 
-/// TEST-DBNEXUS-017: DbPoolBuilder 覆盖配置测试
+/// DbPoolBuilder 覆盖配置测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_builder_override_config() {
@@ -507,7 +507,7 @@ async fn test_builder_override_config() {
     assert!(pool.config().pool_config.max_connections > 0);
 }
 
-/// TEST-DBNEXUS-018: DbPoolBuilder 默认值测试
+/// DbPoolBuilder 默认值测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_builder_defaults() {
@@ -527,7 +527,7 @@ async fn test_builder_defaults() {
     assert_eq!(pool.config().admin_role, "admin");
 }
 
-/// TEST-DBNEXUS-019: DbPoolBuilder 缺少 URL 错误测试
+/// DbPoolBuilder 缺少 URL 错误测试
 #[tokio::test]
 async fn test_builder_missing_url_fails() {
     let result = DbPoolBuilder::new().build().await;
@@ -535,7 +535,7 @@ async fn test_builder_missing_url_fails() {
     assert!(result.is_err());
 }
 
-/// TEST-DBNEXUS-019: DbPoolBuilder 缺少 config 错误测试
+/// DbPoolBuilder 缺少 config 错误测试
 #[tokio::test]
 async fn test_builder_missing_config_fails() {
     let result = DbPoolBuilder::new().build().await;
@@ -543,7 +543,7 @@ async fn test_builder_missing_config_fails() {
     assert!(result.is_err());
 }
 
-/// TEST-DBNEXUS-020: DbPoolBuilder Debug 实现测试
+/// DbPoolBuilder Debug 实现测试
 #[test]
 fn test_builder_debug() {
     let config = dbnexus::DbConfig {
@@ -569,7 +569,7 @@ fn test_builder_debug() {
 // Feature flags 组合测试
 // ============================================================================
 
-/// TEST-DBNEXUS-021: 数据库类型解析测试
+/// 数据库类型解析测试
 #[tokio::test]
 async fn test_database_type_parsing() {
     // SQLite
@@ -599,7 +599,7 @@ async fn test_database_type_parsing() {
     );
 }
 
-/// TEST-DBNEXUS-022: 数据库类型显示测试
+/// 数据库类型显示测试
 #[tokio::test]
 async fn test_database_type_display() {
     assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
@@ -607,7 +607,7 @@ async fn test_database_type_display() {
     assert_eq!(DatabaseType::MySql.to_string(), "mysql");
 }
 
-/// TEST-DBNEXUS-023: 数据库类型 is_real_database 测试
+/// 数据库类型 is_real_database 测试
 #[tokio::test]
 async fn test_database_type_is_real_database() {
     // SQLite 不是"真实"数据库（内存/文件）
@@ -618,7 +618,7 @@ async fn test_database_type_is_real_database() {
     assert!(DatabaseType::MySql.is_real_database());
 }
 
-/// TEST-DBNEXUS-024: 数据库类型 as_str 测试
+/// 数据库类型 as_str 测试
 #[tokio::test]
 async fn test_database_type_as_str() {
     assert_eq!(DatabaseType::Sqlite.as_str(), "sqlite");
@@ -626,7 +626,7 @@ async fn test_database_type_as_str() {
     assert_eq!(DatabaseType::MySql.as_str(), "mysql");
 }
 
-/// TEST-DBNEXUS-025: 连接池克隆测试
+/// 连接池克隆测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_clone() {
@@ -646,7 +646,7 @@ async fn test_pool_clone() {
     assert_eq!(status1.idle, status2.idle);
 }
 
-/// TEST-DBNEXUS-026: 连接池 Arc 包装测试
+/// 连接池 Arc 包装测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_in_arc() {
@@ -676,7 +676,7 @@ async fn test_pool_in_arc() {
     handle.await.expect("Task panicked");
 }
 
-/// TEST-DBNEXUS-027: 并发获取会话测试
+/// 并发获取会话测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_concurrent_session_access() {
@@ -709,7 +709,7 @@ async fn test_concurrent_session_access() {
     assert!(status.total <= pool.config().pool_config.max_connections);
 }
 
-/// TEST-DBNEXUS-028: 连接池获取实际配置测试
+/// 连接池获取实际配置测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_get_actual_config() {
@@ -743,7 +743,7 @@ async fn test_pool_get_actual_config() {
 // 错误处理测试
 // ============================================================================
 
-/// TEST-DBNEXUS-029: 无效 URL 错误测试
+/// 无效 URL 错误测试
 #[tokio::test]
 async fn test_invalid_url_error() {
     let result = DbPool::new("invalid://url").await;
@@ -751,7 +751,7 @@ async fn test_invalid_url_error() {
     assert!(result.is_err());
 }
 
-/// TEST-DBNEXUS-030: 空角色错误测试
+/// 空角色错误测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_empty_role_handling() {
@@ -772,7 +772,7 @@ async fn test_empty_role_handling() {
     }
 }
 
-/// TEST-DBNEXUS-031: 配置验证失败测试
+/// 配置验证失败测试
 #[tokio::test]
 async fn test_config_validation_failure() {
     // min > max 应该失败 - DbConfig 结构体不会在创建时验证
@@ -792,7 +792,7 @@ async fn test_config_validation_failure() {
     assert!(config.pool_config.max_connections < config.pool_config.min_connections);
 }
 
-/// TEST-DBNEXUS-032: 配置边界值测试
+/// 配置边界值测试
 #[tokio::test]
 async fn test_config_boundary_values() {
     // 最大连接数边界
@@ -830,7 +830,7 @@ async fn test_config_boundary_values() {
 // 连接池生命周期测试
 // ============================================================================
 
-/// TEST-DBNEXUS-033: 会话生命周期测试
+/// 会话生命周期测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_session_lifecycle() {
@@ -862,7 +862,7 @@ async fn test_session_lifecycle() {
     assert!(status_after.active < status_during.active || status_after.active == 0);
 }
 
-/// TEST-DBNEXUS-034: 连接池预热测试（如果启用 pool-warmup 特性）
+/// 连接池预热测试（如果启用 pool-warmup 特性）
 #[tokio::test]
 #[cfg(all(
     feature = "pool-warmup",
@@ -894,7 +894,7 @@ async fn test_pool_warmup() {
     let _ = status.total;
 }
 
-/// TEST-DBNEXUS-035: 连接池清理无效连接测试
+/// 连接池清理无效连接测试
 #[tokio::test]
 #[cfg(all(
     any(feature = "sqlite", feature = "postgres", feature = "mysql"),
@@ -914,7 +914,7 @@ async fn test_clean_invalid_connections() {
     assert!(status.total <= pool.config().pool_config.max_connections);
 }
 
-/// TEST-DBNEXUS-036: 连接池验证连接测试
+/// 连接池验证连接测试
 #[tokio::test]
 #[cfg(all(
     any(feature = "sqlite", feature = "postgres", feature = "mysql"),
@@ -932,7 +932,7 @@ async fn test_validate_connections_succeeds() {
     assert!(result.is_ok());
 }
 
-/// TEST-DBNEXUS-036: 连接池重建连接测试
+/// 连接池重建连接测试
 #[tokio::test]
 #[cfg(all(
     any(feature = "sqlite", feature = "postgres", feature = "mysql"),
@@ -957,7 +957,7 @@ async fn test_recreate_connections_succeeds() {
 // 连接池健康检查测试（如果启用 health-check 特性）
 // ============================================================================
 
-/// TEST-DBNEXUS-037: 连接健康检查测试
+/// 连接健康检查测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_connection_health_check() {
@@ -979,7 +979,7 @@ async fn test_connection_health_check() {
     drop(session);
 }
 
-/// TEST-DBNEXUS-038: 连接池状态字段完整性测试
+/// 连接池状态字段完整性测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_status_fields() {
@@ -1002,7 +1002,7 @@ async fn test_pool_status_fields() {
 // 配置相关测试
 // ============================================================================
 
-/// TEST-DBNEXUS-039: 配置 Duration 转换测试
+/// 配置 Duration 转换测试
 #[tokio::test]
 async fn test_config_duration_conversion() {
     let config = dbnexus::DbConfig {
@@ -1028,7 +1028,7 @@ async fn test_config_duration_conversion() {
     );
 }
 
-/// TEST-DBNEXUS-040: 配置 URL 访问测试
+/// 配置 URL 访问测试
 #[tokio::test]
 async fn test_config_url_access() {
     // 带密码的 URL
@@ -1050,7 +1050,7 @@ async fn test_config_url_access() {
     assert_eq!(sqlite_config.url, "sqlite::memory:");
 }
 
-/// TEST-DBNEXUS-041: 配置克隆测试
+/// 配置克隆测试
 #[tokio::test]
 async fn test_config_clone() {
     let config = dbnexus::DbConfig {
@@ -1079,7 +1079,7 @@ async fn test_config_clone() {
     assert_eq!(config.url, cloned.url);
 }
 
-/// TEST-DBNEXUS-042: 配置可选字段测试
+/// 配置可选字段测试
 #[tokio::test]
 async fn test_config_optional_fields() {
     use std::path::PathBuf;
@@ -1100,7 +1100,7 @@ async fn test_config_optional_fields() {
     assert!(config.auto_migrate);
 }
 
-/// TEST-DBNEXUS-043: 配置默认可选字段测试
+/// 配置默认可选字段测试
 #[tokio::test]
 async fn test_config_default_optional_fields() {
     let config = dbnexus::DbConfig {
@@ -1117,7 +1117,7 @@ async fn test_config_default_optional_fields() {
 // 并发和线程安全测试
 // ============================================================================
 
-/// TEST-DBNEXUS-044: 多线程并发访问测试
+/// 多线程并发访问测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_multithreaded_access() {
@@ -1152,7 +1152,7 @@ async fn test_multithreaded_access() {
     assert_eq!(success_count.load(Ordering::SeqCst), 10);
 }
 
-/// TEST-DBNEXUS-045: 连接池压力测试
+/// 连接池压力测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_pool_stress() {

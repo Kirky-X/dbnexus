@@ -18,7 +18,7 @@ use dbnexus::{
 // 熔断器状态转换测试
 // ============================================================================
 
-/// TEST-U-HEALTH-001: 测试熔断器初始状态为关闭
+/// 测试熔断器初始状态为关闭
 ///
 /// 验证熔断器创建后初始状态为 Closed。
 #[tokio::test]
@@ -34,7 +34,7 @@ async fn test_circuit_breaker_initial_state_is_closed() {
     assert_eq!(state, CircuitBreakerState::Closed, "初始状态应该是 Closed");
 }
 
-/// TEST-U-HEALTH-002: 测试熔断器从关闭到打开的状态转换
+/// 测试熔断器从关闭到打开的状态转换
 ///
 /// 验证连续失败达到阈值后熔断器状态转换为 Open。
 #[tokio::test]
@@ -60,7 +60,7 @@ async fn test_circuit_breaker_closed_to_open_transition() {
     assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 }
 
-/// TEST-U-HEALTH-003: 测试熔断器打开状态拒绝请求
+/// 测试熔断器打开状态拒绝请求
 ///
 /// 验证熔断器处于 Open 状态时，can_execute 返回错误。
 #[tokio::test]
@@ -87,7 +87,7 @@ async fn test_circuit_breaker_open_rejects_requests() {
     assert_eq!(err.state(), CircuitBreakerState::Open);
 }
 
-/// TEST-U-HEALTH-004: 测试熔断器关闭状态允许请求
+/// 测试熔断器关闭状态允许请求
 ///
 /// 验证熔断器处于 Closed 状态时，can_execute 允许请求。
 #[tokio::test]
@@ -103,7 +103,7 @@ async fn test_circuit_breaker_closed_allows_requests() {
     assert!(result.is_ok(), "Closed 状态应该允许请求");
 }
 
-/// TEST-U-HEALTH-005: 测试熔断器成功后重置失败计数
+/// 测试熔断器成功后重置失败计数
 ///
 /// 验证熔断器在 Closed 状态下记录成功会重置失败计数。
 #[tokio::test]
@@ -131,7 +131,7 @@ async fn test_circuit_breaker_success_resets_failure_count() {
     assert_eq!(status_after.consecutive_failures, 0);
 }
 
-/// TEST-U-HEALTH-006: 测试熔断器配置默认值
+/// 测试熔断器配置默认值
 ///
 /// 验证熔断器配置使用合理的默认值。
 #[tokio::test]
@@ -148,7 +148,7 @@ async fn test_circuit_breaker_config_defaults() {
 // 熔断器半开状态测试
 // ============================================================================
 
-/// TEST-U-HEALTH-007: 测试熔断器超时后转换为半开状态
+/// 测试熔断器超时后转换为半开状态
 ///
 /// 验证熔断器在 Open 状态下超时后转换为 HalfOpen。
 #[tokio::test]
@@ -175,7 +175,7 @@ async fn test_circuit_breaker_timeout_transitions_to_half_open() {
     assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 }
 
-/// TEST-U-HEALTH-008: 测试熔断器半开状态成功恢复为关闭
+/// 测试熔断器半开状态成功恢复为关闭
 ///
 /// 验证熔断器在 HalfOpen 状态下连续成功达到阈值后转换为 Closed。
 #[tokio::test]
@@ -206,7 +206,7 @@ async fn test_circuit_breaker_half_open_recovers_to_closed() {
     assert_eq!(breaker.state().await, CircuitBreakerState::Closed);
 }
 
-/// TEST-U-HEALTH-009: 测试熔断器半开状态失败返回打开
+/// 测试熔断器半开状态失败返回打开
 ///
 /// 验证熔断器在 HalfOpen 状态下失败后返回 Open 状态。
 #[tokio::test]
@@ -236,7 +236,7 @@ async fn test_circuit_breaker_half_open_failure_returns_to_open() {
     assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 }
 
-/// TEST-U-HEALTH-010: 测试熔断器半开状态失败率阈值
+/// 测试熔断器半开状态失败率阈值
 ///
 /// 验证熔断器在 HalfOpen 状态下失败率过高会拒绝请求。
 #[tokio::test]
@@ -269,7 +269,7 @@ async fn test_circuit_breaker_half_open_failure_rate_threshold() {
     assert!(result.is_err(), "失败率过高应该拒绝请求");
 }
 
-/// TEST-U-HEALTH-011: 测试熔断器状态显示实现
+/// 测试熔断器状态显示实现
 ///
 /// 验证熔断器状态的 Display 实现返回正确的字符串。
 #[tokio::test]
@@ -279,7 +279,7 @@ async fn test_circuit_breaker_state_display() {
     assert_eq!(format!("{}", CircuitBreakerState::Open), "open");
 }
 
-/// TEST-U-HEALTH-012: 测试熔断器错误实现
+/// 测试熔断器错误实现
 ///
 /// 验证熔断器错误正确包含状态信息。
 #[tokio::test]
@@ -293,7 +293,7 @@ async fn test_circuit_breaker_error_implementation() {
 // 健康检查超时测试
 // ============================================================================
 
-/// TEST-U-HEALTH-013: 测试健康检查器超时返回降级状态
+/// 测试健康检查器超时返回降级状态
 ///
 /// 验证健康检查超时后返回降级状态。
 #[tokio::test]
@@ -312,7 +312,7 @@ async fn test_health_checker_timeout_returns_degraded() {
     assert!(result.latency > Duration::ZERO, "应该记录延迟");
 }
 
-/// TEST-U-HEALTH-014: 测试健康检查器正常完成
+/// 测试健康检查器正常完成
 ///
 /// 验证健康检查正常完成时返回正确的状态。
 #[tokio::test]
@@ -330,7 +330,7 @@ async fn test_health_checker_normal_completion() {
     assert!(!result.details.is_empty(), "应该包含详细信息");
 }
 
-/// TEST-U-HEALTH-015: 测试健康检查器超时包含建议
+/// 测试健康检查器超时包含建议
 ///
 /// 验证健康检查超时时返回适当的建议。
 #[tokio::test]
@@ -346,7 +346,7 @@ async fn test_health_checker_timeout_includes_recommendations() {
     );
 }
 
-/// TEST-U-HEALTH-016: 测试健康检查器超时时间配置
+/// 测试健康检查器超时时间配置
 ///
 /// 验证健康检查器的超时配置正确应用。
 #[tokio::test]
@@ -363,7 +363,7 @@ async fn test_health_checker_timeout_configuration() {
 // 连接池健康指标测试
 // ============================================================================
 
-/// TEST-U-HEALTH-017: 测试连接池健康指标初始化
+/// 测试连接池健康指标初始化
 ///
 /// 验证连接池健康指标初始状态正确。
 #[tokio::test]
@@ -380,7 +380,7 @@ async fn test_pool_health_metrics_initial_state() {
     assert_eq!(snapshot.closed, 0, "关闭连接数初始为 0");
 }
 
-/// TEST-U-HEALTH-018: 测试连接池健康指标记录连接创建
+/// 测试连接池健康指标记录连接创建
 ///
 /// 验证正确记录连接创建操作。
 #[tokio::test]
@@ -395,7 +395,7 @@ async fn test_pool_health_metrics_record_connection_created() {
     assert_eq!(snapshot.created, 1, "创建连接数应为 1");
 }
 
-/// TEST-U-HEALTH-019: 测试连接池健康指标记录连接失败
+/// 测试连接池健康指标记录连接失败
 ///
 /// 验证正确记录连接失败操作。
 #[tokio::test]
@@ -408,7 +408,7 @@ async fn test_pool_health_metrics_record_connection_failed() {
     assert_eq!(snapshot.failed, 1, "失败连接数应为 1");
 }
 
-/// TEST-U-HEALTH-020: 测试连接池健康指标记录连接关闭
+/// 测试连接池健康指标记录连接关闭
 ///
 /// 验证正确记录连接关闭操作。
 #[tokio::test]
@@ -423,7 +423,7 @@ async fn test_pool_health_metrics_record_connection_closed() {
     assert_eq!(snapshot.closed, 1, "关闭连接数应为 1");
 }
 
-/// TEST-U-HEALTH-021: 测试连接池健康指标活跃连接计数
+/// 测试连接池健康指标活跃连接计数
 ///
 /// 验证正确追踪活跃连接数。
 #[tokio::test]
@@ -442,7 +442,7 @@ async fn test_pool_health_metrics_active_connection_counting() {
     assert_eq!(snapshot.active, 1, "活跃连接数应为 1");
 }
 
-/// TEST-U-HEALTH-022: 测试连接池健康指标空闲连接计数
+/// 测试连接池健康指标空闲连接计数
 ///
 /// 验证正确追踪空闲连接数。
 #[tokio::test]
@@ -461,7 +461,7 @@ async fn test_pool_health_metrics_idle_connection_counting() {
     assert_eq!(snapshot.idle, 1, "空闲连接数应为 1");
 }
 
-/// TEST-U-HEALTH-023: 测试连接池健康指标 is_healthy 方法
+/// 测试连接池健康指标 is_healthy 方法
 ///
 /// 验证 is_healthy 方法正确判断健康状态。
 #[tokio::test]
@@ -477,7 +477,7 @@ async fn test_pool_health_metrics_is_healthy() {
     assert!(metrics.is_healthy(), "有空闲连接时应该健康");
 }
 
-/// TEST-U-HEALTH-024: 测试连接池健康指标 should_create_connection 方法
+/// 测试连接池健康指标 should_create_connection 方法
 ///
 /// 验证 should_create_connection 方法正确判断是否需要创建新连接。
 #[tokio::test]
@@ -496,7 +496,7 @@ async fn test_pool_health_metrics_should_create_connection() {
     );
 }
 
-/// TEST-U-HEALTH-025: 测试连接池健康指标设置等待请求数
+/// 测试连接池健康指标设置等待请求数
 ///
 /// 验证正确设置等待请求数。
 #[tokio::test]
@@ -513,7 +513,7 @@ async fn test_pool_health_metrics_set_waiting_requests() {
 // 多数据源健康聚合测试
 // ============================================================================
 
-/// TEST-U-HEALTH-026: 测试多数据源健康状态聚合
+/// 测试多数据源健康状态聚合
 ///
 /// 验证多个数据源的健康状态可以正确聚合。
 #[tokio::test]
@@ -547,7 +547,7 @@ async fn test_multi_datasource_health_aggregation() {
     );
 }
 
-/// TEST-U-HEALTH-027: 测试部分数据源不健康时的聚合
+/// 测试部分数据源不健康时的聚合
 ///
 /// 验证部分数据源不健康时聚合结果正确。
 #[tokio::test]
@@ -578,7 +578,7 @@ async fn test_partial_unhealthy_aggregation() {
     );
 }
 
-/// TEST-U-HEALTH-028: 测试并发多数据源健康检查
+/// 测试并发多数据源健康检查
 ///
 /// 验证并发执行多个数据源的健康检查正常工作。
 #[tokio::test]
@@ -609,7 +609,7 @@ async fn test_concurrent_multi_datasource_health_check() {
 // 健康检查缓存测试
 // ============================================================================
 
-/// TEST-U-HEALTH-029: 测试健康检查结果缓存行为
+/// 测试健康检查结果缓存行为
 ///
 /// 验证健康检查的延迟被正确记录。
 #[tokio::test]
@@ -623,7 +623,7 @@ async fn test_health_check_result_latency_recording() {
     assert!(result.latency < Duration::from_millis(2000));
 }
 
-/// TEST-U-HEALTH-030: 测试健康检查详情包含连接池信息
+/// 测试健康检查详情包含连接池信息
 ///
 /// 验证健康检查结果包含详细的连接池信息。
 #[tokio::test]
@@ -643,7 +643,7 @@ async fn test_health_check_details_contain_pool_info() {
     assert!(result.details.contains("idle="));
 }
 
-/// TEST-U-HEALTH-031: 测试健康检查详情包含熔断器信息
+/// 测试健康检查详情包含熔断器信息
 ///
 /// 验证健康检查结果包含熔断器状态信息。
 #[tokio::test]
@@ -656,7 +656,7 @@ async fn test_health_check_details_contain_circuit_breaker_info() {
     assert!(result.details.contains("熔断器") || result.details.contains("Circuit"));
 }
 
-/// TEST-U-HEALTH-032: 测试连续健康检查的一致性
+/// 测试连续健康检查的一致性
 ///
 /// 验证连续多次健康检查返回一致的结果。
 #[tokio::test]
@@ -675,7 +675,7 @@ async fn test_consecutive_health_checks_consistency() {
     assert!(result2.latency < Duration::from_secs(1));
 }
 
-/// TEST-U-HEALTH-033: 测试健康检查建议生成
+/// 测试健康检查建议生成
 ///
 /// 验证在特定条件下生成适当的建议。
 #[tokio::test]
@@ -704,7 +704,7 @@ async fn test_health_check_recommendations_generation() {
 // 熔断器滑动窗口测试
 // ============================================================================
 
-/// TEST-U-HEALTH-034: 测试熔断器滑动窗口大小限制
+/// 测试熔断器滑动窗口大小限制
 ///
 /// 验证滑动窗口不超过配置的大小。
 #[tokio::test]
@@ -727,7 +727,7 @@ async fn test_circuit_breaker_sliding_window_size_limit() {
     assert!(status.consecutive_failures >= 5, "失败计数应该被正确追踪");
 }
 
-/// TEST-U-HEALTH-035: 测试熔断器状态信息完整性
+/// 测试熔断器状态信息完整性
 ///
 /// 验证熔断器状态信息包含所有必要字段。
 #[tokio::test]
@@ -753,7 +753,7 @@ async fn test_circuit_breaker_status_completeness() {
 // 健康检查器综合测试
 // ============================================================================
 
-/// TEST-U-HEALTH-036: 测试健康检查器无连接时状态
+/// 测试健康检查器无连接时状态
 ///
 /// 验证健康检查器在无连接时返回适当的错误信息。
 #[tokio::test]
@@ -770,7 +770,7 @@ async fn test_health_checker_no_connections_state() {
     );
 }
 
-/// TEST-U-HEALTH-037: 测试健康检查器健康状态
+/// 测试健康检查器健康状态
 ///
 /// 验证健康检查器在有可用连接时返回健康状态。
 #[tokio::test]
@@ -794,7 +794,7 @@ async fn test_health_checker_healthy_state() {
     );
 }
 
-/// TEST-U-HEALTH-038: 测试健康检查器获取熔断器
+/// 测试健康检查器获取熔断器
 ///
 /// 验证健康检查器可以正确获取关联的熔断器。
 #[tokio::test]
@@ -806,7 +806,7 @@ async fn test_health_checker_get_circuit_breaker() {
     assert_eq!(state, CircuitBreakerState::Closed);
 }
 
-/// TEST-U-HEALTH-039: 测试健康检查器获取健康指标
+/// 测试健康检查器获取健康指标
 ///
 /// 验证健康检查器可以正确获取关联的健康指标。
 #[tokio::test]
@@ -822,7 +822,7 @@ async fn test_health_checker_get_metrics() {
 // 边界条件测试
 // ============================================================================
 
-/// TEST-U-HEALTH-040: 测试熔断器配置边界值
+/// 测试熔断器配置边界值
 ///
 /// 验证熔断器使用边界配置值时正常工作。
 #[tokio::test]
@@ -840,7 +840,7 @@ async fn test_circuit_breaker_config_boundary_values() {
     assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 }
 
-/// TEST-U-HEALTH-041: 测试熔断器状态转换时间记录
+/// 测试熔断器状态转换时间记录
 ///
 /// 验证熔断器状态转换时正确记录时间。
 #[tokio::test]
@@ -871,7 +871,7 @@ async fn test_circuit_breaker_state_change_time_recording() {
     assert!(status_after.time_since_last_change < time_before || time_before == Duration::ZERO);
 }
 
-/// TEST-U-HEALTH-042: 测试健康检查器超时边界
+/// 测试健康检查器超时边界
 ///
 /// 验证健康检查器在超时边界时的行为。
 #[tokio::test]
@@ -885,7 +885,7 @@ async fn test_health_checker_timeout_boundary() {
     assert!(result.latency > Duration::ZERO);
 }
 
-/// TEST-U-HEALTH-043: 测试 PoolSnapshot 克隆
+/// 测试 PoolSnapshot 克隆
 ///
 /// 验证 PoolSnapshot 可以正确克隆。
 #[tokio::test]
@@ -900,7 +900,7 @@ async fn test_pool_snapshot_clone() {
     assert_eq!(snapshot1.active, snapshot2.active);
 }
 
-/// TEST-U-HEALTH-044: 测试 CircuitBreakerStatus 克隆
+/// 测试 CircuitBreakerStatus 克隆
 ///
 /// 验证 CircuitBreakerStatus 可以正确克隆。
 #[tokio::test]
@@ -914,7 +914,7 @@ async fn test_circuit_breaker_status_clone() {
     assert_eq!(status1.consecutive_failures, status2.consecutive_failures);
 }
 
-/// TEST-U-HEALTH-045: 测试健康检查结果克隆
+/// 测试健康检查结果克隆
 ///
 /// 验证 HealthCheckResult 可以正确克隆。
 #[tokio::test]

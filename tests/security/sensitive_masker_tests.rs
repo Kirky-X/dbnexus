@@ -11,7 +11,7 @@ use dbnexus::{MaskType, SensitiveError, SensitiveMasker};
 // 脱敏测试
 // ============================================================================
 
-/// TEST-MASK-001: 邮箱脱敏
+/// 邮箱脱敏
 #[test]
 fn test_mask_email() {
     let result = SensitiveMasker::mask("alice@example.com", MaskType::Email);
@@ -26,7 +26,7 @@ fn test_mask_email() {
     assert!(masked.contains("*"), "masked part should contain asterisks");
 }
 
-/// TEST-MASK-002: 短邮箱脱敏边界
+/// 短邮箱脱敏边界
 #[test]
 fn test_mask_email_short() {
     // 极短邮箱（用户名仅 1 字符）
@@ -39,7 +39,7 @@ fn test_mask_email_short() {
     }
 }
 
-/// TEST-MASK-003: 手机号脱敏
+/// 手机号脱敏
 #[test]
 fn test_mask_phone() {
     let result = SensitiveMasker::mask("13812345678", MaskType::Phone);
@@ -54,7 +54,7 @@ fn test_mask_phone() {
     assert!(masked.contains("*"), "should contain asterisks");
 }
 
-/// TEST-MASK-004: 无效手机号脱敏
+/// 无效手机号脱敏
 #[test]
 fn test_mask_phone_invalid() {
     // 太短的手机号
@@ -71,7 +71,7 @@ fn test_mask_phone_invalid() {
     }
 }
 
-/// TEST-MASK-005: 身份证号脱敏
+/// 身份证号脱敏
 #[test]
 fn test_mask_id_card() {
     // 18 位身份证
@@ -87,7 +87,7 @@ fn test_mask_id_card() {
     assert!(masked.contains("*"), "should contain asterisks");
 }
 
-/// TEST-MASK-006: 银行卡号脱敏（任务要求 mask_credit_card，实际为 BankCard）
+/// 银行卡号脱敏（任务要求 mask_credit_card，实际为 BankCard）
 #[test]
 fn test_mask_credit_card() {
     // 16 位银行卡号
@@ -103,7 +103,7 @@ fn test_mask_credit_card() {
     assert!(masked.contains("*"), "should contain asterisks");
 }
 
-/// TEST-MASK-008: Unicode 邮箱本地部分不 panic（回归测试）
+/// Unicode 邮箱本地部分不 panic（回归测试）
 ///
 /// `mask_email` 原实现用 `local.len()`（字节数）和 `&local[..prefix_len]`（字节切片），
 /// 对非 ASCII 本地部分（如中文、emoji）按字节切片会 panic。
@@ -141,7 +141,7 @@ fn test_mask_email_unicode_local_part() {
     );
 }
 
-/// TEST-MASK-007: 自定义脱敏
+/// 自定义脱敏
 #[test]
 fn test_mask_custom() {
     let result = SensitiveMasker::mask(

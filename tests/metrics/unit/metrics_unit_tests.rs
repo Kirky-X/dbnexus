@@ -19,7 +19,7 @@ use std::time::Duration;
 // 指标聚合统计测试
 // ============================================================================
 
-/// TEST-MU-001: 基础指标聚合统计测试
+/// 基础指标聚合统计测试
 #[test]
 fn test_metrics_aggregation_basic() {
     let collector = MetricsCollector::new();
@@ -46,7 +46,7 @@ fn test_metrics_aggregation_basic() {
     assert_eq!(update_stats.error_count, 3);
 }
 
-/// TEST-MU-002: 多指标类型聚合测试
+/// 多指标类型聚合测试
 #[test]
 fn test_metrics_aggregation_multiple_types() {
     let collector = MetricsCollector::new();
@@ -67,7 +67,7 @@ fn test_metrics_aggregation_multiple_types() {
     assert!(all_stats.contains_key("DELETE"));
 }
 
-/// TEST-MU-003: 总吞吐量聚合测试
+/// 总吞吐量聚合测试
 #[test]
 fn test_total_throughput_aggregation() {
     let collector = MetricsCollector::new();
@@ -89,7 +89,7 @@ fn test_total_throughput_aggregation() {
     assert!((total.error_rate - 0.333).abs() < 0.01);
 }
 
-/// TEST-MU-004: 空收集器聚合测试
+/// 空收集器聚合测试
 #[test]
 fn test_empty_collector_aggregation() {
     let collector = MetricsCollector::new();
@@ -106,7 +106,7 @@ fn test_empty_collector_aggregation() {
 // 指标标签过滤测试
 // ============================================================================
 
-/// TEST-MU-005: 按查询类型过滤测试
+/// 按查询类型过滤测试
 #[test]
 fn test_query_type_filtering() {
     let collector = MetricsCollector::new();
@@ -132,7 +132,7 @@ fn test_query_type_filtering() {
     assert!(not_exist.is_none());
 }
 
-/// TEST-MU-006: 成功/失败查询过滤测试
+/// 成功/失败查询过滤测试
 #[test]
 fn test_success_failure_filtering() {
     let collector = MetricsCollector::new();
@@ -154,7 +154,7 @@ fn test_success_failure_filtering() {
     assert!((stats.error_rate() - expected_error_rate).abs() < 0.01);
 }
 
-/// TEST-MU-007: 连接池指标过滤测试
+/// 连接池指标过滤测试
 #[test]
 fn test_pool_metrics_filtering() {
     let collector = MetricsCollector::new();
@@ -173,7 +173,7 @@ fn test_pool_metrics_filtering() {
 // 指标时间窗口统计测试
 // ============================================================================
 
-/// TEST-MU-008: 延迟百分位时间窗口测试
+/// 延迟百分位时间窗口测试
 #[test]
 fn test_latency_percentiles_time_window() {
     let collector = MetricsCollector::new();
@@ -194,7 +194,7 @@ fn test_latency_percentiles_time_window() {
     assert!(percentiles.p99_ns >= 98_000_000 && percentiles.p99_ns <= 100_000_000);
 }
 
-/// TEST-MU-009: 延迟百分位边界值测试
+/// 延迟百分位边界值测试
 #[test]
 fn test_latency_percentiles_boundary_values() {
     let collector = MetricsCollector::new();
@@ -215,7 +215,7 @@ fn test_latency_percentiles_boundary_values() {
     assert_eq!(percentiles.max_ns, 100_000_000);
 }
 
-/// TEST-MU-010: 延迟百分位空数据测试
+/// 延迟百分位空数据测试
 #[test]
 fn test_latency_percentiles_empty() {
     let collector = MetricsCollector::new();
@@ -226,7 +226,7 @@ fn test_latency_percentiles_empty() {
     assert!(stats.is_none());
 }
 
-/// TEST-MU-011: 直方图时间窗口测试
+/// 直方图时间窗口测试
 #[test]
 fn test_histogram_time_window() {
     let histogram = LatencyHistogram::new(vec![1, 5, 10, 50, 100, 500]);
@@ -245,7 +245,7 @@ fn test_histogram_time_window() {
     assert_eq!(stats.buckets.len(), 7); // 6个定义桶 + 1个溢出桶
 }
 
-/// TEST-MU-012: 直方图累积计数测试
+/// 直方图累积计数测试
 #[test]
 fn test_histogram_cumulative_count() {
     let histogram = LatencyHistogram::new(vec![10, 50, 100]);
@@ -276,7 +276,7 @@ fn test_histogram_cumulative_count() {
 // Prometheus 格式导出测试
 // ============================================================================
 
-/// TEST-MU-013: Prometheus 格式基础导出测试
+/// Prometheus 格式基础导出测试
 #[test]
 fn test_prometheus_export_basic() {
     let collector = MetricsCollector::new();
@@ -294,7 +294,7 @@ fn test_prometheus_export_basic() {
     assert!(prometheus.contains("dbnexus_queries_total"));
 }
 
-/// TEST-MU-014: Prometheus 导出包含百分位指标
+/// Prometheus 导出包含百分位指标
 #[test]
 fn test_prometheus_export_percentiles() {
     let collector = MetricsCollector::new();
@@ -313,7 +313,7 @@ fn test_prometheus_export_percentiles() {
     assert!(prometheus.contains("dbnexus_query_latency_p99_seconds"));
 }
 
-/// TEST-MU-015: Prometheus 导出包含吞吐量指标
+/// Prometheus 导出包含吞吐量指标
 #[test]
 fn test_prometheus_export_throughput() {
     let collector = MetricsCollector::new();
@@ -332,7 +332,7 @@ fn test_prometheus_export_throughput() {
     assert!(prometheus.contains("dbnexus_error_rate"));
 }
 
-/// TEST-MU-016: Prometheus 导出包含事务指标
+/// Prometheus 导出包含事务指标
 #[test]
 fn test_prometheus_export_transaction_metrics() {
     let collector = MetricsCollector::new();
@@ -348,7 +348,7 @@ fn test_prometheus_export_transaction_metrics() {
     assert!(prometheus.contains("dbnexus_transactions_rollback_total"));
 }
 
-/// TEST-MU-017: Prometheus 导出包含连接获取指标
+/// Prometheus 导出包含连接获取指标
 #[test]
 fn test_prometheus_export_connection_acquire_metrics() {
     let collector = MetricsCollector::new();
@@ -365,7 +365,7 @@ fn test_prometheus_export_connection_acquire_metrics() {
     assert!(prometheus.contains("dbnexus_connection_acquire_failure_total"));
 }
 
-/// TEST-MU-018: Prometheus 空导出测试
+/// Prometheus 空导出测试
 #[test]
 fn test_prometheus_export_empty() {
     let collector = MetricsCollector::new();
@@ -381,7 +381,7 @@ fn test_prometheus_export_empty() {
 // 指标基数控制测试
 // ============================================================================
 
-/// TEST-MU-019: 延迟存储滑动窗口测试（基数控制）
+/// 延迟存储滑动窗口测试（基数控制）
 #[test]
 fn test_latency_storage_sliding_window() {
     let collector = MetricsCollector::new();
@@ -398,7 +398,7 @@ fn test_latency_storage_sliding_window() {
     assert!(stats.latency_percentiles.sample_count <= max_samples as u64);
 }
 
-/// TEST-MU-020: 直方图桶计数边界测试
+/// 直方图桶计数边界测试
 #[test]
 fn test_histogram_bucket_count_boundary() {
     let histogram = LatencyHistogram::new(vec![10, 50, 100]);
@@ -415,7 +415,7 @@ fn test_histogram_bucket_count_boundary() {
     assert_eq!(stats.total_samples, 4);
 }
 
-/// TEST-MU-021: 连接池利用率计算测试
+/// 连接池利用率计算测试
 #[test]
 fn test_pool_utilization_calculation() {
     let metrics = PoolMetrics {
@@ -443,7 +443,7 @@ fn test_pool_utilization_calculation() {
     assert_eq!(metrics_empty.utilization_rate(), 0.0);
 }
 
-/// TEST-MU-022: 错误率边界测试
+/// 错误率边界测试
 #[test]
 fn test_error_rate_boundaries() {
     let collector = MetricsCollector::new();
@@ -462,7 +462,7 @@ fn test_error_rate_boundaries() {
     assert_eq!(stats2.error_rate(), 1.0);
 }
 
-/// TEST-MU-023: 连接获取超时率计算测试
+/// 连接获取超时率计算测试
 #[test]
 fn test_connection_acquire_timeout_rate() {
     let collector = MetricsCollector::new();
@@ -480,7 +480,7 @@ fn test_connection_acquire_timeout_rate() {
     assert_eq!(stats.timeout_rate, 0.2);
 }
 
-/// TEST-MU-024: 事务成功率计算测试
+/// 事务成功率计算测试
 #[test]
 fn test_transaction_success_rate() {
     let collector = MetricsCollector::new();
@@ -502,7 +502,7 @@ fn test_transaction_success_rate() {
 // 高基数标签检测测试
 // ============================================================================
 
-/// TEST-MU-025: 高基数标签检测 - 大量唯一查询类型
+/// 高基数标签检测 - 大量唯一查询类型
 #[test]
 fn test_high_cardinality_detection_many_types() {
     let collector = MetricsCollector::new();
@@ -523,7 +523,7 @@ fn test_high_cardinality_detection_many_types() {
     assert_eq!(all_stats.len(), 1000);
 }
 
-/// TEST-MU-026: 高基数场景下内存控制测试
+/// 高基数场景下内存控制测试
 #[test]
 fn test_memory_control_high_cardinality() {
     let collector = MetricsCollector::new();
@@ -544,7 +544,7 @@ fn test_memory_control_high_cardinality() {
     assert_eq!(stats.unwrap().count, 1);
 }
 
-/// TEST-MU-027: 高基数下百分位准确性测试
+/// 高基数下百分位准确性测试
 #[test]
 fn test_percentiles_accuracy_high_cardinality() {
     let collector = MetricsCollector::new();
@@ -567,7 +567,7 @@ fn test_percentiles_accuracy_high_cardinality() {
     }
 }
 
-/// TEST-MU-028: 高基数下直方图准确性测试
+/// 高基数下直方图准确性测试
 #[test]
 fn test_histogram_accuracy_high_cardinality() {
     let collector = MetricsCollector::new();
@@ -584,7 +584,7 @@ fn test_histogram_accuracy_high_cardinality() {
     assert_eq!(stats.histogram.total_samples, 30);
 }
 
-/// TEST-MU-029: 高基数下 Prometheus 导出测试
+/// 高基数下 Prometheus 导出测试
 #[test]
 fn test_prometheus_export_high_cardinality() {
     let collector = MetricsCollector::new();
@@ -606,7 +606,7 @@ fn test_prometheus_export_high_cardinality() {
     assert!(query_count >= 50);
 }
 
-/// TEST-MU-030: 高基数标签下时间窗口测试
+/// 高基数标签下时间窗口测试
 #[test]
 fn test_time_window_high_cardinality() {
     let collector = MetricsCollector::new();
@@ -637,7 +637,7 @@ fn test_time_window_high_cardinality() {
 // Trait 实现测试
 // ============================================================================
 
-/// TEST-MU-031: MetricsCollectorTrait 默认实现测试
+/// MetricsCollectorTrait 默认实现测试
 #[test]
 fn test_metrics_collector_trait_default() {
     let collector = MetricsCollector::new();
@@ -649,7 +649,7 @@ fn test_metrics_collector_trait_default() {
     assert_eq!(stats.count, 1);
 }
 
-/// TEST-MU-032: MetricsCollectorTrait 连接记录测试
+/// MetricsCollectorTrait 连接记录测试
 #[test]
 fn test_metrics_collector_trait_connection() {
     let collector = MetricsCollector::new();
@@ -669,7 +669,7 @@ fn test_metrics_collector_trait_connection() {
     assert_eq!(stats.failure_count, 1);
 }
 
-/// TEST-MU-033: MetricsCollectorTrait 事务记录测试
+/// MetricsCollectorTrait 事务记录测试
 #[test]
 fn test_metrics_collector_trait_transaction() {
     let collector = MetricsCollector::new();
@@ -682,7 +682,7 @@ fn test_metrics_collector_trait_transaction() {
     assert_eq!(stats.failure_count, 1);
 }
 
-/// TEST-MU-034: MetricsCollectorTrait 连接池使用记录测试
+/// MetricsCollectorTrait 连接池使用记录测试
 #[test]
 fn test_metrics_collector_trait_pool_usage() {
     let collector = MetricsCollector::new();
@@ -696,7 +696,7 @@ fn test_metrics_collector_trait_pool_usage() {
     assert_eq!(metrics.utilization_rate(), 0.7);
 }
 
-/// TEST-MU-035: MetricsCollectorTrait Prometheus 导出测试
+/// MetricsCollectorTrait Prometheus 导出测试
 #[test]
 fn test_metrics_collector_trait_prometheus_export() {
     let collector = MetricsCollector::new();
@@ -709,7 +709,7 @@ fn test_metrics_collector_trait_prometheus_export() {
     assert!(prometheus.contains("dbnexus_queries_total"));
 }
 
-/// TEST-MU-036: MetricsCollectorTrait 清空测试
+/// MetricsCollectorTrait 清空测试
 #[test]
 fn test_metrics_collector_trait_clear() {
     let collector = MetricsCollector::new();
@@ -731,7 +731,7 @@ fn test_metrics_collector_trait_clear() {
 // 边界条件和错误处理测试
 // ============================================================================
 
-/// TEST-MU-037: 零延迟记录测试
+/// 零延迟记录测试
 #[test]
 fn test_zero_latency_recording() {
     let collector = MetricsCollector::new();
@@ -743,7 +743,7 @@ fn test_zero_latency_recording() {
     assert_eq!(stats.latency_percentiles.min_ns, 0);
 }
 
-/// TEST-MU-038: 极大延迟记录测试
+/// 极大延迟记录测试
 #[test]
 fn test_max_latency_recording() {
     let collector = MetricsCollector::new();
@@ -755,7 +755,7 @@ fn test_max_latency_recording() {
     assert_eq!(stats.latency_percentiles.max_ns, 3600 * 1_000_000_000);
 }
 
-/// TEST-MU-039: 延迟百分位 Duration 转换测试
+/// 延迟百分位 Duration 转换测试
 #[test]
 fn test_latency_percentiles_duration_conversion() {
     let percentiles = LatencyPercentiles {
@@ -776,7 +776,7 @@ fn test_latency_percentiles_duration_conversion() {
     assert_eq!(percentiles.max(), Duration::from_millis(200));
 }
 
-/// TEST-MU-040: 直方图空数据统计测试
+/// 直方图空数据统计测试
 #[test]
 fn test_histogram_empty_stats() {
     let histogram = LatencyHistogram::new(vec![10, 50, 100]);
@@ -787,7 +787,7 @@ fn test_histogram_empty_stats() {
     assert!(stats.buckets.iter().all(|b| b.count == 0));
 }
 
-/// TEST-MU-041: 重置清空所有指标测试
+/// 重置清空所有指标测试
 #[test]
 fn test_reset_clears_all_metrics() {
     let collector = MetricsCollector::new();
@@ -803,7 +803,7 @@ fn test_reset_clears_all_metrics() {
     assert!(collector.get_query_stats("SELECT").is_none());
 }
 
-/// TEST-MU-041: 重置后重新记录测试
+/// 重置后重新记录测试
 #[test]
 fn test_re_record_after_reset_succeeds() {
     let collector = MetricsCollector::new();
@@ -823,7 +823,7 @@ fn test_re_record_after_reset_succeeds() {
     assert_eq!(stats.latency_percentiles.p50_ns, 20_000_000);
 }
 
-/// TEST-MU-042: 并发场景下数据一致性测试
+/// 并发场景下数据一致性测试
 #[test]
 fn test_concurrent_data_consistency() {
     use std::sync::Arc;
@@ -858,7 +858,7 @@ fn test_concurrent_data_consistency() {
     assert_eq!(stats.count, 1000);
 }
 
-/// TEST-MU-043: 慢查询记录边界测试
+/// 慢查询记录边界测试
 #[test]
 fn test_slow_query_boundary() {
     let collector = MetricsCollector::new();
@@ -879,7 +879,7 @@ fn test_slow_query_boundary() {
     assert_eq!(collector.slow_queries().len(), 2);
 }
 
-/// TEST-MU-044: 慢查询记录限制测试
+/// 慢查询记录限制测试
 #[test]
 fn test_slow_query_limit() {
     let collector = MetricsCollector::new();
@@ -896,7 +896,7 @@ fn test_slow_query_limit() {
     assert!(slow_queries.len() <= 100);
 }
 
-/// TEST-MU-045: 错误计数累加测试
+/// 错误计数累加测试
 #[test]
 fn test_error_count_accumulation() {
     let collector = MetricsCollector::new();

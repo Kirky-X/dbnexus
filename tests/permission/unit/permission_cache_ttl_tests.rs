@@ -40,7 +40,7 @@ async fn make_provider_with_role(role: &str, policy: RolePolicy) -> Arc<MemoryPe
 // 配置测试
 // ============================================================================
 
-/// TEST-PERM-CACHE-001: 默认配置应启用 SWR 且 TTL=300s
+/// 默认配置应启用 SWR 且 TTL=300s
 #[tokio::test]
 async fn test_permission_cache_default_config() {
     let cache = PermissionCache::new();
@@ -50,7 +50,7 @@ async fn test_permission_cache_default_config() {
     assert!(config.stale_while_revalidate);
 }
 
-/// TEST-PERM-CACHE-002: 链式构造应正确应用 TTL/refresh_interval/SWR 设置
+/// 链式构造应正确应用 TTL/refresh_interval/SWR 设置
 #[tokio::test]
 async fn test_permission_cache_builder_chaining() {
     let cache = PermissionCache::new()
@@ -67,7 +67,7 @@ async fn test_permission_cache_builder_chaining() {
 // TTL 行为测试
 // ============================================================================
 
-/// TEST-PERM-CACHE-003: 未过期条目应命中返回值
+/// 未过期条目应命中返回值
 #[tokio::test]
 async fn test_permission_cache_get_unexpired() {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
@@ -77,7 +77,7 @@ async fn test_permission_cache_get_unexpired() {
     assert_eq!(got.tables[0].name, "users");
 }
 
-/// TEST-PERM-CACHE-004: 过期条目在 SWR 禁用时应返回 None
+/// 过期条目在 SWR 禁用时应返回 None
 #[tokio::test]
 async fn test_permission_cache_get_expired_no_swr_returns_none() {
     let cache = PermissionCache::new()
@@ -91,7 +91,7 @@ async fn test_permission_cache_get_expired_no_swr_returns_none() {
     );
 }
 
-/// TEST-PERM-CACHE-005: 过期条目在 SWR 启用时应返回旧值
+/// 过期条目在 SWR 启用时应返回旧值
 #[tokio::test]
 async fn test_permission_cache_get_expired_with_swr_returns_stale() {
     let cache = PermissionCache::new()
@@ -109,7 +109,7 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
 // 后台刷新测试
 // ============================================================================
 
-/// TEST-PERM-CACHE-006: refresh 应从 provider 更新缓存值
+/// refresh 应从 provider 更新缓存值
 #[tokio::test]
 async fn test_permission_cache_refresh_updates_value() {
     let provider =
@@ -130,7 +130,7 @@ async fn test_permission_cache_refresh_updates_value() {
     assert_eq!(got.tables[0].operations[0], PermissionAction::Delete);
 }
 
-/// TEST-PERM-CACHE-007: refresh 在 provider 缺失时应保留旧值（降级而非 panic）
+/// refresh 在 provider 缺失时应保留旧值（降级而非 panic）
 #[tokio::test]
 async fn test_permission_cache_refresh_without_provider_keeps_stale() {
     let cache = PermissionCache::new()
@@ -146,7 +146,7 @@ async fn test_permission_cache_refresh_without_provider_keeps_stale() {
     assert_eq!(got.tables[0].name, "users");
 }
 
-/// TEST-PERM-CACHE-008: refresh 应受 refresh_interval 节流
+/// refresh 应受 refresh_interval 节流
 #[tokio::test]
 async fn test_permission_cache_refresh_throttled_by_interval() {
     let provider =
@@ -180,7 +180,7 @@ async fn test_permission_cache_refresh_throttled_by_interval() {
 // 失效与并发测试
 // ============================================================================
 
-/// TEST-PERM-CACHE-009: invalidate 应删除单个条目
+/// invalidate 应删除单个条目
 #[tokio::test]
 async fn test_permission_cache_invalidate() {
     let cache = PermissionCache::new();
@@ -193,7 +193,7 @@ async fn test_permission_cache_invalidate() {
     assert!(cache.get("b").is_some());
 }
 
-/// TEST-PERM-CACHE-010: clear 应清空所有条目
+/// clear 应清空所有条目
 #[tokio::test]
 async fn test_permission_cache_clear() {
     let cache = PermissionCache::new();
@@ -205,7 +205,7 @@ async fn test_permission_cache_clear() {
     assert_eq!(cache.len(), 0);
 }
 
-/// TEST-PERM-CACHE-011: 并发访问应线程安全（多任务读写）
+/// 并发访问应线程安全（多任务读写）
 #[tokio::test(flavor = "multi_thread")]
 async fn test_permission_cache_concurrent_access() {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
@@ -240,7 +240,7 @@ async fn test_permission_cache_concurrent_access() {
     assert!(cache.get("key_5").is_some());
 }
 
-/// TEST-PERM-CACHE-012: is_expired 应正确反映条目过期状态
+/// is_expired 应正确反映条目过期状态
 #[tokio::test]
 async fn test_permission_cache_is_expired() {
     let cache = PermissionCache::new().with_ttl(Duration::from_millis(10));

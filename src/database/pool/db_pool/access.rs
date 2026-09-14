@@ -146,7 +146,7 @@ impl DbPool {
     /// 仅在权限配置文件存在且成功加载时验证角色。
     /// 如果没有配置权限文件，使用安全默认策略（仅允许 admin/system 角色）。
     ///
-    /// **显性化（v0.3.0 修复）**：未配置权限文件时输出 warn 日志，明确说明
+    /// **显性化**：未配置权限文件时输出 warn 日志，明确说明
     /// 正在使用安全默认策略，提醒用户配置权限文件以启用完整角色验证。
     #[cfg(feature = "permission")]
     pub(super) async fn validate_role_name(&self, role: &str) -> DbResult<()> {

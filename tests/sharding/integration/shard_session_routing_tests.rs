@@ -44,7 +44,7 @@ async fn build_router_with_pools(n: u32) -> Option<ShardRouter> {
 // shard_id_for_key 测试
 // ============================================================================
 
-/// TEST-SHARD-SESSION-001: `shard_id_for_key` 哈希一致性
+/// `shard_id_for_key` 哈希一致性
 ///
 /// 同一 `shard_key` 在同一 router 上多次计算应返回相同的 `shard_id`。
 #[test]
@@ -60,7 +60,7 @@ fn test_shard_id_for_key_consistency() {
     assert!(id1 < 8, "shard_id must be within [0, total_shards)");
 }
 
-/// TEST-SHARD-SESSION-002: `shard_id_for_key` 分布在 `[0, total_shards)` 内
+/// `shard_id_for_key` 分布在 `[0, total_shards)` 内
 ///
 /// 对大量不同的键进行哈希，所有结果都应落入合法区间；
 /// 且应至少命中多个不同分片（验证哈希分散性，避免全部分配到同一分片）。
@@ -94,7 +94,7 @@ fn test_shard_id_for_key_distribution() {
 // get_session_for_shard 测试
 // ============================================================================
 
-/// TEST-SHARD-SESSION-003: `get_session_for_shard` 成功路由
+/// `get_session_for_shard` 成功路由
 ///
 /// 对一个已注册连接池的分片调用 `get_session_for_shard` 应返回 `Ok(Session)`；
 /// role 使用 `admin`（在无权限配置时属于安全角色）。
@@ -112,7 +112,7 @@ async fn test_get_session_for_shard_success() {
     );
 }
 
-/// TEST-SHARD-SESSION-004: `get_session_for_shard` 未注册分片返回错误
+/// `get_session_for_shard` 未注册分片返回错误
 ///
 /// 构造一个不注册任何连接池的路由器（使用 `with_strategy` 而非 `with_config`），
 /// 调用 `get_session_for_shard` 应返回 `DbError::Config`。
@@ -135,7 +135,7 @@ async fn test_get_session_for_shard_no_pool_registered() {
     );
 }
 
-/// TEST-SHARD-SESSION-005: `get_session_for_shard_with_id` 返回 Session + shard_id 元组
+/// `get_session_for_shard_with_id` 返回 Session + shard_id 元组
 ///
 /// 返回的 `shard_id` 应与 `shard_id_for_key` 单独计算的结果一致。
 #[tokio::test]
@@ -166,7 +166,7 @@ async fn test_get_session_for_shard_with_id() {
 // enforce_shard_binding 测试
 // ============================================================================
 
-/// TEST-SHARD-SESSION-006: `enforce_shard_binding` 同分片通过
+/// `enforce_shard_binding` 同分片通过
 ///
 /// 当 `requested_shard_key` 哈希到的分片与 `expected_shard_id` 一致时，
 /// 应返回 `Ok(())`。
@@ -185,7 +185,7 @@ fn test_enforce_shard_binding_same_shard_accepts() {
     );
 }
 
-/// TEST-SHARD-SESSION-007: `enforce_shard_binding` 跨分片返回 `ShardConflict`
+/// `enforce_shard_binding` 跨分片返回 `ShardConflict`
 ///
 /// 当 `requested_shard_key` 哈希到的分片与 `expected_shard_id` 不一致时，
 /// 应返回 `QueryErrorReport { category: ShardConflict }`。
@@ -235,7 +235,7 @@ fn test_enforce_shard_binding_cross_shard_rejects() {
 // 端到端：路由 + 绑定检查组合
 // ============================================================================
 
-/// TEST-SHARD-SESSION-008: 路由后绑定检查的端到端流程
+/// 路由后绑定检查的端到端流程
 ///
 /// 模拟典型使用流程：
 /// 1. `get_session_for_shard_with_id` 获取 Session 和绑定的 shard_id

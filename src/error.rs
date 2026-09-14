@@ -324,7 +324,7 @@ impl fmt::Display for ErrorCategory {
 /// assert_eq!(report.to_string(), "[InjectionRisk] SQL contains UNION-based injection pattern\nSuggestion: Use parameterized queries instead of string concatenation\nTable: users\nOperation: SELECT");
 /// ```
 ///
-/// 结构化查询错误报告（v0.3.0 新增）
+/// 结构化查询错误报告
 #[derive(Debug, Clone)]
 pub struct QueryErrorReport {
     /// 错误类别

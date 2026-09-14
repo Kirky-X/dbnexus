@@ -107,7 +107,7 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
 // 基本决策测试
 // ============================================================================
 
-/// TEST-PDP-U-001: 基本权限检查 - 允许
+/// 基本权限检查 - 允许
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_allow_returns_allow_decision() {
@@ -144,7 +144,7 @@ async fn test_pdp_check_allow_returns_allow_decision() {
     );
 }
 
-/// TEST-PDP-U-002: 基本权限检查 - 拒绝
+/// 基本权限检查 - 拒绝
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_deny() {
@@ -160,7 +160,7 @@ async fn test_pdp_check_deny() {
     );
 }
 
-/// TEST-PDP-U-003: 基本权限检查 - 不适用
+/// 基本权限检查 - 不适用
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_not_applicable_returns_not_applicable() {
@@ -176,7 +176,7 @@ async fn test_pdp_check_not_applicable_returns_not_applicable() {
     );
 }
 
-/// TEST-PDP-U-004: 未知操作默认拒绝（fail-closed）
+/// 未知操作默认拒绝（fail-closed）
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_unknown_action_returns_default_decision() {
@@ -195,7 +195,7 @@ async fn test_pdp_check_unknown_action_returns_default_decision() {
 // 权限上下文测试
 // ============================================================================
 
-/// TEST-PDP-U-005: 使用 PermissionContext 检查权限
+/// 使用 PermissionContext 检查权限
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_permission_with_context_returns_allow() {
@@ -212,7 +212,7 @@ async fn test_pdp_check_permission_with_context_returns_allow() {
     assert_eq!(decision, PermissionDecision::Allow);
 }
 
-/// TEST-PDP-U-006: PermissionContext 带属性
+/// PermissionContext 带属性
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_check_permission_with_attributes_returns_allow() {
@@ -231,7 +231,7 @@ async fn test_pdp_check_permission_with_attributes_returns_allow() {
     assert_eq!(decision, PermissionDecision::Allow);
 }
 
-/// TEST-PDP-U-007: PermissionSubject 类型测试
+/// PermissionSubject 类型测试
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_permission_subject_types_returns_correct_id() {
@@ -246,7 +246,7 @@ async fn test_pdp_permission_subject_types_returns_correct_id() {
     assert_eq!(role_subject.id, "admin");
 }
 
-/// TEST-PDP-U-008: PermissionResource 类型测试
+/// PermissionResource 类型测试
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_permission_resource_types_returns_correct_fields() {
@@ -265,7 +265,7 @@ async fn test_pdp_permission_resource_types_returns_correct_fields() {
 // 缓存机制测试
 // ============================================================================
 
-/// TEST-PDP-U-009: 缓存命中
+/// 缓存命中
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_cache_second_check_returns_allow() {
@@ -289,7 +289,7 @@ async fn test_pdp_cache_second_check_returns_allow() {
     );
 }
 
-/// TEST-PDP-U-010: 缓存刷新
+/// 缓存刷新
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_cache_refresh_returns_allow() {
@@ -311,7 +311,7 @@ async fn test_pdp_cache_refresh_returns_allow() {
     );
 }
 
-/// TEST-PDP-U-011: 禁用缓存
+/// 禁用缓存
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_cache_disabled_returns_allow() {
@@ -330,7 +330,7 @@ async fn test_pdp_cache_disabled_returns_allow() {
     );
 }
 
-/// TEST-PDP-U-012: 自定义缓存 TTL
+/// 自定义缓存 TTL
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_custom_cache_ttl_returns_allow() {
@@ -349,7 +349,7 @@ async fn test_pdp_custom_cache_ttl_returns_allow() {
 // 速率限制测试
 // ============================================================================
 
-/// TEST-PDP-U-013: 速率限制 - 基本功能
+/// 速率限制 - 基本功能
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_rate_limit_basic_returns_not_applicable() {
@@ -368,7 +368,7 @@ async fn test_pdp_rate_limit_basic_returns_not_applicable() {
     }
 }
 
-/// TEST-PDP-U-014: 速率限制 - 超过限制
+/// 速率限制 - 超过限制
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_rate_limit_exceeded_returns_deny() {
@@ -389,7 +389,7 @@ async fn test_pdp_rate_limit_exceeded_returns_deny() {
     );
 }
 
-/// TEST-PDP-U-015: 速率限制 - 不同用户独立计数
+/// 速率限制 - 不同用户独立计数
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_rate_limit_different_users_independent_count() {
@@ -414,7 +414,7 @@ async fn test_pdp_rate_limit_different_users_independent_count() {
 // 批量检查测试
 // ============================================================================
 
-/// TEST-PDP-U-016: 批量权限检查
+/// 批量权限检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_batch_check_returns_expected_decisions() {
@@ -453,7 +453,7 @@ async fn test_pdp_batch_check_returns_expected_decisions() {
     assert_eq!(results[3].1, PermissionDecision::Deny); // normal_user DELETE users
 }
 
-/// TEST-PDP-U-017: 空批量检查
+/// 空批量检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_batch_check_empty_returns_empty() {
@@ -470,7 +470,7 @@ async fn test_pdp_batch_check_empty_returns_empty() {
 // 权限冲突解决测试
 // ============================================================================
 
-/// TEST-PDP-U-018: 规则优先级 - 高优先级规则优先
+/// 规则优先级 - 高优先级规则优先
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_rule_priority_high_deny_returns_deny() {
@@ -526,7 +526,7 @@ async fn test_pdp_rule_priority_high_deny_returns_deny() {
     );
 }
 
-/// TEST-PDP-U-019: Allow 和 Deny 冲突 - Deny 优先
+/// Allow 和 Deny 冲突 - Deny 优先
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_allow_deny_conflict_returns_decision() {
@@ -581,7 +581,7 @@ async fn test_pdp_allow_deny_conflict_returns_decision() {
     );
 }
 
-/// TEST-PDP-U-020: 禁用的规则不生效
+/// 禁用的规则不生效
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_disabled_rule_returns_not_applicable() {
@@ -626,7 +626,7 @@ async fn test_pdp_disabled_rule_returns_not_applicable() {
 // 获取资源和方法测试
 // ============================================================================
 
-/// TEST-PDP-U-021: 获取允许的资源
+/// 获取允许的资源
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_get_allowed_resources_returns_non_empty() {
@@ -637,7 +637,7 @@ async fn test_pdp_get_allowed_resources_returns_non_empty() {
     assert!(!resources.is_empty());
 }
 
-/// TEST-PDP-U-022: 获取允许的资源列表
+/// 获取允许的资源列表
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_get_allowed_resources_admin_includes_wildcard() {
@@ -655,7 +655,7 @@ async fn test_pdp_get_allowed_resources_admin_includes_wildcard() {
 // 通配符匹配测试
 // ============================================================================
 
-/// TEST-PDP-U-023: 通配符资源匹配
+/// 通配符资源匹配
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_wildcard_resource_returns_allow() {
@@ -671,7 +671,7 @@ async fn test_pdp_wildcard_resource_returns_allow() {
     );
 }
 
-/// TEST-PDP-U-024: 通配符主体匹配
+/// 通配符主体匹配
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_wildcard_subject_returns_allow() {
@@ -716,7 +716,7 @@ async fn test_pdp_wildcard_subject_returns_allow() {
 // PermissionAction 测试
 // ============================================================================
 
-/// TEST-PDP-U-025: PermissionAction Display 实现
+/// PermissionAction Display 实现
 #[cfg(feature = "permission-engine")]
 #[test]
 fn test_permission_action_display_returns_uppercase() {
@@ -726,7 +726,7 @@ fn test_permission_action_display_returns_uppercase() {
     assert_eq!(PermissionAction::Delete.to_string(), "DELETE");
 }
 
-/// TEST-PDP-U-026: PermissionAction 序列化
+/// PermissionAction 序列化
 #[cfg(feature = "permission-engine")]
 #[test]
 fn test_permission_action_serialization_roundtrips() {
@@ -742,7 +742,7 @@ fn test_permission_action_serialization_roundtrips() {
 // PermissionDecision 测试
 // ============================================================================
 
-/// TEST-PDP-U-027: PermissionDecision 相等比较
+/// PermissionDecision 相等比较
 #[cfg(feature = "permission-engine")]
 #[test]
 fn test_permission_decision_equality_compares_correctly() {
@@ -755,7 +755,7 @@ fn test_permission_decision_equality_compares_correctly() {
     assert_ne!(PermissionDecision::Allow, PermissionDecision::Deny);
 }
 
-/// TEST-PDP-U-028: PermissionDecision 序列化
+/// PermissionDecision 序列化
 #[cfg(feature = "permission-engine")]
 #[test]
 fn test_permission_decision_serialization_roundtrips() {
@@ -771,7 +771,7 @@ fn test_permission_decision_serialization_roundtrips() {
 // 并发测试
 // ============================================================================
 
-/// TEST-PDP-U-029: 并发权限检查
+/// 并发权限检查
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_concurrent_check_returns_allow() {
@@ -797,7 +797,7 @@ async fn test_pdp_concurrent_check_returns_allow() {
     }
 }
 
-/// TEST-PDP-U-030: 并发缓存访问
+/// 并发缓存访问
 #[cfg(feature = "permission-engine")]
 #[tokio::test]
 async fn test_pdp_concurrent_cache_access_returns_allow() {

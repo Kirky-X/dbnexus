@@ -42,7 +42,7 @@ async fn make_duckdb_pool() -> DbPool {
 // 连接池创建测试
 // ============================================================================
 
-/// TEST-U-DDB-001: DuckDB 内存数据库连接池应成功创建
+/// DuckDB 内存数据库连接池应成功创建
 #[tokio::test]
 async fn test_duckdb_pool_creation_memory() {
     let pool = make_duckdb_pool().await;
@@ -56,7 +56,7 @@ async fn test_duckdb_pool_creation_memory() {
     );
 }
 
-/// TEST-U-DDB-002: DuckDB 通过 DbConfig 创建连接池应成功
+/// DuckDB 通过 DbConfig 创建连接池应成功
 #[tokio::test]
 async fn test_duckdb_pool_creation_with_config() {
     let config = DbConfig {
@@ -79,7 +79,7 @@ async fn test_duckdb_pool_creation_with_config() {
 // Session DDL/DML/查询测试
 // ============================================================================
 
-/// TEST-U-DDB-003: DuckDB Session 应支持 CREATE TABLE / INSERT / SELECT
+/// DuckDB Session 应支持 CREATE TABLE / INSERT / SELECT
 #[tokio::test]
 async fn test_duckdb_session_ddl_and_query() {
     let pool = make_duckdb_pool().await;
@@ -131,7 +131,7 @@ async fn test_duckdb_session_ddl_and_query() {
     }
 }
 
-/// TEST-U-DDB-004: DuckDB Session 应支持聚合查询
+/// DuckDB Session 应支持聚合查询
 #[tokio::test]
 async fn test_duckdb_session_aggregate_query() {
     let pool = make_duckdb_pool().await;
@@ -168,7 +168,7 @@ async fn test_duckdb_session_aggregate_query() {
 // 健康检查测试
 // ============================================================================
 
-/// TEST-U-DDB-005: DuckDB 连接健康检查应返回 true
+/// DuckDB 连接健康检查应返回 true
 #[tokio::test]
 async fn test_duckdb_pool_health_check() {
     let pool = make_duckdb_pool().await;
@@ -193,7 +193,7 @@ async fn test_duckdb_pool_health_check() {
 // 错误行为测试
 // ============================================================================
 
-/// TEST-U-DDB-006: SeaORM 方法在 DuckDB 连接上应返回错误
+/// SeaORM 方法在 DuckDB 连接上应返回错误
 #[tokio::test]
 async fn test_duckdb_session_seaorm_method_fails() {
     let pool = make_duckdb_pool().await;
@@ -219,7 +219,7 @@ async fn test_duckdb_session_seaorm_method_fails() {
     );
 }
 
-/// TEST-U-DDB-007: DuckDB Session 事务操作应返回错误（事务需要 SeaORM 连接）
+/// DuckDB Session 事务操作应返回错误（事务需要 SeaORM 连接）
 #[tokio::test]
 async fn test_duckdb_session_transaction_fails() {
     let pool = make_duckdb_pool().await;
@@ -241,7 +241,7 @@ async fn test_duckdb_session_transaction_fails() {
 // 并发测试
 // ============================================================================
 
-/// TEST-U-DDB-008: DuckDB 连接池应支持并发 Session 访问
+/// DuckDB 连接池应支持并发 Session 访问
 ///
 /// 注意：DuckDB `:memory:` 数据库按连接隔离，每个新连接是独立的内存数据库。
 /// 为确保所有 Session 共享同一数据库，使用 `max_connections: 1` 强制连接复用。
@@ -327,7 +327,7 @@ async fn test_duckdb_pool_concurrent_sessions() {
     }
 }
 
-/// TEST-U-DDB-009: DuckDB 连接池 status 应正确反映连接状态
+/// DuckDB 连接池 status 应正确反映连接状态
 #[tokio::test]
 async fn test_duckdb_pool_status_invariants() {
     let pool = make_duckdb_pool().await;
@@ -354,7 +354,7 @@ async fn test_duckdb_pool_status_invariants() {
 // Session 安全链测试
 // ============================================================================
 
-/// TEST-U-DDB-010: 非 admin role 执行 DDL 应被拒绝
+/// 非 admin role 执行 DDL 应被拒绝
 #[tokio::test]
 async fn test_duckdb_non_admin_ddl_rejected() {
     let pool = make_duckdb_pool().await;
@@ -371,7 +371,7 @@ async fn test_duckdb_non_admin_ddl_rejected() {
     );
 }
 
-/// TEST-U-DDB-011: admin role 执行 DDL 应成功
+/// admin role 执行 DDL 应成功
 #[tokio::test]
 async fn test_duckdb_admin_ddl_allowed() {
     let pool = make_duckdb_pool().await;
@@ -398,7 +398,7 @@ async fn test_duckdb_admin_ddl_allowed() {
     assert_eq!(rows.len(), 1, "should see 1 row");
 }
 
-/// TEST-U-DDB-012: execute_duckdb 对 DDL 语句应被拒绝（只读查询方法）
+/// execute_duckdb 对 DDL 语句应被拒绝（只读查询方法）
 #[tokio::test]
 async fn test_duckdb_query_rejects_ddl() {
     let pool = make_duckdb_pool().await;
@@ -421,7 +421,7 @@ async fn test_duckdb_query_rejects_ddl() {
 // 数据类型集成测试
 // ============================================================================
 
-/// TEST-U-DDB-013: DuckDB 应支持多种数据类型
+/// DuckDB 应支持多种数据类型
 #[tokio::test]
 async fn test_duckdb_multiple_data_types() {
     let pool = make_duckdb_pool().await;

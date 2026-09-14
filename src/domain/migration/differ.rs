@@ -885,7 +885,7 @@ impl SqlGenerator {
 mod tests {
     use super::*;
 
-    /// TEST-U-020: ColumnType SQL 生成测试
+    /// ColumnType SQL 生成测试
     #[test]
     fn test_column_type_to_sql() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);
@@ -903,7 +903,7 @@ mod tests {
         assert_eq!(sqlite.generate_column_def(&ColumnType::Boolean), "INTEGER");
     }
 
-    /// TEST-U-021: Schema 差异检测测试
+    /// Schema 差异检测测试
     #[test]
     fn test_schema_diff_new_table() {
         let old_schema = Schema::new(DatabaseType::Postgres);
@@ -943,7 +943,7 @@ mod tests {
         }
     }
 
-    /// TEST-U-022: Schema 差异检测 - 删除表
+    /// Schema 差异检测 - 删除表
     #[test]
     fn test_schema_diff_drop_table() {
         let mut old_schema = Schema::new(DatabaseType::Postgres);
@@ -973,7 +973,7 @@ mod tests {
         }
     }
 
-    /// TEST-U-023: SQL 生成测试
+    /// SQL 生成测试
     #[test]
     fn test_sql_generation() {
         let pg = SqlGenerator::new(DatabaseType::Postgres);

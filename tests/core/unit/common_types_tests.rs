@@ -13,14 +13,14 @@ use dbnexus::foundation::DatabaseType;
 // DatabaseType 枚举测试
 // ============================================================================
 
-/// TEST-U-COMMON-001: 默认值应为 Sqlite
+/// 默认值应为 Sqlite
 #[test]
 fn test_database_type_default_is_sqlite() {
     let db_type = DatabaseType::default();
     assert!(matches!(db_type, DatabaseType::Sqlite));
 }
 
-/// TEST-U-COMMON-002: Display 实现应输出小写名称
+/// Display 实现应输出小写名称
 #[test]
 fn test_database_type_display() {
     assert_eq!(DatabaseType::Sqlite.to_string(), "sqlite");
@@ -28,7 +28,7 @@ fn test_database_type_display() {
     assert_eq!(DatabaseType::MySql.to_string(), "mysql");
 }
 
-/// TEST-U-COMMON-003: Clone 应产生相等副本
+/// Clone 应产生相等副本
 #[test]
 fn test_database_type_clone() {
     let original = DatabaseType::Postgres;
@@ -36,7 +36,7 @@ fn test_database_type_clone() {
     assert_eq!(original, cloned);
 }
 
-/// TEST-U-COMMON-004: Copy 语义 — 赋值后原值仍可用且相等
+/// Copy 语义 — 赋值后原值仍可用且相等
 #[test]
 fn test_database_type_copy() {
     let original = DatabaseType::MySql;
@@ -44,7 +44,7 @@ fn test_database_type_copy() {
     assert_eq!(original, copied);
 }
 
-/// TEST-U-COMMON-005: PartialEq 应正确判等
+/// PartialEq 应正确判等
 #[test]
 fn test_database_type_partialeq() {
     assert_eq!(DatabaseType::Sqlite, DatabaseType::Sqlite);
@@ -52,7 +52,7 @@ fn test_database_type_partialeq() {
     assert_ne!(DatabaseType::Postgres, DatabaseType::MySql);
 }
 
-/// TEST-U-COMMON-006: Debug 输出应非空且包含变体名
+/// Debug 输出应非空且包含变体名
 #[test]
 fn test_database_type_debug() {
     let debug_str = format!("{:?}", DatabaseType::Postgres);
@@ -60,7 +60,7 @@ fn test_database_type_debug() {
     assert!(!debug_str.is_empty());
 }
 
-/// TEST-U-COMMON-007: serde Serialize/Deserialize round-trip 应保持相等
+/// serde Serialize/Deserialize round-trip 应保持相等
 #[test]
 fn test_database_type_serde_round_trip() {
     let cases = [
@@ -76,7 +76,7 @@ fn test_database_type_serde_round_trip() {
     }
 }
 
-/// TEST-U-COMMON-008: 变体数量应为 4（0.3.0 新增 DuckDb，防止误删变体）
+/// 变体数量应为 4（0.3.0 新增 DuckDb，防止误删变体）
 #[test]
 fn test_database_type_variant_count() {
     let variants = [
@@ -102,7 +102,7 @@ fn test_database_type_variant_count() {
 // DbNexusResult 类型别名测试
 // ============================================================================
 
-/// TEST-U-COMMON-009: DbNexusResult Ok 路径应解包为原值
+/// DbNexusResult Ok 路径应解包为原值
 #[test]
 #[allow(clippy::unnecessary_literal_unwrap)]
 fn test_dbnexus_result_ok() {
@@ -116,7 +116,7 @@ fn test_dbnexus_result_ok() {
 // DatabaseType::from_url 边界用例测试
 // ============================================================================
 
-/// TEST-U-COMMON-010: 带 query 参数的 PostgreSQL URI 应正确识别为 Postgres
+/// 带 query 参数的 PostgreSQL URI 应正确识别为 Postgres
 #[test]
 fn test_from_url_postgres_with_query_params() {
     let url = "postgres://user:pass@localhost:5432/mydb?sslmode=require&connect_timeout=10";
@@ -124,7 +124,7 @@ fn test_from_url_postgres_with_query_params() {
     assert_eq!(db_type, DatabaseType::Postgres);
 }
 
-/// TEST-U-COMMON-011: 带 query 参数的 MySQL URI 应正确识别为 MySql
+/// 带 query 参数的 MySQL URI 应正确识别为 MySql
 #[test]
 fn test_from_url_mysql_with_query_params() {
     let url = "mysql://root:secret@127.0.0.1:3306/auth?charset=utf8mb4&parseTime=true";
@@ -132,7 +132,7 @@ fn test_from_url_mysql_with_query_params() {
     assert_eq!(db_type, DatabaseType::MySql);
 }
 
-/// TEST-U-COMMON-012: 无 scheme 的字符串应返回错误（不回退到默认值）
+/// 无 scheme 的字符串应返回错误（不回退到默认值）
 #[test]
 fn test_from_url_no_scheme_returns_error() {
     // 仅 host:port 形式，url::Url::parse 视为相对路径，无 scheme
@@ -150,7 +150,7 @@ fn test_from_url_no_scheme_returns_error() {
     );
 }
 
-/// TEST-U-COMMON-013: 相对路径应返回错误（不回退到 Sqlite）
+/// 相对路径应返回错误（不回退到 Sqlite）
 #[test]
 fn test_from_url_relative_path_returns_error() {
     // 相对路径，url::Url::parse 视为相对 URL，无 scheme
@@ -162,7 +162,7 @@ fn test_from_url_relative_path_returns_error() {
     );
 }
 
-/// TEST-U-COMMON-014: 未知 scheme 应返回 UnsupportedDatabaseScheme 错误
+/// 未知 scheme 应返回 UnsupportedDatabaseScheme 错误
 #[test]
 fn test_from_url_unknown_scheme_returns_error() {
     let result = DatabaseType::from_url("ftp://localhost/data");
@@ -175,7 +175,7 @@ fn test_from_url_unknown_scheme_returns_error() {
     );
 }
 
-/// TEST-U-COMMON-015: DuckDb 短形式应识别为 DuckDb
+/// DuckDb 短形式应识别为 DuckDb
 #[test]
 fn test_from_url_duckdb_short_form() {
     let result = DatabaseType::from_url("duckdb::memory:");
@@ -183,7 +183,7 @@ fn test_from_url_duckdb_short_form() {
     assert_eq!(result.unwrap(), DatabaseType::DuckDb);
 }
 
-/// TEST-U-COMMON-016: postgresql scheme（别名）应识别为 Postgres
+/// postgresql scheme（别名）应识别为 Postgres
 #[test]
 fn test_from_url_postgresql_alias() {
     let result = DatabaseType::from_url("postgresql://user@host/db");

@@ -12,7 +12,7 @@ use dbnexus::{
 use std::sync::Arc;
 use std::time::Duration;
 
-/// TEST-AUDIT-001: 多条件组合查询测试
+/// 多条件组合查询测试
 #[tokio::test]
 async fn test_audit_query_multiple_conditions() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -32,7 +32,7 @@ async fn test_audit_query_multiple_conditions() {
     assert_eq!(results.len(), 100, "Should find all 100 user events");
 }
 
-/// TEST-AUDIT-002: 时间范围查询测试
+/// 时间范围查询测试
 #[tokio::test]
 async fn test_audit_query_time_range() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -54,7 +54,7 @@ async fn test_audit_query_time_range() {
     assert!(recent.len() >= 4, "Should find events from last 5 hours");
 }
 
-/// TEST-AUDIT-003: 空条件处理测试
+/// 空条件处理测试
 #[tokio::test]
 async fn test_audit_query_empty_conditions() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -73,7 +73,7 @@ async fn test_audit_query_empty_conditions() {
     assert_eq!(all.len(), 10, "Empty query should return all events");
 }
 
-/// TEST-AUDIT-004: 分页查询测试
+/// 分页查询测试
 #[tokio::test]
 async fn test_audit_query_pagination() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -100,7 +100,7 @@ async fn test_audit_query_pagination() {
     assert_eq!(page2.len(), 10, "Second page should have 10 results");
 }
 
-/// TEST-AUDIT-005: 存储后端读写测试
+/// 存储后端读写测试
 #[tokio::test]
 async fn test_audit_storage_write_read() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
@@ -118,7 +118,7 @@ async fn test_audit_storage_write_read() {
     assert_eq!(results.len(), 10, "Should retrieve all written events");
 }
 
-/// TEST-AUDIT-006: 存储后端 JSON 序列化测试
+/// 存储后端 JSON 序列化测试
 #[tokio::test]
 async fn test_audit_storage_json_serialization() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
@@ -137,7 +137,7 @@ async fn test_audit_storage_json_serialization() {
     assert_eq!(parsed.operation, AuditOperation::Create);
 }
 
-/// TEST-AUDIT-007: 审计日志批量操作测试
+/// 审计日志批量操作测试
 #[tokio::test]
 async fn test_audit_batch_operations() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -170,7 +170,7 @@ async fn test_audit_batch_operations() {
     );
 }
 
-/// TEST-AUDIT-008: 审计存储容量限制测试
+/// 审计存储容量限制测试
 #[tokio::test]
 async fn test_audit_storage_capacity_limit() {
     let storage = Arc::new(MemoryAuditStorage::new(50));
@@ -196,7 +196,7 @@ async fn test_audit_storage_capacity_limit() {
     );
 }
 
-/// TEST-AUDIT-009: 审计事件类型完整测试
+/// 审计事件类型完整测试
 #[tokio::test]
 async fn test_audit_all_event_types() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
@@ -239,7 +239,7 @@ async fn test_audit_all_event_types() {
     );
 }
 
-/// TEST-AUDIT-010: 审计查询时间戳范围测试
+/// 审计查询时间戳范围测试
 #[tokio::test]
 async fn test_audit_query_timestamp_range() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -262,7 +262,7 @@ async fn test_audit_query_timestamp_range() {
     assert!(results.len() >= 10, "Should find recent events");
 }
 
-/// TEST-AUDIT-011: 审计用户ID过滤测试
+/// 审计用户ID过滤测试
 #[tokio::test]
 async fn test_audit_query_by_user() {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -294,7 +294,7 @@ async fn test_audit_query_by_user() {
     assert_eq!(bob_events.len(), 10, "Should find only bob's events");
 }
 
-/// TEST-AUDIT-012: 审计操作结果测试
+/// 审计操作结果测试
 #[tokio::test]
 async fn test_audit_operation_results() {
     let storage = Arc::new(MemoryAuditStorage::new(100));
@@ -331,7 +331,7 @@ async fn test_audit_operation_results() {
     assert_eq!(failure_count, 1, "Should have one failure");
 }
 
-/// TEST-AUDIT-013: 审计事件JSON解析测试
+/// 审计事件JSON解析测试
 #[tokio::test]
 async fn test_audit_event_json_roundtrip() {
     let original = AuditEvent::create("products", "123", "admin")

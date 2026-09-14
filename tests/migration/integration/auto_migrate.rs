@@ -33,7 +33,7 @@ fn id_column_definition(db_type: DatabaseType) -> &'static str {
     }
 }
 
-/// TEST-AM-001: 自动迁移配置创建测试
+/// 自动迁移配置创建测试
 #[tokio::test]
 async fn test_auto_migrate_config_creation() {
     let config = dbnexus::DbConfig {
@@ -49,7 +49,7 @@ async fn test_auto_migrate_config_creation() {
     assert!(config.migrations_dir.is_some());
 }
 
-/// TEST-AM-002: 迁移文件扫描测试（使用内存数据库）
+/// 迁移文件扫描测试（使用内存数据库）
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_migration_file_scanning() {
@@ -148,7 +148,7 @@ DROP TABLE orders_{table_suffix};
     assert_eq!(migrations, 2, "Should have applied 2 migrations");
 }
 
-/// TEST-AM-003: 迁移超时配置测试
+/// 迁移超时配置测试
 #[tokio::test]
 async fn test_migration_timeout_config() {
     let config = dbnexus::DbConfig {
@@ -161,7 +161,7 @@ async fn test_migration_timeout_config() {
     assert_eq!(config.migration_timeout_duration().as_secs(), 300);
 }
 
-/// TEST-AM-004: 空迁移目录测试
+/// 空迁移目录测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_empty_migrations_directory() {
@@ -196,7 +196,7 @@ async fn test_empty_migrations_directory() {
     assert_eq!(result.unwrap(), 0, "Should apply 0 migrations");
 }
 
-/// TEST-AM-005: 不存在目录测试
+/// 不存在目录测试
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_nonexistent_migrations_directory() {
@@ -231,7 +231,7 @@ async fn test_nonexistent_migrations_directory() {
     assert_eq!(result.unwrap(), 0, "Should apply 0 migrations");
 }
 
-/// TEST-AM-006: 环境变量迁移配置测试
+/// 环境变量迁移配置测试
 #[tokio::test]
 #[cfg(feature = "config-env")]
 async fn test_migration_config_from_env() {
@@ -289,7 +289,7 @@ async fn test_migration_config_from_env() {
     }
 }
 
-/// TEST-AM-007: 迁移版本排序测试（使用内存数据库）
+/// 迁移版本排序测试（使用内存数据库）
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_migration_version_sorting() {

@@ -15,7 +15,7 @@ use std::time::Duration;
 #[path = "../../common/mod.rs"]
 mod common;
 
-/// TEST-METRICS-001: 创建指标收集器测试
+/// 创建指标收集器测试
 #[tokio::test]
 async fn test_metrics_collector_creation() {
     let collector = MetricsCollector::new();
@@ -24,7 +24,7 @@ async fn test_metrics_collector_creation() {
     assert!(collector.all_query_stats().is_empty());
 }
 
-/// TEST-METRICS-002: 记录查询指标测试
+/// 记录查询指标测试
 #[tokio::test]
 async fn test_record_query_metrics() {
     let collector = MetricsCollector::new();
@@ -46,7 +46,7 @@ async fn test_record_query_metrics() {
     assert_eq!(stats.error_count, 1);
 }
 
-/// TEST-METRICS-003: 延迟直方图测试
+/// 延迟直方图测试
 #[tokio::test]
 async fn test_latency_histogram() {
     let bucket_boundaries = vec![1, 5, 10, 50, 100, 500, 1000];
@@ -74,7 +74,7 @@ async fn test_latency_histogram() {
     }
 }
 
-/// TEST-METRICS-004: 吞吐量统计测试
+/// 吞吐量统计测试
 #[tokio::test]
 async fn test_throughput_stats() {
     let collector = MetricsCollector::new();
@@ -102,7 +102,7 @@ async fn test_throughput_stats() {
     assert!((stats.error_rate() - expected_error_rate).abs() < 0.01);
 }
 
-/// TEST-METRICS-005: 连接池指标测试
+/// 连接池指标测试
 #[tokio::test]
 async fn test_connection_pool_metrics() {
     let collector = MetricsCollector::new();
@@ -121,7 +121,7 @@ async fn test_connection_pool_metrics() {
     assert_eq!(utilization, 0.5);
 }
 
-/// TEST-METRICS-006: 连接获取指标测试
+/// 连接获取指标测试
 #[tokio::test]
 async fn test_connection_acquire_metrics() {
     let collector = MetricsCollector::new();
@@ -145,7 +145,7 @@ async fn test_connection_acquire_metrics() {
     assert_eq!(stats.failure_count, 1);
 }
 
-/// TEST-METRICS-007: 事务指标测试
+/// 事务指标测试
 #[tokio::test]
 async fn test_transaction_metrics() {
     let collector = MetricsCollector::new();
@@ -166,7 +166,7 @@ async fn test_transaction_metrics() {
     assert_eq!(stats.rollback_count, 1);
 }
 
-/// TEST-METRICS-008: 慢查询配置测试
+/// 慢查询配置测试
 #[tokio::test]
 async fn test_slow_query_config() {
     let collector = MetricsCollector::new();
@@ -184,7 +184,7 @@ async fn test_slow_query_config() {
     assert!(slow_queries.len() >= 2);
 }
 
-/// TEST-METRICS-009: 错误计数测试
+/// 错误计数测试
 #[tokio::test]
 async fn test_error_counting() {
     let collector = MetricsCollector::new();
@@ -198,7 +198,7 @@ async fn test_error_counting() {
     assert_eq!(error_count, 2, "连接错误计数应该为 2");
 }
 
-/// TEST-METRICS-010: 多查询类型指标测试
+/// 多查询类型指标测试
 #[tokio::test]
 async fn test_multiple_query_types() {
     let collector = MetricsCollector::new();
@@ -228,7 +228,7 @@ async fn test_multiple_query_types() {
     assert_eq!(delete_stats.unwrap().count, 50);
 }
 
-/// TEST-METRICS-011: 总吞吐量统计测试
+/// 总吞吐量统计测试
 #[tokio::test]
 async fn test_total_throughput() {
     let collector = MetricsCollector::new();
@@ -252,7 +252,7 @@ async fn test_total_throughput() {
     assert_eq!(total_stats.failure_count, 20);
 }
 
-/// TEST-METRICS-012: 所有查询统计测试
+/// 所有查询统计测试
 #[tokio::test]
 async fn test_all_query_stats() {
     let collector = MetricsCollector::new();
@@ -270,7 +270,7 @@ async fn test_all_query_stats() {
     assert!(all_stats.contains_key("UPDATE"));
 }
 
-/// TEST-METRICS-013: 慢查询禁用测试
+/// 慢查询禁用测试
 #[tokio::test]
 async fn test_slow_query_disabled() {
     let collector = MetricsCollector::new();
@@ -287,7 +287,7 @@ async fn test_slow_query_disabled() {
     assert_eq!(slow_queries.len(), 0);
 }
 
-/// TEST-METRICS-014: 慢查询阈值调整测试
+/// 慢查询阈值调整测试
 #[tokio::test]
 async fn test_slow_query_threshold_adjustment() {
     let collector = MetricsCollector::new();
@@ -314,7 +314,7 @@ async fn test_slow_query_threshold_adjustment() {
     assert!(!slow_queries.is_empty());
 }
 
-/// TEST-METRICS-015: 延迟分布测试
+/// 延迟分布测试
 #[tokio::test]
 async fn test_latency_distribution() {
     let collector = MetricsCollector::new();

@@ -198,7 +198,7 @@ fn test_delete_signature_is_generic() {
 }
 
 // ============================================================================
-// soft_delete=true Uuid 主键实体（覆盖 MEDIUM-2：delete/force_delete 签名测试）
+// soft_delete=true Uuid 主键实体
 // ============================================================================
 
 mod soft_delete_uuid_entity {
@@ -228,7 +228,7 @@ mod soft_delete_uuid_entity {
 
 /// 验证 soft_delete=true 分支下 `delete` 函数签名泛型化（约束为 `Into<sea_orm::Value>`）
 ///
-/// 覆盖 MEDIUM-2：soft_delete=true 分支的 delete 签名此前未被测试覆盖。
+/// soft_delete=true 分支的 delete 签名此前未被测试覆盖。
 #[test]
 fn test_soft_delete_delete_signature_is_generic() {
     let _ = soft_delete_uuid_entity::Model::delete::<uuid::Uuid>;
@@ -238,7 +238,7 @@ fn test_soft_delete_delete_signature_is_generic() {
 
 /// 验证 `force_delete` 函数签名存在且参数类型为泛型（仅 soft_delete=true 实体生成）
 ///
-/// 覆盖 MEDIUM-2：force_delete 签名此前未被测试覆盖。
+/// force_delete 签名此前未被测试覆盖。
 #[test]
 fn test_force_delete_signature_is_generic() {
     let _ = soft_delete_uuid_entity::Model::force_delete::<uuid::Uuid>;

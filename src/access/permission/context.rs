@@ -668,7 +668,7 @@ mod tests {
         )
     }
 
-    /// TEST-U-013: PermissionContext 创建和访问测试
+    /// PermissionContext 创建和访问测试
     #[tokio::test]
     async fn test_permission_context_creation() {
         let cache = create_test_cache().await;
@@ -773,7 +773,7 @@ mod tests {
     // 缓存未命中容错机制测试 (TOCTOU 修复验证)
     // ============================================================================
 
-    /// TEST-U-023: 缓存未命中时自动重新加载策略 - 成功场景
+    /// 缓存未命中时自动重新加载策略 - 成功场景
     #[tokio::test]
     async fn test_cache_miss_reload_success() {
         // 创建权限配置
@@ -820,7 +820,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-024: 缓存未命中时无权限提供者 - 安全拒绝
+    /// 缓存未命中时无权限提供者 - 安全拒绝
     #[tokio::test]
     async fn test_cache_miss_no_provider_safe_deny() {
         // 创建权限上下文（不配置权限提供者）
@@ -839,7 +839,7 @@ mod tests {
         assert_eq!(stats.denied_checks, 1);
     }
 
-    /// TEST-U-025: 缓存未命中时角色不存在于提供者 - 安全拒绝
+    /// 缓存未命中时角色不存在于提供者 - 安全拒绝
     #[tokio::test]
     async fn test_cache_miss_role_not_found_safe_deny() {
         // 创建空的权限提供者
@@ -862,7 +862,7 @@ mod tests {
         assert_eq!(stats.denied_checks, 1);
     }
 
-    /// TEST-U-026: try_reload_policy 方法测试 - 成功场景
+    /// try_reload_policy 方法测试 - 成功场景
     #[tokio::test]
     async fn test_try_reload_policy_success() {
         // 创建权限配置
@@ -909,7 +909,7 @@ mod tests {
         assert!(cached.is_some());
     }
 
-    /// TEST-U-027: try_reload_policy 方法测试 - 无权限提供者
+    /// try_reload_policy 方法测试 - 无权限提供者
     #[tokio::test]
     async fn test_try_reload_policy_no_provider() {
         // 创建权限上下文（无权限提供者）
@@ -921,7 +921,7 @@ mod tests {
         assert!(!result);
     }
 
-    /// TEST-U-028: 缓存命中后缓存未命中的混合场景
+    /// 缓存命中后缓存未命中的混合场景
     #[tokio::test]
     async fn test_cache_hit_then_miss_reload() {
         // 创建权限配置
@@ -977,7 +977,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-029: set_permission_provider 方法测试
+    /// set_permission_provider 方法测试
     #[tokio::test]
     async fn test_set_permission_provider() {
         // 创建权限配置
@@ -1026,7 +1026,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-039: PermissionContext 使用 DbConfig 配置化缓存容量
+    /// PermissionContext 使用 DbConfig 配置化缓存容量
     #[tokio::test]
     async fn test_permission_context_with_config() {
         use crate::foundation::{CacheConfig, DbConfig};
@@ -1051,7 +1051,7 @@ mod tests {
         assert_eq!(stats.capacity, 8192);
     }
 
-    /// TEST-U-040: PermissionContext 同步版本使用 DbConfig 配置
+    /// PermissionContext 同步版本使用 DbConfig 配置
     #[test]
     fn test_permission_context_new_with_config() {
         use crate::foundation::{CacheConfig, DbConfig};
@@ -1077,7 +1077,7 @@ mod tests {
         assert_eq!(stats.capacity, 16384);
     }
 
-    /// TEST-U-041: PermissionContext 默认缓存容量测试
+    /// PermissionContext 默认缓存容量测试
     #[tokio::test]
     async fn test_permission_context_default_capacity() {
         let ctx = PermissionContext::new_default().await.unwrap();
@@ -1087,7 +1087,7 @@ mod tests {
         assert_eq!(stats.capacity, 4096);
     }
 
-    /// TEST-U-042: PermissionContext 自定义缓存容量测试
+    /// PermissionContext 自定义缓存容量测试
     #[tokio::test]
     async fn test_permission_context_custom_capacity() {
         let ctx = PermissionContext::with_cache_size("admin".to_string(), 2048)
@@ -1099,7 +1099,7 @@ mod tests {
         assert_eq!(stats.capacity, 2048);
     }
 
-    /// TEST-U-043: PermissionContext 配置化缓存容量与速率限制组合测试
+    /// PermissionContext 配置化缓存容量与速率限制组合测试
     #[tokio::test]
     async fn test_permission_context_with_config_and_rate_limit() {
         use crate::foundation::{CacheConfig, DbConfig};
@@ -1129,7 +1129,7 @@ mod tests {
         assert_eq!(stats.capacity, 4096);
     }
 
-    /// TEST-U-052: 缓存击穿防护 - 并发请求触发 stampede 保护
+    /// 缓存击穿防护 - 并发请求触发 stampede 保护
     #[tokio::test]
     async fn test_cache_stampede_counter_increments() {
         use crate::access::TablePermission;
@@ -1200,7 +1200,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-053: 缓存击穿防护 - get_cache_metrics 返回正确指标
+    /// 缓存击穿防护 - get_cache_metrics 返回正确指标
     #[tokio::test]
     async fn test_get_cache_metrics() {
         let config = PermissionConfig {

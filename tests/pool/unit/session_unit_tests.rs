@@ -32,7 +32,7 @@ async fn make_pool() -> DbPool {
 // 基础属性测试
 // ============================================================================
 
-/// TEST-U-SESS-001: role() 应返回创建时指定的角色
+/// role() 应返回创建时指定的角色
 #[tokio::test]
 async fn test_session_role_returns_creation_role() {
     let pool = make_pool().await;
@@ -40,7 +40,7 @@ async fn test_session_role_returns_creation_role() {
     assert_eq!(session.role(), "admin");
 }
 
-/// TEST-U-SESS-002: permission_ctx() 应返回与 role 一致的上下文
+/// permission_ctx() 应返回与 role 一致的上下文
 #[cfg(feature = "permission")]
 #[tokio::test]
 async fn test_session_permission_ctx_returns_context() {
@@ -55,7 +55,7 @@ async fn test_session_permission_ctx_returns_context() {
 // 事务生命周期测试
 // ============================================================================
 
-/// TEST-U-SESS-003: 初始 is_in_transaction 应为 false
+/// 初始 is_in_transaction 应为 false
 #[tokio::test]
 async fn test_session_is_in_transaction_initial_false() {
     let pool = make_pool().await;
@@ -63,7 +63,7 @@ async fn test_session_is_in_transaction_initial_false() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-SESS-004: begin_transaction 后 is_in_transaction 应为 true
+/// begin_transaction 后 is_in_transaction 应为 true
 #[tokio::test]
 async fn test_session_begin_transaction_succeeds() {
     let pool = make_pool().await;
@@ -75,7 +75,7 @@ async fn test_session_begin_transaction_succeeds() {
     assert!(session.is_in_transaction().await);
 }
 
-/// TEST-U-SESS-005: begin + commit 后 is_in_transaction 应为 false
+/// begin + commit 后 is_in_transaction 应为 false
 #[tokio::test]
 async fn test_session_commit_after_begin() {
     let pool = make_pool().await;
@@ -85,7 +85,7 @@ async fn test_session_commit_after_begin() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-SESS-006: begin + rollback 后 is_in_transaction 应为 false
+/// begin + rollback 后 is_in_transaction 应为 false
 #[tokio::test]
 async fn test_session_rollback_after_begin() {
     let pool = make_pool().await;
@@ -95,7 +95,7 @@ async fn test_session_rollback_after_begin() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-SESS-007: 重复 begin 应返回 Transaction 错误
+/// 重复 begin 应返回 Transaction 错误
 #[tokio::test]
 async fn test_session_double_begin_fails() {
     let pool = make_pool().await;
@@ -111,7 +111,7 @@ async fn test_session_double_begin_fails() {
     );
 }
 
-/// TEST-U-SESS-008: 无事务时 commit 应返回 Transaction 错误
+/// 无事务时 commit 应返回 Transaction 错误
 #[tokio::test]
 async fn test_session_commit_without_transaction_fails() {
     let pool = make_pool().await;
@@ -126,7 +126,7 @@ async fn test_session_commit_without_transaction_fails() {
     );
 }
 
-/// TEST-U-SESS-009: 无事务时 rollback 应返回 Transaction 错误
+/// 无事务时 rollback 应返回 Transaction 错误
 #[tokio::test]
 async fn test_session_rollback_without_transaction_fails() {
     let pool = make_pool().await;
@@ -145,7 +145,7 @@ async fn test_session_rollback_without_transaction_fails() {
 // execute_raw_ddl 测试
 // ============================================================================
 
-/// TEST-U-SESS-010: admin 角色 execute_raw_ddl CREATE TABLE 应成功
+/// admin 角色 execute_raw_ddl CREATE TABLE 应成功
 #[tokio::test]
 async fn test_session_execute_raw_ddl_admin_success() {
     let pool = make_pool().await;
@@ -160,7 +160,7 @@ async fn test_session_execute_raw_ddl_admin_success() {
     );
 }
 
-/// TEST-U-SESS-011: 非 admin 角色 execute_raw_ddl 应返回 Permission 错误
+/// 非 admin 角色 execute_raw_ddl 应返回 Permission 错误
 #[tokio::test]
 async fn test_session_execute_raw_ddl_non_admin_fails() {
     let pool = make_pool().await;
@@ -178,7 +178,7 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
     );
 }
 
-/// TEST-U-SESS-012: execute_raw_ddl 对 DropTable/DropDatabase 的白名单边界
+/// execute_raw_ddl 对 DropTable/DropDatabase 的白名单边界
 ///
 /// 真实行为核正（阶段 2 验收）：自 0540954 起 admin 路径 DdlGuard 白名单放行
 /// DropTable（迁移事务混合 DDL+DML 场景，表级权限由 security_gate 前置检查，
@@ -220,7 +220,7 @@ async fn test_session_execute_raw_ddl_drop_table() {
 // execute_raw 测试
 // ============================================================================
 
-/// TEST-U-SESS-013: sql-parser feature 下 execute_raw 对 DDL 应返回 Permission 错误
+/// sql-parser feature 下 execute_raw 对 DDL 应返回 Permission 错误
 #[cfg(feature = "sql-parser")]
 #[tokio::test]
 async fn test_session_execute_raw_rejects_ddl_under_sql_parser() {
@@ -241,7 +241,7 @@ async fn test_session_execute_raw_rejects_ddl_under_sql_parser() {
     );
 }
 
-/// TEST-U-SESS-014: 非 sql-parser feature 下 execute_raw 应返回需要 feature 的错误
+/// 非 sql-parser feature 下 execute_raw 应返回需要 feature 的错误
 #[cfg(not(feature = "sql-parser"))]
 #[tokio::test]
 async fn test_session_execute_raw_requires_sql_parser_feature() {
@@ -257,7 +257,7 @@ async fn test_session_execute_raw_requires_sql_parser_feature() {
     );
 }
 
-/// TEST-U-SESS-015: execute_raw SELECT 在 admin 角色下应成功（sql-parser 启用时）
+/// execute_raw SELECT 在 admin 角色下应成功（sql-parser 启用时）
 #[cfg(feature = "sql-parser")]
 #[tokio::test]
 async fn test_session_execute_raw_select_admin_success() {
@@ -284,7 +284,7 @@ async fn test_session_execute_raw_select_admin_success() {
 // batch_execute 测试
 // ============================================================================
 
-/// TEST-U-SESS-016: batch_execute 多条 INSERT 应返回多个结果
+/// batch_execute 多条 INSERT 应返回多个结果
 #[cfg(feature = "sql-parser")]
 #[tokio::test]
 async fn test_session_batch_execute_multiple_inserts() {
@@ -322,7 +322,7 @@ async fn test_session_batch_execute_multiple_inserts() {
 // batch_execute_in_transaction 测试
 // ============================================================================
 
-/// TEST-U-SESS-017: batch_execute_in_transaction 全部成功时应 commit
+/// batch_execute_in_transaction 全部成功时应 commit
 #[cfg(feature = "sql-parser")]
 #[tokio::test]
 async fn test_session_batch_execute_in_transaction_success() {
@@ -349,7 +349,7 @@ async fn test_session_batch_execute_in_transaction_success() {
     assert!(!session.is_in_transaction().await);
 }
 
-/// TEST-U-SESS-018: batch_execute_in_transaction 中间失败时应 rollback
+/// batch_execute_in_transaction 中间失败时应 rollback
 #[cfg(feature = "sql-parser")]
 #[tokio::test]
 async fn test_session_batch_execute_in_transaction_atomicity() {
@@ -375,7 +375,7 @@ async fn test_session_batch_execute_in_transaction_atomicity() {
 // check_table_permission 测试
 // ============================================================================
 
-/// TEST-U-SESS-019: admin 角色 check_table_permission 应绕过检查
+/// admin 角色 check_table_permission 应绕过检查
 #[tokio::test]
 async fn test_session_check_table_permission_admin_bypass() {
     let pool = make_pool().await;
@@ -393,7 +393,7 @@ async fn test_session_check_table_permission_admin_bypass() {
 // should_use_master 测试
 // ============================================================================
 
-/// TEST-U-SESS-020: 初始 should_use_master 应为 false（无写操作、无事务）
+/// 初始 should_use_master 应为 false（无写操作、无事务）
 #[tokio::test]
 async fn test_session_should_use_master_initial_false() {
     let pool = make_pool().await;
@@ -404,7 +404,7 @@ async fn test_session_should_use_master_initial_false() {
     // 不断言具体值，因为实现可能基于时间窗口
 }
 
-/// TEST-U-SESS-021: begin_transaction 后 should_use_master 应为 true
+/// begin_transaction 后 should_use_master 应为 true
 #[tokio::test]
 async fn test_session_should_use_master_true_in_transaction() {
     let pool = make_pool().await;
@@ -416,7 +416,7 @@ async fn test_session_should_use_master_true_in_transaction() {
     );
 }
 
-/// TEST-U-SESS-022: mark_write 后 should_use_master 应为 true
+/// mark_write 后 should_use_master 应为 true
 #[tokio::test]
 async fn test_session_mark_write_affects_should_use_master() {
     let pool = make_pool().await;
@@ -432,7 +432,7 @@ async fn test_session_mark_write_affects_should_use_master() {
 // Drop 行为测试
 // ============================================================================
 
-/// TEST-U-SESS-023: session drop 后 pool status 应恢复
+/// session drop 后 pool status 应恢复
 #[tokio::test]
 async fn test_session_drop_releases_connection() {
     let pool = make_pool().await;
@@ -449,7 +449,7 @@ async fn test_session_drop_releases_connection() {
     );
 }
 
-/// TEST-U-SESS-024: 多个 session 串行获取应可重用连接
+/// 多个 session 串行获取应可重用连接
 #[tokio::test]
 async fn test_session_serial_acquire_release() {
     let pool = make_pool().await;

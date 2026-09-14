@@ -24,7 +24,7 @@ mod common;
 // 构造测试
 // ============================================================================
 
-/// TEST-U-DPOOL-001: DbPool::new(sqlite::memory:) 应成功
+/// DbPool::new(sqlite::memory:) 应成功
 #[tokio::test]
 async fn test_db_pool_new_sqlite_memory() {
     let pool = DbPool::new("sqlite::memory:").await;
@@ -42,7 +42,7 @@ async fn test_db_pool_new_sqlite_memory() {
     );
 }
 
-/// TEST-U-DPOOL-002: DbPool::with_config 应成功
+/// DbPool::with_config 应成功
 #[tokio::test]
 async fn test_db_pool_with_config() {
     let config = DbConfig {
@@ -58,7 +58,7 @@ async fn test_db_pool_with_config() {
     assert!(pool.is_ok(), "with_config should succeed");
 }
 
-/// TEST-U-DPOOL-003: DbPool::try_from_config 应与 with_config 行为一致
+/// DbPool::try_from_config 应与 with_config 行为一致
 #[tokio::test]
 async fn test_db_pool_try_from_config() {
     let config = DbConfig {
@@ -69,7 +69,7 @@ async fn test_db_pool_try_from_config() {
     assert!(pool.is_ok(), "try_from_config should succeed");
 }
 
-/// TEST-U-DPOOL-004: DbPool::new 无效 URL 应返回错误
+/// DbPool::new 无效 URL 应返回错误
 #[tokio::test]
 async fn test_db_pool_new_invalid_url_fails() {
     let result = DbPool::new("invalid://nonexistent").await;
@@ -80,14 +80,14 @@ async fn test_db_pool_new_invalid_url_fails() {
 // DbPoolBuilder 测试
 // ============================================================================
 
-/// TEST-U-DPOOL-005: DbPoolBuilder 通过 url 构造
+/// DbPoolBuilder 通过 url 构造
 #[tokio::test]
 async fn test_db_pool_builder_with_url() {
     let pool = DbPoolBuilder::new().url("sqlite::memory:").build().await;
     assert!(pool.is_ok(), "builder with url should succeed");
 }
 
-/// TEST-U-DPOOL-006: DbPoolBuilder 通过 config 构造
+/// DbPoolBuilder 通过 config 构造
 #[tokio::test]
 async fn test_db_pool_builder_with_config() {
     let config = DbConfig {
@@ -104,7 +104,7 @@ async fn test_db_pool_builder_with_config() {
     assert_eq!(pool.config().pool_config.max_connections, 5);
 }
 
-/// TEST-U-DPOOL-007: DbPoolBuilder 链式设置 max/min connections
+/// DbPoolBuilder 链式设置 max/min connections
 #[tokio::test]
 async fn test_db_pool_builder_max_min_connections() {
     let pool = DbPoolBuilder::new()
@@ -119,7 +119,7 @@ async fn test_db_pool_builder_max_min_connections() {
     assert_eq!(pool.config().pool_config.min_connections, 2);
 }
 
-/// TEST-U-DPOOL-008: DbPoolBuilder 设置 admin_role
+/// DbPoolBuilder 设置 admin_role
 #[tokio::test]
 async fn test_db_pool_builder_admin_role() {
     let pool = DbPoolBuilder::new()
@@ -136,7 +136,7 @@ async fn test_db_pool_builder_admin_role() {
 // status / config 测试
 // ============================================================================
 
-/// TEST-U-DPOOL-009: 初始 status 应满足 total = active + idle（min_connections=0 时为 0）
+/// 初始 status 应满足 total = active + idle（min_connections=0 时为 0）
 #[tokio::test]
 async fn test_db_pool_status_initial() {
     // 使用 min_connections=0 确保初始状态无连接
@@ -156,7 +156,7 @@ async fn test_db_pool_status_initial() {
     assert_eq!(status.idle, 0);
 }
 
-/// TEST-U-DPOOL-010: status 不变量 total = active + idle
+/// status 不变量 total = active + idle
 #[tokio::test]
 async fn test_db_pool_status_invariant_total_equals_active_plus_idle() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -168,7 +168,7 @@ async fn test_db_pool_status_invariant_total_equals_active_plus_idle() {
     );
 }
 
-/// TEST-U-DPOOL-011: config() 应返回构建时配置
+/// config() 应返回构建时配置
 #[tokio::test]
 async fn test_db_pool_config_returns_built_config() {
     let config = DbConfig {
@@ -186,7 +186,7 @@ async fn test_db_pool_config_returns_built_config() {
     assert_eq!(pool.config().url, "sqlite::memory:");
 }
 
-/// TEST-U-DPOOL-012: get_actual_config() 应与 config() 一致
+/// get_actual_config() 应与 config() 一致
 #[tokio::test]
 async fn test_db_pool_get_actual_config() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -203,7 +203,7 @@ async fn test_db_pool_get_actual_config() {
 // get_session 权限测试
 // ============================================================================
 
-/// TEST-U-DPOOL-013: get_session("admin") 应成功
+/// get_session("admin") 应成功
 #[tokio::test]
 async fn test_db_pool_get_session_admin() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -213,7 +213,7 @@ async fn test_db_pool_get_session_admin() {
     assert_eq!(session.role(), "admin");
 }
 
-/// TEST-U-DPOOL-014: get_session("system") 应成功（无权限配置时安全角色）
+/// get_session("system") 应成功（无权限配置时安全角色）
 #[tokio::test]
 async fn test_db_pool_get_session_system() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -224,7 +224,7 @@ async fn test_db_pool_get_session_system() {
     );
 }
 
-/// TEST-U-DPOOL-015: 无权限配置时 get_session("guest") 应失败
+/// 无权限配置时 get_session("guest") 应失败
 #[cfg(feature = "permission")]
 #[tokio::test]
 async fn test_db_pool_get_session_unauthorized_role_fails() {
@@ -242,7 +242,7 @@ async fn test_db_pool_get_session_unauthorized_role_fails() {
     }
 }
 
-/// TEST-U-DPOOL-016: get_session 后 session role 应匹配请求
+/// get_session 后 session role 应匹配请求
 #[tokio::test]
 async fn test_db_pool_get_session_role_matches() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -256,7 +256,7 @@ async fn test_db_pool_get_session_role_matches() {
 // Clone 测试
 // ============================================================================
 
-/// TEST-U-DPOOL-017: Clone 后的 pool 应独立可用
+/// Clone 后的 pool 应独立可用
 #[tokio::test]
 async fn test_db_pool_clone_usable() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -266,7 +266,7 @@ async fn test_db_pool_clone_usable() {
     assert!(session.is_ok(), "cloned pool should be usable");
 }
 
-/// TEST-U-DPOOL-018: Clone 后 config 应相等
+/// Clone 后 config 应相等
 #[tokio::test]
 async fn test_db_pool_clone_config_equal() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -282,7 +282,7 @@ async fn test_db_pool_clone_config_equal() {
 // 边界测试
 // ============================================================================
 
-/// TEST-U-DPOOL-019: max_connections=1 边界
+/// max_connections=1 边界
 #[tokio::test]
 async fn test_db_pool_max_connections_one() {
     let config = DbConfig {
@@ -302,7 +302,7 @@ async fn test_db_pool_max_connections_one() {
     // session 持有期间连接被占用；drop 后释放
 }
 
-/// TEST-U-DPOOL-020: 串行 get_session 多次应成功（连接回收）
+/// 串行 get_session 多次应成功（连接回收）
 #[tokio::test]
 async fn test_db_pool_serial_get_session_reuses_connection() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -318,7 +318,7 @@ async fn test_db_pool_serial_get_session_reuses_connection() {
 // 并发测试
 // ============================================================================
 
-/// TEST-U-DPOOL-021: 并发 get_session 不破坏 status 不变量
+/// 并发 get_session 不破坏 status 不变量
 #[tokio::test]
 async fn test_db_pool_concurrent_get_session_preserves_invariants() {
     use std::sync::Arc;
@@ -353,7 +353,7 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
 // Drop 测试
 // ============================================================================
 
-/// TEST-U-DPOOL-022: DbPool drop 不应 panic
+/// DbPool drop 不应 panic
 #[tokio::test]
 async fn test_db_pool_drop_no_panic() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -361,7 +361,7 @@ async fn test_db_pool_drop_no_panic() {
     drop(pool);
 }
 
-/// TEST-U-DPOOL-023: 带 session 的 DbPool drop 不应 panic
+/// 带 session 的 DbPool drop 不应 panic
 #[tokio::test]
 async fn test_db_pool_drop_with_active_session_no_panic() {
     let pool = common::make_sqlite_memory_pool().await;
@@ -375,7 +375,7 @@ async fn test_db_pool_drop_with_active_session_no_panic() {
 // try_from 同步构造器测试（permission feature 启用时返回 Err）
 // ============================================================================
 
-/// TEST-U-DPOOL-024: try_from 在 permission feature 启用时应返回 Err
+/// try_from 在 permission feature 启用时应返回 Err
 #[cfg(feature = "permission")]
 #[test]
 fn test_db_pool_try_from_with_permission_returns_err() {
@@ -398,14 +398,14 @@ fn test_db_pool_try_from_with_permission_returns_err() {
 // DbPoolBuilder 边界测试
 // ============================================================================
 
-/// TEST-U-DPOOL-025: DbPoolBuilder::build() 未提供 url 或 config 应返回 Err
+/// DbPoolBuilder::build() 未提供 url 或 config 应返回 Err
 #[tokio::test]
 async fn test_db_pool_builder_no_url_no_config_fails() {
     let result = DbPoolBuilder::new().build().await;
     assert!(result.is_err(), "build() without url or config should fail");
 }
 
-/// TEST-U-DPOOL-026: DbPoolBuilder::admin_role 在 config 已设置时应修改 config
+/// DbPoolBuilder::admin_role 在 config 已设置时应修改 config
 #[tokio::test]
 async fn test_db_pool_builder_admin_role_with_config() {
     let config = DbConfig {
@@ -422,7 +422,7 @@ async fn test_db_pool_builder_admin_role_with_config() {
     assert_eq!(pool.config().admin_role, "root");
 }
 
-/// TEST-U-DPOOL-027: DbPoolBuilder::max_connections 在只有 url 时应创建 config
+/// DbPoolBuilder::max_connections 在只有 url 时应创建 config
 #[tokio::test]
 async fn test_db_pool_builder_max_connections_with_url_only() {
     let pool = DbPoolBuilder::new()
@@ -434,7 +434,7 @@ async fn test_db_pool_builder_max_connections_with_url_only() {
     assert_eq!(pool.config().pool_config.max_connections, 13);
 }
 
-/// TEST-U-DPOOL-028: DbPoolBuilder::min_connections 在只有 url 时应创建 config
+/// DbPoolBuilder::min_connections 在只有 url 时应创建 config
 #[tokio::test]
 async fn test_db_pool_builder_min_connections_with_url_only() {
     let pool = DbPoolBuilder::new()
@@ -450,7 +450,7 @@ async fn test_db_pool_builder_min_connections_with_url_only() {
 // parse_health_check_interval 单元测试
 // ============================================================================
 
-/// TEST-U-DPOOL-030: parse_health_check_interval 边界值
+/// parse_health_check_interval 边界值
 #[cfg(feature = "pool-health-check")]
 #[test]
 fn test_parse_health_check_interval_boundaries() {
@@ -478,7 +478,7 @@ fn test_parse_health_check_interval_boundaries() {
 // check_connection_health 测试
 // ============================================================================
 
-/// TEST-U-DPOOL-031: check_connection_health 对健康的 SeaORM 连接应返回 true
+/// check_connection_health 对健康的 SeaORM 连接应返回 true
 #[tokio::test]
 async fn test_check_connection_health_healthy_seaorm() {
     use dbnexus::DbConnection;
@@ -493,7 +493,7 @@ async fn test_check_connection_health_healthy_seaorm() {
 // 健康检查与清理测试（pool-health-check feature）
 // ============================================================================
 
-/// TEST-U-DPOOL-032: clean_invalid_connections 对健康池应返回 0
+/// clean_invalid_connections 对健康池应返回 0
 #[cfg(feature = "pool-health-check")]
 #[tokio::test]
 async fn test_clean_invalid_connections_healthy_pool() {
@@ -505,7 +505,7 @@ async fn test_clean_invalid_connections_healthy_pool() {
     );
 }
 
-/// TEST-U-DPOOL-033: validate_and_recreate_connections 对健康池应返回 0
+/// validate_and_recreate_connections 对健康池应返回 0
 #[cfg(feature = "pool-health-check")]
 #[tokio::test]
 async fn test_validate_and_recreate_connections_healthy_pool() {
@@ -523,7 +523,7 @@ async fn test_validate_and_recreate_connections_healthy_pool() {
 // pool_metrics 测试（metrics feature）
 // ============================================================================
 
-/// TEST-U-DPOOL-034: pool_metrics 在未设置 collector 时应返回全零
+/// pool_metrics 在未设置 collector 时应返回全零
 #[cfg(feature = "metrics")]
 #[tokio::test]
 async fn test_pool_metrics_no_collector_returns_zeros() {
@@ -538,7 +538,7 @@ async fn test_pool_metrics_no_collector_returns_zeros() {
 // run_auto_migrate 测试（auto-migrate feature）
 // ============================================================================
 
-/// TEST-U-DPOOL-035: run_auto_migrate 在无 migrations_dir 时应返回 Ok(0)
+/// run_auto_migrate 在无 migrations_dir 时应返回 Ok(0)
 #[cfg(feature = "auto-migrate")]
 #[tokio::test]
 async fn test_run_auto_migrate_no_dir_returns_zero() {
@@ -558,7 +558,7 @@ async fn test_run_auto_migrate_no_dir_returns_zero() {
 // DbConnection 方法测试
 // ============================================================================
 
-/// TEST-U-DPOOL-036: DbConnection::as_sea_orm 应返回 Ok
+/// DbConnection::as_sea_orm 应返回 Ok
 #[tokio::test]
 async fn test_db_connection_as_sea_orm_ok() {
     use dbnexus::DbConnection;
@@ -570,7 +570,7 @@ async fn test_db_connection_as_sea_orm_ok() {
     );
 }
 
-/// TEST-U-DPOOL-037: DbConnection::is_duckdb 应返回 false（SeaORM 连接）
+/// DbConnection::is_duckdb 应返回 false（SeaORM 连接）
 #[tokio::test]
 async fn test_db_connection_is_duckdb_seaorm() {
     use dbnexus::DbConnection;
@@ -579,7 +579,7 @@ async fn test_db_connection_is_duckdb_seaorm() {
     assert!(!conn.is_duckdb(), "SeaOrm connection should not be duckdb");
 }
 
-/// TEST-U-DPOOL-038: DbConnection::Debug 应不 panic
+/// DbConnection::Debug 应不 panic
 #[tokio::test]
 async fn test_db_connection_debug_format() {
     use dbnexus::DbConnection;

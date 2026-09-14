@@ -36,7 +36,7 @@ fn table_exists_check_sql(db_type: DatabaseType, table_name: &str) -> String {
     }
 }
 
-/// TEST-M-001: 迁移执行器创建测试
+/// 迁移执行器创建测试
 #[tokio::test]
 async fn test_migration_executor_creation() {
     let (pool, _temp_dir) = common::create_test_pool()
@@ -77,7 +77,7 @@ async fn test_migration_executor_creation() {
         .await;
 }
 
-/// TEST-M-021: 迁移应用测试
+/// 迁移应用测试
 #[tokio::test]
 async fn test_migration_apply() {
     let (pool, _temp_dir) = common::create_test_pool()
@@ -126,7 +126,7 @@ async fn test_migration_apply() {
         .await;
 }
 
-/// TEST-M-002: 迁移历史创建测试
+/// 迁移历史创建测试
 #[test]
 fn test_migration_history_creation() {
     let history = MigrationHistory::new();
@@ -135,7 +135,7 @@ fn test_migration_history_creation() {
     assert_eq!(history.get_latest_version(), None);
 }
 
-/// TEST-M-003: 迁移历史添加测试
+/// 迁移历史添加测试
 #[test]
 fn test_migration_history_add() {
     let mut history = MigrationHistory::new();
@@ -153,7 +153,7 @@ fn test_migration_history_add() {
     assert_eq!(history.get_latest_version(), Some(1));
 }
 
-/// TEST-M-004: 迁移执行器首次运行测试（无迁移表）
+/// 迁移执行器首次运行测试（无迁移表）
 ///
 /// 验证 MigrationExecutor 在首次运行时（数据库中不存在迁移表）的行为：
 /// - load_applied_versions 应返回空集合

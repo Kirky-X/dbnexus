@@ -1179,7 +1179,7 @@ roles:
     assert!(!sess.is_in_transaction().await);
 }
 
-/// v0.3.0 性能优化验证：短锁模式下事务功能正常工作
+/// 性能优化验证：短锁模式下事务功能正常工作
 ///
 /// 此测试覆盖 begin_transaction → execute_raw → commit 的完整流程，
 /// 验证使用 `Arc<DatabaseTransaction>` 和短锁模式后事务仍能正确执行。
@@ -1225,7 +1225,7 @@ async fn test_transaction_short_lock_pattern_works() {
     assert!(result.is_ok(), "select after commit failed");
 }
 
-/// v0.3.0 性能优化验证：事务中 execute_raw 后能继续执行（验证 Arc clone 不会阻塞后续操作）
+/// 性能优化验证：事务中 execute_raw 后能继续执行（验证 Arc clone 不会阻塞后续操作）
 #[tokio::test]
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 async fn test_transaction_multiple_executes_in_same_transaction() {

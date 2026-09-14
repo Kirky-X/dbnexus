@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! DuckDB 后端查询示例（v0.3.0 新增）
+//! DuckDB 后端查询示例
 //!
 //! 演示 [`DuckDbConnection`] 的完整使用流程：
 //! - 创建 DuckDB 内存数据库连接（默认连接池大小 = 4）

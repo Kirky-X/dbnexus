@@ -50,7 +50,7 @@ async fn make_manager_with_user() -> AuthenticationManager {
 // JWT 签发与验证集成测试
 // ============================================================================
 
-/// TEST-AUTH-JWT-001: JWT 签发与验证往返
+/// JWT 签发与验证往返
 #[tokio::test]
 async fn test_jwt_issue_and_verify() {
     let mgr = JwtManager::new(TEST_SECRET).expect("valid secret");
@@ -70,7 +70,7 @@ async fn test_jwt_issue_and_verify() {
     assert!(claims.exp > claims.iat, "exp must be after iat");
 }
 
-/// TEST-AUTH-JWT-002: JWT 过期后验证应返回 TokenExpired
+/// JWT 过期后验证应返回 TokenExpired
 #[tokio::test]
 async fn test_jwt_expired() {
     // 使用 1 秒过期时间创建 manager
@@ -91,7 +91,7 @@ async fn test_jwt_expired() {
     );
 }
 
-/// TEST-AUTH-JWT-003: JWT 篡改后验证应返回 InvalidToken
+/// JWT 篡改后验证应返回 InvalidToken
 #[tokio::test]
 async fn test_jwt_tampered() {
     let mgr = JwtManager::new(TEST_SECRET).expect("valid secret");
@@ -119,7 +119,7 @@ async fn test_jwt_tampered() {
     );
 }
 
-/// TEST-AUTH-JWT-004: 不同密钥签发的 JWT 验证应失败（无效签名）
+/// 不同密钥签发的 JWT 验证应失败（无效签名）
 #[tokio::test]
 async fn test_jwt_invalid_signature() {
     let signer = JwtManager::new(TEST_SECRET).expect("valid secret");
@@ -145,7 +145,7 @@ async fn test_jwt_invalid_signature() {
 // 密码哈希集成测试
 // ============================================================================
 
-/// TEST-AUTH-PWD-001: 密码哈希与验证
+/// 密码哈希与验证
 #[test]
 fn test_password_hash_and_verify() {
     let hasher = PasswordHasher::new();
@@ -163,7 +163,7 @@ fn test_password_hash_and_verify() {
         .expect("verify with correct password should succeed");
 }
 
-/// TEST-AUTH-PWD-002: 错误密码验证应失败
+/// 错误密码验证应失败
 #[test]
 fn test_password_wrong_password() {
     let hasher = PasswordHasher::new();
@@ -180,7 +180,7 @@ fn test_password_wrong_password() {
     );
 }
 
-/// TEST-AUTH-PWD-003: 空密码应无法通过强度校验
+/// 空密码应无法通过强度校验
 #[test]
 fn test_password_empty() {
     let hasher = PasswordHasher::new();
@@ -189,7 +189,7 @@ fn test_password_empty() {
     assert!(result.is_err(), "empty password should fail strength check");
 }
 
-/// TEST-AUTH-PWD-004: 密码更新后旧哈希失效
+/// 密码更新后旧哈希失效
 #[test]
 fn test_password_update() {
     let hasher = PasswordHasher::new();
@@ -223,7 +223,7 @@ fn test_password_update() {
 // AuthenticationManager 集成测试
 // ============================================================================
 
-/// TEST-AUTH-MGR-001: 认证成功
+/// 认证成功
 #[tokio::test]
 async fn test_authenticate_success() {
     let mgr = make_manager_with_user().await;
@@ -246,7 +246,7 @@ async fn test_authenticate_success() {
     assert_eq!(claims.role, "admin");
 }
 
-/// TEST-AUTH-MGR-002: 错误密码认证失败
+/// 错误密码认证失败
 #[tokio::test]
 async fn test_authenticate_wrong_password() {
     let mgr = make_manager_with_user().await;
@@ -266,7 +266,7 @@ async fn test_authenticate_wrong_password() {
     );
 }
 
-/// TEST-AUTH-MGR-003: 未知用户认证失败
+/// 未知用户认证失败
 #[tokio::test]
 async fn test_authenticate_unknown_user() {
     let mgr = make_manager_with_user().await;

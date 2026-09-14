@@ -5,7 +5,7 @@
 //! 提供 DuckDB 嵌入式数据库的异步连接抽象，通过 `tokio::task::spawn_blocking` 桥接
 //! DuckDB 的同步 API 到 Tokio 异步运行时。
 //!
-//! # 架构（v0.3.0 连接池优化）
+//! # 架构
 //!
 //! DuckDB 是嵌入式分析型数据库，其 Rust API（`duckdb::Connection`）是同步的。
 //! 本模块通过 `spawn_blocking` 将阻塞式调用移至专用线程池。
@@ -71,7 +71,7 @@ const DEFAULT_POOL_SIZE: usize = 4;
 
 /// DuckDB 连接包装器
 ///
-/// v0.3.0 性能优化：使用连接池（`Vec<duckdb::Connection>`）替代单 `Mutex<Connection>`。
+/// 性能优化：使用连接池（`Vec<duckdb::Connection>`）替代单 `Mutex<Connection>`。
 ///
 /// 通过 `Connection::try_clone()` 创建多个连接共享同一个 `DatabaseHandle`，
 /// 每个 `spawn_blocking` 任务从池中获取一个连接，执行后归还。
@@ -212,7 +212,7 @@ impl DuckDbConnection {
 
     /// 执行 SQL（DDL/DML），返回受影响行数
     ///
-    /// v0.3.0 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接
+    /// 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接
     pub async fn execute(&self, sql: &str) -> DbResult<DuckDbExecResult> {
         let permit = self.acquire_permit().await?;
 
@@ -257,7 +257,7 @@ impl DuckDbConnection {
 
     /// 执行查询，返回结果行集合
     ///
-    /// v0.3.0 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接
+    /// 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接
     pub async fn query(&self, sql: &str) -> DbResult<Vec<DuckDbRow>> {
         let permit = self.acquire_permit().await?;
 
@@ -710,7 +710,7 @@ mod tests {
         }
     }
 
-    /// v0.3.0 连接池优化验证：try_clone 创建的多个连接共享 :memory: 数据库
+    /// 连接池优化验证：try_clone 创建的多个连接共享 :memory: 数据库
     #[tokio::test]
     async fn test_duckdb_pool_shares_memory_database() {
         let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
@@ -739,7 +739,7 @@ mod tests {
         }
     }
 
-    /// v0.3.0 连接池优化验证：自定义连接池大小
+    /// 连接池优化验证：自定义连接池大小
     #[tokio::test]
     async fn test_duckdb_custom_pool_size() {
         let conn = DuckDbConnection::with_pool_size(":memory:", 2)
@@ -761,7 +761,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
     }
 
-    /// v0.3.0 连接池优化验证：并发查询使用不同连接
+    /// 连接池优化验证：并发查询使用不同连接
     ///
     /// 验证连接池模式下多任务可以真正并行（而非串行等待单 Mutex）
     #[tokio::test]

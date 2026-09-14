@@ -180,7 +180,7 @@ impl Default for SqlParser {
 
 const DEFAULT_CACHE_SIZE: usize = 1000;
 
-/// 全局共享 SqlParser 单例（v0.3.0 性能优化）
+/// 全局共享 SqlParser 单例
 ///
 /// 避免每次 SQL 执行都创建新 parser + 新缓存。首次调用时初始化，
 /// 后续调用直接返回 Arc 引用，缓存跨所有 Session/Pool 共享。

@@ -20,7 +20,7 @@ fn get_database_url() -> Option<String> {
     None
 }
 
-/// TEST-SHARD-007: 分片路由基础测试
+/// 分片路由基础测试
 #[test]
 fn test_shard_router_basic() {
     let mut router = ShardRouter::with_strategy("yearly", 12);
@@ -38,7 +38,7 @@ fn test_shard_router_basic() {
     assert!(router.total_shards() > 0, "Should have registered shards");
 }
 
-/// TEST-SHARD-008: 带关键字路由功能测试
+/// 带关键字路由功能测试
 #[test]
 fn test_router_route_with_key() {
     let mut router = ShardRouter::with_strategy("monthly", 6);
@@ -65,7 +65,7 @@ fn test_router_route_with_key() {
     println!("Unique shards seen with key routing: {:?}", shards_seen);
 }
 
-/// TEST-SHARD-009: 计算分片一致性验证测试
+/// 计算分片一致性验证测试
 #[test]
 fn test_router_calculate_shard_consistency() {
     let router = ShardRouter::with_strategy("yearly", 12);
@@ -84,7 +84,7 @@ fn test_router_calculate_shard_consistency() {
     );
 }
 
-/// TEST-SHARD-013: ShardConfig 连接字符串模板测试
+/// ShardConfig 连接字符串模板测试
 #[test]
 fn test_shard_config_template_parsing() {
     let config = ShardConfig::new(
@@ -105,7 +105,7 @@ fn test_shard_config_template_parsing() {
     assert!(!shard_0.contains("{shard}"), "Template should be resolved");
 }
 
-/// TEST-SHARD-014: 路由器配置集成测试
+/// 路由器配置集成测试
 #[test]
 fn test_router_with_config_integration() {
     let config = ShardConfig::new(
@@ -129,7 +129,7 @@ fn test_router_with_config_integration() {
     println!("Total shards: {}, Strategy: {}", total, strategy);
 }
 
-/// TEST-SHARD-016: ShardRouter 异步初始化测试
+/// ShardRouter 异步初始化测试
 #[tokio::test]
 async fn test_shard_router_async_init() {
     let Some(url) = get_database_url() else {
@@ -142,7 +142,7 @@ async fn test_shard_router_async_init() {
     assert_eq!(router.strategy_name(), "yearly");
 }
 
-/// TEST-SHARD-017: ShardRouter 连接池管理测试
+/// ShardRouter 连接池管理测试
 #[tokio::test]
 async fn test_shard_router_pool_management() {
     let Some(url) = get_database_url() else {
@@ -162,7 +162,7 @@ async fn test_shard_router_pool_management() {
     }
 }
 
-/// TEST-SHARD-018: ShardRouter 同步初始化测试
+/// ShardRouter 同步初始化测试
 #[test]
 fn test_shard_router_sync_init() {
     let config = ShardConfig::new("monthly", 4, "data", "sqlite:./test_data/{shard}.db");
@@ -174,7 +174,7 @@ fn test_shard_router_sync_init() {
     assert_eq!(router.all_shards().len(), 4);
 }
 
-/// TEST-SHARD-019: ShardRouter 动态注册连接池测试
+/// ShardRouter 动态注册连接池测试
 #[tokio::test]
 async fn test_shard_router_dynamic_pool_registration() {
     let config = ShardConfig::new("yearly", 2, "dynamic", "sqlite:./test_dynamic_{shard}.db");
@@ -203,7 +203,7 @@ async fn test_shard_router_dynamic_pool_registration() {
     assert!(result.is_err());
 }
 
-/// TEST-SHARD-020: ShardRouter 克隆测试
+/// ShardRouter 克隆测试
 #[tokio::test]
 async fn test_shard_router_clone() {
     let Some(url) = get_database_url() else {
@@ -222,7 +222,7 @@ async fn test_shard_router_clone() {
     assert_eq!(router_clone.pool_count(), router.pool_count());
 }
 
-/// TEST-SHARD-INT-010: ShardRouter::default() 不除零 panic（回归测试）
+/// ShardRouter::default() 不除零 panic（回归测试）
 ///
 /// 原实现 default total_shards=0，shard_id_for_key 的 `% total_shards` 除零 panic。
 /// 修复后 default 应为 1（单一分片），shard_id_for_key 应防御 total_shards==0。
@@ -237,7 +237,7 @@ fn test_router_default_no_divide_by_zero() {
     );
 }
 
-/// TEST-SHARD-INT-011: shard_id_for_key 对不同 key 返回有效分片
+/// shard_id_for_key 对不同 key 返回有效分片
 #[test]
 fn test_shard_id_for_key_within_range() {
     let router = ShardRouter::with_strategy("hash", 8);

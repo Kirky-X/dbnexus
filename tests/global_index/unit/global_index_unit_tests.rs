@@ -12,7 +12,7 @@ use dbnexus::{
 // IndexEntry 测试
 // ============================================================================
 
-/// TEST-GIDX-001: IndexEntry 创建测试
+/// IndexEntry 创建测试
 #[test]
 fn test_index_entry_creation() {
     let entry = IndexEntry {
@@ -30,7 +30,7 @@ fn test_index_entry_creation() {
     assert_eq!(entry.index_value, "user_456");
 }
 
-/// TEST-GIDX-002: IndexEntry 克隆测试
+/// IndexEntry 克隆测试
 #[test]
 fn test_index_entry_clone() {
     let entry = IndexEntry {
@@ -50,7 +50,7 @@ fn test_index_entry_clone() {
     assert_eq!(entry.index_value, cloned.index_value);
 }
 
-/// TEST-GIDX-003: IndexEntry Debug 格式化测试
+/// IndexEntry Debug 格式化测试
 #[test]
 fn test_index_entry_debug() {
     let entry = IndexEntry {
@@ -70,7 +70,7 @@ fn test_index_entry_debug() {
     assert!(debug_str.contains("test@example.com"));
 }
 
-/// TEST-GIDX-004: IndexEntry 边界值测试 - 空字符串
+/// IndexEntry 边界值测试 - 空字符串
 #[test]
 fn test_index_entry_empty_strings() {
     let entry = IndexEntry {
@@ -87,7 +87,7 @@ fn test_index_entry_empty_strings() {
     assert_eq!(entry.index_value, "");
 }
 
-/// TEST-GIDX-005: IndexEntry 边界值测试 - 最大 shard_id
+/// IndexEntry 边界值测试 - 最大 shard_id
 #[test]
 fn test_index_entry_max_shard_id() {
     let entry = IndexEntry {
@@ -101,7 +101,7 @@ fn test_index_entry_max_shard_id() {
     assert_eq!(entry.shard_id, u32::MAX);
 }
 
-/// TEST-GIDX-006: IndexEntry 特殊字符测试
+/// IndexEntry 特殊字符测试
 #[test]
 fn test_index_entry_special_characters() {
     let entry = IndexEntry {
@@ -123,7 +123,7 @@ fn test_index_entry_special_characters() {
 // SyncEvent 测试
 // ============================================================================
 
-/// TEST-GIDX-007: SyncEvent Insert 变体测试
+/// SyncEvent Insert 变体测试
 #[test]
 fn test_sync_event_insert() {
     let entry = IndexEntry {
@@ -144,7 +144,7 @@ fn test_sync_event_insert() {
     }
 }
 
-/// TEST-GIDX-008: SyncEvent Update 变体测试
+/// SyncEvent Update 变体测试
 #[test]
 fn test_sync_event_update() {
     let entry = IndexEntry {
@@ -165,7 +165,7 @@ fn test_sync_event_update() {
     }
 }
 
-/// TEST-GIDX-009: SyncEvent Delete 变体测试
+/// SyncEvent Delete 变体测试
 #[test]
 fn test_sync_event_delete() {
     let entry = IndexEntry {
@@ -185,7 +185,7 @@ fn test_sync_event_delete() {
     }
 }
 
-/// TEST-GIDX-010: SyncEvent Debug 格式化测试
+/// SyncEvent Debug 格式化测试
 #[test]
 fn test_sync_event_debug() {
     let entry = IndexEntry {
@@ -209,7 +209,7 @@ fn test_sync_event_debug() {
     assert!(delete_debug.contains("Delete"));
 }
 
-/// TEST-GIDX-011: SyncEvent Clone 测试
+/// SyncEvent Clone 测试
 #[test]
 fn test_sync_event_clone() {
     let entry = IndexEntry {
@@ -235,7 +235,7 @@ fn test_sync_event_clone() {
 // SyncResult 测试
 // ============================================================================
 
-/// TEST-GIDX-012: SyncResult 成功状态测试
+/// SyncResult 成功状态测试
 #[test]
 fn test_sync_result_success() {
     let result = SyncResult {
@@ -251,7 +251,7 @@ fn test_sync_result_success() {
     assert!(result.errors.is_empty());
 }
 
-/// TEST-GIDX-013: SyncResult 部分失败状态测试
+/// SyncResult 部分失败状态测试
 #[test]
 fn test_sync_result_partial_failure() {
     let result = SyncResult {
@@ -270,7 +270,7 @@ fn test_sync_result_partial_failure() {
     assert_eq!(result.errors.len(), 2);
 }
 
-/// TEST-GIDX-014: SyncResult Debug 格式化测试
+/// SyncResult Debug 格式化测试
 #[test]
 fn test_sync_result_debug() {
     let result = SyncResult {
@@ -287,7 +287,7 @@ fn test_sync_result_debug() {
     assert!(debug_str.contains("synced_count"));
 }
 
-/// TEST-GIDX-015: SyncResult 完全失败状态测试
+/// SyncResult 完全失败状态测试
 #[test]
 fn test_sync_result_complete_failure() {
     let result = SyncResult {
@@ -313,7 +313,7 @@ fn test_sync_result_complete_failure() {
 // 同步状态常量测试
 // ============================================================================
 
-/// TEST-GIDX-016: 同步状态常量值测试
+/// 同步状态常量值测试
 #[test]
 fn test_sync_status_constants() {
     assert_eq!(SYNC_STATUS_PENDING, "pending");
@@ -321,7 +321,7 @@ fn test_sync_status_constants() {
     assert_eq!(SYNC_STATUS_FAILED, "failed");
 }
 
-/// TEST-GIDX-017: 同步状态常量唯一性测试
+/// 同步状态常量唯一性测试
 #[test]
 fn test_sync_status_constants_uniqueness() {
     let statuses = [SYNC_STATUS_PENDING, SYNC_STATUS_SYNCED, SYNC_STATUS_FAILED];
@@ -340,7 +340,7 @@ fn test_sync_status_constants_uniqueness() {
 // IndexEntry 集合操作测试
 // ============================================================================
 
-/// TEST-GIDX-018: IndexEntry 向量操作测试
+/// IndexEntry 向量操作测试
 #[test]
 fn test_index_entry_vector_operations() {
     let entries = [
@@ -384,7 +384,7 @@ fn test_index_entry_vector_operations() {
     assert_eq!(grouped.get("user_456").unwrap().len(), 1);
 }
 
-/// TEST-GIDX-019: IndexEntry 过滤测试
+/// IndexEntry 过滤测试
 #[test]
 fn test_index_entry_filtering() {
     let entries = [
@@ -423,7 +423,7 @@ fn test_index_entry_filtering() {
     assert_eq!(shard_0.len(), 2);
 }
 
-/// TEST-GIDX-020: IndexEntry 排序测试
+/// IndexEntry 排序测试
 #[test]
 fn test_index_entry_sorting() {
     let mut entries = [
@@ -462,7 +462,7 @@ fn test_index_entry_sorting() {
 // SyncEvent 向量操作测试
 // ============================================================================
 
-/// TEST-GIDX-021: SyncEvent 向量操作测试
+/// SyncEvent 向量操作测试
 #[test]
 fn test_sync_event_vector_operations() {
     let events = [
@@ -514,7 +514,7 @@ fn test_sync_event_vector_operations() {
 // 边界条件测试
 // ============================================================================
 
-/// TEST-GIDX-022: IndexEntry 长字符串测试
+/// IndexEntry 长字符串测试
 #[test]
 fn test_index_entry_long_strings() {
     let long_string = "a".repeat(10000);
@@ -533,7 +533,7 @@ fn test_index_entry_long_strings() {
     assert_eq!(entry.index_value.len(), 10000);
 }
 
-/// TEST-GIDX-023: IndexEntry Unicode 字符测试
+/// IndexEntry Unicode 字符测试
 #[test]
 fn test_index_entry_unicode_characters() {
     let entry = IndexEntry {
@@ -550,7 +550,7 @@ fn test_index_entry_unicode_characters() {
     assert_eq!(entry.index_value, "用户@例子.测试");
 }
 
-/// TEST-GIDX-024: IndexEntry JSON 字符串测试
+/// IndexEntry JSON 字符串测试
 #[test]
 fn test_index_entry_json_value() {
     let json_value = r#"{"name":"test","value":123,"nested":{"key":"value"}}"#;
@@ -568,7 +568,7 @@ fn test_index_entry_json_value() {
     assert!(entry.index_value.contains("nested"));
 }
 
-/// TEST-GIDX-025: SyncResult 大量错误测试
+/// SyncResult 大量错误测试
 #[test]
 fn test_sync_result_many_errors() {
     let errors: Vec<String> = (0..1000).map(|i| format!("Error {}", i)).collect();

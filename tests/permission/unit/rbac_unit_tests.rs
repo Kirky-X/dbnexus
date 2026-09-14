@@ -17,7 +17,7 @@ use dbnexus::access::{
 // RbacProvider CRUD 测试
 // ============================================================================
 
-/// TEST-RBAC-U-001: 创建空的 RBAC 提供者
+/// 创建空的 RBAC 提供者
 #[test]
 fn test_rbac_provider_new_empty() {
     let provider = RbacProvider::new();
@@ -27,7 +27,7 @@ fn test_rbac_provider_new_empty() {
     assert!(roles.is_empty(), "New provider should have no roles");
 }
 
-/// TEST-RBAC-U-002: 添加角色策略
+/// 添加角色策略
 #[test]
 fn test_rbac_provider_add_role() {
     let provider = RbacProvider::new();
@@ -56,7 +56,7 @@ fn test_rbac_provider_add_role() {
     assert!(policy.is_some());
 }
 
-/// TEST-RBAC-U-003: 添加多个角色
+/// 添加多个角色
 #[test]
 fn test_rbac_provider_add_multiple_roles() {
     let provider = RbacProvider::new();
@@ -107,7 +107,7 @@ fn test_rbac_provider_add_multiple_roles() {
     assert!(roles.contains(&"user".to_string()));
 }
 
-/// TEST-RBAC-U-004: 覆盖已存在的角色
+/// 覆盖已存在的角色
 #[test]
 fn test_rbac_provider_override_role() {
     let provider = RbacProvider::new();
@@ -141,7 +141,7 @@ fn test_rbac_provider_override_role() {
     assert_eq!(policy.tables[0].operations, vec![PermissionAction::Insert]);
 }
 
-/// TEST-RBAC-U-005: 获取不存在的角色策略
+/// 获取不存在的角色策略
 #[test]
 fn test_rbac_provider_get_nonexistent_role() {
     let provider = RbacProvider::new();
@@ -151,7 +151,7 @@ fn test_rbac_provider_get_nonexistent_role() {
     assert!(policy.is_none());
 }
 
-/// TEST-RBAC-U-006: 使用默认管理员创建提供者
+/// 使用默认管理员创建提供者
 #[test]
 fn test_rbac_provider_with_default_admin() {
     let provider = RbacProvider::with_default_admin();
@@ -172,7 +172,7 @@ fn test_rbac_provider_with_default_admin() {
 // 权限检查测试
 // ============================================================================
 
-/// TEST-RBAC-U-007: 基本权限检查 - 允许
+/// 基本权限检查 - 允许
 #[test]
 fn test_rbac_check_access_allowed() {
     let provider = RbacProvider::new();
@@ -203,7 +203,7 @@ fn test_rbac_check_access_allowed() {
     assert!(result.unwrap(), "user INSERT users should be allowed");
 }
 
-/// TEST-RBAC-U-008: 基本权限检查 - 拒绝
+/// 基本权限检查 - 拒绝
 #[test]
 fn test_rbac_check_access_denied() {
     let provider = RbacProvider::new();
@@ -234,7 +234,7 @@ fn test_rbac_check_access_denied() {
     assert!(!result.unwrap(), "user UPDATE users should be denied");
 }
 
-/// TEST-RBAC-U-009: 不存在的角色权限检查
+/// 不存在的角色权限检查
 #[test]
 fn test_rbac_check_access_nonexistent_role() {
     let provider = RbacProvider::new();
@@ -249,7 +249,7 @@ fn test_rbac_check_access_nonexistent_role() {
     }
 }
 
-/// TEST-RBAC-U-010: 不存在的表权限检查
+/// 不存在的表权限检查
 #[test]
 fn test_rbac_check_access_nonexistent_table() {
     let provider = RbacProvider::new();
@@ -274,7 +274,7 @@ fn test_rbac_check_access_nonexistent_table() {
 // 通配符匹配测试
 // ============================================================================
 
-/// TEST-RBAC-U-011: 通配符表名匹配
+/// 通配符表名匹配
 #[test]
 fn test_rbac_wildcard_table_matching() {
     let provider = RbacProvider::new();
@@ -322,7 +322,7 @@ fn test_rbac_wildcard_table_matching() {
     );
 }
 
-/// TEST-RBAC-U-012: 混合通配符和精确表名
+/// 混合通配符和精确表名
 #[test]
 fn test_rbac_mixed_wildcard_and_exact() {
     let provider = RbacProvider::new();
@@ -372,7 +372,7 @@ fn test_rbac_mixed_wildcard_and_exact() {
 // 边界条件和错误处理测试
 // ============================================================================
 
-/// TEST-RBAC-U-013: 空操作列表
+/// 空操作列表
 #[test]
 fn test_rbac_empty_operations() {
     let provider = RbacProvider::new();
@@ -400,7 +400,7 @@ fn test_rbac_empty_operations() {
     );
 }
 
-/// TEST-RBAC-U-014: 空表权限列表
+/// 空表权限列表
 #[test]
 fn test_rbac_empty_tables() {
     let provider = RbacProvider::new();
@@ -415,7 +415,7 @@ fn test_rbac_empty_tables() {
     );
 }
 
-/// TEST-RBAC-U-015: 多表权限检查
+/// 多表权限检查
 #[test]
 fn test_rbac_multiple_table_permissions() {
     let provider = RbacProvider::new();
@@ -486,7 +486,7 @@ fn test_rbac_multiple_table_permissions() {
     );
 }
 
-/// TEST-RBAC-U-016: 角色名称大小写敏感
+/// 角色名称大小写敏感
 #[test]
 fn test_rbac_role_name_case_sensitive() {
     let provider = RbacProvider::new();
@@ -516,7 +516,7 @@ fn test_rbac_role_name_case_sensitive() {
     );
 }
 
-/// TEST-RBAC-U-017: 表名大小写敏感
+/// 表名大小写敏感
 #[test]
 fn test_rbac_table_name_case_sensitive() {
     let provider = RbacProvider::new();
@@ -544,7 +544,7 @@ fn test_rbac_table_name_case_sensitive() {
     );
 }
 
-/// TEST-RBAC-U-018: 特殊字符表名
+/// 特殊字符表名
 #[test]
 fn test_rbac_special_character_table_names() {
     let provider = RbacProvider::new();
@@ -587,7 +587,7 @@ fn test_rbac_special_character_table_names() {
     );
 }
 
-/// TEST-RBAC-U-019: has_role 方法测试
+/// has_role 方法测试
 #[test]
 fn test_rbac_has_role() {
     let provider = RbacProvider::new();
@@ -606,7 +606,7 @@ fn test_rbac_has_role() {
     assert!(!provider.has_role("nonexistent_role"));
 }
 
-/// TEST-RBAC-U-020: 并发访问测试
+/// 并发访问测试
 #[test]
 fn test_rbac_concurrent_access() {
     use std::sync::Arc;

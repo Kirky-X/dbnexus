@@ -16,7 +16,7 @@ use std::time::Duration;
 // 审计日志轮转测试
 // ============================================================================
 
-/// TEST-U-AUDIT-001: 测试日志容量达到上限时自动轮转
+/// 测试日志容量达到上限时自动轮转
 ///
 /// 验证当存储达到容量上限时，旧日志被自动清除，新日志可以继续写入。
 #[tokio::test]
@@ -49,7 +49,7 @@ async fn test_audit_log_rotation_on_capacity() {
     );
 }
 
-/// TEST-U-AUDIT-002: 测试手动触发日志轮转
+/// 测试手动触发日志轮转
 ///
 /// 验证可以手动触发日志轮转，清理指定时间之前的日志。
 #[tokio::test]
@@ -81,7 +81,7 @@ async fn test_audit_manual_rotation() {
     assert_eq!(remaining, 5, "Should have 5 logs remaining");
 }
 
-/// TEST-U-AUDIT-003: 测试轮转策略 - 保留关键操作日志
+/// 测试轮转策略 - 保留关键操作日志
 ///
 /// 验证轮转时保留高严重级别的日志。
 #[tokio::test]
@@ -123,7 +123,7 @@ async fn test_audit_rotation_retain_high_severity() {
 // 敏感数据脱敏测试
 // ============================================================================
 
-/// TEST-U-AUDIT-004: 测试 JSON 格式敏感字段脱敏
+/// 测试 JSON 格式敏感字段脱敏
 ///
 /// 验证 JSON 中的敏感字段被正确脱敏。
 #[tokio::test]
@@ -164,7 +164,7 @@ async fn test_audit_sanitize_json_sensitive_fields() {
     );
 }
 
-/// TEST-U-AUDIT-005: 测试非 JSON 格式敏感字段脱敏
+/// 测试非 JSON 格式敏感字段脱敏
 ///
 /// 验证非 JSON 格式的敏感数据也能被正确识别和脱敏。
 #[tokio::test]
@@ -181,7 +181,7 @@ async fn test_audit_sanitize_non_json_sensitive_fields() {
     );
 }
 
-/// TEST-U-AUDIT-006: 测试 Base64 编码值脱敏
+/// 测试 Base64 编码值脱敏
 ///
 /// 验证 Base64 编码的敏感数据被正确识别和脱敏。
 #[tokio::test]
@@ -208,7 +208,7 @@ async fn test_audit_sanitize_base64_values() {
     );
 }
 
-/// TEST-U-AUDIT-007: 测试自定义敏感字段列表
+/// 测试自定义敏感字段列表
 ///
 /// 验证可以使用自定义的敏感字段列表进行脱敏。
 #[tokio::test]
@@ -232,7 +232,7 @@ async fn test_audit_sanitize_custom_fields() {
     );
 }
 
-/// TEST-U-AUDIT-008: 测试嵌套敏感字段脱敏
+/// 测试嵌套敏感字段脱敏
 ///
 /// 验证嵌套结构中的敏感字段也能被正确脱敏。
 #[tokio::test]
@@ -263,7 +263,7 @@ async fn test_audit_sanitize_nested_fields() {
 // 审计日志压缩存储测试
 // ============================================================================
 
-/// TEST-U-AUDIT-009: 测试内存存储压缩比
+/// 测试内存存储压缩比
 ///
 /// 验证存储大量日志时的内存效率。
 #[tokio::test]
@@ -291,7 +291,7 @@ async fn test_audit_storage_compression_ratio() {
     assert_eq!(results.len(), 500);
 }
 
-/// TEST-U-AUDIT-010: 测试存储清理效率
+/// 测试存储清理效率
 ///
 /// 验证大批量清理操作的效率。
 #[tokio::test]
@@ -318,7 +318,7 @@ async fn test_audit_cleanup_efficiency() {
 // 审计日志导出测试
 // ============================================================================
 
-/// TEST-U-AUDIT-011: 测试 JSON 格式导出
+/// 测试 JSON 格式导出
 ///
 /// 验证审计日志可以正确序列化为 JSON 格式。
 #[tokio::test]
@@ -346,7 +346,7 @@ async fn test_audit_export_json_format() {
     assert_eq!(parsed.entity_id, "123");
 }
 
-/// TEST-U-AUDIT-012: 测试批量导出
+/// 测试批量导出
 ///
 /// 验证可以批量导出多条审计日志。
 #[tokio::test]
@@ -380,7 +380,7 @@ async fn test_audit_batch_export() {
     }
 }
 
-/// TEST-U-AUDIT-013: 测试带脱敏的导出
+/// 测试带脱敏的导出
 ///
 /// 验证导出时敏感数据被正确脱敏。
 #[tokio::test]
@@ -408,7 +408,7 @@ async fn test_audit_export_with_sanitization() {
 // 审计日志完整性校验测试
 // ============================================================================
 
-/// TEST-U-AUDIT-014: 测试事件 ID 唯一性
+/// 测试事件 ID 唯一性
 ///
 /// 验证每个审计事件都有唯一的 ID。
 #[tokio::test]
@@ -424,7 +424,7 @@ async fn test_audit_event_id_uniqueness() {
     assert_eq!(ids.len(), 100, "All 100 IDs should be unique");
 }
 
-/// TEST-U-AUDIT-015: 测试时间戳顺序
+/// 测试时间戳顺序
 ///
 /// 验证事件时间戳是合理递增的。
 #[tokio::test]
@@ -456,7 +456,7 @@ async fn test_audit_timestamp_ordering() {
     }
 }
 
-/// TEST-U-AUDIT-016: 测试必需字段完整性
+/// 测试必需字段完整性
 ///
 /// 验证审计事件包含所有必需字段。
 #[tokio::test]
@@ -483,7 +483,7 @@ async fn test_audit_required_fields() {
     assert_eq!(event.severity, AuditSeverity::High);
 }
 
-/// TEST-U-AUDIT-017: 测试日志完整性校验 - 校验和
+/// 测试日志完整性校验 - 校验和
 ///
 /// 验证可以通过比较事件内容来校验日志完整性。
 #[tokio::test]
@@ -519,7 +519,7 @@ async fn test_audit_log_integrity_checksum() {
 // 异步审计写入测试
 // ============================================================================
 
-/// TEST-U-AUDIT-018: 测试异步并发写入
+/// 测试异步并发写入
 ///
 /// 验证多个异步任务可以并发写入审计日志。
 #[tokio::test]
@@ -549,7 +549,7 @@ async fn test_audit_async_concurrent_write() {
     assert_eq!(count, 50, "All 50 concurrent events should be logged");
 }
 
-/// TEST-U-AUDIT-019: 测试异步写入错误处理
+/// 测试异步写入错误处理
 ///
 /// 验证异步写入出错时能够正确处理。
 #[tokio::test]
@@ -571,7 +571,7 @@ async fn test_audit_async_write_error_handling() {
     assert_eq!(count, 0, "No events should be logged when disabled");
 }
 
-/// TEST-U-AUDIT-020: 测试异步写入顺序保证
+/// 测试异步写入顺序保证
 ///
 /// 验证异步写入保持事件的时间顺序。
 #[tokio::test]
@@ -610,7 +610,7 @@ async fn test_audit_async_write_ordering() {
     assert_eq!(results.len(), 20, "All 20 events should be logged");
 }
 
-/// TEST-U-AUDIT-021: 测试大量异步写入性能
+/// 测试大量异步写入性能
 ///
 /// 验证大量异步写入时的性能表现。
 #[tokio::test]
@@ -641,7 +641,7 @@ async fn test_audit_high_throughput_writes() {
     );
 }
 
-/// TEST-U-AUDIT-022: 测试审计事件构建器
+/// 测试审计事件构建器
 ///
 /// 验证使用构建器创建完整的审计事件。
 #[tokio::test]
@@ -674,7 +674,7 @@ async fn test_audit_event_builder() {
     assert!(event.extra.is_some());
 }
 
-/// TEST-U-AUDIT-023: 测试追踪上下文
+/// 测试追踪上下文
 ///
 /// 验证审计事件可以包含分布式追踪上下文。
 #[tokio::test]
@@ -688,7 +688,7 @@ async fn test_audit_trace_context() {
     assert_eq!(trace.span_id, "span-456");
 }
 
-/// TEST-U-AUDIT-024: 测试审计上下文
+/// 测试审计上下文
 ///
 /// 验证审计上下文的创建和使用。
 #[tokio::test]
@@ -704,7 +704,7 @@ async fn test_audit_context() {
     assert_eq!(ctx.session_id, "sess-001");
 }
 
-/// TEST-U-AUDIT-025: 测试审计配置默认值
+/// 测试审计配置默认值
 ///
 /// 验证审计配置的默认值设置正确。
 #[test]
@@ -726,7 +726,7 @@ fn test_audit_config_defaults() {
     assert!(config.alert_operations.contains(&AuditOperation::Delete));
 }
 
-/// TEST-U-AUDIT-026: 测试敏感数据脱敏 - 数组格式
+/// 测试敏感数据脱敏 - 数组格式
 ///
 /// 验证 JSON 数组中的敏感字段也被正确脱敏。
 #[tokio::test]
@@ -758,7 +758,7 @@ async fn test_audit_sanitize_json_array() {
     );
 }
 
-/// TEST-U-AUDIT-027: 测试 admin bypass 审计环观测 API 的公开可达性
+/// 测试 admin bypass 审计环观测 API 的公开可达性
 ///
 /// 通过完整公开路径 `dbnexus::database::pool::audit::...` 从外部（集成测试
 /// 即外部 crate 视角）调用观测接口，证明 `mod audit` 已公开可达：

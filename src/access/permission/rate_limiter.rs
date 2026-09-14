@@ -412,7 +412,7 @@ mod tests {
     #[cfg(feature = "permission-engine")]
     use futures;
 
-    /// TEST-U-019: 速率限制器测试 - 基本功能
+    /// 速率限制器测试 - 基本功能
     #[tokio::test]
     async fn test_rate_limiter_basic() {
         let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000, 3);
@@ -426,7 +426,7 @@ mod tests {
         assert!(!limiter.check("user1").await);
     }
 
-    /// TEST-U-020: 速率限制器测试 - 不同键独立计数
+    /// 速率限制器测试 - 不同键独立计数
     #[tokio::test]
     async fn test_rate_limiter_different_keys() {
         let limiter = RateLimiter::new(2, std::time::Duration::from_secs(60), 10000, 2);
@@ -440,7 +440,7 @@ mod tests {
         assert!(!limiter.check("user2").await);
     }
 
-    /// TEST-U-021: 速率限制器测试 - 重置功能
+    /// 速率限制器测试 - 重置功能
     #[tokio::test]
     async fn test_rate_limiter_reset() {
         let limiter = RateLimiter::new(1, std::time::Duration::from_secs(60), 10000, 1);
@@ -453,7 +453,7 @@ mod tests {
         assert!(limiter.check("user1").await);
     }
 
-    /// TEST-U-022: 速率限制器测试 - 剩余请求计数
+    /// 速率限制器测试 - 剩余请求计数
     #[tokio::test]
     async fn test_rate_limiter_remaining() {
         let limiter = RateLimiter::new(3, std::time::Duration::from_secs(60), 10000, 3);
@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(limiter.remaining("user1"), 0);
     }
 
-    /// TEST-U-031: 令牌桶令牌填充测试
+    /// 令牌桶令牌填充测试
     ///
     /// 验证令牌桶在时间流逝后正确填充令牌。
     #[tokio::test]
@@ -498,7 +498,7 @@ mod tests {
         assert!(limiter.remaining("user1") > 0);
     }
 
-    /// TEST-U-032: 令牌桶突发流量测试
+    /// 令牌桶突发流量测试
     ///
     /// 验证令牌桶能够处理突发流量（桶满时可以一次性使用所有令牌）。
     #[tokio::test]
@@ -519,7 +519,7 @@ mod tests {
         assert_eq!(limiter.remaining("user1"), 0);
     }
 
-    /// TEST-U-033: 令牌桶并发安全测试
+    /// 令牌桶并发安全测试
     ///
     /// 验证令牌桶在高并发场景下的正确性。
     #[tokio::test]
@@ -561,7 +561,7 @@ mod tests {
         }
     }
 
-    /// TEST-U-034: 令牌桶单键高并发竞争测试
+    /// 令牌桶单键高并发竞争测试
     ///
     /// 验证单个键在高并发竞争下的正确性。
     #[tokio::test]
@@ -608,7 +608,7 @@ mod tests {
         assert_eq!(limiter.remaining("shared_user"), 0);
     }
 
-    /// TEST-U-035: 令牌桶 cleanup 方法测试
+    /// 令牌桶 cleanup 方法测试
     ///
     /// 验证 cleanup 方法能正确清理长时间未使用的条目。
     #[tokio::test]
@@ -636,7 +636,7 @@ mod tests {
         assert_eq!(limiter.remaining("user1"), 9);
     }
 
-    /// TEST-U-036: 令牌桶 O(1) 复杂度验证
+    /// 令牌桶 O(1) 复杂度验证
     ///
     /// 验证令牌桶操作的时间复杂度为 O(1)。
     #[tokio::test]
@@ -667,7 +667,7 @@ mod tests {
         );
     }
 
-    /// TEST-U-037: 令牌桶精确限流测试
+    /// 令牌桶精确限流测试
     ///
     /// 验证令牌桶精确限制请求数量。
     #[tokio::test]
@@ -693,7 +693,7 @@ mod tests {
         assert_eq!(limiter.remaining("user1"), 0);
     }
 
-    /// TEST-U-038: 令牌桶重置后状态测试
+    /// 令牌桶重置后状态测试
     ///
     /// 验证重置后令牌桶恢复到初始状态。
     #[tokio::test]
@@ -714,7 +714,7 @@ mod tests {
         assert!(limiter.check("user1").await);
     }
 
-    /// TEST-U-039: 令牌桶高并发压力测试（50+ 并发任务）
+    /// 令牌桶高并发压力测试（50+ 并发任务）
     ///
     /// 验证令牌桶在 50+ 并发任务同时调用 check 时的正确性和稳定性。
     /// 测试无 panic、无数据竞争、令牌计数准确。
@@ -765,7 +765,7 @@ mod tests {
         assert_eq!(results.len(), 60);
     }
 
-    /// TEST-U-040: TokenBucket fetch_sub 精度损失测试
+    /// TokenBucket fetch_sub 精度损失测试
     ///
     /// 验证 fetch_sub 返回值判断逻辑正确处理令牌耗尽情况。
     /// 当 tokens 从 1 变为 0 时，fetch_sub 返回 1，应该允许请求。
@@ -797,7 +797,7 @@ mod tests {
         assert_eq!(limiter.remaining("precision_user"), 0);
     }
 
-    /// TEST-U-041: TokenBucket 边界值精度测试
+    /// TokenBucket 边界值精度测试
     ///
     /// 验证在令牌数接近边界值时的精确行为。
     #[tokio::test]

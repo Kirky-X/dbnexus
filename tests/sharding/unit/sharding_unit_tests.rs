@@ -12,7 +12,7 @@ use dbnexus::{ShardConfig, ShardRouter, ShardingStrategy, create_strategy};
 // 哈希分片算法测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-001: 哈希分片策略基础计算测试
+/// 哈希分片策略基础计算测试
 #[test]
 fn test_hash_strategy_basic_calculation() {
     let strategy = create_strategy("hash");
@@ -25,7 +25,7 @@ fn test_hash_strategy_basic_calculation() {
     assert_eq!(strategy.name(), "hash");
 }
 
-/// TEST-SHARD-UNIT-002: 哈希分片策略相同输入产生相同结果测试
+/// 哈希分片策略相同输入产生相同结果测试
 #[test]
 fn test_hash_strategy_consistency() {
     let strategy = create_strategy("hash");
@@ -38,7 +38,7 @@ fn test_hash_strategy_consistency() {
     assert_eq!(shard1, shard2, "Same timestamp should produce same shard");
 }
 
-/// TEST-SHARD-UNIT-003: 哈希分片策略不同时间戳产生不同分布测试
+/// 哈希分片策略不同时间戳产生不同分布测试
 #[test]
 fn test_hash_strategy_different_timestamps() {
     let strategy = create_strategy("hash");
@@ -60,7 +60,7 @@ fn test_hash_strategy_different_timestamps() {
     );
 }
 
-/// TEST-SHARD-UNIT-004: 哈希分片策略边界值测试 - 单分片
+/// 哈希分片策略边界值测试 - 单分片
 #[test]
 fn test_hash_strategy_single_shard() {
     let strategy = create_strategy("hash");
@@ -71,7 +71,7 @@ fn test_hash_strategy_single_shard() {
     assert_eq!(shard_id, 0, "Single shard should always return 0");
 }
 
-/// TEST-SHARD-UNIT-005: 哈希分片策略边界值测试 - 大分片数
+/// 哈希分片策略边界值测试 - 大分片数
 #[test]
 fn test_hash_strategy_large_shard_count() {
     let strategy = create_strategy("hash");
@@ -87,7 +87,7 @@ fn test_hash_strategy_large_shard_count() {
     }
 }
 
-/// TEST-SHARD-UNIT-006: 哈希分片策略 is_valid_shard_id 测试
+/// 哈希分片策略 is_valid_shard_id 测试
 #[test]
 fn test_hash_strategy_valid_shard_id() {
     let strategy = create_strategy("hash");
@@ -103,7 +103,7 @@ fn test_hash_strategy_valid_shard_id() {
 // 范围分片算法测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-007: 年分片策略基础计算测试
+/// 年分片策略基础计算测试
 #[test]
 fn test_yearly_strategy_basic_calculation() {
     let strategy = create_strategy("yearly");
@@ -115,7 +115,7 @@ fn test_yearly_strategy_basic_calculation() {
     assert_eq!(strategy.name(), "yearly");
 }
 
-/// TEST-SHARD-UNIT-008: 年分片策略多年份测试
+/// 年分片策略多年份测试
 #[test]
 fn test_yearly_strategy_multiple_years() {
     let strategy = create_strategy("yearly");
@@ -135,7 +135,7 @@ fn test_yearly_strategy_multiple_years() {
     }
 }
 
-/// TEST-SHARD-UNIT-009: 月分片策略基础计算测试
+/// 月分片策略基础计算测试
 #[test]
 fn test_monthly_strategy_basic_calculation() {
     let strategy = create_strategy("monthly");
@@ -148,7 +148,7 @@ fn test_monthly_strategy_basic_calculation() {
     assert_eq!(strategy.name(), "monthly");
 }
 
-/// TEST-SHARD-UNIT-010: 月分片策略跨年测试
+/// 月分片策略跨年测试
 #[test]
 fn test_monthly_strategy_cross_year() {
     let strategy = create_strategy("monthly");
@@ -168,7 +168,7 @@ fn test_monthly_strategy_cross_year() {
     assert_eq!(shard_jan_2025, (2025 * 12 + 1) % total_shards);
 }
 
-/// TEST-SHARD-UNIT-011: 日分片策略基础计算测试
+/// 日分片策略基础计算测试
 #[test]
 fn test_daily_strategy_basic_calculation() {
     let strategy = create_strategy("daily");
@@ -181,7 +181,7 @@ fn test_daily_strategy_basic_calculation() {
     assert_eq!(strategy.name(), "daily");
 }
 
-/// TEST-SHARD-UNIT-012: 日分片策略连续日期测试
+/// 日分片策略连续日期测试
 #[test]
 fn test_daily_strategy_consecutive_days() {
     let strategy = create_strategy("daily");
@@ -205,7 +205,7 @@ fn test_daily_strategy_consecutive_days() {
 // 分片策略配置测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-013: ShardConfig 默认配置测试
+/// ShardConfig 默认配置测试
 #[test]
 fn test_shard_config_default() {
     let config = ShardConfig::default();
@@ -216,7 +216,7 @@ fn test_shard_config_default() {
     assert_eq!(config.connection_template, "sqlite:./data/{shard}.db");
 }
 
-/// TEST-SHARD-UNIT-014: ShardConfig 自定义配置测试
+/// ShardConfig 自定义配置测试
 #[test]
 fn test_shard_config_custom() {
     let config = ShardConfig::new("hash", 8, "order", "postgresql://localhost/{shard}");
@@ -227,7 +227,7 @@ fn test_shard_config_custom() {
     assert_eq!(config.connection_template, "postgresql://localhost/{shard}");
 }
 
-/// TEST-SHARD-UNIT-015: ShardConfig 连接字符串生成测试
+/// ShardConfig 连接字符串生成测试
 #[test]
 fn test_shard_config_connection_string_generation() {
     let config = ShardConfig::new("monthly", 12, "orders", "postgresql://localhost/{shard}");
@@ -253,7 +253,7 @@ fn test_shard_config_connection_string_generation() {
     );
 }
 
-/// TEST-SHARD-UNIT-016: ShardConfig 生成所有连接字符串测试
+/// ShardConfig 生成所有连接字符串测试
 #[test]
 fn test_shard_config_generate_all_connections() {
     let config = ShardConfig::new("daily", 4, "logs", "sqlite:./data/{shard}.db");
@@ -266,7 +266,7 @@ fn test_shard_config_generate_all_connections() {
     }
 }
 
-/// TEST-SHARD-UNIT-017: ShardConfig 连接模板替换测试
+/// ShardConfig 连接模板替换测试
 #[test]
 fn test_shard_config_template_replacement() {
     let config = ShardConfig::new("hash", 6, "data", "postgresql://{prefix}/{id}_{shard}");
@@ -284,7 +284,7 @@ fn test_shard_config_template_replacement() {
 // 分片策略工厂测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-018: 策略工厂别名测试
+/// 策略工厂别名测试
 #[test]
 fn test_strategy_factory_aliases() {
     let test_time = Utc::now();
@@ -308,7 +308,7 @@ fn test_strategy_factory_aliases() {
     assert_eq!(daily.calculate(test_time, 30), day.calculate(test_time, 30));
 }
 
-/// TEST-SHARD-UNIT-019: 策略工厂大小写不敏感测试
+/// 策略工厂大小写不敏感测试
 #[test]
 fn test_strategy_factory_case_insensitive() {
     let test_time = Utc::now();
@@ -320,7 +320,7 @@ fn test_strategy_factory_case_insensitive() {
     }
 }
 
-/// TEST-SHARD-UNIT-020: 策略工厂无效名称回退测试
+/// 策略工厂无效名称回退测试
 #[test]
 fn test_strategy_factory_invalid_fallback() {
     let test_time = Utc::now();
@@ -339,7 +339,7 @@ fn test_strategy_factory_invalid_fallback() {
 // ShardRouter 基础功能测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-021: ShardRouter 创建测试
+/// ShardRouter 创建测试
 #[test]
 fn test_shard_router_creation() {
     let router = ShardRouter::with_strategy("hash", 8);
@@ -348,7 +348,7 @@ fn test_shard_router_creation() {
     assert_eq!(router.strategy_name(), "hash");
 }
 
-/// TEST-SHARD-UNIT-022: ShardRouter 分片注册测试
+/// ShardRouter 分片注册测试
 #[test]
 fn test_shard_router_registration() {
     let mut router = ShardRouter::with_strategy("yearly", 12);
@@ -370,7 +370,7 @@ fn test_shard_router_registration() {
     assert!(shard_ids.contains(&11));
 }
 
-/// TEST-SHARD-UNIT-023: ShardRouter 路由功能测试
+/// ShardRouter 路由功能测试
 #[test]
 fn test_shard_router_route() {
     let mut router = ShardRouter::with_strategy("yearly", 12);
@@ -389,7 +389,7 @@ fn test_shard_router_route() {
     assert_eq!(shard.unwrap().shard_id, 8);
 }
 
-/// TEST-SHARD-UNIT-024: ShardRouter 计算分片 ID 测试
+/// ShardRouter 计算分片 ID 测试
 #[test]
 fn test_shard_router_calculate_shard() {
     let router = ShardRouter::with_strategy("monthly", 6);
@@ -401,7 +401,7 @@ fn test_shard_router_calculate_shard() {
     assert_eq!(shard_id, 3);
 }
 
-/// TEST-SHARD-UNIT-025: ShardRouter 带关键字路由测试
+/// ShardRouter 带关键字路由测试
 #[test]
 fn test_shard_router_route_with_key() {
     let mut router = ShardRouter::with_strategy("hash", 6);
@@ -418,7 +418,7 @@ fn test_shard_router_route_with_key() {
     assert!(shard.unwrap().shard_id < 6);
 }
 
-/// TEST-SHARD-UNIT-026: ShardRouter 关键字路由一致性测试
+/// ShardRouter 关键字路由一致性测试
 ///
 /// 验证三个确定性/统计属性：
 /// 1. 相同 key + 相同时间戳 → 相同 shard（确定性）
@@ -466,7 +466,7 @@ fn test_shard_router_key_consistency() {
     );
 }
 
-/// TEST-SHARD-UNIT-027: ShardRouter 空关键字测试
+/// ShardRouter 空关键字测试
 #[test]
 fn test_shard_router_empty_key() {
     let router = ShardRouter::with_strategy("monthly", 8);
@@ -485,7 +485,7 @@ fn test_shard_router_empty_key() {
 // 分片重平衡测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-028: ShardRouter 分片数扩展测试
+/// ShardRouter 分片数扩展测试
 #[test]
 fn test_shard_rebalance_expansion() {
     // 原始路由器：4个分片
@@ -503,7 +503,7 @@ fn test_shard_rebalance_expansion() {
     assert!(shard_large < 8);
 }
 
-/// TEST-SHARD-UNIT-029: ShardRouter 分片数缩减测试
+/// ShardRouter 分片数缩减测试
 #[test]
 fn test_shard_rebalance_contraction() {
     let router_8 = ShardRouter::with_strategy("hash", 8);
@@ -521,7 +521,7 @@ fn test_shard_rebalance_contraction() {
     assert!(shard_2 < 2);
 }
 
-/// TEST-SHARD-UNIT-030: 分片迁移影响范围测试
+/// 分片迁移影响范围测试
 #[test]
 fn test_shard_migration_impact() {
     let keys: Vec<String> = (0..1000).map(|i| format!("key_{}", i)).collect();
@@ -554,7 +554,7 @@ fn test_shard_migration_impact() {
 // 分片热点检测测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-031: 分片访问分布检测测试
+/// 分片访问分布检测测试
 #[test]
 fn test_shard_hotspot_detection_distribution() {
     let mut router = ShardRouter::with_strategy("hash", 10);
@@ -596,7 +596,7 @@ fn test_shard_hotspot_detection_distribution() {
     assert_eq!(total_access, 10000);
 }
 
-/// TEST-SHARD-UNIT-032: 时间序列热点检测测试
+/// 时间序列热点检测测试
 #[test]
 fn test_shard_temporal_hotspot() {
     // 按年月分片时，某些时间点的数据量会特别大（如年末、月末）
@@ -623,7 +623,7 @@ fn test_shard_temporal_hotspot() {
     assert!(dec_count > 5000, "December should have higher access count");
 }
 
-/// TEST-SHARD-UNIT-033: 哈希分片均匀性测试
+/// 哈希分片均匀性测试
 #[test]
 fn test_hash_sharding_uniformity() {
     let _strategy = create_strategy("hash");
@@ -679,7 +679,7 @@ fn test_hash_sharding_uniformity() {
 // 分片故障转移测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-034: ShardRouter 连接池管理测试
+/// ShardRouter 连接池管理测试
 #[test]
 fn test_shard_router_pool_management() {
     let mut router = ShardRouter::with_strategy("yearly", 4);
@@ -698,7 +698,7 @@ fn test_shard_router_pool_management() {
     assert_eq!(router.pool_count(), 0);
 }
 
-/// TEST-SHARD-UNIT-035: ShardRouter 动态连接池设置测试
+/// ShardRouter 动态连接池设置测试
 #[test]
 fn test_shard_router_dynamic_pool_set() {
     let mut router = ShardRouter::with_strategy("yearly", 2);
@@ -718,7 +718,7 @@ fn test_shard_router_dynamic_pool_set() {
     assert!(removed.is_none());
 }
 
-/// TEST-SHARD-UNIT-036: ShardRouter 连接池清空测试
+/// ShardRouter 连接池清空测试
 #[test]
 fn test_shard_router_clear_pools() {
     let mut router = ShardRouter::with_strategy("hash", 3);
@@ -737,7 +737,7 @@ fn test_shard_router_clear_pools() {
     assert_eq!(router.pool_count(), 0);
 }
 
-/// TEST-SHARD-UNIT-037: 分片故障隔离测试
+/// 分片故障隔离测试
 #[test]
 fn test_shard_failure_isolation() {
     let mut router = ShardRouter::with_strategy("hash", 4);
@@ -765,7 +765,7 @@ fn test_shard_failure_isolation() {
     }
 }
 
-/// TEST-SHARD-UNIT-038: 分片故障转移路由测试
+/// 分片故障转移路由测试
 #[test]
 fn test_shard_failover_routing() {
     let router = ShardRouter::with_strategy("hash", 4);
@@ -798,7 +798,7 @@ fn test_shard_failover_routing() {
 // 跨分片查询聚合测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-039: 跨分片查询路由收集测试
+/// 跨分片查询路由收集测试
 #[test]
 fn test_cross_shard_query_routing() {
     let mut router = ShardRouter::with_strategy("monthly", 12);
@@ -823,7 +823,7 @@ fn test_cross_shard_query_routing() {
     }
 }
 
-/// TEST-SHARD-UNIT-040: 跨分片时间范围查询测试
+/// 跨分片时间范围查询测试
 #[test]
 fn test_cross_shard_time_range_query() {
     let router = ShardRouter::with_strategy("yearly", 12);
@@ -852,7 +852,7 @@ fn test_cross_shard_time_range_query() {
     assert!(!affected_shards.is_empty());
 }
 
-/// TEST-SHARD-UNIT-041: 跨分片数据聚合准备测试
+/// 跨分片数据聚合准备测试
 #[test]
 fn test_cross_shard_aggregation_preparation() {
     let router = ShardRouter::with_strategy("hash", 8);
@@ -886,7 +886,7 @@ fn test_cross_shard_aggregation_preparation() {
     }
 }
 
-/// TEST-SHARD-UNIT-042: 分片路由一致性测试
+/// 分片路由一致性测试
 #[test]
 fn test_shard_routing_consistency() {
     let router = ShardRouter::with_strategy("monthly", 6);
@@ -908,7 +908,7 @@ fn test_shard_routing_consistency() {
 // ShardRouter Clone 测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-043: ShardRouter 克隆测试
+/// ShardRouter 克隆测试
 #[test]
 fn test_shard_router_clone() {
     let mut router = ShardRouter::with_strategy("hash", 4);
@@ -923,7 +923,7 @@ fn test_shard_router_clone() {
     assert_eq!(router_clone.all_shards().len(), router.all_shards().len());
 }
 
-/// TEST-SHARD-UNIT-044: ShardRouter 克隆后独立修改测试
+/// ShardRouter 克隆后独立修改测试
 #[test]
 fn test_shard_router_clone_independence() {
     let router = ShardRouter::with_strategy("yearly", 2);
@@ -951,7 +951,7 @@ fn test_shard_router_clone_independence() {
 // 策略 trait 方法测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-045: ShardingStrategy current_shard 测试
+/// ShardingStrategy current_shard 测试
 #[test]
 fn test_strategy_current_shard() {
     let strategy = create_strategy("yearly");
@@ -964,7 +964,7 @@ fn test_strategy_current_shard() {
     assert_eq!(current, expected);
 }
 
-/// TEST-SHARD-UNIT-046: ShardingStrategy boxed_clone 测试
+/// ShardingStrategy boxed_clone 测试
 #[test]
 fn test_strategy_boxed_clone() {
     let strategy = create_strategy("monthly");
@@ -978,7 +978,7 @@ fn test_strategy_boxed_clone() {
     assert_eq!(cloned.name(), "monthly");
 }
 
-/// TEST-SHARD-UNIT-047: ShardingStrategy is_valid_shard_id 边界测试
+/// ShardingStrategy is_valid_shard_id 边界测试
 #[test]
 fn test_strategy_valid_shard_id_boundaries() {
     let yearly = create_strategy("yearly");
@@ -1008,7 +1008,7 @@ fn test_strategy_valid_shard_id_boundaries() {
 // 边界条件和错误处理测试
 // ============================================================================
 
-/// TEST-SHARD-UNIT-048: 分片数边界值测试
+/// 分片数边界值测试
 #[test]
 fn test_shard_count_boundary_values() {
     let strategy = create_strategy("hash");
@@ -1023,7 +1023,7 @@ fn test_shard_count_boundary_values() {
     assert!(shard_max < u32::MAX);
 }
 
-/// TEST-SHARD-UNIT-049: 路由空指针测试
+/// 路由空指针测试
 #[test]
 fn test_router_route_nonexistent_shard() {
     let mut router = ShardRouter::with_strategy("yearly", 12);
@@ -1040,7 +1040,7 @@ fn test_router_route_nonexistent_shard() {
     assert!(shard.is_none());
 }
 
-/// TEST-SHARD-UNIT-050: ShardRouter 初始化分片 ID 列表测试
+/// ShardRouter 初始化分片 ID 列表测试
 #[test]
 fn test_router_initialized_shards() {
     let router = ShardRouter::with_strategy("yearly", 3);
@@ -1053,7 +1053,7 @@ fn test_router_initialized_shards() {
 }
 
 // ============================================================================
-// v0.3.0 新增 API 单元测试
+// 新增 API 单元测试
 //
 // 以下测试覆盖 ShardRouter 的 default/new 构造器、get_pool/get_session 的 None 路径、
 // shard_id_for_key 的零分片防御、get_session_for_shard 的错误路径、enforce_shard_binding 的
@@ -1092,7 +1092,7 @@ impl ShardingStrategy for ModuloStrategy {
     }
 }
 
-/// TEST-SHARD-UNIT-051: ShardRouter::default() 返回 total_shards=1 + yearly 策略
+/// ShardRouter::default() 返回 total_shards=1 + yearly 策略
 ///
 /// 验证默认构造器的契约：单一分片（避免 `% 0` panic）+ YearlyStrategy（向后兼容）。
 /// 这是 `Default` 实现的硬性保证，破坏即属 breaking change。
@@ -1120,7 +1120,7 @@ fn test_shard_router_default_returns_single_shard_with_yearly_strategy() {
     );
 }
 
-/// TEST-SHARD-UNIT-052: ShardRouter::new() 接受自定义 ShardingStrategy 实现
+/// ShardRouter::new() 接受自定义 ShardingStrategy 实现
 ///
 /// 验证泛型构造器 `new<S: ShardingStrategy + 'static>(strategy, total_shards)`
 /// 正确接受用户提供的策略实例，且 `strategy_name()` 反映该策略的 `name()` 返回值。
@@ -1151,7 +1151,7 @@ fn test_shard_router_new_with_custom_strategy() {
     assert_eq!(shard.unwrap().shard_id, 1, "ModuloStrategy: 2024 % 7 = 1");
 }
 
-/// TEST-SHARD-UNIT-053: get_pool 未注册时返回 None
+/// get_pool 未注册时返回 None
 #[test]
 fn test_get_pool_returns_none_when_no_pool_registered() {
     let router = ShardRouter::with_strategy("hash", 4);
@@ -1179,7 +1179,7 @@ fn test_get_pool_returns_none_when_no_pool_registered() {
     );
 }
 
-/// TEST-SHARD-UNIT-054: get_session 未注册连接池时返回 Ok(None)
+/// get_session 未注册连接池时返回 Ok(None)
 ///
 /// 注意：`get_session` 返回 `Result<Option<Session>>`，未注册连接池时返回 `Ok(None)`
 /// 而非 `Err`——这与 `get_session_for_shard`（返回 `Err`）的语义不同。
@@ -1199,7 +1199,7 @@ async fn test_get_session_returns_ok_none_when_no_pool() {
     );
 }
 
-/// TEST-SHARD-UNIT-055: get_session_for_timestamp 未注册连接池时返回 Ok(None)
+/// get_session_for_timestamp 未注册连接池时返回 Ok(None)
 #[tokio::test]
 async fn test_get_session_for_timestamp_returns_ok_none_when_no_pool() {
     let router = ShardRouter::with_strategy("monthly", 12);
@@ -1217,7 +1217,7 @@ async fn test_get_session_for_timestamp_returns_ok_none_when_no_pool() {
     );
 }
 
-/// TEST-SHARD-UNIT-056: shard_id_for_key 在 total_shards=0 时返回 0（除零防御）
+/// shard_id_for_key 在 total_shards=0 时返回 0（除零防御）
 ///
 /// 验证 `shard_id_for_key` 的硬性契约：即使 `total_shards` 为 0（不应发生，Default 保证为 1），
 /// 也不能 panic，而是返回 0（单一分片语义）。
@@ -1238,7 +1238,7 @@ fn test_shard_id_for_key_zero_total_shards_returns_zero() {
     }
 }
 
-/// TEST-SHARD-UNIT-057: get_session_for_shard 未注册连接池时返回 Err(DbError::Config)
+/// get_session_for_shard 未注册连接池时返回 Err(DbError::Config)
 ///
 /// 验证 `get_session_for_shard` 的错误语义：与 `get_session` 不同，此方法返回 `Err`
 /// （因为它是 `Result<Session>` 而非 `Result<Option<Session>>`），错误消息必须包含
@@ -1265,7 +1265,7 @@ async fn test_get_session_for_shard_returns_err_when_no_pool() {
     );
 }
 
-/// TEST-SHARD-UNIT-058: get_session_for_shard_with_id 未注册连接池时返回 Err
+/// get_session_for_shard_with_id 未注册连接池时返回 Err
 #[tokio::test]
 async fn test_get_session_for_shard_with_id_returns_err_when_no_pool() {
     let mut router = ShardRouter::with_strategy("hash", 4);
@@ -1285,7 +1285,7 @@ async fn test_get_session_for_shard_with_id_returns_err_when_no_pool() {
     );
 }
 
-/// TEST-SHARD-UNIT-059: enforce_shard_binding 同分片返回 Ok，跨分片返回 ShardConflict
+/// enforce_shard_binding 同分片返回 Ok，跨分片返回 ShardConflict
 ///
 /// 验证 `enforce_shard_binding` 的核心契约：
 /// - 同一 `shard_key` 计算的 `shard_id` 与传入的 `expected_shard_id` 一致 → `Ok(())`
