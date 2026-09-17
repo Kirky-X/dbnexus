@@ -96,10 +96,6 @@ pub fn is_safe_ident(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn sql_string_literal(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
 impl QueryFragment {
     /// 组装为 SELECT SQL
     ///

@@ -46,18 +46,16 @@ dbnexus-macros = { path = "macros", version = "0.6.0-rc.4" }
 validator = { version = "0.21", features = ["derive"] }
 
 [workspace.lints.rust]
-# 抑制 check-cfg 误报：宏展开后的 #[cfg(feature = "...")] 检查的是依赖 crate 的
-# 特性而非本 crate 的 [features] 表（如 dbnexus-examples 中 #[db_entity] 展开的
-# cfg），rustc check-cfg lint 只查本 crate [features]，故统一 allow。
-unexpected_cfgs = "allow"
+# 宏（#[db_entity]/#[db_repository]）展开后会在消费方代码中生成
+# #[cfg(feature = "metrics")] 指标插桩，检查的是 dbnexus 的特性而非本 crate 的
+# [features] 表，rustc check-cfg lint 只认本 crate [features]，故把宏发射的
+# feature 名补记为预期值；其余 feature cfg 仍按各 crate 自身 [features] 以 warn
+# 级校验（保留拼写错误检出能力，宏发射名单见 macros/src 中 cfg(feature = ...)）。
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("metrics"))'] }
 
 [workspace.lints.clippy]
 # 允许测试中多次引用 common 模块
 duplicate_mod = "allow"
-
-[workspace.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [package]
 name = "dbnexus"
@@ -108,6 +106,8 @@ runtime-tokio-native-tls = [
     "tokio/rt-multi-thread",
     "tokio/fs",
 ]
+# 实现状态：tokio 为非可选核心依赖恒开（见 [workspace.dependencies]），本 feature
+# 仅转发 sea-orm 的 async-std 运行时支持，dbnexus 自身仍构建于 tokio 之上。
 runtime-async-std = [
     "sea-orm/runtime-async-std",
 ]
@@ -129,14 +129,17 @@ sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization", "sea-orm/w
 data-protection = ["dep:sha2"]  # 字段脱敏与行级安全
 config-confers = ["dep:confers", "confers/change-stream", "permission"]  # confers 配置热重载
 macros = ["dbnexus-macros"]
-cache = ["dep:oxcache", "arc-swap"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
+cache = ["dep:oxcache", "arc-swap", "cache-available"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
 # trait-kit 0.4 AsyncKit integration (DbNexusModule). Pulls in trait-kit
 # with the `async` feature only — default features are disabled (Rule 6).
 # `oxcache-integration` enables the OxcacheDbCacheAdapter; `kit` adds the
 # DbNexusModule that wires OxcacheModule's capability into a DbPool.
 # Mirrors oxcache/limiteron `kit` feature pattern.
-oxcache-integration = ["dep:oxcache", "arc-swap"]
+oxcache-integration = ["dep:oxcache", "arc-swap", "cache-available"]
+# 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration
+# 均隐含本 feature，池/会话代码统一以此判定缓存能力，避免重复 any(...) 组合。
+cache-available = []
 # kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
 kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
@@ -144,7 +147,6 @@ kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecyc
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（合并原 config-yaml 别名）
 config-toml = []  # TOML 配置支持（无额外依赖，用户需自行添加 toml crate）
 config-env = []  # 环境变量配置（无额外依赖）
-json = []  # JSON 支持（用于直接 serde_json 反序列化）
 
 # === 连接池增强 ===
 pool-health-check = ["futures"]  # 连接池健康检查
@@ -192,8 +194,7 @@ permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # �
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
 # === 开发工具 ===
-dev = []
-dev-full = ["dev", "bench", "test-utils"]
+dev-full = ["bench", "test-utils"]
 bench = ["criterion"]  # 性能测试相关依赖
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
@@ -234,8 +235,8 @@ monolith = [
 # 企业级 - 全功能配置
 enterprise = ["postgres", "monolith", "permission-engine"]
 
-# 所有可选功能（不包括数据库驱动）
-all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache"]
+# 所有可选功能（不包括数据库驱动；成员均无 embedded/server 驱动互斥风险）
+all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "kit", "data-protection"]
 
 [dependencies]
 # Workspace dependencies
@@ -249,33 +250,31 @@ sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
-sha2 = { version = "0.10", optional = true }
+sha2 = { version = "0.11", optional = true }
 confers = { version = "0.6.0-rc.4", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
-uuid = { version = "1.23", optional = true, features = ["v4"] }
+uuid = { version = "1.26", optional = true, features = ["v4"] }
 validator = { workspace = true, optional = true }
 criterion = { version = "0.8", optional = true }
 
 # External dependencies
-regex = { version = "1.0", optional = true }
-sqlparser = { version = "0.62", optional = true }
+regex = { version = "1.13", optional = true }
+sqlparser = { version = "0.63", optional = true }
 futures = { version = "0.3", optional = true }
 dashmap = { version = "6.2", optional = true }
 # Lock-free read for permission config (COW pattern)
-arc-swap = { version = "1.7", optional = true }
-# Lock-free connection pool queue (crossbeam-deque)
-crossbeam-deque = { version = "0.8", optional = true }
+arc-swap = { version = "1.9", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as L1 backend.
 oxcache = { version = "0.5.0-rc.4", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern.
-trait-kit = { version = "0.5.0-rc.4", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.5", features = ["async"], optional = true, default-features = false }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
-duckdb = { version = "1.1", optional = true, features = ["bundled"] }
+duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
 
 # Ladybug embedded graph database (ladybug feature, 0.4.0 new)
 lbug = { version = "0.20", optional = true }
@@ -284,7 +283,7 @@ neo4rs = { version = "0.8", optional = true }
 
 # Authentication dependencies
 # jsonwebtoken: v11 使用 aws_lc_rs 后端，API 与 v10 兼容
-jsonwebtoken = { version = "11.0", features = ["aws_lc_rs"], optional = true }
+jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "0.19", optional = true }
 
 unicode-normalization = { version = "0.1", optional = true }
@@ -315,8 +314,12 @@ futures = "0.3"
 [lints]
 workspace = true
 
+# docs.rs 显式清单：仅启用 sqlite 单一驱动 + 无互斥风险的功能 feature。
+# 不能用 all-features = true——embedded（sqlite/duckdb）与 server-side
+# （postgres/mysql）混用会触发 src/lib.rs 的编译期互斥 compile_error，
+# rustdoc 的 not(clippy) 门控不约束 rustdoc，docs.rs 构建必失败。
 [package.metadata.docs.rs]
-all-features = true
+features = ["default-no-db", "sqlite", "cache", "metrics", "health-check", "migration", "kit"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[test]]
@@ -463,6 +466,7 @@ required-features = ["mysql", "runtime-tokio-rustls", "sql-parser"]
 name = "permission_bench"
 path = "benches/permission_bench.rs"
 harness = false
+required-features = ["sqlite", "runtime-tokio-rustls"]
 
 # 权限引擎基准测试 - PermissionCache insert/get/miss（0.3.0 新增）
 [[bench]]

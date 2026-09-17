@@ -9,9 +9,9 @@ use super::*;
 use crate::foundation::DbResult;
 use crate::foundation::{DbConfig, PoolConfig};
 
-#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+#[cfg(feature = "cache-available")]
 use crate::domain::DbCacheProvider;
-#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+#[cfg(feature = "cache-available")]
 use std::sync::Arc;
 
 impl DbPoolBuilder {
@@ -81,7 +81,7 @@ impl DbPoolBuilder {
     /// # Returns
     ///
     /// 返回构造器自身以支持链式调用
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     pub fn cache_provider(mut self, provider: Arc<dyn DbCacheProvider + Send + Sync>) -> Self {
         self.cache_provider = Some(provider);
         self
@@ -209,7 +209,7 @@ impl DbPoolBuilder {
         let mut pool = DbPool::with_config(config).await?;
 
         // 注入缓存提供者（如果设置）
-        #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+        #[cfg(feature = "cache-available")]
         if let Some(cache_provider) = self.cache_provider {
             pool.set_cache_provider(cache_provider);
         }
@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(pool.config().pool_config.max_connections, 15);
     }
 
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     #[test]
     fn test_builder_cache_provider() {
         use crate::foundation::DbError;
@@ -475,7 +475,7 @@ mod tests {
     }
 
     #[cfg(all(
-        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "cache-available",
         feature = "sqlite"
     ))]
     #[tokio::test]

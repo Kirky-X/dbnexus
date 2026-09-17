@@ -305,13 +305,13 @@ dbnexus = { path = "..", version = "0.6.0-rc.2", features = [
 ] }
 
 # DuckDB crate（duckdb_query 示例需要直接使用 duckdb::types::Value）
-duckdb = { version = "1.1", features = ["bundled"] }
+duckdb = { version = "1.10505", features = ["bundled"] }
 
 # Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
-oxcache = { version = "0.5.0-rc.2" }
+oxcache = { version = "0.5.0-rc.4" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
-trait-kit = { version = "0.5.0-rc.2", features = ["async", "lifecycle", "health"], default-features = false }
+trait-kit = { version = "0.5.0-rc.5", features = ["async", "lifecycle", "health"], default-features = false }
 
 # JSON（图数据库示例需要 serde_json::json!）
 serde_json = { workspace = true }
@@ -340,8 +340,33 @@ validator = { workspace = true }
 [features]
 default = []
 
-# unexpected_cfgs 已上移至根 [workspace.lints.rust]（全 workspace 统一）：
-# #[db_entity] 等宏展开后的 #[cfg(feature = "...")] 检查的是 dbnexus 依赖的
-# 特性，rustc check-cfg lint 只查本 crate 的 [features] 表，故产生误报。
+# 转发 dbnexus feature：cfg!/#[cfg(feature = ...)] 只认本 crate 的 [features]
+# 表，示例中的条件编译（config_presets 等）经下列同名转发与 dbnexus 的实际
+# 启用状态联动（按驱动分组启用，避免触发 dbnexus 的驱动互斥检查）。
+audit = ["dbnexus/audit"]
+authentication = ["dbnexus/authentication"]
+cache = ["dbnexus/cache"]
+config-env = ["dbnexus/config-env"]
+config-toml = ["dbnexus/config-toml"]
+failover = ["dbnexus/failover"]
+global-index = ["dbnexus/global-index"]
+health-check = ["dbnexus/health-check"]
+macros = ["dbnexus/macros"]
+metrics = ["dbnexus/metrics"]
+migration = ["dbnexus/migration"]
+mysql = ["dbnexus/mysql"]
+observability = ["dbnexus/observability"]
+permission = ["dbnexus/permission"]
+permission-engine = ["dbnexus/permission-engine"]
+postgres = ["dbnexus/postgres"]
+security = ["dbnexus/security"]
+sharding = ["dbnexus/sharding"]
+sql-parser = ["dbnexus/sql-parser"]
+sqlite = ["dbnexus/sqlite"]
+yaml = ["dbnexus/yaml"]
+
+# unexpected_cfgs 统一由根 [workspace.lints.rust] 处理：#[db_entity] 等宏展开后
+# 的 #[cfg(feature = "...")] 检查的是 dbnexus 依赖的特性，rustc check-cfg lint
+# 只查本 crate 的 [features] 表，宏发射的 feature 名已在根配置登记为预期值。
 [lints]
 workspace = true

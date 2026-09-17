@@ -14,11 +14,7 @@ use crate::access::DdlGuardPolicy;
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
 use crate::i18n;
-#[cfg(any(
-    feature = "permission",
-    feature = "cache",
-    feature = "oxcache-integration"
-))]
+#[cfg(any(feature = "permission", feature = "cache-available"))]
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 #[cfg(feature = "permission")]
@@ -233,7 +229,7 @@ pub(crate) struct DbPoolInner {
     pub(super) max_active: AtomicU32,
 
     /// 缓存提供者（DI 注入点，ArcSwapOption 无锁读取 — COW 模式）
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     pub(crate) cache_provider: ArcSwapOption<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>,
 
     /// 数据保护配置（脱敏 + RLS，运行时整体换装）
@@ -389,7 +385,7 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
-                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                #[cfg(feature = "cache-available")]
                 cache_provider: ArcSwapOption::new(None),
                 #[cfg(feature = "data-protection")]
                 data_protection: tokio::sync::RwLock::new(
@@ -491,7 +487,7 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
-                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                #[cfg(feature = "cache-available")]
                 cache_provider: ArcSwapOption::new(None),
                 #[cfg(feature = "data-protection")]
                 data_protection: tokio::sync::RwLock::new(
@@ -621,7 +617,7 @@ impl DbPool {
                 max_waiters: AtomicU32::new(0),
                 borrow_count: AtomicU64::new(0),
                 max_active: AtomicU32::new(0),
-                #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+                #[cfg(feature = "cache-available")]
                 cache_provider: ArcSwapOption::new(None),
                 #[cfg(feature = "data-protection")]
                 data_protection: tokio::sync::RwLock::new(
@@ -1480,7 +1476,7 @@ mod tests {
     // ===== 补充测试：cache 方法, validate_role_name =====
 
     #[cfg(all(
-        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "cache-available",
         feature = "sqlite"
     ))]
     #[tokio::test]
@@ -1535,7 +1531,7 @@ mod tests {
 
     /// 未注入 cache_provider 时，query_cache_get 返回 None（直通）。
     #[cfg(all(
-        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "cache-available",
         feature = "sqlite"
     ))]
     #[tokio::test]
@@ -1549,7 +1545,7 @@ mod tests {
 
     /// 注入 cache_provider 后，query_cache_set 存储数据并可经 query_cache_get 命中。
     #[cfg(all(
-        any(feature = "cache", feature = "oxcache-integration"),
+        feature = "cache-available",
         feature = "sqlite"
     ))]
     #[tokio::test]

@@ -9,7 +9,7 @@ impl DbPool {
     ///
     /// 允许外部注入缓存实现，覆盖默认的内置缓存。
     /// 仅在 `cache` 特性启用时可用。
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     pub fn set_cache_provider(
         &mut self,
         provider: Arc<dyn crate::domain::DbCacheProvider + Send + Sync>,
@@ -61,7 +61,7 @@ impl DbPool {
     /// 获取缓存提供者引用
     ///
     /// 返回当前注入的缓存提供者，如果未注入则返回 `None`。
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     pub fn cache_provider(
         &self,
     ) -> Option<Arc<Arc<dyn crate::domain::DbCacheProvider + Send + Sync>>> {

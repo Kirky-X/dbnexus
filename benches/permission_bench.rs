@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 基础性能基准测试
 //!
-//! 运行: cargo bench --bench permission_bench --features "sqlite permission"
+//! 运行: cargo bench --bench permission_bench --features "sqlite,runtime-tokio-rustls"
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::tokio::runtime::Runtime;

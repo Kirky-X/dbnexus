@@ -1776,8 +1776,8 @@ impl Session {
     /// 查询缓存——检查 `cache_provider` 是否有缓存的查询结果。
     ///
     /// 返回 `Some(bytes)` 表示缓存命中，`None` 表示未命中。
-    /// 仅在 `cache`/`oxcache-integration` feature 启用且已注入 `cache_provider` 时有效。
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    /// 仅在缓存能力可用（`cache`/`oxcache-integration`）且已注入 `cache_provider` 时有效。
+    #[cfg(feature = "cache-available")]
     pub async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>> {
         // ArcSwapOption::load() 返回 Guard，clone 内部 Arc 后立即释放 Guard，
         // 避免跨 .await 持有 Guard。
@@ -1788,7 +1788,7 @@ impl Session {
     /// 查询缓存——将查询结果存入 `cache_provider`。
     ///
     /// TTL 取自 `CacheConfig.default_ttl`。
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     pub async fn query_cache_set(&self, key: &str, value: Vec<u8>) {
         let provider = match self.pool_inner.cache_provider.load().clone() {
             Some(p) => p,

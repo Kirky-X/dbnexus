@@ -40,14 +40,10 @@ use crate::foundation::DbResult;
 use async_trait::async_trait;
 use sea_orm::ExecResult;
 
-#[cfg(any(
-    feature = "metrics",
-    feature = "cache",
-    feature = "oxcache-integration"
-))]
+#[cfg(any(feature = "metrics", feature = "cache-available"))]
 use std::sync::Arc;
 
-#[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+#[cfg(feature = "cache-available")]
 use crate::domain::DbCacheProvider;
 
 /// 连接池抽象 trait
@@ -192,7 +188,7 @@ pub struct DbPoolBuilder {
     /// 暂存的最小连接数（同上）
     pending_min_connections: Option<u32>,
     /// 缓存提供者（DI 注入点，优先于内部缓存）
-    #[cfg(any(feature = "cache", feature = "oxcache-integration"))]
+    #[cfg(feature = "cache-available")]
     cache_provider: Option<Arc<dyn DbCacheProvider + Send + Sync>>,
     /// 统一 DDL 守卫策略
     #[cfg(feature = "sql-parser")]
