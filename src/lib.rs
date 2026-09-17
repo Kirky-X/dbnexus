@@ -367,14 +367,13 @@ pub use crate::i18n::{DbI18nFormatter, I18nError};
 // Each re-export is feature-gated to the feature set that actually pulls in
 // the underlying dependency.
 
-// sea_orm is a non-optional dependency but is re-exported only under database
-// driver features to keep the API surface minimal in non-sea-orm builds.
-#[cfg(any(
-    feature = "sqlite",
-    feature = "postgres",
-    feature = "mysql",
-    feature = "duckdb"
-))]
+// sea_orm is a non-optional dependency and is always re-exported. Its
+// `entity::prelude` (DeriveEntityModel / DeriveRelation / EnumIter /
+// ActiveModelBehavior, plus DateTime/Uuid with with-chrono / with-uuid) depends
+// only on the `macros` / `with-chrono` / `with-uuid` features — none of which
+// are tied to a database driver — so entity definitions compile without any
+// driver feature. Gating this re-export on driver features used to break
+// downstream entity code in driver-less builds (NebulaId `--no-default-features`).
 pub use sea_orm;
 
 // async_trait is a non-optional dependency; always available.
