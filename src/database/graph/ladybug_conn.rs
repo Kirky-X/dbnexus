@@ -93,7 +93,7 @@ impl LadybugConnection {
     pub fn with_pool_size(url: &str, pool_size: usize) -> DbResult<Self> {
         let pool_size = pool_size.max(1);
         let db_path = Self::parse_url(url);
-        // 路径遍历校验（M-48 修复）：拒绝包含 .. 的路径，防止打开任意文件
+        // 路径遍历校验：拒绝包含 .. 的路径，防止打开任意文件
         if db_path != ":memory:" && db_path.contains("..") {
             return Err(DbError::Connection(sea_orm::DbErr::Custom(
                 "ladybug database path contains path traversal characters '..': rejected for security".to_string(),
@@ -218,7 +218,7 @@ impl GraphConnection for LadybugConnection {
     }
 
     async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
-        // FM-1.6 修复：事务也占用 Semaphore permit，防止并发事务数无上限
+        // 事务也占用 Semaphore permit，防止并发事务数无上限
         let permit = self
             .spawn_permit
             .clone()
@@ -338,7 +338,7 @@ enum TxnCommand {
 /// Drop 时 `tx` 被释放，channel 关闭，blocking 线程的 `blocking_recv` 收到 `None`
 /// 后自动执行 `ROLLBACK`。`JoinHandle` 被 detach（blocking 线程继续运行到 ROLLBACK 完成）。
 ///
-/// # 并发限制（FM-1.6 修复）
+/// # 并发限制
 ///
 /// `_permit` 持有 `Semaphore` 许可证直到 `commit`/`rollback` 消耗 self，
 /// 防止事务数无上限地绕过连接池并发限制。
@@ -347,7 +347,7 @@ pub struct LadybugTransaction {
     tx: mpsc::Sender<TxnCommand>,
     /// blocking 线程句柄（commit/rollback 时 await）
     handle: Option<JoinHandle<DbResult<()>>>,
-    /// Semaphore 许可证（FM-1.6 修复：事务期间持有，commit/rollback 时释放）
+    /// Semaphore 许可证（事务期间持有，commit/rollback 时释放）
     _permit: tokio::sync::OwnedSemaphorePermit,
 }
 
@@ -737,7 +737,7 @@ mod tests {
 
     #[test]
     fn test_ladybug_rejects_path_traversal() {
-        // M-48 修复：路径遍历校验，拒绝包含 .. 的路径
+        // 路径遍历校验，拒绝包含 .. 的路径
         let result = LadybugConnection::with_pool_size("ladybug:../../etc/passwd", 2);
         assert!(result.is_err(), "path traversal should be rejected");
         let result = LadybugConnection::with_pool_size("../../etc/passwd", 2);

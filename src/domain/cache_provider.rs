@@ -137,7 +137,7 @@ mod tests {
         }
     }
 
-    /// R-dbnexus-module-001 #1: trait is object-safe —
+    /// #1: trait is object-safe —
     /// `Arc<dyn DbCacheProvider + Send + Sync>` compiles and dispatches.
     #[test]
     fn db_cache_provider_is_object_safe() {
@@ -146,7 +146,7 @@ mod tests {
         assert_dyn_compatible(mock);
     }
 
-    /// R-dbnexus-module-001 #2: `get` returns `Pin<Box<dyn Future + Send>>`
+    /// #2: `get` returns `Pin<Box<dyn Future + Send>>`
     /// — verified by calling `.await` on the returned future inside a
     /// tokio runtime.
     #[tokio::test]
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(got, Some(b"v".to_vec()));
     }
 
-    /// R-dbnexus-module-001 #3: `get` on absent key returns `Ok(None)`.
+    /// #3: `get` on absent key returns `Ok(None)`.
     #[tokio::test]
     async fn db_cache_provider_get_absent_key_returns_none() {
         let cache = MockCacheProvider::new();
@@ -167,7 +167,7 @@ mod tests {
         assert!(got.is_none(), "absent key must return Ok(None)");
     }
 
-    /// R-dbnexus-module-001 #4: `set` stores the value and it's
+    /// #4: `set` stores the value and it's
     /// retrievable by `get`.
     #[tokio::test]
     async fn db_cache_provider_set_stores_value() {
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(got, Some(vec![1, 2, 3]));
     }
 
-    /// R-dbnexus-module-001 #5: `delete` removes the value — subsequent
+    /// #5: `delete` removes the value — subsequent
     /// `get` returns `Ok(None)`. Delete is idempotent.
     #[tokio::test]
     async fn db_cache_provider_delete_removes_value() {
@@ -194,7 +194,7 @@ mod tests {
         cache.delete("doomed").await.expect("idempotent delete");
     }
 
-    /// R-dbnexus-module-001 #6: `set` overwrites a prior value for the
+    /// #6: `set` overwrites a prior value for the
     /// same key.
     #[tokio::test]
     async fn db_cache_provider_set_overwrites() {
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(got, Some(b"new".to_vec()));
     }
 
-    /// R-dbnexus-module-001 #7: trait can be used through a trait object
+    /// #7: trait can be used through a trait object
     /// (`Arc<dyn DbCacheProvider + Send + Sync>`) — the dyn dispatch path
     /// that `DbNexusModule::build` will use.
     #[tokio::test]

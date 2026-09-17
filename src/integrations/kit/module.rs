@@ -8,7 +8,7 @@
 //! # Design divergences from `design.md` / `spec.md` (Rule 7: expose, don't
 //! paper over)
 //!
-//! `design.md` Decision 3 (lines 345-380) and `spec.md` R-dbnexus-module-003
+//! `design.md` Decision 3 (lines 345-380) and `spec.md`
 //! wrote the build body as:
 //!
 //! ```text
@@ -375,13 +375,13 @@ mod tests {
     use super::*;
     use oxcache::integrations::kit::OxcacheConfig;
 
-    /// R-dbnexus-module-003 #1: `DbNexusModule::NAME == "dbnexus"`.
+    /// #1: `DbNexusModule::NAME == "dbnexus"`.
     #[test]
     fn dbnexus_module_meta_name() {
         assert_eq!(DbNexusModule::NAME, "dbnexus");
     }
 
-    /// R-dbnexus-module-003 #2: `DbNexusModule::dependencies()` declares
+    /// #2: `DbNexusModule::dependencies()` declares
     /// a dependency on `OxcacheModule`.
     #[test]
     fn dbnexus_module_meta_dependencies() {
@@ -395,7 +395,7 @@ mod tests {
         );
     }
 
-    /// R-dbnexus-module-003 #3: `DbNexusModule` satisfies `AsyncAutoBuilder`
+    /// #3: `DbNexusModule` satisfies `AsyncAutoBuilder`
     /// trait bounds — `Capability: Clone + Send + Sync + 'static` and
     /// `Error: std::error::Error + Send + 'static`.
     #[test]
@@ -406,7 +406,7 @@ mod tests {
         assert_err::<DbError>();
     }
 
-    /// R-dbnexus-module-003 #4: Full integration — register OxcacheModule +
+    /// #4: Full integration — register OxcacheModule +
     /// DbNexusModule, set configs, build, require DbNexusModule → get a
     /// working `Arc<dyn ConnectionPool + Send + Sync>`.
     #[tokio::test]
@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(config.url, "sqlite::memory:");
     }
 
-    /// R-dbnexus-module-003 #5: build fails with a clear error if
+    /// #5: build fails with a clear error if
     /// OxcacheModule is not registered (dependency missing).
     #[tokio::test]
     async fn dbnexus_module_build_fails_without_oxcache() {

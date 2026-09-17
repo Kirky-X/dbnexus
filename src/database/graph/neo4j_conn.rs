@@ -122,7 +122,7 @@ impl Neo4jConnection {
             }
             Err(_) => {
                 // 非 URL 格式，原样返回 uri，凭据从环境变量读取
-                // 错误信息不回显原始 URL，避免凭据泄露（M-49 修复）
+                // 错误信息不回显原始 URL，避免凭据泄露
                 let env_user = std::env::var("NEO4J_USER").map_err(|_| {
                     DbError::Connection(sea_orm::DbErr::Custom(
                         "neo4j URL is not a valid URL and NEO4J_USER env var is not set"
@@ -288,7 +288,7 @@ impl GraphConnection for Neo4jConnection {
 /// `execute_cypher` 锁定 mutex 调用 `Txn::execute`（需要 `&mut self`）。
 /// `commit`/`rollback` 从 `Option` 中取出 `Txn` 并消耗它。
 ///
-/// # Drop 行为（FM-2.2 修复）
+/// # Drop 行为
 ///
 /// `neo4rs::Txn` 的 Drop 只归还连接到池，**不发送 ROLLBACK 消息**，服务器端事务
 /// 会一直保持到超时。此处 Drop 时尝试 `try_lock` + `spawn` rollback task：
@@ -302,7 +302,7 @@ pub struct Neo4jTransaction {
 
 impl Drop for Neo4jTransaction {
     fn drop(&mut self) {
-        // FM-2.2 修复：未显式 commit/rollback 的事务在 Drop 时尝试 rollback
+        // 未显式 commit/rollback 的事务在 Drop 时尝试 rollback
         if let Ok(mut guard) = self.txn.try_lock()
             && let Some(txn) = guard.take()
             && let Ok(handle) = tokio::runtime::Handle::try_current()
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_parse_url_neo4j_no_credentials_returns_error() {
-        // 无凭据且环境变量未设置时必须返回明确错误（LOW-001 修复）
+        // 无凭据且环境变量未设置时必须返回明确错误
         let result = Neo4jConnection::parse_url("neo4j://localhost:7687");
         assert!(
             result.is_err(),
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn test_parse_url_invalid_returns_error() {
-        // 非 URL 格式且环境变量未设置时必须返回明确错误（LOW-001 修复）
+        // 非 URL 格式且环境变量未设置时必须返回明确错误
         let result = Neo4jConnection::parse_url("not_a_url");
         assert!(result.is_err(), "parse_url with invalid URL should error");
     }

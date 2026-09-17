@@ -64,4 +64,4 @@ pub use sql_parser::PermissionAction;
 pub use sql_parser::{SqlOperationType, SqlParser, contains_sql_injection, is_ddl_operation};
 
 // Re-exports: permission_engine
-// 注意：Engine* 别名仅在 crate root (lib.rs) 导出，此处不再重复导出以避免双重路径（HIGH-002 修复）
+// 注意：Engine* 别名仅在 crate root (lib.rs) 导出，此处不再重复导出以避免双重路径

@@ -146,7 +146,7 @@ impl JwtManager {
         role: &str,
         token_type: TokenType,
     ) -> AuthResult<String> {
-        // H-1: 角色白名单验证，防止注入任意角色
+        // 角色白名单验证，防止注入任意角色
         if !self.valid_roles.contains(role) {
             return Err(AuthError::TokenGeneration(format!(
                 "Invalid role '{}'. Valid roles: {:?}",
@@ -225,7 +225,7 @@ impl JwtManager {
         if claims.token_type != TokenType::Refresh {
             return Err(AuthError::InvalidToken);
         }
-        // H-3: 检查 refresh token 是否已被撤销
+        // 检查 refresh token 是否已被撤销
         // 先查本地集合（短路），未命中再查远程缓存
         if let Ok(revoked) = self.revoked_refresh_jtis.lock()
             && revoked.contains_key(&claims.jti)
@@ -248,7 +248,7 @@ impl JwtManager {
     pub async fn refresh_access_token(&self, refresh_token: &str) -> AuthResult<String> {
         let claims = self.verify_refresh_token(refresh_token).await?;
 
-        // H-3: 撤销旧 refresh token（refresh token rotation）
+        // 撤销旧 refresh token（refresh token rotation）
         if let Ok(mut revoked) = self.revoked_refresh_jtis.lock() {
             Self::evict_revoked_entries(&mut revoked, self.refresh_expiration_secs);
             revoked.insert(claims.jti.clone(), Instant::now());
@@ -444,7 +444,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-001: JwtManager 构造函数短密钥拒绝测试
+    // JwtManager 构造函数短密钥拒绝测试
     // ============================================================================
 
     /// 19 字节密钥（<32），`new` 应返回 Err 而非 panic
@@ -504,7 +504,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-002: 撤销集合有界性测试
+    // 撤销集合有界性测试
     // ============================================================================
 
     /// 向撤销集合插入超过 MAX_REVOKED_JTIS 的条目后，集合长度应有上限，
@@ -539,7 +539,7 @@ mod tests {
     }
 
     // ============================================================================
-    // HIGH-002: 轮换重放防护测试
+    // 轮换重放防护测试
     // ============================================================================
 
     /// refresh token 刷新成功后，旧 refresh token 应被撤销，

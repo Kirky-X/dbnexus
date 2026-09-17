@@ -415,7 +415,7 @@ impl DbPool {
         #[cfg(feature = "pool-warmup")]
         pool.warmup_connections().await?;
 
-        // 注意：权限策略缓存的预加载已在 setup_permission_cache() 中完成（HIGH-004 修复）
+        // 注意：权限策略缓存的预加载已在 setup_permission_cache() 中完成
         // 此处不再重复预加载，避免冗余 IO 和缓存覆盖。
 
         #[cfg(feature = "auto-migrate")]

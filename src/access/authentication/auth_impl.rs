@@ -79,7 +79,7 @@ impl AuthenticationManager {
     pub async fn add_user(&self, user: User) -> AuthResult<()> {
         validate_bcrypt_hash(&user.password_hash)?;
         let mut users = self.users.write().await;
-        // H-7: 检查用户存储上限（已存在的用户更新不计入）
+        // 检查用户存储上限（已存在的用户更新不计入）
         if !users.contains_key(&user.username) && users.len() >= self.max_users {
             return Err(AuthError::UserLimitReached(format!(
                 "Cannot add user '{}': user storage limit of {} reached",
@@ -110,7 +110,7 @@ impl AuthenticationManager {
     #[doc(hidden)]
     pub(crate) async fn add_user_unchecked(&self, user: User) -> AuthResult<()> {
         let mut users = self.users.write().await;
-        // H-7: 检查用户存储上限（已存在的用户更新不计入）
+        // 检查用户存储上限（已存在的用户更新不计入）
         if !users.contains_key(&user.username) && users.len() >= self.max_users {
             return Err(AuthError::UserLimitReached(format!(
                 "Cannot add user '{}': user storage limit of {} reached",

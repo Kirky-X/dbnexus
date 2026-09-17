@@ -12,7 +12,7 @@
 //! paper over)
 //!
 //! 1. **`Arc<oxcache::Cache>` → `Arc<dyn CacheBackend + Send + Sync>`**:
-//!    `design.md` Decision 2 (lines 245-247) and `spec.md` R-dbnexus-module-002
+//!    `design.md` Decision 2 (lines 245-247) and `spec.md`
 //!    wrote the field as `cache: Arc<oxcache::Cache>`. The actual
 //!    `OxcacheModule` (`oxcache/src/integrations/kit/module.rs`)
 //!    returns `Arc<dyn CacheBackend + Send + Sync>` because `UnifiedCache`
@@ -110,7 +110,7 @@ mod tests {
         OxcacheDbCacheAdapter::new(cache)
     }
 
-    /// R-dbnexus-module-002 #1: `OxcacheDbCacheAdapter` implements
+    /// #1: `OxcacheDbCacheAdapter` implements
     /// `DbCacheProvider` and can be used through a trait object.
     #[test]
     fn adapter_is_db_cache_provider() {
@@ -121,7 +121,7 @@ mod tests {
         let _dyn: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(adapter);
     }
 
-    /// R-dbnexus-module-002 #2: `set` then `get` round-trips a value
+    /// #2: `set` then `get` round-trips a value
     /// through the real oxcache `MokaMemoryBackend`.
     #[tokio::test]
     async fn adapter_set_get_round_trip() {
@@ -134,7 +134,7 @@ mod tests {
         assert_eq!(got, Some(b"value1".to_vec()));
     }
 
-    /// R-dbnexus-module-002 #3: `get` on an absent key returns `Ok(None)`.
+    /// #3: `get` on an absent key returns `Ok(None)`.
     #[tokio::test]
     async fn adapter_get_absent_returns_none() {
         let adapter = make_adapter();
@@ -145,7 +145,7 @@ mod tests {
         assert!(got.is_none(), "absent key should return Ok(None)");
     }
 
-    /// R-dbnexus-module-002 #4: `delete` removes a value — subsequent
+    /// #4: `delete` removes a value — subsequent
     /// `get` returns `Ok(None)`.
     #[tokio::test]
     async fn adapter_delete_removes_value() {
@@ -159,7 +159,7 @@ mod tests {
         assert!(gone.is_none());
     }
 
-    /// R-dbnexus-module-002 #5: `set` with a TTL stores the value (the TTL
+    /// #5: `set` with a TTL stores the value (the TTL
     /// is forwarded to the oxcache backend). The value is immediately
     /// retrievable.
     #[tokio::test]
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(got, Some(b"ttl_val".to_vec()));
     }
 
-    /// R-dbnexus-module-002 #6: error mapping — oxcache errors become
+    /// #6: error mapping — oxcache errors become
     /// `DbError::Cache`. Hard to trigger a real oxcache error, so we
     /// verify the error type by checking that `DbError::Cache` is the
     /// variant used in the adapter (static check via `From`-like pattern).
@@ -194,7 +194,7 @@ mod tests {
         );
     }
 
-    /// R-dbnexus-module-002 #7: adapter works through dyn dispatch
+    /// #7: adapter works through dyn dispatch
     /// (`Arc<dyn DbCacheProvider + Send + Sync>`) — the path
     /// `DbNexusModule::build()` will use.
     #[tokio::test]

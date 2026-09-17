@@ -10,8 +10,8 @@
 //! DuckDB 是嵌入式分析型数据库，其 Rust API（`duckdb::Connection`）是同步的。
 //! 本模块通过 `spawn_blocking` 将阻塞式调用移至专用线程池。
 //!
-//! v0.3.0 前：`Arc<Mutex<duckdb::Connection>>` 单连接 + Semaphore(4)，实际并发=1
-//! v0.3.0 后：`Arc<Mutex<Vec<duckdb::Connection>>>` 连接池 + Semaphore(N)，真正并发=N
+//! 改进前：`Arc<Mutex<duckdb::Connection>>` 单连接 + Semaphore(4)，实际并发=1
+//! 改进后：`Arc<Mutex<Vec<duckdb::Connection>>>` 连接池 + Semaphore(N)，真正并发=N
 //!
 //! 通过 `Connection::try_clone()` 创建多个连接共享同一个 `DatabaseHandle`，
 //! 包括 `:memory:` 数据库也能共享数据。每个 `spawn_blocking` 任务从池中取出一个连接，

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 分片路由 Session 集成测试
 //!
-//! 测试 v0.3.0 新增的 ShardRouter 分片路由 API：
+//! 测试 ShardRouter 分片路由 API：
 //! - `shard_id_for_key`: 纯哈希分片键路由
 //! - `get_session_for_shard`: 路由并返回 Session
 //! - `get_session_for_shard_with_id`: 返回 Session + shard_id 元组

@@ -69,7 +69,7 @@ struct SessionState {
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     graph_transaction: Option<Box<dyn crate::database::graph::GraphTransaction + Send>>,
 
-    /// 图事务是否被 poison（FM-3.1 修复）
+    /// 图事务是否被 poison
     ///
     /// 当 `execute_cypher` 在事务内 await 期间 panic 时，take→put back 中断，
     /// 事务句柄丢失。设置此标记后，后续图操作返回错误，防止在事务外执行。
@@ -106,7 +106,7 @@ pub struct Session {
 
     /// 图操作互斥锁（防止并发 `execute_cypher` 在 take → put back 窗口绕过事务）
     ///
-    /// HIGH-001 修复：`Box<dyn GraphTransaction>` 不可 clone，图事务采用
+    /// `Box<dyn GraphTransaction>` 不可 clone，图事务采用
     /// take → 锁外 await → put back 模式。若无互斥，并发 `execute_cypher` 会在
     /// take 后的 await 窗口内看到 `graph_transaction` 为 `None`，落入"直接在连接上
     /// 执行"分支，破坏事务隔离。此锁将图操作串行化，确保 put back 后才允许下一个 take。
@@ -1486,8 +1486,8 @@ impl Session {
     /// `execute_cypher_with_params` 的完整事务分发流程：
     /// 1. 注入防护（vuln-0005）
     /// 2. 图权限检查
-    /// 3. 取连接 + 获取图操作互斥锁（HIGH-001：串行化 take → put back）
-    /// 4. 短锁 take graph_transaction（含 poisoned 检查，FM-3.1）
+    /// 3. 取连接 + 获取图操作互斥锁（串行化 take → put back）
+    /// 4. 短锁 take graph_transaction（含 poisoned 检查）
     /// 5. 事务内执行：PoisonGuard + take → await → put back
     /// 6. 事务外执行：直接在连接上调用
     ///
@@ -1538,7 +1538,7 @@ impl Session {
             )
         })?;
 
-        // 获取图操作互斥锁（HIGH-001：防止并发 take → put back 窗口绕过事务隔离）
+        // 获取图操作互斥锁（防止并发 take → put back 窗口绕过事务隔离）
         let _graph_op_guard = self.graph_op_mutex.lock().await;
 
         // 检查是否在图事务中（短锁 take → 锁外执行 → 短锁 put back）
@@ -1555,7 +1555,7 @@ impl Session {
         };
 
         if let Some(graph_txn) = graph_txn {
-            // PoisonGuard（FM-3.1 修复：panic 时标记事务为 poisoned，防止丢失句柄后绕过事务隔离）
+            // PoisonGuard（panic 时标记事务为 poisoned，防止丢失句柄后绕过事务隔离）
             struct PoisonGuard<'a> {
                 state: &'a RwLock<SessionState>,
                 armed: bool,
@@ -2062,11 +2062,11 @@ fn check_ddl_operation(sql: &str) -> DbResult<()> {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // FM-3.6 修复说明：图事务通过级联 Drop 处理
+        // 说明：图事务通过级联 Drop 处理
         //
         // `state: Mutex<SessionState>` 被 drop 时，`SessionState::graph_transaction`
         // 也会被 drop，触发 `LadybugTransaction::drop`（actor 模式自动 ROLLBACK）
-        // 或 `Neo4jTransaction::drop`（FM-2.2 修复：spawn rollback task）。
+        // 或 `Neo4jTransaction::drop`（spawn rollback task）。
         //
         // 如果 `execute_cypher` 正在执行（graph_txn 被 take 出来在 await 中），
         // Session drop 会导致 future drop，局部变量 `graph_txn` 也会被 drop。

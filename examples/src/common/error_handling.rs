@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 结构化错误报告示例
 //!
-//! 演示 v0.3.0 新增的 [`QueryErrorReport`] 与 [`ErrorCategory`] 的使用：
+//! 演示 [`QueryErrorReport`] 与 [`ErrorCategory`] 的使用：
 //! - 构造 4 类错误报告（Permission / InjectionRisk / SyntaxError / ShardConflict）
 //! - 链式 `with_table` / `with_operation` 设置上下文
 //! - [`Display`](std::fmt::Display) 输出格式
