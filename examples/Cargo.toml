@@ -267,7 +267,7 @@ name = "duckdb_query"
 path = "src/database/duckdb_query.rs"
 
 [dependencies]
-dbnexus = { path = "..", version = "0.6.0-rc.2", features = [
+dbnexus = { path = "..", version = "0.6.0-rc.4", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "permission",
