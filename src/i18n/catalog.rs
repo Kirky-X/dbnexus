@@ -630,9 +630,7 @@ mod tests {
         );
         assert_eq!(
             format_from_bundle("en", "query-error-suggestion-code-table", &[]),
-            Some(
-                "Refer to the error code table to determine the handling strategy".to_string()
-            )
+            Some("Refer to the error code table to determine the handling strategy".to_string())
         );
         assert_eq!(
             format_from_bundle("zh", "query-error-suggestion-code-table", &[]),

@@ -1475,10 +1475,7 @@ mod tests {
 
     // ===== 补充测试：cache 方法, validate_role_name =====
 
-    #[cfg(all(
-        feature = "cache-available",
-        feature = "sqlite"
-    ))]
+    #[cfg(all(feature = "cache-available", feature = "sqlite"))]
     #[tokio::test]
     async fn test_pool_set_and_get_cache_provider() {
         use crate::foundation::DbError;
@@ -1530,10 +1527,7 @@ mod tests {
     }
 
     /// 未注入 cache_provider 时，query_cache_get 返回 None（直通）。
-    #[cfg(all(
-        feature = "cache-available",
-        feature = "sqlite"
-    ))]
+    #[cfg(all(feature = "cache-available", feature = "sqlite"))]
     #[tokio::test]
     async fn test_query_cache_miss_without_provider() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1544,10 +1538,7 @@ mod tests {
     }
 
     /// 注入 cache_provider 后，query_cache_set 存储数据并可经 query_cache_get 命中。
-    #[cfg(all(
-        feature = "cache-available",
-        feature = "sqlite"
-    ))]
+    #[cfg(all(feature = "cache-available", feature = "sqlite"))]
     #[tokio::test]
     async fn test_query_cache_hit_with_provider() {
         use std::collections::HashMap;

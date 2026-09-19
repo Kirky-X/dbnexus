@@ -474,10 +474,7 @@ mod tests {
         assert!(builder.cache_provider.is_some());
     }
 
-    #[cfg(all(
-        feature = "cache-available",
-        feature = "sqlite"
-    ))]
+    #[cfg(all(feature = "cache-available", feature = "sqlite"))]
     #[tokio::test]
     async fn test_builder_build_with_cache_provider() {
         use crate::foundation::DbError;
