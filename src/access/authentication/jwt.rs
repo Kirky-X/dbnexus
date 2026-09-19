@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! JWT Token 管理模块
 
@@ -392,7 +392,7 @@ mod tests {
     }
 
     // ============================================================================
-    // verify_access_token / verify_refresh_token token_type 校验测试（diting security 修复）
+    // verify_access_token / verify_refresh_token token_type 校验测试（security 修复）
     // ============================================================================
 
     #[test]

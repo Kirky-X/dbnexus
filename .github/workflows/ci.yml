@@ -63,6 +63,25 @@ jobs:
       - name: Check default features
         run: cargo check --workspace --no-default-features --features sqlite,default-no-db,all-optional
 
+  check-bare:
+    name: Check (zero features, abstraction layer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: check-bare
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      # 零 feature（default = []）验证池抽象/基础设施层无需任何驱动即可编译；
+      # 同时覆盖图驱动 ladybug/neo4j（此前 CI 从未编译过这两条腿）。
+      - name: Check no default features
+        run: cargo check -p dbnexus --no-default-features
+      - name: Check graph drivers
+        run: cargo check -p dbnexus --no-default-features --features ladybug,neo4j
+
   test:
     name: Test (${{ matrix.db }})
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 权限上下文
 //!
@@ -1175,7 +1175,7 @@ mod tests {
             "Single request should not count as stampede"
         );
 
-        // 第二次访问：并发 10 个请求（会触发击穿）
+        // 第二次访问：个请求（会触发击穿）
         ctx.clear_cache().await;
         let mut handles = Vec::new();
         for _ in 0..10 {

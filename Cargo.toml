@@ -11,7 +11,7 @@ resolver = "2"
 version = "0.6.0-rc.4"
 edition = "2024"
 rust-version = "1.97.1"
-authors = ["Kirky.X"]
+authors = ["Kirky-X <Kirky-X@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/dbnexus"
 documentation = "https://docs.rs/dbnexus"
@@ -194,8 +194,9 @@ permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # �
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
 # === 开发工具 ===
-dev-full = ["bench", "test-utils"]
-bench = ["criterion"]  # 性能测试相关依赖
+# bench 已删除：criterion 经 [dev-dependencies] 提供（benches 不经 feature 启用），
+# 原 optional 依赖从未被任何代码路径激活。
+dev-full = ["test-utils"]
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
@@ -251,13 +252,12 @@ time = { workspace = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 sha2 = { version = "0.11", optional = true }
-confers = { version = "0.6.0-rc.4", default-features = false, optional = true }
+confers = { version = "0.6.0-rc.4", path = "../confers", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
 uuid = { version = "1.26", optional = true, features = ["v4"] }
 validator = { workspace = true, optional = true }
-criterion = { version = "0.8", optional = true }
 
 # External dependencies
 regex = { version = "1.13", optional = true }
@@ -266,12 +266,12 @@ futures = { version = "0.3", optional = true }
 dashmap = { version = "6.2", optional = true }
 # Lock-free read for permission config (COW pattern)
 arc-swap = { version = "1.9", optional = true }
-# Cache via oxcache - moka is used internally by oxcache as L1 backend.
-oxcache = { version = "0.5.0-rc.4", optional = true }
+# Cache via oxcache - moka is used internally by oxcache as backend.
+oxcache = { version = "0.5.0-rc.4", path = "../oxcache", optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern.
-trait-kit = { version = "0.5.0-rc.5", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.5", path = "../trait-kit", default-features = false, features = ["async"], optional = true }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
@@ -290,7 +290,7 @@ unicode-normalization = { version = "0.1", optional = true }
 rand = { version = "0.10", optional = true }
 
 # ICU4X 国际化（核心特性，始终可用）
-icu = "2.3"
+icu = { version = "2.3", default-features = false, features = ["compiled_data"] }
 writeable = "0.6"
 sys-locale = "0.3"
 fluent-bundle = "0.16"
@@ -835,18 +835,7 @@ path = "tests/kit_feature_gate.rs"
 required-features = ["kit", "sqlite", "runtime-tokio-rustls"]
 
 [dev-dependencies.testcontainers]
-version = "0.28"
-
-# ============================================================================
-# 示例管理说明
-# ============================================================================
-# 所有示例由独立的 dbnexus-examples crate（examples/Cargo.toml）管理，
-# 其二进制文件通过 [[bin]] 注册，不在此处注册 [[example]]。
-# autoexamples = false 已在 [package] 中设置，防止 Cargo 自动发现 examples/src/*.rs。
-
-# ============================================================================
-# Profiles — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
-# ============================================================================
+version = "0.27"
 [profile.release]
 opt-level = 3
 lto = "fat"
