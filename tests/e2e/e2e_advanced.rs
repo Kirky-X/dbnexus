@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! E2E 高级测试：覆盖分析文档中缺失的边界、异常和交叉组合场景
 //!

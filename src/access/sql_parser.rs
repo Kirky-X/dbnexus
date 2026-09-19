@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! SQL Parser module using sqlparser for enhanced SQL parsing and validation.
 //! This module provides robust SQL operation detection and permission action mapping.

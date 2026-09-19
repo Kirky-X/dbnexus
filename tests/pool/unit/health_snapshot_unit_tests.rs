@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 结构化健康导出（DbPool::health_snapshot）测试
 //!

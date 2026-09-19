@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 跨分片查询引擎 Scatter-Gather 示例
 //!

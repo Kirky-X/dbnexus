@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 审计事件的 DB 持久化存储（`audit` + `sql-parser` feature）
 //!

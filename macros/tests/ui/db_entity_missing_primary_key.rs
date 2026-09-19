@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // db_entity 宏缺少 primary_key 参数时的错误测试
 use dbnexus::db_entity;

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! `#[db_entity]` 宏主键类型泛型化回归测试（0.4.2 新增）
 //!
