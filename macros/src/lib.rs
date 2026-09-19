@@ -539,7 +539,7 @@ fn parse_audit_params(
 ///
 /// ```rust,ignore
 /// use dbnexus::db_entity;
-/// use sea_orm::entity::prelude::*;
+/// use ::dbnexus::sea_orm::entity::prelude::*;
 ///
 /// #[db_entity(table_name = "users", primary_key = "id")]
 /// #[derive(DeriveEntityModel, DeriveModel, DeriveActiveModel)]
@@ -838,12 +838,12 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             let validate_logic = if entity_args.validate {
                 quote! {
                     // 验证：克隆 ActiveModel → Model → validate()，保留原始 __this 的 ActiveValue 状态
-                    use ::sea_orm::TryIntoModel;
+                    use ::dbnexus::sea_orm::TryIntoModel;
                     let mut __this = self;
-                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(__this.clone())
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    let __model: Model = ::dbnexus::sea_orm::TryIntoModel::<Model>::try_into_model(__this.clone())
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                     ::validator::Validate::validate(&__model)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                 }
             } else {
                 quote! { let mut __this = self; }
@@ -854,10 +854,10 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     let __now = ::time::OffsetDateTime::now_utc();
                     if insert {
-                        __this.created_at = ::sea_orm::ActiveValue::Set(Some(__now));
-                        __this.updated_at = ::sea_orm::ActiveValue::Set(Some(__now));
+                        __this.created_at = ::dbnexus::sea_orm::ActiveValue::Set(Some(__now));
+                        __this.updated_at = ::dbnexus::sea_orm::ActiveValue::Set(Some(__now));
                     } else {
-                        __this.updated_at = ::sea_orm::ActiveValue::Set(Some(__now));
+                        __this.updated_at = ::dbnexus::sea_orm::ActiveValue::Set(Some(__now));
                     }
                 }
             } else {
@@ -880,7 +880,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             let before_insert_call = if let Some(ref fn_ident) = before_insert_ident {
                 quote! {
                     #fn_ident(&mut __this)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                 }
             } else {
                 quote! {}
@@ -888,7 +888,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             let before_update_call = if let Some(ref fn_ident) = before_update_ident {
                 quote! {
                     #fn_ident(&mut __this)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                 }
             } else {
                 quote! {}
@@ -912,9 +912,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                     self,
                     db: &C,
                     insert: bool,
-                ) -> Result<Self, ::sea_orm::DbErr>
+                ) -> Result<Self, ::dbnexus::sea_orm::DbErr>
                 where
-                    C: ::sea_orm::ConnectionTrait,
+                    C: ::dbnexus::sea_orm::ConnectionTrait,
                 {
                     let _ = db;
                     #validate_logic
@@ -945,7 +945,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             let after_insert_call = if let Some(ref fn_ident) = after_insert_ident {
                 quote! {
                     #fn_ident(&model)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                 }
             } else {
                 quote! {}
@@ -953,7 +953,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             let after_update_call = if let Some(ref fn_ident) = after_update_ident {
                 quote! {
                     #fn_ident(&model)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                 }
             } else {
                 quote! {}
@@ -964,9 +964,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                     model: Model,
                     db: &C,
                     insert: bool,
-                ) -> Result<Model, ::sea_orm::DbErr>
+                ) -> Result<Model, ::dbnexus::sea_orm::DbErr>
                 where
-                    C: ::sea_orm::ConnectionTrait,
+                    C: ::dbnexus::sea_orm::ConnectionTrait,
                 {
                     let _ = db;
                     if insert {
@@ -993,14 +993,14 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 async fn before_delete<C>(
                     self,
                     db: &C,
-                ) -> Result<Self, ::sea_orm::DbErr>
+                ) -> Result<Self, ::dbnexus::sea_orm::DbErr>
                 where
-                    C: ::sea_orm::ConnectionTrait,
+                    C: ::dbnexus::sea_orm::ConnectionTrait,
                 {
                     let _ = db;
                     let mut __this = self;
                     #before_delete_ident(&mut __this)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                     Ok(__this)
                 }
             }
@@ -1022,16 +1022,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 async fn after_delete<C>(
                     self,
                     db: &C,
-                ) -> Result<Self, ::sea_orm::DbErr>
+                ) -> Result<Self, ::dbnexus::sea_orm::DbErr>
                 where
-                    C: ::sea_orm::ConnectionTrait,
+                    C: ::dbnexus::sea_orm::ConnectionTrait,
                 {
                     let _ = db;
-                    use ::sea_orm::TryIntoModel;
-                    let __model: Model = ::sea_orm::TryIntoModel::<Model>::try_into_model(self.clone())
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                    use ::dbnexus::sea_orm::TryIntoModel;
+                    let __model: Model = ::dbnexus::sea_orm::TryIntoModel::<Model>::try_into_model(self.clone())
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                     #after_delete_ident(&__model)
-                        .map_err(|e| ::sea_orm::DbErr::Custom(e.to_string()))?;
+                        .map_err(|e| ::dbnexus::sea_orm::DbErr::Custom(e.to_string()))?;
                     Ok(self)
                 }
             }
@@ -1070,17 +1070,17 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// 不物理删除记录，而是 UPDATE SET deleted_at = now WHERE pk = ? AND deleted_at IS NULL
             ///
-            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
+            /// 主键类型由调用方决定，约束为 `Into<::dbnexus::sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
             /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
             pub async fn delete<PK>(
                 session: &::dbnexus::database::pool::Session,
                 pk: PK,
             ) -> Result<u64, dbnexus::DbError>
             where
-                PK: Into<sea_orm::Value>,
+                PK: Into<::dbnexus::sea_orm::Value>,
             {
-                use sea_orm::{EntityTrait, QueryFilter, QuerySelect};
-                use ::sea_orm::sea_query::Expr;
+                use ::dbnexus::sea_orm::{EntityTrait, QueryFilter, QuerySelect};
+                use ::dbnexus::sea_orm::sea_query::Expr;
 
                 session.check_table_permission(#table_name, "UPDATE").await?;
                 let conn = session.connection()?;
@@ -1103,10 +1103,10 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 软删除：批量设置 deleted_at（带权限控制）
             pub async fn delete_many(
                 session: &::dbnexus::database::pool::Session,
-                filter: sea_orm::Condition,
+                filter: ::dbnexus::sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::{EntityTrait, QueryFilter};
-                use ::sea_orm::sea_query::Expr;
+                use ::dbnexus::sea_orm::{EntityTrait, QueryFilter};
+                use ::dbnexus::sea_orm::sea_query::Expr;
 
                 session.check_table_permission(#table_name, "UPDATE").await?;
                 let conn = session.connection()?;
@@ -1130,7 +1130,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub async fn find_with_deleted(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1150,7 +1150,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub async fn find_only_deleted(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
-                use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+                use ::dbnexus::sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1169,16 +1169,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 
             /// 物理删除：根据主键永久删除记录（带权限控制）
             ///
-            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
+            /// 主键类型由调用方决定，约束为 `Into<::dbnexus::sea_orm::Value>`（与 sea-orm `Column::eq` 签名一致），
             /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
             pub async fn force_delete<PK>(
                 session: &::dbnexus::database::pool::Session,
                 pk: PK,
             ) -> Result<u64, dbnexus::DbError>
             where
-                PK: Into<sea_orm::Value>,
+                PK: Into<::dbnexus::sea_orm::Value>,
             {
-                use sea_orm::{EntityTrait, QueryFilter};
+                use ::dbnexus::sea_orm::{EntityTrait, QueryFilter};
 
                 session.check_table_permission(#table_name, "DELETE").await?;
                 let conn = session.connection()?;
@@ -1206,9 +1206,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 pk: PK,
             ) -> Result<u64, dbnexus::DbError>
             where
-                PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
+                PK: Into<<<Entity as ::dbnexus::sea_orm::EntityTrait>::PrimaryKey as ::dbnexus::sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
             {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "DELETE").await?;
                 let conn = session.connection()?;
@@ -1234,9 +1234,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// 批量删除（带权限控制）
             pub async fn delete_many(
                 session: &::dbnexus::database::pool::Session,
-                filter: sea_orm::Condition,
+                filter: ::dbnexus::sea_orm::Condition,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "DELETE").await?;
                 let conn = session.connection()?;
@@ -1272,7 +1272,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
 
             /// 生成实体的数据库 Schema 定义
             ///
-            /// 基于 `sea_orm::Schema::create_table_from_entity` 生成 `TableCreateStatement`，
+            /// 基于 `::dbnexus::sea_orm::Schema::create_table_from_entity` 生成 `TableCreateStatement`，
             /// 再通过 `dbnexus::domain::migration::convert_table` 转换为 dbnexus 自研的
             /// `migration::schema::Table` 结构，可直接用于 `Migration::add_table_change`。
             ///
@@ -1285,13 +1285,13 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// ```rust,ignore
             /// use dbnexus::db_entity;
-            /// use sea_orm::DbBackend;
+            /// use ::dbnexus::sea_orm::DbBackend;
             ///
             /// let table = User::schema(DbBackend::Sqlite);
             /// migration.add_table_change(TableChange::CreateTable(table));
             /// ```
-            pub fn schema(backend: ::sea_orm::DbBackend) -> ::dbnexus::domain::migration::schema::Table {
-                use ::sea_orm::{EntityTrait, Schema};
+            pub fn schema(backend: ::dbnexus::sea_orm::DbBackend) -> ::dbnexus::domain::migration::schema::Table {
+                use ::dbnexus::sea_orm::{EntityTrait, Schema};
                 let stmt = Schema::new(backend).create_table_from_entity(Entity);
                 ::dbnexus::domain::migration::convert_table(&stmt)
             }
@@ -1304,7 +1304,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// # 示例
             ///
             /// ```rust,ignore
-            /// use sea_orm::EntityTrait;
+            /// use ::dbnexus::sea_orm::EntityTrait;
             ///
             /// let select = User::query(&session).await?;
             /// let conn = session.connection()?;
@@ -1312,8 +1312,8 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// ```
             pub async fn query(
                 session: &::dbnexus::database::pool::Session,
-            ) -> Result<::sea_orm::Select<Entity>, dbnexus::DbError> {
-                use ::sea_orm::EntityTrait;
+            ) -> Result<::dbnexus::sea_orm::Select<Entity>, dbnexus::DbError> {
+                use ::dbnexus::sea_orm::EntityTrait;
                 session.check_table_permission(#table_name, "SELECT").await?;
                 Ok(Entity::find())
             }
@@ -1331,10 +1331,10 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 session: &'a ::dbnexus::database::pool::Session,
                 page_size: u64,
             ) -> Result<
-                ::sea_orm::Paginator<'a, ::sea_orm::DatabaseConnection, ::sea_orm::SelectModel<Self>>,
+                ::dbnexus::sea_orm::Paginator<'a, ::dbnexus::sea_orm::DatabaseConnection, ::dbnexus::sea_orm::SelectModel<Self>>,
                 dbnexus::DbError,
             > {
-                use ::sea_orm::{EntityTrait, PaginatorTrait};
+                use ::dbnexus::sea_orm::{EntityTrait, PaginatorTrait};
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
                 Ok(Entity::find().paginate(conn, page_size))
@@ -1354,8 +1354,8 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub async fn insert_many(
                 session: &::dbnexus::database::pool::Session,
                 models: Vec<Self>,
-            ) -> Result<::sea_orm::InsertManyResult<ActiveModel>, dbnexus::DbError> {
-                use ::sea_orm::EntityTrait;
+            ) -> Result<::dbnexus::sea_orm::InsertManyResult<ActiveModel>, dbnexus::DbError> {
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "INSERT").await?;
                 let conn = session.connection()?;
@@ -1380,7 +1380,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// # 示例
             ///
             /// ```rust,ignore
-            /// use sea_orm::ColumnTrait;
+            /// use ::dbnexus::sea_orm::ColumnTrait;
             ///
             /// let rows = User::update_many(
             ///     &session,
@@ -1390,11 +1390,11 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// ```
             pub async fn update_many(
                 session: &::dbnexus::database::pool::Session,
-                filter: ::sea_orm::Condition,
-                updates: Vec<(Column, ::sea_orm::Value)>,
+                filter: ::dbnexus::sea_orm::Condition,
+                updates: Vec<(Column, ::dbnexus::sea_orm::Value)>,
             ) -> Result<u64, dbnexus::DbError> {
-                use ::sea_orm::{EntityTrait, QueryFilter};
-                use ::sea_orm::sea_query::Expr;
+                use ::dbnexus::sea_orm::{EntityTrait, QueryFilter};
+                use ::dbnexus::sea_orm::sea_query::Expr;
 
                 session.check_table_permission(#table_name, "UPDATE").await?;
                 let conn = session.connection()?;
@@ -1425,7 +1425,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "INSERT").await?;
                 let conn = session.connection()?;
@@ -1457,9 +1457,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 pk: PK,
             ) -> Result<Option<Self>, dbnexus::DbError>
             where
-                PK: Into<<<Entity as sea_orm::EntityTrait>::PrimaryKey as sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
+                PK: Into<<<Entity as ::dbnexus::sea_orm::EntityTrait>::PrimaryKey as ::dbnexus::sea_orm::entity::prelude::PrimaryKeyTrait>::ValueType>,
             {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1483,7 +1483,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 session: &::dbnexus::database::pool::Session,
                 model: Self,
             ) -> Result<Self, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "UPDATE").await?;
                 let conn = session.connection()?;
@@ -1491,8 +1491,8 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
                 let active_model: ActiveModel = model.into();
                 // ✅ 修复 db_crud 硬编码 `id` 的 bug：使用显式 primary_key 字段名
                 let primary_key = match active_model.#primary_key_ident.clone() {
-                    sea_orm::ActiveValue::Set(id) => id,
-                    sea_orm::ActiveValue::Unchanged(id) => id,
+                    ::dbnexus::sea_orm::ActiveValue::Set(id) => id,
+                    ::dbnexus::sea_orm::ActiveValue::Unchanged(id) => id,
                     _ => return Err(dbnexus::DbError::Config("Primary key not set".to_string())),
                 };
 
@@ -1524,7 +1524,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub async fn find_all(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1546,9 +1546,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// soft_delete=true 时自动过滤已软删除记录
             pub async fn find_by_condition(
                 session: &::dbnexus::database::pool::Session,
-                condition: sea_orm::Condition,
+                condition: ::dbnexus::sea_orm::Condition,
             ) -> Result<Vec<Self>, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1572,9 +1572,9 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// soft_delete=true 时自动过滤已软删除记录
             pub async fn exists(
                 session: &::dbnexus::database::pool::Session,
-                condition: sea_orm::Condition,
+                condition: ::dbnexus::sea_orm::Condition,
             ) -> Result<bool, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1598,16 +1598,16 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             /// soft_delete=true 时自动过滤已软删除记录。
             /// 注意：返回记录的顺序可能与输入顺序不同。
             ///
-            /// 主键类型由调用方决定，约束为 `Into<sea_orm::Value>`（与 sea-orm `Column::is_in` 签名一致），
+            /// 主键类型由调用方决定，约束为 `Into<::dbnexus::sea_orm::Value>`（与 sea-orm `Column::is_in` 签名一致），
             /// 支持 i32/i64/String/uuid::Uuid 等任何 sea-orm `Value` 可接受的类型。
             pub async fn find_by_ids<PK>(
                 session: &::dbnexus::database::pool::Session,
                 pks: Vec<PK>,
             ) -> Result<Vec<Self>, dbnexus::DbError>
             where
-                PK: Into<sea_orm::Value>,
+                PK: Into<::dbnexus::sea_orm::Value>,
             {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1631,7 +1631,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             pub async fn count(
                 session: &::dbnexus::database::pool::Session,
             ) -> Result<u64, dbnexus::DbError> {
-                use sea_orm::EntityTrait;
+                use ::dbnexus::sea_orm::EntityTrait;
 
                 session.check_table_permission(#table_name, "SELECT").await?;
                 let conn = session.connection()?;
@@ -1662,7 +1662,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         // - 注意：Sea-ORM 的 ActiveModelBehavior trait 标注了 #[async_trait]，
         //   生成任何 async fn 时，impl 块也需要 #[async_trait]
         #behavior_attr
-        impl ::sea_orm::ActiveModelBehavior for ActiveModel {
+        impl ::dbnexus::sea_orm::ActiveModelBehavior for ActiveModel {
             #behavior_impl
         }
     };
@@ -1824,10 +1824,10 @@ pub fn db_repository(args: TokenStream, input: TokenStream) -> TokenStream {
                 pool: &::dbnexus::DbPool,
                 id: i64,
             ) -> ::dbnexus::DbResult<Option<serde_json::Value>> {
-                use ::sea_orm::ConnectionTrait;
+                use ::dbnexus::sea_orm::ConnectionTrait;
                 let session = pool.get_session("admin").await?;
                 let conn = session.connection()?;
-                let stmt = ::sea_orm::Statement::from_string(
+                let stmt = ::dbnexus::sea_orm::Statement::from_string(
                     conn.get_database_backend(),
                     format!("SELECT * FROM {} WHERE id = {}", #table_name, id),
                 );
@@ -1849,10 +1849,10 @@ pub fn db_repository(args: TokenStream, input: TokenStream) -> TokenStream {
                 &self,
                 pool: &::dbnexus::DbPool,
             ) -> ::dbnexus::DbResult<Vec<serde_json::Value>> {
-                use ::sea_orm::ConnectionTrait;
+                use ::dbnexus::sea_orm::ConnectionTrait;
                 let session = pool.get_session("admin").await?;
                 let conn = session.connection()?;
-                let stmt = ::sea_orm::Statement::from_string(
+                let stmt = ::dbnexus::sea_orm::Statement::from_string(
                     conn.get_database_backend(),
                     format!("SELECT * FROM {}", #table_name),
                 );

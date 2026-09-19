@@ -169,6 +169,9 @@ with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要
 with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono 类型支持（DateTime/NaiveDateTime 字段）
 with-uuid = ["sea-orm/with-uuid", "dep:uuid"]  # UUID 类型支持（uuid::Uuid 字段）
 validation = ["validator", "with-time"]  # 数据验证（validator crate + timestamps 依赖）
+# sea-orm MockDatabase 转发（仅测试用；经 dbnexus::sea_orm re-export 使用 MockDatabase
+# 的消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
+mock = ["sea-orm/mock"]
 
 # === 分布式能力 ===
 retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sql-parser 判断幂等性，rand 用于 jitter）
