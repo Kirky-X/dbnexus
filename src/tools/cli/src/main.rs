@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! DBNexus 迁移 CLI 工具
 //!
 //! 提供数据库迁移的命令行界面
 
-use clap::{Parser, Subcommand};
+use clap::{Command, CommandFactory, FromArgMatches, Parser, Subcommand};
 use dbnexus::MigrationExecutor;
 use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::i18n;
@@ -13,10 +13,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// CLI 配置
+/// CLI 配置（about/参数 help 在运行期经 i18n 本地化，见 `build_cli()`）
 #[derive(Parser)]
-#[command(name = "dbnexus-migrate")]
-#[command(about = "DBNexus 数据库迁移工具", long_about = None)]
+#[command(name = "dbnexus-migrate", long_about = None)]
 struct Cli {
     /// 数据库连接字符串（global：可置于子命令前后任意位置）
     #[arg(short, long, env = "DATABASE_URL", global = true)]
@@ -154,18 +153,66 @@ enum ExitCode {
     UsageError = 2,
 }
 
+/// 预扫描命令行参数中的 `--lang`，在首次 i18n 输出（含 help 渲染）前应用语言覆盖。
+///
+/// 非法语言值静默忽略（由后续 `set_locale` 正常报错）；未指定时走自动检测链
+/// （`DBNEXUS_LANG` → 系统语言 → en），`LANG=zh` 时即为中文。
+fn pre_apply_lang_override() {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let value = if let Some(rest) = arg.strip_prefix("--lang=") {
+            Some(rest.to_string())
+        } else if arg == "--lang" {
+            args.next()
+        } else {
+            None
+        };
+        if let Some(value) = value {
+            let _ = i18n::set_locale(&value);
+            return;
+        }
+    }
+}
+
+/// 构建本地化 CLI 命令：about 与参数 help 经 i18n 动态生成，
+/// 覆盖 derive 从中文文档注释生成的静态 help。
+fn build_cli() -> Command {
+    Cli::command()
+        .about(i18n::t_simple("cli-help-about"))
+        .mut_arg("database_url", |a| {
+            let help = i18n::t_simple("cli-help-database-url");
+            a.help(help.clone()).long_help(help)
+        })
+        .mut_arg("config", |a| {
+            let help = i18n::t_simple("cli-help-config");
+            a.help(help.clone()).long_help(help)
+        })
+        .mut_arg("migrations_dir", |a| {
+            let help = i18n::t_simple("cli-help-migrations-dir");
+            a.help(help.clone()).long_help(help)
+        })
+        .mut_arg("lang", |a| {
+            let help = i18n::t_simple("cli-help-lang");
+            a.help(help.clone()).long_help(help)
+        })
+}
+
 /// 程序入口
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
+    // 启动早期初始化 i18n（显式 --lang 优先于自动检测）
+    pre_apply_lang_override();
+
+    let matches = build_cli().get_matches();
+    let cli = Cli::from_arg_matches(&matches)?;
 
     // global 参数解析（clap 不允许 required global，此处统一收敛）
     let database_url: String = cli.database_url.unwrap_or_else(|| {
-        eprintln!("error: --database-url is required (or set DATABASE_URL)");
+        eprintln!("{}", i18n::t_simple("cli-database-url-required"));
         std::process::exit(ExitCode::UsageError as i32);
     });
 
-    // 初始化语言设置
+    // 初始化语言设置（非法值在此报错）
     if let Some(ref lang) = cli.lang {
         i18n::set_locale(lang)?;
     }

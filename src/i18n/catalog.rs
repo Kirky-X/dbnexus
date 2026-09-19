@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Message catalog for i18n translations powered by Fluent.
 //!
@@ -205,14 +205,23 @@ error-category-shard-conflict = ShardConflict
 
 query-error-report = [{ $category }] { $message } — Suggestion: { $suggestion }
 query-error-suggestion = Suggestion: { $suggestion }
+query-error-suggestion-code-table = Refer to the error code table to determine the handling strategy
 query-error-table = Table: { $table }
 query-error-operation = Operation: { $operation }
+
+error-code = Error code: { $code } ({ $name })
 
 migration = { $count } migrations applied
 hello-world = Hello, World!
 
 cli-migration-created = ✓ Migration file created: { $path }
 cli-status-title = Migration Status
+cli-help-about = DBNexus database migration tool
+cli-help-database-url = Database connection string (global: may appear before or after any subcommand)
+cli-help-config = Configuration file path
+cli-help-migrations-dir = Migrations directory (global: may appear before or after any subcommand)
+cli-help-lang = Manually specify language (en, zh)
+cli-database-url-required = error: --database-url is required (or set DATABASE_URL)
 cli-db-connect-failed = ❌ Database connection failed: { $error }
 cli-db-type = 📊 Database type: { $type }
 cli-migrations-dir = 📁 Migrations directory: { $path }
@@ -402,14 +411,23 @@ error-category-shard-conflict = 分片冲突
 
 query-error-report = [{ $category }] { $message } — 建议: { $suggestion }
 query-error-suggestion = 建议: { $suggestion }
+query-error-suggestion-code-table = 参考错误码表定位处理策略
 query-error-table = 表: { $table }
 query-error-operation = 操作: { $operation }
+
+error-code = 错误码: { $code }（{ $name }）
 
 migration = 已应用 { $count } 个迁移
 hello-world = 你好，世界！
 
 cli-migration-created = ✓ 迁移文件已创建: { $path }
 cli-status-title = 迁移状态查看
+cli-help-about = DBNexus 数据库迁移工具
+cli-help-database-url = 数据库连接字符串（global：可置于子命令前后任意位置）
+cli-help-config = 配置文件路径
+cli-help-migrations-dir = 迁移文件目录（global：可置于子命令前后任意位置）
+cli-help-lang = 手动指定语言 (en, zh)
+cli-database-url-required = 错误: 必须提供 --database-url（或设置 DATABASE_URL 环境变量）
 cli-db-connect-failed = ❌ 数据库连接失败: { $error }
 cli-db-type = 📊 数据库类型: { $type }
 cli-migrations-dir = 📁 迁移目录: { $path }
@@ -591,6 +609,34 @@ mod tests {
         assert_eq!(
             format_from_bundle("zh", "pool-exhausted", &[]),
             Some("连接池已耗尽".to_string())
+        );
+    }
+
+    /// 守卫:error-code 与 query-error-suggestion-code-table 在 en/zh 双束均存在
+    /// （缺键时 to_localized_string() 会退化为裸键）
+    #[test]
+    fn test_error_code_and_suggestion_keys_present_both_bundles() {
+        let args = &[
+            ("code", "3001".to_string()),
+            ("name", "SqlSyntax".to_string()),
+        ];
+        assert_eq!(
+            format_from_bundle("en", "error-code", args),
+            Some("Error code: 3001 (SqlSyntax)".to_string())
+        );
+        assert_eq!(
+            format_from_bundle("zh", "error-code", args),
+            Some("错误码: 3001（SqlSyntax）".to_string())
+        );
+        assert_eq!(
+            format_from_bundle("en", "query-error-suggestion-code-table", &[]),
+            Some(
+                "Refer to the error code table to determine the handling strategy".to_string()
+            )
+        );
+        assert_eq!(
+            format_from_bundle("zh", "query-error-suggestion-code-table", &[]),
+            Some("参考错误码表定位处理策略".to_string())
         );
     }
 }

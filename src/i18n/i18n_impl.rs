@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! i18n module implementation details.
 //!
@@ -46,17 +46,11 @@ fn get_message(locale: &Locale, key: &str) -> &'static str {
     match (lang, key) {
         // --- 迁移消息 ---
         ("zh", "migration") => "已应用 {count} 个迁移",
-        ("de", "migration") => "{count} Migrationen angewendet",
-        ("ja", "migration") => "{count} 件のマイグレーションを適用しました",
-        ("fr", "migration") => "{count} migrations appliquées",
         // English and fallback
         (_, "migration") => "{count} migrations applied",
 
         // --- 通用消息 ---
         ("zh", "hello_world") => "你好，世界！",
-        ("de", "hello_world") => "Hallo, Welt!",
-        ("ja", "hello_world") => "こんにちは、世界！",
-        ("fr", "hello_world") => "Bonjour, le monde !",
         (_, "hello_world") => "Hello, World!",
 
         // Unknown key fallback

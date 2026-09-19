@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 统一错误类型
 
@@ -258,7 +258,11 @@ impl From<UnifiedDbError> for QueryErrorReport {
             ErrorCode::SqlSyntax => ErrorCategory::SyntaxError,
             _ => ErrorCategory::SyntaxError,
         };
-        QueryErrorReport::new(category, err.to_string(), "参考错误码表定位处理策略")
+        QueryErrorReport::new(
+            category,
+            err.to_string(),
+            crate::i18n::t_simple("query-error-suggestion-code-table"),
+        )
     }
 }
 
