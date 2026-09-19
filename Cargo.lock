@@ -1544,7 +1544,7 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "tokio",
- "trait-kit 0.5.0-rc.5",
+ "trait-kit",
  "twox-hash",
  "unic-langid",
  "unicode-normalization",
@@ -1587,7 +1587,7 @@ dependencies = [
  "time",
  "tokio",
  "toml",
- "trait-kit 0.5.0-rc.5",
+ "trait-kit",
  "validator",
 ]
 
@@ -3782,7 +3782,7 @@ dependencies = [
  "serde_json",
  "serde_stacker",
  "tokio",
- "trait-kit 0.5.0-rc.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trait-kit",
  "unic-langid",
  "uuid",
  "writeable",
@@ -5789,12 +5789,6 @@ dependencies = [
  "fluent-bundle",
  "unic-langid",
 ]
-
-[[package]]
-name = "trait-kit"
-version = "0.5.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2645fc42f8787abe89d0031b798c0a881087ebc2ebb40a67ad71fa65def62534"
 
 [[package]]
 name = "try-lock"
