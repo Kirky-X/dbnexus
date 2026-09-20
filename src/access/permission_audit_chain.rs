@@ -7,7 +7,8 @@
 //! `prev_hash_0 = GENESIS`（零哈希，与 confers 审计链同模式——盐/键由
 //! 使用方持有，链条锚定固定创世哈希）。
 //!
-//! [`verify_permission_chain`] 对完整链条重算签名：任一事件被篡改、
+//! [`verify_permission_chain()`](crate::access::permission_audit_chain::verify_permission_chain)
+//! 对完整链条重算签名：任一事件被篡改、
 //! 删除、重排或伪造（prev_hash 链断裂 / hmac 不匹配 / 序号跳跃）即
 //! 校验失败。
 //!
