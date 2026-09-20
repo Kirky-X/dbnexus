@@ -1,0 +1,22 @@
+# typos 白名单 —— 仅收录已人工核实的"非笔误"用法
+# (缩写、故意构造的测试数据、外文示例)，避免 typos --write-changes 误改真实内容。
+# 新增条目务必写明依据，禁止整目录/整文件排除。
+
+[default]
+
+# extend-ignore-identifiers-re: 标识符级白名单
+# tests/security/unit/sql_injection_tests.rs: 混合大小写的 SQL 关键字
+# "InFoRmAtIoN_ScHeMa" 是刻意的注入检测用例，大小写必须保留
+# (typos 会把它按大小写切成 In|Fo|Rm|At|Io|N，故按标识符整体忽略)
+extend-ignore-identifiers-re = ["(?i)InFoRmAtIoN"]
+
+# extend-words: 单词级白名单(值等于键 = 该词永远合法)
+[default.extend-words]
+# docs/ARCHITECTURE.md: mermaid 节点 id，foundation 模块的惯用缩写
+FND = "FND"
+# src/access/sql_parser.rs#test_special_unicode_chars: 故意拆开的 "SEL\u{200B}ECT"，
+# 用于验证零宽字符规范化，不可合并/改写
+ECT = "ECT"
+# src/database/pool/duckdb_conn.rs#test_duckdb_syntax_error_returns_error:
+# 故意写错的 SQL 关键字，用于触发语法错误分支
+TABL = "TABL"
