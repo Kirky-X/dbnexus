@@ -151,7 +151,7 @@ fn chain_message(prev_hash: &[u8], canonical_event: &[u8]) -> Vec<u8> {
 
 /// 十六进制解码（非法输入返回 None）
 fn hex_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     (0..s.len())
@@ -268,10 +268,6 @@ pub fn verify_permission_chain(entries: &[ChainEntry], key: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn record(role: &str, action: &str) -> PermissionChangeRecord {
-        PermissionChangeRecord::new(role, action, "operator")
-    }
 
     // ===== RFC 4231 HMAC-SHA256 向量 =====
 

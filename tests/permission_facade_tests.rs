@@ -14,7 +14,7 @@
 use dbnexus::{
     DbPool, PermissionFacade, PermissionFacadeConfig,
     access::data_protection::MaskStrategy,
-    access::permission::{PermissionAction, PermissionConfig, RolePolicy, TablePermission},
+    access::permission::{PermissionAction, RolePolicy, TablePermission},
 };
 use std::collections::HashMap;
 

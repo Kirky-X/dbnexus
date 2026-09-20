@@ -895,7 +895,7 @@ impl Session {
 
     /// 查询出口字段脱敏
     #[cfg(feature = "data-protection")]
-    async fn apply_masking(&self, rows: &mut Vec<serde_json::Value>) {
+    async fn apply_masking(&self, rows: &mut [serde_json::Value]) {
         let dp = { self.pool_inner.data_protection.read().await.clone() };
         if let Some(m) = dp.masking.as_ref() {
             m.apply(rows);

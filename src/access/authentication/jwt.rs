@@ -234,10 +234,10 @@ impl JwtManager {
         }
         // 查远程撤销缓存（异步）
         #[cfg(feature = "oxcache-integration")]
-        if let Some(ref cache) = self.revocation_cache {
-            if let Ok(Some(_)) = cache.get(&format!("revoked_jti:{}", claims.jti)).await {
-                return Err(AuthError::InvalidToken);
-            }
+        if let Some(ref cache) = self.revocation_cache
+            && let Ok(Some(_)) = cache.get(&format!("revoked_jti:{}", claims.jti)).await
+        {
+            return Err(AuthError::InvalidToken);
         }
         Ok(claims)
     }

@@ -11,7 +11,7 @@
 #![cfg(all(feature = "runtime-tokio-rustls", feature = "sqlite", feature = "copy"))]
 
 use dbnexus::DbError;
-use dbnexus::database::copy::{CopyFormat, CopyStatement};
+use dbnexus::database::copy::CopyStatement;
 
 fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
     let path = std::env::temp_dir().join(format!("dbnexus_t407_{}_{}.db", tag, std::process::id()));
@@ -46,9 +46,7 @@ fn test_copy_statement_rejects_injection_identifiers() {
         "",
         "t ",
     ] {
-        let err = CopyStatement::new(bad, &["id".to_string()])
-            .err()
-            .expect("非法标识符应返回错误");
+        let err = CopyStatement::new(bad, &["id".to_string()]).expect_err("非法标识符应返回错误");
         assert!(
             format!("{err}").contains("identifier"),
             "错误应说明 identifier 非法，实际: {err}"

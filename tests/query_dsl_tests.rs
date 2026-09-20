@@ -111,8 +111,10 @@ fn test_select_star() {
 /// 条件组合 API：程序化追加（非宏路径）
 #[test]
 fn test_programmatic_condition_addition() {
-    let mut fragment = QueryFragment::default();
-    fragment.table = Some("t422".to_string());
+    let mut fragment = QueryFragment {
+        table: Some("t422".to_string()),
+        ..Default::default()
+    };
     fragment.add_condition("age", dbnexus::DslOp::Gt, "10".to_string());
     assert_eq!(fragment.to_sql(), "SELECT * FROM t422 WHERE age > 10");
 }

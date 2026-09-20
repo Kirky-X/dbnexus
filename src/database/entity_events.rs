@@ -274,15 +274,10 @@ impl OutboxStore for DbOutboxStore {
                 continue;
             };
             // payload 以 JSON 文本存储：能解析则还原为结构化 Value，否则保留原文本
-            let payload: Option<Value> = match row
+            let payload: Option<Value> = row
                 .get("payload")
                 .and_then(|v| v.as_str().map(String::from))
-            {
-                Some(text) => {
-                    Some(serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text)))
-                }
-                None => None,
-            };
+                .map(|text| serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text)));
             let occurred_at_ms = row
                 .get("created_at")
                 .and_then(|v| v.as_u64())
