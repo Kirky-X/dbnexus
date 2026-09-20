@@ -409,6 +409,8 @@ mod tests {
     /// #4: Full integration — register OxcacheModule +
     /// DbNexusModule, set configs, build, require DbNexusModule → get a
     /// working `Arc<dyn ConnectionPool + Send + Sync>`.
+    // sqlite 专测:URL 硬编码 sqlite::memory:;驱动互斥矩阵(pg/mysql 腿)下需跳过。
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn dbnexus_module_build_returns_connection_pool() {
         let mut kit = AsyncKit::new();
@@ -635,6 +637,8 @@ mod tests {
     }
 
     /// 缓存能力可 require — get/set 经 `DbCacheProvider` 走 oxcache 后端。
+    // sqlite 专测:URL 硬编码 sqlite::memory:;驱动互斥矩阵(pg/mysql 腿)下需跳过。
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn t413_cache_capability_requireable() {
         let mut kit = AsyncKit::new();
@@ -663,7 +667,13 @@ mod tests {
 
     /// 全能力注册端到端 — 池/缓存/审计/健康四能力在构建后全部
     /// 可 require 且可用（审计走临时文件库，规避 sqlite 内存库每连接独立）。
-    #[cfg(all(feature = "audit", feature = "sql-parser", feature = "health-check"))]
+    // sqlite 专测:URL 硬编码 sqlite 临时文件库;驱动互斥矩阵(pg/mysql 腿)下需跳过。
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "audit",
+        feature = "sql-parser",
+        feature = "health-check"
+    ))]
     #[tokio::test]
     async fn t413_all_capabilities_requireable() {
         let db_path = std::env::temp_dir().join(format!("dbnexus_t413_{}.db", std::process::id()));

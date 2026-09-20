@@ -1055,7 +1055,9 @@ dependencies = [
 
 [[package]]
 name = "confers"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff95e01ed3c29084efe4e95e365fa831e3101504d269a59972d5914020b3d389"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1083,7 +1085,9 @@ dependencies = [
 
 [[package]]
 name = "confers-macros"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f68d3acdd765107a376e4fca48d40d8bc027d52a99a94e307992f2dfdc824077"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -1508,7 +1512,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1556,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-cli"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
 dependencies = [
  "assert_cmd",
  "chrono",
@@ -1573,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-examples"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1593,7 +1597,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-macros"
-version = "0.6.0-rc.4"
+version = "0.6.0-rc.5"
 dependencies = [
  "dbnexus",
  "proc-macro2",
@@ -3769,11 +3773,12 @@ dependencies = [
 [[package]]
 name = "oxcache"
 version = "0.5.0-rc.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d6c9870fdf44705199a23baf0ecfa891ba9b4b58fe56d556fb2afacf7e507f4"
 dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
- "fluent-bundle",
  "futures",
  "icu",
  "moka",
@@ -3783,7 +3788,6 @@ dependencies = [
  "serde_stacker",
  "tokio",
  "trait-kit",
- "unic-langid",
  "uuid",
  "writeable",
 ]
@@ -5784,7 +5788,9 @@ dependencies = [
 
 [[package]]
 name = "trait-kit"
-version = "0.5.0-rc.5"
+version = "0.5.0-rc.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "726ca13fe2e870e40548c8eff4d02614548e31615282395da2df696a4981bfb9"
 dependencies = [
  "fluent-bundle",
  "unic-langid",

@@ -118,6 +118,8 @@ roles:
         assert!(config.roles.contains_key("analyst"));
     }
 
+    // sqlite 专测:URL 硬编码 sqlite;驱动互斥矩阵(pg/mysql 腿)下无 sqlite 驱动,需跳过。
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_hot_reload_swaps_permission_config() {
         use confers::{ChangeEvent, ChangeSource, ChangeStream};
