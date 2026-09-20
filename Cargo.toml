@@ -172,6 +172,10 @@ validation = ["validator", "with-time"]  # 数据验证（validator crate + time
 # sea-orm MockDatabase 转发（仅测试用；经 dbnexus::sea_orm re-export 使用 MockDatabase
 # 的消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
 mock = ["sea-orm/mock"]
+# sea-orm 派生宏转发（entity::prelude 的 DeriveEntityModel/DeriveRelation/FromQueryResult
+# 等 derive 均由 sea-orm 的 macros feature 门控；经 dbnexus::sea_orm re-export 定义实体/
+# 查询行的消费方开启此 feature，避免为派生宏保留 sea-orm 直依赖；与驱动 feature 正交）
+entity-macros = ["sea-orm/macros"]
 
 # === 分布式能力 ===
 retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sql-parser 判断幂等性，rand 用于 jitter）
