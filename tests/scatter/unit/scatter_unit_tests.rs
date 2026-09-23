@@ -116,6 +116,7 @@ fn test_scatter_result_empty() {
         failed_shards: vec![],
         aggregated: None,
         shard_rows: vec![],
+        merged_rows: Vec::new(),
     };
     assert!(result.shard_row_counts.is_empty());
     assert!(result.failed_shards.is_empty());
@@ -133,6 +134,7 @@ fn test_scatter_result_with_data() {
         }],
         aggregated: Some(AggregateValue::Count(450)),
         shard_rows: vec![],
+        merged_rows: Vec::new(),
     };
     assert_eq!(result.shard_row_counts.len(), 3);
     assert_eq!(result.failed_shards.len(), 1);

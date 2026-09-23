@@ -21,7 +21,7 @@ pub mod duckdb_conn;
 use crate::foundation::DbConfig;
 
 pub use db_pool::{DatabaseConnection, DbConnection, DbPool, PoolStatus};
-pub use session::Session;
+pub use session::{DbIsolationLevel, Session};
 
 #[cfg(feature = "duckdb")]
 pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};

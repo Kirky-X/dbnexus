@@ -77,8 +77,8 @@ pub mod access;
 /// Observability 层 - 可观测模块
 pub mod observability;
 
-/// Reliability 层 - 运行时容错模块（重试、故障转移等）
-#[cfg(feature = "retry")]
+/// Reliability 层 - 运行时容错模块（重试、故障转移、缓存三防等）
+#[cfg(any(feature = "retry", feature = "cache-available"))]
 pub mod reliability;
 
 /// Storage 模块 (保留用于 global-index)
@@ -136,13 +136,13 @@ pub use crate::domain::{
 pub use crate::database::DbConnection;
 pub use crate::database::DbPool;
 pub use crate::database::DbPoolBuilder;
-pub use crate::database::Session;
 #[cfg(feature = "migration")]
 pub use crate::database::{
     Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser,
     MigrationHistory, MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use crate::database::{ConnectionPool, DatabaseSession};
+pub use crate::database::{DbIsolationLevel, Session};
 
 // DuckDB 连接包装器导出（0.3.0 新增）
 #[cfg(feature = "sharding")]
@@ -280,8 +280,8 @@ pub use crate::database::replica::{
 // Scatter-Gather 导出（scatter-gather feature）
 #[cfg(feature = "scatter-gather")]
 pub use crate::database::{
-    AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ScatterResult,
-    ShardError,
+    AggregateFunction, AggregateValue, OrderKey, PartialFailurePolicy, ScatterGatherExecutor,
+    ScatterResult, ShardError, apply_global_pagination, merge_shard_rows,
 };
 
 // Saga 分布式事务导出（saga feature）

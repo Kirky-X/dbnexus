@@ -81,6 +81,7 @@ mod scatter_integration {
             }],
             aggregated: Some(AggregateValue::Count(450)),
             shard_rows: vec![],
+            merged_rows: Vec::new(),
         };
         assert_eq!(result.shard_row_counts.len(), 3);
         assert_eq!(result.failed_shards.len(), 1);

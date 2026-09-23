@@ -132,6 +132,130 @@ pub struct ScatterResult {
     pub aggregated: Option<AggregateValue>,
     /// 各分片返回的真实数据行 (shard_id, rows)——取回的数据行而非仅行数
     pub shard_rows: Vec<(u32, Vec<serde_json::Value>)>,
+    /// 全局排序归并 + 分页后的行（仅 `scatter_query_rows_merged` 填充，其余路径为空）
+    pub merged_rows: Vec<serde_json::Value>,
+}
+
+/// 全局排序键（跨分片归并用）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderKey {
+    /// 列名（JSON 行对象的键）
+    pub column: String,
+    /// 是否降序
+    pub desc: bool,
+}
+
+impl OrderKey {
+    /// 升序排序键
+    pub fn asc(column: impl Into<String>) -> Self {
+        Self {
+            column: column.into(),
+            desc: false,
+        }
+    }
+
+    /// 降序排序键
+    pub fn desc(column: impl Into<String>) -> Self {
+        Self {
+            column: column.into(),
+            desc: true,
+        }
+    }
+}
+
+/// 按排序键列表比较两行；同键值返回 Equal（保持稳定序）
+fn compare_rows_by_keys(
+    a: &serde_json::Value,
+    b: &serde_json::Value,
+    keys: &[OrderKey],
+) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    for key in keys {
+        let ord = match (a.get(&key.column), b.get(&key.column)) {
+            (None, None) => Ordering::Equal,
+            // 缺失恒排末尾（asc 与 desc 一致）
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(x), Some(y)) => compare_json_values(x, y, key.desc),
+        };
+        if ord != Ordering::Equal {
+            return ord;
+        }
+    }
+    Ordering::Equal
+}
+
+/// 单键值比较：同类值（Number 按数值 / String 按字典序）受 `desc` 反转；
+/// 混型类型类序固定（Number < String < 其他），不随 desc 反转
+fn compare_json_values(
+    a: &serde_json::Value,
+    b: &serde_json::Value,
+    desc: bool,
+) -> std::cmp::Ordering {
+    use serde_json::Value;
+    use std::cmp::Ordering;
+    let ordered = |ord: Ordering| if desc { ord.reverse() } else { ord };
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => {
+            let (fx, fy) = (x.as_f64(), y.as_f64());
+            match (fx, fy) {
+                (Some(x), Some(y)) => ordered(x.partial_cmp(&y).unwrap_or(Ordering::Equal)),
+                _ => Ordering::Equal,
+            }
+        }
+        (Value::String(x), Value::String(y)) => ordered(x.cmp(y)),
+        // 类型类序固定（不受 desc 影响）
+        (Value::Number(_), _) => Ordering::Less,
+        (_, Value::Number(_)) => Ordering::Greater,
+        (Value::String(_), _) => Ordering::Less,
+        (_, Value::String(_)) => Ordering::Greater,
+        _ => Ordering::Equal,
+    }
+}
+
+/// 跨分片行全局归并排序
+///
+/// 输入各分片行集（分片内无需有序），输出全局有序的全部行。排序稳定：
+/// 同键值行保持「分片 ID 升序、分片内原序」。
+pub fn merge_shard_rows(
+    shard_rows: &[(u32, Vec<serde_json::Value>)],
+    order_by: &[OrderKey],
+) -> Vec<serde_json::Value> {
+    if order_by.is_empty() {
+        return shard_rows
+            .iter()
+            .flat_map(|(_, rows)| rows.iter().cloned())
+            .collect();
+    }
+    let mut indexed: Vec<(u32, usize, &serde_json::Value)> = shard_rows
+        .iter()
+        .flat_map(|(shard_id, rows)| {
+            rows.iter()
+                .enumerate()
+                .map(move |(i, row)| (*shard_id, i, row))
+        })
+        .collect();
+    indexed.sort_by(|(sa, ia, ra), (sb, ib, rb)| {
+        compare_rows_by_keys(ra, rb, order_by)
+            .then_with(|| sa.cmp(sb))
+            .then_with(|| ia.cmp(ib))
+    });
+    indexed.into_iter().map(|(_, _, row)| row.clone()).collect()
+}
+
+/// 全局分页：对归并后的行集应用 offset/limit（作用于全局行序而非单分片）
+pub fn apply_global_pagination(
+    rows: Vec<serde_json::Value>,
+    limit: u64,
+    offset: u64,
+) -> Vec<serde_json::Value> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    let total = rows.len() as u64;
+    let start = offset.min(total) as usize;
+    let end = (start as u64).saturating_add(limit).min(total) as usize;
+    rows.into_iter().skip(start).take(end - start).collect()
 }
 
 // ============================================================================
@@ -242,7 +366,35 @@ impl ScatterGatherExecutor {
             failed_shards,
             aggregated,
             shard_rows,
+            merged_rows: Vec::new(),
         })
+    }
+
+    /// scatter-gather 全局有序查询：跨分片归并排序 + 全局分页
+    ///
+    /// 与 `scatter_query_rows` 的差异：结果经 [`merge_shard_rows`] 全局排序后
+    /// 应用 [`apply_global_pagination`]，limit/offset 作用于**全局行序**，
+    /// 修正旧路径「各分片各自 LIMIT 后按完成顺序拼接」的错误语义。
+    ///
+    /// # 性能建议
+    ///
+    /// 各分片 SQL 应自带 `ORDER BY` 与 `LIMIT(limit + offset)` 下推，
+    /// 减少网络传输；归并层不依赖分片行集有序（无序时退化为全量排序）。
+    pub async fn scatter_query_rows_merged(
+        &self,
+        sql: &str,
+        role: &str,
+        agg: Option<&AggregateFunction>,
+        order_by: &[OrderKey],
+        limit: u64,
+        offset: u64,
+    ) -> Result<ScatterResult, String> {
+        let mut result = self.scatter_query_rows(sql, role, agg).await?;
+        if !order_by.is_empty() {
+            let merged = merge_shard_rows(&result.shard_rows, order_by);
+            result.merged_rows = apply_global_pagination(merged, limit, offset);
+        }
+        Ok(result)
     }
 
     /// 对 scatter 结果执行 COUNT 聚合
@@ -273,5 +425,138 @@ impl ScatterGatherExecutor {
     /// 对 scatter 结果执行 MAX 聚合
     pub fn aggregate_max(values: &[f64]) -> AggregateValue {
         AggregateValue::Max(values.iter().copied().fold(f64::NEG_INFINITY, f64::max))
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// 三分片交错数据归并后与全量排序结果一致（R-scatter-001）
+    #[test]
+    fn merge_orders_rows_globally_across_shards() {
+        let shard_rows = vec![
+            (
+                0u32,
+                vec![json!({"id": 5, "score": 90}), json!({"id": 1, "score": 70})],
+            ),
+            (
+                1u32,
+                vec![json!({"id": 3, "score": 90}), json!({"id": 2, "score": 85})],
+            ),
+            (
+                2u32,
+                vec![json!({"id": 4, "score": 60}), json!({"id": 6, "score": 90})],
+            ),
+        ];
+        let merged = merge_shard_rows(&shard_rows, &[OrderKey::asc("score")]);
+        let scores: Vec<i64> = merged
+            .iter()
+            .map(|r| r["score"].as_i64().unwrap())
+            .collect();
+        assert_eq!(scores, vec![60, 70, 85, 90, 90, 90]);
+    }
+
+    /// 稳定性：同键值行按 分片 ID 升序、分片内原序
+    #[test]
+    fn merge_is_stable_for_equal_keys() {
+        let shard_rows = vec![
+            (
+                1u32,
+                vec![json!({"k": 1, "tag": "b1"}), json!({"k": 1, "tag": "b2"})],
+            ),
+            (0u32, vec![json!({"k": 1, "tag": "a1"})]),
+        ];
+        let merged = merge_shard_rows(&shard_rows, &[OrderKey::asc("k")]);
+        let tags: Vec<&str> = merged.iter().map(|r| r["tag"].as_str().unwrap()).collect();
+        assert_eq!(tags, vec!["a1", "b1", "b2"]);
+    }
+
+    /// 降序 + 多键排序
+    #[test]
+    fn merge_supports_desc_and_multi_key() {
+        let shard_rows = vec![
+            (0u32, vec![json!({"a": 1, "b": 2}), json!({"a": 2, "b": 1})]),
+            (1u32, vec![json!({"a": 1, "b": 9})]),
+        ];
+        let merged = merge_shard_rows(&shard_rows, &[OrderKey::asc("a"), OrderKey::desc("b")]);
+        let bs: Vec<i64> = merged.iter().map(|r| r["b"].as_i64().unwrap()).collect();
+        assert_eq!(bs, vec![9, 2, 1]);
+    }
+
+    /// 缺失键恒排末尾（asc 与 desc 一致）；混型数值优先
+    #[test]
+    fn missing_keys_sort_last_regardless_of_direction() {
+        let shard_rows = vec![(
+            0u32,
+            vec![
+                json!({"v": 10}),
+                json!({"other": 1}),
+                json!({"v": "text"}),
+                json!({"v": 2}),
+            ],
+        )];
+        for key in [OrderKey::asc("v"), OrderKey::desc("v")] {
+            let merged = merge_shard_rows(&shard_rows, &[key]);
+            let last = merged.last().unwrap();
+            assert!(last.get("v").is_none(), "missing-key row must be last");
+            // 数值在字符串之前（类型类序不受 desc 影响）
+            let positions: Vec<usize> = merged
+                .iter()
+                .enumerate()
+                .map(|(i, r)| {
+                    if r.get("v").is_some_and(|v| v.is_string()) {
+                        i
+                    } else {
+                        usize::MAX
+                    }
+                })
+                .filter(|i| *i != usize::MAX)
+                .collect();
+            assert_eq!(
+                positions,
+                vec![2],
+                "string value row sits between numbers and missing"
+            );
+        }
+    }
+
+    /// 空排序键 = 不过排序，仅拼接（兼容入口语义）
+    #[test]
+    fn empty_order_by_concatenates_without_sort() {
+        let shard_rows = vec![
+            (0u32, vec![json!({"id": 2})]),
+            (1u32, vec![json!({"id": 1})]),
+        ];
+        let merged = merge_shard_rows(&shard_rows, &[]);
+        assert_eq!(merged.len(), 2);
+    }
+
+    /// 全局分页（R-scatter-002）：offset/limit 作用于全局行序
+    #[test]
+    fn global_pagination_applies_after_merge() {
+        let shard_rows = vec![
+            (0u32, vec![json!({"id": 1}), json!({"id": 4})]),
+            (
+                1u32,
+                vec![json!({"id": 2}), json!({"id": 3}), json!({"id": 5})],
+            ),
+        ];
+        let merged = merge_shard_rows(&shard_rows, &[OrderKey::asc("id")]);
+        let page1 = apply_global_pagination(merged.clone(), 2, 0);
+        let page2 = apply_global_pagination(merged.clone(), 2, 2);
+        let page3 = apply_global_pagination(merged.clone(), 2, 4);
+        let as_ids = |rows: Vec<serde_json::Value>| {
+            rows.iter()
+                .map(|r| r["id"].as_i64().unwrap())
+                .collect::<Vec<i64>>()
+        };
+        assert_eq!(as_ids(page1), vec![1, 2]);
+        assert_eq!(as_ids(page2), vec![3, 4]);
+        assert_eq!(as_ids(page3), vec![5]);
+        // 边界：offset 超界、limit=0
+        assert!(apply_global_pagination(merged.clone(), 2, 99).is_empty());
+        assert!(apply_global_pagination(merged, 0, 0).is_empty());
     }
 }

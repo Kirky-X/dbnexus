@@ -12,3 +12,9 @@ pub use retry::{RetryError, RetryExecutor, RetryPolicy};
 
 #[cfg(feature = "retry")]
 pub use retry::is_idempotent_operation;
+
+#[cfg(feature = "cache-available")]
+pub mod cache_guard;
+
+#[cfg(feature = "cache-available")]
+pub use cache_guard::{CacheGuard, jittered_ttl};

@@ -59,8 +59,8 @@ pub use migration::{
     MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use pool::{
-    ConnectionPool, DatabaseConnection, DatabaseSession, DbConnection, DbPool, DbPoolBuilder,
-    PoolStatus, Session,
+    ConnectionPool, DatabaseConnection, DatabaseSession, DbConnection, DbIsolationLevel, DbPool,
+    DbPoolBuilder, PoolStatus, Session,
 };
 pub use pool::{ConnectionTrait, TransactionTrait};
 #[cfg(feature = "duckdb")]
@@ -73,8 +73,8 @@ pub use sharding::{
 // Scatter-Gather re-exports
 #[cfg(feature = "scatter-gather")]
 pub use scatter::{
-    AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterGatherExecutor, ScatterResult,
-    ShardError,
+    AggregateFunction, AggregateValue, OrderKey, PartialFailurePolicy, ScatterGatherExecutor,
+    ScatterResult, ShardError, apply_global_pagination, merge_shard_rows,
 };
 
 // Saga re-exports
