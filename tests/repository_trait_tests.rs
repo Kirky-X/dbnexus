@@ -440,3 +440,75 @@ async fn test_find_all_cursor_walks_all_rows_without_duplicates() {
     );
     let _ = std::fs::remove_file(path);
 }
+
+// ============================================================================
+// 绑定参数化：恶意值往返（R-repo-005 / R-txn-003）
+// ============================================================================
+
+/// 含注入序列的值经绑定参数写入后必须逐字节往返、且不影响表数据
+#[tokio::test]
+async fn test_bound_params_roundtrip_malicious_values() {
+    let (pool, path) = setup_pool("bind_roundtrip").await;
+    let repo = JsonRepository::new("t418_users").expect("repo");
+
+    let evil_name = "O'Brien \\ ; DROP TABLE t418_users; -- ' OR '1'='1";
+    let evil_email = "x\\'@example.com";
+
+    repo.insert(
+        &pool,
+        &User {
+            id: 900,
+            name: evil_name.to_string(),
+            email: evil_email.to_string(),
+            age: 1,
+        },
+    )
+    .await
+    .expect("insert with malicious values");
+
+    // 逐字节往返
+    let found: User = repo.find_by_id(&pool, 900).await.unwrap().unwrap();
+    assert_eq!(found.name, evil_name);
+    assert_eq!(found.email, evil_email);
+
+    // 表未被注入语句破坏：更新仍正常工作
+    let affected = repo
+        .update(
+            &pool,
+            900,
+            &User {
+                id: 900,
+                name: "recovered".to_string(),
+                email: evil_email.to_string(),
+                age: 2,
+            },
+        )
+        .await
+        .expect("update after malicious insert");
+    assert_eq!(affected, 1);
+
+    // 乐观锁路径同样走绑定：版本过期仍正确冲突
+    let err = repo
+        .update_if_version(
+            &pool,
+            900,
+            &User {
+                id: 900,
+                name: "cas".to_string(),
+                email: "cas@example.com".to_string(),
+                age: 3,
+            },
+            "age", // 非版本语义，但走同一绑定路径验证占位符
+        )
+        .await;
+    // age=3 与库中 age=2 不匹配 → VersionConflict（绑定路径条件判断生效）
+    assert!(
+        matches!(err, Err(dbnexus::DbError::VersionConflict { .. })),
+        "bound CAS must evaluate conditions correctly: {err:?}"
+    );
+
+    // 全表行数恰好 1（此前唯一的 insert），DROP TABLE 未得逞
+    let all: Vec<User> = repo.find_all(&pool, 100, 0).await.expect("find_all");
+    assert_eq!(all.len(), 1);
+    let _ = std::fs::remove_file(path);
+}
