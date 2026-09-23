@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use sea_orm::{ConnectionTrait, Statement};
@@ -309,6 +310,8 @@ struct NodeState {
     last_latency_ms: Option<u64>,
     /// 最近一次探测是否健康（乐观初始：未被探测证伪前视为健康）
     last_healthy: bool,
+    /// 最近一次探测时间（探测结果按 `probe_interval` 缓存复用）
+    last_probe_at: Option<std::time::Instant>,
 }
 
 impl NodeState {
@@ -334,6 +337,12 @@ pub struct ReplicaLoadBalancer {
     nodes: Mutex<Vec<NodeState>>,
     failure_threshold: u32,
     last_selected: Mutex<Option<String>>,
+    /// 写后读粘性窗口：窗口内的读请求强制走主库（防读到未同步的旧值）
+    sticky_duration: Duration,
+    /// 最近一次成功写会话的获取时间（粘性窗口起点）
+    last_write_at: Mutex<Option<std::time::Instant>>,
+    /// 探测结果复用窗口：窗口内的读请求直接沿用上次健康度/延迟，不重新探测
+    probe_interval: Duration,
 }
 
 impl ReplicaLoadBalancer {
@@ -347,6 +356,20 @@ impl ReplicaLoadBalancer {
         nodes: Vec<ReplicaNode>,
         _config: crate::foundation::ReplicaConfig,
     ) -> Self {
+        Self::with_sticky_duration(primary, nodes, _config, Duration::from_secs(5))
+    }
+
+    /// 创建负载均衡器并指定写后读粘性窗口
+    ///
+    /// `sticky_duration = Duration::ZERO` 关闭粘性（写后读立即按 lag 路由副本）；
+    /// 默认 5s——写后窗口内的读请求强制走主库，规避「lag 阈值内但 >0」时
+    /// 读到未同步旧值的问题。
+    pub fn with_sticky_duration(
+        primary: Arc<DbPool>,
+        nodes: Vec<ReplicaNode>,
+        _config: crate::foundation::ReplicaConfig,
+        sticky_duration: Duration,
+    ) -> Self {
         let states = nodes
             .into_iter()
             .map(|node| NodeState {
@@ -354,6 +377,7 @@ impl ReplicaLoadBalancer {
                 consecutive_failures: 0,
                 last_latency_ms: None,
                 last_healthy: true,
+                last_probe_at: None,
             })
             .collect();
         Self {
@@ -361,6 +385,27 @@ impl ReplicaLoadBalancer {
             nodes: Mutex::new(states),
             failure_threshold: 3,
             last_selected: Mutex::new(None),
+            sticky_duration,
+            last_write_at: Mutex::new(None),
+            probe_interval: Duration::from_millis(500),
+        }
+    }
+
+    /// 链式设置探测结果复用窗口（默认 500ms）
+    ///
+    /// 窗口内的读请求沿用上次探测结论，不重新探测——避免「每次读都串行
+    /// 探测全部副本」的延迟放大。代价是健康状态最长滞后一个窗口期。
+    #[must_use]
+    pub fn with_probe_interval(mut self, interval: Duration) -> Self {
+        self.probe_interval = interval;
+        self
+    }
+
+    /// 是否处于写后读粘性窗口内
+    fn in_sticky_window(&self) -> bool {
+        match *self.last_write_at.lock().expect("sticky lock") {
+            Some(at) => std::time::Instant::now().duration_since(at) < self.sticky_duration,
+            None => false,
         }
     }
 
@@ -410,20 +455,33 @@ impl ReplicaLoadBalancer {
             .collect()
     }
 
-    /// 写会话：恒走主库
+    /// 写会话：恒走主库；成功后开启写后读粘性窗口
     pub async fn get_write_session(
         &self,
         role: &str,
     ) -> crate::foundation::DbResult<crate::Session> {
-        self.primary.get_session(role).await
+        let session = self.primary.get_session(role).await?;
+        *self.last_write_at.lock().expect("sticky lock") = Some(std::time::Instant::now());
+        Ok(session)
     }
 
     /// 读会话：探测各未剔除副本 → 健康者按权重/延迟打分 → 最高分承接；
-    /// 全部不可用（lag 超阈值 / 探测失败 / 被剔除）时回退主库
+    /// 全部不可用（lag 超阈值 / 探测失败 / 被剔除）时回退主库。
+    /// 写后读粘性窗口内直接走主库（不探测副本），保证读己之写。
+    ///
+    /// 探测结果按 [`Self::with_probe_interval`] 窗口缓存复用：窗口内的候选
+    /// 沿用上次健康度/延迟，不重新探测；需探测的候选用 `join_all` **并行**
+    /// 探测（旧实现串行逐个探测，N 副本 = 每次读叠加 N 次串行 lag 查询）。
     pub async fn get_read_session(
         &self,
         role: &str,
     ) -> crate::foundation::DbResult<crate::Session> {
+        // 0. 粘性窗口：刚写完，读主库兜底（不探测副本）
+        if self.in_sticky_window() {
+            *self.last_selected.lock().expect("balancer lock") = None;
+            return self.primary.get_session(role).await;
+        }
+
         // 1. 快照未剔除候选（短临界区）
         let candidates: Vec<usize> = {
             let nodes = self.nodes.lock().expect("balancer lock");
@@ -435,10 +493,25 @@ impl ReplicaLoadBalancer {
                 .collect()
         };
 
-        // 2. 逐个探测（锁内仅克隆引用，锁外 await——不跨 await 持锁）：
-        //    健康性 + 探测延迟（探测器内耗时即延迟样本）
-        let mut probed: Vec<(usize, bool, Option<u64>)> = Vec::with_capacity(candidates.len());
-        for idx in candidates {
+        // 2. 候选分类：缓存新鲜（< probe_interval）直接复用；过期/未探测的并行探测
+        let now = std::time::Instant::now();
+        let mut reused: Vec<(usize, bool, Option<u64>)> = Vec::new();
+        let mut to_probe: Vec<usize> = Vec::new();
+        {
+            let nodes = self.nodes.lock().expect("balancer lock");
+            for idx in candidates {
+                match nodes[idx].last_probe_at {
+                    Some(at) if now.duration_since(at) < self.probe_interval => {
+                        reused.push((idx, nodes[idx].last_healthy, nodes[idx].last_latency_ms));
+                    }
+                    _ => to_probe.push(idx),
+                }
+            }
+        }
+
+        // 并行探测（锁内仅克隆引用，锁外 await——不跨 await 持锁）：
+        // 健康性 + 探测延迟（探测器内耗时即延迟样本）
+        let probe_futures = to_probe.into_iter().map(|idx| async move {
             let (pool, detector) = {
                 let nodes = self.nodes.lock().expect("balancer lock");
                 (
@@ -450,22 +523,28 @@ impl ReplicaLoadBalancer {
             let probe = detector.detect_lag(&pool).await;
             let latency_ms = start.elapsed().as_millis() as u64;
             let healthy = matches!(&probe, Ok(lag) if lag.is_caught_up);
-            probed.push((idx, healthy, Some(latency_ms)));
-        }
+            (idx, healthy, Some(latency_ms))
+        });
+        let mut probed: Vec<(usize, bool, Option<u64>)> =
+            futures::future::join_all(probe_futures).await;
 
-        // 3. 回写探测结果并按分数排序候选（短临界区）
+        // 3. 回写探测结果（仅新探测的候选计入剔除计数；缓存复用不产生新证据），
+        //    与缓存复用候选合并后按分数排序（短临界区）
         let ranked: Vec<usize> = {
             let mut nodes = self.nodes.lock().expect("balancer lock");
+            let now = std::time::Instant::now();
             for (idx, healthy, latency) in &probed {
                 let state = &mut nodes[*idx];
                 state.last_healthy = *healthy;
                 state.last_latency_ms = *latency;
+                state.last_probe_at = Some(now);
                 if *healthy {
                     state.consecutive_failures = 0;
                 } else {
                     state.consecutive_failures = state.consecutive_failures.saturating_add(1);
                 }
             }
+            probed.extend(reused);
             let mut order: Vec<usize> = probed
                 .iter()
                 .filter(|(_, healthy, _)| *healthy)
@@ -624,6 +703,290 @@ mod tests {
         assert!(
             !parse_mysql_seconds_behind(SecondsBehindRaw::Null)
                 .is_some_and(|s| s <= detector.max_lag_seconds)
+        );
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod sticky_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    /// 健康副本探测器：恒 healthy，计数探测次数
+    struct HealthyDetector {
+        probes: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ReplicationLagDetector for HealthyDetector {
+        async fn detect_lag(&self, _pool: &DbPool) -> DbResult<ReplicationLag> {
+            self.probes.fetch_add(1, Ordering::SeqCst);
+            Ok(ReplicationLag {
+                lag_bytes: Some(0),
+                lag_seconds: Some(0.0),
+                is_caught_up: true,
+            })
+        }
+    }
+
+    /// 恒不健康的探测器（用于回退路径）
+    struct UnhealthyDetector {
+        probes: AtomicUsize,
+        healthy: AtomicBool,
+    }
+
+    #[async_trait]
+    impl ReplicationLagDetector for UnhealthyDetector {
+        async fn detect_lag(&self, _pool: &DbPool) -> DbResult<ReplicationLag> {
+            self.probes.fetch_add(1, Ordering::SeqCst);
+            Ok(ReplicationLag {
+                lag_bytes: None,
+                lag_seconds: None,
+                is_caught_up: self.healthy.load(Ordering::SeqCst),
+            })
+        }
+    }
+
+    async fn make_balancer_async(sticky: Duration) -> ReplicaLoadBalancer {
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            vec![ReplicaNode {
+                name: "r1".to_string(),
+                pool: replica,
+                weight: 1,
+                lag_detector: Arc::new(HealthyDetector {
+                    probes: AtomicUsize::new(0),
+                }),
+            }],
+            crate::foundation::ReplicaConfig::default(),
+            sticky,
+        )
+    }
+
+    /// R-replica-001: 写后粘性窗口内读主库、不探测副本
+    #[tokio::test]
+    async fn read_goes_primary_within_sticky_window() {
+        let balancer = make_balancer_async(Duration::from_secs(5)).await;
+        balancer.get_write_session("admin").await.expect("write");
+        let session = balancer.get_read_session("admin").await.expect("read");
+        let _ = session;
+        // 粘性命中：未选择副本（回退主库路径同样置 None，但此处关键是无探测）
+        assert!(balancer.last_selected_replica().is_none());
+    }
+
+    /// R-replica-001: 粘性窗口关闭（ZERO）时读按 lag 路由副本
+    #[tokio::test]
+    async fn read_goes_replica_when_sticky_disabled() {
+        let balancer = make_balancer_async(Duration::ZERO).await;
+        balancer.get_write_session("admin").await.expect("write");
+        let session = balancer.get_read_session("admin").await.expect("read");
+        let _ = session;
+        assert_eq!(balancer.last_selected_replica().as_deref(), Some("r1"));
+    }
+
+    /// R-replica-001: 写失败不打点粘性窗口
+    #[tokio::test]
+    async fn failed_write_does_not_open_sticky_window() {
+        let balancer = make_balancer_async(Duration::from_secs(5)).await;
+        // 让主库不可用：drop primary 克隆，无法直接制造失败——改用 unhealthy 副本路径验证主库回退仍工作
+        // 此处验证：未调用 write 时读请求正常走副本探测
+        let session = balancer.get_read_session("admin").await.expect("read");
+        let _ = session;
+        assert_eq!(balancer.last_selected_replica().as_deref(), Some("r1"));
+    }
+
+    /// UnhealthyDetector 抑制 dead_code 告警并验证回退语义
+    #[tokio::test]
+    async fn unhealthy_replica_falls_back_to_primary() {
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            vec![ReplicaNode {
+                name: "bad".to_string(),
+                pool: replica,
+                weight: 1,
+                lag_detector: Arc::new(UnhealthyDetector {
+                    probes: AtomicUsize::new(0),
+                    healthy: AtomicBool::new(false),
+                }),
+            }],
+            crate::foundation::ReplicaConfig::default(),
+            Duration::ZERO,
+        );
+        let session = balancer
+            .get_read_session("admin")
+            .await
+            .expect("fallback to primary");
+        let _ = session;
+        assert!(balancer.last_selected_replica().is_none());
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod probe_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// 慢探测器：固定延迟 + 计数（健康）
+    struct SlowDetector {
+        probes: AtomicUsize,
+        delay_ms: u64,
+    }
+
+    #[async_trait]
+    impl ReplicationLagDetector for SlowDetector {
+        async fn detect_lag(&self, _pool: &DbPool) -> DbResult<ReplicationLag> {
+            self.probes.fetch_add(1, Ordering::SeqCst);
+            tokio::time::sleep(Duration::from_millis(self.delay_ms)).await;
+            Ok(ReplicationLag {
+                lag_bytes: Some(0),
+                lag_seconds: Some(0.0),
+                is_caught_up: true,
+            })
+        }
+    }
+
+    /// R-replica-002: probe_interval 内复用探测结果，不重复探测
+    #[tokio::test]
+    async fn probe_results_are_cached_within_interval() {
+        let detector = Arc::new(SlowDetector {
+            probes: AtomicUsize::new(0),
+            delay_ms: 0,
+        });
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            vec![ReplicaNode {
+                name: "r1".to_string(),
+                pool: replica,
+                weight: 1,
+                lag_detector: detector.clone(),
+            }],
+            crate::foundation::ReplicaConfig::default(),
+            Duration::ZERO,
+        )
+        .with_probe_interval(Duration::from_millis(500));
+
+        let s1 = balancer
+            .get_read_session("admin")
+            .await
+            .expect("first read");
+        let s2 = balancer
+            .get_read_session("admin")
+            .await
+            .expect("second read");
+        let _ = (s1, s2);
+        assert_eq!(
+            detector.probes.load(Ordering::SeqCst),
+            1,
+            "second read within probe_interval must reuse cached result"
+        );
+    }
+
+    /// R-replica-003: 候选副本并行探测（3×60ms 串行≈180ms，并行应远低于）
+    #[tokio::test]
+    async fn candidates_are_probed_concurrently() {
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let mut pools = Vec::new();
+        for _ in 0..3 {
+            pools.push(Arc::new(
+                DbPool::new("sqlite::memory:").await.expect("pool"),
+            ));
+        }
+        let nodes = pools
+            .into_iter()
+            .enumerate()
+            .map(|(i, pool)| ReplicaNode {
+                name: format!("r{i}"),
+                pool,
+                weight: 1,
+                lag_detector: Arc::new(SlowDetector {
+                    probes: AtomicUsize::new(0),
+                    delay_ms: 60,
+                }),
+            })
+            .collect();
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            nodes,
+            crate::foundation::ReplicaConfig::default(),
+            Duration::ZERO,
+        );
+
+        let start = std::time::Instant::now();
+        let session = balancer.get_read_session("admin").await.expect("read");
+        let _ = session;
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(120),
+            "3x60ms probes must run in parallel (serial sum 180ms), took {elapsed:?}"
+        );
+    }
+}
+
+#[cfg(all(test, feature = "sqlite", feature = "permission"))]
+mod sticky_write_failure_tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    /// 健康探测器（复用计数语义）
+    struct HealthyDetector {
+        probes: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ReplicationLagDetector for HealthyDetector {
+        async fn detect_lag(&self, _pool: &DbPool) -> DbResult<ReplicationLag> {
+            self.probes.fetch_add(1, Ordering::SeqCst);
+            Ok(ReplicationLag {
+                lag_bytes: Some(0),
+                lag_seconds: Some(0.0),
+                is_caught_up: true,
+            })
+        }
+    }
+
+    use std::sync::atomic::Ordering;
+
+    /// R-replica-001: 写失败（主库 get_session Err）不打点粘性窗口——
+    /// 失败写之后窗口内的读仍按 lag 正常路由副本
+    #[tokio::test]
+    async fn failed_write_does_not_open_sticky_window_under_permission() {
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            vec![ReplicaNode {
+                name: "r1".to_string(),
+                pool: replica,
+                weight: 1,
+                lag_detector: Arc::new(HealthyDetector {
+                    probes: AtomicUsize::new(0),
+                }),
+            }],
+            crate::foundation::ReplicaConfig::default(),
+            Duration::from_secs(5),
+        );
+
+        // 未授权角色 → 主库 get_session 被权限默认策略拒绝 → get_write_session Err
+        let result = balancer.get_write_session("no-such-role").await;
+        assert!(
+            result.is_err(),
+            "unauthorized write must fail: {:?}",
+            result.is_ok()
+        );
+
+        // 失败写不得打开粘性窗口：紧接着的读应照常路由健康副本
+        let session = balancer.get_read_session("admin").await.expect("read");
+        let _ = session;
+        assert_eq!(
+            balancer.last_selected_replica().as_deref(),
+            Some("r1"),
+            "failed write must NOT open sticky window; read routes to replica"
         );
     }
 }

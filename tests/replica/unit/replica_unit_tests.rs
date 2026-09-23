@@ -143,8 +143,14 @@ mod t411_replica_load_balancer_tests {
     async fn test_t411_read_write_split_routing() {
         let primary = Arc::new(DbPool::new(&temp_db_url("primary")).await.unwrap());
         let node = replica_node("replica-a", 1, MockDetector::caught_up()).await;
-        let balancer =
-            ReplicaLoadBalancer::new(primary.clone(), vec![node], ReplicaConfig::default());
+        // 关闭写后读粘性：本测试验证纯 lag 路由（默认 5s 粘性窗口内读主库，
+        // 由 src/database/replica.rs 的 sticky_tests 覆盖）
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary.clone(),
+            vec![node],
+            ReplicaConfig::default(),
+            std::time::Duration::ZERO,
+        );
 
         // 写路由：始终主库（last_selected 不变）
         let _w = balancer.get_write_session("admin").await.unwrap();
@@ -223,7 +229,9 @@ mod t411_replica_load_balancer_tests {
             replica_urls: vec!["replica-bad".to_string()],
             ..Default::default()
         };
-        let balancer = ReplicaLoadBalancer::new(primary.clone(), vec![node], config);
+        // 关闭探测缓存：本测试验证逐次探测的剔除计数语义
+        let balancer = ReplicaLoadBalancer::new(primary.clone(), vec![node], config)
+            .with_probe_interval(std::time::Duration::ZERO);
 
         // 连续失败达阈值（默认 3）→ 剔除
         for i in 0..3 {
