@@ -86,6 +86,41 @@ struct SessionState {
     last_write: Option<Instant>,
 }
 
+/// serde_json 值 → sea-orm 绑定值
+///
+/// Null 绑定为无类型参数（列类型由引擎推断）；数组/对象序列化为
+/// JSON 字符串（与仓储字面量时代的存储形态一致）。
+fn json_to_sea_value(v: &serde_json::Value) -> sea_orm::Value {
+    match v {
+        serde_json::Value::Null => None::<String>.into(),
+        serde_json::Value::Bool(b) => (*b).into(),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i.into()
+            } else {
+                n.as_f64().unwrap_or(0.0).into()
+            }
+        }
+        serde_json::Value::String(s) => s.clone().into(),
+        other => serde_json::to_string(other)
+            .unwrap_or_else(|_| "null".to_string())
+            .into(),
+    }
+}
+
+/// 语句构造：空参走 `from_string`（与既有路径完全一致），带参走绑定
+fn build_statement(
+    backend: sea_orm::DatabaseBackend,
+    sql: String,
+    params: &[serde_json::Value],
+) -> sea_orm::Statement {
+    if params.is_empty() {
+        sea_orm::Statement::from_string(backend, sql)
+    } else {
+        sea_orm::Statement::from_sql_and_values(backend, sql, params.iter().map(json_to_sea_value))
+    }
+}
+
 /// 事务隔离级别（四档，映射到 sea-orm `IsolationLevel`）
 ///
 /// 各后端的实际支持度不同（如 SQLite 只有可串行化语义、MySQL 默认
@@ -580,6 +615,30 @@ impl Session {
     ///   失败后自动按指数退避重试（至多 `max_retries` 次）
     /// - **写类操作**（INSERT/UPDATE/DELETE/DDL）绝不重试，避免副作用重复
     pub async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult> {
+        self.execute_raw_impl(sql, &[]).await
+    }
+
+    /// 绑定参数执行 SQL
+    ///
+    /// 与 [`Self::execute_raw`] 同一条防御链（DDL 拒绝/权限/慢查询/事务感知/重试），
+    /// 差异仅在语句构造：非空 `params` 经 `Statement::from_sql_and_values` 绑定，
+    /// 占位符按后端书写（PostgreSQL `$N`，SQLite/MySQL `?`）。
+    /// `params` 为空时与 `execute_raw` 路径逐字节一致。
+    pub async fn execute_with_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> DbResult<ExecResult> {
+        self.execute_raw_impl(sql, params).await
+    }
+
+    /// 内部：execute_raw 的参数化实现
+    async fn execute_raw_impl(
+        &self,
+        sql: &str,
+        #[cfg_attr(not(feature = "sql-parser"), allow(unused_variables))]
+        params: &[serde_json::Value],
+    ) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
             // 检查是否为 DDL 操作
@@ -684,15 +743,18 @@ impl Session {
                             let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
                             tokio::time::sleep(backoff).await;
                         }
+                        let backend = if let Some(tx) = tx_opt.as_ref() {
+                            use sea_orm::ConnectionTrait;
+                            tx.get_database_backend()
+                        } else {
+                            self.connection()?.get_database_backend()
+                        };
+                        let stmt = build_statement(backend, sql.to_owned(), params);
                         let result = if let Some(ref tx) = tx_opt {
-                            tx.execute_unprepared(sql)
-                                .await
-                                .map_err(DbError::Connection)
+                            tx.execute_raw(stmt).await.map_err(DbError::Connection)
                         } else {
                             let conn = self.connection()?;
-                            conn.execute_unprepared(sql)
-                                .await
-                                .map_err(DbError::Connection)
+                            conn.execute_raw(stmt).await.map_err(DbError::Connection)
                         };
                         match result {
                             Ok(exec_result) => {
@@ -712,15 +774,18 @@ impl Session {
             }
 
             // 无重试路径（retry 未启用或非幂等操作）
+            let backend = if let Some(tx) = tx_opt.as_ref() {
+                use sea_orm::ConnectionTrait;
+                tx.get_database_backend()
+            } else {
+                self.connection()?.get_database_backend()
+            };
+            let stmt = build_statement(backend, sql.to_owned(), params);
             let result = if let Some(tx) = tx_opt {
-                tx.execute_unprepared(sql)
-                    .await
-                    .map_err(DbError::Connection)
+                tx.execute_raw(stmt).await.map_err(DbError::Connection)
             } else {
                 let conn = self.connection()?;
-                conn.execute_unprepared(sql)
-                    .await
-                    .map_err(DbError::Connection)
+                conn.execute_raw(stmt).await.map_err(DbError::Connection)
             };
 
             // 记录查询指标（含慢查询检测）
@@ -791,6 +856,29 @@ impl Session {
     /// `retry` feature 启用且 `DbConfig.retry_policy` 配置时，行查询失败
     /// 自动按指数退避重试（与 `execute_raw` 幂等路径同口径）。
     pub async fn query_rows(&self, sql: &str) -> DbResult<Vec<serde_json::Value>> {
+        self.query_rows_impl(sql, &[]).await
+    }
+
+    /// 绑定参数行查询
+    ///
+    /// 与 [`Self::query_rows`] 同一条防御链与方言处理，差异仅在语句构造：
+    /// 非空 `params` 经绑定传递（PostgreSQL `$N`、其余 `?`）。
+    /// `params` 为空时与 `query_rows` 路径一致。
+    pub async fn query_rows_with_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> DbResult<Vec<serde_json::Value>> {
+        self.query_rows_impl(sql, params).await
+    }
+
+    /// 内部：query_rows 的参数化实现
+    async fn query_rows_impl(
+        &self,
+        sql: &str,
+        #[cfg_attr(not(feature = "sql-parser"), allow(unused_variables))]
+        params: &[serde_json::Value],
+    ) -> DbResult<Vec<serde_json::Value>> {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
@@ -890,7 +978,7 @@ impl Session {
                                 let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
                                 tokio::time::sleep(backoff).await;
                             }
-                            match self.query_rows_execute(sql, tx_opt.clone()).await {
+                            match self.query_rows_execute(sql, tx_opt.clone(), params).await {
                                 Ok(rows) => {
                                     success = Some(rows);
                                     break;
@@ -903,12 +991,12 @@ impl Session {
                             None => Err(last_error.unwrap()),
                         }
                     }
-                    None => self.query_rows_execute(sql, tx_opt).await,
+                    None => self.query_rows_execute(sql, tx_opt, params).await,
                 }
             };
 
             #[cfg(not(feature = "retry"))]
-            let result = self.query_rows_execute(sql, tx_opt).await;
+            let result = self.query_rows_execute(sql, tx_opt, params).await;
 
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             self.record_execute_metrics(query_start, result.is_ok());
@@ -927,6 +1015,12 @@ impl Session {
         &self,
         sql: &str,
         tx_opt: Option<Arc<DatabaseTransaction>>,
+        // pg/sqlite 方言臂都裁掉时（无任何驱动特性）该参数无消费点
+        #[cfg_attr(
+            not(any(feature = "postgres", feature = "sqlite")),
+            allow(unused_variables)
+        )]
+        params: &[serde_json::Value],
     ) -> DbResult<Vec<serde_json::Value>> {
         use sea_orm::ConnectionTrait;
 
@@ -997,7 +1091,7 @@ impl Session {
                     "SELECT row_to_json(sub.*) AS row_data FROM ({}) AS sub",
                     sql.trim_end().trim_end_matches(';')
                 );
-                let stmt = sea_orm::Statement::from_string(backend, wrapped);
+                let stmt = build_statement(backend, wrapped, params);
                 let rows = if let Some(tx) = tx_opt.as_ref() {
                     tx.query_all_raw(stmt).await
                 } else {
@@ -1025,7 +1119,7 @@ impl Session {
                     )
                 })?;
                 let cols = self.sqlite_table_columns(table, tx_opt.as_ref()).await?;
-                let stmt = sea_orm::Statement::from_string(backend, sql_for_fetch.clone());
+                let stmt = build_statement(backend, sql_for_fetch.clone(), params);
                 let rows = if let Some(tx) = tx_opt.as_ref() {
                     tx.query_all_raw(stmt).await
                 } else {

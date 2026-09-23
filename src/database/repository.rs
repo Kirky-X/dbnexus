@@ -12,8 +12,9 @@
 //!   `serde_json::Value`（与 `query_rows` 出口一致）；
 //! - 底层执行复用 `DbPool::query_rows` / `Session::execute_raw`，自动继承
 //!   解析校验/权限检查/注入检测/慢查询统计整条防御链；
-//! - 表名与列名做标识符白名单校验（防注入），字符串值按 SQL 标准转义
-//!   （单引号加倍）；复杂值（数组/对象）序列化为 JSON 字符串存储。
+//! - 表名与列名做标识符白名单校验（防注入）；**值一律经绑定参数传递**
+//!   （PostgreSQL `$N`、其余方言 `?`），SQL 文本不含值字面量；
+//!   复杂值（数组/对象）序列化为 JSON 字符串后绑定。
 //!
 //! # 示例
 //!
@@ -126,6 +127,19 @@ fn escape_sql_string(s: &str, backend: SqlBackend) -> String {
     }
 }
 
+/// 解析池的 sea-orm 后端（占位符方言判定用）
+fn sea_backend(pool: &DbPool) -> sea_orm::DatabaseBackend {
+    crate::database::DbPool::get_database_backend(&pool.inner.config.url)
+}
+
+/// 绑定占位符：PostgreSQL `$N`，其余方言 `?`
+fn placeholder(backend: sea_orm::DatabaseBackend, i: usize) -> String {
+    match backend {
+        sea_orm::DatabaseBackend::Postgres => format!("${i}"),
+        _ => "?".to_string(),
+    }
+}
+
 /// 从连接池解析字面量转义后端口径
 pub(crate) fn resolve_sql_backend(pool: &DbPool) -> SqlBackend {
     if crate::database::DbPool::get_database_backend(&pool.inner.config.url)
@@ -212,16 +226,26 @@ impl JsonRepository {
         after_id: i64,
         limit: u64,
     ) -> DbResult<Vec<T>> {
+        let backend = sea_backend(pool);
         let sql = format!(
             "SELECT {} FROM {} WHERE {} > {} ORDER BY {} LIMIT {}",
             self.select_clause(),
             self.table,
             self.id_column,
-            after_id,
+            placeholder(backend, 1),
             self.id_column,
-            limit
+            placeholder(backend, 2)
         );
-        let rows = pool.query_rows(&sql, &self.role).await?;
+        let session = pool.get_session(&self.role).await?;
+        let rows = session
+            .query_rows_with_params(
+                &sql,
+                &[
+                    serde_json::Value::from(after_id),
+                    serde_json::Value::from(limit),
+                ],
+            )
+            .await?;
         rows.into_iter()
             .map(|row| {
                 serde_json::from_value(row)
@@ -290,8 +314,10 @@ impl JsonRepository {
                 ))
             })?;
 
-        let backend = resolve_sql_backend(pool);
-        let mut assignments = Vec::with_capacity(map.len());
+        let backend = sea_backend(pool);
+        let mut assignments = Vec::new();
+        let mut params: Vec<Value> = Vec::new();
+        let mut n = 0usize;
         for (col, value) in &map {
             if !is_safe_identifier(col) {
                 return Err(DbError::Config(format!(
@@ -302,13 +328,20 @@ impl JsonRepository {
             if col == &self.id_column || col == version_column {
                 continue;
             }
-            assignments.push(format!("{} = {}", col, sql_literal(value, backend)?));
+            n += 1;
+            assignments.push(format!("{} = {}", col, placeholder(backend, n)));
+            params.push(value.clone());
         }
         let set_clause = if assignments.is_empty() {
             String::new()
         } else {
             format!(", {}", assignments.join(", "))
         };
+        // WHERE 的两个绑定：id 与期望版本
+        n += 1;
+        let id_ph = placeholder(backend, n);
+        n += 1;
+        let version_ph = placeholder(backend, n);
         let sql = format!(
             "UPDATE {} SET {} = {} + 1{} WHERE {} = {} AND {} = {}",
             self.table,
@@ -316,12 +349,14 @@ impl JsonRepository {
             version_column,
             set_clause,
             self.id_column,
-            id,
+            id_ph,
             version_column,
-            expected
+            version_ph
         );
+        params.push(Value::from(id));
+        params.push(Value::from(expected));
         let session = pool.get_session(&self.role).await?;
-        let exec = session.execute_raw(&sql).await?;
+        let exec = session.execute_with_params(&sql, &params).await?;
         let affected = exec.rows_affected();
         if affected == 0 {
             return Err(DbError::VersionConflict {
@@ -360,26 +395,28 @@ where
                 "repository insert requires at least one column".to_string(),
             ));
         }
-        let backend = resolve_sql_backend(pool);
+        let backend = sea_backend(pool);
         let mut columns = Vec::with_capacity(map.len());
-        let mut values = Vec::with_capacity(map.len());
-        for (col, value) in &map {
+        let mut placeholders = Vec::with_capacity(map.len());
+        let mut params = Vec::with_capacity(map.len());
+        for (i, (col, value)) in map.iter().enumerate() {
             if !is_safe_identifier(col) {
                 return Err(DbError::Config(format!(
                     "repository column must be a safe identifier: '{col}'"
                 )));
             }
             columns.push(col.clone());
-            values.push(sql_literal(value, backend)?);
+            placeholders.push(placeholder(backend, i + 1));
+            params.push(value.clone());
         }
         let sql = format!(
             "INSERT INTO {} ({}) VALUES ({})",
             self.table,
             columns.join(", "),
-            values.join(", ")
+            placeholders.join(", ")
         );
         let session = pool.get_session(&self.role).await?;
-        let exec = session.execute_raw(&sql).await?;
+        let exec = session.execute_with_params(&sql, &params).await?;
         Ok(exec.last_insert_id() as i64)
     }
 
@@ -389,9 +426,12 @@ where
             self.select_clause(),
             self.table,
             self.id_column,
-            id
+            placeholder(sea_backend(pool), 1)
         );
-        let rows = pool.query_rows(&sql, &self.role).await?;
+        let session = pool.get_session(&self.role).await?;
+        let rows = session
+            .query_rows_with_params(&sql, &[serde_json::Value::from(id)])
+            .await?;
         match rows.into_iter().next() {
             Some(row) => Ok(Some(serde_json::from_value(row).map_err(|e| {
                 DbError::Config(format!("entity deserialize failed: {e}"))
@@ -401,15 +441,25 @@ where
     }
 
     async fn find_all(&self, pool: &DbPool, limit: u64, offset: u64) -> DbResult<Vec<T>> {
+        let backend = sea_backend(pool);
         let sql = format!(
             "SELECT {} FROM {} ORDER BY {} LIMIT {} OFFSET {}",
             self.select_clause(),
             self.table,
             self.id_column,
-            limit,
-            offset
+            placeholder(backend, 1),
+            placeholder(backend, 2)
         );
-        let rows = pool.query_rows(&sql, &self.role).await?;
+        let session = pool.get_session(&self.role).await?;
+        let rows = session
+            .query_rows_with_params(
+                &sql,
+                &[
+                    serde_json::Value::from(limit),
+                    serde_json::Value::from(offset),
+                ],
+            )
+            .await?;
         rows.into_iter()
             .map(|row| {
                 serde_json::from_value(row)
@@ -425,8 +475,10 @@ where
                 "repository update requires at least one column".to_string(),
             ));
         }
-        let backend = resolve_sql_backend(pool);
+        let backend = sea_backend(pool);
         let mut assignments = Vec::with_capacity(map.len());
+        let mut params = Vec::with_capacity(map.len() + 1);
+        let mut n = 0usize;
         for (col, value) in &map {
             if !is_safe_identifier(col) {
                 return Err(DbError::Config(format!(
@@ -436,32 +488,40 @@ where
             if col == &self.id_column {
                 continue; // 主键不参与 SET
             }
-            assignments.push(format!("{} = {}", col, sql_literal(value, backend)?));
+            n += 1;
+            assignments.push(format!("{} = {}", col, placeholder(backend, n)));
+            params.push(value.clone());
         }
         if assignments.is_empty() {
             return Err(DbError::Config(
                 "repository update requires at least one non-id column".to_string(),
             ));
         }
+        n += 1;
         let sql = format!(
             "UPDATE {} SET {} WHERE {} = {}",
             self.table,
             assignments.join(", "),
             self.id_column,
-            id
+            placeholder(backend, n)
         );
+        params.push(serde_json::Value::from(id));
         let session = pool.get_session(&self.role).await?;
-        let exec = session.execute_raw(&sql).await?;
+        let exec = session.execute_with_params(&sql, &params).await?;
         Ok(exec.rows_affected())
     }
 
     async fn delete(&self, pool: &DbPool, id: i64) -> DbResult<u64> {
         let sql = format!(
             "DELETE FROM {} WHERE {} = {}",
-            self.table, self.id_column, id
+            self.table,
+            self.id_column,
+            placeholder(sea_backend(pool), 1)
         );
         let session = pool.get_session(&self.role).await?;
-        let exec = session.execute_raw(&sql).await?;
+        let exec = session
+            .execute_with_params(&sql, &[serde_json::Value::from(id)])
+            .await?;
         Ok(exec.rows_affected())
     }
 
@@ -470,7 +530,8 @@ where
         // `SELECT COUNT(*) AS cnt` 的聚合列不在表列清单内会被丢弃，
         // 故以主键列全量取回后计行数（MVP 口径，大表请配合分页/上游聚合）。
         let sql = format!("SELECT {} FROM {}", self.id_column, self.table);
-        let rows = pool.query_rows(&sql, &self.role).await?;
+        let session = pool.get_session(&self.role).await?;
+        let rows = session.query_rows_with_params(&sql, &[]).await?;
         Ok(rows.len() as u64)
     }
 }
