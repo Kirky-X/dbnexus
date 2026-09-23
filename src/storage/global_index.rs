@@ -102,7 +102,11 @@ impl GlobalIndex {
         Ok(Self { pool })
     }
 
-    /// 创建全局索引表（如果不存在）
+    /// 创建全局索引表（如果不存在），并补建查询列二级索引
+    ///
+    /// 索引 `(table_name, index_key, index_value)` 服务于
+    /// [`Self::query_by_index`] 的等值过滤——没有它，全局索引表自身会
+    /// 退化为全表扫描。`CREATE INDEX IF NOT EXISTS` 幂等可重入。
     async fn create_table_if_not_exists(db: &sea_orm::DatabaseConnection) -> DbResult<()> {
         use sea_orm::Schema;
 
@@ -113,6 +117,14 @@ impl GlobalIndex {
         create_table_stmt.if_not_exists();
 
         db.execute(&create_table_stmt).await?;
+
+        let create_index_stmt = sea_orm::Statement::from_string(
+            builder,
+            "CREATE INDEX IF NOT EXISTS idx_global_index_lookup \
+             ON global_index (table_name, index_key, index_value)"
+                .to_owned(),
+        );
+        db.execute_raw(create_index_stmt).await?;
 
         Ok(())
     }
@@ -549,5 +561,51 @@ mod tests {
             .expect("query failed");
         assert_eq!(queried.len(), 1);
         assert_eq!(queried[0].record_id, "user_599");
+    }
+}
+
+#[cfg(all(test, feature = "sqlite", feature = "runtime-tokio-rustls"))]
+mod lookup_index_tests {
+    use super::*;
+
+    static IDX_TEST_DB_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+    /// R-gidx-001: init 后查询列二级索引存在
+    #[tokio::test]
+    async fn lookup_index_is_created_with_table() {
+        let n = IDX_TEST_DB_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let url = format!("sqlite:file:global_index_lib_idx_{n}?mode=memory&cache=shared");
+        let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+        GlobalIndex::new(pool.clone()).await.expect("init");
+        let session = pool.get_session("admin").await.expect("session");
+        let conn = session.connection().expect("connection");
+
+        let row = conn
+            .query_one_raw(sea_orm::Statement::from_string(
+                conn.get_database_backend(),
+                "SELECT name, sql FROM sqlite_master WHERE type = 'index' \
+                 AND name = 'idx_global_index_lookup'"
+                    .to_owned(),
+            ))
+            .await
+            .expect("query sqlite_master")
+            .expect("lookup index must exist after init");
+        let sql: String = row.try_get_by("sql").expect("sql column");
+        assert!(
+            sql.contains("table_name") && sql.contains("index_key") && sql.contains("index_value"),
+            "index must cover (table_name, index_key, index_value), got: {sql}"
+        );
+    }
+
+    /// R-gidx-001: 二次 init（表与索引已存在）不报错
+    #[tokio::test]
+    async fn init_is_idempotent() {
+        let n = IDX_TEST_DB_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let url = format!("sqlite:file:global_index_lib_idem_{n}?mode=memory&cache=shared");
+        let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+        GlobalIndex::new(pool.clone()).await.expect("first init");
+        GlobalIndex::new(pool)
+            .await
+            .expect("second init must be idempotent");
     }
 }

@@ -90,7 +90,19 @@ async fn test_health_snapshot_shape_and_fields() {
 #[tokio::test]
 async fn test_health_snapshot_unhealthy_without_connections() {
     let (url, path) = temp_db_url("unhealthy");
-    let pool = dbnexus::DbPool::new(&url).await.unwrap();
+    // 显式 min_connections=0：被测语义是「零连接池 → unhealthy」。
+    // pool-warmup 特性下 DbPool::new 会预热 min_connections（默认 5）个连接，
+    // 那时的池确实 healthy——测试必须显式构造零连接前提才能在两种特性组合下
+    // 稳定成立（workspace 特性统一会意外开启 pool-warmup）。
+    let config = dbnexus::DbConfig {
+        url: url.clone(),
+        pool_config: dbnexus::PoolConfig {
+            min_connections: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let pool = dbnexus::DbPool::with_config(config).await.unwrap();
 
     // 未 warmup、未使用的池：total == 0 → unhealthy
     let snap = pool.health_snapshot().await;
