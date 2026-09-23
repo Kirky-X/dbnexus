@@ -24,6 +24,10 @@ impl DbError {
             DbError::Query(msg) => msg.clone(),
             #[cfg(feature = "validation")]
             DbError::Validation(msg) => msg.clone(),
+            DbError::Unsupported(msg) => msg.clone(),
+            DbError::VersionConflict { table, id } => {
+                format!("version conflict on table '{table}' for id {id}")
+            }
         }
     }
 }

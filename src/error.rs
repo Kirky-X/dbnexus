@@ -197,6 +197,8 @@ impl From<crate::foundation::DbError> for UnifiedDbError {
             #[cfg(feature = "validation")]
             crate::foundation::DbError::Validation(_) => ErrorCode::Validation,
             crate::foundation::DbError::Config(_) => ErrorCode::Config,
+            crate::foundation::DbError::Unsupported(_) => ErrorCode::Query,
+            crate::foundation::DbError::VersionConflict { .. } => ErrorCode::Query,
         };
         Self::new(code, err.to_string()).with_source(err.to_string())
     }

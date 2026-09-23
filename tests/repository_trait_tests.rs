@@ -188,3 +188,255 @@ async fn test_macro_generated_repository() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+// ============================================================================
+// 乐观锁 update_if_version（R-repo-004）
+// ============================================================================
+
+/// 带版本列的测试实体
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct Versioned {
+    id: i64,
+    qty: i64,
+    version: i64,
+}
+
+#[derive(Default)]
+struct VersionedRepo;
+
+dbnexus::impl_json_repository!(VersionedRepo, Versioned, table = "t418_versioned");
+
+async fn setup_version_pool(tag: &str) -> (DbPool, std::path::PathBuf) {
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_t418_ver_{}_{}.db",
+        tag,
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let url = format!("sqlite:{}?mode=rwc", path.display());
+    let pool = DbPool::new(&url).await.expect("pool");
+    let admin = pool.get_session("admin").await.expect("admin session");
+    admin
+        .execute_raw_ddl(
+            "CREATE TABLE t418_versioned (id INTEGER PRIMARY KEY, qty INTEGER, version INTEGER)",
+        )
+        .await
+        .expect("create table");
+    (pool, path)
+}
+
+/// 版本匹配：更新成功且版本自增
+#[tokio::test]
+async fn test_update_if_version_success_bumps_version() {
+    let (pool, path) = setup_version_pool("cas_ok").await;
+    let repo = JsonRepository::new("t418_versioned").expect("repo");
+
+    repo.insert(
+        &pool,
+        &Versioned {
+            id: 1,
+            qty: 5,
+            version: 3,
+        },
+    )
+    .await
+    .expect("insert");
+
+    let affected = repo
+        .update_if_version(
+            &pool,
+            1,
+            &Versioned {
+                id: 1,
+                qty: 42,
+                version: 3,
+            },
+            "version",
+        )
+        .await
+        .expect("cas should succeed");
+    assert_eq!(affected, 1);
+
+    let reread: Versioned = repo.find_by_id(&pool, 1).await.unwrap().unwrap();
+    assert_eq!(reread.qty, 42);
+    assert_eq!(reread.version, 4, "version must be bumped by 1");
+    let _ = std::fs::remove_file(path);
+}
+
+/// 版本过期：VersionConflict 且影响 0 行
+#[tokio::test]
+async fn test_update_if_version_stale_version_conflicts() {
+    let (pool, path) = setup_version_pool("cas_stale").await;
+    let repo = JsonRepository::new("t418_versioned").expect("repo");
+
+    repo.insert(
+        &pool,
+        &Versioned {
+            id: 2,
+            qty: 5,
+            version: 7,
+        },
+    )
+    .await
+    .expect("insert");
+
+    let err = repo
+        .update_if_version(
+            &pool,
+            2,
+            &Versioned {
+                id: 2,
+                qty: 9,
+                version: 3, // 过期版本（库中是 7）
+            },
+            "version",
+        )
+        .await
+        .expect_err("stale version must conflict");
+    match err {
+        dbnexus::DbError::VersionConflict { table, id } => {
+            assert_eq!(table, "t418_versioned");
+            assert_eq!(id, 2);
+        }
+        other => panic!("expected VersionConflict, got {other:?}"),
+    }
+
+    // 数据未被篡改
+    let reread: Versioned = repo.find_by_id(&pool, 2).await.unwrap().unwrap();
+    assert_eq!(reread.qty, 5);
+    assert_eq!(reread.version, 7);
+    let _ = std::fs::remove_file(path);
+}
+
+/// 宏生成的仓储转发 update_if_version
+#[tokio::test]
+async fn test_macro_repo_forwards_update_if_version() {
+    let (pool, path) = setup_version_pool("cas_macro").await;
+    let repo = VersionedRepo;
+
+    repo.insert(
+        &pool,
+        &Versioned {
+            id: 3,
+            qty: 1,
+            version: 0,
+        },
+    )
+    .await
+    .expect("insert");
+
+    let affected = repo
+        .update_if_version(
+            &pool,
+            3,
+            &Versioned {
+                id: 3,
+                qty: 2,
+                version: 0,
+            },
+            "version",
+        )
+        .await
+        .expect("macro-forwarded cas should succeed");
+    assert_eq!(affected, 1);
+    let _ = std::fs::remove_file(path);
+}
+
+// ============================================================================
+// 列投影与游标分页（R-repo-002 / R-repo-003）
+// ============================================================================
+
+/// 列投影：查询生成显式列清单而非 SELECT *
+#[tokio::test]
+async fn test_with_columns_generates_projection() {
+    // 非法列名构造时拒绝
+    assert!(
+        JsonRepository::new("t418_users")
+            .unwrap()
+            .with_columns(&["id", "bad; DROP TABLE x"])
+            .is_err()
+    );
+
+    // 合法列名：投影列查询（行为验证：只查 id/name 两列，email 缺失时反序列化为错误
+    // —— 以此证明 SQL 生成确实只取了投影列）
+    let repo = JsonRepository::new("t418_users")
+        .unwrap()
+        .with_columns(&["id", "name"])
+        .expect("with_columns");
+    let (pool, path) = setup_pool("projection").await;
+    repo.insert(
+        &pool,
+        &User {
+            id: 20,
+            name: "Cara".to_string(),
+            email: "c@example.com".to_string(),
+            age: 25,
+        },
+    )
+    .await
+    .expect("insert");
+    // 完整实体反序列化会因缺 email/age 失败——改用游标 + 宽投影查全列验证不报错
+    let wide = JsonRepository::new("t418_users")
+        .unwrap()
+        .with_columns(&["id", "name"])
+        .expect("wide");
+    let rows = wide.find_all_cursor::<User>(&pool, 0, 10).await;
+    // User 需要 email/age 字段：投影缺列 → 反序列化失败正是投影生效的证据
+    assert!(
+        rows.is_err(),
+        "missing projected columns must fail deserialization"
+    );
+
+    // 投影覆盖全列时查询正常
+    let all_cols = JsonRepository::new("t418_users")
+        .unwrap()
+        .with_columns(&["id", "name", "email", "age"])
+        .expect("all cols");
+    let found: Vec<User> = all_cols
+        .find_all_cursor(&pool, 0, 10)
+        .await
+        .expect("cursor");
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "Cara");
+    let _ = std::fs::remove_file(path);
+}
+
+/// 游标分页：连续翻页遍历全量无重复
+#[tokio::test]
+async fn test_find_all_cursor_walks_all_rows_without_duplicates() {
+    let (pool, path) = setup_pool("cursor").await;
+    let repo = JsonRepository::new("t418_users").expect("repo");
+    for i in 0..7i64 {
+        repo.insert(
+            &pool,
+            &User {
+                id: (i + 1) * 10,
+                name: format!("u{i}"),
+                email: format!("u{i}@example.com"),
+                age: 20 + i,
+            },
+        )
+        .await
+        .expect("insert");
+    }
+
+    let mut seen: Vec<i64> = Vec::new();
+    let mut after = 0i64;
+    loop {
+        let page: Vec<User> = repo
+            .find_all_cursor(&pool, after, 3)
+            .await
+            .expect("cursor page");
+        if page.is_empty() {
+            break;
+        }
+        seen.extend(page.iter().map(|u| u.id));
+        after = *seen.last().expect("non-empty page");
+    }
+    assert_eq!(
+        seen,
+        vec![10, 20, 30, 40, 50, 60, 70],
+        "full ordered walk, no dupes"
+    );
+    let _ = std::fs::remove_file(path);
+}

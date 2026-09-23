@@ -57,6 +57,11 @@ where
     async fn find_by_id(&self, pool: &DbPool, id: i64) -> DbResult<Option<T>>;
 
     /// 分页查询（`limit`/`offset`，按主键升序）
+    ///
+    /// # 性能警示
+    ///
+    /// OFFSET 分页在深页码需扫描并丢弃前 N 行，代价与页深成正比；
+    /// 优先使用 [`JsonRepository::find_all_cursor`] 键集分页。
     async fn find_all(&self, pool: &DbPool, limit: u64, offset: u64) -> DbResult<Vec<T>>;
 
     /// 按主键更新实体，返回受影响行数
@@ -84,18 +89,51 @@ pub(crate) fn is_safe_identifier(name: &str) -> bool {
 ///   注入扫描器对字符串字面量内容不敏感）；
 /// - 数组/对象：序列化为 JSON 字符串字面量；
 /// - 布尔：TRUE/FALSE；空值：NULL。
-pub(crate) fn sql_literal(value: &Value) -> DbResult<String> {
+pub(crate) fn sql_literal(value: &Value, backend: SqlBackend) -> DbResult<String> {
     match value {
         Value::Null => Ok("NULL".to_string()),
         Value::Bool(b) => Ok(if *b { "TRUE" } else { "FALSE" }.to_string()),
         Value::Number(n) => Ok(n.to_string()),
-        Value::String(s) => Ok(format!("'{}'", s.replace('\'', "''"))),
+        Value::String(s) => Ok(format!("'{}'", escape_sql_string(s, backend))),
         Value::Array(_) | Value::Object(_) => {
             let json = serde_json::to_string(value).map_err(|e| {
                 DbError::Config(format!("entity nested value serialize failed: {e}"))
             })?;
-            Ok(format!("'{}'", json.replace('\'', "''")))
+            Ok(format!("'{}'", escape_sql_string(&json, backend)))
         }
+    }
+}
+
+/// 字符串字面量转义的数据库后端口径
+///
+/// 反斜杠语义按后端分化：MySQL 默认模式（`NO_BACKSLASH_ESCAPES` 关闭）下
+/// `\` 是转义符，仅加倍单引号可被 `\'` 序列击穿（注入向量）；PostgreSQL
+/// （standard_conforming_strings=on）、SQLite、DuckDB 遵循 SQL 标准，
+/// `\` 是字面量，加倍会引入多余字符。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SqlBackend {
+    /// MySQL：先加倍反斜杠，再加倍单引号
+    MySql,
+    /// SQL 标准口径（PostgreSQL / SQLite / DuckDB）：仅加倍单引号
+    Standard,
+}
+
+/// 按后端转义字符串字面量内容（不含外层引号）
+fn escape_sql_string(s: &str, backend: SqlBackend) -> String {
+    match backend {
+        SqlBackend::MySql => s.replace('\\', "\\\\").replace('\'', "''"),
+        SqlBackend::Standard => s.replace('\'', "''"),
+    }
+}
+
+/// 从连接池解析字面量转义后端口径
+pub(crate) fn resolve_sql_backend(pool: &DbPool) -> SqlBackend {
+    if crate::database::DbPool::get_database_backend(&pool.inner.config.url)
+        == sea_orm::DatabaseBackend::MySql
+    {
+        SqlBackend::MySql
+    } else {
+        SqlBackend::Standard
     }
 }
 
@@ -107,6 +145,8 @@ pub struct JsonRepository {
     table: String,
     id_column: String,
     role: String,
+    /// 显式列清单（`with_columns` 设置后查询生成列投影，替代 `SELECT *`）
+    columns: Option<Vec<String>>,
 }
 
 impl JsonRepository {
@@ -125,7 +165,69 @@ impl JsonRepository {
             table: table.to_string(),
             id_column: "id".to_string(),
             role: "admin".to_string(),
+            columns: None,
         })
+    }
+
+    /// 设置显式列清单（列投影，避免 `SELECT *`）
+    ///
+    /// 设置后 `find_by_id` / `find_all` / `find_all_cursor` 生成
+    /// `SELECT {columns}` 而非 `SELECT *`；列名逐一校验
+    /// [`is_safe_identifier`]。
+    ///
+    /// # Errors
+    ///
+    /// 任一列名不含合法标识符时返回 `DbError::Config`
+    pub fn with_columns(mut self, columns: &[&str]) -> DbResult<Self> {
+        for col in columns {
+            if !is_safe_identifier(col) {
+                return Err(DbError::Config(format!(
+                    "repository column must be a safe identifier: '{col}'"
+                )));
+            }
+        }
+        self.columns = Some(columns.iter().map(|c| c.to_string()).collect());
+        Ok(self)
+    }
+
+    /// 查询列子句：显式投影或 `*`
+    fn select_clause(&self) -> String {
+        match &self.columns {
+            Some(cols) => cols.join(", "),
+            None => "*".to_string(),
+        }
+    }
+
+    /// 游标分页（键集分页，深分页友好）
+    ///
+    /// 返回 `{id_column} > {after_id}` 的升序 `limit` 行；翻页时传上一页
+    /// 末行 id 即可全量遍历，无 OFFSET 深分页的扫描放大。
+    ///
+    /// # Errors
+    ///
+    /// 透传 [`DbPool::query_rows`] 的错误
+    pub async fn find_all_cursor<T: Serialize + DeserializeOwned>(
+        &self,
+        pool: &DbPool,
+        after_id: i64,
+        limit: u64,
+    ) -> DbResult<Vec<T>> {
+        let sql = format!(
+            "SELECT {} FROM {} WHERE {} > {} ORDER BY {} LIMIT {}",
+            self.select_clause(),
+            self.table,
+            self.id_column,
+            after_id,
+            self.id_column,
+            limit
+        );
+        let rows = pool.query_rows(&sql, &self.role).await?;
+        rows.into_iter()
+            .map(|row| {
+                serde_json::from_value(row)
+                    .map_err(|e| DbError::Config(format!("entity deserialize failed: {e}")))
+            })
+            .collect()
     }
 
     /// 自定义主键列
@@ -147,6 +249,87 @@ impl JsonRepository {
     pub fn with_role(mut self, role: &str) -> Self {
         self.role = role.to_string();
         self
+    }
+
+    /// 乐观锁更新：带版本条件的比较并置换（CAS）
+    ///
+    /// 从 `entity` 的 `version_column` 字段取期望版本，生成
+    /// `UPDATE {table} SET {cols}, {version_column} = {version_column} + 1
+    /// WHERE {id_column} = {id} AND {version_column} = {expected}`。
+    /// 影响行数为 0（版本过期或行不存在）时返回 `DbError::VersionConflict`，
+    /// 调用方应重读实体后重试；成功时版本列自增 1。
+    ///
+    /// # Errors
+    ///
+    /// - `version_column` 非法标识符或实体缺失该字段 / 版本非整数：`DbError::Config`
+    /// - 条件未命中：`DbError::VersionConflict`
+    pub async fn update_if_version<T: Serialize + DeserializeOwned>(
+        &self,
+        pool: &DbPool,
+        id: i64,
+        entity: &T,
+        version_column: &str,
+    ) -> DbResult<u64> {
+        if !is_safe_identifier(version_column) {
+            return Err(DbError::Config(format!(
+                "repository version column must be a safe identifier: '{version_column}'"
+            )));
+        }
+        let map = self.entity_object(entity)?;
+        let expected = map
+            .get(version_column)
+            .ok_or_else(|| {
+                DbError::Config(format!(
+                    "update_if_version requires field '{version_column}' on the entity"
+                ))
+            })?
+            .as_i64()
+            .ok_or_else(|| {
+                DbError::Config(format!(
+                    "version column '{version_column}' must be an integer"
+                ))
+            })?;
+
+        let backend = resolve_sql_backend(pool);
+        let mut assignments = Vec::with_capacity(map.len());
+        for (col, value) in &map {
+            if !is_safe_identifier(col) {
+                return Err(DbError::Config(format!(
+                    "repository column must be a safe identifier: '{col}'"
+                )));
+            }
+            // 主键与版本列不参与 SET（版本列由 +1 表达式承载）
+            if col == &self.id_column || col == version_column {
+                continue;
+            }
+            assignments.push(format!("{} = {}", col, sql_literal(value, backend)?));
+        }
+        let set_clause = if assignments.is_empty() {
+            String::new()
+        } else {
+            format!(", {}", assignments.join(", "))
+        };
+        let sql = format!(
+            "UPDATE {} SET {} = {} + 1{} WHERE {} = {} AND {} = {}",
+            self.table,
+            version_column,
+            version_column,
+            set_clause,
+            self.id_column,
+            id,
+            version_column,
+            expected
+        );
+        let session = pool.get_session(&self.role).await?;
+        let exec = session.execute_raw(&sql).await?;
+        let affected = exec.rows_affected();
+        if affected == 0 {
+            return Err(DbError::VersionConflict {
+                table: self.table.clone(),
+                id,
+            });
+        }
+        Ok(affected)
     }
 
     fn entity_object<T: Serialize>(&self, entity: &T) -> DbResult<serde_json::Map<String, Value>> {
@@ -177,6 +360,7 @@ where
                 "repository insert requires at least one column".to_string(),
             ));
         }
+        let backend = resolve_sql_backend(pool);
         let mut columns = Vec::with_capacity(map.len());
         let mut values = Vec::with_capacity(map.len());
         for (col, value) in &map {
@@ -186,7 +370,7 @@ where
                 )));
             }
             columns.push(col.clone());
-            values.push(sql_literal(value)?);
+            values.push(sql_literal(value, backend)?);
         }
         let sql = format!(
             "INSERT INTO {} ({}) VALUES ({})",
@@ -201,8 +385,11 @@ where
 
     async fn find_by_id(&self, pool: &DbPool, id: i64) -> DbResult<Option<T>> {
         let sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            self.table, self.id_column, id
+            "SELECT {} FROM {} WHERE {} = {}",
+            self.select_clause(),
+            self.table,
+            self.id_column,
+            id
         );
         let rows = pool.query_rows(&sql, &self.role).await?;
         match rows.into_iter().next() {
@@ -215,8 +402,12 @@ where
 
     async fn find_all(&self, pool: &DbPool, limit: u64, offset: u64) -> DbResult<Vec<T>> {
         let sql = format!(
-            "SELECT * FROM {} ORDER BY {} LIMIT {} OFFSET {}",
-            self.table, self.id_column, limit, offset
+            "SELECT {} FROM {} ORDER BY {} LIMIT {} OFFSET {}",
+            self.select_clause(),
+            self.table,
+            self.id_column,
+            limit,
+            offset
         );
         let rows = pool.query_rows(&sql, &self.role).await?;
         rows.into_iter()
@@ -234,6 +425,7 @@ where
                 "repository update requires at least one column".to_string(),
             ));
         }
+        let backend = resolve_sql_backend(pool);
         let mut assignments = Vec::with_capacity(map.len());
         for (col, value) in &map {
             if !is_safe_identifier(col) {
@@ -244,7 +436,7 @@ where
             if col == &self.id_column {
                 continue; // 主键不参与 SET
             }
-            assignments.push(format!("{} = {}", col, sql_literal(value)?));
+            assignments.push(format!("{} = {}", col, sql_literal(value, backend)?));
         }
         if assignments.is_empty() {
             return Err(DbError::Config(
@@ -392,6 +584,25 @@ macro_rules! impl_json_repository {
                 .await
             }
         }
+
+        /// 乐观锁更新（转发 [`JsonRepository::update_if_version`]）
+        impl $repo {
+            /// 带版本条件的比较并置换：见 [`JsonRepository::update_if_version`]
+            ///（宏按实体生成；未用到乐观锁的实例化点会触发 dead_code，故放行）
+            #[allow(dead_code)]
+            pub async fn update_if_version(
+                &self,
+                pool: &$crate::database::DbPool,
+                id: i64,
+                entity: &$entity,
+                version_column: &str,
+            ) -> $crate::foundation::DbResult<u64> {
+                $crate::database::repository::JsonRepository::new($table)?
+                    $(.with_id_column($id)?)?
+                    .update_if_version(pool, id, entity, version_column)
+                    .await
+            }
+        }
     };
 }
 
@@ -412,17 +623,66 @@ mod tests {
 
     #[test]
     fn test_sql_literal_escaping() {
-        assert_eq!(sql_literal(&Value::Null).unwrap(), "NULL");
-        assert_eq!(sql_literal(&Value::Bool(true)).unwrap(), "TRUE");
-        assert_eq!(sql_literal(&serde_json::json!(42)).unwrap(), "42");
+        assert_eq!(
+            sql_literal(&Value::Null, SqlBackend::Standard).unwrap(),
+            "NULL"
+        );
+        assert_eq!(
+            sql_literal(&Value::Bool(true), SqlBackend::Standard).unwrap(),
+            "TRUE"
+        );
+        assert_eq!(
+            sql_literal(&serde_json::json!(42), SqlBackend::Standard).unwrap(),
+            "42"
+        );
         // 单引号加倍转义
         assert_eq!(
-            sql_literal(&serde_json::json!("O'Brien")).unwrap(),
+            sql_literal(&serde_json::json!("O'Brien"), SqlBackend::Standard).unwrap(),
             "'O''Brien'"
         );
         // 数组/对象 → JSON 字符串
-        let lit = sql_literal(&serde_json::json!([1, 2])).unwrap();
+        let lit = sql_literal(&serde_json::json!([1, 2]), SqlBackend::Standard).unwrap();
         assert_eq!(lit, "'[1,2]'");
+    }
+
+    /// R-repo-001: MySQL 后端必须同时转义反斜杠——仅加倍单引号会被 `\'`
+    /// 序列击穿（值以反斜杠结尾时悬空引号改变字面量边界）
+    #[test]
+    fn test_sql_literal_mysql_backslash_escaping() {
+        // 尾随反斜杠值 `test\`：
+        // Standard 口径原样保留反斜杠（PG 字面量语义，安全）
+        assert_eq!(
+            sql_literal(&serde_json::json!("test\\"), SqlBackend::Standard).unwrap(),
+            "'test\\'"
+        );
+        // MySql 口径反斜杠加倍，字面量边界不再被 `\'` 击穿
+        assert_eq!(
+            sql_literal(&serde_json::json!("test\\"), SqlBackend::MySql).unwrap(),
+            "'test\\\\'"
+        );
+        // `\'` 注入序列：MySql 转义后 `a\\'' -- …` 整体是一个安全字面量
+        assert_eq!(
+            sql_literal(
+                &serde_json::json!("a\\' -- DROP TABLE users"),
+                SqlBackend::MySql
+            )
+            .unwrap(),
+            "'a\\\\'' -- DROP TABLE users'"
+        );
+        // Standard 口径保持现状（反斜杠是字面量）
+        assert_eq!(
+            sql_literal(&serde_json::json!("a\\b"), SqlBackend::Standard).unwrap(),
+            "'a\\b'"
+        );
+        assert_eq!(
+            sql_literal(&serde_json::json!("a\\b"), SqlBackend::MySql).unwrap(),
+            "'a\\\\b'"
+        );
+        // 单引号在 MySql 下依旧加倍
+        assert_eq!(
+            sql_literal(&serde_json::json!("it's"), SqlBackend::MySql).unwrap(),
+            "'it''s'"
+        );
     }
 
     // 宏展开 in-crate 最小验证（类型推断检查）

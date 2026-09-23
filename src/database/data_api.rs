@@ -346,11 +346,17 @@ impl DataApiGateway {
                 where_clauses.push(format!(
                     "instr({}, {}) > 0",
                     filter.column,
-                    sql_literal(&Value::String(text))?
+                    sql_literal(
+                        &Value::String(text),
+                        crate::database::repository::resolve_sql_backend(&self.pool)
+                    )?
                 ));
                 continue;
             }
-            let literal = sql_literal(&filter.value)?;
+            let literal = sql_literal(
+                &filter.value,
+                crate::database::repository::resolve_sql_backend(&self.pool),
+            )?;
             where_clauses.push(format!(
                 "{} {} {}",
                 filter.column,

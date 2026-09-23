@@ -228,7 +228,7 @@ impl DbPool {
     ///
     /// 如果 URL 无法识别，默认返回 SQLite 类型。
     /// DuckDB 连接不使用 SeaORM 后端，此方法仅用于 SeaORM 连接。
-    pub(super) fn get_database_backend(url: &str) -> sea_orm::DatabaseBackend {
+    pub(crate) fn get_database_backend(url: &str) -> sea_orm::DatabaseBackend {
         if url.starts_with("sqlite:") {
             sea_orm::DatabaseBackend::Sqlite
         } else if url.starts_with("postgres:") || url.starts_with("postgresql:") {

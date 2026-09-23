@@ -218,8 +218,12 @@ impl DbOutboxStore {
         }
     }
 
-    fn sql_value(v: &Value) -> String {
-        crate::database::repository::sql_literal(v).unwrap_or_else(|_| "NULL".to_string())
+    fn sql_value(&self, v: &Value) -> String {
+        crate::database::repository::sql_literal(
+            v,
+            crate::database::repository::resolve_sql_backend(&self.pool),
+        )
+        .unwrap_or_else(|_| "NULL".to_string())
     }
 }
 
@@ -227,13 +231,13 @@ impl DbOutboxStore {
 impl OutboxStore for DbOutboxStore {
     async fn record(&self, event: &EntityEvent) -> DbResult<u64> {
         let payload = match &event.payload {
-            Some(v) => Self::sql_value(v),
+            Some(v) => self.sql_value(v),
             None => "NULL".to_string(),
         };
         // entity/entity_id 为调用方提供的自由文本，经 sql_literal 转义后进语句
         // （单引号加倍），杜绝拼接注入
-        let entity = Self::sql_value(&Value::String(event.entity.clone()));
-        let entity_id = Self::sql_value(&Value::String(event.entity_id.clone()));
+        let entity = self.sql_value(&Value::String(event.entity.clone()));
+        let entity_id = self.sql_value(&Value::String(event.entity_id.clone()));
         let sql = format!(
             "INSERT INTO {} (entity, action, entity_id, payload, status, created_at) VALUES ({}, '{}', {}, {}, 'pending', {})",
             self.table,

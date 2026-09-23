@@ -56,6 +56,19 @@ pub enum DbError {
     #[cfg(feature = "validation")]
     #[error("Validation error: {0}")]
     Validation(String),
+
+    /// 当前操作不被该后端/特性支持（显性拒绝，避免静默降级）
+    #[error("Unsupported operation: {0}")]
+    Unsupported(String),
+
+    /// 乐观锁版本冲突（`update_if_version` 条件未命中时返回）
+    #[error("Version conflict on table '{table}' for id {id}")]
+    VersionConflict {
+        /// 冲突的表名
+        table: String,
+        /// 冲突的行 ID
+        id: i64,
+    },
 }
 
 /// 连接池错误
@@ -142,6 +155,8 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Query(_) => "db-query",
             #[cfg(feature = "validation")]
             Self::Validation(_) => "db-validation",
+            Self::Unsupported(_) => "db-unsupported",
+            Self::VersionConflict { .. } => "db-version-conflict",
         }
     }
 
@@ -156,6 +171,10 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Query(msg) => vec![("message", msg.clone())],
             #[cfg(feature = "validation")]
             Self::Validation(msg) => vec![("message", msg.clone())],
+            Self::Unsupported(msg) => vec![("message", msg.clone())],
+            Self::VersionConflict { table, id } => {
+                vec![("table", table.clone()), ("id", id.to_string())]
+            }
         }
     }
 }
