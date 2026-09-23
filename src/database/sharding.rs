@@ -30,6 +30,21 @@ pub trait ShardingStrategy: Send + Sync {
     /// 根据时间和总分片数计算分片 ID
     fn calculate(&self, timestamp: DateTime<Utc>, total_shards: u32) -> u32;
 
+    /// 按业务分片键（如 user_id / order_id）的确定性路由
+    ///
+    /// 默认实现：`XxHash64(key) % total_shards`（朴素取模，同一 key 结果恒定）。
+    /// [`ConsistentHashStrategy`] 覆写为虚拟环查找，扩缩容时仅迁移 O(N/k)。
+    /// 实现不得依赖当前时间——同一 key 的路由结果必须跨调用稳定。
+    fn calculate_for_key(&self, key: &str, total_shards: u32) -> u32 {
+        use std::hash::{Hash, Hasher};
+        if total_shards == 0 {
+            return 0;
+        }
+        let mut hasher = twox_hash::XxHash64::default();
+        key.hash(&mut hasher);
+        (hasher.finish() % total_shards as u64) as u32
+    }
+
     /// 获取策略名称
     fn name(&self) -> &'static str;
 
@@ -253,6 +268,16 @@ impl ShardingStrategy for ConsistentHashStrategy {
         let hash = hasher.finish();
 
         Self::consistent_ring_lookup(hash, total_shards, self.virtual_nodes)
+    }
+
+    fn calculate_for_key(&self, key: &str, total_shards: u32) -> u32 {
+        use std::hash::{Hash, Hasher};
+        if total_shards == 0 {
+            return 0;
+        }
+        let mut hasher = twox_hash::XxHash64::default();
+        key.hash(&mut hasher);
+        Self::consistent_ring_lookup(hasher.finish(), total_shards, self.virtual_nodes)
     }
 
     fn name(&self) -> &'static str {
@@ -588,6 +613,38 @@ impl ShardRouter {
         timestamp: DateTime<Utc>,
     ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
         let shard_id = self.strategy.calculate(timestamp, self.total_shards);
+        self.get_session(shard_id).await
+    }
+
+    /// 按业务分片键路由（经策略计算）
+    ///
+    /// 与 [`shard_id_for_key`](Self::shard_id_for_key)（朴素取模快路径）不同，
+    /// 本方法走 `strategy.calculate_for_key`：一致性哈希策略下 key 路由
+    /// 同样享受虚拟环的最小迁移特性。
+    ///
+    /// # Errors
+    ///
+    /// 路由到的分片 ID 未注册（无 ShardInfo）时返回 `DbError::Config`。
+    pub fn route_for_key(&self, key: &str) -> Result<u32, crate::foundation::DbError> {
+        let shard_id = self.strategy.calculate_for_key(key, self.total_shards);
+        if self.shards.contains_key(&shard_id) {
+            Ok(shard_id)
+        } else {
+            Err(crate::foundation::DbError::Config(format!(
+                "shard key '{key}' routed to unregistered shard {shard_id}"
+            )))
+        }
+    }
+
+    /// 按业务分片键获取对应分片的 Session
+    ///
+    /// 等价于 `get_session(route_for_key(key)?)`，但路由失败（分片未注册）
+    /// 时返回 `Ok(None)` 而非错误，与 `get_session_for_timestamp` 语义对齐。
+    pub async fn get_session_for_key(
+        &self,
+        key: &str,
+    ) -> Result<Option<crate::database::Session>, crate::foundation::DbError> {
+        let shard_id = self.strategy.calculate_for_key(key, self.total_shards);
         self.get_session(shard_id).await
     }
 
@@ -1007,5 +1064,95 @@ mod tests {
         assert!(strategy.is_valid_shard_id(0, 10));
         assert!(strategy.is_valid_shard_id(9, 10));
         assert!(!strategy.is_valid_shard_id(10, 10));
+    }
+}
+
+#[cfg(test)]
+mod key_routing_tests {
+    use super::*;
+
+    /// 同一 key 重复路由必须恒定（R-sharding-001）
+    #[test]
+    fn same_key_routes_identically_across_calls() {
+        for strategy in [
+            Box::new(HashStrategy) as Box<dyn ShardingStrategy>,
+            Box::new(ConsistentHashStrategy::default()),
+            Box::new(YearlyStrategy),
+        ] {
+            let expected = strategy.calculate_for_key("user-42", 8);
+            for _ in 0..100 {
+                assert_eq!(strategy.calculate_for_key("user-42", 8), expected);
+            }
+        }
+    }
+
+    /// key 分布不得塌缩到单分片（R-sharding-001）
+    #[test]
+    fn keys_distribute_across_shards() {
+        for strategy in [
+            Box::new(HashStrategy) as Box<dyn ShardingStrategy>,
+            Box::new(ConsistentHashStrategy::default()),
+        ] {
+            let mut hit = std::collections::HashSet::new();
+            for i in 0..1000u32 {
+                let key = format!("user-{i}");
+                hit.insert(strategy.calculate_for_key(&key, 8));
+            }
+            assert!(
+                hit.len() >= 4,
+                "strategy '{}' hit only {} shards",
+                strategy.name(),
+                hit.len()
+            );
+        }
+    }
+
+    /// 一致性哈希扩容最小迁移；朴素取模对照组大面积迁移（R-sharding-002）
+    #[test]
+    fn consistent_hash_minimizes_migration_on_scale_up() {
+        let strategy = ConsistentHashStrategy::default();
+        let keys: Vec<String> = (0..2000).map(|i| format!("user-{i}")).collect();
+        let before: Vec<u32> = keys
+            .iter()
+            .map(|k| strategy.calculate_for_key(k, 8))
+            .collect();
+        let after: Vec<u32> = keys
+            .iter()
+            .map(|k| strategy.calculate_for_key(k, 9))
+            .collect();
+        let moved = before.iter().zip(&after).filter(|(a, b)| a != b).count();
+        let rate = moved as f64 / keys.len() as f64;
+        assert!(
+            rate < 0.5,
+            "consistent-hash migration rate {rate} must be < 50%"
+        );
+
+        // 对照：朴素取模在 8→9 下保留率仅 ~1/9（迁移 ~89%）
+        let naive_moved = keys
+            .iter()
+            .zip(&after)
+            .filter(|(k, b)| ShardingStrategy::calculate_for_key(&HashStrategy, k, 8) != **b)
+            .count() as f64
+            / keys.len() as f64;
+        assert!(
+            naive_moved > 0.5,
+            "naive mod baseline should migrate most keys"
+        );
+    }
+
+    /// route_for_key 走策略并要求分片已注册；get_session_for_key 无池时返回 None（R-sharding-003）
+    #[test]
+    fn router_route_for_key_requires_registered_shard() {
+        let mut router = ShardRouter::new(ConsistentHashStrategy::default(), 4);
+        for id in 0..4u32 {
+            router.register_shard(id, format!("shard-{id}"), format!("sqlite://shard{id}.db"));
+        }
+        let first = router.route_for_key("order-1001").unwrap();
+        for _ in 0..100 {
+            assert_eq!(router.route_for_key("order-1001").unwrap(), first);
+        }
+        // 未注册分片的 router（total=4 但 0 注册）必须报错而非静默返回
+        let empty = ShardRouter::new(ConsistentHashStrategy::default(), 4);
+        assert!(empty.route_for_key("order-1001").is_err());
     }
 }
