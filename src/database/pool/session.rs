@@ -86,6 +86,35 @@ struct SessionState {
     last_write: Option<Instant>,
 }
 
+/// 事务隔离级别（四档，映射到 sea-orm `IsolationLevel`）
+///
+/// 各后端的实际支持度不同（如 SQLite 只有可串行化语义、MySQL 默认
+/// REPEATABLE READ）：请求的级别由底层引擎尽力落实，SQLite 上会
+/// 映射为引擎默认语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbIsolationLevel {
+    /// 读未提交
+    ReadUncommitted,
+    /// 读已提交
+    ReadCommitted,
+    /// 可重复读
+    RepeatableRead,
+    /// 可串行化
+    Serializable,
+}
+
+impl DbIsolationLevel {
+    /// 映射到 sea-orm 隔离级别
+    pub fn into_sea_orm(self) -> sea_orm::IsolationLevel {
+        match self {
+            DbIsolationLevel::ReadUncommitted => sea_orm::IsolationLevel::ReadUncommitted,
+            DbIsolationLevel::ReadCommitted => sea_orm::IsolationLevel::ReadCommitted,
+            DbIsolationLevel::RepeatableRead => sea_orm::IsolationLevel::RepeatableRead,
+            DbIsolationLevel::Serializable => sea_orm::IsolationLevel::Serializable,
+        }
+    }
+}
+
 /// Session 结构
 pub struct Session {
     /// 数据库连接（统一枚举：SeaORM 或 DuckDB）
@@ -211,6 +240,81 @@ impl Session {
         {
             state.transaction.is_some()
         }
+    }
+
+    /// 以指定隔离级别开启事务
+    ///
+    /// SeaORM 关系型路径经 `begin_with_config` 传递隔离级别；图连接与
+    /// DuckDB raw 路径**显性拒绝**（`DbError::Unsupported`）而非静默降级——
+    /// 静默忽略隔离级别会让调用方误以为获得了该隔离保证。
+    ///
+    /// # Errors
+    ///
+    /// - 已在事务中：`DbError::Transaction`（与 `begin_transaction` 一致）
+    /// - 图连接 / DuckDB raw 后端：`DbError::Unsupported`
+    pub async fn begin_transaction_with_isolation(
+        &self,
+        level: DbIsolationLevel,
+    ) -> Result<(), DbError> {
+        // 短锁：检查是否已在事务中
+        {
+            let state = self.state.write().await;
+            #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+            if state.graph_transaction.is_some() {
+                return Err(DbError::Transaction(
+                    "Already in graph transaction".to_string(),
+                ));
+            }
+            if state.transaction.is_some() {
+                return Err(DbError::Transaction("Already in transaction".to_string()));
+            }
+        }
+
+        let conn = self.connection.as_ref().ok_or_else(|| {
+            DbError::Config(
+                "Connection not available - Session may have been invalidated".to_string(),
+            )
+        })?;
+
+        // 图连接与 raw 后端不支持隔离级别语义
+        #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+        if conn.is_graph() {
+            return Err(DbError::Unsupported(
+                "begin_transaction_with_isolation requires a relational (SeaORM) backend"
+                    .to_string(),
+            ));
+        }
+        let conn = conn.as_sea_orm().map_err(|_| {
+            DbError::Unsupported(
+                "begin_transaction_with_isolation requires a relational (SeaORM) backend"
+                    .to_string(),
+            )
+        })?;
+
+        let transaction = conn
+            .begin_with_config(Some(level.into_sea_orm()), None)
+            .await
+            .map_err(|e| {
+                DbError::Transaction(i18n::t(
+                    "session-txn-begin-failed",
+                    &[("error", e.to_string())],
+                ))
+            })?;
+
+        // 短锁：写入 transaction（含并发冲突处理）
+        let has_conflict = {
+            let state = self.state.write().await;
+            state.transaction.is_some()
+        };
+        if has_conflict {
+            let _ = transaction.rollback().await;
+            return Err(DbError::Transaction(
+                "Already in transaction (concurrent begin detected)".to_string(),
+            ));
+        }
+        let mut state = self.state.write().await;
+        state.transaction = Some(Arc::new(transaction));
+        Ok(())
     }
 
     /// 开始事务
@@ -625,6 +729,55 @@ impl Session {
 
             result
         }
+    }
+
+    /// 当前读：在活动事务中执行行锁定查询（`SELECT ... FOR UPDATE`）
+    ///
+    /// 与普通 [`Self::query_rows`]（快照读）不同，本方法要求 Session 已开启
+    /// 事务——排他行锁只在事务持有期内有效，非事务下调用一律拒绝，
+    /// 避免「拿到锁即释」的假防护。用于「读取-修改-写入」竞态防护
+    /// （库存扣减、余额结算等）。
+    ///
+    /// `FOR UPDATE` 子句由调用方写入 SQL（方言语法各异）；SQLite 不支持
+    /// `FOR UPDATE` 语法，测试与 SQLite 场景可传普通 SELECT（事务内执行）。
+    ///
+    /// # Errors
+    ///
+    /// - 未开启事务：`DbError::Transaction`
+    /// - 非关系型后端（图连接 / DuckDB raw）：`DbError::Unsupported`
+    /// - 其余错误透传 [`Self::query_rows`]（含 SELECT-only 与权限检查）
+    pub async fn query_rows_for_update(&self, sql: &str) -> DbResult<Vec<serde_json::Value>> {
+        // 行锁依赖事务持有期：非事务下一律拒绝
+        if !self.is_in_transaction().await {
+            return Err(DbError::Transaction(
+                "query_rows_for_update requires an active transaction (call begin_transaction first)"
+                    .to_string(),
+            ));
+        }
+
+        // 仅 SeaORM 关系型后端具备行锁语义；raw/图连接显性拒绝
+        let is_relational = self
+            .connection
+            .as_ref()
+            .map(|conn| {
+                #[cfg(any(feature = "ladybug", feature = "neo4j"))]
+                {
+                    !conn.is_graph() && conn.as_sea_orm().is_ok()
+                }
+                #[cfg(not(any(feature = "ladybug", feature = "neo4j")))]
+                {
+                    conn.as_sea_orm().is_ok()
+                }
+            })
+            .unwrap_or(false);
+        if !is_relational {
+            return Err(DbError::Unsupported(
+                "query_rows_for_update requires a relational (SeaORM) backend".to_string(),
+            ));
+        }
+
+        // 事务感知执行：query_rows 在活动事务下自动走事务连接
+        self.query_rows(sql).await
     }
 
     /// 统一行查询 API：执行 SELECT 并返回数据行（JSON 对象数组）
@@ -3399,5 +3552,113 @@ mod session_basic_tests {
             "create_migration_executor should succeed: {:?}",
             result.err()
         );
+    }
+}
+
+#[cfg(all(test, feature = "sqlite", feature = "sql-parser"))]
+mod for_update_tests {
+    use super::*;
+    use crate::database::DbPool;
+
+    /// R-txn-001: 非事务下调用必须拒绝（拿到锁即释 = 假防护）
+    #[tokio::test]
+    async fn query_rows_for_update_requires_active_transaction() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        let err = session
+            .query_rows_for_update("SELECT 1")
+            .await
+            .expect_err("must reject outside transaction");
+        assert!(matches!(err, DbError::Transaction(_)), "got {err:?}");
+        assert!(err.message().contains("requires an active transaction"));
+    }
+
+    /// R-txn-001: 事务内执行当前读，读得见未提交写（同一事务连接）
+    #[tokio::test]
+    async fn query_rows_for_update_executes_inside_transaction() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+
+        session
+            .execute_raw_ddl("CREATE TABLE for_update_t (id INTEGER PRIMARY KEY, qty INTEGER)")
+            .await
+            .expect("create table");
+        session
+            .execute_raw("INSERT INTO for_update_t (id, qty) VALUES (1, 5)")
+            .await
+            .expect("insert");
+
+        session.begin_transaction().await.expect("begin");
+        let rows = session
+            .query_rows_for_update("SELECT id, qty FROM for_update_t WHERE id = 1")
+            .await
+            .expect("current read in tx");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["qty"], serde_json::json!(5));
+
+        session.rollback().await.expect("rollback");
+    }
+
+    /// R-txn-001: 回滚后（事务结束）再次当前读被拒绝
+    #[tokio::test]
+    async fn query_rows_for_update_rejected_after_rollback() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session.begin_transaction().await.expect("begin");
+        session.rollback().await.expect("rollback");
+        let err = session
+            .query_rows_for_update("SELECT 1")
+            .await
+            .expect_err("transaction is over");
+        assert!(matches!(err, DbError::Transaction(_)));
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod isolation_level_tests {
+    use super::*;
+    use crate::database::DbPool;
+
+    /// R-txn-002: sqlite 上以指定隔离级别开启事务并回滚
+    #[tokio::test]
+    async fn begin_with_isolation_opens_transaction_on_sqlite() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        assert!(!session.is_in_transaction().await);
+        session
+            .begin_transaction_with_isolation(DbIsolationLevel::Serializable)
+            .await
+            .expect("begin with isolation");
+        assert!(session.is_in_transaction().await);
+        session.rollback().await.expect("rollback");
+        assert!(!session.is_in_transaction().await);
+    }
+
+    /// R-txn-002: 重复开启返回 Already in transaction（与 begin_transaction 一致）
+    #[tokio::test]
+    async fn double_begin_with_isolation_rejected() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session
+            .begin_transaction_with_isolation(DbIsolationLevel::ReadCommitted)
+            .await
+            .expect("first begin");
+        let err = session
+            .begin_transaction_with_isolation(DbIsolationLevel::Serializable)
+            .await
+            .expect_err("second begin must fail");
+        assert!(matches!(err, DbError::Transaction(_)), "got {err:?}");
+        assert!(err.message().contains("Already in transaction"));
+        session.rollback().await.expect("rollback");
+    }
+
+    /// R-txn-002: 四档级别映射到 sea-orm 不丢档
+    #[test]
+    fn all_levels_map_to_sea_orm() {
+        use DbIsolationLevel::*;
+        let _ = ReadUncommitted.into_sea_orm();
+        let _ = ReadCommitted.into_sea_orm();
+        let _ = RepeatableRead.into_sea_orm();
+        let _ = Serializable.into_sea_orm();
     }
 }
