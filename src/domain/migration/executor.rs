@@ -28,6 +28,9 @@ pub struct MigrationExecutor {
     /// 迁移历史表名（默认 [`DEFAULT_MIGRATIONS_TABLE`]，可经
     /// [`MigrationExecutor::with_history_table`] 定制）
     history_table: String,
+    /// 迁移文件 UP/DOWN 段标记集（默认内置集，可经
+    /// [`MigrationExecutor::with_markers`] 定制）
+    markers: MigrationMarkers,
 }
 
 fn build_placeholder_list(backend: sea_orm::DbBackend, count: usize) -> String {
@@ -120,7 +123,18 @@ impl MigrationExecutor {
             sql_generator: SqlGenerator::new(db_type),
             history: MigrationHistory::new(),
             history_table: DEFAULT_MIGRATIONS_TABLE.to_string(),
+            markers: MigrationMarkers::default(),
         }
+    }
+
+    /// 定制迁移文件的 UP/DOWN 段标记集
+    ///
+    /// 只影响本执行器的 UP 段提取与 DOWN 段回滚提取；`extract_down_sql`
+    /// 关联函数与 `MigrationFileParser` 校验仍用内置标记集，保证不定制
+    /// 标记的消费者口径逐字节不变。
+    pub fn with_markers(mut self, markers: MigrationMarkers) -> Self {
+        self.markers = markers;
+        self
     }
 
     /// 定制迁移历史表名
@@ -523,14 +537,38 @@ const DOWN_MARKERS: [&str; 6] = [
     "-- DOWN:", "-- down:", "-- DOWN", "-- down", "DOWN:", "DOWN",
 ];
 
+/// 迁移文件 UP/DOWN 段标记集合（可定制）
+///
+/// 默认值为内置 [`UP_MARKERS`]/[`DOWN_MARKERS`] 常量副本。标记匹配口径：
+/// 逐行 trim 后大小写不敏感的行首前缀匹配——带 `--` 或 `:` 的标记走纯前缀
+/// 分支，裸词标记额外要求词边界。内置集不识别的形态（如 `-- --- UP ---`
+/// 分隔线行）可经定制标记覆盖（如 `up: ["-- --- UP"]`）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationMarkers {
+    /// UP 段起始标记集
+    pub up: Vec<String>,
+    /// DOWN 段起始标记集
+    pub down: Vec<String>,
+}
+
+impl Default for MigrationMarkers {
+    fn default() -> Self {
+        Self {
+            up: UP_MARKERS.iter().map(|m| m.to_string()).collect(),
+            down: DOWN_MARKERS.iter().map(|m| m.to_string()).collect(),
+        }
+    }
+}
+
 /// 判断一行（trim 后）是否以某个标记开头（大小写不敏感）
 ///
 /// - 带冒号（`-- UP:`、`UP:`）与注释形（`-- UP`）标记自带边界，做纯前缀匹配；
 /// - 裸词标记（`UP` / `DOWN`）额外要求标记后是行尾或非单词字符，
 ///   避免把 `updated_at`、`download_url` 这类以 up/down 开头的标识符误判为标记行。
-fn line_matches_marker(line: &str, markers: &[&str]) -> bool {
+fn line_matches_marker<S: AsRef<str>>(line: &str, markers: &[S]) -> bool {
     let trimmed = line.trim();
     markers.iter().any(|marker| {
+        let marker = marker.as_ref();
         // get 保证按字符边界取前缀，避免多字节字符下的切片 panic
         let Some(prefix) = trimmed.get(..marker.len()) else {
             return false;
@@ -557,7 +595,7 @@ fn line_matches_marker(line: &str, markers: &[&str]) -> bool {
 /// 相比旧的全文子串搜索：
 /// - `-- Down:` 等混合大小写标记可被识别（旧实现按字节精确匹配会漏判）；
 /// - 裸标记 `DOWN` 只在行首（trim 后）匹配，不再命中行中间的单词。
-fn find_marker_line(content: &str, markers: &[&str]) -> Option<(usize, usize)> {
+fn find_marker_line<S: AsRef<str>>(content: &str, markers: &[S]) -> Option<(usize, usize)> {
     let mut rest = content;
     let mut line_start = 0usize;
     while let Some(nl) = rest.find('\n') {
@@ -718,7 +756,7 @@ impl MigrationExecutor {
         migration_file: &MigrationFile,
     ) -> Result<(), DbError> {
         // 解析迁移文件内容
-        let sql = Self::extract_up_sql(&migration_file.content);
+        let sql = Self::extract_up_sql(&migration_file.content, &self.markers);
 
         // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
@@ -780,10 +818,13 @@ impl MigrationExecutor {
         self.apply_migration_file(migration_file).await
     }
 
-    /// 从迁移文件中提取 UP SQL
-    fn extract_up_sql(content: &str) -> &str {
-        let up_marker = find_marker_line(content, &UP_MARKERS);
-        let down_marker = find_marker_line(content, &DOWN_MARKERS);
+    /// 从迁移文件中提取 UP SQL（按给定标记集切分）
+    ///
+    /// UP 与 DOWN 均无标记时回退返回全文（trim 后）；UP 无标记而 DOWN 有
+    /// 标记时返回 DOWN 标记行之前的全部内容。
+    fn extract_up_sql<'a>(content: &'a str, markers: &MigrationMarkers) -> &'a str {
+        let up_marker = find_marker_line(content, &markers.up);
+        let down_marker = find_marker_line(content, &markers.down);
 
         match (up_marker, down_marker) {
             (Some((_, up_end)), Some((down_start, _))) if down_start > up_end => {
@@ -796,6 +837,11 @@ impl MigrationExecutor {
         .trim()
     }
 
+    /// 从迁移文件中提取 DOWN SQL（按给定 DOWN 标记集切分）
+    fn extract_down_sql_with<'a>(content: &'a str, down_markers: &[String]) -> Option<&'a str> {
+        find_marker_line(content, down_markers).map(|(_, down_end)| content[down_end..].trim())
+    }
+
     /// 从迁移文件中提取 DOWN SQL
     ///
     /// 与 `extract_up_sql` 对称：存在 DOWN 标记时返回标记行之后的内容（可能为空）；
@@ -803,6 +849,8 @@ impl MigrationExecutor {
     ///
     /// 注意：仅含注释/空白的 DOWN 段同样按原文返回（`Some`，语义不变）；
     /// 拒绝"假回滚"由 `rollback_version` 负责（剥离注释后无可执行语句即报错）。
+    /// 本关联函数固定使用内置标记集；经 `with_markers` 定制标记的回滚提取
+    /// 走 `rollback_version` 内部的参数化路径。
     pub fn extract_down_sql(content: &str) -> Option<&str> {
         find_marker_line(content, &DOWN_MARKERS).map(|(_, down_end)| content[down_end..].trim())
     }
@@ -840,12 +888,13 @@ impl MigrationExecutor {
         migration_file: &MigrationFile,
     ) -> Result<(), DbError> {
         // 无 DOWN 段的迁移无法回滚，提前返回明确错误（不删除历史记录）
-        let down_sql = Self::extract_down_sql(&migration_file.content).ok_or_else(|| {
-            DbError::Migration(format!(
-                "迁移 v{} ({}) 无可回滚的 DOWN 部分",
-                version, migration_file.description
-            ))
-        })?;
+        let down_sql = Self::extract_down_sql_with(&migration_file.content, &self.markers.down)
+            .ok_or_else(|| {
+                DbError::Migration(format!(
+                    "迁移 v{} ({}) 无可回滚的 DOWN 部分",
+                    version, migration_file.description
+                ))
+            })?;
 
         // 模板生成的迁移常带未填写的 DOWN 段（仅 `--` 注释/空白）。execute_unprepared
         // 执行纯注释 SQL 会"成功"（0 行受影响），若据此删除历史行会造成"假回滚"：
@@ -1436,7 +1485,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_with_up_and_down() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
-        let result = MigrationExecutor::extract_up_sql(content);
+        let result = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(result.contains("CREATE TABLE users"));
         assert!(!result.contains("DROP TABLE"));
     }
@@ -1445,7 +1494,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_only_up() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n";
-        let result = MigrationExecutor::extract_up_sql(content);
+        let result = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(result.contains("CREATE TABLE users"));
     }
 
@@ -1453,7 +1502,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_no_markers() {
         let content = "CREATE TABLE users (id INTEGER);";
-        let result = MigrationExecutor::extract_up_sql(content);
+        let result = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         // 无标记时返回整个内容
         assert!(result.contains("CREATE TABLE users"));
     }
@@ -1462,7 +1511,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_case_insensitive_markers() {
         let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- down:\nDROP TABLE t;\n";
-        let result = MigrationExecutor::extract_up_sql(content);
+        let result = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(result.contains("CREATE TABLE t"));
         assert!(!result.contains("DROP TABLE"));
     }
@@ -1471,7 +1520,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_only_down() {
         let content = "-- DOWN:\nDROP TABLE users;\n";
-        let result = MigrationExecutor::extract_up_sql(content);
+        let result = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         // 只有 DOWN 标记时，UP 部分为 DOWN 之前的内容（空）
         assert!(result.is_empty());
     }
@@ -1625,7 +1674,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_bare_mixed_case_markers() {
         let content = "Up:\nCREATE TABLE t (id INTEGER);\nDOWN\nDROP TABLE t;\n";
-        let up = MigrationExecutor::extract_up_sql(content);
+        let up = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(up.contains("CREATE TABLE t"));
         assert!(!up.contains("DROP TABLE"));
         let down = MigrationExecutor::extract_down_sql(content).expect("应识别裸 DOWN 标记");
@@ -1638,7 +1687,7 @@ mod tests {
     #[test]
     fn test_extract_up_sql_not_truncated_by_up_down_prefixed_identifiers() {
         let content = "-- UP:\nCREATE TABLE posts (\n    id INTEGER PRIMARY KEY,\n    updated_at TIMESTAMP,\n    download_url TEXT\n);\n-- DOWN:\nDROP TABLE posts;\n";
-        let up = MigrationExecutor::extract_up_sql(content);
+        let up = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(up.contains("updated_at"), "UP 段不应被 updated_at 截断");
         assert!(up.contains("download_url"), "UP 段不应被 download_url 截断");
         assert!(up.contains(");"));
@@ -2124,6 +2173,149 @@ mod tests {
         // 事务回滚后历史记录保留
         executor.load_history().await.unwrap();
         assert_eq!(executor.get_all_versions(), vec![1]);
+    }
+
+    // =====================================================================
+    // 迁移标记集（MigrationMarkers）
+    // =====================================================================
+
+    /// Default 值必须等于内置 UP/DOWN 常量副本（定制能力不得漂移既有口径）
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_migration_markers_default_equals_builtin_constants() {
+        let markers = MigrationMarkers::default();
+        assert_eq!(
+            markers.up,
+            UP_MARKERS.iter().map(|m| m.to_string()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            markers.down,
+            DOWN_MARKERS
+                .iter()
+                .map(|m| m.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// 默认标记集对 `-- --- UP ---` 分隔线形态不识别（trim 后行首与任何
+    /// 默认标记不同前缀）→ 无标记全文回退；锁定该口径防止默认/定制两套
+    /// 标记判定静默分裂
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_default_markers_separator_line_form_falls_back_to_full_content() {
+        let markers = MigrationMarkers::default();
+        let content = "-- --- UP ---\nCREATE TABLE a(id INT);";
+        assert_eq!(
+            MigrationExecutor::extract_up_sql(content, &markers),
+            content,
+            "默认标记集下分隔线形态不识别,应全文回退"
+        );
+    }
+
+    /// 定制标记命中 `-- --- UP ---` 分隔线形态（mnemis 形态可覆盖证明）：
+    /// 定制标记以 `--` 开头走纯前缀分支，逐行 trim 后大小写不敏感
+    #[cfg(feature = "auto-migrate")]
+    #[test]
+    fn test_with_markers_custom_separator_prefix_form() {
+        let markers = MigrationMarkers {
+            up: vec!["-- --- UP".to_string()],
+            down: vec!["-- --- DOWN".to_string()],
+        };
+        let content = "-- --- UP ---\nCREATE TABLE a(id INT);\n-- --- DOWN ---\nDROP TABLE a;\n";
+        assert_eq!(
+            MigrationExecutor::extract_up_sql(content, &markers),
+            "CREATE TABLE a(id INT);",
+            "定制标记应切分出 UP 段"
+        );
+        assert_eq!(
+            MigrationExecutor::extract_down_sql_with(content, &markers.down)
+                .expect("定制 DOWN 标记应识别"),
+            "DROP TABLE a;"
+        );
+
+        // 逐行大小写不敏感：小写形态同样命中
+        let lower = content.to_lowercase();
+        assert_eq!(
+            MigrationExecutor::extract_up_sql(&lower, &markers),
+            "create table a(id int);"
+        );
+    }
+
+    /// 定制标记端到端（sqlite 内存库，默认/定制对照）：同一分隔线形态文件，
+    /// 默认标记集全文执行（UP+DOWN 连跑,表建后即删），定制标记集正确切分
+    /// （表保留）且回滚按定制 DOWN 标记工作
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_with_markers_custom_separator_form_end_to_end() {
+        let content =
+            "-- --- UP ---\nCREATE TABLE mk (id INTEGER);\n-- --- DOWN ---\nDROP TABLE mk;\n"
+                .to_string();
+        let table_exists = |sql: &str| {
+            format!("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mk' {sql}")
+        };
+
+        // 默认标记集：全文回退执行，DOWN 段连带执行，表不应存在
+        let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+        let mut executor = MigrationExecutor::new(connection, DatabaseType::Sqlite);
+        executor.load_history().await.unwrap();
+        let migration = MigrationFile::new(
+            1,
+            "separator form".to_string(),
+            PathBuf::from("001_sep.sql"),
+            content.clone(),
+        );
+        executor
+            .apply_migration_file_public(&migration)
+            .await
+            .expect("默认标记集下全文执行应成功");
+        let rows = executor
+            .connection
+            .query_all_raw(sea_orm::Statement::from_string(
+                sea_orm::DbBackend::Sqlite,
+                table_exists(""),
+            ))
+            .await
+            .unwrap();
+        assert!(rows.is_empty(), "默认标记集下 DOWN 段随全文执行,表不应存在");
+
+        // 定制标记集：UP/DOWN 正确切分，表保留
+        let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+        let mut executor = MigrationExecutor::new(connection, DatabaseType::Sqlite).with_markers(
+            MigrationMarkers {
+                up: vec!["-- --- UP".to_string()],
+                down: vec!["-- --- DOWN".to_string()],
+            },
+        );
+        executor.load_history().await.unwrap();
+        let migration = MigrationFile::new(
+            1,
+            "separator form".to_string(),
+            PathBuf::from("001_sep.sql"),
+            content,
+        );
+        executor
+            .apply_migration_file_public(&migration)
+            .await
+            .expect("定制标记下迁移应成功");
+        let rows = executor
+            .connection
+            .query_all_raw(sea_orm::Statement::from_string(
+                sea_orm::DbBackend::Sqlite,
+                table_exists(""),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1, "定制标记下 DOWN 段不应被执行,表应保留");
+
+        // 回滚按定制 DOWN 标记工作
+        executor
+            .rollback_version(1, &migration)
+            .await
+            .expect("定制 DOWN 标记应支持回滚");
     }
 
     // =====================================================================
