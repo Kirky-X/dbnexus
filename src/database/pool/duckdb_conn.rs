@@ -260,6 +260,68 @@ impl DuckDbConnection {
         exec_result
     }
 
+    /// 执行多语句 SQL 批（DDL/DML 混合，不绑定参数）
+    ///
+    /// 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接。
+    /// **成败皆归还**（同 [`Self::execute`]）：批中任一语句失败不损坏连接对象，
+    /// 先归还再透传错误。
+    ///
+    /// # 行数语义
+    ///
+    /// `rows_affected` **恒为 0**：DuckDB 原生批量执行接口
+    /// （`duckdb::Connection::execute_batch`）不返回受影响行数，本方法不自行
+    /// 统计。需要逐语句行数时，应拆分后逐条调用 [`Self::execute`] 或
+    /// [`Self::execute_with_params`]。
+    ///
+    /// # 原子性
+    ///
+    /// 不自动包裹事务，不保证原子性。需要多语句原子提交/回滚时使用
+    /// [`Self::execute_transaction`]。
+    pub async fn execute_batch(&self, sql: &str) -> DbResult<DuckDbExecResult> {
+        let permit = self.acquire_permit().await?;
+
+        // 短锁：从池中取出连接
+        let conn = {
+            let mut pool = self.pool.lock().await;
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let sql_owned = sql.to_string();
+        // 闭包始终把连接放回双元组第一位；批结果（含失败）放第二位
+        let handle: JoinHandle<(duckdb::Connection, DbResult<DuckDbExecResult>)> =
+            tokio::task::spawn_blocking(move || {
+                let outcome = (|| {
+                    conn.execute_batch(&sql_owned).map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB execute_batch failed: {e}"
+                        )))
+                    })?;
+                    Ok(DuckDbExecResult { rows_affected: 0 })
+                })();
+                (conn, outcome)
+            });
+
+        // permit 必须在 handle.await 之后 drop
+        let (conn, exec_result) = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
+        drop(permit);
+
+        // 短锁：归还连接（失败路径同样归还，再透传批错误）
+        {
+            let mut pool = self.pool.lock().await;
+            pool.push(conn);
+        }
+
+        exec_result
+    }
+
     /// 执行查询，返回结果行集合
     ///
     /// 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接
@@ -1152,5 +1214,66 @@ mod tests {
         assert_eq!(DuckDbConnection::parse_url("DuckDB::memory:"), ":memory:");
         // duckdb: 前缀剥离保留原始大小写（仅前缀匹配不敏感）
         assert_eq!(DuckDbConnection::parse_url("duckdb:test.db"), "test.db");
+    }
+
+    // ===== execute_batch 测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_execute_batch_multi_statement() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn
+            .execute_batch(
+                "CREATE TABLE batch_test (id INTEGER PRIMARY KEY, val VARCHAR);
+                 INSERT INTO batch_test VALUES (1, 'a'), (2, 'b'), (3, 'c');",
+            )
+            .await
+            .expect("batch should succeed");
+        // 行数语义锁定：DuckDB 原生批量执行接口不提供受影响行数，恒为 0；
+        // 需要逐语句行数时应拆分后走 execute / execute_with_params
+        assert_eq!(result.rows_affected, 0);
+
+        // 批内全部语句均已生效
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM batch_test")
+            .await
+            .expect("query after batch");
+        let count = rows[0].get("cnt").expect("should have cnt");
+        match count {
+            DuckValue::BigInt(n) => assert_eq!(*n, 3, "批内两条语句应均已执行"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// 成败皆归还：批中途失败的语句不损坏连接对象，单连接池不被抽干
+    #[tokio::test]
+    async fn test_connection_returned_after_failed_execute_batch() {
+        let conn = DuckDbConnection::with_pool_size(":memory:", 1)
+            .expect("Failed to create single-connection pool");
+
+        assert!(
+            conn.execute_batch("CREATE TABLE ok_table (id INTEGER); THIS IS NOT SQL")
+                .await
+                .is_err(),
+            "含非法语句的批应失败"
+        );
+        // 失败批之后连接已归还池：后续 execute_batch / execute 均仍可用
+        conn.execute_batch("CREATE TABLE ok_table (id INTEGER); INSERT INTO ok_table VALUES (1)")
+            .await
+            .expect("失败批后连接应已归还池");
+        conn.execute("INSERT INTO ok_table VALUES (2)")
+            .await
+            .expect("execute 仍可用");
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_execute_batch_syntax_error_returns_error() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn.execute_batch("CREAT TABL broken (id INTEGER)").await;
+        assert!(result.is_err(), "语法错误应返回错误");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(
+            msg.contains("execute_batch"),
+            "错误信息应标注来源方法: {msg}"
+        );
     }
 }
