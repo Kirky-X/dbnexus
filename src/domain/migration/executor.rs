@@ -57,6 +57,54 @@ fn build_migration_insert_sql(backend: sea_orm::DbBackend, table: &str) -> Strin
     }
 }
 
+fn build_create_history_table_sql(db_type: DatabaseType, table: &str) -> String {
+    match db_type {
+        DatabaseType::Postgres => {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    file_path TEXT
+                );"
+            )
+        }
+        DatabaseType::MySql => {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    version INT PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    file_path TEXT
+                );"
+            )
+        }
+        DatabaseType::Sqlite => {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    file_path TEXT
+                );"
+            )
+        }
+        DatabaseType::DuckDb => {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    file_path TEXT
+                );"
+            )
+        }
+        DatabaseType::Ladybug | DatabaseType::Neo4j => {
+            panic!("Graph databases do not participate in relational migrations")
+        }
+    }
+}
+
 fn sql_escape_single_quotes(s: &str) -> String {
     s.replace('\'', "''")
 }
@@ -296,52 +344,8 @@ impl MigrationExecutor {
     /// "表已由并发会话创建"。此方法在捕获这两类错误后等待 50ms 再重试，确保另一会话的
     /// `CREATE TABLE` 已提交，使重试的 `IF NOT EXISTS` 成为真正的 no-op。
     async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
-        let table = self.history_table.as_str();
-        let create_table_sql = match self.sql_generator.db_type {
-            DatabaseType::Postgres => {
-                format!(
-                    "CREATE TABLE IF NOT EXISTS {table} (
-                    version INTEGER PRIMARY KEY,
-                    description TEXT NOT NULL,
-                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    file_path TEXT
-                );"
-                )
-            }
-            DatabaseType::MySql => {
-                format!(
-                    "CREATE TABLE IF NOT EXISTS {table} (
-                    version INT PRIMARY KEY,
-                    description TEXT NOT NULL,
-                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    file_path TEXT
-                );"
-                )
-            }
-            DatabaseType::Sqlite => {
-                format!(
-                    "CREATE TABLE IF NOT EXISTS {table} (
-                    version INTEGER PRIMARY KEY,
-                    description TEXT NOT NULL,
-                    applied_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    file_path TEXT
-                );"
-                )
-            }
-            DatabaseType::DuckDb => {
-                format!(
-                    "CREATE TABLE IF NOT EXISTS {table} (
-                    version INTEGER PRIMARY KEY,
-                    description TEXT NOT NULL,
-                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    file_path TEXT
-                );"
-                )
-            }
-            DatabaseType::Ladybug | DatabaseType::Neo4j => {
-                panic!("Graph databases do not participate in relational migrations")
-            }
-        };
+        let create_table_sql =
+            build_create_history_table_sql(self.sql_generator.db_type, &self.history_table);
 
         match self.connection.execute_unprepared(&create_table_sql).await {
             Ok(_) => Ok(()),
@@ -1096,6 +1100,57 @@ mod tests {
         );
     }
 
+    /// 默认表名下 4 个后端的 CREATE TABLE SQL 必须与 format! 化之前的历史
+    /// 字面量逐字节一致（快照锁定 ensure_migration_table_exists 的默认口径）
+    #[test]
+    fn test_build_create_history_table_sql_default_snapshot() {
+        let t = DEFAULT_MIGRATIONS_TABLE;
+        assert_eq!(
+            build_create_history_table_sql(DatabaseType::Postgres, t),
+            "CREATE TABLE IF NOT EXISTS dbnexus_migrations (\
+            \n                    version INTEGER PRIMARY KEY,\
+            \n                    description TEXT NOT NULL,\
+            \n                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+            \n                    file_path TEXT\
+            \n                );"
+        );
+        assert_eq!(
+            build_create_history_table_sql(DatabaseType::MySql, t),
+            "CREATE TABLE IF NOT EXISTS dbnexus_migrations (\
+            \n                    version INT PRIMARY KEY,\
+            \n                    description TEXT NOT NULL,\
+            \n                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+            \n                    file_path TEXT\
+            \n                );"
+        );
+        assert_eq!(
+            build_create_history_table_sql(DatabaseType::Sqlite, t),
+            "CREATE TABLE IF NOT EXISTS dbnexus_migrations (\
+            \n                    version INTEGER PRIMARY KEY,\
+            \n                    description TEXT NOT NULL,\
+            \n                    applied_at TEXT NOT NULL DEFAULT (datetime('now')),\
+            \n                    file_path TEXT\
+            \n                );"
+        );
+        assert_eq!(
+            build_create_history_table_sql(DatabaseType::DuckDb, t),
+            "CREATE TABLE IF NOT EXISTS dbnexus_migrations (\
+            \n                    version INTEGER PRIMARY KEY,\
+            \n                    description TEXT NOT NULL,\
+            \n                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+            \n                    file_path TEXT\
+            \n                );"
+        );
+    }
+
+    /// 定制表名贯穿 CREATE TABLE 语句且不残留默认表名
+    #[test]
+    fn test_build_create_history_table_sql_custom_table() {
+        let sql = build_create_history_table_sql(DatabaseType::Sqlite, "schema_migrations");
+        assert!(sql.starts_with("CREATE TABLE IF NOT EXISTS schema_migrations ("));
+        assert!(!sql.contains("dbnexus_migrations"));
+    }
+
     /// 定制表名贯穿 INSERT 语句且不残留默认表名
     #[test]
     fn test_build_migration_insert_sql_custom_table() {
@@ -1433,6 +1488,26 @@ mod tests {
         assert!(sql.contains("1"));
         assert!(sql.contains("test migration"));
         assert!(sql.contains("/path/to/file.sql"));
+    }
+
+    /// 默认表名下 deprecated raw INSERT 的结构与转义逐字节锁定
+    /// （applied_at 值动态生成，以首尾锚定覆盖表名/列名/占位序/引号转义）
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_build_history_insert_sql_raw_default_table_snapshot() {
+        let executor = create_sqlite_executor().await;
+        let applied_at = time::OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        #[allow(deprecated)]
+        let sql = executor.build_history_insert_sql_raw(7, "it's", applied_at, "/tmp/x.sql");
+        assert!(
+            sql.starts_with(
+                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (7, 'it''s', '"
+            ),
+            "默认表名/列序/转义不符: {sql}"
+        );
+        assert!(sql.ends_with("', '/tmp/x.sql')"), "尾部值/引号不符: {sql}");
+        let body = &sql["INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (".len()..];
+        assert_eq!(body.matches(',').count(), 3, "应为 4 个占位值");
     }
 
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
