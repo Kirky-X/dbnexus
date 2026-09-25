@@ -1718,4 +1718,39 @@ mod tests {
         }
         assert!(recovered, "取消后连接应归还池(2s 内恢复可用)");
     }
+
+    /// 机制哨兵：commit(mut self) 按值消耗 Transaction,但其 Err 返回路径上
+    /// self 作为函数局部值仍会 drop → Drop::drop → finish_ 兜底回滚——
+    /// with_transaction doc 中「commit 失败时残留事务由 Transaction::drop
+    /// 的默认 Rollback 行为清理」论据的机制依据。以 DropBehavior::Panic 把
+    /// drop 路径变成可观察 panic;若未来 duckdb-rs 改为消耗后不触发 drop,
+    /// 本测试先红,上述注释须同步修订。
+    #[test]
+    fn commit_err_path_runs_drop_fallback() {
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let mut conn = duckdb::Connection::open_in_memory().expect("open in-memory db");
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let mut tx = conn.transaction().expect("begin transaction");
+            tx.set_drop_behavior(duckdb::DropBehavior::Panic);
+            tx.execute_batch("ROLLBACK").expect("manual rollback");
+            let r = tx.commit();
+            assert!(r.is_err(), "手动回滚后 COMMIT 应失败");
+            "no-drop"
+        }));
+        match outcome {
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| payload.downcast_ref::<&'static str>().copied())
+                    .unwrap_or_default();
+                assert!(
+                    msg.contains("Transaction dropped unexpectedly"),
+                    "panic 应来自 finish_ 的 Panic 分支,实际: {msg}"
+                );
+            }
+            Ok(_) => panic!("commit Err 路径未触发 Drop 兜底:doc 的 drop 清理论据失效,须同步修订"),
+        }
+    }
 }
