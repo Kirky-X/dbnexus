@@ -639,6 +639,86 @@ impl DuckDbConnection {
         results
     }
 
+    /// 在单个事务中执行泛型闭包，返回其结果（仅 DuckDB 连接可用）
+    ///
+    /// 连接池模式：从池中取出连接 → spawn_blocking 内 `BEGIN` → 执行闭包 →
+    /// 成败皆归还连接。
+    ///
+    /// # 事务语义
+    ///
+    /// - 闭包通过 `duckdb::Transaction`（Deref 到 `Connection`）执行语句，
+    ///   **事务内可读**：可见本事务未提交的写入（read-your-own-writes）。
+    /// - 闭包返回 `Ok` → 提交（`COMMIT`）；commit 失败时错误原样透传，
+    ///   残留事务由 `Transaction::drop` 的默认 Rollback 行为清理。
+    /// - 闭包返回 `Err`（含事务内语句失败）→ 回滚（`ROLLBACK`），透传
+    ///   闭包原始错误；回滚自身失败不掩盖原始错误（drop 再兜底一次）。
+    ///
+    /// # 参数与返回
+    ///
+    /// * `f` - 事务闭包，接收 `&duckdb::Transaction`，返回 `DbResult<R>`
+    /// * 返回闭包的成功值；`Send + 'static` 约束源于跨 `spawn_blocking` 传值
+    pub async fn with_transaction<R, F>(&self, f: F) -> DbResult<R>
+    where
+        F: for<'a> FnOnce(&'a duckdb::Transaction<'a>) -> DbResult<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let permit = self.acquire_permit().await?;
+
+        // 短锁：从池中取出连接
+        let mut conn = {
+            let mut pool = self.pool.lock().await;
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        // 闭包始终把连接放回双元组第一位；事务结果（含失败/commit 失败）放第二位
+        let handle: JoinHandle<(duckdb::Connection, DbResult<R>)> =
+            tokio::task::spawn_blocking(move || {
+                let outcome = (|| {
+                    let tx = conn.transaction().map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB begin transaction failed: {e}"
+                        )))
+                    })?;
+                    match f(&tx) {
+                        Ok(value) => {
+                            tx.commit().map_err(|e| {
+                                DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                    "DuckDB commit failed: {e}"
+                                )))
+                            })?;
+                            Ok(value)
+                        }
+                        Err(e) => {
+                            // 回滚吞错：保留闭包原始错误；残留事务由 drop 兜底回滚
+                            let _ = tx.rollback();
+                            Err(e)
+                        }
+                    }
+                })();
+                (conn, outcome)
+            });
+
+        // permit 必须在 handle.await 之后 drop
+        let (conn, result) = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
+        drop(permit);
+
+        // 短锁：归还连接（失败/回滚/commit 失败路径同样归还，再透传错误）
+        {
+            let mut pool = self.pool.lock().await;
+            pool.push(conn);
+        }
+
+        result
+    }
+
     /// 健康检查（执行 `SELECT 1`）
     ///
     /// # 错误
@@ -1275,5 +1355,119 @@ mod tests {
             msg.contains("execute_batch"),
             "错误信息应标注来源方法: {msg}"
         );
+    }
+
+    // ===== with_transaction 测试 =====
+
+    /// 成功路径：闭包返回 Ok → commit → 落库；事务内可读到本事务的写入
+    #[tokio::test]
+    async fn test_with_transaction_commit_persists_and_readable_in_tx() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE tx_test (id INTEGER)")
+            .await
+            .expect("create table");
+
+        let written: i64 = conn
+            .with_transaction(|tx| {
+                tx.execute("INSERT INTO tx_test VALUES (1)", [])
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx insert failed: {e}"
+                        )))
+                    })?;
+                // 事务内可读：能看到本事务未提交的写入
+                let n: i64 = tx
+                    .query_row("SELECT COUNT(*) FROM tx_test", [], |r| r.get(0))
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx read failed: {e}"
+                        )))
+                    })?;
+                Ok(n)
+            })
+            .await
+            .expect("事务应提交成功");
+        assert_eq!(written, 1, "事务内应读到本事务写入");
+
+        // 提交后对池上后续语句可见
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM tx_test")
+            .await
+            .expect("query after commit");
+        match rows[0].get("cnt").expect("should have cnt") {
+            DuckValue::BigInt(n) => assert_eq!(*n, 1, "commit 后应落库"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// 语句失败路径：事务内任一语句失败 → 整体回滚 → 单连接池不被抽干
+    #[tokio::test]
+    async fn test_with_transaction_rolls_back_on_statement_failure() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE rb_test (id INTEGER)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO rb_test VALUES (1)")
+            .await
+            .expect("seed row");
+
+        let result: DbResult<()> = conn
+            .with_transaction(|tx| {
+                tx.execute("INSERT INTO rb_test VALUES (2)", [])
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx insert failed: {e}"
+                        )))
+                    })?;
+                tx.execute("THIS IS NOT SQL", []).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB tx statement failed: {e}"
+                    )))
+                })?;
+                Ok(())
+            })
+            .await;
+        assert!(result.is_err(), "事务内语句失败应返回错误");
+
+        // 回滚生效（事务内 INSERT 不落库）且连接已归还池（后续查询可用）
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM rb_test")
+            .await
+            .expect("语句失败后连接应已归还池");
+        match rows[0].get("cnt").expect("should have cnt") {
+            DuckValue::BigInt(n) => assert_eq!(*n, 1, "失败事务应整体回滚,仅保留事务前的 1 行"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// commit 失败路径：事务内手动 ROLLBACK 后 commit 必失败（已无活动事务），
+    /// with_transaction 应透传错误且连接归还
+    #[tokio::test]
+    async fn test_with_transaction_commit_failure_returns_error() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE cf_test (id INTEGER)")
+            .await
+            .expect("create table");
+
+        let result: DbResult<usize> = conn
+            .with_transaction(|tx| {
+                // 构造 commit 失败：先手动 ROLLBACK，事务结束后 COMMIT 必报错
+                tx.execute_batch("ROLLBACK").map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "manual rollback failed: {e}"
+                    )))
+                })?;
+                Ok(7)
+            })
+            .await;
+        assert!(result.is_err(), "commit 失败应返回错误");
+
+        // 连接归还：后续语句仍可用
+        conn.execute("INSERT INTO cf_test VALUES (1)")
+            .await
+            .expect("commit 失败后连接应已归还池");
     }
 }
