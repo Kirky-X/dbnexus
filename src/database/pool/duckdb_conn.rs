@@ -26,7 +26,7 @@
 use std::sync::Arc;
 
 pub use duckdb::types::Value as DuckValue;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, MutexGuard, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::foundation::{DbError, DbResult};
@@ -84,6 +84,10 @@ pub struct DuckDbConnection {
     pool_size: usize,
     /// spawn_blocking 并发限制信号量（= 连接池大小）
     spawn_permit: Arc<Semaphore>,
+    /// 串行写闸：`Some` 时全部写路径在执行前互斥持闸（写回串行，读路径
+    /// 不受影响）；`None`（默认）维持池化并发写。Clone 句柄经 Arc 共享
+    /// 同一闸。
+    serialized_write_gate: Option<Arc<Mutex<()>>>,
 }
 
 impl DuckDbConnection {
@@ -147,6 +151,7 @@ impl DuckDbConnection {
             pool: Arc::new(Mutex::new(pool)),
             pool_size,
             spawn_permit: Arc::new(Semaphore::new(pool_size)),
+            serialized_write_gate: None,
         })
     }
 
@@ -182,6 +187,7 @@ impl DuckDbConnection {
             pool: Arc::new(Mutex::new(pool)),
             pool_size,
             spawn_permit: Arc::new(Semaphore::new(pool_size)),
+            serialized_write_gate: None,
         })
     }
 
@@ -216,6 +222,7 @@ impl DuckDbConnection {
     /// **成败皆归还**：语句失败不损坏连接对象，先归还再透传错误（否则
     /// 单连接架构下一次失败即令池永久耗尽，见 pool.rs 的 max_connections=1）。
     pub async fn execute(&self, sql: &str) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         // 短锁：从池中取出连接
@@ -278,6 +285,7 @@ impl DuckDbConnection {
     /// 不自动包裹事务，不保证原子性。需要多语句原子提交/回滚时使用
     /// [`Self::execute_transaction`]。
     pub async fn execute_batch(&self, sql: &str) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         // 短锁：从池中取出连接
@@ -425,6 +433,7 @@ impl DuckDbConnection {
         sql: &str,
         params: Vec<DuckValue>,
     ) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         let conn = {
@@ -582,6 +591,7 @@ impl DuckDbConnection {
         &self,
         statements: Vec<(String, Vec<DuckValue>)>,
     ) -> DbResult<Vec<DuckDbExecResult>> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         let mut conn = {
@@ -662,6 +672,7 @@ impl DuckDbConnection {
         F: for<'a> FnOnce(&'a duckdb::Transaction<'a>) -> DbResult<R> + Send + 'static,
         R: Send + 'static,
     {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         // 短锁：从池中取出连接
@@ -739,6 +750,29 @@ impl DuckDbConnection {
         self.pool_size
     }
 
+    /// 启用串行写闸
+    ///
+    /// 启用后全部写路径（[`Self::execute`]、[`Self::execute_with_params`]、
+    /// [`Self::execute_batch`]、[`Self::execute_transaction`]、
+    /// [`Self::with_transaction`]）在执行前互斥持闸，写回串行；读路径
+    /// （[`Self::query`]、[`Self::query_with_params`]）不受影响，连接池的
+    /// 并发收益保留在读侧。默认不启用（池化并发写）。写入场景出现并发
+    /// 冲突（write-write conflict）时压测后再定是否启用。
+    pub fn with_serialized_writes(mut self) -> Self {
+        self.serialized_write_gate = Some(Arc::new(Mutex::new(())));
+        self
+    }
+
+    /// 写路径获取串行写闸（未启用时返回 `None`，不产生任何阻塞）
+    ///
+    /// 返回的 guard 在写路径完成（含连接归还）后 drop，失败路径同样释放。
+    async fn acquire_write_gate(&self) -> Option<MutexGuard<'_, ()>> {
+        match &self.serialized_write_gate {
+            Some(gate) => Some(gate.lock().await),
+            None => None,
+        }
+    }
+
     /// 获取 Semaphore 许可证，限制 spawn_blocking 并发数
     ///
     /// 返回的 `SemaphorePermit` 在 drop 时自动释放，确保不会泄漏。
@@ -761,6 +795,7 @@ impl std::fmt::Debug for DuckDbConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
     async fn test_duckdb_connection_create_memory() {
@@ -1469,5 +1504,120 @@ mod tests {
         conn.execute("INSERT INTO cf_test VALUES (1)")
             .await
             .expect("commit 失败后连接应已归还池");
+    }
+
+    // =====================================================================
+    // 串行写闸（with_serialized_writes）测试
+    // =====================================================================
+
+    /// 默认不启用写闸（维持池化并发写）；启用后 Clone 句柄经 Arc 共享同一闸
+    #[tokio::test]
+    async fn test_serialized_writes_default_off_and_clone_shares_gate() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        assert!(conn.serialized_write_gate.is_none(), "默认不应启用串行写闸");
+
+        let enabled = conn.with_serialized_writes();
+        let cloned = enabled.clone();
+        assert!(enabled.serialized_write_gate.is_some());
+        assert!(
+            Arc::ptr_eq(
+                enabled.serialized_write_gate.as_ref().unwrap(),
+                cloned.serialized_write_gate.as_ref().unwrap(),
+            ),
+            "Clone 句柄应共享同一写闸"
+        );
+    }
+
+    /// 写互斥:默认池化并发下写事务可重叠(max>=2);启用串行写闸后
+    /// 同一时刻至多一个写事务在执行(max==1)
+    #[tokio::test]
+    async fn test_serialized_writes_gate_excludes_concurrent_write_transactions() {
+        let peak_inflight = |conn: Arc<DuckDbConnection>| async move {
+            let cur = Arc::new(AtomicUsize::new(0));
+            let max_inflight = Arc::new(AtomicUsize::new(0));
+            let mut handles = Vec::new();
+            for _ in 0..4 {
+                let conn = conn.clone();
+                let cur = cur.clone();
+                let max_inflight = max_inflight.clone();
+                handles.push(tokio::spawn(async move {
+                    conn.with_transaction(move |_tx| {
+                        let now = cur.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_inflight.fetch_max(now, Ordering::SeqCst);
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                        cur.fetch_sub(1, Ordering::SeqCst);
+                        Ok(())
+                    })
+                    .await
+                    .expect("写事务应成功");
+                }));
+            }
+            for handle in handles {
+                handle.await.expect("Task panicked");
+            }
+            max_inflight.load(Ordering::SeqCst)
+        };
+
+        // 默认(未启用闸):池化并发写,事务可重叠
+        let pooled = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 4).expect("Failed to create connection"),
+        );
+        let pooled_max = peak_inflight(pooled).await;
+        assert!(
+            pooled_max >= 2,
+            "默认池化并发下写事务应可重叠,实际 max={pooled_max}"
+        );
+
+        // 启用串行写闸:互斥,峰值并发=1
+        let serialized = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 4)
+                .expect("Failed to create connection")
+                .with_serialized_writes(),
+        );
+        let serialized_max = peak_inflight(serialized).await;
+        assert_eq!(serialized_max, 1, "串行写闸下写事务应互斥");
+    }
+
+    /// 读并发不受限:写任务持闸期间,读路径不排队,在写事务窗口内完成
+    #[tokio::test]
+    async fn test_serialized_writes_gate_does_not_block_reads() {
+        let conn = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 2)
+                .expect("Failed to create connection")
+                .with_serialized_writes(),
+        );
+        conn.execute("CREATE TABLE rg (id INTEGER)")
+            .await
+            .expect("create table");
+
+        // 写事务持闸 150ms
+        let writer_conn = conn.clone();
+        let writer = tokio::spawn(async move {
+            writer_conn
+                .with_transaction(move |_tx| {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    Ok(())
+                })
+                .await
+                .expect("写事务应成功");
+        });
+        // 等写事务进入持闸窗口
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        // 读路径在写持闸窗口内完成(若读被写闸阻塞,只能等写结束,下方断言必失败)
+        let reader_conn = conn.clone();
+        let read = tokio::spawn(async move {
+            reader_conn
+                .query("SELECT 1 AS one")
+                .await
+                .expect("读应成功")
+        });
+        let _rows = read.await.expect("读任务不应 panic");
+        assert!(
+            !writer.is_finished(),
+            "读完成时写事务仍应持闸,证明读未被写闸阻塞"
+        );
+
+        writer.await.expect("写任务不应 panic");
     }
 }
