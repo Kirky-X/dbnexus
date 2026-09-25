@@ -35,7 +35,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::database::DbPool;
-use crate::database::repository::{is_safe_identifier, sql_literal};
+use crate::database::identifier::is_safe_identifier;
+use crate::database::repository::sql_literal;
 use crate::foundation::{DbError, DbResult};
 
 /// 单表查询端点声明

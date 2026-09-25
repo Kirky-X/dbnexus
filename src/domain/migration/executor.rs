@@ -6,10 +6,14 @@
 
 use super::differ::SqlGenerator;
 use super::schema::*;
+use crate::database::identifier::is_safe_identifier;
 use crate::foundation::DatabaseType;
 use crate::foundation::DbError;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
+
+/// 迁移历史表默认表名
+pub(crate) const DEFAULT_MIGRATIONS_TABLE: &str = "dbnexus_migrations";
 
 /// 迁移执行器
 ///
@@ -21,6 +25,9 @@ pub struct MigrationExecutor {
     pub(crate) sql_generator: SqlGenerator,
     /// 迁移历史记录
     pub(crate) history: MigrationHistory,
+    /// 迁移历史表名（默认 [`DEFAULT_MIGRATIONS_TABLE`]，可经
+    /// [`MigrationExecutor::with_history_table`] 定制）
+    history_table: String,
 }
 
 fn build_placeholder_list(backend: sea_orm::DbBackend, count: usize) -> String {
@@ -35,13 +42,13 @@ fn build_placeholder_list(backend: sea_orm::DbBackend, count: usize) -> String {
     }
 }
 
-fn build_migration_insert_sql(backend: sea_orm::DbBackend) -> String {
+fn build_migration_insert_sql(backend: sea_orm::DbBackend, table: &str) -> String {
     match backend {
-        sea_orm::DbBackend::Postgres => {
-            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ($1, $2, CAST($3 AS TIMESTAMP), $4)".to_string()
-        }
+        sea_orm::DbBackend::Postgres => format!(
+            "INSERT INTO {table} (version, description, applied_at, file_path) VALUES ($1, $2, CAST($3 AS TIMESTAMP), $4)"
+        ),
         _ => format!(
-            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({})",
+            "INSERT INTO {table} (version, description, applied_at, file_path) VALUES ({})",
             build_placeholder_list(backend, 4)
         ),
     }
@@ -112,7 +119,23 @@ impl MigrationExecutor {
             connection,
             sql_generator: SqlGenerator::new(db_type),
             history: MigrationHistory::new(),
+            history_table: DEFAULT_MIGRATIONS_TABLE.to_string(),
         }
+    }
+
+    /// 定制迁移历史表名
+    ///
+    /// 历史表名以 SQL 标识符直拼进建表/INSERT/DELETE 语句，因此必须通过
+    /// [`is_safe_identifier`] 白名单校验（字母或下划线开头，仅含字母/数字/
+    /// 下划线，长度 1-64），不合法时返回 `DbError::Config` 而非静默回退。
+    pub fn with_history_table(mut self, name: &str) -> Result<Self, DbError> {
+        if !is_safe_identifier(name) {
+            return Err(DbError::Config(format!(
+                "illegal migration history table name: {name}"
+            )));
+        }
+        self.history_table = name.to_string();
+        Ok(self)
     }
 
     /// 构建迁移历史插入语句（原始 SQL 字符串）
@@ -146,12 +169,12 @@ impl MigrationExecutor {
 
         match backend {
             sea_orm::DbBackend::Postgres => format!(
-                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', CAST('{}' AS TIMESTAMP), '{}')",
-                version, desc_esc, applied_at_value, path_esc
+                "INSERT INTO {} (version, description, applied_at, file_path) VALUES ({}, '{}', CAST('{}' AS TIMESTAMP), '{}')",
+                self.history_table, version, desc_esc, applied_at_value, path_esc
             ),
             _ => format!(
-                "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}')",
-                version, desc_esc, applied_at_value, path_esc
+                "INSERT INTO {} (version, description, applied_at, file_path) VALUES ({}, '{}', '{}', '{}')",
+                self.history_table, version, desc_esc, applied_at_value, path_esc
             ),
         }
     }
@@ -172,7 +195,7 @@ impl MigrationExecutor {
             use sea_orm::sea_query::{Alias, Expr, Order, Query};
 
             let mut query = Query::select();
-            query.from(Alias::new("dbnexus_migrations"));
+            query.from(Alias::new(self.history_table.as_str()));
             query.column(Alias::new("version"));
             query.column(Alias::new("description"));
             query.column(Alias::new("file_path"));
@@ -259,45 +282,54 @@ impl MigrationExecutor {
     /// "表已由并发会话创建"。此方法在捕获这两类错误后等待 50ms 再重试，确保另一会话的
     /// `CREATE TABLE` 已提交，使重试的 `IF NOT EXISTS` 成为真正的 no-op。
     async fn ensure_migration_table_exists(&self) -> Result<(), DbError> {
+        let table = self.history_table.as_str();
         let create_table_sql = match self.sql_generator.db_type {
             DatabaseType::Postgres => {
-                "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
+                format!(
+                    "CREATE TABLE IF NOT EXISTS {table} (
                     version INTEGER PRIMARY KEY,
                     description TEXT NOT NULL,
                     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     file_path TEXT
                 );"
+                )
             }
             DatabaseType::MySql => {
-                "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
+                format!(
+                    "CREATE TABLE IF NOT EXISTS {table} (
                     version INT PRIMARY KEY,
                     description TEXT NOT NULL,
                     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     file_path TEXT
                 );"
+                )
             }
             DatabaseType::Sqlite => {
-                "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
+                format!(
+                    "CREATE TABLE IF NOT EXISTS {table} (
                     version INTEGER PRIMARY KEY,
                     description TEXT NOT NULL,
                     applied_at TEXT NOT NULL DEFAULT (datetime('now')),
                     file_path TEXT
                 );"
+                )
             }
             DatabaseType::DuckDb => {
-                "CREATE TABLE IF NOT EXISTS dbnexus_migrations (
+                format!(
+                    "CREATE TABLE IF NOT EXISTS {table} (
                     version INTEGER PRIMARY KEY,
                     description TEXT NOT NULL,
                     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     file_path TEXT
                 );"
+                )
             }
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
                 panic!("Graph databases do not participate in relational migrations")
             }
         };
 
-        match self.connection.execute_unprepared(create_table_sql).await {
+        match self.connection.execute_unprepared(&create_table_sql).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 let err_str = e.to_string();
@@ -309,7 +341,7 @@ impl MigrationExecutor {
                 if is_creation_conflict {
                     // 等待并发 CREATE TABLE 提交后重试，使 IF NOT EXISTS 成为 no-op
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    match self.connection.execute_unprepared(create_table_sql).await {
+                    match self.connection.execute_unprepared(&create_table_sql).await {
                         Ok(_) => Ok(()),
                         Err(e2) => {
                             let err_str2 = e2.to_string();
@@ -371,7 +403,7 @@ impl MigrationExecutor {
             }
         };
 
-        let insert_sql = build_migration_insert_sql(backend);
+        let insert_sql = build_migration_insert_sql(backend, &self.history_table);
         let applied_at_value = format_applied_at_for_backend(backend, version_record.applied_at);
 
         let stmt = sea_orm::Statement::from_sql_and_values(
@@ -661,7 +693,7 @@ impl MigrationExecutor {
 
         let mut query = Query::select();
         query.column(Alias::new("version"));
-        query.from(Alias::new("dbnexus_migrations"));
+        query.from(Alias::new(self.history_table.as_str()));
 
         let rows = self
             .connection
@@ -711,7 +743,7 @@ impl MigrationExecutor {
                 panic!("Graph databases do not participate in relational migrations")
             }
         };
-        let insert_sql = build_migration_insert_sql(backend);
+        let insert_sql = build_migration_insert_sql(backend, &self.history_table);
         let applied_at_value = format_applied_at_for_backend(backend, applied_at);
         let stmt = sea_orm::Statement::from_sql_and_values(
             backend,
@@ -788,8 +820,8 @@ impl MigrationExecutor {
 
     /// 回滚单个迁移文件
     ///
-    /// 在同一事务内执行迁移文件的 DOWN SQL，成功后删除 `dbnexus_migrations`
-    /// 表中对应版本的历史行；DOWN SQL 执行失败时整体回滚，历史记录保持不变。
+    /// 在同一事务内执行迁移文件的 DOWN SQL，成功后删除迁移历史表中
+    /// 对应版本的历史行；DOWN SQL 执行失败时整体回滚，历史记录保持不变。
     ///
     /// # Arguments
     ///
@@ -854,7 +886,8 @@ impl MigrationExecutor {
 
         // 删除迁移历史记录（使用参数化查询防止 SQL 注入）
         let delete_sql = format!(
-            "DELETE FROM dbnexus_migrations WHERE version = {}",
+            "DELETE FROM {} WHERE version = {}",
+            self.history_table,
             build_placeholder_list(backend, 1)
         );
         let stmt =
@@ -973,23 +1006,136 @@ mod tests {
 
     #[test]
     fn test_build_migration_insert_sql_postgres() {
-        let sql = build_migration_insert_sql(sea_orm::DbBackend::Postgres);
+        let sql =
+            build_migration_insert_sql(sea_orm::DbBackend::Postgres, DEFAULT_MIGRATIONS_TABLE);
         assert!(sql.contains("INSERT INTO dbnexus_migrations"));
         assert!(sql.contains("$1, $2, CAST($3 AS TIMESTAMP), $4"));
     }
 
     #[test]
     fn test_build_migration_insert_sql_sqlite() {
-        let sql = build_migration_insert_sql(sea_orm::DbBackend::Sqlite);
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::Sqlite, DEFAULT_MIGRATIONS_TABLE);
         assert!(sql.contains("INSERT INTO dbnexus_migrations"));
         assert!(sql.contains("?, ?, ?, ?"));
     }
 
     #[test]
     fn test_build_migration_insert_sql_mysql() {
-        let sql = build_migration_insert_sql(sea_orm::DbBackend::MySql);
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::MySql, DEFAULT_MIGRATIONS_TABLE);
         assert!(sql.contains("INSERT INTO dbnexus_migrations"));
         assert!(sql.contains("?, ?, ?, ?"));
+    }
+
+    // =====================================================================
+    // 迁移历史表名字段化
+    // =====================================================================
+
+    /// 默认表名下生成的 INSERT SQL 必须与历史字面量逐字节一致（快照锁定）
+    #[test]
+    fn test_build_migration_insert_sql_default_table_snapshot() {
+        assert_eq!(
+            build_migration_insert_sql(sea_orm::DbBackend::Postgres, DEFAULT_MIGRATIONS_TABLE),
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES ($1, $2, CAST($3 AS TIMESTAMP), $4)"
+        );
+        assert_eq!(
+            build_migration_insert_sql(sea_orm::DbBackend::Sqlite, DEFAULT_MIGRATIONS_TABLE),
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)"
+        );
+        assert_eq!(
+            build_migration_insert_sql(sea_orm::DbBackend::MySql, DEFAULT_MIGRATIONS_TABLE),
+            "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (?, ?, ?, ?)"
+        );
+    }
+
+    /// 定制表名贯穿 INSERT 语句且不残留默认表名
+    #[test]
+    fn test_build_migration_insert_sql_custom_table() {
+        let sql = build_migration_insert_sql(sea_orm::DbBackend::Sqlite, "schema_migrations");
+        assert!(sql.contains("INSERT INTO schema_migrations "));
+        assert!(!sql.contains("dbnexus_migrations"));
+        let pg = build_migration_insert_sql(sea_orm::DbBackend::Postgres, "schema_migrations");
+        assert!(pg.contains("INSERT INTO schema_migrations "));
+        assert!(!pg.contains("dbnexus_migrations"));
+    }
+
+    /// 表名白名单校验：SQL 注入形态/数字开头/含空格一律拒绝
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_with_history_table_rejects_unsafe_identifier() {
+        for bad in ["migrations; DROP TABLE x", "9migrations", "bad name", ""] {
+            let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+            let result =
+                MigrationExecutor::new(connection, DatabaseType::Sqlite).with_history_table(bad);
+            assert!(result.is_err(), "非法表名 {bad:?} 应被拒绝");
+        }
+    }
+
+    /// 定制历史表端到端（sqlite 内存库）：迁移历史写入定制表、默认表不创建、
+    /// 回滚后定制表历史行删除
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
+    #[tokio::test]
+    async fn test_with_history_table_custom_table_end_to_end() {
+        use sea_orm::Statement;
+
+        let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
+        let mut executor = MigrationExecutor::new(connection, DatabaseType::Sqlite)
+            .with_history_table("schema_migrations")
+            .expect("合法表名应通过校验");
+
+        let migration = MigrationFile::new(
+            1,
+            "custom history table".to_string(),
+            PathBuf::from("001_custom.sql"),
+            "-- UP:\nCREATE TABLE hist_e2e (id INTEGER);\n-- DOWN:\nDROP TABLE hist_e2e;\n"
+                .to_string(),
+        );
+
+        // 先经 load_history 触发定制历史表创建（与 run_migrations 前置行为一致）
+        executor.load_history().await.expect("历史表初始化应成功");
+
+        executor
+            .apply_migration_file_public(&migration)
+            .await
+            .expect("迁移应成功");
+
+        let versions = executor
+            .connection
+            .query_all_raw(Statement::from_string(
+                sea_orm::DbBackend::Sqlite,
+                "SELECT version FROM schema_migrations",
+            ))
+            .await
+            .expect("定制历史表应存在且可查");
+        assert_eq!(versions.len(), 1, "定制历史表应有 1 行历史");
+
+        let default_table = executor
+            .connection
+            .query_all_raw(Statement::from_string(
+                sea_orm::DbBackend::Sqlite,
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'dbnexus_migrations'",
+            ))
+            .await
+            .expect("查询 sqlite_master 应成功");
+        assert!(default_table.is_empty(), "默认历史表不应被创建");
+
+        executor
+            .rollback_version(1, &migration)
+            .await
+            .expect("回滚应成功");
+
+        let versions = executor
+            .connection
+            .query_all_raw(Statement::from_string(
+                sea_orm::DbBackend::Sqlite,
+                "SELECT version FROM schema_migrations",
+            ))
+            .await
+            .expect("回滚后查询定制表应成功");
+        assert!(versions.is_empty(), "回滚后定制历史表的历史行应被删除");
     }
 
     // =====================================================================

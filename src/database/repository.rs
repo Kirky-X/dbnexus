@@ -37,6 +37,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::database::DbPool;
+use crate::database::identifier::is_safe_identifier;
 use crate::foundation::{DbError, DbResult};
 
 /// 泛型仓储 CRUD 端口
@@ -73,15 +74,6 @@ where
 
     /// 统计表内总行数
     async fn count(&self, pool: &DbPool) -> DbResult<u64>;
-}
-
-/// 校验 SQL 标识符（表名/列名）白名单：字母或下划线开头，仅含
-/// 字母/数字/下划线，长度 1-64
-pub(crate) fn is_safe_identifier(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
-        && name.len() <= 64
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// 将 JSON 值转为 SQL 字面量
