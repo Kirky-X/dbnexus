@@ -8,6 +8,17 @@
 
 /// 校验 SQL 标识符（表名/列名）白名单：字母或下划线开头，仅含
 /// 字母/数字/下划线，长度 1-64
+// 无门控共享模块：消费者全部缺席时（如 --no-default-features）函数无人
+// 调用，按消费方 feature 集豁免 dead_code，避免引入伪警告
+#[cfg_attr(
+    not(any(
+        feature = "repository",
+        feature = "data-api",
+        feature = "entity-events",
+        feature = "migration"
+    )),
+    allow(dead_code)
+)]
 pub(crate) fn is_safe_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')

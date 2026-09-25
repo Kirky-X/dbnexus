@@ -59,7 +59,7 @@ pub use migration::MigrationExecutor;
 #[cfg(feature = "migration")]
 pub use migration::{
     Column, ColumnType, Index, Migration, MigrationFile, MigrationFileParser, MigrationHistory,
-    MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+    MigrationMarkers, MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use pool::{
     ConnectionPool, DatabaseConnection, DatabaseSession, DbConnection, DbIsolationLevel, DbPool,
