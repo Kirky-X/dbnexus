@@ -279,7 +279,7 @@ impl DuckDbConnection {
                     conn: Some(conn),
                     pool,
                 };
-                let outcome = (|| {
+                (|| {
                     let conn = guard.conn_mut();
                     let rows_affected = conn.execute(&sql_owned, []).map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -287,8 +287,7 @@ impl DuckDbConnection {
                         )))
                     })?;
                     Ok(DuckDbExecResult { rows_affected })
-                })();
-                outcome
+                })()
             });
 
         // permit 必须在 handle.await 之后 drop
@@ -342,7 +341,7 @@ impl DuckDbConnection {
                     conn: Some(conn),
                     pool,
                 };
-                let outcome = (|| {
+                (|| {
                     let conn = guard.conn_mut();
                     conn.execute_batch(&sql_owned).map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -350,8 +349,7 @@ impl DuckDbConnection {
                         )))
                     })?;
                     Ok(DuckDbExecResult { rows_affected: 0 })
-                })();
-                outcome
+                })()
             });
 
         // permit 必须在 handle.await 之后 drop
@@ -389,7 +387,7 @@ impl DuckDbConnection {
                 conn: Some(conn),
                 pool,
             };
-            let outcome = (|| {
+            (|| {
                 let conn = guard.conn_mut();
                 let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
                     DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -436,8 +434,7 @@ impl DuckDbConnection {
                 }
                 drop(stmt);
                 Ok(result)
-            })();
-            outcome
+            })()
         });
 
         // permit 必须在 handle.await 之后 drop
@@ -487,7 +484,7 @@ impl DuckDbConnection {
                     conn: Some(conn),
                     pool,
                 };
-                let outcome = (|| {
+                (|| {
                     let conn = guard.conn_mut();
                     let rows_affected = conn
                         .execute(&sql_owned, duckdb::params_from_iter(params))
@@ -497,8 +494,7 @@ impl DuckDbConnection {
                             )))
                         })?;
                     Ok(DuckDbExecResult { rows_affected })
-                })();
-                outcome
+                })()
             });
 
         let exec_result = handle.await.map_err(|e| {
@@ -545,7 +541,7 @@ impl DuckDbConnection {
                 conn: Some(conn),
                 pool,
             };
-            let outcome = (|| {
+            (|| {
                 let conn = guard.conn_mut();
                 let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
                     DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -591,8 +587,7 @@ impl DuckDbConnection {
                 }
                 drop(stmt);
                 Ok(result)
-            })();
-            outcome
+            })()
         });
 
         let rows = handle.await.map_err(|e| {
@@ -644,7 +639,7 @@ impl DuckDbConnection {
                     pool,
                 };
                 // 事务中途失败（含 ROLLBACK）不损坏连接对象
-                let outcome = (|| {
+                (|| {
                     let conn = guard.conn_mut();
                     let tx = conn.transaction().map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -668,8 +663,7 @@ impl DuckDbConnection {
                         )))
                     })?;
                     Ok(results)
-                })();
-                outcome
+                })()
             });
 
         let results = handle.await.map_err(|e| {
@@ -726,7 +720,7 @@ impl DuckDbConnection {
                 conn: Some(conn),
                 pool,
             };
-            let outcome = (|| {
+            (|| {
                 let conn = guard.conn_mut();
                 let tx = conn.transaction().map_err(|e| {
                     DbError::Connection(sea_orm::DbErr::Custom(format!(
@@ -748,8 +742,7 @@ impl DuckDbConnection {
                         Err(e)
                     }
                 }
-            })();
-            outcome
+            })()
         });
 
         // permit 必须在 handle.await 之后 drop
@@ -791,6 +784,14 @@ impl DuckDbConnection {
     /// （[`Self::query`]、[`Self::query_with_params`]）不受影响，连接池的
     /// 并发收益保留在读侧。默认不启用（池化并发写）。写入场景出现并发
     /// 冲突（write-write conflict）时压测后再定是否启用。
+    ///
+    /// # 取消边界
+    ///
+    /// 串行承诺仅覆盖未被取消的写路径：写调用自身被取消（超时/abort）时，
+    /// 闸随 async future 立即释放，而被取消的 blocking 写事务仍会跑完
+    /// （其在 blocking 线程内完整提交或回滚，无半开事务），此刻可能与
+    /// 下一个进闸的写并发——恰是本闸要防的 write-write conflict 场景。
+    /// 对写路径施加超时/取消的调用方不应依赖启用本闸获得互斥保证。
     pub fn with_serialized_writes(mut self) -> Self {
         // 幂等：已启用时复用现有闸，避免 Clone 句柄各自持新闸却共享同一池、
         // 写互斥静默失效
