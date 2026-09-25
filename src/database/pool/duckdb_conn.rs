@@ -24,12 +24,46 @@
 //! 避免运行时借用检查冲突。
 
 use std::sync::Arc;
+use std::sync::Mutex as SyncMutex;
 
 pub use duckdb::types::Value as DuckValue;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, MutexGuard, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::foundation::{DbError, DbResult};
+
+/// spawn_blocking 闭包内的池连接归还 guard
+///
+/// 连接持有于 guard，闭包正常结束、语句失败、闭包 panic（栈展开）乃至
+/// await 侧被取消导致输出被丢弃——任何路径下 guard 都在 blocking 线程内
+/// 把连接推回池（池锁为不跨 await 的短锁，同步取用安全）。
+/// 此前实现把连接放进闭包输出元组、await 后归还：一旦 await 侧被
+/// 超时/abort 取消，输出无人接收，连接随输出 drop 关闭，池容量永久 -1
+/// （单连接部署下一次取消即全池耗尽）。
+struct PoolConnGuard {
+    conn: Option<duckdb::Connection>,
+    pool: Arc<SyncMutex<Vec<duckdb::Connection>>>,
+}
+
+impl PoolConnGuard {
+    /// 借出连接执行语句（连接在 drop 前始终存活）
+    fn conn_mut(&mut self) -> &mut duckdb::Connection {
+        self.conn
+            .as_mut()
+            .expect("connection present until PoolConnGuard drop")
+    }
+}
+
+impl Drop for PoolConnGuard {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            self.pool
+                .lock()
+                .expect("DuckDB pool mutex poisoned")
+                .push(conn);
+        }
+    }
+}
 
 /// DuckDB 查询结果的行数据
 ///
@@ -78,12 +112,17 @@ const DEFAULT_POOL_SIZE: usize = 4;
 /// Semaphore 限制并发数 = 连接池大小，实现真正的并行查询。
 #[derive(Clone)]
 pub struct DuckDbConnection {
-    /// 连接池（多个连接共享同一个数据库，通过 try_clone 创建）
-    pool: Arc<Mutex<Vec<duckdb::Connection>>>,
+    /// 连接池（多个连接共享同一个数据库，通过 try_clone 创建）。
+    /// 同步短锁：临界区内不跨 await，仅在取/还连接时瞬间持有。
+    pool: Arc<SyncMutex<Vec<duckdb::Connection>>>,
     /// 连接池大小
     pool_size: usize,
     /// spawn_blocking 并发限制信号量（= 连接池大小）
     spawn_permit: Arc<Semaphore>,
+    /// 串行写闸：`Some` 时全部写路径在执行前互斥持闸（写回串行，读路径
+    /// 不受影响）；`None`（默认）维持池化并发写。Clone 句柄经 Arc 共享
+    /// 同一闸。
+    serialized_write_gate: Option<Arc<Mutex<()>>>,
 }
 
 impl DuckDbConnection {
@@ -144,9 +183,10 @@ impl DuckDbConnection {
         }
 
         Ok(Self {
-            pool: Arc::new(Mutex::new(pool)),
+            pool: Arc::new(SyncMutex::new(pool)),
             pool_size,
             spawn_permit: Arc::new(Semaphore::new(pool_size)),
+            serialized_write_gate: None,
         })
     }
 
@@ -179,9 +219,10 @@ impl DuckDbConnection {
         }
 
         Ok(Self {
-            pool: Arc::new(Mutex::new(pool)),
+            pool: Arc::new(SyncMutex::new(pool)),
             pool_size,
             spawn_permit: Arc::new(Semaphore::new(pool_size)),
+            serialized_write_gate: None,
         })
     }
 
@@ -216,11 +257,12 @@ impl DuckDbConnection {
     /// **成败皆归还**：语句失败不损坏连接对象，先归还再透传错误（否则
     /// 单连接架构下一次失败即令池永久耗尽，见 pool.rs 的 max_connections=1）。
     pub async fn execute(&self, sql: &str) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         // 短锁：从池中取出连接
         let conn = {
-            let mut pool = self.pool.lock().await;
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::Custom(
                     "DuckDB pool exhausted: no connection available".to_string(),
@@ -229,33 +271,94 @@ impl DuckDbConnection {
         };
 
         let sql_owned = sql.to_string();
-        // 闭包始终把连接放回双元组第一位；语句结果（含失败）放第二位
-        let handle: JoinHandle<(duckdb::Connection, DbResult<DuckDbExecResult>)> =
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消（输出被丢弃）皆归还
+        let handle: JoinHandle<DbResult<DuckDbExecResult>> =
             tokio::task::spawn_blocking(move || {
-                let outcome = (|| {
+                let mut guard = PoolConnGuard {
+                    conn: Some(conn),
+                    pool,
+                };
+                (|| {
+                    let conn = guard.conn_mut();
                     let rows_affected = conn.execute(&sql_owned, []).map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
                             "DuckDB execute failed: {e}"
                         )))
                     })?;
                     Ok(DuckDbExecResult { rows_affected })
-                })();
-                (conn, outcome)
+                })()
             });
 
         // permit 必须在 handle.await 之后 drop
-        let (conn, exec_result) = handle.await.map_err(|e| {
+        let exec_result = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"
             )))
         })?;
         drop(permit);
 
-        // 短锁：归还连接（失败路径同样归还，再透传语句错误）
-        {
-            let mut pool = self.pool.lock().await;
-            pool.push(conn);
-        }
+        exec_result
+    }
+
+    /// 执行多语句 SQL 批（DDL/DML 混合，不绑定参数）
+    ///
+    /// 连接池模式：从池中取出连接 → spawn_blocking 执行 → 归还连接。
+    /// **成败皆归还**（同 [`Self::execute`]）：批中任一语句失败不损坏连接对象，
+    /// 先归还再透传错误。
+    ///
+    /// # 行数语义
+    ///
+    /// `rows_affected` **恒为 0**：DuckDB 原生批量执行接口
+    /// （`duckdb::Connection::execute_batch`）不返回受影响行数，本方法不自行
+    /// 统计。需要逐语句行数时，应拆分后逐条调用 [`Self::execute`] 或
+    /// [`Self::execute_with_params`]。
+    ///
+    /// # 原子性
+    ///
+    /// 不自动包裹事务，不保证原子性。需要多语句原子提交/回滚时使用
+    /// [`Self::execute_transaction`]。
+    pub async fn execute_batch(&self, sql: &str) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
+        let permit = self.acquire_permit().await?;
+
+        // 短锁：从池中取出连接
+        let conn = {
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let sql_owned = sql.to_string();
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消（输出被丢弃）皆归还
+        let handle: JoinHandle<DbResult<DuckDbExecResult>> =
+            tokio::task::spawn_blocking(move || {
+                let mut guard = PoolConnGuard {
+                    conn: Some(conn),
+                    pool,
+                };
+                (|| {
+                    let conn = guard.conn_mut();
+                    conn.execute_batch(&sql_owned).map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB execute_batch failed: {e}"
+                        )))
+                    })?;
+                    Ok(DuckDbExecResult { rows_affected: 0 })
+                })()
+            });
+
+        // permit 必须在 handle.await 之后 drop
+        let exec_result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
+        drop(permit);
 
         exec_result
     }
@@ -268,7 +371,7 @@ impl DuckDbConnection {
 
         // 短锁：从池中取出连接
         let conn = {
-            let mut pool = self.pool.lock().await;
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::Custom(
                     "DuckDB pool exhausted: no connection available".to_string(),
@@ -277,73 +380,70 @@ impl DuckDbConnection {
         };
 
         let sql_owned = sql.to_string();
-        // 成败皆归还连接（同 execute，防单连接池被语句失败抽干）
-        let handle: JoinHandle<(duckdb::Connection, DbResult<Vec<DuckDbRow>>)> =
-            tokio::task::spawn_blocking(move || {
-                let outcome = (|| {
-                    let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消（输出被丢弃）皆归还
+        let handle: JoinHandle<DbResult<Vec<DuckDbRow>>> = tokio::task::spawn_blocking(move || {
+            let mut guard = PoolConnGuard {
+                conn: Some(conn),
+                pool,
+            };
+            (|| {
+                let conn = guard.conn_mut();
+                let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB prepare failed: {e}"
+                    )))
+                })?;
+
+                // 使用 query_map 在闭包内通过 row.as_ref() 获取列信息
+                let rows = stmt
+                    .query_map([], |row| {
+                        let stmt_ref = row.as_ref();
+                        let column_count = stmt_ref.column_count();
+                        let column_names: Vec<String> = (0..column_count)
+                            .map(|i| {
+                                stmt_ref
+                                    .column_name(i)
+                                    .ok()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default()
+                            })
+                            .collect();
+
+                        let mut columns = Vec::with_capacity(column_count);
+                        for (i, name) in column_names.iter().enumerate() {
+                            let value: DuckValue = row.get(i).unwrap_or(DuckValue::Null);
+                            columns.push((name.clone(), value));
+                        }
+                        Ok(DuckDbRow { columns })
+                    })
+                    .map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB prepare failed: {e}"
+                            "DuckDB query failed: {e}"
                         )))
                     })?;
 
-                    // 使用 query_map 在闭包内通过 row.as_ref() 获取列信息
-                    let rows = stmt
-                        .query_map([], |row| {
-                            let stmt_ref = row.as_ref();
-                            let column_count = stmt_ref.column_count();
-                            let column_names: Vec<String> = (0..column_count)
-                                .map(|i| {
-                                    stmt_ref
-                                        .column_name(i)
-                                        .ok()
-                                        .map(|s| s.to_string())
-                                        .unwrap_or_default()
-                                })
-                                .collect();
-
-                            let mut columns = Vec::with_capacity(column_count);
-                            for (i, name) in column_names.iter().enumerate() {
-                                let value: DuckValue = row.get(i).unwrap_or(DuckValue::Null);
-                                columns.push((name.clone(), value));
-                            }
-                            Ok(DuckDbRow { columns })
-                        })
-                        .map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB query failed: {e}"
-                            )))
-                        })?;
-
-                    let mut result = Vec::new();
-                    for row_result in rows {
-                        let row = row_result.map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB row fetch failed: {e}"
-                            )))
-                        })?;
-                        result.push(row);
-                    }
-                    // stmt 借用 conn，drop stmt 后 conn 可以 move
-                    drop(stmt);
-                    Ok(result)
-                })();
-                (conn, outcome)
-            });
+                let mut result = Vec::new();
+                for row_result in rows {
+                    let row = row_result.map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB row fetch failed: {e}"
+                        )))
+                    })?;
+                    result.push(row);
+                }
+                drop(stmt);
+                Ok(result)
+            })()
+        });
 
         // permit 必须在 handle.await 之后 drop
-        let (conn, rows) = handle.await.map_err(|e| {
+        let rows = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"
             )))
         })?;
         drop(permit);
-
-        // 短锁：归还连接（失败路径同样归还，再透传语句错误）
-        {
-            let mut pool = self.pool.lock().await;
-            pool.push(conn);
-        }
 
         rows
     }
@@ -363,10 +463,11 @@ impl DuckDbConnection {
         sql: &str,
         params: Vec<DuckValue>,
     ) -> DbResult<DuckDbExecResult> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
         let conn = {
-            let mut pool = self.pool.lock().await;
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::Custom(
                     "DuckDB pool exhausted: no connection available".to_string(),
@@ -375,10 +476,16 @@ impl DuckDbConnection {
         };
 
         let sql_owned = sql.to_string();
-        // 成败皆归还连接（同 execute，防单连接池被语句失败抽干）
-        let handle: JoinHandle<(duckdb::Connection, DbResult<DuckDbExecResult>)> =
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消（输出被丢弃）皆归还
+        let handle: JoinHandle<DbResult<DuckDbExecResult>> =
             tokio::task::spawn_blocking(move || {
-                let outcome = (|| {
+                let mut guard = PoolConnGuard {
+                    conn: Some(conn),
+                    pool,
+                };
+                (|| {
+                    let conn = guard.conn_mut();
                     let rows_affected = conn
                         .execute(&sql_owned, duckdb::params_from_iter(params))
                         .map_err(|e| {
@@ -387,22 +494,15 @@ impl DuckDbConnection {
                             )))
                         })?;
                     Ok(DuckDbExecResult { rows_affected })
-                })();
-                (conn, outcome)
+                })()
             });
 
-        let result = handle.await.map_err(|e| {
+        let exec_result = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"
             )))
         })?;
         drop(permit);
-
-        let (conn, exec_result) = result;
-        {
-            let mut pool = self.pool.lock().await;
-            pool.push(conn);
-        }
 
         exec_result
     }
@@ -425,7 +525,7 @@ impl DuckDbConnection {
         let permit = self.acquire_permit().await?;
 
         let conn = {
-            let mut pool = self.pool.lock().await;
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::Custom(
                     "DuckDB pool exhausted: no connection available".to_string(),
@@ -434,70 +534,68 @@ impl DuckDbConnection {
         };
 
         let sql_owned = sql.to_string();
-        // 成败皆归还连接（同 execute，防单连接池被语句失败抽干）
-        let handle: JoinHandle<(duckdb::Connection, DbResult<Vec<DuckDbRow>>)> =
-            tokio::task::spawn_blocking(move || {
-                let outcome = (|| {
-                    let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消（输出被丢弃）皆归还
+        let handle: JoinHandle<DbResult<Vec<DuckDbRow>>> = tokio::task::spawn_blocking(move || {
+            let mut guard = PoolConnGuard {
+                conn: Some(conn),
+                pool,
+            };
+            (|| {
+                let conn = guard.conn_mut();
+                let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB prepare failed: {e}"
+                    )))
+                })?;
+
+                let rows = stmt
+                    .query_map(duckdb::params_from_iter(params), |row| {
+                        let stmt_ref = row.as_ref();
+                        let column_count = stmt_ref.column_count();
+                        let column_names: Vec<String> = (0..column_count)
+                            .map(|i| {
+                                stmt_ref
+                                    .column_name(i)
+                                    .ok()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default()
+                            })
+                            .collect();
+
+                        let mut columns = Vec::with_capacity(column_count);
+                        for (i, name) in column_names.iter().enumerate() {
+                            let value: DuckValue = row.get(i).unwrap_or(DuckValue::Null);
+                            columns.push((name.clone(), value));
+                        }
+                        Ok(DuckDbRow { columns })
+                    })
+                    .map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB prepare failed: {e}"
+                            "DuckDB query failed: {e}"
                         )))
                     })?;
 
-                    let rows = stmt
-                        .query_map(duckdb::params_from_iter(params), |row| {
-                            let stmt_ref = row.as_ref();
-                            let column_count = stmt_ref.column_count();
-                            let column_names: Vec<String> = (0..column_count)
-                                .map(|i| {
-                                    stmt_ref
-                                        .column_name(i)
-                                        .ok()
-                                        .map(|s| s.to_string())
-                                        .unwrap_or_default()
-                                })
-                                .collect();
+                let mut result = Vec::new();
+                for row_result in rows {
+                    let row = row_result.map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB row fetch failed: {e}"
+                        )))
+                    })?;
+                    result.push(row);
+                }
+                drop(stmt);
+                Ok(result)
+            })()
+        });
 
-                            let mut columns = Vec::with_capacity(column_count);
-                            for (i, name) in column_names.iter().enumerate() {
-                                let value: DuckValue = row.get(i).unwrap_or(DuckValue::Null);
-                                columns.push((name.clone(), value));
-                            }
-                            Ok(DuckDbRow { columns })
-                        })
-                        .map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB query failed: {e}"
-                            )))
-                        })?;
-
-                    let mut result = Vec::new();
-                    for row_result in rows {
-                        let row = row_result.map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB row fetch failed: {e}"
-                            )))
-                        })?;
-                        result.push(row);
-                    }
-                    drop(stmt);
-                    Ok(result)
-                })();
-                (conn, outcome)
-            });
-
-        let result = handle.await.map_err(|e| {
+        let rows = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"
             )))
         })?;
         drop(permit);
-
-        let (conn, rows) = result;
-        {
-            let mut pool = self.pool.lock().await;
-            pool.push(conn);
-        }
 
         rows
     }
@@ -520,10 +618,11 @@ impl DuckDbConnection {
         &self,
         statements: Vec<(String, Vec<DuckValue>)>,
     ) -> DbResult<Vec<DuckDbExecResult>> {
+        let _write_gate = self.acquire_write_gate().await;
         let permit = self.acquire_permit().await?;
 
-        let mut conn = {
-            let mut pool = self.pool.lock().await;
+        let conn = {
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
                 DbError::Connection(sea_orm::DbErr::Custom(
                     "DuckDB pool exhausted: no connection available".to_string(),
@@ -531,10 +630,17 @@ impl DuckDbConnection {
             })?
         };
 
-        let handle: JoinHandle<(duckdb::Connection, DbResult<Vec<DuckDbExecResult>>)> =
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/事务失败/闭包 panic/await 侧被取消皆归还
+        let handle: JoinHandle<DbResult<Vec<DuckDbExecResult>>> =
             tokio::task::spawn_blocking(move || {
-                // 成败皆归还连接：事务中途失败（含 ROLLBACK）不损坏连接对象
-                let outcome = (|| {
+                let mut guard = PoolConnGuard {
+                    conn: Some(conn),
+                    pool,
+                };
+                // 事务中途失败（含 ROLLBACK）不损坏连接对象
+                (|| {
+                    let conn = guard.conn_mut();
                     let tx = conn.transaction().map_err(|e| {
                         DbError::Connection(sea_orm::DbErr::Custom(format!(
                             "DuckDB begin transaction failed: {e}"
@@ -557,10 +663,89 @@ impl DuckDbConnection {
                         )))
                     })?;
                     Ok(results)
-                })();
-                (conn, outcome)
+                })()
             });
 
+        let results = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
+        drop(permit);
+
+        results
+    }
+
+    /// 在单个事务中执行泛型闭包，返回其结果（仅 DuckDB 连接可用）
+    ///
+    /// 连接池模式：从池中取出连接 → spawn_blocking 内 `BEGIN` → 执行闭包 →
+    /// 成败皆归还连接。
+    ///
+    /// # 事务语义
+    ///
+    /// - 闭包通过 `duckdb::Transaction`（Deref 到 `Connection`）执行语句，
+    ///   **事务内可读**：可见本事务未提交的写入（read-your-own-writes）。
+    /// - 闭包返回 `Ok` → 提交（`COMMIT`）；commit 失败时错误原样透传，
+    ///   残留事务由 `Transaction::drop` 的默认 Rollback 行为清理。
+    /// - 闭包返回 `Err`（含事务内语句失败）→ 回滚（`ROLLBACK`），透传
+    ///   闭包原始错误；回滚自身失败不掩盖原始错误（drop 再兜底一次）。
+    ///
+    /// # 参数与返回
+    ///
+    /// * `f` - 事务闭包，接收 `&duckdb::Transaction`，返回 `DbResult<R>`
+    /// * 返回闭包的成功值；`Send + 'static` 约束源于跨 `spawn_blocking` 传值
+    pub async fn with_transaction<R, F>(&self, f: F) -> DbResult<R>
+    where
+        F: for<'a> FnOnce(&'a duckdb::Transaction<'a>) -> DbResult<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let _write_gate = self.acquire_write_gate().await;
+        let permit = self.acquire_permit().await?;
+
+        // 短锁（不跨 await）：从池中取出连接
+        let conn = {
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/回滚/闭包 panic/await 侧被取消（含施加
+        // timeout/abort 的场景）皆归还，池容量不因取消而永久损失
+        let handle: JoinHandle<DbResult<R>> = tokio::task::spawn_blocking(move || {
+            let mut guard = PoolConnGuard {
+                conn: Some(conn),
+                pool,
+            };
+            (|| {
+                let conn = guard.conn_mut();
+                let tx = conn.transaction().map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB begin transaction failed: {e}"
+                    )))
+                })?;
+                match f(&tx) {
+                    Ok(value) => {
+                        tx.commit().map_err(|e| {
+                            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                "DuckDB commit failed: {e}"
+                            )))
+                        })?;
+                        Ok(value)
+                    }
+                    Err(e) => {
+                        // 回滚吞错：保留闭包原始错误；残留事务由 drop 兜底回滚
+                        let _ = tx.rollback();
+                        Err(e)
+                    }
+                }
+            })()
+        });
+
+        // permit 必须在 handle.await 之后 drop
         let result = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"
@@ -568,13 +753,7 @@ impl DuckDbConnection {
         })?;
         drop(permit);
 
-        let (conn, results) = result;
-        {
-            let mut pool = self.pool.lock().await;
-            pool.push(conn);
-        }
-
-        results
+        result
     }
 
     /// 健康检查（执行 `SELECT 1`）
@@ -595,6 +774,41 @@ impl DuckDbConnection {
     /// 获取连接池大小
     pub fn pool_size(&self) -> usize {
         self.pool_size
+    }
+
+    /// 启用串行写闸
+    ///
+    /// 启用后全部写路径（[`Self::execute`]、[`Self::execute_with_params`]、
+    /// [`Self::execute_batch`]、[`Self::execute_transaction`]、
+    /// [`Self::with_transaction`]）在执行前互斥持闸，写回串行；读路径
+    /// （[`Self::query`]、[`Self::query_with_params`]）不受影响，连接池的
+    /// 并发收益保留在读侧。默认不启用（池化并发写）。写入场景出现并发
+    /// 冲突（write-write conflict）时压测后再定是否启用。
+    ///
+    /// # 取消边界
+    ///
+    /// 串行承诺仅覆盖未被取消的写路径：写调用自身被取消（超时/abort）时，
+    /// 闸随 async future 立即释放，而被取消的 blocking 写事务仍会跑完
+    /// （其在 blocking 线程内完整提交或回滚，无半开事务），此刻可能与
+    /// 下一个进闸的写并发——恰是本闸要防的 write-write conflict 场景。
+    /// 对写路径施加超时/取消的调用方不应依赖启用本闸获得互斥保证。
+    pub fn with_serialized_writes(mut self) -> Self {
+        // 幂等：已启用时复用现有闸，避免 Clone 句柄各自持新闸却共享同一池、
+        // 写互斥静默失效
+        if self.serialized_write_gate.is_none() {
+            self.serialized_write_gate = Some(Arc::new(Mutex::new(())));
+        }
+        self
+    }
+
+    /// 写路径获取串行写闸（未启用时返回 `None`，不产生任何阻塞）
+    ///
+    /// 返回的 guard 在写路径完成（含连接归还）后 drop，失败路径同样释放。
+    async fn acquire_write_gate(&self) -> Option<MutexGuard<'_, ()>> {
+        match &self.serialized_write_gate {
+            Some(gate) => Some(gate.lock().await),
+            None => None,
+        }
     }
 
     /// 获取 Semaphore 许可证，限制 spawn_blocking 并发数
@@ -619,6 +833,7 @@ impl std::fmt::Debug for DuckDbConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
     async fn test_duckdb_connection_create_memory() {
@@ -1152,5 +1367,390 @@ mod tests {
         assert_eq!(DuckDbConnection::parse_url("DuckDB::memory:"), ":memory:");
         // duckdb: 前缀剥离保留原始大小写（仅前缀匹配不敏感）
         assert_eq!(DuckDbConnection::parse_url("duckdb:test.db"), "test.db");
+    }
+
+    // ===== execute_batch 测试 =====
+
+    #[tokio::test]
+    async fn test_duckdb_execute_batch_multi_statement() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn
+            .execute_batch(
+                "CREATE TABLE batch_test (id INTEGER PRIMARY KEY, val VARCHAR);
+                 INSERT INTO batch_test VALUES (1, 'a'), (2, 'b'), (3, 'c');",
+            )
+            .await
+            .expect("batch should succeed");
+        // 行数语义锁定：DuckDB 原生批量执行接口不提供受影响行数，恒为 0；
+        // 需要逐语句行数时应拆分后走 execute / execute_with_params
+        assert_eq!(result.rows_affected, 0);
+
+        // 批内全部语句均已生效
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM batch_test")
+            .await
+            .expect("query after batch");
+        let count = rows[0].get("cnt").expect("should have cnt");
+        match count {
+            DuckValue::BigInt(n) => assert_eq!(*n, 3, "批内两条语句应均已执行"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// 成败皆归还：批中途失败的语句不损坏连接对象，单连接池不被抽干
+    #[tokio::test]
+    async fn test_connection_returned_after_failed_execute_batch() {
+        let conn = DuckDbConnection::with_pool_size(":memory:", 1)
+            .expect("Failed to create single-connection pool");
+
+        assert!(
+            conn.execute_batch("CREATE TABLE ok_table (id INTEGER); THIS IS NOT SQL")
+                .await
+                .is_err(),
+            "含非法语句的批应失败"
+        );
+        // 失败批之后连接已归还池：后续 execute_batch / execute 均仍可用
+        conn.execute_batch("CREATE TABLE ok_table (id INTEGER); INSERT INTO ok_table VALUES (1)")
+            .await
+            .expect("失败批后连接应已归还池");
+        conn.execute("INSERT INTO ok_table VALUES (2)")
+            .await
+            .expect("execute 仍可用");
+    }
+
+    #[tokio::test]
+    async fn test_duckdb_execute_batch_syntax_error_returns_error() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        let result = conn.execute_batch("CREAT TABL broken (id INTEGER)").await;
+        assert!(result.is_err(), "语法错误应返回错误");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(
+            msg.contains("execute_batch"),
+            "错误信息应标注来源方法: {msg}"
+        );
+    }
+
+    // ===== with_transaction 测试 =====
+
+    /// 成功路径：闭包返回 Ok → commit → 落库；事务内可读到本事务的写入
+    #[tokio::test]
+    async fn test_with_transaction_commit_persists_and_readable_in_tx() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE tx_test (id INTEGER)")
+            .await
+            .expect("create table");
+
+        let written: i64 = conn
+            .with_transaction(|tx| {
+                tx.execute("INSERT INTO tx_test VALUES (1)", [])
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx insert failed: {e}"
+                        )))
+                    })?;
+                // 事务内可读：能看到本事务未提交的写入
+                let n: i64 = tx
+                    .query_row("SELECT COUNT(*) FROM tx_test", [], |r| r.get(0))
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx read failed: {e}"
+                        )))
+                    })?;
+                Ok(n)
+            })
+            .await
+            .expect("事务应提交成功");
+        assert_eq!(written, 1, "事务内应读到本事务写入");
+
+        // 提交后对池上后续语句可见
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM tx_test")
+            .await
+            .expect("query after commit");
+        match rows[0].get("cnt").expect("should have cnt") {
+            DuckValue::BigInt(n) => assert_eq!(*n, 1, "commit 后应落库"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// 语句失败路径：事务内任一语句失败 → 整体回滚 → 单连接池不被抽干
+    #[tokio::test]
+    async fn test_with_transaction_rolls_back_on_statement_failure() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE rb_test (id INTEGER)")
+            .await
+            .expect("create table");
+        conn.execute("INSERT INTO rb_test VALUES (1)")
+            .await
+            .expect("seed row");
+
+        let result: DbResult<()> = conn
+            .with_transaction(|tx| {
+                tx.execute("INSERT INTO rb_test VALUES (2)", [])
+                    .map_err(|e| {
+                        DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB tx insert failed: {e}"
+                        )))
+                    })?;
+                tx.execute("THIS IS NOT SQL", []).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB tx statement failed: {e}"
+                    )))
+                })?;
+                Ok(())
+            })
+            .await;
+        assert!(result.is_err(), "事务内语句失败应返回错误");
+
+        // 回滚生效（事务内 INSERT 不落库）且连接已归还池（后续查询可用）
+        let rows = conn
+            .query("SELECT COUNT(*) AS cnt FROM rb_test")
+            .await
+            .expect("语句失败后连接应已归还池");
+        match rows[0].get("cnt").expect("should have cnt") {
+            DuckValue::BigInt(n) => assert_eq!(*n, 1, "失败事务应整体回滚,仅保留事务前的 1 行"),
+            other => panic!("Expected BigInt, got {:?}", other),
+        }
+    }
+
+    /// commit 失败路径：事务内手动 ROLLBACK 后 commit 必失败（已无活动事务），
+    /// with_transaction 应透传错误且连接归还
+    #[tokio::test]
+    async fn test_with_transaction_commit_failure_returns_error() {
+        let conn =
+            DuckDbConnection::with_pool_size(":memory:", 1).expect("Failed to create connection");
+        conn.execute("CREATE TABLE cf_test (id INTEGER)")
+            .await
+            .expect("create table");
+
+        let result: DbResult<usize> = conn
+            .with_transaction(|tx| {
+                // 构造 commit 失败：先手动 ROLLBACK，事务结束后 COMMIT 必报错
+                tx.execute_batch("ROLLBACK").map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "manual rollback failed: {e}"
+                    )))
+                })?;
+                Ok(7)
+            })
+            .await;
+        assert!(result.is_err(), "commit 失败应返回错误");
+
+        // 连接归还：后续语句仍可用
+        conn.execute("INSERT INTO cf_test VALUES (1)")
+            .await
+            .expect("commit 失败后连接应已归还池");
+    }
+
+    // =====================================================================
+    // 串行写闸（with_serialized_writes）测试
+    // =====================================================================
+
+    /// 默认不启用写闸（维持池化并发写）；启用后 Clone 句柄经 Arc 共享同一闸
+    #[tokio::test]
+    async fn test_serialized_writes_default_off_and_clone_shares_gate() {
+        let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
+        assert!(conn.serialized_write_gate.is_none(), "默认不应启用串行写闸");
+
+        let enabled = conn.with_serialized_writes();
+        let cloned = enabled.clone();
+        assert!(enabled.serialized_write_gate.is_some());
+        assert!(
+            Arc::ptr_eq(
+                enabled.serialized_write_gate.as_ref().unwrap(),
+                cloned.serialized_write_gate.as_ref().unwrap(),
+            ),
+            "Clone 句柄应共享同一写闸"
+        );
+
+        // 幂等:对已启用句柄(含 Clone 出的)重复启用,必须复用现有闸而非
+        // 各自新建——否则两句柄共享池却各持一把闸,写互斥静默失效
+        let re_enabled = cloned.with_serialized_writes();
+        assert!(
+            Arc::ptr_eq(
+                enabled.serialized_write_gate.as_ref().unwrap(),
+                re_enabled.serialized_write_gate.as_ref().unwrap(),
+            ),
+            "重复启用应复用同一写闸(幂等)"
+        );
+    }
+
+    /// 写互斥:默认池化并发下写事务可重叠(max>=2);启用串行写闸后
+    /// 同一时刻至多一个写事务在执行(max==1)
+    #[tokio::test]
+    async fn test_serialized_writes_gate_excludes_concurrent_write_transactions() {
+        let peak_inflight = |conn: Arc<DuckDbConnection>| async move {
+            let cur = Arc::new(AtomicUsize::new(0));
+            let max_inflight = Arc::new(AtomicUsize::new(0));
+            let mut handles = Vec::new();
+            for _ in 0..4 {
+                let conn = conn.clone();
+                let cur = cur.clone();
+                let max_inflight = max_inflight.clone();
+                handles.push(tokio::spawn(async move {
+                    conn.with_transaction(move |_tx| {
+                        let now = cur.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_inflight.fetch_max(now, Ordering::SeqCst);
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                        cur.fetch_sub(1, Ordering::SeqCst);
+                        Ok(())
+                    })
+                    .await
+                    .expect("写事务应成功");
+                }));
+            }
+            for handle in handles {
+                handle.await.expect("Task panicked");
+            }
+            max_inflight.load(Ordering::SeqCst)
+        };
+
+        // 默认(未启用闸):池化并发写,事务可重叠
+        let pooled = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 4).expect("Failed to create connection"),
+        );
+        let pooled_max = peak_inflight(pooled).await;
+        assert!(
+            pooled_max >= 2,
+            "默认池化并发下写事务应可重叠,实际 max={pooled_max}"
+        );
+
+        // 启用串行写闸:互斥,峰值并发=1
+        let serialized = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 4)
+                .expect("Failed to create connection")
+                .with_serialized_writes(),
+        );
+        let serialized_max = peak_inflight(serialized).await;
+        assert_eq!(serialized_max, 1, "串行写闸下写事务应互斥");
+    }
+
+    /// 读并发不受限:写事务持闸期间,读路径不排队,在写事务窗口内完成。
+    /// 同步点:写事务闭包入口置 entered 标志,主任务轮询该标志确认写已持闸
+    /// (替代固定 sleep,消除调度时序假设);写窗口 1s 为慢 CI 留足余量。
+    #[tokio::test]
+    async fn test_serialized_writes_gate_does_not_block_reads() {
+        use std::sync::atomic::AtomicBool;
+
+        let conn = Arc::new(
+            DuckDbConnection::with_pool_size(":memory:", 2)
+                .expect("Failed to create connection")
+                .with_serialized_writes(),
+        );
+        conn.execute("CREATE TABLE rg (id INTEGER)")
+            .await
+            .expect("create table");
+
+        let entered = Arc::new(AtomicBool::new(false));
+        let writer_entered = entered.clone();
+        let writer_conn = conn.clone();
+        let writer = tokio::spawn(async move {
+            writer_conn
+                .with_transaction(move |_tx| {
+                    writer_entered.store(true, Ordering::SeqCst);
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                    Ok(())
+                })
+                .await
+                .expect("写事务应成功");
+        });
+
+        // 轮询等写事务进入持闸窗口(最多 2s)
+        let mut in_window = false;
+        for _ in 0..1000 {
+            if entered.load(Ordering::SeqCst) {
+                in_window = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        }
+        assert!(in_window, "写事务应已进入持闸窗口");
+
+        // 读路径在写持闸窗口内完成(若读被写闸阻塞,只能等写结束,下方断言必失败)
+        let reader_conn = conn.clone();
+        let read = tokio::spawn(async move {
+            reader_conn
+                .query("SELECT 1 AS one")
+                .await
+                .expect("读应成功")
+        });
+        let _rows = read.await.expect("读任务不应 panic");
+        assert!(
+            !writer.is_finished(),
+            "读完成时写事务仍应持闸,证明读未被写闸阻塞"
+        );
+
+        writer.await.expect("写任务不应 panic");
+    }
+
+    /// 取消安全：with_transaction 被超时取消后，spawn_blocking 任务跑完时
+    /// 连接仍经 guard 归还池——单连接池不因一次取消而永久耗尽
+    #[tokio::test]
+    async fn test_cancelled_with_transaction_returns_connection_to_pool() {
+        let conn = Arc::new(DuckDbConnection::with_pool_size(":memory:", 1).expect("create pool"));
+        conn.execute("CREATE TABLE cc (id INTEGER)")
+            .await
+            .expect("create table");
+
+        // 50ms 掐断一个 300ms 的长写事务
+        let txn_conn = conn.clone();
+        let cancelled = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            txn_conn.with_transaction(move |_tx| {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                Ok(())
+            }),
+        )
+        .await;
+        assert!(cancelled.is_err(), "长事务应在 50ms 处超时取消");
+
+        // blocking 任务跑完(约 300ms)后连接已归还:单连接池上后续语句可用。
+        // query 在连接归还前会因池空立即报错,故轮询等待归还完成。
+        let mut recovered = false;
+        for _ in 0..200 {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            if conn.query("SELECT 1 AS one").await.is_ok() {
+                recovered = true;
+                break;
+            }
+        }
+        assert!(recovered, "取消后连接应归还池(2s 内恢复可用)");
+    }
+
+    /// 机制哨兵：commit(mut self) 按值消耗 Transaction,但其 Err 返回路径上
+    /// self 作为函数局部值仍会 drop → Drop::drop → finish_ 兜底回滚——
+    /// with_transaction doc 中「commit 失败时残留事务由 Transaction::drop
+    /// 的默认 Rollback 行为清理」论据的机制依据。以 DropBehavior::Panic 把
+    /// drop 路径变成可观察 panic;若未来 duckdb-rs 改为消耗后不触发 drop,
+    /// 本测试先红,上述注释须同步修订。
+    #[test]
+    fn commit_err_path_runs_drop_fallback() {
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let mut conn = duckdb::Connection::open_in_memory().expect("open in-memory db");
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let mut tx = conn.transaction().expect("begin transaction");
+            tx.set_drop_behavior(duckdb::DropBehavior::Panic);
+            tx.execute_batch("ROLLBACK").expect("manual rollback");
+            let r = tx.commit();
+            assert!(r.is_err(), "手动回滚后 COMMIT 应失败");
+            "no-drop"
+        }));
+        match outcome {
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| payload.downcast_ref::<&'static str>().copied())
+                    .unwrap_or_default();
+                assert!(
+                    msg.contains("Transaction dropped unexpectedly"),
+                    "panic 应来自 finish_ 的 Panic 分支,实际: {msg}"
+                );
+            }
+            Ok(_) => panic!("commit Err 路径未触发 Drop 兜底:doc 的 drop 清理论据失效,须同步修订"),
+        }
     }
 }

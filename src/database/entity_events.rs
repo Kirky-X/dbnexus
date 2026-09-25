@@ -206,7 +206,7 @@ impl DbOutboxStore {
     ///
     /// 表名不是安全标识符时返回 `DbError::Config`
     pub fn with_table(pool: std::sync::Arc<DbPool>, table: &str) -> DbResult<Self> {
-        if crate::database::repository::is_safe_identifier(table) {
+        if crate::database::identifier::is_safe_identifier(table) {
             Ok(Self {
                 pool,
                 table: table.to_string(),

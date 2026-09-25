@@ -34,6 +34,9 @@ pub mod copy;
 #[cfg(feature = "repository")]
 pub mod repository;
 
+/// SQL 标识符白名单校验（无 feature 门控，全库共用同一口径）
+pub mod identifier;
+
 /// 数据 API 网关雏形
 #[cfg(feature = "data-api")]
 pub mod data_api;
@@ -56,7 +59,7 @@ pub use migration::MigrationExecutor;
 #[cfg(feature = "migration")]
 pub use migration::{
     Column, ColumnType, Index, Migration, MigrationFile, MigrationFileParser, MigrationHistory,
-    MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+    MigrationMarkers, MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
 };
 pub use pool::{
     ConnectionPool, DatabaseConnection, DatabaseSession, DbConnection, DbIsolationLevel, DbPool,

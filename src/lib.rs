@@ -139,7 +139,8 @@ pub use crate::database::DbPoolBuilder;
 #[cfg(feature = "migration")]
 pub use crate::database::{
     Column, ColumnType, Index, Migration, MigrationExecutor, MigrationFile, MigrationFileParser,
-    MigrationHistory, MigrationVersion, Schema, SchemaDiffer, SqlGenerator, Table, TableChange,
+    MigrationHistory, MigrationMarkers, MigrationVersion, Schema, SchemaDiffer, SqlGenerator,
+    Table, TableChange,
 };
 pub use crate::database::{ConnectionPool, DatabaseSession};
 pub use crate::database::{DbIsolationLevel, Session};
