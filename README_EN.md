@@ -110,6 +110,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `copy` 🆕 | COPY FROM STDIN statement building (pg protocol path gated per driver) |
 | `entity-events` 🆕 | Entity event bus + Outbox persistent dispatch |
 | `otel` 🆕 | Health snapshot metrics exported via OTLP/HTTP (stdout fallback) |
+| `inklog` 🆕 | inklog structured logging integration: pool timeout / permission denied / circuit breaker / slow query records route through the inklog pipeline |
 | `kit` | trait-kit AsyncKit integration; register once for pool/cache/audit/health capabilities |
 | `config-confers` 🆕 | confers hot config reload (atomic `ArcSwap` swap) |
 | `retry` | Runtime retry: idempotency check + exponential backoff |
@@ -256,6 +257,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `health-check` | Health check module and `health_snapshot` structured export | No |
 | `observability` | `metrics` + `health-check` aggregate | No |
 | `otel` | OTLP/HTTP JSON envelope export bridge | No |
+| `inklog` | inklog structured logging integration: `init_inklog_logger()` installs inklog as the global `log` backend; pool timeout / permission denied / circuit breaker / slow query records route into the inklog pipeline | No |
 
 ### Data Management
 

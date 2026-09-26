@@ -712,6 +712,10 @@ impl Session {
                         if self.role == self.pool_inner.admin_role {
                             // admin 有完全权限，跳过检查
                         } else {
+                            log::warn!(
+                                "permission denied: role={} reason=sql-parse-failure (fail-closed)",
+                                self.role
+                            );
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
                             ));
@@ -2186,6 +2190,7 @@ fn permission_denied(
     action: &(impl std::fmt::Display + ?Sized),
     table: &(impl std::fmt::Display + ?Sized),
 ) -> DbError {
+    log::warn!("permission denied: action={} table={}", action, table);
     DbError::Permission(i18n::t(
         "session-permission-denied",
         &[("action", action.to_string()), ("table", table.to_string())],

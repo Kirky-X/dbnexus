@@ -87,8 +87,9 @@ pub mod storage;
 /// Internationalization 模块 - ICU4X + Fluent locale 感知格式化（核心特性，始终可用）
 pub mod i18n;
 
-/// Integration adapters for external crates (oxcache, etc.)
-#[cfg(feature = "oxcache-integration")]
+/// Integration adapters for external crates (oxcache, inklog, etc.)
+// 成员子模块各自带 cfg 门控，此处 any(...) 覆盖全部含 adapter 的 feature
+#[cfg(any(feature = "oxcache-integration", feature = "kit", feature = "inklog"))]
 pub mod integrations;
 
 // 生成的权限角色模块

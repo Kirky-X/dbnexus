@@ -898,6 +898,12 @@ impl MetricsCollector {
             while slow.len() > self.max_slow_queries {
                 slow.pop_front();
             }
+            log::warn!(
+                "slow query: query_type={} duration_ms={} threshold_ms={}",
+                query_type,
+                duration_ms,
+                config.threshold_ms
+            );
         }
     }
 

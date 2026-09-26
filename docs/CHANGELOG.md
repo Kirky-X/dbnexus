@@ -27,6 +27,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **inklog 结构化日志集成（Logs 支柱从零到一）**：新增 `inklog` feature（`inklog 0.3.0-rc.5`，`default-features = false`），`dbnexus::integrations::inklog::init_inklog_logger()` 将 inklog `LoggerManager` 安装为全局 `log` 后端；池获取超时、权限拒绝（含 SQL 解析失败 fail-closed 拒绝）、熔断器状态转换（打开/重开/半开/恢复）、慢查询四类接线点经 `log` 门面发记录，启用后自动路由到 inklog 结构化管道；`log 0.4` 门面为非可选依赖，未安装 logger 时为 no-op，默认构建行为不变
+- **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容；`integrations::inklog` 内联测试覆盖 init 成功/级别安装/路由不 panic/幂等
+
 ## [0.6.0-rc.3] - 2026-09-10
 
 ### Added

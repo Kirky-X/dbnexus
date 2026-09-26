@@ -321,6 +321,11 @@ impl CircuitBreaker {
                     *state = CircuitBreakerState::Closed;
                     *self.last_state_change.write().await = Instant::now();
                     self.consecutive_failures.store(0, Ordering::Relaxed);
+                    log::info!(
+                        "circuit breaker closed: successes={} success_threshold={}",
+                        successes,
+                        config.success_threshold
+                    );
                 }
             }
             CircuitBreakerState::Open => {
@@ -343,6 +348,11 @@ impl CircuitBreaker {
                 if failures >= config.failure_threshold {
                     *state = CircuitBreakerState::Open;
                     *self.last_state_change.write().await = Instant::now();
+                    log::warn!(
+                        "circuit breaker opened: failures={} failure_threshold={}",
+                        failures,
+                        config.failure_threshold
+                    );
                 }
                 self.consecutive_successes.store(0, Ordering::Relaxed);
             }
@@ -350,6 +360,7 @@ impl CircuitBreaker {
                 *state = CircuitBreakerState::Open;
                 *self.last_state_change.write().await = Instant::now();
                 self.consecutive_successes.store(0, Ordering::Relaxed);
+                log::warn!("circuit breaker reopened: half-open probe failed");
             }
             CircuitBreakerState::Open => {
                 // 已经在 Open 状态
@@ -396,6 +407,10 @@ impl CircuitBreaker {
                     *self.last_state_change.write().await = Instant::now();
                     self.consecutive_failures.store(0, Ordering::Relaxed);
                     self.consecutive_successes.store(0, Ordering::Relaxed);
+                    log::info!(
+                        "circuit breaker half-open: timeout_ms={}",
+                        config.timeout_ms
+                    );
                     Ok(())
                 } else {
                     Err(CircuitBreakerError::new(CircuitBreakerState::Open))

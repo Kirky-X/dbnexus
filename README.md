@@ -108,6 +108,7 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `copy` 🆕 | COPY FROM STDIN 批量写入语句构建（pg 协议路径按驱动门控） |
 | `entity-events` 🆕 | 实体事件总线 + Outbox 持久化投递 |
 | `otel` 🆕 | 健康快照指标导出 OTLP/HTTP（stdout fallback 兜底） |
+| `inklog` 🆕 | inklog 结构化日志集成：池超时/权限拒绝/熔断/慢查询记录路由到 inklog 管道 |
 | `kit` | trait-kit AsyncKit 集成，注册即获得池/缓存/审计/健康全能力 |
 | `config-confers` 🆕 | confers 配置热重载（`ArcSwap` 原子换装） |
 | `retry` | 运行时重试：幂等判断 + 指数退避 |
@@ -256,6 +257,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `health-check` | 健康检查模块与 `health_snapshot` 结构化导出 | 否 |
 | `observability` | `metrics` + `health-check` 聚合 | 否 |
 | `otel` | OTLP/HTTP JSON 信封导出桥 | 否 |
+| `inklog` | inklog 结构化日志集成：`init_inklog_logger()` 把 inklog 安装为全局 `log` 后端，池超时/权限拒绝/熔断/慢查询记录自动路由到 inklog 管道 | 否 |
 
 ### 数据管理
 

@@ -13,9 +13,15 @@ pub mod oxcache_adapter;
 #[cfg(feature = "kit")]
 pub mod kit;
 
+#[cfg(feature = "inklog")]
+pub mod inklog;
+
 // Re-exports
 #[cfg(feature = "oxcache-integration")]
 pub use oxcache_adapter::OxcacheDbCacheAdapter;
 
 #[cfg(feature = "kit")]
 pub use kit::{DbNexusBuildObserver, DbNexusModule};
+
+#[cfg(feature = "inklog")]
+pub use inklog::{init_inklog_logger, init_inklog_logger_with_config};
