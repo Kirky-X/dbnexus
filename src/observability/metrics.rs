@@ -887,22 +887,33 @@ impl MetricsCollector {
         }
 
         // 检查是否为慢查询
-        let config = self.slow_query_config.read();
-        if config.enabled && duration_ms >= config.threshold_ms {
-            let mut slow = self.slow_queries.write();
-            slow.push_back(SlowQueryRecord {
-                query_type: query_type.to_string(),
-                duration_ms,
-                timestamp: time::OffsetDateTime::now_utc(),
-            });
-            while slow.len() > self.max_slow_queries {
-                slow.pop_front();
+        // 判定与环形缓冲维护的临界区保持最小，日志在锁外发——log 桥启用时
+        // 每条记录带脱敏/格式化成本，锁内发会在慢查询风暴时把并发
+        // record_query 串行化到同一写锁上，放大已退化系统的指标路径竞争
+        let (slow_hit, threshold_ms) = {
+            let config = self.slow_query_config.read();
+            (
+                config.enabled && duration_ms >= config.threshold_ms,
+                config.threshold_ms,
+            )
+        };
+        if slow_hit {
+            {
+                let mut slow = self.slow_queries.write();
+                slow.push_back(SlowQueryRecord {
+                    query_type: query_type.to_string(),
+                    duration_ms,
+                    timestamp: time::OffsetDateTime::now_utc(),
+                });
+                while slow.len() > self.max_slow_queries {
+                    slow.pop_front();
+                }
             }
             log::warn!(
                 "slow query: query_type={} duration_ms={} threshold_ms={}",
                 query_type,
                 duration_ms,
-                config.threshold_ms
+                threshold_ms
             );
         }
     }

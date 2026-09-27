@@ -8,6 +8,13 @@
 //! - 熔断器状态转换（Closed→Open / HalfOpen→Open / HalfOpen→Closed）
 //! - 慢查询（`MetricsCollector::record_query` 超阈值）
 //!
+//! 权限拒绝的日志覆盖范围（显式声明）：`permission_denied()` 集中构造点
+//! （覆盖 check_permission / execute 逐表 / ORM / check_table_permission
+//! 等全部拒绝调用点）+ 三处「SQL 解析失败 fail-closed 拒绝」分支
+//! （execute_raw_impl / query_rows_impl / duckdb_security_gate）。其余
+//! fail-closed 拒绝（无表名/表名非法/DDL 角色白名单等固定文案路径）不发
+//! 日志，仅返回错误——如需观测请走 permission_denied 集中点。
+//!
 //! 日志门面为 `log` crate，与 `inklog` feature 正交：接线点无条件编译，
 //! 未安装 logger 时为 no-op（默认构建行为不变）；启用 `inklog` feature 并
 //! `init_inklog_logger()` 后记录自动路由到 inklog 结构化管道。测试经进程内
@@ -139,6 +146,79 @@ async fn permission_denied_emits_warn_record() {
         has_entry(log::Level::Warn, "restricted_table"),
         "WARN record must carry the denied table name; entries: {:?}",
         dump_entries()
+    );
+}
+
+/// 畸形标识符（换行/回车/ESC 控制字符）写入日志前必须消毒：
+/// 权限拒绝记录是安全审计记录，注入的换行可伪造日志行、ESC 可操纵终端渲染
+#[cfg(feature = "permission")]
+#[tokio::test]
+#[allow(clippy::unwrap_used)]
+async fn permission_denied_sanitizes_control_characters() {
+    use dbnexus::access::PermissionAction;
+
+    log_entries();
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config).await.expect("create pool");
+    let admin = pool.get_session("admin").await.expect("admin session");
+
+    let perm_json = r#"
+{
+  "roles": {
+    "admin": {
+      "tables": [
+        { "name": "*", "operations": ["select", "insert", "update", "delete"] }
+      ]
+    },
+    "user": {
+      "tables": [
+        { "name": "users", "operations": ["select", "insert"] }
+      ]
+    }
+  }
+}
+"#;
+    let perm_config: dbnexus::access::PermissionConfig =
+        serde_json::from_str(perm_json).expect("parse permission JSON");
+    admin
+        .permission_ctx()
+        .load_policy(&perm_config)
+        .await
+        .expect("load policy");
+
+    let user = pool.get_session("user").await.expect("user session");
+    let forged = "legit\nFAKE LOG LINE injected\x1b[31mred";
+    let result = user
+        .check_permission(forged, &PermissionAction::Select)
+        .await;
+    assert!(result.is_err(), "unauthorized table access must be denied");
+
+    let entries = log_entries().lock().expect("log entries lock poisoned");
+    let denial: Vec<&LogEntry> = entries
+        .iter()
+        .filter(|e| e.level == log::Level::Warn && e.message.contains("permission denied"))
+        .collect();
+    assert!(
+        !denial.is_empty(),
+        "permission denial must emit a WARN record; entries: {:?}",
+        dump_entries()
+    );
+    for entry in &denial {
+        assert!(
+            !entry.message.contains('\n') && !entry.message.contains('\r'),
+            "denial record must stay on one line, got: {:?}",
+            entry.message
+        );
+        assert!(
+            !entry.message.contains('\x1b'),
+            "denial record must not contain raw ESC bytes, got: {:?}",
+            entry.message
+        );
+    }
+    assert!(
+        denial.iter().any(|e| e.message.contains("legitFAKE")),
+        "control characters must be stripped while visible content is preserved, got: {:?}",
+        denial.iter().map(|e| e.message.clone()).collect::<Vec<_>>()
     );
 }
 

@@ -714,7 +714,7 @@ impl Session {
                         } else {
                             log::warn!(
                                 "permission denied: role={} reason=sql-parse-failure (fail-closed)",
-                                self.role
+                                sanitize_log_field(&self.role)
                             );
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
@@ -943,6 +943,10 @@ impl Session {
                     Err(_) => {
                         // 解析失败：admin 放行（对齐 execute_raw 路径），非 admin 拒绝（安全默认）
                         if self.role != self.pool_inner.admin_role {
+                            log::warn!(
+                                "permission denied: role={} reason=sql-parse-failure (fail-closed)",
+                                sanitize_log_field(&self.role)
+                            );
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
                             ));
@@ -1353,6 +1357,10 @@ impl Session {
                     // admin role 放行（对齐 Ok(None) 路径——admin 拥有完全控制权）；
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                     if self.role != self.pool_inner.admin_role {
+                        log::warn!(
+                            "permission denied: role={} reason=sql-parse-failure (fail-closed)",
+                            sanitize_log_field(&self.role)
+                        );
                         return Err(DbError::Permission(
                             "Failed to parse SQL statement for permission checking".to_string(),
                         ));
@@ -2190,11 +2198,23 @@ fn permission_denied(
     action: &(impl std::fmt::Display + ?Sized),
     table: &(impl std::fmt::Display + ?Sized),
 ) -> DbError {
-    log::warn!("permission denied: action={} table={}", action, table);
+    log::warn!(
+        "permission denied: action={} table={}",
+        sanitize_log_field(&action.to_string()),
+        sanitize_log_field(&table.to_string())
+    );
     DbError::Permission(i18n::t(
         "session-permission-denied",
         &[("action", action.to_string()), ("table", table.to_string())],
     ))
+}
+
+/// 剔除控制字符（<0x20 与 0x7F，含换行/回车/ESC），防止日志注入：
+/// 表名/角色名等字段源自用户 SQL 解析结果或调用方传入，
+/// 原样写入会让攻击者伪造日志行或操纵终端渲染（OWASP Logging Cheat Sheet）。
+#[cfg(feature = "permission")]
+fn sanitize_log_field(input: &str) -> String {
+    input.chars().filter(|c| !c.is_control()).collect()
 }
 
 /// 判断是否为写操作（Insert/Update/Delete）

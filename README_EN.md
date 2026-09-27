@@ -257,7 +257,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `health-check` | Health check module and `health_snapshot` structured export | No |
 | `observability` | `metrics` + `health-check` aggregate | No |
 | `otel` | OTLP/HTTP JSON envelope export bridge | No |
-| `inklog` | inklog structured logging integration: `init_inklog_logger()` installs inklog as the global `log` backend; pool timeout / permission denied / circuit breaker / slow query records route into the inklog pipeline | No |
+| `inklog` | inklog structured logging integration: `init_inklog_logger()` installs inklog as the global `log` backend; pool timeout / permission denied / circuit breaker / slow query records route into the inklog pipeline (log-facade records reach console/file sinks only; the database sink is reachable solely via inklog's native tracing path; keep the manager alive for the whole process — dropping it silently discards records) | No |
 
 ### Data Management
 

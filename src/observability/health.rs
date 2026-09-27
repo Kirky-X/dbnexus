@@ -307,30 +307,43 @@ impl CircuitBreaker {
 
     /// 记录成功
     pub async fn record_success(&self) {
-        let mut state = self.state.write().await;
-        let config = &self.config;
+        // 状态写守卫的临界区保持最小；转换日志在守卫释放后发——log 桥启用时
+        // 每条记录带脱敏/格式化成本，锁内发会推迟并发 can_execute 读者
+        let recovered;
+        {
+            let mut state = self.state.write().await;
+            let config = &self.config;
 
-        match *state {
-            CircuitBreakerState::Closed => {
-                self.consecutive_failures.store(0, Ordering::Relaxed);
-                self.consecutive_successes.fetch_add(1, Ordering::Relaxed);
-            }
-            CircuitBreakerState::HalfOpen => {
-                let successes = self.consecutive_successes.fetch_add(1, Ordering::Relaxed) + 1;
-                if successes >= config.success_threshold {
-                    *state = CircuitBreakerState::Closed;
-                    *self.last_state_change.write().await = Instant::now();
+            let mut did_recover = false;
+            let mut successes_at_recovery = 0;
+            match *state {
+                CircuitBreakerState::Closed => {
                     self.consecutive_failures.store(0, Ordering::Relaxed);
-                    log::info!(
-                        "circuit breaker closed: successes={} success_threshold={}",
-                        successes,
-                        config.success_threshold
-                    );
+                    self.consecutive_successes.fetch_add(1, Ordering::Relaxed);
+                }
+                CircuitBreakerState::HalfOpen => {
+                    let successes = self.consecutive_successes.fetch_add(1, Ordering::Relaxed) + 1;
+                    if successes >= config.success_threshold {
+                        *state = CircuitBreakerState::Closed;
+                        *self.last_state_change.write().await = Instant::now();
+                        self.consecutive_failures.store(0, Ordering::Relaxed);
+                        did_recover = true;
+                        successes_at_recovery = successes;
+                    }
+                }
+                CircuitBreakerState::Open => {
+                    // Open 状态下不允许成功
                 }
             }
-            CircuitBreakerState::Open => {
-                // Open 状态下不允许成功
-            }
+            recovered = did_recover.then_some(successes_at_recovery);
+        }
+
+        if let Some(successes) = recovered {
+            log::info!(
+                "circuit breaker closed: successes={} success_threshold={}",
+                successes,
+                self.config.success_threshold
+            );
         }
 
         // 更新滑动窗口
@@ -339,32 +352,56 @@ impl CircuitBreaker {
 
     /// 记录失败
     pub async fn record_failure(&self) {
-        let mut state = self.state.write().await;
-        let config = &self.config;
+        // 状态写守卫的临界区保持最小；转换日志在守卫释放后发（同 record_success）
+        enum Transition {
+            Opened { failures: u64, threshold: u64 },
+            Reopened,
+        }
+        let transition;
+        {
+            let mut state = self.state.write().await;
+            let config = &self.config;
 
-        match *state {
-            CircuitBreakerState::Closed => {
-                let failures = self.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
-                if failures >= config.failure_threshold {
+            let mut pending: Option<Transition> = None;
+            match *state {
+                CircuitBreakerState::Closed => {
+                    let failures = self.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
+                    if failures >= config.failure_threshold {
+                        *state = CircuitBreakerState::Open;
+                        *self.last_state_change.write().await = Instant::now();
+                        pending = Some(Transition::Opened {
+                            failures,
+                            threshold: config.failure_threshold,
+                        });
+                    }
+                    self.consecutive_successes.store(0, Ordering::Relaxed);
+                }
+                CircuitBreakerState::HalfOpen => {
                     *state = CircuitBreakerState::Open;
                     *self.last_state_change.write().await = Instant::now();
-                    log::warn!(
-                        "circuit breaker opened: failures={} failure_threshold={}",
-                        failures,
-                        config.failure_threshold
-                    );
+                    self.consecutive_successes.store(0, Ordering::Relaxed);
+                    pending = Some(Transition::Reopened);
                 }
-                self.consecutive_successes.store(0, Ordering::Relaxed);
+                CircuitBreakerState::Open => {
+                    // 已经在 Open 状态
+                }
             }
-            CircuitBreakerState::HalfOpen => {
-                *state = CircuitBreakerState::Open;
-                *self.last_state_change.write().await = Instant::now();
-                self.consecutive_successes.store(0, Ordering::Relaxed);
-                log::warn!("circuit breaker reopened: half-open probe failed");
+            transition = pending;
+        }
+
+        match transition {
+            Some(Transition::Opened {
+                failures,
+                threshold,
+            }) => log::warn!(
+                "circuit breaker opened: failures={} failure_threshold={}",
+                failures,
+                threshold
+            ),
+            Some(Transition::Reopened) => {
+                log::warn!("circuit breaker reopened: half-open probe failed")
             }
-            CircuitBreakerState::Open => {
-                // 已经在 Open 状态
-            }
+            None => {}
         }
 
         // 更新滑动窗口
@@ -400,17 +437,18 @@ impl CircuitBreaker {
                 // 检查是否超时
                 let elapsed = self.last_state_change.read().await.elapsed();
                 if elapsed.as_millis() >= config.timeout_ms as u128 {
-                    // 转换为半开状态
+                    // 转换为半开状态；转换日志在写守卫释放后发（同 record_success/record_failure）
                     drop(state);
-                    let mut write_state = self.state.write().await;
-                    *write_state = CircuitBreakerState::HalfOpen;
-                    *self.last_state_change.write().await = Instant::now();
-                    self.consecutive_failures.store(0, Ordering::Relaxed);
-                    self.consecutive_successes.store(0, Ordering::Relaxed);
-                    log::info!(
-                        "circuit breaker half-open: timeout_ms={}",
-                        config.timeout_ms
-                    );
+                    let flipped;
+                    {
+                        let mut write_state = self.state.write().await;
+                        *write_state = CircuitBreakerState::HalfOpen;
+                        *self.last_state_change.write().await = Instant::now();
+                        self.consecutive_failures.store(0, Ordering::Relaxed);
+                        self.consecutive_successes.store(0, Ordering::Relaxed);
+                        flipped = config.timeout_ms;
+                    }
+                    log::info!("circuit breaker half-open: timeout_ms={}", flipped);
                     Ok(())
                 } else {
                     Err(CircuitBreakerError::new(CircuitBreakerState::Open))
