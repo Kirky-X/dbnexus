@@ -532,6 +532,42 @@ fn test_audit_query_other_operation_filter() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// --limit 超上界（>1_000_000）应按用法错误拒绝
+#[cfg(feature = "audit")]
+#[test]
+fn test_audit_query_limit_over_max_exit_2() {
+    let output = cli()
+        .args([
+            "audit-query",
+            "--database-url",
+            "sqlite::memory:",
+            "--limit",
+            "1000001",
+        ])
+        .output()
+        .expect("run audit-query --limit");
+    assert_eq!(output.status.code(), Some(2));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "invalid_limit");
+}
+
+/// --limit=0 表示不限制（显式选择全量物化），空集仍为成功
+#[cfg(all(feature = "audit", feature = "sqlite"))]
+#[test]
+fn test_audit_query_limit_zero_means_unlimited() {
+    let (path, url) = temp_db_url("audit_unlimited");
+    let output = cli()
+        .args(["audit-query", "--database-url", &url, "--limit", "0"])
+        .output()
+        .expect("run audit-query --limit 0");
+    assert_eq!(output.status.code(), Some(0));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["count"], 0);
+    assert_eq!(json["truncated"], false);
+    let _ = std::fs::remove_file(&path);
+}
+
+#[cfg(feature = "audit")]
 #[test]
 fn test_audit_query_invalid_operation_exit_2() {
     let output = cli()
@@ -549,6 +585,7 @@ fn test_audit_query_invalid_operation_exit_2() {
     assert_eq!(json["error_code"], "invalid_operation");
 }
 
+#[cfg(feature = "audit")]
 #[cfg(feature = "audit")]
 #[test]
 fn test_audit_query_invalid_since_exit_2() {

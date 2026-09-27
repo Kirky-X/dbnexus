@@ -11,7 +11,7 @@ use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::i18n;
 use dbnexus::{DbError, DbPool, DbResult};
 use std::fs;
-#[cfg(feature = "migration")]
+#[cfg(any(feature = "migration", feature = "permission-engine"))]
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -123,17 +123,17 @@ enum Commands {
     },
 
     /// 连接池状态快照（health_snapshot 结构，JSON 输出）
-    #[cfg(feature = "migration")]
+    #[cfg(feature = "health-check")]
     PoolStatus,
 
     /// 审计事件查询（DbAuditStorage 过滤查询，JSON 输出，退出码 0/1/2）
-    #[cfg(feature = "migration")]
+    #[cfg(feature = "audit")]
     AuditQuery {
-        /// 按用户 ID 过滤
+        /// 按用户 ID 过滤（仅经单引号转义拼接，勿透传不可信输入）
         #[arg(long)]
         user: Option<String>,
 
-        /// 按实体类型过滤
+        /// 按实体类型过滤（仅经单引号转义拼接，勿透传不可信输入）
         #[arg(long)]
         entity: Option<String>,
 
@@ -163,7 +163,7 @@ enum Commands {
     },
 
     /// 分片信息（策略/分片清单/路由演示，JSON 输出）
-    #[cfg(feature = "migration")]
+    #[cfg(feature = "sharding")]
     ShardInfo {
         /// 分片策略（yearly/monthly/daily/hash/consistent-hash）
         #[arg(long)]
@@ -187,7 +187,7 @@ enum Commands {
     },
 
     /// 权限校验（权限配置文件 + PDP 决策，JSON 输出）
-    #[cfg(feature = "migration")]
+    #[cfg(feature = "permission-engine")]
     PermissionCheck {
         /// 被校验的角色名
         #[arg(long)]
@@ -303,13 +303,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // global 参数解析（clap 不允许 required global，此处统一收敛）；
     // shard-info（纯路由计算）与 permission-check（读配置文件 + PDP）不依赖数据库
     // 免库命令集合：仅在相应命令存在的 feature 组合下参与判定
-    #[cfg(any(feature = "sharding", feature = "permission-engine"))]
-    let needs_db = !matches!(
-        cli.command,
-        Commands::ShardInfo { .. } | Commands::PermissionCheck { .. }
-    );
-    #[cfg(not(any(feature = "sharding", feature = "permission-engine")))]
-    let needs_db = true;
+    #[cfg(feature = "sharding")]
+    let shard_info_free = matches!(cli.command, Commands::ShardInfo { .. });
+    #[cfg(not(feature = "sharding"))]
+    let shard_info_free = false;
+    #[cfg(feature = "permission-engine")]
+    let permission_check_free = matches!(cli.command, Commands::PermissionCheck { .. });
+    #[cfg(not(feature = "permission-engine"))]
+    let permission_check_free = false;
+    let needs_db = !(shard_info_free || permission_check_free);
     let database_url: String = if needs_db {
         cli.database_url.unwrap_or_else(|| {
             eprintln!("{}", i18n::t_simple("cli-database-url-required"));
@@ -410,6 +412,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 until: until.clone(),
                 limit: *limit,
             };
+            if *limit > 1_000_000 {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "invalid_limit",
+                    "error": "limit must not exceed 1000000 (0 means unlimited)"
+                }));
+                std::process::exit(ExitCode::UsageError as i32);
+            }
             let code = run_audit_query_json(&database_url, &filters).await;
             std::process::exit(code as i32);
         }
@@ -1886,8 +1895,9 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         return ExitCode::RuntimeFailure;
     }
 
-    // limit+1 探测截断：多取一条即可判定是否仍有匹配（0 = unlimited 不探测）
-    let probe_limit = (args.limit != 0).then_some(args.limit + 1);
+    // limit+1 探测截断：多取一条即可判定是否仍有匹配（0 = unlimited 不探测）；
+    // saturating 加法防御 usize::MAX 输入回绕为 LIMIT 0（恒空集的错误输出）
+    let probe_limit = (args.limit != 0).then_some(args.limit.saturating_add(1));
     let filters = AuditQueryFilters {
         user_id: args.user.clone(),
         entity_type: args.entity.clone(),

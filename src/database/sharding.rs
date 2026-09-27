@@ -308,15 +308,32 @@ impl ShardingStrategy for ConsistentHashStrategy {
 /// - `consistent-hash` / `consistent` → `ConsistentHashStrategy`
 /// - 其他 → 默认 `YearlyStrategy`
 pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
-    match name.to_lowercase().as_str() {
-        "yearly" | "year" => Box::new(YearlyStrategy),
-        "monthly" | "month" => Box::new(MonthlyStrategy),
-        "daily" | "day" => Box::new(DailyStrategy),
-        "hash" => Box::new(HashStrategy),
-        "consistent-hash" | "consistent" => Box::new(ConsistentHashStrategy::default()),
-        _ => Box::new(YearlyStrategy), // 默认使用年分片
-    }
+    let lower = name.to_lowercase();
+    STRATEGY_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == lower)
+        .map(|(_, factory)| factory())
+        .unwrap_or_else(|| Box::new(YearlyStrategy)) // 默认使用年分片
 }
+
+/// 策略工厂：按别名构造对应策略实例
+type StrategyFactory = fn() -> Box<dyn ShardingStrategy>;
+
+/// 策略别名注册表：别名 → 构造函数。单一事实源，
+/// [`is_known_strategy`] 与 [`create_strategy`] 均由此表驱动。
+const STRATEGY_ALIASES: &[(&str, StrategyFactory)] = &[
+    ("yearly", || Box::new(YearlyStrategy)),
+    ("year", || Box::new(YearlyStrategy)),
+    ("monthly", || Box::new(MonthlyStrategy)),
+    ("month", || Box::new(MonthlyStrategy)),
+    ("daily", || Box::new(DailyStrategy)),
+    ("day", || Box::new(DailyStrategy)),
+    ("hash", || Box::new(HashStrategy)),
+    ("consistent-hash", || {
+        Box::new(ConsistentHashStrategy::default())
+    }),
+    ("consistent", || Box::new(ConsistentHashStrategy::default())),
+];
 
 /// 策略名是否为已知策略（含别名）
 ///
@@ -324,18 +341,8 @@ pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
 /// 需要显性拒绝未知名的调用方（如运维 CLI）以本函数为单一事实源做前置
 /// 校验，避免各自复制别名表后与库侧漂移。
 pub fn is_known_strategy(name: &str) -> bool {
-    matches!(
-        name.to_lowercase().as_str(),
-        "yearly"
-            | "year"
-            | "monthly"
-            | "month"
-            | "daily"
-            | "day"
-            | "hash"
-            | "consistent-hash"
-            | "consistent"
-    )
+    let lower = name.to_lowercase();
+    STRATEGY_ALIASES.iter().any(|(alias, _)| *alias == lower)
 }
 
 /// 分片信息
