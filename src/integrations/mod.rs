@@ -24,4 +24,4 @@ pub use oxcache_adapter::OxcacheDbCacheAdapter;
 pub use kit::{DbNexusBuildObserver, DbNexusModule};
 
 #[cfg(feature = "inklog")]
-pub use inklog::{init_inklog_logger, init_inklog_logger_with_config};
+pub use inklog::{InklogInit, init_inklog_logger, init_inklog_logger_with_config};

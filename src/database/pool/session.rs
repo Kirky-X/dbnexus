@@ -2209,12 +2209,23 @@ fn permission_denied(
     ))
 }
 
-/// 剔除控制字符（<0x20 与 0x7F，含换行/回车/ESC），防止日志注入：
-/// 表名/角色名等字段源自用户 SQL 解析结果或调用方传入，
-/// 原样写入会让攻击者伪造日志行或操纵终端渲染（OWASP Logging Cheat Sheet）。
+/// 剔除控制字符（<0x20 与 0x7F，含换行/回车/ESC）与 Unicode 格式字符
+/// （零宽 U+200B-200F、双向控制 U+202A-202E、双向隔离 U+2066-2069、BOM
+/// U+FEFF），防止日志注入：表名/角色名等字段源自用户 SQL 解析结果或调用
+/// 方传入，原样写入会让攻击者伪造日志行、注入 ANSI 序列或经不可见字符
+/// 视觉重排误导日志审阅者（OWASP Logging Cheat Sheet / Trojan Source）。
 #[cfg(feature = "permission")]
 fn sanitize_log_field(input: &str) -> String {
-    input.chars().filter(|c| !c.is_control()).collect()
+    input
+        .chars()
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(
+                    c,
+                    '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
+                )
+        })
+        .collect()
 }
 
 /// 判断是否为写操作（Insert/Update/Delete）

@@ -193,6 +193,13 @@ async fn permission_denied_sanitizes_control_characters() {
         .await;
     assert!(result.is_err(), "unauthorized table access must be denied");
 
+    // Cf 格式字符（零宽/双向控制/BOM）同样必须剔除：不可见字符可在终端
+    // 渲染中视觉重排或隐藏文本（Trojan-Source 式欺骗）
+    let vis_override = "col\u{202E}ltr\u{2066}iso\u{200B}zw\u{FEFF}bom";
+    let _ = user
+        .check_permission(vis_override, &PermissionAction::Select)
+        .await;
+
     let entries = log_entries().lock().expect("log entries lock poisoned");
     let denial: Vec<&LogEntry> = entries
         .iter()
@@ -214,10 +221,23 @@ async fn permission_denied_sanitizes_control_characters() {
             "denial record must not contain raw ESC bytes, got: {:?}",
             entry.message
         );
+        for cf in ['\u{200B}', '\u{200E}', '\u{202E}', '\u{2066}', '\u{FEFF}'] {
+            assert!(
+                !entry.message.contains(cf),
+                "denial record must not contain format char U+{:04X}, got: {:?}",
+                cf as u32,
+                entry.message
+            );
+        }
     }
     assert!(
         denial.iter().any(|e| e.message.contains("legitFAKE")),
         "control characters must be stripped while visible content is preserved, got: {:?}",
+        denial.iter().map(|e| e.message.clone()).collect::<Vec<_>>()
+    );
+    assert!(
+        denial.iter().any(|e| e.message.contains("colltrisozwbom")),
+        "Cf format chars must be stripped while visible content is preserved, got: {:?}",
         denial.iter().map(|e| e.message.clone()).collect::<Vec<_>>()
     );
 }
