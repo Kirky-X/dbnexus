@@ -9,7 +9,9 @@
 <summary>📑 版本索引</summary>
 
 - [Unreleased](#unreleased)
-- [0.6.0-rc.3 - 2026-09-10](#060-rc3---2026-09-10)
+- [0.6.0-rc.6 - 2026-09-28](#060-rc6---2026-09-28)
+- [0.6.0-rc.5 - 2026-09-21](#060-rc5---2026-09-21)
+- [0.6.0-rc.4 - 2026-09-14](#060-rc4---2026-09-14)
 - [0.6.0-rc.2 - 2026-09-03](#060-rc2---2026-09-03)
 - [0.5.1 - 2026-08-06](#051---2026-08-06)
 - [0.5.0 - 2026-08-04](#050---2026-08-04)
@@ -27,6 +29,8 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.6] - 2026-09-28
+
 ### Added
 
 - **分片策略单一事实源**：`database::sharding` 新增 `is_known_strategy` 导出，别名注册表 `STRATEGY_ALIASES` 供 `is_known_strategy`/`create_strategy` 共用
@@ -36,8 +40,25 @@
 
 - **inklog 结构化日志集成（Logs 支柱从零到一）**：新增 `inklog` feature（`inklog 0.3.0-rc.5`，`default-features = false`），`dbnexus::integrations::inklog::init_inklog_logger()` 将 inklog `LoggerManager` 安装为全局 `log` 后端，返回 `InklogInit::Installed/Reused` 显性区分「本次配置生效」与「复用既有后端」；池获取超时、权限拒绝（含 SQL 解析失败 fail-closed 拒绝，execute_raw/query_rows/duckdb_security_gate 三分支全覆盖，用户可控字段经控制字符消毒防日志注入）、熔断器状态转换（打开/重开/半开/恢复）、慢查询四类接线点经 `log` 门面发记录，启用后路由到 inklog 结构化管道（log 门面记录达 console/file sinks，database sink 仅原生 tracing 路径可达；manager 须全程保持存活，Drop 后记录被静默丢弃）；`log 0.4` 门面为非可选依赖，未安装 logger 时为 no-op，默认构建行为不变
 - **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容（含畸形标识符日志注入消毒用例）；`integrations::inklog` 内联测试覆盖 init 成功/级别安装/路由不 panic/Installed-Reused 标记语义
+- **duckdb 能力扩展**：串行写闸 `with_serialized_writes`（默认不启用，读并发不受限）；`with_transaction` 泛型事务闭包（事务内可读、成败皆归还连接）；连接池模式新增 `execute_batch` 多语句批量执行
+- **migration 定制化**：`with_history_table` 迁移历史表名可定制（默认路径 SQL 逐字节不变）；`with_markers` UP/DOWN 迁移标记集可定制（默认口径不变）
+- **cache-guard 缓存三防**：穿透/击穿/雪崩防护与 scatter 跨分片全局归并
+- **replica 写后读粘性窗口**：探测结果缓存与并行探测
+- **session 当前读与隔离级别**：`query_rows_for_update` 当前读、`begin_transaction_with_isolation` 隔离级别控制
+- **绑定参数化执行 API**：session/repository 绑定参数化执行与 JsonRepository 全链路值绑定
+- **业务分片键路由**：`calculate_for_key` / `route_for_key`（sharding）
 
-## [0.6.0-rc.3] - 2026-09-10
+### Fixed
+
+- **【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入**：列投影/游标分页/乐观锁路径的字符串字面量按后端转义规则处理，MySQL 后端（反斜杠为转义字符）此前存在注入面
+- **duckdb 连接池归还**：池连接改 RAII 归还、语句执行成败皆归还连接、写闸幂等复用
+- **saga 持久化显性化**：持久化失败不再静默，重放跳过已补偿步骤，补偿会话失败显性上报
+- **global-index / health**：全局索引表查询列二级索引；health 零连接测试前提显式化
+- 权限审计链模块头链接改全路径，修复 rustdoc `-D warnings` 假红
+
+## [0.6.0-rc.4] - 2026-09-14
+
+> 注：0.6.0-rc.3 未单独发布（无 tag、未上 crates.io），本节内容含原 rc.3 开发批次，随 0.6.0-rc.4 一并发布。
 
 ### Added
 
@@ -80,6 +101,19 @@
 ### Fixed
 
 - `verify_refresh_token` / `refresh_access_token` 改为 async，级联更新所有调用点（测试、示例、文档）
+
+---
+
+## [0.6.0-rc.5] - 2026-09-21
+
+### Changed
+
+- **dbnexus-macros 增强**：新增 `entity-macros` feature 转发 sea-orm 派生宏——消费方经 `dbnexus::sea_orm` re-export 定义实体即可，免直接依赖 sea-orm；`sea_orm` re-export 不再绑定驱动 feature
+- **i18n 整改**：统一错误与消息文案管理
+- **依赖升级**：sha2 0.10.9 → 0.11.0 及 patch 组刷新；跨仓 path 依赖改走 crates.io
+- **工程加固**：detect-secrets 基线、pre-commit 门禁、typos 误报白名单、clippy 存量清理
+
+---
 
 ## [0.6.0-rc.2] - 2026-09-03
 

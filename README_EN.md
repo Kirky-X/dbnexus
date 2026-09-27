@@ -77,7 +77,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 |------|------|
 | **Connection Pooling** | RAII-style connection lifecycle; pool state maintained with atomics, lock-free on hot paths |
 | **Transactions** | Complete transaction management with `begin_transaction` / `commit` / rollback and RAII guarantees |
-| **Unified Errors** | `ErrorCode` table + `QueryErrorReport` structured error reporting (unified in 0.6.0-rc.3) |
+| **Unified Errors** | `ErrorCode` table + `QueryErrorReport` structured error reporting (unified in 0.6.0-rc.4) |
 | **Configuration** | `DbConfig` / `PoolConfig` with environment variable / YAML / TOML sources |
 | **Internationalization** | ICU4X + Fluent locale-aware formatting (core feature, always compiled) |
 
@@ -120,7 +120,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `saga` | Saga distributed transactions: persistent log, startup recovery, compensation orchestration |
 | `distributed-id` | Snowflake distributed ID generation |
 
-> 🆕 marks capabilities added in 0.6.0-rc.3; see the [Changelog](docs/CHANGELOG.md) for the full list.
+> 🆕 marks capabilities added in 0.6.0-rc.4; see the [Changelog](docs/CHANGELOG.md) for the full list.
 
 ---
 
@@ -137,7 +137,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.3", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.6", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -325,16 +325,16 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ```toml
 # Embedded/edge devices (minimal)
-dbnexus = { version = "0.6.0-rc.3", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.6", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0-rc.3", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.6", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0-rc.3", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.6", features = ["monolith"] }
 
 # Enterprise (full features)
-dbnexus = { version = "0.6.0-rc.3", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 ```
 
 ---
@@ -358,7 +358,7 @@ dbnexus = { version = "0.6.0-rc.3", features = ["enterprise"] }
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **51 binary targets** in total (as of 0.6.0-rc.3):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **51 binary targets** in total (as of 0.6.0-rc.6):
 
 ```bash
 cd examples
@@ -441,12 +441,12 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicitly registered integration targets under `tests/**` (feature-gated), end-to-end scenarios in `tests/e2e/` (isolated via `cfg(feature)`), `postgres_testcontainers` / `mysql_testcontainers` container-level tests (per-test container isolation), doc tests (run separately in CI via `cargo test --doc`), and criterion benchmarks under [benches/](benches/) (see [Performance](#-performance)). The test pyramid baseline, driver-group matrix and E2E scenario definitions are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
-### Test scale (as of 0.6.0-rc.3)
+### Test scale (as of 0.6.0-rc.6)
 
 | Metric | Value | Source |
 |------|------|------|
-| Total test functions | 2389 `#[test]` / `#[tokio::test]` | grep count (src 1066 + tests 1321 + macros 2) |
-| Registered test targets | 79 `[[test]]` | `Cargo.toml` |
+| Total test functions | 2492 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1154 + tests 1336 + macros 2) |
+| Registered test targets | 80 `[[test]]` | `Cargo.toml` |
 | Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | Coverage gate | ≥ 80% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
 
@@ -528,7 +528,9 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.6.0-rc.3 | 2026-09-10 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands |
+| 0.6.0-rc.6 | 2026-09-28 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); inklog structured logging integration; duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
+| 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` forwarding sea-orm derives; `sea_orm` re-export decoupled from driver features; i18n overhaul; sha2 0.11; cross-repo path deps moved to crates.io |
+| 0.6.0-rc.4 | 2026-09-14 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands (version 0.6.0-rc.3 was skipped and never published; its content shipped with this release) |
 | 0.6.0-rc.2 | 2026-09-03 | Removed the `tracing` feature; strict four-driver mutual exclusion (compile-time `compile_error!`); completed JOIN/subquery cross-table permission checks; `h2` security upgrade |
 | 0.5.1 | 2026-08-06 | Hot path performance optimizations (static injection detection table, `Session` RwLock, `DbConfig` Arc sharing, etc.); removed deprecated builder methods |
 
