@@ -111,6 +111,82 @@ enum Commands {
         #[command(subcommand)]
         action: UserAction,
     },
+
+    /// 连接池状态快照（health_snapshot 结构，JSON 输出）
+    PoolStatus,
+
+    /// 审计事件查询（DbAuditStorage 过滤查询，JSON 输出，退出码 0/1/2）
+    AuditQuery {
+        /// 按用户 ID 过滤
+        #[arg(long)]
+        user: Option<String>,
+
+        /// 按实体类型过滤
+        #[arg(long)]
+        entity: Option<String>,
+
+        /// 按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change）
+        #[arg(long)]
+        operation: Option<String>,
+
+        /// 按严重级别过滤（info/low/medium/high/critical）
+        #[arg(long)]
+        severity: Option<String>,
+
+        /// 按结果过滤（success/failure/partial/unknown）
+        #[arg(long)]
+        status: Option<String>,
+
+        /// 起始时间（RFC 3339，如 2026-01-01T00:00:00Z）
+        #[arg(long)]
+        since: Option<String>,
+
+        /// 截止时间（RFC 3339）
+        #[arg(long)]
+        until: Option<String>,
+    },
+
+    /// 分片信息（策略/分片清单/路由演示，JSON 输出）
+    ShardInfo {
+        /// 分片策略（yearly/monthly/daily/hash/consistent-hash）
+        #[arg(long)]
+        strategy: String,
+
+        /// 总分片数（≥1）
+        #[arg(long)]
+        total_shards: u32,
+
+        /// 分片名称前缀
+        #[arg(long, default_value = "db")]
+        prefix: String,
+
+        /// 连接字符串模板（{shard} 占位符）
+        #[arg(long, default_value = "sqlite:./data/{shard}.db")]
+        template: String,
+
+        /// 演示路由：按业务分片键计算目标分片 ID
+        #[arg(long)]
+        route_key: Option<String>,
+    },
+
+    /// 权限校验（权限配置文件 + PDP 决策，JSON 输出）
+    PermissionCheck {
+        /// 被校验的角色名
+        #[arg(long)]
+        role: String,
+
+        /// 目标资源（表名）
+        #[arg(long)]
+        table: String,
+
+        /// 操作（select/insert/update/delete，大小写不敏感）
+        #[arg(long)]
+        action: String,
+
+        /// 权限配置文件路径（YAML/JSON：roles.<role> 为规则数组）
+        #[arg(long)]
+        permissions: PathBuf,
+    },
 }
 
 /// `user` 子命令动作
@@ -206,11 +282,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = build_cli().get_matches();
     let cli = Cli::from_arg_matches(&matches)?;
 
-    // global 参数解析（clap 不允许 required global，此处统一收敛）
-    let database_url: String = cli.database_url.unwrap_or_else(|| {
-        eprintln!("{}", i18n::t_simple("cli-database-url-required"));
-        std::process::exit(ExitCode::UsageError as i32);
-    });
+    // global 参数解析（clap 不允许 required global，此处统一收敛）；
+    // shard-info（纯路由计算）与 permission-check（读配置文件 + PDP）不依赖数据库
+    let needs_db = !matches!(
+        cli.command,
+        Commands::ShardInfo { .. } | Commands::PermissionCheck { .. }
+    );
+    let database_url: String = if needs_db {
+        cli.database_url.unwrap_or_else(|| {
+            eprintln!("{}", i18n::t_simple("cli-database-url-required"));
+            std::process::exit(ExitCode::UsageError as i32);
+        })
+    } else {
+        cli.database_url.unwrap_or_default()
+    };
 
     // 初始化语言设置（非法值在此报错）
     if let Some(ref lang) = cli.lang {
@@ -268,6 +353,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::User { action } => {
             let code = run_user_command(&database_url, action).await;
+            std::process::exit(code as i32);
+        }
+        Commands::PoolStatus => {
+            let code = run_pool_status_json(&database_url).await;
+            std::process::exit(code as i32);
+        }
+        Commands::AuditQuery {
+            user,
+            entity,
+            operation,
+            severity,
+            status,
+            since,
+            until,
+        } => {
+            let filters = AuditFilterArgs {
+                user: user.clone(),
+                entity: entity.clone(),
+                operation: operation.clone(),
+                severity: severity.clone(),
+                status: status.clone(),
+                since: since.clone(),
+                until: until.clone(),
+            };
+            let code = run_audit_query_json(&database_url, &filters).await;
+            std::process::exit(code as i32);
+        }
+        Commands::ShardInfo {
+            strategy,
+            total_shards,
+            prefix,
+            template,
+            route_key,
+        } => {
+            let code = run_shard_info_json(strategy, *total_shards, prefix, template, route_key);
+            std::process::exit(code as i32);
+        }
+        Commands::PermissionCheck {
+            role,
+            table,
+            action,
+            permissions,
+        } => {
+            let code = run_permission_check_json(role, table, action, permissions).await;
             std::process::exit(code as i32);
         }
     }
@@ -1481,6 +1610,432 @@ VALUES ('{username}', '{hash}', '{role}', '{created_at}')"
                 ExitCode::RuntimeFailure
             }
         },
+    }
+}
+
+// ============================================================================
+// 运维子命令（pool-status / audit-query / shard-info / permission-check）
+// — 机器可读 JSON + 退出码 0/1/2
+// ============================================================================
+
+/// 连接池状态快照（JSON 输出 health_snapshot 结构）
+///
+/// 退出码：0 健康/降级 / 1 不健康（快照 unhealthy 或连接失败）/ 2 URL 用法错误
+async fn run_pool_status_json(database_url: &str) -> ExitCode {
+    if detect_database_type(database_url).is_err() {
+        print_json(&serde_json::json!({
+            "status": "unhealthy",
+            "checks": { "url": "invalid" },
+            "error": "unsupported database URL protocol"
+        }));
+        return ExitCode::UsageError;
+    }
+
+    let pool = match DbPool::new(database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "unhealthy",
+                "checks": { "connect": "fail" },
+                "error": e.to_string(),
+                "url": mask_database_url(database_url),
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+
+    // 先取一次会话建立真实连接：新建池无预热连接（total=0），health_snapshot
+    // 的零连接语义恒判 unhealthy；探测会话归还后快照反映真实池容量
+    if let Err(e) = pool.get_session("admin").await {
+        print_json(&serde_json::json!({
+            "status": "unhealthy",
+            "checks": { "connect": "ok", "session": "fail" },
+            "error": e.to_string(),
+            "url": mask_database_url(database_url),
+        }));
+        return ExitCode::RuntimeFailure;
+    }
+
+    let mut snapshot = pool.health_snapshot().await;
+    snapshot["url"] = serde_json::Value::String(mask_database_url(database_url));
+    let code = if snapshot["status"] == "unhealthy" {
+        ExitCode::RuntimeFailure
+    } else {
+        ExitCode::Ok
+    };
+    print_json(&snapshot);
+    code
+}
+
+/// audit-query 的过滤参数集合
+struct AuditFilterArgs {
+    user: Option<String>,
+    entity: Option<String>,
+    operation: Option<String>,
+    severity: Option<String>,
+    status: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+}
+
+/// 审计操作枚举名 → 枚举（serde 序列化名，大小写不敏感）
+fn parse_audit_operation(name: &str) -> Option<dbnexus::AuditOperation> {
+    use dbnexus::AuditOperation;
+    match name.to_lowercase().as_str() {
+        "create" => Some(AuditOperation::Create),
+        "read" => Some(AuditOperation::Read),
+        "update" => Some(AuditOperation::Update),
+        "delete" => Some(AuditOperation::Delete),
+        "login" => Some(AuditOperation::Login),
+        "logout" => Some(AuditOperation::Logout),
+        "permission-change" => Some(AuditOperation::PermissionChange),
+        "config-change" => Some(AuditOperation::ConfigChange),
+        _ => None,
+    }
+}
+
+/// 审计严重级别枚举名 → 枚举
+fn parse_audit_severity(name: &str) -> Option<dbnexus::AuditSeverity> {
+    use dbnexus::AuditSeverity;
+    match name.to_lowercase().as_str() {
+        "info" => Some(AuditSeverity::Info),
+        "low" => Some(AuditSeverity::Low),
+        "medium" => Some(AuditSeverity::Medium),
+        "high" => Some(AuditSeverity::High),
+        "critical" => Some(AuditSeverity::Critical),
+        _ => None,
+    }
+}
+
+/// 审计状态枚举名 → 枚举
+fn parse_audit_status(name: &str) -> Option<dbnexus::AuditStatus> {
+    use dbnexus::AuditStatus;
+    match name.to_lowercase().as_str() {
+        "success" => Some(AuditStatus::Success),
+        "failure" => Some(AuditStatus::Failure),
+        "partial" => Some(AuditStatus::Partial),
+        "unknown" => Some(AuditStatus::Unknown),
+        _ => None,
+    }
+}
+
+/// 参数校验失败（用法错误）的统一 JSON 输出
+fn print_usage_error(error_code: &str, error: &str) {
+    print_json(&serde_json::json!({
+        "status": "error", "error_code": error_code, "error": error
+    }));
+}
+
+/// 审计事件查询（JSON 输出）
+///
+/// 退出码：0 查询成功（含空集）/ 1 查询执行失败 / 2 参数错误
+async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> ExitCode {
+    use dbnexus::{AuditQueryFilters, AuditStorage};
+
+    let operation = match &args.operation {
+        Some(name) => match parse_audit_operation(name) {
+            Some(op) => Some(op),
+            None => {
+                print_usage_error(
+                    "invalid_operation",
+                    "operation must be one of create/read/update/delete/login/logout/permission-change/config-change",
+                );
+                return ExitCode::UsageError;
+            }
+        },
+        None => None,
+    };
+    let severity = match &args.severity {
+        Some(name) => match parse_audit_severity(name) {
+            Some(sev) => Some(sev),
+            None => {
+                print_usage_error(
+                    "invalid_severity",
+                    "severity must be one of info/low/medium/high/critical",
+                );
+                return ExitCode::UsageError;
+            }
+        },
+        None => None,
+    };
+    let status = match &args.status {
+        Some(name) => match parse_audit_status(name) {
+            Some(st) => Some(st),
+            None => {
+                print_usage_error(
+                    "invalid_status",
+                    "status must be one of success/failure/partial/unknown",
+                );
+                return ExitCode::UsageError;
+            }
+        },
+        None => None,
+    };
+    let parse_time = |raw: &str| -> Result<chrono::DateTime<chrono::Utc>, ()> {
+        chrono::DateTime::parse_from_rfc3339(raw)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .map_err(|_| ())
+    };
+    let since = match &args.since {
+        Some(raw) => match parse_time(raw) {
+            Ok(t) => Some(t),
+            Err(_) => {
+                print_usage_error(
+                    "invalid_since",
+                    "since must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)",
+                );
+                return ExitCode::UsageError;
+            }
+        },
+        None => None,
+    };
+    let until = match &args.until {
+        Some(raw) => match parse_time(raw) {
+            Ok(t) => Some(t),
+            Err(_) => {
+                print_usage_error(
+                    "invalid_until",
+                    "until must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)",
+                );
+                return ExitCode::UsageError;
+            }
+        },
+        None => None,
+    };
+
+    let pool = match DbPool::new(database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "connect_failed", "error": e.to_string()
+            }));
+            return classify_connect_error(database_url);
+        }
+    };
+
+    let storage = dbnexus::DbAuditStorage::new(std::sync::Arc::new(pool));
+    // 幂等建表：空库首查返回空集而非"表不存在"失败
+    if let Err(e) = storage.init().await {
+        print_json(&serde_json::json!({
+            "status": "error", "error_code": "table_init_failed", "error": e.to_string()
+        }));
+        return ExitCode::RuntimeFailure;
+    }
+
+    let filters = AuditQueryFilters {
+        user_id: args.user.clone(),
+        entity_type: args.entity.clone(),
+        operation,
+        start_time: since,
+        end_time: until,
+        severity,
+        result: status,
+    };
+
+    match storage.query(&filters).await {
+        Ok(events) => {
+            let mut rows = Vec::with_capacity(events.len());
+            for event in &events {
+                match serde_json::to_value(event) {
+                    Ok(value) => rows.push(value),
+                    Err(e) => {
+                        print_json(&serde_json::json!({
+                            "status": "error", "error_code": "serialize_failed",
+                            "error": e.to_string()
+                        }));
+                        return ExitCode::RuntimeFailure;
+                    }
+                }
+            }
+            let count = rows.len();
+            print_json(&serde_json::json!({
+                "status": "ok", "count": count, "events": rows
+            }));
+            ExitCode::Ok
+        }
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "query_failed", "error": e.to_string()
+            }));
+            ExitCode::RuntimeFailure
+        }
+    }
+}
+
+/// 分片策略白名单（create_strategy 对未知名静默回落 YearlyStrategy，
+/// 运维 CLI 必须显性拒绝拼写错误，禁止静默回落）
+fn is_known_shard_strategy(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "yearly"
+            | "year"
+            | "monthly"
+            | "month"
+            | "daily"
+            | "day"
+            | "hash"
+            | "consistent-hash"
+            | "consistent"
+    )
+}
+
+/// 分片信息（JSON 输出）
+///
+/// 退出码：0 成功 / 2 参数错误（未知策略、total_shards=0、空 route key）
+fn run_shard_info_json(
+    strategy: &str,
+    total_shards: u32,
+    prefix: &str,
+    template: &str,
+    route_key: &Option<String>,
+) -> ExitCode {
+    if total_shards == 0 {
+        print_usage_error("invalid_total_shards", "total_shards must be at least 1");
+        return ExitCode::UsageError;
+    }
+    if !is_known_shard_strategy(strategy) {
+        print_usage_error(
+            "unknown_strategy",
+            "strategy must be one of yearly/monthly/daily/hash/consistent-hash",
+        );
+        return ExitCode::UsageError;
+    }
+    if route_key.as_ref().is_some_and(|k| k.is_empty()) {
+        print_usage_error("invalid_route_key", "route_key must not be empty");
+        return ExitCode::UsageError;
+    }
+
+    let config = dbnexus::ShardConfig {
+        strategy: strategy.to_string(),
+        total_shards,
+        prefix: prefix.to_string(),
+        connection_template: template.to_string(),
+    };
+    let router = dbnexus::ShardRouter::with_config_sync(&config);
+
+    let mut infos = router.all_shards();
+    // 按 shard_id 排序输出：HashMap 迭代序不稳定，运维输出需确定性
+    infos.sort_by_key(|info| info.shard_id);
+    let shards: Vec<serde_json::Value> = infos
+        .iter()
+        .map(|info| {
+            serde_json::json!({
+                "shard_id": info.shard_id,
+                "name": info.name,
+                "connection_string": info.connection_string,
+            })
+        })
+        .collect();
+
+    let mut payload = serde_json::json!({
+        "status": "ok",
+        "strategy": router.strategy_name(),
+        "total_shards": router.total_shards(),
+        "shards": shards,
+    });
+
+    if let Some(key) = route_key {
+        let shard_id = router.shard_id_for_key(key);
+        payload["route"] = serde_json::json!({ "key": key, "shard_id": shard_id });
+    }
+
+    print_json(&payload);
+    ExitCode::Ok
+}
+
+/// 权限校验白名单（PDP check 对未知 action fail-closed 拒绝，
+/// CLI 层先行拦截以便归为用法错误而非 deny 决策）
+fn parse_permission_action(action: &str) -> Option<&'static str> {
+    match action.to_lowercase().as_str() {
+        "select" => Some("select"),
+        "insert" => Some("insert"),
+        "update" => Some("update"),
+        "delete" => Some("delete"),
+        _ => None,
+    }
+}
+
+/// 权限校验（JSON 输出）
+///
+/// 退出码：0 allow / 1 deny 或 NotApplicable（fail-closed）/ 2 参数或配置错误
+async fn run_permission_check_json(
+    role: &str,
+    table: &str,
+    action: &str,
+    permissions: &Path,
+) -> ExitCode {
+    if role.is_empty() || table.is_empty() {
+        print_usage_error("empty_role_or_table", "role and table must not be empty");
+        return ExitCode::UsageError;
+    }
+    let action = match parse_permission_action(action) {
+        Some(a) => a,
+        None => {
+            print_usage_error(
+                "invalid_action",
+                "action must be one of select/insert/update/delete",
+            );
+            return ExitCode::UsageError;
+        }
+    };
+    if !permissions.exists() {
+        print_usage_error(
+            "permissions_file_unavailable",
+            "permissions file does not exist or is not readable",
+        );
+        return ExitCode::UsageError;
+    }
+
+    use dbnexus::EnginePermissionProvider;
+
+    let provider =
+        match dbnexus::EngineYamlPermissionProvider::new(permissions.to_string_lossy().as_ref()) {
+            Ok(p) => p,
+            Err(e) => {
+                print_usage_error("permissions_file_unavailable", &e);
+                return ExitCode::UsageError;
+            }
+        };
+    // provider 首次 check 时惰性加载（60s 刷新阈值下新建实例永不触发），
+    // 显式 refresh 确保规则在决策前装载，加载失败即刻暴露为配置错误
+    if let Err(e) = provider.refresh().await {
+        print_usage_error(
+            "permissions_file_invalid",
+            &format!("permissions file could not be loaded: {e}"),
+        );
+        return ExitCode::UsageError;
+    }
+
+    // NotApplicable 归为 Deny（fail-closed：无适用策略即拒绝）
+    let pdp = dbnexus::PolicyDecisionPoint::builder()
+        .provider(std::sync::Arc::new(provider))
+        .default_decision(dbnexus::PermissionDecision::Deny)
+        .build();
+
+    let decision = pdp.check(role, table, action).await;
+    let decision_name = match &decision {
+        dbnexus::PermissionDecision::Allow => "allow",
+        dbnexus::PermissionDecision::Deny | dbnexus::PermissionDecision::NotApplicable => "deny",
+        dbnexus::PermissionDecision::Error(_) => {
+            print_usage_error(
+                "permissions_file_invalid",
+                "permissions file could not be evaluated (malformed config)",
+            );
+            return ExitCode::UsageError;
+        }
+    };
+
+    print_json(&serde_json::json!({
+        "status": "ok",
+        "role": role,
+        "table": table,
+        "action": action,
+        "decision": decision_name,
+    }));
+    if decision_name == "allow" {
+        ExitCode::Ok
+    } else {
+        ExitCode::RuntimeFailure
     }
 }
 

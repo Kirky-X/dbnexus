@@ -254,3 +254,386 @@ fn test_user_invalid_args_exit_2() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+// ============================================================================
+// pool-status（池状态：health_snapshot JSON 输出）
+// ============================================================================
+
+#[cfg(feature = "sqlite")]
+#[test]
+fn test_pool_status_healthy_exit_0() {
+    let (path, url) = temp_db_url("pool_status_ok");
+    let output = cli()
+        .args(["pool-status", "--database-url", &url])
+        .output()
+        .expect("run pool-status");
+    assert_eq!(output.status.code(), Some(0), "可连库应退出 0");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert!(
+        json["status"] == "healthy" || json["status"] == "degraded",
+        "可连库状态应为 healthy/degraded: {}",
+        json["status"]
+    );
+    assert!(json["pool"]["total"].is_u64(), "应输出池连接总数");
+    assert!(json["pool"]["saturation"].is_number(), "应输出池饱和度");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[cfg(feature = "sqlite")]
+#[test]
+fn test_pool_status_unreachable_exit_1() {
+    let output = cli()
+        .args([
+            "pool-status",
+            "--database-url",
+            "sqlite:/nonexistent_dir_r4/x.db?mode=rwc",
+        ])
+        .output()
+        .expect("run pool-status");
+    assert_eq!(output.status.code(), Some(1), "不可达库应退出 1");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "unhealthy");
+}
+
+#[test]
+fn test_pool_status_invalid_url_exit_2() {
+    let output = cli()
+        .args(["pool-status", "--database-url", "foo://localhost/db"])
+        .output()
+        .expect("run pool-status");
+    assert_eq!(output.status.code(), Some(2), "非法协议应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["checks"]["url"], "invalid");
+}
+
+// ============================================================================
+// shard-info（分片信息：策略/分片清单/路由演示）
+// ============================================================================
+
+#[test]
+fn test_shard_info_lists_all_shards_exit_0() {
+    let output = cli()
+        .args([
+            "shard-info",
+            "--strategy",
+            "yearly",
+            "--total-shards",
+            "4",
+            "--prefix",
+            "db",
+        ])
+        .output()
+        .expect("run shard-info");
+    assert_eq!(output.status.code(), Some(0));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["strategy"], "yearly");
+    assert_eq!(json["total_shards"], 4);
+    let shards = json["shards"].as_array().expect("shards 数组");
+    assert_eq!(shards.len(), 4);
+    assert_eq!(shards[0]["shard_id"], 0);
+    assert_eq!(shards[0]["name"], "db_0");
+    assert!(shards[0]["connection_string"].is_string());
+}
+
+#[test]
+fn test_shard_info_route_key_exit_0() {
+    let output = cli()
+        .args([
+            "shard-info",
+            "--strategy",
+            "hash",
+            "--total-shards",
+            "8",
+            "--route-key",
+            "user-42",
+        ])
+        .output()
+        .expect("run shard-info with route key");
+    assert_eq!(output.status.code(), Some(0));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    let route = &json["route"];
+    assert_eq!(route["key"], "user-42");
+    let shard_id = route["shard_id"].as_u64().expect("shard_id 数值");
+    assert!(shard_id < 8, "路由结果必须落在分片范围内: {}", shard_id);
+}
+
+#[test]
+fn test_shard_info_zero_shards_exit_2() {
+    let output = cli()
+        .args(["shard-info", "--strategy", "yearly", "--total-shards", "0"])
+        .output()
+        .expect("run shard-info");
+    assert_eq!(output.status.code(), Some(2), "total_shards=0 应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "error");
+    assert_eq!(json["error_code"], "invalid_total_shards");
+}
+
+#[test]
+fn test_shard_info_unknown_strategy_exit_2() {
+    let output = cli()
+        .args([
+            "shard-info",
+            "--strategy",
+            "quadratic",
+            "--total-shards",
+            "4",
+        ])
+        .output()
+        .expect("run shard-info");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "未知策略应退出 2（禁止静默回落）"
+    );
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "unknown_strategy");
+}
+
+// ============================================================================
+// audit-query（审计查询：DbAuditStorage + AuditQueryFilters）
+// ============================================================================
+
+#[cfg(feature = "sqlite")]
+#[test]
+fn test_audit_query_empty_exit_0() {
+    let (path, url) = temp_db_url("audit_empty");
+    let output = cli()
+        .args(["audit-query", "--database-url", &url])
+        .output()
+        .expect("run audit-query");
+    assert_eq!(output.status.code(), Some(0), "空审计集应退出 0");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["count"], 0);
+    assert_eq!(json["events"].as_array().unwrap().len(), 0);
+    let _ = std::fs::remove_file(&path);
+}
+
+/// 借 dbnexus 库 API 直写两条审计事件（CLI 只读；写入属库侧行为）
+#[cfg(feature = "sqlite")]
+fn seed_audit_events(url: &str, user_a: &str, user_b: &str) {
+    use dbnexus::{AuditEvent, AuditOperation, AuditSeverity, AuditStatus, AuditStorage};
+    use std::sync::Arc;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let pool = Arc::new(dbnexus::DbPool::new(url).await.expect("seed pool"));
+        let storage = dbnexus::DbAuditStorage::new(Arc::clone(&pool));
+        storage.init().await.expect("init audit table");
+
+        for (uid, op, sev, status) in [
+            (
+                user_a,
+                AuditOperation::Create,
+                AuditSeverity::Info,
+                AuditStatus::Success,
+            ),
+            (
+                user_b,
+                AuditOperation::Delete,
+                AuditSeverity::High,
+                AuditStatus::Failure,
+            ),
+        ] {
+            let event = AuditEvent {
+                id: format!("evt-{uid}"),
+                timestamp: chrono::Utc::now(),
+                operation: op,
+                entity_type: "users".to_string(),
+                entity_id: "42".to_string(),
+                user_id: uid.to_string(),
+                user_role: "admin".to_string(),
+                client_ip: "127.0.0.1".to_string(),
+                severity: sev,
+                result: status,
+                error_message: None,
+                before_value: None,
+                after_value: None,
+                extra: None,
+                request_id: "req-r4".to_string(),
+                session_id: String::new(),
+                trace_context: None,
+            };
+            storage.store(&event).await.expect("store audit event");
+        }
+    });
+}
+
+#[cfg(feature = "sqlite")]
+#[test]
+fn test_audit_query_lists_seeded_events() {
+    let (path, url) = temp_db_url("audit_seeded");
+    seed_audit_events(&url, "alice", "bob");
+
+    let output = cli()
+        .args(["audit-query", "--database-url", &url])
+        .output()
+        .expect("run audit-query");
+    assert_eq!(output.status.code(), Some(0));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["count"], 2);
+
+    // user 过滤：只返回 alice 的事件
+    let filtered = cli()
+        .args(["audit-query", "--database-url", &url, "--user", "alice"])
+        .output()
+        .expect("run audit-query --user");
+    assert_eq!(filtered.status.code(), Some(0));
+    let fjson = parse_json_line(&String::from_utf8_lossy(&filtered.stdout));
+    assert_eq!(fjson["count"], 1);
+    assert_eq!(fjson["events"][0]["user_id"], "alice");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn test_audit_query_invalid_operation_exit_2() {
+    let output = cli()
+        .args([
+            "audit-query",
+            "--database-url",
+            "sqlite::memory:",
+            "--operation",
+            "frobnicate",
+        ])
+        .output()
+        .expect("run audit-query");
+    assert_eq!(output.status.code(), Some(2), "非法操作枚举应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "invalid_operation");
+}
+
+#[test]
+fn test_audit_query_invalid_since_exit_2() {
+    let output = cli()
+        .args([
+            "audit-query",
+            "--database-url",
+            "sqlite::memory:",
+            "--since",
+            "not-a-timestamp",
+        ])
+        .output()
+        .expect("run audit-query");
+    assert_eq!(output.status.code(), Some(2), "非法时间格式应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "invalid_since");
+}
+
+// ============================================================================
+// permission-check（权限校验：YamlPermissionProvider + PDP，allow/deny 分流）
+// ============================================================================
+
+/// 权限配置文件（YAML 为 JSON 超集，两种写法均可被 provider 解析）
+#[cfg(feature = "sqlite")]
+fn write_permissions_file(tag: &str, body: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_r4_permissions_{}_{}.json",
+        tag,
+        std::process::id()
+    ));
+    std::fs::write(&path, body).unwrap();
+    path
+}
+
+#[test]
+fn test_permission_check_allow_exit_0() {
+    let perms = write_permissions_file(
+        "allow",
+        r#"{"roles": {"ops": [{"name": "ops-select", "subject": "ops", "resource": "users", "allow": ["select", "insert"], "deny": []}]}}"#,
+    );
+    let output = cli()
+        .args([
+            "permission-check",
+            "--role",
+            "ops",
+            "--table",
+            "users",
+            "--action",
+            "select",
+            "--permissions",
+            perms.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run permission-check");
+    assert_eq!(output.status.code(), Some(0), "allow 决策应退出 0");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["decision"], "allow");
+    std::fs::remove_file(&perms).unwrap();
+}
+
+#[test]
+fn test_permission_check_deny_exit_1() {
+    // guest 无任何规则 → default_decision(Deny) fail-closed → 退出 1
+    let perms = write_permissions_file(
+        "deny",
+        r#"{"roles": {"ops": [{"name": "ops-select", "subject": "ops", "resource": "users", "allow": ["select"], "deny": []}]}}"#,
+    );
+    let output = cli()
+        .args([
+            "permission-check",
+            "--role",
+            "guest",
+            "--table",
+            "users",
+            "--action",
+            "delete",
+            "--permissions",
+            perms.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run permission-check");
+    assert_eq!(output.status.code(), Some(1), "deny 决策应退出 1");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["decision"], "deny");
+    std::fs::remove_file(&perms).unwrap();
+}
+
+#[test]
+fn test_permission_check_missing_file_exit_2() {
+    let output = cli()
+        .args([
+            "permission-check",
+            "--role",
+            "ops",
+            "--table",
+            "users",
+            "--action",
+            "select",
+            "--permissions",
+            "/nonexistent_dir_r4/permissions.json",
+        ])
+        .output()
+        .expect("run permission-check");
+    assert_eq!(output.status.code(), Some(2), "权限文件缺失应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "permissions_file_unavailable");
+}
+
+#[test]
+fn test_permission_check_invalid_action_exit_2() {
+    let perms = write_permissions_file("act", r#"{"roles": {}}"#);
+    let output = cli()
+        .args([
+            "permission-check",
+            "--role",
+            "ops",
+            "--table",
+            "users",
+            "--action",
+            "drop table users",
+            "--permissions",
+            perms.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run permission-check");
+    assert_eq!(output.status.code(), Some(2), "非法 action 应退出 2");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "invalid_action");
+    std::fs::remove_file(&perms).unwrap();
+}

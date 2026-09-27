@@ -29,6 +29,8 @@
 
 ### Added
 
+- **运维 CLI 剩余命令（R4）**：`dbnexus-cli` 新增 `pool-status`（`health_snapshot` 结构化池快照，unhealthy 分流退出码 1）/`audit-query`（`DbAuditStorage` 过滤查询，user/entity/operation/severity/status/时间区间参数，幂等建表空集即成功）/`shard-info`（策略与分片清单输出，`--route-key` 演示哈希路由，未知策略显性拒绝禁止静默回落）/`permission-check`（权限配置文件 + PDP 决策，allow→0 / deny→1 / 配置错误→2），沿用 JSON 输出 + 退出码 0/1/2 契约；`--database-url` 改为按需收敛（shard-info/permission-check 免库）
+
 - **inklog 结构化日志集成（Logs 支柱从零到一）**：新增 `inklog` feature（`inklog 0.3.0-rc.5`，`default-features = false`），`dbnexus::integrations::inklog::init_inklog_logger()` 将 inklog `LoggerManager` 安装为全局 `log` 后端，返回 `InklogInit::Installed/Reused` 显性区分「本次配置生效」与「复用既有后端」；池获取超时、权限拒绝（含 SQL 解析失败 fail-closed 拒绝，execute_raw/query_rows/duckdb_security_gate 三分支全覆盖，用户可控字段经控制字符消毒防日志注入）、熔断器状态转换（打开/重开/半开/恢复）、慢查询四类接线点经 `log` 门面发记录，启用后路由到 inklog 结构化管道（log 门面记录达 console/file sinks，database sink 仅原生 tracing 路径可达；manager 须全程保持存活，Drop 后记录被静默丢弃）；`log 0.4` 门面为非可选依赖，未安装 logger 时为 no-op，默认构建行为不变
 - **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容（含畸形标识符日志注入消毒用例）；`integrations::inklog` 内联测试覆盖 init 成功/级别安装/路由不 panic/Installed-Reused 标记语义
 
