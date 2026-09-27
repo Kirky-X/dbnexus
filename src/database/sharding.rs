@@ -318,6 +318,26 @@ pub fn create_strategy(name: &str) -> Box<dyn ShardingStrategy> {
     }
 }
 
+/// 策略名是否为已知策略（含别名）
+///
+/// [`create_strategy`] 对未知名静默回落 `YearlyStrategy`（向后兼容行为）；
+/// 需要显性拒绝未知名的调用方（如运维 CLI）以本函数为单一事实源做前置
+/// 校验，避免各自复制别名表后与库侧漂移。
+pub fn is_known_strategy(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "yearly"
+            | "year"
+            | "monthly"
+            | "month"
+            | "daily"
+            | "day"
+            | "hash"
+            | "consistent-hash"
+            | "consistent"
+    )
+}
+
 /// 分片信息
 #[derive(Debug, Clone)]
 pub struct ShardInfo {

@@ -71,6 +71,7 @@ pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
 #[cfg(feature = "sharding")]
 pub use sharding::{
     ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy,
+    is_known_strategy,
 };
 
 // Scatter-Gather re-exports

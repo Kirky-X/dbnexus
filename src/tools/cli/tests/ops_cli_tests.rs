@@ -6,7 +6,6 @@
 //! （0 成功 / 1 运行时失败 / 2 用法错误）。
 
 use assert_cmd::Command;
-#[cfg(feature = "sqlite")]
 use std::path::PathBuf;
 
 /// 定位 dbnexus-cli 二进制
@@ -259,7 +258,7 @@ fn test_user_invalid_args_exit_2() {
 // pool-status（池状态：health_snapshot JSON 输出）
 // ============================================================================
 
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "sqlite", feature = "health-check"))]
 #[test]
 fn test_pool_status_healthy_exit_0() {
     let (path, url) = temp_db_url("pool_status_ok");
@@ -279,7 +278,7 @@ fn test_pool_status_healthy_exit_0() {
     let _ = std::fs::remove_file(&path);
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "sqlite", feature = "health-check"))]
 #[test]
 fn test_pool_status_unreachable_exit_1() {
     let output = cli()
@@ -295,6 +294,7 @@ fn test_pool_status_unreachable_exit_1() {
     assert_eq!(json["status"], "unhealthy");
 }
 
+#[cfg(feature = "health-check")]
 #[test]
 fn test_pool_status_invalid_url_exit_2() {
     let output = cli()
@@ -395,7 +395,7 @@ fn test_shard_info_unknown_strategy_exit_2() {
 // audit-query（审计查询：DbAuditStorage + AuditQueryFilters）
 // ============================================================================
 
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "audit", feature = "sqlite"))]
 #[test]
 fn test_audit_query_empty_exit_0() {
     let (path, url) = temp_db_url("audit_empty");
@@ -412,7 +412,7 @@ fn test_audit_query_empty_exit_0() {
 }
 
 /// 借 dbnexus 库 API 直写两条审计事件（CLI 只读；写入属库侧行为）
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "audit", feature = "sqlite"))]
 fn seed_audit_events(url: &str, user_a: &str, user_b: &str) {
     use dbnexus::{AuditEvent, AuditOperation, AuditSeverity, AuditStatus, AuditStorage};
     use std::sync::Arc;
@@ -461,7 +461,7 @@ fn seed_audit_events(url: &str, user_a: &str, user_b: &str) {
     });
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(all(feature = "audit", feature = "sqlite"))]
 #[test]
 fn test_audit_query_lists_seeded_events() {
     let (path, url) = temp_db_url("audit_seeded");
@@ -489,6 +489,49 @@ fn test_audit_query_lists_seeded_events() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[cfg(feature = "audit")]
+/// seed 多条事件后 --limit 截断并如实报告 truncated
+#[cfg(all(feature = "audit", feature = "sqlite"))]
+#[test]
+fn test_audit_query_limit_truncates() {
+    let (path, url) = temp_db_url("audit_limit");
+    seed_audit_events(&url, "alice", "bob");
+
+    let output = cli()
+        .args(["audit-query", "--database-url", &url, "--limit", "1"])
+        .output()
+        .expect("run audit-query --limit");
+    assert_eq!(output.status.code(), Some(0));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["count"], 1, "limit=1 应只返回 1 条");
+    assert_eq!(json["truncated"], true, "超出上限应报告截断");
+    let _ = std::fs::remove_file(&path);
+}
+
+/// other:<text> 约定映射自由文本操作变体 Other(String)
+#[cfg(all(feature = "audit", feature = "sqlite"))]
+#[test]
+fn test_audit_query_other_operation_filter() {
+    let (path, url) = temp_db_url("audit_other");
+    seed_audit_events(&url, "alice", "bob");
+
+    let output = cli()
+        .args([
+            "audit-query",
+            "--database-url",
+            &url,
+            "--operation",
+            "other:rebalance",
+        ])
+        .output()
+        .expect("run audit-query other:");
+    assert_eq!(output.status.code(), Some(0), "other: 前缀应可解析");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["count"], 0, "未写入 Other 事件时应为空集");
+    let _ = std::fs::remove_file(&path);
+}
+
 #[test]
 fn test_audit_query_invalid_operation_exit_2() {
     let output = cli()
@@ -506,6 +549,7 @@ fn test_audit_query_invalid_operation_exit_2() {
     assert_eq!(json["error_code"], "invalid_operation");
 }
 
+#[cfg(feature = "audit")]
 #[test]
 fn test_audit_query_invalid_since_exit_2() {
     let output = cli()
@@ -528,7 +572,6 @@ fn test_audit_query_invalid_since_exit_2() {
 // ============================================================================
 
 /// 权限配置文件（YAML 为 JSON 超集，两种写法均可被 provider 解析）
-#[cfg(feature = "sqlite")]
 fn write_permissions_file(tag: &str, body: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "dbnexus_r4_permissions_{}_{}.json",
@@ -563,6 +606,7 @@ fn test_permission_check_allow_exit_0() {
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
     assert_eq!(json["decision"], "allow");
+    assert_eq!(json["raw_decision"], "allow");
     std::fs::remove_file(&perms).unwrap();
 }
 
@@ -590,7 +634,11 @@ fn test_permission_check_deny_exit_1() {
     assert_eq!(output.status.code(), Some(1), "deny 决策应退出 1");
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
-    assert_eq!(json["decision"], "deny");
+    assert_eq!(json["decision"], "deny", "fail-closed 退出语义不变");
+    assert_eq!(
+        json["raw_decision"], "not_applicable",
+        "无匹配策略应可辨（多为拼写/subject 配错）"
+    );
     std::fs::remove_file(&perms).unwrap();
 }
 

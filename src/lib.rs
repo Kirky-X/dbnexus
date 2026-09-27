@@ -150,6 +150,7 @@ pub use crate::database::{DbIsolationLevel, Session};
 #[cfg(feature = "sharding")]
 pub use crate::database::{
     ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy,
+    is_known_strategy,
 };
 #[cfg(feature = "duckdb")]
 pub use crate::database::{DuckDbConnection, DuckDbExecResult, DuckDbRow};

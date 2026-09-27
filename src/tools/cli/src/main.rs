@@ -5,12 +5,15 @@
 //! 提供数据库迁移的命令行界面
 
 use clap::{Command, CommandFactory, FromArgMatches, Parser, Subcommand};
+#[cfg(feature = "migration")]
 use dbnexus::MigrationExecutor;
 use dbnexus::foundation::DatabaseType as MigrationDatabaseType;
 use dbnexus::i18n;
 use dbnexus::{DbError, DbPool, DbResult};
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(feature = "migration")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// CLI 配置（about/参数 help 在运行期经 i18n 本地化，见 `build_cli()`）
@@ -41,6 +44,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// 创建新的迁移文件
+    #[cfg(feature = "migration")]
     Create {
         /// 迁移描述
         description: String,
@@ -51,6 +55,7 @@ enum Commands {
     },
 
     /// 应用迁移
+    #[cfg(feature = "migration")]
     Up {
         /// 目标版本号（可选，默认为所有待应用迁移）
         #[arg(long)]
@@ -58,6 +63,7 @@ enum Commands {
     },
 
     /// 回滚迁移
+    #[cfg(feature = "migration")]
     Down {
         /// 目标版本号（可选，默认为回滚上一版本）
         #[arg(long)]
@@ -69,12 +75,14 @@ enum Commands {
     },
 
     /// 查看迁移状态
+    #[cfg(feature = "migration")]
     Status,
 
     /// 测试数据库连接
     TestConnection,
 
     /// 生成迁移文件（基于 schema 差异）
+    #[cfg(feature = "migration")]
     Generate {
         /// 源 Schema 文件（JSON 格式）
         #[arg(long)]
@@ -94,9 +102,11 @@ enum Commands {
     },
 
     /// 列出所有迁移文件
+    #[cfg(feature = "migration")]
     List,
 
     /// 应用迁移目录中的所有待应用迁移（机器可读输出，退出码 0/1/2）
+    #[cfg(feature = "migration")]
     Migrate {
         /// 目标版本号（可选，默认为所有待应用迁移）
         #[arg(long)]
@@ -113,9 +123,11 @@ enum Commands {
     },
 
     /// 连接池状态快照（health_snapshot 结构，JSON 输出）
+    #[cfg(feature = "migration")]
     PoolStatus,
 
     /// 审计事件查询（DbAuditStorage 过滤查询，JSON 输出，退出码 0/1/2）
+    #[cfg(feature = "migration")]
     AuditQuery {
         /// 按用户 ID 过滤
         #[arg(long)]
@@ -125,7 +137,7 @@ enum Commands {
         #[arg(long)]
         entity: Option<String>,
 
-        /// 按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change）
+        /// 按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change/other:<text>）
         #[arg(long)]
         operation: Option<String>,
 
@@ -144,9 +156,14 @@ enum Commands {
         /// 截止时间（RFC 3339）
         #[arg(long)]
         until: Option<String>,
+
+        /// 返回条数上限（默认 500；0 表示不限制）
+        #[arg(long, default_value_t = 500)]
+        limit: usize,
     },
 
     /// 分片信息（策略/分片清单/路由演示，JSON 输出）
+    #[cfg(feature = "migration")]
     ShardInfo {
         /// 分片策略（yearly/monthly/daily/hash/consistent-hash）
         #[arg(long)]
@@ -170,6 +187,7 @@ enum Commands {
     },
 
     /// 权限校验（权限配置文件 + PDP 决策，JSON 输出）
+    #[cfg(feature = "migration")]
     PermissionCheck {
         /// 被校验的角色名
         #[arg(long)]
@@ -284,10 +302,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // global 参数解析（clap 不允许 required global，此处统一收敛）；
     // shard-info（纯路由计算）与 permission-check（读配置文件 + PDP）不依赖数据库
+    // 免库命令集合：仅在相应命令存在的 feature 组合下参与判定
+    #[cfg(any(feature = "sharding", feature = "permission-engine"))]
     let needs_db = !matches!(
         cli.command,
         Commands::ShardInfo { .. } | Commands::PermissionCheck { .. }
     );
+    #[cfg(not(any(feature = "sharding", feature = "permission-engine")))]
+    let needs_db = true;
     let database_url: String = if needs_db {
         cli.database_url.unwrap_or_else(|| {
             eprintln!("{}", i18n::t_simple("cli-database-url-required"));
@@ -313,24 +335,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     match &cli.command {
+        #[cfg(feature = "migration")]
         Commands::Create {
             description,
             directory,
         } => {
             create_migration(description, directory).await?;
         }
+        #[cfg(feature = "migration")]
         Commands::Up { version } => {
             run_migrations_up(&database_url, &cli.migrations_dir, *version).await?;
         }
+        #[cfg(feature = "migration")]
         Commands::Down { version, all } => {
             run_migrations_down(&database_url, &cli.migrations_dir, *version, *all).await?;
         }
+        #[cfg(feature = "migration")]
         Commands::Status => {
             show_status(&database_url, &cli.migrations_dir).await?;
         }
         Commands::TestConnection => {
             test_connection(&database_url).await?;
         }
+        #[cfg(feature = "migration")]
         Commands::Generate {
             from_schema,
             to_schema,
@@ -339,10 +366,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             generate_migration(from_schema, to_schema, output, description).await?;
         }
+        #[cfg(feature = "migration")]
         Commands::List => {
             list_migrations(&database_url, &cli.migrations_dir).await?;
         }
         // 运维子命令：JSON 输出 + 退出码契约（0 成功 / 1 运行时失败 / 2 用法错误）
+        #[cfg(feature = "migration")]
         Commands::Migrate { version } => {
             let code = run_migrate_json(&database_url, &cli.migrations_dir, *version).await;
             std::process::exit(code as i32);
@@ -355,10 +384,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let code = run_user_command(&database_url, action).await;
             std::process::exit(code as i32);
         }
+        #[cfg(feature = "health-check")]
         Commands::PoolStatus => {
             let code = run_pool_status_json(&database_url).await;
             std::process::exit(code as i32);
         }
+        #[cfg(feature = "audit")]
         Commands::AuditQuery {
             user,
             entity,
@@ -367,6 +398,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             status,
             since,
             until,
+            limit,
         } => {
             let filters = AuditFilterArgs {
                 user: user.clone(),
@@ -376,10 +408,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 status: status.clone(),
                 since: since.clone(),
                 until: until.clone(),
+                limit: *limit,
             };
             let code = run_audit_query_json(&database_url, &filters).await;
             std::process::exit(code as i32);
         }
+        #[cfg(feature = "sharding")]
         Commands::ShardInfo {
             strategy,
             total_shards,
@@ -390,6 +424,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let code = run_shard_info_json(strategy, *total_shards, prefix, template, route_key);
             std::process::exit(code as i32);
         }
+        #[cfg(feature = "permission-engine")]
         Commands::PermissionCheck {
             role,
             table,
@@ -405,6 +440,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// 创建新的迁移文件
+#[cfg(feature = "migration")]
 async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
     // 创建迁移目录（如果不存在）
     fs::create_dir_all(directory).map_err(|e| {
@@ -480,6 +516,7 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
 }
 
 /// 显示迁移状态
+#[cfg(feature = "migration")]
 async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║  {:58}  ║", i18n::t_simple("cli-status-title"));
@@ -748,6 +785,7 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
 }
 
 /// 运行向上的迁移（应用迁移）
+#[cfg(feature = "migration")]
 async fn run_migrations_up(
     database_url: &str,
     migrations_dir: &Path,
@@ -875,6 +913,7 @@ async fn run_migrations_up(
 }
 
 /// 运行向下的迁移（回滚迁移）
+#[cfg(feature = "migration")]
 async fn run_migrations_down(
     database_url: &str,
     migrations_dir: &Path,
@@ -1029,6 +1068,7 @@ async fn run_migrations_down(
 /// 在扫描结果中按版本号查找迁移文件
 ///
 /// 回滚需要迁移文件内容以提取 DOWN SQL，找不到对应文件时返回 `None`
+#[cfg(feature = "migration")]
 fn find_migration_file(
     files: &[dbnexus::MigrationFile],
     version: u32,
@@ -1042,6 +1082,7 @@ fn find_migration_file(
 /// 成功后再删除 `dbnexus_migrations` 历史行：
 /// - 无 DOWN 段时返回"该迁移无可回滚的 DOWN 部分"错误；
 /// - DOWN 执行失败时不删除历史记录并返回错误。
+#[cfg(feature = "migration")]
 async fn rollback_migration(
     executor: &mut MigrationExecutor,
     version: u32,
@@ -1051,6 +1092,7 @@ async fn rollback_migration(
 }
 
 /// 生成迁移文件
+#[cfg(feature = "migration")]
 async fn generate_migration(
     from_schema: &Option<PathBuf>,
     to_schema: &Option<PathBuf>,
@@ -1175,12 +1217,14 @@ async fn generate_migration(
 }
 
 /// Schema 差异 SQL
+#[cfg(feature = "migration")]
 struct DiffSql {
     up: String,
     down: String,
 }
 
 /// 生成 Schema 差异 SQL（简化版本）
+#[cfg(feature = "migration")]
 fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<DiffSql, DbError> {
     // 这里是一个简化实现
     // 实际实现需要解析 schema 文件并计算差异
@@ -1191,6 +1235,7 @@ fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<Di
 }
 
 /// 列出所有迁移文件
+#[cfg(feature = "migration")]
 async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<()> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║  {:58}  ║", i18n::t_simple("cli-list-title"));
@@ -1304,6 +1349,7 @@ fn to_hex(bytes: &[u8]) -> String {
 /// 应用迁移目录中的所有待应用迁移（JSON 输出）
 ///
 /// 退出码：0 全部应用成功（含无待应用）/ 1 迁移执行失败 / 2 连接或 URL 配置错误
+#[cfg(feature = "migration")]
 async fn run_migrate_json(
     database_url: &str,
     migrations_dir: &Path,
@@ -1621,6 +1667,7 @@ VALUES ('{username}', '{hash}', '{role}', '{created_at}')"
 /// 连接池状态快照（JSON 输出 health_snapshot 结构）
 ///
 /// 退出码：0 健康/降级 / 1 不健康（快照 unhealthy 或连接失败）/ 2 URL 用法错误
+#[cfg(feature = "health-check")]
 async fn run_pool_status_json(database_url: &str) -> ExitCode {
     if detect_database_type(database_url).is_err() {
         print_json(&serde_json::json!({
@@ -1637,7 +1684,7 @@ async fn run_pool_status_json(database_url: &str) -> ExitCode {
             print_json(&serde_json::json!({
                 "status": "unhealthy",
                 "checks": { "connect": "fail" },
-                "error": e.to_string(),
+                "error": mask_url_in_text(&e.to_string(), database_url),
                 "url": mask_database_url(database_url),
             }));
             return ExitCode::RuntimeFailure;
@@ -1668,6 +1715,7 @@ async fn run_pool_status_json(database_url: &str) -> ExitCode {
 }
 
 /// audit-query 的过滤参数集合
+#[cfg(feature = "audit")]
 struct AuditFilterArgs {
     user: Option<String>,
     entity: Option<String>,
@@ -1676,11 +1724,18 @@ struct AuditFilterArgs {
     status: Option<String>,
     since: Option<String>,
     until: Option<String>,
+    /// 0 = 不限制，其余为条数上限
+    limit: usize,
 }
 
 /// 审计操作枚举名 → 枚举（serde 序列化名，大小写不敏感）
+#[cfg(feature = "audit")]
 fn parse_audit_operation(name: &str) -> Option<dbnexus::AuditOperation> {
     use dbnexus::AuditOperation;
+    // other:<text> 映射自由文本变体 Other(String)，覆盖非预置操作类型的事件
+    if let Some(text) = name.strip_prefix("other:") {
+        return Some(AuditOperation::Other(text.to_string()));
+    }
     match name.to_lowercase().as_str() {
         "create" => Some(AuditOperation::Create),
         "read" => Some(AuditOperation::Read),
@@ -1695,6 +1750,7 @@ fn parse_audit_operation(name: &str) -> Option<dbnexus::AuditOperation> {
 }
 
 /// 审计严重级别枚举名 → 枚举
+#[cfg(feature = "audit")]
 fn parse_audit_severity(name: &str) -> Option<dbnexus::AuditSeverity> {
     use dbnexus::AuditSeverity;
     match name.to_lowercase().as_str() {
@@ -1708,6 +1764,7 @@ fn parse_audit_severity(name: &str) -> Option<dbnexus::AuditSeverity> {
 }
 
 /// 审计状态枚举名 → 枚举
+#[cfg(feature = "audit")]
 fn parse_audit_status(name: &str) -> Option<dbnexus::AuditStatus> {
     use dbnexus::AuditStatus;
     match name.to_lowercase().as_str() {
@@ -1720,6 +1777,12 @@ fn parse_audit_status(name: &str) -> Option<dbnexus::AuditStatus> {
 }
 
 /// 参数校验失败（用法错误）的统一 JSON 输出
+#[cfg(any(
+    feature = "health-check",
+    feature = "audit",
+    feature = "sharding",
+    feature = "permission-engine"
+))]
 fn print_usage_error(error_code: &str, error: &str) {
     print_json(&serde_json::json!({
         "status": "error", "error_code": error_code, "error": error
@@ -1729,6 +1792,7 @@ fn print_usage_error(error_code: &str, error: &str) {
 /// 审计事件查询（JSON 输出）
 ///
 /// 退出码：0 查询成功（含空集）/ 1 查询执行失败 / 2 参数错误
+#[cfg(feature = "audit")]
 async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> ExitCode {
     use dbnexus::{AuditQueryFilters, AuditStorage};
 
@@ -1822,6 +1886,8 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         return ExitCode::RuntimeFailure;
     }
 
+    // limit+1 探测截断：多取一条即可判定是否仍有匹配（0 = unlimited 不探测）
+    let probe_limit = (args.limit != 0).then_some(args.limit + 1);
     let filters = AuditQueryFilters {
         user_id: args.user.clone(),
         entity_type: args.entity.clone(),
@@ -1830,11 +1896,13 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         end_time: until,
         severity,
         result: status,
+        limit: probe_limit,
     };
 
     match storage.query(&filters).await {
         Ok(events) => {
-            let mut rows = Vec::with_capacity(events.len());
+            let truncated = probe_limit.is_some() && events.len() > args.limit;
+            let mut rows = Vec::with_capacity(events.len().min(args.limit));
             for event in &events {
                 match serde_json::to_value(event) {
                     Ok(value) => rows.push(value),
@@ -1847,9 +1915,16 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
                     }
                 }
             }
+            if truncated {
+                rows.truncate(args.limit);
+            }
             let count = rows.len();
             print_json(&serde_json::json!({
-                "status": "ok", "count": count, "events": rows
+                "status": "ok",
+                "count": count,
+                "truncated": truncated,
+                "limit": args.limit,
+                "events": rows,
             }));
             ExitCode::Ok
         }
@@ -1862,26 +1937,10 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
     }
 }
 
-/// 分片策略白名单（create_strategy 对未知名静默回落 YearlyStrategy，
-/// 运维 CLI 必须显性拒绝拼写错误，禁止静默回落）
-fn is_known_shard_strategy(name: &str) -> bool {
-    matches!(
-        name.to_lowercase().as_str(),
-        "yearly"
-            | "year"
-            | "monthly"
-            | "month"
-            | "daily"
-            | "day"
-            | "hash"
-            | "consistent-hash"
-            | "consistent"
-    )
-}
-
 /// 分片信息（JSON 输出）
 ///
 /// 退出码：0 成功 / 2 参数错误（未知策略、total_shards=0、空 route key）
+#[cfg(feature = "sharding")]
 fn run_shard_info_json(
     strategy: &str,
     total_shards: u32,
@@ -1889,11 +1948,17 @@ fn run_shard_info_json(
     template: &str,
     route_key: &Option<String>,
 ) -> ExitCode {
-    if total_shards == 0 {
-        print_usage_error("invalid_total_shards", "total_shards must be at least 1");
+    // 上界 fail-fast：generate_all_connections 会按 total_shards 全量分配，
+    // 误传超大值（如 3.6e9）将导致进程挂起/OOM；运维真实分片规模远低于此
+    if total_shards == 0 || total_shards > 10_000 {
+        print_usage_error(
+            "invalid_total_shards",
+            "total_shards must be between 1 and 10000",
+        );
         return ExitCode::UsageError;
     }
-    if !is_known_shard_strategy(strategy) {
+    // 单一事实源：库侧 is_known_strategy（create_strategy 对未知名静默回落）
+    if !dbnexus::is_known_strategy(strategy) {
         print_usage_error(
             "unknown_strategy",
             "strategy must be one of yearly/monthly/daily/hash/consistent-hash",
@@ -1945,6 +2010,7 @@ fn run_shard_info_json(
 
 /// 权限校验白名单（PDP check 对未知 action fail-closed 拒绝，
 /// CLI 层先行拦截以便归为用法错误而非 deny 决策）
+#[cfg(feature = "permission-engine")]
 fn parse_permission_action(action: &str) -> Option<&'static str> {
     match action.to_lowercase().as_str() {
         "select" => Some("select"),
@@ -1958,6 +2024,7 @@ fn parse_permission_action(action: &str) -> Option<&'static str> {
 /// 权限校验（JSON 输出）
 ///
 /// 退出码：0 allow / 1 deny 或 NotApplicable（fail-closed）/ 2 参数或配置错误
+#[cfg(feature = "permission-engine")]
 async fn run_permission_check_json(
     role: &str,
     table: &str,
@@ -1996,8 +2063,8 @@ async fn run_permission_check_json(
                 return ExitCode::UsageError;
             }
         };
-    // provider 首次 check 时惰性加载（60s 刷新阈值下新建实例永不触发），
-    // 显式 refresh 确保规则在决策前装载，加载失败即刻暴露为配置错误
+    // 显式 refresh 让配置加载失败在决策前即刻暴露为退出码 2，
+    // 而非依赖 provider 内部的 Error 决策路径
     if let Err(e) = provider.refresh().await {
         print_usage_error(
             "permissions_file_invalid",
@@ -2006,16 +2073,21 @@ async fn run_permission_check_json(
         return ExitCode::UsageError;
     }
 
-    // NotApplicable 归为 Deny（fail-closed：无适用策略即拒绝）
+    // default_decision 保持 NotApplicable 透传：显式 Deny（策略拒绝）与
+    // NotApplicable（无匹配策略，多为角色/表名拼写或规则 subject 配错）
+    // 根因不同，诊断输出必须可辨；fail-closed 由下方退出码统一保证
     let pdp = dbnexus::PolicyDecisionPoint::builder()
         .provider(std::sync::Arc::new(provider))
-        .default_decision(dbnexus::PermissionDecision::Deny)
         .build();
 
     let decision = pdp.check(role, table, action).await;
-    let decision_name = match &decision {
-        dbnexus::PermissionDecision::Allow => "allow",
-        dbnexus::PermissionDecision::Deny | dbnexus::PermissionDecision::NotApplicable => "deny",
+    let (decision_name, raw_decision_name, code) = match &decision {
+        dbnexus::PermissionDecision::Allow => ("allow", "allow", ExitCode::Ok),
+        dbnexus::PermissionDecision::Deny => ("deny", "deny", ExitCode::RuntimeFailure),
+        // fail-closed：无适用策略按拒绝处理，但原始决策保留供诊断
+        dbnexus::PermissionDecision::NotApplicable => {
+            ("deny", "not_applicable", ExitCode::RuntimeFailure)
+        }
         dbnexus::PermissionDecision::Error(_) => {
             print_usage_error(
                 "permissions_file_invalid",
@@ -2031,12 +2103,9 @@ async fn run_permission_check_json(
         "table": table,
         "action": action,
         "decision": decision_name,
+        "raw_decision": raw_decision_name,
     }));
-    if decision_name == "allow" {
-        ExitCode::Ok
-    } else {
-        ExitCode::RuntimeFailure
-    }
+    code
 }
 
 /// 连接失败按 URL 合法性分类退出码：协议不支持 → 用法错误，其余 → 运行时失败
@@ -2081,15 +2150,54 @@ fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbE
 }
 
 /// 隐藏数据库 URL 中的敏感信息
+///
+/// authority 中的 password 段与 query 参数中的 password/token/secret 类
+/// 键值统一脱敏；无法解析时返回固定占位符而非原文（原文可能携带凭据）
 fn mask_database_url(url: &str) -> String {
-    url::Url::parse(url)
-        .map(|mut url| {
-            if let Some(password) = url.password() {
-                url.set_password(Some(&"*".repeat(password.len()))).ok();
-            }
-            url.to_string()
-        })
-        .unwrap_or_else(|_| url.to_string())
+    let mut parsed = match url::Url::parse(url) {
+        Ok(parsed) => parsed,
+        Err(_) => return "<unparsable-url>".to_string(),
+    };
+    if let Some(password) = parsed.password() {
+        parsed.set_password(Some(&"*".repeat(password.len()))).ok();
+    }
+    let has_sensitive_query = parsed
+        .query_pairs()
+        .any(|(k, _)| is_sensitive_query_key(&k));
+    if has_sensitive_query {
+        let pairs: Vec<String> = parsed
+            .query_pairs()
+            .map(|(k, v)| {
+                if is_sensitive_query_key(&k) {
+                    format!("{k}=***")
+                } else {
+                    format!("{k}={v}")
+                }
+            })
+            .collect();
+        let query = pairs.join("&");
+        parsed.set_query(Some(&query));
+    }
+    parsed.to_string()
+}
+
+fn is_sensitive_query_key(key: &str) -> bool {
+    let key = key.to_lowercase();
+    key.contains("password") || key.contains("token") || key.contains("secret")
+}
+
+/// 将错误文本中内嵌的完整连接串替换为脱敏形式
+///
+/// 连接错误的 Display 文本可能内嵌原始 URL；仅对文本整体调
+/// mask_database_url 无法覆盖复合文本，故按调用方已知的原始 URL
+/// 做精确子串替换
+#[cfg(any(feature = "health-check", feature = "audit"))]
+fn mask_url_in_text(text: &str, url: &str) -> String {
+    let masked = mask_database_url(url);
+    if masked == url {
+        return text.to_string();
+    }
+    text.replace(url, &masked)
 }
 
 #[cfg(test)]
@@ -2098,6 +2206,7 @@ mod tests {
 
     // ===== DOWN 提取（rollback 前置校验依赖的逻辑） =====
 
+    #[cfg(feature = "migration")]
     #[test]
     fn test_extract_down_sql_present() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
@@ -2105,6 +2214,7 @@ mod tests {
         assert_eq!(down, "DROP TABLE users;");
     }
 
+    #[cfg(feature = "migration")]
     #[test]
     fn test_extract_down_sql_case_insensitive() {
         let content = "-- up:\nALTER TABLE users ADD COLUMN c TEXT;\n-- down:\nALTER TABLE users DROP COLUMN c;\n";
@@ -2113,6 +2223,7 @@ mod tests {
     }
 
     /// DOWN 缺失时的错误分支：extract 返回 None → rollback 报"无可回滚的 DOWN 部分"
+    #[cfg(feature = "migration")]
     #[test]
     fn test_extract_down_sql_missing_yields_no_rollback_error() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n";
@@ -2135,6 +2246,7 @@ mod tests {
 
     // ===== find_migration_file =====
 
+    #[cfg(feature = "migration")]
     #[test]
     fn test_find_migration_file_by_version() {
         let files = vec![

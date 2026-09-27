@@ -127,12 +127,18 @@ impl AuditStorage for DbAuditStorage {
             format!(" WHERE {}", conditions.join(" AND "))
         };
 
+        // LIMIT 值为 usize 内部数值（非用户字符串），格式化无注入面
+        let limit_clause = filters
+            .limit
+            .map(|n| format!(" LIMIT {n}"))
+            .unwrap_or_default();
+
         let rows = self
             .pool
             .query_rows(
                 &format!(
-                    "SELECT event FROM audit_events{} ORDER BY timestamp, id",
-                    where_clause
+                    "SELECT event FROM audit_events{} ORDER BY timestamp, id{}",
+                    where_clause, limit_clause
                 ),
                 "admin",
             )

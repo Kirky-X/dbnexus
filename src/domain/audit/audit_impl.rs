@@ -524,6 +524,10 @@ impl AuditStorage for MemoryAuditStorage {
             result.retain(|e| e.result == *result_status);
         }
 
+        if let Some(limit) = filters.limit {
+            result.truncate(limit);
+        }
+
         Ok(result)
     }
 

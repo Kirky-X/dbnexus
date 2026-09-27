@@ -233,6 +233,8 @@ pub struct AuditQueryFilters {
     pub severity: Option<AuditSeverity>,
     /// 结果
     pub result: Option<AuditStatus>,
+    /// 返回条数上限（None = 不限制）；匹配集可能很大，无界查询会全量物化
+    pub limit: Option<usize>,
 }
 
 /// 内存审计存储（默认实现）
@@ -553,6 +555,7 @@ mod tests {
             end_time: Some(now + chrono::Duration::minutes(1)),
             severity: Some(AuditSeverity::High),
             result: Some(AuditStatus::Failure),
+            ..Default::default()
         };
 
         let filtered = logger.query(&filters).await.unwrap();

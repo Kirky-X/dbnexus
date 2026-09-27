@@ -818,12 +818,22 @@ pub struct YamlPermissionProvider {
     role_mapping: RwLock<HashMap<String, Vec<String>>>,
 }
 
+/// 早于当前时间的 last_refresh 初值：惰性加载以 `age > 刷新阈值` 判定，
+/// 初值若为 `Instant::now()` 则新建实例的首次 check（age≈0）永不触发加载，
+/// 在阈值窗口内静默返回空规则（deny-everything）。Unix 纪元不可用（Instant
+/// 为单调钟），故从当前时刻回退一个远超阈值（1h）的偏移；极短 uptime 平台
+/// 回退不足时最多延迟一个阈值周期后自然加载。
+fn stale_last_refresh() -> Instant {
+    let now = Instant::now();
+    now.checked_sub(Duration::from_secs(3600)).unwrap_or(now)
+}
+
 impl Default for YamlPermissionProvider {
     fn default() -> Self {
         Self {
             config_path: String::new(),
             roles: RwLock::new(HashMap::new()),
-            last_refresh: RwLock::new(Instant::now()),
+            last_refresh: RwLock::new(stale_last_refresh()),
             name: "yaml".to_string(),
             role_mapping: RwLock::new(HashMap::new()),
         }
@@ -861,7 +871,7 @@ impl YamlPermissionProvider {
         Ok(Self {
             config_path: config_path.to_string(),
             roles: RwLock::new(HashMap::new()),
-            last_refresh: RwLock::new(Instant::now()),
+            last_refresh: RwLock::new(stale_last_refresh()),
             name: "yaml".to_string(),
             role_mapping: RwLock::new(HashMap::new()),
         })
@@ -1299,6 +1309,41 @@ impl Default for PolicyDecisionPointConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 回归：新建 YamlPermissionProvider 的首次 check 必须触发配置加载。
+    /// 修复前 last_refresh 初值为 Instant::now()，60s 惰性阈值下首次 check
+    /// 的 age≈0 永不加载，静默以空规则返回 NotApplicable（deny-everything
+    /// 无任何信号）。stale_last_refresh 初值使首查即加载。
+    #[tokio::test]
+    async fn yaml_provider_first_check_loads_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "dbnexus_perm_engine_{}_{}",
+            std::process::id(),
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("permissions.json");
+        std::fs::write(
+            &config_path,
+            r#"{"roles": {"ops": [{"name": "ops-read", "subject": "ops", "resource": "users", "allow": ["select"], "deny": []}]}}"#,
+        )
+        .unwrap();
+
+        let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+
+        assert!(
+            matches!(decision, PermissionDecision::Allow),
+            "first check must load config and allow, got: {decision:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[tokio::test]
     async fn test_yaml_permission_provider() {
