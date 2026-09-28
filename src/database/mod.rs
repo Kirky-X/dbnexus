@@ -26,7 +26,8 @@ pub mod scatter;
 #[cfg(feature = "config-confers")]
 pub mod config_confers;
 
-/// COPY 批量写入（copy feature；协议传输路径在 postgres 驱动组下启用）
+/// 批量写入：COPY 封装 + 多值 INSERT 构建（copy feature；COPY 协议传输
+/// 路径在 postgres 驱动组下启用，DuckDB 文件 COPY 传输在 duckdb 驱动组下启用）
 #[cfg(feature = "copy")]
 pub mod copy;
 
@@ -67,7 +68,7 @@ pub use pool::{
 };
 pub use pool::{ConnectionTrait, TransactionTrait};
 #[cfg(feature = "duckdb")]
-pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
+pub use pool::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue, json_to_duck_value};
 #[cfg(feature = "sharding")]
 pub use sharding::{
     ConsistentHashStrategy, ShardConfig, ShardRouter, ShardingStrategy, create_strategy,
@@ -90,9 +91,12 @@ pub use saga::{
     SagaOrchestrator, SagaRecovery, SagaStatus, SagaStep, SagaStepLog,
 };
 
-// COPY 批量写入 re-exports
+// 批量写入 re-exports（COPY 封装 + 多值 INSERT 构建）
 #[cfg(feature = "copy")]
-pub use copy::{CopyFormat, CopyStatement, encode_copy_rows};
+pub use copy::{
+    BATCH_INSERT_CHUNK_SIZE, BatchInsertStatement, CopyFormat, CopyStatement, PlaceholderStyle,
+    bind_param_limit, encode_copy_rows, encode_duckdb_copy_rows,
+};
 
 // 图数据库 re-exports
 #[cfg(feature = "ladybug")]

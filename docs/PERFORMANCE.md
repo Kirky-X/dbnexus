@@ -27,6 +27,8 @@
 | 基准文件 | 覆盖面 | 运行命令 |
 |----------|--------|----------|
 | `benches/e2e_bench.rs` | 端到端：池获取 / 行查询 / 批量写 | `cargo bench --bench e2e_bench --features "sqlite,runtime-tokio-rustls,sql-parser"` |
+| `benches/batch_insert_bench.rs` | 多值 INSERT：逐行 vs 500 行分块（sqlite 临时文件库） | `cargo bench --bench batch_insert_bench --features "sqlite,copy,sql-parser,runtime-tokio-rustls"` |
+| `benches/duckdb_copy_bench.rs` | DuckDB COPY：逐行 vs `copy_in`（duckdb::memory:） | `cargo bench --bench duckdb_copy_bench --features "duckdb,copy,sql-parser,runtime-tokio-rustls"` |
 | `benches/permission_bench.rs` | 池构造（sqlite::memory:）、DbConfig 路径 | `cargo bench --bench permission_bench --features permission` |
 | `benches/permission_engine_bench.rs` | PermissionCache insert / get / miss | `cargo bench --bench permission_engine_bench --features permission-engine` |
 | `benches/sharding_bench.rs` | 分片路由哈希、跨分片绑定冲突检测 | `cargo bench --bench sharding_bench --features sharding` |
@@ -67,6 +69,35 @@ cargo bench --bench e2e_bench --features "sqlite,runtime-tokio-rustls,sql-parser
 - **池获取**是纯内存路径（句柄 + 权限检查），亚微秒级；真实连接建立发生在首次执行时（sea-orm/sqlx 惰性连接）。
 - **简单查询**约 0.5 ms，主要成本在 sql-parser 校验 + sea-orm `query_all_raw` + `serde_json` 行构造，属可接受的端到端常量。
 - **逐条 INSERT** ≈ 11 ms/行：每条语句独立走解析/权限/执行全管道。批量写入请优先使用事务批提交或 `copy` 特性（pg COPY 协议路径）；逐条路径的数字即为未批处理时的下界参考。
+
+---
+
+## 批量写入基线（`copy` 特性）
+
+### 测量环境
+
+| 项 | 值 |
+|----|----|
+| 日期 | 2026-09-29 |
+| 平台 | WSL2 linux 6.6.87.2-microsoft-standard-WSL2 x86_64 |
+| 工具链 | rustc/cargo 1.97.1 |
+| Profile | `bench`（optimized），criterion `--quick` 单轮采样 |
+
+### 基线数据
+
+| 基准 | 路径 | 基线（中位数） |
+|------|------|----------------|
+| `batch_insert_sqlite/row_by_row_500` | 逐行 `execute_with_params`（每行独立走解析/权限/执行全管道） | **≈ 7.38 s/500 行**（≈ 68 行/s） |
+| `batch_insert_sqlite/multi_value_chunked_500` | `BatchInsertStatement::chunk_rows` 500 行单块参数化 | **≈ 28 ms/500 行**（≈ 17.8K 行/s） |
+| `copy_duckdb/row_by_row_500` | 逐行 `execute_duckdb_raw_with_params`（duckdb::memory:） | **≈ 338 ms/500 行**（≈ 1.5K 行/s） |
+| `copy_duckdb/copy_in_500` | `DbPool::copy_in`（CSV 载荷 + 临时文件 `COPY FROM`） | **≈ 1.8 ms/500 行**（≈ 274K 行/s） |
+
+sqlite 侧多值路径对逐行路径约 **260× 吞吐提升**（500 条语句的往返/解析/权限开销收敛为 1 条语句）；duckdb 侧 `copy_in` 对逐行约 **186× 吞吐提升**（批量导入绕过逐行往返）。
+
+### 解读
+
+- **多值 INSERT 是 sqlite/mysql 批量写入的首选**：参数化绑定保持注入安全，500 行分块对齐 SQLite 变量上限余量。
+- **COPY 是 postgres/duckdb 大批量导入的首选**：PG 协议流式传输 / DuckDB 文件导入绕过逐行往返；小行集优先多值 INSERT。
 
 ---
 

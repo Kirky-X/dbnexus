@@ -187,7 +187,12 @@ retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sq
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
-copy = []  # COPY 批量写入（构建 COPY FROM STDIN 语句与 text 行编码；协议传输路径在 postgres 驱动组下经 #cfg(feature="postgres") 门控）
+# 批量写入：COPY 封装（语句构建 + text/CSV 行编码；协议传输经 #cfg(feature="postgres")
+# 门控，DuckDB 文件 COPY 传输经 #cfg(feature="duckdb") 门控）+ 多值 INSERT 构建
+# （batch_insert，500 行分块参数化）。取舍：copy 保持零依赖（[]）——postgres/duckdb
+# 是互斥驱动 feature，本 feature 不绑定任何驱动，传输路径按驱动 cfg 双门控，避免
+# feature 互斥矩阵爆炸；无驱动组时仅编译语句构建/编码纯函数，copy_in 显式报错。
+copy = []
 repository = []  # 泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
 data-api = ["repository"]  # 数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
 prepare-cache = []  # 语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
@@ -518,6 +523,20 @@ path = "benches/e2e_bench.rs"
 harness = false
 required-features = ["sqlite", "runtime-tokio-rustls", "sql-parser"]
 
+# batch_insert 多值 INSERT 验收基准（逐行 vs 多值 500 分块，sqlite 临时文件库）
+[[bench]]
+name = "batch_insert_bench"
+path = "benches/batch_insert_bench.rs"
+harness = false
+required-features = ["sqlite", "copy", "sql-parser", "runtime-tokio-rustls"]
+
+# DuckDB COPY 批量写入验收基准（逐行 vs copy_in，duckdb::memory: 嵌入库）
+[[bench]]
+name = "duckdb_copy_bench"
+path = "benches/duckdb_copy_bench.rs"
+harness = false
+required-features = ["duckdb", "copy", "sql-parser", "runtime-tokio-rustls"]
+
 # tests/mod.rs 需要 sqlite 特性才能正确运行
 # 因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
 [[test]]
@@ -614,6 +633,18 @@ required-features = ["sqlite", "health-check", "runtime-tokio-rustls"]
 name = "copy_contract_tests"
 path = "tests/copy/unit/copy_contract_tests.rs"
 required-features = ["sqlite", "copy", "runtime-tokio-rustls"]
+
+# batch_insert 多值 INSERT 构建契约（构建纯函数 + sqlite 参数化落库）
+[[test]]
+name = "batch_insert_tests"
+path = "tests/copy/unit/batch_insert_tests.rs"
+required-features = ["sqlite", "copy", "sql-parser", "runtime-tokio-rustls"]
+
+# DuckDB COPY 传输契约（CSV 编码 + build_from_file + 池级 copy_in 落库）
+[[test]]
+name = "duckdb_copy_tests"
+path = "tests/copy/unit/duckdb_copy_tests.rs"
+required-features = ["duckdb", "copy", "sql-parser", "runtime-tokio-rustls"]
 
 # DB 审计存储（DbAuditStorage）
 [[test]]

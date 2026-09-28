@@ -24,7 +24,9 @@ pub use db_pool::{DatabaseConnection, DbConnection, DbPool, PoolStatus};
 pub use session::{DbIsolationLevel, Session};
 
 #[cfg(feature = "duckdb")]
-pub use duckdb_conn::{DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue};
+pub use duckdb_conn::{
+    DuckDbConnection, DuckDbExecResult, DuckDbRow, DuckValue, json_to_duck_value,
+};
 // 语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）
 #[cfg(feature = "prepare-cache")]
 pub use prepare_cache::{PoolPrepareCache, PrepareCacheStats, PreparedStatementCache};

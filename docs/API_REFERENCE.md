@@ -529,7 +529,7 @@ pub type Operation = PermissionAction;
 | `repository` | `Repository<T>`、`JsonRepository`、`impl_json_repository!` |
 | `data-api` | `DataApiGateway`（实体到 JSON 查询端点） |
 | `entity-events` | `EntityEvent`、`EntityEventBus`、`DbOutboxStore`、`OutboxDispatcher` |
-| `copy` | COPY FROM STDIN 语句构建与 text 行编码 |
+| `copy` | 批量写入：COPY 封装（`CopyStatement`/`encode_copy_rows`/`encode_duckdb_copy_rows`）+ 多值 INSERT 构建（`BatchInsertStatement`） |
 | `kit` | `DbNexusModule` 及卫星模块（见 [Kit 与缓存集成](#-kit-与缓存集成)） |
 | `validation` | `DbError::Validation` 变体 + validator 集成 |
 | `pool-health-check` | `DbPool::clean_invalid_connections`、`validate_and_recreate_connections` |
@@ -579,6 +579,42 @@ let logger = AuditLogger::new(); // 默认内存存储（容量 10000）
 ```
 
 自定义存储与配置经 `AuditLogger::with_config(config: AuditConfig, storage: Arc<dyn AuditStorage>)` 注入；0.6.0-rc.3 新增 `DbAuditStorage` 数据库存储实现（`audit` + `sql-parser` 门控）与 `PermissionAuditChain` HMAC 链式签名审计链。
+
+---
+
+## 📦 批量写入（`copy` 特性）
+
+两条批量写入路径，按后端能力择一。共用契约：标识符白名单校验在构建期关闭注入面；数据值经编码（COPY）或绑定参数（batch_insert）传递，绝不拼入 SQL 文本；错误显性化（空集/行列不匹配/非法标识符构建期报错）。
+
+### 多值 INSERT 构建 `BatchInsertStatement`
+
+无 COPY 协议后端（sqlite/mysql/duckdb）的参数化批量写入：行集按 `min(500, bind_param_limit(style)/列数)` 分块构建 `INSERT ... VALUES (...), (...)`（宽表自动收缩，单语句占位符数恒不超后端绑定上限；列数本身超上限时构建期报错），占位符绑定。典型消费方为批量日志落库（inklog 等）：`chunk_rows` 产出 `(sql, params)` 序列，逐条送入 `Session::execute_with_params`（sqlite/mysql/postgres）或经 `json_to_duck_value` 转换后走 DuckDB 参数化通道。
+
+```rust
+use dbnexus::database::copy::{BatchInsertStatement, PlaceholderStyle, BATCH_INSERT_CHUNK_SIZE};
+
+let stmt = BatchInsertStatement::new("t_logs", &["ts".into(), "msg".into()])?;
+// fail-fast 全量校验：返回 Ok 即保证全部语句可安全执行（无部分写入风险）
+for (sql, params) in stmt.chunk_rows(&rows, PlaceholderStyle::QMark)? {
+    session.execute_with_params(&sql, &params).await?;   // sqlite/mysql/postgres
+}
+// postgres 方言：PlaceholderStyle::Dollar（$N 编号跨行连续）
+```
+
+### COPY 封装 `CopyStatement` 与 `DbPool::copy_in`
+
+- **postgres**：`build()` 生成 `COPY ... FROM STDIN`，`copy_in` 经协议流式传输（`encode_copy_rows` 提供 PG text 行编码）。
+- **duckdb**：`build_from_file(path)` 生成 `COPY ... FROM 'path'`（选项串与 `encode_duckdb_copy_rows` 的 CSV 编码一一配对：未引用空字段 = NULL、引用空字段 `""` = 空串），`copy_in` 经临时文件导入并返回导入行数，载荷文件成败皆清理。
+- **其他后端**：`copy_in` 显式报错，绝不静默退化为逐行 INSERT——请改用 `BatchInsertStatement`。
+
+```rust
+use dbnexus::database::copy::CopyStatement;
+
+let stmt = CopyStatement::new("t_logs", &["ts".into(), "msg".into()])?;
+let inserted: u64 = pool.copy_in(&stmt, &rows).await?;
+```
+
+**注意**：`duckdb::memory:` 的池连接互不共享（idle 队列空时重新 open 全新空库）；copy_in 前请先归还建表连接（串行复用单连接），或使用文件库 + `with_existing_duckdb_connection` 共享句柄。
 
 ---
 

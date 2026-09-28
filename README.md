@@ -105,7 +105,7 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `query-dsl` 🆕 | `q!` 类型安全查询片段宏，标识符与值注入免疫 |
 | `repository` / `data-api` 🆕 | 泛型仓储 `Repository<T>`；实体到 JSON 的数据 API 网关 |
 | `prepare-cache` 🆕 | 语句级 prepared statement LRU 缓存与命中率指标 |
-| `copy` 🆕 | COPY FROM STDIN 批量写入语句构建（pg 协议路径按驱动门控） |
+| `copy` 🆕 | 批量写入：COPY 封装（pg 协议 / DuckDB 文件 COPY 按驱动门控）+ 多值 INSERT 构建（batch_insert 500 分块参数化） |
 | `entity-events` 🆕 | 实体事件总线 + Outbox 持久化投递 |
 | `otel` 🆕 | 健康快照指标导出 OTLP/HTTP（stdout fallback 兜底） |
 | `inklog` 🆕 | inklog 结构化日志集成：池超时/权限拒绝/熔断/慢查询记录路由到 inklog 管道 |
@@ -244,7 +244,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `prepare-cache` | 语句级 prepared statement LRU 缓存 | 否 |
 | `query-dsl` | `q!` 类型安全查询片段宏 | 否 |
 | `entity-events` | 实体事件总线 + Outbox | 否 |
-| `copy` | COPY FROM STDIN 批量写入语句构建 | 否 |
+| `copy` | 批量写入：COPY 封装 + 多值 INSERT 构建（batch_insert） | 否 |
 | `data-protection` | 字段脱敏与行级安全谓词注入 | 否 |
 | `permission-facade` | RBAC + 脱敏 + RLS 统一门面 | 否 |
 | `config-confers` | confers 配置热重载 | 否 |

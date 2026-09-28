@@ -32,6 +32,31 @@ use tokio::task::JoinHandle;
 
 use crate::foundation::{DbError, DbResult};
 
+/// serde_json 值 → DuckDB 绑定值
+///
+/// 与 Session 侧 `json_to_sea_value` 同构（跨后端统一的 JSON→绑定值映射口径）：
+/// Null → `DuckValue::Null`；整数字段绑定 BigInt（避免 Int32 溢出回退）、
+/// 浮点绑定 Double；数组/对象序列化为 JSON 字符串（与 sqlite 路径的
+/// 存储形态一致）。供 batch_insert 构建产出的 JSON 参数序列对接
+/// `execute_with_params` / `execute_duckdb_transaction` 等参数化通道。
+pub fn json_to_duck_value(v: &serde_json::Value) -> DuckValue {
+    match v {
+        serde_json::Value::Null => DuckValue::Null,
+        serde_json::Value::Bool(b) => DuckValue::Boolean(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                DuckValue::BigInt(i)
+            } else {
+                DuckValue::Double(n.as_f64().unwrap_or(0.0))
+            }
+        }
+        serde_json::Value::String(s) => DuckValue::Text(s.clone()),
+        other => {
+            DuckValue::Text(serde_json::to_string(other).unwrap_or_else(|_| "null".to_string()))
+        }
+    }
+}
+
 /// spawn_blocking 闭包内的池连接归还 guard
 ///
 /// 连接持有于 guard，闭包正常结束、语句失败、闭包 panic（栈展开）乃至
@@ -746,6 +771,80 @@ impl DuckDbConnection {
         });
 
         // permit 必须在 handle.await 之后 drop
+        let result = handle.await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                "spawn_blocking join failed: {e}"
+            )))
+        })?;
+        drop(permit);
+
+        result
+    }
+
+    /// 执行 COPY FROM 文件语句并返回导入行数（`COPY` 封装的传输原语）
+    ///
+    /// 执行形如 `COPY "t" ("c1") FROM '/path/data.csv' (FORMAT CSV, ...)`
+    /// 的语句（语句构建见 `copy` 模块的 `CopyStatement::build_from_file`），
+    /// 从 DuckDB COPY 结果集的首行首列（`Count`）读取导入行数。
+    /// 写路径语义：持串行写闸（若启用）+ spawn 许可，成败皆归还连接。
+    ///
+    /// # 契约
+    ///
+    /// 仅接受 COPY FROM 语句（表/列标识符在语句构建期经白名单校验，
+    /// 路径经单引号转义）；数据文件由调用方创建并清理。
+    pub async fn copy_from_file(&self, copy_sql: &str) -> DbResult<u64> {
+        let _write_gate = self.acquire_write_gate().await;
+        let permit = self.acquire_permit().await?;
+
+        let conn = {
+            let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
+            pool.pop().ok_or_else(|| {
+                DbError::Connection(sea_orm::DbErr::Custom(
+                    "DuckDB pool exhausted: no connection available".to_string(),
+                ))
+            })?
+        };
+
+        let sql_owned = copy_sql.to_string();
+        let pool = self.pool.clone();
+        // 连接经 guard 归还：成败/闭包 panic/await 侧被取消皆归还
+        let handle: JoinHandle<DbResult<u64>> = tokio::task::spawn_blocking(move || {
+            let mut guard = PoolConnGuard {
+                conn: Some(conn),
+                pool,
+            };
+            (|| {
+                let conn = guard.conn_mut();
+                let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB COPY prepare failed: {e}"
+                    )))
+                })?;
+                let mut rows = stmt.query([]).map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB COPY execute failed: {e}"
+                    )))
+                })?;
+                // COPY 结果集恒为一行一列（BIGINT Count）；空结果按 0 行
+                // 导入处理（防御方言差异，不臆测成功）
+                match rows.next().map_err(|e| {
+                    DbError::Connection(sea_orm::DbErr::Custom(format!(
+                        "DuckDB COPY result fetch failed: {e}"
+                    )))
+                })? {
+                    Some(row) => {
+                        let count: i64 = row.get(0).map_err(|e| {
+                            DbError::Connection(sea_orm::DbErr::Custom(format!(
+                                "DuckDB COPY count column read failed: {e}"
+                            )))
+                        })?;
+                        Ok(count.max(0) as u64)
+                    }
+                    None => Ok(0),
+                }
+            })()
+        });
+
         let result = handle.await.map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!(
                 "spawn_blocking join failed: {e}"

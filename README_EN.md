@@ -107,7 +107,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `query-dsl` 🆕 | `q!` type-safe query fragment macro, immune to identifier and value injection |
 | `repository` / `data-api` 🆕 | Generic `Repository<T>`; entity-to-JSON data API gateway |
 | `prepare-cache` 🆕 | Statement-level prepared statement LRU cache with hit-rate metrics |
-| `copy` 🆕 | COPY FROM STDIN statement building (pg protocol path gated per driver) |
+| `copy` 🆕 | Batch write: COPY wrappers (pg protocol / DuckDB file COPY gated per driver) + multi-row INSERT building (batch_insert, 500-row chunked parameterized) |
 | `entity-events` 🆕 | Entity event bus + Outbox persistent dispatch |
 | `otel` 🆕 | Health snapshot metrics exported via OTLP/HTTP (stdout fallback) |
 | `inklog` 🆕 | inklog structured logging integration: pool timeout / permission denied / circuit breaker / slow query records route through the inklog pipeline |
@@ -244,7 +244,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `prepare-cache` | Statement-level prepared statement LRU cache | No |
 | `query-dsl` | `q!` type-safe query fragment macro | No |
 | `entity-events` | Entity event bus + Outbox | No |
-| `copy` | COPY FROM STDIN batch-write statement building | No |
+| `copy` | Batch write: COPY wrappers + multi-row INSERT building (batch_insert) | No |
 | `data-protection` | Field masking and row-level security predicate injection | No |
 | `permission-facade` | RBAC + masking + RLS unified facade | No |
 | `config-confers` | confers hot config reload | No |
