@@ -81,18 +81,18 @@ cargo bench --bench e2e_bench --features "sqlite,runtime-tokio-rustls,sql-parser
 | 日期 | 2026-09-29 |
 | 平台 | WSL2 linux 6.6.87.2-microsoft-standard-WSL2 x86_64 |
 | 工具链 | rustc/cargo 1.97.1 |
-| Profile | `bench`（optimized），criterion `--quick` 单轮采样 |
+| Profile | `bench`（optimized），criterion 多轮统计采样（bench 内显式 `sample_size(30)`，`--noplot`） |
 
 ### 基线数据
 
 | 基准 | 路径 | 基线（中位数） |
 |------|------|----------------|
-| `batch_insert_sqlite/row_by_row_500` | 逐行 `execute_with_params`（每行独立走解析/权限/执行全管道） | **≈ 7.38 s/500 行**（≈ 68 行/s） |
-| `batch_insert_sqlite/multi_value_chunked_500` | `BatchInsertStatement::chunk_rows` 500 行单块参数化 | **≈ 28 ms/500 行**（≈ 17.8K 行/s） |
-| `copy_duckdb/row_by_row_500` | 逐行 `execute_duckdb_raw_with_params`（duckdb::memory:） | **≈ 338 ms/500 行**（≈ 1.5K 行/s） |
-| `copy_duckdb/copy_in_500` | `DbPool::copy_in`（CSV 载荷 + 临时文件 `COPY FROM`） | **≈ 1.8 ms/500 行**（≈ 274K 行/s） |
+| `batch_insert_sqlite/row_by_row_500` | 逐行 `execute_with_params`（每行独立走解析/权限/执行全管道） | **≈ 18.1 s/500 行**（≈ 27.6 行/s） |
+| `batch_insert_sqlite/multi_value_chunked_500` | `BatchInsertStatement::chunk_rows` 构建 + 500 行单块参数化执行 | **≈ 77.0 ms/500 行**（≈ 6.49K 行/s） |
+| `copy_duckdb/row_by_row_500` | 逐行 `execute_duckdb_raw_with_params`（duckdb::memory:） | **≈ 381 ms/500 行**（≈ 1.31K 行/s） |
+| `copy_duckdb/copy_in_500` | `DbPool::copy_in`（CSV 载荷 + 临时文件 `COPY FROM`） | **≈ 9.3 ms/500 行**（≈ 53.8K 行/s） |
 
-sqlite 侧多值路径对逐行路径约 **260× 吞吐提升**（500 条语句的往返/解析/权限开销收敛为 1 条语句）；duckdb 侧 `copy_in` 对逐行约 **186× 吞吐提升**（批量导入绕过逐行往返）。
+sqlite 侧多值路径对逐行路径约 **235× 吞吐提升**（500 条语句的往返/解析/权限开销收敛为 1 条语句）；duckdb 侧 `copy_in` 对逐行约 **41× 吞吐提升**（批量导入绕过逐行往返）。吞吐列由表内基线值直接换算。绝对值受宿主机负载影响明显：sqlite 侧多轮比值落在 235×–285× 区间（含 chunk_rows 构建入计时前后的口径差异）；duckdb 侧跨轮跨度大（41×–186×，前轮 1.8 ms 为废弃的 `--quick` 单轮口径，与本轮多轮中位数不可直接对比），采信以当前多轮中位数为准；复测请用干净串行环境。
 
 ### 解读
 

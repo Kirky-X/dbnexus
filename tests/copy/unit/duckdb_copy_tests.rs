@@ -245,20 +245,40 @@ async fn test_copy_in_duckdb_rejects_empty_rows() {
 #[tokio::test]
 async fn test_copy_in_duckdb_error_leaves_no_temp_file() {
     let pool = setup_duckdb_pool("CREATE TABLE t_other (id INTEGER)").await;
+
+    // 断言口径为"无新增残留"而非"目录清空"：temp 目录可能存在历史孤儿
+    // 或并行测试正在使用的载荷文件，均不在本测试的清理责任内
+    let pre_existing: std::collections::HashSet<std::path::PathBuf> = std::env::temp_dir()
+        .read_dir()
+        .expect("read temp dir")
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().starts_with("dbnexus_copy_"))
+                .unwrap_or(false)
+        })
+        .collect();
+
     // 目标表不存在 → COPY 失败
     let stmt = CopyStatement::new("t_missing", &["id".to_string()]).expect("合法标识符应通过");
     let result = pool.copy_in(&stmt, &[vec![serde_json::json!(1)]]).await;
     assert!(result.is_err(), "目标表不存在应报错");
 
-    // 成败路径都不得残留临时载荷文件。并行测试各自持有活跃载荷文件，
-    // 断言以轮询收敛（其它测试成功后同样会清理，窗口有限）
+    // 本测试新建的载荷文件成败皆清理；其它测试的活跃载荷不纳入断言
     let mut clean = false;
     for _ in 0..200 {
         let leftovers: Vec<_> = std::env::temp_dir()
             .read_dir()
             .expect("read temp dir")
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().starts_with("dbnexus_copy_"))
+            .map(|e| e.path())
+            .filter(|p| !pre_existing.contains(p))
+            .filter(|p| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().starts_with("dbnexus_copy_"))
+                    .unwrap_or(false)
+            })
             .collect();
         if leftovers.is_empty() {
             clean = true;
@@ -266,7 +286,10 @@ async fn test_copy_in_duckdb_error_leaves_no_temp_file() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    assert!(clean, "失败路径不得残留临时 COPY 载荷文件（2s 内未收敛）");
+    assert!(
+        clean,
+        "失败路径不得残留本次新建的 COPY 载荷文件（2s 内未收敛）"
+    );
     drop(pool);
 }
 

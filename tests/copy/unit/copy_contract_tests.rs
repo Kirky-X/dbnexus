@@ -106,6 +106,20 @@ async fn test_copy_in_contract_rejects_non_postgres_backend() {
                 msg.contains("postgres"),
                 "非 postgres 后端应报 COPY 仅 postgres 支持，实际: {msg}"
             );
+            // duckdb 驱动同启时本测试池为 sqlite 连接，copy_in 走 duckdb
+            // 失配路径：统一文案必须以尾注保留原始下转错误的连接类型细节
+            //（"got SeaOrm" 等），否则 postgres+duckdb 双启用时无从排查池发错连接
+            #[cfg(feature = "duckdb")]
+            assert!(
+                msg.contains("got SeaOrm"),
+                "失配路径应保留原始连接类型细节供诊断，实际: {msg}"
+            );
+            // 无驱动组（sqlite-only）编译时错误应给出可执行的补救指引
+            #[cfg(not(any(feature = "duckdb", feature = "postgres")))]
+            assert!(
+                msg.contains("driver feature"),
+                "无驱动组错误应指引启用 postgres/duckdb 驱动，实际: {msg}"
+            );
         }
         other => panic!("应返回明确错误而非 panic，实际: {other:?}"),
     }

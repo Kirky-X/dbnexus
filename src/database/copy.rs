@@ -204,29 +204,60 @@ fn quote_identifier(name: &str) -> String {
 ///
 /// 转义规则（PostgreSQL 文档 COPY text 格式）：`\\`、`\t`、`\n`、`\r`。
 /// 非字符串值经 JSON 文本化后原样嵌入（数值/布尔安全；JSON 对象/数组
-/// 作为文本列时经转义嵌入）。
+/// 作为文本列时经转义嵌入）。字段缓冲跨行复用，无需转义的字段走借用
+/// 视图零拷贝（与 [`encode_duckdb_copy_rows`] 同范式）。
 pub fn encode_copy_rows(rows: &[Vec<serde_json::Value>]) -> String {
-    let mut out = String::new();
+    // 容量粗估（典型短字段 ~16B + 分隔）：仅避免冷启动扩容，无需精确
+    let mut out = String::with_capacity(rows.len() * 32);
+    // 字段缓冲跨行复用：clear 保留已分配容量，行间零重分配
+    let mut fields: Vec<std::borrow::Cow<'_, str>> = Vec::new();
     for row in rows {
-        let fields: Vec<String> = row.iter().map(encode_copy_value).collect();
-        out.push_str(&fields.join("\t"));
+        fields.clear();
+        fields.extend(row.iter().map(encode_copy_value));
+        for (i, field) in fields.iter().enumerate() {
+            if i > 0 {
+                out.push('\t');
+            }
+            out.push_str(field);
+        }
         out.push('\n');
     }
     out
 }
 
 /// 单值 → PG text COPY 字段
-fn encode_copy_value(value: &serde_json::Value) -> String {
+fn encode_copy_value(value: &serde_json::Value) -> std::borrow::Cow<'_, str> {
     match value {
-        serde_json::Value::Null => "\\N".to_string(),
+        serde_json::Value::Null => std::borrow::Cow::Borrowed("\\N"),
         serde_json::Value::String(s) => escape_copy_text(s),
-        other => escape_copy_text(&other.to_string()),
+        // 数值/布尔文本化后不含特殊字符，原样嵌入；JSON 对象/数组含
+        // 逗号/引号等，按 PG text 规则转义
+        other => {
+            let text = other.to_string();
+            if copy_text_needs_escape(&text) {
+                std::borrow::Cow::Owned(escape_copy_text_owned(&text))
+            } else {
+                std::borrow::Cow::Owned(text)
+            }
+        }
     }
 }
 
-/// PG text 转义（`\\` `\t` `\n` `\r`）
-fn escape_copy_text(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
+/// PG text 转义（`\\` `\t` `\n` `\r`）；无需转义的输入返回借用视图零拷贝
+fn escape_copy_text(s: &str) -> std::borrow::Cow<'_, str> {
+    if copy_text_needs_escape(s) {
+        std::borrow::Cow::Owned(escape_copy_text_owned(s))
+    } else {
+        std::borrow::Cow::Borrowed(s)
+    }
+}
+
+fn copy_text_needs_escape(s: &str) -> bool {
+    s.chars().any(|c| matches!(c, '\\' | '\t' | '\n' | '\r'))
+}
+
+fn escape_copy_text_owned(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
     for c in s.chars() {
         match c {
             '\\' => out.push_str("\\\\"),
@@ -404,6 +435,9 @@ impl BatchInsertStatement {
             quote_identifier(&self.table),
             cols
         );
+        // VALUES 主体一次性预留（每单元格峰值 ≈ 分隔 2 + 括号 2 + 占位符
+        // 均长 ~4），避免长语句倍增扩容反复搬运
+        sql.reserve(row_count * width * 8);
         let mut placeholder_no = 0usize;
         for row_idx in 0..row_count {
             if row_idx > 0 {
@@ -418,7 +452,23 @@ impl BatchInsertStatement {
                     PlaceholderStyle::QMark => sql.push('?'),
                     PlaceholderStyle::Dollar => {
                         placeholder_no += 1;
-                        sql.push_str(&format!("${placeholder_no}"));
+                        sql.push('$');
+                        // 手写十进制展开：避开每占位符一次 format! 的堆分配
+                        let mut digits = [0u8; 20];
+                        let mut n = placeholder_no;
+                        let mut end = digits.len();
+                        loop {
+                            end -= 1;
+                            digits[end] = b'0' + (n % 10) as u8;
+                            n /= 10;
+                            if n == 0 {
+                                break;
+                            }
+                        }
+                        sql.push_str(
+                            std::str::from_utf8(&digits[end..])
+                                .expect("placeholder digits are ASCII"),
+                        );
                     }
                 }
             }
@@ -475,6 +525,21 @@ impl BatchInsertStatement {
     }
 }
 
+/// `copy_in` 后端不支持时的统一契约错误
+///
+/// 无驱动组与"驱动组启用但池连接类型不匹配"（如 sqlite+duckdb 组合下
+/// 拿到 sqlite 连接）共用同一基础文案；`detail` 携带路径特定的补救指引
+/// 或根因尾注——失配路径必须透传下转错误的原始连接类型（"got SeaOrm"
+/// 等），这是排查多驱动池配置的唯一线索，丢弃即违反错误显性化契约
+fn copy_in_backend_error(detail: &str) -> crate::foundation::DbError {
+    crate::foundation::DbError::Query(format!(
+        "copy_in supports the postgres and duckdb backends only (COPY protocol is \
+             PostgreSQL-specific; DuckDB uses file-based COPY); non-COPY backends \
+             (sqlite/mysql/graph) must use their own write paths (batch_insert \
+             multi-row INSERT for SQL backends){detail}"
+    ))
+}
+
 impl crate::database::DbPool {
     /// COPY 批量写入：按语句将行数据送入 postgres 协议或 DuckDB 文件导入
     ///
@@ -508,7 +573,11 @@ impl crate::database::DbPool {
             let conn = self.acquire_connection().await?;
             // 无论成功失败都归还连接：错误路径漏归还将永久占用池槽位
             let outcome: crate::foundation::DbResult<u64> = async {
-                let sea_conn = conn.as_sea_orm()?;
+                let sea_conn = conn.as_sea_orm().map_err(|e| {
+                    copy_in_backend_error(&format!(
+                        " (pool returned an incompatible connection: {e})"
+                    ))
+                })?;
                 let pg_pool = sea_conn.get_postgres_connection_pool();
                 let sql = statement.build();
                 let payload = encode_copy_rows(rows);
@@ -538,13 +607,26 @@ impl crate::database::DbPool {
         {
             let conn = self.acquire_connection().await?;
             let outcome: crate::foundation::DbResult<u64> = async {
-                let duck_conn = conn.as_duckdb()?;
-                let payload = encode_duckdb_copy_rows(rows);
-                let path = write_copy_payload_file(&payload).map_err(|e| {
-                    crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "DuckDB COPY payload temp file creation failed: {e}"
-                    )))
+                let duck_conn = conn.as_duckdb().map_err(|e| {
+                    copy_in_backend_error(&format!(
+                        " (pool returned an incompatible connection: {e})"
+                    ))
                 })?;
+                let payload = encode_duckdb_copy_rows(rows);
+                // 载荷随行数线性增长，同步文件 I/O 经 spawn_blocking 下放，
+                // 避免阻塞 tokio 执行器线程
+                let path = tokio::task::spawn_blocking(move || write_copy_payload_file(&payload))
+                    .await
+                    .map_err(|e| {
+                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB COPY payload write task join failed: {e}"
+                        )))
+                    })?
+                    .map_err(|e| {
+                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(format!(
+                            "DuckDB COPY payload temp file creation failed: {e}"
+                        )))
+                    })?;
                 // 载荷文件已在手：此后一切可失败步骤收在内层块，成败皆清理
                 let inner: crate::foundation::DbResult<u64> = async {
                     let path_str = path.to_str().ok_or_else(|| {
@@ -557,8 +639,12 @@ impl crate::database::DbPool {
                 }
                 .await;
                 // 清理失败不掩盖主结果（载荷在系统临时目录，残留由系统清理
-                // 策略兜底）
-                let _ = std::fs::remove_file(&path);
+                // 策略兜底），但经 log 门面留痕拉长暴露窗口的异常
+                let removed =
+                    tokio::task::spawn_blocking(move || std::fs::remove_file(&path)).await;
+                if let Ok(Err(e)) = removed {
+                    log::warn!("DuckDB COPY payload temp file cleanup failed: {e}");
+                }
                 inner
             }
             .await;
@@ -569,12 +655,8 @@ impl crate::database::DbPool {
         #[cfg(not(any(feature = "postgres", feature = "duckdb")))]
         {
             let _ = (statement, rows);
-            Err(crate::foundation::DbError::Query(
-                "copy_in supports the postgres and duckdb backends only (COPY protocol \
-                 is PostgreSQL-specific; DuckDB uses file-based COPY); enable the \
-                 postgres or duckdb driver feature. sqlite/mysql must use the \
-                 batch_insert multi-row INSERT path"
-                    .to_string(),
+            Err(copy_in_backend_error(
+                " — enable the postgres or duckdb driver feature to use COPY",
             ))
         }
     }
@@ -583,9 +665,13 @@ impl crate::database::DbPool {
 /// 把 COPY 载荷写入临时文件（`O_EXCL` 创建，文件名含进程号 + 原子计数器）
 ///
 /// 返回创建的路径；调用方负责用后删除（成败皆清）。`create_new` 从机制上
-/// 排除同进程/跨进程的文件名碰撞与符号链接抢占。
+/// 排除同进程/跨进程的文件名碰撞与符号链接抢占。Unix 下权限收紧为属主
+/// 0600——载荷是批量行数据，系统临时目录可能多用户共享（默认 0644 全局
+/// 可读构成暴露面；其余平台忽略该设置，属主隔离由目录权限兜底）。
 #[cfg(all(feature = "duckdb", not(feature = "postgres")))]
 fn write_copy_payload_file(payload: &str) -> std::io::Result<std::path::PathBuf> {
+    use std::io::Write;
+
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut last_err: Option<std::io::Error> = None;
     // 极小概率的文件名碰撞（同纳秒 + 同计数器不可能，但目录被并发清理
@@ -601,13 +687,16 @@ fn write_copy_payload_file(payload: &str) -> std::io::Result<std::path::PathBuf>
             std::process::id(),
             now
         ));
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
         {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&path) {
             Ok(mut file) => {
-                std::io::Write::write_all(&mut file, payload.as_bytes())?;
+                file.write_all(payload.as_bytes())?;
                 return Ok(path);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -649,5 +738,24 @@ mod tests {
     #[test]
     fn test_copy_statement_rejects_empty_columns() {
         assert!(CopyStatement::new("t", &[]).is_err());
+    }
+
+    // 载荷含批量行数据，临时目录可能多用户共享：权限必须收紧到属主
+    #[cfg(all(unix, feature = "duckdb", not(feature = "postgres")))]
+    #[test]
+    fn test_copy_payload_file_owner_only_permissions() {
+        let path = write_copy_payload_file("p").expect("create payload file");
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path)
+            .expect("payload metadata")
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o600,
+            "COPY 载荷临时文件应仅属主可读写，实际: {:o}",
+            mode & 0o777
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }

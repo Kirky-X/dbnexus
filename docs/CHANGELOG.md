@@ -29,6 +29,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **批量写入（`copy`）错误契约**：`copy_in` 非 COPY 后端拒绝统一为 `DbError::Query` 基础文案（postgres/duckdb 支持范围 + 非 COPY 后端改写指引）；驱动组启用但池连接类型不匹配时以尾注透传原始下转错误（"got SeaOrm" 等），无驱动组追加启用驱动 feature 的补救指引——duckdb 失配路径的可观察变体由 `DbError::Connection` 变为 `DbError::Query`
+
+### Fixed
+
+- **批量写入（`copy`）**：多值 INSERT 分块按 `min(500, bind_param_limit/列数)` 收缩（宽表单语句占位符数恒不超后端绑定上限，列数超上限构建期显性报错）；DuckDB CSV 编码对 JSON 对象/数组值补齐引用转义（含逗号/引号值不再破坏列结构）；COPY 载荷临时文件权限收紧为属主 0600 并经 `spawn_blocking` 下放同步文件 I/O
+
 ## [0.6.0-rc.6] - 2026-09-28
 
 ### Added

@@ -11,7 +11,7 @@
 //! 同款，`duckdb:file:` 多连接会触发文件锁冲突故不可用）。
 //!
 //! 运行: cargo bench --bench duckdb_copy_bench --features "duckdb,copy,sql-parser,runtime-tokio-rustls"
-//! 基线数字记录于 docs/PERFORMANCE.md（本机一次性采样）。
+//! 基线数字记录于 docs/PERFORMANCE.md（本机 sample_size 30 中位数采样）。
 
 #![cfg(all(
     feature = "duckdb",

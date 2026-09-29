@@ -8,7 +8,7 @@
 //!   逐块 `execute_with_params`
 //!
 //! 运行: cargo bench --bench batch_insert_bench --features "sqlite,copy,sql-parser,runtime-tokio-rustls"
-//! 基线数字记录于 docs/PERFORMANCE.md（本机一次性采样）。
+//! 基线数字记录于 docs/PERFORMANCE.md（本机 sample_size 30 中位数采样）。
 
 #![cfg(all(
     feature = "sqlite",
@@ -52,9 +52,6 @@ fn bench_batch_insert_vs_row_by_row(c: &mut Criterion) {
         .collect();
     let stmt = BatchInsertStatement::new("t_bench_batch", &["id".to_string(), "val".to_string()])
         .expect("合法标识符应通过");
-    let chunks = stmt
-        .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功");
 
     let mut group = c.benchmark_group("batch_insert_sqlite");
     group.sample_size(30);
@@ -88,6 +85,11 @@ fn bench_batch_insert_vs_row_by_row(c: &mut Criterion) {
                     .execute_raw("DELETE FROM t_bench_batch")
                     .await
                     .expect("清表");
+                // chunk_rows（语句构建 + 参数扁平化）纳入计时：它是多值路径
+                // 的组成部分，测量消费方的完整成本
+                let chunks = stmt
+                    .chunk_rows(&rows, PlaceholderStyle::QMark)
+                    .expect("分块应成功");
                 for (sql, params) in &chunks {
                     admin
                         .execute_with_params(sql, params)
