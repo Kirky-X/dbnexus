@@ -237,7 +237,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | Flag | Description | Default |
 |------|------|:----:|
 | `cache` | oxcache cache (moka L1 backend) + lock-free `ArcSwap` reads | No |
-| `oxcache-integration` | OxcacheDbCacheAdapter | No |
+| `oxcache-integration` | OxcacheDbCacheAdapter + `OxcacheQueryCache` query-cache decorator (query_cached/invalidate_table) | No |
 | `kit` | trait-kit AsyncKit integration with the full pool/cache/audit/health capability closure | No |
 | `repository` | Generic `Repository<T>` CRUD port + `impl_json_repository!` macro | No |
 | `data-api` | Data API gateway: entity-to-JSON query endpoints (allowlist + filtering + pagination) | No |

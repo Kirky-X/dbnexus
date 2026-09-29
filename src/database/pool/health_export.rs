@@ -28,6 +28,13 @@ use crate::database::pool::DbPool;
 ///
 /// 返回的 JSON 对象数组将原样进入 `health_snapshot().replicas`；
 /// 副本负载均衡路由可注入其真实副本状态。
+///
+/// # 契约
+///
+/// 闭包在 `health_snapshot()` 的同步临界区内被调用，且 `/readyz` 每次
+/// 探测都会触发：**必须廉价、纯同步、无阻塞 IO**——真实网络探测或慢
+/// 操作会把读锁持有时间放大为快照串行化，未鉴权探测流量的放大为锁竞争；
+/// 重结果（主动拨测等）由消费方自行后台刷新并缓存，闭包只读缓存。
 pub type ReplicaHealthProvider = Arc<dyn Fn() -> Vec<serde_json::Value> + Send + Sync>;
 
 impl DbPool {
@@ -80,7 +87,7 @@ impl DbPool {
             if let Some(collector) = collector {
                 let cfg = collector.slow_query_config_snapshot();
                 serde_json::json!({
-                    "count": collector.slow_queries().len(),
+                    "count": collector.slow_queries_count(),
                     "threshold_ms": cfg.threshold_ms,
                     "enabled": cfg.enabled,
                 })

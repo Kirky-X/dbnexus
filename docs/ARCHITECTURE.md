@@ -244,7 +244,9 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 ### 集成层 `integrations/`
 
 - `integrations/kit/` — `DbNexusModule` 及缓存/审计/健康卫星模块（cfg = `kit`，trait-kit AsyncKit 集成）
+- `integrations/inklog.rs` — inklog 结构化日志接线（池超时/权限拒绝/熔断/慢查询路由，cfg = `inklog`）
 - `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = `oxcache-integration`）
+- `integrations/http_health.rs` — `HealthRouterBuilder` 三端点健康 Router：/healthz /readyz /metrics（cfg = `http-health`，axum Router 生成而非服务）
 
 ### 国际化模块 `i18n/`
 

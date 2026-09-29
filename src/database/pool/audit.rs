@@ -240,16 +240,22 @@ mod tests {
             "默认 admin 角色应触发审计记录"
         );
 
-        // 自定义角色由 test_vuln_0001_custom_admin_role_no_warning 覆盖（不触发）
-        let events = take_admin_bypass_events();
-        assert!(
-            events
-                .iter()
-                .any(|e| e.kind == BYPASS_KIND_DEFAULT_ADMIN_ROLE
+        // 自定义角色由 test_vuln_0001_custom_admin_role_no_warning 覆盖（不触发）。
+        // 并行测试共享同一进程级环且 take 清空：本测试刚记录的事件可能被
+        // 并行 take 抽走——重试 record+take 直到观测到本类事件（count 断言
+        // 已自足无竞态，此处验证事件类别内容可观测）
+        for _ in 0..100 {
+            let events = take_admin_bypass_events();
+            if events.iter().any(|e| {
+                e.kind == BYPASS_KIND_DEFAULT_ADMIN_ROLE
                     && e.table == "-"
-                    && e.operation == "PoolInit"),
-            "应存在 default_admin_role 类别的池初始化事件"
-        );
+                    && e.operation == "PoolInit"
+            }) {
+                return;
+            }
+            warn_and_record_default_admin_role("admin");
+        }
+        panic!("重试 100 次内应观测到 default_admin_role 类别的池初始化事件");
     }
 
     /// vuln-0001 回归测试：admin bypass 审计事件被真实记录（内容可观测）

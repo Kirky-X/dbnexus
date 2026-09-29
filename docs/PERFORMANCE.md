@@ -32,7 +32,7 @@
 | `benches/permission_bench.rs` | 池构造（sqlite::memory:）、DbConfig 路径 | `cargo bench --bench permission_bench --features permission` |
 | `benches/permission_engine_bench.rs` | PermissionCache insert / get / miss | `cargo bench --bench permission_engine_bench --features permission-engine` |
 | `benches/sharding_bench.rs` | 分片路由哈希、跨分片绑定冲突检测 | `cargo bench --bench sharding_bench --features sharding` |
-| `benches/metrics_bench.rs` | 百分位计算、Prometheus 导出、直方图记录 | `cargo bench --bench metrics_bench --features metrics` |
+| `benches/metrics_bench.rs` | 百分位计算、Prometheus 导出（含 1/50/200 标签规模曲线 + 慢查询环满态）、直方图记录、health_snapshot（`metrics,sqlite,health-check,sql-parser,runtime-tokio-rustls`） | `cargo bench --bench metrics_bench --features metrics` |
 
 两轮平台优化的过程记录与逐轮对照见 [benches/baseline-after.md](../benches/baseline-after.md)。
 
@@ -108,8 +108,34 @@ sqlite 侧多值路径对逐行路径约 **243× 吞吐提升**（500 条语句�
 上表之外的基准聚焦子系统热点：
 
 - **分片路由**（`sharding_bench`）：`shard_id_for_key` 哈希热路径与 `enforce_shard_binding_conflict` 绑定冲突检测。
-- **指标导出**（`metrics_bench`）：`prometheus_export` 全量导出、`histogram_record` 直方图记录。
+- **指标导出**（`metrics_bench`）：`prometheus_export` 全量导出、`prometheus_export_scale` 1/50/200 标签规模曲线（含慢查询环满态）、`histogram_record` 直方图记录、`health_snapshot` 快照。
 - **权限缓存**（`permission_engine_bench`）：`permission_cache_hit` / `permission_cache_miss`。
+
+### 指标导出与健康快照基线（2026-09-30，WSL2 多轮采样区间；每点 2-3 轮独立进程、机况空闲，区间非稳定包络——跨进程漂移可超 2×）
+
+`/metrics` 抓取路径（http-health 端点直通）与 `/readyz` 数据源的规模基线：
+
+| 基准 | 形态 | 中位数区间（多轮） |
+|------|------|----------------|
+| `prometheus_export_scale/labels_1` | 1 标签 + 慢查询环满 | ≈ 2.1-2.2 µs |
+| `prometheus_export_scale/labels_50` | 50 标签 + 慢查询环满 | ≈ 22-29 µs |
+| `prometheus_export_scale/labels_200` | 200 标签 + 慢查询环满 | ≈ 85-240 µs |
+| `health_snapshot` | 池状态快照（sqlite::memory:） | ≈ 0.4-0.8 µs |
+
+导出成本随标签数线性增长（小规模 ≈0.4 µs/标签；200 标签点宿主噪声显著，回归判定以同进程多轮趋势为准）；慢查询环内容当前不入导出，环满仅为未来接入预留前提。`health_snapshot` 与规模点均为亚微秒至百微秒级基准，WSL2 上跨进程漂移可达 2×，绝对差在上述区间内视为噪声。
+
+### oxcache 查询缓存基线（2026-09-30，WSL2 同轮采样；`oxcache_query_cache_bench`）
+
+N+1 形态 200 次点查（sqlite 临时文件库 + Moka 后端），命中收益对装饰器开销的核心验证：
+
+| 基准 | 路径 | 中位数 |
+|------|------|----------------|
+| `n_plus_one_200_always_miss` | 每轮失效后 200 点查全穿透（key 派生 + miss + 执行 + 回填） | **≈ 106.5 ms/200 查询**（≈ 533 µs/查询） |
+| `n_plus_one_200_all_hit` | 预热后 200 点查全命中（key 派生 + get hit，数据库零往返） | **≈ 102 µs/200 查询**（≈ 0.51 µs/查询） |
+| `derive_key_hit_1_tables` | 单表命中路径（含 key 派生 + 1 次 get） | ≈ 0.58 µs |
+| `derive_key_hit_2_tables` | 双表命中路径（版本批量读 2 键） | ≈ 0.72 µs |
+
+命中路径对穿透路径约 **1045× 吞吐提升**（每次查询省去 SQL 解析/权限/RLS/执行全管道往返）；装饰器自身热路径（key 派生 + 后端 get）单查询亚微秒级。
 
 单项数据与两轮优化的逐轮对照表见 [benches/baseline-after.md](../benches/baseline-after.md)。
 

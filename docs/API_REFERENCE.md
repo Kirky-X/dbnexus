@@ -643,9 +643,13 @@ let app = HealthRouterBuilder::new(pool)          // 池快照为必选数据源
     .with_metrics_collector(collector)            // 可选：/metrics 输出 Prometheus
     .build();
 
-let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
 axum::serve(listener, app).await?;
 ```
+
+**部署警告**：三端点生成后无鉴权、无速率限制，`/readyz` 返回完整池快照（连接数/饱和度/慢查询统计/replicas 数组）、`/metrics` 返回全量指标文档——监听地址用 loopback/内网接口，或置于反代鉴权之后；需与业务端点隔离时把 Router `nest` 进带鉴权的 admin Router（如 `app.nest("/internal/health", health_router)`）。replicas 数组内容来自消费方注入的 provider（须廉价、纯同步、无阻塞 IO——每次 `/readyz` 探测都会在快照临界区内调用，重探测结果请消费方自行后台缓存）。
+
+可选数据源跟随自身 feature 门控：`with_circuit_breaker` 随 `health-check`（本 feature 依赖，恒可用）；`with_metrics_collector` 随 `metrics`——该 feature 未启用时方法不存在，`/metrics` 恒 404 并说明需启用 metrics 重建。
 
 ---
 
@@ -912,6 +916,27 @@ let pool = DbPoolBuilder::new()
 ```
 
 **导出类型**：`DbCacheProvider`、`OxcacheDbCacheAdapter`（`oxcache-integration` 特性，适配 oxcache）
+
+### 查询缓存装饰器（`oxcache-integration` 特性）
+
+`OxcacheQueryCache` 把 oxcache 后端装配到 `DbPool` 参数化查询通道：`query_cached` 以 SQL + 绑定参数 + 表版本戳派生缓存 key（SHA-256），命中返回缓存行集（`from_cache = true`，数据库零往返），未命中穿透执行并回填；`invalidate_table` 在写路径后按表戳版本（纳秒时间戳，免读改写竞态、幂等），使提及该表的缓存项自然失效。
+
+```rust
+use std::sync::Arc;
+use dbnexus::integrations::oxcache_query_cache::OxcacheQueryCache;
+
+let qc = OxcacheQueryCache::new(pool, cache_backend).with_default_ttl(std::time::Duration::from_secs(60));
+// N+1 点查：二轮起全部命中（from_cache = true）
+let cq = qc.query_cached(
+    "SELECT id, name FROM users WHERE id = ?",
+    &[serde_json::json!(user_id)],
+    &["users"],                                    // SQL 依赖的表（显式声明）
+).await?;
+// 写路径后失效该表：后续 query_cached 重新执行并读到新值
+qc.invalidate_table("users").await?;
+```
+
+契约：**表名显式声明**（`tables` 参数，非空白名单校验，空集拒绝）而非从 SQL 解析——失效正确性优先，SQL 解析对别名/子查询的漏提取会直接变成脏读；key 由 `SHA-256(安全上下文 + 表版本原始字节 + SQL + 参数 JSON)` 派生，**role/namespace 参与 key**——行集内容依赖执行时 RLS/脱敏/权限上下文，共享同一后端的多实例必须以 `with_role`/`with_namespace` 区分安全上下文（admin 回填的全量行对受限角色不可见，跨租户同理），否则命中即越权读取；SQL/参数/任一表失效/安全上下文四者任一变化即新条目（旧条目交由后端 TTL/LRU 淘汰）；表版本以原始字节进哈希 + 失效写十进制串（编码单射，重复失效不碰撞回旧 key）；版本读取失败显性报错（当未失效会静默脏读）；穿透成功但缓存回填失败返回 `DbError::Cache`（查询幂等可安全重试）。**导出类型**：`OxcacheQueryCache`、`CachedQuery`。
 
 ---
 

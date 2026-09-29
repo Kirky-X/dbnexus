@@ -237,7 +237,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `cache` | oxcache 缓存（moka L1 后端）+ `ArcSwap` 无锁读取 | 否 |
-| `oxcache-integration` | OxcacheDbCacheAdapter 适配器 | 否 |
+| `oxcache-integration` | OxcacheDbCacheAdapter 适配器 + `OxcacheQueryCache` 查询缓存装饰器（query_cached/invalidate_table） | 否 |
 | `kit` | trait-kit AsyncKit 集成，隐含池/缓存/审计/健康全能力闭包 | 否 |
 | `repository` | 泛型仓储 `Repository<T>` CRUD 端口 + `impl_json_repository!` 宏 | 否 |
 | `data-api` | 数据 API 网关：实体到 JSON 查询端点（白名单 + 过滤 + 分页） | 否 |

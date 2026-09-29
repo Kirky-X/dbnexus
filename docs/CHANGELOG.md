@@ -33,14 +33,19 @@
 
 - **HTTP 健康端点生成器（R6）**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
 - **批量写入（`copy`）**：`BatchInsertStatement::chunk_rows_owned` 消费所有权变体——行集按值消费、参数经 `Vec::append` 指针级搬运，持有行集所有权的调用方免去借用版逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致
+- **指标（`metrics`）**：`MetricsCollector::slow_queries_count()` 零克隆计数访问器（健康快照等只需计数的场景免整环深拷贝）
+- **oxcache 查询缓存一等集成（`oxcache-integration`）**：新增 `OxcacheQueryCache` 查询缓存装饰器——`query_cached` 以 SQL + 绑定参数 + 表版本戳派生 key（SHA-256），命中返回缓存行集（`from_cache` 标记）、未命中穿透执行并回填；`invalidate_table` 写路径后按表纳秒时间戳戳版本（幂等、免读改写竞态），使提及该表的缓存项自然失效；表名显式声明（失效正确性优先于 SQL 解析）、版本读取失败与缓存回填失败均显性报错；feature 依赖新增 `sha2`（key 派生）
 
 ### Changed
+
+- **HTTP 健康端点（`http-health`）部署契约**：模块与 API 文档明示三端点无鉴权/无速率限制——`/readyz` 返回完整池快照、`/metrics` 返回全量指标文档，示例监听地址改 loopback，要求置于内网/反代鉴权之后或 nest 进带鉴权的 admin Router；`/metrics` 全量导出经 `spawn_blocking` 下放（免阻塞执行器线程）；`ReplicaHealthProvider` 契约显性化（必须廉价/纯同步/无阻塞 IO）
 
 - **批量写入（`copy`）错误契约**：`copy_in` 非 COPY 后端拒绝统一为 `DbError::Query` 基础文案（postgres/duckdb 支持范围 + 非 COPY 后端改写指引）；驱动组启用但池连接类型不匹配时以尾注透传原始下转错误（"got SeaOrm" 等），无驱动组追加启用驱动 feature 的补救指引——duckdb 失配路径的可观察变体由 `DbError::Connection` 变为 `DbError::Query`
 
 ### Fixed
 
 - **批量写入（`copy`）**：多值 INSERT 分块按 `min(500, bind_param_limit/列数)` 收缩（宽表单语句占位符数恒不超后端绑定上限，列数超上限构建期显性报错）；DuckDB CSV 编码对 JSON 对象/数组值补齐引用转义（含逗号/引号值不再破坏列结构）；COPY 载荷临时文件权限收紧为属主 0600 并经 `spawn_blocking` 下放同步文件 I/O
+- **指标（`metrics`）**：Prometheus 导出的 `type` label value 按 text exposition 规则转义（`\` `"` 换行）——`record_query` 公开 API 的自由字符串含注入载荷时不再可逃逸 label 或伪造指标行
 
 ## [0.6.0-rc.6] - 2026-09-28
 

@@ -842,6 +842,35 @@ impl MetricsCollector {
     }
 }
 
+/// Prometheus text exposition label value 转义（`\` → `\\`、`"` → `\"`、
+/// 换行 → `\n`）——自由字符串进 label 前必经此转义，否则可逃逸 label
+/// 或伪造指标行。无转义需求的输入返回借用视图零拷贝（导出热路径的
+/// 常见形态，对齐 copy 模块 CSV 编码器的 Cow 范式）。
+fn escape_prometheus_label_value(value: &str) -> std::borrow::Cow<'_, str> {
+    fn needs_escape(value: &str) -> bool {
+        value.chars().any(|c| matches!(c, '\\' | '"' | '\n'))
+    }
+
+    fn escape_owned(value: &str) -> String {
+        let mut out = String::with_capacity(value.len() + 8);
+        for c in value.chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                '\n' => out.push_str("\\n"),
+                _ => out.push(c),
+            }
+        }
+        out
+    }
+
+    if needs_escape(value) {
+        std::borrow::Cow::Owned(escape_owned(value))
+    } else {
+        std::borrow::Cow::Borrowed(value)
+    }
+}
+
 impl MetricsCollector {
     /// 记录一次查询
     pub fn record_query(
@@ -992,6 +1021,15 @@ impl MetricsCollector {
     /// 获取慢查询记录
     pub fn slow_queries(&self) -> Vec<SlowQueryRecord> {
         self.slow_queries.read().iter().cloned().collect()
+    }
+
+    /// 慢查询条数（零克隆）
+    ///
+    /// 健康快照等只需计数的场景用本访问器代替
+    /// `slow_queries().len()`——后者为取一个长度克隆整个样本环（环满时
+    /// 100 条 String 深拷贝）。
+    pub fn slow_queries_count(&self) -> usize {
+        self.slow_queries.read().len()
     }
 
     /// 获取慢查询配置快照（健康导出用）
@@ -1296,7 +1334,12 @@ impl MetricsCollector {
         // 查询指标
         let stats = self.all_query_stats();
         for (query_type, stat) in stats {
-            let type_label = query_type.to_lowercase();
+            // query_type 是 record_query 公开 API 的自由字符串（可能携带
+            // 用户输入），label value 按 text exposition 规则转义，否则
+            // 含 `"`/换行的值可逃逸 label 或伪造指标行；无特殊字符时转义
+            // 返回借用，每标签仅 to_lowercase 一次分配
+            let lowered = query_type.to_lowercase();
+            let type_label = escape_prometheus_label_value(&lowered);
 
             // 使用 writeln! 替代 push_str + format!
             writeln!(
@@ -1516,6 +1559,49 @@ impl MetricsCollectorTrait for MockMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// label value 注入防护：query_type 是公开 API 的自由字符串，含
+    /// `"`/换行时必须转义，否则可逃逸 label 或伪造指标行（Prometheus
+    /// text exposition 注入）
+    #[test]
+    fn test_export_prometheus_escapes_label_injection() {
+        let collector = MetricsCollector::new();
+        let malicious = "probe\"} 1\n# TYPE fake counter\n";
+        collector.record_query(malicious, Duration::from_millis(1), true, None);
+
+        let output = collector.export_prometheus();
+        // 转义后不得出现裸引号逃逸或独立伪造的 TYPE 行（导出前 type 会
+        // to_lowercase，伪 TYPE 行同样以小写形态判定）
+        assert!(
+            !output.contains("\n# type fake"),
+            "不得出现伪造指标行，实际输出:\n{output}"
+        );
+        assert!(
+            output.contains(r#"probe\"} 1\n# type fake counter\n"#),
+            "label value 应按 text exposition 规则转义（\\\" 与 \\n），实际输出:\n{output}"
+        );
+    }
+
+    /// 零克隆计数访问器：与全量克隆访问器的 len 一致，环满封顶
+    #[test]
+    fn test_slow_queries_count_matches_len_without_clone() {
+        let collector = MetricsCollector::new();
+        assert_eq!(collector.slow_queries_count(), 0);
+        collector.set_slow_query_threshold(0);
+        for i in 0..105 {
+            collector.record_query(&format!("slow_{i}"), Duration::from_millis(1), true, None);
+        }
+        assert_eq!(
+            collector.slow_queries_count(),
+            collector.slow_queries().len(),
+            "计数访问器应与克隆访问器长度一致"
+        );
+        assert_eq!(
+            collector.slow_queries_count(),
+            collector.max_slow_queries,
+            "环满后计数封顶"
+        );
+    }
 
     /// MockMetrics 基本功能测试
     #[test]

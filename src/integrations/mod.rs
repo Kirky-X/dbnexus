@@ -10,6 +10,10 @@
 #[cfg(feature = "oxcache-integration")]
 pub mod oxcache_adapter;
 
+/// 查询缓存装饰器（oxcache 后端 × DbPool 参数化查询，命中/失效/穿透）
+#[cfg(feature = "oxcache-integration")]
+pub mod oxcache_query_cache;
+
 #[cfg(feature = "kit")]
 pub mod kit;
 
@@ -23,6 +27,9 @@ pub mod http_health;
 // Re-exports
 #[cfg(feature = "oxcache-integration")]
 pub use oxcache_adapter::OxcacheDbCacheAdapter;
+
+#[cfg(feature = "oxcache-integration")]
+pub use oxcache_query_cache::{CachedQuery, OxcacheQueryCache};
 
 #[cfg(feature = "kit")]
 pub use kit::{DbNexusBuildObserver, DbNexusModule};

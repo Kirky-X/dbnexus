@@ -87,10 +87,84 @@ fn bench_histogram_record(c: &mut Criterion) {
     });
 }
 
+/// Prometheus 导出规模曲线：1/50/200 标签（另附慢查询环满态）
+///
+/// `/metrics` 抓取路径（http-health 端点直通本导出）的成本随标签数线性
+/// 增长，规模点作为回归基线暴露增长斜率。慢查询填充用单一 query_type
+/// （"slow"，计入总标签数——op 填充 labels-1 个）——环满与标签数解耦：
+/// export_prometheus 不遍历慢查询环（仅读查询统计），慢_{i} 各自成标签
+/// 会伪造 x 轴。
+fn bench_prometheus_export_scales(c: &mut Criterion) {
+    let mut group = c.benchmark_group("prometheus_export_scale");
+    for &labels in &[1usize, 50, 200] {
+        let collector = MetricsCollector::new();
+        collector.set_slow_query_threshold(0);
+        for i in 0..labels.saturating_sub(1) {
+            collector.record_query(&format!("op_{i}"), Duration::from_millis(1), true, None);
+        }
+        // 慢查询环满（上限 100）：环内容当前不入导出，仅固化"环满"前提，
+        // 未来导出接入慢查询统计时本基准即覆盖该形态
+        for _ in 0..105 {
+            collector.record_query("slow", Duration::from_millis(1), true, None);
+        }
+        group.bench_function(format!("labels_{labels}"), |b| {
+            b.iter(|| black_box(collector.export_prometheus()))
+        });
+    }
+    group.finish();
+}
+
+/// 健康快照：`/readyz` 探测的数据源成本（池状态 + 慢查询计数 + 副本段）
+///
+/// 亚微秒级基准（本机采样 ≈0.4-0.8µs）：WSL2 上亚微秒基准跨进程漂移
+/// 可达 2×，绝对差 <1µs 视为噪声而非回归——回归判定看同进程多轮中位数
+/// 趋势或与 docs/PERFORMANCE.md 记录量级对比，不用窄百分比阈值。
+#[cfg(all(
+    feature = "sqlite",
+    feature = "health-check",
+    feature = "sql-parser",
+    feature = "runtime-tokio-rustls"
+))]
+fn bench_health_snapshot(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let pool = rt.block_on(async {
+        // sqlite::memory: 快照基于池状态统计而非连接探活，预热一次保证 healthy
+        let pool = dbnexus::DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session.execute_raw("SELECT 1").await.expect("warm");
+        pool
+    });
+    c.bench_function("health_snapshot", |b| {
+        b.iter(|| black_box(rt.block_on(pool.health_snapshot())))
+    });
+}
+
+// health_snapshot 依赖 sqlite+health-check 组合，cfg 在宏外拆分声明
+#[cfg(all(
+    feature = "sqlite",
+    feature = "health-check",
+    feature = "sql-parser",
+    feature = "runtime-tokio-rustls"
+))]
 criterion_group!(
     benches,
     bench_percentile_calculation,
     bench_prometheus_export,
+    bench_prometheus_export_scales,
+    bench_histogram_record,
+    bench_health_snapshot
+);
+#[cfg(not(all(
+    feature = "sqlite",
+    feature = "health-check",
+    feature = "sql-parser",
+    feature = "runtime-tokio-rustls"
+)))]
+criterion_group!(
+    benches,
+    bench_percentile_calculation,
+    bench_prometheus_export,
+    bench_prometheus_export_scales,
     bench_histogram_record
 );
 criterion_main!(benches);
