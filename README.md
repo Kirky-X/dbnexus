@@ -257,6 +257,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `health-check` | 健康检查模块与 `health_snapshot` 结构化导出 | 否 |
 | `observability` | `metrics` + `health-check` 聚合 | 否 |
 | `otel` | OTLP/HTTP JSON 信封导出桥 | 否 |
+| `http-health` 🆕 | HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 `/healthz`（liveness）/`/readyz`（readiness，池快照+熔断器判定）/`/metrics`（Prometheus）的 axum Router；仅生成 Router 不含 serve，默认构建零 HTTP 依赖 | 否 |
 | `inklog` | inklog 结构化日志集成：`init_inklog_logger()` 把 inklog 安装为全局 `log` 后端，池超时/权限拒绝/熔断/慢查询记录路由到 inklog 管道（log 门面记录达 console/file sinks，database sink 仅 inklog 原生 tracing 路径可达；manager 须全程保持存活，Drop 后记录被静默丢弃） | 否 |
 
 ### 数据管理

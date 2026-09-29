@@ -29,6 +29,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **HTTP 健康端点生成器（R6）**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
+- **批量写入（`copy`）**：`BatchInsertStatement::chunk_rows_owned` 消费所有权变体——行集按值消费、参数经 `Vec::append` 指针级搬运，持有行集所有权的调用方免去借用版逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致
+
 ### Changed
 
 - **批量写入（`copy`）错误契约**：`copy_in` 非 COPY 后端拒绝统一为 `DbError::Query` 基础文案（postgres/duckdb 支持范围 + 非 COPY 后端改写指引）；驱动组启用但池连接类型不匹配时以尾注透传原始下转错误（"got SeaOrm" 等），无驱动组追加启用驱动 feature 的补救指引——duckdb 失配路径的可观察变体由 `DbError::Connection` 变为 `DbError::Query`

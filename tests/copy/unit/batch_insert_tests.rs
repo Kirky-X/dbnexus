@@ -295,6 +295,78 @@ fn test_chunk_rows_rejects_width_over_bind_param_limit() {
 }
 
 // ============================================================================
+// chunk_rows_owned：消费所有权变体（零深拷贝扁平化）
+// ============================================================================
+
+#[test]
+fn test_chunk_rows_owned_matches_borrowed_output() {
+    let stmt =
+        BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()]).expect("合法标识符");
+    // 1207 行跨块：owned 版产出必须与借用版逐字节/逐值一致
+    let rows: Vec<Vec<serde_json::Value>> = (0..1207)
+        .map(|i| vec![serde_json::json!(i), serde_json::json!(format!("v{i}"))])
+        .collect();
+    let borrowed = stmt
+        .chunk_rows(&rows, PlaceholderStyle::QMark)
+        .expect("借用版分块应成功");
+    let owned = stmt
+        .chunk_rows_owned(rows, PlaceholderStyle::QMark)
+        .expect("所有权版分块应成功");
+    assert_eq!(borrowed, owned, "所有权版产出应与借用版完全一致");
+    assert_eq!(owned.len(), 3, "1207 行应分为 500+500+207 三块");
+}
+
+#[test]
+fn test_chunk_rows_owned_moves_json_trees_without_clone() {
+    // 值相等性保证 move 语义不改变数据；大 JSON 树（对象/数组列）是
+    // 深克隆成本的主体，此处验证其经 owned 路径后内容无损
+    let stmt =
+        BatchInsertStatement::new("t", &["id".to_string(), "doc".to_string()]).expect("合法标识符");
+    let docs: Vec<serde_json::Value> = (0..4)
+        .map(|i| serde_json::json!({"id": i, "nested": {"arr": [i, i + 1, i + 2]}}))
+        .collect();
+    let rows: Vec<Vec<serde_json::Value>> = docs
+        .iter()
+        .enumerate()
+        .map(|(i, d)| vec![serde_json::json!(i), d.clone()])
+        .collect();
+    let owned = stmt
+        .chunk_rows_owned(rows, PlaceholderStyle::QMark)
+        .expect("所有权版分块应成功");
+    let flat: Vec<&serde_json::Value> = owned[0].1.iter().collect();
+    assert_eq!(flat[0], &serde_json::json!(0));
+    assert_eq!(flat[1], &docs[0], "JSON 树应按 move 原样搬运");
+    assert_eq!(flat[3], &docs[1]);
+}
+
+#[test]
+fn test_chunk_rows_owned_rejects_ragged_rows_before_consuming() {
+    let stmt =
+        BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()]).expect("合法标识符");
+    let rows = vec![
+        vec![serde_json::json!(1), serde_json::json!(2)],
+        vec![serde_json::json!(3)],
+    ];
+    let err = stmt
+        .chunk_rows_owned(rows, PlaceholderStyle::QMark)
+        .expect_err("行列数不匹配必须整体报错");
+    assert!(
+        format!("{err}").contains("row"),
+        "错误应说明行宽非法，实际: {err}"
+    );
+    // 宽表收缩与超限拒绝对 owned 版同契约
+    let cols: Vec<String> = (0..70).map(|i| format!("c{i}")).collect();
+    let wide = BatchInsertStatement::new("t_w", &cols).expect("合法标识符");
+    let rows: Vec<Vec<serde_json::Value>> = (0..1000)
+        .map(|i| (0..70).map(|_| serde_json::json!(i)).collect())
+        .collect();
+    let owned = wide
+        .chunk_rows_owned(rows, PlaceholderStyle::QMark)
+        .expect("宽表 owned 分块应成功");
+    assert_eq!(owned[0].1.len(), 468 * 70, "首块应按收缩后大小满载");
+}
+
+// ============================================================================
 // 执行层（sqlite）：构建产物经 execute_with_params 参数化落库
 // ============================================================================
 

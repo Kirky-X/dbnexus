@@ -89,7 +89,12 @@ pub mod i18n;
 
 /// Integration adapters for external crates (oxcache, inklog, etc.)
 // 成员子模块各自带 cfg 门控，此处 any(...) 覆盖全部含 adapter 的 feature
-#[cfg(any(feature = "oxcache-integration", feature = "kit", feature = "inklog"))]
+#[cfg(any(
+    feature = "oxcache-integration",
+    feature = "kit",
+    feature = "inklog",
+    feature = "http-health"
+))]
 pub mod integrations;
 
 // 生成的权限角色模块

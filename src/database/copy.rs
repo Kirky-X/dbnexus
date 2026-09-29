@@ -488,11 +488,62 @@ impl BatchInsertStatement {
     ///   即可，无需自行处理中途失败的部分写入；列数本身超过绑定上限时
     ///   同样构建期报错（任何行数的语句都无法安全执行）
     /// - 空行集返回空序列（合法输入，调用方无事可做）
+    ///
+    /// 行集按借用传递，参数逐值克隆；调用方持有行集所有权且不再复用时，
+    /// [`Self::chunk_rows_owned`] 免去逐值深拷贝
     pub fn chunk_rows(
         &self,
         rows: &[Vec<serde_json::Value>],
         style: PlaceholderStyle,
     ) -> Result<Vec<(String, Vec<serde_json::Value>)>, DbError> {
+        let chunk_size = self.validated_chunk_size(rows, style)?;
+        let width = self.columns.len();
+        let mut out = Vec::with_capacity(rows.len().div_ceil(chunk_size));
+        for chunk in rows.chunks(chunk_size) {
+            let sql = self.build(chunk.len(), style)?;
+            let mut params = Vec::with_capacity(chunk.len() * width);
+            for row in chunk {
+                params.extend(row.iter().cloned());
+            }
+            out.push((sql, params));
+        }
+        Ok(out)
+    }
+
+    /// [`Self::chunk_rows`] 的消费所有权变体
+    ///
+    /// 行集按值消费，参数经 `Vec::append` 整体搬运（行缓冲指针级 move，
+    /// `serde_json::Value` 零深拷贝），供持有行集所有权且不再复用的调用方
+    /// 替代借用版免去逐值克隆（JSON 对象/数组列的整树深拷贝是借用版的
+    /// 主要构建成本）。校验与分块契约与借用版完全一致（fail-fast 全量
+    /// 校验先行，错误路径下行集已被消费、不可恢复属预期语义）。
+    pub fn chunk_rows_owned(
+        &self,
+        mut rows: Vec<Vec<serde_json::Value>>,
+        style: PlaceholderStyle,
+    ) -> Result<Vec<(String, Vec<serde_json::Value>)>, DbError> {
+        let chunk_size = self.validated_chunk_size(&rows, style)?;
+        let width = self.columns.len();
+        let mut out = Vec::with_capacity(rows.len().div_ceil(chunk_size));
+        while !rows.is_empty() {
+            let take = rows.len().min(chunk_size);
+            let sql = self.build(take, style)?;
+            let mut params = Vec::with_capacity(take * width);
+            for row in rows.drain(..take) {
+                let mut row = row;
+                params.append(&mut row);
+            }
+            out.push((sql, params));
+        }
+        Ok(out)
+    }
+
+    /// fail-fast 全量校验（行宽/列数超绑定上限）并计算收缩后的块行数
+    fn validated_chunk_size(
+        &self,
+        rows: &[Vec<serde_json::Value>],
+        style: PlaceholderStyle,
+    ) -> Result<usize, DbError> {
         let width = self.columns.len();
         for (idx, row) in rows.iter().enumerate() {
             if row.len() != width {
@@ -511,17 +562,7 @@ impl BatchInsertStatement {
                  the INSERT instead"
             )));
         }
-        let chunk_size = BATCH_INSERT_CHUNK_SIZE.min(limit / width).max(1);
-        let mut out = Vec::with_capacity(rows.len().div_ceil(chunk_size));
-        for chunk in rows.chunks(chunk_size) {
-            let sql = self.build(chunk.len(), style)?;
-            let mut params = Vec::with_capacity(chunk.len() * width);
-            for row in chunk {
-                params.extend(row.iter().cloned());
-            }
-            out.push((sql, params));
-        }
-        Ok(out)
+        Ok(BATCH_INSERT_CHUNK_SIZE.min(limit / width).max(1))
     }
 }
 

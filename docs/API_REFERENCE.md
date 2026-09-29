@@ -601,6 +601,8 @@ for (sql, params) in stmt.chunk_rows(&rows, PlaceholderStyle::QMark)? {
 // postgres 方言：PlaceholderStyle::Dollar（$N 编号跨行连续）
 ```
 
+持有行集所有权且不再复用时，`chunk_rows_owned(rows, style)`（按值消费）经 `Vec::append` 指针级搬运参数，免去借用版 `chunk_rows` 的逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致。
+
 ### COPY 封装 `CopyStatement` 与 `DbPool::copy_in`
 
 - **postgres**：`build()` 生成 `COPY ... FROM STDIN`，`copy_in` 经协议流式传输（`encode_copy_rows` 提供 PG text 行编码）。
@@ -615,6 +617,35 @@ let inserted: u64 = pool.copy_in(&stmt, &rows).await?;
 ```
 
 **注意**：`duckdb::memory:` 的池连接互不共享（idle 队列空时重新 open 全新空库）；copy_in 前请先归还建表连接（串行复用单连接），或使用文件库 + `with_existing_duckdb_connection` 共享句柄。
+
+---
+
+## 🌐 HTTP 健康端点生成器（`http-health` 特性）
+
+`HealthRouterBuilder`（`dbnexus::integrations::http_health`）把既有健康数据源装配为挂载三个标准端点的 axum Router。**生成而非服务**：`build()` 只产出 Router，监听/优雅停机由消费方用 `axum::serve` 自行编排；feature 未启用时库不引入任何 HTTP 依赖。
+
+| 端点 | 语义 | 数据源 | 成功态 |
+|------|------|--------|--------|
+| `GET /healthz` | liveness：进程存活标记 | 无 | 恒 200 `{"status":"alive"}` |
+| `GET /readyz` | readiness：能否承接流量 | `DbPool::health_snapshot`（池饱和度/副本/慢查询）+ 可选熔断器 | healthy/degraded → 200，否则 503 |
+| `GET /metrics` | Prometheus 抓取 | 可选 `MetricsCollector::export_prometheus` | 已注入 → 200（`text/plain; version=0.0.4`），未注入 → 404 |
+
+契约：readiness **fail-closed**——快照 `status` 非 healthy/degraded（含未知值/缺失）一律 503；熔断器 `Open` 覆盖快照状态为 `unhealthy`（池健康但下游被熔断拒绝时不接流量），closed/half-open 如实入响应体 `circuit_breaker` 字段；`/metrics` 未注入采集器时显性 404 并说明原因，不返回伪造空文档。
+
+```rust
+use std::sync::Arc;
+use dbnexus::DbPool;
+use dbnexus::integrations::http_health::HealthRouterBuilder;
+
+let pool = Arc::new(DbPool::new("sqlite:data.db?mode=rwc").await?);
+let app = HealthRouterBuilder::new(pool)          // 池快照为必选数据源
+    .with_circuit_breaker(breaker)                // 可选：Open → /readyz 503
+    .with_metrics_collector(collector)            // 可选：/metrics 输出 Prometheus
+    .build();
+
+let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+axum::serve(listener, app).await?;
+```
 
 ---
 

@@ -128,6 +128,10 @@ path = "src/observability/health_check.rs"
 name = "latency_histogram"
 path = "src/observability/latency_histogram.rs"
 
+[[bin]]
+name = "http_health"
+path = "src/observability/http_health.rs"
+
 # ============================================================
 # 认证与审计模块示例 (auth/)
 # ============================================================
@@ -277,6 +281,9 @@ oxcache = { version = "0.5.0-rc.4" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
 trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async", "lifecycle", "health"] }
+
+# axum（http_health 示例需要直接调用 axum::serve 承载生成的 Router）
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 
 # JSON（图数据库示例需要 serde_json::json!）
 serde_json = { workspace = true }

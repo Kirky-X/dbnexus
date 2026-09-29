@@ -593,6 +593,8 @@ dependencies = [
  "http",
  "http-body",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "itoa",
  "matchit",
  "memchr",
@@ -600,7 +602,10 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "serde_core",
+ "serde_json",
+ "serde_path_to_error",
  "sync_wrapper",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",
@@ -1569,6 +1574,7 @@ dependencies = [
  "arc-swap",
  "assert_cmd",
  "async-trait",
+ "axum",
  "bcrypt",
  "chrono",
  "confers",
@@ -1578,6 +1584,7 @@ dependencies = [
  "duckdb",
  "fluent-bundle",
  "futures",
+ "http-body-util",
  "icu",
  "inklog",
  "jsonwebtoken",
@@ -1601,6 +1608,7 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "tokio",
+ "tower",
  "trait-kit",
  "twox-hash",
  "unic-langid",
@@ -1633,6 +1641,7 @@ name = "dbnexus-examples"
 version = "0.6.0-rc.6"
 dependencies = [
  "async-trait",
+ "axum",
  "chrono",
  "dbnexus",
  "duckdb",
@@ -5044,6 +5053,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

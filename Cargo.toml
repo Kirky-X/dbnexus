@@ -45,6 +45,9 @@ dbnexus-macros = { path = "macros", version = "0.6.0-rc.6" }
 # Validation（root + examples 共享）
 validator = { version = "0.21", features = ["derive"] }
 
+# HTTP 健康端点（http-health feature 生成 axum Router，server 能力交给消费方）
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
+
 [workspace.lints.rust]
 # 宏（#[db_entity]/#[db_repository]）展开后会在消费方代码中生成
 # #[cfg(feature = "metrics")] 指标插桩，检查的是 dbnexus 的特性而非本 crate 的
@@ -157,6 +160,11 @@ observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
 otel = ["health-check"]  # OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback，手工 HTTP 客户端无新增依赖）
+# HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 /healthz /readyz /metrics
+# 的 axum Router（liveness/readiness/Prometheus 三分语义）；仅生成 Router 不含
+# serve，默认不引入任何 HTTP 依赖，启用本 feature 才拉入 axum（server 能力
+# 留给消费方挂载）。数据源 health_snapshot + 可选 CircuitBreaker/MetricsCollector
+http-health = ["dep:axum", "health-check"]
 # inklog 结构化日志集成 — 池超时/权限拒绝/熔断/慢查询接线点经 `log` 门面发
 # 记录（无条件编译，无 logger 时 no-op）；启用后 `init_inklog_logger()` 把
 # inklog LoggerManager 安装为全局 log 后端，记录自动路由到结构化管道。
@@ -254,7 +262,7 @@ monolith = [
 enterprise = ["postgres", "monolith", "permission-engine"]
 
 # 所有可选功能（不包括数据库驱动；成员均无 embedded/server 驱动互斥风险）
-all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "inklog", "kit", "data-protection"]
+all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "inklog", "kit", "data-protection", "http-health"]
 
 [dependencies]
 # Workspace dependencies
@@ -266,6 +274,7 @@ serde_yaml_ng = { workspace = true, optional = true }
 serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
+axum = { workspace = true, optional = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 sha2 = { version = "0.11", optional = true }
@@ -337,6 +346,9 @@ predicates = "3.1"
 criterion = "0.8"
 tempfile = "3.27"
 futures = "0.3"
+# http-health 端点契约测试：tower ServiceExt::oneshot 直测 Router（不起真实服务器）
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1"
 
 [lints]
 workspace = true
@@ -645,6 +657,12 @@ required-features = ["sqlite", "copy", "sql-parser", "runtime-tokio-rustls"]
 name = "duckdb_copy_tests"
 path = "tests/copy/unit/duckdb_copy_tests.rs"
 required-features = ["duckdb", "copy", "sql-parser", "runtime-tokio-rustls"]
+
+# HTTP 健康端点契约（Router 三端点语义 + 数据源接线，oneshot 直测不起服务器）
+[[test]]
+name = "http_health_tests"
+path = "tests/http_health_tests.rs"
+required-features = ["sqlite", "http-health", "metrics", "sql-parser", "runtime-tokio-rustls"]
 
 # DB 审计存储（DbAuditStorage）
 [[test]]
