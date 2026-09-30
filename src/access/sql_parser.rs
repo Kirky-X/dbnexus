@@ -243,8 +243,15 @@ impl SqlParser {
     ///
     /// # 缓存行为
     ///
-    /// 解析结果会被缓存以提高重复查询的性能。
+    /// 解析结果会被缓存以提高重复查询的性能（失败解析不入缓存，仅成功
+    /// 产物可复用）。
     /// 使用 `clear_cache()` 可手动清空缓存。
+    ///
+    /// # async 无挂起点
+    ///
+    /// async 签名仅为对齐调用管道（`Session` 执行链）的接口形态；方法体
+    /// 为纯同步路径（同步 LRU 探测 + 同步 AST 解析，无 `.await`），调用
+    /// 不会真正挂起任务，也不阻塞执行器线程。
     pub async fn parse_single(&self, sql: &str) -> Result<ParsedSqlOperation, SqlParseError> {
         let sql = sql.trim();
 
@@ -1198,6 +1205,43 @@ mod tests {
 
         // 缓存统计：一次未命中 + 一次命中
         assert_eq!(parser.cache_stats(), (1, 1));
+    }
+
+    /// 失败解析不入缓存：非法语句反复解析均走真实解析路径（未命中），
+    /// 缓存条目数恒为 0——毒语句不得借失败结果污染缓存复用通道
+    #[tokio::test]
+    async fn test_failed_parse_is_not_cached() {
+        let parser = SqlParser::new().await;
+        let bad_sql = "SELECT FROM WHERE (";
+
+        assert!(
+            parser.parse_single(bad_sql).await.is_err(),
+            "非法语句应解析失败"
+        );
+        assert_eq!(
+            parser.parse_cache.stats().size,
+            0,
+            "失败解析不得写入缓存条目"
+        );
+
+        // 同一非法语句二次解析：仍计入未命中（重走解析），条目数仍为 0
+        assert!(parser.parse_single(bad_sql).await.is_err());
+        let (hits, misses) = parser.cache_stats();
+        assert_eq!((hits, misses), (0, 2), "两次失败解析均应计入未命中");
+        assert_eq!(
+            parser.parse_cache.stats().size,
+            0,
+            "重复失败解析后缓存仍不得有条目"
+        );
+
+        // 失败与成功互不干扰：成功语句正常入缓存命中
+        assert!(parser.parse_single("SELECT 1").await.is_ok());
+        assert!(parser.parse_single("SELECT 1").await.is_ok());
+        assert_eq!(
+            parser.cache_stats(),
+            (1, 3),
+            "成功语句一次未命中 + 一次命中（失败解析的 2 次未命中保留）"
+        );
     }
 
     #[tokio::test]

@@ -679,6 +679,13 @@ path = "benches/oxcache_query_cache_bench.rs"
 harness = false
 required-features = ["sqlite", "oxcache-integration", "sql-parser", "runtime-tokio-rustls"]
 
+# 语句级 LRU 缓存基准（满容量稳态插入淘汰钉住 O(1) 成本 + 命中路径参照）
+[[bench]]
+name = "prepare_cache_bench"
+path = "benches/prepare_cache_bench.rs"
+harness = false
+required-features = ["prepare-cache"]
+
 # DB 审计存储（DbAuditStorage）
 [[test]]
 name = "audit_db_storage_tests"

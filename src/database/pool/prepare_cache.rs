@@ -44,28 +44,104 @@ pub struct PrepareCacheStats {
     pub size: usize,
 }
 
-/// 缓存条目：调用方准备产物（SQL 由 map 键承载，条目不重复存储）
-struct Entry<V> {
+/// 链表节点：槽位池存储，prev/next 为槽位索引（None 即链端）；
+/// value 为调用方准备产物，SQL 由 map 键承载（节点持有同值 Arc 供淘汰时清理 map）
+struct Node<V> {
+    key: Arc<str>,
     value: Arc<V>,
-    /// LRU 访问时钟（每次命中/插入递增，容量淘汰时剔除最小者）
-    last_used: u64,
+    prev: Option<usize>,
+    next: Option<usize>,
 }
 
 /// 语句级 LRU 缓存
 ///
-/// 线程安全（内部 `Mutex`）；容量上限在构造时固定，淘汰策略为
-/// 最近最少使用（按访问时钟）。
+/// 线程安全（内部 `Mutex`）；容量上限在构造时固定，淘汰策略为最近最少
+/// 使用：侵入式双链表维护访问序，命中/插入前移链首、淘汰摘链尾，
+/// 全部操作 O(1)（无满容量线性扫描串行点）。
 pub struct PreparedStatementCache<V> {
     capacity: usize,
     inner: Mutex<LruState<V>>,
 }
 
 struct LruState<V> {
-    map: HashMap<Arc<str>, Entry<V>>,
-    clock: u64,
+    /// 键 → 槽位索引（节点顺序与统计由链表/计数承载）
+    map: HashMap<Arc<str>, usize>,
+    /// 节点槽位池（含空闲槽；淘汰回收的槽位经 free 复用，避免重复分配）
+    slab: Vec<Node<V>>,
+    free: Vec<usize>,
+    /// 访问序双链表：head 为最近使用，tail 为最久未使用
+    head: Option<usize>,
+    tail: Option<usize>,
     hits: u64,
     misses: u64,
     evictions: u64,
+}
+
+impl<V> LruState<V> {
+    /// 从访问序链表摘除槽位节点（不动 map 与 free）
+    fn unlink(&mut self, idx: usize) {
+        let (prev, next) = (self.slab[idx].prev, self.slab[idx].next);
+        match prev {
+            Some(p) => self.slab[p].next = next,
+            None => self.head = next,
+        }
+        match next {
+            Some(n) => self.slab[n].prev = prev,
+            None => self.tail = prev,
+        }
+        self.slab[idx].prev = None;
+        self.slab[idx].next = None;
+    }
+
+    /// 将槽位节点链接到链首（最近使用端）
+    fn push_front(&mut self, idx: usize) {
+        self.slab[idx].prev = None;
+        self.slab[idx].next = self.head;
+        if let Some(old_head) = self.head {
+            self.slab[old_head].prev = Some(idx);
+        } else {
+            self.tail = Some(idx);
+        }
+        self.head = Some(idx);
+    }
+
+    /// 命中刷新：已在链中的节点前移至链首
+    fn touch(&mut self, idx: usize) {
+        if self.head != Some(idx) {
+            self.unlink(idx);
+            self.push_front(idx);
+        }
+    }
+
+    /// 淘汰链尾（最久未使用）：摘链、清 map 并回收槽位
+    fn evict_lru(&mut self) {
+        let tail = self.tail.expect("淘汰仅在容量已满的非空缓存发生");
+        self.unlink(tail);
+        let key = Arc::clone(&self.slab[tail].key);
+        self.map.remove(&key);
+        self.free.push(tail);
+        self.evictions += 1;
+    }
+
+    /// 分配槽位：优先复用淘汰回收的空闲槽，否则追加
+    fn alloc_slot(&mut self, key: Arc<str>, value: Arc<V>) -> usize {
+        let node = Node {
+            key,
+            value,
+            prev: None,
+            next: None,
+        };
+        match self.free.pop() {
+            Some(idx) => {
+                self.slab[idx] = node;
+                idx
+            }
+            None => {
+                self.slab.push(node);
+                self.slab.len() - 1
+            }
+        }
+    }
 }
 
 impl<V> PreparedStatementCache<V> {
@@ -75,7 +151,10 @@ impl<V> PreparedStatementCache<V> {
             capacity: capacity.max(1),
             inner: Mutex::new(LruState {
                 map: HashMap::new(),
-                clock: 0,
+                slab: Vec::new(),
+                free: Vec::new(),
+                head: None,
+                tail: None,
                 hits: 0,
                 misses: 0,
                 evictions: 0,
@@ -98,13 +177,11 @@ impl<V> PreparedStatementCache<V> {
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.clock += 1;
-        let clock = state.clock;
 
-        // 命中路径：刷新访问时钟
-        if let Some(entry) = state.map.get_mut(&key) {
-            entry.last_used = clock;
-            let value = Arc::clone(&entry.value);
+        // 命中路径：条目前移至链首（刷新访问序）
+        if let Some(&idx) = state.map.get(&key) {
+            state.touch(idx);
+            let value = Arc::clone(&state.slab[idx].value);
             state.hits += 1;
             return (value, true);
         }
@@ -113,25 +190,14 @@ impl<V> PreparedStatementCache<V> {
         state.misses += 1;
         let value = Arc::new(prepare(&key));
 
-        // 容量已满 → 淘汰最久未使用条目
-        if state.map.len() >= self.capacity
-            && let Some(oldest_key) = state
-                .map
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| Arc::clone(key))
-        {
-            state.map.remove(&oldest_key);
-            state.evictions += 1;
+        // 容量已满 → 淘汰链尾（最久未使用，O(1)）
+        if state.map.len() >= self.capacity {
+            state.evict_lru();
         }
 
-        state.map.insert(
-            Arc::clone(&key),
-            Entry {
-                value: Arc::clone(&value),
-                last_used: clock,
-            },
-        );
+        let idx = state.alloc_slot(Arc::clone(&key), Arc::clone(&value));
+        state.push_front(idx);
+        state.map.insert(key, idx);
         (value, false)
     }
 
@@ -149,7 +215,7 @@ impl<V> PreparedStatementCache<V> {
         }
     }
 
-    /// 探测缓存条目；命中刷新访问时钟并计入命中统计，未命中计入未命中统计
+    /// 探测缓存条目；命中刷新访问序并计入命中统计，未命中计入未命中统计
     ///
     /// 与 [`Self::get_or_prepare`] 的差异：不执行 prepare 闭包，命中与否由
     /// 调用方分支处理（如解析失败的结果不允许入缓存）。
@@ -158,12 +224,10 @@ impl<V> PreparedStatementCache<V> {
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.clock += 1;
-        let clock = state.clock;
-        match state.map.get_mut(key) {
-            Some(entry) => {
-                entry.last_used = clock;
-                let value = Arc::clone(&entry.value);
+        match state.map.get(key).copied() {
+            Some(idx) => {
+                state.touch(idx);
+                let value = Arc::clone(&state.slab[idx].value);
                 state.hits += 1;
                 Some(value)
             }
@@ -174,7 +238,7 @@ impl<V> PreparedStatementCache<V> {
         }
     }
 
-    /// 插入条目；键已存在时原位覆盖（刷新访问时钟，不触发淘汰），
+    /// 插入条目；键已存在时原位覆盖（前移访问序，不触发淘汰），
     /// 新键在容量已满时先淘汰最久未使用条目
     pub fn insert(&self, key: impl Into<Arc<str>>, value: V) {
         let key: Arc<str> = key.into();
@@ -182,30 +246,17 @@ impl<V> PreparedStatementCache<V> {
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.clock += 1;
-        let clock = state.clock;
-        if let Some(entry) = state.map.get_mut(&key) {
-            entry.value = Arc::new(value);
-            entry.last_used = clock;
+        if let Some(&idx) = state.map.get(&key) {
+            state.slab[idx].value = Arc::new(value);
+            state.touch(idx);
             return;
         }
-        if state.map.len() >= self.capacity
-            && let Some(oldest_key) = state
-                .map
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| Arc::clone(key))
-        {
-            state.map.remove(&oldest_key);
-            state.evictions += 1;
+        if state.map.len() >= self.capacity {
+            state.evict_lru();
         }
-        state.map.insert(
-            key,
-            Entry {
-                value: Arc::new(value),
-                last_used: clock,
-            },
-        );
+        let idx = state.alloc_slot(Arc::clone(&key), Arc::new(value));
+        state.push_front(idx);
+        state.map.insert(key, idx);
     }
 
     /// 清空全部条目并重置命中/未命中/淘汰统计
@@ -215,6 +266,10 @@ impl<V> PreparedStatementCache<V> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.map.clear();
+        state.slab.clear();
+        state.free.clear();
+        state.head = None;
+        state.tail = None;
         state.hits = 0;
         state.misses = 0;
         state.evictions = 0;
@@ -332,5 +387,40 @@ mod tests {
         assert_eq!(stats.size, 0);
         assert_eq!((stats.hits, stats.misses, stats.evictions), (0, 0, 0));
         assert_eq!(cache.get("a"), None, "清空后条目不可达");
+    }
+
+    /// 满容量稳态循环：槽位回收复用下淘汰对象仍严格按 LRU 访问序
+    /// （逐 victims 断言长序列，链表槽位错链即在此红灯）
+    #[test]
+    fn test_sustained_eviction_keeps_recency_order() {
+        let cache: PreparedStatementCache<u32> = PreparedStatementCache::new(3);
+
+        // 装满：a → b → c（访问序 c > b > a）
+        for (k, v) in [("a", 1), ("b", 2), ("c", 3)] {
+            cache.insert(k, v);
+        }
+        // 命中 a → 访问序 a > c > b
+        assert_eq!(cache.get("a").map(|v| *v), Some(1));
+
+        // 稳态循环：每轮 1 条新键进、淘汰最久未使用者（槽位全部走 free
+        // 回收路径），淘汰对象预期 b → c → a → n0 → n1 → n2
+        let expected_victims = ["b", "c", "a", "n0", "n1", "n2"];
+        for (round, victim) in expected_victims.iter().enumerate() {
+            cache.insert(format!("n{round}"), round as u32);
+            assert_eq!(
+                cache.get(victim),
+                None,
+                "第 {round} 轮应淘汰最久未使用的 {victim}"
+            );
+        }
+
+        // 循环后存活集合恰为最新 3 条（n3/n4/n5），统计账目一致
+        let stats = cache.stats();
+        assert_eq!(stats.size, 3);
+        assert_eq!(stats.evictions, 6);
+        for k in ["n3", "n4", "n5"] {
+            assert!(cache.get(k).is_some(), "{k} 应存活");
+        }
+        assert_eq!(cache.stats().size, 3, "存活集合不得越界");
     }
 }

@@ -167,6 +167,11 @@ jobs:
           fi
       - name: Run tests
         run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
+      # ops_cli_tests 以 cli default features 门控（workspace --no-default-features
+      # 口径下整套静默跳过）；默认口径单独跑 dbnexus-cli 测试补上该缺口
+      - name: Run cli tests (default features)
+        if: matrix.db == 'sqlite'
+        run: cargo test -p dbnexus-cli
       - name: Run doc tests
         run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 

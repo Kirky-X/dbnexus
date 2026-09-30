@@ -22,7 +22,7 @@ impl Session {
     async fn duckdb_security_gate(&self, sql: &str) -> DbResult<()> {
         if is_ddl_operation(sql) {
             // DDL：仅 admin 角色（对齐 execute_raw_ddl 的角色白名单）
-            if self.role != self.pool_inner.admin_role {
+            if !self.is_admin {
                 return Err(DbError::Permission(format!(
                     "DDL operations are only allowed for admin role in DuckDB context. Current role: '{}', Admin role: '{}'",
                     self.role, self.pool_inner.admin_role
@@ -43,7 +43,7 @@ impl Session {
                             "Failed to extract table name for permission checking".to_string(),
                         ));
                     }
-                    if self.role != self.pool_inner.admin_role
+                    if !self.is_admin
                         && !self
                             .permission_ctx
                             .check_table_access(&table_name, &action)
@@ -55,7 +55,7 @@ impl Session {
                 Ok(None) => {
                     // admin role 对无法解析的语句直接执行（支持 SELECT 1 等无表名健康检查）；
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
-                    if self.role != self.pool_inner.admin_role {
+                    if !self.is_admin {
                         return Err(DbError::Permission(
                             "SQL statement requires a valid table name for permission checking"
                                 .to_string(),
@@ -66,7 +66,7 @@ impl Session {
                     // 解析失败（如 SQL 含 INFORMATION_SCHEMA 被注入检测拦截）：
                     // admin role 放行（对齐 Ok(None) 路径——admin 拥有完全控制权）；
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
-                    if self.role != self.pool_inner.admin_role {
+                    if !self.is_admin {
                         log::warn!(
                             "permission denied: role={} reason=sql-parse-failure (fail-closed)",
                             sanitize_log_field(&self.role)
@@ -263,7 +263,7 @@ impl Session {
                                 "Failed to extract table name for permission checking".to_string(),
                             ));
                         }
-                        if self.role != self.pool_inner.admin_role
+                        if !self.is_admin
                             && !self
                                 .permission_ctx
                                 .check_table_access(&table_name, &action)
@@ -276,7 +276,7 @@ impl Session {
                         // admin role 对无法解析的语句直接执行（对齐 execute 的 None 路径），
                         // 支持 SELECT 1 / SELECT 1 AS health 等无表名健康检查查询；
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             return Err(DbError::Permission(
                                 "SQL statement requires a valid table name for permission checking"
                                     .to_string(),
@@ -285,7 +285,7 @@ impl Session {
                     }
                     Err(_) => {
                         // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
                             ));
@@ -326,7 +326,7 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                if self.role == self.pool_inner.admin_role {
+                if self.is_admin {
                     // 统一守卫漏斗 —— admin role 通过守卫验证后直接执行，
                     // 不再走 parse_operation 权限检查（DDL 语句无法被
                     // parse_operation_async 正确解析，会返回 Err）
@@ -366,7 +366,7 @@ impl Session {
                                 "Failed to extract table name for permission checking".to_string(),
                             ));
                         }
-                        if self.role != self.pool_inner.admin_role
+                        if !self.is_admin
                             && !self
                                 .permission_ctx
                                 .check_table_access(&table_name, &action)
@@ -378,7 +378,7 @@ impl Session {
                     Ok(None) => {
                         // admin role 对无法解析的语句直接执行（对齐 execute 的 None 路径），
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             return Err(DbError::Permission(
                                 "SQL statement requires a valid table name for permission checking"
                                     .to_string(),
@@ -387,7 +387,7 @@ impl Session {
                     }
                     Err(_) => {
                         // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
                             ));

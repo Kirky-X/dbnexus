@@ -103,7 +103,7 @@ impl Session {
 
             // Admin 角色绕过权限检查
             // vuln-0001 修复：admin bypass 仍记录审计事件（进程级审计环）以保留审计链
-            if self.role == self.pool_inner.admin_role {
+            if self.is_admin {
                 audit_admin_bypass(&self.role, _table_name, &action);
             } else if !self
                 .permission_ctx

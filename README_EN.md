@@ -407,7 +407,7 @@ The layered module design, per-layer responsibilities and the full module overvi
 
 ### 🔗 Core Execution Path
 
-Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → per-table permission check → driver execution"; on parse failure the admin role is allowed and non-admin roles are denied, every target table in JOINs / subqueries is checked (completed in rc.2), and the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session/](src/database/pool/session/mod.rs)).
+Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → permission check → driver execution"; table-name checks (extraction validity + per-table authorization) belong to the permission-check stage and are bypassed up front for the admin role as a whole (table-free statements such as `SELECT 1` touch no tables), while non-admin roles fail closed — a missing or invalid table name is rejected, every target table in JOINs / subqueries is checked (completed in rc.2), and on parse failure admin is allowed while non-admin roles are denied; the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session/](src/database/pool/session/mod.rs)).
 
 See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行管道) for the full sequence diagram and path notes.
 

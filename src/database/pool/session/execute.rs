@@ -81,7 +81,7 @@ impl Session {
                         // Admin 角色绕过权限检查（含表名有效性检查：表名检查本就是
                         // 权限检查的一部分，无表语句如 SELECT 1 不触达任何表，对
                         // admin 放行无越权面）；非 admin 保持 fail-closed
-                        if self.role == self.pool_inner.admin_role {
+                        if self.is_admin {
                             // admin 有完全权限，跳过检查
                         } else {
                             if parsed.all_table_names.is_empty() {
@@ -111,7 +111,7 @@ impl Session {
                     Err(_) => {
                         // 解析失败：admin role 放行（对齐 Ok(None)/parse 失败路径），
                         // 非 admin role 拒绝（安全默认）。
-                        if self.role == self.pool_inner.admin_role {
+                        if self.is_admin {
                             // admin 有完全权限，跳过检查
                         } else {
                             log::warn!(
@@ -315,7 +315,7 @@ impl Session {
                         }
                         // Admin 角色绕过权限检查（含表名有效性检查，同 execute_raw）；
                         // 非 admin 保持 fail-closed 并逐表校验 Select 权限
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             if parsed.all_table_names.is_empty() {
                                 return Err(DbError::Permission(
                                     "Failed to extract table name for permission checking"
@@ -346,7 +346,7 @@ impl Session {
                     }
                     Err(_) => {
                         // 解析失败：admin 放行（对齐 execute_raw 路径），非 admin 拒绝（安全默认）
-                        if self.role != self.pool_inner.admin_role {
+                        if !self.is_admin {
                             log::warn!(
                                 "permission denied: role={} reason=sql-parse-failure (fail-closed)",
                                 sanitize_log_field(&self.role)
@@ -480,8 +480,7 @@ impl Session {
         #[cfg_attr(not(feature = "sqlite"), allow(unused_variables))]
         let sql_for_fetch = {
             let dp = { self.pool_inner.data_protection.read().await.clone() };
-            let is_admin = self.role == self.pool_inner.admin_role;
-            if !is_admin {
+            if !self.is_admin {
                 if let Some(rls) = dp.rls.as_ref() {
                     rls.inject(sql, primary_table.as_deref())
                 } else {
@@ -681,7 +680,7 @@ impl Session {
     /// 此方法只允许管理员角色执行，用于测试和迁移场景。
     pub async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
         // 检查角色白名单（只允许管理员角色执行 DDL）
-        if self.role != self.pool_inner.admin_role {
+        if !self.is_admin {
             return Err(DbError::Permission(format!(
                 "DDL operations are only allowed for admin role. Current role: '{}', Admin role: '{}'",
                 self.role, self.pool_inner.admin_role

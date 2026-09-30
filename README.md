@@ -407,7 +407,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 ### 🔗 核心执行路径
 
-`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下的真实执行管道：`get_session` 校验角色后，语句经"拒绝 DDL → 解析 → 逐表权限检查 → 驱动执行"返回；解析失败时 admin 角色放行、非 admin 角色拒绝，JOIN / 子查询涉及的目标表逐一受检（rc.2 补全）；`retry` 幂等重试、`metrics` 慢查询观测与 `audit` 的 admin 绕过记录均挂接于此管道（源码见 [src/database/pool/session/](src/database/pool/session/mod.rs)）。
+`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下的真实执行管道：`get_session` 校验角色后，语句经"拒绝 DDL → 解析 → 权限检查 → 驱动执行"返回；表名检查（提取有效性 + 逐表授权）归属权限检查环节、由 admin 角色整体前置绕过（无表语句如 `SELECT 1` 不触达任何表），非 admin 角色 fail-closed——提取不到表名或表名非法即拒绝，JOIN / 子查询涉及的目标表逐一受检（rc.2 补全），解析失败时同样 admin 放行、非 admin 拒绝；`retry` 幂等重试、`metrics` 慢查询观测与 `audit` 的 admin 绕过记录均挂接于此管道（源码见 [src/database/pool/session/](src/database/pool/session/mod.rs)）。
 
 完整时序图与路径要点见[架构文档 · 核心执行管道](docs/ARCHITECTURE.md#核心执行管道)。
 

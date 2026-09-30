@@ -246,6 +246,14 @@ impl OxcacheQueryCache {
             self.cache.get_many(&version_keys).await.map_err(|e| {
                 DbError::Cache(format!("query cache table version read failed: {e}"))
             })?;
+        // 后端契约：get_many 返回值与请求键一一对应；zip 按短侧截断会
+        // 静默丢弃尾部表的版本维度（该表失效探测失明 → 潜在脏读），
+        // debug 构建在此钉住契约破坏
+        debug_assert_eq!(
+            versions.len(),
+            tables.len(),
+            "get_many must return one entry per requested key"
+        );
 
         let mut hasher = Sha256::new();
         // 长度前缀框架：每个变长字段先写 8 字节小端长度再写内容——编码

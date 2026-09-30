@@ -170,6 +170,10 @@ pub struct Session {
     /// 角色
     role: String,
 
+    /// 是否 admin 角色（`new` 时预计算的快照；`role` 与 `pool_inner.admin_role`
+    /// 构造后均不可变，热路径（每条语句的权限检查）免字符串比较）
+    is_admin: bool,
+
     /// 权限上下文
     #[cfg(feature = "permission")]
     permission_ctx: PermissionContext,
@@ -201,6 +205,8 @@ impl Session {
         #[cfg(feature = "permission")]
         let permission_ctx = PermissionContext::new(role.clone(), pool_inner.policy_cache.clone());
 
+        let is_admin = role == pool_inner.admin_role;
+
         #[cfg(feature = "metrics")]
         let metrics = pool_inner
             .metrics_collector
@@ -212,6 +218,7 @@ impl Session {
             connection: Some(connection),
             pool_inner,
             role,
+            is_admin,
             #[cfg(feature = "permission")]
             permission_ctx,
             state: RwLock::new(SessionState {
@@ -255,7 +262,7 @@ impl Session {
     ) -> Result<(), DbError> {
         // Admin 角色绕过权限检查（拥有完全控制权）
         // vuln-0001 修复：admin bypass 仍记录审计事件（进程级审计环）以保留审计链
-        if self.role == self.pool_inner.admin_role {
+        if self.is_admin {
             audit_admin_bypass(&self.role, table, operation);
             return Ok(());
         }
