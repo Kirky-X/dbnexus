@@ -102,9 +102,8 @@ impl Session {
                             // 对语句涉及的所有表逐一检查权限
                             // （含 JOIN/子查询表，防止通过关联表越权读写未授权数据）
                             for table in &parsed.all_table_names {
-                                if !self.permission_ctx.check_table_access(table, &action).await {
-                                    return Err(permission_denied(&action, table));
-                                }
+                                super::check_table_or_error(&self.permission_ctx, table, &action)
+                                    .await?;
                             }
                         }
                     }
@@ -331,16 +330,12 @@ impl Session {
                                 }
                             }
                             for table in &parsed.all_table_names {
-                                if !self
-                                    .permission_ctx
-                                    .check_table_access(table, &PermissionAction::Select)
-                                    .await
-                                {
-                                    return Err(permission_denied(
-                                        &PermissionAction::Select,
-                                        table,
-                                    ));
-                                }
+                                super::check_table_or_error(
+                                    &self.permission_ctx,
+                                    table,
+                                    &PermissionAction::Select,
+                                )
+                                .await?;
                             }
                         }
                     }
@@ -767,13 +762,8 @@ impl Session {
         // 检查权限
         #[cfg(feature = "permission")]
         {
-            if !table_name.is_empty()
-                && !self
-                    .permission_ctx
-                    .check_table_access(&table_name, operation)
-                    .await
-            {
-                return Err(permission_denied(operation, &table_name));
+            if !table_name.is_empty() {
+                super::check_table_or_error(&self.permission_ctx, &table_name, operation).await?;
             }
         }
 

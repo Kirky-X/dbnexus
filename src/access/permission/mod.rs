@@ -42,12 +42,15 @@ pub use stats::{CacheStats, PermissionCheckStats, PermissionCheckStatsSnapshot};
 // 从 rate_limiter.rs 重导出
 pub use rate_limiter::RateLimiter;
 
+// 限流端口与判定类型（独立小 crate 防 dbnexus↔limiteron 包级循环依赖）
+pub use dbnexus_limiter_port::{Limiter, RateLimitDecision, RateLimitError};
+
 // 从 cache.rs 重导出（TTL + SWR 缓存，0.3.0 新增）
 pub use cache::{PermissionCache, PermissionCacheConfig};
 
 // 从 context.rs 重导出（需要 cache feature）
 #[cfg(feature = "cache")]
-pub use context::PermissionContext;
+pub use context::{PermissionContext, RateLimitBackend, TableAccessDecision};
 
 // ============================================================================
 // 内部使用（pub(crate)）

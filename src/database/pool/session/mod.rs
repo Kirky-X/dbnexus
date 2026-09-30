@@ -37,7 +37,7 @@ use crate::access::{DdlGuard, DdlGuardPolicy, DdlValidationResult};
 #[cfg(all(feature = "sql-parser", feature = "permission"))]
 use crate::access::SqlOperationType;
 #[cfg(feature = "permission")]
-use crate::access::{PermissionAction, PermissionContext};
+use crate::access::{PermissionAction, PermissionContext, TableAccessDecision};
 use crate::foundation::{DbError, DbResult};
 use crate::i18n;
 #[cfg(feature = "metrics")]
@@ -267,15 +267,7 @@ impl Session {
             return Ok(());
         }
 
-        if self
-            .permission_ctx
-            .check_table_access(table, operation)
-            .await
-        {
-            Ok(())
-        } else {
-            Err(permission_denied(operation, table))
-        }
+        check_table_or_error(&self.permission_ctx, table, operation).await
     }
 
     /// 是否在事务中
@@ -390,6 +382,37 @@ fn permission_denied(
         "session-permission-denied",
         &[("action", action.to_string()), ("table", table.to_string())],
     ))
+}
+
+/// 构造速率限制拒绝错误（HTTP 429 语义，区别于策略拒绝的
+/// [`permission_denied`]；`retry_after` 供 HTTP 层映射 `Retry-After` 头。
+/// 亚秒建议按秒向上取整：默认档填充速率 2/s 给出 500ms 建议，截断为 0
+/// 会被当作「后端未提供」丢弃，导致 Retry-After 系统性缺失）
+#[cfg(feature = "permission")]
+fn rate_limited_error(retry_after: Option<Duration>) -> DbError {
+    log::warn!(
+        "rate limited: table access throttled (retry_after={:?})",
+        retry_after
+    );
+    DbError::RateLimited {
+        retry_after_secs: retry_after
+            .filter(|d| !d.is_zero())
+            .map(|d| d.as_secs() + u64::from(d.subsec_nanos() != 0)),
+    }
+}
+
+/// 限流感知的表访问检查：策略拒绝 → 403 语义，限流拒绝 → 429 语义
+#[cfg(feature = "permission")]
+async fn check_table_or_error(
+    ctx: &PermissionContext,
+    table: &str,
+    action: &PermissionAction,
+) -> Result<(), DbError> {
+    match ctx.check_table_access_decision(table, action).await {
+        TableAccessDecision::Allowed => Ok(()),
+        TableAccessDecision::Denied => Err(permission_denied(action, table)),
+        TableAccessDecision::RateLimited { retry_after } => Err(rate_limited_error(retry_after)),
+    }
 }
 
 /// 剔除控制字符（<0x20 与 0x7F，含换行/回车/ESC）与 Unicode 格式字符

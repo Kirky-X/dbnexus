@@ -9,12 +9,16 @@ use super::rate_limiter::RateLimiter;
 use super::stats::{CacheStats, PermissionCheckStats};
 use super::types::{PermissionAction, PermissionConfig, PermissionError, RolePolicy};
 use dashmap::DashMap;
+use dbnexus_limiter_port::Limiter;
 #[cfg(feature = "cache")]
 use oxcache::Cache;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex as TokioMutex;
+
+#[cfg(feature = "audit")]
+use crate::domain::audit::{AuditEvent, AuditLogger, AuditOperation, AuditSeverity, AuditStatus};
 
 /// 权限检查速率限制默认值
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
@@ -24,6 +28,53 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 ///
 /// 此值作为后备默认值使用，实际应从 `CacheConfig.policy_cache_capacity` 获取。
 const DEFAULT_POLICY_CACHE_CAPACITY: usize = 4096;
+
+/// 构造内置令牌桶限流器（默认后端，实现 `Limiter` 端口）
+fn token_bucket_limiter(max_requests: u32, window_secs: u64) -> Arc<dyn Limiter> {
+    Arc::new(RateLimiter::new(
+        max_requests,
+        Duration::from_secs(window_secs),
+        10000,
+        max_requests,
+    ))
+}
+
+/// 速率限制后端选择（双后端）
+///
+/// 旧令牌桶保留为默认后端；外部限流引擎（如 limiteron 适配器）实现
+/// `Limiter` 端口后经 [`RateLimitBackend::External`] 注入——dbnexus 与
+/// limiteron 互为消费方（Cargo 禁包级循环依赖），故限流端口独立于两者，
+/// 装配发生在应用组合根。
+#[derive(Clone)]
+pub enum RateLimitBackend {
+    /// 内置令牌桶（默认后端）
+    TokenBucket {
+        /// 时间窗口内最大请求数
+        max_requests: u32,
+        /// 时间窗口大小（秒）
+        window_secs: u64,
+    },
+    /// 外部 `Limiter` 端口实现
+    External(Arc<dyn Limiter>),
+}
+
+/// 表访问检查决策
+///
+/// 区分策略拒绝（403 语义）与限流拒绝（429 语义），后者携带
+/// `Retry-After` 建议；布尔简版见
+/// [`check_table_access`](PermissionContext::check_table_access)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TableAccessDecision {
+    /// 允许访问
+    Allowed,
+    /// 策略拒绝（权限不足）
+    Denied,
+    /// 被速率限制拒绝（HTTP 429 语义）
+    RateLimited {
+        /// 建议等待时间；`None` = 后端未提供（含后端故障 fail-closed）
+        retry_after: Option<Duration>,
+    },
+}
 
 /// 从同步上下文安全创建缓存
 ///
@@ -66,8 +117,12 @@ pub struct PermissionContext {
     /// 缓存容量（用于统计信息）
     cache_capacity: usize,
 
-    /// 权限检查速率限制器
-    rate_limiter: Option<Arc<RateLimiter>>,
+    /// 权限检查速率限制器（`Limiter` 端口；默认令牌桶，可注入外部实现）
+    rate_limiter: Option<Arc<dyn Limiter>>,
+
+    /// 限流拒绝审计器（audit feature；未挂载时不产生审计事件）
+    #[cfg(feature = "audit")]
+    audit_logger: Option<Arc<AuditLogger>>,
 
     /// 权限检查统计
     check_stats: Arc<PermissionCheckStats>,
@@ -141,12 +196,12 @@ impl PermissionContext {
             role,
             policy_cache: Arc::new(policy_cache),
             cache_capacity,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
             in_flight: DashMap::new(),
@@ -173,16 +228,60 @@ impl PermissionContext {
             role,
             policy_cache: Arc::new(policy_cache),
             cache_capacity,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
-                max_requests,
-                Duration::from_secs(window_secs),
-                10000,
-                max_requests,
-            ))),
+            rate_limiter: Some(token_bucket_limiter(max_requests, window_secs)),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
             in_flight: DashMap::new(),
         })
+    }
+
+    /// 创建新的权限上下文（自定义缓存容量 + 限流后端选择）
+    ///
+    /// 双后端切换入口：[`RateLimitBackend::TokenBucket`] 为默认令牌桶；
+    /// [`RateLimitBackend::External`] 注入外部 `Limiter` 端口实现
+    /// （limiteron 适配器等），装配由应用组合根完成。
+    ///
+    /// # Errors
+    ///
+    /// 如果 `cache_capacity` 为 0，返回 `InvalidCacheCapacity` 错误
+    pub async fn with_cache_size_and_backend(
+        role: String,
+        cache_capacity: usize,
+        backend: RateLimitBackend,
+    ) -> Result<Self, PermissionError> {
+        let policy_cache = Cache::builder()
+            .capacity(cache_capacity as u64)
+            .build()
+            .await
+            .map_err(|_| PermissionError::InvalidCacheCapacity)?;
+        Ok(Self {
+            role,
+            policy_cache: Arc::new(policy_cache),
+            cache_capacity,
+            rate_limiter: Some(match backend {
+                RateLimitBackend::TokenBucket {
+                    max_requests,
+                    window_secs,
+                } => token_bucket_limiter(max_requests, window_secs),
+                RateLimitBackend::External(limiter) => limiter,
+            }),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
+            check_stats: Arc::new(PermissionCheckStats::new()),
+            permission_provider: None,
+            in_flight: DashMap::new(),
+        })
+    }
+
+    /// 挂载限流拒绝审计器（audit feature）
+    ///
+    /// 挂载后，每次因速率限制拒绝的权限检查都会产生一条审计事件
+    /// （operation=`rate_limit_exceeded`，result=Failure，severity=Medium）。
+    #[cfg(feature = "audit")]
+    pub fn set_audit_logger(&mut self, logger: Arc<AuditLogger>) {
+        self.audit_logger = Some(logger);
     }
 
     /// 创建新的权限上下文（使用 DbConfig 配置）
@@ -265,12 +364,12 @@ impl PermissionContext {
             role,
             policy_cache: Arc::new(cache),
             cache_capacity: DEFAULT_POLICY_CACHE_CAPACITY,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
             in_flight: DashMap::new(),
@@ -292,12 +391,12 @@ impl PermissionContext {
             role,
             policy_cache: Arc::new(cache),
             cache_capacity,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
             in_flight: DashMap::new(),
@@ -312,12 +411,12 @@ impl PermissionContext {
             role,
             policy_cache,
             cache_capacity: DEFAULT_POLICY_CACHE_CAPACITY,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: None,
             in_flight: DashMap::new(),
@@ -337,12 +436,12 @@ impl PermissionContext {
             role,
             policy_cache,
             cache_capacity: DEFAULT_POLICY_CACHE_CAPACITY,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
             in_flight: DashMap::new(),
@@ -370,12 +469,12 @@ impl PermissionContext {
             role,
             policy_cache,
             cache_capacity: config.cache_config.policy_cache_capacity as usize,
-            rate_limiter: Some(Arc::new(RateLimiter::new(
+            rate_limiter: Some(token_bucket_limiter(
                 DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-                Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
-                10000,
-                DEFAULT_RATE_LIMIT_MAX_REQUESTS,
-            ))),
+                DEFAULT_RATE_LIMIT_WINDOW_SECS,
+            )),
+            #[cfg(feature = "audit")]
+            audit_logger: None,
             check_stats: Arc::new(PermissionCheckStats::new()),
             permission_provider: Some(permission_provider),
             in_flight: DashMap::new(),
@@ -491,10 +590,16 @@ impl PermissionContext {
         false
     }
 
-    /// 检查表访问权限（增强版 - 包含统计跟踪和缓存未命中重试）
+    /// 检查表访问权限（决策版 - 区分限流拒绝与策略拒绝）
     ///
-    /// 此方法会先检查速率限制，然后检查缓存。如果缓存未命中，
+    /// 此方法会先经限流端口检查，然后检查缓存。如果缓存未命中，
     /// 会尝试从权限提供者重新加载策略，避免 TOCTOU 竞争条件。
+    ///
+    /// # Returns
+    ///
+    /// - [`TableAccessDecision::Allowed`] - 允许访问
+    /// - [`TableAccessDecision::Denied`] - 策略拒绝（403 语义）
+    /// - [`TableAccessDecision::RateLimited`] - 限流拒绝（429 语义，携带 Retry-After）
     ///
     /// # Security
     ///
@@ -503,13 +608,32 @@ impl PermissionContext {
     /// 2. 缓存未命中时尝试重新加载策略
     /// 3. 重新加载成功后重新检查权限
     /// 4. 重新加载失败时安全地拒绝访问
-    pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
+    ///
+    /// 限流后端故障时 fail-closed：按限流拒绝处理（计入 `rate_limited_checks`
+    /// 并产生告警日志），绝不静默放行。
+    pub async fn check_table_access_decision(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+    ) -> TableAccessDecision {
         // 1. 检查速率限制
-        if let Some(limiter) = &self.rate_limiter
-            && !limiter.check(&self.role).await
-        {
-            self.check_stats.record_rate_limited();
-            return false;
+        if let Some(limiter) = &self.rate_limiter {
+            let decision = match limiter.check(&self.role).await {
+                Ok(decision) => decision,
+                Err(err) => {
+                    // 后端故障 fail-closed：按限流拒绝处理，显性记录故障
+                    log::warn!("rate limiter backend error: {err}");
+                    dbnexus_limiter_port::RateLimitDecision::deny(None)
+                }
+            };
+            if !decision.allowed {
+                self.check_stats.record_rate_limited();
+                self.audit_rate_limited(table, operation, decision.retry_after)
+                    .await;
+                return TableAccessDecision::RateLimited {
+                    retry_after: decision.retry_after,
+                };
+            }
         }
 
         // 2. 尝试从缓存获取，如果未命中则尝试加载
@@ -522,7 +646,7 @@ impl PermissionContext {
                 self.check_stats.record_denied();
             }
             self.check_stats.record_cache_hit();
-            return allowed;
+            return Self::policy_decision(allowed);
         }
 
         // 缓存未命中，使用 stampede-protected 加载
@@ -536,13 +660,69 @@ impl PermissionContext {
                 } else {
                     self.check_stats.record_denied();
                 }
-                allowed
+                Self::policy_decision(allowed)
             }
             None => {
                 self.check_stats.record_denied();
-                false
+                TableAccessDecision::Denied
             }
         }
+    }
+
+    /// 策略判定结果映射
+    fn policy_decision(allowed: bool) -> TableAccessDecision {
+        if allowed {
+            TableAccessDecision::Allowed
+        } else {
+            TableAccessDecision::Denied
+        }
+    }
+
+    /// 限流拒绝审计事件（audit feature；未挂载审计器时为 no-op）
+    #[cfg(feature = "audit")]
+    async fn audit_rate_limited(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+        retry_after: Option<Duration>,
+    ) {
+        let Some(logger) = &self.audit_logger else {
+            return;
+        };
+        let retry_after_secs = retry_after.map_or(0, |d| d.as_secs());
+        let mut event = AuditEvent::create("table_access", table, &self.role)
+            .with_user(&self.role, "")
+            .with_result(AuditStatus::Failure)
+            .with_severity(AuditSeverity::Medium)
+            .with_extra(&format!(
+                r#"{{"reason":"rate_limit_exceeded","operation":"{operation}","retry_after_secs":{retry_after_secs}}}"#
+            ));
+        event.operation = AuditOperation::Other("rate_limit_exceeded".to_string());
+        if let Err(err) = logger.log(event).await {
+            // 审计失败不阻断权限判定，但必须显性记录
+            log::warn!("rate limit audit event dropped: {err}");
+        }
+    }
+
+    /// 限流拒绝审计 no-op（未启用 audit feature）
+    #[cfg(not(feature = "audit"))]
+    async fn audit_rate_limited(
+        &self,
+        _table: &str,
+        _operation: &PermissionAction,
+        _retry_after: Option<Duration>,
+    ) {
+    }
+
+    /// 检查表访问权限（布尔简版）
+    ///
+    /// 限流拒绝与策略拒绝均返回 `false`；需区分两者（429/403 语义）时使用
+    /// [`check_table_access_decision`](Self::check_table_access_decision)。
+    pub async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool {
+        matches!(
+            self.check_table_access_decision(table, operation).await,
+            TableAccessDecision::Allowed
+        )
     }
 
     /// 验证角色是否有权限执行特定操作（细粒度验证）

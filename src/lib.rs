@@ -339,6 +339,12 @@ pub use crate::storage::{
     SyncEvent, SyncResult,
 };
 
+// Rate limiter port 导出（permission feature）
+// 独立小 crate 防 dbnexus↔limiteron 包级循环依赖：外部限流后端（limiteron 等）
+// 实现本端口后经 PermissionContext::with_cache_size_and_backend 注入
+#[cfg(feature = "permission")]
+pub use dbnexus_limiter_port::{Limiter, RateLimitDecision, RateLimitError};
+
 // Business 导出（直接从 domain::audit 导出，移除 business 中间层）
 #[cfg(all(feature = "audit", feature = "sql-parser"))]
 pub use crate::domain::DbAuditStorage;

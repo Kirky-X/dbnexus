@@ -29,6 +29,9 @@ use std::sync::{Arc, Mutex};
 
 /// 池级缓存实例别名（DbPool 集成口径 —— 就绪标记 + 命中率指标；
 /// 下游如需缓存驱动句柄可用自定义 V 的 PreparedStatementCache）
+// 生产消费方（enable_prepare_cache/execute_cached）随 prepare-cache 门控；
+// 仅 sql-parser 路径（无 prepare-cache）编译本模块时无生产调用点
+#[cfg_attr(not(feature = "prepare-cache"), allow(dead_code))]
 pub type PoolPrepareCache = PreparedStatementCache<()>;
 
 /// 缓存命中率统计
@@ -165,6 +168,9 @@ impl<V> PreparedStatementCache<V> {
     /// 取缓存的准备产物；未命中或容量为 1 的覆盖场景调用 `prepare`
     ///
     /// 返回 `(产物, 是否命中)`。`prepare` 只在未命中时被调用。
+    // 生产消费方 `execute_cached` 随 prepare-cache 门控；仅 sql-parser
+    // 路径编译本模块时该方法仅由单元测试消费，保留为单一实现
+    #[cfg_attr(not(feature = "prepare-cache"), allow(dead_code))]
     pub fn get_or_prepare(
         &self,
         sql: impl Into<Arc<str>>,
@@ -276,6 +282,8 @@ impl<V> PreparedStatementCache<V> {
     }
 
     /// 缓存容量
+    // 仅由 LRU 驱逐的单元测试断言消费
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn capacity(&self) -> usize {
         self.capacity
     }

@@ -1580,6 +1580,7 @@ dependencies = [
  "confers",
  "criterion",
  "dashmap",
+ "dbnexus-limiter-port",
  "dbnexus-macros",
  "duckdb",
  "fluent-bundle",
@@ -1655,6 +1656,14 @@ dependencies = [
  "toml",
  "trait-kit",
  "validator",
+]
+
+[[package]]
+name = "dbnexus-limiter-port"
+version = "0.6.0-rc.6"
+dependencies = [
+ "async-trait",
+ "tokio",
 ]
 
 [[package]]

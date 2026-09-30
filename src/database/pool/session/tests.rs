@@ -1339,3 +1339,33 @@ mod isolation_level_tests {
         let _ = Serializable.into_sea_orm();
     }
 }
+
+/// 限流拒绝错误的 Retry-After 秒粒度契约（HTTP 429 语义）
+#[cfg(all(test, feature = "permission"))]
+mod rate_limited_error_tests {
+    use super::*;
+
+    /// 亚秒建议向上取整为秒：500ms（默认档 refill 2/s 的建议）不得截断为
+    /// 0 被当作「后端未提供」丢弃；整秒保持不变；空/零建议保持 None
+    #[test]
+    fn rate_limited_error_ceils_sub_second_hint() {
+        let to_secs = |err: DbError| match err {
+            DbError::RateLimited { retry_after_secs } => retry_after_secs,
+            other => panic!("expected RateLimited, got {other:?}"),
+        };
+
+        assert_eq!(
+            to_secs(rate_limited_error(Some(Duration::from_millis(500)))),
+            Some(1)
+        );
+        assert_eq!(
+            to_secs(rate_limited_error(Some(Duration::from_secs(7)))),
+            Some(7)
+        );
+        assert_eq!(to_secs(rate_limited_error(None)), None);
+        assert_eq!(
+            to_secs(rate_limited_error(Some(Duration::from_millis(0)))),
+            None
+        );
+    }
+}

@@ -43,13 +43,9 @@ impl Session {
                             "Failed to extract table name for permission checking".to_string(),
                         ));
                     }
-                    if !self.is_admin
-                        && !self
-                            .permission_ctx
-                            .check_table_access(&table_name, &action)
-                            .await
-                    {
-                        return Err(permission_denied(&action, &table_name));
+                    if !self.is_admin {
+                        super::check_table_or_error(&self.permission_ctx, &table_name, &action)
+                            .await?;
                     }
                 }
                 Ok(None) => {
@@ -263,13 +259,9 @@ impl Session {
                                 "Failed to extract table name for permission checking".to_string(),
                             ));
                         }
-                        if !self.is_admin
-                            && !self
-                                .permission_ctx
-                                .check_table_access(&table_name, &action)
-                                .await
-                        {
-                            return Err(permission_denied(&action, &table_name));
+                        if !self.is_admin {
+                            super::check_table_or_error(&self.permission_ctx, &table_name, &action)
+                                .await?;
                         }
                     }
                     Ok(None) => {
@@ -366,13 +358,9 @@ impl Session {
                                 "Failed to extract table name for permission checking".to_string(),
                             ));
                         }
-                        if !self.is_admin
-                            && !self
-                                .permission_ctx
-                                .check_table_access(&table_name, &action)
-                                .await
-                        {
-                            return Err(permission_denied(&action, &table_name));
+                        if !self.is_admin {
+                            super::check_table_or_error(&self.permission_ctx, &table_name, &action)
+                                .await?;
                         }
                     }
                     Ok(None) => {

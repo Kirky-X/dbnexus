@@ -1,0 +1,20 @@
+[package]
+name = "dbnexus-limiter-port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT"
+repository.workspace = true
+documentation.workspace = true
+description = "Rate limiter port (trait Limiter) shared by dbnexus and limiteron; only dependency is async-trait"
+
+[dependencies]
+# async_trait 使 trait 对象安全（Arc<dyn Limiter> 可注入）；limiteron 同款模式
+async-trait = { version = "0.1", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.53", default-features = false, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

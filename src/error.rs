@@ -68,6 +68,12 @@ pub enum ErrorCode {
     PermissionDenied = 2000,
     /// 权限配置错误（2001）
     PermissionConfig = 2001,
+    /// 速率限制拒绝（2002；HTTP 429 语义）
+    ///
+    /// 错误分类（如 [`QueryErrorReport`]）将其归入 Permission 类：类别
+    /// 粒度仅表达「访问控制域」，HTTP 层区分 429（限流）与 403（策略
+    /// 拒绝）依赖本错误码——2002 为限流，2000/2001 为策略/配置拒绝。
+    RateLimited = 2002,
     /// SQL 注入风险（3000）
     InjectionRisk = 3000,
     /// SQL 语法/解析错误（3001）
@@ -99,6 +105,7 @@ impl ErrorCode {
             ErrorCode::Connection => "Connection",
             ErrorCode::PermissionDenied => "PermissionDenied",
             ErrorCode::PermissionConfig => "PermissionConfig",
+            ErrorCode::RateLimited => "RateLimited",
             ErrorCode::InjectionRisk => "InjectionRisk",
             ErrorCode::SqlSyntax => "SqlSyntax",
             ErrorCode::Config => "Config",
@@ -190,6 +197,7 @@ impl From<crate::foundation::DbError> for UnifiedDbError {
         let code = match &err {
             crate::foundation::DbError::Connection(_) => ErrorCode::Connection,
             crate::foundation::DbError::Permission(_) => ErrorCode::PermissionDenied,
+            crate::foundation::DbError::RateLimited { .. } => ErrorCode::RateLimited,
             crate::foundation::DbError::Transaction(_) => ErrorCode::Transaction,
             crate::foundation::DbError::Migration(_) => ErrorCode::Migration,
             crate::foundation::DbError::Cache(_) => ErrorCode::Cache,
@@ -235,6 +243,10 @@ impl From<UnifiedDbError> for crate::foundation::DbError {
             ErrorCode::PermissionDenied | ErrorCode::PermissionConfig => {
                 crate::foundation::DbError::Permission(text)
             }
+            // 反向为有损映射：Retry-After 细节保留在消息文本中
+            ErrorCode::RateLimited => crate::foundation::DbError::RateLimited {
+                retry_after_secs: None,
+            },
             ErrorCode::Migration => crate::foundation::DbError::Migration(text),
             ErrorCode::Transaction => crate::foundation::DbError::Transaction(text),
             ErrorCode::Cache => crate::foundation::DbError::Cache(text),
@@ -255,7 +267,11 @@ impl From<UnifiedDbError> for crate::foundation::DbError {
 impl From<UnifiedDbError> for QueryErrorReport {
     fn from(err: UnifiedDbError) -> Self {
         let category = match err.code {
-            ErrorCode::PermissionDenied | ErrorCode::PermissionConfig => ErrorCategory::Permission,
+            // RateLimited（2002）归 Permission 类：429/403 的区分靠错误码
+            // 本身（见 ErrorCode::RateLimited 文档），类别仅表达访问控制域
+            ErrorCode::PermissionDenied | ErrorCode::PermissionConfig | ErrorCode::RateLimited => {
+                ErrorCategory::Permission
+            }
             ErrorCode::InjectionRisk => ErrorCategory::InjectionRisk,
             ErrorCode::SqlSyntax => ErrorCategory::SyntaxError,
             _ => ErrorCategory::SyntaxError,

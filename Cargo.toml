@@ -2,6 +2,7 @@
 members = [
     ".",
     "macros",
+    "limiter-port",
     "src/tools/cli",
     "examples",
 ]
@@ -41,6 +42,8 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 
 # Internal packages
 dbnexus-macros = { path = "macros", version = "0.6.0-rc.6" }
+# 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
+dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.6" }
 
 # Validation（root + examples 共享）
 validator = { version = "0.21", features = ["derive"] }
@@ -125,7 +128,7 @@ ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带）
+permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带；dbnexus-limiter-port 为限流端口——旧令牌桶实现端口保持默认后端，外部限流后端（limiteron 等）经端口注入）
 # 移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
 # sql-parser 自带解析结果缓存（prepare_cache 同步 LRU 端口），不隐含 cache→oxcache
@@ -300,6 +303,9 @@ dashmap = { version = "6.2", optional = true }
 arc-swap = { version = "1.9", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as backend.
 oxcache = { version = "0.5.0-rc.4", optional = true }
+
+# Rate limiter port（限流端口，permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
+dbnexus-limiter-port = { workspace = true, optional = true }
 
 # Structured logging backend (optional, feature-gated via `inklog`).
 # Mirrors sdforge/limiteron pattern: `init_inklog_logger()` installs inklog's
@@ -855,6 +861,14 @@ required-features = ["permission", "permission-engine"]
 name = "rate_limiter_unit_tests"
 path = "tests/permission/unit/rate_limiter_unit_tests.rs"
 required-features = ["permission"]
+
+# Permission 单元测试 - 限流端口统一：双后端切换/429 语义/审计事件
+[[test]]
+name = "rate_limit_port_tests"
+path = "tests/permission/unit/rate_limit_port_tests.rs"
+# audit：文件含 2 个 #[cfg(feature = "audit")] 审计用例，目标必须随 audit
+# 编译，保证注册用例全部可运行（仅 permission 时审计用例会被静默剔除）
+required-features = ["permission", "audit"]
 
 # Pool 单元测试 - 连接池配置/限制/超时/泄漏检测（Convergence 注册）
 [[test]]

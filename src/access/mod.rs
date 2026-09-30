@@ -43,10 +43,11 @@ pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 pub use permission::GraphPermissionContext;
 #[cfg(feature = "permission")]
 pub use permission::{
-    AdvancedRbacProvider, CacheStats, MemoryPermissionProvider, PermissionAction, PermissionCache,
-    PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot, PermissionConfig,
-    PermissionContext, PermissionError, PermissionProvider, PermissionProviderError, RateLimiter,
-    RbacProvider, RefreshablePermissionProvider, RolePolicy, TablePermission,
+    AdvancedRbacProvider, CacheStats, Limiter, MemoryPermissionProvider, PermissionAction,
+    PermissionCache, PermissionCacheConfig, PermissionCheckStats, PermissionCheckStatsSnapshot,
+    PermissionConfig, PermissionContext, PermissionError, PermissionProvider,
+    PermissionProviderError, RateLimitBackend, RateLimitDecision, RateLimitError, RateLimiter,
+    RbacProvider, RefreshablePermissionProvider, RolePolicy, TableAccessDecision, TablePermission,
     YamlPermissionProvider,
 };
 

@@ -10,9 +10,10 @@
 
 use serde_json::Value;
 
-/// 读取 dbnexus 包的 feature 依赖表（`cargo metadata --no-deps --offline`，
-/// 不触发编译也不访问网络）。
-fn dbnexus_features() -> serde_json::Map<String, Value> {
+/// 读取 workspace 元数据根（`cargo metadata --no-deps --offline`，
+/// 不触发编译也不访问网络）。packages 覆盖全部 workspace 成员，且成员包的
+/// `dependencies` 数组保留完整依赖声明（含外部 crate 与 dev 归属）。
+fn workspace_metadata() -> Value {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let output = std::process::Command::new(env!("CARGO"))
         .args([
@@ -30,15 +31,23 @@ fn dbnexus_features() -> serde_json::Map<String, Value> {
         "cargo metadata 失败：{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let meta: Value =
-        serde_json::from_slice(&output.stdout).expect("cargo metadata 输出非合法 JSON");
-    let package = meta["packages"]
+    serde_json::from_slice(&output.stdout).expect("cargo metadata 输出非合法 JSON")
+}
+
+/// 在 workspace 元数据中按名查找包
+fn workspace_package<'a>(meta: &'a Value, name: &str) -> &'a Value {
+    meta["packages"]
         .as_array()
         .expect("packages 数组")
         .iter()
-        .find(|p| p["name"] == "dbnexus")
-        .expect("workspace 内必有 dbnexus 包");
-    package["features"]
+        .find(|p| p["name"] == name)
+        .unwrap_or_else(|| panic!("workspace 内必有 {name} 包"))
+}
+
+/// 读取 dbnexus 包的 feature 依赖表
+fn dbnexus_features() -> serde_json::Map<String, Value> {
+    let meta = workspace_metadata();
+    workspace_package(&meta, "dbnexus")["features"]
         .as_object()
         .expect("features 表")
         .clone()
@@ -142,5 +151,50 @@ fn global_index_implies_entity_macros() {
             .iter()
             .any(|dep| dep.as_str() == Some("entity-macros")),
         "global-index 须蕴含 entity-macros（无驱动组合的实体 derive 依赖），实际依赖：{global_index:?}"
+    );
+}
+
+/// 收集包元数据中常规依赖（kind 为 null，排除 dev/build）的名字集合
+fn normal_dep_names(package: &Value) -> std::collections::BTreeSet<String> {
+    package["dependencies"]
+        .as_array()
+        .expect("dependencies 数组")
+        .iter()
+        .filter(|d| d["kind"].is_null())
+        .map(|d| d["name"].as_str().expect("dependency name").to_string())
+        .collect()
+}
+
+/// 限流端口包隔离（全图零环的固化）：`dbnexus-limiter-port` 的常规依赖
+/// 不得含 dbnexus 或 limiteron——端口是 dbnexus 与 limiteron 的公共底座，
+/// 任一方向依赖都会令「limiteron optional 依赖 dbnexus 作存储后端」的组合
+/// 成环（Cargo 禁止包级循环依赖，optional 亦然）。
+#[test]
+fn limiter_port_does_not_depend_on_dbnexus_or_limiteron() {
+    let meta = workspace_metadata();
+    let deps = normal_dep_names(workspace_package(&meta, "dbnexus-limiter-port"));
+    let offenders: Vec<&String> = deps
+        .iter()
+        .filter(|n| n.as_str() == "dbnexus" || n.as_str() == "limiteron")
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "限流端口不得依赖 dbnexus/limiteron（防包级循环依赖），实际：{offenders:?}"
+    );
+}
+
+/// 限流端口保持极小依赖面：常规依赖仅 async-trait（trait 对象安全宏），
+/// 无任何 feature。该不变量是端口通用性（dbnexus 与 limiteron 均可零负担
+/// 单向依赖）与 limiter-port/Cargo.toml 依赖描述的固化；新增依赖须显式
+/// 更新本契约与描述，防止依赖面悄然膨胀。
+#[test]
+fn limiter_port_stays_async_trait_only() {
+    let meta = workspace_metadata();
+    let deps = normal_dep_names(workspace_package(&meta, "dbnexus-limiter-port"));
+    let expected: std::collections::BTreeSet<String> =
+        ["async-trait"].into_iter().map(str::to_string).collect();
+    assert_eq!(
+        deps, expected,
+        "限流端口常规依赖须仅 async-trait（防依赖面膨胀/描述失真）"
     );
 }

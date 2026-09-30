@@ -18,6 +18,10 @@ impl DbError {
             DbError::Connection(e) => e.to_string(),
             DbError::Config(msg) => msg.clone(),
             DbError::Permission(msg) => msg.clone(),
+            DbError::RateLimited { retry_after_secs } => match retry_after_secs {
+                Some(secs) => format!("rate limit exceeded, retry after {secs} secs"),
+                None => "rate limit exceeded".to_string(),
+            },
             DbError::Transaction(msg) => msg.clone(),
             DbError::Migration(msg) => msg.clone(),
             DbError::Cache(msg) => msg.clone(),

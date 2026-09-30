@@ -36,6 +36,16 @@ pub enum DbError {
     #[error("Permission denied: {0}")]
     Permission(String),
 
+    /// 速率限制拒绝（HTTP 429 语义；权限检查触发限流时返回，区别于策略拒绝）
+    #[error(
+        "Rate limited: too many requests{}",
+        retry_after_secs.map_or_else(String::new, |secs| format!("; retry after {secs}s"))
+    )]
+    RateLimited {
+        /// 建议等待时间（秒）；`None` = 限流后端未提供
+        retry_after_secs: Option<u64>,
+    },
+
     /// 事务错误
     #[error("Transaction error: {0}")]
     Transaction(String),
@@ -149,6 +159,15 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Connection(_) => "db-connection",
             Self::Config(_) => "db-config",
             Self::Permission(_) => "db-permission",
+            // 携带建议秒数走 -retry 键插值；未携带走无秒数键（两模板
+            // 双语齐备，见 i18n::catalog）
+            Self::RateLimited { retry_after_secs } => {
+                if retry_after_secs.is_some() {
+                    "db-rate-limited-retry"
+                } else {
+                    "db-rate-limited"
+                }
+            }
             Self::Transaction(_) => "db-transaction",
             Self::Migration(_) => "db-migration",
             Self::Cache(_) => "db-cache",
@@ -165,6 +184,10 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Connection(err) => vec![("error", err.to_string())],
             Self::Config(msg) => vec![("message", msg.clone())],
             Self::Permission(msg) => vec![("message", msg.clone())],
+            Self::RateLimited { retry_after_secs } => vec![(
+                "retry_after_secs",
+                retry_after_secs.map_or_else(String::new, |secs| secs.to_string()),
+            )],
             Self::Transaction(msg) => vec![("message", msg.clone())],
             Self::Migration(msg) => vec![("message", msg.clone())],
             Self::Cache(msg) => vec![("message", msg.clone())],

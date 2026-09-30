@@ -105,12 +105,8 @@ impl Session {
             // vuln-0001 修复：admin bypass 仍记录审计事件（进程级审计环）以保留审计链
             if self.is_admin {
                 audit_admin_bypass(&self.role, _table_name, &action);
-            } else if !self
-                .permission_ctx
-                .check_table_access(_table_name, &action)
-                .await
-            {
-                return Err(permission_denied(_operation, _table_name));
+            } else {
+                super::check_table_or_error(&self.permission_ctx, _table_name, &action).await?;
             }
         }
         Ok(())

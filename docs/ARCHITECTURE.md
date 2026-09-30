@@ -248,6 +248,13 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 - `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = `oxcache-integration`）
 - `integrations/http_health.rs` — `HealthRouterBuilder` 三端点健康 Router：/healthz /readyz /metrics（cfg = `http-health`，axum Router 生成而非服务）
 
+> 适配器方向约定：oxcache/inklog/trait-kit 不依赖 dbnexus，适配器驻留 dbnexus
+> 消费方即可防环。反向依赖的外部组件（limiteron 已 optional 依赖 dbnexus 作
+> 存储后端）不能走此模式——dbnexus 反向依赖即成环，须抽取独立端口 crate：
+> `Limiter` 端口位于 workspace 成员 `limiter-port/`（`dbnexus-limiter-port`，
+> 仅依赖 async-trait，不依赖 dbnexus 与 limiteron 任何一方），令牌桶实现端口为默认限流后端，外部后端经应用组合根注入，
+> 详见 `docs/RATE_LIMITING.md`。
+
 ### 国际化模块 `i18n/`
 
 - `i18n/i18n_impl.rs` — `DbI18nFormatter`（ICU4X locale 感知格式化，核心特性始终可用）

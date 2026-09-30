@@ -264,10 +264,15 @@ pub enum PermissionAction {
 | `new` | `fn new(role: String, policy_cache: Arc<Cache<String, RolePolicy>>) -> Self` | 以共享策略缓存创建 |
 | `with_cache_size_and_rate_limit` | `async fn with_cache_size_and_rate_limit(role: String, cache_capacity: usize, max_requests: u32, window_secs: u64) -> Result<Self, PermissionError>` | 自定义缓存大小与令牌桶限流 |
 | `with_config_and_rate_limit` | `async fn with_config_and_rate_limit(role: String, config: &DbConfig, max_requests: u32, window_secs: u64) -> Result<Self, PermissionError>` | 从 `DbConfig` 创建并附带限流 |
-| `check_table_access` | `async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool` | 检查当前角色能否对表执行操作 |
+| `check_table_access` | `async fn check_table_access(&self, table: &str, operation: &PermissionAction) -> bool` | 检查当前角色能否对表执行操作（限流拒绝与策略拒绝均返回 `false`） |
+| `check_table_access_decision` | `async fn check_table_access_decision(&self, table: &str, operation: &PermissionAction) -> TableAccessDecision` | 决策版检查：区分 `Allowed` / `Denied`（403）/ `RateLimited{retry_after}`（429） |
+| `with_cache_size_and_backend` | `async fn with_cache_size_and_backend(role: String, cache_capacity: usize, backend: RateLimitBackend) -> Result<Self, PermissionError>` | 双后端切换：`TokenBucket{max_requests, window_secs}`（默认）或 `External(Arc<dyn Limiter>)` 注入外部限流（limiteron 等） |
+| `set_audit_logger` | `fn set_audit_logger(&mut self, logger: Arc<AuditLogger>)`（`audit` feature） | 挂载审计器，限流拒绝产生 `rate_limit_exceeded` 审计事件 |
 | `load_policy` | `async fn load_policy(&self, config: &PermissionConfig) -> Result<(), String>` | 加载权限配置 |
 
 > 权限缓存带 TTL 与 singleflight 请求合并（防缓存击穿），支持后台热加载。
+> 限流统一：`Limiter` 端口（`dbnexus-limiter-port` crate）抽取令牌桶与外部后端
+> 的公共契约，429/403 语义与会话层映射见 `docs/RATE_LIMITING.md`。
 
 ### `PermissionConfig`
 

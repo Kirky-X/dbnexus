@@ -124,6 +124,8 @@ db-migration = Migration error: { $message }
 db-cache = Cache error: { $message }
 db-query = Query error: { $message }
 db-validation = Validation error: { $message }
+db-rate-limited = Rate limit exceeded: too many requests, please retry later
+db-rate-limited-retry = Rate limit exceeded: too many requests; retry after { $retry_after_secs }s
 
 pool-acquire-timeout = Failed to acquire connection within timeout
 pool-exhausted = Connection pool exhausted
@@ -330,6 +332,8 @@ db-migration = 迁移错误: { $message }
 db-cache = 缓存错误: { $message }
 db-query = 查询错误: { $message }
 db-validation = 验证错误: { $message }
+db-rate-limited = 请求过于频繁，已被速率限制，请稍后重试
+db-rate-limited-retry = 请求过于频繁，已被速率限制，{ $retry_after_secs } 秒后重试
 
 pool-acquire-timeout = 无法在超时时间内获取连接
 pool-exhausted = 连接池已耗尽
@@ -609,6 +613,36 @@ mod tests {
         assert_eq!(
             format_from_bundle("zh", "pool-exhausted", &[]),
             Some("连接池已耗尽".to_string())
+        );
+    }
+
+    /// db-rate-limited 双语模板：携带建议秒数走 -retry 键插值
+    /// retry_after_secs（防「死参数」回归），无建议走无秒数键
+    #[test]
+    fn test_fluent_rate_limited_retry_after_interpolation() {
+        assert_eq!(
+            format_from_bundle(
+                "en",
+                "db-rate-limited-retry",
+                &[("retry_after_secs", "7".to_string())]
+            ),
+            Some("Rate limit exceeded: too many requests; retry after 7s".to_string())
+        );
+        assert_eq!(
+            format_from_bundle("en", "db-rate-limited", &[]),
+            Some("Rate limit exceeded: too many requests, please retry later".to_string())
+        );
+        assert_eq!(
+            format_from_bundle(
+                "zh",
+                "db-rate-limited-retry",
+                &[("retry_after_secs", "7".to_string())]
+            ),
+            Some("请求过于频繁，已被速率限制，7 秒后重试".to_string())
+        );
+        assert_eq!(
+            format_from_bundle("zh", "db-rate-limited", &[]),
+            Some("请求过于频繁，已被速率限制，请稍后重试".to_string())
         );
     }
 

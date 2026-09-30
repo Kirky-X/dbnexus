@@ -3,9 +3,14 @@
 //! 速率限制器
 //!
 //! 提供基于令牌桶算法的速率限制功能。
+//! 令牌桶同时实现限流端口 `Limiter`，作为权限检查链路的默认限流后端；
+//! 外部后端（limiteron 等）经同一端口注入（见 `context.rs` 的
+//! `RateLimitBackend`）。
 
+use async_trait::async_trait;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
+use dbnexus_limiter_port::{Limiter, RateLimitDecision};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::Duration;
@@ -265,16 +270,6 @@ impl RateLimiter {
     ///
     /// 如果允许请求返回 true，否则返回 false
     pub async fn check(&self, key: &str) -> bool {
-        // 计算填充速率：max_requests / window_duration（秒）
-        // 使用浮点数计算，确保精度，然后向上取整，最小为 1
-        let window_secs = self.window_duration.as_secs();
-        let refill_rate = if window_secs > 0 {
-            let rate = (self.max_requests as f64 / window_secs as f64).ceil() as u64;
-            rate.max(1) // 确保至少为 1
-        } else {
-            self.max_requests as u64
-        };
-
         // 检查是否需要 LRU 驱逐（在 entry() 之前检查，避免在持有 entry 时删除）
         if self.buckets.len() >= self.max_buckets && !self.buckets.contains_key(key) {
             // 执行 LRU 驱逐：移除最长时间未访问的桶
@@ -290,12 +285,26 @@ impl RateLimiter {
             }
             Entry::Vacant(entry) => {
                 // 桶不存在：创建新桶并插入（使用 burst_capacity 作为初始/最大令牌数）
-                let bucket = TokenBucket::new(self.burst_capacity as u64, refill_rate);
+                let bucket = TokenBucket::new(self.burst_capacity as u64, self.refill_rate());
                 bucket.touch();
                 let consumed = bucket.try_consume();
                 entry.insert(bucket);
                 consumed
             }
+        }
+    }
+
+    /// 计算令牌填充速率（令牌/秒）
+    ///
+    /// max_requests / window_duration（秒），向上取整，最小为 1
+    fn refill_rate(&self) -> u64 {
+        let window_secs = self.window_duration.as_secs();
+        if window_secs > 0 {
+            // 使用浮点数计算，确保精度，然后向上取整，最小为 1
+            let rate = (self.max_requests as f64 / window_secs as f64).ceil() as u64;
+            rate.max(1) // 确保至少为 1
+        } else {
+            self.max_requests as u64
         }
     }
 
@@ -396,6 +405,28 @@ impl RateLimiter {
         {
             // LRU 驱逐记录（已移除 tracing）
         }
+    }
+}
+
+/// 限流端口实现：令牌桶作为默认限流后端接入权限检查链路
+///
+/// 拒绝时按填充速率给出 Retry-After 建议（一个令牌的补充周期），
+/// 供 429 语义的 `Retry-After` 响应头使用。
+#[async_trait]
+impl Limiter for RateLimiter {
+    async fn check(
+        &self,
+        key: &str,
+    ) -> Result<RateLimitDecision, dbnexus_limiter_port::RateLimitError> {
+        if RateLimiter::check(self, key).await {
+            return Ok(RateLimitDecision::allow());
+        }
+        // 一个令牌的补充周期（毫秒），向上取整：fill 速率不整除 1000 时
+        // floor 值会让调用方按建议重试仍被拒一次（令牌尚未补充）
+        let retry_after_ms = 1000_u64.div_ceil(self.refill_rate());
+        Ok(RateLimitDecision::deny(Some(Duration::from_millis(
+            retry_after_ms,
+        ))))
     }
 }
 
@@ -819,5 +850,21 @@ mod tests {
             assert!(!limiter.check("boundary_user").await);
             assert_eq!(limiter.remaining("boundary_user"), 0);
         }
+    }
+
+    /// Limiter 端口 Retry-After 向上取整：填充速率不整除 1000 时建议不得
+    /// 小于一个补充周期（floor 会让调用方按建议重试仍被拒一次）
+    #[tokio::test]
+    async fn test_limiter_port_retry_after_ceils_refill_period() {
+        // refill_rate = ceil(3/1) = 3/s → 一个补充周期 ceil(1000/3) = 334ms
+        let limiter = RateLimiter::new(3, std::time::Duration::from_secs(1), 16, 1);
+        assert!(limiter.check("ceil_user").await);
+        let decision = Limiter::check(&limiter, "ceil_user").await.unwrap();
+        assert!(!decision.allowed, "bucket exhausted -> denied");
+        assert_eq!(
+            decision.retry_after,
+            Some(Duration::from_millis(334)),
+            "Retry-After 须向上取整到完整补充周期"
+        );
     }
 }
