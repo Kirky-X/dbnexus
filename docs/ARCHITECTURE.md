@@ -183,7 +183,7 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 | 模块 | 职责 | 门控 |
 |------|------|------|
 | `pool/db_pool/` | `DbPool`（`access` / `health` / `status` 三分部）、`PoolStatus` | 核心 |
-| `pool/session.rs` | `Session`（RAII 会话，承载事务、权限检查、慢查询计时、图操作互斥） | 核心 |
+| `pool/session/` | `Session`（RAII 会话，承载事务、权限检查、慢查询计时、图操作互斥；按职责拆为 execute/transaction/duckdb/graph/metrics 子模块） | 核心 |
 | `pool/pool_impl.rs` | 连接池内部实现（原子计数器 + `Notify` + `Semaphore`） | 核心 |
 | `pool/prepare_cache.rs` | 语句级 prepared statement LRU 缓存 | `prepare-cache` |
 | `pool/health_export.rs` | `health_snapshot` 结构化健康导出 | `health-check` |

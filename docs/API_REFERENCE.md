@@ -919,7 +919,7 @@ let pool = DbPoolBuilder::new()
 
 ### 查询缓存装饰器（`oxcache-integration` 特性）
 
-`OxcacheQueryCache` 把 oxcache 后端装配到 `DbPool` 参数化查询通道：`query_cached` 以 SQL + 绑定参数 + 表版本戳派生缓存 key（SHA-256），命中返回缓存行集（`from_cache = true`，数据库零往返），未命中穿透执行并回填；`invalidate_table` 在写路径后按表戳版本（纳秒时间戳，免读改写竞态、幂等），使提及该表的缓存项自然失效。
+`OxcacheQueryCache` 把 oxcache 后端装配到 `DbPool` 参数化查询通道：`query_cached` 以安全上下文 + 数据保护策略世代 + SQL + 绑定参数 + 表版本戳派生缓存 key（SHA-256），命中返回缓存行集（`from_cache = true`，数据库零往返），未命中穿透执行并回填；`invalidate_table` 在写路径后按表戳版本（纳秒时间戳，免读改写竞态、幂等），使提及该表的缓存项自然失效。
 
 ```rust
 use std::sync::Arc;
@@ -936,7 +936,7 @@ let cq = qc.query_cached(
 qc.invalidate_table("users").await?;
 ```
 
-契约：**表名显式声明**（`tables` 参数，非空白名单校验，空集拒绝）而非从 SQL 解析——失效正确性优先，SQL 解析对别名/子查询的漏提取会直接变成脏读；key 由 `SHA-256(安全上下文 + 表版本原始字节 + SQL + 参数 JSON)` 派生，**role/namespace 参与 key**——行集内容依赖执行时 RLS/脱敏/权限上下文，共享同一后端的多实例必须以 `with_role`/`with_namespace` 区分安全上下文（admin 回填的全量行对受限角色不可见，跨租户同理），否则命中即越权读取；SQL/参数/任一表失效/安全上下文四者任一变化即新条目（旧条目交由后端 TTL/LRU 淘汰）；表版本以原始字节进哈希 + 失效写十进制串（编码单射，重复失效不碰撞回旧 key）；版本读取失败显性报错（当未失效会静默脏读）；穿透成功但缓存回填失败返回 `DbError::Cache`（查询幂等可安全重试）。**导出类型**：`OxcacheQueryCache`、`CachedQuery`。
+契约：**表名显式声明**（`tables` 参数，非空白名单校验，空集拒绝）而非从 SQL 解析——失效正确性优先，SQL 解析对别名/子查询的漏提取会直接变成脏读；key 由 `SHA-256(安全上下文 + 数据保护策略世代 + 表版本原始字节 + SQL + 参数 JSON)` 派生，**role/namespace 参与 key**——行集内容依赖执行时 RLS/脱敏/权限上下文，共享同一后端的多实例必须以 `with_role`/`with_namespace` 区分安全上下文（admin 回填的全量行对受限角色不可见，跨租户同理），否则命中即越权读取；`data-protection` 特性下**策略世代参与 key**——`set_data_protection` 运行时换装后旧策略下回填的行集不再可命中（旧 RLS 谓词/脱敏出口不脏读，收紧/放宽即时生效）；SQL/参数/任一表失效/安全上下文/策略换装任一变化即新条目（旧条目交由后端 TTL/LRU 淘汰）；表版本以原始字节进哈希 + 失效写十进制串（编码单射，重复失效不碰撞回旧 key）；版本读取失败显性报错（当未失效会静默脏读）；穿透成功但缓存回填失败返回 `DbError::Cache`（查询幂等可安全重试）。**导出类型**：`OxcacheQueryCache`、`CachedQuery`。
 
 ---
 

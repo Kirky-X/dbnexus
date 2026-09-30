@@ -10,8 +10,9 @@
 //! # 契约
 //!
 //! - **key 派生**：`SHA-256(安全上下文 + 表版本原始字节 + SQL + 参数
-//!   JSON)`——安全上下文（role/namespace）、SQL、参数、任一提及表被
-//!   失效，四者任一变化都派生新 key（旧条目交给后端 TTL/LRU 淘汰）。
+//!   JSON + 数据保护策略世代)`——安全上下文（role/namespace）、SQL、
+//!   参数、任一提及表被失效、`set_data_protection` 运行时换装，任一
+//!   变化都派生新 key（旧条目交给后端 TTL/LRU 淘汰）。
 //!   表版本以**原始字节**进哈希（绕开任何文本解码的多对一路径），
 //!   `invalidate_table` 写十进制字符串（可读且单射）
 //! - **安全上下文隔离**：行集内容依赖执行时安全上下文（RLS 谓词/脱敏/
@@ -19,6 +20,10 @@
 //!   若安全上下文不同（admin vs 受限角色、租户 A vs B），穿透回填的
 //!   条目互不可见；跨进程共享后端（redis 等）时跨实例隔离由相同机制
 //!   保证
+//! - **策略换装失效**：`data-protection` feature 下 key 派生纳入池的
+//!   数据保护策略世代，`set_data_protection` 换装后旧策略下回填的行集
+//!   （旧 RLS 谓词/脱敏出口）不再可命中——运行时收紧或放宽策略都即时
+//!   生效，不依赖调用方手动失效
 //! - **表名显式声明**：`tables` 参数由调用方给出而非从 SQL 解析，且
 //!   fail-closed——空表集与非法表名（非 `[A-Za-z0-9_.]` 白名单）构建期
 //!   拒绝：漏传 tables 的查询永不受失效影响，即潜在无限脏读
@@ -243,27 +248,31 @@ impl OxcacheQueryCache {
             })?;
 
         let mut hasher = Sha256::new();
+        // 长度前缀框架：每个变长字段先写 8 字节小端长度再写内容——编码
+        // 单射，字段值含换行/分隔字节时不同 (role, namespace, sql) 组合
+        // 不可能产生相同哈希输入（换行标签拼接可被字段值注入混淆）
         // 安全上下文维度：role/namespace 不同即不同 key（行集内容依赖
         // 执行时 RLS/脱敏/权限上下文，跨上下文命中即越权读取）
-        hasher.update(b"role=");
-        hasher.update(self.role.as_bytes());
-        hasher.update(b"\nns=");
-        hasher.update(self.namespace.as_bytes());
-        hasher.update(b"\n");
+        push_field(&mut hasher, self.role.as_bytes());
+        push_field(&mut hasher, self.namespace.as_bytes());
+        // 数据保护策略世代：set_data_protection 运行时换装 bump 世代，
+        // 旧策略下回填的行集（旧 RLS 谓词/脱敏出口）不得被新策略下的
+        // 查询命中（feature 关闭时行集无策略依赖，无此维度）
+        #[cfg(feature = "data-protection")]
+        push_field(
+            &mut hasher,
+            &self.pool.data_protection_epoch().to_le_bytes(),
+        );
         // 表版本以原始字节进哈希：绕开文本解码多对一路径（lossy 解码曾
         // 使相邻纳秒时间戳碰撞出相同版本串，失效静默 no-op）
         for (table, version) in tables.iter().zip(&versions) {
-            hasher.update(table.as_bytes());
-            hasher.update(b"=");
-            hasher.update(version.as_deref().unwrap_or(ZERO_VERSION));
-            hasher.update(b";");
+            push_field(&mut hasher, table.as_bytes());
+            push_field(&mut hasher, version.as_deref().unwrap_or(ZERO_VERSION));
         }
-        hasher.update(b"\n");
-        hasher.update(sql.as_bytes());
-        hasher.update(b"\n");
+        push_field(&mut hasher, sql.as_bytes());
         let params_json = serde_json::to_vec(params)
             .map_err(|e| DbError::Cache(format!("query cache params encode failed: {e}")))?;
-        hasher.update(&params_json);
+        push_field(&mut hasher, &params_json);
         let digest = hasher.finalize();
 
         // hex 编码查表零中间分配（命中热路径每调用必经）
@@ -276,6 +285,13 @@ impl OxcacheQueryCache {
         }
         Ok(key)
     }
+}
+
+/// 哈希字段写入（8 字节小端长度前缀 + 内容）——长度前缀使变长字段
+/// 序列化单射，字段值不限定字符集
+fn push_field(hasher: &mut Sha256, field: &[u8]) {
+    hasher.update((field.len() as u64).to_le_bytes());
+    hasher.update(field);
 }
 
 /// 表名白名单校验（对齐 `copy` 模块标识符口径：字母/数字/下划线/点，

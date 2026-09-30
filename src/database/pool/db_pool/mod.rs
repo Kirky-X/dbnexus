@@ -236,6 +236,11 @@ pub(crate) struct DbPoolInner {
     #[cfg(feature = "data-protection")]
     pub(crate) data_protection: tokio::sync::RwLock<crate::access::data_protection::DataProtection>,
 
+    /// 数据保护策略世代（每次换装单调递增）——查询缓存等以策略内容为
+    /// 前提的派生键据此区分新旧策略下的行集
+    #[cfg(feature = "data-protection")]
+    pub(crate) data_protection_epoch: std::sync::atomic::AtomicU64,
+
     /// 副本健康状态提供者
     #[cfg(feature = "health-check")]
     pub(crate) replica_health_provider:
@@ -391,6 +396,8 @@ impl DbPool {
                 data_protection: tokio::sync::RwLock::new(
                     crate::access::data_protection::DataProtection::default(),
                 ),
+                #[cfg(feature = "data-protection")]
+                data_protection_epoch: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]
@@ -493,6 +500,8 @@ impl DbPool {
                 data_protection: tokio::sync::RwLock::new(
                     crate::access::data_protection::DataProtection::default(),
                 ),
+                #[cfg(feature = "data-protection")]
+                data_protection_epoch: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]
@@ -623,6 +632,8 @@ impl DbPool {
                 data_protection: tokio::sync::RwLock::new(
                     crate::access::data_protection::DataProtection::default(),
                 ),
+                #[cfg(feature = "data-protection")]
+                data_protection_epoch: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(feature = "health-check")]
                 replica_health_provider: std::sync::RwLock::new(None),
                 #[cfg(feature = "sql-parser")]

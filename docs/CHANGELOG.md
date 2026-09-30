@@ -34,7 +34,7 @@
 - **HTTP 健康端点生成器（R6）**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
 - **批量写入（`copy`）**：`BatchInsertStatement::chunk_rows_owned` 消费所有权变体——行集按值消费、参数经 `Vec::append` 指针级搬运，持有行集所有权的调用方免去借用版逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致
 - **指标（`metrics`）**：`MetricsCollector::slow_queries_count()` 零克隆计数访问器（健康快照等只需计数的场景免整环深拷贝）
-- **oxcache 查询缓存一等集成（`oxcache-integration`）**：新增 `OxcacheQueryCache` 查询缓存装饰器——`query_cached` 以 SQL + 绑定参数 + 表版本戳派生 key（SHA-256），命中返回缓存行集（`from_cache` 标记）、未命中穿透执行并回填；`invalidate_table` 写路径后按表纳秒时间戳戳版本（幂等、免读改写竞态），使提及该表的缓存项自然失效；表名显式声明（失效正确性优先于 SQL 解析）、版本读取失败与缓存回填失败均显性报错；feature 依赖新增 `sha2`（key 派生）
+- **oxcache 查询缓存一等集成（`oxcache-integration`）**：新增 `OxcacheQueryCache` 查询缓存装饰器——`query_cached` 以 **role/namespace 安全上下文 + 数据保护策略世代 + SQL + 绑定参数 + 表版本原始字节**派生 key（SHA-256，长度前缀编码单射；行集内容依赖执行时 RLS/脱敏/权限上下文，共享后端的多实例必须以 `with_role`/`with_namespace` 区分，跨上下文命中即越权读取），命中返回缓存行集（`from_cache` 标记）、未命中穿透执行并回填；**策略换装失效**：`data-protection` 特性下池侧世代计数参与 key 派生，`set_data_protection` 运行时换装即失效旧策略下回填的条目（旧 RLS 谓词/脱敏出口不脏读，收紧/放宽即时生效，免调用方手动失效）；`invalidate_table` 写路径后按表纳秒时间戳十进制串戳版本（单射、幂等、免读改写竞态，重复失效不碰撞回旧 key），使提及该表的缓存项自然失效；`tables` 空集与非法表名 fail-closed 拒绝（漏传即永不受失效影响）、版本读取失败与缓存回填失败均显性报错；feature 依赖新增 `sha2`（key 派生）
 
 ### Changed
 

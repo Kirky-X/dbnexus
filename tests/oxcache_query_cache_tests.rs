@@ -449,6 +449,70 @@ async fn test_namespace_isolates_tenants_on_shared_backend() {
 }
 
 // ============================================================================
+// key 哈希输入单射性：字段值含换行不得混淆条目（注入回归）
+// ============================================================================
+
+#[tokio::test]
+async fn test_hash_field_injection_cannot_confuse_entries() {
+    // 旧框架用换行标签拼接哈希输入，字段边界可被字段值注入：role 与
+    // namespace 的边界由 "\nns=" 标签界定，(role="r", ns="EVIL\nns=N") 与
+    // (role="r\nns=EVIL", ns="N") 在同表同版本同 SQL 同参数下折叠出逐字节
+    // 相同输入；无界定的纯拼接则被 (role="rE", ns="VIL\nns=N") 与
+    // (role="r", ns="EVIL\nns=N") 混淆。这些安全上下文不同的实例共享后端
+    // 时，一方回填的条目会被另一方命中（行集内容依赖执行时 RLS/脱敏上下
+    // 文，跨上下文命中即越权读取）。长度前缀框架下字段编码单射，以下混淆
+    // 对必须互不可见
+    let (pool, path) = {
+        let (url, path) = temp_db_url("inj");
+        let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+        let session = pool.get_session("admin").await.expect("session");
+        session
+            .execute_raw_ddl("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+            .await
+            .expect("create");
+        (pool, path)
+    };
+    let backend = make_cache();
+    // 实例 A：受限上下文（role="r"），回填条目
+    let a = OxcacheQueryCache::new(pool.clone(), backend.clone())
+        .with_role("r")
+        .with_namespace("EVIL\nns=N");
+    // 实例 B：换行标签注入——旧标签框架下哈希输入与 A 逐字节等价
+    let b = OxcacheQueryCache::new(pool.clone(), backend.clone())
+        .with_role("r\nns=EVIL")
+        .with_namespace("N");
+    // 实例 C：字段边界漂移——无界定纯拼接下哈希输入与 A 逐字节等价
+    let c = OxcacheQueryCache::new(pool, backend)
+        .with_role("rE")
+        .with_namespace("VIL\nns=N");
+
+    let sql = "SELECT id FROM t ORDER BY id";
+    let first = a.query_cached(sql, &[], &["t"]).await.expect("a first");
+    assert!(!first.from_cache);
+    assert!(
+        a.query_cached(sql, &[], &["t"])
+            .await
+            .expect("a second")
+            .from_cache,
+        "A 自身的正常命中语义不受影响"
+    );
+
+    // B/C 查询相同语句：不得命中 A 回填的条目（若命中则 from_cache 为
+    // true 且不会走到数据库执行，即构成跨上下文越权读取）
+    for (name, ctx) in [("标签注入", &b), ("边界漂移", &c)] {
+        let outcome = ctx.query_cached(sql, &[], &["t"]).await;
+        if let Ok(cq) = outcome {
+            assert!(
+                !cq.from_cache,
+                "{name} 上下文不得命中他上下文回填的条目（哈希输入必须单射）"
+            );
+        }
+    }
+
+    cleanup(&path).await;
+}
+
+// ============================================================================
 // fail-closed：空 tables 与非法表名拒绝
 // ============================================================================
 
@@ -525,5 +589,87 @@ async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
         .await
         .expect("multi-table second pass after both invalidations");
     assert!(fifth.from_cache, "失效后的首轮穿透即回填，再查命中");
+    cleanup(&path).await;
+}
+
+// ============================================================================
+// 策略换装失效：set_data_protection 运行时换策略后旧 key 命中失效
+// ============================================================================
+
+#[cfg(feature = "data-protection")]
+use dbnexus::access::data_protection::{DataProtection, MaskStrategy, MaskingEngine};
+
+#[cfg(feature = "data-protection")]
+#[tokio::test]
+async fn test_policy_change_invalidates_cached_entries() {
+    let (url, path) = temp_db_url("dpepoch");
+    let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+    {
+        let session = pool.get_session("admin").await.expect("session");
+        session
+            .execute_raw_ddl("CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)")
+            .await
+            .expect("create users");
+        session
+            .execute_with_params(
+                "INSERT INTO users (id, email) VALUES (?, ?)",
+                &[serde_json::json!(1), serde_json::json!("alice@example.com")],
+            )
+            .await
+            .expect("insert user");
+    }
+    let qc = OxcacheQueryCache::new(pool.clone(), make_cache());
+    let sql = "SELECT id, email FROM users ORDER BY id";
+
+    // 策略 v1：email 哈希脱敏——穿透回填的行集是脱敏出口
+    pool.set_data_protection(DataProtection {
+        masking: Some(Arc::new(
+            MaskingEngine::new().rule("email", MaskStrategy::Hash),
+        )),
+        rls: None,
+    })
+    .await;
+    let v1 = qc
+        .query_cached(sql, &[], &["users"])
+        .await
+        .expect("v1 first");
+    assert!(!v1.from_cache);
+    assert_eq!(
+        v1.rows[0]["email"].as_str().unwrap().len(),
+        64,
+        "v1 出口为哈希脱敏"
+    );
+    assert!(
+        qc.query_cached(sql, &[], &["users"])
+            .await
+            .expect("v1 second")
+            .from_cache,
+        "同策略内正常命中语义不受影响"
+    );
+
+    // 策略 v2：撤销脱敏——key 派生纳入策略世代，旧策略脱敏行集必须失效，
+    // 重执行返回明文（否则缓存把已撤销的脱敏永久钉死，策略收紧同理放行
+    // 旧宽策略行集）
+    pool.set_data_protection(DataProtection::default()).await;
+    let v2 = qc
+        .query_cached(sql, &[], &["users"])
+        .await
+        .expect("v2 first");
+    assert!(
+        !v2.from_cache,
+        "set_data_protection 换装后旧 key 必须失效重执行"
+    );
+    assert_eq!(
+        v2.rows[0]["email"], "alice@example.com",
+        "v2 出口为明文（撤销脱敏即时生效）"
+    );
+    assert!(
+        qc.query_cached(sql, &[], &["users"])
+            .await
+            .expect("v2 second")
+            .from_cache,
+        "新策略世代下重新建立命中"
+    );
+
     cleanup(&path).await;
 }

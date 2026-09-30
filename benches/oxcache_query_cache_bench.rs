@@ -122,7 +122,8 @@ fn bench_query_cache_hit_vs_miss(c: &mut Criterion) {
     let _ = std::fs::remove_file(&db_path);
 }
 
-/// key 派生热路径（安全上下文 + 版本批量读 + SHA-256 + hex）单独量化
+/// 命中全路径（key 派生 + 版本批量读 + 缓存 get + 反序列化）——派生
+/// 纯成本的上界口径（反序列化随行集规模混入）
 fn bench_derive_key_cost(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (qc, db_path) = rt.block_on(setup());
@@ -131,10 +132,11 @@ fn bench_derive_key_cost(c: &mut Criterion) {
 
     for (tables_n, tables) in &[(1usize, vec!["users"]), (2usize, vec!["users", "orders"])] {
         let sql = "SELECT id FROM users WHERE id = ?";
-        // 预热回填（命中路径 = key 派生 + 一次 get，差值即派生成本上界）
+        // 预热回填（命中全路径 = key 派生 + 版本读 + 缓存 get + 反序列化）
         rt.block_on(qc.query_cached(sql, &[serde_json::json!(1)], tables))
             .expect("prewarm");
-        group.bench_function(format!("derive_key_hit_{tables_n}_tables"), |b| {
+        let plural = if *tables_n > 1 { "s" } else { "" };
+        group.bench_function(format!("hit_path_{tables_n}_table{plural}"), |b| {
             b.iter(|| {
                 rt.block_on(async {
                     let cq = qc

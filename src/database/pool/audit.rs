@@ -200,12 +200,17 @@ mod tests {
         );
     }
 
+    /// 进程级环为本模块全部触环测试共享且 take 清空——并行执行时事件
+    /// 会被互抽，内容/顺序断言天然竞态。测试互斥锁串行化全部触环用例；
+    /// 各用例锁内开头先 take 清空（他测残留不影响本测断言），非测试
+    /// 写入源（如池构造）只增无关事件，marker 过滤断言不受影响
+    static RING_TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
     /// 记录 N 条 → 计数递增、内容可观测、take 后清空
-    ///
-    /// 进程级环被同进程内其他测试共享（池构造等也会记录），因此计数用
-    /// 单调递增断言、内容按本测试专属标记过滤，保证不受并发写入影响。
     #[test]
     fn test_record_admin_bypass_count_take_and_clear() {
+        let _guard = RING_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        take_admin_bypass_events();
         let marker = "record-take-marker";
         let before = admin_bypass_count();
 
@@ -232,36 +237,32 @@ mod tests {
     /// vuln-0001 回归测试：默认 admin 角色触发审计记录，事件可观测
     #[test]
     fn test_warn_and_record_default_admin_role() {
+        let _guard = RING_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        take_admin_bypass_events();
         let before = admin_bypass_count();
         warn_and_record_default_admin_role("admin");
-        // 本次调用至少记录 1 条（其他测试可能并发记录，故用 >=）
         assert!(
             admin_bypass_count() > before,
             "默认 admin 角色应触发审计记录"
         );
 
-        // 自定义角色由 test_vuln_0001_custom_admin_role_no_warning 覆盖（不触发）。
-        // 并行测试共享同一进程级环且 take 清空：本测试刚记录的事件可能被
-        // 并行 take 抽走——重试 record+take 直到观测到本类事件（count 断言
-        // 已自足无竞态，此处验证事件类别内容可观测）
-        for _ in 0..100 {
-            let events = take_admin_bypass_events();
-            if events.iter().any(|e| {
-                e.kind == BYPASS_KIND_DEFAULT_ADMIN_ROLE
+        let events = take_admin_bypass_events();
+        assert!(
+            events
+                .iter()
+                .any(|e| e.kind == BYPASS_KIND_DEFAULT_ADMIN_ROLE
                     && e.table == "-"
-                    && e.operation == "PoolInit"
-            }) {
-                return;
-            }
-            warn_and_record_default_admin_role("admin");
-        }
-        panic!("重试 100 次内应观测到 default_admin_role 类别的池初始化事件");
+                    && e.operation == "PoolInit"),
+            "应存在 default_admin_role 类别的池初始化事件"
+        );
     }
 
     /// vuln-0001 回归测试：admin bypass 审计事件被真实记录（内容可观测）
     #[cfg(feature = "permission")]
     #[test]
     fn test_vuln_0001_audit_admin_bypass_records_event() {
+        let _guard = RING_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        take_admin_bypass_events();
         let marker = "bypass-audit-marker";
         let before = admin_bypass_count();
 
@@ -294,6 +295,8 @@ mod tests {
     fn test_observation_api_reachable_via_full_public_path() {
         use crate::database::pool::audit as public_audit;
 
+        let _guard = RING_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        public_audit::take_admin_bypass_events();
         let before = public_audit::admin_bypass_count();
         // 记录仍由内部触发（record_admin_bypass 保持 crate 内可见）
         record_admin_bypass(

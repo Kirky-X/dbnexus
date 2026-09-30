@@ -407,7 +407,7 @@ The layered module design, per-layer responsibilities and the full module overvi
 
 ### 🔗 Core Execution Path
 
-Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → per-table permission check → driver execution"; on parse failure the admin role is allowed and non-admin roles are denied, every target table in JOINs / subqueries is checked (completed in rc.2), and the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session.rs](src/database/pool/session.rs)).
+Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → per-table permission check → driver execution"; on parse failure the admin role is allowed and non-admin roles are denied, every target table in JOINs / subqueries is checked (completed in rc.2), and the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session/](src/database/pool/session/mod.rs)).
 
 See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行管道) for the full sequence diagram and path notes.
 
@@ -511,7 +511,7 @@ Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicate
 ### Mid Term
 
 - [ ] Resolve the mbedtls duplicate-symbol link conflict when `duckdb` and `ladybug` are enabled together (multi-driver verification currently uses grouped feature combinations)
-- [ ] Follow up on Medium items filed during code quality reviews
+- [x] Follow up on Medium items filed during code quality reviews — query-cache policy-change stale reads fixed: key derivation includes the data-protection epoch, `set_data_protection` invalidates old entries on swap (2026-09-30)
 
 > Items compiled from the [CHANGELOG.md](docs/CHANGELOG.md) and repository acceptance records.
 

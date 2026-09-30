@@ -121,9 +121,23 @@ impl DbPool {
     }
 
     /// 注入数据保护配置（字段脱敏 + RLS 谓词）
+    ///
+    /// 换装即 bump 策略世代：行集内容随 RLS/脱敏变化，查询缓存 key 派生
+    /// 纳入世代，旧策略下回填的条目不会被新策略下的查询命中。
     #[cfg(feature = "data-protection")]
     pub async fn set_data_protection(&self, dp: crate::access::data_protection::DataProtection) {
         *self.inner.data_protection.write().await = dp;
+        self.inner
+            .data_protection_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
+
+    /// 数据保护策略世代读数（查询缓存 key 派生用；换装单调递增）
+    #[cfg(feature = "data-protection")]
+    pub(crate) fn data_protection_epoch(&self) -> u64 {
+        self.inner
+            .data_protection_epoch
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// 运行时替换权限配置（角色策略缓存同步换装）
