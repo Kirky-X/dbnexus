@@ -306,6 +306,11 @@ roles:
           - insert
           - update
           - delete
+  user:
+    tables:
+      - name: "users"
+        operations:
+          - select
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
@@ -321,12 +326,13 @@ roles:
     let pool = DbPool::with_config(config)
         .await
         .expect("Failed to create test pool");
-    let session = pool
-        .get_session("admin")
+    let user_session = pool
+        .get_session("user")
         .await
         .expect("Failed to get session");
 
-    let result = session.execute_raw("SELECT 1").await;
+    // 非 admin：解析失败 fail-closed 拒绝（admin 对解析失败放行，对齐 Err 分支语义）
+    let result = user_session.execute_raw("THIS IS NOT VALID SQL").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
 }
 
@@ -637,6 +643,7 @@ async fn test_commit_clears_last_write() {
 async fn test_execute_denies_when_no_table_in_statement() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
+    // 非 admin 角色承载 fail-closed 断言（admin 对表无关语句放行，随绕过跳过表名检查）
     let perm_content = r#"
 roles:
   admin:
@@ -647,6 +654,11 @@ roles:
           - insert
           - update
           - delete
+  user:
+    tables:
+      - name: "users"
+        operations:
+          - select
 "#;
     std::fs::write(&perm_file, perm_content).expect("Failed to write permissions file");
 
@@ -662,12 +674,25 @@ roles:
     let pool = DbPool::with_config(config)
         .await
         .expect("Failed to create test pool");
-    let session = pool
+
+    // admin：表无关语句（无 FROM）放行
+    let admin = pool
         .get_session("admin")
         .await
         .expect("Failed to get session");
+    let admin_result = admin.execute("SELECT 1").await;
+    assert!(
+        admin_result.is_ok(),
+        "admin should execute table-free statements, got: {:?}",
+        admin_result.err()
+    );
 
-    let result = session.execute("SELECT 1").await;
+    // 非 admin：无表语句 fail-closed 拒绝
+    let user_session = pool
+        .get_session("user")
+        .await
+        .expect("Failed to get session");
+    let result = user_session.execute("SELECT 1").await;
     assert!(matches!(result, Err(DbError::Permission(_))));
 }
 
@@ -955,11 +980,17 @@ roles:
 async fn test_execute_raw_rejects_effectively_empty_table_name() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
+    // 非 admin 承载 fail-closed 断言（admin 对空表名语句随绕过放行）
     let perm_content = r#"
 roles:
   admin:
     tables:
       - name: "*"
+        operations:
+          - select
+  user:
+    tables:
+      - name: "users"
         operations:
           - select
 "#;
@@ -978,7 +1009,7 @@ roles:
         .await
         .expect("Failed to create test pool");
     let session = pool
-        .get_session("admin")
+        .get_session("user")
         .await
         .expect("Failed to get session");
 
@@ -993,11 +1024,17 @@ roles:
 async fn test_execute_rejects_effectively_empty_table_name() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let perm_file = temp_dir.path().join("permissions.yaml");
+    // 非 admin 承载 fail-closed 断言（admin 对空表名语句随绕过放行）
     let perm_content = r#"
 roles:
   admin:
     tables:
       - name: "*"
+        operations:
+          - select
+  user:
+    tables:
+      - name: "users"
         operations:
           - select
 "#;
@@ -1016,7 +1053,7 @@ roles:
         .await
         .expect("Failed to create test pool");
     let session = pool
-        .get_session("admin")
+        .get_session("user")
         .await
         .expect("Failed to get session");
 

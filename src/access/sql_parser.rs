@@ -10,7 +10,6 @@ use sqlparser::ast::{
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
@@ -57,8 +56,9 @@ pub enum PermissionAction {
     Delete,
 }
 
-/// SQL解析缓存适配器
-use oxcache::Cache;
+/// 解析结果缓存后端：库内同步 LRU 端口（prepare_cache），sql-parser 由此
+/// 不再隐含 cache→oxcache 依赖（oxcache 仅供 permission 等真正消费方携带）
+use crate::database::pool::prepare_cache::PreparedStatementCache;
 
 /// Errors that can occur during SQL parsing
 #[derive(Debug, Error)]
@@ -160,21 +160,13 @@ pub enum SqlOperationType {
 /// ```
 pub struct SqlParser {
     dialect: GenericDialect,
-    /// 缓存用于存储解析结果
-    parse_cache: Cache<String, ParsedSqlOperation>,
-    /// 缓存命中次数
-    cache_hits: AtomicU64,
-    /// 缓存未命中次数
-    cache_misses: AtomicU64,
+    /// 解析结果缓存（库内同步 LRU，容量淘汰；命中/未命中统计由端口承载）
+    parse_cache: PreparedStatementCache<ParsedSqlOperation>,
 }
 
 impl Default for SqlParser {
     fn default() -> Self {
-        // Note: This method may fail when called from an async context (like #[tokio::test])
-        // because it uses block_on which cannot nest in an existing runtime.
-        // For async contexts, use SqlParser::new().await instead.
-        tokio::runtime::Handle::current()
-            .block_on(async { Self::with_cache_size(DEFAULT_CACHE_SIZE).await })
+        Self::build(DEFAULT_CACHE_SIZE)
     }
 }
 
@@ -187,10 +179,18 @@ const DEFAULT_CACHE_SIZE: usize = 1000;
 static SHARED_PARSER: tokio::sync::OnceCell<Arc<SqlParser>> = tokio::sync::OnceCell::const_new();
 
 impl SqlParser {
+    /// 同步构建 parser（构造为纯内存操作，无 IO 与异步等待）
+    fn build(cache_size: usize) -> Self {
+        Self {
+            dialect: GenericDialect {},
+            parse_cache: PreparedStatementCache::new(cache_size.max(1)),
+        }
+    }
+
     /// Create a new SQL parser with generic dialect support and default cache
     #[inline]
     pub async fn new() -> Self {
-        Self::with_cache_size(DEFAULT_CACHE_SIZE).await
+        Self::build(DEFAULT_CACHE_SIZE)
     }
 
     /// 获取全局共享的 SqlParser 实例（推荐）
@@ -199,57 +199,35 @@ impl SqlParser {
     /// 缓存跨所有 Session/DbPool 共享，避免重复创建开销。
     ///
     /// **性能对比**：
-    /// - `SqlParser::new().await`：每次创建新 Cache（async + 内存分配）
+    /// - `SqlParser::new().await`：每次创建新缓存实例（内存分配）
     /// - `SqlParser::shared().await`：首次创建，后续 O(1) 返回 Arc clone
     #[inline]
     pub async fn shared() -> Arc<SqlParser> {
         SHARED_PARSER
-            .get_or_init(|| async { Arc::new(Self::with_cache_size(DEFAULT_CACHE_SIZE).await) })
+            .get_or_init(|| async { Arc::new(Self::build(DEFAULT_CACHE_SIZE)) })
             .await
             .clone()
     }
 
     /// Create a parser with specific cache size
+    ///
+    /// 容量下限收敛到 1（非正容量按单条目缓存处理）
     #[inline]
     pub async fn with_cache_size(cache_size: usize) -> Self {
-        let cache = Cache::builder()
-            .capacity(cache_size.max(1) as u64)
-            .build()
-            .await
-            .unwrap_or_else(|_| {
-                // Fallback cache on error - use block_on for synchronous fallback
-                // which is acceptable as a rare error case
-                tokio::runtime::Handle::current()
-                    .block_on(async {
-                        Cache::builder()
-                            .capacity(DEFAULT_CACHE_SIZE as u64)
-                            .build()
-                            .await
-                    })
-                    .expect("Failed to create fallback cache")
-            });
-        Self {
-            dialect: GenericDialect {},
-            parse_cache: cache,
-            cache_hits: AtomicU64::new(0),
-            cache_misses: AtomicU64::new(0),
-        }
+        Self::build(cache_size)
     }
 
     /// Create a parser with specific database dialect
     #[inline]
     pub async fn with_dialect(_db_type: &str) -> Self {
         // Using GenericDialect for broad compatibility
-        Self::new().await
+        Self::build(DEFAULT_CACHE_SIZE)
     }
 
-    /// 清空解析缓存
+    /// 清空解析缓存（条目与命中/未命中统计一并重置）
     #[inline]
     pub async fn clear_cache(&self) {
-        self.parse_cache.clear().await.ok();
-        // 重置统计计数器
-        self.cache_hits.store(0, Ordering::SeqCst);
-        self.cache_misses.store(0, Ordering::SeqCst);
+        self.parse_cache.clear();
     }
 
     /// 获取缓存命中率统计
@@ -257,10 +235,8 @@ impl SqlParser {
     /// 返回 (命中次数, 未命中次数) 的元组
     #[inline]
     pub fn cache_stats(&self) -> (u64, u64) {
-        (
-            self.cache_hits.load(Ordering::SeqCst),
-            self.cache_misses.load(Ordering::SeqCst),
-        )
+        let stats = self.parse_cache.stats();
+        (stats.hits, stats.misses)
     }
 
     /// Parse and validate a single SQL statement
@@ -270,23 +246,18 @@ impl SqlParser {
     /// 解析结果会被缓存以提高重复查询的性能。
     /// 使用 `clear_cache()` 可手动清空缓存。
     pub async fn parse_single(&self, sql: &str) -> Result<ParsedSqlOperation, SqlParseError> {
-        let sql = sql.trim().to_string();
+        let sql = sql.trim();
 
-        // 检查缓存
-        if let Some(cached) = self.parse_cache.get(&sql).await.ok().flatten() {
-            // 缓存命中，增加计数器
-            self.cache_hits.fetch_add(1, Ordering::SeqCst);
-            return Ok(cached);
+        // 探测缓存（命中/未命中统计由端口承载）
+        if let Some(cached) = self.parse_cache.get(sql) {
+            return Ok((*cached).clone());
         }
 
-        // 缓存未命中，增加计数器
-        self.cache_misses.fetch_add(1, Ordering::SeqCst);
-
-        // 执行解析
-        let result = self.parse_single_uncached(&sql)?;
+        // 执行解析（失败结果不入缓存，仅成功产物可复用）
+        let result = self.parse_single_uncached(sql)?;
 
         // 存储结果到缓存
-        self.parse_cache.set(&sql, &result).await.ok();
+        self.parse_cache.insert(sql.to_string(), result.clone());
 
         Ok(result)
     }
@@ -1224,6 +1195,9 @@ mod tests {
 
         // 验证结果是相同的
         assert_eq!(result1.unwrap().sql, result2.unwrap().sql);
+
+        // 缓存统计：一次未命中 + 一次命中
+        assert_eq!(parser.cache_stats(), (1, 1));
     }
 
     #[tokio::test]
@@ -1233,13 +1207,16 @@ mod tests {
         // 添加一些缓存条目
         parser.parse_single("SELECT * FROM users").await.unwrap();
         parser.parse_single("SELECT * FROM posts").await.unwrap();
+        assert_eq!(parser.cache_stats(), (0, 2));
 
-        // 清空缓存
+        // 清空缓存（条目与统计一并重置）
         parser.clear_cache().await;
+        assert_eq!(parser.cache_stats(), (0, 0));
 
         // 再次解析，应该重新解析（虽然结果相同）
         let result = parser.parse_single("SELECT * FROM users").await;
         assert!(result.is_ok());
+        assert_eq!(parser.cache_stats(), (0, 1));
     }
 
     // ==================== shared() 单例测试 ====================

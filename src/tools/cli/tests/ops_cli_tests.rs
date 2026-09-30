@@ -2,8 +2,20 @@
 // SPDX-License-Identifier: MIT
 //! 运维 CLI 端到端测试（assert_cmd 驱动真实二进制）
 //!
-//! 覆盖 `migrate` / `health` / `user` 三个运维子命令的 JSON 输出与退出码契约
-//! （0 成功 / 1 运行时失败 / 2 用法错误）。
+//! 覆盖 `migrate` / `health` / `user` / `permission-check` 等运维子命令的
+//! JSON 输出与退出码契约（0 成功 / 1 运行时失败 / 2 用法错误）。
+//!
+//! 子命令经 cli 的 `migration`/`health-check`/`permission-engine` 等 features
+//! 门控（均属 cli default 集合）；workspace `--no-default-features` 口径会
+//! 关闭它们使子命令不存在，整套用例仅在 feature 集合齐备的构建下编译运行
+//! （`cargo test -p dbnexus-cli` 默认口径覆盖）。
+
+#![cfg(all(
+    feature = "sqlite",
+    feature = "migration",
+    feature = "health-check",
+    feature = "permission-engine"
+))]
 
 use assert_cmd::Command;
 use std::path::PathBuf;

@@ -350,7 +350,31 @@ async fn test_cross_role_instances_never_share_entries() {
     // role 必须参与 key 派生隔离
     let (pool, path) = {
         let (url, path) = temp_db_url("roles");
-        let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+        let perm_file = path.with_extension("permissions.yaml");
+        std::fs::write(
+            &perm_file,
+            r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations:
+          - select
+  analyst:
+    tables:
+      - name: "users"
+        operations:
+          - select
+"#,
+        )
+        .expect("write permissions file");
+        let config = dbnexus::DbConfig {
+            url: url.clone(),
+            pool_config: dbnexus::foundation::PoolConfig::default(),
+            permissions_path: Some(perm_file.to_string_lossy().to_string()),
+            ..Default::default()
+        };
+        let pool = Arc::new(DbPool::with_config(config).await.expect("pool"));
         let session = pool.get_session("admin").await.expect("session");
         session
             .execute_raw_ddl("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
@@ -464,7 +488,28 @@ async fn test_hash_field_injection_cannot_confuse_entries() {
     // 对必须互不可见
     let (pool, path) = {
         let (url, path) = temp_db_url("inj");
-        let pool = Arc::new(DbPool::new(&url).await.expect("pool"));
+        let perm_file = path.with_extension("permissions.yaml");
+        // 受限角色名含换行/边界变体（哈希混淆对），JSON 转义序列承载真实换行
+        std::fs::write(
+            &perm_file,
+            r#"{
+  "roles": {
+    "admin": {"tables": [{"name": "*", "operations": ["select"]}]},
+    "r": {"tables": [{"name": "t", "operations": ["select"]}]},
+    "r\nns=EVIL": {"tables": [{"name": "t", "operations": ["select"]}]},
+    "rE": {"tables": [{"name": "t", "operations": ["select"]}]}
+  }
+}
+"#,
+        )
+        .expect("write permissions file");
+        let config = dbnexus::DbConfig {
+            url: url.clone(),
+            pool_config: dbnexus::foundation::PoolConfig::default(),
+            permissions_path: Some(perm_file.to_string_lossy().to_string()),
+            ..Default::default()
+        };
+        let pool = Arc::new(DbPool::with_config(config).await.expect("pool"));
         let session = pool.get_session("admin").await.expect("session");
         session
             .execute_raw_ddl("CREATE TABLE t (id INTEGER PRIMARY KEY)")

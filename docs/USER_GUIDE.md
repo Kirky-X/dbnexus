@@ -57,7 +57,7 @@ tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 ```
 
 > DBNexus 的 `default` 特性为空：运行时、数据库驱动与功能特性均需显式启用。
-> `permission` 会强制启用 `sql-parser` 与 `cache`（编译期校验，防止注入绕过权限检查）。
+> `permission` 会强制启用 `sql-parser` 与 `cache`（防止注入绕过权限检查；`cache` 为权限策略缓存的显式依赖）。
 
 ### 选择数据库驱动
 

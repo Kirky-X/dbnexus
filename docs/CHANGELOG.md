@@ -38,12 +38,22 @@
 
 ### Changed
 
+- **sql-parser 与 cache/oxcache 解耦**：`sql-parser` 不再隐含 `cache`→oxcache——复核确认耦合面唯一为 `SqlParser` 的解析结果缓存（原经 oxcache `Cache` 的 moka 异步后端），现改由库内同步 LRU 承接（复用 `prepare_cache` 的 `PreparedStatementCache` 端口，新增 `get`/`insert`/`clear` 探测式方法，条目与命中/未命中/淘汰统计语义不变；失败解析不入缓存行为保持）；`permission` 对 oxcache 的真实消费（DbPool 权限策略缓存）改为显式携带 `cache`，`permission`/`default-no-db` 闭包总体不变；`sql-parser` 单独启用（如 `retry` 组合）不再背 oxcache/moka；`cargo tree` 实证 `--features sql-parser` 闭包零 oxcache；`prepare_cache` 模块本体去 feature 门控（对外 re-export 仍由 `prepare-cache` 门控）；`SqlParser` 公开 API 签名不变（构造/清空保持 async 签名，`Default` 不再依赖 tokio runtime）；契约测试 `tests/feature_dependency_contract.rs` 经 `cargo metadata` 固化解耦不变量
+
+- **驱动互斥守卫（`duckdb` × `ladybug`）**：mbedtls 重复符号链接冲突升级为编译期互斥——冲突根因定位为两驱动 bundled 各自 vendor 一份 mbedtls 静态库（libduckdb-sys 的 `duckdb/third_party/mbedtls` 与 lbug 的 `lbug-src/third_party/mbedtls`，均以同名 `mbedtls` 静态库整档链接，duckdb 侧另有 rsa_alt/sha256_alt 等符号替换实现），依赖层面无解；`duckdb` 与 `ladybug` 同启用即 `compile_error!`（给出分组启用指引），`ladybug` + `sqlite` 组合不受影响；守卫契约测试 `tests/feature_mutex_guards.rs` 固化守卫存在性/作用域（全守卫统一 `not(clippy)` 门控）
+
+- **MySQL 集成测试常规化核验**：路线图「恢复 MySQL 集成测试的常规运行」翻转完成——CI `test` job 已按 matrix `db: [sqlite, postgres, mysql]` 常规运行（mysql:8.0 service 容器 + mysqladmin 健康检查 + `DATABASE_URL` 注入 + `--features mysql,default-no-db,all-optional` 全量测试），README 登记与实际状态对齐
+
 - **HTTP 健康端点（`http-health`）部署契约**：模块与 API 文档明示三端点无鉴权/无速率限制——`/readyz` 返回完整池快照、`/metrics` 返回全量指标文档，示例监听地址改 loopback，要求置于内网/反代鉴权之后或 nest 进带鉴权的 admin Router；`/metrics` 全量导出经 `spawn_blocking` 下放（免阻塞执行器线程）；`ReplicaHealthProvider` 契约显性化（必须廉价/纯同步/无阻塞 IO）
 
 - **批量写入（`copy`）错误契约**：`copy_in` 非 COPY 后端拒绝统一为 `DbError::Query` 基础文案（postgres/duckdb 支持范围 + 非 COPY 后端改写指引）；驱动组启用但池连接类型不匹配时以尾注透传原始下转错误（"got SeaOrm" 等），无驱动组追加启用驱动 feature 的补救指引——duckdb 失配路径的可观察变体由 `DbError::Connection` 变为 `DbError::Query`
 
 ### Fixed
 
+- **admin 执行表无关语句被误拒**：`execute_raw`/`query_rows` 权限管道的表名有效性检查（空 `all_table_names`/非法表名）原先排在 admin 绕过之前，admin 执行无 FROM 语句（`SELECT 1` 连通性探测/健康检查预热等合法场景）被误拒；现 admin 绕过整体前置（表名检查本就是权限检查的一部分，随绕过跳过），非 admin 的 fail-closed 拒绝与逐表校验不变；回归测试 `test_admin_bypasses_table_name_validity_check` 双向断言（HEAD 2861e3c 复现，非本轮 feature 变更引入）
+- **查询缓存测试的受限角色会话被安全默认拒绝**：`oxcache_query_cache_tests` 两用例（跨角色隔离/哈希字段注入）的池未配权限文件，`with_role` 实例 `get_session` 被安全默认（仅 admin/system）拒绝——测试池显式携带权限配置（定义受限角色及表权限，换行角色名经 JSON 转义承载），12/12 全绿（HEAD 2861e3c 复现）
+- **运维 CLI 端到端测试的口径适配**：`ops_cli_tests` 整套用例加显性 `#![cfg(...)]` 门控（子命令经 cli `migration`/`health-check`/`permission-engine` 等 features 门控，workspace `--no-default-features` 口径下子命令不存在），该口径编译期跳过、`cargo test -p dbnexus-cli` 默认口径 25/25 全绿（workspace 口径与 cli default features 的适配属 CI feature 工程待办，登记于 docs/WS_R14_REVIEW.md）
+- **`global-index` 无驱动组合编译裂缝**：`global-index` feature 补蕴含 `entity-macros`（sea-orm 派生宏转发）——`src/storage/global_index.rs` 的 `DeriveEntityModel`/`DeriveRelation` 依赖 sea-orm/macros，无驱动组合（`all-optional`/`data-management`/`global-index`）此前编译失败（HEAD 复现 23 错；CI 因恒带 `sqlite` 未暴露）；契约测试固化蕴含
 - **批量写入（`copy`）**：多值 INSERT 分块按 `min(500, bind_param_limit/列数)` 收缩（宽表单语句占位符数恒不超后端绑定上限，列数超上限构建期显性报错）；DuckDB CSV 编码对 JSON 对象/数组值补齐引用转义（含逗号/引号值不再破坏列结构）；COPY 载荷临时文件权限收紧为属主 0600 并经 `spawn_blocking` 下放同步文件 I/O
 - **指标（`metrics`）**：Prometheus 导出的 `type` label value 按 text exposition 规则转义（`\` `"` 换行）——`record_query` 公开 API 的自由字符串含注入载荷时不再可逃逸 label 或伪造指标行
 

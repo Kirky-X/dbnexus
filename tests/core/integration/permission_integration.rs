@@ -340,3 +340,45 @@ async fn test_join_and_subquery_cross_table_access_denied() {
         exists.err()
     );
 }
+
+/// 回归测试：admin 执行表无关语句（如 `SELECT 1`）必须放行，非 admin 保持 fail-closed
+///
+/// 历史缺陷：`execute_raw`/`query_rows` 的表名有效性检查（空 `all_table_names`/
+/// 非法表名）排在 admin 绕过之前，admin 执行无 FROM 语句（健康检查预热、连通性
+/// 探测等合法场景）被误拒——表名检查本就是权限检查的一部分，应随绕过一起跳过。
+#[tokio::test]
+#[cfg(all(
+    feature = "permission",
+    any(feature = "sqlite", feature = "postgres", feature = "mysql")
+))]
+#[allow(clippy::unwrap_used)]
+async fn test_admin_bypasses_table_name_validity_check() {
+    use dbnexus::foundation::DbError;
+
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("Failed to create test pool");
+
+    let admin = pool
+        .get_session("admin")
+        .await
+        .expect("Failed to get session");
+    let table_free = admin.execute_raw("SELECT 1").await;
+    assert!(
+        table_free.is_ok(),
+        "admin should execute table-free statements, got: {:?}",
+        table_free.err()
+    );
+
+    let user_session = pool
+        .get_session("user")
+        .await
+        .expect("Failed to get session");
+    let denied = user_session.execute_raw("SELECT 1").await;
+    assert!(
+        matches!(denied, Err(DbError::Permission(_))),
+        "non-admin table-free statements must stay denied (fail-closed), got: {:?}",
+        denied.err()
+    );
+}

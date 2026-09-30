@@ -36,17 +36,32 @@ compile_error!(
     "Cannot mix embedded (sqlite/duckdb) and server-side (postgres/mysql) database features"
 );
 
+// 规则 4：duckdb 与 ladybug 互斥。两者均以 bundled 方式各自 vendor 一份 mbedtls
+// 静态库（libduckdb-sys 的 duckdb/third_party/mbedtls 与 lbug 的
+// lbug-src/third_party/mbedtls，均以同名 `mbedtls` 静态库整档链接，duckdb 侧
+// 另有 rsa_alt/sha256_alt 等符号替换实现），同一二进制内链接必然重复符号，
+// 依赖层面无解，故编译期互斥；多驱动验证按驱动分组启用 features
+// （ladybug + sqlite 组合不受影响，libsqlite3-sys 无此冲突）。
+#[cfg(all(not(clippy), feature = "duckdb", feature = "ladybug"))]
+compile_error!(
+    "Cannot enable both 'duckdb' and 'ladybug' features: both bundle their own vendored \
+     mbedtls static library and the duplicate-symbol link conflict is unresolvable; \
+     enable them in separate driver groups"
+);
+
 // 规则 3：至少一个数据库后端（关系型或图 DB）
 // 注意：不使用 compile_error! 以便 cargo publish 能验证 default = [] 的包。
 // 用户启用任一数据库 feature 后，下方模块才会提供实际功能。
 // 图 DB feature（ladybug/neo4j）与关系型 feature 不互斥，允许混合使用
+// （唯一例外：ladybug 与 duckdb，见上方规则 4）
 
 // 检查 feature 依赖关系
 #[cfg(all(not(clippy), feature = "permission-engine", not(feature = "cache")))]
 compile_error!("The 'permission-engine' feature requires the 'cache' feature to be enabled");
 
-#[cfg(all(not(clippy), feature = "sql-parser", not(feature = "cache")))]
-compile_error!("The 'sql-parser' feature requires the 'cache' feature to be enabled");
+// sql-parser 不作 cache 前置要求：解析结果缓存由库内同步 LRU（prepare_cache
+// 端口）承接，sql-parser 不再隐含 cache→oxcache（oxcache 由 permission 等
+// 真正消费方显式携带）
 
 // permission feature 需要 cache（Cache::builder 在 db_pool 中使用）
 #[cfg(all(not(clippy), feature = "permission", not(feature = "cache")))]

@@ -149,6 +149,77 @@ impl<V> PreparedStatementCache<V> {
         }
     }
 
+    /// 探测缓存条目；命中刷新访问时钟并计入命中统计，未命中计入未命中统计
+    ///
+    /// 与 [`Self::get_or_prepare`] 的差异：不执行 prepare 闭包，命中与否由
+    /// 调用方分支处理（如解析失败的结果不允许入缓存）。
+    pub fn get(&self, key: &str) -> Option<Arc<V>> {
+        let mut state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.clock += 1;
+        let clock = state.clock;
+        match state.map.get_mut(key) {
+            Some(entry) => {
+                entry.last_used = clock;
+                let value = Arc::clone(&entry.value);
+                state.hits += 1;
+                Some(value)
+            }
+            None => {
+                state.misses += 1;
+                None
+            }
+        }
+    }
+
+    /// 插入条目；键已存在时原位覆盖（刷新访问时钟，不触发淘汰），
+    /// 新键在容量已满时先淘汰最久未使用条目
+    pub fn insert(&self, key: impl Into<Arc<str>>, value: V) {
+        let key: Arc<str> = key.into();
+        let mut state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.clock += 1;
+        let clock = state.clock;
+        if let Some(entry) = state.map.get_mut(&key) {
+            entry.value = Arc::new(value);
+            entry.last_used = clock;
+            return;
+        }
+        if state.map.len() >= self.capacity
+            && let Some(oldest_key) = state
+                .map
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| Arc::clone(key))
+        {
+            state.map.remove(&oldest_key);
+            state.evictions += 1;
+        }
+        state.map.insert(
+            key,
+            Entry {
+                value: Arc::new(value),
+                last_used: clock,
+            },
+        );
+    }
+
+    /// 清空全部条目并重置命中/未命中/淘汰统计
+    pub fn clear(&self) {
+        let mut state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.map.clear();
+        state.hits = 0;
+        state.misses = 0;
+        state.evictions = 0;
+    }
+
     /// 缓存容量
     pub fn capacity(&self) -> usize {
         self.capacity
@@ -208,5 +279,58 @@ mod tests {
         assert_eq!(cache.capacity(), 2);
         // b 已被淘汰（重新探测为未命中）
         assert!(!cache.get_or_prepare("b", |_| ()).1, "b 应已被淘汰");
+    }
+
+    /// 探测语义：命中/未命中计入统计，命中刷新访问时钟（影响后续淘汰对象）
+    #[test]
+    fn test_get_probes_and_refreshes_recency() {
+        let cache: PreparedStatementCache<u32> = PreparedStatementCache::new(2);
+
+        assert_eq!(cache.get("a"), None, "空缓存探测应未命中");
+        let stats = cache.stats();
+        assert_eq!((stats.hits, stats.misses), (0, 1));
+
+        cache.insert("a", 1);
+        cache.insert("b", 2);
+        assert_eq!(cache.get("a").map(|v| *v), Some(1), "探测命中应返回条目");
+        // 命中 a → b 成为最久未使用；新键 c 插入时淘汰 b
+        cache.insert("c", 3);
+        assert_eq!(cache.get("b"), None, "b 应被淘汰");
+        assert_eq!(cache.get("a").map(|v| *v), Some(1), "a 应仍存活");
+
+        let stats = cache.stats();
+        assert_eq!(stats.evictions, 1);
+        assert_eq!(stats.size, 2);
+    }
+
+    /// 插入语义：同键原位覆盖（不触发淘汰），统计只记淘汰不记命中/未命中
+    #[test]
+    fn test_insert_overwrites_in_place() {
+        let cache: PreparedStatementCache<u32> = PreparedStatementCache::new(2);
+        cache.insert("a", 1);
+        cache.insert("a", 10);
+
+        assert_eq!(cache.get("a").map(|v| *v), Some(10), "同键应覆盖原值");
+        let stats = cache.stats();
+        assert_eq!(stats.size, 1, "覆盖不得新增条目");
+        assert_eq!(stats.evictions, 0, "覆盖不得触发淘汰");
+        // 唯一一次命中来自上面的 get 探测；插入自身不计入命中/未命中
+        assert_eq!((stats.hits, stats.misses), (1, 0), "插入不计入命中/未命中");
+    }
+
+    /// 清空语义：条目与统计一并归零
+    #[test]
+    fn test_clear_resets_entries_and_stats() {
+        let cache: PreparedStatementCache<u32> = PreparedStatementCache::new(2);
+        cache.insert("a", 1);
+        let _ = cache.get("a");
+        cache.insert("b", 2);
+        cache.insert("c", 3);
+
+        cache.clear();
+        let stats = cache.stats();
+        assert_eq!(stats.size, 0);
+        assert_eq!((stats.hits, stats.misses, stats.evictions), (0, 0, 0));
+        assert_eq!(cache.get("a"), None, "清空后条目不可达");
     }
 }

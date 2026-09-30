@@ -141,7 +141,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["runtime-tokio-rustls", "sqlite"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-> `permission` force-enables `sql-parser` and `cache` (verified at compile time to prevent SQL injection bypassing permission checks). `default = []`: every feature must be enabled explicitly.
+> `permission` force-enables `sql-parser` and `cache` (prevents SQL injection bypassing permission checks; `cache` is the explicit dependency of the permission policy cache). `default = []`: every feature must be enabled explicitly.
 
 ### 💡 Minimal Example
 
@@ -228,7 +228,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | Flag | Description | Default |
 |------|------|:----:|
 | `permission` | Table-level RBAC; hard-depends on `sql-parser` and enables `yaml` + `cache` | No |
-| `sql-parser` | SQL parsing, table extraction and injection detection; auto-enables `cache` | No |
+| `sql-parser` | SQL parsing, table extraction and injection detection (parse-result cache is an in-tree sync LRU; no longer auto-enables `cache`) | No |
 | `macros` | `dbnexus-macros` procedural macros (`db_entity` / `db_repository`) | No |
 | `default-no-db` | Driver-less default aggregate (runtime + permission + sql-parser + macros + config-env + with-time) for CI driver-matrix testing | No |
 
@@ -432,7 +432,7 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 | MariaDB | MySQL | MySQL-compatible fork |
 | Aurora | PostgreSQL/MySQL | AWS cloud-native database |
 
-> Known limitation: enabling `duckdb` and `ladybug` together hits an mbedtls duplicate-symbol link conflict; verify multiple drivers with grouped feature combinations (see the [Roadmap](#️-roadmap)).
+> Known limitation: enabling `duckdb` and `ladybug` together hits a duplicate-symbol link conflict — each driver bundles its own vendored mbedtls static library. A compile-time mutex guard now rejects the combination outright with grouping guidance (`ladybug` + `sqlite` stays allowed); verify multiple drivers with grouped feature combinations.
 
 ---
 
@@ -506,11 +506,11 @@ Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicate
 
 - [ ] Release 0.6.0 stable: after rc validation, update the trait-kit 0.5.0 / oxcache 0.5.0 dependency requirements per the workspace propagation table, verify with `cargo publish --dry-run`, then tag to trigger the automated release.yml publish
 - [x] Align the declared MSRV with actual dependency requirements — unified to 1.97.1 per workspace CONFIG_BASELINE (2026-09-06), covering the 1.94 transitive requirement
-- [ ] Restore regular MySQL integration test runs (testcontainers ready, currently blocked by database service availability)
+- [x] Restore regular MySQL integration test runs — the CI `test` job now runs a regular `db: [sqlite, postgres, mysql]` matrix: a MySQL 8.0 service container (readiness via mysqladmin health check, then `DATABASE_URL` injection), full test + doc test runs with `--features mysql,default-no-db,all-optional` (2026-09-30)
 
 ### Mid Term
 
-- [ ] Resolve the mbedtls duplicate-symbol link conflict when `duckdb` and `ladybug` are enabled together (multi-driver verification currently uses grouped feature combinations)
+- [x] Resolve the mbedtls duplicate-symbol link conflict when `duckdb` and `ladybug` are enabled together — root cause is each driver bundling its own vendored mbedtls static library (unresolvable at the dependency level); a compile-time mutex guard now fails the combination with grouping guidance, `ladybug` + `sqlite` stays allowed (2026-09-30)
 - [x] Follow up on Medium items filed during code quality reviews — query-cache policy-change stale reads fixed: key derivation includes the data-protection epoch, `set_data_protection` invalidates old entries on swap (2026-09-30)
 
 > Items compiled from the [CHANGELOG.md](docs/CHANGELOG.md) and repository acceptance records.

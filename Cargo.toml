@@ -125,10 +125,11 @@ ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取）
+permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带）
 # 移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
-sql-parser = ["sqlparser", "cache", "regex", "unicode-normalization", "sea-orm/with-json"]
+# sql-parser 自带解析结果缓存（prepare_cache 同步 LRU 端口），不隐含 cache→oxcache
+sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json"]
 data-protection = ["dep:sha2"]  # 字段脱敏与行级安全
 config-confers = ["dep:confers", "confers/change-stream", "permission"]  # confers 配置热重载
 macros = ["dbnexus-macros"]
@@ -177,7 +178,7 @@ data-management = ["migration", "auto-migrate", "sharding", "global-index"]
 migration = ["sqlparser", "regex"]  # 数据库迁移
 auto-migrate = ["migration"]  # 自动迁移
 sharding = ["twox-hash", "chrono", "futures", "dashmap"]  # 数据分片（dashmap 用于分片连接池并发管理）
-global-index = ["chrono", "with-json"]  # 全局索引
+global-index = ["chrono", "with-json", "entity-macros"]  # 全局索引（实体 derive 经 entity-macros 转发，无驱动组合可用）
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
 with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono 类型支持（DateTime/NaiveDateTime 字段）
@@ -924,6 +925,17 @@ required-features = ["sqlite", "runtime-tokio-rustls"]
 name = "kit_feature_gate"
 path = "tests/kit_feature_gate.rs"
 required-features = ["kit", "sqlite", "runtime-tokio-rustls"]
+
+# 编译期 feature 互斥守卫契约（源码级，无需任何 feature；真正触发守卫需
+# bundled C++ 全量编译，代价过高，以守卫存在性/作用域断言固化）
+[[test]]
+name = "feature_mutex_guards"
+path = "tests/feature_mutex_guards.rs"
+
+# feature 依赖闭包契约（cargo metadata 结构断言，无需任何 feature）
+[[test]]
+name = "feature_dependency_contract"
+path = "tests/feature_dependency_contract.rs"
 
 [dev-dependencies.testcontainers]
 version = "0.27"

@@ -69,7 +69,7 @@ impl Session {
                             SqlOperationType::Insert => PermissionAction::Insert,
                             SqlOperationType::Update => PermissionAction::Update,
                             SqlOperationType::Delete => PermissionAction::Delete,
-                            // 解析成功但是不支持的语句类型（DDL/DCL/Transaction）或没有表名的语句
+                            // 解析成功但是不支持的语句类型（DDL/DCL/Transaction），
                             // 这些情况需要拒绝执行以确保安全
                             _ => {
                                 return Err(DbError::Permission(
@@ -78,24 +78,27 @@ impl Session {
                             }
                         };
 
-                        if parsed.all_table_names.is_empty() {
-                            return Err(DbError::Permission(
-                                "Failed to extract table name for permission checking".to_string(),
-                            ));
-                        }
-                        for table in &parsed.all_table_names {
-                            if table.is_empty() || is_invalid_table_name(table) {
+                        // Admin 角色绕过权限检查（含表名有效性检查：表名检查本就是
+                        // 权限检查的一部分，无表语句如 SELECT 1 不触达任何表，对
+                        // admin 放行无越权面）；非 admin 保持 fail-closed
+                        if self.role == self.pool_inner.admin_role {
+                            // admin 有完全权限，跳过检查
+                        } else {
+                            if parsed.all_table_names.is_empty() {
                                 return Err(DbError::Permission(
                                     "Failed to extract table name for permission checking"
                                         .to_string(),
                                 ));
                             }
-                        }
+                            for table in &parsed.all_table_names {
+                                if table.is_empty() || is_invalid_table_name(table) {
+                                    return Err(DbError::Permission(
+                                        "Failed to extract table name for permission checking"
+                                            .to_string(),
+                                    ));
+                                }
+                            }
 
-                        // Admin 角色绕过权限检查
-                        if self.role == self.pool_inner.admin_role {
-                            // admin 有完全权限，跳过检查
-                        } else {
                             // 对语句涉及的所有表逐一检查权限
                             // （含 JOIN/子查询表，防止通过关联表越权读写未授权数据）
                             for table in &parsed.all_table_names {
@@ -310,21 +313,23 @@ impl Session {
                                 "query_rows only allows SELECT statements".to_string(),
                             ));
                         }
-                        if parsed.all_table_names.is_empty() {
-                            return Err(DbError::Permission(
-                                "Failed to extract table name for permission checking".to_string(),
-                            ));
-                        }
-                        for table in &parsed.all_table_names {
-                            if table.is_empty() || is_invalid_table_name(table) {
+                        // Admin 角色绕过权限检查（含表名有效性检查，同 execute_raw）；
+                        // 非 admin 保持 fail-closed 并逐表校验 Select 权限
+                        if self.role != self.pool_inner.admin_role {
+                            if parsed.all_table_names.is_empty() {
                                 return Err(DbError::Permission(
                                     "Failed to extract table name for permission checking"
                                         .to_string(),
                                 ));
                             }
-                        }
-                        // Admin 角色绕过权限检查；非 admin 逐表校验 Select 权限
-                        if self.role != self.pool_inner.admin_role {
+                            for table in &parsed.all_table_names {
+                                if table.is_empty() || is_invalid_table_name(table) {
+                                    return Err(DbError::Permission(
+                                        "Failed to extract table name for permission checking"
+                                            .to_string(),
+                                    ));
+                                }
+                            }
                             for table in &parsed.all_table_names {
                                 if !self
                                     .permission_ctx

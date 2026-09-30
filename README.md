@@ -141,7 +141,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["runtime-tokio-rustls", "sqlite"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-> `permission` 会强制启用 `sql-parser` 与 `cache`（编译期校验，防 SQL 注入绕过权限检查）。`default = []`：所有特性均需显式启用。
+> `permission` 会强制启用 `sql-parser` 与 `cache`（防 SQL 注入绕过权限检查；`cache` 为权限策略缓存的显式依赖）。`default = []`：所有特性均需显式启用。
 
 ### 💡 最小示例
 
@@ -228,7 +228,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `permission` | 表级 RBAC 权限控制，强制依赖 `sql-parser`，并启用 `yaml` 与 `cache` | 否 |
-| `sql-parser` | SQL 解析、表名提取与注入检测，自动启用 `cache` | 否 |
+| `sql-parser` | SQL 解析、表名提取与注入检测（解析结果缓存为库内同步 LRU，不再自动启用 `cache`） | 否 |
 | `macros` | `dbnexus-macros` 过程宏（`db_entity` / `db_repository`） | 否 |
 | `default-no-db` | 无驱动的默认聚合（运行时 + permission + sql-parser + macros + config-env + with-time），供 CI 按驱动组合测试 | 否 |
 
@@ -432,7 +432,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 | MariaDB | MySQL | MySQL 兼容分支 |
 | Aurora | PostgreSQL/MySQL | AWS 云原生数据库 |
 
-> 已知限制：`duckdb` 与 `ladybug` 同时启用存在 mbedtls 重复符号链接冲突，多驱动验证请采用分组特性组合（见[路线图](#️-开发路线图)）。
+> 已知限制：`duckdb` 与 `ladybug` 同时启用会因两驱动 bundled 各自 vendor 的 mbedtls 静态库产生重复符号链接冲突，已建编译期互斥守卫（同启用即编译失败并给出分组指引，`ladybug` + `sqlite` 组合不受影响），多驱动验证请采用分组特性组合。
 
 ---
 
@@ -506,11 +506,11 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 - [ ] 发布 0.6.0 正式版：完成 rc 验证后按工作区传导表更新 trait-kit 0.5.0 / oxcache 0.5.0 依赖要求，`cargo publish --dry-run` 核对后打 tag 触发 release.yml 自动发布
 - [x] 对齐 MSRV 声明与依赖实际要求 — 已按工作区 CONFIG_BASELINE 统一为 1.97.1（2026-09-06），覆盖传递依赖的 1.94 要求
-- [ ] 恢复 MySQL 集成测试的常规运行（testcontainers 已就绪，当前受数据库服务依赖阻塞）
+- [x] 恢复 MySQL 集成测试的常规运行 — CI `test` job 以 matrix `db: [sqlite, postgres, mysql]` 常规运行：MySQL 8.0 service 容器（mysqladmin 健康检查就绪后注入 `DATABASE_URL`），`--features mysql,default-no-db,all-optional` 全量测试 + doc tests（2026-09-30）
 
 ### 中期
 
-- [ ] 解决 `duckdb` 与 `ladybug` 同时启用时的 mbedtls 重复符号链接冲突（当前多驱动验证采用分组特性组合）
+- [x] 解决 `duckdb` 与 `ladybug` 同时启用时的 mbedtls 重复符号链接冲突 — 冲突源为两驱动 bundled 各自 vendor 的 mbedtls 静态库（依赖层面无解），已建编译期互斥守卫：同启用即编译失败并给出分组指引，`ladybug` + `sqlite` 组合不受影响（2026-09-30）
 - [x] 跟进代码质量审查留档的 Medium 项 — 查询缓存策略换装脏读已修：key 派生纳入数据保护策略世代，`set_data_protection` 换装即失效旧条目（2026-09-30）
 
 > 条目整理自 [CHANGELOG.md](docs/CHANGELOG.md) 与仓库验收记录。

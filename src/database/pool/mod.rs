@@ -11,7 +11,9 @@ mod db_pool;
 #[cfg(feature = "health-check")]
 pub mod health_export;
 mod pool_impl;
-#[cfg(feature = "prepare-cache")]
+// prepare_cache 模块本体不作 feature 门控：其同步 LRU 端口同时服务
+// prepare-cache（池级语句准备缓存）与 sql-parser（解析结果缓存，解耦
+// oxcache 依赖）两条路径；对外 re-export 仍由 prepare-cache 门控
 pub mod prepare_cache;
 mod session;
 
