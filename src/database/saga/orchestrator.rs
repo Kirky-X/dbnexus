@@ -688,7 +688,7 @@ mod session_failure_tests {
         }
     }
 
-    /// T016: 补偿会话不可用（空 router 无池）必须显性进入 CompensationFailed，
+    /// 补偿会话不可用（空 router 无池）必须显性进入 CompensationFailed，
     /// 不得静默跳过伪装成补偿成功的 Failed
     #[tokio::test]
     async fn compensation_with_unavailable_session_enters_compensation_failed() {
