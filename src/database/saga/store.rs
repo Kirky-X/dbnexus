@@ -143,6 +143,10 @@ impl SagaLogStore for DbSagaLog {
         let status = log.status.as_str();
         // updated_at 用客户端时间戳（跨 sqlite/postgres 方言安全）
         let updated_at = chrono::Utc::now().to_rfc3339();
+        // 注入防护依赖单引号翻倍转义（默认引擎配置下有效，postgres
+        // standard_conforming_strings=off 的遗留配置除外）。外部传入的 saga_id
+        // 也走此路径：迁移参数化（execute_with_params）需 Session 公开后端类型
+        // 以按方言书写占位符（sqlite ? / postgres $N），并配 postgres 集成测试。
         let sql = format!(
             "INSERT INTO saga_logs (saga_id, status, steps, updated_at) \
              VALUES ('{}', '{}', '{}', '{}') \

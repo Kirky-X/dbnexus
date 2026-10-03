@@ -930,6 +930,7 @@ impl AuditEventBuilder {
     /// 创建新构建器
     pub fn new() -> Self {
         Self {
+            id: None,
             operation: None,
             entity_type: None,
             entity_id: None,
@@ -1012,6 +1013,12 @@ impl AuditEventBuilder {
         self
     }
 
+    /// 设置事件 ID（跨服务追踪/幂等场景由调用方提供；缺省由库生成 uuid v4）
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
+    }
+
     /// 设置请求 ID
     pub fn request_id(mut self, request_id: &str) -> Self {
         self.request_id = Some(request_id.to_string());
@@ -1027,7 +1034,9 @@ impl AuditEventBuilder {
     /// 构建 AuditEvent
     ///
     /// # Errors
-    /// 如果必需字段（operation, entity_type, entity_id）未设置则返回错误
+    /// 如果必需字段（operation, entity_type, entity_id）未设置则返回错误；
+    /// 事件 ID 显式传空字符串返回 [`BuildError::IdEmpty`]（空 ID 作主键会被
+    /// ON CONFLICT 静默覆盖既有审计记录）
     pub fn build(self) -> Result<AuditEvent, BuildError> {
         if self.operation.is_none() {
             return Err(BuildError::OperationRequired);
@@ -1038,9 +1047,12 @@ impl AuditEventBuilder {
         if self.entity_id.is_none() {
             return Err(BuildError::EntityIdRequired);
         }
+        if self.id.as_deref().is_some_and(str::is_empty) {
+            return Err(BuildError::IdEmpty);
+        }
 
         Ok(AuditEvent {
-            id: Uuid::new_v4().to_string(),
+            id: self.id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             timestamp: Utc::now(),
             operation: self.operation.unwrap(),
             entity_type: self.entity_type.unwrap(),
@@ -1285,5 +1297,48 @@ mod tests {
             format!("my{pwd}: {val}"),
             "字母边界内的子串不应命中: {after}"
         );
+    }
+
+    /// 调用方提供事件 ID：builder `.id()` 优先于库生成的 uuid v4
+    #[test]
+    fn builder_uses_provided_event_id() {
+        let event = AuditEvent::builder()
+            .operation(AuditOperation::Update)
+            .entity_type("users")
+            .entity_id("42")
+            .id("caller-event-001")
+            .build()
+            .expect("必填字段齐全时构建必须成功");
+        assert_eq!(event.id, "caller-event-001");
+    }
+
+    /// 未调用 `.id()` 时保持原行为：库生成非空 uuid v4 兜底
+    #[test]
+    fn builder_generates_event_id_by_default() {
+        let event = AuditEvent::builder()
+            .operation(AuditOperation::Update)
+            .entity_type("users")
+            .entity_id("42")
+            .build()
+            .expect("必填字段齐全时构建必须成功");
+        assert!(
+            uuid::Uuid::parse_str(&event.id).is_ok(),
+            "缺省必须生成 uuid v4 格式的事件 ID: {}",
+            event.id
+        );
+    }
+
+    /// 显式传空事件 ID 是调用方 bug：必须报错而非让空串作主键入库
+    /// （审计表 ON CONFLICT(id) 会静默覆盖，空 ID 碰撞即丢审计记录）
+    #[test]
+    fn builder_rejects_empty_event_id() {
+        let err = AuditEvent::builder()
+            .operation(AuditOperation::Update)
+            .entity_type("users")
+            .entity_id("42")
+            .id("")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::IdEmpty));
     }
 }

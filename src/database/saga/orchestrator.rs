@@ -233,9 +233,36 @@ impl SagaOrchestrator {
         }
     }
 
-    /// 执行 Saga
+    /// 执行 Saga（saga_id 由库生成；需复用调用方 ID 时用 [`Self::execute_saga_with_id`]）
     pub async fn execute_saga(&self, steps: Vec<SagaStep>) -> SagaExecutionResult {
         let saga_id = uuid::Uuid::new_v4().to_string();
+        self.execute_saga_inner(saga_id, steps).await
+    }
+
+    /// 执行 Saga（调用方提供 saga_id：幂等重试/跨服务追踪需跨进程复用同一 ID 时使用）
+    ///
+    /// 不做去重：同一 saga_id 再次执行会重跑全部步骤并整条覆盖旧日志
+    /// （日志存储为幂等 upsert），action 级幂等与日志覆盖语义由调用方负责。
+    /// 空 `saga_id` 视为未提供，回退为库生成 uuid v4。
+    pub async fn execute_saga_with_id(
+        &self,
+        saga_id: &str,
+        steps: Vec<SagaStep>,
+    ) -> SagaExecutionResult {
+        let saga_id = if saga_id.is_empty() {
+            uuid::Uuid::new_v4().to_string()
+        } else {
+            saga_id.to_string()
+        };
+        self.execute_saga_inner(saga_id, steps).await
+    }
+
+    /// 内部执行体（saga_id 已确定）
+    async fn execute_saga_inner(
+        &self,
+        saga_id: String,
+        steps: Vec<SagaStep>,
+    ) -> SagaExecutionResult {
         let mut persist_failures = 0u32;
         let mut log = SagaLog {
             saga_id: saga_id.clone(),
@@ -494,6 +521,53 @@ mod persist_failure_tests {
         let result = orchestrator.execute_saga(single_step()).await;
         assert_eq!(result.persist_failures, 0);
         assert_eq!(result.status, SagaStatus::Failed);
+    }
+}
+
+/// 外部 saga_id 注入契约：结果与持久化日志携带调用方 ID，空 ID 回退库生成
+#[cfg(test)]
+mod external_id_tests {
+    use super::*;
+
+    struct NoopAction;
+
+    #[async_trait]
+    impl SagaAction for NoopAction {
+        async fn execute(&self, _session: &Session) -> Result<(), SagaError> {
+            Ok(())
+        }
+        fn name(&self) -> &str {
+            "noop"
+        }
+    }
+
+    fn single_step() -> Vec<SagaStep> {
+        vec![SagaStep {
+            name: "only".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopAction),
+            compensation: Box::new(NoopAction),
+        }]
+    }
+
+    #[tokio::test]
+    async fn execute_saga_with_id_uses_provided_id() {
+        let orchestrator = SagaOrchestrator::new(Arc::new(ShardRouter::default()));
+        let result = orchestrator
+            .execute_saga_with_id("caller-saga-001", single_step())
+            .await;
+        assert_eq!(result.saga_id, "caller-saga-001");
+        match orchestrator.get_saga_log("caller-saga-001").await {
+            Some(log) => assert_eq!(log.saga_id, "caller-saga-001"),
+            None => panic!("saga 日志必须以调用方提供的 saga_id 持久化"),
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_saga_with_id_falls_back_on_empty() {
+        let orchestrator = SagaOrchestrator::new(Arc::new(ShardRouter::default()));
+        let result = orchestrator.execute_saga_with_id("", single_step()).await;
+        assert!(!result.saga_id.is_empty(), "空 saga_id 必须回退为库生成");
     }
 }
 

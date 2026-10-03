@@ -54,6 +54,9 @@ pub enum BuildError {
     /// 缺少必需字段 entity_id
     #[error("entity_id is required")]
     EntityIdRequired,
+    /// 事件 ID 显式传了空字符串（空 ID 会以主键入库，ON CONFLICT 下静默覆盖既有审计记录）
+    #[error("event id must not be empty")]
+    IdEmpty,
 }
 
 impl crate::i18n::error_ext::LocalizedMsg for BuildError {
@@ -62,6 +65,7 @@ impl crate::i18n::error_ext::LocalizedMsg for BuildError {
             Self::OperationRequired => "audit-builder-operation-required",
             Self::EntityTypeRequired => "audit-builder-entity-type-required",
             Self::EntityIdRequired => "audit-builder-entity-id-required",
+            Self::IdEmpty => "audit-builder-id-empty",
         }
     }
 }
@@ -888,6 +892,7 @@ mod tests {
 /// ```
 #[derive(Debug, Default)]
 pub struct AuditEventBuilder {
+    id: Option<String>,
     operation: Option<AuditOperation>,
     entity_type: Option<String>,
     entity_id: Option<String>,

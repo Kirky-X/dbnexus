@@ -186,6 +186,7 @@ circuit-breaker = Circuit breaker is { $state }
 audit-builder-operation-required = operation is required
 audit-builder-entity-type-required = entity_type is required
 audit-builder-entity-id-required = entity_id is required
+audit-builder-id-empty = event id must not be empty
 
 retry-exhausted = Retry exhausted after { $attempts } attempts: { $last_error }
 retry-non-retryable = Non-retryable operation: { $error }
@@ -394,6 +395,7 @@ circuit-breaker = 断路器处于 { $state } 状态
 audit-builder-operation-required = 操作类型为必填项
 audit-builder-entity-type-required = 实体类型为必填项
 audit-builder-entity-id-required = 实体 ID 为必填项
+audit-builder-id-empty = 事件 ID 不能为空
 
 retry-exhausted = 重试 { $attempts } 次后仍失败: { $last_error }
 retry-non-retryable = 不可重试的操作: { $error }
