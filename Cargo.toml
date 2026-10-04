@@ -323,7 +323,7 @@ duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
 # Ladybug embedded graph database (ladybug feature, 0.4.0 new)
 lbug = { version = "0.20", optional = true }
 # Neo4j graph database server (neo4j feature, 0.4.0 new)
-neo4rs = { version = "0.8", optional = true }
+neo4rs = { version = "0.9.0-rc.10", optional = true }
 
 # Authentication dependencies
 # jsonwebtoken: v11 使用 aws_lc_rs 后端，API 与 v10 兼容

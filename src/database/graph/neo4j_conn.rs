@@ -68,7 +68,7 @@ impl Neo4jConnection {
     ///
     /// 连接失败时返回 `DbError::Connection`
     pub async fn new(uri: &str, user: &str, password: &str) -> DbResult<Self> {
-        let graph = neo4rs::Graph::new(uri, user, password).await.map_err(|e| {
+        let graph = neo4rs::Graph::new(uri, user, password).map_err(|e| {
             DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j connect: {e}")))
         })?;
         Ok(Self {
@@ -858,5 +858,74 @@ mod tests {
         let _ = conn
             .execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n")
             .await;
+    }
+}
+
+/// 集成回归：负整数属性经 Bolt 读回必须精确（neo4rs 0.8 的 tiny-int 解码
+/// 会把 -16..=-1 回绕为 u8：-1 → 255，neo4rs 0.9 线已修复；本测试锁定该
+/// 行为，防止降级/换驱动时回归）。需要可连的 Neo4j：设置
+/// `NEO4J_URL`/`NEO4J_USER`/`NEO4J_PASSWORD`（URL 缺省 bolt://localhost:7687），
+/// 未设置时跳过。
+#[cfg(all(test, feature = "neo4j"))]
+mod negative_int_integration {
+    use super::*;
+
+    fn integration_enabled() -> bool {
+        std::env::var("NEO4J_PASSWORD").is_ok()
+    }
+
+    #[tokio::test]
+    async fn negative_integer_properties_roundtrip_exactly() {
+        if !integration_enabled() {
+            eprintln!("skip: NEO4J_PASSWORD 未设置，跳过负整数往返集成测试");
+            return;
+        }
+        let uri = std::env::var("NEO4J_URL").unwrap_or_else(|_| "bolt://localhost:7687".into());
+        let user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".into());
+        let password = std::env::var("NEO4J_PASSWORD").unwrap();
+        let conn = Neo4jConnection::new(&uri, &user, &password).await.unwrap();
+        let graph = conn.graph.as_ref().unwrap();
+        use neo4rs::Query;
+
+        let mut merge_stream = graph
+            .execute(Query::new(
+                "MERGE (w:Word {id: 'dbnexus-neg-int-roundtrip'}) \
+                 SET w.a = -1, w.b = -2, w.c = -300, w.d = 255, w.e = 300"
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        while let Some(_row) = merge_stream.next().await.unwrap() {}
+
+        let mut stream = graph
+            .execute(Query::new(
+                "MATCH (w:Word {id: 'dbnexus-neg-int-roundtrip'}) \
+                 RETURN w.a AS a, w.b AS b, w.c AS c, w.d AS d, w.e AS e"
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        let row = stream.next().await.unwrap().expect("行应存在");
+        // 两条读取路径（serde_json 反序列化 + 类型化 get）都必须精确
+        let via_serde: serde_json::Value = row.to::<serde_json::Value>().unwrap();
+        assert_eq!(
+            via_serde["a"], -1,
+            "serde 路径 -1 往返（neo4rs 0.8 tiny-int 回绕回归点）"
+        );
+        assert_eq!(via_serde["b"], -2);
+        assert_eq!(via_serde["d"], 255);
+        let a: i64 = row.get("a").unwrap();
+        let b: i64 = row.get("b").unwrap();
+        assert_eq!(a, -1, "类型化路径 -1 往返");
+        assert_eq!(b, -2);
+
+        // 清理探针节点
+        let mut clean = graph
+            .execute(Query::new(
+                "MATCH (w:Word {id: 'dbnexus-neg-int-roundtrip'}) DETACH DELETE w".to_string(),
+            ))
+            .await
+            .unwrap();
+        while let Some(_r) = clean.next().await.unwrap() {}
     }
 }
