@@ -1682,7 +1682,7 @@ async fn run_pool_status_json(database_url: &str) -> ExitCode {
         print_json(&serde_json::json!({
             "status": "unhealthy",
             "checks": { "url": "invalid" },
-            "error": "unsupported database URL protocol"
+            "error": i18n::t_simple("cli-unsupported-db-url-protocol")
         }));
         return ExitCode::UsageError;
     }

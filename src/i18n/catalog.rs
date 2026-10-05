@@ -317,6 +317,7 @@ cli-invalid-action = action must be one of select/insert/update/delete
 cli-permissions-file-unavailable = permissions file does not exist or is not readable
 cli-permissions-file-load-failed = permissions file could not be loaded: { $error }
 cli-permissions-file-invalid = permissions file could not be evaluated (malformed config)
+cli-unsupported-db-url-protocol = unsupported database URL protocol
 
 pool-invalid-config = Invalid configuration: { $error }
 pool-read-config-failed = Failed to read permission config file '{ $path }': { $error }
@@ -375,6 +376,7 @@ repository-version-column-unsafe = repository version column must be a safe iden
 repository-version-field-missing = update_if_version requires field '{ $column }' on the entity
 repository-version-column-integer = version column '{ $column }' must be an integer
 repository-column-unsafe = repository column must be a safe identifier: '{ $column }'
+repository-entity-deserialize-failed = entity deserialize failed: { $error }
 
 shard-route-unregistered = shard key '{ $key }' routed to unregistered shard { $shard_id }
 
@@ -610,6 +612,7 @@ cli-invalid-action = action 必须是 select/insert/update/delete 之一
 cli-permissions-file-unavailable = 权限配置文件不存在或不可读
 cli-permissions-file-load-failed = 权限配置文件加载失败: { $error }
 cli-permissions-file-invalid = 权限配置文件无法求值（配置格式错误）
+cli-unsupported-db-url-protocol = 不支持的数据库 URL 协议
 
 pool-invalid-config = 无效的配置: { $error }
 pool-read-config-failed = 读取权限配置文件 '{ $path }' 失败: { $error }
@@ -668,6 +671,7 @@ repository-version-column-unsafe = repository 版本列必须是安全标识符:
 repository-version-field-missing = update_if_version 要求实体包含字段 '{ $column }'
 repository-version-column-integer = 版本列 '{ $column }' 必须是整数
 repository-column-unsafe = repository 列必须是安全标识符: '{ $column }'
+repository-entity-deserialize-failed = 实体反序列化失败: { $error }
 
 shard-route-unregistered = 分片键 '{ $key }' 路由到未注册的分片 { $shard_id }
 
@@ -880,6 +884,7 @@ mod tests {
             "cli-permissions-file-unavailable",
             "cli-permissions-file-load-failed",
             "cli-permissions-file-invalid",
+            "cli-unsupported-db-url-protocol",
             "perm-rate-limiter-error",
             "perm-rate-limit-audit-dropped",
             "copy-path-empty",
@@ -907,6 +912,7 @@ mod tests {
             "repository-version-field-missing",
             "repository-version-column-integer",
             "repository-column-unsafe",
+            "repository-entity-deserialize-failed",
             "session-already-in-transaction",
             "session-already-in-transaction-concurrent",
             "session-already-in-graph-transaction",
@@ -1026,6 +1032,18 @@ mod tests {
                 &[],
                 "Connection not available - Session may have been invalidated",
                 "连接不可用 - 会话可能已失效",
+            ),
+            (
+                "cli-unsupported-db-url-protocol",
+                &[],
+                "unsupported database URL protocol",
+                "不支持的数据库 URL 协议",
+            ),
+            (
+                "repository-entity-deserialize-failed",
+                &[("error", "E")],
+                "entity deserialize failed: E",
+                "实体反序列化失败: E",
             ),
         ];
         for (key, args, en, zh) in cases {

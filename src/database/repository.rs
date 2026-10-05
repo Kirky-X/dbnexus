@@ -242,8 +242,12 @@ impl JsonRepository {
             .await?;
         rows.into_iter()
             .map(|row| {
-                serde_json::from_value(row)
-                    .map_err(|e| DbError::Config(format!("entity deserialize failed: {e}")))
+                serde_json::from_value(row).map_err(|e| {
+                    DbError::Config(i18n::t(
+                        "repository-entity-deserialize-failed",
+                        &[("error", e.to_string())],
+                    ))
+                })
             })
             .collect()
     }
