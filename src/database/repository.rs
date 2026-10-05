@@ -39,6 +39,7 @@ use serde_json::Value;
 use crate::database::DbPool;
 use crate::database::identifier::is_safe_identifier;
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 
 /// 泛型仓储 CRUD 端口
 ///
@@ -287,22 +288,25 @@ impl JsonRepository {
         version_column: &str,
     ) -> DbResult<u64> {
         if !is_safe_identifier(version_column) {
-            return Err(DbError::Config(format!(
-                "repository version column must be a safe identifier: '{version_column}'"
+            return Err(DbError::Config(i18n::t(
+                "repository-version-column-unsafe",
+                &[("column", version_column.to_string())],
             )));
         }
         let map = self.entity_object(entity)?;
         let expected = map
             .get(version_column)
             .ok_or_else(|| {
-                DbError::Config(format!(
-                    "update_if_version requires field '{version_column}' on the entity"
+                DbError::Config(i18n::t(
+                    "repository-version-field-missing",
+                    &[("column", version_column.to_string())],
                 ))
             })?
             .as_i64()
             .ok_or_else(|| {
-                DbError::Config(format!(
-                    "version column '{version_column}' must be an integer"
+                DbError::Config(i18n::t(
+                    "repository-version-column-integer",
+                    &[("column", version_column.to_string())],
                 ))
             })?;
 

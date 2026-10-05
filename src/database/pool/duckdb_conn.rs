@@ -26,6 +26,8 @@
 use std::sync::Arc;
 use std::sync::Mutex as SyncMutex;
 
+use crate::i18n;
+
 pub use duckdb::types::Value as DuckValue;
 use tokio::sync::{Mutex, MutexGuard, Semaphore};
 use tokio::task::JoinHandle;
@@ -369,8 +371,9 @@ impl DuckDbConnection {
                 (|| {
                     let conn = guard.conn_mut();
                     conn.execute_batch(&sql_owned).map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB execute_batch failed: {e}"
+                        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "duckdb-execute-batch-failed",
+                            &[("error", e.to_string())],
                         )))
                     })?;
                     Ok(DuckDbExecResult { rows_affected: 0 })
@@ -816,26 +819,30 @@ impl DuckDbConnection {
             (|| {
                 let conn = guard.conn_mut();
                 let mut stmt = conn.prepare(&sql_owned).map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "DuckDB COPY prepare failed: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "duckdb-copy-prepare-failed",
+                        &[("error", e.to_string())],
                     )))
                 })?;
                 let mut rows = stmt.query([]).map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "DuckDB COPY execute failed: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "duckdb-copy-execute-failed",
+                        &[("error", e.to_string())],
                     )))
                 })?;
                 // COPY 结果集恒为一行一列（BIGINT Count）；空结果按 0 行
                 // 导入处理（防御方言差异，不臆测成功）
                 match rows.next().map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "DuckDB COPY result fetch failed: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "duckdb-copy-fetch-failed",
+                        &[("error", e.to_string())],
                     )))
                 })? {
                     Some(row) => {
                         let count: i64 = row.get(0).map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB COPY count column read failed: {e}"
+                            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                                "duckdb-copy-count-read-failed",
+                                &[("error", e.to_string())],
                             )))
                         })?;
                         Ok(count.max(0) as u64)

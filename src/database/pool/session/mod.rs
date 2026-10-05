@@ -374,9 +374,14 @@ fn permission_denied(
     table: &(impl std::fmt::Display + ?Sized),
 ) -> DbError {
     log::warn!(
-        "permission denied: action={} table={}",
-        sanitize_log_field(&action.to_string()),
-        sanitize_log_field(&table.to_string())
+        "{}",
+        i18n::t(
+            "session-log-permission-denied",
+            &[
+                ("action", sanitize_log_field(&action.to_string())),
+                ("table", sanitize_log_field(&table.to_string())),
+            ]
+        )
     );
     DbError::Permission(i18n::t(
         "session-permission-denied",
@@ -391,8 +396,11 @@ fn permission_denied(
 #[cfg(feature = "permission")]
 fn rate_limited_error(retry_after: Option<Duration>) -> DbError {
     log::warn!(
-        "rate limited: table access throttled (retry_after={:?})",
-        retry_after
+        "{}",
+        i18n::t(
+            "session-log-rate-limited",
+            &[("retry_after", format!("{:?}", retry_after))]
+        )
     );
     DbError::RateLimited {
         retry_after_secs: retry_after

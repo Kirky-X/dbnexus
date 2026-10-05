@@ -19,6 +19,8 @@ use thiserror::Error;
 use tokio::sync::RwLock;
 use tokio::time;
 
+use crate::i18n;
+
 /// 健康状态
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HealthStatus {
@@ -340,9 +342,14 @@ impl CircuitBreaker {
 
         if let Some(successes) = recovered {
             log::info!(
-                "circuit breaker closed: successes={} success_threshold={}",
-                successes,
-                self.config.success_threshold
+                "{}",
+                i18n::t(
+                    "circuit-breaker-closed",
+                    &[
+                        ("successes", successes.to_string()),
+                        ("threshold", self.config.success_threshold.to_string()),
+                    ]
+                )
             );
         }
 
@@ -394,12 +401,17 @@ impl CircuitBreaker {
                 failures,
                 threshold,
             }) => log::warn!(
-                "circuit breaker opened: failures={} failure_threshold={}",
-                failures,
-                threshold
+                "{}",
+                i18n::t(
+                    "circuit-breaker-opened",
+                    &[
+                        ("failures", failures.to_string()),
+                        ("threshold", threshold.to_string()),
+                    ]
+                )
             ),
             Some(Transition::Reopened) => {
-                log::warn!("circuit breaker reopened: half-open probe failed")
+                log::warn!("{}", i18n::t_simple("circuit-breaker-reopened"))
             }
             None => {}
         }
@@ -448,7 +460,13 @@ impl CircuitBreaker {
                         self.consecutive_successes.store(0, Ordering::Relaxed);
                         flipped = config.timeout_ms;
                     }
-                    log::info!("circuit breaker half-open: timeout_ms={}", flipped);
+                    log::info!(
+                        "{}",
+                        i18n::t(
+                            "circuit-breaker-half-open",
+                            &[("timeout_ms", flipped.to_string())]
+                        )
+                    );
                     Ok(())
                 } else {
                     Err(CircuitBreakerError::new(CircuitBreakerState::Open))

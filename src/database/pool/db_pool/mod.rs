@@ -869,10 +869,21 @@ impl DbPool {
                 let waited_ms = start.elapsed().as_millis() as u64;
                 self.record_acquire_timeout(start);
                 log::warn!(
-                    "pool acquire timeout: waited_ms={} timeout_ms={} waiters={}",
-                    waited_ms,
-                    timeout_duration.as_millis() as u64,
-                    self.inner.wait_count.load(Ordering::SeqCst)
+                    "{}",
+                    i18n::t(
+                        "pool-log-acquire-timeout",
+                        &[
+                            ("waited_ms", waited_ms.to_string()),
+                            (
+                                "timeout_ms",
+                                (timeout_duration.as_millis() as u64).to_string()
+                            ),
+                            (
+                                "waiters",
+                                self.inner.wait_count.load(Ordering::SeqCst).to_string()
+                            ),
+                        ]
+                    )
                 );
                 return Err(DbError::Connection(sea_orm::DbErr::ConnectionAcquire(
                     sea_orm::ConnAcquireErr::Timeout,

@@ -11,6 +11,7 @@ use async_trait::async_trait;
 
 use crate::database::Session;
 use crate::database::sharding::ShardRouter;
+use crate::i18n;
 
 use super::store::{InMemorySagaLog, SagaLog, SagaLogStore};
 use super::types::*;
@@ -188,9 +189,9 @@ impl SagaOrchestrator {
                     mark_compensation_failed(
                         &mut log,
                         &step_log.name,
-                        &format!(
-                            "compensation session unavailable: no pool for shard {}",
-                            step_log.shard_id
+                        &i18n::t(
+                            "saga-compensation-no-pool",
+                            &[("shard_id", step_log.shard_id.to_string())],
                         ),
                     );
                 }
@@ -199,7 +200,10 @@ impl SagaOrchestrator {
                     mark_compensation_failed(
                         &mut log,
                         &step_log.name,
-                        &format!("compensation session unavailable: {e}"),
+                        &i18n::t(
+                            "saga-compensation-session-unavailable",
+                            &[("error", e.to_string())],
+                        ),
                     );
                 }
             }
@@ -344,8 +348,9 @@ impl SagaOrchestrator {
                                     mark_compensation_failed(
                                         &mut log,
                                         completed_name,
-                                        &format!(
-                                            "compensation session unavailable: no pool for shard {completed_shard_id}"
+                                        &i18n::t(
+                                            "saga-compensation-no-pool",
+                                            &[("shard_id", completed_shard_id.to_string())],
                                         ),
                                     );
                                 }
@@ -354,7 +359,10 @@ impl SagaOrchestrator {
                                     mark_compensation_failed(
                                         &mut log,
                                         completed_name,
-                                        &format!("compensation session unavailable: {e}"),
+                                        &i18n::t(
+                                            "saga-compensation-session-unavailable",
+                                            &[("error", e.to_string())],
+                                        ),
                                     );
                                 }
                             }

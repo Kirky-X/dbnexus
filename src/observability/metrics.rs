@@ -16,6 +16,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
+use crate::i18n;
+
 // ============================================================================
 // MetricsCollector Trait Interface
 // ============================================================================
@@ -939,10 +941,15 @@ impl MetricsCollector {
                 }
             }
             log::warn!(
-                "slow query: query_type={} duration_ms={} threshold_ms={}",
-                query_type,
-                duration_ms,
-                threshold_ms
+                "{}",
+                i18n::t(
+                    "metrics-slow-query",
+                    &[
+                        ("query_type", query_type.to_string()),
+                        ("duration_ms", duration_ms.to_string()),
+                        ("threshold_ms", threshold_ms.to_string()),
+                    ]
+                )
             );
         }
     }

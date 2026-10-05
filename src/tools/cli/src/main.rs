@@ -415,7 +415,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if *limit > 1_000_000 {
                 print_json(&serde_json::json!({
                     "status": "error", "error_code": "invalid_limit",
-                    "error": "limit must not exceed 1000000 (0 means unlimited)"
+                    "error": i18n::t_simple("cli-invalid-limit")
                 }));
                 std::process::exit(ExitCode::UsageError as i32);
             }
@@ -1811,7 +1811,7 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
             None => {
                 print_usage_error(
                     "invalid_operation",
-                    "operation must be one of create/read/update/delete/login/logout/permission-change/config-change",
+                    &i18n::t_simple("cli-invalid-operation"),
                 );
                 return ExitCode::UsageError;
             }
@@ -1822,10 +1822,7 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         Some(name) => match parse_audit_severity(name) {
             Some(sev) => Some(sev),
             None => {
-                print_usage_error(
-                    "invalid_severity",
-                    "severity must be one of info/low/medium/high/critical",
-                );
+                print_usage_error("invalid_severity", &i18n::t_simple("cli-invalid-severity"));
                 return ExitCode::UsageError;
             }
         },
@@ -1835,10 +1832,7 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         Some(name) => match parse_audit_status(name) {
             Some(st) => Some(st),
             None => {
-                print_usage_error(
-                    "invalid_status",
-                    "status must be one of success/failure/partial/unknown",
-                );
+                print_usage_error("invalid_status", &i18n::t_simple("cli-invalid-status"));
                 return ExitCode::UsageError;
             }
         },
@@ -1853,10 +1847,7 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         Some(raw) => match parse_time(raw) {
             Ok(t) => Some(t),
             Err(_) => {
-                print_usage_error(
-                    "invalid_since",
-                    "since must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)",
-                );
+                print_usage_error("invalid_since", &i18n::t_simple("cli-invalid-since"));
                 return ExitCode::UsageError;
             }
         },
@@ -1866,10 +1857,7 @@ async fn run_audit_query_json(database_url: &str, args: &AuditFilterArgs) -> Exi
         Some(raw) => match parse_time(raw) {
             Ok(t) => Some(t),
             Err(_) => {
-                print_usage_error(
-                    "invalid_until",
-                    "until must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)",
-                );
+                print_usage_error("invalid_until", &i18n::t_simple("cli-invalid-until"));
                 return ExitCode::UsageError;
             }
         },
@@ -1963,20 +1951,20 @@ fn run_shard_info_json(
     if total_shards == 0 || total_shards > 10_000 {
         print_usage_error(
             "invalid_total_shards",
-            "total_shards must be between 1 and 10000",
+            &i18n::t_simple("cli-invalid-total-shards"),
         );
         return ExitCode::UsageError;
     }
     // 单一事实源：库侧 is_known_strategy（create_strategy 对未知名静默回落）
     if !dbnexus::is_known_strategy(strategy) {
-        print_usage_error(
-            "unknown_strategy",
-            "strategy must be one of yearly/monthly/daily/hash/consistent-hash",
-        );
+        print_usage_error("unknown_strategy", &i18n::t_simple("cli-invalid-strategy"));
         return ExitCode::UsageError;
     }
     if route_key.as_ref().is_some_and(|k| k.is_empty()) {
-        print_usage_error("invalid_route_key", "route_key must not be empty");
+        print_usage_error(
+            "invalid_route_key",
+            &i18n::t_simple("cli-invalid-route-key"),
+        );
         return ExitCode::UsageError;
     }
 
@@ -2042,23 +2030,23 @@ async fn run_permission_check_json(
     permissions: &Path,
 ) -> ExitCode {
     if role.is_empty() || table.is_empty() {
-        print_usage_error("empty_role_or_table", "role and table must not be empty");
+        print_usage_error(
+            "empty_role_or_table",
+            &i18n::t_simple("cli-empty-role-or-table"),
+        );
         return ExitCode::UsageError;
     }
     let action = match parse_permission_action(action) {
         Some(a) => a,
         None => {
-            print_usage_error(
-                "invalid_action",
-                "action must be one of select/insert/update/delete",
-            );
+            print_usage_error("invalid_action", &i18n::t_simple("cli-invalid-action"));
             return ExitCode::UsageError;
         }
     };
     if !permissions.exists() {
         print_usage_error(
             "permissions_file_unavailable",
-            "permissions file does not exist or is not readable",
+            &i18n::t_simple("cli-permissions-file-unavailable"),
         );
         return ExitCode::UsageError;
     }
@@ -2078,7 +2066,10 @@ async fn run_permission_check_json(
     if let Err(e) = provider.refresh().await {
         print_usage_error(
             "permissions_file_invalid",
-            &format!("permissions file could not be loaded: {e}"),
+            &i18n::t(
+                "cli-permissions-file-load-failed",
+                &[("error", e.to_string())],
+            ),
         );
         return ExitCode::UsageError;
     }
@@ -2101,7 +2092,7 @@ async fn run_permission_check_json(
         dbnexus::PermissionDecision::Error(_) => {
             print_usage_error(
                 "permissions_file_invalid",
-                "permissions file could not be evaluated (malformed config)",
+                &i18n::t_simple("cli-permissions-file-invalid"),
             );
             return ExitCode::UsageError;
         }

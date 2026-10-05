@@ -114,8 +114,11 @@ impl Session {
                             // admin 有完全权限，跳过检查
                         } else {
                             log::warn!(
-                                "permission denied: role={} reason=sql-parse-failure (fail-closed)",
-                                sanitize_log_field(&self.role)
+                                "{}",
+                                i18n::t(
+                                    "session-log-sql-parse-denied",
+                                    &[("role", sanitize_log_field(&self.role))]
+                                )
                             );
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),
@@ -219,10 +222,9 @@ impl Session {
     pub async fn query_rows_for_update(&self, sql: &str) -> DbResult<Vec<serde_json::Value>> {
         // 行锁依赖事务持有期：非事务下一律拒绝
         if !self.is_in_transaction().await {
-            return Err(DbError::Transaction(
-                "query_rows_for_update requires an active transaction (call begin_transaction first)"
-                    .to_string(),
-            ));
+            return Err(DbError::Transaction(i18n::t_simple(
+                "session-for-update-txn-required",
+            )));
         }
 
         // 仅 SeaORM 关系型后端具备行锁语义；raw/图连接显性拒绝
@@ -241,9 +243,9 @@ impl Session {
             })
             .unwrap_or(false);
         if !is_relational {
-            return Err(DbError::Unsupported(
-                "query_rows_for_update requires a relational (SeaORM) backend".to_string(),
-            ));
+            return Err(DbError::Unsupported(i18n::t_simple(
+                "session-for-update-relational-required",
+            )));
         }
 
         // 事务感知执行：query_rows 在活动事务下自动走事务连接
@@ -343,8 +345,11 @@ impl Session {
                         // 解析失败：admin 放行（对齐 execute_raw 路径），非 admin 拒绝（安全默认）
                         if !self.is_admin {
                             log::warn!(
-                                "permission denied: role={} reason=sql-parse-failure (fail-closed)",
-                                sanitize_log_field(&self.role)
+                                "{}",
+                                i18n::t(
+                                    "session-log-sql-parse-denied",
+                                    &[("role", sanitize_log_field(&self.role))]
+                                )
                             );
                             return Err(DbError::Permission(
                                 "Failed to parse SQL statement for permission checking".to_string(),

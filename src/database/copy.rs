@@ -30,6 +30,7 @@
 //!   显式拒绝
 
 use crate::foundation::DbError;
+use crate::i18n;
 
 /// 绑定参数单语句上限（按占位符方言取各后端保守下界）
 ///
@@ -158,9 +159,7 @@ impl CopyStatement {
     /// 文件导入方言选项名不同，请使用 [`Self::build`]（STDIN 协议）。
     pub fn build_from_file(&self, path: &str) -> Result<String, DbError> {
         if path.is_empty() {
-            return Err(DbError::Config(
-                "COPY file path must not be empty".to_string(),
-            ));
+            return Err(DbError::Config(i18n::t_simple("copy-path-empty")));
         }
         let cols = self
             .columns
@@ -392,9 +391,9 @@ impl BatchInsertStatement {
             cols.push(c.clone());
         }
         if cols.is_empty() {
-            return Err(DbError::Config(
-                "INSERT requires at least one column".to_string(),
-            ));
+            return Err(DbError::Config(i18n::t_simple(
+                "copy-insert-column-required",
+            )));
         }
         Ok(Self {
             table: table.to_string(),
@@ -418,10 +417,7 @@ impl BatchInsertStatement {
     /// 的空集拒绝契约）。
     pub fn build(&self, row_count: usize, style: PlaceholderStyle) -> Result<String, DbError> {
         if row_count == 0 {
-            return Err(DbError::Config(
-                "multi-row INSERT requires at least one row (empty VALUES is meaningless)"
-                    .to_string(),
-            ));
+            return Err(DbError::Config(i18n::t_simple("copy-insert-row-required")));
         }
         let cols = self
             .columns
@@ -616,7 +612,11 @@ impl crate::database::DbPool {
             let outcome: crate::foundation::DbResult<u64> = async {
                 let sea_conn = conn.as_sea_orm().map_err(|e| {
                     copy_in_backend_error(&format!(
-                        " (pool returned an incompatible connection: {e})"
+                        " {}",
+                        i18n::t(
+                            "copy-in-incompatible-connection",
+                            &[("error", e.to_string())]
+                        )
                     ))
                 })?;
                 let pg_pool = sea_conn.get_postgres_connection_pool();
@@ -650,7 +650,11 @@ impl crate::database::DbPool {
             let outcome: crate::foundation::DbResult<u64> = async {
                 let duck_conn = conn.as_duckdb().map_err(|e| {
                     copy_in_backend_error(&format!(
-                        " (pool returned an incompatible connection: {e})"
+                        " {}",
+                        i18n::t(
+                            "copy-in-incompatible-connection",
+                            &[("error", e.to_string())]
+                        )
                     ))
                 })?;
                 let payload = encode_duckdb_copy_rows(rows);
@@ -672,7 +676,7 @@ impl crate::database::DbPool {
                 let inner: crate::foundation::DbResult<u64> = async {
                     let path_str = path.to_str().ok_or_else(|| {
                         crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(
-                            "COPY payload temp path is not valid UTF-8".to_string(),
+                            i18n::t_simple("copy-payload-path-utf8"),
                         ))
                     })?;
                     let sql = statement.build_from_file(path_str)?;
@@ -684,7 +688,10 @@ impl crate::database::DbPool {
                 let removed =
                     tokio::task::spawn_blocking(move || std::fs::remove_file(&path)).await;
                 if let Ok(Err(e)) = removed {
-                    log::warn!("DuckDB COPY payload temp file cleanup failed: {e}");
+                    log::warn!(
+                        "{}",
+                        i18n::t("copy-payload-cleanup-failed", &[("error", e.to_string())])
+                    );
                 }
                 inner
             }
@@ -696,9 +703,10 @@ impl crate::database::DbPool {
         #[cfg(not(any(feature = "postgres", feature = "duckdb")))]
         {
             let _ = (statement, rows);
-            Err(copy_in_backend_error(
-                " — enable the postgres or duckdb driver feature to use COPY",
-            ))
+            Err(copy_in_backend_error(&format!(
+                " {}",
+                i18n::t_simple("copy-driver-feature-missing")
+            )))
         }
     }
 }
@@ -747,7 +755,7 @@ fn write_copy_payload_file(payload: &str) -> std::io::Result<std::path::PathBuf>
         }
     }
     Err(last_err
-        .unwrap_or_else(|| std::io::Error::other("could not create COPY payload temp file")))
+        .unwrap_or_else(|| std::io::Error::other(i18n::t_simple("copy-payload-create-failed"))))
 }
 
 #[cfg(test)]

@@ -19,8 +19,11 @@ impl DbError {
             DbError::Config(msg) => msg.clone(),
             DbError::Permission(msg) => msg.clone(),
             DbError::RateLimited { retry_after_secs } => match retry_after_secs {
-                Some(secs) => format!("rate limit exceeded, retry after {secs} secs"),
-                None => "rate limit exceeded".to_string(),
+                Some(secs) => crate::i18n::t(
+                    "db-rate-limited-retry",
+                    &[("retry_after_secs", secs.to_string())],
+                ),
+                None => crate::i18n::t_simple("db-rate-limited"),
             },
             DbError::Transaction(msg) => msg.clone(),
             DbError::Migration(msg) => msg.clone(),
@@ -29,9 +32,10 @@ impl DbError {
             #[cfg(feature = "validation")]
             DbError::Validation(msg) => msg.clone(),
             DbError::Unsupported(msg) => msg.clone(),
-            DbError::VersionConflict { table, id } => {
-                format!("version conflict on table '{table}' for id {id}")
-            }
+            DbError::VersionConflict { table, id } => crate::i18n::t(
+                "db-version-conflict",
+                &[("table", table.clone()), ("id", id.to_string())],
+            ),
         }
     }
 }

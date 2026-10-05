@@ -9,6 +9,7 @@ use super::schema::*;
 use crate::database::identifier::is_safe_identifier;
 use crate::foundation::DatabaseType;
 use crate::foundation::DbError;
+use crate::i18n;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use std::path::PathBuf;
 
@@ -192,8 +193,9 @@ impl MigrationExecutor {
     /// 下划线，长度 1-64），不合法时返回 `DbError::Config` 而非静默回退。
     pub fn with_history_table(mut self, name: &str) -> Result<Self, DbError> {
         if !is_safe_identifier(name) {
-            return Err(DbError::Config(format!(
-                "illegal migration history table name: {name}"
+            return Err(DbError::Config(i18n::t(
+                "migration-history-table-invalid",
+                &[("name", name.to_string())],
             )));
         }
         self.history_table = name.to_string();

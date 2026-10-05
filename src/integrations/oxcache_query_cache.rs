@@ -48,6 +48,7 @@ use sha2::{Digest, Sha256};
 
 use crate::database::pool::DbPool;
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 
 const KEY_PREFIX: &str = "qcache:q:v1";
 const TABLE_VERSION_PREFIX: &str = "qcache:t:v1";
@@ -164,14 +165,18 @@ impl OxcacheQueryCache {
         let key = self.derive_key(sql, params, tables).await?;
         let ttl = ttl.or(self.default_ttl);
 
-        if let Some(bytes) = self
-            .cache
-            .get(&key)
-            .await
-            .map_err(|e| DbError::Cache(format!("query cache get failed: {e}")))?
-        {
-            let rows = serde_json::from_slice(&bytes)
-                .map_err(|e| DbError::Cache(format!("query cache decode failed: {e}")))?;
+        if let Some(bytes) = self.cache.get(&key).await.map_err(|e| {
+            DbError::Cache(i18n::t(
+                "query-cache-get-failed",
+                &[("error", e.to_string())],
+            ))
+        })? {
+            let rows = serde_json::from_slice(&bytes).map_err(|e| {
+                DbError::Cache(i18n::t(
+                    "query-cache-decode-failed",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             return Ok(CachedQuery {
                 rows,
                 from_cache: true,
@@ -180,12 +185,21 @@ impl OxcacheQueryCache {
 
         let session = self.pool.get_session(&self.role).await?;
         let rows = session.query_rows_with_params(sql, params).await?;
-        let bytes = serde_json::to_vec(&rows)
-            .map_err(|e| DbError::Cache(format!("query cache encode failed: {e}")))?;
+        let bytes = serde_json::to_vec(&rows).map_err(|e| {
+            DbError::Cache(i18n::t(
+                "query-cache-encode-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
         self.cache
             .set(key.into(), Arc::new(bytes), ttl)
             .await
-            .map_err(|e| DbError::Cache(format!("query cache fill failed: {e}")))?;
+            .map_err(|e| {
+                DbError::Cache(i18n::t(
+                    "query-cache-fill-failed",
+                    &[("error", e.to_string())],
+                ))
+            })?;
         Ok(CachedQuery {
             rows,
             from_cache: false,
@@ -202,7 +216,12 @@ impl OxcacheQueryCache {
         validate_table_name(table)?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| DbError::Cache(format!("system clock before epoch: {e}")))?
+            .map_err(|e| {
+                DbError::Cache(i18n::t(
+                    "query-cache-clock-before-epoch",
+                    &[("error", e.to_string())],
+                ))
+            })?
             .as_nanos()
             .to_string();
         self.cache
@@ -212,7 +231,12 @@ impl OxcacheQueryCache {
                 None,
             )
             .await
-            .map_err(|e| DbError::Cache(format!("query cache invalidate failed: {e}")))
+            .map_err(|e| {
+                DbError::Cache(i18n::t(
+                    "query-cache-invalidate-failed",
+                    &[("error", e.to_string())],
+                ))
+            })
     }
 
     /// key 派生：`SHA-256(安全上下文 + 表版本原始字节 + SQL + 参数 JSON)`
@@ -227,11 +251,9 @@ impl OxcacheQueryCache {
         tables: &[&str],
     ) -> DbResult<String> {
         if tables.is_empty() {
-            return Err(DbError::Config(
-                "query cache requires at least one table in `tables`; a query with \
-                 no declared tables can never be invalidated (fail-closed)"
-                    .to_string(),
-            ));
+            return Err(DbError::Config(i18n::t_simple(
+                "query-cache-tables-required",
+            )));
         }
         for table in tables {
             validate_table_name(table)?;
@@ -242,10 +264,12 @@ impl OxcacheQueryCache {
             .iter()
             .map(|t| format!("{TABLE_VERSION_PREFIX}:{t}"))
             .collect();
-        let versions =
-            self.cache.get_many(&version_keys).await.map_err(|e| {
-                DbError::Cache(format!("query cache table version read failed: {e}"))
-            })?;
+        let versions = self.cache.get_many(&version_keys).await.map_err(|e| {
+            DbError::Cache(i18n::t(
+                "query-cache-version-read-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
         // 后端契约：get_many 返回值与请求键一一对应；zip 按短侧截断会
         // 静默丢弃尾部表的版本维度（该表失效探测失明 → 潜在脏读），
         // debug 构建在此钉住契约破坏
@@ -278,8 +302,12 @@ impl OxcacheQueryCache {
             push_field(&mut hasher, version.as_deref().unwrap_or(ZERO_VERSION));
         }
         push_field(&mut hasher, sql.as_bytes());
-        let params_json = serde_json::to_vec(params)
-            .map_err(|e| DbError::Cache(format!("query cache params encode failed: {e}")))?;
+        let params_json = serde_json::to_vec(params).map_err(|e| {
+            DbError::Cache(i18n::t(
+                "query-cache-params-encode-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
         push_field(&mut hasher, &params_json);
         let digest = hasher.finalize();
 
@@ -312,9 +340,9 @@ fn validate_table_name(table: &str) -> DbResult<()> {
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
     if !first_ok || !table.chars().all(valid) || table.contains("..") {
-        return Err(DbError::Config(format!(
-            "query cache table name is invalid: '{table}' \
-             (allowed: letters/digits/underscore/dot, must not start with a digit)"
+        return Err(DbError::Config(i18n::t(
+            "query-cache-table-name-invalid",
+            &[("table", table.to_string())],
         )));
     }
     Ok(())

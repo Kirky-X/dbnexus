@@ -19,6 +19,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 #[cfg(feature = "audit")]
 use crate::domain::audit::{AuditEvent, AuditLogger, AuditOperation, AuditSeverity, AuditStatus};
+use crate::i18n;
 
 /// 权限检查速率限制默认值
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
@@ -622,7 +623,10 @@ impl PermissionContext {
                 Ok(decision) => decision,
                 Err(err) => {
                     // 后端故障 fail-closed：按限流拒绝处理，显性记录故障
-                    log::warn!("rate limiter backend error: {err}");
+                    log::warn!(
+                        "{}",
+                        i18n::t("perm-rate-limiter-error", &[("error", err.to_string())])
+                    );
                     dbnexus_limiter_port::RateLimitDecision::deny(None)
                 }
             };
@@ -700,7 +704,13 @@ impl PermissionContext {
         event.operation = AuditOperation::Other("rate_limit_exceeded".to_string());
         if let Err(err) = logger.log(event).await {
             // 审计失败不阻断权限判定，但必须显性记录
-            log::warn!("rate limit audit event dropped: {err}");
+            log::warn!(
+                "{}",
+                i18n::t(
+                    "perm-rate-limit-audit-dropped",
+                    &[("error", err.to_string())]
+                )
+            );
         }
     }
 

@@ -25,6 +25,8 @@ use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::i18n;
+
 /// 分片策略 trait
 pub trait ShardingStrategy: Send + Sync {
     /// 根据时间和总分片数计算分片 ID
@@ -657,8 +659,9 @@ impl ShardRouter {
         if self.shards.contains_key(&shard_id) {
             Ok(shard_id)
         } else {
-            Err(crate::foundation::DbError::Config(format!(
-                "shard key '{key}' routed to unregistered shard {shard_id}"
+            Err(crate::foundation::DbError::Config(i18n::t(
+                "shard-route-unregistered",
+                &[("key", key.to_string()), ("shard_id", shard_id.to_string())],
             )))
         }
     }

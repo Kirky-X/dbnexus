@@ -50,6 +50,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 
 use crate::database::pool::DbPool;
+use crate::i18n;
 
 /// 三端点共享的应用状态
 #[derive(Clone)]
@@ -168,7 +169,7 @@ async fn metrics(State(state): State<HealthState>) -> impl IntoResponse {
     let Some(collector) = state.metrics_collector.clone() else {
         return (
             StatusCode::NOT_FOUND,
-            "metrics collector not configured (use with_metrics_collector)".to_string(),
+            i18n::t_simple("metrics-collector-not-configured"),
         )
             .into_response();
     };
@@ -188,7 +189,10 @@ async fn metrics(State(state): State<HealthState>) -> impl IntoResponse {
             .into_response(),
         Err(e) => (
             StatusCode::SERVICE_UNAVAILABLE,
-            format!("# metrics export task join failed: {e}\n"),
+            format!(
+                "# {}\n",
+                i18n::t("metrics-export-join-failed", &[("error", e.to_string())])
+            ),
         )
             .into_response(),
     }
@@ -202,9 +206,7 @@ async fn metrics(State(state): State<HealthState>) -> impl IntoResponse {
 async fn metrics() -> impl IntoResponse {
     (
         StatusCode::NOT_FOUND,
-        "metrics feature not enabled (rebuild with the metrics feature to expose \
-         the collector endpoint)"
-            .to_string(),
+        i18n::t_simple("metrics-feature-not-enabled"),
     )
         .into_response()
 }

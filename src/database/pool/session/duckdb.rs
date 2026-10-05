@@ -64,8 +64,11 @@ impl Session {
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                     if !self.is_admin {
                         log::warn!(
-                            "permission denied: role={} reason=sql-parse-failure (fail-closed)",
-                            sanitize_log_field(&self.role)
+                            "{}",
+                            i18n::t(
+                                "session-log-sql-parse-denied",
+                                &[("role", sanitize_log_field(&self.role))]
+                            )
                         );
                         return Err(DbError::Permission(
                             "Failed to parse SQL statement for permission checking".to_string(),

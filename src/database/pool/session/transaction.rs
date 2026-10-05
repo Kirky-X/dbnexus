@@ -42,16 +42,12 @@ impl Session {
         // 图连接与 raw 后端不支持隔离级别语义
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
         if conn.is_graph() {
-            return Err(DbError::Unsupported(
-                "begin_transaction_with_isolation requires a relational (SeaORM) backend"
-                    .to_string(),
-            ));
+            return Err(DbError::Unsupported(i18n::t_simple(
+                "session-isolation-relational-required",
+            )));
         }
         let conn = conn.as_sea_orm().map_err(|_| {
-            DbError::Unsupported(
-                "begin_transaction_with_isolation requires a relational (SeaORM) backend"
-                    .to_string(),
-            )
+            DbError::Unsupported(i18n::t_simple("session-isolation-relational-required"))
         })?;
 
         let transaction = conn

@@ -124,6 +124,8 @@ db-migration = Migration error: { $message }
 db-cache = Cache error: { $message }
 db-query = Query error: { $message }
 db-validation = Validation error: { $message }
+db-unsupported = Unsupported operation: { $message }
+db-version-conflict = Version conflict on table '{ $table }' for id { $id }
 db-rate-limited = Rate limit exceeded: too many requests, please retry later
 db-rate-limited-retry = Rate limit exceeded: too many requests; retry after { $retry_after_secs }s
 
@@ -156,6 +158,8 @@ perm-provider-role-not-found = Role '{ $role }' not found
 perm-provider-load-error = Failed to load config: { $reason }
 perm-provider-check-error = Permission check failed: { $reason }
 perm-provider-unknown = Unknown error: { $reason }
+perm-rate-limiter-error = rate limiter backend error: { $error }
+perm-rate-limit-audit-dropped = rate limit audit event dropped: { $error }
 
 sql-parse-error = Failed to parse SQL: { $reason }
 sql-unsupported-statement = Unsupported SQL statement type: { $stmt_type }
@@ -180,8 +184,16 @@ auth-user-limit-reached = User storage limit reached: { $reason }
 metrics-export-error = Export failed: { $reason }
 metrics-not-initialized = Collector not initialized
 metrics-unknown = Unknown metrics error: { $reason }
+metrics-collector-not-configured = metrics collector not configured (use with_metrics_collector)
+metrics-export-join-failed = metrics export task join failed: { $error }
+metrics-slow-query = slow query: query_type={ $query_type } duration_ms={ $duration_ms } threshold_ms={ $threshold_ms }
+metrics-feature-not-enabled = metrics feature not enabled (rebuild with the metrics feature to expose the collector endpoint)
 
 circuit-breaker = Circuit breaker is { $state }
+circuit-breaker-closed = circuit breaker closed: successes={ $successes } success_threshold={ $threshold }
+circuit-breaker-opened = circuit breaker opened: failures={ $failures } failure_threshold={ $threshold }
+circuit-breaker-reopened = circuit breaker reopened: half-open probe failed
+circuit-breaker-half-open = circuit breaker half-open: timeout_ms={ $timeout_ms }
 
 audit-builder-operation-required = operation is required
 audit-builder-entity-type-required = entity_type is required
@@ -195,6 +207,8 @@ retry-timeout = Retry timed out after { $timeout_ms }ms: { $last_error }
 saga-execution-failed = Saga execution failed: { $reason }
 saga-compensation-failed = Saga compensation failed: { $reason }
 saga-timeout = Saga timeout: { $reason }
+saga-compensation-no-pool = compensation session unavailable: no pool for shard { $shard_id }
+saga-compensation-session-unavailable = compensation session unavailable: { $error }
 
 snowflake-clock-backtrack = Clock backtrack: waited timestamp { $waited_ts } still behind last used { $last_ts }
 snowflake-timestamp-overflow = Timestamp overflow: { $timestamp } exceeds 41-bit capacity
@@ -289,6 +303,20 @@ cli-check-edit-file = Please review and edit the generated migration file for co
 cli-list-title = Migration File List
 cli-list-directory = Directory: { $path }
 cli-list-total-count = Total { $count } migration files
+cli-invalid-limit = limit must not exceed 1000000 (0 means unlimited)
+cli-invalid-operation = operation must be one of create/read/update/delete/login/logout/permission-change/config-change
+cli-invalid-severity = severity must be one of info/low/medium/high/critical
+cli-invalid-status = status must be one of success/failure/partial/unknown
+cli-invalid-since = since must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)
+cli-invalid-until = until must be an RFC 3339 timestamp (e.g. 2026-01-01T00:00:00Z)
+cli-invalid-total-shards = total_shards must be between 1 and 10000
+cli-invalid-strategy = strategy must be one of yearly/monthly/daily/hash/consistent-hash
+cli-invalid-route-key = route_key must not be empty
+cli-empty-role-or-table = role and table must not be empty
+cli-invalid-action = action must be one of select/insert/update/delete
+cli-permissions-file-unavailable = permissions file does not exist or is not readable
+cli-permissions-file-load-failed = permissions file could not be loaded: { $error }
+cli-permissions-file-invalid = permissions file could not be evaluated (malformed config)
 
 pool-invalid-config = Invalid configuration: { $error }
 pool-read-config-failed = Failed to read permission config file '{ $path }': { $error }
@@ -296,6 +324,7 @@ pool-parse-config-failed = Failed to parse permission config file '{ $path }': {
 pool-yaml-parse-error = YAML parse error in '{ $source }': { $error }
 pool-invalid-db-url = Invalid database URL: { $error }
 pool-recreate-failed = Failed to recreate connections: { $error }
+pool-log-acquire-timeout = pool acquire timeout: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
 session-txn-begin-failed = Failed to begin transaction: { $error }
 session-txn-begin-graph-failed = Failed to begin graph transaction: { $error }
 session-txn-commit-failed = Failed to commit graph transaction: { $error }
@@ -306,6 +335,46 @@ session-ddl-parse-failed = Failed to parse DDL SQL: { $error }
 session-ddl-validation-error = DDL validation error: { $error }
 session-unknown-operation = Unknown operation: { $operation }
 session-permission-denied = Permission denied for { $action } on { $table }
+session-for-update-txn-required = query_rows_for_update requires an active transaction (call begin_transaction first)
+session-for-update-relational-required = query_rows_for_update requires a relational (SeaORM) backend
+session-isolation-relational-required = begin_transaction_with_isolation requires a relational (SeaORM) backend
+session-log-sql-parse-denied = permission denied: role={ $role } reason=sql-parse-failure (fail-closed)
+session-log-permission-denied = permission denied: action={ $action } table={ $table }
+session-log-rate-limited = rate limited: table access throttled (retry_after={ $retry_after })
+
+copy-path-empty = COPY file path must not be empty
+copy-insert-column-required = INSERT requires at least one column
+copy-insert-row-required = multi-row INSERT requires at least one row (empty VALUES is meaningless)
+copy-in-incompatible-connection = (pool returned an incompatible connection: { $error })
+copy-payload-path-utf8 = COPY payload temp path is not valid UTF-8
+copy-payload-cleanup-failed = DuckDB COPY payload temp file cleanup failed: { $error }
+copy-driver-feature-missing = — enable the postgres or duckdb driver feature to use COPY
+copy-payload-create-failed = could not create COPY payload temp file
+
+duckdb-execute-batch-failed = DuckDB execute_batch failed: { $error }
+duckdb-copy-prepare-failed = DuckDB COPY prepare failed: { $error }
+duckdb-copy-execute-failed = DuckDB COPY execute failed: { $error }
+duckdb-copy-fetch-failed = DuckDB COPY result fetch failed: { $error }
+duckdb-copy-count-read-failed = DuckDB COPY count column read failed: { $error }
+
+repository-version-column-unsafe = repository version column must be a safe identifier: '{ $column }'
+repository-version-field-missing = update_if_version requires field '{ $column }' on the entity
+repository-version-column-integer = version column '{ $column }' must be an integer
+
+shard-route-unregistered = shard key '{ $key }' routed to unregistered shard { $shard_id }
+
+migration-history-table-invalid = illegal migration history table name: { $name }
+
+query-cache-get-failed = query cache get failed: { $error }
+query-cache-decode-failed = query cache decode failed: { $error }
+query-cache-encode-failed = query cache encode failed: { $error }
+query-cache-fill-failed = query cache fill failed: { $error }
+query-cache-clock-before-epoch = system clock before epoch: { $error }
+query-cache-invalidate-failed = query cache invalidate failed: { $error }
+query-cache-tables-required = query cache requires at least one table in `tables`; a query with no declared tables can never be invalidated (fail-closed)
+query-cache-version-read-failed = query cache table version read failed: { $error }
+query-cache-params-encode-failed = query cache params encode failed: { $error }
+query-cache-table-name-invalid = query cache table name is invalid: '{ $table }' (allowed: letters/digits/underscore/dot, must not start with a digit)
 "#;
 
 // ============================================================================
@@ -333,6 +402,8 @@ db-migration = 迁移错误: { $message }
 db-cache = 缓存错误: { $message }
 db-query = 查询错误: { $message }
 db-validation = 验证错误: { $message }
+db-unsupported = 不支持的操作: { $message }
+db-version-conflict = 表 '{ $table }' 中 ID 为 { $id } 的记录版本冲突
 db-rate-limited = 请求过于频繁，已被速率限制，请稍后重试
 db-rate-limited-retry = 请求过于频繁，已被速率限制，{ $retry_after_secs } 秒后重试
 
@@ -365,6 +436,8 @@ perm-provider-role-not-found = 角色 '{ $role }' 未找到
 perm-provider-load-error = 加载配置失败: { $reason }
 perm-provider-check-error = 权限检查失败: { $reason }
 perm-provider-unknown = 未知错误: { $reason }
+perm-rate-limiter-error = 限流后端故障: { $error }
+perm-rate-limit-audit-dropped = 限流审计事件已丢弃: { $error }
 
 sql-parse-error = SQL 解析失败: { $reason }
 sql-unsupported-statement = 不支持的 SQL 语句类型: { $stmt_type }
@@ -389,8 +462,16 @@ auth-user-limit-reached = 用户存储已达上限: { $reason }
 metrics-export-error = 导出失败: { $reason }
 metrics-not-initialized = 收集器未初始化
 metrics-unknown = 未知指标错误: { $reason }
+metrics-collector-not-configured = 指标收集器未配置（请使用 with_metrics_collector）
+metrics-export-join-failed = 指标导出任务 join 失败: { $error }
+metrics-slow-query = 慢查询: query_type={ $query_type } duration_ms={ $duration_ms } threshold_ms={ $threshold_ms }
+metrics-feature-not-enabled = metrics 特性未启用（重新编译时启用 metrics 特性以暴露收集器端点）
 
 circuit-breaker = 断路器处于 { $state } 状态
+circuit-breaker-closed = 断路器闭合: successes={ $successes } success_threshold={ $threshold }
+circuit-breaker-opened = 断路器打开: failures={ $failures } failure_threshold={ $threshold }
+circuit-breaker-reopened = 断路器重新打开: half-open 探测失败
+circuit-breaker-half-open = 断路器半开: timeout_ms={ $timeout_ms }
 
 audit-builder-operation-required = 操作类型为必填项
 audit-builder-entity-type-required = 实体类型为必填项
@@ -404,6 +485,8 @@ retry-timeout = 重试在 { $timeout_ms }ms 后超时: { $last_error }
 saga-execution-failed = Saga 执行失败: { $reason }
 saga-compensation-failed = Saga 补偿失败: { $reason }
 saga-timeout = Saga 超时: { $reason }
+saga-compensation-no-pool = 补偿会话不可用: 分片 { $shard_id } 无可用连接池
+saga-compensation-session-unavailable = 补偿会话不可用: { $error }
 
 snowflake-clock-backtrack = 时钟回拨: 等待后的时间戳 { $waited_ts } 仍落后于上次使用的 { $last_ts }
 snowflake-timestamp-overflow = 时间戳溢出: { $timestamp } 超出 41 位容量
@@ -498,6 +581,20 @@ cli-check-edit-file = 请检查并编辑生成的迁移文件以确保正确性
 cli-list-title = 迁移文件列表
 cli-list-directory = 目录: { $path }
 cli-list-total-count = 共 { $count } 个迁移文件
+cli-invalid-limit = limit 不能超过 1000000（0 表示不限制）
+cli-invalid-operation = operation 必须是 create/read/update/delete/login/logout/permission-change/config-change 之一
+cli-invalid-severity = severity 必须是 info/low/medium/high/critical 之一
+cli-invalid-status = status 必须是 success/failure/partial/unknown 之一
+cli-invalid-since = since 必须是 RFC 3339 时间戳（例如 2026-01-01T00:00:00Z）
+cli-invalid-until = until 必须是 RFC 3339 时间戳（例如 2026-01-01T00:00:00Z）
+cli-invalid-total-shards = total_shards 必须在 1 到 10000 之间
+cli-invalid-strategy = strategy 必须是 yearly/monthly/daily/hash/consistent-hash 之一
+cli-invalid-route-key = route_key 不能为空
+cli-empty-role-or-table = role 与 table 不能为空
+cli-invalid-action = action 必须是 select/insert/update/delete 之一
+cli-permissions-file-unavailable = 权限配置文件不存在或不可读
+cli-permissions-file-load-failed = 权限配置文件加载失败: { $error }
+cli-permissions-file-invalid = 权限配置文件无法求值（配置格式错误）
 
 pool-invalid-config = 无效的配置: { $error }
 pool-read-config-failed = 读取权限配置文件 '{ $path }' 失败: { $error }
@@ -505,6 +602,7 @@ pool-parse-config-failed = 解析权限配置文件 '{ $path }' 失败: { $error
 pool-yaml-parse-error = '{ $source }' 中的 YAML 解析错误: { $error }
 pool-invalid-db-url = 无效的数据库 URL: { $error }
 pool-recreate-failed = 重新创建连接失败: { $error }
+pool-log-acquire-timeout = 连接池获取超时: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
 session-txn-begin-failed = 开始事务失败: { $error }
 session-txn-begin-graph-failed = 开始图事务失败: { $error }
 session-txn-commit-failed = 提交图事务失败: { $error }
@@ -515,6 +613,46 @@ session-ddl-parse-failed = DDL SQL 解析失败: { $error }
 session-ddl-validation-error = DDL 验证错误: { $error }
 session-unknown-operation = 未知操作: { $operation }
 session-permission-denied = 对 { $table } 的 { $action } 权限被拒绝
+session-for-update-txn-required = query_rows_for_update 需要活动事务（请先调用 begin_transaction）
+session-for-update-relational-required = query_rows_for_update 需要关系型（SeaORM）后端
+session-isolation-relational-required = begin_transaction_with_isolation 需要关系型（SeaORM）后端
+session-log-sql-parse-denied = 权限被拒绝: role={ $role } reason=sql-parse-failure (fail-closed)
+session-log-permission-denied = 权限被拒绝: action={ $action } table={ $table }
+session-log-rate-limited = 速率受限: 表访问被限流 (retry_after={ $retry_after })
+
+copy-path-empty = COPY 文件路径不能为空
+copy-insert-column-required = INSERT 至少需要一列
+copy-insert-row-required = 多行 INSERT 至少需要一行（空 VALUES 无意义）
+copy-in-incompatible-connection = （连接池返回了不兼容的连接: { $error }）
+copy-payload-path-utf8 = COPY 载荷临时路径不是有效的 UTF-8
+copy-payload-cleanup-failed = DuckDB COPY 载荷临时文件清理失败: { $error }
+copy-driver-feature-missing = ——启用 postgres 或 duckdb 驱动特性后方可使用 COPY
+copy-payload-create-failed = 无法创建 COPY 载荷临时文件
+
+duckdb-execute-batch-failed = DuckDB execute_batch 失败: { $error }
+duckdb-copy-prepare-failed = DuckDB COPY 预处理失败: { $error }
+duckdb-copy-execute-failed = DuckDB COPY 执行失败: { $error }
+duckdb-copy-fetch-failed = DuckDB COPY 结果读取失败: { $error }
+duckdb-copy-count-read-failed = DuckDB COPY 计数列读取失败: { $error }
+
+repository-version-column-unsafe = repository 版本列必须是安全标识符: '{ $column }'
+repository-version-field-missing = update_if_version 要求实体包含字段 '{ $column }'
+repository-version-column-integer = 版本列 '{ $column }' 必须是整数
+
+shard-route-unregistered = 分片键 '{ $key }' 路由到未注册的分片 { $shard_id }
+
+migration-history-table-invalid = 非法的迁移历史表名: { $name }
+
+query-cache-get-failed = 查询缓存读取失败: { $error }
+query-cache-decode-failed = 查询缓存解码失败: { $error }
+query-cache-encode-failed = 查询缓存编码失败: { $error }
+query-cache-fill-failed = 查询缓存回填失败: { $error }
+query-cache-clock-before-epoch = 系统时钟早于 Unix 纪元: { $error }
+query-cache-invalidate-failed = 查询缓存失效操作失败: { $error }
+query-cache-tables-required = 查询缓存要求 tables 中至少声明一个表；未声明表的查询永远无法失效（fail-closed）
+query-cache-version-read-failed = 查询缓存表版本读取失败: { $error }
+query-cache-params-encode-failed = 查询缓存参数编码失败: { $error }
+query-cache-table-name-invalid = 查询缓存表名无效: '{ $table }'（允许字母/数字/下划线/点，不得以数字开头）
 "#;
 
 // ============================================================================
@@ -672,5 +810,164 @@ mod tests {
             format_from_bundle("zh", "query-error-suggestion-code-table", &[]),
             Some("参考错误码表定位处理策略".to_string())
         );
+    }
+
+    /// 守卫：错误消息与日志接线的新键在 en/zh 双束均存在
+    /// （缺键时 to_localized_string() / t() 会退化为裸键）
+    #[test]
+    fn test_new_wired_keys_present_both_bundles() {
+        const NEW_KEYS: &[&str] = &[
+            "db-unsupported",
+            "db-version-conflict",
+            "circuit-breaker-closed",
+            "circuit-breaker-opened",
+            "circuit-breaker-reopened",
+            "circuit-breaker-half-open",
+            "metrics-collector-not-configured",
+            "metrics-export-join-failed",
+            "metrics-slow-query",
+            "metrics-feature-not-enabled",
+            "pool-log-acquire-timeout",
+            "saga-compensation-no-pool",
+            "saga-compensation-session-unavailable",
+            "session-for-update-txn-required",
+            "session-for-update-relational-required",
+            "session-isolation-relational-required",
+            "session-log-sql-parse-denied",
+            "session-log-permission-denied",
+            "session-log-rate-limited",
+            "cli-invalid-limit",
+            "cli-invalid-operation",
+            "cli-invalid-severity",
+            "cli-invalid-status",
+            "cli-invalid-since",
+            "cli-invalid-until",
+            "cli-invalid-total-shards",
+            "cli-invalid-strategy",
+            "cli-invalid-route-key",
+            "cli-empty-role-or-table",
+            "cli-invalid-action",
+            "cli-permissions-file-unavailable",
+            "cli-permissions-file-load-failed",
+            "cli-permissions-file-invalid",
+            "perm-rate-limiter-error",
+            "perm-rate-limit-audit-dropped",
+            "copy-path-empty",
+            "copy-insert-column-required",
+            "copy-insert-row-required",
+            "copy-in-incompatible-connection",
+            "copy-payload-path-utf8",
+            "copy-payload-cleanup-failed",
+            "copy-driver-feature-missing",
+            "copy-payload-create-failed",
+            "duckdb-execute-batch-failed",
+            "duckdb-copy-prepare-failed",
+            "duckdb-copy-execute-failed",
+            "duckdb-copy-fetch-failed",
+            "duckdb-copy-count-read-failed",
+            "repository-version-column-unsafe",
+            "repository-version-field-missing",
+            "repository-version-column-integer",
+            "shard-route-unregistered",
+            "migration-history-table-invalid",
+            "query-cache-get-failed",
+            "query-cache-decode-failed",
+            "query-cache-encode-failed",
+            "query-cache-fill-failed",
+            "query-cache-clock-before-epoch",
+            "query-cache-invalidate-failed",
+            "query-cache-tables-required",
+            "query-cache-version-read-failed",
+            "query-cache-params-encode-failed",
+            "query-cache-table-name-invalid",
+        ];
+        for key in NEW_KEYS {
+            assert!(
+                format_from_bundle("en", key, &[]).is_some(),
+                "en bundle missing key: {key}"
+            );
+            assert!(
+                format_from_bundle("zh", key, &[]).is_some(),
+                "zh bundle missing key: {key}"
+            );
+        }
+    }
+
+    /// 守卫：新键模板的占位符名全部可解析——提供超集参数格式化后，
+    /// 输出不得残留 `{ $…}` 字面（Fluent 对缺失/拼错的占位符会原样保留）
+    #[test]
+    fn test_new_wired_keys_placeholders_resolve_both_bundles() {
+        let superset_args = [
+            ("error", "E".to_string()),
+            ("message", "M".to_string()),
+            ("table", "T".to_string()),
+            ("id", "1".to_string()),
+            ("column", "C".to_string()),
+            ("key", "K".to_string()),
+            ("shard_id", "2".to_string()),
+            ("name", "N".to_string()),
+            ("role", "R".to_string()),
+            ("action", "A".to_string()),
+            ("retry_after", "RA".to_string()),
+            ("retry_after_secs", "3".to_string()),
+            ("waited_ms", "4".to_string()),
+            ("timeout_ms", "5".to_string()),
+            ("waiters", "6".to_string()),
+            ("successes", "7".to_string()),
+            ("failures", "8".to_string()),
+            ("threshold", "9".to_string()),
+            ("query_type", "Q".to_string()),
+            ("duration_ms", "10".to_string()),
+            ("threshold_ms", "11".to_string()),
+        ];
+        const NEW_KEYS: &[&str] = &[
+            "db-unsupported",
+            "db-version-conflict",
+            "circuit-breaker-closed",
+            "circuit-breaker-opened",
+            "circuit-breaker-half-open",
+            "metrics-export-join-failed",
+            "metrics-slow-query",
+            "pool-log-acquire-timeout",
+            "saga-compensation-no-pool",
+            "saga-compensation-session-unavailable",
+            "session-log-sql-parse-denied",
+            "session-log-permission-denied",
+            "session-log-rate-limited",
+            "cli-permissions-file-load-failed",
+            "perm-rate-limiter-error",
+            "perm-rate-limit-audit-dropped",
+            "copy-in-incompatible-connection",
+            "copy-payload-cleanup-failed",
+            "duckdb-execute-batch-failed",
+            "duckdb-copy-prepare-failed",
+            "duckdb-copy-execute-failed",
+            "duckdb-copy-fetch-failed",
+            "duckdb-copy-count-read-failed",
+            "repository-version-column-unsafe",
+            "repository-version-field-missing",
+            "repository-version-column-integer",
+            "shard-route-unregistered",
+            "migration-history-table-invalid",
+            "query-cache-get-failed",
+            "query-cache-decode-failed",
+            "query-cache-encode-failed",
+            "query-cache-fill-failed",
+            "query-cache-clock-before-epoch",
+            "query-cache-invalidate-failed",
+            "query-cache-version-read-failed",
+            "query-cache-params-encode-failed",
+            "query-cache-table-name-invalid",
+        ];
+        for key in NEW_KEYS {
+            for lang in ["en", "zh"] {
+                let formatted = format_from_bundle(lang, key, &superset_args)
+                    .unwrap_or_else(|| panic!("{lang} bundle missing key: {key}"));
+                assert!(
+                    !formatted.contains("{ $"),
+                    "{lang}/{key} left an unresolved placeholder: {formatted}"
+                );
+            }
+        }
     }
 }
