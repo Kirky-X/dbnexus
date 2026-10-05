@@ -189,7 +189,7 @@ impl MigrationExecutor {
     /// 定制迁移历史表名
     ///
     /// 历史表名以 SQL 标识符直拼进建表/INSERT/DELETE 语句，因此必须通过
-    /// [`is_safe_identifier`] 白名单校验（字母或下划线开头，仅含字母/数字/
+    /// `is_safe_identifier` 白名单校验（字母或下划线开头，仅含字母/数字/
     /// 下划线，长度 1-64），不合法时返回 `DbError::Config` 而非静默回退。
     pub fn with_history_table(mut self, name: &str) -> Result<Self, DbError> {
         if !is_safe_identifier(name) {
@@ -545,7 +545,7 @@ const DOWN_MARKERS: [&str; 6] = [
 
 /// 迁移文件 UP/DOWN 段标记集合（可定制）
 ///
-/// 默认值为内置 [`UP_MARKERS`]/[`DOWN_MARKERS`] 常量副本。标记匹配口径：
+/// 默认值为内置 `UP_MARKERS`/`DOWN_MARKERS` 常量副本。标记匹配口径：
 /// 逐行 trim 后大小写不敏感的行首前缀匹配——带 `--` 或 `:` 的标记走纯前缀
 /// 分支，裸词标记额外要求词边界。内置集不识别的形态（如 `-- --- UP ---`
 /// 分隔线行）可经定制标记覆盖（如 `up: ["-- --- UP"]`）。

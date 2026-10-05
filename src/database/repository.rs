@@ -180,7 +180,7 @@ impl JsonRepository {
     ///
     /// 设置后 `find_by_id` / `find_all` / `find_all_cursor` 生成
     /// `SELECT {columns}` 而非 `SELECT *`；列名逐一校验
-    /// [`is_safe_identifier`]。
+    /// `is_safe_identifier`。
     ///
     /// # Errors
     ///

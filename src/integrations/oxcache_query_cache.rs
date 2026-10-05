@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 //! `OxcacheQueryCache` — 查询缓存装饰器（`oxcache-integration` feature）
 //!
-//! 把 oxcache [`CacheBackend`] 装配到 [`DbPool`] 的参数化查询通道上：
+//! 把 oxcache [`oxcache::backend::CacheBackend`] 装配到
+//! [`crate::database::pool::DbPool`] 的参数化查询通道上：
 //! `query_cached` 以安全上下文 + SQL + 绑定参数 + 表版本戳派生缓存 key
 //! （SHA-256），命中直接返回缓存行集，未命中穿透执行并回填；
 //! `invalidate_table` 在写路径后按表戳版本，使提及该表的缓存项自然失效。
@@ -36,7 +37,7 @@
 //!   于数据条目）——**容量规划要求 capacity ≥ 表数 + 数据条目工作集**，
 //!   病态小容量（capacity < 表数）不受支持
 //! - **缓存写失败显性化**：穿透执行成功但回填失败时返回
-//!   [`DbError::Cache`]（行数据不丢，查询幂等可安全重试），不静默吞掉
+//!   [`crate::foundation::DbError::Cache`]（行数据不丢，查询幂等可安全重试），不静默吞掉
 //! - **默认零行为变化**：不装饰时 `DbPool` 查询通道完全不受影响；本
 //!   feature 未启用时无任何编译面
 

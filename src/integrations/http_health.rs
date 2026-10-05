@@ -3,7 +3,7 @@
 //! HTTP 健康端点生成器（`http-health` feature）
 //!
 //! [`HealthRouterBuilder`] 把既有健康数据源装配为挂载三个标准端点的
-//! axum [`Router`]，供 K8s/反代健康探测与 Prometheus 抓取直接消费：
+//! axum [`axum::Router`]，供 K8s/反代健康探测与 Prometheus 抓取直接消费：
 //!
 //! | 端点 | 语义 | 数据源 | 成功态 |
 //! |------|------|--------|--------|
@@ -13,7 +13,7 @@
 //!
 //! # 契约
 //!
-//! - **生成而非服务**：`build()` 只产出 [`Router`]，监听端口/优雅停机由
+//! - **生成而非服务**：`build()` 只产出 [`axum::Router`]，监听端口/优雅停机由
 //!   消费方用 `axum::serve` 自行编排——生成器不占用运行时配置
 //! - **readiness fail-closed**：快照 `status` 非三态值（healthy/degraded/
 //!   unhealthy）一律判不就绪，未知字段形态不产生误放行；熔断器 `Open`
