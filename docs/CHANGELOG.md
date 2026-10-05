@@ -57,6 +57,9 @@
 - **`global-index` 无驱动组合编译裂缝**：`global-index` feature 补蕴含 `entity-macros`（sea-orm 派生宏转发）——`src/storage/global_index.rs` 的 `DeriveEntityModel`/`DeriveRelation` 依赖 sea-orm/macros，无驱动组合（`all-optional`/`data-management`/`global-index`）此前编译失败（HEAD 复现 23 错；CI 因恒带 `sqlite` 未暴露）；契约测试固化蕴含
 - **批量写入（`copy`）**：多值 INSERT 分块按 `min(500, bind_param_limit/列数)` 收缩（宽表单语句占位符数恒不超后端绑定上限，列数超上限构建期显性报错）；DuckDB CSV 编码对 JSON 对象/数组值补齐引用转义（含逗号/引号值不再破坏列结构）；COPY 载荷临时文件权限收紧为属主 0600 并经 `spawn_blocking` 下放同步文件 I/O
 - **指标（`metrics`）**：Prometheus 导出的 `type` label value 按 text exposition 规则转义（`\` `"` 换行）——`record_query` 公开 API 的自由字符串含注入载荷时不再可逃逸 label 或伪造指标行
+- **rustdoc 断链（`RUSTDOCFLAGS=-D warnings` 口径）**：7 处文档链接修复——`is_safe_identifier`/`UP_MARKERS`/`DOWN_MARKERS` 为 `pub(crate)` 私有项改纯代码字体（executor.rs/repository.rs）；`oxcache_query_cache` 与 `http_health` 模块级文档的短链接（`CacheBackend`/`DbPool`/`DbError::Cache`/`Router`）在模块声明带外层文档时按父模块作用域解析、模块内 `use` 不可见，改全限定路径
+- **session 模块 feature 组合编译裂缝**：`json_to_sea_value`/`build_statement` 补 `sql-parser` 门控（调用点全部位于 raw 查询路径，neo4j-only 等组合下不再死代码告警）；`apply_masking` 补 `data-protection × (postgres|sqlite)` 门控（调用点仅存在于 postgres/sqlite 两个 raw 分支，duckdb-only 组合下不再死代码告警）；`query_rows_impl` 无 sql-parser 分支的提前返回补 `needless_return` 豁免（cfg 互斥块内该 return 恰为函数尾，clippy 单组合口径误报）；session 测试模块 `use super::*` glob 按 feature 矩阵统一豁免（裸组合/部分组合下 unused 告警）
+- **db_pool 死连接测试不可模拟（如实披露）**：`db_pool` 两用例（cleanup/validate 杀死连接）保持 `#[ignore]`——sea-orm 2.0 sqlite 走 `RusqliteSharedConnection` 进程内嵌库，`SELECT 1` 恒成功、`close` 无法真正杀死连接，「死连接」不可模拟；恢复条件为 cleanup/validate 支持注入式健康探针（原因已内联于 ignore 属性）；Neo4j 服务器依赖用例维持环境变量门控
 
 ## [0.6.0-rc.6] - 2026-09-28
 
