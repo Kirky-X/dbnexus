@@ -289,6 +289,9 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
+            // cfg 互斥块中此 return 在 not 分支恰为函数尾——clippy
+            // needless_return 按单组合误报，语义上必须显性提前返回
+            #[allow(clippy::needless_return)]
             return Err(DbError::Permission(
                 "query_rows requires the sql-parser feature to be enabled".to_string(),
             ));
@@ -552,7 +555,13 @@ impl Session {
     }
 
     /// 查询出口字段脱敏
-    #[cfg(feature = "data-protection")]
+    ///
+    /// 调用点仅存在于 postgres/sqlite 两个 raw 查询分支；其余驱动组合
+    /// （duckdb-only 等）下不编译，避免 feature 组合性死代码告警。
+    #[cfg(all(
+        feature = "data-protection",
+        any(feature = "postgres", feature = "sqlite")
+    ))]
     async fn apply_masking(&self, rows: &mut [serde_json::Value]) {
         let dp = { self.pool_inner.data_protection.read().await.clone() };
         if let Some(m) = dp.masking.as_ref() {

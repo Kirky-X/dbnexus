@@ -2,10 +2,19 @@
 // SPDX-License-Identifier: MIT
 //! 大文件拆分：自 session.rs 按职责纯移动的测试模块（行为不变）。
 
+// feature 矩阵下各子测试模块激活集合不同：裸组合/部分组合（如 postgres 单驱
+// 动、neo4j-only）时本 use 必然 unused——测试文件统一豁免（对齐 feature 矩阵
+// 测试惯例）。子测试模块经本导入取 session 项（DbPool/DbError/Session 等），
+// 故不删；模块内 glob 语义依赖此处（super::* 链式取 session 作用域）。
+#[allow(unused_imports)]
 use super::*;
 
 #[cfg(all(test, feature = "ladybug"))]
 mod graph_tests {
+    #[cfg(feature = "ladybug")]
+    // feature 矩阵下各子测试模块激活集合不同：裸组合/部分组合时本 use
+    // 必然 unused——测试文件统一豁免（对齐 feature 矩阵测试惯例）
+    #[allow(unused_imports)]
     use super::*;
     use crate::database::graph::{GraphExecResult, GraphValue};
 
@@ -389,6 +398,9 @@ mod graph_tests {
 #[cfg(test)]
 #[cfg(all(feature = "permission", feature = "sqlite"))]
 mod vuln_0001_tests {
+    // feature 矩阵下各子测试模块激活集合不同：裸组合/部分组合时本 use
+    // 必然 unused——测试文件统一豁免（对齐 feature 矩阵测试惯例）
+    #[allow(unused_imports)]
     use super::*;
 
     /// vuln-0001 集成测试：admin 角色绕过权限检查仍返回 Ok（带审计日志）
@@ -516,6 +528,9 @@ roles:
 #[cfg(test)]
 #[cfg(all(feature = "permission", feature = "sql-parser"))]
 mod vuln_0003_tests {
+    // feature 矩阵下各子测试模块激活集合不同：裸组合/部分组合时本 use
+    // 必然 unused——测试文件统一豁免（对齐 feature 矩阵测试惯例）
+    #[allow(unused_imports)]
     use super::*;
 
     /// vuln-0003：SqlParser 对 INSERT 的正确处理
@@ -603,6 +618,9 @@ mod vuln_0003_tests {
 
 #[cfg(all(test, feature = "ladybug"))]
 mod vuln_0005_tests {
+    // feature 矩阵下各子测试模块激活集合不同：裸组合/部分组合时本 use
+    // 必然 unused——测试文件统一豁免（对齐 feature 矩阵测试惯例）
+    #[allow(unused_imports)]
     use super::*;
     use crate::database::graph::{GraphExecResult, GraphValue};
 
@@ -1338,7 +1356,7 @@ mod isolation_level_tests {
     /// R-txn-002: 四档级别映射到 sea-orm 不丢档
     #[test]
     fn all_levels_map_to_sea_orm() {
-        use DbIsolationLevel::*;
+        use super::DbIsolationLevel::*;
         let _ = ReadUncommitted.into_sea_orm();
         let _ = ReadCommitted.into_sea_orm();
         let _ = RepeatableRead.into_sea_orm();

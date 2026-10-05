@@ -99,6 +99,10 @@ struct SessionState {
 ///
 /// Null 绑定为无类型参数（列类型由引擎推断）；数组/对象序列化为
 /// JSON 字符串（与仓储字面量时代的存储形态一致）。
+///
+/// 仅 sql-parser 组合的调用点使用（execute 的 raw 查询路径）；neo4j-only
+/// 等组合下不编译，避免 feature 组合性死代码告警。
+#[cfg(feature = "sql-parser")]
 fn json_to_sea_value(v: &serde_json::Value) -> sea_orm::Value {
     match v {
         serde_json::Value::Null => None::<String>.into(),
@@ -118,6 +122,9 @@ fn json_to_sea_value(v: &serde_json::Value) -> sea_orm::Value {
 }
 
 /// 语句构造：空参走 `from_string`（与既有路径完全一致），带参走绑定
+///
+/// 门控同上：调用点全部位于 sql-parser 组合的 raw 查询路径。
+#[cfg(feature = "sql-parser")]
 fn build_statement(
     backend: sea_orm::DatabaseBackend,
     sql: String,
