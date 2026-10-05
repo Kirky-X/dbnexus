@@ -559,4 +559,49 @@ mod merge_tests {
         assert!(apply_global_pagination(merged.clone(), 2, 99).is_empty());
         assert!(apply_global_pagination(merged, 0, 0).is_empty());
     }
+
+    // ===== 补充测试：聚合辅助与全局排序分页 =====
+
+    #[test]
+    fn test_aggregate_helpers() {
+        // ScatterQuery 关联函数：COUNT/SUM/AVG/MIN/MAX
+        let mut result = ScatterResult {
+            shard_row_counts: vec![(0, 2), (1, 3)],
+            failed_shards: vec![],
+            aggregated: None,
+            shard_rows: vec![],
+            merged_rows: vec![],
+        };
+        match ScatterGatherExecutor::aggregate_count(&result) {
+            AggregateValue::Count(5) => {}
+            other => panic!("expected Count(5), got {other:?}"),
+        }
+        result.shard_row_counts.clear();
+        match ScatterGatherExecutor::aggregate_count(&result) {
+            AggregateValue::Count(0) => {}
+            other => panic!("expected Count(0), got {other:?}"),
+        }
+
+        match ScatterGatherExecutor::aggregate_sum(&[1.0, 2.0, 3.5]) {
+            AggregateValue::Sum(v) => assert!((v - 6.5).abs() < f64::EPSILON),
+            other => panic!("expected Sum(6.5), got {other:?}"),
+        }
+        // 空集 AVG 为 0，非空为均值
+        match ScatterGatherExecutor::aggregate_avg(&[]) {
+            AggregateValue::Avg(v) => assert!((v - 0.0).abs() < f64::EPSILON),
+            other => panic!("expected Avg(0.0), got {other:?}"),
+        }
+        match ScatterGatherExecutor::aggregate_avg(&[2.0, 4.0]) {
+            AggregateValue::Avg(v) => assert!((v - 3.0).abs() < f64::EPSILON),
+            other => panic!("expected Avg(3.0), got {other:?}"),
+        }
+        match ScatterGatherExecutor::aggregate_min(&[3.0, 1.0, 2.0]) {
+            AggregateValue::Min(v) => assert!((v - 1.0).abs() < f64::EPSILON),
+            other => panic!("expected Min(1.0), got {other:?}"),
+        }
+        match ScatterGatherExecutor::aggregate_max(&[3.0, 1.0, 2.0]) {
+            AggregateValue::Max(v) => assert!((v - 3.0).abs() < f64::EPSILON),
+            other => panic!("expected Max(3.0), got {other:?}"),
+        }
+    }
 }

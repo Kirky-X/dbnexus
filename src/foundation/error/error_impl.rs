@@ -111,4 +111,41 @@ mod tests {
         let err: DbError = "config error".into();
         assert_eq!(err.message(), "config error");
     }
+
+    #[test]
+    fn test_message_rate_limited_and_unsupported() {
+        let with_secs = DbError::RateLimited {
+            retry_after_secs: Some(7),
+        };
+        assert!(
+            with_secs.message().contains("7"),
+            "应携带建议秒数: {:?}",
+            with_secs.message()
+        );
+        let without_secs = DbError::RateLimited {
+            retry_after_secs: None,
+        };
+        assert!(!without_secs.message().is_empty());
+
+        let unsupported = DbError::Unsupported("raw backend".to_string());
+        assert_eq!(unsupported.message(), "raw backend");
+    }
+
+    #[test]
+    fn test_message_version_conflict() {
+        let err = DbError::VersionConflict {
+            table: "orders".to_string(),
+            id: 42,
+        };
+        let msg = err.message();
+        assert!(msg.contains("orders"), "应携带表名: {msg:?}");
+        assert!(msg.contains("42"), "应携带行 ID: {msg:?}");
+    }
+
+    #[cfg(feature = "validation")]
+    #[test]
+    fn test_message_validation() {
+        let err = DbError::Validation("bad payload".to_string());
+        assert_eq!(err.message(), "bad payload");
+    }
 }

@@ -24,20 +24,21 @@ impl Session {
             let state = self.state.write().await;
             #[cfg(any(feature = "ladybug", feature = "neo4j"))]
             if state.graph_transaction.is_some() {
-                return Err(DbError::Transaction(
-                    "Already in graph transaction".to_string(),
-                ));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-already-in-graph-transaction",
+                )));
             }
             if state.transaction.is_some() {
-                return Err(DbError::Transaction("Already in transaction".to_string()));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-already-in-transaction",
+                )));
             }
         }
 
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config(
-                "Connection not available - Session may have been invalidated".to_string(),
-            )
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("session-connection-not-available")))?;
 
         // 图连接与 raw 后端不支持隔离级别语义
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
@@ -67,9 +68,9 @@ impl Session {
         };
         if has_conflict {
             let _ = transaction.rollback().await;
-            return Err(DbError::Transaction(
-                "Already in transaction (concurrent begin detected)".to_string(),
-            ));
+            return Err(DbError::Transaction(i18n::t_simple(
+                "session-already-in-transaction-concurrent",
+            )));
         }
         let mut state = self.state.write().await;
         state.transaction = Some(Arc::new(transaction));

@@ -1186,3 +1186,74 @@ mod key_routing_tests {
         assert!(empty.route_for_key("order-1001").is_err());
     }
 }
+
+#[cfg(test)]
+mod strategy_edge_tests {
+    use super::*;
+
+    /// current_shard 恒落在合法范围，boxed_clone 后路由行为一致
+    #[test]
+    fn current_shard_in_range_and_clone_consistent() {
+        let strategies: Vec<Box<dyn ShardingStrategy>> = vec![
+            Box::new(YearlyStrategy),
+            Box::new(MonthlyStrategy),
+            Box::new(DailyStrategy),
+            Box::new(HashStrategy),
+        ];
+        for s in &strategies {
+            let id = s.current_shard(7);
+            assert!(id < 7, "strategy '{}' out of range: {id}", s.name());
+            let cloned = s.boxed_clone();
+            assert_eq!(cloned.name(), s.name());
+        }
+    }
+
+    /// calculate_for_key：total_shards=0 恒返回 0；已知策略名校验
+    #[test]
+    fn calculate_for_key_zero_shards_and_known_names() {
+        let strategies: Vec<Box<dyn ShardingStrategy>> = vec![
+            Box::new(YearlyStrategy),
+            Box::new(MonthlyStrategy),
+            Box::new(DailyStrategy),
+            Box::new(HashStrategy),
+        ];
+        for s in &strategies {
+            assert_eq!(s.calculate_for_key("any-key", 0), 0);
+        }
+
+        for name in [
+            "yearly",
+            "monthly",
+            "daily",
+            "hash",
+            "consistent-hash",
+            "YEARLY",
+        ] {
+            assert!(is_known_strategy(name), "{name} 应为已知策略");
+        }
+        assert!(!is_known_strategy("no-such-strategy"));
+    }
+
+    /// get_session_for_key：已注册分片拿到会话，未注册返回 Ok(None)
+    #[tokio::test]
+    async fn get_session_for_key_none_when_unregistered() {
+        let router = ShardRouter::new(HashStrategy, 2);
+        // 两个分片都未注册 → Ok(None)
+        let session = router.get_session_for_key("order-1").await.unwrap();
+        assert!(session.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_session_for_key_returns_session_when_registered() {
+        let router = ShardRouter::new(HashStrategy, 2).with_session_role("admin");
+        let pool = Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        router.add_shard(0, pool.clone());
+        router.add_shard(1, pool);
+        let session = router.get_session_for_key("order-1").await.unwrap();
+        assert!(session.is_some(), "已注册分片必须拿到会话");
+    }
+}

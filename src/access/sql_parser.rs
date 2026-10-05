@@ -1686,4 +1686,439 @@ mod tests {
         let normalized = normalize_unicode(ligature);
         assert!(normalized.contains("fi") || normalized.contains("\u{FB01}"));
     }
+
+    // ========================================================================
+    // SqlParseError 的 i18n 键与参数
+    // ========================================================================
+
+    #[test]
+    fn test_sql_parse_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        assert_eq!(
+            SqlParseError::ParseError("bad".to_string()).message_key(),
+            "sql-parse-error"
+        );
+        assert_eq!(
+            SqlParseError::ParseError("bad".to_string()).message_args(),
+            vec![("reason", "bad".to_string())]
+        );
+        assert_eq!(
+            SqlParseError::UnsupportedStatement("DDL".to_string()).message_key(),
+            "sql-unsupported-statement"
+        );
+        assert_eq!(
+            SqlParseError::UnsupportedStatement("DDL".to_string()).message_args(),
+            vec![("stmt_type", "DDL".to_string())]
+        );
+        assert_eq!(
+            SqlParseError::EmptyStatement.message_key(),
+            "sql-empty-statement"
+        );
+        assert!(SqlParseError::EmptyStatement.message_args().is_empty());
+        assert_eq!(
+            SqlParseError::MultipleStatements.message_key(),
+            "sql-multiple-statements"
+        );
+        assert!(SqlParseError::MultipleStatements.message_args().is_empty());
+        assert_eq!(
+            SqlParseError::ContainsVariables("x".to_string()).message_key(),
+            "sql-contains-variables"
+        );
+        assert_eq!(
+            SqlParseError::ContainsVariables("x".to_string()).message_args(),
+            vec![("details", "x".to_string())]
+        );
+    }
+
+    // ========================================================================
+    // parse_single 错误路径
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_statement_exceeds_max_length_rejected() {
+        let parser = SqlParser::new().await;
+        let sql = format!("SELECT {}", "1".repeat(MAX_SQL_LENGTH + 1));
+        let err = parser.parse_single(&sql).await.unwrap_err();
+        assert!(err.to_string().contains("maximum length"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_query_depth_exceeded_rejected() {
+        let parser = SqlParser::new().await;
+        // 深度 > 10 且含分号 → 走深度检查分支
+        let sql = format!("SELECT {} 1;", "(".repeat(MAX_QUERY_DEPTH + 1));
+        let err = parser.parse_single(&sql).await.unwrap_err();
+        assert!(err.to_string().contains("depth"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_injection_pattern_rejected_by_parse_single() {
+        let parser = SqlParser::new().await;
+        let err = parser
+            .parse_single("SELECT * FROM users WHERE id = 1 UNION SELECT password FROM admin")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("injection"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_table_name_too_long_rejected() {
+        let parser = SqlParser::new().await;
+        let long_table = "t".repeat(MAX_TABLE_NAME_LENGTH + 1);
+        let err = parser
+            .parse_single(&format!("SELECT * FROM {long_table}"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Table name exceeds"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_parse_syntax_error() {
+        let parser = SqlParser::new().await;
+        let err = parser.parse_single("SELEC * FORM").await.unwrap_err();
+        assert!(matches!(err, SqlParseError::ParseError(_)));
+    }
+
+    // ========================================================================
+    // classify_statement 其余语句类型
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_classify_truncate_without_table_keyword() {
+        let parser = SqlParser::new().await;
+        let parsed = parser.parse_single("TRUNCATE t9").await.unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
+        assert_eq!(parsed.table_name.as_deref(), Some("t9"));
+    }
+
+    #[tokio::test]
+    async fn test_classify_drop_non_table_object() {
+        let parser = SqlParser::new().await;
+        // DROP VIEW 不在 DDL 拦截关键字内，走 Drop 分类且对象非表
+        let parsed = parser.parse_single("DROP VIEW v9").await.unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
+        assert!(parsed.table_name.is_none());
+        assert!(parsed.all_table_names.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_classify_revoke() {
+        let parser = SqlParser::new().await;
+        let parsed = parser
+            .parse_single("REVOKE SELECT ON t9 FROM role1")
+            .await
+            .unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
+        assert!(parsed.table_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_classify_transaction_controls() {
+        let parser = SqlParser::new().await;
+        for sql in ["START TRANSACTION", "COMMIT", "ROLLBACK"] {
+            let parsed = parser.parse_single(sql).await.unwrap();
+            assert_eq!(
+                parsed.operation_type,
+                SqlOperationType::Transaction,
+                "sql: {sql}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_classify_set_statements() {
+        let parser = SqlParser::new().await;
+        // DDL 相关变量 → Ddl
+        let parsed = parser
+            .parse_single("SET SESSION sql_mode = 'STRICT'")
+            .await
+            .unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Ddl);
+        // 普通变量 → Other
+        let parsed = parser.parse_single("SET NAMES utf8").await.unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Other);
+    }
+
+    #[tokio::test]
+    async fn test_classify_other_statement() {
+        let parser = SqlParser::new().await;
+        let parsed = parser.parse_single("USE mydb").await.unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Other);
+        assert!(parsed.table_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_classify_update_with_join_collects_all_tables() {
+        let parser = SqlParser::new().await;
+        let parsed = parser
+            .parse_single("UPDATE t1 INNER JOIN t2 ON t1.id = t2.id SET t1.a = 1")
+            .await
+            .unwrap();
+        assert_eq!(parsed.operation_type, SqlOperationType::Update);
+        assert_eq!(parsed.table_name.as_deref(), Some("t1"));
+        assert!(parsed.all_table_names.contains(&"t2".to_string()));
+    }
+
+    // ========================================================================
+    // 表提取：JOIN / 派生表 / 子查询 / 集合操作
+    // ========================================================================
+
+    async fn tables_of(parser: &SqlParser, sql: &str) -> Vec<String> {
+        parser.parse_single(sql).await.unwrap().all_table_names
+    }
+
+    #[tokio::test]
+    async fn test_extract_join_tables() {
+        let parser = SqlParser::new().await;
+        let tables = tables_of(
+            &parser,
+            "SELECT * FROM orders o JOIN users u ON o.uid = u.id LEFT JOIN items i ON i.oid = o.id",
+        )
+        .await;
+        for t in ["orders", "users", "items"] {
+            assert!(tables.contains(&t.to_string()), "missing {t}: {tables:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extract_derived_table_subquery() {
+        let parser = SqlParser::new().await;
+        let tables = tables_of(
+            &parser,
+            "SELECT * FROM (SELECT id FROM inner_t) AS x JOIN outer_t ON x.id = outer_t.id",
+        )
+        .await;
+        for t in ["inner_t", "outer_t"] {
+            assert!(tables.contains(&t.to_string()), "missing {t}: {tables:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extract_where_subquery_forms() {
+        let parser = SqlParser::new().await;
+        let cases = [
+            "SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2)",
+            "SELECT * FROM t1 WHERE id IN (SELECT id FROM t2)",
+            "SELECT * FROM t1 WHERE id = (SELECT max(id) FROM t2)",
+            "SELECT * FROM t1 WHERE id BETWEEN (SELECT min(id) FROM t2) AND 10",
+            "SELECT * FROM t1 WHERE id IN (1, 2, (SELECT id FROM t2 LIMIT 1))",
+            "SELECT * FROM t1 WHERE name LIKE (SELECT name FROM t2 LIMIT 1)",
+            "SELECT * FROM t1 WHERE NOT (id = (SELECT id FROM t2))",
+            "SELECT * FROM t1 WHERE id > ANY (SELECT id FROM t2)",
+        ];
+        for sql in cases {
+            let tables = tables_of(&parser, sql).await;
+            assert!(
+                tables.contains(&"t2".to_string()),
+                "missing t2 in {sql}: {tables:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extract_expression_subquery_forms() {
+        let parser = SqlParser::new().await;
+        let cases = [
+            "SELECT * FROM t1 WHERE CASE WHEN (SELECT count(*) FROM t2) > 0 THEN 1 ELSE 0 END = 1",
+            "SELECT * FROM t1 WHERE upper((SELECT name FROM t2 LIMIT 1)) = 'x'",
+            "SELECT * FROM t1 HAVING count(*) > (SELECT n FROM t2)",
+        ];
+        for sql in cases {
+            let tables = tables_of(&parser, sql).await;
+            assert!(
+                tables.contains(&"t2".to_string()),
+                "missing t2 in {sql}: {tables:?}"
+            );
+        }
+        // 集合操作与括号主体被 parse_single 的注入拦截挡在门外
+        // （UNION SELECT 属注入模式），走内部提取函数直测
+        let dialect = GenericDialect {};
+        for sql in [
+            "SELECT * FROM t1 UNION SELECT * FROM t2",
+            "SELECT * FROM t1 UNION (SELECT * FROM t2)",
+        ] {
+            let stmts = Parser::parse_sql(&dialect, sql).unwrap();
+            let Statement::Query(q) = &stmts[0] else {
+                panic!("expected query: {sql}")
+            };
+            let mut out = Vec::new();
+            extract_query_tables(q, &mut out);
+            assert!(
+                out.contains(&"t1".to_string()) && out.contains(&"t2".to_string()),
+                "{sql}: {out:?}"
+            );
+        }
+    }
+
+    // ========================================================================
+    // 字面量剥离 / 块注释 / 深度估算
+    // ========================================================================
+
+    #[test]
+    fn test_remove_string_literals_escapes_and_backticks() {
+        // 单引号内容替换为空格
+        assert_eq!(remove_string_literals("SELECT 'a b'"), "SELECT      ");
+        // 双引号内容替换为空格
+        assert_eq!(remove_string_literals(r#"SELECT "x y""#), "SELECT      ");
+        // 转义引号不终止字符串：'a\'b' 六个字符逐一替换
+        assert_eq!(
+            remove_string_literals(r"SELECT 'a\'b'"),
+            format!("SELECT {}", " ".repeat(6))
+        );
+        // 字符串内的反斜杠替换为空格
+        assert_eq!(remove_string_literals(r"SELECT 'a\b'"), "SELECT      ");
+        // 反引号是标识符引用，保留原内容
+        assert_eq!(
+            remove_string_literals("SELECT `col name` FROM t"),
+            "SELECT `col name` FROM t"
+        );
+        // 未闭合字符串到 EOF
+        assert_eq!(remove_string_literals("SELECT 'open"), "SELECT      ");
+    }
+
+    #[test]
+    fn test_strip_block_comments_variants() {
+        // 基本剥离，等长替换：/* + c + */ 共 5 字符
+        assert_eq!(strip_block_comments("SELECT/*c*/1"), "SELECT     1");
+        // 注释内换行保留（行号对齐）
+        assert_eq!(strip_block_comments("A/*\n*/B"), "A  \n  B");
+        // 未闭合注释消费到 EOF
+        assert_eq!(strip_block_comments("A/*xx"), "A    ");
+        // 普通内容不受影响
+        assert_eq!(strip_block_comments("SELECT 1"), "SELECT 1");
+    }
+
+    #[test]
+    fn test_estimate_query_depth_ignores_string_parens() {
+        // 字符串内的括号不计入深度
+        assert_eq!(estimate_query_depth("SELECT '((('"), 1);
+        // 嵌套括号计入
+        assert_eq!(estimate_query_depth("SELECT ((1))"), 3);
+        // 多余右括号不下探（saturating）
+        assert_eq!(estimate_query_depth("SELECT 1)))"), 1);
+    }
+
+    // ========================================================================
+    // 提取函数边界臂（直调内部函数：解析器公开面被注入拦截挡住的分支）
+    // ========================================================================
+
+    #[test]
+    fn test_extract_delete_variants() {
+        let dialect = GenericDialect {};
+
+        // DELETE FROM t1（WithFromKeyword 常规路径）
+        let stmts = Parser::parse_sql(&dialect, "DELETE FROM t1").unwrap();
+        if let Statement::Delete(d) = &stmts[0] {
+            assert_eq!(extract_table_from_delete(d).as_deref(), Some("t1"));
+        }
+
+        // 多表 DELETE：tables 向量非空优先
+        if let Ok(stmts) = Parser::parse_sql(&dialect, "DELETE FROM t1, t2")
+            && let Statement::Delete(d) = &stmts[0]
+        {
+            assert_eq!(extract_table_from_delete(d).as_deref(), Some("t1"));
+        }
+
+        // WITH 前缀删除（派生复杂关系）——只需不 panic 且提取出主表
+        if let Ok(stmts) = Parser::parse_sql(&dialect, "DELETE FROM t1 WHERE id = 1")
+            && let Statement::Delete(d) = &stmts[0]
+        {
+            assert!(extract_table_from_delete(d).is_some());
+        }
+    }
+
+    #[test]
+    fn test_extract_table_with_joins_non_table_relation() {
+        // 表因子非 Table（派生表）→ None
+        let dialect = GenericDialect {};
+        let stmts = Parser::parse_sql(&dialect, "SELECT * FROM (SELECT 1) AS x").unwrap();
+        if let Statement::Query(q) = &stmts[0]
+            && let SetExpr::Select(sel) = q.body.as_ref()
+        {
+            let twj = &sel.from[0];
+            assert!(
+                extract_table_name_from_table_with_joins(twj).is_none(),
+                "派生表关系应提取为 None"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_function_subquery_arg_and_case_operand() {
+        let dialect = GenericDialect {};
+        // 函数参数中的子查询（FunctionArguments::List → Unnamed）
+        let sql = "SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.id = t1.id)";
+        let stmts = Parser::parse_sql(&dialect, sql).unwrap();
+        if let Statement::Query(q) = &stmts[0] {
+            let mut out = Vec::new();
+            extract_query_tables(q, &mut out);
+            assert!(out.contains(&"t2".to_string()), "got {out:?}");
+        }
+    }
+
+    #[test]
+    fn test_estimate_query_depth_multiline_and_tabs() {
+        // 深度只看括号：混合空白/换行不影响
+        assert_eq!(estimate_query_depth("SELECT\n\t((1))\n"), 3);
+        assert_eq!(estimate_query_depth(""), 1);
+    }
+
+    #[test]
+    fn test_with_dialect_constructor() {
+        // with_dialect 忽略方言参数恒用 GenericDialect
+        let parser = futures_block_on_sql_parser_with_dialect("mysql");
+        let parsed = futures_block_on(&parser, "SELECT * FROM users");
+        assert_eq!(parsed.table_name.as_deref(), Some("users"));
+    }
+
+    fn futures_block_on_sql_parser_with_dialect(db: &str) -> SqlParser {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(SqlParser::with_dialect(db))
+    }
+
+    fn futures_block_on(parser: &SqlParser, sql: &str) -> ParsedSqlOperation {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(parser.parse_single(sql))
+            .unwrap()
+    }
+
+    #[test]
+    fn test_with_cache_size_min_clamp_and_clear() {
+        // 容量下限收敛：0 → 单条目缓存，仍可正常工作
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let parser = rt.block_on(SqlParser::with_cache_size(0));
+        let parsed = rt
+            .block_on(parser.parse_single("SELECT * FROM users"))
+            .unwrap();
+        assert_eq!(parsed.table_name.as_deref(), Some("users"));
+        rt.block_on(parser.clear_cache());
+        let (hits, misses) = parser.cache_stats();
+        let _ = (hits, misses);
+    }
+
+    #[test]
+    fn test_parse_operation_async_guard_returns_none_in_runtime() {
+        // async 上下文守卫：parse_operation 在 runtime 内必须返回 None
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let parser = rt.block_on(SqlParser::new());
+        let _guard = rt.enter();
+        assert!(parser.parse_operation("SELECT 1").is_none());
+    }
+
+    #[test]
+    fn test_insert_table_function_object_and_revoke_classify() {
+        let parser = futures_block_on_sql_parser_with_dialect("generic");
+        // REVOKE 走 Dcl 分类
+        let parsed = futures_block_on(&parser, "REVOKE INSERT ON t9 FROM role2");
+        assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
+    }
 }

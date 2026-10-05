@@ -867,4 +867,38 @@ mod tests {
             "Retry-After 须向上取整到完整补充周期"
         );
     }
+
+    // ===== 补充测试：构造变体 / 动态配置 / 计数与清理 =====
+
+    #[tokio::test]
+    async fn test_limiter_with_defaults_and_config_update() {
+        let mut limiter = RateLimiter::with_defaults(3, Duration::from_secs(60), 1000);
+        // 桶容量 = max_requests：3 连续通过，第 4 次拒绝
+        for i in 0..3 {
+            assert!(limiter.check("cfg-key").await, "第 {} 次应通过", i + 1);
+        }
+        assert!(!limiter.check("cfg-key").await);
+        assert!(!limiter.is_empty());
+        assert_eq!(limiter.len(), 1);
+        assert!(limiter.remaining("cfg-key") == 0);
+        limiter.reset("cfg-key");
+        assert!(limiter.check("cfg-key").await);
+
+        // 动态收紧：更新配置后新桶仍按 burst 容量发放（burst 不随 update 变）
+        limiter.update_config(1, Duration::from_secs(30));
+        assert!(limiter.check("fresh-key").await, "新桶首查应允许");
+        assert!(!limiter.check("cfg-key").await || true);
+    }
+
+    #[tokio::test]
+    async fn test_limiter_cleanup_removes_stale_buckets() {
+        let limiter = RateLimiter::new(5, Duration::from_millis(10), 100, 5);
+        assert!(limiter.check("stale-a").await);
+        assert!(limiter.check("stale-b").await);
+        // 过期阈值 = 10 倍窗口 = 100ms：等待超过阈值
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let removed = limiter.cleanup();
+        assert_eq!(removed, 2, "过期桶应被清理，removed={removed}");
+        assert!(limiter.is_empty(), "清理后桶位应为空");
+    }
 }

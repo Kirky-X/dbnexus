@@ -145,3 +145,73 @@ pub struct SagaStepLog {
     /// 错误信息
     pub error: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::error_ext::LocalizedMsg;
+
+    #[test]
+    fn test_saga_error_display() {
+        assert_eq!(
+            SagaError::ExecutionFailed("boom".to_string()).to_string(),
+            "Saga execution failed: boom"
+        );
+        assert_eq!(
+            SagaError::CompensationFailed("undo".to_string()).to_string(),
+            "Saga compensation failed: undo"
+        );
+        assert_eq!(
+            SagaError::Timeout("30s".to_string()).to_string(),
+            "Saga timeout: 30s"
+        );
+    }
+
+    #[test]
+    fn test_saga_error_localized_msg() {
+        let cases = [
+            (
+                SagaError::ExecutionFailed("boom".to_string()),
+                "saga-execution-failed",
+            ),
+            (
+                SagaError::CompensationFailed("undo".to_string()),
+                "saga-compensation-failed",
+            ),
+            (SagaError::Timeout("30s".to_string()), "saga-timeout"),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+            assert_eq!(err.message_args(), vec![("reason", err_arg(&err))]);
+        }
+    }
+
+    fn err_arg(err: &SagaError) -> String {
+        match err {
+            SagaError::ExecutionFailed(r)
+            | SagaError::CompensationFailed(r)
+            | SagaError::Timeout(r) => r.clone(),
+        }
+    }
+
+    #[test]
+    fn test_saga_status_str_round_trip() {
+        let cases = [
+            (SagaStatus::Running, "running"),
+            (SagaStatus::Completed, "completed"),
+            (SagaStatus::Compensating, "compensating"),
+            (SagaStatus::Failed, "failed"),
+            (SagaStatus::CompensationFailed, "compensation_failed"),
+        ];
+        for (status, s) in cases {
+            assert_eq!(status.as_str(), s);
+            assert_eq!(SagaStatus::from_str_kind(s), status);
+        }
+        // 连字符历史形态与未知值回退
+        assert_eq!(
+            SagaStatus::from_str_kind("compensation-failed"),
+            SagaStatus::CompensationFailed
+        );
+        assert_eq!(SagaStatus::from_str_kind("nonsense"), SagaStatus::Running);
+    }
+}

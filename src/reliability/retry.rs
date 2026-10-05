@@ -379,4 +379,166 @@ mod tests {
         assert_eq!(result.expect("should succeed on 2nd attempt"), 42);
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
+
+    /// RetryError 的 Display / source / i18n 键与参数
+    #[test]
+    fn test_retry_error_display_source_and_i18n() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let last = || DbError::Query("boom".to_string());
+
+        let exhausted = RetryError::Exhausted {
+            attempts: 4,
+            last_error: last(),
+        };
+        assert_eq!(
+            exhausted.to_string(),
+            "Retry exhausted after 4 attempts: Query error: boom"
+        );
+        assert!(std::error::Error::source(&exhausted).is_some());
+        assert_eq!(exhausted.message_key(), "retry-exhausted");
+        let args = exhausted.message_args();
+        assert!(args.contains(&("attempts", "4".to_string())));
+        assert!(
+            args.iter()
+                .any(|(k, v)| *k == "last_error" && v.contains("boom"))
+        );
+
+        let non_retryable = RetryError::NonRetryable(last());
+        assert_eq!(
+            non_retryable.to_string(),
+            "Non-retryable operation: Query error: boom"
+        );
+        assert!(std::error::Error::source(&non_retryable).is_some());
+        assert_eq!(non_retryable.message_key(), "retry-non-retryable");
+        assert_eq!(
+            non_retryable.message_args(),
+            vec![("error", "Query error: boom".to_string())]
+        );
+
+        let timeout = RetryError::Timeout {
+            timeout_ms: 50,
+            last_error: last(),
+        };
+        assert_eq!(
+            timeout.to_string(),
+            "Retry timed out after 50ms: Query error: boom"
+        );
+        assert!(std::error::Error::source(&timeout).is_some());
+        assert_eq!(timeout.message_key(), "retry-timeout");
+        let args = timeout.message_args();
+        assert!(args.contains(&("timeout_ms", "50".to_string())));
+        assert!(
+            args.iter()
+                .any(|(k, v)| *k == "last_error" && v.contains("boom"))
+        );
+    }
+
+    /// RetryError → DbError 保留底层错误
+    #[test]
+    fn test_retry_error_into_db_error() {
+        let exhausted: DbError = RetryError::Exhausted {
+            attempts: 2,
+            last_error: DbError::Query("e1".to_string()),
+        }
+        .into();
+        assert!(matches!(exhausted, DbError::Query(_)));
+
+        let non_retryable: DbError =
+            RetryError::NonRetryable(DbError::Config("e2".to_string())).into();
+        assert!(matches!(non_retryable, DbError::Config(_)));
+
+        let timeout: DbError = RetryError::Timeout {
+            timeout_ms: 10,
+            last_error: DbError::Transaction("e3".to_string()),
+        }
+        .into();
+        assert!(matches!(timeout, DbError::Transaction(_)));
+    }
+
+    /// 幂等性判断：前缀大小写不敏感、trim 前导空白、非查询一律 false
+    #[test]
+    fn test_is_idempotent_operation() {
+        assert!(is_idempotent_operation("SELECT 1"));
+        assert!(is_idempotent_operation("  select * from t"));
+        assert!(is_idempotent_operation("Show tables"));
+        assert!(is_idempotent_operation("\tEXPLAIN SELECT 1"));
+        // 截断前缀不成立
+        assert!(!is_idempotent_operation("SEL"));
+        assert!(!is_idempotent_operation(""));
+        assert!(!is_idempotent_operation("INSERT INTO t VALUES (1)"));
+        assert!(!is_idempotent_operation("DELETE FROM t"));
+        assert!(!is_idempotent_operation("UPDATE t SET a = 1"));
+        assert!(!is_idempotent_operation("CREATE TABLE t (id INT)"));
+    }
+
+    /// 非幂等操作不重试：失败一次即返回 NonRetryable
+    #[tokio::test]
+    async fn test_non_idempotent_not_retried() {
+        let policy = RetryPolicy::default();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err::<u32, _>(DbError::Query("write failed".to_string()))
+                }
+            },
+            "INSERT INTO t VALUES (1)",
+        )
+        .await;
+
+        assert!(matches!(result, Err(RetryError::NonRetryable(_))));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    /// 重试耗尽：attempts = 1 + max_retries
+    #[tokio::test]
+    async fn test_retry_exhausted_attempts_count() {
+        let policy = RetryPolicy {
+            max_retries: 2,
+            initial_backoff_ms: 1,
+            jitter: false,
+            overall_timeout_ms: None,
+            ..Default::default()
+        };
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            || async { Err::<u32, _>(DbError::Query("always".to_string())) },
+            "SELECT 1",
+        )
+        .await;
+
+        match result {
+            Err(RetryError::Exhausted { attempts, .. }) => assert_eq!(attempts, 3),
+            other => panic!("expected Exhausted, got {:?}", other),
+        }
+    }
+
+    /// jitter=true 的退避值仍落在 [1, max_backoff] 内
+    #[test]
+    fn test_calculate_backoff_jitter_bounds() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 400,
+            jitter: true,
+            overall_timeout_ms: None,
+            ..Default::default()
+        };
+        for attempt in 0..4u32 {
+            let d = RetryExecutor::calculate_backoff(&policy, attempt);
+            // 抖动在 cap 之后叠加：上界 = max_backoff × 1.25
+            let upper = (policy.max_backoff_ms as f64 * 1.25) as u128;
+            assert!(
+                d.as_millis() >= 1 && d.as_millis() <= upper,
+                "attempt {attempt} backoff {}ms 越界",
+                d.as_millis()
+            );
+        }
+    }
 }

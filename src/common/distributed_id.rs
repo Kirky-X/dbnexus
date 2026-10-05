@@ -295,4 +295,68 @@ mod tests {
         assert!(parsed.timestamp_ms > 0);
         assert_eq!(parsed.machine_id, 7);
     }
+
+    /// machine_id 越界拒绝
+    #[test]
+    fn test_machine_id_out_of_range_rejected() {
+        assert!(SnowflakeIdGenerator::new(1024, 0).is_err());
+        assert!(SnowflakeIdGenerator::new(1023, 0).is_ok());
+    }
+
+    /// parse_id 按 41/10/12 位布局拆解：时间戳、机器 ID、序列号
+    #[test]
+    fn test_parse_id_layout() {
+        let generator = SnowflakeIdGenerator::new(7, 0).unwrap();
+        let id: u64 = (123_456 << 22) | (7 << 12) | 4095;
+        let parsed = generator.parse_id(id);
+        assert_eq!(parsed.timestamp_ms, 123_456);
+        assert_eq!(parsed.machine_id, 7);
+        assert_eq!(parsed.sequence, 4095);
+    }
+
+    /// 连续生成单调不重复
+    #[test]
+    fn test_ids_are_unique_and_monotonic() {
+        let generator = SnowflakeIdGenerator::new(3, 0).unwrap();
+        let mut prev = 0u64;
+        for _ in 0..1000 {
+            let id = generator.next_id().unwrap();
+            assert!(id > prev, "id 必须严格单调递增");
+            prev = id;
+        }
+    }
+
+    /// SnowflakeError 的 Display 与 i18n 键/参数
+    #[test]
+    fn test_snowflake_error_display_and_i18n() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let backtrack = SnowflakeError::ClockBacktrack {
+            waited_ts: 100,
+            last_ts: 200,
+        };
+        assert_eq!(
+            backtrack.to_string(),
+            "Clock backtrack: waited timestamp 100 still behind last used 200"
+        );
+        assert_eq!(backtrack.message_key(), "snowflake-clock-backtrack");
+        assert_eq!(
+            backtrack.message_args(),
+            vec![
+                ("waited_ts", "100".to_string()),
+                ("last_ts", "200".to_string())
+            ]
+        );
+
+        let overflow = SnowflakeError::TimestampOverflow { timestamp: 42 };
+        assert_eq!(
+            overflow.to_string(),
+            "Timestamp overflow: 42 exceeds 41-bit capacity"
+        );
+        assert_eq!(overflow.message_key(), "snowflake-timestamp-overflow");
+        assert_eq!(
+            overflow.message_args(),
+            vec![("timestamp", "42".to_string())]
+        );
+    }
 }

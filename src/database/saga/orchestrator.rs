@@ -530,6 +530,22 @@ mod persist_failure_tests {
         assert_eq!(result.persist_failures, 0);
         assert_eq!(result.status, SagaStatus::Failed);
     }
+
+    /// FailingStore 经恢复器与日志查询访问（load_pending/get 的错误契约）
+    #[tokio::test]
+    async fn failing_store_via_recovery_and_log_query() {
+        let store = Arc::new(FailingStore);
+        let recovery = SagaRecovery::new(store.clone());
+        assert!(
+            recovery.list_pending().await.is_ok(),
+            "FailingStore load_pending 恒 Ok 空"
+        );
+
+        let orchestrator =
+            SagaOrchestrator::new_with_log_store(Arc::new(ShardRouter::default()), store);
+        assert!(orchestrator.get_saga_log("none").await.is_none());
+        assert_eq!(single_step()[0].action.name(), "noop");
+    }
 }
 
 /// 外部 saga_id 注入契约：结果与持久化日志携带调用方 ID，空 ID 回退库生成
@@ -576,6 +592,18 @@ mod external_id_tests {
         let orchestrator = SagaOrchestrator::new(Arc::new(ShardRouter::default()));
         let result = orchestrator.execute_saga_with_id("", single_step()).await;
         assert!(!result.saga_id.is_empty(), "空 saga_id 必须回退为库生成");
+    }
+
+    /// mock 动作契约：name 标识与执行成功语义
+    #[tokio::test]
+    async fn noop_action_name_and_execute_contract() {
+        let pool = crate::database::DbPool::new("sqlite::memory:")
+            .await
+            .expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        let action = NoopAction;
+        assert_eq!(action.name(), "noop");
+        action.execute(&session).await.expect("noop 执行恒成功");
     }
 }
 
@@ -725,6 +753,44 @@ mod replay_compensation_tests {
         );
         assert_eq!(result.compensated_steps, vec!["step-b".to_string()]);
     }
+
+    /// PreloadedStore 的 pending 过滤与 mock 动作契约直调
+    #[tokio::test]
+    async fn preloaded_store_pending_filter_and_mock_contract() {
+        let saga_id = "saga-pending-filter".to_string();
+        let stored = SagaLog {
+            saga_id: saga_id.clone(),
+            status: SagaStatus::Compensating,
+            steps: vec![SagaStepLog {
+                name: "step-a".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        let store = Arc::new(PreloadedStore {
+            log: std::sync::Mutex::new(Some(stored)),
+        });
+        let recovery = SagaRecovery::new(store);
+        let pending = recovery.list_pending().await.expect("list_pending");
+        assert_eq!(pending.len(), 1, "Compensating 属 pending");
+        assert_eq!(pending[0].saga_id, saga_id);
+
+        // mock 的 name 与 execute 契约（直调避免依赖编排路径）
+        let pool = crate::database::DbPool::new("sqlite::memory:")
+            .await
+            .expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        let comp = CountingCompensation {
+            calls: Arc::new(AtomicUsize::new(0)),
+        };
+        assert_eq!(comp.name(), "counting-comp");
+        comp.execute(&session).await.expect("计数补偿恒成功");
+        let fwd = NoopForward;
+        assert_eq!(fwd.name(), "noop-forward");
+        fwd.execute(&session).await.expect("noop forward 恒成功");
+    }
 }
 
 #[cfg(all(test, feature = "sqlite"))]
@@ -811,5 +877,284 @@ mod session_failure_tests {
             result.compensated_steps.is_empty(),
             "nothing was actually compensated"
         );
+    }
+
+    /// PreloadedStore 空 pending 语义与 NoopAction 契约
+    #[tokio::test]
+    async fn preloaded_store_empty_pending_and_noop_contract() {
+        let store = Arc::new(PreloadedStore {
+            log: std::sync::Mutex::new(None),
+        });
+        let recovery = SagaRecovery::new(store);
+        assert!(
+            recovery
+                .list_pending()
+                .await
+                .expect("list_pending")
+                .is_empty(),
+            "无日志时 pending 为空"
+        );
+
+        let pool = crate::database::DbPool::new("sqlite::memory:")
+            .await
+            .expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        let noop = NoopAction;
+        assert_eq!(noop.name(), "noop");
+        noop.execute(&session).await.expect("noop 恒成功");
+    }
+}
+
+/// 执行路径补全：Completed 终态、补偿失败终态、会话获取 Err、日志缺失与恢复列表
+#[cfg(all(test, feature = "sqlite"))]
+mod execute_path_tests {
+    use super::*;
+    use crate::database::sharding::ShardRouter;
+    use std::sync::Arc;
+
+    #[derive(Default)]
+    struct NoopAction;
+
+    #[async_trait]
+    impl SagaAction for NoopAction {
+        async fn execute(&self, _session: &Session) -> Result<(), SagaError> {
+            Ok(())
+        }
+        fn name(&self) -> &str {
+            "noop"
+        }
+    }
+
+    /// 恒失败动作
+    struct FailingAction;
+
+    #[async_trait]
+    impl SagaAction for FailingAction {
+        async fn execute(&self, _session: &Session) -> Result<(), SagaError> {
+            Err(SagaError::ExecutionFailed("boom".to_string()))
+        }
+        fn name(&self) -> &str {
+            "failing"
+        }
+    }
+
+    /// 恒失败补偿
+    struct FailingCompensation;
+
+    #[async_trait]
+    impl SagaAction for FailingCompensation {
+        async fn execute(&self, _session: &Session) -> Result<(), SagaError> {
+            Err(SagaError::CompensationFailed("undo boom".to_string()))
+        }
+        fn name(&self) -> &str {
+            "failing-comp"
+        }
+    }
+
+    async fn router_with_sqlite() -> Arc<ShardRouter> {
+        // permission feature 下 "default" 角色会被安全默认策略拒绝，
+        // 统一用 admin 角色保证会话可获取（与既有 saga 测试口径一致）
+        let router = ShardRouter::default().with_session_role("admin");
+        let pool = Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        router.add_shard(0, pool);
+        Arc::new(router)
+    }
+
+    /// 全部动作成功 → Completed 终态，completed_steps 全量记录
+    #[tokio::test]
+    async fn all_actions_succeed_enters_completed() {
+        let orchestrator = SagaOrchestrator::new(router_with_sqlite().await);
+        let steps: Vec<SagaStep> = (0..3)
+            .map(|i| SagaStep {
+                name: format!("step-{i}"),
+                shard_id: 0,
+                action: Box::new(NoopAction),
+                compensation: Box::new(NoopAction),
+            })
+            .collect();
+        let result = orchestrator.execute_saga(steps).await;
+        assert!(result.success, "全成功应为 success: {:?}", result.failure);
+        assert_eq!(result.status, SagaStatus::Completed);
+        assert_eq!(result.completed_steps.len(), 3);
+        assert!(result.compensated_steps.is_empty());
+        assert!(result.failure.is_none());
+    }
+
+    /// 第二步动作失败且第一步补偿失败 → CompensationFailed 终态
+    #[tokio::test]
+    async fn failed_compensation_enters_compensation_failed() {
+        let orchestrator = SagaOrchestrator::new(router_with_sqlite().await);
+        let steps = vec![
+            SagaStep {
+                name: "ok-step".to_string(),
+                shard_id: 0,
+                action: Box::new(NoopAction),
+                compensation: Box::new(FailingCompensation),
+            },
+            SagaStep {
+                name: "bad-step".to_string(),
+                shard_id: 0,
+                action: Box::new(FailingAction),
+                compensation: Box::new(NoopAction),
+            },
+        ];
+        let result = orchestrator.execute_saga(steps).await;
+        assert!(!result.success);
+        assert_eq!(result.status, SagaStatus::CompensationFailed);
+        assert_eq!(result.completed_steps, vec!["ok-step".to_string()]);
+        assert!(
+            result.compensated_steps.is_empty(),
+            "补偿失败不得计入已补偿: {:?}",
+            result.compensated_steps
+        );
+        let failure = result.failure.expect("必须携带失败信息");
+        assert_eq!(failure.step_name, "bad-step");
+    }
+
+    /// 会话获取 Err（permission 默认角色拒绝）→ Failed 且携带失败信息
+    #[tokio::test]
+    async fn session_acquisition_error_fails_saga() {
+        // 默认角色在 permission feature 下被安全默认策略拒绝 → get_session Err
+        let router = Arc::new(ShardRouter::default());
+        let pool = Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        router.add_shard(0, pool);
+        let orchestrator = SagaOrchestrator::new(router);
+        let steps = vec![SagaStep {
+            name: "denied-step".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopAction),
+            compensation: Box::new(NoopAction),
+        }];
+        let result = orchestrator.execute_saga(steps).await;
+        assert!(!result.success);
+        assert_eq!(result.status, SagaStatus::Failed);
+        assert!(result.failure.is_some(), "会话失败必须显性化");
+    }
+
+    /// compensate_recovered 对不存在的 saga 日志返回 Failed + 显性失败信息
+    #[tokio::test]
+    async fn compensate_recovered_missing_log_fails() {
+        let orchestrator = SagaOrchestrator::new(router_with_sqlite().await);
+        let steps = vec![SagaStep {
+            name: "s".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopAction),
+            compensation: Box::new(NoopAction),
+        }];
+        let result = orchestrator
+            .compensate_recovered("no-such-saga", &steps)
+            .await;
+        assert!(!result.success);
+        assert_eq!(result.status, SagaStatus::Failed);
+        let failure = result.failure.expect("必须携带日志缺失失败信息");
+        assert!(
+            failure.error.contains("not found"),
+            "got: {}",
+            failure.error
+        );
+        assert!(result.completed_steps.is_empty());
+    }
+
+    /// SagaRecovery.list_pending 透传存储结果
+    #[tokio::test]
+    async fn recovery_lists_pending_from_store() {
+        let store = Arc::new(super::super::store::InMemorySagaLog::new());
+        let recovery = SagaRecovery::new(store.clone());
+        let pending = recovery.list_pending().await.expect("list_pending");
+        assert!(pending.is_empty(), "空存储无 pending");
+
+        // 经编排器产生一条 Failed 日志（Failed 不属于 pending）
+        let orchestrator = SagaOrchestrator::new_with_log_store(router_with_sqlite().await, store);
+        let result = orchestrator
+            .execute_saga_with_id("recovery-list-case", single_noop_step())
+            .await;
+        assert_eq!(result.saga_id, "recovery-list-case");
+        let pending = recovery.list_pending().await.expect("list_pending");
+        assert!(
+            !pending.iter().any(|l| l.saga_id == "recovery-list-case"),
+            "Failed 终态不属于 pending"
+        );
+    }
+
+    fn single_noop_step() -> Vec<SagaStep> {
+        vec![SagaStep {
+            name: "only".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopAction),
+            compensation: Box::new(NoopAction),
+        }]
+    }
+
+    /// compensate_recovered：重放期间会话获取 Err → CompensationFailed（显性化）
+    #[tokio::test]
+    async fn compensate_recovered_session_err_enters_compensation_failed() {
+        let saga_id = "saga-replay-err".to_string();
+        let stored = SagaLog {
+            saga_id: saga_id.clone(),
+            status: SagaStatus::Compensating,
+            steps: vec![SagaStepLog {
+                name: "step-x".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        let store = Arc::new(PreloadedStore2 {
+            log: std::sync::Mutex::new(Some(stored)),
+        });
+        // 默认角色被安全默认策略拒绝 → get_session Err
+        let steps = vec![SagaStep {
+            name: "step-x".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopAction),
+            compensation: Box::new(NoopAction),
+        }];
+        let orchestrator =
+            SagaOrchestrator::new_with_log_store(Arc::new(ShardRouter::default()), store);
+        let result = orchestrator.compensate_recovered(&saga_id, &steps).await;
+        assert_eq!(result.status, SagaStatus::CompensationFailed);
+        assert!(result.compensated_steps.is_empty());
+    }
+
+    /// 失败动作/补偿 mock 的 name 契约
+    #[test]
+    fn failing_action_and_compensation_names() {
+        assert_eq!(FailingAction.name(), "failing");
+        assert_eq!(FailingCompensation.name(), "failing-comp");
+    }
+}
+
+/// 可预置日志的内存存储（execute_path_tests 专用）
+#[cfg(all(test, feature = "sqlite"))]
+struct PreloadedStore2 {
+    log: std::sync::Mutex<Option<SagaLog>>,
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+#[async_trait]
+impl SagaLogStore for PreloadedStore2 {
+    async fn persist(&self, log: &SagaLog) -> Result<(), String> {
+        *self.log.lock().expect("store lock") = Some(log.clone());
+        Ok(())
+    }
+    async fn load_pending(&self) -> Result<Vec<SagaLog>, String> {
+        Ok(Vec::new())
+    }
+    async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String> {
+        Ok(self
+            .log
+            .lock()
+            .expect("store lock")
+            .clone()
+            .filter(|l| l.saga_id == saga_id))
     }
 }

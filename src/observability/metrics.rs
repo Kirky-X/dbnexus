@@ -1917,4 +1917,93 @@ mod tests {
         assert_eq!(txn_stats.commit_count, 4000);
         assert_eq!(txn_stats.total_transactions, 4000);
     }
+
+    // ===== 补充测试：MetricsError i18n / 分位访问器 / 采集器全链路 =====
+
+    #[test]
+    fn test_metrics_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        assert_eq!(
+            MetricsError::ExportError("io".to_string()).message_key(),
+            "metrics-export-error"
+        );
+        assert_eq!(
+            MetricsError::ExportError("io".to_string()).message_args(),
+            vec![("reason", "io".to_string())]
+        );
+        assert_eq!(
+            MetricsError::NotInitialized.message_key(),
+            "metrics-not-initialized"
+        );
+        assert!(MetricsError::NotInitialized.message_args().is_empty());
+        assert_eq!(
+            MetricsError::Unknown("x".to_string()).message_key(),
+            "metrics-unknown"
+        );
+        assert_eq!(
+            MetricsError::Unknown("x".to_string()).message_args(),
+            vec![("reason", "x".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_latency_percentile_accessors() {
+        let p = LatencyPercentiles {
+            p50_ns: 50,
+            p75_ns: 75,
+            p90_ns: 90,
+            p95_ns: 95,
+            p99_ns: 99,
+            p999_ns: 999,
+            min_ns: 1,
+            max_ns: 1000,
+            sample_count: 1,
+        };
+        assert_eq!(p.p50(), Duration::from_nanos(50));
+        assert_eq!(p.p75(), Duration::from_nanos(75));
+        assert_eq!(p.p90(), Duration::from_nanos(90));
+        assert_eq!(p.p95(), Duration::from_nanos(95));
+        assert_eq!(p.p99(), Duration::from_nanos(99));
+        assert_eq!(p.p999(), Duration::from_nanos(999));
+        assert_eq!(p.min(), Duration::from_nanos(1));
+    }
+
+    #[test]
+    fn test_collector_acquire_timeout_levels_and_transactions() {
+        let collector = MetricsCollector::default();
+
+        // 分级超时：warn / error / critical 三档
+        collector.record_connection_timeout_level(100);
+        collector.record_connection_timeout_level(6000);
+        collector.record_connection_timeout_level(20000);
+        let stats = collector.connection_acquire_stats();
+        assert_eq!(stats.timeout_warn, 1);
+        assert_eq!(stats.timeout_error, 1);
+        assert_eq!(stats.timeout_critical, 1);
+        assert_eq!(stats.timeout_count, 3);
+        assert_eq!(stats.total_attempts, 3);
+
+        // 成功获取 + 慢获取（>=3000ms）
+        collector.record_connection_acquire_duration(Duration::from_millis(10));
+        collector.record_connection_acquire_duration(Duration::from_millis(3500));
+        let stats = collector.connection_acquire_stats();
+        assert_eq!(stats.slow_acquires, 1);
+
+        // 事务计数
+        collector.record_transaction_commit();
+        collector.record_transaction_rollback();
+        collector.record_transaction_failure();
+        let ts = collector.transaction_stats();
+        assert_eq!(ts.commit_count, 1);
+        assert_eq!(ts.rollback_count, 1);
+        assert_eq!(ts.failure_count, 1);
+
+        // 池状态与连接错误
+        collector.record_connection_error();
+        let pm = collector.pool_status();
+        assert_eq!(pm.total, 0);
+        assert_eq!(pm.active, 0);
+        assert_eq!(pm.idle, 0);
+    }
 }

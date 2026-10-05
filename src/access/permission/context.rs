@@ -1484,4 +1484,85 @@ mod tests {
                 .await
         );
     }
+
+    // ===== 补充测试：构造器 / 批量检查 / Debug =====
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_context_new_default_constructors() {
+        let ctx = PermissionContext::new_default().await.unwrap();
+        assert_eq!(ctx.role(), "admin");
+
+        let ctx = PermissionContext::new_default_with_rate_limit("ops".to_string())
+            .await
+            .unwrap();
+        assert_eq!(ctx.role(), "ops");
+        assert!(ctx.rate_limiter.is_some());
+
+        // 同步构造器
+        let ctx = PermissionContext::new_with_defaults("sync_role".to_string());
+        assert_eq!(ctx.role(), "sync_role");
+        assert!(ctx.rate_limiter.is_some());
+
+        // 带 provider 与配置的同步构造器
+        let cache = create_test_cache().await;
+        let provider: Arc<dyn PermissionProvider> = Arc::new(MemoryPermissionProvider::new());
+        let config = crate::foundation::DbConfig::default();
+        let ctx = PermissionContext::new_with_provider_and_config(
+            "prov_role".to_string(),
+            cache,
+            provider,
+            &config,
+        );
+        assert_eq!(ctx.role(), "prov_role");
+
+        // Debug 形态：只报布尔存在性
+        let debug = format!("{ctx:?}");
+        assert!(debug.contains("prov_role"), "got: {debug}");
+        assert!(debug.contains("has_permission_provider: true"));
+    }
+
+    #[tokio::test]
+    async fn test_context_load_policy_missing_role_errors() {
+        let config = PermissionConfig {
+            roles: [("other_role".to_string(), RolePolicy { tables: vec![] })]
+                .into_iter()
+                .collect(),
+        };
+        let ctx = PermissionContext::with_cache_size("me".to_string(), 64)
+            .await
+            .unwrap();
+        let err = ctx.load_policy(&config).await;
+        assert!(err.is_err(), "未定义角色加载必须报错");
+    }
+
+    #[tokio::test]
+    async fn test_context_batch_check_permissions() {
+        let config = PermissionConfig {
+            roles: [(
+                "batch_role".to_string(),
+                RolePolicy {
+                    tables: vec![TablePermission {
+                        name: "users".to_string(),
+                        operations: vec![PermissionAction::Select, PermissionAction::Insert],
+                    }],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let ctx = PermissionContext::with_cache_size("batch_role".to_string(), 64)
+            .await
+            .unwrap();
+        ctx.load_policy(&config).await.unwrap();
+
+        let results = ctx
+            .batch_check_permissions(&[
+                ("users".to_string(), PermissionAction::Select),
+                ("users".to_string(), PermissionAction::Insert),
+                ("users".to_string(), PermissionAction::Delete),
+                ("secret".to_string(), PermissionAction::Select),
+            ])
+            .await;
+        assert_eq!(results, vec![true, true, false, false]);
+    }
 }

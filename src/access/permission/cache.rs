@@ -636,4 +636,79 @@ mod tests {
             "refresh 与 get 两条路径并发时每轮仍只允许 1 次 provider 调用"
         );
     }
+
+    // ===== 补充测试：Debug 形态 / 后台刷新节流 / 角色缺失保旧值 =====
+
+    #[tokio::test]
+    async fn test_cache_debug_shape_and_throttled_refresh() {
+        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(1)));
+        // TTL 压到 5ms：get 两次（间隔 > TTL）才会走到过期分支触发后台刷新
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(5))
+            .with_provider(provider.clone())
+            .with_refresh_interval(Duration::from_millis(50));
+
+        // Debug 形态：条目数 + provider 存在性
+        let debug = format!("{cache:?}");
+        assert!(debug.contains("entry_count: 0"), "got: {debug}");
+        assert!(debug.contains("has_provider: true"), "got: {debug}");
+
+        cache.insert("admin", sample_policy("users"));
+        assert_eq!(cache.len(), 1);
+        assert!(!cache.is_empty());
+        assert!(format!("{cache:?}").contains("entry_count: 1"));
+
+        // 首次 get 在 TTL 内直接命中；等过期后再 get 触发后台刷新
+        let _ = cache.get("admin");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let _ = cache.get("admin");
+        let _ = cache.get("admin");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let calls = provider.calls.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            calls, 1,
+            "节流窗口内的多次 get 只应派生一次后台刷新, calls={calls}"
+        );
+
+        // invalidate 后条目消失，is_expired 对缺失键为 true
+        cache.invalidate("admin");
+        assert_eq!(cache.len(), 0);
+        assert!(cache.is_expired("admin"));
+        cache.clear();
+        assert!(cache.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cache_refresh_keeps_old_value_when_role_missing() {
+        struct NoPolicyProvider;
+
+        impl PermissionProvider for NoPolicyProvider {
+            fn get_role_policy(&self, _role: &str) -> Option<RolePolicy> {
+                None
+            }
+
+            fn check_access(
+                &self,
+                _role: &str,
+                _table: &str,
+                _operation: PermissionAction,
+            ) -> Result<bool, PermissionProviderError> {
+                Ok(false)
+            }
+
+            fn get_roles(&self) -> Vec<String> {
+                Vec::new()
+            }
+        }
+
+        let cache = PermissionCache::new()
+            .with_provider(Arc::new(NoPolicyProvider))
+            .with_refresh_interval(Duration::from_millis(1));
+        let old = sample_policy("users");
+        cache.insert("ghost", old);
+
+        // provider 返回 None：refresh 保留旧值（stale-while-revalidate）
+        cache.refresh("ghost").await;
+        assert!(cache.get("ghost").is_some(), "角色缺失时刷新必须保留旧值");
+    }
 }

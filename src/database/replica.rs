@@ -990,3 +990,84 @@ mod sticky_write_failure_tests {
         );
     }
 }
+
+#[cfg(all(test, feature = "sqlite"))]
+mod replica_pool_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// 静态 lag 探测器：caught_up / 出错二态可控
+    enum StaticDetector {
+        CaughtUp,
+        Failed,
+    }
+
+    #[async_trait]
+    impl ReplicationLagDetector for StaticDetector {
+        async fn detect_lag(&self, _pool: &DbPool) -> DbResult<ReplicationLag> {
+            match self {
+                Self::CaughtUp => Ok(ReplicationLag {
+                    lag_bytes: Some(0),
+                    lag_seconds: Some(0.0),
+                    is_caught_up: true,
+                }),
+                Self::Failed => Err(DbError::Query("detector down".to_string())),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn read_session_routes_to_replica_when_caught_up() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = ReplicaPool::new(pool.clone(), Arc::new(StaticDetector::CaughtUp), 5.0);
+        let session = replica.get_read_session("admin").await;
+        assert!(session.is_some(), "已追上的副本必须承接读请求");
+        assert!(Arc::ptr_eq(replica.pool(), &pool));
+    }
+
+    #[tokio::test]
+    async fn read_session_falls_back_when_lag_exceeded() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = ReplicaPool::new(
+            pool,
+            Arc::new(StaticDetector::Failed), // 探测失败同样走回退路径
+            5.0,
+        );
+        assert!(
+            replica.get_read_session("admin").await.is_none(),
+            "超阈值副本必须回退主库（返回 None）"
+        );
+    }
+
+    #[tokio::test]
+    async fn read_session_falls_back_on_detector_error() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed), 5.0);
+        assert!(
+            replica.get_read_session("admin").await.is_none(),
+            "探测失败必须回退主库，绝不假成功"
+        );
+    }
+
+    /// 全部副本探测失败 → 剔除计数递增并回退主库（绝不假成功路由到坏副本）
+    #[tokio::test]
+    async fn balancer_falls_back_to_primary_when_all_replicas_fail() {
+        let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let replica = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let balancer = ReplicaLoadBalancer::with_sticky_duration(
+            primary,
+            vec![ReplicaNode {
+                name: "bad-replica".to_string(),
+                pool: replica,
+                weight: 1,
+                lag_detector: Arc::new(StaticDetector::Failed),
+            }],
+            crate::foundation::ReplicaConfig::default(),
+            Duration::ZERO,
+        );
+        let _session = balancer
+            .get_read_session("admin")
+            .await
+            .expect("全副本失败必须回退主库承接");
+    }
+}

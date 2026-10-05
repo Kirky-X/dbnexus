@@ -516,4 +516,48 @@ mod tests {
         let result = SensitiveMasker::mask("13812345678", MaskType::Phone);
         assert!(result.is_ok());
     }
+
+    // ===== 补充测试：SensitiveError i18n 键与参数 =====
+
+    #[test]
+    fn test_sensitive_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases = [
+            (
+                SensitiveError::MaskingFailed("m".to_string()),
+                "sensitive-masking-failed",
+            ),
+            (
+                SensitiveError::EncryptionFailed("e".to_string()),
+                "sensitive-encryption-failed",
+            ),
+            (
+                SensitiveError::DecryptionFailed("d".to_string()),
+                "sensitive-decryption-failed",
+            ),
+            (
+                SensitiveError::InvalidKey("k".to_string()),
+                "sensitive-invalid-key",
+            ),
+            (
+                SensitiveError::InvalidInput("i".to_string()),
+                "sensitive-invalid-input",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+            assert_eq!(err.message_args(), vec![("reason", err_args(&err))]);
+        }
+    }
+
+    fn err_args(err: &SensitiveError) -> String {
+        match err {
+            SensitiveError::MaskingFailed(r)
+            | SensitiveError::EncryptionFailed(r)
+            | SensitiveError::DecryptionFailed(r)
+            | SensitiveError::InvalidKey(r)
+            | SensitiveError::InvalidInput(r) => r.clone(),
+        }
+    }
 }

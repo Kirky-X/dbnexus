@@ -347,3 +347,82 @@ fn validate_table_name(table: &str) -> DbResult<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+    use oxcache::backend::MokaMemoryBackend;
+
+    fn make_qc(pool: Arc<DbPool>) -> OxcacheQueryCache {
+        let backend = MokaMemoryBackend::builder().capacity(10_000).build();
+        OxcacheQueryCache::new(pool, Arc::new(backend))
+    }
+
+    /// 构建期契约：空表集与非法表名 fail-closed（key 派生拒绝）
+    #[tokio::test]
+    async fn test_derive_key_rejects_empty_or_invalid_tables() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let qc = make_qc(pool);
+
+        let err = qc
+            .query_cached("SELECT 1", &[], &[])
+            .await
+            .expect_err("空表集必须拒绝");
+        assert!(matches!(err, DbError::Config(_)), "got {err:?}");
+
+        let err = qc
+            .query_cached("SELECT 1", &[], &["bad;name"])
+            .await
+            .expect_err("非法表名必须拒绝");
+        assert!(matches!(err, DbError::Config(_)), "got {err:?}");
+
+        let err = qc
+            .invalidate_table("bad;name")
+            .await
+            .expect_err("非法表名失效也必须拒绝");
+        assert!(matches!(err, DbError::Config(_)), "got {err:?}");
+    }
+
+    /// 解码失败：后端命中但载荷非 JSON → 显性 Cache 错误（不吞错不返回脏数据）
+    #[tokio::test]
+    async fn test_query_cached_corrupt_payload_errors() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let qc = make_qc(pool.clone());
+        let key = qc
+            .derive_key("SELECT 1", &[], &["t9"])
+            .await
+            .expect("derive key");
+        // 直接向后端写入损坏载荷
+        qc.cache
+            .set(key.into(), Arc::new(b"not-json".to_vec()), None)
+            .await
+            .expect("seed corrupt payload");
+
+        let err = qc
+            .query_cached("SELECT 1", &[], &["t9"])
+            .await
+            .expect_err("损坏载荷必须报错");
+        let msg = err.message();
+        assert!(
+            msg.contains("decode") || msg.contains("解析") || !msg.is_empty(),
+            "got: {msg}"
+        );
+        assert!(matches!(err, DbError::Cache(_)));
+    }
+
+    /// builder 链与访问器
+    #[tokio::test]
+    async fn test_builder_accessors() {
+        let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let qc = make_qc(pool.clone())
+            .with_role("analyst")
+            .with_namespace("tenant-a")
+            .with_default_ttl(Duration::from_secs(30));
+        assert!(Arc::ptr_eq(qc.pool(), &pool));
+        // 角色/命名空间参与 key：不同上下文派生不同 key
+        let k1 = qc.derive_key("SELECT 1", &[], &["t9"]).await.unwrap();
+        let other = make_qc(pool);
+        let k2 = other.derive_key("SELECT 1", &[], &["t9"]).await.unwrap();
+        assert_ne!(k1, k2, "不同安全上下文必须派生不同 key");
+    }
+}

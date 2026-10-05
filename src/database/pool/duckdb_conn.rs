@@ -652,9 +652,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -670,8 +670,9 @@ impl DuckDbConnection {
                 (|| {
                     let conn = guard.conn_mut();
                     let tx = conn.transaction().map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB begin transaction failed: {e}"
+                        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "duckdb-txn-begin-failed",
+                            &[("error", e.to_string())],
                         )))
                     })?;
                     let mut results = Vec::with_capacity(statements.len());
@@ -686,8 +687,9 @@ impl DuckDbConnection {
                         results.push(DuckDbExecResult { rows_affected });
                     }
                     tx.commit().map_err(|e| {
-                        DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB commit failed: {e}"
+                        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "duckdb-txn-commit-failed",
+                            &[("error", e.to_string())],
                         )))
                     })?;
                     Ok(results)
@@ -695,8 +697,9 @@ impl DuckDbConnection {
             });
 
         let results = handle.await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "spawn_blocking join failed: {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "duckdb-spawn-blocking-join-failed",
+                &[("error", e.to_string())],
             )))
         })?;
         drop(permit);
@@ -734,9 +737,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -751,15 +754,17 @@ impl DuckDbConnection {
             (|| {
                 let conn = guard.conn_mut();
                 let tx = conn.transaction().map_err(|e| {
-                    DbError::Connection(sea_orm::DbErr::Custom(format!(
-                        "DuckDB begin transaction failed: {e}"
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "duckdb-txn-begin-failed",
+                        &[("error", e.to_string())],
                     )))
                 })?;
                 match f(&tx) {
                     Ok(value) => {
                         tx.commit().map_err(|e| {
-                            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                                "DuckDB commit failed: {e}"
+                            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                                "duckdb-txn-commit-failed",
+                                &[("error", e.to_string())],
                             )))
                         })?;
                         Ok(value)
@@ -775,8 +780,9 @@ impl DuckDbConnection {
 
         // permit 必须在 handle.await 之后 drop
         let result = handle.await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "spawn_blocking join failed: {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "duckdb-spawn-blocking-join-failed",
+                &[("error", e.to_string())],
             )))
         })?;
         drop(permit);
@@ -802,9 +808,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -853,8 +859,9 @@ impl DuckDbConnection {
         });
 
         let result = handle.await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "spawn_blocking join failed: {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "duckdb-spawn-blocking-join-failed",
+                &[("error", e.to_string())],
             )))
         })?;
         drop(permit);

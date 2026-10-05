@@ -342,14 +342,23 @@ session-log-sql-parse-denied = permission denied: role={ $role } reason=sql-pars
 session-log-permission-denied = permission denied: action={ $action } table={ $table }
 session-log-rate-limited = rate limited: table access throttled (retry_after={ $retry_after })
 
+session-already-in-transaction = Already in transaction
+session-already-in-transaction-concurrent = Already in transaction (concurrent begin detected)
+session-already-in-graph-transaction = Already in graph transaction
+session-connection-not-available = Connection not available - Session may have been invalidated
+
 copy-path-empty = COPY file path must not be empty
 copy-insert-column-required = INSERT requires at least one column
 copy-insert-row-required = multi-row INSERT requires at least one row (empty VALUES is meaningless)
+copy-insert-table-invalid = INSERT target table identifier is invalid: '{ $table }' (allowed: letters/digits/underscore/dot)
+copy-insert-column-invalid = INSERT column identifier is invalid: '{ $column }' (allowed: letters/digits/underscore/dot)
 copy-in-incompatible-connection = (pool returned an incompatible connection: { $error })
 copy-payload-path-utf8 = COPY payload temp path is not valid UTF-8
 copy-payload-cleanup-failed = DuckDB COPY payload temp file cleanup failed: { $error }
 copy-driver-feature-missing = — enable the postgres or duckdb driver feature to use COPY
 copy-payload-create-failed = could not create COPY payload temp file
+copy-payload-create-io-failed = DuckDB COPY payload temp file creation failed: { $error }
+copy-payload-write-join-failed = DuckDB COPY payload write task join failed: { $error }
 
 duckdb-execute-batch-failed = DuckDB execute_batch failed: { $error }
 duckdb-copy-prepare-failed = DuckDB COPY prepare failed: { $error }
@@ -357,9 +366,15 @@ duckdb-copy-execute-failed = DuckDB COPY execute failed: { $error }
 duckdb-copy-fetch-failed = DuckDB COPY result fetch failed: { $error }
 duckdb-copy-count-read-failed = DuckDB COPY count column read failed: { $error }
 
+duckdb-pool-exhausted = DuckDB pool exhausted: no connection available
+duckdb-txn-begin-failed = DuckDB begin transaction failed: { $error }
+duckdb-txn-commit-failed = DuckDB commit failed: { $error }
+duckdb-spawn-blocking-join-failed = spawn_blocking join failed: { $error }
+
 repository-version-column-unsafe = repository version column must be a safe identifier: '{ $column }'
 repository-version-field-missing = update_if_version requires field '{ $column }' on the entity
 repository-version-column-integer = version column '{ $column }' must be an integer
+repository-column-unsafe = repository column must be a safe identifier: '{ $column }'
 
 shard-route-unregistered = shard key '{ $key }' routed to unregistered shard { $shard_id }
 
@@ -620,14 +635,23 @@ session-log-sql-parse-denied = 权限被拒绝: role={ $role } reason=sql-parse-
 session-log-permission-denied = 权限被拒绝: action={ $action } table={ $table }
 session-log-rate-limited = 速率受限: 表访问被限流 (retry_after={ $retry_after })
 
+session-already-in-transaction = 已处于事务中
+session-already-in-transaction-concurrent = 已处于事务中（检测到并发开启）
+session-already-in-graph-transaction = 已处于图事务中
+session-connection-not-available = 连接不可用 - 会话可能已失效
+
 copy-path-empty = COPY 文件路径不能为空
 copy-insert-column-required = INSERT 至少需要一列
 copy-insert-row-required = 多行 INSERT 至少需要一行（空 VALUES 无意义）
+copy-insert-table-invalid = INSERT 目标表标识符无效: '{ $table }'（允许字母/数字/下划线/点）
+copy-insert-column-invalid = INSERT 列标识符无效: '{ $column }'（允许字母/数字/下划线/点）
 copy-in-incompatible-connection = （连接池返回了不兼容的连接: { $error }）
 copy-payload-path-utf8 = COPY 载荷临时路径不是有效的 UTF-8
 copy-payload-cleanup-failed = DuckDB COPY 载荷临时文件清理失败: { $error }
 copy-driver-feature-missing = ——启用 postgres 或 duckdb 驱动特性后方可使用 COPY
 copy-payload-create-failed = 无法创建 COPY 载荷临时文件
+copy-payload-create-io-failed = DuckDB COPY 载荷临时文件创建失败: { $error }
+copy-payload-write-join-failed = DuckDB COPY 载荷写入任务 join 失败: { $error }
 
 duckdb-execute-batch-failed = DuckDB execute_batch 失败: { $error }
 duckdb-copy-prepare-failed = DuckDB COPY 预处理失败: { $error }
@@ -635,9 +659,15 @@ duckdb-copy-execute-failed = DuckDB COPY 执行失败: { $error }
 duckdb-copy-fetch-failed = DuckDB COPY 结果读取失败: { $error }
 duckdb-copy-count-read-failed = DuckDB COPY 计数列读取失败: { $error }
 
+duckdb-pool-exhausted = DuckDB 连接池已耗尽: 无可用连接
+duckdb-txn-begin-failed = DuckDB 开始事务失败: { $error }
+duckdb-txn-commit-failed = DuckDB 提交事务失败: { $error }
+duckdb-spawn-blocking-join-failed = spawn_blocking 任务 join 失败: { $error }
+
 repository-version-column-unsafe = repository 版本列必须是安全标识符: '{ $column }'
 repository-version-field-missing = update_if_version 要求实体包含字段 '{ $column }'
 repository-version-column-integer = 版本列 '{ $column }' 必须是整数
+repository-column-unsafe = repository 列必须是安全标识符: '{ $column }'
 
 shard-route-unregistered = 分片键 '{ $key }' 路由到未注册的分片 { $shard_id }
 
@@ -855,19 +885,32 @@ mod tests {
             "copy-path-empty",
             "copy-insert-column-required",
             "copy-insert-row-required",
+            "copy-insert-table-invalid",
+            "copy-insert-column-invalid",
             "copy-in-incompatible-connection",
             "copy-payload-path-utf8",
             "copy-payload-cleanup-failed",
             "copy-driver-feature-missing",
             "copy-payload-create-failed",
+            "copy-payload-create-io-failed",
+            "copy-payload-write-join-failed",
             "duckdb-execute-batch-failed",
             "duckdb-copy-prepare-failed",
             "duckdb-copy-execute-failed",
             "duckdb-copy-fetch-failed",
             "duckdb-copy-count-read-failed",
+            "duckdb-pool-exhausted",
+            "duckdb-txn-begin-failed",
+            "duckdb-txn-commit-failed",
+            "duckdb-spawn-blocking-join-failed",
             "repository-version-column-unsafe",
             "repository-version-field-missing",
             "repository-version-column-integer",
+            "repository-column-unsafe",
+            "session-already-in-transaction",
+            "session-already-in-transaction-concurrent",
+            "session-already-in-graph-transaction",
+            "session-connection-not-available",
             "shard-route-unregistered",
             "migration-history-table-invalid",
             "query-cache-get-failed",
@@ -889,6 +932,114 @@ mod tests {
             assert!(
                 format_from_bundle("zh", key, &[]).is_some(),
                 "zh bundle missing key: {key}"
+            );
+        }
+    }
+
+    /// 单条精确值断言用例：(键, 格式化参数, en 期望, zh 期望)
+    type ExactValueCase = (
+        &'static str,
+        &'static [(&'static str, &'static str)],
+        &'static str,
+        &'static str,
+    );
+
+    /// 守卫：本批接线键的 en/zh 模板精确值——en 为代码基准文案，
+    /// zh 术语对齐既有资源（连接池/join/标识符等），双侧任一漂移即失败
+    #[test]
+    fn test_batch_wired_keys_en_zh_exact_values() {
+        let cases: &[ExactValueCase] = &[
+            (
+                "copy-insert-table-invalid",
+                &[("table", "t 9")],
+                "INSERT target table identifier is invalid: 't 9' (allowed: letters/digits/underscore/dot)",
+                "INSERT 目标表标识符无效: 't 9'（允许字母/数字/下划线/点）",
+            ),
+            (
+                "copy-insert-column-invalid",
+                &[("column", "c1")],
+                "INSERT column identifier is invalid: 'c1' (allowed: letters/digits/underscore/dot)",
+                "INSERT 列标识符无效: 'c1'（允许字母/数字/下划线/点）",
+            ),
+            (
+                "copy-payload-write-join-failed",
+                &[("error", "E")],
+                "DuckDB COPY payload write task join failed: E",
+                "DuckDB COPY 载荷写入任务 join 失败: E",
+            ),
+            (
+                "copy-payload-create-io-failed",
+                &[("error", "E")],
+                "DuckDB COPY payload temp file creation failed: E",
+                "DuckDB COPY 载荷临时文件创建失败: E",
+            ),
+            (
+                "repository-column-unsafe",
+                &[("column", "c")],
+                "repository column must be a safe identifier: 'c'",
+                "repository 列必须是安全标识符: 'c'",
+            ),
+            (
+                "duckdb-pool-exhausted",
+                &[],
+                "DuckDB pool exhausted: no connection available",
+                "DuckDB 连接池已耗尽: 无可用连接",
+            ),
+            (
+                "duckdb-txn-begin-failed",
+                &[("error", "E")],
+                "DuckDB begin transaction failed: E",
+                "DuckDB 开始事务失败: E",
+            ),
+            (
+                "duckdb-txn-commit-failed",
+                &[("error", "E")],
+                "DuckDB commit failed: E",
+                "DuckDB 提交事务失败: E",
+            ),
+            (
+                "duckdb-spawn-blocking-join-failed",
+                &[("error", "E")],
+                "spawn_blocking join failed: E",
+                "spawn_blocking 任务 join 失败: E",
+            ),
+            (
+                "session-already-in-transaction",
+                &[],
+                "Already in transaction",
+                "已处于事务中",
+            ),
+            (
+                "session-already-in-transaction-concurrent",
+                &[],
+                "Already in transaction (concurrent begin detected)",
+                "已处于事务中（检测到并发开启）",
+            ),
+            (
+                "session-already-in-graph-transaction",
+                &[],
+                "Already in graph transaction",
+                "已处于图事务中",
+            ),
+            (
+                "session-connection-not-available",
+                &[],
+                "Connection not available - Session may have been invalidated",
+                "连接不可用 - 会话可能已失效",
+            ),
+        ];
+        for (key, args, en, zh) in cases {
+            let owned: Vec<(&str, String)> =
+                args.iter().map(|(k, v)| (*k, v.to_string())).collect();
+            assert_eq!(
+                format_from_bundle("en", key, &owned),
+                Some(en.to_string()),
+                "en value drifted for {key}"
+            );
+            assert_eq!(
+                format_from_bundle("zh", key, &owned),
+                Some(zh.to_string()),
+                "zh value drifted for {key}"
             );
         }
     }
@@ -939,12 +1090,20 @@ mod tests {
             "perm-rate-limit-audit-dropped",
             "copy-in-incompatible-connection",
             "copy-payload-cleanup-failed",
+            "copy-insert-table-invalid",
+            "copy-insert-column-invalid",
+            "copy-payload-create-io-failed",
+            "copy-payload-write-join-failed",
             "duckdb-execute-batch-failed",
             "duckdb-copy-prepare-failed",
             "duckdb-copy-execute-failed",
             "duckdb-copy-fetch-failed",
             "duckdb-copy-count-read-failed",
+            "duckdb-txn-begin-failed",
+            "duckdb-txn-commit-failed",
+            "duckdb-spawn-blocking-join-failed",
             "repository-version-column-unsafe",
+            "repository-column-unsafe",
             "repository-version-field-missing",
             "repository-version-column-integer",
             "shard-route-unregistered",

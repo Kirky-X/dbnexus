@@ -370,4 +370,31 @@ mod tests {
         }
         assert_eq!(EntityAction::from_str_raw("bogus"), None);
     }
+
+    // ===== 补充测试：事件构造器 / outbox 表名校验 =====
+
+    #[test]
+    fn test_entity_event_constructors_and_payload() {
+        let ev = EntityEvent::insert("users", "u1").with_payload(serde_json::json!({"k": 1}));
+        assert_eq!(ev.entity, "users");
+        assert_eq!(ev.action, EntityAction::Insert);
+        assert_eq!(ev.entity_id, "u1");
+        assert_eq!(ev.payload.as_ref().map(|p| p["k"].as_i64()), Some(Some(1)));
+
+        let ev = EntityEvent::update("orders", "o9");
+        assert_eq!(ev.action, EntityAction::Update);
+        let ev = EntityEvent::delete("orders", "o9");
+        assert_eq!(ev.action, EntityAction::Delete);
+    }
+
+    /// outbox 表名非法必须显性拒绝（fail-closed）
+    #[tokio::test]
+    async fn test_outbox_store_rejects_unsafe_table_name() {
+        let pool = std::sync::Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        assert!(DbOutboxStore::with_table(pool, "9bad-table",).is_err());
+    }
 }

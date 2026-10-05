@@ -1518,3 +1518,110 @@ mod tests {
     // set_var/remove_var 为 unsafe，但 lib crate 有 #![forbid(unsafe_code)]。
     // from_env 的覆盖率为外部测试目录（tests/）中独立 crate 的测试覆盖。
 }
+
+#[cfg(test)]
+mod config_error_i18n_tests {
+    use super::*;
+
+    // ===== 补充测试：ConfigError i18n 全变体 =====
+
+    #[test]
+    fn test_config_error_localized_msg_matrix() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases: Vec<(ConfigError, &'static str)> = vec![
+            (
+                ConfigError::MissingField("url".to_string()),
+                "config-missing-field",
+            ),
+            (ConfigError::MissingUrl, "config-missing-url"),
+            (
+                ConfigError::InvalidCacheCapacity("zero".to_string()),
+                "config-invalid-cache-capacity",
+            ),
+            (
+                ConfigError::InvalidValue {
+                    key: "k".to_string(),
+                    message: "m".to_string(),
+                },
+                "config-invalid-value",
+            ),
+            (
+                ConfigError::InvalidFormat("f".to_string()),
+                "config-invalid-format",
+            ),
+            (
+                ConfigError::FileNotFound("p.yaml".to_string()),
+                "config-file-not-found",
+            ),
+            (ConfigError::IoError("io".to_string()), "config-io-error"),
+            (
+                ConfigError::InvalidUrl("u".to_string()),
+                "config-invalid-url",
+            ),
+            (
+                ConfigError::UnsupportedProtocol("proto".to_string()),
+                "config-unsupported-protocol",
+            ),
+            (
+                ConfigError::ParseError("pe".to_string()),
+                "config-parse-error",
+            ),
+            (
+                ConfigError::ValidationError("ve".to_string()),
+                "config-validation-error",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+            let _ = err.message_args();
+        }
+        assert!(ConfigError::MissingUrl.message_args().is_empty());
+        assert_eq!(
+            ConfigError::InvalidValue {
+                key: "k".to_string(),
+                message: "m".to_string(),
+            }
+            .message_args(),
+            vec![("key", "k".to_string()), ("message", "m".to_string())]
+        );
+        assert_eq!(
+            ConfigError::FileNotFound("p.yaml".to_string()).message_args(),
+            vec![("path", "p.yaml".to_string())]
+        );
+        assert_eq!(
+            ConfigError::InvalidUrl("u".to_string()).message_args(),
+            vec![("url", "u".to_string())]
+        );
+        assert_eq!(
+            ConfigError::UnsupportedProtocol("proto".to_string()).message_args(),
+            vec![("protocol", "proto".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_cache_config_validate_and_loaders() {
+        let mut config = CacheConfig::default();
+        assert!(config.validate().is_ok());
+        // 三个容量字段逐一归零触发校验失败
+        config.policy_cache_capacity = 0;
+        assert!(config.validate().is_err());
+        config = CacheConfig::default();
+        config.sql_parse_cache_capacity = 0;
+        assert!(config.validate().is_err());
+        config = CacheConfig::default();
+        config.query_cache_capacity = 0;
+        assert!(config.validate().is_err());
+
+        // JSON 加载器
+        let value = serde_json::json!({"default_ttl": 60});
+        assert!(CacheConfig::from_json_value(value).is_ok());
+        assert!(CacheConfig::from_json_value(serde_json::json!(42)).is_err());
+
+        // 默认 TTL Duration 换算
+        assert_eq!(
+            CacheConfig::default().default_ttl_duration(),
+            Duration::from_secs(300)
+        );
+    }
+}

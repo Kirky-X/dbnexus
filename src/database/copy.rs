@@ -375,17 +375,17 @@ impl BatchInsertStatement {
     /// 标识符白名单与 [`CopyStatement::new`] 同一口径（字母/数字/下划线/点）。
     pub fn new(table: &str, columns: &[String]) -> Result<Self, DbError> {
         validate_identifier(table).map_err(|_| {
-            DbError::Config(format!(
-                "INSERT target table identifier is invalid: '{table}' \
-                 (allowed: letters/digits/underscore/dot)"
+            DbError::Config(i18n::t(
+                "copy-insert-table-invalid",
+                &[("table", table.to_string())],
             ))
         })?;
         let mut cols = Vec::with_capacity(columns.len());
         for c in columns {
             validate_identifier(c).map_err(|_| {
-                DbError::Config(format!(
-                    "INSERT column identifier is invalid: '{c}' \
-                     (allowed: letters/digits/underscore/dot)"
+                DbError::Config(i18n::t(
+                    "copy-insert-column-invalid",
+                    &[("column", c.to_string())],
                 ))
             })?;
             cols.push(c.clone());
@@ -663,13 +663,15 @@ impl crate::database::DbPool {
                 let path = tokio::task::spawn_blocking(move || write_copy_payload_file(&payload))
                     .await
                     .map_err(|e| {
-                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB COPY payload write task join failed: {e}"
+                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "copy-payload-write-join-failed",
+                            &[("error", e.to_string())],
                         )))
                     })?
                     .map_err(|e| {
-                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(format!(
-                            "DuckDB COPY payload temp file creation failed: {e}"
+                        crate::foundation::DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "copy-payload-create-io-failed",
+                            &[("error", e.to_string())],
                         )))
                     })?;
                 // 载荷文件已在手：此后一切可失败步骤收在内层块，成败皆清理
@@ -806,5 +808,110 @@ mod tests {
             mode & 0o777
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_copy_statement_rejects_invalid_identifiers() {
+        assert!(CopyStatement::new("9bad", &["c1".to_string()]).is_err());
+        assert!(CopyStatement::new("t9", &["bad col".to_string()]).is_err());
+    }
+
+    #[test]
+    fn test_copy_statement_accessors_and_build() {
+        let stmt = CopyStatement::new("t9", &["a".to_string(), "b".to_string()]).unwrap();
+        assert_eq!(stmt.table(), "t9");
+        assert_eq!(stmt.columns(), &["a".to_string(), "b".to_string()]);
+        assert_eq!(stmt.format(), CopyFormat::Text);
+        let sql = stmt.build();
+        assert!(sql.starts_with("COPY \"t9\" (\"a\", \"b\") FROM STDIN"),);
+    }
+
+    #[test]
+    fn test_copy_statement_build_from_file() {
+        let stmt = CopyStatement::new("t9", &["a".to_string()]).unwrap();
+        let sql = stmt.build_from_file("/tmp/payload.csv").unwrap();
+        assert!(
+            sql.contains("COPY \"t9\" (\"a\") FROM '/tmp/payload.csv'"),
+            "got: {sql}"
+        );
+        assert!(sql.contains("FORMAT CSV"));
+        // 路径内单引号翻倍转义
+        let sql = stmt.build_from_file("/tmp/it's.csv").unwrap();
+        assert!(sql.contains("/tmp/it''s.csv"), "got: {sql}");
+        // 空路径拒绝
+        let err = stmt.build_from_file("").unwrap_err();
+        assert!(matches!(err, DbError::Config(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn test_encode_copy_rows_pg_text() {
+        let rows = vec![vec![
+            serde_json::Value::Null,
+            serde_json::Value::String("plain".to_string()),
+            serde_json::Value::String("a\tb\nc\\d".to_string()),
+            serde_json::Value::Number(serde_json::Number::from(42)),
+            serde_json::Value::Bool(true),
+            serde_json::json!({"k": "v"}),
+        ]];
+        let encoded = encode_copy_rows(&rows);
+        let fields: Vec<&str> = encoded.trim_end_matches('\n').split('\t').collect();
+        assert_eq!(fields[0], "\\N");
+        assert_eq!(fields[1], "plain");
+        assert_eq!(fields[2], "a\\tb\\nc\\\\d");
+        assert_eq!(fields[3], "42");
+        assert_eq!(fields[4], "true");
+        assert!(fields[5].contains("{\"k\":\"v\"}"), "got: {}", fields[5]);
+        // 无需转义的字符串零拷贝路径（借用视图）
+        let plain = vec![vec![serde_json::Value::String("x".to_string())]];
+        assert_eq!(encode_copy_rows(&plain), "x\n");
+    }
+
+    #[test]
+    fn test_encode_duckdb_copy_rows_csv() {
+        let rows = vec![vec![
+            serde_json::Value::Null,
+            serde_json::Value::String("".to_string()),
+            serde_json::Value::String("a,b".to_string()),
+            serde_json::Value::String("he said \"hi\"".to_string()),
+            serde_json::Value::Number(serde_json::Number::from(7)),
+            serde_json::json!({"k": 1}),
+        ]];
+        let encoded = encode_duckdb_copy_rows(&rows);
+        // NULL → 未引用空字段；空字符串 → 引用字段 ""（二者语义可区分）
+        assert_eq!(
+            encoded,
+            ",\"\",\"a,b\",\"he said \"\"hi\"\"\",7,\"{\"\"k\"\":1}\"\n"
+        );
+        assert_eq!(encode_duckdb_copy_rows(&[]), "");
+    }
+
+    #[test]
+    fn test_batch_insert_rejects_invalid_and_empty() {
+        assert!(BatchInsertStatement::new("9bad", &["c".to_string()]).is_err());
+        assert!(BatchInsertStatement::new("t9", &["bad col".to_string()]).is_err());
+        assert!(BatchInsertStatement::new("t9", &[]).is_err());
+        let stmt = BatchInsertStatement::new("t9", &["a".to_string()]).unwrap();
+        assert_eq!(stmt.table(), "t9");
+        assert_eq!(stmt.columns(), &["a".to_string()]);
+        assert!(stmt.build(0, PlaceholderStyle::QMark).is_err());
+    }
+
+    #[test]
+    fn test_batch_insert_build_styles_and_chunking() {
+        let cols = vec!["a".to_string(), "b".to_string()];
+        let stmt = BatchInsertStatement::new("t9", &cols).unwrap();
+
+        let sql = stmt.build(2, PlaceholderStyle::QMark).unwrap();
+        assert!(
+            sql.starts_with("INSERT INTO \"t9\" (\"a\", \"b\") VALUES (?, ?), (?, ?)"),
+            "got: {sql}"
+        );
+
+        let sql = stmt.build(1, PlaceholderStyle::Dollar).unwrap();
+        assert!(sql.contains("VALUES ($1, $2)"), "got: {sql}");
+
+        // 分块上限：占位符数不超后端绑定上限
+        assert_eq!(bind_param_limit(PlaceholderStyle::QMark), 32_766);
+        assert_eq!(bind_param_limit(PlaceholderStyle::Dollar), 65_535);
     }
 }

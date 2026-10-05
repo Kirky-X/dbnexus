@@ -557,4 +557,40 @@ mod tests {
             Ok(DdlValidationResult::Allowed)
         ));
     }
+
+    // ===== 补充测试：DryRun 记录与拒绝/解析失败路径 =====
+
+    #[test]
+    fn test_dry_run_guard_records_and_would_allow() {
+        use std::sync::Arc;
+
+        let guard = DryRunDdlGuard::new(Arc::new(DdlGuard::new()));
+        let plan = guard.plan(&[
+            "CREATE TABLE t9 (id INT)",
+            "DROP DATABASE x",
+            "THIS IS NOT SQL",
+        ]);
+        assert_eq!(plan.len(), 3);
+        assert!(plan[0].allowed, "白名单 DDL 应放行");
+        assert!(!plan[1].allowed, "DROP DATABASE 必须拒绝");
+        assert!(!plan[2].allowed, "解析失败必须拒绝");
+
+        let records = guard.records();
+        assert_eq!(records.len(), 3, "plan 与 validate 各记录一次");
+
+        assert!(guard.would_allow("CREATE INDEX idx ON t9 (id)"));
+        assert!(!guard.would_allow("DROP DATABASE y"));
+
+        // validate 直连：空语句 Forbidden / 非法 SQL Err
+        let inner = DdlGuard::new();
+        let forbidden = inner.validate(";").ok();
+        assert!(
+            matches!(
+                &forbidden,
+                Some(crate::access::DdlValidationResult::Forbidden(_))
+            ),
+            "空语句应 Forbidden: {forbidden:?}"
+        );
+        assert!(inner.validate("TOTAL GARBAGE").is_err());
+    }
 }

@@ -103,3 +103,103 @@ impl crate::i18n::error_ext::LocalizedMsg for PermissionError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::error_ext::LocalizedMsg;
+
+    #[test]
+    fn test_permission_config_error_localized_msg() {
+        let cases = [
+            (
+                PermissionConfigError::MissingField("roles".to_string()),
+                "perm-config-missing-field",
+            ),
+            (
+                PermissionConfigError::InvalidValue {
+                    field: "ttl".to_string(),
+                    reason: "negative".to_string(),
+                },
+                "perm-config-invalid-value",
+            ),
+            (
+                PermissionConfigError::PolicyFileNotFound("p.json".to_string()),
+                "perm-config-policy-not-found",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+        }
+
+        assert_eq!(
+            PermissionConfigError::MissingField("roles".to_string()).message_args(),
+            vec![("field", "roles".to_string())]
+        );
+        assert_eq!(
+            PermissionConfigError::InvalidValue {
+                field: "ttl".to_string(),
+                reason: "negative".to_string(),
+            }
+            .message_args(),
+            vec![
+                ("field", "ttl".to_string()),
+                ("reason", "negative".to_string())
+            ]
+        );
+        assert_eq!(
+            PermissionConfigError::PolicyFileNotFound("p.json".to_string()).message_args(),
+            vec![("path", "p.json".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_permission_error_localized_msg() {
+        let cases = [
+            (
+                PermissionError::Denied {
+                    resource: "users".to_string(),
+                    operation: "DELETE".to_string(),
+                },
+                "perm-denied",
+            ),
+            (
+                PermissionError::RoleNotFound("admin".to_string()),
+                "perm-role-not-found",
+            ),
+            (
+                PermissionError::InvalidPolicy("bad".to_string()),
+                "perm-invalid-policy",
+            ),
+            (PermissionError::RateLimited, "perm-rate-limited"),
+            (
+                PermissionError::ParseError("oops".to_string()),
+                "perm-parse-error",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+        }
+
+        assert_eq!(
+            PermissionError::Denied {
+                resource: "users".to_string(),
+                operation: "DELETE".to_string(),
+            }
+            .message_args(),
+            vec![
+                ("resource", "users".to_string()),
+                ("operation", "DELETE".to_string())
+            ]
+        );
+        assert_eq!(
+            PermissionError::RoleNotFound("admin".to_string()).message_args(),
+            vec![("role", "admin".to_string())]
+        );
+        assert!(PermissionError::RateLimited.message_args().is_empty());
+        assert_eq!(
+            PermissionError::InvalidPolicy("bad".to_string()).message_args(),
+            vec![("reason", "bad".to_string())]
+        );
+    }
+}

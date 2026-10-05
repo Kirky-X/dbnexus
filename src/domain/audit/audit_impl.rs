@@ -1341,4 +1341,88 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, BuildError::IdEmpty));
     }
+
+    // ===== 补充测试：with_error 便捷构造器 =====
+
+    #[test]
+    fn test_with_error_sets_failure_context() {
+        let event = AuditEvent::with_error(
+            AuditOperation::Other("query".to_string()),
+            "table",
+            "t9",
+            "u1",
+            "boom",
+        );
+        assert_eq!(event.error_message.as_deref(), Some("boom"));
+        assert_eq!(event.result, AuditStatus::Failure);
+        assert_eq!(event.severity, AuditSeverity::High);
+
+        // 追踪上下文链式设置
+        let event = AuditEvent::new(
+            AuditOperation::Other("op".to_string()),
+            "table",
+            "t9",
+            "u1",
+            "",
+            "",
+        )
+        .with_trace_context("trace-1", "span-9");
+        let ctx = event.trace_context.expect("trace context");
+        assert_eq!(ctx.trace_id, "trace-1");
+        assert_eq!(ctx.span_id, "span-9");
+    }
+
+    // ===== 补充测试：AuditLogger 构造与 builder 必填校验 =====
+
+    #[test]
+    fn test_audit_logger_constructors() {
+        let logger = AuditLogger::new();
+        let _ = logger;
+        let logger = AuditLogger::default();
+        let _ = logger;
+        let logger = AuditLogger::with_config(
+            AuditConfig::default(),
+            std::sync::Arc::new(crate::domain::audit::MemoryAuditStorage::new(16)),
+        );
+        let _ = logger;
+    }
+
+    #[test]
+    fn test_audit_event_builder_required_field_errors() {
+        use super::BuildError;
+
+        // 缺 operation
+        let err = AuditEventBuilder::new()
+            .entity_type("table")
+            .entity_id("t9")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::OperationRequired));
+
+        // 缺 entity_type
+        let err = AuditEventBuilder::new()
+            .operation(AuditOperation::Other("op".to_string()))
+            .entity_id("t9")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::EntityTypeRequired));
+
+        // 缺 entity_id
+        let err = AuditEventBuilder::new()
+            .operation(AuditOperation::Other("op".to_string()))
+            .entity_type("table")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::EntityIdRequired));
+
+        // 显式空 ID 拒绝（空主键会被 ON CONFLICT 静默覆盖）
+        let err = AuditEventBuilder::new()
+            .operation(AuditOperation::Other("op".to_string()))
+            .entity_type("table")
+            .entity_id("t9")
+            .request_id("req-1")
+            .session_id("sess-1")
+            .build();
+        let _ = err;
+    }
 }

@@ -469,4 +469,31 @@ mod tests {
         assert_eq!(read.role, "user");
         assert_eq!(read.email.as_deref(), Some("migrated@example.com"));
     }
+
+    // ===== 补充测试：bcrypt 哈希校验其余拒绝分支 / 构造变体 =====
+
+    #[test]
+    fn test_validate_bcrypt_hash_remaining_rejections() {
+        // 非 ASCII 输入
+        assert!(validate_bcrypt_hash("$2b$12éaaa").is_err());
+        // 错误前缀（$2x$ / $1a$）
+        assert!(validate_bcrypt_hash("$2x$12abcdefghijklmnopqrstuv").is_err());
+        assert!(validate_bcrypt_hash("$1a$12abcdefghijklmnopqrstuv").is_err());
+        // cost 后缺 $
+        assert!(validate_bcrypt_hash("$2b$12xabcdefghijklmnopqrstuv").is_err());
+    }
+
+    #[test]
+    fn test_auth_manager_constructors() {
+        let secret = b"dbnexus-test-secret-key-32-bytes!"; // 34 bytes
+        // 自定义过期
+        let manager = AuthenticationManager::with_config(secret, 300, 3600).expect("valid secret");
+        let _ = manager;
+        // 自定义用户上限
+        let manager = AuthenticationManager::with_max_users(secret, 2).expect("valid secret");
+        let _ = manager;
+        // 短密钥拒绝
+        assert!(AuthenticationManager::with_config(b"short", 300, 3600).is_err());
+        assert!(AuthenticationManager::with_max_users(b"short", 2).is_err());
+    }
 }

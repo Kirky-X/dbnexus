@@ -1676,4 +1676,487 @@ mod tests {
             PermissionDecision::Deny
         );
     }
+
+    // ========================================================================
+    // 主体 / 资源 / 上下文构造器
+    // ========================================================================
+
+    #[test]
+    fn test_permission_resource_with_type() {
+        let resource = PermissionResource::with_type("orders", "view");
+        assert_eq!(resource.name, "orders");
+        assert_eq!(resource.resource_type, "view");
+        assert_eq!(PermissionResource::new("users").resource_type, "table");
+    }
+
+    #[test]
+    fn test_permission_subject_role_type() {
+        let subject = PermissionSubject::role("admins");
+        assert_eq!(subject.id, "admins");
+        assert_eq!(subject.subject_type, SubjectType::Role);
+        assert_eq!(
+            PermissionSubject::user("u1").subject_type,
+            SubjectType::User
+        );
+    }
+
+    // ========================================================================
+    // 规则匹配与条件评估（纯函数直测）
+    // ========================================================================
+
+    fn rule(subject: &str, resource: &str, allow: Vec<PermissionAction>) -> PermissionRule {
+        PermissionRule {
+            name: "r".to_string(),
+            priority: 1,
+            subject: subject.to_string(),
+            resource: resource.to_string(),
+            allow,
+            deny: vec![],
+            condition: None,
+            enabled: true,
+        }
+    }
+
+    fn ctx() -> PermissionContext {
+        PermissionContext::new(
+            PermissionSubject::user("ops"),
+            PermissionResource::new("users"),
+            PermissionAction::Select,
+        )
+    }
+
+    #[test]
+    fn test_matches_rule_subject_resource_action_gates() {
+        assert!(matches_rule(
+            &rule("*", "*", vec![PermissionAction::Select]),
+            &ctx()
+        ));
+        assert!(matches_rule(
+            &rule("ops", "users", vec![PermissionAction::Select]),
+            &ctx()
+        ));
+        // 主体不匹配
+        assert!(!matches_rule(
+            &rule("bob", "*", vec![PermissionAction::Select]),
+            &ctx()
+        ));
+        // 资源不匹配
+        assert!(!matches_rule(
+            &rule("*", "orders", vec![PermissionAction::Select]),
+            &ctx()
+        ));
+        // 操作不在 allow/deny 列表 → 不匹配（提前过滤，allow 为空也失配）
+        assert!(!matches_rule(&rule("*", "*", vec![]), &ctx()));
+        assert!(!matches_rule(
+            &rule("*", "*", vec![PermissionAction::Delete]),
+            &ctx()
+        ));
+    }
+
+    #[test]
+    fn test_matches_rule_condition_gate() {
+        let mut r = rule("*", "*", vec![PermissionAction::Select]);
+        r.condition = Some("tenant=acme".to_string());
+        // 条件不满足 → 不匹配
+        assert!(!matches_rule(&r, &ctx()));
+        // 属性满足 → 匹配
+        let matched_ctx = ctx().with_attribute("tenant", "acme");
+        assert!(matches_rule(&r, &matched_ctx));
+        // 环境变量兜底满足 → 匹配
+        let env_ctx = ctx().with_environment("tenant", "acme");
+        assert!(matches_rule(&r, &env_ctx));
+    }
+
+    #[test]
+    fn test_evaluate_condition_semantics() {
+        let base = ctx().with_attribute("dept", "ops");
+        // 空条件恒匹配
+        assert!(evaluate_condition("", &base));
+        assert!(evaluate_condition("  ", &base));
+        // AND 语义：全部满足才匹配
+        assert!(evaluate_condition("dept=ops", &base));
+        assert!(evaluate_condition(
+            "dept=ops, region=cn",
+            &base.clone().with_attribute("region", "cn")
+        ));
+        // 部分不满足（region 期望 cn 实际 us）→ false
+        assert!(!evaluate_condition(
+            "dept=ops, region=cn",
+            &base.clone().with_attribute("region", "us")
+        ));
+        // attributes 优先于 environment
+        let both = ctx()
+            .with_attribute("k", "from_attr")
+            .with_environment("k", "from_env");
+        assert!(evaluate_condition("k=from_attr", &both));
+        assert!(!evaluate_condition("k=from_env", &both));
+        // 无法解析的片段 fail-safe 拒绝
+        assert!(!evaluate_condition("noequals", &base));
+    }
+
+    // ========================================================================
+    // 角色继承与 RBAC 查询接口
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_rbac_inheritance_and_query_apis() {
+        let provider = RbacPermissionProvider::default();
+        provider.add_role(Role {
+            name: "viewer".to_string(),
+            description: String::new(),
+            enabled: true,
+            extends: vec![],
+        });
+        provider.add_role(Role {
+            name: "editor".to_string(),
+            description: "继承 viewer".to_string(),
+            enabled: true,
+            extends: vec!["viewer".to_string()],
+        });
+        provider.add_permission(
+            "viewer",
+            PermissionRule {
+                name: "view".to_string(),
+                priority: 1,
+                subject: "ops".to_string(),
+                resource: "reports".to_string(),
+                allow: vec![PermissionAction::Select],
+                deny: vec![],
+                condition: None,
+                enabled: true,
+            },
+        );
+        provider.add_permission(
+            "editor",
+            PermissionRule {
+                name: "edit".to_string(),
+                priority: 2,
+                subject: "ops".to_string(),
+                resource: "*".to_string(),
+                allow: vec![PermissionAction::Update],
+                deny: vec![],
+                condition: None,
+                enabled: true,
+            },
+        );
+        provider.add_role_to_subject("ops", "editor");
+
+        assert!(provider.has_role("viewer"));
+        assert!(provider.has_role("editor"));
+        assert!(!provider.has_role("ghost"));
+
+        // 继承角色的权限参与决策：editor 无 select，但继承的 viewer 有
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("reports"),
+                PermissionAction::Select,
+            ))
+            .await;
+        assert_eq!(decision, PermissionDecision::Allow);
+
+        // get_allowed_resources / get_allowed_actions 含继承权限
+        let resources = provider.get_allowed_resources("ops").await;
+        assert!(
+            resources
+                .iter()
+                .any(|r| r.name == "reports" || r.name == "*")
+        );
+        let actions = provider.get_allowed_actions("ops", "reports").await;
+        assert!(actions.contains(&PermissionAction::Select));
+        assert!(actions.contains(&PermissionAction::Update));
+
+        // 角色未分配的主体 → NotApplicable
+        let denied = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("mallory"),
+                PermissionResource::new("reports"),
+                PermissionAction::Select,
+            ))
+            .await;
+        assert_eq!(denied, PermissionDecision::NotApplicable);
+
+        // refresh 只更新时间戳，不改变决策
+        provider.refresh().await.unwrap();
+    }
+
+    // ========================================================================
+    // PDP 构造器全家桶 + 缓存行为
+    // ========================================================================
+
+    fn allow_all_provider() -> Arc<RbacPermissionProvider> {
+        let provider = Arc::new(RbacPermissionProvider::new());
+        provider.add_role(Role {
+            name: "admin".to_string(),
+            description: String::new(),
+            enabled: true,
+            extends: vec![],
+        });
+        provider.add_permission(
+            "admin",
+            PermissionRule {
+                name: "all".to_string(),
+                priority: 100,
+                subject: "*".to_string(),
+                resource: "*".to_string(),
+                allow: vec![PermissionAction::Select],
+                deny: vec![],
+                condition: None,
+                enabled: true,
+            },
+        );
+        provider.add_role_to_subject("admin", "admin");
+        provider
+    }
+
+    #[test]
+    fn test_builder_without_provider_panics() {
+        let result = std::panic::catch_unwind(PolicyDecisionPointBuilder::new);
+        assert!(result.is_ok());
+        // 未设置 provider 时 build 必须 panic（文档契约）
+        let built = std::panic::catch_unwind(|| PolicyDecisionPoint::builder().build());
+        assert!(built.is_err(), "缺 provider 的 build 应 panic");
+    }
+
+    #[tokio::test]
+    async fn test_builder_full_options_and_cache_flow() {
+        let provider = allow_all_provider();
+        let pdp = PolicyDecisionPoint::builder()
+            .provider(provider.clone())
+            .cache_ttl_seconds(600)
+            .cache_enabled(true)
+            .rate_limit(1000, 60)
+            .default_decision(PermissionDecision::Deny)
+            .build();
+
+        // 首查：provider 决策 + 写缓存
+        let first = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(first, PermissionDecision::Allow);
+        // 二查：命中缓存（同样结果）
+        let second = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(second, PermissionDecision::Allow);
+
+        // refresh_cache 清空条目后决策不变
+        pdp.refresh_cache().await;
+        let third = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(third, PermissionDecision::Allow);
+    }
+
+    #[tokio::test]
+    async fn test_with_dependencies_and_with_cache_constructors() {
+        let provider = allow_all_provider();
+        let pdp = PolicyDecisionPoint::with_dependencies(provider.clone());
+        assert_eq!(
+            pdp.check("admin", "users", "SELECT").await,
+            PermissionDecision::Allow
+        );
+
+        let pdp = PolicyDecisionPoint::with_cache(provider.clone(), 1);
+        assert_eq!(
+            pdp.check("admin", "users", "SELECT").await,
+            PermissionDecision::Allow
+        );
+
+        // with_config：默认决策 Deny + NotApplicable 时兜底
+        let pdp = PolicyDecisionPoint::with_config(
+            provider.clone(),
+            PolicyDecisionPointConfig::default(),
+        );
+        assert_eq!(
+            pdp.check("admin", "users", "SELECT").await,
+            PermissionDecision::Allow
+        );
+
+        // 默认决策生效：无匹配规则的主体走 default_decision
+        let empty_provider = Arc::new(RbacPermissionProvider::new());
+        let pdp = PolicyDecisionPoint::with_config(
+            empty_provider,
+            PolicyDecisionPointConfig {
+                default_decision: PermissionDecision::Deny,
+                cache_ttl_seconds: 300,
+                cache_enabled: false,
+            },
+        );
+        assert_eq!(
+            pdp.check("stranger", "secret", "SELECT").await,
+            PermissionDecision::Deny
+        );
+    }
+
+    #[tokio::test]
+    async fn test_check_batch_and_get_allowed_resources() {
+        let provider = allow_all_provider();
+        let pdp = PolicyDecisionPoint::new(provider.clone());
+
+        let contexts = vec![
+            PermissionContext::new(
+                PermissionSubject::user("admin"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ),
+            PermissionContext::new(
+                PermissionSubject::user("ghost"),
+                PermissionResource::new("users"),
+                PermissionAction::Delete,
+            ),
+        ];
+        let decisions = pdp.check_batch(contexts).await;
+        assert_eq!(decisions.len(), 2);
+        assert_eq!(decisions[0].1, PermissionDecision::Allow);
+        assert_eq!(decisions[1].1, PermissionDecision::NotApplicable);
+
+        let resources = pdp.get_allowed_resources("admin").await;
+        assert!(resources.iter().any(|r| r.name == "*"));
+    }
+
+    // ========================================================================
+    // 配置路径安全检查
+    // ========================================================================
+
+    #[test]
+    fn test_is_safe_config_path_matrix() {
+        // 空路径拒绝
+        assert!(!is_safe_config_path(""));
+        // 路径遍历拒绝
+        assert!(!is_safe_config_path("config/../../etc/passwd"));
+        assert!(!is_safe_config_path("a\\b"));
+        // 允许前缀的绝对路径放行
+        assert!(is_safe_config_path("/etc/dbnexus/permissions.yaml"));
+        assert!(is_safe_config_path("/opt/dbnexus/config/p.yaml"));
+        assert!(is_safe_config_path("./config/p.yaml"));
+        assert!(is_safe_config_path("./p.yaml"));
+        // 前缀外的绝对路径走临时目录检查
+        let temp = std::env::temp_dir().join("dbnexus_test_perm.yaml");
+        assert!(is_safe_config_path(temp.to_str().unwrap()));
+        assert!(!is_safe_config_path("/definitely/not/allowed/p.yaml"));
+        // 相对路径无遍历放行
+        assert!(is_safe_config_path("permissions.yaml"));
+    }
+
+    // ========================================================================
+    // YamlPermissionProvider 错误路径
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_yaml_provider_missing_file_errors_on_check() {
+        // 配置文件缺失：构造是惰性的；首次 check（stale last_refresh）触发
+        // 加载失败，必须显性返回 Error 决策而非静默空规则
+        let missing = std::env::temp_dir().join("dbnexus_no_such_perm_config.yaml");
+        let _ = std::fs::remove_file(&missing);
+        let provider = YamlPermissionProvider::new(missing.to_str().unwrap()).unwrap();
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+        assert!(
+            matches!(decision, PermissionDecision::Error(_)),
+            "missing config must surface Error, got: {decision:?}"
+        );
+    }
+
+    // ===== 补充测试：YamlPermissionProvider 全流程（允许/拒绝/优先级/查询） =====
+
+    #[tokio::test]
+    async fn test_yaml_provider_full_flow() {
+        let dir = std::env::temp_dir().join(format!(
+            "dbnexus_perm_flow_{}_{}",
+            std::process::id(),
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("permissions.json");
+        std::fs::write(
+            &config_path,
+            r#"{"roles": {
+                "ops": [
+                    {"name": "ops-read", "priority": 10, "subject": "ops", "resource": "users", "allow": ["select"], "deny": []},
+                    {"name": "ops-no-delete", "priority": 100, "subject": "ops", "resource": "users", "allow": [], "deny": ["delete"]}
+                ]
+            }}"#,
+        )
+        .unwrap();
+
+        let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
+
+        // 高优先级 deny 压过低优先级 allow
+        let denied = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Delete,
+            ))
+            .await;
+        assert_eq!(denied, PermissionDecision::Deny);
+
+        // allow 命中
+        let allowed = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+        assert_eq!(allowed, PermissionDecision::Allow);
+
+        // 未覆盖的操作 → NotApplicable
+        let na = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Update,
+            ))
+            .await;
+        assert_eq!(na, PermissionDecision::NotApplicable);
+
+        // 资源 / 动作查询
+        let resources = provider.get_allowed_resources("ops").await;
+        assert!(resources.iter().any(|r| r.name == "users"));
+        let actions = provider.get_allowed_actions("ops", "users").await;
+        assert!(actions.contains(&PermissionAction::Select));
+
+        // refresh 走 load_config（时间戳刷新）
+        provider.refresh().await.expect("refresh");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_yaml_provider_new_path_validation_branches() {
+        // 空路径
+        assert!(YamlPermissionProvider::new("").is_err());
+        // 父目录引用
+        assert!(YamlPermissionProvider::new("../etc/passwd").is_err());
+        // 非允许目录的绝对路径
+        assert!(YamlPermissionProvider::new("/definitely/not/allowed/x.yaml").is_err());
+
+        // Default 实现与 new 产物同构（懒加载语义）
+        let provider = YamlPermissionProvider::default();
+        assert_eq!(provider.name(), "yaml");
+    }
+
+    #[test]
+    fn test_role_and_rbac_provider_defaults() {
+        let role = Role::default();
+        assert!(role.name.is_empty());
+        assert!(role.enabled);
+        assert!(role.extends.is_empty());
+
+        let provider = RbacPermissionProvider::default();
+        assert_eq!(provider.name(), "rbac");
+        assert!(!provider.has_role("anything"));
+    }
+
+    #[tokio::test]
+    async fn test_pdp_cache_ttl_zero_bypasses_cache() {
+        let provider = allow_all_provider();
+        // TTL=0：缓存条目即时过期 → 每次查询都穿透到 provider
+        let pdp = PolicyDecisionPoint::with_cache(provider, 0);
+        let first = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(first, PermissionDecision::Allow);
+        let second = pdp.check("admin", "users", "SELECT").await;
+        assert_eq!(second, PermissionDecision::Allow);
+    }
 }

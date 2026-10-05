@@ -188,8 +188,9 @@ impl JsonRepository {
     pub fn with_columns(mut self, columns: &[&str]) -> DbResult<Self> {
         for col in columns {
             if !is_safe_identifier(col) {
-                return Err(DbError::Config(format!(
-                    "repository column must be a safe identifier: '{col}'"
+                return Err(DbError::Config(i18n::t(
+                    "repository-column-unsafe",
+                    &[("column", col.to_string())],
                 )));
             }
         }
@@ -316,8 +317,9 @@ impl JsonRepository {
         let mut n = 0usize;
         for (col, value) in &map {
             if !is_safe_identifier(col) {
-                return Err(DbError::Config(format!(
-                    "repository column must be a safe identifier: '{col}'"
+                return Err(DbError::Config(i18n::t(
+                    "repository-column-unsafe",
+                    &[("column", col.to_string())],
                 )));
             }
             // 主键与版本列不参与 SET（版本列由 +1 表达式承载）
@@ -775,6 +777,97 @@ mod tests {
                 .unwrap()
                 .with_id_column("1bad")
                 .is_err()
+        );
+    }
+
+    // ===== 补充测试：构造校验与 update_if_version 前置错误 =====
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct VersionEntity {
+        name: String,
+        version: i64,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct BadVersionEntity {
+        version: String,
+    }
+
+    #[test]
+    fn test_repository_constructor_validations() {
+        assert!(JsonRepository::new("9bad").is_err());
+        // 列清单校验
+        assert!(
+            JsonRepository::new("t9")
+                .unwrap()
+                .with_columns(&["a", "bad col"])
+                .is_err()
+        );
+        assert!(
+            JsonRepository::new("t9")
+                .unwrap()
+                .with_columns(&["a", "b"])
+                .is_ok()
+        );
+        // 主键列校验
+        assert!(
+            JsonRepository::new("t9")
+                .unwrap()
+                .with_id_column("bad;col")
+                .is_err()
+        );
+        assert!(
+            JsonRepository::new("t9")
+                .unwrap()
+                .with_id_column("row_id")
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_if_version_precondition_errors() {
+        let repo = JsonRepository::new("t9").unwrap();
+        // 占位池：前置校验在触达数据库前即失败
+        let pool = crate::database::DbPool::new("sqlite::memory:")
+            .await
+            .unwrap();
+        let entity = VersionEntity {
+            name: "n".to_string(),
+            version: 3,
+        };
+
+        // 版本列名非法
+        let err = repo
+            .update_if_version(&pool, 1, &entity, "bad;col")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::foundation::DbError::Config(_)),
+            "got {err:?}"
+        );
+
+        // 实体缺失版本字段
+        let missing = std::collections::HashMap::<String, serde_json::Value>::new();
+        let err = repo
+            .update_if_version(&pool, 1, &missing, "version")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::foundation::DbError::Config(_)),
+            "got {err:?}"
+        );
+
+        // 版本字段非整数
+        let bad = BadVersionEntity {
+            version: "not-a-number".to_string(),
+        };
+        let err = repo
+            .update_if_version(&pool, 1, &bad, "version")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::foundation::DbError::Config(_)),
+            "got {err:?}"
         );
     }
 }

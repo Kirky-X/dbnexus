@@ -567,4 +567,175 @@ mod tests {
             result.map(|_| "Ok(...)".to_string())
         );
     }
+
+    // ===== 补充测试：角色白名单 / refresh rotation / 撤销校验 =====
+
+    #[tokio::test]
+    async fn test_generate_token_rejects_unknown_role() {
+        let mut manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        manager.add_valid_role("auditor".to_string());
+
+        // 白名单内角色可生成
+        manager
+            .generate_token("u1", "User One", "auditor", TokenType::Access)
+            .expect("whitelisted role must generate");
+
+        // 白名单外角色拒绝
+        let err = manager
+            .generate_token("u1", "User One", "superadmin", TokenType::Access)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid role"), "got: {msg}");
+        assert!(msg.contains("superadmin"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_rotation_revokes_old_token() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let refresh = manager
+            .generate_token("u2", "User Two", "admin", TokenType::Refresh)
+            .expect("generate refresh token");
+
+        // 首次刷新成功并签发新 access token
+        let access = manager
+            .refresh_access_token(&refresh)
+            .await
+            .expect("refresh");
+        let claims = manager.verify_access_token(&access).expect("access claims");
+        assert_eq!(claims.sub, "u2");
+
+        // 旧 refresh token 已被 rotation 撤销：二次刷新必须失败
+        let err = manager
+            .refresh_access_token(&refresh)
+            .await
+            .expect_err("revoked refresh token must be rejected");
+        assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_cannot_be_used_as_access_token() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let refresh = manager
+            .generate_token("u3", "User Three", "admin", TokenType::Refresh)
+            .expect("generate refresh token");
+        let err = manager
+            .verify_access_token(&refresh)
+            .expect_err("refresh token must not verify as access token");
+        assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
+
+        let access = manager
+            .generate_token("u3", "User Three", "admin", TokenType::Access)
+            .unwrap();
+        let err = manager
+            .verify_refresh_token(&access)
+            .await
+            .expect_err("access token must not verify as refresh token");
+        assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_type_mismatch_invalid() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let access = manager
+            .generate_token("u4", "User Four", "admin", TokenType::Access)
+            .unwrap();
+        // access token 直接当 refresh 用 → InvalidToken（type 校验分支）
+        let err = manager.verify_refresh_token(&access).await.unwrap_err();
+        assert!(matches!(err, AuthError::InvalidToken));
+    }
+
+    // ===== 补充测试：远程撤销缓存 / 过期淘汰 / 剩余 TTL 边界 =====
+
+    /// 远程撤销缓存 mock：get 命中即视为已撤销
+    struct RevokedCacheMock;
+
+    impl crate::domain::DbCacheProvider for RevokedCacheMock {
+        fn get<'a>(
+            &'a self,
+            _key: &'a str,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<Option<Vec<u8>>, crate::foundation::DbError>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(Some(vec![1u8])) })
+        }
+        fn set<'a>(
+            &'a self,
+            _key: &'a str,
+            _value: Vec<u8>,
+            _ttl: Option<std::time::Duration>,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<(), crate::foundation::DbError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(()) })
+        }
+        fn delete<'a>(
+            &'a self,
+            _key: &'a str,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<(), crate::foundation::DbError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn test_remote_revocation_cache_rejects_refresh() {
+        let mut manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        manager.with_revocation_cache(Arc::new(RevokedCacheMock));
+
+        let refresh = manager
+            .generate_token("u9", "User Nine", "admin", TokenType::Refresh)
+            .expect("generate refresh");
+        // 本地撤销集合未命中 → 查远程缓存命中 → InvalidToken
+        let err = manager
+            .verify_refresh_token(&refresh)
+            .await
+            .expect_err("远程缓存标记撤销必须拒绝");
+        assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
+    }
+
+    #[test]
+    fn test_evict_removes_expired_entries_with_zero_expiry() {
+        let manager =
+            JwtManager::with_expiration(TEST_SECRET, 60, 0).expect("zero refresh expiry accepted");
+        let mut revoked = manager.revoked_refresh_jtis.lock().unwrap();
+        revoked.insert("j1".to_string(), Instant::now());
+        JwtManager::evict_revoked_entries(&mut revoked, manager.refresh_expiration_secs);
+        assert!(
+            revoked.is_empty(),
+            "refresh_expiration=0 时撤销条目应立即全部淘汰"
+        );
+    }
+
+    #[test]
+    fn test_compute_remaining_ttl_zero_for_expired_claims() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let claims = JwtClaims {
+            sub: "u".to_string(),
+            username: "u".to_string(),
+            role: "admin".to_string(),
+            exp: 1, // 远早于当前时间
+            iat: 0,
+            token_type: TokenType::Access,
+            jti: "j".to_string(),
+        };
+        assert_eq!(
+            manager.compute_remaining_ttl(&claims),
+            Duration::ZERO,
+            "过期 claims 的剩余 TTL 必须为 0"
+        );
+    }
 }

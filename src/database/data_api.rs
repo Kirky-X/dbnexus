@@ -414,3 +414,132 @@ impl DataApiGateway {
         })
     }
 }
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[test]
+    fn test_table_endpoint_constructor_validations() {
+        // 表名非法
+        assert!(TableEndpoint::new("9bad", &["a"]).is_err());
+        // 列集为空 / 含非法列
+        assert!(TableEndpoint::new("t9", &[]).is_err());
+        assert!(TableEndpoint::new("t9", &["a", "bad col"]).is_err());
+        // 合法构造
+        assert!(TableEndpoint::new("t9", &["a", "b"]).is_ok());
+    }
+
+    #[test]
+    fn test_table_endpoint_orderable_whitelist() {
+        let endpoint = TableEndpoint::new("t9", &["a", "b"]).unwrap();
+        // 可排序列必须在列白名单内
+        assert!(endpoint.clone().with_orderable(&["c"]).is_err());
+        assert!(endpoint.clone().with_orderable(&[]).is_err());
+        assert!(endpoint.clone().with_orderable(&["a"]).is_ok());
+        // 非法标识符拒绝
+        assert!(endpoint.with_orderable(&["a;"]).is_err());
+    }
+
+    #[test]
+    fn test_filter_op_as_sql_matrix() {
+        // Contains 走 instr() 不经 as_sql；其余操作符逐一断言
+        assert_eq!(FilterOp::Eq.as_sql(), "=");
+        assert_eq!(FilterOp::Ne.as_sql(), "!=");
+        assert_eq!(FilterOp::Lt.as_sql(), "<");
+        assert_eq!(FilterOp::Le.as_sql(), "<=");
+        assert_eq!(FilterOp::Gt.as_sql(), ">");
+        assert_eq!(FilterOp::Ge.as_sql(), ">=");
+    }
+
+    #[test]
+    fn test_order_direction_and_request_defaults() {
+        // ListRequest 默认值契约：page 0/page_size 0 表示用端点默认
+        let req = ListRequest::default();
+        assert_eq!(req.page, 0);
+        assert_eq!(req.page_size, 0);
+        assert!(req.filters.is_empty());
+        assert!(req.order.is_none());
+
+        // 过滤构造器
+        let f = Filter::eq("a", 1);
+        assert_eq!(f.column, "a");
+        let f = Filter::contains("name", "x");
+        assert_eq!(f.op, FilterOp::Contains);
+    }
+
+    /// list 全流程：分页钳制 / 过滤白名单 / 排序白名单 / Contains 走 instr
+    #[tokio::test]
+    async fn test_list_flow_filters_order_pagination() {
+        // 内存库每连接独立：用临时文件库保证建表与查询同库
+        let db_path = std::env::temp_dir().join(format!(
+            "dbnexus_data_api_{}.db",
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        let pool = std::sync::Arc::new(
+            DbPool::new(&format!("sqlite:{}?mode=rwc", db_path.display()))
+                .await
+                .expect("pool"),
+        );
+        let admin = pool.get_session("admin").await.expect("admin");
+        admin
+            .execute_raw_ddl("CREATE TABLE t9 (id INTEGER PRIMARY KEY, name TEXT)")
+            .await
+            .expect("create");
+        for i in 1..=5 {
+            admin
+                .execute_with_params(
+                    "INSERT INTO t9 (id, name) VALUES (?, ?)",
+                    &[serde_json::json!(i), serde_json::json!(format!("user{i}"))],
+                )
+                .await
+                .expect("insert");
+        }
+
+        let endpoint = TableEndpoint::new("t9", &["id", "name"])
+            .unwrap()
+            .with_orderable(&["id"])
+            .unwrap();
+        let gateway = DataApiGateway::new(pool)
+            .register("t9_list", endpoint)
+            .expect("register");
+
+        // page=0 拒绝
+        let req = ListRequest {
+            page: 0,
+            ..Default::default()
+        };
+        assert!(gateway.list("t9_list", &req).await.is_err());
+
+        // 过滤列不在白名单 → Permission
+        let req = ListRequest {
+            page: 1,
+            filters: vec![Filter::eq("secret", 1)],
+            ..Default::default()
+        };
+        let err = gateway.list("t9_list", &req).await.unwrap_err();
+        assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+        // 排序列不在可排序白名单 → Config
+        let req = ListRequest {
+            page: 1,
+            order: Some(("name".to_string(), OrderDirection::Asc)),
+            ..Default::default()
+        };
+        assert!(gateway.list("t9_list", &req).await.is_err());
+
+        // 正常查询：等值过滤 + 升序 + 分页
+        let req = ListRequest {
+            page: 2,
+            page_size: 2,
+            filters: vec![Filter::contains("name", "user")],
+            order: Some(("id".to_string(), OrderDirection::Asc)),
+        };
+        let resp = gateway.list("t9_list", &req).await.expect("list");
+        assert_eq!(resp.total, 5);
+        assert_eq!(resp.page, 2);
+        assert_eq!(resp.page_size, 2);
+        assert_eq!(resp.items.len(), 2, "第 2 页应剩 2 行");
+        let _ = std::fs::remove_file(&db_path);
+    }
+}

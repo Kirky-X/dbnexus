@@ -515,4 +515,49 @@ mod tests {
             .expect("should build pool with cache provider");
         assert!(pool.cache_provider().is_some());
     }
+
+    // ===== 补充测试：builder 池参数应用与缺参拒绝 =====
+
+    #[tokio::test]
+    async fn test_builder_without_url_or_config_rejected() {
+        let result = DbPoolBuilder::new().build().await;
+        assert!(result.is_err(), "缺 url/config 必须显性拒绝");
+    }
+
+    #[tokio::test]
+    async fn test_builder_pending_pool_params_applied() {
+        let pool = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .max_connections(3)
+            .min_connections(1)
+            .build()
+            .await
+            .expect("build pool");
+        let config = pool.config();
+        assert_eq!(config.pool_config.max_connections, 3);
+        assert_eq!(config.pool_config.min_connections, 1);
+    }
+
+    #[tokio::test]
+    async fn test_builder_config_takes_precedence_over_url() {
+        let config = DbConfig {
+            url: "postgres://ignored".to_string(),
+            ..Default::default()
+        };
+        // config 显式提供时优先于 url（即使 url 也设置了）
+        let pool = DbPoolBuilder::new()
+            .url("sqlite::memory:")
+            .config(config)
+            .build()
+            .await;
+        // postgres url 无法在无 postgres 环境构建成功与否不作断言，
+        // 只验证未触发 "Either url or config" 错误路径
+        if let Err(e) = pool {
+            assert!(
+                !e.message().contains("Either url or config"),
+                "got: {}",
+                e.message()
+            );
+        }
+    }
 }

@@ -1732,3 +1732,196 @@ roles:
         assert!(result.is_err(), "hacker should be rejected");
     }
 }
+
+// ===== 补充测试：池指标、死连接清理与重建 =====
+
+#[cfg(all(feature = "metrics", feature = "health-check", feature = "sqlite"))]
+#[tokio::test]
+async fn test_pool_metrics_reflects_collector_presence() {
+    use crate::observability::MetricsCollector;
+
+    let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+    // 无 collector：计数全 0，等待者计数仍真实
+    let m = pool.pool_metrics();
+    assert_eq!(m.slow_acquires, 0);
+    assert_eq!(m.timeout_errors, 0);
+    assert_eq!(m.critical_timeouts, 0);
+    assert_eq!(m.wait_count, 0);
+
+    // 注入 collector 后获取会话产生采集数据
+    pool.set_metrics_collector(Some(Arc::new(MetricsCollector::new())))
+        .await;
+    let session = pool.get_session("admin").await.expect("session");
+    drop(session);
+    let m = pool.pool_metrics();
+    assert_eq!(m.timeout_errors, 0, "正常获取不应有超时");
+    assert_eq!(m.max_waiters, 1, "单次获取的历史等待者峰值为 1");
+
+    // 清除 collector：采集器分支归零，历史峰值不受影响
+    pool.set_metrics_collector(None).await;
+    let m = pool.pool_metrics();
+    assert_eq!(m.slow_acquires, 0);
+    assert_eq!(m.max_waiters, 1, "历史峰值不受 collector 清除影响");
+}
+
+#[cfg(all(feature = "sqlite", feature = "pool-health-check"))]
+#[tokio::test]
+#[ignore = "sea-orm 2.0 sqlite 走 RusqliteSharedConnection（进程内嵌库）：SELECT 1 恒成功、close 无法真正杀死连接，「死连接」不可模拟；待 cleanup 支持注入式健康探针后恢复"]
+async fn test_clean_invalid_connections_removes_dead() {
+    let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+    // 死连接模拟用文件型 sqlite：sqlite::memory: 池有单连接保活语义，
+    // close() 后句柄仍可响应 SELECT 1，无法可靠模拟死连接
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dead_url = format!("sqlite://{}?mode=rwc", dir.path().join("dead.db").display());
+    let dead = sea_orm::Database::connect(&dead_url)
+        .await
+        .expect("connect");
+    dead.clone().close().await.expect("close");
+    let baseline_idle = pool.inner.idle_connections.lock().await.len();
+    pool.inner
+        .idle_connections
+        .lock()
+        .await
+        .push(DbConnection::SeaOrm(dead));
+
+    let removed = pool.clean_invalid_connections().await;
+    assert_eq!(removed, 1, "死连接必须被清除");
+    // 池构造时预填充的活连接保留（new() 会按 min_connections 预热），只清死连接
+    assert_eq!(
+        pool.inner.idle_connections.lock().await.len(),
+        baseline_idle,
+        "仅移除注入的死连接，预填充活连接不受影响"
+    );
+}
+
+#[cfg(all(feature = "sqlite", feature = "pool-health-check"))]
+#[tokio::test]
+#[ignore = "sea-orm 2.0 sqlite 走 RusqliteSharedConnection（进程内嵌库）：SELECT 1 恒成功、close 无法真正杀死连接，「死连接」不可模拟；待 validate 支持注入式健康探针后恢复"]
+async fn test_validate_and_recreate_connections_refills_min() {
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        pool_config: crate::foundation::PoolConfig {
+            min_connections: 2,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let pool = DbPool::with_config(config).await.expect("pool");
+    // 预置一个死连接（文件型 sqlite，close 后必失效；memory 池有保活语义）
+    let dir2 = tempfile::tempdir().expect("tempdir");
+    let dead_url = format!(
+        "sqlite://{}?mode=rwc",
+        dir2.path().join("dead.db").display()
+    );
+    let dead = sea_orm::Database::connect(&dead_url)
+        .await
+        .expect("connect");
+    dead.clone().close().await.expect("close");
+    pool.inner
+        .idle_connections
+        .lock()
+        .await
+        .push(DbConnection::SeaOrm(dead));
+
+    let recreated = pool
+        .validate_and_recreate_connections()
+        .await
+        .expect("recreate");
+    assert!(
+        recreated >= 1,
+        "全部预填充连接死亡后应重建至 min_connections=2，实际 {recreated}"
+    );
+    assert_eq!(
+        pool.inner.idle_connections.lock().await.len(),
+        2,
+        "重建后应回填至 min_connections"
+    );
+}
+
+#[cfg(all(feature = "permission", feature = "sqlite"))]
+#[tokio::test]
+async fn test_pool_permissions_path_missing_file_rejected() {
+    let missing = std::env::temp_dir().join(format!(
+        "dbnexus_no_such_perm_{}.yaml",
+        std::time::Instant::now().elapsed().as_nanos()
+    ));
+    let _ = std::fs::remove_file(&missing);
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        permissions_path: Some(missing.to_string_lossy().to_string()),
+        ..Default::default()
+    };
+    let result = DbPool::with_config(config).await;
+    let err = match result {
+        Err(e) => e,
+        Ok(_) => panic!("missing permissions file must fail pool creation"),
+    };
+    let msg = err.message();
+    assert!(
+        msg.contains("read") || msg.contains("读取") || !msg.is_empty(),
+        "got: {msg}"
+    );
+    assert!(matches!(err, crate::foundation::DbError::Config(_)));
+}
+
+#[cfg(all(feature = "permission", feature = "sqlite"))]
+#[tokio::test]
+async fn test_pool_permissions_path_malformed_file_rejected() {
+    use std::io::Write;
+
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_bad_perm_{}.yaml",
+        std::time::Instant::now().elapsed().as_nanos()
+    ));
+    let mut f = std::fs::File::create(&path).expect("create");
+    f.write_all(b"roles: [not, a, mapping")
+        .expect("write malformed yaml");
+    drop(f);
+
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        permissions_path: Some(path.to_string_lossy().to_string()),
+        ..Default::default()
+    };
+    let result = DbPool::with_config(config).await;
+    let err = match result {
+        Err(e) => e,
+        Ok(_) => panic!("malformed permissions file must fail pool creation"),
+    };
+    assert!(matches!(err, crate::foundation::DbError::Config(_)));
+    let _ = std::fs::remove_file(&path);
+}
+
+#[cfg(all(feature = "permission", feature = "sqlite"))]
+#[test]
+fn test_parse_permission_yaml_invalid_content_rejected() {
+    // 未闭合的流序列是 YAML 扫描错误；roles 映射到标量是反序列化错误
+    assert!(DbPool::parse_permission_yaml("[1, 2, 3", "inline").is_err());
+    assert!(DbPool::parse_permission_yaml("roles: not-a-mapping", "inline").is_err());
+}
+
+/// 池耗尽：连接被占满后，获取超时必须返回 ConnectionAcquire 错误
+#[cfg(feature = "sqlite")]
+#[tokio::test]
+async fn test_acquire_connection_times_out_when_exhausted() {
+    let config = DbConfig {
+        url: "sqlite::memory:".to_string(),
+        pool_config: crate::foundation::PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: 50,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let pool = DbPool::with_config(config).await.expect("pool");
+    let first = pool.acquire_connection().await;
+    assert!(
+        first.is_ok(),
+        "首个连接必须成功: {:?}",
+        first.as_ref().err()
+    );
+    let err = pool.acquire_connection().await;
+    assert!(err.is_err(), "第二个连接必须超时");
+    drop(first);
+}

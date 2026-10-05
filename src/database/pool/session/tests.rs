@@ -1325,7 +1325,13 @@ mod isolation_level_tests {
             .await
             .expect_err("second begin must fail");
         assert!(matches!(err, DbError::Transaction(_)), "got {err:?}");
-        assert!(err.message().contains("Already in transaction"));
+        // 错误文本经 i18n 接线，随测试机 locale 输出 en/zh 两种形态
+        assert!(
+            err.message().contains("Already in transaction")
+                || err.message().contains("已处于事务中"),
+            "got {:?}",
+            err.message()
+        );
         session.rollback().await.expect("rollback");
     }
 
@@ -1367,5 +1373,264 @@ mod rate_limited_error_tests {
             to_secs(rate_limited_error(Some(Duration::from_millis(0)))),
             None
         );
+    }
+}
+
+/// 非 admin 角色的执行期权限流与 retry 策略（permission + sqlite + sql-parser）
+#[cfg(all(test, feature = "permission", feature = "sqlite"))]
+mod permission_flow_tests {
+    use crate::foundation::DbConfig;
+    use std::io::Write;
+
+    const ANALYST_YAML: &str = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations: ["select", "insert", "update", "delete"]
+  analyst:
+    tables:
+      - name: "users"
+        operations: ["select"]
+"#;
+
+    async fn pool_with_analyst_role(
+        retry_policy: Option<crate::reliability::RetryPolicy>,
+    ) -> (std::path::PathBuf, crate::database::DbPool) {
+        let path = std::env::temp_dir().join(format!(
+            "dbnexus_session_perm_{}.yaml",
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        let mut f = std::fs::File::create(&path).expect("create temp perm file");
+        f.write_all(ANALYST_YAML.as_bytes())
+            .expect("write perm yaml");
+
+        let config = DbConfig {
+            url: "sqlite::memory:".to_string(),
+            permissions_path: Some(path.to_string_lossy().to_string()),
+            retry_policy,
+            ..Default::default()
+        };
+        let pool = crate::database::DbPool::with_config(config)
+            .await
+            .expect("pool with perm config");
+        // admin 通道建表，供 analyst 查询/拒绝用
+        let admin = pool.get_session("admin").await.expect("admin session");
+        admin
+            .execute_raw_ddl("CREATE TABLE users (id INTEGER)")
+            .await
+            .expect("create users");
+        admin
+            .execute_raw_ddl("CREATE TABLE secrets (id INTEGER)")
+            .await
+            .expect("create secrets");
+        (path, pool)
+    }
+
+    async fn analyst_session(
+        pool: &crate::database::DbPool,
+    ) -> crate::database::pool::session::Session {
+        pool.get_session("analyst").await.expect("analyst session")
+    }
+
+    #[tokio::test]
+    async fn analyst_select_on_permitted_table_allowed() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        session
+            .execute_raw("SELECT * FROM users")
+            .await
+            .expect("select on permitted table must pass");
+    }
+
+    #[tokio::test]
+    async fn analyst_select_on_unlisted_table_denied() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("SELECT * FROM secrets")
+            .await
+            .expect_err("unlisted table must be denied");
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn analyst_join_unlisted_table_denied() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("SELECT * FROM users JOIN secrets ON users.id = secrets.id")
+            .await
+            .expect_err("join on unlisted table must be denied");
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn analyst_insert_denied_by_operation_list() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("INSERT INTO users (id) VALUES (1)")
+            .await
+            .expect_err("insert not in operations must be denied");
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn analyst_no_table_statement_denied() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("SELECT 1")
+            .await
+            .expect_err("table-less statement must be denied for non-admin");
+        let msg = err.message();
+        assert!(msg.contains("Failed to extract table name"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn analyst_unsupported_statement_type_denied() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("GRANT SELECT ON users TO role2")
+            .await
+            .expect_err("DCL must be denied for non-admin");
+        let msg = err.message();
+        assert!(msg.contains("valid table name"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn analyst_parse_failure_denied() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        let err = session
+            .execute_raw("SELEC bogus FROM nowhere")
+            .await
+            .expect_err("unparsable SQL must be denied for non-admin");
+        let msg = err.message();
+        assert!(msg.contains("Failed to parse SQL statement"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn analyst_execute_within_transaction() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+        session.begin_transaction().await.expect("begin");
+        session
+            .execute_raw("SELECT * FROM users")
+            .await
+            .expect("in-tx permitted select");
+        session.rollback().await.expect("rollback");
+    }
+
+    /// retry 策略：幂等查询失败自动重试，重试耗尽返回最后错误
+    #[tokio::test]
+    async fn retry_policy_exhaustion_returns_last_error() {
+        let policy = crate::reliability::RetryPolicy {
+            max_retries: 2,
+            initial_backoff_ms: 1,
+            jitter: false,
+            overall_timeout_ms: None,
+            ..Default::default()
+        };
+        let (_path, pool) = pool_with_analyst_role(Some(policy)).await;
+        // admin 绕过权限检查，让失败发生在执行层以触达重试循环
+        let session = pool.get_session("admin").await.expect("admin session");
+        let err = session
+            .execute_raw("SELECT * FROM no_such_table_anywhere")
+            .await
+            .expect_err("missing table must fail");
+        assert!(
+            matches!(err, crate::foundation::DbError::Connection(_)),
+            "got {err:?}"
+        );
+    }
+}
+
+/// 事务句柄并发占用与无事务错误路径（Arc::try_unwrap 契约）
+#[cfg(all(test, feature = "sqlite"))]
+mod txn_handle_error_path_tests {
+    use super::*;
+    use crate::database::DbPool;
+
+    /// commit 时事务 Arc 被并发查询持有 → 显性拒绝而非静默提交
+    #[tokio::test]
+    async fn commit_with_in_use_transaction_arc_rejected() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session.begin_transaction().await.expect("begin");
+        // 模拟并发查询持有事务句柄：锁内 clone Arc
+        let held = session
+            .state
+            .write()
+            .await
+            .transaction
+            .clone()
+            .expect("transaction in state");
+        let err = session.commit().await.expect_err("must reject");
+        assert!(
+            err.message().contains("concurrent query"),
+            "got: {:?}",
+            err.message()
+        );
+        // 拒绝路径已把事务从 state take 走：drop(held) 即收尾，
+        // 此后再 rollback 应报 "Not in transaction"（无残留事务）
+        drop(held);
+        assert!(session.rollback().await.is_err());
+    }
+
+    /// rollback 时事务 Arc 被并发查询持有 → 显性拒绝
+    #[tokio::test]
+    async fn rollback_with_in_use_transaction_arc_rejected() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session.begin_transaction().await.expect("begin");
+        let held = session
+            .state
+            .write()
+            .await
+            .transaction
+            .clone()
+            .expect("transaction in state");
+        let err = session.rollback().await.expect_err("must reject");
+        assert!(
+            err.message().contains("concurrent query"),
+            "got: {:?}",
+            err.message()
+        );
+        drop(held);
+        assert!(session.rollback().await.is_err(), "拒绝路径已消耗事务句柄");
+    }
+
+    /// isolation 变体同样受并发占用保护
+    #[tokio::test]
+    async fn commit_with_isolation_and_in_use_arc_rejected() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+        session
+            .begin_transaction_with_isolation(DbIsolationLevel::Serializable)
+            .await
+            .expect("begin");
+        let held = session
+            .state
+            .write()
+            .await
+            .transaction
+            .clone()
+            .expect("transaction in state");
+        let err = session.commit().await.expect_err("must reject");
+        assert!(err.message().contains("concurrent query"));
+        drop(held);
+        assert!(session.commit().await.is_err(), "拒绝路径已消耗事务句柄");
     }
 }

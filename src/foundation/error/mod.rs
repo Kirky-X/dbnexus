@@ -392,4 +392,182 @@ mod tests {
         let error = AuditError::SerializationError("invalid JSON".to_string());
         assert!(error.to_string().contains("invalid JSON"));
     }
+
+    /// DbError 的 i18n 键映射：键随变体分段，RateLimited 依是否携带
+    /// 建议秒数区分 -retry 键
+    #[test]
+    fn test_db_error_localized_msg_keys() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases: Vec<(DbError, &'static str)> = vec![
+            (
+                DbError::Connection(sea_orm::DbErr::Custom("x".to_string())),
+                "db-connection",
+            ),
+            (DbError::Config("x".to_string()), "db-config"),
+            (DbError::Permission("x".to_string()), "db-permission"),
+            (
+                DbError::RateLimited {
+                    retry_after_secs: Some(5),
+                },
+                "db-rate-limited-retry",
+            ),
+            (
+                DbError::RateLimited {
+                    retry_after_secs: None,
+                },
+                "db-rate-limited",
+            ),
+            (DbError::Transaction("x".to_string()), "db-transaction"),
+            (DbError::Migration("x".to_string()), "db-migration"),
+            (DbError::Cache("x".to_string()), "db-cache"),
+            (DbError::Query("x".to_string()), "db-query"),
+            (DbError::Unsupported("x".to_string()), "db-unsupported"),
+            (
+                DbError::VersionConflict {
+                    table: "t9".to_string(),
+                    id: 7,
+                },
+                "db-version-conflict",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key, "variant {:?} key drift", err);
+        }
+
+        #[cfg(feature = "validation")]
+        assert_eq!(
+            DbError::Validation("x".to_string()).message_key(),
+            "db-validation"
+        );
+    }
+
+    /// DbError 的 i18n 参数：各变体携带的插值名
+    #[test]
+    fn test_db_error_localized_msg_args() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        assert_eq!(
+            DbError::Config("bad cfg".to_string()).message_args(),
+            vec![("message", "bad cfg".to_string())]
+        );
+        assert_eq!(
+            DbError::RateLimited {
+                retry_after_secs: Some(9),
+            }
+            .message_args(),
+            vec![("retry_after_secs", "9".to_string())]
+        );
+        assert_eq!(
+            DbError::RateLimited {
+                retry_after_secs: None,
+            }
+            .message_args(),
+            vec![("retry_after_secs", String::new())]
+        );
+        assert_eq!(
+            DbError::VersionConflict {
+                table: "orders".to_string(),
+                id: 42,
+            }
+            .message_args(),
+            vec![("table", "orders".to_string()), ("id", "42".to_string())]
+        );
+    }
+
+    /// PoolError 的 i18n 键与参数
+    #[test]
+    fn test_pool_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        assert_eq!(
+            PoolError::AcquireTimeout.message_key(),
+            "pool-acquire-timeout"
+        );
+        assert_eq!(PoolError::PoolExhausted.message_key(), "pool-exhausted");
+        assert_eq!(
+            PoolError::ConnectionFailed("refused".to_string()).message_key(),
+            "pool-connection-failed"
+        );
+        assert_eq!(
+            PoolError::HealthCheckFailed("dead".to_string()).message_key(),
+            "pool-health-check-failed"
+        );
+
+        assert!(PoolError::AcquireTimeout.message_args().is_empty());
+        assert_eq!(
+            PoolError::ConnectionFailed("refused".to_string()).message_args(),
+            vec![("reason", "refused".to_string())]
+        );
+        assert_eq!(
+            PoolError::HealthCheckFailed("dead".to_string()).message_args(),
+            vec![("reason", "dead".to_string())]
+        );
+    }
+
+    /// MigrationError 的 i18n 键与参数
+    #[test]
+    fn test_migration_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases = [
+            (
+                MigrationError::FileNotFound("a.sql".to_string()),
+                "migration-file-not-found",
+            ),
+            (
+                MigrationError::ParseError("bad".to_string()),
+                "migration-parse-error",
+            ),
+            (
+                MigrationError::ExecutionError("boom".to_string()),
+                "migration-execution-error",
+            ),
+            (
+                MigrationError::VersionConflict("v1".to_string()),
+                "migration-version-conflict",
+            ),
+            (
+                MigrationError::RollbackError("rb".to_string()),
+                "migration-rollback-error",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+        }
+
+        assert_eq!(
+            MigrationError::FileNotFound("a.sql".to_string()).message_args(),
+            vec![("path", "a.sql".to_string())]
+        );
+        assert_eq!(
+            MigrationError::ExecutionError("boom".to_string()).message_args(),
+            vec![("reason", "boom".to_string())]
+        );
+    }
+
+    /// AuditError 的 i18n 键与参数
+    #[test]
+    fn test_audit_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases = [
+            (
+                AuditError::WriteError("io".to_string()),
+                "audit-write-error",
+            ),
+            (
+                AuditError::SerializationError("json".to_string()),
+                "audit-serialization-error",
+            ),
+            (
+                AuditError::ConfigError("cfg".to_string()),
+                "audit-config-error",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+            assert_eq!(err.message_args().len(), 1);
+        }
+    }
 }

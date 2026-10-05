@@ -35,6 +35,9 @@ allow = [
     "CC0-1.0",
     "CDLA-Permissive-2.0",
     "BSL-1.0",
+    # MPL-2.0 —— 弱 copyleft（文件级），option-ext 0.2.0（dirs/dirs-sys 传递依赖，
+    # inklog 审计桥引入）使用；OSI 认可的常用宽松许可证
+    "MPL-2.0",
 ]
 # 7 仓统一 license：MIT + Commons Clause v1.0（license-file 形态，见 base/CONFIG_BASELINE.md）。
 # cargo-deny 不识别 manifest 的 license-file 且 allow 不接受 LicenseRef-*，

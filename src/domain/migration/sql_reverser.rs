@@ -145,4 +145,43 @@ mod tests {
         assert!(down_sql.contains("DROP COLUMN"));
         assert!(down_sql.contains("email"));
     }
+
+    #[test]
+    fn test_reverse_rename_column() {
+        let up_sql = "ALTER TABLE users RENAME COLUMN email TO email_addr;";
+        let reverser = SqlReverser::new();
+        let down_sql = reverser.reverse(up_sql).unwrap();
+        assert!(down_sql.contains("RENAME COLUMN email TO email_addr"),);
+    }
+
+    #[test]
+    fn test_reverse_unsupported_statement_rejected() {
+        let up_sql = "DROP TABLE users;";
+        let reverser = SqlReverser::new();
+        let err = reverser.reverse(up_sql).unwrap_err();
+        assert!(err.contains("Unsupported statement type"));
+    }
+
+    #[test]
+    fn test_reverse_unsupported_alter_operation_rejected() {
+        let up_sql = "ALTER TABLE users DROP COLUMN email;";
+        let reverser = SqlReverser::new();
+        let err = reverser.reverse(up_sql).unwrap_err();
+        assert!(err.contains("Unsupported ALTER operation"));
+    }
+
+    #[test]
+    fn test_reverse_parse_error_rejected() {
+        let up_sql = "THIS IS NOT SQL";
+        let reverser = SqlReverser::new();
+        let err = reverser.reverse(up_sql).unwrap_err();
+        assert!(err.contains("Failed to parse SQL"));
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let reverser = SqlReverser::default();
+        let down_sql = reverser.reverse("CREATE TABLE t9 (id INT);").unwrap();
+        assert!(down_sql.contains("DROP TABLE IF EXISTS t9"));
+    }
 }

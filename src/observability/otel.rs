@@ -356,4 +356,121 @@ mod tests {
         exporter.write_line("hello");
         assert_eq!(lines.lock().unwrap().len(), 1);
     }
+
+    // ===== 补充测试：HTTP 传输 / stdout fallback / 自定义传输 =====
+
+    #[test]
+    fn test_http_post_against_local_collector() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .unwrap();
+        });
+
+        let result = http_post(&format!("http://{addr}/v1/metrics"), b"{\"x\":1}", 1000);
+        assert!(result.is_ok(), "2xx 应视为成功: {result:?}");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn test_http_post_rejects_non_2xx_and_bad_endpoint() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // 非 2xx 响应 → 错误
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+        });
+        let result = http_post(&format!("http://{addr}"), b"{}", 1000);
+        assert!(result.is_err(), "500 必须报错");
+        assert!(result.unwrap_err().contains("non-2xx"));
+        server.join().unwrap();
+
+        // 非 http:// 端点拒绝
+        assert!(http_post("https://collector/v1", b"{}", 10).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_exporter_transport_fallback_and_success() {
+        struct OkTransport;
+        #[async_trait::async_trait]
+        impl OtlpTransport for OkTransport {
+            async fn send(&self, _endpoint: &str, _body: &serde_json::Value) -> Result<(), String> {
+                Ok(())
+            }
+        }
+        struct FailTransport;
+        #[async_trait::async_trait]
+        impl OtlpTransport for FailTransport {
+            async fn send(&self, _endpoint: &str, _body: &serde_json::Value) -> Result<(), String> {
+                Err("collector down".to_string())
+            }
+        }
+
+        let snapshot = serde_json::json!({
+            "pool": { "saturation": 0.5, "wait_count": 2 },
+            "slow_queries": { "count": 1 }
+        });
+
+        // 成功路径：不触发 fallback
+        let exporter = OtelExporter::with_transport(
+            OtelConfig {
+                stdout_fallback: false,
+                ..Default::default()
+            },
+            Arc::new(OkTransport),
+        );
+        exporter
+            .export_health_snapshot(&snapshot)
+            .await
+            .expect("ok");
+
+        // 失败 + fallback 开启 → 逐事件输出 JSON 行且返回 Ok
+        let lines = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = lines.clone();
+        let exporter = OtelExporter {
+            config: OtelConfig {
+                stdout_fallback: true,
+                ..Default::default()
+            },
+            transport: Arc::new(FailTransport),
+            stdout: StdoutExporter::with_writer(Box::new(move |line| {
+                sink.lock().unwrap().push(line.to_string());
+            })),
+        };
+        exporter
+            .export_health_snapshot(&snapshot)
+            .await
+            .expect("fallback 应视为成功");
+        assert!(!lines.lock().unwrap().is_empty(), "fallback 必须输出事件行");
+
+        // 失败 + fallback 关闭 → 显性错误
+        let exporter = OtelExporter::with_transport(
+            OtelConfig {
+                stdout_fallback: false,
+                ..Default::default()
+            },
+            Arc::new(FailTransport),
+        );
+        let err = exporter
+            .export_health_snapshot(&snapshot)
+            .await
+            .unwrap_err();
+        assert!(err.contains("otlp export failed"), "got: {err}");
+    }
 }

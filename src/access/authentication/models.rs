@@ -163,4 +163,45 @@ mod tests {
         assert!(!json.contains("password_hash"));
         assert!(!json.contains("hash"));
     }
+
+    /// AuthError 的 i18n 键与参数：键随变体一一对应
+    #[test]
+    fn test_auth_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases = [
+            (AuthError::InvalidCredentials, "auth-invalid-credentials"),
+            (
+                AuthError::TokenGeneration("rng".to_string()),
+                "auth-token-generation",
+            ),
+            (AuthError::InvalidToken, "auth-invalid-token"),
+            (AuthError::TokenExpired, "auth-token-expired"),
+            (
+                AuthError::UserNotFound("u1".to_string()),
+                "auth-user-not-found",
+            ),
+            (
+                AuthError::PasswordHash("argon2".to_string()),
+                "auth-password-hash",
+            ),
+            (
+                AuthError::UserLimitReached("1000".to_string()),
+                "auth-user-limit-reached",
+            ),
+        ];
+        for (err, key) in cases {
+            assert_eq!(err.message_key(), key);
+        }
+
+        assert!(AuthError::InvalidCredentials.message_args().is_empty());
+        assert_eq!(
+            AuthError::UserNotFound("u1".to_string()).message_args(),
+            vec![("user", "u1".to_string())]
+        );
+        assert_eq!(
+            AuthError::PasswordHash("argon2".to_string()).message_args(),
+            vec![("reason", "argon2".to_string())]
+        );
+    }
 }

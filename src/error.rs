@@ -664,4 +664,222 @@ mod tests {
         let report = QueryErrorReport::from(err);
         assert_eq!(report.category, ErrorCategory::Permission);
     }
+
+    #[test]
+    fn test_error_code_name_table() {
+        let cases = [
+            (ErrorCode::Unknown, "Unknown"),
+            (ErrorCode::Connection, "Connection"),
+            (ErrorCode::PermissionDenied, "PermissionDenied"),
+            (ErrorCode::PermissionConfig, "PermissionConfig"),
+            (ErrorCode::RateLimited, "RateLimited"),
+            (ErrorCode::InjectionRisk, "InjectionRisk"),
+            (ErrorCode::SqlSyntax, "SqlSyntax"),
+            (ErrorCode::Config, "Config"),
+            (ErrorCode::Migration, "Migration"),
+            (ErrorCode::Query, "Query"),
+            (ErrorCode::Transaction, "Transaction"),
+            (ErrorCode::Cache, "Cache"),
+            (ErrorCode::Validation, "Validation"),
+        ];
+        for (code, name) in cases {
+            assert_eq!(code.name(), name);
+        }
+    }
+
+    #[test]
+    fn test_error_code_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+        let code = ErrorCode::Connection;
+        assert_eq!(code.message_key(), "error-code");
+        let args = code.message_args();
+        assert!(args.contains(&("code", "1000".to_string())));
+        assert!(args.contains(&("name", "Connection".to_string())));
+    }
+
+    #[test]
+    fn test_error_category_localized_msg_keys() {
+        use crate::i18n::error_ext::LocalizedMsg;
+        assert_eq!(
+            ErrorCategory::Permission.message_key(),
+            "error-category-permission"
+        );
+        assert_eq!(
+            ErrorCategory::InjectionRisk.message_key(),
+            "error-category-injection-risk"
+        );
+        assert_eq!(
+            ErrorCategory::SyntaxError.message_key(),
+            "error-category-syntax-error"
+        );
+        assert_eq!(
+            ErrorCategory::ShardConflict.message_key(),
+            "error-category-shard-conflict"
+        );
+    }
+
+    #[test]
+    fn test_query_error_report_localized_msg_args() {
+        use crate::i18n::error_ext::LocalizedMsg;
+        let minimal = QueryErrorReport::new(ErrorCategory::SyntaxError, "bad sql", "fix it");
+        assert_eq!(minimal.message_key(), "query-error-report");
+        let args = minimal.message_args();
+        assert_eq!(args.len(), 3);
+
+        let full = minimal.clone().with_table("users").with_operation("SELECT");
+        let args = full.message_args();
+        assert_eq!(args.len(), 5);
+        assert!(args.contains(&("table", "users".to_string())));
+        assert!(args.contains(&("operation", "SELECT".to_string())));
+    }
+
+    #[test]
+    fn test_db_nexus_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+        let err = DbNexusError::UnsupportedDatabaseScheme("oracle".to_string());
+        assert_eq!(err.message_key(), "nexus-unsupported-database");
+        assert_eq!(err.message_args(), vec![("scheme", "oracle".to_string())]);
+    }
+
+    #[test]
+    fn test_unified_error_display_with_source() {
+        let err = UnifiedDbError::new(ErrorCode::Cache, "cache miss").with_source("redis down");
+        let display = err.to_string();
+        assert!(display.contains("[7000:Cache]"));
+        assert!(display.contains("cache miss"));
+        assert!(display.contains("(source: redis down)"));
+    }
+
+    #[test]
+    fn test_from_legacy_db_error_all_segments() {
+        let cases = [
+            (
+                crate::foundation::DbError::Permission("p".to_string()),
+                ErrorCode::PermissionDenied,
+            ),
+            (
+                crate::foundation::DbError::RateLimited {
+                    retry_after_secs: Some(3),
+                },
+                ErrorCode::RateLimited,
+            ),
+            (
+                crate::foundation::DbError::Transaction("t".to_string()),
+                ErrorCode::Transaction,
+            ),
+            (
+                crate::foundation::DbError::Migration("m".to_string()),
+                ErrorCode::Migration,
+            ),
+            (
+                crate::foundation::DbError::Cache("c".to_string()),
+                ErrorCode::Cache,
+            ),
+            (
+                crate::foundation::DbError::Query("q".to_string()),
+                ErrorCode::Query,
+            ),
+            (
+                crate::foundation::DbError::Config("cfg".to_string()),
+                ErrorCode::Config,
+            ),
+            (
+                crate::foundation::DbError::Unsupported("u".to_string()),
+                ErrorCode::Query,
+            ),
+            (
+                crate::foundation::DbError::VersionConflict {
+                    table: "t9".to_string(),
+                    id: 1,
+                },
+                ErrorCode::Query,
+            ),
+        ];
+        for (legacy, expected) in cases {
+            let unified: UnifiedDbError = legacy.into();
+            assert_eq!(unified.code(), expected);
+        }
+
+        #[cfg(feature = "validation")]
+        {
+            let unified: UnifiedDbError =
+                crate::foundation::DbError::Validation("v".to_string()).into();
+            assert_eq!(unified.code(), ErrorCode::Validation);
+        }
+    }
+
+    #[test]
+    fn test_from_db_nexus_error_segments() {
+        let scheme: UnifiedDbError =
+            DbNexusError::UnsupportedDatabaseScheme("oracle".to_string()).into();
+        assert_eq!(scheme.code(), ErrorCode::SqlSyntax);
+
+        #[cfg(feature = "permission")]
+        {
+            let denied: UnifiedDbError = DbNexusError::Permission(
+                crate::domain::PermissionError::RoleNotFound("r1".to_string()),
+            )
+            .into();
+            assert_eq!(denied.code(), ErrorCode::PermissionDenied);
+
+            let config_err: UnifiedDbError = DbNexusError::PermissionConfig(
+                crate::domain::PermissionConfigError::PolicyFileNotFound("p.json".to_string()),
+            )
+            .into();
+            assert_eq!(config_err.code(), ErrorCode::PermissionConfig);
+        }
+    }
+
+    #[test]
+    fn test_into_legacy_db_error_all_segments() {
+        // RateLimited 反向映射有损：Retry-After 与消息不保留（见 From impl 注释），
+        // 只断言变体；其余断言消息文本保留
+        let rate: crate::foundation::DbError =
+            UnifiedDbError::new(ErrorCode::RateLimited, "rate").into();
+        assert!(matches!(
+            rate,
+            crate::foundation::DbError::RateLimited {
+                retry_after_secs: None
+            }
+        ));
+
+        let cases = [
+            (ErrorCode::Transaction, "txn"),
+            (ErrorCode::Cache, "cache"),
+            (ErrorCode::SqlSyntax, "sql"),
+            (ErrorCode::InjectionRisk, "inj"),
+            (ErrorCode::Query, "query"),
+            (ErrorCode::Unknown, "unknown"),
+            (ErrorCode::Config, "config"),
+            (ErrorCode::Validation, "val"),
+            (ErrorCode::PermissionConfig, "perm-cfg"),
+        ];
+        for (code, msg) in cases {
+            let unified = UnifiedDbError::new(code, msg).with_source("detail");
+            let legacy: crate::foundation::DbError = unified.into();
+            let text = legacy.to_string();
+            assert!(text.contains(msg), "code {code:?} text: {text}");
+            assert!(text.contains("detail"), "source 文本应保留: {text}");
+        }
+    }
+
+    #[test]
+    fn test_unified_error_to_report_categories() {
+        let injection = QueryErrorReport::from(UnifiedDbError::new(ErrorCode::InjectionRisk, "x"));
+        assert_eq!(injection.category, ErrorCategory::InjectionRisk);
+
+        let syntax = QueryErrorReport::from(UnifiedDbError::new(ErrorCode::SqlSyntax, "x"));
+        assert_eq!(syntax.category, ErrorCategory::SyntaxError);
+
+        let fallback = QueryErrorReport::from(UnifiedDbError::new(ErrorCode::Unknown, "x"));
+        assert_eq!(fallback.category, ErrorCategory::SyntaxError);
+
+        #[cfg(feature = "permission")]
+        {
+            let config_report = QueryErrorReport::from(DbNexusError::PermissionConfig(
+                crate::domain::PermissionConfigError::MissingField("roles".to_string()),
+            ));
+            assert_eq!(config_report.category, ErrorCategory::Permission);
+        }
+    }
 }
