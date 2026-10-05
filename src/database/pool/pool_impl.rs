@@ -524,6 +524,8 @@ mod tests {
         assert!(result.is_err(), "缺 url/config 必须显性拒绝");
     }
 
+    // sqlite::memory: 需 sqlite driver：neo4j-only 等无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_builder_pending_pool_params_applied() {
         let pool = DbPoolBuilder::new()
