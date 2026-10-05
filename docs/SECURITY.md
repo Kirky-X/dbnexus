@@ -67,19 +67,19 @@ Dbnexus 采用纵深防御（defense-in-depth）设计，自下而上分为五�
 
 - **参数化查询**：默认全部使用参数化查询。
 - **SQL 解析器校验**：表名提取基于 `SqlParser`（0.4.2 起替代朴素字符串匹配，消除解析层注入隐患）；`contains_sql_injection` 提供注入模式检测（含 Unicode 归一化防护）。
-- **统一注入检测引擎**：关系型 / DDL / 图三处规则表合并为单一注册表（`InjectionEngine`，0.6.0-rc.3）。
+- **统一注入检测引擎**：关系型 / DDL / 图三处规则表合并为单一注册表（`InjectionEngine`，0.6.0-rc.4）。
 - **DDL 防护**：裸 DDL 执行（含 DuckDB 的安全通道）需 admin 角色并通过 `DdlGuard` AST 校验；危险模式（如 `DROP DATABASE`）由注入检测引擎硬拦截。
 - **图查询防护**：图数据库裸 Cypher 执行已废弃，统一使用 `execute_cypher_with_params`（带注入防护，默认实现拒绝静默回退）。
 
 ### 第 4 层：认证与配置安全
 
-- **JWT 认证**（`authentication` 特性）：访问/刷新令牌区分校验（`verify_access_token` / `verify_refresh_token` 额外校验 `token_type`，防止刷新令牌冒用为访问令牌）；JWT 密钥有最小长度要求；0.6.0-rc.3 起撤销缓存 TTL 化（等于令牌剩余有效期）。
+- **JWT 认证**（`authentication` 特性）：访问/刷新令牌区分校验（`verify_access_token` / `verify_refresh_token` 额外校验 `token_type`，防止刷新令牌冒用为访问令牌）；JWT 密钥有最小长度要求；0.6.0-rc.4 起撤销缓存 TTL 化（等于令牌剩余有效期）。
 - **密码安全**：bcrypt 哈希存储；`PasswordPolicy` 支持密码黑名单 + 复杂度要求；`register_user` 提供校验强度 → 哈希 → 入库的完整注册流程；`add_user` 会校验传入哈希格式，拒绝畸形哈希。
 - **路径与凭据**：连接 URL / 策略文件路径做遍历校验（拒绝含 `..` 的路径）；URL 解析失败时不回显原始 URL，避免凭据泄露。
 
 ### 第 5 层：审计与脱敏
 
-- **审计日志**（`audit` 特性）：完整操作日志与用户上下文跟踪；admin 绕过权限的操作也会被记录审计（0.4.2 起）。权限变更另有 HMAC-SHA256 链式签名的审计链与篡改检测（0.6.0-rc.3）。
+- **审计日志**（`audit` 特性）：完整操作日志与用户上下文跟踪；admin 绕过权限的操作也会被记录审计（0.4.2 起）。权限变更另有 HMAC-SHA256 链式签名的审计链与篡改检测（0.6.0-rc.4）。
 - **敏感数据脱敏**：内置 `SensitiveMasker`，支持邮箱、电话、身份证号等多种脱敏类型（含 Unicode 安全处理）；`data-protection` 特性提供查询出口字段级脱敏与行级安全谓词注入（admin bypass 通道保留）。
 
 ### 纵深防御补充

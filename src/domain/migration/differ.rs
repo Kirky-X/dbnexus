@@ -2208,4 +2208,242 @@ mod tests {
             _ => panic!("expected Generate"),
         }
     }
+
+    // ===== generate_alter_column_sql 方言矩阵 =====
+
+    fn named_column(name: &str) -> Column {
+        Column {
+            name: name.to_string(),
+            column_type: ColumnType::Integer,
+            is_primary_key: false,
+            is_nullable: false,
+            has_default: false,
+            default_value: None,
+            is_auto_increment: false,
+            comment: None,
+        }
+    }
+
+    #[test]
+    fn test_alter_column_rename_add_remove() {
+        let generator = SqlGenerator::new(DatabaseType::Postgres);
+
+        let sql = generator
+            .generate_alter_column_sql(
+                "t9",
+                &ColumnChange::RenameColumn {
+                    old_name: "old_c".to_string(),
+                    new_name: "new_c".to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(sql, "ALTER TABLE t9 RENAME COLUMN old_c TO new_c;");
+
+        let sql = generator
+            .generate_alter_column_sql("t9", &ColumnChange::AddColumn(named_column("added_c")))
+            .unwrap();
+        assert_eq!(sql, "ALTER TABLE t9 ADD added_c INTEGER NOT NULL;");
+
+        let sql = generator
+            .generate_alter_column_sql(
+                "t9",
+                &ColumnChange::RemoveColumn {
+                    column_name: "gone_c".to_string(),
+                },
+            )
+            .unwrap();
+        assert!(
+            sql.contains("DROP COLUMN gone_c"),
+            "删除应委托既有生成逻辑: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_alter_column_rename_rejects_graph_dialects() {
+        for db in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
+            let generator = SqlGenerator::new(db);
+            let err = generator
+                .generate_alter_column_sql(
+                    "t9",
+                    &ColumnChange::RenameColumn {
+                        old_name: "a".to_string(),
+                        new_name: "b".to_string(),
+                    },
+                )
+                .unwrap_err();
+            assert!(err.contains("Graph databases"), "got: {err}");
+        }
+    }
+
+    #[test]
+    fn test_alter_column_modify_mysql_and_sqlite() {
+        let mut with_default = named_column("status");
+        with_default.column_type = ColumnType::Integer;
+        with_default.default_value = Some("0".to_string());
+        with_default.has_default = true;
+
+        let change = ColumnChange::ModifyColumn {
+            column_name: "status".to_string(),
+            new_column: with_default,
+        };
+
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        let sql = mysql.generate_alter_column_sql("t9", &change).unwrap();
+        assert!(
+            sql.starts_with("ALTER TABLE t9 MODIFY COLUMN status"),
+            "MySQL 类型/默认值变更走 MODIFY COLUMN: {sql}"
+        );
+        assert!(sql.contains("DEFAULT 0"), "默认值须保留: {sql}");
+
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
+        let sql = sqlite.generate_alter_column_sql("t9", &change).unwrap();
+        assert!(
+            sql.contains("不支持修改列定义") && sql.contains("t9") && sql.contains("status"),
+            "SQLite 输出重建说明注释: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_alter_column_modify_postgres_type_nullability_default() {
+        let mut new_col = named_column("score");
+        new_col.column_type = ColumnType::Double;
+        new_col.is_nullable = true;
+        new_col.default_value = Some("0.0".to_string());
+        new_col.has_default = true;
+        let change = ColumnChange::ModifyColumn {
+            column_name: "score".to_string(),
+            new_column: new_col,
+        };
+
+        let generator = SqlGenerator::new(DatabaseType::Postgres);
+        let sql = generator.generate_alter_column_sql("t9", &change).unwrap();
+        assert!(
+            sql.contains("ALTER TABLE t9 ALTER COLUMN score TYPE DOUBLE PRECISION"),
+            "{sql}"
+        );
+        assert!(
+            sql.contains("ALTER TABLE t9 ALTER COLUMN score DROP NOT NULL"),
+            "{sql}"
+        );
+        assert!(sql.contains("SET DEFAULT 0.0"), "{sql}");
+    }
+
+    #[test]
+    fn test_alter_column_modify_rejects_graph_dialects() {
+        for db in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
+            let generator = SqlGenerator::new(db);
+            let err = generator
+                .generate_alter_column_sql(
+                    "t9",
+                    &ColumnChange::ModifyColumn {
+                        column_name: "c".to_string(),
+                        new_column: named_column("c"),
+                    },
+                )
+                .unwrap_err();
+            assert!(err.contains("Graph databases"), "got: {err}");
+        }
+    }
+
+    #[test]
+    fn test_alter_column_type_changed_matrix() {
+        let change = ColumnChange::TypeChanged {
+            column_name: "amount".to_string(),
+            old_type: ColumnType::Integer,
+            new_type: ColumnType::BigInteger,
+        };
+
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        assert_eq!(
+            pg.generate_alter_column_sql("t9", &change).unwrap(),
+            "ALTER TABLE t9 ALTER COLUMN amount TYPE BIGINT;"
+        );
+
+        let mysql = SqlGenerator::new(DatabaseType::MySql);
+        assert_eq!(
+            mysql.generate_alter_column_sql("t9", &change).unwrap(),
+            "ALTER TABLE t9 MODIFY COLUMN amount BIGINT;"
+        );
+
+        let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
+        let sql = sqlite.generate_alter_column_sql("t9", &change).unwrap();
+        assert!(
+            sql.contains("不支持修改列类型") && sql.contains("amount"),
+            "SQLite 输出重建说明注释: {sql}"
+        );
+
+        for db in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
+            assert!(
+                SqlGenerator::new(db)
+                    .generate_alter_column_sql("t9", &change)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_alter_column_nullability_changed_matrix() {
+        let nullable = |v: bool| ColumnChange::NullabilityChanged {
+            column_name: "nick".to_string(),
+            old_nullable: !v,
+            new_nullable: v,
+        };
+
+        let pg = SqlGenerator::new(DatabaseType::Postgres);
+        assert_eq!(
+            pg.generate_alter_column_sql("t9", &nullable(true)).unwrap(),
+            "ALTER TABLE t9 ALTER COLUMN nick DROP NOT NULL;"
+        );
+        assert_eq!(
+            pg.generate_alter_column_sql("t9", &nullable(false))
+                .unwrap(),
+            "ALTER TABLE t9 ALTER COLUMN nick SET NOT NULL;"
+        );
+
+        for db in [DatabaseType::MySql, DatabaseType::Sqlite] {
+            let sql = SqlGenerator::new(db)
+                .generate_alter_column_sql("t9", &nullable(true))
+                .unwrap();
+            assert!(
+                sql.contains("不支持直接修改列可空性") && sql.contains("nick"),
+                "{db:?} 输出重建说明注释: {sql}"
+            );
+        }
+
+        for db in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
+            assert!(
+                SqlGenerator::new(db)
+                    .generate_alter_column_sql("t9", &nullable(true))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_alter_column_rejects_unsafe_identifier() {
+        let generator = SqlGenerator::new(DatabaseType::Postgres);
+        assert!(
+            generator
+                .generate_alter_column_sql(
+                    "bad;table",
+                    &ColumnChange::RenameColumn {
+                        old_name: "a".to_string(),
+                        new_name: "b".to_string(),
+                    },
+                )
+                .is_err()
+        );
+        assert!(
+            generator
+                .generate_alter_column_sql(
+                    "t9",
+                    &ColumnChange::TypeChanged {
+                        column_name: "bad;col".to_string(),
+                        old_type: ColumnType::Integer,
+                        new_type: ColumnType::BigInteger,
+                    },
+                )
+                .is_err()
+        );
+    }
 }

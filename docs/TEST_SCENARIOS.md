@@ -104,5 +104,5 @@
 | doc | `RUSTFLAGS="-D warnings" cargo doc --no-deps --features sqlite,default-no-db,all-optional` | 零告警 |
 | deny | `cargo deny check` | 4 项 ok（licenses 经 clarify 绑定 LICENSE hash，见 deny.toml 注释） |
 | audit | `cargo audit --stale` | rc=0（RUSTSEC-2025-0134 在 allowed，neo4rs 传递依赖） |
-| examples | `examples/test_all_examples.sh`（项目自带脚本，51 个 [[bin]]，graph_ladybug 除外） | 51/51 通过，0 警告 0 失败 |
+| examples | `examples/test_all_examples.sh`（项目自带脚本，52 个 [[bin]]，graph_ladybug 除外） | 52/52 通过，0 警告 0 失败 |
 | macros | `cargo test -p dbnexus-macros`（CI exclude，本地补验） | db_entity_tests 2 聚合全过（pass×6 + compile_fail×3） |

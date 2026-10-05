@@ -5,10 +5,10 @@ mkdir -p target/tmp
 export TMPDIR=$PWD/target/tmp
 
 echo "========================================="
-echo "测试所有51个示例"
+echo "测试所有52个示例"
 echo "========================================="
 
-# 清单与 examples/Cargo.toml 的 [[bin]] 一一对应（共 51 个，按 Cargo.toml 中的注册顺序排列）。
+# 清单与 examples/Cargo.toml 的 [[bin]] 一一对应（共 52 个，按 Cargo.toml 中的注册顺序排列）。
 # 说明：graph_ladybug 未注册为 [[bin]]（需 ladybug feature，与 duckdb 存在 mbedtls 链接冲突），
 # 不纳入本脚本，需按 Cargo.toml 注释单独编译。
 # database_postgres / database_mysql / graph_neo4j 在无数据库服务时优雅降级退出，无需跳过。
@@ -45,6 +45,7 @@ examples=(
   "metrics_prometheus"
   "health_check"
   "latency_histogram"
+  "http_health"
   # 认证与审计模块 (auth/)
   "authentication_jwt"
   "authentication_password"

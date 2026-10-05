@@ -469,6 +469,8 @@ mod unit_tests {
     }
 
     /// list 全流程：分页钳制 / 过滤白名单 / 排序白名单 / Contains 走 instr
+    // sqlite 临时文件库依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_list_flow_filters_order_pagination() {
         // 内存库每连接独立：用临时文件库保证建表与查询同库

@@ -2121,4 +2121,94 @@ mod tests {
         let parsed = futures_block_on(&parser, "REVOKE INSERT ON t9 FROM role2");
         assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
     }
+
+    // ========================================================================
+    // extract_subquery_tables 表达式臂：逐变体直调，权限面依赖全部表提取
+    // ========================================================================
+
+    fn tables_of_raw(sql: &str) -> Vec<String> {
+        let dialect = GenericDialect {};
+        let stmts = Parser::parse_sql(&dialect, sql).unwrap();
+        let Statement::Query(q) = &stmts[0] else {
+            panic!("expected query: {sql}");
+        };
+        let mut out = Vec::new();
+        extract_query_tables(q, &mut out);
+        out
+    }
+
+    #[test]
+    fn test_extract_distinct_from_subquery_operands() {
+        for sql in [
+            "SELECT * FROM t1 WHERE a IS DISTINCT FROM (SELECT max(id) FROM t2)",
+            "SELECT * FROM t1 WHERE a IS NOT DISTINCT FROM (SELECT min(id) FROM t2)",
+        ] {
+            let tables = tables_of_raw(sql);
+            assert!(
+                tables.contains(&"t2".to_string()),
+                "missing t2 in {sql}: {tables:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_in_unnest_subquery() {
+        let tables = tables_of_raw("SELECT * FROM t1 WHERE id IN UNNEST((SELECT arr FROM t2))");
+        assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+    }
+
+    #[test]
+    fn test_extract_like_family_pattern_subqueries() {
+        for sql in [
+            "SELECT * FROM t1 WHERE name LIKE (SELECT pat FROM t2)",
+            "SELECT * FROM t1 WHERE name ILIKE (SELECT pat FROM t2)",
+            "SELECT * FROM t1 WHERE name SIMILAR TO (SELECT pat FROM t2)",
+        ] {
+            let tables = tables_of_raw(sql);
+            assert!(
+                tables.contains(&"t2".to_string()),
+                "missing t2 in {sql}: {tables:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_predicate_truth_subqueries() {
+        for sql in [
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS NULL",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS NOT NULL",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS TRUE",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS NOT TRUE",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS FALSE",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS NOT FALSE",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS UNKNOWN",
+            "SELECT * FROM t1 WHERE (SELECT flag FROM t2) IS NOT UNKNOWN",
+        ] {
+            let tables = tables_of_raw(sql);
+            assert!(
+                tables.contains(&"t2".to_string()),
+                "missing t2 in {sql}: {tables:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_cast_and_between_high_subqueries() {
+        let tables =
+            tables_of_raw("SELECT * FROM t1 WHERE CAST((SELECT id FROM t2) AS INTEGER) > 0");
+        assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+
+        let tables =
+            tables_of_raw("SELECT * FROM t1 WHERE id BETWEEN 1 AND (SELECT max(id) FROM t2)");
+        assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+    }
+
+    #[test]
+    fn test_extract_all_op_and_named_function_arg_subqueries() {
+        let tables = tables_of_raw("SELECT * FROM t1 WHERE id > ALL (SELECT id FROM t2)");
+        assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+
+        let tables = tables_of_raw("SELECT * FROM t1 WHERE foo(bar => (SELECT id FROM t2)) = 1");
+        assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+    }
 }

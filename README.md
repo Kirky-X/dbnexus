@@ -118,7 +118,7 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `saga` | Saga 分布式事务：持久化日志、启动恢复、补偿编排 |
 | `distributed-id` | Snowflake 分布式 ID 生成 |
 
-> 🆕 为 0.6.0-rc.4 新增能力，完整清单见 [CHANGELOG](docs/CHANGELOG.md)。
+> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（inklog 为 rc.6、http-health 为未发布新增）。
 
 </details>
 
@@ -201,7 +201,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 |------|-----------|
 | `DbPool` | 连接池入口，可从 URL 或 `DbConfig` 构建，管理连接生命周期 |
 | `Session` | 按角色获取的会话句柄，RAII 归还连接，承载事务与执行通道 |
-| `#[db_entity]` | 一个宏生成 Sea-ORM 实体模型 + 8 个带权限检查的 CRUD 方法 |
+| `#[db_entity]` | 一个宏生成 Sea-ORM 实体模型 + 一组带权限检查的 CRUD 方法（insert/find/update/delete 及批量、分页、存在性等 14+ 个） |
 | 权限策略 | 角色 → 表 → 操作的 RBAC 策略（内存或 YAML），JOIN/子查询表同样受检 |
 | 特性门控 | 驱动互斥在编译期 `compile_error!` 强制，未启用的能力零开销 |
 
@@ -299,14 +299,12 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 |------|------|:----:|
 | `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm 类型桥接（JSON / time / chrono / UUID 字段） | 否 |
 | `validation` | validator 数据验证 | 否 |
-| `json` | 直接 serde_json 反序列化支持 | 否 |
 | `yaml` | YAML 权限/配置文件解析 | 否 |
 | `config-toml` | TOML 配置支持（无额外依赖） | 否 |
 | `config-env` | 环境变量配置（无额外依赖） | 否 |
 | `pool-health-check` | 连接池健康检查 | 否 |
 | `pool-warmup` | 连接池预热 | 否 |
-| `dev` / `dev-full` | 开发辅助聚合 | 否 |
-| `bench` | criterion 基准依赖 | 否 |
+| `dev-full` | 开发辅助聚合（= `test-utils`） | 否 |
 | `test-utils` | 测试辅助工具（tempfile / assert_cmd） | 否 |
 | `cli-tests` | CLI 集成测试门控 | 否 |
 
@@ -320,7 +318,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
 | `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, 全部 7 项分布式能力 | 单体应用 |
 | `enterprise` | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| `all-optional` | 除数据库驱动外的 15 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache） | 全功能验证（手动追加驱动） |
+| `all-optional` | 除数据库驱动外的 27 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / inklog / kit / data-protection / http-health） | 全功能验证（手动追加驱动） |
 
 ### 使用示例
 
@@ -359,7 +357,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 
 ## 💻 示例
 
-全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **51 个二进制目标**（截至 0.6.0-rc.6）：
+全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.6）：
 
 ```bash
 cd examples
@@ -379,7 +377,7 @@ cargo build --all-targets
 | 权限 | `permission_rbac`、`permission_yaml`、`permission_macro`、`permission_engine` | RBAC / YAML 策略 / 宏权限 / 权限引擎 |
 | 安全 | `sql_parser`、`sql_injection_detection`、`ddl_guard`、`sensitive_masker`、`rate_limiter` | SQL 解析 / 注入检测 / DDL 守卫 / 脱敏 / 限流 |
 | 认证与审计 | `authentication_jwt`、`authentication_password`、`audit_logging` | JWT / 密码哈希 / 审计日志 |
-| 可观测性 | `metrics_prometheus`、`health_check`、`latency_histogram` | 指标 / 健康检查与熔断 / 延迟直方图 |
+| 可观测性 | `metrics_prometheus`、`health_check`、`latency_histogram`、`http_health` | 指标 / 健康检查与熔断 / 延迟直方图 / HTTP 健康端点 |
 | 宏 | `macros_db_entity`、`macros_db_crud`、`macros_db_audit`、`macros_db_cache`、`macros_soft_delete_unique`、`macros_db_entity_v2`、`macros_advanced_query` | 宏全量能力（CRUD/审计/缓存/软删除/hooks/分页） |
 | 图数据库 | `graph_ladybug`*、`graph_neo4j` | Ladybug 嵌入式图 DB / Neo4j 服务器 |
 | 分布式能力 | `distributed_id`、`saga`、`scatter_gather`、`replica_routing`、`shard_migration` | Snowflake ID / Saga / 跨分片聚合 / 读写分离 / 分片迁移 |
@@ -446,8 +444,8 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 | 指标 | 数值 | 来源 |
 |------|------|------|
-| 测试函数总数 | 2492 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1154 + tests 1336 + macros 2） |
-| 显式注册测试目标 | 80 个 `[[test]]` | `Cargo.toml` |
+| 测试函数总数 | 2754 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1347 + tests 1405 + macros 2） |
+| 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
 | 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | 覆盖率门禁 | ≥ 80% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
 
@@ -474,7 +472,7 @@ DBNexus 遵循零成本抽象原则，性能相关能力均为设计层面保证
 
 ### 端到端基准
 
-仓库内置 5 个 criterion 基准：`permission_bench`、`permission_engine_bench`、`sharding_bench`、`metrics_bench`、`e2e_bench`（位于 [benches/](benches/)，`cargo bench` 运行）。端到端基线（2026-09-11 采样，非 SLA）：`DbPool::get_session` 句柄获取 ≈ 0.24 µs、`DbPool::query_rows` 单行完整管道 ≈ 480 µs、`Session::execute_raw` 64 行循环 INSERT ≈ 708 ms/迭代（≈ 11 ms/行）。测量环境、逐项解读与复现命令见[性能基线 · 端到端基线](docs/PERFORMANCE.md#端到端基线)。
+仓库内置 9 个 criterion 基准：`permission_bench`、`permission_engine_bench`、`sharding_bench`、`metrics_bench`、`e2e_bench`、`batch_insert_bench`、`duckdb_copy_bench`、`oxcache_query_cache_bench`、`prepare_cache_bench`（位于 [benches/](benches/)，`cargo bench` 运行）。端到端基线（2026-09-11 采样，非 SLA）：`DbPool::get_session` 句柄获取 ≈ 0.24 µs、`DbPool::query_rows` 单行完整管道 ≈ 480 µs、`Session::execute_raw` 64 行循环 INSERT ≈ 708 ms/迭代（≈ 11 ms/行）。测量环境、逐项解读与复现命令见[性能基线 · 端到端基线](docs/PERFORMANCE.md#端到端基线)。
 
 ### 历史优化对照
 

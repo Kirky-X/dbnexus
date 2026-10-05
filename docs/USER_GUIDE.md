@@ -1110,7 +1110,7 @@ Model::delete(&session, 1).await?;
 
 ## 📦 完整示例
 
-改编自 [examples/basic/basic_crud.rs](../examples/src/basic/basic_crud.rs)（共 51 个可运行示例，见 [examples/README.md](../examples/README.md)）：
+改编自 [examples/basic/basic_crud.rs](../examples/src/basic/basic_crud.rs)（共 52 个可运行示例，见 [examples/README.md](../examples/README.md)）：
 
 ```rust
 use dbnexus::{db_entity, DbPool};

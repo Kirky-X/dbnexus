@@ -32,7 +32,7 @@ use dbnexus::sea_orm::entity::prelude::*;
 /// 使用 `#[db_entity(table_name = "users", primary_key = "id")]` 统一属性宏获得：
 /// - sea-orm 的 EntityModel 实现（Entity/ActiveModel/Column 等，由 DeriveEntityModel 生成）
 /// - dbnexus 的 `table_name()` / `primary_key_column()` 辅助方法
-/// - 8 个带权限检查的 CRUD 方法（insert/find_by_id/update/delete/find_all/...）
+/// - 一组带权限检查的 CRUD 方法（insert/find/update/delete 及批量、分页、存在性等 14+ 个）
 /// - `impl ActiveModelBehavior for ActiveModel`（宏自动生成，用户无需手写）
 #[db_entity(table_name = "users", primary_key = "id")]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

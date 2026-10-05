@@ -50,7 +50,7 @@ pub struct DbPool { /* 字段私有 */ }
 | `try_from_config` | `async fn try_from_config(config: DbConfig) -> DbResult<Self>` | 从显式配置创建（严格模式） |
 | `try_from` | `fn try_from(config: &DbConfig) -> Result<Self, ConfigError>` | 同步创建未初始化的连接池 |
 | `get_session` | `async fn get_session(&self, role: &str) -> DbResult<Session>` | 获取带角色权限检查的会话 |
-| `query_rows` | `async fn query_rows(&self, sql: &str, role: &str) -> DbResult<Vec<serde_json::Value>>` | 统一行查询：解析 → 权限 → 执行 → JSON 出口（0.6.0-rc.3） |
+| `query_rows` | `async fn query_rows(&self, sql: &str, role: &str) -> DbResult<Vec<serde_json::Value>>` | 统一行查询：解析 → 权限 → 执行 → JSON 出口（0.6.0-rc.4） |
 | `status` | `fn status(&self) -> PoolStatus` | 返回当前池状态快照 |
 | `config` | `fn config(&self) -> &DbConfig` | 返回生效配置 |
 | `clean_invalid_connections` | `async fn clean_invalid_connections(&self) -> u32` | 手动触发连接健康检查与清理（`pool-health-check`） |
@@ -96,7 +96,7 @@ pub struct Session { /* 字段私有 */ }
 |------|----------|------|
 | `role` | `fn role(&self) -> &str` | 返回当前会话角色 |
 | `execute` | `async fn execute(&self, sql: &str) -> DbResult<ExecResult>` | 执行带权限检查的 SQL |
-| `execute_raw` | `async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>` | 安全管道执行（解析 → 逐表权限 → 慢查询计时，0.6.0-rc.3 接线） |
+| `execute_raw` | `async fn execute_raw(&self, sql: &str) -> DbResult<ExecResult>` | 安全管道执行（解析 → 逐表权限 → 慢查询计时，0.6.0-rc.4 接线） |
 | `query_rows` | `async fn query_rows(&self, sql: &str) -> DbResult<Vec<serde_json::Value>>` | 行查询，返回 JSON 数据行 |
 | `execute_raw_ddl` | `async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult>` | 执行 DDL，仅限 admin 角色，经 `DdlGuard` 校验 |
 | `execute_cached` | `async fn execute_cached(&self, sql: &str) -> DbResult<ExecResult>` | 语句级缓存感知执行（`prepare-cache`） |
@@ -105,7 +105,7 @@ pub struct Session { /* 字段私有 */ }
 | `commit` | `async fn commit(&self) -> Result<(), DbError>` | 提交当前事务 |
 | `rollback` | `async fn rollback(&self) -> Result<(), DbError>` | 回滚当前事务 |
 | `is_in_transaction` | `async fn is_in_transaction(&self) -> bool` | 检查是否在事务中 |
-| `query_cache_get` / `query_cache_set` | `async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>>` 等 | 只读查询结果缓存读写（`cache`，0.6.0-rc.3） |
+| `query_cache_get` / `query_cache_set` | `async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>>` 等 | 只读查询结果缓存读写（`cache`，0.6.0-rc.4） |
 
 `execute` 可能返回的错误：
 
@@ -386,7 +386,7 @@ let found = Model::find_by_id(&session, 1).await?;
 
 ### `#[db_repository]`
 
-泛型仓储宏（`repository` 特性，0.6.0-rc.3 新增）：为实体生成 `Repository<T>` CRUD 端口实现，配合 `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 `query_rows` 管道）与 `impl_json_repository!` 实现宏。
+泛型仓储宏（`repository` 特性，0.6.0-rc.4 新增）：为实体生成 `Repository<T>` CRUD 端口实现，配合 `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 `query_rows` 管道）与 `impl_json_repository!` 实现宏。
 
 ---
 
@@ -472,7 +472,7 @@ pub enum SqlParseError {
 }
 ```
 
-### 统一错误报告（0.6.0-rc.3）
+### 统一错误报告（0.6.0-rc.4）
 
 | 类型 | 说明 |
 |------|------|
@@ -583,7 +583,7 @@ let logger = AuditLogger::new(); // 默认内存存储（容量 10000）
 // 记录操作与用户上下文；admin 绕过权限的操作同样被记录
 ```
 
-自定义存储与配置经 `AuditLogger::with_config(config: AuditConfig, storage: Arc<dyn AuditStorage>)` 注入；0.6.0-rc.3 新增 `DbAuditStorage` 数据库存储实现（`audit` + `sql-parser` 门控）与 `PermissionAuditChain` HMAC 链式签名审计链。
+自定义存储与配置经 `AuditLogger::with_config(config: AuditConfig, storage: Arc<dyn AuditStorage>)` 注入；0.6.0-rc.4 新增 `DbAuditStorage` 数据库存储实现（`audit` + `sql-parser` 门控）与 `PermissionAuditChain` HMAC 链式签名审计链。
 
 ---
 
@@ -862,7 +862,7 @@ assert!(contains_sql_injection("'; DROP TABLE--"));
 
 ### 注入检测 `InjectionEngine`（`sql-parser` 特性）
 
-统一注入检测引擎：关系型 / DDL / 图三处规则表合并为单一注册表（0.6.0-rc.3），按类别（`RuleCategory`）扫描。
+统一注入检测引擎：关系型 / DDL / 图三处规则表合并为单一注册表（0.6.0-rc.4），按类别（`RuleCategory`）扫描。
 
 ```rust
 use dbnexus::{InjectionEngine, RuleCategory};
@@ -904,7 +904,7 @@ use dbnexus::DbNexusModule;
 let module = DbNexusModule::new();
 ```
 
-**导出类型**：`DbNexusModule`、`DbNexusCacheModule`、`DbNexusAuditModule`、`DbNexusHealthModule`、`DbHealthCapability`、`DbNexusBuildObserver`（卫星模块为 0.6.0-rc.3 新增，四能力均可独立注册）
+**导出类型**：`DbNexusModule`、`DbNexusCacheModule`、`DbNexusAuditModule`、`DbNexusHealthModule`、`DbHealthCapability`、`DbNexusBuildObserver`（卫星模块为 0.6.0-rc.4 新增，四能力均可独立注册）
 
 ### 缓存 Provider（`cache` / `oxcache-integration` 特性）
 

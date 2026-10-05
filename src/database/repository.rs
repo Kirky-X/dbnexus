@@ -436,7 +436,10 @@ where
             .await?;
         match rows.into_iter().next() {
             Some(row) => Ok(Some(serde_json::from_value(row).map_err(|e| {
-                DbError::Config(format!("entity deserialize failed: {e}"))
+                DbError::Config(i18n::t(
+                    "repository-entity-deserialize-failed",
+                    &[("error", e.to_string())],
+                ))
             })?)),
             None => Ok(None),
         }
@@ -464,8 +467,12 @@ where
             .await?;
         rows.into_iter()
             .map(|row| {
-                serde_json::from_value(row)
-                    .map_err(|e| DbError::Config(format!("entity deserialize failed: {e}")))
+                serde_json::from_value(row).map_err(|e| {
+                    DbError::Config(i18n::t(
+                        "repository-entity-deserialize-failed",
+                        &[("error", e.to_string())],
+                    ))
+                })
             })
             .collect()
     }
@@ -786,12 +793,14 @@ mod tests {
 
     // ===== 补充测试：构造校验与 update_if_version 前置错误 =====
 
+    #[cfg(feature = "sqlite")]
     #[derive(serde::Serialize, serde::Deserialize)]
     struct VersionEntity {
         name: String,
         version: i64,
     }
 
+    #[cfg(feature = "sqlite")]
     #[derive(serde::Serialize, serde::Deserialize)]
     struct BadVersionEntity {
         version: String,
@@ -828,6 +837,8 @@ mod tests {
         );
     }
 
+    // 占位池用 sqlite::memory:，依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_update_if_version_precondition_errors() {
         let repo = JsonRepository::new("t9").unwrap();

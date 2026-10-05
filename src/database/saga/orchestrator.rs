@@ -595,6 +595,8 @@ mod external_id_tests {
     }
 
     /// mock 动作契约：name 标识与执行成功语义
+    // 占位池用 sqlite::memory:，依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn noop_action_name_and_execute_contract() {
         let pool = crate::database::DbPool::new("sqlite::memory:")
@@ -790,6 +792,127 @@ mod replay_compensation_tests {
         let fwd = NoopForward;
         assert_eq!(fwd.name(), "noop-forward");
         fwd.execute(&session).await.expect("noop forward 恒成功");
+    }
+
+    /// 恒失败补偿（重放失败路径专用）
+    struct ReplayFailingCompensation;
+
+    #[async_trait]
+    impl SagaAction for ReplayFailingCompensation {
+        async fn execute(&self, _session: &Session) -> Result<(), SagaError> {
+            Err(SagaError::CompensationFailed("undo boom".to_string()))
+        }
+        fn name(&self) -> &str {
+            "replay-failing-comp"
+        }
+    }
+
+    /// 重放日志含未定义步骤 → 该步骤无法补偿，终态 CompensationFailed
+    #[tokio::test]
+    async fn replay_ghost_step_enters_compensation_failed() {
+        let saga_id = "saga-replay-ghost".to_string();
+        let stored = SagaLog {
+            saga_id: saga_id.clone(),
+            status: SagaStatus::Compensating,
+            steps: vec![SagaStepLog {
+                name: "ghost-step".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        let store = Arc::new(PreloadedStore {
+            log: std::sync::Mutex::new(Some(stored)),
+        });
+        // 步骤定义缺 ghost-step：重放无从补偿
+        let steps = vec![SagaStep {
+            name: "defined-step".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopForward),
+            compensation: Box::new(NoopForward),
+        }];
+        let orchestrator =
+            SagaOrchestrator::new_with_log_store(Arc::new(ShardRouter::default()), store);
+        let result = orchestrator.compensate_recovered(&saga_id, &steps).await;
+        assert_eq!(result.status, SagaStatus::CompensationFailed);
+        assert!(result.compensated_steps.is_empty());
+    }
+
+    /// 重放时补偿执行失败 → 终态 CompensationFailed，补偿未计入成功清单
+    #[tokio::test]
+    async fn replay_compensation_execute_err_enters_compensation_failed() {
+        let saga_id = "saga-replay-comp-err".to_string();
+        let stored = SagaLog {
+            saga_id: saga_id.clone(),
+            status: SagaStatus::Compensating,
+            steps: vec![SagaStepLog {
+                name: "step-c".to_string(),
+                shard_id: 0,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        let store = Arc::new(PreloadedStore {
+            log: std::sync::Mutex::new(Some(stored)),
+        });
+        let steps = vec![SagaStep {
+            name: "step-c".to_string(),
+            shard_id: 0,
+            action: Box::new(NoopForward),
+            compensation: Box::new(ReplayFailingCompensation),
+        }];
+        // permission feature 下 "default" 角色会被安全默认策略拒绝，统一用 admin 角色
+        let router = ShardRouter::default().with_session_role("admin");
+        let pool = Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        router.add_shard(0, pool);
+        let orchestrator = SagaOrchestrator::new_with_log_store(Arc::new(router), store);
+        let result = orchestrator.compensate_recovered(&saga_id, &steps).await;
+        assert_eq!(result.status, SagaStatus::CompensationFailed);
+        assert!(result.compensated_steps.is_empty());
+    }
+
+    /// 重放日志步骤指向未注册分片 → 会话 Ok(None) → 终态 CompensationFailed
+    #[tokio::test]
+    async fn replay_unregistered_shard_enters_compensation_failed() {
+        let saga_id = "saga-replay-no-shard".to_string();
+        let stored = SagaLog {
+            saga_id: saga_id.clone(),
+            status: SagaStatus::Compensating,
+            steps: vec![SagaStepLog {
+                name: "step-x".to_string(),
+                shard_id: 42,
+                action_success: true,
+                compensation_success: None,
+                error: None,
+            }],
+        };
+        let store = Arc::new(PreloadedStore {
+            log: std::sync::Mutex::new(Some(stored)),
+        });
+        let steps = vec![SagaStep {
+            name: "step-x".to_string(),
+            shard_id: 42,
+            action: Box::new(NoopForward),
+            compensation: Box::new(NoopForward),
+        }];
+        // 仅注册分片 0，日志中的分片 42 未注册；admin 角色保证已注册分片会话可获取
+        let router = ShardRouter::default().with_session_role("admin");
+        let pool = Arc::new(
+            crate::database::DbPool::new("sqlite::memory:")
+                .await
+                .expect("pool"),
+        );
+        router.add_shard(0, pool);
+        let orchestrator = SagaOrchestrator::new_with_log_store(Arc::new(router), store);
+        let result = orchestrator.compensate_recovered(&saga_id, &steps).await;
+        assert_eq!(result.status, SagaStatus::CompensationFailed);
+        assert!(result.compensated_steps.is_empty());
     }
 }
 

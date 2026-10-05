@@ -1243,6 +1243,8 @@ mod strategy_edge_tests {
         assert!(session.is_none());
     }
 
+    // sqlite::memory: 依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn get_session_for_key_returns_session_when_registered() {
         let router = ShardRouter::new(HashStrategy, 2).with_session_role("admin");

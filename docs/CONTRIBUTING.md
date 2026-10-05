@@ -37,9 +37,9 @@ cd dbnexus
 # 安装 pre-commit hooks
 ./scripts/install-pre-commit.sh
 
-# 验证环境
-cargo build --all-features
-cargo test --all-features --lib
+# 验证环境（嵌入式/服务器驱动互斥，禁用 --all-features：src/lib.rs compile_error! 守卫）
+cargo build --no-default-features --features sqlite,default-no-db,all-optional
+cargo test --no-default-features --features sqlite,default-no-db,all-optional --lib
 ```
 
 ---
@@ -121,10 +121,12 @@ pre-commit run --all-files
 3. **确保测试通过**
 
    ```bash
-   cargo test --all-features
-   cargo clippy --all-features -- -D warnings
+   cargo test --no-default-features --features sqlite,default-no-db,all-optional
+   cargo clippy --no-default-features --features sqlite,default-no-db,all-optional -- -D warnings
    cargo fmt --all -- --check
    ```
+
+   > 嵌入式与服务器端驱动互斥，禁用 `--all-features`（`src/lib.rs` 的 `compile_error!` 守卫会强制编译失败）。
 
 4. **提交 PR**
    - 标题格式：Conventional Commits（`feat(<模块>): <描述>` 或 `fix(<模块>): <描述>`，commit-msg 钩子校验）
@@ -186,8 +188,8 @@ cargo test --features sqlite --lib
 # 集成测试
 cargo test --features sqlite
 
-# 全部测试
-cargo test --all-features
+# 全部测试（CI 标准特性组合）
+cargo test --no-default-features --features sqlite,default-no-db,all-optional
 
 # 特定数据库后端
 cargo test --features postgres

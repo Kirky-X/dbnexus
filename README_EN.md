@@ -120,7 +120,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `saga` | Saga distributed transactions: persistent log, startup recovery, compensation orchestration |
 | `distributed-id` | Snowflake distributed ID generation |
 
-> 🆕 marks capabilities added in 0.6.0-rc.4; see the [Changelog](docs/CHANGELOG.md) for the full list.
+> 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (inklog in rc.6, http-health unreleased).
 
 ---
 
@@ -201,7 +201,7 @@ Model::find_all(&session).await?; // Error: permission denied
 |------|-----------|
 | `DbPool` | Pool entry point, built from a URL or `DbConfig`, owns the connection lifecycle |
 | `Session` | Role-scoped session handle, RAII connection return, hosts transactions and execution channels |
-| `#[db_entity]` | One macro generates the Sea-ORM entity model + 8 permission-checked CRUD methods |
+| `#[db_entity]` | One macro generates the Sea-ORM entity model + a set of permission-checked CRUD methods (insert/find/update/delete plus bulk, pagination, existence and more, 14+ in total) |
 | Permission policy | Role → table → action RBAC policy (memory or YAML); JOIN/subquery tables are checked too |
 | Feature gating | Driver mutual exclusion enforced at compile time via `compile_error!`; disabled capabilities cost nothing |
 
@@ -299,14 +299,12 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 |------|------|:----:|
 | `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm type bridges (JSON / time / chrono / UUID fields) | No |
 | `validation` | validator-based data validation | No |
-| `json` | Direct serde_json deserialization support | No |
 | `yaml` | YAML permission/config file parsing | No |
 | `config-toml` | TOML config support (no extra dependency) | No |
 | `config-env` | Environment variable config (no extra dependency) | No |
 | `pool-health-check` | Connection pool health checks | No |
 | `pool-warmup` | Connection pool warmup | No |
-| `dev` / `dev-full` | Developer convenience aggregates | No |
-| `bench` | criterion benchmark dependencies | No |
+| `dev-full` | Developer convenience aggregate (equals `test-utils`) | No |
 | `test-utils` | Test utilities (tempfile / assert_cmd) | No |
 | `cli-tests` | CLI integration test gating | No |
 
@@ -320,7 +318,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
 | `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, all 7 distributed capabilities | Monolithic application |
 | `enterprise` | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| `all-optional` | 15 optional features except database drivers (cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache) | Full-feature verification (add drivers manually) |
+| `all-optional` | 27 optional features except database drivers (cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / inklog / kit / data-protection / http-health) | Full-feature verification (add drivers manually) |
 
 ### Usage Examples
 
@@ -359,7 +357,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **51 binary targets** in total (as of 0.6.0-rc.6):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.6):
 
 ```bash
 cd examples
@@ -379,7 +377,7 @@ cargo build --all-targets
 | Permission | `permission_rbac`, `permission_yaml`, `permission_macro`, `permission_engine` | RBAC / YAML policies / macro permissions / permission engine |
 | Security | `sql_parser`, `sql_injection_detection`, `ddl_guard`, `sensitive_masker`, `rate_limiter` | SQL parsing / injection detection / DDL guard / masking / rate limiting |
 | Auth & Audit | `authentication_jwt`, `authentication_password`, `audit_logging` | JWT / password hashing / audit logging |
-| Observability | `metrics_prometheus`, `health_check`, `latency_histogram` | Metrics / health check & circuit breaker / latency histogram |
+| Observability | `metrics_prometheus`, `health_check`, `latency_histogram`, `http_health` | Metrics / health check & circuit breaker / latency histogram / HTTP health endpoints |
 | Macros | `macros_db_entity`, `macros_db_crud`, `macros_db_audit`, `macros_db_cache`, `macros_soft_delete_unique`, `macros_db_entity_v2`, `macros_advanced_query` | Full macro capabilities (CRUD/audit/cache/soft-delete/hooks/pagination) |
 | Graph Databases | `graph_ladybug`*, `graph_neo4j` | Ladybug embedded graph DB / Neo4j server |
 | Distributed Capabilities | `distributed_id`, `saga`, `scatter_gather`, `replica_routing`, `shard_migration` | Snowflake ID / Saga / cross-shard aggregation / read-write splitting / shard migration |
@@ -446,8 +444,8 @@ Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicit
 
 | Metric | Value | Source |
 |------|------|------|
-| Total test functions | 2492 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1154 + tests 1336 + macros 2) |
-| Registered test targets | 80 `[[test]]` | `Cargo.toml` |
+| Total test functions | 2754 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1347 + tests 1405 + macros 2) |
+| Registered test targets | 87 `[[test]]` | `Cargo.toml` |
 | Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | Coverage gate | ≥ 80% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
 
@@ -474,7 +472,7 @@ DBNexus follows the zero-cost abstraction principle; its performance characteris
 
 ### End-to-end benchmarks
 
-The repository ships 5 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench` (under [benches/](benches/), run via `cargo bench`). The end-to-end baseline (sampled 2026-09-11, not an SLA): `DbPool::get_session` handle acquisition ≈ 0.24 µs, `DbPool::query_rows` single-row full pipeline ≈ 480 µs, `Session::execute_raw` 64-row INSERT loop ≈ 708 ms/iteration (≈ 11 ms/row). The measurement environment, per-item interpretation and reproduction commands live in [Performance Baseline · End-to-end baseline](docs/PERFORMANCE.md#端到端基线).
+The repository ships 9 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench`, `batch_insert_bench`, `duckdb_copy_bench`, `oxcache_query_cache_bench`, `prepare_cache_bench` (under [benches/](benches/), run via `cargo bench`). The end-to-end baseline (sampled 2026-09-11, not an SLA): `DbPool::get_session` handle acquisition ≈ 0.24 µs, `DbPool::query_rows` single-row full pipeline ≈ 480 µs, `Session::execute_raw` 64-row INSERT loop ≈ 708 ms/iteration (≈ 11 ms/row). The measurement environment, per-item interpretation and reproduction commands live in [Performance Baseline · End-to-end baseline](docs/PERFORMANCE.md#端到端基线).
 
 ### Historical optimization comparison
 

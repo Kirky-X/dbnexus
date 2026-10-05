@@ -1,6 +1,6 @@
 # DBNexus 示例索引
 
-本目录是独立子 crate `dbnexus-examples`，收录 DBNexus 的全部功能示例，与 `Cargo.toml` 中的 `[[bin]]` 清单一一对应（共 51 个已注册 bin）。
+本目录是独立子 crate `dbnexus-examples`，收录 DBNexus 的全部功能示例，与 `Cargo.toml` 中的 `[[bin]]` 清单一一对应（共 52 个已注册 bin）。
 
 **Rust 版本要求：1.97.1+**（与 workspace 的 `rust-version` 一致）。
 
@@ -88,6 +88,7 @@ cargo run -p dbnexus-examples --bin <示例名>
 | `metrics_prometheus` | 用 `MetricsCollector` 同步池状态、记录查询指标并导出 Prometheus 格式 | `cargo run -p dbnexus-examples --bin metrics_prometheus` |
 | `health_check` | 演示 `HealthChecker` 健康检查与 `CircuitBreaker` 熔断器的完整流程 | `cargo run -p dbnexus-examples --bin health_check` |
 | `latency_histogram` | 演示 `LatencyHistogram` 延迟直方图、百分位统计与慢查询记录 | `cargo run -p dbnexus-examples --bin latency_histogram` |
+| `http_health` | 用 `HealthRouterBuilder` 生成 `/healthz` `/readyz` `/metrics` 三个健康端点并本地起服演示（10 秒自动退出） | `cargo run -p dbnexus-examples --bin http_health` |
 
 ## 认证与审计模块 (auth/)
 
@@ -163,7 +164,7 @@ cargo build --bin graph_ladybug --no-default-features \
 ## 批量运行与编译
 
 ```bash
-# 在 examples/ 目录下逐个运行全部 51 个已注册示例
+# 在 examples/ 目录下逐个运行全部 52 个已注册示例
 bash test_all_examples.sh
 
 # 编译全部示例

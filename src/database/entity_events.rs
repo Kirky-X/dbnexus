@@ -388,6 +388,8 @@ mod tests {
     }
 
     /// outbox 表名非法必须显性拒绝（fail-closed）
+    // sqlite::memory: 依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_outbox_store_rejects_unsafe_table_name() {
         let pool = std::sync::Arc::new(

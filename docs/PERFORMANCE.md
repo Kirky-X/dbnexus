@@ -22,7 +22,7 @@
 
 ## 基准设施
 
-仓库内置 5 个 criterion 基准（位于 [benches/](../benches/)），随 `bench` 特性提供：
+仓库内置 9 个 criterion 基准（位于 [benches/](../benches/)），criterion 经 dev-dependencies 提供、不经 feature 启用：
 
 | 基准文件 | 覆盖面 | 运行命令 |
 |----------|--------|----------|
@@ -33,6 +33,8 @@
 | `benches/permission_engine_bench.rs` | PermissionCache insert / get / miss | `cargo bench --bench permission_engine_bench --features permission-engine` |
 | `benches/sharding_bench.rs` | 分片路由哈希、跨分片绑定冲突检测 | `cargo bench --bench sharding_bench --features sharding` |
 | `benches/metrics_bench.rs` | 百分位计算、Prometheus 导出（含 1/50/200 标签规模曲线 + 慢查询环满态）、直方图记录、health_snapshot（`metrics,sqlite,health-check,sql-parser,runtime-tokio-rustls`） | `cargo bench --bench metrics_bench --features metrics` |
+| `benches/oxcache_query_cache_bench.rs` | oxcache 查询缓存装饰器：N+1 形态查询的穿透（miss）vs 命中（hit）路径（sqlite 临时文件库 + Moka 后端） | `cargo bench --bench oxcache_query_cache_bench --features "sqlite,oxcache-integration,sql-parser,runtime-tokio-rustls"` |
+| `benches/prepare_cache_bench.rs` | 语句级 prepared statement LRU 缓存：满容量稳态插入淘汰成本不随容量线性劣化 | `cargo bench --bench prepare_cache_bench --features prepare-cache` |
 
 两轮平台优化的过程记录与逐轮对照见 [benches/baseline-after.md](../benches/baseline-after.md)。
 

@@ -352,14 +352,19 @@ fn validate_table_name(table: &str) -> DbResult<()> {
 #[cfg(test)]
 mod unit_tests {
     use super::*;
+    // 仅 sqlite 门控测试经 make_qc 使用：无 sqlite 组合下避免 unused import
+    #[cfg(feature = "sqlite")]
     use oxcache::backend::MokaMemoryBackend;
 
+    #[cfg(feature = "sqlite")]
     fn make_qc(pool: Arc<DbPool>) -> OxcacheQueryCache {
         let backend = MokaMemoryBackend::builder().capacity(10_000).build();
         OxcacheQueryCache::new(pool, Arc::new(backend))
     }
 
     /// 构建期契约：空表集与非法表名 fail-closed（key 派生拒绝）
+    // 占位池用 sqlite::memory:，依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_derive_key_rejects_empty_or_invalid_tables() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
@@ -385,6 +390,8 @@ mod unit_tests {
     }
 
     /// 解码失败：后端命中但载荷非 JSON → 显性 Cache 错误（不吞错不返回脏数据）
+    // 占位池用 sqlite::memory:，依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_query_cached_corrupt_payload_errors() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
@@ -412,6 +419,8 @@ mod unit_tests {
     }
 
     /// builder 链与访问器
+    // 占位池用 sqlite::memory:，依赖嵌入式驱动：无 sqlite 组合不可运行
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_builder_accessors() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
