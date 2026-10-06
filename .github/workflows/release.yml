@@ -57,6 +57,10 @@ jobs:
     environment:
       name: crates.io
       url: https://crates.io/crates/dbnexus
+    # token 经 env 传递给 cargo（cargo 原生读 CARGO_REGISTRY_TOKEN），
+    # 避免内联到命令行后出现在同 runner 的进程表里
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,29 +69,60 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.97.1
 
-      - name: Publish dbnexus-macros
+      - name: Resolve version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      # 包级自下而上发布顺序：dbnexus-macros → dbnexus-limiter-port → dbnexus → dbnexus-cli。
+      # limiter-port 是 dbnexus `permission` feature 的必需依赖（workspace 成员），未上 registry
+      # 时 `cargo publish dbnexus` 连打包前的依赖解析都过不去，顺序错了不会静默成功。
+      # 发布失败不再被 `|| echo` 吞掉：先区分「已在 registry」（幂等成功）与真失败，
+      # 真失败立即硬报 error 退出；每次上传后轮询 registry 直到可见再进下一个包
+      # （取代固定 sleep 15s，新 crate 首次上榜的索引传播时间不固定）。
+      # crates.io API 必须带 User-Agent，否则 403。
+      - name: Publish crates (bottom-up)
         run: |
-          cd macros
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
+          set -uo pipefail
+          VER="${{ steps.ver.outputs.version }}"
+          case "$VER" in
+            [0-9]*) ;;
+            *) echo "::error::无法从引用 '$GITHUB_REF_NAME' 解析版本号（发布仅应由 v* tag 触发）"; exit 1 ;;
+          esac
+          UA='User-Agent: kirky-x-release-verify'
+          registry_seen() {
+            for i in $(seq 1 12); do
+              code=$(curl -sS -m 20 --retry 2 -o /dev/null -w "%{http_code}" -H "$UA" \
+                     "https://crates.io/api/v1/crates/$1/${VER}" || echo "000")
+              if [ "$code" = "200" ]; then
+                echo "$1 ${VER}: registry 可见 (HTTP $code)"
+                return 0
+              fi
+              echo "$1 ${VER}: 等待索引 (try$i HTTP $code)"
+              sleep 10
+            done
+            return 1
+          }
+          publish() {
+            dir="$1"; name="$2"
+            if ! (cd "$dir" && cargo publish); then
+              if registry_seen "$name"; then
+                echo "::notice::$name ${VER} 发布命令未成功但已在 registry，视为幂等成功"
+                return 0
+              fi
+              echo "::error::$name ${VER} 发布失败且 registry 不可查"
+              return 1
+            fi
+            registry_seen "$name" || { echo "::error::$name 已上传但 registry 不可见"; return 1; }
+          }
+          publish macros            dbnexus-macros        || exit 1
+          publish limiter-port      dbnexus-limiter-port  || exit 1
+          publish .                 dbnexus               || exit 1
+          publish src/tools/cli     dbnexus-cli           || exit 1
+          echo "All crates published: ${VER}"
 
-      - name: Wait for index update
-        run: sleep 15
-
-      - name: Publish dbnexus
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
-
-      - name: Wait for index update
-        run: sleep 15
-
-      - name: Publish dbnexus-cli
+      - name: Publication links
         run: |
-          cd src/tools/cli
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "Already published or skipped"
-
-      - name: Verify publication
-        run: |
-          echo "All crates published!"
-          echo "Check:"
-          echo "  - https://crates.io/crates/dbnexus"
-          echo "  - https://crates.io/crates/dbnexus-macros"
-          echo "  - https://crates.io/crates/dbnexus-cli"
+          VER="${{ steps.ver.outputs.version }}"
+          for crate in dbnexus dbnexus-macros dbnexus-limiter-port dbnexus-cli; do
+            echo "https://crates.io/crates/${crate}/${VER}"
+          done
