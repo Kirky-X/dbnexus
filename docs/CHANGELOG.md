@@ -9,7 +9,7 @@
 <summary>📑 版本索引</summary>
 
 - [Unreleased](#unreleased)
-- [0.6.0-rc.6 - 2026-09-28](#060-rc6---2026-09-28)
+- [0.6.0-rc.6 - 2026-10-06](#060-rc6---2026-10-06)
 - [0.6.0-rc.5 - 2026-09-21](#060-rc5---2026-09-21)
 - [0.6.0-rc.4 - 2026-09-14](#060-rc4---2026-09-14)
 - [0.6.0-rc.2 - 2026-09-03](#060-rc2---2026-09-03)
@@ -29,8 +29,23 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.6] - 2026-10-06
+
 ### Added
 
+- **分片策略单一事实源**：`database::sharding` 新增 `is_known_strategy` 导出，别名注册表 `STRATEGY_ALIASES` 供 `is_known_strategy`/`create_strategy` 共用
+- **审计查询有界化**：`AuditQueryFilters` 新增 `limit` 字段（`DbAuditStorage` 线程化为 SQL `LIMIT`，`MemoryAuditStorage` 同步截断），下游字面量构造需补 `..Default::default()`
+- **YAML 权限提供者首查即加载**：修复 `EngineYamlPermissionProvider` 新建实例在 60s 惰性阈值窗口内静默返回空规则（deny-everything 无信号）的行为缺陷
+- **运维 CLI 剩余命令（R4）**：`dbnexus-cli` 新增 `pool-status`（`health_snapshot` 结构化池快照，unhealthy 分流退出码 1）/`audit-query`（`DbAuditStorage` 过滤查询，user/entity/operation/severity/status/时间区间参数，幂等建表空集即成功）/`shard-info`（策略与分片清单输出，`--route-key` 演示哈希路由，未知策略显性拒绝禁止静默回落）/`permission-check`（权限配置文件 + PDP 决策，allow→0 / deny→1 / 配置错误→2），沿用 JSON 输出 + 退出码 0/1/2 契约；`--database-url` 改为按需收敛（shard-info/permission-check 免库）
+
+- **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容（含畸形标识符日志注入消毒用例）
+- **duckdb 能力扩展**：串行写闸 `with_serialized_writes`（默认不启用，读并发不受限）；`with_transaction` 泛型事务闭包（事务内可读、成败皆归还连接）；连接池模式新增 `execute_batch` 多语句批量执行
+- **migration 定制化**：`with_history_table` 迁移历史表名可定制（默认路径 SQL 逐字节不变）；`with_markers` UP/DOWN 迁移标记集可定制（默认口径不变）
+- **cache-guard 缓存三防**：穿透/击穿/雪崩防护与 scatter 跨分片全局归并
+- **replica 写后读粘性窗口**：探测结果缓存与并行探测
+- **session 当前读与隔离级别**：`query_rows_for_update` 当前读、`begin_transaction_with_isolation` 隔离级别控制
+- **绑定参数化执行 API**：session/repository 绑定参数化执行与 JsonRepository 全链路值绑定
+- **业务分片键路由**：`calculate_for_key` / `route_for_key`（sharding）
 - **限流统一（R2，limiteron 端口抽取）**：权限检查限流抽为 `Limiter` 端口（新 workspace 成员 `dbnexus-limiter-port`，仅依赖 `async-trait`，不依赖 dbnexus 与 limiteron 任何一方）——limiteron 已 optional 依赖 dbnexus，Cargo 禁包级循环依赖（optional 亦然），dbnexus 反向接入必成环，故端口独立成 crate 由两侢单向依赖、装配在应用组合根（全图解析零依赖环，方案见 `docs/RATE_LIMITING.md`）；旧令牌桶保留为默认后端（行为不变），新增 `PermissionContext::with_cache_size_and_backend` 双后端切换（`TokenBucket`/`External(Arc<dyn Limiter>)`）；**429 响应语义**：新增 `TableAccessDecision`（`Allowed`/`Denied`/`RateLimited{retry_after}`）与 `DbError::RateLimited{retry_after_secs}`（`ErrorCode::RateLimited = 2002`），会话层全部执行路径区分策略拒绝（403）与限流拒绝（429，携带 `Retry-After`），限流后端故障 fail-closed 显性告警；**审计事件**：`audit` feature 下 `set_audit_logger` 挂载后限流拒绝产生 `rate_limit_exceeded` 审计事件（表名/SQL 动作/Retry-After 入 extra，写入失败不阻断判定但显性告警）；旧布尔 API `check_table_access` 行为兼容；迁移指南 `docs/RATE_LIMITING.md`
 - **HTTP 健康端点生成器（R6）**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
 - **批量写入（`copy`）**：`BatchInsertStatement::chunk_rows_owned` 消费所有权变体——行集按值消费、参数经 `Vec::append` 指针级搬运，持有行集所有权的调用方免去借用版逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致
@@ -49,8 +64,17 @@
 
 - **批量写入（`copy`）错误契约**：`copy_in` 非 COPY 后端拒绝统一为 `DbError::Query` 基础文案（postgres/duckdb 支持范围 + 非 COPY 后端改写指引）；驱动组启用但池连接类型不匹配时以尾注透传原始下转错误（"got SeaOrm" 等），无驱动组追加启用驱动 feature 的补救指引——duckdb 失配路径的可观察变体由 `DbError::Connection` 变为 `DbError::Query`
 
+- **解除 `dbnexus → inklog` 依赖边（防包级循环依赖）**：rc.6 开发期曾新增 `inklog` feature 与 `init_inklog_logger()` 便捷入口。因 inklog 自身已 optional 依赖 dbnexus（`^0.6.0-rc.5`，caret 会匹配 rc.6），两侧同时启用 `dbnexus/inklog` 与 `inklog/{sqlite,postgres,mysql,duckdb,dbnexus-audit,kit}` 即触发 `cargo` 的 `cyclic package dependency` 硬失败（已实测复现）。本版删除该 feature、`src/integrations/inklog.rs` 与可选依赖，日志后端由消费方自行安装为全局 `log` 后端——四类接线点（池超时/权限拒绝/熔断/慢查询）经 `log` 门面发记录的能力与测试保持不变，默认构建行为不变
+
+- **三方依赖刷新至最新稳定版**（发布前统一 `cargo update`，门禁与覆盖率均基于刷新后的锁定集重跑）：跨仓钉版收敛至 `confers 0.6.0-rc.6` / `oxcache 0.5.0-rc.6` / `trait-kit 0.5.0-rc.7`（`inklog` 依赖边已摘除，见下条）；关键直邻依赖 `sea-orm 2.0.2 → 2.0.4`、`libduckdb-sys/duckdb 1.10505 → 1.10506`（bundled 引擎小版本）、`tokio 1.53.1 → 1.53.2`、dev 依赖 `testcontainers 0.27.3 → 0.28.0`（取代 dependabot PR #29）、`cc 1.4.6 → 1.6.0`、`cxx 1.0.199 → 1.0.202`、`lbug 0.20.2 → 0.20.4`；`trybuild` 依赖由 `target-triple` 改为上游正式改名后的 `target-tuple 1.0.2`（已经 crates.io 校验为 dtolnay 官方 crate）；`cargo deny check`（advisories/bans/licenses/sources）与 `cargo audit` 均 0 漏洞通过
+
 ### Fixed
 
+- **【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入**：列投影/游标分页/乐观锁路径的字符串字面量按后端转义规则处理，MySQL 后端（反斜杠为转义字符）此前存在注入面
+- **duckdb 连接池归还**：池连接改 RAII 归还、语句执行成败皆归还连接、写闸幂等复用
+- **saga 持久化显性化**：持久化失败不再静默，重放跳过已补偿步骤，补偿会话失败显性上报
+- **global-index / health**：全局索引表查询列二级索引；health 零连接测试前提显式化
+- 权限审计链模块头链接改全路径，修复 rustdoc `-D warnings` 假红
 - **admin 执行表无关语句被误拒**：`execute_raw`/`query_rows` 权限管道的表名有效性检查（空 `all_table_names`/非法表名）原先排在 admin 绕过之前，admin 执行无 FROM 语句（`SELECT 1` 连通性探测/健康检查预热等合法场景）被误拒；现 admin 绕过整体前置（表名检查本就是权限检查的一部分，随绕过跳过），非 admin 的 fail-closed 拒绝与逐表校验不变；回归测试 `test_admin_bypasses_table_name_validity_check` 双向断言（HEAD 2861e3c 复现，非本轮 feature 变更引入）
 - **查询缓存测试的受限角色会话被安全默认拒绝**：`oxcache_query_cache_tests` 两用例（跨角色隔离/哈希字段注入）的池未配权限文件，`with_role` 实例 `get_session` 被安全默认（仅 admin/system）拒绝——测试池显式携带权限配置（定义受限角色及表权限，换行角色名经 JSON 转义承载），12/12 全绿（HEAD 2861e3c 复现）
 - **运维 CLI 端到端测试的口径适配**：`ops_cli_tests` 整套用例加显性 `#![cfg(...)]` 门控（子命令经 cli `migration`/`health-check`/`permission-engine` 等 features 门控，workspace `--no-default-features` 口径下子命令不存在），该口径编译期跳过、`cargo test -p dbnexus-cli` 默认口径 25/25 全绿（workspace 口径与 cli default features 的适配属 CI feature 工程待办，登记于 docs/WS_R14_REVIEW.md）
@@ -61,32 +85,16 @@
 - **session 模块 feature 组合编译裂缝**：`json_to_sea_value`/`build_statement` 补 `sql-parser` 门控（调用点全部位于 raw 查询路径，neo4j-only 等组合下不再死代码告警）；`apply_masking` 补 `data-protection × (postgres|sqlite)` 门控（调用点仅存在于 postgres/sqlite 两个 raw 分支，duckdb-only 组合下不再死代码告警）；`query_rows_impl` 无 sql-parser 分支的提前返回补 `needless_return` 豁免（cfg 互斥块内该 return 恰为函数尾，clippy 单组合口径误报）；session 测试模块 `use super::*` glob 按 feature 矩阵统一豁免（裸组合/部分组合下 unused 告警）
 - **db_pool 死连接测试不可模拟（如实披露）**：`db_pool` 两用例（cleanup/validate 杀死连接）保持 `#[ignore]`——sea-orm 2.0 sqlite 走 `RusqliteSharedConnection` 进程内嵌库，`SELECT 1` 恒成功、`close` 无法真正杀死连接，「死连接」不可模拟；恢复条件为 cleanup/validate 支持注入式健康探针（原因已内联于 ignore 属性）；Neo4j 服务器依赖用例维持环境变量门控
 
-## [0.6.0-rc.6] - 2026-09-28
+## [0.6.0-rc.5] - 2026-09-21
 
-### Added
+### Changed
 
-- **分片策略单一事实源**：`database::sharding` 新增 `is_known_strategy` 导出，别名注册表 `STRATEGY_ALIASES` 供 `is_known_strategy`/`create_strategy` 共用
-- **审计查询有界化**：`AuditQueryFilters` 新增 `limit` 字段（`DbAuditStorage` 线程化为 SQL `LIMIT`，`MemoryAuditStorage` 同步截断），下游字面量构造需补 `..Default::default()`
-- **YAML 权限提供者首查即加载**：修复 `EngineYamlPermissionProvider` 新建实例在 60s 惰性阈值窗口内静默返回空规则（deny-everything 无信号）的行为缺陷
-- **运维 CLI 剩余命令（R4）**：`dbnexus-cli` 新增 `pool-status`（`health_snapshot` 结构化池快照，unhealthy 分流退出码 1）/`audit-query`（`DbAuditStorage` 过滤查询，user/entity/operation/severity/status/时间区间参数，幂等建表空集即成功）/`shard-info`（策略与分片清单输出，`--route-key` 演示哈希路由，未知策略显性拒绝禁止静默回落）/`permission-check`（权限配置文件 + PDP 决策，allow→0 / deny→1 / 配置错误→2），沿用 JSON 输出 + 退出码 0/1/2 契约；`--database-url` 改为按需收敛（shard-info/permission-check 免库）
+- **dbnexus-macros 增强**：新增 `entity-macros` feature 转发 sea-orm 派生宏——消费方经 `dbnexus::sea_orm` re-export 定义实体即可，免直接依赖 sea-orm；`sea_orm` re-export 不再绑定驱动 feature
+- **i18n 整改**：统一错误与消息文案管理
+- **依赖升级**：sha2 0.10.9 → 0.11.0 及 patch 组刷新；跨仓 path 依赖改走 crates.io
+- **工程加固**：detect-secrets 基线、pre-commit 门禁、typos 误报白名单、clippy 存量清理
 
-- **inklog 结构化日志集成（Logs 支柱从零到一）**：新增 `inklog` feature（`inklog 0.3.0-rc.5`，`default-features = false`），`dbnexus::integrations::inklog::init_inklog_logger()` 将 inklog `LoggerManager` 安装为全局 `log` 后端，返回 `InklogInit::Installed/Reused` 显性区分「本次配置生效」与「复用既有后端」；池获取超时、权限拒绝（含 SQL 解析失败 fail-closed 拒绝，execute_raw/query_rows/duckdb_security_gate 三分支全覆盖，用户可控字段经控制字符消毒防日志注入）、熔断器状态转换（打开/重开/半开/恢复）、慢查询四类接线点经 `log` 门面发记录，启用后路由到 inklog 结构化管道（log 门面记录达 console/file sinks，database sink 仅原生 tracing 路径可达；manager 须全程保持存活，Drop 后记录被静默丢弃）；`log 0.4` 门面为非可选依赖，未安装 logger 时为 no-op，默认构建行为不变
-- **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容（含畸形标识符日志注入消毒用例）；`integrations::inklog` 内联测试覆盖 init 成功/级别安装/路由不 panic/Installed-Reused 标记语义
-- **duckdb 能力扩展**：串行写闸 `with_serialized_writes`（默认不启用，读并发不受限）；`with_transaction` 泛型事务闭包（事务内可读、成败皆归还连接）；连接池模式新增 `execute_batch` 多语句批量执行
-- **migration 定制化**：`with_history_table` 迁移历史表名可定制（默认路径 SQL 逐字节不变）；`with_markers` UP/DOWN 迁移标记集可定制（默认口径不变）
-- **cache-guard 缓存三防**：穿透/击穿/雪崩防护与 scatter 跨分片全局归并
-- **replica 写后读粘性窗口**：探测结果缓存与并行探测
-- **session 当前读与隔离级别**：`query_rows_for_update` 当前读、`begin_transaction_with_isolation` 隔离级别控制
-- **绑定参数化执行 API**：session/repository 绑定参数化执行与 JsonRepository 全链路值绑定
-- **业务分片键路由**：`calculate_for_key` / `route_for_key`（sharding）
-
-### Fixed
-
-- **【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入**：列投影/游标分页/乐观锁路径的字符串字面量按后端转义规则处理，MySQL 后端（反斜杠为转义字符）此前存在注入面
-- **duckdb 连接池归还**：池连接改 RAII 归还、语句执行成败皆归还连接、写闸幂等复用
-- **saga 持久化显性化**：持久化失败不再静默，重放跳过已补偿步骤，补偿会话失败显性上报
-- **global-index / health**：全局索引表查询列二级索引；health 零连接测试前提显式化
-- 权限审计链模块头链接改全路径，修复 rustdoc `-D warnings` 假红
+---
 
 ## [0.6.0-rc.4] - 2026-09-14
 
@@ -133,17 +141,6 @@
 ### Fixed
 
 - `verify_refresh_token` / `refresh_access_token` 改为 async，级联更新所有调用点（测试、示例、文档）
-
----
-
-## [0.6.0-rc.5] - 2026-09-21
-
-### Changed
-
-- **dbnexus-macros 增强**：新增 `entity-macros` feature 转发 sea-orm 派生宏——消费方经 `dbnexus::sea_orm` re-export 定义实体即可，免直接依赖 sea-orm；`sea_orm` re-export 不再绑定驱动 feature
-- **i18n 整改**：统一错误与消息文案管理
-- **依赖升级**：sha2 0.10.9 → 0.11.0 及 patch 组刷新；跨仓 path 依赖改走 crates.io
-- **工程加固**：detect-secrets 基线、pre-commit 门禁、typos 误报白名单、clippy 存量清理
 
 ---
 
@@ -679,8 +676,10 @@ cargo build
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
 
-[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.3...HEAD
-[0.6.0-rc.3]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.2...v0.6.0-rc.3
+[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.6...HEAD
+[0.6.0-rc.6]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.5...v0.6.0-rc.6
+[0.6.0-rc.5]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.4...v0.6.0-rc.5
+[0.6.0-rc.4]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.2...v0.6.0-rc.4
 [0.6.0-rc.2]: https://github.com/Kirky-X/dbnexus/compare/v0.5.1...v0.6.0-rc.2
 [0.5.1]: https://github.com/Kirky-X/dbnexus/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Kirky-X/dbnexus/compare/v0.4.4...v0.5.0

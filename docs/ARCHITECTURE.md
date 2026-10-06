@@ -244,13 +244,14 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 ### 集成层 `integrations/`
 
 - `integrations/kit/` — `DbNexusModule` 及缓存/审计/健康卫星模块（cfg = `kit`，trait-kit AsyncKit 集成）
-- `integrations/inklog.rs` — inklog 结构化日志接线（池超时/权限拒绝/熔断/慢查询路由，cfg = `inklog`）
 - `integrations/oxcache_adapter.rs` — `OxcacheDbCacheAdapter`（cfg = `oxcache-integration`）
 - `integrations/http_health.rs` — `HealthRouterBuilder` 三端点健康 Router：/healthz /readyz /metrics（cfg = `http-health`，axum Router 生成而非服务）
 
-> 适配器方向约定：oxcache/inklog/trait-kit 不依赖 dbnexus，适配器驻留 dbnexus
-> 消费方即可防环。反向依赖的外部组件（limiteron 已 optional 依赖 dbnexus 作
-> 存储后端）不能走此模式——dbnexus 反向依赖即成环，须抽取独立端口 crate：
+> 适配器方向约定：oxcache/trait-kit 不依赖 dbnexus，适配器驻留 dbnexus
+> 消费方即可防环。反向依赖的外部组件（limiteron 与 inklog 均已 optional 依赖
+> dbnexus 作存储/审计后端）不能走此模式——dbnexus 反向依赖即成环（inklog 的 caret
+> 需求会匹配到 dbnexus 新版本，构成包级循环），须抽取独立端口 crate 或把适配
+> 器驻留对方一侧：
 > `Limiter` 端口位于 workspace 成员 `limiter-port/`（`dbnexus-limiter-port`，
 > 仅依赖 async-trait，不依赖 dbnexus 与 limiteron 任何一方），令牌桶实现端口为默认限流后端，外部后端经应用组合根注入，
 > 详见 `docs/RATE_LIMITING.md`。

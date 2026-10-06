@@ -31,7 +31,7 @@
 - `sql-parser`（解耦证明：无 cache/oxcache 编译通过）
 - `cache`、`oxcache-integration`、`permission`、`sql-parser,cache`（解耦后两 feature 独立正交共存）
 - `sql-parser,permission`、`retry`、`prepare-cache`、`prepare-cache,sql-parser`
-- `kit`、`data-protection`、`audit`、`observability`、`http-health`、`inklog`
+- `kit`、`data-protection`、`audit`、`observability`、`http-health`
 - `neo4j`、`config-confers`、`default-no-db`、`copy`、`distributed-capabilities`
 - `runtime-async-std`、`validation`、`authentication`、`with-chrono`、`entity-macros`、`mock`
 

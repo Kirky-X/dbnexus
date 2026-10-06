@@ -137,7 +137,7 @@ enum Commands {
         #[arg(long)]
         entity: Option<String>,
 
-        /// 按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change/other:<text>）
+        /// 按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change/`other:<text>`）
         #[arg(long)]
         operation: Option<String>,
 
@@ -201,7 +201,7 @@ enum Commands {
         #[arg(long)]
         action: String,
 
-        /// 权限配置文件路径（YAML/JSON：roles.<role> 为规则数组）
+        /// 权限配置文件路径（YAML/JSON：`roles.<role>` 为规则数组）
         #[arg(long)]
         permissions: PathBuf,
     },

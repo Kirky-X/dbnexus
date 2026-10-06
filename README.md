@@ -108,7 +108,6 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `copy` 🆕 | 批量写入：COPY 封装（pg 协议 / DuckDB 文件 COPY 按驱动门控）+ 多值 INSERT 构建（batch_insert 500 分块参数化） |
 | `entity-events` 🆕 | 实体事件总线 + Outbox 持久化投递 |
 | `otel` 🆕 | 健康快照指标导出 OTLP/HTTP（stdout fallback 兜底） |
-| `inklog` 🆕 | inklog 结构化日志集成：池超时/权限拒绝/熔断/慢查询记录路由到 inklog 管道 |
 | `kit` | trait-kit AsyncKit 集成，注册即获得池/缓存/审计/健康全能力 |
 | `config-confers` 🆕 | confers 配置热重载（`ArcSwap` 原子换装） |
 | `retry` | 运行时重试：幂等判断 + 指数退避 |
@@ -118,7 +117,7 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `saga` | Saga 分布式事务：持久化日志、启动恢复、补偿编排 |
 | `distributed-id` | Snowflake 分布式 ID 生成 |
 
-> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（inklog 为 rc.6、http-health 为未发布新增）。
+> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（http-health 为未发布新增）。
 
 </details>
 
@@ -258,7 +257,8 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `observability` | `metrics` + `health-check` 聚合 | 否 |
 | `otel` | OTLP/HTTP JSON 信封导出桥 | 否 |
 | `http-health` 🆕 | HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 `/healthz`（liveness）/`/readyz`（readiness，池快照+熔断器判定）/`/metrics`（Prometheus）的 axum Router；仅生成 Router 不含 serve，默认构建零 HTTP 依赖 | 否 |
-| `inklog` | inklog 结构化日志集成：`init_inklog_logger()` 把 inklog 安装为全局 `log` 后端，池超时/权限拒绝/熔断/慢查询记录路由到 inklog 管道（log 门面记录达 console/file sinks，database sink 仅 inklog 原生 tracing 路径可达；manager 须全程保持存活，Drop 后记录被静默丢弃） | 否 |
+
+> 结构化日志：池超时/权限拒绝/熔断/慢查询四类接线点经 `log` 门面发记录（无条件编译，未安装 logger 时为 no-op，默认构建行为不变）。日志后端（如 inklog `LoggerManager`）由**消费方自行安装**为全局 `log` 后端，记录即路由到其结构化管道——dbnexus 不依赖任何日志后端 crate（inklog 已反向 optional 依赖 dbnexus，互依赖会构成包级循环，见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 适配器方向约定）。
 
 ### 数据管理
 
@@ -318,7 +318,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
 | `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, 全部 7 项分布式能力 | 单体应用 |
 | `enterprise` | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| `all-optional` | 除数据库驱动外的 27 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / inklog / kit / data-protection / http-health） | 全功能验证（手动追加驱动） |
+| `all-optional` | 除数据库驱动外的 26 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / kit / data-protection / http-health） | 全功能验证（手动追加驱动） |
 
 ### 使用示例
 
@@ -527,7 +527,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
-| 0.6.0-rc.6 | 2026-09-28 | 运维 CLI 剩余命令（权限校验/池状态/审计查询/分片信息）；inklog 结构化日志集成；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
+| 0.6.0-rc.6 | 2026-10-06 | 运维 CLI 剩余命令（权限校验/池状态/审计查询/分片信息）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` 转发 sea-orm 派生宏；`sea_orm` re-export 解绑驱动 feature；i18n 整改；sha2 0.11；跨仓 path 依赖改走 crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | 统一行查询 `query_rows`；Saga 持久化恢复；字段级脱敏与行级安全（`data-protection`）；权限统一门面与查询 DSL；COPY 批量写入与 OTel 导出桥；端到端基准 `e2e_bench`；运维 CLI `migrate`/`health`/`user` 子命令（0.6.0-rc.3 版本号跳过未发布，内容随本版发布） |
 | 0.6.0-rc.2 | 2026-09-03 | 移除 `tracing` 特性；四驱动互斥严格化（编译期 `compile_error!`）；补全 JOIN/子查询跨表权限检查；`h2` 安全升级 |

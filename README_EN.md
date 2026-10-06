@@ -110,7 +110,6 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `copy` 🆕 | Batch write: COPY wrappers (pg protocol / DuckDB file COPY gated per driver) + multi-row INSERT building (batch_insert, 500-row chunked parameterized) |
 | `entity-events` 🆕 | Entity event bus + Outbox persistent dispatch |
 | `otel` 🆕 | Health snapshot metrics exported via OTLP/HTTP (stdout fallback) |
-| `inklog` 🆕 | inklog structured logging integration: pool timeout / permission denied / circuit breaker / slow query records route through the inklog pipeline |
 | `kit` | trait-kit AsyncKit integration; register once for pool/cache/audit/health capabilities |
 | `config-confers` 🆕 | confers hot config reload (atomic `ArcSwap` swap) |
 | `retry` | Runtime retry: idempotency check + exponential backoff |
@@ -120,7 +119,7 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 | `saga` | Saga distributed transactions: persistent log, startup recovery, compensation orchestration |
 | `distributed-id` | Snowflake distributed ID generation |
 
-> 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (inklog in rc.6, http-health unreleased).
+> 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (http-health unreleased).
 
 ---
 
@@ -258,7 +257,8 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `observability` | `metrics` + `health-check` aggregate | No |
 | `otel` | OTLP/HTTP JSON envelope export bridge | No |
 | `http-health` 🆕 | HTTP health endpoint generator: `HealthRouterBuilder` produces an axum Router mounting `/healthz` (liveness) / `/readyz` (readiness, pool snapshot + circuit breaker) / `/metrics` (Prometheus); generates the Router only, no serve loop; zero HTTP deps in the default build | No |
-| `inklog` | inklog structured logging integration: `init_inklog_logger()` installs inklog as the global `log` backend; pool timeout / permission denied / circuit breaker / slow query records route into the inklog pipeline (log-facade records reach console/file sinks only; the database sink is reachable solely via inklog's native tracing path; keep the manager alive for the whole process — dropping it silently discards records) | No |
+
+> Structured logging: the four wiring points (pool acquisition timeout, permission denied, circuit breaker state transitions, slow queries) emit records through the `log` facade unconditionally — a no-op when no logger is installed, so the default build is unchanged. The backend (e.g. inklog's `LoggerManager`) is installed as the global `log` backend **by the consumer**; dbnexus itself depends on no logging-backend crate (inklog already optionally depends on dbnexus, and a reverse edge would form a package-level cycle — see the adapter-direction convention in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 ### Data Management
 
@@ -318,7 +318,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | Microservice deployment |
 | `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, all 7 distributed capabilities | Monolithic application |
 | `enterprise` | `postgres`, `monolith`, `permission-engine` | Full enterprise features |
-| `all-optional` | 27 optional features except database drivers (cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / inklog / kit / data-protection / http-health) | Full-feature verification (add drivers manually) |
+| `all-optional` | 26 optional features except database drivers (cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / kit / data-protection / http-health) | Full-feature verification (add drivers manually) |
 
 ### Usage Examples
 
@@ -527,7 +527,7 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.6.0-rc.6 | 2026-09-28 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); inklog structured logging integration; duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
+| 0.6.0-rc.6 | 2026-10-06 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` forwarding sea-orm derives; `sea_orm` re-export decoupled from driver features; i18n overhaul; sha2 0.11; cross-repo path deps moved to crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands (version 0.6.0-rc.3 was skipped and never published; its content shipped with this release) |
 | 0.6.0-rc.2 | 2026-09-03 | Removed the `tracing` feature; strict four-driver mutual exclusion (compile-time `compile_error!`); completed JOIN/subquery cross-table permission checks; `h2` security upgrade |
