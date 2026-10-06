@@ -15,10 +15,10 @@
 //! fail-closed 拒绝（无表名/表名非法/DDL 角色白名单等固定文案路径）不发
 //! 日志，仅返回错误——如需观测请走 permission_denied 集中点。
 //!
-//! 日志门面为 `log` crate，与 `inklog` feature 正交：接线点无条件编译，
-//! 未安装 logger 时为 no-op（默认构建行为不变）；启用 `inklog` feature 并
-//! `init_inklog_logger()` 后记录自动路由到 inklog 结构化管道。测试经进程内
-//! 唯一安装的 TestLogger 收集记录并断言级别与内容。
+//! 日志门面为 `log` crate：接线点无条件编译，未安装 logger 时为 no-op
+//! （默认构建行为不变）；具体后端（如 inklog `LoggerManager`）由消费方自行
+//! 安装为全局 log 后端，记录即路由到其结构化管道——dbnexus 本身不依赖任何
+//! 日志后端 crate。测试经进程内唯一安装的 TestLogger 收集记录并断言级别与内容。
 
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;

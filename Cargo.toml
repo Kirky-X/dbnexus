@@ -170,11 +170,6 @@ otel = ["health-check"]  # OTel 导出桥（慢查询/池指标 → OTLP/HTTP + 
 # serve，默认不引入任何 HTTP 依赖，启用本 feature 才拉入 axum（server 能力
 # 留给消费方挂载）。数据源 health_snapshot + 可选 CircuitBreaker/MetricsCollector
 http-health = ["dep:axum", "health-check"]
-# inklog 结构化日志集成 — 池超时/权限拒绝/熔断/慢查询接线点经 `log` 门面发
-# 记录（无条件编译，无 logger 时 no-op）；启用后 `init_inklog_logger()` 把
-# inklog LoggerManager 安装为全局 log 后端，记录自动路由到结构化管道。
-# 同 sdforge/limiteron 的 `inklog` feature 模式。
-inklog = ["dep:inklog"]
 
 # === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
@@ -267,7 +262,7 @@ monolith = [
 enterprise = ["postgres", "monolith", "permission-engine"]
 
 # 所有可选功能（不包括数据库驱动；成员均无 embedded/server 驱动互斥风险）
-all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "inklog", "kit", "data-protection", "http-health"]
+all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "kit", "data-protection", "http-health"]
 
 [dependencies]
 # Workspace dependencies
@@ -283,7 +278,7 @@ axum = { workspace = true, optional = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 sha2 = { version = "0.11", optional = true }
-confers = { version = "0.6.0-rc.5", default-features = false, optional = true }
+confers = { version = "0.6.0-rc.6", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
@@ -292,8 +287,8 @@ validator = { workspace = true, optional = true }
 
 # External dependencies
 # 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；
-# 未安装 logger 时为 no-op，默认构建行为不变。`inklog` feature 把 inklog
-# 安装为全局 log 后端后，记录自动路由到 inklog 结构化管道。
+# 未安装 logger 时为 no-op，默认构建行为不变。具体后端（如 inklog
+# LoggerManager）由消费方自行安装，dbnexus 不依赖任何日志后端 crate。
 log = { version = "0.4", default-features = false, features = ["std"] }
 regex = { version = "1.13", optional = true }
 sqlparser = { version = "0.63", optional = true }
@@ -302,20 +297,14 @@ dashmap = { version = "6.2", optional = true }
 # Lock-free read for permission config (COW pattern)
 arc-swap = { version = "1.9", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as backend.
-oxcache = { version = "0.5.0-rc.4", optional = true }
+oxcache = { version = "0.5.0-rc.6", optional = true }
 
 # Rate limiter port（限流端口，permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
 
-# Structured logging backend (optional, feature-gated via `inklog`).
-# Mirrors sdforge/limiteron pattern: `init_inklog_logger()` installs inklog's
-# LoggerManager as the global `log` backend; existing log:: macro calls in the
-# pool/session/health/metrics wiring points then route to inklog's sinks.
-inklog = { version = "0.3.0-rc.5", default-features = false, optional = true }
-
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern.
-trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
 
 # DuckDB embedded database (duckdb feature, 0.3.0 new)
 duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
@@ -959,7 +948,7 @@ name = "feature_dependency_contract"
 path = "tests/feature_dependency_contract.rs"
 
 [dev-dependencies.testcontainers]
-version = "0.27"
+version = "0.28"
 [profile.release]
 opt-level = 3
 lto = "fat"

@@ -17,9 +17,6 @@ pub mod oxcache_query_cache;
 #[cfg(feature = "kit")]
 pub mod kit;
 
-#[cfg(feature = "inklog")]
-pub mod inklog;
-
 /// HTTP 健康端点生成器（axum Router 三端点：liveness/readiness/Prometheus）
 #[cfg(feature = "http-health")]
 pub mod http_health;
@@ -33,9 +30,6 @@ pub use oxcache_query_cache::{CachedQuery, OxcacheQueryCache};
 
 #[cfg(feature = "kit")]
 pub use kit::{DbNexusBuildObserver, DbNexusModule};
-
-#[cfg(feature = "inklog")]
-pub use inklog::{InklogInit, init_inklog_logger, init_inklog_logger_with_config};
 
 #[cfg(feature = "http-health")]
 pub use http_health::HealthRouterBuilder;

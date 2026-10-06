@@ -277,10 +277,10 @@ dbnexus = { path = "..", version = "0.6.0-rc.6", features = ["sqlite", "duckdb",
 duckdb = { version = "1.10505", features = ["bundled"] }
 
 # Oxcache（oxcache_adapter 示例需要直接使用 oxcache 后端类型）
-oxcache = { version = "0.5.0-rc.4" }
+oxcache = { version = "0.5.0-rc.6" }
 
 # trait-kit（kit 示例需要直接使用 AsyncKit DI 框架）
-trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async", "lifecycle", "health"] }
+trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async", "lifecycle", "health"] }
 
 # axum（http_health 示例需要直接调用 axum::serve 承载生成的 Router）
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
