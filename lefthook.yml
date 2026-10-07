@@ -27,8 +27,8 @@ pre-push:
   commands:
     cargo-audit:
       run: cargo audit
-    coverage-90:
-      name: coverage ≥90% lines
+    coverage-95:
+      name: coverage ≥95% lines
       # 与 CI coverage job 同口径（sqlite,default-no-db,all-optional）——
       # 此前裸 default(=[]) 统计的是零 feature 空壳，门槛形同虚设。
-      run: cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 90
+      run: cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 95

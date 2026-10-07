@@ -449,7 +449,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 | 测试函数总数 | 2765 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1358 + tests 1405 + macros 2） |
 | 显式注册测试目标 | 88 个 `[[test]]` | `Cargo.toml` |
 | 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
-| 覆盖率门禁 | ≥ 90% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
+| 覆盖率门禁 | ≥ 95% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
 
 ### 运行命令（与 CI 一致）
 
@@ -519,7 +519,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 ## 🤝 参与贡献
 
-欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装脚本 `./scripts/install-pre-commit.sh`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 90%），以及提交/PR 流程。
+欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装脚本 `./scripts/install-pre-commit.sh`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 95%），以及提交/PR 流程。
 
 ---
 
