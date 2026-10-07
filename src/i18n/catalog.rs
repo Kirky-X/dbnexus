@@ -326,6 +326,7 @@ pool-yaml-parse-error = YAML parse error in '{ $source }': { $error }
 pool-invalid-db-url = Invalid database URL: { $error }
 pool-recreate-failed = Failed to recreate connections: { $error }
 pool-log-acquire-timeout = pool acquire timeout: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
+pool-log-idle-check-wait-timeout = pool acquire waited for idle-connection check: waited_ms={ $waited_ms } in_progress={ $in_progress }
 session-txn-begin-failed = Failed to begin transaction: { $error }
 session-txn-begin-graph-failed = Failed to begin graph transaction: { $error }
 session-txn-commit-failed = Failed to commit graph transaction: { $error }
@@ -621,6 +622,7 @@ pool-yaml-parse-error = '{ $source }' 中的 YAML 解析错误: { $error }
 pool-invalid-db-url = 无效的数据库 URL: { $error }
 pool-recreate-failed = 重新创建连接失败: { $error }
 pool-log-acquire-timeout = 连接池获取超时: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
+pool-log-idle-check-wait-timeout = 连接池获取等待空闲连接校验回填超时: waited_ms={ $waited_ms } in_progress={ $in_progress }
 session-txn-begin-failed = 开始事务失败: { $error }
 session-txn-begin-graph-failed = 开始图事务失败: { $error }
 session-txn-commit-failed = 提交图事务失败: { $error }
@@ -1080,6 +1082,7 @@ mod tests {
             ("retry_after", "RA".to_string()),
             ("retry_after_secs", "3".to_string()),
             ("waited_ms", "4".to_string()),
+            ("in_progress", "1".to_string()),
             ("timeout_ms", "5".to_string()),
             ("waiters", "6".to_string()),
             ("successes", "7".to_string()),
@@ -1098,6 +1101,7 @@ mod tests {
             "metrics-export-join-failed",
             "metrics-slow-query",
             "pool-log-acquire-timeout",
+            "pool-log-idle-check-wait-timeout",
             "saga-compensation-no-pool",
             "saga-compensation-session-unavailable",
             "session-log-sql-parse-denied",

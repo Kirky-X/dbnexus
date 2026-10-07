@@ -140,7 +140,11 @@ impl DbPool {
         for result in results {
             match result {
                 Ok(conn) => {
-                    self.inner.idle_connections.lock().await.push(conn);
+                    self.inner
+                        .idle_connections
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .push(conn);
                     self.inner.total_count.fetch_add(1, Ordering::SeqCst);
                     success_count += 1;
                 }
@@ -254,20 +258,19 @@ impl DbPool {
     ///
     /// # Arguments
     ///
-    /// * `idle` - 空闲连接队列的可变引用
+    /// * `connections` - 已从空闲队列取走的连接（调用方保证锁外持有）
     /// * `config` - 数据库配置
     ///
     /// # Returns
     ///
     /// 返回元组 (有效连接列表, 无效连接数量)
     pub(super) async fn validate_idle_connections(
-        idle: &mut Vec<DbConnection>,
+        connections: Vec<DbConnection>,
         config: &DbConfig,
     ) -> (Vec<DbConnection>, usize) {
         let backend = Self::get_database_backend(&config.url);
 
-        // 先将所有连接移出，避免在持有锁期间进行 I/O 操作
-        let connections: Vec<DbConnection> = std::mem::take(idle);
+        // 调用方已在锁外取走连接：健康检查是 I/O，绝不持锁跨 await
 
         // 并行执行所有健康检查
         let check_futures: Vec<_> = connections
@@ -329,15 +332,39 @@ impl DbPool {
     ///
     /// 被移除的无效连接数量
     pub async fn clean_invalid_connections(&self) -> u32 {
-        let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
+
+        // 校验期间标记「空闲校验在途」：并发 acquire 在空闲队列为空时
+        // 等待回填而非新建连接——旧实现靠持 AsyncMutex 跨 await 阻塞
+        // acquire 达成同一契约，但持锁会阻塞归还侧。标记随守卫在函数
+        // 返回（含错误路径）时清除并唤醒等待方；等待方预算上限见
+        // `IDLE_CHECK_MAX_WAIT`，到期降级新建。
+        let _idle_check = self.inner.mark_idle_check();
+
+        // 锁内只做取走：健康检查是 I/O，绝不持锁跨 await（否则归还侧与
+        // acquire 侧被阻塞数秒，曾诱发延迟归还导致的空 idle 竞态）
+        let taken = {
+            let mut idle = self
+                .inner
+                .idle_connections
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::mem::take(&mut *idle)
+        };
 
         // 使用辅助方法验证连接
         let (valid_connections, removed_count) =
-            Self::validate_idle_connections(&mut idle, config).await;
+            Self::validate_idle_connections(taken, config).await;
 
-        // 重建空闲连接队列
-        idle.extend(valid_connections);
+        // 重建空闲队列
+        {
+            let mut idle = self
+                .inner
+                .idle_connections
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            idle.extend(valid_connections);
+        }
 
         // 更新总连接数
         if removed_count > 0 {
@@ -359,12 +386,25 @@ impl DbPool {
     ///
     /// 被重新创建的连接数量，或错误
     pub async fn validate_and_recreate_connections(&self) -> Result<u32, sea_orm::DbErr> {
-        let mut idle = self.inner.idle_connections.lock().await;
         let config = &self.inner.config;
+
+        // 校验期间标记「空闲校验在途」（同 clean_invalid_connections 的契约
+        // 说明）；标记随守卫在函数返回（含错误路径）时清除并唤醒等待方。
+        let _idle_check = self.inner.mark_idle_check();
+
+        // 锁内只做取走与回填：健康检查与重建是 I/O，绝不持锁跨 await
+        let taken = {
+            let mut idle = self
+                .inner
+                .idle_connections
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::mem::take(&mut *idle)
+        };
 
         // 使用辅助方法验证连接
         let (valid_connections, invalid_count) =
-            Self::validate_idle_connections(&mut idle, config).await;
+            Self::validate_idle_connections(taken, config).await;
 
         let mut recreated_count = 0;
 
@@ -373,35 +413,67 @@ impl DbPool {
             self.inner
                 .total_count
                 .fetch_sub(invalid_count as u32, Ordering::SeqCst);
+        }
 
-            // 重建空闲队列（只保留有效连接）
+        // 回填有效连接（无论是否存在无效连接都执行——与原实现一致）
+        {
+            let mut idle = self
+                .inner
+                .idle_connections
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             idle.extend(valid_connections);
+        }
 
-            // 重新创建连接以维持最小连接数
-            let current_idle = idle.len();
-            let needed = config
-                .pool_config
-                .min_connections
-                .saturating_sub(current_idle as u32) as usize;
+        if invalid_count > 0 {
+            // 重新创建连接以维持最小连接数（原语义：仅剔除过无效连接才补建，
+            // 不做无条件扩容——否则与 warmup 竞态造成双倍预创建；
+            // create 是 I/O，锁外逐条创建回填）
+            {
+                let needed = {
+                    let idle = self
+                        .inner
+                        .idle_connections
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    config
+                        .pool_config
+                        .min_connections
+                        .saturating_sub(idle.len() as u32) as usize
+                };
 
-            for _ in 0..needed {
-                match Self::create_connection(config).await {
-                    Ok(new_conn) => {
-                        idle.push(new_conn);
-                        self.inner.total_count.fetch_add(1, Ordering::SeqCst);
-                        recreated_count += 1;
+                for _ in 0..needed {
+                    // 并发取连接在窗口内新建/其他回填可能已补满：不超额创建
+                    {
+                        let idle = self
+                            .inner
+                            .idle_connections
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        if idle.len() >= config.pool_config.max_connections as usize {
+                            break;
+                        }
                     }
-                    Err(e) => {
-                        return Err(sea_orm::DbErr::Custom(i18n::t(
-                            "pool-recreate-failed",
-                            &[("error", e.to_string())],
-                        )));
+                    match Self::create_connection(config).await {
+                        Ok(new_conn) => {
+                            let mut idle = self
+                                .inner
+                                .idle_connections
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            idle.push(new_conn);
+                            self.inner.total_count.fetch_add(1, Ordering::SeqCst);
+                            recreated_count += 1;
+                        }
+                        Err(e) => {
+                            return Err(sea_orm::DbErr::Custom(i18n::t(
+                                "pool-recreate-failed",
+                                &[("error", e.to_string())],
+                            )));
+                        }
                     }
                 }
             }
-        } else {
-            // 没有无效连接，恢复有效连接到池中
-            idle.extend(valid_connections);
         }
 
         Ok(recreated_count as u32)

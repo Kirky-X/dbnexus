@@ -29,6 +29,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **连接池归还改为同步完成**：`release_connection` 原在 `try_lock` 失败时经 `tokio::spawn` 延迟 push 连接——归还被推迟到下一个调度点，紧随其后的 `acquire_connection` 在 push 落地前看到空 idle 队列而新建连接（对 `duckdb::memory:` 等「新连接即新库」的后端，新建连接看不到此前建表数据）。现改为 std Mutex 同步归还，临界区仅队列 push/len、notify 与信号量许可归还，不含 await
+- **空闲连接校验窗口内不再新建冗余连接**：`clean_invalid_connections` / `validate_and_recreate_connections` 不再持 idle 锁跨 await（原实现会阻塞归还侧），改为「取走校验 + 回填」，并以 `idle_check_in_progress` 标记校验在途；`acquire_connection` 在空闲队列为空且标记置位时等待回填后重试取用。等待预算取 `acquire_timeout` 剩余额度与 500ms 的较小值，并计入等待者指标；校验方异常滞留到期时降级新建并记 warn。标记经守卫在函数返回（含错误路径）时清除并唤醒等待方
+- **校验回填不超额创建**：`validate_and_recreate_connections` 补建最小连接数时校验 `max_connections` 上限，避免与并发取连接叠加造成空闲队列超配
+
 ## [0.6.0-rc.6] - 2026-10-06
 
 ### Added

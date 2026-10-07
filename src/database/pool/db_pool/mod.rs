@@ -20,13 +20,22 @@ use async_trait::async_trait;
 #[cfg(feature = "permission")]
 use oxcache::Cache;
 use std::sync::Arc;
+use std::sync::Mutex as SyncMutex;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 use std::time::Instant;
-use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
+use tokio::sync::{Notify, Semaphore};
 #[cfg(feature = "pool-health-check")]
 use tokio::time::interval;
 use tokio::time::timeout;
+
+/// 空闲连接校验在途时，取连接等待回填的上限
+///
+/// 实际等待预算取本值与「acquire_timeout 剩余额度」的较小值：校验窗口内
+/// 临时取走的空闲连接会被回填，等待可避免新建冗余连接（对
+/// `duckdb::memory:` 等「新连接即新库」的后端是数据可见性要求）；校验方
+/// 异常滞留时到期降级新建，不把 acquire 拖到无界。
+const IDLE_CHECK_MAX_WAIT: Duration = Duration::from_millis(500);
 
 // ponytail: ConnectionLifecycle and dead consts removed; add back when health telemetry is wired
 
@@ -187,7 +196,7 @@ pub(crate) struct DbPoolInner {
     connection_semaphore: Arc<Semaphore>,
 
     /// 空闲连接队列
-    idle_connections: AsyncMutex<Vec<DbConnection>>,
+    idle_connections: SyncMutex<Vec<DbConnection>>,
 
     /// 连接可用通知（替代忙等待）
     connection_available: Notify,
@@ -197,6 +206,13 @@ pub(crate) struct DbPoolInner {
 
     /// 总连接数
     pub(super) total_count: AtomicU32,
+
+    /// 空闲连接校验在途计数（>0 表示空闲队列可能被校验方临时取走）
+    ///
+    /// [`DbPool::acquire_connection`] 在空闲队列为空且本计数 >0 时等待
+    /// 回填，不在校验窗口内新建连接：新建对 `duckdb::memory:` 等「新连接
+    /// 即新库」的后端是数据可见性缺陷，对其他后端是冗余连接。
+    pub(super) idle_check_in_progress: AtomicU32,
 
     /// 权限策略缓存（直接使用 oxcache）
     #[cfg(feature = "permission")]
@@ -258,43 +274,60 @@ pub(crate) struct DbPoolInner {
 }
 
 impl DbPoolInner {
+    #[cfg(feature = "pool-health-check")]
+    /// 标记空闲连接校验在途
+    ///
+    /// 返回的守卫 Drop 时递减在途计数并唤醒等待方——含错误路径与提前
+    /// 返回，无需手工配对清除。
+    pub(crate) fn mark_idle_check(&self) -> IdleCheckGuard<'_> {
+        self.idle_check_in_progress.fetch_add(1, Ordering::SeqCst);
+        IdleCheckGuard { inner: self }
+    }
+
     /// 归还连接到池（内部实现）
     ///
     /// 直接从 `DbPoolInner` 操作，无需通过 `DbPool` 中转。
     /// Session 的 Drop 可直接调用此方法，避免持有 `Arc<DbPool>`。
+    ///
+    /// 归还必须同步完成（临界区仅队列 push/len、notify 与许可归还，无 await）：
+    /// 曾用 try_lock 失败走 `tokio::spawn` 延迟 push 的方案，归还被推迟到
+    /// 下一个调度点，后续 `acquire_connection` 在 push 落地前看到空 idle
+    /// 队列而新建连接——对 `duckdb::memory:` 而言新建即全新空库，此前建表
+    /// 数据不可见（该场景由 COPY 测试定位）。空闲队列锁持有时间极短，
+    /// 同步锁不引入可观测阻塞。
     pub(crate) fn release_connection(inner: &Arc<Self>, conn: DbConnection) {
         inner.active_count.fetch_sub(1, Ordering::SeqCst);
-        let inner_clone = Arc::clone(inner);
 
-        // 尝试快速路径：非阻塞获取锁
-        if let Ok(mut idle) = inner_clone.idle_connections.try_lock() {
-            if idle.len() < inner_clone.config.pool_config.max_connections as usize {
-                idle.push(conn);
-                inner_clone.connection_available.notify_one();
-                inner_clone.connection_semaphore.add_permits(1);
-            } else {
-                inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
-                inner_clone.connection_semaphore.add_permits(1);
-            }
-            return;
-        }
-
-        // 异步路径：在 tokio 运行时中执行
-        if tokio::runtime::Handle::try_current().is_ok() {
-            tokio::spawn(async move {
-                let mut idle = inner_clone.idle_connections.lock().await;
-                if idle.len() < inner_clone.config.pool_config.max_connections as usize {
-                    idle.push(conn);
-                    inner_clone.connection_available.notify_one();
-                } else {
-                    inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
-                }
-                inner_clone.connection_semaphore.add_permits(1);
-            });
+        let mut idle = inner
+            .idle_connections
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if idle.len() < inner.config.pool_config.max_connections as usize {
+            idle.push(conn);
+            inner.connection_available.notify_one();
         } else {
-            inner_clone.total_count.fetch_sub(1, Ordering::SeqCst);
-            inner_clone.connection_semaphore.add_permits(1);
+            inner.total_count.fetch_sub(1, Ordering::SeqCst);
         }
+        inner.connection_semaphore.add_permits(1);
+    }
+}
+
+/// 空闲连接校验在途守卫
+///
+/// 置位期间 [`DbPool::acquire_connection`] 在空闲队列为空时等待回填而非
+/// 新建连接；Drop 时清除计数并唤醒等待方（含错误路径与提前返回）。
+#[cfg(feature = "pool-health-check")]
+pub(crate) struct IdleCheckGuard<'a> {
+    inner: &'a DbPoolInner,
+}
+
+#[cfg(feature = "pool-health-check")]
+impl Drop for IdleCheckGuard<'_> {
+    fn drop(&mut self) {
+        self.inner
+            .idle_check_in_progress
+            .fetch_sub(1, Ordering::SeqCst);
+        self.inner.connection_available.notify_waiters();
     }
 }
 
@@ -371,10 +404,11 @@ impl DbPool {
                 connection_semaphore: Arc::new(Semaphore::new(
                     config.pool_config.max_connections as usize,
                 )),
-                idle_connections: AsyncMutex::new(Vec::new()),
+                idle_connections: SyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
+                idle_check_in_progress: AtomicU32::new(0),
                 #[cfg(feature = "permission")]
                 policy_cache,
                 #[cfg(feature = "permission")]
@@ -475,10 +509,11 @@ impl DbPool {
             inner: Arc::new(DbPoolInner {
                 config: Arc::new(config.clone()),
                 connection_semaphore: Arc::new(Semaphore::new(pool_size)),
-                idle_connections: AsyncMutex::new(idle_vec),
+                idle_connections: SyncMutex::new(idle_vec),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(pool_size as u32),
+                idle_check_in_progress: AtomicU32::new(0),
                 #[cfg(feature = "permission")]
                 policy_cache: {
                     // 最小化权限缓存（无配置文件，使用安全默认策略）
@@ -614,10 +649,11 @@ impl DbPool {
                 connection_semaphore: Arc::new(Semaphore::new(
                     config.pool_config.max_connections as usize,
                 )),
-                idle_connections: AsyncMutex::new(Vec::new()),
+                idle_connections: SyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
+                idle_check_in_progress: AtomicU32::new(0),
                 health_check_shutdown: Arc::new(Notify::new()),
                 admin_role: config.admin_role.clone(),
                 #[cfg(feature = "metrics")]
@@ -891,9 +927,14 @@ impl DbPool {
             }
         };
 
-        // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间）
+        // 步骤 2: 尝试从空闲队列获取（最小化锁持有时间；同步锁：临界区仅
+        // pop，无 await——归还侧同样同步，保证归还先于任何后续新建可见）
         {
-            let mut idle = self.inner.idle_connections.lock().await;
+            let mut idle = self
+                .inner
+                .idle_connections
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(conn) = idle.pop() {
                 let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
                 self.update_max_active(active);
@@ -901,6 +942,75 @@ impl DbPool {
                 permit.forget();
                 return Ok(conn);
             }
+        }
+
+        // 步骤 2.5: 空闲连接校验在途 → 等待回填后重试取用，不新建
+        //
+        // 校验方在校验窗口内临时取走空闲连接（idle 看起来为空），此时新建
+        // 连接会引入冗余连接：对 `duckdb::memory:` 等「新连接即新库」的后端
+        // 是数据可见性缺陷，对其他后端是连接数膨胀。等待预算取
+        // 「acquire_timeout 剩余额度」与 IDLE_CHECK_MAX_WAIT 的较小值；到期
+        // 仍在校验中则降级新建（记录 warn 供诊断），等待登记进 wait_count
+        // 使池告警可归因该校验窗口。
+        let wait_deadline = std::cmp::min(
+            start + timeout_duration,
+            Instant::now() + IDLE_CHECK_MAX_WAIT,
+        );
+        let mut wait_registered = false;
+        let found = 'wait: loop {
+            // 每轮先试取：校验窗口内归还/回填的连接立即可用
+            let popped = {
+                let mut idle = self
+                    .inner
+                    .idle_connections
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                idle.pop()
+            };
+            if popped.is_some() {
+                break 'wait popped;
+            }
+            if self.inner.idle_check_in_progress.load(Ordering::SeqCst) == 0 {
+                break 'wait None;
+            }
+            let now = Instant::now();
+            if now >= wait_deadline {
+                log::warn!(
+                    "{}",
+                    i18n::t(
+                        "pool-log-idle-check-wait-timeout",
+                        &[
+                            ("waited_ms", (now - start).as_millis().to_string()),
+                            (
+                                "in_progress",
+                                self.inner
+                                    .idle_check_in_progress
+                                    .load(Ordering::SeqCst)
+                                    .to_string()
+                            ),
+                        ]
+                    )
+                );
+                break 'wait None;
+            }
+            if !wait_registered {
+                let waiters = self.inner.wait_count.fetch_add(1, Ordering::SeqCst) + 1;
+                self.update_max_waiters(waiters);
+                wait_registered = true;
+            }
+            // 守卫清除时广播、归还时 notify_one；1ms 兜底防丢失唤醒
+            let notified = self.inner.connection_available.notified();
+            let _ = timeout(Duration::from_millis(1).min(wait_deadline - now), notified).await;
+        };
+        if wait_registered {
+            self.inner.wait_count.fetch_sub(1, Ordering::SeqCst);
+        }
+        if let Some(conn) = found {
+            let active = self.inner.active_count.fetch_add(1, Ordering::SeqCst) + 1;
+            self.update_max_active(active);
+            self.inner.borrow_count.fetch_add(1, Ordering::SeqCst);
+            permit.forget();
+            return Ok(conn);
         }
 
         // 步骤 3: 创建新连接（不持有锁）
@@ -1777,18 +1887,27 @@ async fn test_clean_invalid_connections_removes_dead() {
         .await
         .expect("connect");
     dead.clone().close().await.expect("close");
-    let baseline_idle = pool.inner.idle_connections.lock().await.len();
+    let baseline_idle = pool
+        .inner
+        .idle_connections
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .len();
     pool.inner
         .idle_connections
         .lock()
-        .await
+        .unwrap_or_else(|p| p.into_inner())
         .push(DbConnection::SeaOrm(dead));
 
     let removed = pool.clean_invalid_connections().await;
     assert_eq!(removed, 1, "死连接必须被清除");
     // 池构造时预填充的活连接保留（new() 会按 min_connections 预热），只清死连接
     assert_eq!(
-        pool.inner.idle_connections.lock().await.len(),
+        pool.inner
+            .idle_connections
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .len(),
         baseline_idle,
         "仅移除注入的死连接，预填充活连接不受影响"
     );
@@ -1820,7 +1939,7 @@ async fn test_validate_and_recreate_connections_refills_min() {
     pool.inner
         .idle_connections
         .lock()
-        .await
+        .unwrap_or_else(|p| p.into_inner())
         .push(DbConnection::SeaOrm(dead));
 
     let recreated = pool
@@ -1832,7 +1951,11 @@ async fn test_validate_and_recreate_connections_refills_min() {
         "全部预填充连接死亡后应重建至 min_connections=2，实际 {recreated}"
     );
     assert_eq!(
-        pool.inner.idle_connections.lock().await.len(),
+        pool.inner
+            .idle_connections
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .len(),
         2,
         "重建后应回填至 min_connections"
     );
