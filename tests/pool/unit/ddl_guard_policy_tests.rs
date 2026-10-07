@@ -155,3 +155,64 @@ async fn test_auditing_guard_receives_funnel_decisions() {
     assert!(!events[1].allowed);
     let _ = std::fs::remove_file(&url);
 }
+
+/// 解析失败策略：错误必须显性上抛（Config），不得静默放行 DDL
+struct ParseErrorGuard;
+
+impl DdlGuardPolicy for ParseErrorGuard {
+    fn validate(&self, _sql: &str) -> Result<DdlValidationResult, String> {
+        Ok(DdlValidationResult::ParseError(
+            "unparsable (test)".to_string(),
+        ))
+    }
+}
+
+/// 策略本身出错（Err）也必须显性上抛，不得默认放行
+struct FailingGuard;
+
+impl DdlGuardPolicy for FailingGuard {
+    fn validate(&self, _sql: &str) -> Result<DdlValidationResult, String> {
+        Err("policy backend down (test)".to_string())
+    }
+}
+
+#[tokio::test]
+async fn test_parse_error_and_failing_guard_are_explicit_errors() {
+    // ParseError 分支：解析失败按配置错误显性返回
+    let url = temp_url("parse_err");
+    let pool = DbPoolBuilder::new()
+        .url(&url)
+        .ddl_guard(Arc::new(ParseErrorGuard))
+        .build()
+        .await
+        .unwrap();
+    let session = pool.get_session("admin").await.unwrap();
+    let err = session
+        .execute_raw_ddl("CREATE TABLE t_pe (id INTEGER)")
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{err}").contains("parse") || format!("{err:?}").contains("Config"),
+        "解析失败应显性报错，实际: {err:?}"
+    );
+    let _ = std::fs::remove_file(&url);
+
+    // 策略 Err 分支：策略故障也不得放行
+    let url2 = temp_url("guard_err");
+    let pool2 = DbPoolBuilder::new()
+        .url(&url2)
+        .ddl_guard(Arc::new(FailingGuard))
+        .build()
+        .await
+        .unwrap();
+    let session2 = pool2.get_session("admin").await.unwrap();
+    let err2 = session2
+        .execute_raw_ddl("CREATE TABLE t_ge (id INTEGER)")
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{err2}").contains("policy backend down") || format!("{err2:?}").contains("Config"),
+        "策略故障应显性报错，实际: {err2:?}"
+    );
+    let _ = std::fs::remove_file(&url2);
+}

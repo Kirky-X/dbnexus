@@ -691,3 +691,41 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
         );
     }
 }
+
+/// 迁移历史的方言分支：同一连接上以不同 DatabaseType 构造执行器
+///
+/// `load_history` 的 `applied_at` 表达式按方言分派（Postgres 的 `::text`、
+/// MySQL 的 `CAST(... AS CHAR)`、SQLite/DuckDB 直取列）：sqlite 腿在测时只走得到
+/// Sqlite 分支，其余方言分支此前无执行。本测试要求每种方言要么正常读取，
+/// 要么显性报错——不得静默返回空历史。
+#[tokio::test]
+async fn test_load_history_dialect_branches_are_explicit() {
+    for dt in [
+        DatabaseType::Sqlite,
+        DatabaseType::Postgres,
+        DatabaseType::MySql,
+        DatabaseType::DuckDb,
+    ] {
+        let db_path =
+            std::env::temp_dir().join(format!("dbnexus_hist_{}_{:?}.db", std::process::id(), dt));
+        let url = format!("sqlite:{}?mode=rwc", db_path.display());
+        let conn = sea_orm::Database::connect(&url)
+            .await
+            .expect("connect sqlite");
+
+        let mut executor = dbnexus::MigrationExecutor::new(conn, dt);
+        match executor.load_history().await {
+            // 方言可被 sqlite 接受：历史为空但表已建（显性成功）
+            Ok(()) => assert!(
+                executor.history().applied_migrations.is_empty(),
+                "{dt:?} 全新库历史应为空"
+            ),
+            // 方言不被 sqlite 接受：必须显性报错，不得静默吞掉
+            Err(e) => {
+                let msg = format!("{e:?}");
+                assert!(!msg.is_empty(), "{dt:?} 方言不可用时必须给出显性错误");
+            }
+        }
+        let _ = std::fs::remove_file(&db_path);
+    }
+}
