@@ -10,7 +10,7 @@
 //! # 运行示例
 //!
 //! ```bash
-//! cargo run --example config_toml --features "config-toml"
+//! cargo run --example config_toml
 //! ```
 
 use dbnexus::{DbConfig, DbPool};

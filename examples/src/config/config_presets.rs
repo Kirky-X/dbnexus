@@ -131,7 +131,6 @@ fn print_feature_status() {
         ("cache", cfg!(feature = "cache")),
         ("config-env", cfg!(feature = "config-env")),
         ("yaml", cfg!(feature = "yaml")),
-        ("config-toml", cfg!(feature = "config-toml")),
         ("migration", cfg!(feature = "migration")),
         ("sharding", cfg!(feature = "sharding")),
         ("global-index", cfg!(feature = "global-index")),

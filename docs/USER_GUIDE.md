@@ -174,7 +174,7 @@ let pool = DbPool::with_config(config).await?;
 
 ### TOML 配置
 
-启用 `config-toml` 特性表示采纳 TOML 配置约定；DBNexus 不强制捆绑 `toml` 解析器，由应用自行引入 `toml` crate 反序列化（`DbConfig` 实现了 `serde::Deserialize`）：
+DBNexus 不捆绑 `toml` 解析器，由应用自行引入 `toml` crate 反序列化（`DbConfig` 实现了 `serde::Deserialize`）：
 
 ```toml
 [dependencies]

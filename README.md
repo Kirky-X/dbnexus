@@ -301,11 +301,9 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm 类型桥接（JSON / time / chrono / UUID 字段） | 否 |
 | `validation` | validator 数据验证 | 否 |
 | `yaml` | YAML 权限/配置文件解析 | 否 |
-| `config-toml` | TOML 配置支持（无额外依赖） | 否 |
 | `config-env` | 环境变量配置（无额外依赖） | 否 |
 | `pool-health-check` | 连接池健康检查 | 否 |
 | `pool-warmup` | 连接池预热 | 否 |
-| `dev-full` | 开发辅助聚合（= `test-utils`） | 否 |
 | `test-utils` | 测试辅助工具（tempfile / assert_cmd） | 否 |
 | `cli-tests` | CLI 集成测试门控 | 否 |
 

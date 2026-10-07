@@ -301,11 +301,9 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm type bridges (JSON / time / chrono / UUID fields) | No |
 | `validation` | validator-based data validation | No |
 | `yaml` | YAML permission/config file parsing | No |
-| `config-toml` | TOML config support (no extra dependency) | No |
 | `config-env` | Environment variable config (no extra dependency) | No |
 | `pool-health-check` | Connection pool health checks | No |
 | `pool-warmup` | Connection pool warmup | No |
-| `dev-full` | Developer convenience aggregate (equals `test-utils`) | No |
 | `test-utils` | Test utilities (tempfile / assert_cmd) | No |
 | `cli-tests` | CLI integration test gating | No |
 

@@ -183,7 +183,7 @@ cargo build -p dbnexus-examples --all-targets
 - **数据库**：`sqlite`、`duckdb`、`neo4j`（`ladybug` 因与 `duckdb` 的 mbedtls 链接冲突未启用，仅供 `graph_ladybug` 单独编译时使用）
 - **运行时**：`runtime-tokio-rustls`
 - **安全与权限**：`permission`、`permission-engine`、`sql-parser`、`authentication`、`validation`
-- **配置**：`yaml`、`config-toml`、`config-env`
+- **配置**：`yaml`、`config-env`
 - **数据管理**：`cache`、`migration`、`auto-migrate`、`sharding`、`global-index`、`pool-warmup`、`pool-health-check`
 - **可观测性**：`metrics`、`health-check`、`audit`
 - **宏**：`macros`

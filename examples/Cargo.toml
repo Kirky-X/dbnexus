@@ -271,7 +271,7 @@ name = "duckdb_query"
 path = "src/database/duckdb_query.rs"
 
 [dependencies]
-dbnexus = { path = "..", version = "0.6.0-rc.6", features = ["sqlite", "duckdb", "neo4j", "config-env", "config-toml", "yaml", "macros", "pool-warmup", "pool-health-check", "all-optional"] }
+dbnexus = { path = "..", version = "0.6.0-rc.6", features = ["sqlite", "duckdb", "neo4j", "config-env", "yaml", "macros", "pool-warmup", "pool-health-check", "all-optional"] }
 
 # DuckDB crate（duckdb_query 示例需要直接使用 duckdb::types::Value）
 duckdb = { version = "1.10505", features = ["bundled"] }
@@ -319,7 +319,6 @@ audit = ["dbnexus/audit"]
 authentication = ["dbnexus/authentication"]
 cache = ["dbnexus/cache"]
 config-env = ["dbnexus/config-env"]
-config-toml = ["dbnexus/config-toml"]
 failover = ["dbnexus/failover"]
 global-index = ["dbnexus/global-index"]
 health-check = ["dbnexus/health-check"]

@@ -153,7 +153,6 @@ kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecyc
 
 # === 配置支持 ===
 yaml = ["serde_yaml_ng"]  # YAML 配置支持（合并原 config-yaml 别名）
-config-toml = []  # TOML 配置支持（无额外依赖，用户需自行添加 toml crate）
 config-env = []  # 环境变量配置（无额外依赖）
 
 # === 连接池增强 ===
@@ -221,7 +220,6 @@ authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 # === 开发工具 ===
 # bench 已删除：criterion 经 [dev-dependencies] 提供（benches 不经 feature 启用），
 # 原 optional 依赖从未被任何代码路径激活。
-dev-full = ["test-utils"]
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
