@@ -752,6 +752,59 @@ impl DbConfig {
         serde_json::from_str(json)
     }
 
+    /// 从 sqlite 文件路径构造自举配置
+    ///
+    /// 面向"库文件不存在则创建"的首启场景：
+    /// - `create_if_missing = true` 时对父目录做尽力而为的
+    ///   `create_dir_all`（与 DuckDB 连接路径的先例一致），并在 URL 上追加
+    ///   `?mode=rwc` 交由 sqlx 创建库文件；目录无法创建不在此处报错，
+    ///   由后续连接错误显性暴露；
+    /// - `create_if_missing = false` 时保持裸路径 URL，不做任何文件系统操作。
+    ///
+    /// URL 拼接对 `%` 与 `?` 做 percent-encoding（`%25` / `%3F`），与
+    /// sqlx sqlite 连接串解析端的 percent-decode 对称，路径中的这两个
+    /// 字符不会被误读为转义或查询串分隔符。`path` 按受信配置输入对待：
+    /// 含 `..` 或来自不可信来源时由调用方先行净化。`path` 一律按文件
+    /// 路径解释；需要完整连接串（如 `file::memory:?cache=shared`）时直接
+    /// 构造 `DbConfig` 并填写 `url`。
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use dbnexus::DbConfig;
+    ///
+    /// let config = DbConfig::for_sqlite_path("./data/app.db", true);
+    /// assert_eq!(config.url, "sqlite:./data/app.db?mode=rwc");
+    /// ```
+    pub fn for_sqlite_path(path: &str, create_if_missing: bool) -> Self {
+        if path == ":memory:" {
+            return Self {
+                url: "sqlite::memory:".to_string(),
+                ..Default::default()
+            };
+        }
+
+        // 与 sqlx-sqlite 解析端（percent-decode）对称：先编码 `%` 自身，
+        // 再编码查询串分隔符 `?`，保证路径字节原样落地。
+        let encoded = path.replace('%', "%25").replace('?', "%3F");
+
+        if create_if_missing {
+            let file = PathBuf::from(path);
+            if let Some(parent) = file.parent().filter(|p| !p.as_os_str().is_empty()) {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            Self {
+                url: format!("sqlite:{encoded}?mode=rwc"),
+                ..Default::default()
+            }
+        } else {
+            Self {
+                url: format!("sqlite:{encoded}"),
+                ..Default::default()
+            }
+        }
+    }
+
     /// 获取数据库类型
     ///
     /// # Errors
@@ -1517,6 +1570,62 @@ mod tests {
     // 注意：from_env() 完整测试需要修改环境变量，在 Rust 2024 edition 中
     // set_var/remove_var 为 unsafe，但 lib crate 有 #![forbid(unsafe_code)]。
     // from_env 的覆盖率为外部测试目录（tests/）中独立 crate 的测试覆盖。
+
+    // ===== for_sqlite_path 测试 =====
+
+    #[test]
+    fn test_for_sqlite_path_memory_has_no_fs_side_effect() {
+        let config = DbConfig::for_sqlite_path(":memory:", true);
+        assert_eq!(config.url, "sqlite::memory:");
+        assert_eq!(config.database_type().unwrap(), DatabaseType::Sqlite);
+    }
+
+    #[test]
+    fn test_for_sqlite_path_create_if_missing_builds_parent_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("nested").join("app.db");
+        assert!(!db_path.parent().unwrap().exists());
+
+        let config = DbConfig::for_sqlite_path(db_path.to_str().unwrap(), true);
+        assert_eq!(
+            config.url,
+            format!("sqlite:{}?mode=rwc", db_path.to_str().unwrap())
+        );
+        assert!(db_path.parent().unwrap().exists());
+        assert_eq!(config.database_type().unwrap(), DatabaseType::Sqlite);
+    }
+
+    #[test]
+    fn test_for_sqlite_path_without_create_keeps_bare_url_and_no_fs() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("absent").join("app.db");
+
+        let config = DbConfig::for_sqlite_path(db_path.to_str().unwrap(), false);
+        assert_eq!(config.url, format!("sqlite:{}", db_path.to_str().unwrap()));
+        assert!(!db_path.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn test_for_sqlite_path_relative_without_parent_dir_component() {
+        // 纯文件名无父目录分量：不触发 create_dir_all，URL 原样
+        let config = DbConfig::for_sqlite_path("app.db", true);
+        assert_eq!(config.url, "sqlite:app.db?mode=rwc");
+    }
+
+    #[test]
+    fn test_for_sqlite_path_percent_encodes_url_special_chars() {
+        let dir = tempfile::tempdir().unwrap();
+        // 空格原样保留；% 与 ? 编码后不被 sqlx 误读为转义/查询串
+        let db_path = dir.path().join("report 2026%1?.db");
+        let config = DbConfig::for_sqlite_path(db_path.to_str().unwrap(), true);
+        let expected = format!(
+            "sqlite:{}/report 2026%251%3F.db?mode=rwc",
+            dir.path().to_str().unwrap()
+        );
+        assert_eq!(config.url, expected);
+        // 文件系统侧用原始路径，父目录已建
+        assert!(dir.path().exists());
+    }
 }
 
 #[cfg(test)]
