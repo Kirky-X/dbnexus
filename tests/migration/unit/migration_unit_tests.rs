@@ -729,3 +729,52 @@ async fn test_load_history_dialect_branches_are_explicit() {
         let _ = std::fs::remove_file(&db_path);
     }
 }
+
+/// 迁移历史 INSERT 语句的方言分派（Postgres 用 CAST(... AS TIMESTAMP)，
+/// MySQL/SQLite/DuckDB 用字面量）+ 单引号转义
+///
+/// 该方法为遗留公开入口，sqlite 腿下此前只执行得到 sqlite 分支。
+#[tokio::test]
+#[allow(deprecated)]
+async fn test_history_insert_sql_dialect_and_escaping() {
+    for dt in [
+        DatabaseType::Sqlite,
+        DatabaseType::Postgres,
+        DatabaseType::MySql,
+        DatabaseType::DuckDb,
+    ] {
+        let db_path =
+            std::env::temp_dir().join(format!("dbnexus_ins_{}_{:?}.db", std::process::id(), dt));
+        let url = format!("sqlite:{}?mode=rwc", db_path.display());
+        let conn = sea_orm::Database::connect(&url).await.expect("connect");
+        let executor = dbnexus::MigrationExecutor::new(conn, dt);
+
+        // 描述中的单引号必须被转义为 ''（防 SQL 注入/语法破坏）
+        let sql = executor.build_history_insert_sql_raw(
+            7,
+            "O'Brien's migration",
+            time::OffsetDateTime::now_utc(),
+            "007_migration.sql",
+        );
+        assert!(
+            sql.contains("O''Brien''s migration"),
+            "{dt:?} 单引号应转义为 ''，实际: {sql}"
+        );
+        assert!(sql.contains("007_migration.sql"), "{dt:?} 文件路径应入语句");
+        match dt {
+            // DuckDB 在 as_sea_orm 处被拒、仅编译兜底，显式映射为 Postgres 形态
+            DatabaseType::Postgres | DatabaseType::DuckDb => assert!(
+                sql.contains("CAST(") && sql.contains(" AS TIMESTAMP)"),
+                "{dt:?} 分支应使用 CAST(... AS TIMESTAMP): {sql}"
+            ),
+            DatabaseType::Sqlite | DatabaseType::MySql => assert!(
+                !sql.contains("CAST("),
+                "{dt:?} 分支不应使用 Postgres 的 CAST 形态: {sql}"
+            ),
+            DatabaseType::Ladybug | DatabaseType::Neo4j => {
+                panic!("图数据库不参与关系型迁移")
+            }
+        }
+        let _ = std::fs::remove_file(&db_path);
+    }
+}

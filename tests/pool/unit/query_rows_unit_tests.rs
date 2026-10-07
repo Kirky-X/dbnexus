@@ -402,3 +402,40 @@ async fn test_scatter_partial_failure_policies() {
 
     let _ = std::fs::remove_file(&tmp0);
 }
+
+/// scatter 超时：collect 阶段超时必须显性返回错误（不得静默返回半成品）
+#[cfg(feature = "scatter-gather")]
+#[tokio::test]
+async fn test_scatter_timeout_is_explicit() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let tmp0 = std::env::temp_dir().join(format!("dbnexus_to_s0_{}.db", std::process::id()));
+    let url0 = format!("sqlite:{}?mode=rwc", tmp0.display());
+    let mut router = ShardRouter::with_strategy("hash", 1);
+    router.register_shard(0, "shard_0".to_string(), url0.clone());
+    let pool0 = Arc::new(dbnexus::DbPool::new(&url0).await.unwrap());
+    let admin0 = pool0.get_session("admin").await.unwrap();
+    admin0
+        .execute_raw_ddl("CREATE TABLE t_to (val REAL NOT NULL)")
+        .await
+        .unwrap();
+    router.set_pool(0, pool0).unwrap();
+
+    // 1 纳秒超时：collect 必然超时 → 显性错误
+    let executor = ScatterGatherExecutor::new(
+        Arc::new(router),
+        Duration::from_nanos(1),
+        PartialFailurePolicy::BestEffort,
+    );
+    let err = executor
+        .scatter_query_rows("SELECT val FROM t_to", "admin", None)
+        .await
+        .expect_err("超时必须显性报错");
+    assert!(
+        err.contains("timed out"),
+        "超时错误信息应可辨识，实际: {err}"
+    );
+
+    let _ = std::fs::remove_file(&tmp0);
+}
