@@ -222,6 +222,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > `PoolConfig` 的字段经 `#[serde(flatten)]` 扁平化，YAML/JSON 中直接写 `max_connections` 等键即可；Rust 代码中通过 `config.pool_config.max_connections` 访问。
 
+> 除池参数外，`DbConfig` 还带四个子配置：`cache_config`（`cache` 相关容量与默认 TTL）、`retry_policy`（`retry`）、`failover_config`（`failover`）与 `replica_config`（`replica-routing`）。后三个是 `#[cfg]` 门控字段，未启用对应 feature 时不存在于结构体也不参与序列化（向配置源写这些子节点会被 serde 静默忽略）；四个字段均**不读环境变量**，只能走 YAML/JSON/TOML 或程序化赋值。字段表与 YAML 形状见 [API 参考 · 配置 API](API_REFERENCE.md#️-配置-api)。
+
 ---
 
 ## 🧩 定义实体

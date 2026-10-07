@@ -236,6 +236,7 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | Flag | Description | Default |
 |------|------|:----:|
 | `cache` | oxcache cache (moka L1 backend) + lock-free `ArcSwap` reads | No |
+| `cache-available` | Internal capability marker (no code of its own): implied by `cache` and `oxcache-integration`, lets downstream crates and gating tests detect whether the cache surface is ready | No |
 | `oxcache-integration` | OxcacheDbCacheAdapter + `OxcacheQueryCache` query-cache decorator (query_cached/invalidate_table) | No |
 | `kit` | trait-kit AsyncKit integration with the full pool/cache/audit/health capability closure | No |
 | `repository` | Generic `Repository<T>` CRUD port + `impl_json_repository!` macro | No |
@@ -345,6 +346,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 | [📖 User Guide](docs/USER_GUIDE.md) | Complete tutorial from installation to advanced usage |
 | [📘 API Reference](docs/API_REFERENCE.md) | Detailed description of all public APIs |
 | [🏗️ Architecture](docs/ARCHITECTURE.md) | Design philosophy, module breakdown, data flow, security/performance design |
+| [⛔ Rate Limiting & Migration](docs/RATE_LIMITING.md) | `dbnexus-limiter-port` topology, token-bucket vs. external backend selection, and the 403/429 semantics migration |
 | [📊 Performance Baseline](docs/PERFORMANCE.md) | End-to-end benchmark data and reproduction commands |
 | [🔒 Security](docs/SECURITY.md) | Defense-in-depth design, best practices and vulnerability reporting |
 | [📋 Changelog](docs/CHANGELOG.md) | Change records for every version |
@@ -444,8 +446,8 @@ Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicit
 
 | Metric | Value | Source |
 |------|------|------|
-| Total test functions | 2754 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1347 + tests 1405 + macros 2) |
-| Registered test targets | 87 `[[test]]` | `Cargo.toml` |
+| Total test functions | 2765 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1358 + tests 1405 + macros 2) |
+| Registered test targets | 88 `[[test]]` | `Cargo.toml` |
 | Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | Coverage gate | ≥ 80% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
 

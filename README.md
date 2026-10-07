@@ -236,6 +236,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `cache` | oxcache 缓存（moka L1 后端）+ `ArcSwap` 无锁读取 | 否 |
+| `cache-available` | 内部能力标记位（无自有代码）：由 `cache` 与 `oxcache-integration` 蕴含，供下游与门控测试探测缓存面是否就绪 | 否 |
 | `oxcache-integration` | OxcacheDbCacheAdapter 适配器 + `OxcacheQueryCache` 查询缓存装饰器（query_cached/invalidate_table） | 否 |
 | `kit` | trait-kit AsyncKit 集成，隐含池/缓存/审计/健康全能力闭包 | 否 |
 | `repository` | 泛型仓储 `Repository<T>` CRUD 端口 + `impl_json_repository!` 宏 | 否 |
@@ -345,6 +346,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 | [📖 用户指南](docs/USER_GUIDE.md) | 从安装到进阶的完整使用教程 |
 | [📘 API 参考](docs/API_REFERENCE.md) | 全部公开 API 的详细说明 |
 | [🏗️ 架构文档](docs/ARCHITECTURE.md) | 设计理念、模块划分、数据流与安全/性能设计 |
+| [⛔ 限流与迁移指南](docs/RATE_LIMITING.md) | `dbnexus-limiter-port` 端口拓扑、令牌桶/外部后端选型与 403/429 语义迁移 |
 | [📊 性能基线](docs/PERFORMANCE.md) | 端到端基准数据与复现命令 |
 | [🔒 安全文档](docs/SECURITY.md) | 纵深防御设计、最佳实践与漏洞报告流程 |
 | [📋 更新日志](docs/CHANGELOG.md) | 每个版本的变更记录 |
@@ -444,8 +446,8 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 | 指标 | 数值 | 来源 |
 |------|------|------|
-| 测试函数总数 | 2754 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1347 + tests 1405 + macros 2） |
-| 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
+| 测试函数总数 | 2765 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1358 + tests 1405 + macros 2） |
+| 显式注册测试目标 | 88 个 `[[test]]` | `Cargo.toml` |
 | 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | 覆盖率门禁 | ≥ 80% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
 

@@ -176,6 +176,25 @@ pub struct DbConfig {
 
     #[serde(default = "default_warmup_retries")]
     pub warmup_retries: u32,
+
+    /// 缓存配置（`cache` 相关容量的子结构，缺失时回退 `CacheConfig::default()`）
+    #[serde(default)]
+    pub cache_config: CacheConfig,
+
+    /// 运行时重试策略（`retry` feature 启用时可用）
+    #[cfg(feature = "retry")]
+    #[serde(default)]
+    pub retry_policy: Option<crate::reliability::RetryPolicy>,
+
+    /// 连接故障转移配置（`failover` feature 启用时可用）
+    #[cfg(feature = "failover")]
+    #[serde(default)]
+    pub failover_config: Option<FailoverConfig>,
+
+    /// 副本路由配置（`replica-routing` feature 启用时可用）
+    #[cfg(feature = "replica-routing")]
+    #[serde(default)]
+    pub replica_config: Option<ReplicaConfig>,
 }
 ```
 
@@ -214,6 +233,66 @@ pub struct PoolConfig {
 | `admin_role` | `"admin"` | `DB_ADMIN_ROLE` |
 | `warmup_timeout` | 30（秒） | `DB_WARMUP_TIMEOUT` |
 | `warmup_retries` | 3 | `DB_WARMUP_RETRIES` |
+| `cache_config` | `CacheConfig::default()` | 无（仅配置源 / 程序化） |
+| `retry_policy` | `None`（`retry`） | 无（仅配置源 / 程序化） |
+| `failover_config` | `None`（`failover`） | 无（仅配置源 / 程序化） |
+| `replica_config` | `None`（`replica-routing`） | 无（仅配置源 / 程序化） |
+
+> `from_env` 不读这四个字段的环境变量（固定 `CacheConfig::default()` 与 `None`）；后三个字段是对应 feature 下的 `#[cfg]` 可选字段，未启用时既不存在于结构体、也不参与序列化。配置类型均未标 `deny_unknown_fields`，因此向未启用 feature 的配置源写 `failover_config:` 等子节点会被 serde **静默忽略**（不报错），需对应 feature 重新构建才会生效。
+
+### `CacheConfig`（`cache_config:` 子节点）
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfig {
+    pub policy_cache_capacity: u64,    // 权限策略缓存容量，默认 4096
+    pub sql_parse_cache_capacity: u64, // SQL 解析缓存容量，默认 1000
+    pub query_cache_capacity: u64,     // 查询结果缓存容量，默认 10000
+    pub default_ttl: u64,              // 默认 TTL（秒），默认 300
+}
+```
+
+`Default` 为手写 `impl`（逐字段取上述默认值）。`validate()` 要求三个 capacity 均 > 0，否则返回 `ConfigError::InvalidCacheCapacity`（携带字段名的错文）。
+
+### `FailoverConfig`（`failover` feature，`failover_config:` 子节点）
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverConfig {
+    pub urls: Vec<String>,                      // 有序链 [primary, replica1, replica2, ...]，首项为 primary；无 serde 默认值，写了本子节点就必须给出
+    pub health_check_query: Option<String>,     // 自定义健康检查 SQL，`None` = `SELECT 1`
+    pub failover_threshold: u32,                // 连续失败 N 次触发转移，默认 3
+}
+```
+
+手写 `impl Default`：`urls` 为空列表、`health_check_query` 为 `None`、`failover_threshold` 为 3。
+
+### `ReplicaConfig`（`replica-routing` feature，`replica_config:` 子节点）
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplicaConfig {
+    pub replica_urls: Vec<String>,        // 副本 URL 列表（无 serde 默认值）
+    pub max_lag_seconds: f64,             // 最大允许复制延迟（秒），超过则回退主库，默认 5.0
+    pub lag_check_interval_secs: u64,     // Lag 检测间隔（秒），默认 10
+}
+```
+
+手写 `impl Default`：`replica_urls` 为空列表、`max_lag_seconds` 为 5.0、`lag_check_interval_secs` 为 10。
+
+YAML 示例（三个子节点各自需对应 feature 启用）：
+
+```yaml
+url: "postgresql://localhost/mydb"
+cache_config:
+  query_cache_capacity: 20000
+  default_ttl: 60
+failover_config:              # 需 `failover` feature
+  urls:
+    - "postgresql://primary/mydb"
+    - "postgresql://standby/mydb"
+  failover_threshold: 3
+```
 
 ### 配置加载方法
 
