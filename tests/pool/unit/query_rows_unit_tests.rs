@@ -327,3 +327,78 @@ async fn test_scatter_query_rows_merged_orders_and_paginates_globally() {
     let _ = std::fs::remove_file(&tmp0);
     let _ = std::fs::remove_file(&tmp1);
 }
+
+/// scatter 部分失败策略：BestEffort 返回部分结果 + 失败分片信息；Fail 整体失败
+///
+/// 构造「一个正常分片 + 一个指向不可达库的分片」，断言两种策略的语义差异
+/// （既有用例只覆盖全部分片成功的路径）。
+#[cfg(feature = "scatter-gather")]
+#[tokio::test]
+async fn test_scatter_partial_failure_policies() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let tmp0 = std::env::temp_dir().join(format!("dbnexus_pf_s0_{}.db", std::process::id()));
+    let tmp1 = std::env::temp_dir().join(format!("dbnexus_pf_s1_{}.db", std::process::id()));
+    let url0 = format!("sqlite:{}?mode=rwc", tmp0.display());
+    let url1 = format!("sqlite:{}?mode=rwc", tmp1.display());
+
+    let mut router = ShardRouter::with_strategy("hash", 2);
+    router.register_shard(0, "shard_0".to_string(), url0.clone());
+    let pool0 = Arc::new(dbnexus::DbPool::new(&url0).await.unwrap());
+    let admin0 = pool0.get_session("admin").await.unwrap();
+    admin0
+        .execute_raw_ddl("CREATE TABLE t_pf (val REAL NOT NULL)")
+        .await
+        .unwrap();
+    admin0
+        .execute_raw("INSERT INTO t_pf (val) VALUES (1.0)")
+        .await
+        .unwrap();
+    router.set_pool(0, pool0).unwrap();
+
+    // 分片 1：合法但未建表的库——查询 "no such table" 即分片失败
+    router.register_shard(1, "shard_1".to_string(), url1.clone());
+    let pool1 = Arc::new(dbnexus::DbPool::new(&url1).await.unwrap());
+    router.set_pool(1, pool1).unwrap();
+
+    let router = Arc::new(router);
+
+    // BestEffort：部分成功仍返回结果，失败分片显性列出
+    let best = ScatterGatherExecutor::new(
+        Arc::clone(&router),
+        Duration::from_secs(5),
+        PartialFailurePolicy::BestEffort,
+    );
+    let result = best
+        .scatter_query_rows("SELECT val FROM t_pf", "admin", None)
+        .await
+        .expect("BestEffort 应返回部分结果");
+    assert_eq!(result.failed_shards.len(), 1, "应列出 1 个失败分片");
+    assert_eq!(result.failed_shards[0].shard_id, 1, "失败分片应为 shard_1");
+    assert!(!result.shard_rows.is_empty(), "正常分片的数据行应被保留");
+
+    // Fail：任一分片失败则整体失败（错误信息含失败分片数）
+    let strict = ScatterGatherExecutor::new(
+        Arc::clone(&router),
+        Duration::from_secs(5),
+        PartialFailurePolicy::Fail,
+    );
+    let err = strict
+        .scatter_query_rows("SELECT val FROM t_pf", "admin", None)
+        .await
+        .expect_err("Fail 策略下应整体失败");
+    assert!(
+        err.contains("1 shard(s) failed"),
+        "错误信息应含失败分片数，实际: {err}"
+    );
+
+    // 兼容入口与 scatter_query_rows 同语义
+    let compat = best
+        .scatter_query("SELECT val FROM t_pf", "admin")
+        .await
+        .expect("兼容入口应可用");
+    assert!(compat.failed_shards.len() <= 1, "兼容入口语义一致");
+
+    let _ = std::fs::remove_file(&tmp0);
+}
