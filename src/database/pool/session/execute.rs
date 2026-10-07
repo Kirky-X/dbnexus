@@ -151,20 +151,10 @@ impl Session {
                             let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
                             tokio::time::sleep(backoff).await;
                         }
-                        let backend = if let Some(tx) = tx_opt.as_ref() {
-                            use sea_orm::ConnectionTrait;
-                            tx.get_database_backend()
-                        } else {
-                            self.connection()?.get_database_backend()
-                        };
-                        let stmt = build_statement(backend, sql.to_owned(), params);
-                        let result = if let Some(ref tx) = tx_opt {
-                            tx.execute_raw(stmt).await.map_err(DbError::Connection)
-                        } else {
-                            let conn = self.connection()?;
-                            conn.execute_raw(stmt).await.map_err(DbError::Connection)
-                        };
-                        match result {
+                        match self
+                            .execute_statement_once(tx_opt.as_ref(), sql, params)
+                            .await
+                        {
                             Ok(exec_result) => {
                                 // 记录查询指标（含慢查询检测）
                                 #[cfg(all(feature = "metrics", feature = "sql-parser"))]
@@ -182,25 +172,41 @@ impl Session {
             }
 
             // 无重试路径（retry 未启用或非幂等操作）
-            let backend = if let Some(tx) = tx_opt.as_ref() {
-                use sea_orm::ConnectionTrait;
-                tx.get_database_backend()
-            } else {
-                self.connection()?.get_database_backend()
-            };
-            let stmt = build_statement(backend, sql.to_owned(), params);
-            let result = if let Some(tx) = tx_opt {
-                tx.execute_raw(stmt).await.map_err(DbError::Connection)
-            } else {
-                let conn = self.connection()?;
-                conn.execute_raw(stmt).await.map_err(DbError::Connection)
-            };
+            let result = self
+                .execute_statement_once(tx_opt.as_ref(), sql, params)
+                .await;
 
             // 记录查询指标（含慢查询检测）
             #[cfg(all(feature = "metrics", feature = "sql-parser"))]
             self.record_execute_metrics(query_start, result.is_ok());
 
             result
+        }
+    }
+
+    /// 单次语句执行：按事务/直连选择连接，构造方言语句并执行
+    ///
+    /// retry 循环与无重试路径共用，保证两条路径的连接选择、语句构造
+    /// 与执行分发保持一致。
+    #[cfg(feature = "sql-parser")]
+    async fn execute_statement_once(
+        &self,
+        tx_opt: Option<&Arc<DatabaseTransaction>>,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> DbResult<ExecResult> {
+        let backend = if let Some(tx) = tx_opt {
+            use sea_orm::ConnectionTrait;
+            tx.get_database_backend()
+        } else {
+            self.connection()?.get_database_backend()
+        };
+        let stmt = build_statement(backend, sql.to_owned(), params);
+        if let Some(tx) = tx_opt {
+            tx.execute_raw(stmt).await.map_err(DbError::Connection)
+        } else {
+            let conn = self.connection()?;
+            conn.execute_raw(stmt).await.map_err(DbError::Connection)
         }
     }
 
@@ -377,38 +383,7 @@ impl Session {
             // RetryPolicy 存在且 SQL 判定为幂等（SELECT/SHOW/EXPLAIN 前缀）时
             // 逐次退避重试；query_rows 仅放行 SELECT，天然幂等）
             #[cfg(feature = "retry")]
-            let result = {
-                let policy = self
-                    .pool_inner
-                    .config
-                    .retry_policy
-                    .as_ref()
-                    .filter(|_| crate::reliability::is_idempotent_operation(sql));
-                match policy {
-                    Some(policy) => {
-                        let mut last_error: Option<DbError> = None;
-                        let mut success: Option<Vec<serde_json::Value>> = None;
-                        for attempt in 0..=policy.max_retries {
-                            if attempt > 0 {
-                                let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
-                                tokio::time::sleep(backoff).await;
-                            }
-                            match self.query_rows_execute(sql, tx_opt.clone(), params).await {
-                                Ok(rows) => {
-                                    success = Some(rows);
-                                    break;
-                                }
-                                Err(e) => last_error = Some(e),
-                            }
-                        }
-                        match success {
-                            Some(rows) => Ok(rows),
-                            None => Err(last_error.unwrap()),
-                        }
-                    }
-                    None => self.query_rows_execute(sql, tx_opt, params).await,
-                }
-            };
+            let result = self.query_rows_with_retry(sql, tx_opt, params).await;
 
             #[cfg(not(feature = "retry"))]
             let result = self.query_rows_execute(sql, tx_opt, params).await;
@@ -417,6 +392,49 @@ impl Session {
             self.record_execute_metrics(query_start, result.is_ok());
 
             result
+        }
+    }
+
+    /// 内部：幂等行查询的自动重试包装（与 `execute_raw` 重试同口径）
+    ///
+    /// `retry_policy` 存在且 SQL 判定为幂等（SELECT/SHOW/EXPLAIN 前缀）时
+    /// 逐次退避重试；其余情况直通 [`Self::query_rows_execute`]。
+    #[cfg(all(feature = "retry", feature = "sql-parser"))]
+    async fn query_rows_with_retry(
+        &self,
+        sql: &str,
+        tx_opt: Option<Arc<DatabaseTransaction>>,
+        params: &[serde_json::Value],
+    ) -> DbResult<Vec<serde_json::Value>> {
+        let policy = self
+            .pool_inner
+            .config
+            .retry_policy
+            .as_ref()
+            .filter(|_| crate::reliability::is_idempotent_operation(sql));
+        match policy {
+            Some(policy) => {
+                let mut last_error: Option<DbError> = None;
+                let mut success: Option<Vec<serde_json::Value>> = None;
+                for attempt in 0..=policy.max_retries {
+                    if attempt > 0 {
+                        let backoff = Self::calculate_retry_backoff(policy, attempt - 1);
+                        tokio::time::sleep(backoff).await;
+                    }
+                    match self.query_rows_execute(sql, tx_opt.clone(), params).await {
+                        Ok(rows) => {
+                            success = Some(rows);
+                            break;
+                        }
+                        Err(e) => last_error = Some(e),
+                    }
+                }
+                match success {
+                    Some(rows) => Ok(rows),
+                    None => Err(last_error.unwrap()),
+                }
+            }
+            None => self.query_rows_execute(sql, tx_opt, params).await,
         }
     }
 
