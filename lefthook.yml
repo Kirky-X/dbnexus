@@ -27,7 +27,7 @@ pre-push:
   commands:
     cargo-audit:
       run: cargo audit
-    coverage-80:
+    coverage-90:
       name: coverage ≥90% lines
       # 与 CI coverage job 同口径（sqlite,default-no-db,all-optional）——
       # 此前裸 default(=[]) 统计的是零 feature 空壳，门槛形同虚设。
