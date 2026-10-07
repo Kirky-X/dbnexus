@@ -1480,3 +1480,104 @@ async fn test_release_connection_no_leak() {
         status.total, status.idle
     );
 }
+
+/// 空闲校验在途时的取连接契约
+///
+/// 校验方（`clean_invalid_connections`）取走空闲连接做 I/O 期间，取用方会
+/// 看到空 idle 队列：修复前该窗口直接新建连接——对 `duckdb::memory:` 等
+/// 「新连接即新库」后端是数据可见性缺陷，对其他后端是连接数膨胀。本测试
+/// 并发施压「校验 × 取用」，断言计数始终自洽：
+/// active 归零、total ≤ max_connections、total == idle。
+#[cfg(feature = "pool-health-check")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_acquire_during_idle_check_keeps_accounting_consistent() {
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create pool");
+    let pool = Arc::new(pool);
+
+    // 预置空闲连接，使校验方有连接可取走校验
+    let mut sessions = Vec::new();
+    for _ in 0..4 {
+        sessions.push(pool.get_session("admin").await.expect("prefill session"));
+    }
+    drop(sessions);
+    assert!(
+        pool.status().idle >= 1,
+        "预置后应有空闲连接: {:?}",
+        pool.status()
+    );
+
+    // 一侧反复执行空闲校验（取走 → 校验 → 回填）；三侧在窗口内并发取用
+    let checker = {
+        let p = Arc::clone(&pool);
+        tokio::spawn(async move {
+            for _ in 0..50 {
+                let _ = p.clean_invalid_connections().await;
+            }
+        })
+    };
+    let mut clients = Vec::new();
+    for _ in 0..3 {
+        let p = Arc::clone(&pool);
+        clients.push(tokio::spawn(async move {
+            for _ in 0..50 {
+                let session = p
+                    .get_session("admin")
+                    .await
+                    .expect("acquire during idle check");
+                drop(session);
+            }
+        }));
+    }
+    checker.await.expect("checker task");
+    for c in clients {
+        c.await.expect("client task");
+    }
+
+    let st = pool.status();
+    assert_eq!(st.active, 0, "全部归还后 active 应为 0: {st:?}");
+    assert!(st.total <= 5, "不得超过 max_connections: {st:?}");
+    assert_eq!(st.total, st.idle, "连接应全部回收到 idle: {st:?}");
+}
+
+/// SQL 门禁的失败路径必须 fail-closed
+///
+/// 1. `query_rows` 只允许 SELECT：DML/DDL 一律拒绝（不得放行副作用语句）；
+/// 2. 非 admin 角色遇到 SQL 解析失败时走安全默认（拒绝），不得因解析不出
+///    表名而放行。
+#[cfg(all(feature = "sql-parser", feature = "permission"))]
+#[tokio::test]
+async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
+    let (pool, _temp_dir) = common::create_test_pool()
+        .await
+        .expect("Failed to create pool");
+
+    let admin = pool.get_session("admin").await.expect("admin session");
+    // DDL 走专用入口（execute_raw 按设计拒绝 DDL）
+    admin
+        .execute_raw_ddl("CREATE TABLE IF NOT EXISTS guard_probe (id INTEGER PRIMARY KEY, v TEXT)")
+        .await
+        .expect("create table");
+
+    // query_rows 只允许 SELECT
+    let err = admin
+        .query_rows("DELETE FROM guard_probe")
+        .await
+        .expect_err("non-SELECT must be rejected by query_rows");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "query_rows 非 SELECT 应为权限拒绝，实际: {err:?}"
+    );
+
+    // 非 admin 的 SQL 解析失败：安全默认拒绝
+    let sys = pool.get_session("system").await.expect("non-admin session");
+    let err = sys
+        .execute_raw("THIS IS NOT VALID SQL")
+        .await
+        .expect_err("parse failure must be denied for non-admin");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "非 admin 解析失败应为权限拒绝，实际: {err:?}"
+    );
+}
