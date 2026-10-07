@@ -23,7 +23,6 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::access::{PermissionAction, PermissionConfig, RolePolicy, TablePermission};
 use dbnexus::foundation::ConfigError;
 use std::hint::black_box;
-use std::time::{Duration, Instant};
 
 #[path = "../../common/mod.rs"]
 mod common;
@@ -158,29 +157,3 @@ criterion_group!(
 );
 
 criterion_main!(benches);
-
-/// 性能测试辅助函数
-/// 测量操作执行时间
-#[allow(dead_code)]
-fn measure_duration<F, T>(_name: &str, f: F) -> (T, Duration)
-where
-    F: FnOnce() -> T,
-{
-    let start = Instant::now();
-    let result = f();
-    let duration = start.elapsed();
-    (result, duration)
-}
-
-/// 打印性能测试结果
-#[allow(dead_code)]
-fn print_benchmark_result(name: &str, duration: Duration, iterations: u64) {
-    let avg_ns = duration.as_nanos() / iterations as u128;
-    let avg_us = avg_ns as f64 / 1000.0;
-    let avg_ms = avg_us / 1000.0;
-
-    println!(
-        "{}: {} iterations, avg: {}ns ({:.4}μs, {:.4}ms)",
-        name, iterations, avg_ns, avg_us, avg_ms
-    );
-}

@@ -239,26 +239,16 @@ pub struct ReplicaPool {
     pool: Arc<DbPool>,
     /// lag 检测器
     lag_detector: Arc<dyn ReplicationLagDetector>,
-    /// 最大允许延迟（秒）
-    ///
-    /// 路由判定只依赖检测器折算进 `is_caught_up` 的阈值结果（见 `get_read_session`），
-    /// 该字段不再参与判定，仅为保持 `new` 构造签名的 API 兼容而保留。
-    #[allow(dead_code)]
-    max_lag_seconds: f64,
 }
 
 impl ReplicaPool {
     /// 创建副本连接池
-    pub fn new(
-        pool: Arc<DbPool>,
-        lag_detector: Arc<dyn ReplicationLagDetector>,
-        max_lag_seconds: f64,
-    ) -> Self {
-        Self {
-            pool,
-            lag_detector,
-            max_lag_seconds,
-        }
+    ///
+    /// lag 阈值不在此处传入：路由判定只依赖检测器折算进 `is_caught_up`
+    /// 的阈值结果（见 `get_read_session`），阈值归属各检测器自身配置
+    /// （如 [`MySqlLagDetector::max_lag_seconds`]）。
+    pub fn new(pool: Arc<DbPool>, lag_detector: Arc<dyn ReplicationLagDetector>) -> Self {
+        Self { pool, lag_detector }
     }
 
     /// 获取读 session（lag 感知路由）
@@ -1019,7 +1009,7 @@ mod replica_pool_tests {
     #[tokio::test]
     async fn read_session_routes_to_replica_when_caught_up() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
-        let replica = ReplicaPool::new(pool.clone(), Arc::new(StaticDetector::CaughtUp), 5.0);
+        let replica = ReplicaPool::new(pool.clone(), Arc::new(StaticDetector::CaughtUp));
         let session = replica.get_read_session("admin").await;
         assert!(session.is_some(), "已追上的副本必须承接读请求");
         assert!(Arc::ptr_eq(replica.pool(), &pool));
@@ -1028,11 +1018,8 @@ mod replica_pool_tests {
     #[tokio::test]
     async fn read_session_falls_back_when_lag_exceeded() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
-        let replica = ReplicaPool::new(
-            pool,
-            Arc::new(StaticDetector::Failed), // 探测失败同样走回退路径
-            5.0,
-        );
+        // 探测失败同样走回退路径
+        let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed));
         assert!(
             replica.get_read_session("admin").await.is_none(),
             "超阈值副本必须回退主库（返回 None）"
@@ -1042,7 +1029,7 @@ mod replica_pool_tests {
     #[tokio::test]
     async fn read_session_falls_back_on_detector_error() {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
-        let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed), 5.0);
+        let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed));
         assert!(
             replica.get_read_session("admin").await.is_none(),
             "探测失败必须回退主库，绝不假成功"

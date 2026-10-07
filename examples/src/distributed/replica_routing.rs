@@ -204,6 +204,6 @@ fn main() {
     println!("\n📚 关键 API:");
     println!("  - ReplicaConfig {{ replica_urls, max_lag_seconds, lag_check_interval_secs }}");
     println!("  - FailoverConfig {{ urls, health_check_query, failover_threshold }}");
-    println!("  - ReplicaPool::new(pool, lag_detector, max_lag_seconds)");
+    println!("  - ReplicaPool::new(pool, lag_detector)");
     println!("  - replica_pool.get_read_session(role) -> Option<Session>");
 }
