@@ -449,7 +449,7 @@ Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicit
 | Total test functions | 2765 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1358 + tests 1405 + macros 2) |
 | Registered test targets | 88 `[[test]]` | `Cargo.toml` |
 | Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
-| Coverage gate | ≥ 80% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
+| Coverage gate | ≥ 90% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
 
 ### Commands (identical to CI)
 
@@ -519,7 +519,7 @@ Supply-chain security: CI runs `cargo deny check` (licenses/advisories/duplicate
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first for the TDD workflow, the development environment requirements (Rust 1.97.1 toolchain, lefthook / pre-commit hooks — installed via `./scripts/install-pre-commit.sh`, bypassing with `--no-verify` is forbidden, Conventional Commits commit messages) and the quality gates (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, `cargo audit`, ≥ 80% line coverage), as well as the commit/PR process.
+Contributions are welcome! Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first for the TDD workflow, the development environment requirements (Rust 1.97.1 toolchain, lefthook / pre-commit hooks — installed via `./scripts/install-pre-commit.sh`, bypassing with `--no-verify` is forbidden, Conventional Commits commit messages) and the quality gates (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, `cargo audit`, ≥ 90% line coverage), as well as the commit/PR process.
 
 ---
 

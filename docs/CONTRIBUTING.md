@@ -87,7 +87,7 @@ pre-commit run --all-files
 | 格式 | `cargo fmt --all -- --check` |
 | Lint | `cargo clippy --all-targets -- -D warnings` |
 | 供应链 | `cargo deny check`、`cargo audit` |
-| 覆盖率 | 行覆盖 ≥ 80%（CI 中 llvm-cov 统计） |
+| 覆盖率 | 行覆盖 ≥ 90%（CI 中 llvm-cov 统计） |
 | 文档 | `cargo doc` 零告警 |
 
 ### 自动化审查工具

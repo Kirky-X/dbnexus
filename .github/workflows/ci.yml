@@ -261,9 +261,9 @@ jobs:
         uses: taiki-e/install-action@c3ec0de9ae7f1019cea21aa96aa0a895b9552063 # v2
         with:
           tool: cargo-llvm-cov
-      - name: Generate coverage (gate ≥80% lines)
+      - name: Generate coverage (gate ≥90% lines)
         run: |
-          cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 80 --lcov --output-path lcov.info
+          cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 90 --lcov --output-path lcov.info
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         with:
