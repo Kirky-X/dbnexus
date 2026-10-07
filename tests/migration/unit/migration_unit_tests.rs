@@ -557,3 +557,137 @@ fn test_migration_generate_succeeds() {
 
     assert!(sql.contains("id INTEGER"));
 }
+
+/// 方言 SQL 生成覆盖：同一列操作在四种关系型后端下的输出形状
+///
+/// sqlite 腿在测时只执行得到 `DatabaseType::Sqlite` 分支，Postgres/MySql/DuckDb
+/// 与图数据库拒绝分支在 CI 覆盖率口径下从无执行（历史缺口：方言分支的改动没有
+/// 回归信号）。本测试逐一断言输出形状，并断言图数据库显性拒绝而非静默产出无效 SQL。
+#[test]
+fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
+    use dbnexus::domain::migration::types::ColumnChange;
+
+    let new_column = Column {
+        name: "age".to_string(),
+        column_type: ColumnType::Integer,
+        is_primary_key: false,
+        is_nullable: true,
+        has_default: false,
+        default_value: None,
+        is_auto_increment: false,
+        comment: None,
+    };
+
+    // (方言, 删除列应含, 修改列应含；"--" 表示 SQLite 的人工重建提示)
+    for (dt, expect_drop, expect_modify) in [
+        (DatabaseType::Sqlite, "请手动重建表", "--"),
+        (
+            DatabaseType::Postgres,
+            "DROP COLUMN age;",
+            "ALTER COLUMN age TYPE INTEGER;",
+        ),
+        (
+            DatabaseType::MySql,
+            "DROP COLUMN age;",
+            "MODIFY COLUMN age INTEGER",
+        ),
+        (
+            DatabaseType::DuckDb,
+            "DROP COLUMN age;",
+            "ALTER COLUMN age TYPE INTEGER;",
+        ),
+    ] {
+        let generator = SqlGenerator::new(dt);
+
+        let drop_sql = generator
+            .generate_drop_column_sql("users", "age")
+            .expect("drop column");
+        assert!(
+            drop_sql.contains(expect_drop),
+            "{dt:?} 删除列输出异常: {drop_sql}"
+        );
+
+        let modify_sql = generator
+            .generate_alter_column_sql(
+                "users",
+                &ColumnChange::ModifyColumn {
+                    column_name: "age".to_string(),
+                    new_column: new_column.clone(),
+                },
+            )
+            .expect("modify column");
+        if expect_modify == "--" {
+            assert!(
+                modify_sql.contains("请手动重建表"),
+                "{dt:?} SQLite 修改列应输出重建提示: {modify_sql}"
+            );
+        } else {
+            assert!(
+                modify_sql.contains(expect_modify),
+                "{dt:?} 修改列输出异常: {modify_sql}"
+            );
+        }
+
+        // 重命名：关系型方言原生 RENAME COLUMN（SQLite 输出重建提示）
+        let rename_sql = generator
+            .generate_alter_column_sql(
+                "users",
+                &ColumnChange::RenameColumn {
+                    old_name: "age".to_string(),
+                    new_name: "years".to_string(),
+                },
+            )
+            .expect("rename column");
+        assert!(
+            rename_sql.contains("RENAME COLUMN") || rename_sql.contains("请手动重建表"),
+            "{dt:?} 重命名输出异常: {rename_sql}"
+        );
+
+        // 其余变更类型在各方言都应有分支产出（形状由上面三类显式断言覆盖，
+        // 这里要求执行到各分支且不 panic）
+        let _ = generator
+            .generate_alter_column_sql("users", &ColumnChange::AddColumn(new_column.clone()));
+        let _ = generator.generate_alter_column_sql(
+            "users",
+            &ColumnChange::RemoveColumn {
+                column_name: "age".to_string(),
+            },
+        );
+        let _ = generator.generate_alter_column_sql(
+            "users",
+            &ColumnChange::TypeChanged {
+                column_name: "age".to_string(),
+                old_type: ColumnType::Integer,
+                new_type: ColumnType::String(Some(64)),
+            },
+        );
+        let _ = generator.generate_alter_column_sql(
+            "users",
+            &ColumnChange::NullabilityChanged {
+                column_name: "age".to_string(),
+                old_nullable: true,
+                new_nullable: false,
+            },
+        );
+        let _ = generator.generate_alter_column_sql(
+            "users",
+            &ColumnChange::DefaultChanged {
+                column_name: "age".to_string(),
+                old_default: None,
+                new_default: Some("0".to_string()),
+            },
+        );
+    }
+
+    // 图数据库：关系型 ALTER 一律显性拒绝
+    for dt in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
+        let generator = SqlGenerator::new(dt);
+        let err = generator
+            .generate_drop_column_sql("users", "age")
+            .expect_err("graph databases must reject relational ALTER");
+        assert!(
+            err.contains("Graph databases do not support relational"),
+            "{dt:?} 拒绝信息异常: {err}"
+        );
+    }
+}

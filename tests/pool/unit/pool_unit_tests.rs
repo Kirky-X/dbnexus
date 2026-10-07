@@ -1570,6 +1570,16 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         "query_rows 非 SELECT 应为权限拒绝，实际: {err:?}"
     );
 
+    // query_rows 的 DDL 门禁：建表语句不得经由行查询入口执行
+    let err = admin
+        .query_rows("CREATE TABLE ddl_probe (id INTEGER)")
+        .await
+        .expect_err("DDL must be rejected by query_rows");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "query_rows 中的 DDL 应为权限拒绝，实际: {err:?}"
+    );
+
     // 非 admin 的 SQL 解析失败：安全默认拒绝
     let sys = pool.get_session("system").await.expect("non-admin session");
     let err = sys
@@ -1580,4 +1590,46 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         matches!(err, dbnexus::DbError::Permission(_)),
         "非 admin 解析失败应为权限拒绝，实际: {err:?}"
     );
+
+    // 非 admin 的无表名查询：无法判定所需权限时 fail-closed
+    let err = sys
+        .query_rows("SELECT 1")
+        .await
+        .expect_err("table-less query must be denied for non-admin");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "非 admin 无表名查询应为权限拒绝，实际: {err:?}"
+    );
+}
+
+/// 建连失败必须显性报错并回滚计数
+///
+/// 不可达的 sqlite 路径在 acquire 时创建连接失败：错误必须上抛（不得静默返回
+/// 连接），且 total/active 计数必须回滚（不得因失败而虚增，否则后续 status
+/// 与容量判断全部失真）。
+#[cfg(feature = "sqlite")]
+#[tokio::test]
+async fn test_acquire_failure_is_explicit_and_rolls_back_counters() {
+    let config = dbnexus::DbConfig {
+        url: "sqlite:///nonexistent-dir-for-test/nope.db".to_string(),
+        pool_config: dbnexus::foundation::PoolConfig {
+            max_connections: 2,
+            min_connections: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    // 建池可能延迟连接（也可在建池即失败）；两条路径都要求显性错误
+    if let Ok(pool) = dbnexus::DbPool::with_config(config).await {
+        let result = pool.get_session("admin").await;
+        assert!(
+            result.is_err(),
+            "不可达数据库的 acquire 必须显性报错，不得返回可用连接"
+        );
+        let st = pool.status();
+        assert_eq!(st.active, 0, "失败后不得残留活跃计数: {st:?}");
+        assert_eq!(st.total, 0, "失败后 total 必须回滚为 0: {st:?}");
+        assert_eq!(st.idle, 0, "失败后不得有 idle 连接: {st:?}");
+    }
 }
