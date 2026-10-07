@@ -122,7 +122,7 @@ runtime-async-std = [
 sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros"]
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
-duckdb = ["dep:duckdb", "sea-orm/macros"]  # 嵌入式分析型数据库（0.3.0 新增；sea-orm/macros 供 global-index 等 derive 实体编译）
+duckdb = ["dep:duckdb", "sea-orm/macros"]  # 嵌入式分析型数据库（sea-orm/macros 供 global-index 等 derive 实体编译）
 # Graph database drivers (can coexist with relational drivers per design 2.8)
 ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
@@ -306,12 +306,12 @@ dbnexus-limiter-port = { workspace = true, optional = true }
 # Mirrors oxcache/limiteron pattern.
 trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
 
-# DuckDB embedded database (duckdb feature, 0.3.0 new)
+# DuckDB embedded database (duckdb feature)
 duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
 
-# Ladybug embedded graph database (ladybug feature, 0.4.0 new)
+# Ladybug embedded graph database (ladybug feature)
 lbug = { version = "0.20", optional = true }
-# Neo4j graph database server (neo4j feature, 0.4.0 new)
+# Neo4j graph database server (neo4j feature)
 neo4rs = { version = "0.9.0-rc.10", optional = true }
 
 # Authentication dependencies
@@ -448,7 +448,7 @@ name = "shard_session_routing_tests"
 path = "tests/sharding/integration/shard_session_routing_tests.rs"
 required-features = ["sharding", "permission"]
 
-# Sharding 单元测试 - ShardRouter 路由/分片策略/连接池管理（0.3.0 修复：此前未注册导致测试从未运行）
+# Sharding 单元测试 - ShardRouter 路由/分片策略/连接池管理
 [[test]]
 name = "sharding_unit_tests"
 path = "tests/sharding/unit/sharding_unit_tests.rs"
@@ -504,21 +504,21 @@ path = "benches/permission_bench.rs"
 harness = false
 required-features = ["sqlite", "runtime-tokio-rustls"]
 
-# 权限引擎基准测试 - PermissionCache insert/get/miss（0.3.0 新增）
+# 权限引擎基准测试 - PermissionCache insert/get/miss
 [[bench]]
 name = "permission_engine_bench"
 path = "benches/permission_engine_bench.rs"
 harness = false
 required-features = ["permission"]
 
-# 分片路由基准测试 - shard_id_for_key / enforce_shard_binding（0.3.0 新增）
+# 分片路由基准测试 - shard_id_for_key / enforce_shard_binding
 [[bench]]
 name = "sharding_bench"
 path = "benches/sharding_bench.rs"
 harness = false
 required-features = ["sharding"]
 
-# 指标系统基准测试 - 百分位计算 / Prometheus 导出 / 直方图记录（0.3.0 新增）
+# 指标系统基准测试 - 百分位计算 / Prometheus 导出 / 直方图记录
 [[bench]]
 name = "metrics_bench"
 path = "benches/metrics_bench.rs"
@@ -559,7 +559,7 @@ name = "pool_semaphore_test"
 path = "tests/pool_semaphore_test.rs"
 required-features = ["sqlite", "futures"]
 
-# DuckDB pool integration tests (0.3.0 新增)
+# DuckDB pool integration tests
 [[test]]
 name = "duckdb_pool_tests"
 path = "tests/pool/unit/duckdb_pool_tests.rs"
@@ -721,36 +721,36 @@ name = "domain_permission_tests"
 path = "tests/domain/permission_test.rs"
 required-features = ["permission"]
 
-# Permission 单元测试 - PermissionCache TTL + SWR（0.3.0 新增）
+# Permission 单元测试 - PermissionCache TTL + SWR
 [[test]]
 name = "permission_cache_ttl_tests"
 path = "tests/permission/unit/permission_cache_ttl_tests.rs"
 required-features = ["permission", "cache"]
 
-# Authentication 集成测试 - JWT 签发验证 / 密码哈希 / AuthenticationManager（0.3.0 新增）
+# Authentication 集成测试 - JWT 签发验证 / 密码哈希 / AuthenticationManager
 [[test]]
 name = "authentication_integration"
 path = "tests/authentication/integration_tests.rs"
 required-features = ["authentication"]
 
-# Security 单元测试 - SensitiveMasker 脱敏（0.3.0 新增）
+# Security 单元测试 - SensitiveMasker 脱敏
 [[test]]
 name = "sensitive_masker_tests"
 path = "tests/security/sensitive_masker_tests.rs"
 
-# sea-orm 类型特性桥接测试 - with-chrono/with-uuid 在实体字段中的使用（0.3.0 新增）
+# sea-orm 类型特性桥接测试 - with-chrono/with-uuid 在实体字段中的使用
 [[test]]
 name = "sea_orm_type_tests"
 path = "tests/entity/unit/sea_orm_type_tests.rs"
 required-features = ["sqlite", "macros", "permission", "with-chrono", "with-uuid"]
 
-# Entity 模块单元测试 - Condition/ActiveValue/EntityTrait 类型导出验证（0.3.1 注册）
+# Entity 模块单元测试 - Condition/ActiveValue/EntityTrait 类型导出验证
 [[test]]
 name = "entity_unit_tests"
 path = "tests/entity/unit/entity_unit_tests.rs"
 required-features = ["sqlite", "macros", "with-chrono"]
 
-# db_entity 宏主键类型泛型化回归测试（0.4.2 新增）
+# db_entity 宏主键类型泛型化回归测试
 # 验证 #[db_entity] 在 i64 / Uuid / String 主键下的 find_by_id / find_by_ids / delete / force_delete 编译期与签名正确性
 # 0.4.1 回归 bug：Uuid 主键实体编译失败 'the trait bound uuid::Uuid: From<i64> is not satisfied'
 [[test]]
@@ -759,93 +759,91 @@ path = "tests/entity/unit/db_entity_pk_types_test.rs"
 required-features = ["sqlite", "macros", "permission", "with-uuid", "with-time"]
 
 # ============================================================================
-# 注册 16 个此前未注册的真实测试文件
-# 这些文件存在于 tests/ 但从未被 [[test]] 注册，导致从未编译运行。
-# 与早期修复的 sharding_unit_tests 同类问题。
+# 以下测试此前存在于 tests/ 但未注册，显式注册以恢复编译运行
 # ============================================================================
 
-# Core 集成测试 - DbPool 初始化/连接/关闭（Convergence 注册）
+# Core 集成测试 - DbPool 初始化/连接/关闭
 [[test]]
 name = "dbnexus_integration"
 path = "tests/core/integration/dbnexus_integration.rs"
 required-features = ["sqlite"]
 
-# Core 集成测试 - DbConfig serde 反序列化（Convergence 注册）
+# Core 集成测试 - DbConfig serde 反序列化
 [[test]]
 name = "config_integration"
 path = "tests/core/integration/config_integration.rs"
 required-features = ["sqlite"]
 
-# Core 集成测试 - CircuitBreaker/HealthChecker 健康检查（Convergence 注册）
+# Core 集成测试 - CircuitBreaker/HealthChecker 健康检查
 [[test]]
 name = "health_integration"
 path = "tests/core/integration/health_integration.rs"
 required-features = ["health-check", "sqlite"]
 
-# Core 单元测试 - 边界条件/异常场景（Convergence 注册）
+# Core 单元测试 - 边界条件/异常场景
 [[test]]
 name = "edge_cases"
 path = "tests/core/unit/edge_cases.rs"
 # sqlite：经 common::make_sqlite_memory_pool 依赖 sqlite::memory:（embedded
 # 专属）；多库运行需先对目标内并发测试做表名唯一化改造（否则共享库下
-# CREATE TABLE 同名冲突），阶段 2 验收记录为后续改进项
+# CREATE TABLE 同名冲突）
 required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine", "sqlite"]
 
-# Cache 集成测试 - CacheConfig/moka Cache（Convergence 注册）
+# Cache 集成测试 - CacheConfig/moka Cache
 [[test]]
 name = "cache_integration"
 path = "tests/cache/integration/cache_integration.rs"
 required-features = ["cache"]
 
-# GlobalIndex 单元测试 - IndexEntry/SyncEvent/SyncResult（Convergence 注册）
+# GlobalIndex 单元测试 - IndexEntry/SyncEvent/SyncResult
 [[test]]
 name = "global_index_unit_tests"
 path = "tests/global_index/unit/global_index_unit_tests.rs"
 required-features = ["global-index"]
 
-# GlobalIndex 集成测试 - CRUD/跨分片同步（Convergence 注册）
+# GlobalIndex 集成测试 - CRUD/跨分片同步
 [[test]]
 name = "global_index_integration"
 path = "tests/global_index/integration/global_index_integration.rs"
 required-features = ["global-index", "sqlite"]
 
-# Health 单元测试 - CircuitBreaker/HealthChecker/PoolHealthMetrics（Convergence 注册）
+# Health 单元测试 - CircuitBreaker/HealthChecker/PoolHealthMetrics
 [[test]]
 name = "health_unit_tests"
 path = "tests/health/unit/health_unit_tests.rs"
 required-features = ["health-check"]
 
-# Metrics 单元测试 - MetricsCollector/LatencyHistogram/Prometheus 导出（Convergence 注册）
+# Metrics 单元测试 - MetricsCollector/LatencyHistogram/Prometheus 导出
 [[test]]
 name = "metrics_unit_tests"
 path = "tests/metrics/unit/metrics_unit_tests.rs"
 required-features = ["metrics"]
 
-# Migration 单元测试 - Migration/Schema/SqlGenerator/SchemaDiffer（Convergence 注册）
+# Migration 单元测试 - Migration/Schema/SqlGenerator/SchemaDiffer
 [[test]]
 name = "migration_unit_tests"
 path = "tests/migration/unit/migration_unit_tests.rs"
 required-features = ["migration"]
 
-# Permission 单元测试 - RbacProvider CRUD/通配符匹配（Convergence 注册）
+# Permission 单元测试 - RbacProvider CRUD/通配符匹配
 [[test]]
 name = "rbac_unit_tests"
 path = "tests/permission/unit/rbac_unit_tests.rs"
 required-features = ["permission"]
 
-# Permission 单元测试 - AdvancedRbacProvider 角色继承链/循环检测（Convergence 注册）
+# Permission 单元测试 - AdvancedRbacProvider 角色继承链/循环检测
 [[test]]
 name = "advanced_rbac_unit_tests"
 path = "tests/permission/unit/advanced_rbac_unit_tests.rs"
 required-features = ["permission"]
 
-# Permission 单元测试 - PolicyDecisionPoint 决策/缓存/速率限制（Convergence 注册）
+# Permission 单元测试 - PolicyDecisionPoint 决策/缓存/速率限制
 [[test]]
 name = "pdp_unit_tests"
 path = "tests/permission/unit/pdp_unit_tests.rs"
 required-features = ["permission", "permission-engine"]
 
-# Permission 单元测试 - RateLimiter 令牌桶/并发/驱逐（Convergence 注册）
+# Permission 单元测试 - RateLimiter 令牌桶/并发/驱逐
 [[test]]
 name = "rate_limiter_unit_tests"
 path = "tests/permission/unit/rate_limiter_unit_tests.rs"
@@ -859,21 +857,21 @@ path = "tests/permission/unit/rate_limit_port_tests.rs"
 # 编译，保证注册用例全部可运行（仅 permission 时审计用例会被静默剔除）
 required-features = ["permission", "audit"]
 
-# Pool 单元测试 - 连接池配置/限制/超时/泄漏检测（Convergence 注册）
+# Pool 单元测试 - 连接池配置/限制/超时/泄漏检测
 [[test]]
 name = "pool_unit_tests"
 path = "tests/pool/unit/pool_unit_tests.rs"
 required-features = ["sqlite", "runtime-tokio-rustls"]
 
-# Pool 集成测试 - 健康检查/clean invalid connections（Convergence 注册）
+# Pool 集成测试 - 健康检查/clean invalid connections
 [[test]]
 name = "pool_integration"
 path = "tests/pool/integration/pool_integration.rs"
 required-features = ["sqlite"]
 
 # E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）
-# 位于 tests/e2e/ 目录承载（阶段 2 验收：e2e_* 不得裸放 tests/ 顶层）
-# required-features 修正（阶段 2 验收）：原含 authentication，但 CI 口径
+# 位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层）
+# required-features 修正：原含 authentication，但 CI 口径
 # （<db>,default-no-db,all-optional）的 feature 闭包不含 authentication，
 # 目标因此从未编译运行；文件按 cfg(feature) 隔离设计，authentication
 # 模块在无该 feature 时自动跳过，故移出 required-features（其激活验证
@@ -920,8 +918,8 @@ path = "tests/distributed_id/unit/distributed_id_tests.rs"
 required-features = ["distributed-id"]
 
 # 分布式能力端到端集成测试
-# 位于 tests/e2e/ 目录承载（阶段 2 验收：e2e_* 不得裸放 tests/ 顶层）
-# required-features 修正（阶段 2 验收）：原含聚合名 distributed-capabilities，
+# 位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层）
+# required-features 修正：原含聚合名 distributed-capabilities，
 # 但 CI 口径的 all-optional 仅列其 7 个成员不列聚合名，目标因此从未编译
 # 运行；文件按成员级 cfg(feature) 隔离，移除聚合名后 CI 口径下全部激活
 [[test]]
@@ -959,5 +957,5 @@ strip = true
 inherits = "release"
 
 # ============================================================================
-# Local development patches (rc3 hardening)
+# 本地开发联调 [patch] 占位（当前无）
 # ============================================================================
