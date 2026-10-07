@@ -1620,6 +1620,23 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         matches!(err, dbnexus::DbError::Permission(_)),
         "非 admin 行查询解析失败应为权限拒绝，实际: {err:?}"
     );
+
+    // 执行层：DCL（GRANT/REVOKE）与 SET 会话变量都不是 DML，
+    // 必须被 execute_raw 拒绝（admin 亦然）——防提权与执行环境篡改
+    for sql in [
+        "GRANT SELECT ON guard_probe TO role_x",
+        "REVOKE SELECT ON guard_probe FROM role_x",
+        "SET sql_mode = 'STRICT_ALL_TABLES'",
+    ] {
+        let err = admin
+            .execute_raw(sql)
+            .await
+            .expect_err("非 DML 语句必须被 execute_raw 拒绝");
+        assert!(
+            matches!(err, dbnexus::DbError::Permission(_)),
+            "{sql} 应为权限拒绝，实际: {err:?}"
+        );
+    }
 }
 
 /// 建连失败必须显性报错并回滚计数
