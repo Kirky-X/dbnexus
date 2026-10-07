@@ -1600,6 +1600,26 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         matches!(err, dbnexus::DbError::Permission(_)),
         "非 admin 无表名查询应为权限拒绝，实际: {err:?}"
     );
+
+    // 非 admin 的非法表名：不得带着可疑表名去查权限（fail-closed）
+    let err = sys
+        .query_rows("SELECT * FROM \"bad;name\"")
+        .await
+        .expect_err("invalid table name must be denied for non-admin");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "非 admin 非法表名应为权限拒绝，实际: {err:?}"
+    );
+
+    // 非 admin 行查询的 SQL 解析失败：与 execute_raw 同口径 fail-closed
+    let err = sys
+        .query_rows("THIS IS NOT VALID SQL")
+        .await
+        .expect_err("parse failure must be denied for non-admin query_rows");
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "非 admin 行查询解析失败应为权限拒绝，实际: {err:?}"
+    );
 }
 
 /// 建连失败必须显性报错并回滚计数

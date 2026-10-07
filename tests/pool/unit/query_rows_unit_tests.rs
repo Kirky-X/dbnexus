@@ -13,7 +13,9 @@
 // scatter-gather 跨分片行查询（门禁：无 scatter-gather feature 时其余
 // 用例仍需可编译运行，故按 feature 隔离）
 #[cfg(feature = "scatter-gather")]
-use dbnexus::{AggregateFunction, PartialFailurePolicy, ScatterGatherExecutor, ShardRouter};
+use dbnexus::{
+    AggregateFunction, OrderKey, PartialFailurePolicy, ScatterGatherExecutor, ShardRouter,
+};
 
 #[tokio::test]
 async fn test_query_rows_returns_data_rows() {
@@ -224,4 +226,104 @@ async fn test_query_rows_masking_and_rls() {
     assert_eq!(rows_rls[0]["tenant_id"], "t-100");
 
     let _ = std::fs::remove_file(&db_path);
+}
+
+/// scatter_query_rows_merged：跨分片全局归并 + 全局分页
+///
+/// 既有用例只覆盖不带 `order_by` 的 `scatter_query_rows`；归并分支
+/// （`merge_shard_rows` + `apply_global_pagination`）此前无执行。本用例断言
+/// 跨分片全局有序，且分页切片与全量序列一致（分页不得按分片局部切片）。
+#[cfg(feature = "scatter-gather")]
+#[tokio::test]
+async fn test_scatter_query_rows_merged_orders_and_paginates_globally() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let tmp0 = std::env::temp_dir().join(format!("dbnexus_t401_m0_{}.db", std::process::id()));
+    let tmp1 = std::env::temp_dir().join(format!("dbnexus_t401_m1_{}.db", std::process::id()));
+    let url0 = format!("sqlite:{}?mode=rwc", tmp0.display());
+    let url1 = format!("sqlite:{}?mode=rwc", tmp1.display());
+
+    let mut router = ShardRouter::with_strategy("hash", 2);
+    router.register_shard(0, "shard_0".to_string(), url0.clone());
+    let pool0 = Arc::new(dbnexus::DbPool::new(&url0).await.unwrap());
+    let admin0 = pool0.get_session("admin").await.unwrap();
+    admin0
+        .execute_raw_ddl("CREATE TABLE t_m (val REAL NOT NULL)")
+        .await
+        .unwrap();
+    // 分片内乱序，确保归并而非拼接生效
+    admin0
+        .execute_raw("INSERT INTO t_m (val) VALUES (5.0), (1.0)")
+        .await
+        .unwrap();
+    router.set_pool(0, pool0).unwrap();
+
+    router.register_shard(1, "shard_1".to_string(), url1.clone());
+    let pool1 = Arc::new(dbnexus::DbPool::new(&url1).await.unwrap());
+    let admin1 = pool1.get_session("admin").await.unwrap();
+    admin1
+        .execute_raw_ddl("CREATE TABLE t_m (val REAL NOT NULL)")
+        .await
+        .unwrap();
+    admin1
+        .execute_raw("INSERT INTO t_m (val) VALUES (4.0), (2.0), (3.0)")
+        .await
+        .unwrap();
+    router.set_pool(1, pool1).unwrap();
+
+    let executor = ScatterGatherExecutor::new(
+        Arc::new(router),
+        Duration::from_secs(5),
+        PartialFailurePolicy::BestEffort,
+    );
+
+    // 全量归并（升序）
+    let full = executor
+        .scatter_query_rows_merged(
+            "SELECT val FROM t_m",
+            "admin",
+            None,
+            &[OrderKey::asc("val")],
+            100,
+            0,
+        )
+        .await
+        .unwrap();
+    let vals: Vec<f64> = full
+        .merged_rows
+        .iter()
+        .map(|r| r["val"].as_f64().unwrap())
+        .collect();
+    assert_eq!(vals.len(), 5, "两分片共 5 行应全部归并: {vals:?}");
+    assert!(
+        vals.windows(2).all(|w| w[0] <= w[1]),
+        "跨分片应全局升序而非分片内有序: {vals:?}"
+    );
+
+    // 全局分页：切片与全量序列一致（不是按分片各自的 offset）
+    let page = executor
+        .scatter_query_rows_merged(
+            "SELECT val FROM t_m",
+            "admin",
+            None,
+            &[OrderKey::asc("val")],
+            2,
+            1,
+        )
+        .await
+        .unwrap();
+    let page_vals: Vec<f64> = page
+        .merged_rows
+        .iter()
+        .map(|r| r["val"].as_f64().unwrap())
+        .collect();
+    assert_eq!(
+        page_vals,
+        vals[1..3].to_vec(),
+        "全局分页切片应与全量序列一致"
+    );
+
+    let _ = std::fs::remove_file(&tmp0);
+    let _ = std::fs::remove_file(&tmp1);
 }

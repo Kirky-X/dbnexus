@@ -362,3 +362,41 @@ async fn test_case_insensitive_keywords() {
     let parsed = result.unwrap();
     assert_eq!(parsed.operation_type, SqlOperationType::Select);
 }
+
+/// 多语句输入必须拒绝（防注入经典手法：合法语句 + 分号 + 第二条语句），
+/// 并覆盖单表/多表名提取与 Default 构造路径。
+#[tokio::test]
+async fn test_parse_rejects_multiple_statements_and_extracts_all_tables() {
+    let parser = SqlParser::new().await;
+
+    // 多语句：parse_single 只接受单条语句
+    let err = parser
+        .parse_single("SELECT * FROM users; DELETE FROM users")
+        .await
+        .expect_err("multiple statements must be rejected");
+    assert!(
+        format!("{err:?}").contains("Multiple"),
+        "多语句应报 MultipleStatements，实际: {err:?}"
+    );
+
+    // 单表 / 多表名提取（非 admin 权限检查按表逐个判定，漏表即越权）
+    let single = parser.parse_single("SELECT * FROM users").await.unwrap();
+    assert_eq!(single.all_table_names.len(), 1, "单表查询应提取 1 个表名");
+
+    let multi = parser
+        .parse_single("SELECT a.id, b.name FROM users a JOIN orders b ON a.id = b.user_id")
+        .await
+        .unwrap();
+    assert!(
+        multi.all_table_names.len() >= 2,
+        "JOIN 查询应提取多个表名: {:?}",
+        multi.all_table_names
+    );
+
+    // Default 构造与 shared 单例同口径可解析
+    let default_parser = SqlParser::default();
+    assert!(
+        default_parser.parse_single("SELECT 1").await.is_ok(),
+        "Default 构造的解析器应可解析"
+    );
+}
