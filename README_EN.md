@@ -577,7 +577,7 @@ If you find this project useful, please consider giving it a ⭐️!
 
 **Built with ❤️ by Kirky.X**
 
-[⬆ Back to Top](#readme)
+[⬆ Back to Top](#-table-of-contents)
 
 <sub>© 2026 Kirky.X. All rights reserved.</sub>
 

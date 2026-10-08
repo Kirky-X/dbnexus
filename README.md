@@ -577,7 +577,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 **由 Kirky.X 用 ❤️ 构建**
 
-[⬆ 返回顶部](#readme)
+[⬆ 返回顶部](#-目录)
 
 <sub>© 2026 Kirky.X. All rights reserved.</sub>
 
