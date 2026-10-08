@@ -563,7 +563,7 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
         )
     );
 
-    // 加载迁移历史
+    // 获取会话
     let session = match pool.get_session("admin").await {
         Ok(session) => session,
         Err(e) => {
