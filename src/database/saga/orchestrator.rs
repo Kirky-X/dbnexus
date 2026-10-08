@@ -1216,6 +1216,30 @@ mod execute_path_tests {
         }]
     }
 
+    /// 可预置日志的内存存储（compensate_recovered 重放测试专用）
+    struct PreloadedStore2 {
+        log: std::sync::Mutex<Option<SagaLog>>,
+    }
+
+    #[async_trait]
+    impl SagaLogStore for PreloadedStore2 {
+        async fn persist(&self, log: &SagaLog) -> Result<(), String> {
+            *self.log.lock().expect("store lock") = Some(log.clone());
+            Ok(())
+        }
+        async fn load_pending(&self) -> Result<Vec<SagaLog>, String> {
+            Ok(Vec::new())
+        }
+        async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String> {
+            Ok(self
+                .log
+                .lock()
+                .expect("store lock")
+                .clone()
+                .filter(|l| l.saga_id == saga_id))
+        }
+    }
+
     /// compensate_recovered：重放期间会话获取 Err → CompensationFailed（显性化）
     #[tokio::test]
     async fn compensate_recovered_session_err_enters_compensation_failed() {
@@ -1253,31 +1277,5 @@ mod execute_path_tests {
     fn failing_action_and_compensation_names() {
         assert_eq!(FailingAction.name(), "failing");
         assert_eq!(FailingCompensation.name(), "failing-comp");
-    }
-}
-
-/// 可预置日志的内存存储（execute_path_tests 专用）
-#[cfg(all(test, feature = "sqlite"))]
-struct PreloadedStore2 {
-    log: std::sync::Mutex<Option<SagaLog>>,
-}
-
-#[cfg(all(test, feature = "sqlite"))]
-#[async_trait]
-impl SagaLogStore for PreloadedStore2 {
-    async fn persist(&self, log: &SagaLog) -> Result<(), String> {
-        *self.log.lock().expect("store lock") = Some(log.clone());
-        Ok(())
-    }
-    async fn load_pending(&self) -> Result<Vec<SagaLog>, String> {
-        Ok(Vec::new())
-    }
-    async fn get(&self, saga_id: &str) -> Result<Option<SagaLog>, String> {
-        Ok(self
-            .log
-            .lock()
-            .expect("store lock")
-            .clone()
-            .filter(|l| l.saga_id == saga_id))
     }
 }

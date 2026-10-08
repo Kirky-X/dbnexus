@@ -280,13 +280,6 @@ impl<V> PreparedStatementCache<V> {
         state.misses = 0;
         state.evictions = 0;
     }
-
-    /// 缓存容量
-    // 仅由 LRU 驱逐的单元测试断言消费
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
 }
 
 #[cfg(test)]
@@ -339,7 +332,7 @@ mod tests {
         let stats = cache.stats();
         assert_eq!(stats.evictions, 1);
         assert_eq!(stats.size, 2);
-        assert_eq!(cache.capacity(), 2);
+        assert_eq!(cache.capacity, 2);
         // b 已被淘汰（重新探测为未命中）
         assert!(!cache.get_or_prepare("b", |_| ()).1, "b 应已被淘汰");
     }

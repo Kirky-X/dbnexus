@@ -39,10 +39,6 @@ use crate::database::graph::{
 };
 use crate::foundation::{DbError, DbResult};
 
-/// 默认并发连接数
-#[cfg(test)]
-const DEFAULT_POOL_SIZE: usize = 4;
-
 /// Ladybug 图数据库连接
 ///
 /// 封装 `lbug::Database`，通过 `Semaphore` 限制并发查询数。
@@ -666,6 +662,9 @@ fn graph_value_to_json_scalar(value: &GraphValue) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 默认并发连接数
+    const DEFAULT_POOL_SIZE: usize = 4;
 
     // ===== new / with_pool_size 测试 =====
 

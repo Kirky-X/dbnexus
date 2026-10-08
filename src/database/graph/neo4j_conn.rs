@@ -38,7 +38,7 @@ use crate::foundation::{DbError, DbResult};
 ///
 /// 封装 `neo4rs::Graph`，提供 Cypher 查询执行、健康检查和事务能力。
 ///
-/// `graph` 字段为 `Option` 以支持 `new_placeholder()`（用于不连接服务器的单元测试）。
+/// `graph` 字段为 `Option`：`None` 表示占位连接（不可执行查询），
 /// 真实连接通过 [`new`](Self::new) 创建，`graph` 为 `Some`。
 ///
 /// # 示例
@@ -138,14 +138,6 @@ impl Neo4jConnection {
                 Ok((url.to_string(), env_user, env_pass))
             }
         }
-    }
-
-    /// 创建占位连接（仅用于不连接服务器的单元测试）
-    ///
-    /// 返回的连接 `graph` 为 `None`，所有 `GraphConnection` 方法返回明确错误。
-    #[cfg(test)]
-    pub(crate) fn new_placeholder() -> Self {
-        Self { graph: None }
     }
 }
 
@@ -500,6 +492,11 @@ fn json_to_bolt_type(value: serde_json::Value) -> neo4rs::BoltType {
 mod tests {
     use super::*;
 
+    /// 占位连接：`graph` 为 `None`，所有 `GraphConnection` 方法返回明确错误
+    fn placeholder() -> Neo4jConnection {
+        Neo4jConnection { graph: None }
+    }
+
     // ===== parse_url 测试 =====
 
     #[test]
@@ -558,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_neo4j_backend_name() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         assert_eq!(conn.backend_name(), "neo4j");
     }
 
@@ -566,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_neo4j_debug_format_placeholder() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let debug_str = format!("{:?}", conn);
         assert!(
             debug_str.contains("Neo4jConnection"),
@@ -580,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_neo4j_clone_preserves_backend_name() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let cloned = conn.clone();
         assert_eq!(conn.backend_name(), cloned.backend_name());
     }
@@ -589,7 +586,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_neo4j_placeholder_execute_cypher_returns_error() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let result = conn.execute_cypher("RETURN 1").await;
         assert!(result.is_err(), "placeholder should return error");
         let err = result.unwrap_err();
@@ -604,14 +601,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_neo4j_placeholder_health_check_returns_error() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let result = conn.health_check().await;
         assert!(result.is_err(), "placeholder should return error");
     }
 
     #[tokio::test]
     async fn test_neo4j_placeholder_begin_graph_txn_returns_error() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let result = conn.begin_graph_txn().await;
         assert!(result.is_err(), "placeholder should return error");
     }
@@ -794,7 +791,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_neo4j_placeholder_execute_with_params_returns_error() {
-        let conn = Neo4jConnection::new_placeholder();
+        let conn = placeholder();
         let params = HashMap::from([("name".to_string(), serde_json::json!("Alice"))]);
         let result = conn
             .execute_cypher_with_params("MATCH (n) WHERE n.name = $name RETURN n", params)

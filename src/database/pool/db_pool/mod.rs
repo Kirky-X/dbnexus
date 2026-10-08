@@ -1181,20 +1181,28 @@ mod tests {
             .expect("health_check should pass");
     }
 
+    /// 惰性连接池的 Neo4j 连接：仅做变体分发断言，不发起网络 IO
     #[cfg(feature = "neo4j")]
-    #[test]
-    fn test_neo4j_connection_is_graph() {
-        let conn =
-            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+    async fn neo4j_db_connection() -> DbConnection {
+        DbConnection::Neo4j(Arc::new(
+            crate::database::Neo4jConnection::new("neo4j://localhost:7687", "neo4j", "password")
+                .await
+                .expect("neo4rs 连接池惰性构建，无服务器也应成功"),
+        ))
+    }
+
+    #[cfg(feature = "neo4j")]
+    #[tokio::test]
+    async fn test_neo4j_connection_is_graph() {
+        let conn = neo4j_db_connection().await;
         assert!(conn.is_graph(), "Neo4j connection should be graph");
         assert!(!conn.is_duckdb(), "Neo4j connection should not be duckdb");
     }
 
     #[cfg(feature = "neo4j")]
-    #[test]
-    fn test_neo4j_connection_as_graph_returns_ok() {
-        let conn =
-            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+    #[tokio::test]
+    async fn test_neo4j_connection_as_graph_returns_ok() {
+        let conn = neo4j_db_connection().await;
         let result = conn.as_graph();
         assert!(result.is_ok(), "as_graph() on Neo4j should return Ok");
         let graph = result.unwrap();
@@ -1202,10 +1210,9 @@ mod tests {
     }
 
     #[cfg(feature = "neo4j")]
-    #[test]
-    fn test_neo4j_connection_as_sea_orm_returns_err() {
-        let conn =
-            DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+    #[tokio::test]
+    async fn test_neo4j_connection_as_sea_orm_returns_err() {
+        let conn = neo4j_db_connection().await;
         let result = conn.as_sea_orm();
         assert!(result.is_err(), "as_sea_orm() on Neo4j should return Err");
     }
@@ -1254,8 +1261,8 @@ mod tests {
         assert!(result.is_err(), "as_graph() on SeaOrm should return Err");
     }
 
-    #[test]
-    fn test_db_connection_debug_format() {
+    #[tokio::test]
+    async fn test_db_connection_debug_format() {
         #[cfg(feature = "ladybug")]
         {
             let conn = DbConnection::Ladybug(Arc::new(
@@ -1270,8 +1277,7 @@ mod tests {
         }
         #[cfg(feature = "neo4j")]
         {
-            let conn =
-                DbConnection::Neo4j(Arc::new(crate::database::Neo4jConnection::new_placeholder()));
+            let conn = neo4j_db_connection().await;
             let debug_str = format!("{conn:?}");
             assert!(
                 debug_str.contains("Neo4j"),
