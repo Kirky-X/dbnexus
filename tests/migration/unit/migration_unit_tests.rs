@@ -698,6 +698,11 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
 /// MySQL 的 `CAST(... AS CHAR)`、SQLite/DuckDB 直取列）：sqlite 腿在测时只走得到
 /// Sqlite 分支，其余方言分支此前无执行。本测试要求每种方言要么正常读取，
 /// 要么显性报错——不得静默返回空历史。
+///
+/// 本用例需要一个真实 sqlite 连接来承载各方言分支的执行，故仅在 `sqlite`
+/// 驱动腿运行：postgres/mysql/duckdb 腿不链接 sqlite 驱动，连接串
+/// `sqlite:<path>` 会因「has no supporting driver」直接失败。
+#[cfg(feature = "sqlite")]
 #[tokio::test]
 async fn test_load_history_dialect_branches_are_explicit() {
     for dt in [
@@ -734,6 +739,10 @@ async fn test_load_history_dialect_branches_are_explicit() {
 /// MySQL/SQLite/DuckDB 用字面量）+ 单引号转义
 ///
 /// 该方法为遗留公开入口，sqlite 腿下此前只执行得到 sqlite 分支。
+///
+/// 同 [`test_load_history_dialect_branches_are_explicit`]：依赖真实 sqlite 连接，
+/// 仅在 `sqlite` 驱动腿运行。
+#[cfg(feature = "sqlite")]
 #[tokio::test]
 #[allow(deprecated)]
 async fn test_history_insert_sql_dialect_and_escaping() {
