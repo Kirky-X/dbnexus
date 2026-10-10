@@ -2,21 +2,41 @@
 // SPDX-License-Identifier: MIT
 //! 权限缓存（TTL + SWR）
 //!
-//! 提供 `PermissionCache`：基于 `DashMap` 的线程安全权限策略缓存，支持：
-//! - **TTL 过期**：每个条目在插入时记录时间戳，超过 TTL 后视为过期
-//! - **后台刷新**：`get` 命中过期条目时返回 `None` 并 `tokio::spawn` 后台刷新
-//! - **SWR（stale-while-revalidate）**：启用时返回旧值并后台刷新，避免缓存击穿
+//! 提供 `PermissionCache`：基于 oxcache `Cache`（stale + offload 特性）的
+//! 线程安全权限策略缓存，支持：
+//! - **TTL 过期**：SWR 双时间戳 envelope（expire_at/stale_at）判定三态
+//!   （Fresh / Stale / Expired），物理 TTL = ttl + stale 窗口
+//! - **后台刷新**：`get` 命中 stale 条目时返回旧值并后台刷新，同 key 并发
+//!   至多一次回源（offload in-flight 去重 + 回源准入闸）
+//! - **SWR（stale-while-revalidate）**：由 `stale_policy(OffloadRevalidate)`
+//!   承载；禁用时 stale 窗口为 0，过期条目立即视同 miss
 //!
-//! 与 `PermissionContext`（基于 oxcache）的关系：
-//! - `PermissionContext` 提供容量限制的缓存 + 速率限制 + 单飞行防护
-//! - `PermissionCache` 提供显式 TTL + SWR 后台刷新，适合需要"过期但仍可用"语义的场景
+//! # 迁移说明（原 DashMap 手写实现 → oxcache 承载）
 //!
-//! 两者互补共存，不强制替换。
+//! - 原 `len`/`is_empty`/`is_expired` 无 oxcache 直接等价且无生产消费方，
+//!   已移除；条目存在性经 `get` 返回值判定。
+//! - 读写面（`get`/`insert`/`invalidate`/`clear`/`refresh`）为异步方法
+//!   （oxcache 异步面承载；`sync_mode` 与 stale 特性互斥）。
+//! - `with_refresh_interval` 映射为 stale 窗口长度（`stale_ttl`）：原
+//!   "最小刷新间隔"时间窗节流由 stale 窗口 + 在飞去重承担。
+//! - miss 路径新增 provider 回填能力（原实现 miss 不回源，要求调用方手动
+//!   `insert`）；provider 返回 None 时任何路径不写缓存、保留旧值。
+//! - 与 `PermissionContext` 的关系：两者均基于 oxcache；`PermissionContext`
+//!   面向容量限制的上下文缓存 + 速率限制，本类型面向显式 TTL + SWR 语义，
+//!   按场景选用。
+//!
+//! # 约束
+//!
+//! builder 链（`with_*`）须在首次读写前完成：配置变更会以新配置重建底层
+//! oxcache 实例，此前写入的条目不保留。
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use dashmap::{DashMap, Entry};
+use dashmap::DashMap;
+use oxcache::features::stale::StalePolicy;
+use oxcache::{Cache, OxCacheError};
+use tokio::sync::Mutex as AsyncMutex;
 
 use super::provider::PermissionProvider;
 use super::types::RolePolicy;
@@ -24,16 +44,15 @@ use super::types::RolePolicy;
 /// 默认 TTL（5 分钟）
 const DEFAULT_TTL: Duration = Duration::from_secs(300);
 /// 默认最小刷新间隔（60 秒，防止刷新风暴）
+///
+/// oxcache 承载后该值映射为 stale 窗口长度（`stale_ttl`）：窗口内过期条目
+/// 仍返回旧值并触发至多一次后台刷新，窗口外条目视同 miss。
 const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-
-/// 缓存条目
-#[derive(Clone, Debug)]
-struct CacheEntry {
-    /// 缓存的权限策略
-    value: RolePolicy,
-    /// 插入时间戳
-    inserted_at: Instant,
-}
+/// oxcache memory 后端容量上限
+///
+/// 迁移前 DashMap 无容量界；moka 后端要求显式容量，取实际不可达的上界，
+/// 使容量淘汰在本缓存语义下不触发（与迁移前一致）。
+const CACHE_CAPACITY: u64 = u64::MAX;
 
 /// 权限缓存配置（只读快照，构建后不可变）
 #[derive(Clone, Debug)]
@@ -41,8 +60,12 @@ pub struct PermissionCacheConfig {
     /// 缓存 TTL（条目过期时间）
     pub ttl: Duration,
     /// 后台刷新最小间隔（防止同一 key 短时间内重复刷新）
+    ///
+    /// oxcache 承载后映射为 stale 窗口长度（`stale_ttl`）。
     pub refresh_interval: Duration,
     /// 是否启用 SWR（stale-while-revalidate）模式
+    ///
+    /// 禁用时 stale 窗口为 0：过期条目立即视同 miss。
     pub stale_while_revalidate: bool,
 }
 
@@ -58,7 +81,10 @@ impl Default for PermissionCacheConfig {
 
 /// 权限缓存（TTL + SWR）
 ///
-/// 基于 `DashMap` 实现，线程安全。可附加 `PermissionProvider` 用于后台刷新。
+/// 由 oxcache `Cache`（stale + offload 特性）承载：过期行为由 SWR 双时间戳
+/// envelope 判定（Fresh / Stale / Expired 三态），后台刷新去重由 offload
+/// in-flight 同 key 去重承担。线程安全，可附加 `PermissionProvider` 用于
+/// 后台刷新。
 ///
 /// # 示例
 ///
@@ -75,25 +101,33 @@ impl Default for PermissionCacheConfig {
 ///     .with_stale_while_revalidate(true)
 ///     .with_provider(provider);
 ///
-/// cache.insert("admin", RolePolicy::default());
-/// assert!(cache.get("admin").is_some());
+/// cache.insert("admin", RolePolicy::default()).await;
+/// assert!(cache.get("admin").await.is_some());
 /// # }
 /// ```
 pub struct PermissionCache {
-    /// 内部 DashMap 存储（用 Arc 共享，clone 是廉价的引用计数操作）
-    inner: Arc<DashMap<String, CacheEntry>>,
+    /// oxcache 实例（Arc 共享，clone 是廉价的引用计数操作）
+    inner: Arc<Cache<String, RolePolicy>>,
     /// 配置
     config: PermissionCacheConfig,
     /// 权限提供者（可选，用于后台刷新）
     provider: Option<Arc<dyn PermissionProvider>>,
-    /// 上次刷新时间（key -> Instant），用于 refresh_interval 节流
-    last_refresh: Arc<DashMap<String, Instant>>,
+    /// 同 key 回源准入闸（key -> 锁）
+    ///
+    /// oxcache offload 的在飞去重为 `contains_key` → `insert` 两步非原子
+    /// 操作，屏障锁步下的并发调用会同时通过检查（实测 16 锁步并发 4-8 次
+    /// 穿透，oxcache 0.5.0-rc.6 无锁步覆盖）。本闸以非阻塞 `try_lock`
+    /// 把同 key 的 `get_or_refresh` 调用串到在飞去重之后：持锁者走完整
+    /// 刷新路径，未持锁者只读当前值不触发刷新（与"他人已在回源"语义等价）。
+    /// 无时间窗、不阻塞，生命周期随 `invalidate`/`clear` 清理。
+    /// `Arc` 包装使 `clone` 的各副本共享同一张准入表（DashMap 自身 Clone
+    /// 为深拷贝，直接持有会让克隆副本各持独立闸门而失效）。
+    revalidate_gate: Arc<DashMap<String, Arc<AsyncMutex<()>>>>,
 }
 
 impl std::fmt::Debug for PermissionCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PermissionCache")
-            .field("entry_count", &self.inner.len())
             .field("config", &self.config)
             .field("has_provider", &self.provider.is_some())
             .finish_non_exhaustive()
@@ -106,58 +140,56 @@ impl Default for PermissionCache {
     }
 }
 
-/// 原子节流占位：检查 `key` 距上次刷新是否已超过 `interval`。
-///
-/// 通过 `DashMap::entry` 持有分片写锁完成"检查 + 占位"（通过则立即写入当前时间），
-/// 消除 check-then-act 竞态——并发调用只允许一个调用方通过并执行刷新。
-/// 占位时间戳即刷新发起时刻，与既有语义一致（节流窗口从刷新发起起算；
-/// 刷新失败不回滚，成功后由 `insert` 更新条目时间戳）。
-fn try_reserve_refresh(
-    last_refresh: &DashMap<String, Instant>,
-    key: &str,
-    interval: Duration,
-) -> bool {
-    match last_refresh.entry(key.to_string()) {
-        Entry::Occupied(mut occupied) => {
-            if occupied.get().elapsed() < interval {
-                return false;
-            }
-            *occupied.get_mut() = Instant::now();
-            true
-        }
-        Entry::Vacant(vacant) => {
-            vacant.insert(Instant::now());
-            true
-        }
-    }
-}
-
 impl PermissionCache {
+    /// 按当前配置构建 oxcache 实例
+    ///
+    /// - `ttl` / `stale_ttl`：SWR 双时间戳 envelope（物理 TTL = ttl + stale_ttl）；
+    /// - `stale_policy(OffloadRevalidate)`：stale 命中返回旧值并后台刷新，
+    ///   builder 自动挂载 OffloadManager（容量上限显式配置为 8，不依赖默认值）。
+    fn build_inner(config: &PermissionCacheConfig) -> Cache<String, RolePolicy> {
+        let stale_window = if config.stale_while_revalidate {
+            config.refresh_interval
+        } else {
+            Duration::ZERO
+        };
+        Cache::<String, RolePolicy>::builder()
+            .capacity(CACHE_CAPACITY)
+            .ttl(config.ttl)
+            .stale_ttl(stale_window)
+            .stale_policy(StalePolicy::OffloadRevalidate)
+            .build_sync()
+            .expect("oxcache 默认 memory 后端构建不应失败（无用户后端可失败）")
+    }
+
     /// 创建新的权限缓存（使用默认配置）
     pub fn new() -> Self {
+        let config = PermissionCacheConfig::default();
         Self {
-            inner: Arc::new(DashMap::new()),
-            config: PermissionCacheConfig::default(),
+            inner: Arc::new(Self::build_inner(&config)),
+            config,
             provider: None,
-            last_refresh: Arc::new(DashMap::new()),
+            revalidate_gate: Arc::new(DashMap::new()),
         }
     }
 
     /// 链式设置 TTL
     pub fn with_ttl(mut self, ttl: Duration) -> Self {
         self.config.ttl = ttl;
+        self.inner = Arc::new(Self::build_inner(&self.config));
         self
     }
 
-    /// 链式设置后台刷新最小间隔
+    /// 链式设置后台刷新最小间隔（映射为 oxcache stale 窗口长度）
     pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
         self.config.refresh_interval = interval;
+        self.inner = Arc::new(Self::build_inner(&self.config));
         self
     }
 
     /// 链式启用/禁用 SWR（stale-while-revalidate）模式
     pub fn with_stale_while_revalidate(mut self, enabled: bool) -> Self {
         self.config.stale_while_revalidate = enabled;
+        self.inner = Arc::new(Self::build_inner(&self.config));
         self
     }
 
@@ -173,146 +205,107 @@ impl PermissionCache {
     }
 
     /// 插入或更新缓存条目（重置时间戳）
-    pub fn insert(&self, key: &str, value: RolePolicy) {
-        let entry = CacheEntry {
-            value,
-            inserted_at: Instant::now(),
-        };
-        self.inner.insert(key.to_string(), entry);
+    pub async fn insert(&self, key: &str, value: RolePolicy) {
+        if let Err(e) = self
+            .inner
+            .set_with_ttl(&key.to_string(), &value, Some(self.config.ttl))
+            .await
+        {
+            log::warn!("PermissionCache insert 失败（错误不含键原文）: {e}");
+        }
     }
 
     /// 失效单个条目（删除）
-    pub fn invalidate(&self, key: &str) {
-        self.inner.remove(key);
-        self.last_refresh.remove(key);
+    pub async fn invalidate(&self, key: &str) {
+        self.revalidate_gate.remove(key);
+        if let Err(e) = self.inner.delete(&key.to_string()).await {
+            log::warn!("PermissionCache invalidate 失败（错误不含键原文）: {e}");
+        }
     }
 
     /// 清空所有缓存条目
-    pub fn clear(&self) {
-        self.inner.clear();
-        self.last_refresh.clear();
-    }
-
-    /// 当前缓存条目数量
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    /// 缓存是否为空
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+    pub async fn clear(&self) {
+        self.revalidate_gate.clear();
+        if let Err(e) = self.inner.clear().await {
+            log::warn!("PermissionCache clear 失败: {e}");
+        }
     }
 
     /// 查询缓存条目
     ///
-    /// - **未过期**：返回 `Some(value)`
-    /// - **已过期 + SWR 启用**：返回 `Some(旧值)` 并后台刷新
-    /// - **已过期 + SWR 禁用**：返回 `None` 并后台刷新
-    /// - **未命中**：返回 `None`（不触发刷新，调用方应主动 `insert`）
-    pub fn get(&self, key: &str) -> Option<RolePolicy> {
-        if let Some(entry) = self.inner.get(key) {
-            let elapsed = entry.inserted_at.elapsed();
-            if elapsed < self.config.ttl {
-                // 未过期：直接返回
-                return Some(entry.value.clone());
-            }
-            // 已过期
-            self.maybe_spawn_refresh(key);
-            if self.config.stale_while_revalidate {
-                // SWR：返回旧值
-                Some(entry.value.clone())
-            } else {
-                // 非 SWR：返回 None
-                None
-            }
+    /// - **未过期**：返回 `Some(当前值)`（Fresh）
+    /// - **已过期 + stale 窗口内**：返回 `Some(旧值)` 并触发后台刷新（Stale，
+    ///   同 key 并发至多一次回源）
+    /// - **超过 stale 窗口**：条目物理删除，视同 miss——经 provider 回源，
+    ///   provider 返回 None 或未配置时返回 `None`
+    /// - **未命中**：同上，经 provider 回源；无可用策略时返回 `None`
+    ///
+    /// 并发语义：回源准入闸（见 `revalidate_gate`）持锁者走完整刷新路径；
+    /// 未持锁者只读当前值——同 key 并发刷新去重由 offload 在飞 + 准入闸
+    /// 共同保证（屏障锁步下 oxcache 在飞去热的两步检查会穿透）。
+    pub async fn get(&self, key: &str) -> Option<RolePolicy> {
+        let key_owned = key.to_string();
+        let gate = self
+            .revalidate_gate
+            .entry(key_owned.clone())
+            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+            .clone();
+        if let Ok(_admitted) = gate.try_lock() {
+            // 持锁：走完整 get_or_refresh（stale 命中 → offload 后台刷新）；
+            // fallback 仅在持锁路径构造（未持锁者只读，省一次 Arc/String 克隆）
+            let provider = self.provider.clone();
+            let key_for_fallback = key_owned.clone();
+            let fallback = move || {
+                let provider = provider.clone();
+                let key_owned = key_for_fallback.clone();
+                async move {
+                    match provider {
+                        // provider 返回 None（角色缺失）映射为 Err：任何路径不写
+                        // 缓存，旧值保留（负缓存属 Non-Goals）
+                        Some(p) => p.get_role_policy(&key_owned).map(Ok).unwrap_or_else(|| {
+                            Err(OxCacheError::NotFound(format!(
+                                "permission provider has no policy for role '{key_owned}'"
+                            )))
+                        }),
+                        None => Err(OxCacheError::NotFound(format!(
+                            "no permission provider configured for role '{key_owned}'"
+                        ))),
+                    }
+                }
+            };
+            self.inner
+                .get_or_refresh(&key_owned, Some(self.config.ttl), fallback)
+                .await
+                .ok()
         } else {
-            None
-        }
-    }
-
-    /// 检查条目是否过期（仅查时间戳，不触发刷新）
-    pub fn is_expired(&self, key: &str) -> bool {
-        if let Some(entry) = self.inner.get(key) {
-            entry.inserted_at.elapsed() >= self.config.ttl
-        } else {
-            // 不存在的条目视为"过期"
-            true
+            // 未持锁：同 key 已有调用方在回源，只读当前值不触发刷新
+            // （stale 窗口内返回旧值，与 SWR 语义一致）
+            self.inner.get(&key_owned).await.ok().flatten()
         }
     }
 
     /// 后台刷新条目（stale-while-revalidate）
     ///
-    /// 使用 `refresh_interval` 节流，防止短时间内重复刷新。
-    /// 刷新失败时保留旧值并记录 warn 日志。
+    /// 语义由 oxcache 三态承载：Fresh 条目不重复回源（时间维度由 stale
+    /// 窗口承担）；Stale 条目经 offload in-flight 去重后台刷新（并发调用
+    /// 至多一次回源）；Expired/缺失条目经 single-flight 同步回源。provider
+    /// 返回 None 时任何路径不写缓存（保留旧值）。
     pub async fn refresh(&self, key: &str) {
-        // 节流：原子"检查并占位"，避免 check-then-act 竞态导致并发重复刷新
-        if !try_reserve_refresh(&self.last_refresh, key, self.config.refresh_interval) {
-            return;
-        }
-
-        let provider = match &self.provider {
-            Some(p) => p.clone(),
-            None => {
-                return;
-            }
-        };
-
-        let key_owned = key.to_string();
-        // 同步调用 provider（trait 方法是同步的）
-        match provider.get_role_policy(&key_owned) {
-            Some(new_policy) => {
-                self.insert(&key_owned, new_policy);
-            }
-            None => {
-                // 角色不存在：保留旧值（stale-while-revalidate 语义）
-            }
-        }
-    }
-
-    /// 触发后台刷新（如果配置了 provider 且未在节流窗口内）
-    fn maybe_spawn_refresh(&self, key: &str) {
-        if self.provider.is_none() {
-            return;
-        }
-        // 节流 + 占位必须在调用线程内（spawn 之前）原子完成：
-        // 若 insert 延迟到 spawn 的任务内，并发的 get 在占位写入前仍会通过节流检查，
-        // 造成重复派生后台任务
-        if !try_reserve_refresh(&self.last_refresh, key, self.config.refresh_interval) {
-            return;
-        }
-        let key_owned = key.to_string();
-        let provider = self.provider.clone().unwrap();
-        // Arc<DashMap> clone 是廉价的引用计数，spawn 任务写入会反映到原 cache
-        let inner = self.inner.clone();
-
-        tokio::spawn(async move {
-            match provider.get_role_policy(&key_owned) {
-                Some(new_policy) => {
-                    let entry = CacheEntry {
-                        value: new_policy,
-                        inserted_at: Instant::now(),
-                    };
-                    inner.insert(key_owned, entry);
-                }
-                None => {
-                    // 后台刷新返回 None，保留旧值
-                }
-            }
-        });
+        let _ = self.get(key).await;
     }
 }
 
 impl Clone for PermissionCache {
-    /// 克隆缓存（共享内部 DashMap）
+    /// 克隆缓存（共享内部 oxcache 实例）
     ///
-    /// 内部 DashMap 用 `Arc` 包装，clone 是廉价的引用计数操作，
+    /// 内部 `Cache` 用 `Arc` 包装，clone 是廉价的引用计数操作，
     /// 写入会反映到所有 clone 副本。
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
             config: self.config.clone(),
             provider: self.provider.clone(),
-            last_refresh: self.last_refresh.clone(),
+            revalidate_gate: self.revalidate_gate.clone(),
         }
     }
 }
@@ -332,66 +325,6 @@ mod tests {
                 operations: vec![PermissionAction::Select],
             }],
         }
-    }
-
-    #[tokio::test]
-    async fn test_insert_and_get_fresh() {
-        let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
-        cache.insert("admin", sample_policy("users"));
-        let got = cache.get("admin");
-        assert!(got.is_some());
-        assert_eq!(got.unwrap().tables.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_get_missing_returns_none() {
-        let cache = PermissionCache::new();
-        assert!(cache.get("ghost").is_none());
-    }
-
-    #[tokio::test]
-    async fn test_expired_without_swr_returns_none() {
-        let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(1))
-            .with_stale_while_revalidate(false);
-        cache.insert("admin", sample_policy("users"));
-        // 等待过期
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        assert!(cache.get("admin").is_none());
-    }
-
-    #[tokio::test]
-    async fn test_expired_with_swr_returns_stale() {
-        let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(1))
-            .with_stale_while_revalidate(true);
-        cache.insert("admin", sample_policy("users"));
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        let got = cache.get("admin");
-        assert!(got.is_some(), "SWR should return stale value");
-    }
-
-    #[tokio::test]
-    async fn test_is_expired() {
-        let cache = PermissionCache::new().with_ttl(Duration::from_millis(10));
-        cache.insert("admin", sample_policy("users"));
-        assert!(!cache.is_expired("admin"));
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        assert!(cache.is_expired("admin"));
-        assert!(cache.is_expired("ghost"));
-    }
-
-    #[tokio::test]
-    async fn test_invalidate_and_clear() {
-        let cache = PermissionCache::new();
-        cache.insert("a", sample_policy("t1"));
-        cache.insert("b", sample_policy("t2"));
-        assert_eq!(cache.len(), 2);
-        cache.invalidate("a");
-        assert_eq!(cache.len(), 1);
-        assert!(cache.get("a").is_none());
-        cache.clear();
-        assert!(cache.is_empty());
     }
 
     /// 计数 provider：统计 get_role_policy 调用次数，并阻塞一段时间
@@ -440,21 +373,167 @@ mod tests {
         }
     }
 
-    /// 节流占位必须原子：并发 refresh 同一 key 时 provider 只应被调用 1 次
-    /// （未修复的 check-then-act 竞态下 8 个并发都会通过节流检查）
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_concurrent_refresh_single_provider_call() {
+    /// TTL 内已插入条目：get 返回当前值（Fresh）
+    #[tokio::test]
+    async fn test_fresh_get_returns_value() {
+        let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
+        cache.insert("admin", sample_policy("users")).await;
+        let got = cache.get("admin").await;
+        assert!(got.is_some(), "fresh entry should hit");
+        assert_eq!(got.unwrap().tables.len(), 1);
+    }
+
+    /// 未命中且无 provider：get 返回 None（不触发刷新）
+    #[tokio::test]
+    async fn test_get_missing_returns_none() {
+        let cache = PermissionCache::new();
+        assert!(cache.get("ghost").await.is_none());
+    }
+
+    /// (a) 过期条目在 stale 窗口内：get 返回旧值（SWR）
+    ///
+    /// stale 窗口由 `with_refresh_interval` 映射承载（见 R-permission-cache-004）。
+    #[tokio::test]
+    async fn test_expired_within_stale_window_returns_stale_value() {
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(30))
+            .with_refresh_interval(Duration::from_secs(5));
+        cache.insert("admin", sample_policy("users")).await;
+        // 超过 TTL（30ms）但仍在 stale 窗口（5s）内
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let got = cache.get("admin").await;
+        assert!(got.is_some(), "stale 窗口内应返回旧值");
+        assert_eq!(got.unwrap().tables[0].name, "users");
+    }
+
+    /// (b) 超过 stale 窗口：get 返回 None（Expired，视同 miss）
+    #[tokio::test]
+    async fn test_beyond_stale_window_returns_none() {
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(10))
+            .with_refresh_interval(Duration::from_millis(30));
+        cache.insert("admin", sample_policy("users")).await;
+        // 物理窗口 = TTL 10ms + stale 30ms ≈ 40ms；等 120ms 后彻底过期
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(
+            cache.get("admin").await.is_none(),
+            "超过 stale 窗口应视为 miss"
+        );
+    }
+
+    /// (c) 并发 get 过期 key：provider 恰好被调用一次
+    ///（offload in-flight 同 key 去重承载，替代手写 try_reserve_refresh 时间窗节流）
+    // TTL 50ms + burst 前等 60ms：条目进入 stale 窗口触发回源；回源写回后
+    // 条目有 50ms 新鲜窗，覆盖被阻塞 provider 拖住的迟到竞速者（避免其把
+    // "刚刷新又转 stale"的条目再次回源——那是 SWR 语义而非去重失效）。
+    // CountingProvider 以 std::thread::sleep 阻塞 worker，worker_threads
+    // 取任务数 + 2 防止 burst 任务排队。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 10)]
+    async fn test_concurrent_get_single_background_refresh() {
         let provider = Arc::new(CountingProvider::new());
         let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(1))
+            .with_ttl(Duration::from_millis(50))
             .with_refresh_interval(Duration::from_secs(60))
             .with_provider(provider.clone());
-        cache.insert("admin", sample_policy("users"));
-        // 等待条目过期，使 refresh 走完整刷新路径
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        cache.insert("admin", sample_policy("users")).await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
 
         let mut handles = Vec::new();
         for _ in 0..8 {
+            let cache = cache.clone();
+            handles.push(tokio::spawn(async move {
+                let _ = cache.get("admin").await;
+            }));
+        }
+        for h in handles {
+            h.await.unwrap();
+        }
+        // 等待后台刷新任务执行完毕
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// (d) provider 返回 None（角色缺失）时旧值保留且缓存不写入
+    #[tokio::test]
+    async fn test_refresh_keeps_old_value_when_role_missing() {
+        struct NoPolicyProvider;
+
+        impl PermissionProvider for NoPolicyProvider {
+            fn get_role_policy(&self, _role: &str) -> Option<RolePolicy> {
+                None
+            }
+
+            fn check_access(
+                &self,
+                _role: &str,
+                _table: &str,
+                _operation: PermissionAction,
+            ) -> Result<bool, PermissionProviderError> {
+                Ok(false)
+            }
+
+            fn get_roles(&self) -> Vec<String> {
+                Vec::new()
+            }
+        }
+
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(1))
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_provider(Arc::new(NoPolicyProvider));
+        cache.insert("ghost", sample_policy("users")).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // provider 返回 None：fallback 映射为 Err，后台任务不写缓存
+        cache.refresh("ghost").await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            cache.get("ghost").await.is_some(),
+            "角色缺失时刷新必须保留旧值"
+        );
+    }
+
+    /// (e) invalidate 后条目不可达；clear 清空全部
+    #[tokio::test]
+    async fn test_invalidate_and_clear_hide_entries() {
+        let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
+        cache.insert("a", sample_policy("t1")).await;
+        cache.insert("b", sample_policy("t2")).await;
+        cache.invalidate("a").await;
+        assert!(cache.get("a").await.is_none(), "invalidate 后不可达");
+        assert!(cache.get("b").await.is_some());
+        cache.clear().await;
+        assert!(cache.get("b").await.is_none(), "clear 后不可达");
+    }
+
+    /// Debug 形态：配置快照 + provider 存在性
+    #[tokio::test]
+    async fn test_debug_shape() {
+        let cache = PermissionCache::new().with_provider(Arc::new(CountingProvider::new()));
+        let debug = format!("{cache:?}");
+        assert!(debug.contains("PermissionCache"), "got: {debug}");
+        assert!(debug.contains("has_provider: true"), "got: {debug}");
+        assert!(
+            debug.contains("stale_while_revalidate: true"),
+            "got: {debug}"
+        );
+    }
+
+    /// 并发 refresh 过期 key：provider 恰好被调用一次
+    ///（R-permission-cache-002：in-flight 去重同时覆盖显式 refresh 路径）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 18)]
+    async fn test_concurrent_refresh_single_provider_call() {
+        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
+        let cache = PermissionCache::new()
+            .with_ttl(Duration::from_millis(50))
+            .with_refresh_interval(Duration::from_secs(60))
+            .with_provider(provider.clone());
+        cache.insert("admin", sample_policy("users")).await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        let mut handles = Vec::new();
+        for _ in 0..16 {
             let cache = cache.clone();
             handles.push(tokio::spawn(async move {
                 cache.refresh("admin").await;
@@ -463,34 +542,6 @@ mod tests {
         for h in handles {
             h.await.unwrap();
         }
-
-        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
-    }
-
-    /// maybe_spawn_refresh 的占位必须在 spawn 前由调用线程写入：
-    /// 并发 get 过期 key 只应派生一次后台刷新
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_concurrent_get_single_background_refresh() {
-        let provider = Arc::new(CountingProvider::new());
-        let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(1))
-            .with_refresh_interval(Duration::from_secs(60))
-            .with_stale_while_revalidate(true)
-            .with_provider(provider.clone());
-        cache.insert("admin", sample_policy("users"));
-        tokio::time::sleep(Duration::from_millis(20)).await;
-
-        let mut handles = Vec::new();
-        for _ in 0..8 {
-            let cache = cache.clone();
-            handles.push(tokio::spawn(async move {
-                let _ = cache.get("admin");
-            }));
-        }
-        for h in handles {
-            h.await.unwrap();
-        }
-        // 等待后台刷新任务执行完毕
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
@@ -499,26 +550,11 @@ mod tests {
     // =========================================================================
     // 强同步并发回归测试（Barrier 多轮竞速版）
     //
-    // 上面两个普通并发测试的任务各自独立 spawn，抵达节流检查的时间点分散，
-    // 竞态窗口（纳秒到微秒级）难以命中——盲审实证：把实现改回 check-then-act
-    // 后二者依然通过，回归保护力不足。以下测试改用 `tokio::sync::Barrier`
-    // 强同步 + 多轮独立竞速：
-    //
-    // - Barrier + 倒计数锁步放行：16 个任务先在 Barrier 汇合，再经原子倒
-    //   计数（race_start）近似同时起跑，把"检查 → 占位"窗口重叠到同一时刻；
-    //   worker_threads = 16 保证竞速时每个任务独占线程（真实并行）；
-    // - 多轮：每轮开始前 `invalidate` 清空节流时间戳，重开一个互相独立的
-    //   竞态窗口。单轮能否命中取决于线程唤醒抖动（概率事件），多轮累积后
-    //   回退到非原子 check-then-act 的实现会被稳定捕获（自证实验：回退后
-    //   refresh 版测试连续 8/8 FAILED，每轮多穿透 1-8 次 provider 调用）；
-    // - provider 内部 sleep 数十毫秒放大窗口：一旦多个竞速者同时穿透节流，
-    //   重复的 provider 调用会被 AtomicUsize 计数捕获。
-    //
-    // 断言：provider 恰好每轮被调用 1 次（原子占位下每轮确定恰好 1 次穿透，
-    // 连续 10 次运行无假阳性）。
-    //
-    // 原有两个普通并发测试保留：它们覆盖常规 spawn 并发下的端到端行为，
-    // 与 Barrier 版的"竞态探测器"定位互补。
+    // oxcache 承载下刷新去重由 offload in-flight 表承担：每轮 16 个任务先在
+    // Barrier 汇合，再经原子倒计数（race_start）近似同时起跑，同时触发
+    // refresh / get 两条路径——同 key 的在飞去重必须保证每轮 provider
+    // 恰好被调用 1 次。刷新成功回写后条目回到 Fresh，stale 窗口内不重复
+    // 回源（时间维度由 stale 窗口承担）。
     // =========================================================================
 
     /// 竞速任务数（与 worker_threads 相同，保证放行时全员并行）
@@ -549,62 +585,27 @@ mod tests {
         }
     }
 
-    /// 强同步并发 refresh：每轮 Barrier 汇合 + 原子倒计数锁步放行后，
-    /// RACE_TASKS 个任务同时调用 refresh，节流占位必须原子——
-    /// 每轮 provider 只应被调用 1 次
-    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
-    async fn test_barrier_refresh_racers_single_provider_call() {
-        // 20ms/轮 × 16 轮：控制测试耗时的同时保留"数十毫秒级"窗口放大
-        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
-        let cache = PermissionCache::new()
-            .with_refresh_interval(Duration::from_secs(60))
-            .with_provider(provider.clone());
-
-        // refresh 不依赖缓存条目，每轮清空节流表即可重开竞态窗口
-        let barrier = Arc::new(tokio::sync::Barrier::new(RACE_TASKS));
-        for _ in 0..RACE_ROUNDS {
-            cache.invalidate("admin");
-            let latch = Arc::new(AtomicUsize::new(RACE_TASKS));
-            let mut handles = Vec::with_capacity(RACE_TASKS);
-            for _ in 0..RACE_TASKS {
-                let cache = cache.clone();
-                let barrier = barrier.clone();
-                let latch = latch.clone();
-                handles.push(tokio::spawn(async move {
-                    race_start(&barrier, &latch).await;
-                    cache.refresh("admin").await;
-                }));
-            }
-            for h in handles {
-                h.await.unwrap();
-            }
-        }
-
-        assert_eq!(
-            provider.calls.load(Ordering::SeqCst),
-            RACE_ROUNDS,
-            "锁步放行后每轮并发 refresh 仍只允许 1 次 provider 调用"
-        );
-    }
-
-    /// 强同步 refresh/get 混合路径：两条刷新路径共享同一 last_refresh 节流表，
-    /// 每轮锁步放行后同时触发，总 provider 调用次数（含后台刷新）每轮仍应为 1
-    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    /// 强同步 refresh/get 混合路径：每轮锁步放行后两条路径同时触发，
+    /// 在飞去重下每轮 provider 仍只应被调用 1 次
+    #[tokio::test(flavor = "multi_thread", worker_threads = 18)]
     async fn test_barrier_mixed_refresh_and_get_single_provider_call() {
+        // 每轮独立 key：竞速窗口天然隔离——上一轮在飞任务（同 key 才会
+        // 被在飞去重吸收）不会穿透到本轮，条目写入亦互不可见。
+        // TTL 50ms + burst 前等 60ms：条目进入 stale 窗口；回源写回后
+        // 50ms 新鲜窗覆盖被阻塞 provider 拖住的迟到 burst（否则迟到者把
+        // "刚刷新又转 stale"的条目再次回源，属 SWR 语义而非去重失效）。
         let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
         let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(1))
+            .with_ttl(Duration::from_millis(50))
             .with_refresh_interval(Duration::from_secs(60))
-            .with_stale_while_revalidate(true)
             .with_provider(provider.clone());
 
         let barrier = Arc::new(tokio::sync::Barrier::new(RACE_TASKS));
-        for _ in 0..RACE_ROUNDS {
-            // invalidate 同时清空条目与节流表，隔离上一轮（含后台任务）的写入
-            cache.invalidate("admin");
-            cache.insert("admin", sample_policy("users"));
-            // 等待条目过期（ttl = 1ms），使 get 走 maybe_spawn_refresh 后台路径
-            tokio::time::sleep(Duration::from_millis(3)).await;
+        for round in 0..RACE_ROUNDS {
+            let key = format!("admin_{round}");
+            cache.insert(&key, sample_policy("users")).await;
+            // 等待条目过期（ttl = 50ms），进入 stale 窗口
+            tokio::time::sleep(Duration::from_millis(60)).await;
 
             let latch = Arc::new(AtomicUsize::new(RACE_TASKS));
             let mut handles = Vec::with_capacity(RACE_TASKS);
@@ -612,14 +613,15 @@ mod tests {
                 let cache = cache.clone();
                 let barrier = barrier.clone();
                 let latch = latch.clone();
+                let key = key.clone();
                 handles.push(tokio::spawn(async move {
                     race_start(&barrier, &latch).await;
                     if i % 2 == 0 {
                         // 偶数任务走显式 refresh 路径
-                        cache.refresh("admin").await;
+                        cache.refresh(&key).await;
                     } else {
-                        // 奇数任务走 get 过期 key → maybe_spawn_refresh 后台路径
-                        let _ = cache.get("admin");
+                        // 奇数任务走 get 过期 key → offload 后台刷新路径
+                        let _ = cache.get(&key).await;
                     }
                 }));
             }
@@ -627,88 +629,22 @@ mod tests {
                 h.await.unwrap();
             }
         }
-        // 等待最后一轮 get 派生的后台刷新任务执行完毕（provider 内部 sleep 20ms）
-        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 最后一轮的回源任务在竞速后异步启动，轮询等待其落库
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while provider.calls.load(Ordering::SeqCst) < RACE_ROUNDS {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "等待最后一轮回源超时：calls = {}",
+                provider.calls.load(Ordering::SeqCst)
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
 
         assert_eq!(
             provider.calls.load(Ordering::SeqCst),
             RACE_ROUNDS,
             "refresh 与 get 两条路径并发时每轮仍只允许 1 次 provider 调用"
         );
-    }
-
-    // ===== 补充测试：Debug 形态 / 后台刷新节流 / 角色缺失保旧值 =====
-
-    #[tokio::test]
-    async fn test_cache_debug_shape_and_throttled_refresh() {
-        let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(1)));
-        // TTL 压到 5ms：get 两次（间隔 > TTL）才会走到过期分支触发后台刷新
-        let cache = PermissionCache::new()
-            .with_ttl(Duration::from_millis(5))
-            .with_provider(provider.clone())
-            .with_refresh_interval(Duration::from_millis(50));
-
-        // Debug 形态：条目数 + provider 存在性
-        let debug = format!("{cache:?}");
-        assert!(debug.contains("entry_count: 0"), "got: {debug}");
-        assert!(debug.contains("has_provider: true"), "got: {debug}");
-
-        cache.insert("admin", sample_policy("users"));
-        assert_eq!(cache.len(), 1);
-        assert!(!cache.is_empty());
-        assert!(format!("{cache:?}").contains("entry_count: 1"));
-
-        // 首次 get 在 TTL 内直接命中；等过期后再 get 触发后台刷新
-        let _ = cache.get("admin");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        let _ = cache.get("admin");
-        let _ = cache.get("admin");
-        tokio::time::sleep(Duration::from_millis(80)).await;
-        let calls = provider.calls.load(std::sync::atomic::Ordering::SeqCst);
-        assert_eq!(
-            calls, 1,
-            "节流窗口内的多次 get 只应派生一次后台刷新, calls={calls}"
-        );
-
-        // invalidate 后条目消失，is_expired 对缺失键为 true
-        cache.invalidate("admin");
-        assert_eq!(cache.len(), 0);
-        assert!(cache.is_expired("admin"));
-        cache.clear();
-        assert!(cache.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_cache_refresh_keeps_old_value_when_role_missing() {
-        struct NoPolicyProvider;
-
-        impl PermissionProvider for NoPolicyProvider {
-            fn get_role_policy(&self, _role: &str) -> Option<RolePolicy> {
-                None
-            }
-
-            fn check_access(
-                &self,
-                _role: &str,
-                _table: &str,
-                _operation: PermissionAction,
-            ) -> Result<bool, PermissionProviderError> {
-                Ok(false)
-            }
-
-            fn get_roles(&self) -> Vec<String> {
-                Vec::new()
-            }
-        }
-
-        let cache = PermissionCache::new()
-            .with_provider(Arc::new(NoPolicyProvider))
-            .with_refresh_interval(Duration::from_millis(1));
-        let old = sample_policy("users");
-        cache.insert("ghost", old);
-
-        // provider 返回 None：refresh 保留旧值（stale-while-revalidate）
-        cache.refresh("ghost").await;
-        assert!(cache.get("ghost").is_some(), "角色缺失时刷新必须保留旧值");
     }
 }

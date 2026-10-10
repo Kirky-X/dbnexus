@@ -41,6 +41,8 @@ pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 // Re-exports: permission
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
 pub use permission::GraphPermissionContext;
+// PermissionCache/PermissionCacheConfig：oxcache stale+offload 承载的
+// TTL + SWR 权限缓存（公开 API 契约见 cache.rs 模块 doc 迁移说明）
 #[cfg(feature = "permission")]
 pub use permission::{
     AdvancedRbacProvider, CacheStats, Limiter, MemoryPermissionProvider, PermissionAction,

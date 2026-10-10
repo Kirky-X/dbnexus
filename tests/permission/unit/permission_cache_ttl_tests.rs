@@ -1,12 +1,16 @@
 // Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! PermissionCache TTL + SWR 单元测试
+//! PermissionCache TTL + SWR 单元测试（oxcache 承载）
 //!
 //! 覆盖：
 //! - 默认配置、TTL/refresh_interval/SWR 链式构造
-//! - 未过期命中、过期未命中、过期 SWR 返回旧值
-//! - 后台刷新更新值、provider 缺失时降级
+//! - 未过期命中、过期 SWR 返回旧值（itch stale 窗口）
+//! - 后台刷新更新值、provider 缺失时降级、刷新后新鲜窗内不重复回源
 //! - 失效与清空、并发访问
+//!
+//! 迁移说明：读写面为异步方法（oxcache 异步面承载）；`len`/`is_empty`/
+//! `is_expired` 已随吸收移除（条目存在性经 `get` 返回值判定）；
+//! `refresh` 对 Fresh 条目为空操作（时间维度由 stale 窗口承担）。
 
 #![cfg(feature = "permission")]
 
@@ -71,8 +75,13 @@ async fn test_permission_cache_builder_chaining() {
 #[tokio::test]
 async fn test_permission_cache_get_unexpired() {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
-    let got = cache.get("admin").expect("unexpired entry should hit");
+    cache
+        .insert("admin", sample_policy("users", PermissionAction::Select))
+        .await;
+    let got = cache
+        .get("admin")
+        .await
+        .expect("unexpired entry should hit");
     assert_eq!(got.tables.len(), 1);
     assert_eq!(got.tables[0].name, "users");
 }
@@ -83,10 +92,12 @@ async fn test_permission_cache_get_expired_no_swr_returns_none() {
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_millis(1))
         .with_stale_while_revalidate(false);
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
+    cache
+        .insert("admin", sample_policy("users", PermissionAction::Select))
+        .await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     assert!(
-        cache.get("admin").is_none(),
+        cache.get("admin").await.is_none(),
         "expired entry without SWR should return None"
     );
 }
@@ -97,10 +108,13 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_millis(1))
         .with_stale_while_revalidate(true);
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
+    cache
+        .insert("admin", sample_policy("users", PermissionAction::Select))
+        .await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let got = cache
         .get("admin")
+        .await
         .expect("SWR should return stale value for expired entry");
     assert_eq!(got.tables[0].name, "users");
 }
@@ -114,18 +128,33 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
 async fn test_permission_cache_refresh_updates_value() {
     let provider =
         make_provider_with_role("admin", sample_policy("orders", PermissionAction::Delete)).await;
+    // ttl 50ms（快速转入 stale）+ stale 窗 60s（回源写回前持续可服务旧值）
     let cache = PermissionCache::new()
-        .with_ttl(Duration::from_secs(60))
-        .with_refresh_interval(Duration::from_millis(1))
+        .with_ttl(Duration::from_millis(50))
+        .with_refresh_interval(Duration::from_secs(60))
         .with_provider(provider);
 
     // 初始插入一个不同的值
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
-    // 刷新应替换为 provider 中的值
+    cache
+        .insert("admin", sample_policy("users", PermissionAction::Select))
+        .await;
+    // 等条目转入 stale 窗口（ttl 50ms）后刷新：后台回源写回 provider 值
+    tokio::time::sleep(Duration::from_millis(60)).await;
     cache.refresh("admin").await;
-    let got = cache
-        .get("admin")
-        .expect("after refresh, value should be present");
+    // 轮询等待后台回源落库（refresh 为触发式，写回异步完成）
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let got = loop {
+        if let Some(policy) = cache.get("admin").await
+            && policy.tables[0].name == "orders"
+        {
+            break policy;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "等待 refresh 回源落库超时"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
     assert_eq!(got.tables[0].name, "orders");
     assert_eq!(got.tables[0].operations[0], PermissionAction::Delete);
 }
@@ -133,46 +162,69 @@ async fn test_permission_cache_refresh_updates_value() {
 /// refresh 在 provider 缺失时应保留旧值（降级而非 panic）
 #[tokio::test]
 async fn test_permission_cache_refresh_without_provider_keeps_stale() {
+    // ttl 50ms + stale 窗 60s：条目转入 stale 后触发回源路径
     let cache = PermissionCache::new()
-        .with_ttl(Duration::from_secs(60))
-        .with_refresh_interval(Duration::from_millis(1));
+        .with_ttl(Duration::from_millis(50))
+        .with_refresh_interval(Duration::from_secs(60));
     // 不附加 provider
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
-    // refresh 应不 panic，保留旧值
+    cache
+        .insert("admin", sample_policy("users", PermissionAction::Select))
+        .await;
+    // 等条目转入 stale 窗口后 refresh：无 provider 时不写缓存，旧值保留
+    tokio::time::sleep(Duration::from_millis(60)).await;
     cache.refresh("admin").await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let got = cache
         .get("admin")
+        .await
         .expect("stale value should be kept after failed refresh");
     assert_eq!(got.tables[0].name, "users");
 }
 
-/// refresh 应受 refresh_interval 节流
+/// 刷新成功后条目回到 Fresh：新鲜窗内的再次 refresh 不重复回源
+/// （时间维度由 stale 窗口承担，替代原 refresh_interval 节流）
 #[tokio::test]
-async fn test_permission_cache_refresh_throttled_by_interval() {
+async fn test_permission_cache_refresh_skipped_within_fresh_window() {
     let provider =
         make_provider_with_role("admin", sample_policy("v2", PermissionAction::Select)).await;
     let cache = PermissionCache::new()
-        .with_ttl(Duration::from_secs(60))
-        .with_refresh_interval(Duration::from_secs(60)) // 长间隔
+        .with_ttl(Duration::from_millis(50))
+        .with_refresh_interval(Duration::from_secs(60))
         .with_provider(provider.clone());
 
-    // 手动插入旧值
-    cache.insert("admin", sample_policy("v1", PermissionAction::Select));
-    // 第一次 refresh 应执行
+    // 手动插入旧值，等条目转入 stale 窗口
+    cache
+        .insert("admin", sample_policy("v1", PermissionAction::Select))
+        .await;
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    // 第一次 refresh 触发回源
     cache.refresh("admin").await;
-    let after_first = cache.get("admin").expect("first refresh should update");
-    assert_eq!(after_first.tables[0].name, "v2");
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(policy) = cache.get("admin").await
+            && policy.tables[0].name == "v2"
+        {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "等待第一次 refresh 回源落库超时"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 
-    // 变更 provider 值到 v3：若第二次 refresh 未被节流，缓存会更新为 v3
+    // 变更 provider 值到 v3：条目刚回源为 Fresh（ttl 50ms），立即 refresh
+    // 不应再回源
     provider
         .add_role("admin", sample_policy("v3", PermissionAction::Select))
         .await;
-    cache.refresh("admin").await; // 应被 refresh_interval 节流
+    cache.refresh("admin").await;
 
-    // 验证：值仍为 v2（节流生效，未读取 provider 的 v3）
+    // 验证：值仍为 v2（新鲜窗内未回源；读取不等待后台任务）
     let after_second = cache
         .get("admin")
-        .expect("entry should be kept after throttled refresh");
+        .await
+        .expect("entry should be kept after fresh-window refresh");
     assert_eq!(after_second.tables[0].name, "v2");
 }
 
@@ -180,76 +232,69 @@ async fn test_permission_cache_refresh_throttled_by_interval() {
 // 失效与并发测试
 // ============================================================================
 
-/// invalidate 应删除单个条目
+/// invalidate 应使单个条目不可达（其余条目保持可达）
 #[tokio::test]
 async fn test_permission_cache_invalidate() {
     let cache = PermissionCache::new();
-    cache.insert("a", sample_policy("t1", PermissionAction::Select));
-    cache.insert("b", sample_policy("t2", PermissionAction::Insert));
-    assert_eq!(cache.len(), 2);
-    cache.invalidate("a");
-    assert_eq!(cache.len(), 1);
-    assert!(cache.get("a").is_none());
-    assert!(cache.get("b").is_some());
+    cache
+        .insert("a", sample_policy("t1", PermissionAction::Select))
+        .await;
+    cache
+        .insert("b", sample_policy("t2", PermissionAction::Insert))
+        .await;
+    cache.invalidate("a").await;
+    assert!(cache.get("a").await.is_none());
+    assert!(cache.get("b").await.is_some());
 }
 
 /// clear 应清空所有条目
 #[tokio::test]
 async fn test_permission_cache_clear() {
     let cache = PermissionCache::new();
-    cache.insert("a", sample_policy("t1", PermissionAction::Select));
-    cache.insert("b", sample_policy("t2", PermissionAction::Insert));
-    assert!(!cache.is_empty());
-    cache.clear();
-    assert!(cache.is_empty());
-    assert_eq!(cache.len(), 0);
+    cache
+        .insert("a", sample_policy("t1", PermissionAction::Select))
+        .await;
+    cache
+        .insert("b", sample_policy("t2", PermissionAction::Insert))
+        .await;
+    cache.clear().await;
+    assert!(cache.get("a").await.is_none(), "clear 后条目不可达");
+    assert!(cache.get("b").await.is_none(), "clear 后条目不可达");
 }
 
 /// 并发访问应线程安全（多任务读写）
 #[tokio::test(flavor = "multi_thread")]
 async fn test_permission_cache_concurrent_access() {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(60));
-    cache.insert(
-        "shared",
-        sample_policy("shared_table", PermissionAction::Select),
-    );
+    cache
+        .insert(
+            "shared",
+            sample_policy("shared_table", PermissionAction::Select),
+        )
+        .await;
 
     let cache_clone = cache.clone();
     let writer = tokio::spawn(async move {
         for i in 0..10 {
-            cache_clone.insert(
-                &format!("key_{i}"),
-                sample_policy(&format!("t{i}"), PermissionAction::Select),
-            );
+            cache_clone
+                .insert(
+                    &format!("key_{i}"),
+                    sample_policy(&format!("t{i}"), PermissionAction::Select),
+                )
+                .await;
         }
     });
 
     let cache_clone2 = cache.clone();
     let reader = tokio::spawn(async move {
         for _ in 0..10 {
-            let _ = cache_clone2.get("shared");
+            let _ = cache_clone2.get("shared").await;
         }
     });
 
     writer.await.expect("writer task panicked");
     reader.await.expect("reader task panicked");
 
-    // 最终状态应有 11 个条目（shared + key_0..9）
-    assert_eq!(cache.len(), 11);
-    assert!(cache.get("shared").is_some());
-    assert!(cache.get("key_5").is_some());
-}
-
-/// is_expired 应正确反映条目过期状态
-#[tokio::test]
-async fn test_permission_cache_is_expired() {
-    let cache = PermissionCache::new().with_ttl(Duration::from_millis(10));
-    cache.insert("admin", sample_policy("users", PermissionAction::Select));
-    assert!(!cache.is_expired("admin"));
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    assert!(cache.is_expired("admin"));
-    assert!(
-        cache.is_expired("ghost"),
-        "missing entry should be considered expired"
-    );
+    assert!(cache.get("shared").await.is_some());
+    assert!(cache.get("key_5").await.is_some());
 }

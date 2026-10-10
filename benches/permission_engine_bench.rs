@@ -31,19 +31,29 @@ fn sample_policy(table: &str, action: PermissionAction) -> RolePolicy {
 }
 
 /// 预填充缓存：插入 `n` 个角色策略（key = "role_{i}"）
+///
+/// oxcache 承载后 `insert` 为异步方法（stale 特性与 sync_mode 互斥），
+/// 经独立 runtime 的 block_on 驱动
 fn populate_cache(cache: &PermissionCache, n: usize) {
-    for i in 0..n {
-        let action = match i % 4 {
-            0 => PermissionAction::Select,
-            1 => PermissionAction::Insert,
-            2 => PermissionAction::Update,
-            _ => PermissionAction::Delete,
-        };
-        cache.insert(
-            &format!("role_{i}"),
-            sample_policy(&format!("t{i}"), action),
-        );
-    }
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("bench runtime");
+    rt.block_on(async {
+        for i in 0..n {
+            let action = match i % 4 {
+                0 => PermissionAction::Select,
+                1 => PermissionAction::Insert,
+                2 => PermissionAction::Update,
+                _ => PermissionAction::Delete,
+            };
+            cache
+                .insert(
+                    &format!("role_{i}"),
+                    sample_policy(&format!("t{i}"), action),
+                )
+                .await;
+        }
+    });
 }
 
 // ============================================================================
@@ -52,16 +62,23 @@ fn populate_cache(cache: &PermissionCache, n: usize) {
 
 /// 角色策略加载：测量 `PermissionCache::insert` 的吞吐量
 fn bench_role_policy_load(c: &mut Criterion) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("bench runtime");
     c.bench_function("permission_cache_insert", |b| {
         b.iter_with_setup(
             || PermissionCache::new().with_ttl(Duration::from_secs(300)),
             |cache| {
-                for i in 0..100 {
-                    cache.insert(
-                        &format!("role_{i}"),
-                        sample_policy(&format!("t{i}"), PermissionAction::Select),
-                    );
-                }
+                rt.block_on(async {
+                    for i in 0..100 {
+                        cache
+                            .insert(
+                                &format!("role_{i}"),
+                                sample_policy(&format!("t{i}"), PermissionAction::Select),
+                            )
+                            .await;
+                    }
+                });
                 black_box(&cache);
                 cache
             },
@@ -73,14 +90,19 @@ fn bench_role_policy_load(c: &mut Criterion) {
 fn bench_permission_cache_hit(c: &mut Criterion) {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(300));
     populate_cache(&cache, 100);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("bench runtime");
 
     c.bench_function("permission_cache_hit", |b| {
         b.iter(|| {
-            // 交替访问不同 key，避免编译器过度优化
-            for i in 0..100 {
-                let key = format!("role_{i}");
-                let _ = black_box(cache.get(&key));
-            }
+            rt.block_on(async {
+                // 交替访问不同 key，避免编译器过度优化
+                for i in 0..100 {
+                    let key = format!("role_{i}");
+                    let _ = black_box(cache.get(&key).await);
+                }
+            })
         })
     });
 }
@@ -89,14 +111,19 @@ fn bench_permission_cache_hit(c: &mut Criterion) {
 fn bench_permission_cache_miss(c: &mut Criterion) {
     let cache = PermissionCache::new().with_ttl(Duration::from_secs(300));
     populate_cache(&cache, 100);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("bench runtime");
 
     c.bench_function("permission_cache_miss", |b| {
         b.iter(|| {
-            for i in 0..100 {
-                // key 不存在于缓存中
-                let key = format!("missing_{i}");
-                let _ = black_box(cache.get(&key));
-            }
+            rt.block_on(async {
+                for i in 0..100 {
+                    // key 不存在于缓存中
+                    let key = format!("missing_{i}");
+                    let _ = black_box(cache.get(&key).await);
+                }
+            })
         })
     });
 }

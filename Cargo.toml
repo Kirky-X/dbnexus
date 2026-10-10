@@ -128,7 +128,7 @@ ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带；dbnexus-limiter-port 为限流端口——旧令牌桶实现端口保持默认后端，外部限流后端（limiteron 等）经端口注入）
+permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port", "oxcache/stale"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带；dbnexus-limiter-port 为限流端口——旧令牌桶实现端口保持默认后端，外部限流后端（limiteron 等）经端口注入）
 # 移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
 # sql-parser 自带解析结果缓存（prepare_cache 同步 LRU 端口），不隐含 cache→oxcache

@@ -29,6 +29,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **`PermissionCache` 手写实现吸收进 oxcache（breaking）**：`PermissionCache` 由 DashMap 双表手写 TTL/SWR/节流迁移为 oxcache `Cache`（stale + offload 特性）承载。移除无 oxcache 等价且无生产消费方的 `len`/`is_empty`/`is_expired` 公开方法；读写面（`get`/`insert`/`invalidate`/`clear`/`refresh`）改为异步方法；`with_refresh_interval` 映射为 stale 窗口长度（原时间窗节流语义由 stale 窗口 + offload 在飞去重承担）；miss 路径新增 provider 回填能力（provider 返回 None 时任何路径不写缓存、保留旧值）。`permission` feature 追加 `oxcache/stale` 依赖
+
 ### Fixed
 
 - **连接池归还改为同步完成**：`release_connection` 原在 `try_lock` 失败时经 `tokio::spawn` 延迟 push 连接——归还被推迟到下一个调度点，紧随其后的 `acquire_connection` 在 push 落地前看到空 idle 队列而新建连接（对 `duckdb::memory:` 等「新连接即新库」的后端，新建连接看不到此前建表数据）。现改为 std Mutex 同步归还，临界区仅队列 push/len、notify 与信号量许可归还，不含 await

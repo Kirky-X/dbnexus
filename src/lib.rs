@@ -225,6 +225,8 @@ pub use crate::database::entity_events::{
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
 pub use crate::access::GraphPermissionContext;
+// PermissionCache：oxcache stale+offload 承载的 TTL + SWR 权限缓存
+// （len/is_empty/is_expired 已随吸收移除，迁移说明见 cache.rs 模块 doc）
 #[cfg(feature = "permission")]
 pub use crate::access::{
     MemoryPermissionProvider, PermissionAction as AccessPermissionAction, PermissionCache,
