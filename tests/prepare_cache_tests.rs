@@ -46,7 +46,8 @@ async fn test_execute_cached_records_hits() {
     let _ = std::fs::remove_file(&path);
 }
 
-/// builder 启用 + 不同语句各自未命中、容量淘汰由 LRU 记账
+/// builder 启用 + 不同语句各自未命中、容量逐出由 oxcache 后端承载
+/// （逐出计数不暴露：evictions 恒 0，淘汰行为经 size 界与再次未命中观测）
 #[tokio::test]
 async fn test_builder_enabled_cache_and_eviction_accounting() {
     let path = std::env::temp_dir().join(format!("dbnexus_t420_b_{}.db", std::process::id()));
@@ -75,8 +76,19 @@ async fn test_builder_enabled_cache_and_eviction_accounting() {
 
     let stats = pool.prepare_cache_stats().expect("cache enabled");
     assert_eq!(stats.misses, 2, "两条不同语句均未命中");
-    assert_eq!(stats.evictions, 1, "容量 1 下第二条应淘汰第一条");
-    assert_eq!(stats.size, 1);
+    assert_eq!(stats.size, 1, "容量 1 下仅存最新一条");
+    assert_eq!(
+        stats.evictions, 0,
+        "oxcache memory 后端不暴露逐出计数，evictions 恒 0（由命中率口径取代）"
+    );
+
+    // 行为性验证淘汰：第一条语句已被逐出，再次执行为未命中（SELECT 幂等）
+    admin
+        .execute_cached("SELECT id, val FROM t420")
+        .await
+        .expect("s3");
+    let stats = pool.prepare_cache_stats().expect("cache enabled");
+    assert_eq!(stats.misses, 3, "被逐出的语句再次执行应未命中");
 
     let _ = std::fs::remove_file(&path);
 }
