@@ -1,6 +1,6 @@
 # 🧪 Dbnexus 测试场景固化
 
-> 记录测试金字塔基线、66 个测试目标的功能域落点、E2E 场景定义、真实行为核正发现、驱动组组合矩阵与静态门槛。验证口径全部为 `cargo test`。
+> 记录测试金字塔基线、87 个测试目标的功能域落点、E2E 场景定义、真实行为核正发现、驱动组组合矩阵与静态门槛。验证口径全部为 `cargo test`。
 
 ## 📋 目录
 
@@ -23,7 +23,7 @@
 | 层级 | 承载 | 数量基线 |
 |------|------|----------|
 | L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]` | error/common_types/config/domain 等模块自测，随 `--lib` 运行 |
-| L2 集成测试 | `tests/**` 深路径，66 个 `[[test]]` 显式注册 | 单元/集成分层目录（unit/integration/） |
+| L2 集成测试 | `tests/**` 深路径，87 个 `[[test]]` 显式注册 | 单元/集成分层目录（unit/integration/） |
 | L3 E2E 场景 | `tests/e2e/`（e2e_advanced 88 测试 + e2e_distributed 10 测试） | 98 测试，按 cfg(feature) 隔离 |
 | L4 容器级 | `postgres_testcontainers` + `mysql_testcontainers` | 各 14 测试，每测试独立容器隔离 |
 
@@ -38,7 +38,7 @@
 
 ## 测试目标功能域落点
 
-66 个测试目标按功能域归位如下：
+87 个测试目标按功能域归位如下：
 
 - **core**：entity_integration / sql_parser_integration / session_transaction / permission_integration / dbnexus_integration / config_integration / health_integration / config_unit / common_types_unit / error_unit / edge_cases
 - **entity**：sea_orm_type / entity_unit / db_entity_pk_types（主键泛型化回归）

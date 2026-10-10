@@ -445,7 +445,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 | 指标 | 数值 | 来源 |
 |------|------|------|
 | 测试函数总数 | 2765 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1358 + tests 1405 + macros 2） |
-| 显式注册测试目标 | 88 个 `[[test]]` | `Cargo.toml` |
+| 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
 | 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | 覆盖率门禁 | ≥ 95% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
 
