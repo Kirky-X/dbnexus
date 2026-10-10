@@ -102,7 +102,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- 4. 使用连接池 ---\n");
 
-    // 查看连接池状态
     let status = pool.status();
     println!(
         "  连接池状态: total={}, active={}, idle={}",
@@ -110,7 +109,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  配置 URL: {}", pool.config().url);
 
-    // 获取 Session 并执行 DDL
     let session = pool.get_session("admin").await?;
     println!("  ✓ 获取 Session 成功 (角色: {})", session.role());
 

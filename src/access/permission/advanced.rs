@@ -197,7 +197,6 @@ impl AdvancedRbacProvider {
     ///
     /// 所有继承角色的集合（包括自身）
     pub fn get_inherited_roles(&self, role: &str) -> HashSet<String> {
-        // 检查缓存
         if let Some(cached) = self.inherited_roles_cache.get(role) {
             return cached.clone();
         }
@@ -208,24 +207,20 @@ impl AdvancedRbacProvider {
         queue.push_back((role.to_string(), 0));
 
         while let Some((current, depth)) = queue.pop_front() {
-            // 检查深度限制
             if depth > MAX_INHERITANCE_DEPTH {
-                // 角色继承深度超过限制，停止遍历
                 continue;
             }
 
-            // 只有当角色尚未被收集时才处理
-            if inherited.insert(current.clone()) {
-                // 获取当前角色的父角色并加入队列
-                if let Some(parents) = self.role_hierarchy.get(&current) {
-                    for parent in parents.iter() {
-                        queue.push_back((parent.clone(), depth + 1));
-                    }
+            // 只有当角色尚未被收集时才处理（HashSet::insert 对已存在元素返回 false）
+            if inherited.insert(current.clone())
+                && let Some(parents) = self.role_hierarchy.get(&current)
+            {
+                for parent in parents.iter() {
+                    queue.push_back((parent.clone(), depth + 1));
                 }
             }
         }
 
-        // 缓存结果
         if self.inherited_roles_cache.len() < self.cache_capacity {
             self.inherited_roles_cache
                 .insert(role.to_string(), inherited.clone());

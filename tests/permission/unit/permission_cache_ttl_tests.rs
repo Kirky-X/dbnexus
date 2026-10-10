@@ -154,7 +154,7 @@ async fn test_permission_cache_refresh_throttled_by_interval() {
     let cache = PermissionCache::new()
         .with_ttl(Duration::from_secs(60))
         .with_refresh_interval(Duration::from_secs(60)) // 长间隔
-        .with_provider(provider);
+        .with_provider(provider.clone());
 
     // 手动插入旧值
     cache.insert("admin", sample_policy("v1", PermissionAction::Select));
@@ -163,17 +163,17 @@ async fn test_permission_cache_refresh_throttled_by_interval() {
     let after_first = cache.get("admin").expect("first refresh should update");
     assert_eq!(after_first.tables[0].name, "v2");
 
-    // 修改 provider 的值（模拟策略变更）
-    // 由于 refresh_interval=60s，第二次 refresh 应被节流，不更新
-    // 但我们已经更新到 v2，需要先插入 v3 来验证节流
-    // 实际上 MemoryPermissionProvider 的 add_role 会覆盖，但我们无法在这里再调用
-    // 改为验证：第二次 refresh 后 last_refresh 时间戳不变（间接验证）
-    let before_refresh_count = cache.len(); // 不直接相关，用时间戳验证更准确
-    cache.refresh("admin").await; // 应被节流
-    let _ = before_refresh_count; // 仅占位
+    // 变更 provider 值到 v3：若第二次 refresh 未被节流，缓存会更新为 v3
+    provider
+        .add_role("admin", sample_policy("v3", PermissionAction::Select))
+        .await;
+    cache.refresh("admin").await; // 应被 refresh_interval 节流
 
-    // 验证：条目仍存在（节流不删除条目）
-    assert!(cache.get("admin").is_some());
+    // 验证：值仍为 v2（节流生效，未读取 provider 的 v3）
+    let after_second = cache
+        .get("admin")
+        .expect("entry should be kept after throttled refresh");
+    assert_eq!(after_second.tables[0].name, "v2");
 }
 
 // ============================================================================

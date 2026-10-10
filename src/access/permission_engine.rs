@@ -851,15 +851,11 @@ impl YamlPermissionProvider {
     ///
     /// 如果路径无效或不在允许的目录内，返回错误
     pub fn new(config_path: &str) -> Result<Self, String> {
-        // 验证配置文件路径安全性
-
-        // 1. 检查空路径
         if config_path.is_empty() {
             return Err("Config path cannot be empty".to_string());
         }
 
-        // 2. 检查路径是否包含父目录引用（防止路径遍历攻击）
-        // 使用预编译的正则表达式进行检测
+        // 防止路径遍历攻击：预编译正则检测父目录引用
         if PATH_TRAVERSAL_REGEX.is_match(config_path) {
             return Err("Config path contains invalid parent directory reference".to_string());
         }

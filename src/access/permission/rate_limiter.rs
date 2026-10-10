@@ -94,14 +94,11 @@ impl TokenBucket {
     ///
     /// 如果成功消费令牌返回 true，否则返回 false
     fn try_consume(&self) -> bool {
-        // 1. 更新最后访问时间
         self.touch();
 
-        // 2. 先尝试填充令牌
         self.refill();
 
-        // 3. 原子 check-and-decrement：仅当 tokens > 0 时递减
-        // 使用 compare_exchange 循环避免 fetch_sub 在 0 时的 u64 下溢竞态
+        // 原子 check-and-decrement：compare_exchange 循环避免 fetch_sub 在 0 时的 u64 下溢竞态
         loop {
             let current = self.tokens.load(Ordering::Acquire);
             if current == 0 {

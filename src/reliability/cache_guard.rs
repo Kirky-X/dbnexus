@@ -109,12 +109,11 @@ impl CacheGuard {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Option<Vec<u8>>, DbError>>,
     {
-        // 1. 快路径：缓存命中
         if let Some(bytes) = self.provider.get(key).await? {
             return Ok(self.decode(bytes));
         }
 
-        // 2. singleflight：同 key 并发只放一个重建者
+        // singleflight：同 key 并发只放一个重建者
         let lock = self.lock_for(key);
         let _guard = lock.lock().await;
         // double-check：等锁期间可能已被其他调用方填充
@@ -122,7 +121,7 @@ impl CacheGuard {
             return Ok(self.decode(bytes));
         }
 
-        // 3. 真重建
+        // 真重建
         match loader().await? {
             Some(value) => {
                 self.provider

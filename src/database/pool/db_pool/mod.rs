@@ -1395,7 +1395,6 @@ mod tests {
         }
         assert_eq!(status.borrow_count, 0);
 
-        // Test config()
         assert_eq!(pool.config().url, "sqlite::memory:");
         assert_eq!(pool.config().pool_config.max_connections, 10);
         assert_eq!(pool.config().pool_config.min_connections, 2);
@@ -1412,18 +1411,15 @@ mod tests {
             .await
             .expect("should create pool");
 
-        // Initially max_active is 0
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 0);
 
-        // Update to 5
         pool.update_max_active(5);
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 5);
 
-        // Update to 3 (should not decrease)
+        // 只增不减：调小应被忽略
         pool.update_max_active(3);
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 5);
 
-        // Update to 10
         pool.update_max_active(10);
         assert_eq!(pool.inner.max_active.load(Ordering::SeqCst), 10);
     }
@@ -1525,12 +1521,10 @@ mod tests {
             status.total
         );
 
-        // Test ConnectionPool::config
         let cfg = ConnectionPool::config(&pool);
         assert_eq!(cfg.url, "sqlite::memory:");
         assert_eq!(cfg.pool_config.max_connections, 5);
 
-        // Test ConnectionPool::get_session with admin role
         let session = ConnectionPool::get_session(&pool, "admin").await;
         assert!(
             session.is_ok(),
@@ -1561,8 +1555,7 @@ mod tests {
     #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_release_connection_pool_full() {
-        // Test release_connection when idle pool is at capacity
-        // This exercises the total_count decrement path (idle pool at capacity)
+        // idle 池满时归还连接，触发 total_count 递减路径
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             pool_config: PoolConfig {
@@ -1586,7 +1579,7 @@ mod tests {
         drop(session2);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // Verify pool is consistent - idle should be <= max_connections
+        // Verify pool is consistent
         let status = pool.status();
         assert!(
             status.idle <= 2,

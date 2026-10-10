@@ -98,7 +98,6 @@ impl Session {
             }
         }
 
-        // 获取连接
         let conn = self.connection.as_ref().ok_or_else(|| {
             DbError::Config(
                 "Connection not available - Session may have been invalidated".to_string(),

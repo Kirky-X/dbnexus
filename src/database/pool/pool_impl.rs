@@ -204,7 +204,6 @@ impl DbPoolBuilder {
             config.pool_config.min_connections = min;
         }
 
-        // 创建 pool
         #[allow(unused_mut)]
         let mut pool = DbPool::with_config(config).await?;
 

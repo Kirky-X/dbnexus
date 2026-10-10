@@ -968,7 +968,6 @@ mod tests {
         let conn = DuckDbConnection::with_pool_size(":memory:", 1)
             .expect("Failed to create single-connection pool");
 
-        // 1) execute 失败 → 后续语句仍可用
         assert!(
             conn.execute("THIS IS NOT SQL").await.is_err(),
             "非法 SQL 应失败"
@@ -977,7 +976,6 @@ mod tests {
             .await
             .expect("execute 失败后连接应已归还池");
 
-        // 2) query 失败 → 后续查询仍可用
         assert!(conn.query("SELECT * FROM no_such_table").await.is_err());
         let rows = conn
             .query("SELECT 1 AS one")
@@ -985,7 +983,6 @@ mod tests {
             .expect("query 失败后连接应已归还池");
         assert_eq!(rows.len(), 1);
 
-        // 3) execute_with_params 失败 → 仍可用
         assert!(
             conn.execute_with_params(
                 "INSERT INTO no_such_table VALUES (?)",
@@ -998,7 +995,6 @@ mod tests {
             .await
             .expect("execute_with_params 失败后连接应已归还池");
 
-        // 4) query_with_params 失败 → 仍可用
         assert!(
             conn.query_with_params(
                 "SELECT * FROM no_such_table WHERE id = ?",
@@ -1013,7 +1009,6 @@ mod tests {
             .expect("query_with_params 失败后连接应已归还池");
         assert_eq!(rows.len(), 1);
 
-        // 5) 事务中途失败（ROLLBACK）→ 连接归还且事务未落库
         let statements = vec![
             (
                 "INSERT INTO t VALUES (?)".to_string(),
@@ -1147,7 +1142,6 @@ mod tests {
             .await
             .expect("Failed to create table");
 
-        // 插入数据
         conn.execute("INSERT INTO shared_test VALUES (1, 'hello')")
             .await
             .expect("Failed to insert");

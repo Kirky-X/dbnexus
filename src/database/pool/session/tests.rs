@@ -262,7 +262,6 @@ mod graph_tests {
             .await
             .expect("create node table");
 
-        // 插入多条
         session
             .execute_cypher_with_params("CREATE (:Person {name: 'Alice', age: 25})", HashMap::new())
             .await
@@ -272,7 +271,6 @@ mod graph_tests {
             .await
             .expect("create bob");
 
-        // 查询并验证
         let result = session
             .execute_cypher_with_params(
                 "MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY name",
@@ -606,10 +604,8 @@ mod vuln_0003_tests {
 //   - 注释混淆：`MATCH (n) // bypass RETURN n`
 //   - 危险过程：`CALL apoc.systemdb.admin(...)`
 //
-// 修复方案：
-//   1. 添加 `validate_cypher_safety` 对原始 Cypher 做多层检查（长度/多语句/注释/危险过程）
-//   2. 添加 `execute_cypher_with_params` 使用 prepared statement 防止值注入
-//   3. 标记 `execute_cypher` 为 `#[deprecated]`，引导调用方迁移
+// 修复方案：`validate_cypher_safety` 多层检查原始 Cypher + `execute_cypher_with_params`
+//   参数化防值注入（Session 无参 `execute_cypher` 入口已移除，仅剩参数化入口）
 //
 // 测试策略：
 //   - 单元测试 `validate_cypher_safety` 各检查项（拒绝/允许）
@@ -809,7 +805,6 @@ mod vuln_0005_tests {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
 
-        // 1. 创建 Node Table（DDL，无参数）
         session
             .execute_cypher_with_params(
                 "CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))",
@@ -818,7 +813,6 @@ mod vuln_0005_tests {
             .await
             .expect("create node table");
 
-        // 2. 参数化插入 Alice
         let mut params_alice = HashMap::new();
         params_alice.insert("name".to_string(), serde_json::json!("Alice"));
         params_alice.insert("age".to_string(), serde_json::json!(25));
@@ -827,7 +821,6 @@ mod vuln_0005_tests {
             .await
             .expect("create Alice with params");
 
-        // 3. 参数化插入 Bob
         let mut params_bob = HashMap::new();
         params_bob.insert("name".to_string(), serde_json::json!("Bob"));
         params_bob.insert("age".to_string(), serde_json::json!(30));
@@ -836,7 +829,6 @@ mod vuln_0005_tests {
             .await
             .expect("create Bob with params");
 
-        // 4. 参数化查询：按 name 过滤
         let mut params_query = HashMap::new();
         params_query.insert("target_name".to_string(), serde_json::json!("Alice"));
         let result = session
@@ -847,11 +839,9 @@ mod vuln_0005_tests {
             .await
             .expect("match with params");
 
-        // 5. 验证结果
         match result {
             GraphExecResult::Query(q) => {
                 assert_eq!(q.rows.len(), 1, "should return 1 person (Alice)");
-                // 验证 name 列
                 let name_val = &q.rows[0].columns[0].1;
                 match name_val {
                     GraphValue::Scalar(serde_json::Value::String(s)) => {
@@ -859,7 +849,6 @@ mod vuln_0005_tests {
                     }
                     other => panic!("expected String Scalar for name, got {other:?}"),
                 }
-                // 验证 age 列
                 let age_val = &q.rows[0].columns[1].1;
                 match age_val {
                     GraphValue::Scalar(serde_json::Value::Number(n)) => {
@@ -881,7 +870,6 @@ mod vuln_0005_tests {
         let pool = make_ladybug_pool().await;
         let session = pool.get_session("admin").await.expect("get_session");
 
-        // 创建 Node Table
         session
             .execute_cypher_with_params(
                 "CREATE NODE TABLE Account(id INT64, balance INT64, PRIMARY KEY(id))",
@@ -1162,7 +1150,6 @@ mod session_basic_tests {
     async fn test_session_database_session_trait_execute() {
         let (_pool, session) = make_test_session("admin").await;
 
-        // Create a table first
         use sea_orm::ConnectionTrait;
         session
             .connection()

@@ -247,7 +247,6 @@ async fn test_session_routing_end_to_end() {
         return;
     };
 
-    // Step 1: 路由获取 Session
     let primary_key = "user_42";
     let result = router
         .get_session_for_shard_with_id(primary_key, "admin")
@@ -255,7 +254,6 @@ async fn test_session_routing_end_to_end() {
     assert!(result.is_ok(), "routing should succeed: {:?}", result.err());
     let (_session, bound_shard_id) = result.unwrap();
 
-    // Step 2: 同一 key 的绑定检查通过
     let same_check = router.enforce_shard_binding(bound_shard_id, primary_key);
     assert!(
         same_check.is_ok(),
@@ -263,7 +261,6 @@ async fn test_session_routing_end_to_end() {
         same_check.err()
     );
 
-    // Step 3: 找一个不同分片的 key 并验证绑定检查失败
     let mut other_key = String::new();
     for i in 0..256 {
         let candidate = format!("other_{}", i);
@@ -279,5 +276,5 @@ async fn test_session_routing_end_to_end() {
             "binding check for a different-shard key must fail"
         );
     }
-    // 如果 256 个候选都映射到同一分片（极小概率），跳过 Step 3 不算失败。
+    // 若 256 个候选都映射到同一分片（极小概率），跳过跨分片验证不算失败。
 }

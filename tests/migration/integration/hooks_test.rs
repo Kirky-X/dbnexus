@@ -455,9 +455,9 @@ async fn test_delete_hooks_trigger() {
     );
 }
 
-/// hook 失败应短路（不继续执行后续操作）
+/// before_insert 成功路径：insert 成功后 after_insert 应被调用
 #[tokio::test]
-async fn test_hook_failure_short_circuits() {
+async fn test_hook_success_path_after_insert_called() {
     let (pool, _guard) = setup().await;
     let session = pool
         .get_session("admin")
@@ -465,10 +465,8 @@ async fn test_hook_failure_short_circuits() {
         .expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
-    // before_insert_hook 会正常成功，但我们用一个失败的钩子测试短路
-    // 这里通过插入无效数据让 before_insert_hook 返回错误来测试
-    // 实际上 before_insert_hook 总是成功，所以我们改为验证：
-    // 如果 insert 成功，after_insert 也应被调用
+    // 本实体 before_insert_hook 恒成功（timestamps 先置 updated_at=Set(Some(now))，
+    // 钩子守卫不触发失败），短路路径不可达；此处验证成功路径
     let am: ActiveModel = Model {
         id: 200,
         name: "Success Path".to_string(),

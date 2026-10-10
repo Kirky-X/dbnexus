@@ -25,7 +25,6 @@ static OVERRIDE_LOCALE: std::sync::RwLock<Option<Locale>> = std::sync::RwLock::n
 ///
 /// Priority: `DBNEXUS_LANG` env var → `sys-locale` → `"en"` fallback.
 fn detect_locale() -> Locale {
-    // 1. DBNEXUS_LANG environment variable
     if let Ok(lang) = std::env::var("DBNEXUS_LANG")
         && !lang.is_empty()
         && let Ok(locale) = Locale::from_str(&lang)
@@ -33,14 +32,12 @@ fn detect_locale() -> Locale {
         return locale;
     }
 
-    // 2. sys-locale system detection
     if let Some(sys_locale) = sys_locale::get_locale()
         && let Ok(locale) = Locale::from_str(&sys_locale)
     {
         return locale;
     }
 
-    // 3. English fallback
     Locale::from_str("en").expect("'en' is a valid BCP-47 locale")
 }
 
@@ -50,7 +47,6 @@ fn detect_locale() -> Locale {
 /// 1. Override set via [`set_locale()`]
 /// 2. Global default (detected once on first access via `detect_locale()`)
 pub fn current_locale() -> Locale {
-    // Check override first
     if let Ok(guard) = OVERRIDE_LOCALE.read()
         && let Some(locale) = guard.as_ref()
     {
@@ -122,12 +118,10 @@ mod tests {
 
     #[test]
     fn test_set_locale_override() {
-        // Set override
         set_locale("zh-CN").expect("zh-CN is valid");
         let locale = current_locale();
         assert_eq!(locale.to_string(), "zh-CN");
 
-        // Clear override
         clear_locale_override();
         // Should return to detected locale (not necessarily "zh-CN")
         let locale = current_locale();

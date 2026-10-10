@@ -39,7 +39,8 @@ use trait_kit::prelude::*;
 
 use oxcache::integrations::kit::OxcacheModule;
 
-#[cfg(test)]
+// 仅 sqlite 专测消费 trait 对象断言；非 sqlite 组合下避免 unused import
+#[cfg(all(test, feature = "sqlite"))]
 use crate::database::ConnectionPool;
 use crate::database::{DbPool, DbPoolBuilder};
 use crate::foundation::DbConfig;
@@ -91,27 +92,24 @@ impl AsyncAutoBuilder for DbNexusModule {
         kit: &'a AsyncKit,
     ) -> Pin<Box<dyn Future<Output = Result<Self::Capability, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            // 1. Require OxcacheModule capability (Arc<dyn CacheBackend + Send + Sync>).
+            // 构建顺序：require OxcacheModule 能力（`Arc<dyn CacheBackend + Send + Sync>`）→
+            // 经 cache_provider 注入 OxcacheDbCacheAdapter → 读 DbConfig → 建池 → 返回
             let cache_cap = kit
                 .require::<OxcacheModule>()
                 .map_err(|e| DbError::Config(format!("require OxcacheModule: {e}")))?;
 
-            // 2. Wrap in OxcacheDbCacheAdapter and inject via cache_provider().
             let adapter = OxcacheDbCacheAdapter::new(cache_cap);
 
-            // 3. Read DbConfig from the kit.
             let config: DbConfig = kit
                 .config()
                 .map_err(|e| DbError::Config(format!("read DbConfig: {e}")))?;
 
-            // 4. Build the pool with cache provider injected.
             let pool = DbPoolBuilder::new()
                 .config(config)
                 .cache_provider(Arc::new(adapter))
                 .build()
                 .await?;
 
-            // 5. Return the concrete pool .
             Ok(Arc::new(pool))
         })
     }
@@ -373,6 +371,8 @@ impl BuildObserver for DbNexusBuildObserver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // 仅 sqlite 专测与 pool-warmup 用例消费；其余组合下避免 unused import
+    #[cfg(any(feature = "sqlite", feature = "pool-warmup"))]
     use oxcache::integrations::kit::OxcacheConfig;
 
     /// #1: `DbNexusModule::NAME == "dbnexus"`.
@@ -705,11 +705,9 @@ mod tests {
             .await
             .expect("AsyncKit::build should build all four modules");
 
-        // 1. 池能力
         let pool = kit.require::<DbNexusModule>().expect("require pool");
         assert!(pool.config().url.contains("t413"), "池能力可用");
 
-        // 2. 缓存能力
         let cache = kit.require::<DbNexusCacheModule>().expect("require cache");
         cache
             .set("k", b"v".to_vec(), None)
@@ -720,7 +718,6 @@ mod tests {
             Some(&b"v"[..])
         );
 
-        // 3. 审计能力（DB 持久化存储）
         let audit = kit.require::<DbNexusAuditModule>().expect("require audit");
         let event = crate::domain::AuditEvent::create("t413_entities", "42", "admin");
         audit.store(&event).await.expect("audit store");
@@ -735,7 +732,6 @@ mod tests {
             "审计能力应可写入并查回事件"
         );
 
-        // 4. 健康能力
         let health = kit
             .require::<DbNexusHealthModule>()
             .expect("require health");

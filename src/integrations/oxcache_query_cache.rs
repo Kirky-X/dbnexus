@@ -351,8 +351,9 @@ fn validate_table_name(table: &str) -> DbResult<()> {
 
 #[cfg(test)]
 mod unit_tests {
+    // 本模块全部用例为 sqlite 专测；非 sqlite 组合下模块为空集，避免 unused_imports
+    #[cfg(feature = "sqlite")]
     use super::*;
-    // 仅 sqlite 门控测试经 make_qc 使用：无 sqlite 组合下避免 unused import
     #[cfg(feature = "sqlite")]
     use oxcache::backend::MokaMemoryBackend;
 

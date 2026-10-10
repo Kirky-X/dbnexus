@@ -863,7 +863,6 @@ fn test_concurrent_data_consistency() {
 fn test_slow_query_boundary() {
     let collector = MetricsCollector::new();
 
-    // 设置阈值为 100ms
     collector.set_slow_query_threshold(100);
 
     // 记录 99ms（不触发）

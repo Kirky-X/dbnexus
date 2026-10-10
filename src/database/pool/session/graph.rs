@@ -100,7 +100,6 @@ impl Session {
                 .check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
         }
 
-        // 取连接
         let conn = self.connection.as_ref().ok_or_else(|| {
             DbError::Config(
                 "Connection not available - Session may have been invalidated".to_string(),

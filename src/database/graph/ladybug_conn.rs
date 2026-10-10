@@ -1089,12 +1089,10 @@ mod tests {
     async fn test_ladybug_relationship_table() {
         let conn = LadybugConnection::new(":memory:", 1).expect("Failed to create connection");
 
-        // 创建节点表
         conn.execute_cypher("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))")
             .await
             .expect("create person table");
 
-        // 创建关系表
         conn.execute_cypher("CREATE REL TABLE Knows(FROM Person TO Person)")
             .await
             .expect("create rel table");

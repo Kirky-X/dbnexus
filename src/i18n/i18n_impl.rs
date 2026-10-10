@@ -220,7 +220,6 @@ mod tests {
 
     #[test]
     fn test_get_message_via_migration_all_locales() {
-        // Test that each locale produces expected migration text
         let locales_and_expected = vec![("zh-CN", "迁移"), ("en-US", "migrations applied")];
         for (locale, expected) in locales_and_expected {
             let fmt = DbI18nFormatter::new(locale).unwrap_or_else(|_| panic!("locale {locale}"));

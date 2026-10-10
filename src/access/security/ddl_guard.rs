@@ -231,8 +231,8 @@ impl DdlGuard {
             ));
         }
 
-        // 第一步：检查禁止的字符串模式（捕获 AST 无法检测的注入）
-        // 禁用模式表已合并至统一注入引擎（scan_ddl 管线口径不变）
+        // 模式扫描先于 AST：捕获 AST 无法检测的注入
+        // （禁用模式表已合并至统一注入引擎，scan_ddl 管线口径不变）
         if let Some(rule) = crate::access::InjectionEngine::global()
             .scan_ddl(sql_trimmed)
             .first()
@@ -243,7 +243,6 @@ impl DdlGuard {
             )));
         }
 
-        // 第二步：AST 解析验证
         let statements = Parser::parse_sql(&self.dialect, sql_trimmed)
             .map_err(|e| format!("Failed to parse SQL: {}", e))?;
 
@@ -253,7 +252,6 @@ impl DdlGuard {
             ));
         }
 
-        // 第三步：检查每条语句是否在白名单中
         for stmt in &statements {
             if !Self::is_allowed_statement(stmt) {
                 return Ok(DdlValidationResult::Forbidden(format!(

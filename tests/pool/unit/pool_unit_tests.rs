@@ -318,7 +318,6 @@ async fn test_pool_connection_reuse() {
         .await
         .expect("Failed to create pool");
 
-    // 获取并释放连接多次
     for _ in 0..5 {
         let session = pool
             .get_session("admin")
@@ -662,7 +661,6 @@ async fn test_pool_status_consistency() {
 async fn test_connection_lifecycle_via_status() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    // 获取连接并验证状态
     {
         let _session = pool
             .get_session("admin")
@@ -868,7 +866,6 @@ async fn test_pool_single_connection() {
         .await
         .expect("Failed to create pool");
 
-    // 获取并释放连接
     {
         let _session = pool
             .get_session("admin")

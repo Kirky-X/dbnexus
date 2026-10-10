@@ -137,15 +137,7 @@ async fn test_entity_types_compatibility() {
 
 #[tokio::test]
 async fn test_entity_module_reexports() {
-    // 测试 entity 模块是否正确重新导出了 sea-orm 的类型
-
-    // 以下类型应该从 dbnexus::entity 可访问：
-    // - EntityTrait
-    // - ActiveModelTrait
-    // - Condition
-    // - Set
-
-    // 如果编译通过，说明重新导出正确
+    // 编译期检查：sea-orm 类型经 dbnexus 导出可访问
     let condition = Condition::all();
     assert!(!format!("{condition:?}").is_empty());
 }

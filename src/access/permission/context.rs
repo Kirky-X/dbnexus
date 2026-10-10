@@ -501,12 +501,11 @@ impl PermissionContext {
     /// - follower park 在 lock().await，唤醒后检测 done = true 并跳过重新加载
     /// - stampede 计数器在 follower 检测到 done = true 时递增（thundering herd 发生）
     async fn get_or_load_policy_coalesced(&self) -> Option<RolePolicy> {
-        // Step 1: 快速路径 - 缓存命中
         if let Some(policy) = self.policy_cache.get(&self.role).await.ok().flatten() {
             return Some(policy);
         }
 
-        // Step 2: 获取或创建 in_flight entry（限定作用域，确保释放 DashMap 借用）
+        // 获取或创建 in_flight entry（限定作用域，确保释放 DashMap 借用）
         let result = {
             let entry = self.in_flight.entry(self.role.clone()).or_insert_with(|| {
                 Arc::new(InFlightEntry {
@@ -517,16 +516,13 @@ impl PermissionContext {
 
             // 循环：follower 检测到 leader 失败后，重置 done 并重新获取锁作为 leader
             loop {
-                // Step 3: 获得锁
                 let mut guard = entry.result.lock().await;
 
-                // Step 4: 检查 done 标志
                 if entry.done.load(Ordering::SeqCst) {
                     // Follower: leader 已完成，检测到 thundering herd
                     self.check_stats.record_stampede();
                     let leader_result = (*guard).clone();
                     if let Some(policy) = leader_result {
-                        // Leader 成功加载，返回结果
                         drop(guard);
                         self.check_stats.record_cache_hit();
                         break Some(policy);
@@ -536,17 +532,15 @@ impl PermissionContext {
                     drop(guard);
                     continue;
                 } else {
-                    // Step 5: Leader: 获得锁且 done = false，开始加载
+                    // Leader：done = false，执行加载
                     let result = self.do_load_policy();
                     *guard = result.clone();
 
                     // done = true 必须在释放锁之前设置（防止 follower 误认为需要重新加载）
                     entry.done.store(true, Ordering::SeqCst);
 
-                    // 释放锁
                     drop(guard);
 
-                    // 异步缓存插入
                     if let Some(ref policy) = result {
                         self.policy_cache.set(&self.role, policy).await.ok();
                     }
@@ -617,7 +611,6 @@ impl PermissionContext {
         table: &str,
         operation: &PermissionAction,
     ) -> TableAccessDecision {
-        // 1. 检查速率限制
         if let Some(limiter) = &self.rate_limiter {
             let decision = match limiter.check(&self.role).await {
                 Ok(decision) => decision,
@@ -640,9 +633,7 @@ impl PermissionContext {
             }
         }
 
-        // 2. 尝试从缓存获取，如果未命中则尝试加载
         if let Some(policy) = self.policy_cache.get(&self.role).await.ok().flatten() {
-            // 缓存命中
             let allowed = policy.allows(table, operation);
             if allowed {
                 self.check_stats.record_allowed();
@@ -653,7 +644,6 @@ impl PermissionContext {
             return Self::policy_decision(allowed);
         }
 
-        // 缓存未命中，使用 stampede-protected 加载
         self.check_stats.record_cache_miss();
 
         match self.get_or_load_policy_coalesced().await {
@@ -1085,7 +1075,6 @@ mod tests {
         let cache = create_test_cache().await;
         let ctx = PermissionContext::new_with_provider("admin".to_string(), cache, provider);
 
-        // 调用 try_reload_policy
         let result = ctx.try_reload_policy().await;
         assert!(result);
 
@@ -1106,7 +1095,6 @@ mod tests {
         let cache = create_test_cache().await;
         let ctx = PermissionContext::new("admin".to_string(), cache);
 
-        // 调用 try_reload_policy
         let result = ctx.try_reload_policy().await;
         assert!(!result);
     }

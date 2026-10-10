@@ -79,7 +79,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n  [初始状态]");
     println!("  state = {}", breaker.state().await);
 
-    // 阶段一：连续失败触发 Open
     println!(
         "\n  [阶段一] 连续失败 {} 次 → 触发 Open",
         config.failure_threshold
@@ -95,7 +94,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(breaker.state().await, CircuitBreakerState::Open);
     println!("  ✓ 熔断器已打开 (Open)，请求将被拒绝");
 
-    // 阶段二：can_execute 在 Open 状态下应拒绝
     println!("\n  [阶段二] Open 状态下 can_execute 检查");
     let can_exec = breaker.can_execute().await;
     println!(
@@ -105,7 +103,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("blocked: {}", e))
     );
 
-    // 阶段三：等待超时后触发 Open → HalfOpen
     println!(
         "\n  [阶段三] 等待 {}ms 超时 → 转为 HalfOpen",
         config.timeout_ms
@@ -118,7 +115,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(state_after_timeout, CircuitBreakerState::HalfOpen);
     println!("  ✓ 熔断器进入半开状态 (HalfOpen)，允许试探性请求");
 
-    // 阶段四：连续成功触发 HalfOpen → Closed
     println!(
         "\n  [阶段四] 连续成功 {} 次 → 恢复 Closed",
         config.success_threshold

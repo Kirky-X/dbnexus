@@ -366,7 +366,6 @@ impl DbPool {
             idle.extend(valid_connections);
         }
 
-        // 更新总连接数
         if removed_count > 0 {
             self.inner
                 .total_count
@@ -402,14 +401,12 @@ impl DbPool {
             std::mem::take(&mut *idle)
         };
 
-        // 使用辅助方法验证连接
         let (valid_connections, invalid_count) =
             Self::validate_idle_connections(taken, config).await;
 
         let mut recreated_count = 0;
 
         if invalid_count > 0 {
-            // 更新总连接数
             self.inner
                 .total_count
                 .fetch_sub(invalid_count as u32, Ordering::SeqCst);

@@ -487,7 +487,6 @@ fn is_write_action(action: &PermissionAction) -> bool {
 /// 检测到危险模式时返回 `DbError::Permission`，错误消息描述具体原因。
 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
 fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
-    // 1. 长度限制：10KB（10_240 字节）
     const MAX_CYPHER_BYTES: usize = 10_240;
     if cypher.len() > MAX_CYPHER_BYTES {
         return Err(DbError::Permission(format!(
@@ -497,8 +496,6 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         )));
     }
 
-    // 2. 多语句检测：除末尾分号外的 `;`
-    //
     // 末尾分号允许（部分客户端习惯以 `;` 结尾），但中间的 `;` 视为多语句注入。
     let trimmed = cypher.trim();
     let inner = trimmed.trim_end_matches(';').trim();
@@ -509,10 +506,8 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         ));
     }
 
-    // 3. 行注释检测：`//`（排除 URL scheme 如 `http://`、`https://`）
-    //
     // Cypher 不支持 `//` 行注释（OpenCypher 标准用 `//` 是合法注释，但极少在正常查询中使用）。
-    // 检测策略：查找 `//` 出现位置，若前一个字符不是字母（排除 URL scheme）则拒绝。
+    // 检测策略：查找 `//` 出现位置，若前一个字符不是字母（排除 URL scheme 如 `http://`、`https://`）则拒绝。
     if let Some(pos) = cypher.find("//") {
         let is_url_scheme = pos > 0 && {
             let prev = cypher.as_bytes()[pos - 1];
@@ -525,9 +520,8 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         }
     }
 
-    // 4/5. 块注释与危险过程检测经统一注入引擎（规则表合并 + 去重）
+    // 块注释与危险过程检测经统一注入引擎（规则表合并 + 去重）
     let findings = crate::access::InjectionEngine::global().scan_graph(cypher);
-    // 块注释（`/* */`）：任一标记命中即拒绝（与合并前第 4 步口径一致）
     if findings
         .iter()
         .any(|rule| rule.category == crate::access::RuleCategory::Comment)

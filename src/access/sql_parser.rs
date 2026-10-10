@@ -277,7 +277,6 @@ impl SqlParser {
             return Err(SqlParseError::EmptyStatement);
         }
 
-        // 验证SQL长度限制
         if sql.len() > MAX_SQL_LENGTH {
             return Err(SqlParseError::ParseError(format!(
                 "SQL statement exceeds maximum length of {} bytes",
@@ -285,7 +284,6 @@ impl SqlParser {
             )));
         }
 
-        // Check for multiple statements (basic detection)
         if sql.contains(';') {
             // Allow only safe SET statements (SET SESSION, SET NAMES, etc.) — not arbitrary SET
             let is_safe_set = sql.starts_with("SET ");
@@ -302,14 +300,12 @@ impl SqlParser {
             }
         }
 
-        // Check for SQL injection patterns
         if contains_sql_injection(sql) {
             return Err(SqlParseError::ParseError(
                 "SQL statement contains potential injection patterns".to_string(),
             ));
         }
 
-        // Check for DDL operations
         if contains_ddl_operation(sql) {
             return Err(SqlParseError::UnsupportedStatement(
                 "DDL operations are not allowed".to_string(),

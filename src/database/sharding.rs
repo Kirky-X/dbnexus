@@ -1057,10 +1057,8 @@ mod tests {
             })
             .collect();
 
-        // 计算 N=4 时的分片分配
         let assignments_n4: Vec<u32> = times.iter().map(|t| strategy.calculate(*t, 4)).collect();
 
-        // 计算 N=5 时的分片分配
         let assignments_n5: Vec<u32> = times.iter().map(|t| strategy.calculate(*t, 5)).collect();
 
         // 统计迁移量（分片发生变化的条目数）

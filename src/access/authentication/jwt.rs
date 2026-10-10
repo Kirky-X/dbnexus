@@ -520,7 +520,6 @@ mod tests {
             revoked.insert(format!("test-jti-{}", i), Instant::now());
         }
 
-        // 调用淘汰逻辑
         JwtManager::evict_revoked_entries(&mut revoked, manager.refresh_expiration_secs);
 
         // 集合长度应不超过上限

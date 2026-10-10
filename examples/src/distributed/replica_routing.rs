@@ -15,7 +15,7 @@
 //! cargo run --bin replica_routing
 //! ```
 
-use dbnexus::{FailoverConfig, ReplicaConfig};
+use dbnexus::{FailoverConfig, ReplicaConfig, t_simple};
 
 fn main() {
     println!("========================================");
@@ -204,6 +204,9 @@ fn main() {
     println!("\n📚 关键 API:");
     println!("  - ReplicaConfig {{ replica_urls, max_lag_seconds, lag_check_interval_secs }}");
     println!("  - FailoverConfig {{ urls, health_check_query, failover_threshold }}");
-    println!("  - ReplicaPool::new(pool, lag_detector)");
+    println!(
+        "  {}",
+        t_simple("example-replica-routing-api-replica-pool-new")
+    );
     println!("  - replica_pool.get_read_session(role) -> Option<Session>");
 }

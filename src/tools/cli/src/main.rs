@@ -531,7 +531,6 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
     println!("║  {:58}  ║", i18n::t_simple("cli-status-title"));
     println!("╚══════════════════════════════════════════════════════════════╝");
 
-    // 测试数据库连接
     let pool = match DbPool::new(database_url).await {
         Ok(pool) => pool,
         Err(e) => {
@@ -544,7 +543,6 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
         }
     };
 
-    // 获取数据库类型
     let db_type = detect_database_type(database_url).map_err(|e| {
         DbError::Config(i18n::t(
             "cli-db-type-detect-failed",
@@ -563,7 +561,6 @@ async fn show_status(database_url: &str, migrations_dir: &Path) -> DbResult<()> 
         )
     );
 
-    // 获取会话
     let session = match pool.get_session("admin").await {
         Ok(session) => session,
         Err(e) => {
@@ -819,7 +816,6 @@ async fn run_migrations_up(
         )
     );
 
-    // 创建迁移执行器
     let session = pool.get_session("admin").await?;
     let mut executor = session.create_migration_executor(db_type)?;
 
@@ -831,7 +827,6 @@ async fn run_migrations_up(
         return Ok(());
     }
 
-    // 加载迁移历史并获取已应用版本
     executor.load_history().await?;
     let applied_versions: std::collections::HashSet<u32> = executor
         .history()
@@ -941,14 +936,12 @@ async fn run_migrations_down(
         i18n::t("cli-db-type", &[("type", db_type.to_string())])
     );
 
-    // 创建迁移执行器
     let session = pool.get_session("admin").await?;
     let mut executor = session.create_migration_executor(db_type)?;
 
     // 扫描本地迁移文件（回滚需要迁移文件内容以提取 DOWN SQL）
     let migration_files = executor.scan_migrations(migrations_dir)?;
 
-    // 加载迁移历史
     executor.load_history().await?;
 
     let applied_migrations = &executor.history().applied_migrations;
@@ -1199,7 +1192,6 @@ async fn generate_migration(
         })?;
     }
 
-    // 写入文件
     fs::write(output, migration_content).map_err(|e| {
         DbError::Config(i18n::t(
             "cli-file-write-failed",
@@ -2125,11 +2117,9 @@ fn classify_connect_error(database_url: &str) -> ExitCode {
 /// 使用 URL 解析器验证数据库 URL 格式，
 /// 只返回已知支持的数据库类型，不支持时返回错误
 fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbError> {
-    // 尝试解析 URL
     let url = url::Url::parse(database_url)
         .map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
 
-    // 获取协议scheme
     let scheme = url.scheme().to_lowercase();
 
     // 根据协议返回对应的数据库类型

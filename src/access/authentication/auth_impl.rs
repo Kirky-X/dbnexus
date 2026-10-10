@@ -141,14 +141,12 @@ impl AuthenticationManager {
         password: &str,
         role: &str,
     ) -> AuthResult<()> {
-        // 1. 验证密码强度
         self.password_hasher.validate_strength(password)?;
 
-        // 2. 哈希密码
         let password_hash = self.password_hasher.hash(password)?;
 
-        // 3. 构造 User 并存储（使用 add_user_unchecked 因为密码已由 validate_strength 验证，
-        //    且 password_hash 来自 self.password_hasher.hash() 一定是有效 bcrypt 格式）
+        // 使用 add_user_unchecked：密码已由 validate_strength 验证，且 password_hash 来自
+        // self.password_hasher.hash()，一定是有效 bcrypt 格式
         let user = User {
             id: username.to_string(),
             username: username.to_string(),
@@ -165,17 +163,14 @@ impl AuthenticationManager {
     ///
     /// 验证用户凭据并生成 JWT Token
     pub async fn authenticate(&self, credentials: AuthCredentials) -> AuthResult<String> {
-        // 1. 验证用户名
         let users = self.users.read().await;
         let user = users
             .get(&credentials.username)
             .ok_or(AuthError::InvalidCredentials)?;
 
-        // 2. 验证密码
         self.password_hasher
             .verify(&credentials.password, &user.password_hash)?;
 
-        // 3. 生成 JWT token
         let token = self.jwt_manager.generate_token(
             &user.id,
             &user.username,

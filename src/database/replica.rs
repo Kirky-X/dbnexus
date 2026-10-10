@@ -466,13 +466,11 @@ impl ReplicaLoadBalancer {
         &self,
         role: &str,
     ) -> crate::foundation::DbResult<crate::Session> {
-        // 0. 粘性窗口：刚写完，读主库兜底（不探测副本）
         if self.in_sticky_window() {
             *self.last_selected.lock().expect("balancer lock") = None;
             return self.primary.get_session(role).await;
         }
 
-        // 1. 快照未剔除候选（短临界区）
         let candidates: Vec<usize> = {
             let nodes = self.nodes.lock().expect("balancer lock");
             nodes
@@ -483,7 +481,6 @@ impl ReplicaLoadBalancer {
                 .collect()
         };
 
-        // 2. 候选分类：缓存新鲜（< probe_interval）直接复用；过期/未探测的并行探测
         let now = std::time::Instant::now();
         let mut reused: Vec<(usize, bool, Option<u64>)> = Vec::new();
         let mut to_probe: Vec<usize> = Vec::new();
@@ -518,8 +515,7 @@ impl ReplicaLoadBalancer {
         let mut probed: Vec<(usize, bool, Option<u64>)> =
             futures::future::join_all(probe_futures).await;
 
-        // 3. 回写探测结果（仅新探测的候选计入剔除计数；缓存复用不产生新证据），
-        //    与缓存复用候选合并后按分数排序（短临界区）
+        // 探测结果回写计入剔除计数（缓存复用不产生新证据），与复用候选合并后按分数排序
         let ranked: Vec<usize> = {
             let mut nodes = self.nodes.lock().expect("balancer lock");
             let now = std::time::Instant::now();
@@ -549,7 +545,6 @@ impl ReplicaLoadBalancer {
             order
         };
 
-        // 4. 按分数顺序尝试取会话；任一成功即记录并返回
         for idx in ranked {
             // 锁内仅克隆 Arc，await 必须发生在锁外（MutexGuard 非 Send）
             let pool = {
@@ -574,7 +569,6 @@ impl ReplicaLoadBalancer {
             }
         }
 
-        // 5. 全部副本不可用 → 回退主库
         *self.last_selected.lock().expect("balancer lock") = None;
         self.primary.get_session(role).await
     }

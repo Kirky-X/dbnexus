@@ -40,7 +40,6 @@ impl Session {
     ) -> DbResult<ExecResult> {
         #[cfg(feature = "sql-parser")]
         {
-            // 检查是否为 DDL 操作
             if is_ddl_operation(sql) {
                 return Err(DbError::Permission(
                     "DDL operations are not allowed in this context".to_string(),
@@ -734,11 +733,9 @@ impl Session {
         #[cfg(feature = "permission")]
         {
             let start = Instant::now();
-            // 解析 SQL 操作类型和表名
             let parsed = parse_sql_for_permission(sql).await?;
             match parsed {
                 Some((table_name, action)) => {
-                    // 表名有效性检查
                     if table_name.is_empty() || is_invalid_table_name(&table_name) {
                         return Err(DbError::Permission(
                             "Failed to extract table name for permission checking".to_string(),
@@ -746,9 +743,7 @@ impl Session {
                     }
                     // 权限检查（含 admin 角色绕过）
                     self.check_permission(&table_name, &action).await?;
-                    // 执行 SQL
                     let result = self.execute_raw(sql).await?;
-                    // 记录指标并标记写操作
                     self.record_metrics_and_mark_write(&action, start).await;
                     Ok(result)
                 }
@@ -780,7 +775,6 @@ impl Session {
 
         #[cfg(feature = "sql-parser")]
         {
-            // 检查是否为 DDL 操作
             if is_ddl_operation(sql) {
                 return Err(DbError::Permission(
                     "DDL operations are not allowed in this context".to_string(),

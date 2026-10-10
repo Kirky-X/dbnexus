@@ -355,23 +355,19 @@ fn test_ddl_guard_vs_sql_injection() {
         "DROP DATABASE 应被 DDL Guard 拒绝"
     );
 
-    // SQL 注入检测应该独立工作
-    // 注意: contains_sql_injection 是针对 DML 的注入检测，
-    // 对于 DDL 语句，应该通过 DdlGuard 进行验证
+    // 注入检测独立工作：contains_sql_injection 仅针对 DML，DDL 经 DdlGuard 验证
 }
 
 /// 测试完整的 SQL 安全验证流程
 #[cfg(feature = "sql-parser")]
 #[test]
 fn test_complete_sql_security_flow() {
-    // 1. 首先检查 SQL 注入（适用于 DML）
     let safe_sql = "SELECT * FROM users WHERE id = 1";
     assert!(
         !contains_sql_injection(safe_sql),
         "安全的 SQL 不应被标记为注入"
     );
 
-    // 2. DDL 操作应该通过 DdlGuard
     let ddl_sql = "CREATE TABLE test_table (id INT)";
     let guard = DdlGuard::new();
     let result = guard.validate(ddl_sql);
@@ -380,7 +376,6 @@ fn test_complete_sql_security_flow() {
         "合法 DDL 应该通过 DdlGuard"
     );
 
-    // 3. 危险的 DDL 应该被拦截
     let dangerous_ddl = "DROP DATABASE production";
     let result = guard.validate(dangerous_ddl);
     assert!(
@@ -388,7 +383,6 @@ fn test_complete_sql_security_flow() {
         "危险的 DDL 应该被拦截"
     );
 
-    // 4. 包含注入模式的 DML 应该被检测
     let injection_sql = "SELECT * FROM users WHERE id = 1 OR 1=1";
     assert!(
         contains_sql_injection(injection_sql),

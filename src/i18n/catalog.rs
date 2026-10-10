@@ -393,6 +393,8 @@ query-cache-tables-required = query cache requires at least one table in `tables
 query-cache-version-read-failed = query cache table version read failed: { $error }
 query-cache-params-encode-failed = query cache params encode failed: { $error }
 query-cache-table-name-invalid = query cache table name is invalid: '{ $table }' (allowed: letters/digits/underscore/dot, must not start with a digit)
+
+example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
 "#;
 
 // ============================================================================
@@ -689,6 +691,8 @@ query-cache-tables-required = 查询缓存要求 tables 中至少声明一个表
 query-cache-version-read-failed = 查询缓存表版本读取失败: { $error }
 query-cache-params-encode-failed = 查询缓存参数编码失败: { $error }
 query-cache-table-name-invalid = 查询缓存表名无效: '{ $table }'（允许字母/数字/下划线/点，不得以数字开头）
+
+example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
 "#;
 
 // ============================================================================
@@ -931,6 +935,7 @@ mod tests {
             "query-cache-version-read-failed",
             "query-cache-params-encode-failed",
             "query-cache-table-name-invalid",
+            "example-replica-routing-api-replica-pool-new",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -1046,6 +1051,12 @@ mod tests {
                 &[("error", "E")],
                 "entity deserialize failed: E",
                 "实体反序列化失败: E",
+            ),
+            (
+                "example-replica-routing-api-replica-pool-new",
+                &[],
+                "- ReplicaPool::new(pool, lag_detector)",
+                "- ReplicaPool::new(pool, lag_detector)",
             ),
         ];
         for (key, args, en, zh) in cases {

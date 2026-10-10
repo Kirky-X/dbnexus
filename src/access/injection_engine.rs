@@ -116,10 +116,10 @@ impl InjectionEngine {
             normalize_unicode, remove_string_literals, strip_block_comments,
         };
 
-        // 第一步：Unicode 规范化（NFKC），防止 Unicode 绕过
+        // NFKC 规范化，防止 Unicode 绕过
         let normalized = normalize_unicode(sql);
 
-        // 第二步：块注释标记在移除前检测（注释本身即为注入迹象）
+        // 块注释标记在移除前检测（注释本身即为注入迹象）
         if normalized.contains("/*") {
             return self
                 .rules
@@ -128,7 +128,6 @@ impl InjectionEngine {
                 .collect();
         }
 
-        // 第三至四步：移除字符串字面量与块注释后大写
         let without_strings = remove_string_literals(&normalized);
         let without_comments = strip_block_comments(&without_strings);
         let prepared = without_comments.to_uppercase();
