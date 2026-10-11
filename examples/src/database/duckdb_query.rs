@@ -23,22 +23,22 @@ use duckdb::types::Value as DuckValue;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🦆 DBNexus DuckDB 后端查询示例");
+    println!("🦆 DBNexus DuckDB backend query example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建 DuckDB 内存连接（默认连接池大小 4）
     // ============================================
-    println!("--- 1. 创建 DuckDB 内存连接 ---");
+    println!("--- 1. create a DuckDB in-memory connection ---");
     let conn = DuckDbConnection::new(":memory:")?;
-    println!("  ✓ DuckDbConnection 创建成功");
+    println!("  ✓ DuckDbConnection created");
     println!("  pool_size = {}", conn.pool_size());
     assert_eq!(conn.pool_size(), 4);
 
     // ============================================
     // 2. 创建表并插入测试数据
     // ============================================
-    println!("\n--- 2. 创建表并插入测试数据 ---");
+    println!("\n--- 2. create a table and insert test data ---");
     conn.execute(
         "CREATE TABLE sales (
             id INTEGER PRIMARY KEY,
@@ -66,17 +66,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .await?;
     }
-    println!("  ✓ INSERT 6 条销售记录（3 个 category）");
+    println!("  ✓ inserted 6 sales records (3 categories)");
 
     // ============================================
     // 3. 简单查询：SELECT COUNT(*)
     // ============================================
-    println!("\n--- 3. 简单查询：SELECT COUNT(*) ---");
+    println!("\n--- 3. simple query: SELECT COUNT(*) ---");
     let rows = conn.query("SELECT COUNT(*) AS cnt FROM sales").await?;
     assert_eq!(rows.len(), 1);
     let count = rows[0].get("cnt").expect("column 'cnt' missing");
     if let DuckValue::BigInt(n) = count {
-        println!("  ✓ 总记录数 = {}", n);
+        println!("  ✓ total records = {}", n);
         assert_eq!(*n, 6);
     } else {
         panic!("Expected BigInt, got {:?}", count);
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. 聚合查询：GROUP BY + AVG / SUM
     // ============================================
-    println!("\n--- 4. 聚合查询：GROUP BY + AVG / SUM ---");
+    println!("\n--- 4. aggregate query: GROUP BY + AVG / SUM ---");
     let rows = conn
         .query(
             "SELECT
@@ -136,16 +136,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 自定义连接池大小
     // ============================================
-    println!("\n--- 5. 自定义连接池大小 ---");
+    println!("\n--- 5. custom pool size ---");
     let conn2 = DuckDbConnection::with_pool_size("duckdb::memory:", 8)?;
-    println!("  ✓ with_pool_size(8) 创建成功");
+    println!("  ✓ with_pool_size(8) created");
     println!("  pool_size = {}", conn2.pool_size());
     assert_eq!(conn2.pool_size(), 8);
 
     // ============================================
     // 6. 并发查询验证连接池真正并行
     // ============================================
-    println!("\n--- 6. 并发查询验证（8 个任务 vs pool_size=8）---");
+    println!("\n--- 6. concurrent query verification (8 tasks vs pool_size=8) ---");
     let shared = Arc::new(DuckDbConnection::with_pool_size(":memory:", 8)?);
     shared
         .execute("CREATE TABLE parallel_demo (id INTEGER, val INTEGER)")
@@ -174,9 +174,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for handle in handles {
         sum_total += handle.await?;
     }
-    println!("  ✓ 8 个并发任务全部完成");
+    println!("  ✓ all 8 concurrent tasks completed");
     println!(
-        "  8 个分片 SUM(val) 累加 = {} (应等于 {})",
+        "  8 shards SUM(val) accumulated = {} (should equal {})",
         sum_total,
         (0..16).map(|i| i * 2).sum::<i32>()
     );
@@ -184,26 +184,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 7. 健康检查
     // ============================================
-    println!("\n--- 7. 健康检查 ---");
+    println!("\n--- 7. health check ---");
     shared.health_check().await?;
-    println!("  ✓ health_check() 通过（SELECT 1 AS health）");
+    println!("  ✓ health_check() passed (SELECT 1 AS health)");
 
     println!("\n========================================");
-    println!("✨ DuckDB 查询示例完成！");
+    println!("✨ DuckDB query example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DuckDbConnection::new(url)                 创建默认连接池（pool=4）");
-    println!("  - DuckDbConnection::with_pool_size(url, n)   自定义连接池大小");
+    println!("\n📚 Key concepts:");
+    println!("  - DuckDbConnection::new(url)                 create a default pool (pool=4)");
+    println!("  - DuckDbConnection::with_pool_size(url, n)   custom pool size");
     println!("  - conn.execute(sql) -> DuckDbExecResult      DDL/DML");
     println!("  - conn.query(sql)  -> Vec<DuckDbRow>         SELECT");
-    println!("  - DuckDbRow::get(col) -> Option<&DuckValue>  按列名取值");
-    println!("  - DuckValue::Text/BigInt/Double/Float        类型匹配");
-    println!("  - conn.health_check()                        SELECT 1 健康检查");
-    println!("  - conn.pool_size()                           获取连接池大小");
-    println!("\n💡 v0.3.0 连接池优化:");
-    println!("  - 多个连接通过 try_clone 共享同一 DatabaseHandle");
-    println!("  - :memory: 数据库也能跨连接共享数据");
-    println!("  - Semaphore(pool_size) + Vec<Connection> 实现真正并行查询");
+    println!("  - DuckDbRow::get(col) -> Option<&DuckValue>  get a value by column name");
+    println!("  - DuckValue::Text/BigInt/Double/Float        type matching");
+    println!("  - conn.health_check()                       SELECT 1 health check");
+    println!("  - conn.pool_size()                          get the pool size");
+    println!("\n💡 v0.3.0 pool optimization:");
+    println!("  - multiple connections share one DatabaseHandle via try_clone");
+    println!("  - a :memory: database can also share data across connections");
+    println!("  - Semaphore(pool_size) + Vec<Connection> implements truly parallel queries");
 
     Ok(())
 }

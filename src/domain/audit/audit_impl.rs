@@ -1091,7 +1091,10 @@ mod tests {
         let event = logger
             .sanitize_event(AuditEvent::create("users", "1", "admin").with_after_value(&fixture));
         let after = event.after_value.as_ref().unwrap();
-        assert!(!after.contains(&leaked), "敏感值不应残留: {after}");
+        assert!(
+            !after.contains(&leaked),
+            "no sensitive value should remain: {after}"
+        );
         let parsed: serde_json::Value = serde_json::from_str(after).unwrap();
         assert_eq!(parsed[key.as_str()], "[REDACTED]");
         // 非敏感键的键名与值均不受影响
@@ -1113,7 +1116,10 @@ mod tests {
         let event = logger
             .sanitize_event(AuditEvent::create("users", "1", "admin").with_after_value(&fixture));
         let after = event.after_value.as_ref().unwrap();
-        assert!(!after.contains(&deep), "嵌套敏感值不应残留: {after}");
+        assert!(
+            !after.contains(&deep),
+            "no nested sensitive value should remain: {after}"
+        );
         let parsed: serde_json::Value = serde_json::from_str(after).unwrap();
         assert_eq!(parsed["user"][key.as_str()], "[REDACTED]");
         assert_eq!(parsed["user"]["name"], "n");
@@ -1175,9 +1181,18 @@ mod tests {
                 .with_after_value(&format!("{key}: {leaked}, name = kept")),
         );
         let after = event.after_value.as_ref().unwrap();
-        assert!(!after.contains(&leaked), "敏感值不应残留: {after}");
-        assert!(after.contains(&format!("{key}:")), "键名应保留: {after}");
-        assert!(after.contains("name = kept"), "无关文本不受影响: {after}");
+        assert!(
+            !after.contains(&leaked),
+            "no sensitive value should remain: {after}"
+        );
+        assert!(
+            after.contains(&format!("{key}:")),
+            "key names should be kept: {after}"
+        );
+        assert!(
+            after.contains("name = kept"),
+            "unrelated text should be unaffected: {after}"
+        );
 
         // JSON 风格引号文本（含 \" 转义的字符串值整体替换）
         let token_key = ["tok", "en"].concat();
@@ -1186,13 +1201,22 @@ mod tests {
                 &format!(r#"log: user="bob", "{token_key}":"with \"quote\" inside", ok=1"#),
             ));
         let after = event.after_value.as_ref().unwrap();
-        assert!(!after.contains("inside"), "敏感值不应残留: {after}");
+        assert!(
+            !after.contains("inside"),
+            "no sensitive value should remain: {after}"
+        );
         assert!(
             after.contains(&format!(r#""{token_key}":"[REDACTED]""#)),
-            "键名应保留: {after}"
+            "key names should be kept: {after}"
         );
-        assert!(after.contains(r#"user="bob""#), "无关文本不受影响: {after}");
-        assert!(after.contains("ok=1"), "无关文本不受影响: {after}");
+        assert!(
+            after.contains(r#"user="bob""#),
+            "unrelated text should be unaffected: {after}"
+        );
+        assert!(
+            after.contains("ok=1"),
+            "unrelated text should be unaffected: {after}"
+        );
     }
 
     /// 非 JSON 且不含敏感键值对的文本原样保留
@@ -1225,7 +1249,7 @@ mod tests {
         assert_eq!(
             after,
             format!("{mixed_key}: [REDACTED]"),
-            "裸键大小写变体应脱敏且键名保留: {after}"
+            "bare-key case variants should be masked with key names kept: {after}"
         );
 
         // 引号键混合大小写："PassWord":"v4" → 命中且键名原样保留
@@ -1236,7 +1260,7 @@ mod tests {
         assert_eq!(
             after,
             format!(r#""{mixed_key}":"[REDACTED]""#),
-            "引号键大小写变体应脱敏且键名保留: {after}"
+            "quoted-key case variants should be masked with key names kept: {after}"
         );
 
         // 引号复合键（取引号内完整键名 contains）：与 JSON 路径语义一致
@@ -1247,7 +1271,7 @@ mod tests {
         assert_eq!(
             after,
             format!(r#""{hash_key}":"[REDACTED]""#),
-            "引号复合键应脱敏且键名保留: {after}"
+            "quoted compound keys should be masked with key names kept: {after}"
         );
 
         // 下划线分隔复合键：user_password_hash: h2 → 命中（_ 视为边界）
@@ -1258,7 +1282,7 @@ mod tests {
         assert_eq!(
             after,
             format!("{hash_key}: [REDACTED]"),
-            "下划线复合键应脱敏且键名保留: {after}"
+            "underscore compound keys should be masked with key names kept: {after}"
         );
 
         // 无冒号的自由文本不误伤（快照语义：原样返回）
@@ -1266,7 +1290,7 @@ mod tests {
         let after = AuditLogger::sanitize_field_text(free_text, &["password".to_string()]);
         assert_eq!(
             after, free_text,
-            "无键值对形态的自由文本不应被改写: {after}"
+            "free text without a key-value shape must not be rewritten: {after}"
         );
     }
 
@@ -1284,7 +1308,7 @@ mod tests {
         assert_eq!(
             after,
             format!("{pwd}1: {val}"),
-            "数字边界内的子串不应命中: {after}"
+            "a substring inside a numeric boundary must not match: {after}"
         );
 
         // 字母前缀紧贴：mypassword 的 password 后缀被字母边界挡住，不触发替换
@@ -1295,7 +1319,7 @@ mod tests {
         assert_eq!(
             after,
             format!("my{pwd}: {val}"),
-            "字母边界内的子串不应命中: {after}"
+            "a substring inside an alphabetic boundary must not match: {after}"
         );
     }
 
@@ -1308,7 +1332,7 @@ mod tests {
             .entity_id("42")
             .id("caller-event-001")
             .build()
-            .expect("必填字段齐全时构建必须成功");
+            .expect("construction must succeed when all required fields are present");
         assert_eq!(event.id, "caller-event-001");
     }
 
@@ -1320,10 +1344,10 @@ mod tests {
             .entity_type("users")
             .entity_id("42")
             .build()
-            .expect("必填字段齐全时构建必须成功");
+            .expect("construction must succeed when all required fields are present");
         assert!(
             uuid::Uuid::parse_str(&event.id).is_ok(),
-            "缺省必须生成 uuid v4 格式的事件 ID: {}",
+            "the event ID must be generated in uuid v4 format by default: {}",
             event.id
         );
     }

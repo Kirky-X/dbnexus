@@ -119,7 +119,7 @@ mod tests {
         };
         assert!(
             with_secs.message().contains("7"),
-            "应携带建议秒数: {:?}",
+            "should carry the suggested seconds: {:?}",
             with_secs.message()
         );
         let without_secs = DbError::RateLimited {
@@ -138,8 +138,11 @@ mod tests {
             id: 42,
         };
         let msg = err.message();
-        assert!(msg.contains("orders"), "应携带表名: {msg:?}");
-        assert!(msg.contains("42"), "应携带行 ID: {msg:?}");
+        assert!(
+            msg.contains("orders"),
+            "should carry the table name: {msg:?}"
+        );
+        assert!(msg.contains("42"), "should carry the row ID: {msg:?}");
     }
 
     #[cfg(feature = "validation")]

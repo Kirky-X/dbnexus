@@ -36,20 +36,20 @@ use trait_kit::prelude::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🧰 DBNexus AsyncKit + DbNexusModule 依赖注入示例");
+    println!("🧰 DBNexus AsyncKit + DbNexusModule dependency injection example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建 AsyncKit 并配置
     // ============================================
-    println!("--- 1. 创建 AsyncKit 并设置配置 ---\n");
+    println!("--- 1. create AsyncKit and set the configuration ---\n");
 
     let mut kit = AsyncKit::new();
-    println!("  ✓ AsyncKit 创建成功");
+    println!("  ✓ AsyncKit created");
 
     // 设置 OxcacheConfig（OxcacheModule 需要）
     kit.set_config(OxcacheConfig::default());
-    println!("  ✓ OxcacheConfig 已设置（默认配置）");
+    println!("  ✓ OxcacheConfig set (default configuration)");
 
     // 设置 DbConfig（DbNexusModule 需要）
     let db_config = DbConfig {
@@ -63,54 +63,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     kit.set_config(db_config);
-    println!("  ✓ DbConfig 已设置（sqlite 共享内存, max_connections=5）");
+    println!("  ✓ DbConfig set (sqlite shared memory, max_connections=5)");
 
     // ============================================
     // 2. 注册模块
     // ============================================
-    println!("\n--- 2. 注册模块 ---\n");
+    println!("\n--- 2. register modules ---\n");
 
     // OxcacheModule 必须先注册（DbNexusModule 依赖它）
     kit.register::<OxcacheModule>()
         .map_err(|e| format!("register OxcacheModule: {e}"))?;
-    println!("  ✓ OxcacheModule 已注册（缓存模块）");
+    println!("  ✓ OxcacheModule registered (the cache module)");
 
     kit.register::<DbNexusModule>()
         .map_err(|e| format!("register DbNexusModule: {e}"))?;
-    println!("  ✓ DbNexusModule 已注册（数据库连接池模块）");
-    println!("  依赖关系: DbNexusModule → OxcacheModule");
+    println!("  ✓ DbNexusModule registered (the database pool module)");
+    println!("  dependencies: DbNexusModule → OxcacheModule");
 
     // ============================================
     // 3. 构建 Kit 并获取连接池
     // ============================================
-    println!("\n--- 3. 构建 Kit ---\n");
+    println!("\n--- 3. build the Kit ---\n");
 
     let kit = kit
         .build()
         .await
         .map_err(|e| format!("AsyncKit::build: {e}"))?;
-    println!("  ✓ AsyncKit 构建成功");
+    println!("  ✓ AsyncKit built successfully");
 
     // 从 kit 中获取 DbNexusModule 的能力（Arc<dyn ConnectionPool + Send + Sync>）
     let pool: Arc<dyn ConnectionPool + Send + Sync> = kit
         .require::<DbNexusModule>()
         .map_err(|e| format!("require DbNexusModule: {e}"))?;
-    println!("  ✓ 获取 Arc<dyn ConnectionPool> 成功");
+    println!("  ✓ Arc<dyn ConnectionPool> acquired successfully");
 
     // ============================================
     // 4. 使用连接池
     // ============================================
-    println!("\n--- 4. 使用连接池 ---\n");
+    println!("\n--- 4. use the connection pool ---\n");
 
     let status = pool.status();
     println!(
-        "  连接池状态: total={}, active={}, idle={}",
+        "  pool status: total={}, active={}, idle={}",
         status.total, status.active, status.idle
     );
-    println!("  配置 URL: {}", pool.config().url);
+    println!("  configuration URL: {}", pool.config().url);
 
     let session = pool.get_session("admin").await?;
-    println!("  ✓ 获取 Session 成功 (角色: {})", session.role());
+    println!("  ✓ Session acquired (role: {})", session.role());
 
     session
         .execute_raw_ddl(
@@ -121,12 +121,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("  ✓ 执行 DDL 成功: CREATE TABLE kit_demo");
+    println!("  ✓ DDL executed: CREATE TABLE kit_demo");
 
     // ============================================
     // 5. INSERT 数据
     // ============================================
-    println!("\n--- 5. INSERT 数据 ---\n");
+    println!("\n--- 5. INSERT data ---\n");
 
     session
         .execute_raw("INSERT INTO kit_demo (id, name) VALUES (1, 'async-kit')")
@@ -137,30 +137,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session
         .execute_raw("INSERT INTO kit_demo (id, name) VALUES (3, 'oxcache-module')")
         .await?;
-    println!("  ✓ 插入 3 行测试数据");
+    println!("  ✓ inserted 3 test rows");
 
     // ============================================
     // 6. SELECT 查询
     // ============================================
-    println!("\n--- 6. SELECT 查询 ---\n");
+    println!("\n--- 6. SELECT query ---\n");
 
     session
         .execute_raw("SELECT id, name FROM kit_demo ORDER BY id")
         .await?;
-    println!("  ✓ 查询 kit_demo 表成功");
+    println!("  ✓ queried the kit_demo table successfully");
 
     // ============================================
     // 7. 事务操作
     // ============================================
-    println!("\n--- 7. 事务操作 ---\n");
+    println!("\n--- 7. transactions ---\n");
 
     session.begin_transaction().await?;
-    println!("  ✓ 开始事务");
+    println!("  ✓ transaction started");
 
     session
         .execute_raw("INSERT INTO kit_demo (id, name) VALUES (4, 'transaction-test')")
         .await?;
-    println!("  ✓ 事务内插入: transaction-test");
+    println!("  ✓ inserted inside the transaction: transaction-test");
 
     println!(
         "  is_in_transaction() = {}",
@@ -168,12 +168,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     session.commit().await?;
-    println!("  ✓ 事务已提交");
+    println!("  ✓ transaction committed");
 
     // ============================================
     // 8. 错误处理演示
     // ============================================
-    println!("\n--- 8. 错误处理 ---\n");
+    println!("\n--- 8. error handling ---\n");
 
     // 演示：未注册 OxcacheModule 时 build 会失败
     let mut incomplete_kit = AsyncKit::new();
@@ -186,14 +186,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("register: {e}"))?;
 
     match incomplete_kit.build().await {
-        Ok(_) => println!("  ✗ 预期应该失败"),
+        Ok(_) => println!("  ✗ expected a failure"),
         Err(e) => {
             let msg = e.to_string();
-            println!("  ✓ 未注册 OxcacheModule 时 build 失败（预期行为）");
-            println!("  错误信息: {}", msg);
+            println!("  ✓ build fails when OxcacheModule is not registered (expected behavior)");
+            println!("  error message: {}", msg);
             assert!(
                 msg.contains("oxcache"),
-                "错误应提及 oxcache 依赖, got: {msg}"
+                "the error should mention the oxcache dependency, got: {msg}"
             );
         }
     }
@@ -201,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 9. 多 Session 使用
     // ============================================
-    println!("\n--- 9. 多 Session ---\n");
+    println!("\n--- 9. multiple Sessions ---\n");
 
     let admin_session = pool.get_session("admin").await?;
     let system_session = pool.get_session("system").await?;
@@ -210,26 +210,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let final_status = pool.status();
     println!(
-        "\n  最终连接池状态: total={}, active={}, idle={}",
+        "\n  final pool status: total={}, active={}, idle={}",
         final_status.total, final_status.active, final_status.idle
     );
 
     println!("\n========================================");
-    println!("✨ AsyncKit + DbNexusModule 示例完成！");
+    println!("✨ AsyncKit + DbNexusModule example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - AsyncKit::new()                    创建 DI 容器");
-    println!("  - kit.set_config(T)                  设置模块配置");
-    println!("  - kit.register::<M>()                注册模块");
-    println!("  - kit.build().await                  构建（拓扑排序 + 依赖注入）");
-    println!("  - kit.require::<M>()                 获取模块能力");
-    println!("  - DbNexusModule                      构建 DbPool 的 AsyncKit 模块");
-    println!("  - OxcacheModule                      构建缓存后端的 AsyncKit 模块");
-    println!("\n💡 设计要点:");
-    println!("  - DbNexusModule 依赖 OxcacheModule（自动拓扑排序）");
-    println!("  - OxcacheDbCacheAdapter 在 build() 内自动创建并注入");
-    println!("  - 返回 Arc<dyn ConnectionPool + Send + Sync> trait 对象");
-    println!("  - 未注册依赖模块时 build() 返回清晰错误");
+    println!("\n📚 Key concepts:");
+    println!("  - AsyncKit::new()                    create a DI container");
+    println!("  - kit.set_config(T)                  set a module configuration");
+    println!("  - kit.register::<M>()                register a module");
+    println!(
+        "  - kit.build().await                  build (topological sort + dependency injection)"
+    );
+    println!("  - kit.require::<M>()                 acquire a module capability");
+    println!("  - DbNexusModule              the AsyncKit module that builds the DbPool");
+    println!("  - OxcacheModule              the AsyncKit module that builds the cache backend");
+    println!("\n💡 Design notes:");
+    println!("  - DbNexusModule depends on OxcacheModule (automatic topological sort)");
+    println!("  - OxcacheDbCacheAdapter created and injected automatically inside build()");
+    println!("  - returns an Arc<dyn ConnectionPool + Send + Sync> trait object");
+    println!("  - build() returns a clear error when a dependency module is not registered");
 
     Ok(())
 }

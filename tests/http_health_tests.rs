@@ -72,9 +72,16 @@ async fn test_healthz_always_ok_with_alive_body() {
     let (pool, path) = warm_pool().await;
     let router = HealthRouterBuilder::new(pool).build();
     let (status, body) = send(router, "/healthz").await;
-    assert_eq!(status, StatusCode::OK, "liveness 端点应恒为 200");
-    let json: serde_json::Value = serde_json::from_str(&body).expect("healthz 应为 JSON");
-    assert_eq!(json["status"], "alive", "healthz 语义为进程存活标记");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the liveness endpoint should always return 200"
+    );
+    let json: serde_json::Value = serde_json::from_str(&body).expect("healthz should be JSON");
+    assert_eq!(
+        json["status"], "alive",
+        "the healthz semantics is a process liveness marker"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -87,16 +94,16 @@ async fn test_readyz_ok_for_warm_pool() {
     let (pool, path) = warm_pool().await;
     let router = HealthRouterBuilder::new(pool.clone()).build();
     let (status, body) = send(router, "/readyz").await;
-    assert_eq!(status, StatusCode::OK, "健康池应就绪");
-    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz 应为 JSON");
-    assert_eq!(json["status"], "healthy", "健康池快照状态");
+    assert_eq!(status, StatusCode::OK, "a healthy pool should be ready");
+    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz should be JSON");
+    assert_eq!(json["status"], "healthy", "healthy pool snapshot status");
     assert!(
         json["pool"]["total"].as_u64().unwrap_or(0) > 0,
-        "池应有连接"
+        "the pool should have connections"
     );
     assert!(
         json["pool"]["saturation"].as_f64().is_some(),
-        "池饱和度字段应透传"
+        "the pool saturation field should be passed through"
     );
     let _ = std::fs::remove_file(&path);
 }
@@ -112,7 +119,7 @@ async fn test_readyz_ready_semantics_covers_degraded() {
     assert!(!snapshot_is_ready(&unhealthy));
     assert!(
         !snapshot_is_ready(&garbage),
-        "非三态字段一律不就绪（fail-closed）"
+        "any non-tri-state field means not ready (fail-closed)"
     );
 }
 
@@ -132,15 +139,19 @@ async fn test_readyz_not_ready_for_zero_connection_pool() {
         );
         assert!(
             !snapshot_is_ready(&serde_json::json!({"status": "unhealthy"})),
-            "unhealthy 快照不应判定就绪"
+            "an unhealthy snapshot should not be judged ready"
         );
         let _ = std::fs::remove_file(&path);
         return;
     }
     let router = HealthRouterBuilder::new(pool).build();
     let (status, body) = send(router, "/readyz").await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "零连接池不就绪");
-    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz 应为 JSON");
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "a zero-connection pool is not ready"
+    );
+    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz should be JSON");
     assert_eq!(json["status"], "unhealthy");
     let _ = std::fs::remove_file(&path);
 }
@@ -159,7 +170,7 @@ async fn test_readyz_unready_when_circuit_breaker_open() {
     assert_eq!(
         breaker.state().await,
         dbnexus::observability::CircuitBreakerState::Open,
-        "前置：熔断器应处于 Open"
+        "prerequisite: the circuit breaker should be Open"
     );
 
     let router = HealthRouterBuilder::new(pool)
@@ -169,11 +180,17 @@ async fn test_readyz_unready_when_circuit_breaker_open() {
     assert_eq!(
         status,
         StatusCode::SERVICE_UNAVAILABLE,
-        "熔断打开即使池健康也不就绪"
+        "an open breaker makes the service not ready even when the pool is healthy"
     );
-    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz 应为 JSON");
-    assert_eq!(json["status"], "unhealthy", "熔断打开应覆盖快照状态");
-    assert_eq!(json["circuit_breaker"], "open", "熔断状态应进响应体");
+    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz should be JSON");
+    assert_eq!(
+        json["status"], "unhealthy",
+        "an open breaker should override the snapshot status"
+    );
+    assert_eq!(
+        json["circuit_breaker"], "open",
+        "the breaker status should appear in the response body"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -186,8 +203,11 @@ async fn test_readyz_includes_circuit_breaker_field_when_closed() {
         .build();
     let (status, body) = send(router, "/readyz").await;
     assert_eq!(status, StatusCode::OK);
-    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz 应为 JSON");
-    assert_eq!(json["circuit_breaker"], "closed", "熔断关闭应如实上报");
+    let json: serde_json::Value = serde_json::from_str(&body).expect("readyz should be JSON");
+    assert_eq!(
+        json["circuit_breaker"], "closed",
+        "a closed breaker should be reported truthfully"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -206,7 +226,7 @@ async fn test_metrics_prometheus_text_when_collector_injected() {
     assert_eq!(status, StatusCode::OK);
     assert!(
         body.contains("dbnexus_uptime_seconds"),
-        "metrics 应输出 Prometheus 文本（uptime 指标恒存在），实际前 120 字节: {}",
+        "metrics should output Prometheus text (the uptime metric is always present), actual first 120 bytes: {}",
         &body[..body.len().min(120)]
     );
     let _ = std::fs::remove_file(&path);
@@ -220,11 +240,11 @@ async fn test_metrics_404_without_collector() {
     assert_eq!(
         status,
         StatusCode::NOT_FOUND,
-        "未注入采集器时 metrics 显性 404"
+        "metrics should explicitly 404 when no collector is injected"
     );
     assert!(
         body.contains("metrics"),
-        "404 应说明原因（未注入采集器），实际: {body}"
+        "404 should explain the reason (no collector injected), actual: {body}"
     );
     let _ = std::fs::remove_file(&path);
 }
@@ -238,6 +258,10 @@ async fn test_unknown_path_is_404() {
     let (pool, path) = warm_pool().await;
     let router = HealthRouterBuilder::new(pool).build();
     let (status, _) = send(router, "/nope").await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "生成器只暴露三个健康路径");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "the generator exposes only three healthy paths"
+    );
     let _ = std::fs::remove_file(&path);
 }

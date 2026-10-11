@@ -366,7 +366,11 @@ mod db_saga_recovery_tests {
             .list_pending()
             .await
             .unwrap();
-        assert_eq!(pending.len(), 1, "Running 中断日志应出现在恢复列表");
+        assert_eq!(
+            pending.len(),
+            1,
+            "the Running interruption log should appear in the recovery list"
+        );
         assert_eq!(pending[0].saga_id, "rec-1");
 
         // 重放补偿（补偿成功）→ 终态 Failed
@@ -456,7 +460,7 @@ mod db_saga_recovery_tests {
         assert_eq!(
             replay.status,
             SagaStatus::CompensationFailed,
-            "存在无法补偿的步骤时不得报告干净失败"
+            "a clean failure must not be reported when there are steps that cannot be compensated"
         );
         assert_eq!(replay.compensated_steps, vec!["known"]);
 
@@ -518,7 +522,7 @@ mod db_saga_recovery_tests {
         assert_eq!(
             stored.steps.len(),
             1,
-            "补偿失败应原地更新条目，不得追加重复条目"
+            "a compensation failure should update the entry in place, not append a duplicate entry"
         );
 
         let _ = std::fs::remove_file(&path);

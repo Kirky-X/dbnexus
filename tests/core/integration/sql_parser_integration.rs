@@ -376,12 +376,16 @@ async fn test_parse_rejects_multiple_statements_and_extracts_all_tables() {
         .expect_err("multiple statements must be rejected");
     assert!(
         format!("{err:?}").contains("Multiple"),
-        "多语句应报 MultipleStatements，实际: {err:?}"
+        "multiple statements should report MultipleStatements, actual: {err:?}"
     );
 
     // 单表 / 多表名提取（非 admin 权限检查按表逐个判定，漏表即越权）
     let single = parser.parse_single("SELECT * FROM users").await.unwrap();
-    assert_eq!(single.all_table_names.len(), 1, "单表查询应提取 1 个表名");
+    assert_eq!(
+        single.all_table_names.len(),
+        1,
+        "a single-table query should extract 1 table name"
+    );
 
     let multi = parser
         .parse_single("SELECT a.id, b.name FROM users a JOIN orders b ON a.id = b.user_id")
@@ -389,7 +393,7 @@ async fn test_parse_rejects_multiple_statements_and_extracts_all_tables() {
         .unwrap();
     assert!(
         multi.all_table_names.len() >= 2,
-        "JOIN 查询应提取多个表名: {:?}",
+        "a JOIN query should extract multiple table names: {:?}",
         multi.all_table_names
     );
 
@@ -397,6 +401,6 @@ async fn test_parse_rejects_multiple_statements_and_extracts_all_tables() {
     let default_parser = SqlParser::default();
     assert!(
         default_parser.parse_single("SELECT 1").await.is_ok(),
-        "Default 构造的解析器应可解析"
+        "a parser constructed via Default should be able to parse"
     );
 }

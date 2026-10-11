@@ -46,7 +46,7 @@ fn bench_duckdb_copy_vs_row_by_row(c: &mut Criterion) {
         .map(|i| vec![serde_json::json!(i), serde_json::json!(format!("v{i}"))])
         .collect();
     let stmt = CopyStatement::new("t_bench_copy", &["id".to_string(), "val".to_string()])
-        .expect("合法标识符应通过");
+        .expect("valid identifier should pass");
     let single = "INSERT INTO t_bench_copy (id, val) VALUES (?, ?)";
 
     let mut group = c.benchmark_group("copy_duckdb");
@@ -61,7 +61,7 @@ fn bench_duckdb_copy_vs_row_by_row(c: &mut Criterion) {
                 admin
                     .execute_duckdb_raw("DELETE FROM t_bench_copy")
                     .await
-                    .expect("清表");
+                    .expect("truncate table");
                 for row in &rows {
                     admin
                         .execute_duckdb_raw_with_params(
@@ -74,7 +74,7 @@ fn bench_duckdb_copy_vs_row_by_row(c: &mut Criterion) {
                             ],
                         )
                         .await
-                        .expect("逐行插入");
+                        .expect("row-by-row insert");
                 }
                 drop(admin);
             })
@@ -88,9 +88,9 @@ fn bench_duckdb_copy_vs_row_by_row(c: &mut Criterion) {
                 admin
                     .execute_duckdb_raw("DELETE FROM t_bench_copy")
                     .await
-                    .expect("清表");
+                    .expect("truncate table");
                 drop(admin);
-                pool.copy_in(&stmt, &rows).await.expect("COPY 导入");
+                pool.copy_in(&stmt, &rows).await.expect("COPY import");
             })
         })
     });

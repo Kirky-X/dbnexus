@@ -19,13 +19,13 @@ use dbnexus::{DbConfig, DbPool};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🗄️  DBNexus SQLite 集成示例");
+    println!("🗄️  DBNexus SQLite integration example");
     println!("========================================\n");
 
     // ============================================
     // 1. 内存模式
     // ============================================
-    println!("─── 内存模式 (sqlite::memory:) ───\n");
+    println!("─── In-memory mode (sqlite::memory:) ───\n");
     let memory_config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
@@ -37,10 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let memory_pool = DbPool::with_config(memory_config).await?;
-    println!("✓ 内存连接池创建成功");
+    println!("✓ in-memory pool created");
 
     let session = memory_pool.get_session("admin").await?;
-    println!("✓ Session 获取成功 (角色: {})", session.role());
+    println!("✓ Session acquired (role: {})", session.role());
 
     // DDL: 建表
     session
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("✓ users 表创建成功");
+    println!("✓ users table created");
 
     // DML: 插入
     let r1 = session
@@ -62,25 +62,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .execute_raw("INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')")
         .await?;
     println!(
-        "✓ 插入 {} 条记录 (rows_affected: {}, {})",
+        "✓ inserted {} records (rows_affected: {}, {})",
         2,
         r1.rows_affected(),
         r2.rows_affected()
     );
 
     drop(session);
-    println!("ℹ️  Session 释放，连接归还池中");
+    println!("ℹ️  Session released, connection returned to the pool");
 
     // 内存模式特性说明
-    println!("\n📌 内存模式特性:");
-    println!("  - 数据存储在进程内存中，退出即销毁");
-    println!("  - 适用于测试、临时计算、原型开发");
-    println!("  - 每个连接独立的内存库（除非用 file::memory:?cache=shared）");
+    println!("\n📌 In-memory mode features:");
+    println!("  - data lives in process memory and is destroyed on exit");
+    println!("  - for testing, temporary computation, and prototyping");
+    println!(
+        "  - each connection gets an independent in-memory database (unless file::memory:?cache=shared)"
+    );
 
     // ============================================
     // 2. 文件模式
     // ============================================
-    println!("\n─── 文件模式 (sqlite://example.db) ───\n");
+    println!("\n─── File mode (sqlite://example.db) ───\n");
 
     let db_path = "dbnexus_example.db";
     // 清理旧文件以确保示例干净
@@ -100,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let file_pool = DbPool::with_config(file_config).await?;
-    println!("✓ 文件连接池创建成功 (文件: {})", db_path);
+    println!("✓ file pool created (file: {})", db_path);
 
     let session = file_pool.get_session("admin").await?;
 
@@ -114,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("✓ products 表创建成功");
+    println!("✓ products table created");
 
     // DML: 插入
     session
@@ -126,21 +128,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session
         .execute_raw("INSERT INTO products (id, name, price) VALUES (3, 'Gizmo', 29.99)")
         .await?;
-    println!("✓ 插入 3 条产品记录");
+    println!("✓ inserted 3 product records");
 
     drop(session);
-    println!("ℹ️  Session 释放");
+    println!("ℹ️  Session released");
 
     // 文件模式特性说明
-    println!("\n📌 文件模式特性:");
-    println!("  - 数据持久化到磁盘文件");
-    println!("  - 适用于生产环境、需要数据持久化的场景");
-    println!("  - 支持多进程访问（需配置 WAL 模式）");
+    println!("\n📌 File mode features:");
+    println!("  - data persists to a disk file");
+    println!("  - for production environments needing data persistence");
+    println!("  - supports multi-process access (requires WAL mode)");
 
     // 验证文件已创建
     let metadata = std::fs::metadata(db_path)?;
     println!(
-        "\n✓ 数据库文件已创建: {} ({} 字节)",
+        "\n✓ Database file created: {} ({} bytes)",
         db_path,
         metadata.len()
     );
@@ -148,31 +150,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 清理示例文件
     drop(file_pool);
     let _ = std::fs::remove_file(db_path);
-    println!("ℹ️  已清理示例数据库文件");
+    println!("ℹ️  Example database file cleaned up");
 
     // ============================================
     // 3. 两种模式对比
     // ============================================
-    println!("\n─── 模式对比 ───\n");
+    println!("\n─── Mode comparison ───\n");
     println!("┌────────────┬───────────────┬──────────────────┐");
-    println!("│ 维度       │ 内存模式      │ 文件模式          │");
+    println!("│ dimension    │ in-memory mode│ file mode       │");
     println!("├────────────┼───────────────┼──────────────────┤");
-    println!("│ URL 格式   │ sqlite::memory: │ sqlite:path.db │");
-    println!("│ 持久化     │ 否            │ 是               │");
-    println!("│ 性能       │ 最高          │ 高（受磁盘IO限制）│");
-    println!("│ 适用场景   │ 测试/原型     │ 生产环境          │");
-    println!("│ 多进程共享 │ 需 cache=shared │ 支持（WAL 模式）│");
+    println!("│ URL format   │ sqlite::memory: │ sqlite:path.db │");
+    println!("│ persistence  │ no            │ yes              │");
+    println!("│ performance  │ highest       │ high (disk IO bound) │");
+    println!("│ use cases    │ testing/prototyping │ production      │");
+    println!("│ multi-proc   │ needs cache=shared │ supported (WAL mode) │");
     println!("└────────────┴───────────────┴──────────────────┘");
 
     println!("\n========================================");
-    println!("✨ SQLite 集成示例完成！");
+    println!("✨ SQLite integration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - sqlite::memory: 创建内存数据库，退出即销毁");
-    println!("  - sqlite:path.db 创建文件数据库，数据持久化");
-    println!("  - session.execute_raw_ddl(sql) 执行 DDL（仅 admin）");
-    println!("  - session.execute_raw(sql) 执行 DML（INSERT/UPDATE/DELETE/SELECT）");
-    println!("  - DbPool::with_config(config) 统一入口创建连接池");
+    println!("\n📚 Key concepts:");
+    println!("  - sqlite::memory: creates an in-memory database, destroyed on exit");
+    println!("  - sqlite:path.db creates a file database, data persisted");
+    println!("  - session.execute_raw_ddl(sql) executes DDL (admin only)");
+    println!("  - session.execute_raw(sql) executes DML (INSERT/UPDATE/DELETE/SELECT)");
+    println!("  - DbPool::with_config(config) is the unified entry point for creating a pool");
 
     Ok(())
 }

@@ -246,7 +246,11 @@ mod tests {
         engine.apply(&mut rows);
         let masked = rows[0]["email"].as_str().unwrap();
         // sha2("alice@example.com") 前缀
-        assert_eq!(masked.len(), 64, "SHA-256 十六进制应为 64 字符");
+        assert_eq!(
+            masked.len(),
+            64,
+            "the SHA-256 hex digest should be 64 characters"
+        );
         assert!(!masked.contains("alice"));
         assert!(!masked.contains('@'));
     }
@@ -259,10 +263,16 @@ mod tests {
         let mut rows = vec![json!({"phone": "13812345678", "bio": "很长的个人简介内容"})];
         engine.apply(&mut rows);
         let phone = rows[0]["phone"].as_str().unwrap();
-        assert!(phone.starts_with("138"), "应保留前 3 位");
-        assert!(phone.contains('*'), "中间应为掩码");
+        assert!(
+            phone.starts_with("138"),
+            "the first 3 digits should be kept"
+        );
+        assert!(phone.contains('*'), "the middle should be masked");
         let bio = rows[0]["bio"].as_str().unwrap();
-        assert!(bio.chars().count() <= 6, "截断 5 字符 + 省略号");
+        assert!(
+            bio.chars().count() <= 6,
+            "truncation to 5 characters plus the ellipsis"
+        );
         assert!(bio.ends_with('…'));
     }
 

@@ -105,7 +105,8 @@ async fn test_session_double_begin_fails() {
     assert!(result.is_err(), "double begin should fail");
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Transaction(ref msg) if msg.contains("Already in transaction")),
+        matches!(err, DbError::Transaction(ref msg)
+            if msg.contains("Already in transaction") || msg.contains("已处于事务中")),
         "expected Transaction 'Already in transaction' error, got {:?}",
         err
     );
@@ -120,7 +121,8 @@ async fn test_session_commit_without_transaction_fails() {
     assert!(result.is_err(), "commit without transaction should fail");
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Transaction(ref msg) if msg.contains("No active transaction")),
+        matches!(err, DbError::Transaction(ref msg)
+            if msg.contains("No active transaction") || msg.contains("没有活动事务")),
         "expected Transaction 'No active transaction' error, got {:?}",
         err
     );
@@ -135,7 +137,8 @@ async fn test_session_rollback_without_transaction_fails() {
     assert!(result.is_err(), "rollback without transaction should fail");
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Transaction(ref msg) if msg.contains("Not in transaction")),
+        matches!(err, DbError::Transaction(ref msg)
+            if msg.contains("Not in transaction") || msg.contains("不在事务中")),
         "expected Transaction 'Not in transaction' error, got {:?}",
         err
     );
@@ -172,7 +175,8 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
     assert!(result.is_err(), "non-admin execute_raw_ddl should fail");
     let err = result.unwrap_err();
     assert!(
-        matches!(err, DbError::Permission(ref msg) if msg.contains("admin role")),
+        matches!(err, DbError::Permission(ref msg)
+            if msg.contains("admin role") || msg.contains("admin 角色")),
         "expected Permission 'admin role' error, got {:?}",
         err
     );

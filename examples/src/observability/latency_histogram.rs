@@ -24,13 +24,13 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("📈 DBNexus 延迟直方图与慢查询示例");
+    println!("📈 DBNexus latency histogram and slow query example");
     println!("========================================\n");
 
     // ============================================
     // 1. 独立使用 LatencyHistogram
     // ============================================
-    println!("--- 1. LatencyHistogram 独立使用 ---");
+    println!("--- 1. LatencyHistogram standalone ---");
     // 定义桶边界（毫秒）：≤1ms, ≤5ms, ≤10ms, ≤50ms, ≤100ms, ≤500ms, ≤1s, >1s
     let bucket_boundaries: Vec<u64> = vec![1, 5, 10, 50, 100, 500, 1000];
     let histogram = LatencyHistogram::new(bucket_boundaries.clone());
@@ -49,15 +49,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for s in &samples {
         histogram.record(*s);
     }
-    println!("  ✓ 记录 {} 个样本", samples.len());
+    println!("  ✓ recorded {} samples", samples.len());
 
     // ============================================
     // 2. 展示 HistogramStats（桶分布）
     // ============================================
-    println!("\n--- 2. HistogramStats 桶分布 ---");
+    println!("\n--- 2. HistogramStats bucket distribution ---");
     let stats: HistogramStats = histogram.stats();
     println!("  total_samples = {}", stats.total_samples);
-    println!("  桶分布:");
+    println!("  bucket distribution:");
     for bucket in &stats.buckets {
         let boundary_str = if bucket.boundary_ms == u64::MAX {
             "+Inf".to_string()
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 通过 MetricsCollector 展示 LatencyPercentiles
     // ============================================
-    println!("\n--- 3. LatencyPercentiles 延迟百分位 ---");
+    println!("\n--- 3. LatencyPercentiles latency percentiles ---");
     let collector = MetricsCollector::new();
 
     // 记录 100 条延迟数据（1ms ~ 100ms 线性分布）
@@ -86,9 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let query_stats = collector
         .get_query_stats("SELECT")
-        .expect("SELECT 统计应存在");
+        .expect("the SELECT statistics should exist");
     let percentiles: &LatencyPercentiles = &query_stats.latency_percentiles;
-    println!("  样本数: {}", percentiles.sample_count);
+    println!("  sample count: {}", percentiles.sample_count);
     println!("  P50  = {:?}", percentiles.p50());
     println!("  P75  = {:?}", percentiles.p75());
     println!("  P90  = {:?}", percentiles.p90());
@@ -101,13 +101,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. SlowQueryConfig 与 SlowQueryRecord
     // ============================================
-    println!("\n--- 4. SlowQueryConfig 慢查询配置 ---");
+    println!("\n--- 4. SlowQueryConfig slow query configuration ---");
     let slow_config = SlowQueryConfig {
         threshold_ms: 100,
         enabled: true,
     };
     println!(
-        "  配置: enabled={}, threshold_ms={}",
+        "  configuration: enabled={}, threshold_ms={}",
         slow_config.enabled, slow_config.threshold_ms
     );
 
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // （ collector 默认 threshold=1000ms，这里调整为 50ms 以便捕获更多慢查询）
     collector.set_slow_query_threshold(50);
     collector.set_slow_query_enabled(true);
-    println!("  ✓ 已将阈值调整为 50ms（默认 1000ms）");
+    println!("  ✓ threshold adjusted to 50ms (default 1000ms)");
 
     // 上面已记录的 200ms 和 500ms 查询会被识别为慢查询
     // 注意：set_slow_query_threshold 只影响后续 record_query 的判定
@@ -125,8 +125,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     collector.record_query("UPDATE", Duration::from_millis(300), false, None);
 
     let slow_queries: Vec<SlowQueryRecord> = collector.slow_queries();
-    println!("\n  慢查询记录 (threshold=50ms):");
-    println!("  共 {} 条慢查询", slow_queries.len());
+    println!("\n  slow query records (threshold=50ms):");
+    println!("  {} slow queries in total", slow_queries.len());
     for (idx, sq) in slow_queries.iter().enumerate() {
         println!(
             "    #{}: type={}, duration_ms={}, timestamp={}",
@@ -140,30 +140,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 禁用慢查询记录的对比
     // ============================================
-    println!("\n--- 5. 禁用慢查询记录 ---");
+    println!("\n--- 5. disable slow query recording ---");
     let disabled_collector = MetricsCollector::new();
     disabled_collector.set_slow_query_enabled(false);
     disabled_collector.set_slow_query_threshold(10);
     disabled_collector.record_query("SELECT", Duration::from_millis(500), true, None);
     let disabled_slow = disabled_collector.slow_queries();
     println!(
-        "  enabled=false 时记录 500ms 查询后，慢查询数量 = {} (应为 0)",
+        "  with enabled=false, the slow query count after recording a 500ms query = {} (should be 0)",
         disabled_slow.len()
     );
 
     println!("\n========================================");
-    println!("✨ 延迟直方图与慢查询示例完成！");
+    println!("✨ Latency histogram and slow query example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - LatencyHistogram::new(bucket_boundaries)   - 创建直方图");
-    println!("  - histogram.record(duration)                 - 记录延迟");
-    println!("  - histogram.stats() -> HistogramStats        - 获取桶统计");
-    println!("  - HistogramStats.buckets                     - 桶分布详情");
-    println!("  - MetricsCollector::get_query_stats          - 获取百分位");
-    println!("  - LatencyPercentiles: p50/p75/p90/p95/p99    - 延迟百分位");
-    println!("  - SlowQueryConfig {{ threshold_ms, enabled }}  - 慢查询配置");
-    println!("  - collector.set_slow_query_threshold(ms)     - 调整阈值");
-    println!("  - collector.slow_queries() -> Vec<SlowQueryRecord> - 慢查询列表");
+    println!("\n📚 Key concepts:");
+    println!("  - LatencyHistogram::new(bucket_boundaries)   - create a histogram");
+    println!("  - histogram.record(duration)                 - record a latency");
+    println!("  - histogram.stats() -> HistogramStats        - get the bucket statistics");
+    println!("  - HistogramStats.buckets                     - bucket distribution details");
+    println!("  - MetricsCollector::get_query_stats          - get percentiles");
+    println!("  - LatencyPercentiles: p50/p75/p90/p95/p99    - latency percentiles");
+    println!("  - SlowQueryConfig {{ threshold_ms, enabled }}  - slow query configuration");
+    println!("  - collector.set_slow_query_threshold(ms)     - adjust the threshold");
+    println!("  - collector.slow_queries() -> Vec<SlowQueryRecord> - the slow query list");
 
     Ok(())
 }

@@ -321,7 +321,7 @@ mod tests {
         let mut prev = 0u64;
         for _ in 0..1000 {
             let id = generator.next_id().unwrap();
-            assert!(id > prev, "id 必须严格单调递增");
+            assert!(id > prev, "ids must be strictly monotonically increasing");
             prev = id;
         }
     }

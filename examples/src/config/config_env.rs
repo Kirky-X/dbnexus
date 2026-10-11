@@ -18,7 +18,7 @@ use dbnexus::DbConfig;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("⚙️  DBNexus 环境变量配置示例");
+    println!("⚙️  DBNexus environment variable configuration example");
     println!("========================================\n");
 
     // ============================================
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("DB_AUTO_MIGRATE", "false");
     }
 
-    println!("已设置的环境变量:");
+    println!("Environment variables set:");
     println!(
         "  - DATABASE_URL       = {}",
         std::env::var("DATABASE_URL")?
@@ -66,12 +66,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 从环境变量加载配置
     // ============================================
     let config = DbConfig::from_env()?;
-    println!("\n✓ 配置加载成功");
+    println!("\n✓ configuration loaded");
 
     // ============================================
     // 3. 打印配置信息
     // ============================================
-    println!("\n📋 解析后的 DbConfig:");
+    println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(
         "  - max_connections   : {}",
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.database_type().unwrap()
     );
 
-    println!("\n💾 缓存配置:");
+    println!("\n💾 Cache configuration:");
     println!(
         "  - policy_cache_capacity : {}",
         config.cache_config.policy_cache_capacity
@@ -115,12 +115,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\n========================================");
-    println!("✨ 环境变量配置示例完成！");
+    println!("✨ Environment variable configuration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DbConfig::from_env() 从环境变量读取配置");
-    println!("  - DATABASE_URL 是必填项，缺失时返回 ConfigError::MissingUrl");
-    println!("  - 其他变量可选，未设置时使用默认值");
+    println!("\n📚 Key concepts:");
+    println!("  - DbConfig::from_env() reads configuration from environment variables");
+    println!("  - DATABASE_URL is required; a missing value returns ConfigError::MissingUrl");
+    println!("  - other variables are optional and fall back to defaults when unset");
 
     Ok(())
 }

@@ -44,7 +44,7 @@ async fn test_query_rows_returns_data_rows() {
         .query_rows("SELECT id, val FROM t_qr ORDER BY id", "admin")
         .await
         .unwrap();
-    assert_eq!(rows.len(), 2, "应返回 2 行数据");
+    assert_eq!(rows.len(), 2, "2 rows of data should be returned");
     assert_eq!(rows[0]["id"], 1);
     assert_eq!(rows[0]["val"], 10.0);
     assert_eq!(rows[1]["val"], 20.0);
@@ -56,7 +56,7 @@ async fn test_query_rows_returns_data_rows() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("SELECT"),
-        "query_rows 非 SELECT 应被拒绝，实际: {err}"
+        "a non-SELECT in query_rows should be rejected, actual: {err}"
     );
     let _ = std::fs::remove_file(&db_path);
 }
@@ -115,12 +115,19 @@ async fn test_scatter_query_rows_with_aggregate() {
         .await
         .unwrap();
 
-    assert_eq!(result.shard_row_counts.len(), 2, "两分片都应返回行数");
+    assert_eq!(
+        result.shard_row_counts.len(),
+        2,
+        "both shards should return a row count"
+    );
     let total_rows: usize = result.shard_rows.iter().map(|(_, r)| r.len()).sum();
-    assert_eq!(total_rows, 3, "跨分片应取回 3 行数据");
+    assert_eq!(
+        total_rows, 3,
+        "3 rows of data should be fetched across shards"
+    );
     assert!(
         result.shard_rows.iter().all(|(_, r)| !r.is_empty()),
-        "数据行应真实存在而非空"
+        "the data rows should really exist rather than be empty"
     );
 
     match result.aggregated {
@@ -211,9 +218,9 @@ async fn test_query_rows_masking_and_rls() {
         )
         .await
         .unwrap();
-    assert_eq!(rows.len(), 2, "admin 不受 RLS 限制");
+    assert_eq!(rows.len(), 2, "admin is not subject to RLS");
     let email = rows[0]["email"].as_str().unwrap();
-    assert_eq!(email.len(), 64, "admin 出口同样脱敏");
+    assert_eq!(email.len(), 64, "the admin exit is masked as well");
     assert!(!email.contains('@'));
     assert_eq!(rows[0]["tenant_id"], "t-100");
 
@@ -222,7 +229,11 @@ async fn test_query_rows_masking_and_rls() {
         .query_rows("SELECT id, tenant_id FROM orders", "default")
         .await
         .unwrap();
-    assert_eq!(rows_rls.len(), 1, "RLS 谓词应只放行 t-100");
+    assert_eq!(
+        rows_rls.len(),
+        1,
+        "the RLS predicate should let only t-100 through"
+    );
     assert_eq!(rows_rls[0]["tenant_id"], "t-100");
 
     let _ = std::fs::remove_file(&db_path);
@@ -295,10 +306,14 @@ async fn test_scatter_query_rows_merged_orders_and_paginates_globally() {
         .iter()
         .map(|r| r["val"].as_f64().unwrap())
         .collect();
-    assert_eq!(vals.len(), 5, "两分片共 5 行应全部归并: {vals:?}");
+    assert_eq!(
+        vals.len(),
+        5,
+        "both shards should return all 5 rows merged: {vals:?}"
+    );
     assert!(
         vals.windows(2).all(|w| w[0] <= w[1]),
-        "跨分片应全局升序而非分片内有序: {vals:?}"
+        "cross-shard ordering should be globally ascending rather than ordered within shards: {vals:?}"
     );
 
     // 全局分页：切片与全量序列一致（不是按分片各自的 offset）
@@ -321,7 +336,7 @@ async fn test_scatter_query_rows_merged_orders_and_paginates_globally() {
     assert_eq!(
         page_vals,
         vals[1..3].to_vec(),
-        "全局分页切片应与全量序列一致"
+        "the global pagination slice should match the full sequence"
     );
 
     let _ = std::fs::remove_file(&tmp0);
@@ -373,10 +388,20 @@ async fn test_scatter_partial_failure_policies() {
     let result = best
         .scatter_query_rows("SELECT val FROM t_pf", "admin", None)
         .await
-        .expect("BestEffort 应返回部分结果");
-    assert_eq!(result.failed_shards.len(), 1, "应列出 1 个失败分片");
-    assert_eq!(result.failed_shards[0].shard_id, 1, "失败分片应为 shard_1");
-    assert!(!result.shard_rows.is_empty(), "正常分片的数据行应被保留");
+        .expect("BestEffort should return partial results");
+    assert_eq!(
+        result.failed_shards.len(),
+        1,
+        "1 failed shard should be listed"
+    );
+    assert_eq!(
+        result.failed_shards[0].shard_id, 1,
+        "the failed shard should be shard_1"
+    );
+    assert!(
+        !result.shard_rows.is_empty(),
+        "the healthy shard's data rows should be preserved"
+    );
 
     // Fail：任一分片失败则整体失败（错误信息含失败分片数）
     let strict = ScatterGatherExecutor::new(
@@ -387,18 +412,21 @@ async fn test_scatter_partial_failure_policies() {
     let err = strict
         .scatter_query_rows("SELECT val FROM t_pf", "admin", None)
         .await
-        .expect_err("Fail 策略下应整体失败");
+        .expect_err("the whole result should fail under the Fail policy");
     assert!(
         err.contains("1 shard(s) failed"),
-        "错误信息应含失败分片数，实际: {err}"
+        "the error message should include the failed shard count, actual: {err}"
     );
 
     // 兼容入口与 scatter_query_rows 同语义
     let compat = best
         .scatter_query("SELECT val FROM t_pf", "admin")
         .await
-        .expect("兼容入口应可用");
-    assert!(compat.failed_shards.len() <= 1, "兼容入口语义一致");
+        .expect("the compatibility entry point should be usable");
+    assert!(
+        compat.failed_shards.len() <= 1,
+        "the compatibility entry point semantics should be identical"
+    );
 
     let _ = std::fs::remove_file(&tmp0);
 }
@@ -431,10 +459,10 @@ async fn test_scatter_timeout_is_explicit() {
     let err = executor
         .scatter_query_rows("SELECT val FROM t_to", "admin", None)
         .await
-        .expect_err("超时必须显性报错");
+        .expect_err("a timeout must error explicitly");
     assert!(
         err.contains("timed out"),
-        "超时错误信息应可辨识，实际: {err}"
+        "the timeout error message should be identifiable, actual: {err}"
     );
 
     let _ = std::fs::remove_file(&tmp0);

@@ -143,7 +143,7 @@ fn bench_derive_key_cost(c: &mut Criterion) {
                         .query_cached(sql, &[serde_json::json!(1)], tables)
                         .await
                         .expect("derive key bench");
-                    assert!(cq.from_cache, "预热后应为命中路径");
+                    assert!(cq.from_cache, "should hit the cache path after warm-up");
                 })
             })
         });

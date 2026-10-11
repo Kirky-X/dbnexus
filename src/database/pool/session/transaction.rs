@@ -89,20 +89,21 @@ impl Session {
             let state = self.state.write().await;
             #[cfg(any(feature = "ladybug", feature = "neo4j"))]
             if state.graph_transaction.is_some() {
-                return Err(DbError::Transaction(
-                    "Already in graph transaction".to_string(),
-                ));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-already-in-graph-transaction",
+                )));
             }
             if state.transaction.is_some() {
-                return Err(DbError::Transaction("Already in transaction".to_string()));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-already-in-transaction",
+                )));
             }
         }
 
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config(
-                "Connection not available - Session may have been invalidated".to_string(),
-            )
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("session-connection-not-available")))?;
 
         // 图连接分发：调用 begin_graph_txn
         #[cfg(any(feature = "ladybug", feature = "neo4j"))]
@@ -124,9 +125,9 @@ impl Session {
             if has_conflict {
                 // 并发冲突：锁已释放，安全执行 rollback
                 let _ = graph_txn.rollback().await;
-                return Err(DbError::Transaction(
-                    "Already in graph transaction (concurrent begin detected)".to_string(),
-                ));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-already-in-graph-transaction-concurrent",
+                )));
             }
             // 无冲突：安全写入
             let mut state = self.state.write().await;
@@ -152,9 +153,9 @@ impl Session {
         if has_conflict {
             // 并发冲突：锁已释放，安全执行 rollback
             let _ = transaction.rollback().await;
-            return Err(DbError::Transaction(
-                "Already in transaction (concurrent begin detected)".to_string(),
-            ));
+            return Err(DbError::Transaction(i18n::t_simple(
+                "session-already-in-transaction-concurrent",
+            )));
         }
         // 无冲突：安全包装并写入
         let transaction = Arc::new(transaction);
@@ -201,15 +202,13 @@ impl Session {
         let transaction_arc = {
             let mut state = self.state.write().await;
             state.transaction.take().ok_or_else(|| {
-                DbError::Transaction("No active transaction to commit".to_string())
+                DbError::Transaction(i18n::t_simple("session-no-active-transaction-commit"))
             })?
         };
 
         // 锁外：try_unwrap 解包 Arc（如果有并发查询持有引用，会失败）
         let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
-            DbError::Transaction(
-                "Cannot commit: transaction is in use by a concurrent query".to_string(),
-            )
+            DbError::Transaction(i18n::t_simple("session-commit-transaction-in-use"))
         })?;
 
         // 锁外：执行 async commit（commit 消耗 self）
@@ -258,18 +257,18 @@ impl Session {
         let transaction_arc = {
             let mut state = self.state.write().await;
             if state.transaction.is_none() {
-                return Err(DbError::Transaction("Not in transaction".to_string()));
+                return Err(DbError::Transaction(i18n::t_simple(
+                    "session-not-in-transaction",
+                )));
             }
             state.transaction.take().ok_or_else(|| {
-                DbError::Transaction("No active transaction to rollback".to_string())
+                DbError::Transaction(i18n::t_simple("session-no-active-transaction-rollback"))
             })?
         };
 
         // 锁外：try_unwrap 解包 Arc
         let transaction = Arc::try_unwrap(transaction_arc).map_err(|_| {
-            DbError::Transaction(
-                "Cannot rollback: transaction is in use by a concurrent query".to_string(),
-            )
+            DbError::Transaction(i18n::t_simple("session-rollback-transaction-in-use"))
         })?;
 
         // 锁外：执行 async rollback（rollback 消耗 self）

@@ -23,14 +23,14 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("📊 DBNexus Prometheus 指标导出示例");
+    println!("📊 DBNexus Prometheus metrics export example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建连接池（用于真实场景下的指标采集上下文）
     // ============================================
     let (_pool, _session) = common::db::setup_shared_sqlite_session().await?;
-    println!("✓ 连接池创建成功 (max_connections=5)\n");
+    println!("✓ pool created (max_connections=5)\n");
 
     // ============================================
     // 2. 创建 MetricsCollector 并同步连接池状态
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 将连接池状态同步到指标收集器（total/active/idle）
     collector.update_pool_status(5, 2, 3);
-    println!("--- 连接池指标 (PoolMetrics) ---");
+    println!("--- pool metrics (PoolMetrics) ---");
     let pool_metrics: PoolMetrics = collector.pool_status();
     println!(
         "  total={}, active={}, idle={}",
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 记录查询指标（模拟业务流量）
     // ============================================
-    println!("\n--- 记录查询指标 ---");
+    println!("\n--- record query metrics ---");
     for i in 1..=20 {
         let latency_ms = if i % 5 == 0 { 120 } else { 5 + (i % 10) };
         let success = i != 15; // 第 15 次模拟失败
@@ -64,12 +64,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     collector.record_query("INSERT", Duration::from_millis(25), true, None);
     collector.record_query("UPDATE", Duration::from_millis(40), true, None);
 
-    println!("  ✓ 记录 20 条 SELECT + 1 条 INSERT + 1 条 UPDATE");
+    println!("  ✓ recorded 20 SELECT + 1 INSERT + 1 UPDATE");
 
     // ============================================
     // 4. 展示 QueryStats（查询统计）
     // ============================================
-    println!("\n--- 查询统计 (QueryStats) ---");
+    println!("\n--- query statistics (QueryStats) ---");
     if let Some(stats) = collector.get_query_stats("SELECT") {
         print_query_stats("SELECT", &stats);
     }
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 记录事务与连接获取指标
     // ============================================
-    println!("\n--- 事务与连接获取指标 ---");
+    println!("\n--- transaction and connection acquisition metrics ---");
     collector.record_transaction_commit();
     collector.record_transaction_commit();
     collector.record_transaction_rollback();
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let txn_stats = collector.transaction_stats();
     println!(
-        "  事务: total={}, commit={}, rollback={}, success_rate={:.2}%",
+        "  transactions: total={}, commit={}, rollback={}, success_rate={:.2}%",
         txn_stats.total_transactions,
         txn_stats.commit_count,
         txn_stats.rollback_count,
@@ -99,17 +99,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let conn_stats = collector.connection_acquire_stats();
     println!(
-        "  连接获取: total={}, success={}, timeout={}",
+        "  connection acquisition: total={}, success={}, timeout={}",
         conn_stats.total_attempts, conn_stats.success_count, conn_stats.timeout_count
     );
 
     // ============================================
     // 6. 慢查询记录
     // ============================================
-    println!("\n--- 慢查询记录 ---");
+    println!("\n--- slow query records ---");
     collector.set_slow_query_threshold(100);
     let slow_queries = collector.slow_queries();
-    println!("  慢查询数量 (threshold=100ms): {}", slow_queries.len());
+    println!(
+        "  slow query count (threshold=100ms): {}",
+        slow_queries.len()
+    );
     for sq in &slow_queries {
         println!("  - type={}, duration_ms={}", sq.query_type, sq.duration_ms);
     }
@@ -117,13 +120,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 7. 导出 Prometheus 格式指标
     // ============================================
-    println!("\n--- Prometheus 格式导出 ---");
+    println!("\n--- Prometheus format export ---");
     let prometheus_output = collector.export_prometheus();
     // 只打印前 30 行，避免刷屏
     for (idx, line) in prometheus_output.lines().enumerate() {
         if idx >= 30 {
             println!(
-                "  ... (共 {} 行，已省略后续输出)",
+                "  ... ({} rows in total; the rest of the output is omitted)",
                 prometheus_output.lines().count()
             );
             break;
@@ -136,22 +139,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::sync::Arc::new(MetricsCollector::new());
     let trait_metrics = trait_collector.pool_metrics();
     println!(
-        "\n✓ 通过 MetricsCollectorTrait 获取 PoolMetrics: total={}",
+        "\n✓ PoolMetrics obtained via MetricsCollectorTrait: total={}",
         trait_metrics.total
     );
 
     println!("\n========================================");
-    println!("✨ Prometheus 指标导出示例完成！");
+    println!("✨ Prometheus metrics export example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - MetricsCollector::new()                      - 创建指标收集器");
-    println!("  - collector.update_pool_status(t, a, i)        - 同步连接池状态");
-    println!("  - collector.record_query(type, dur, ok, bytes) - 记录查询指标");
-    println!("  - collector.pool_status() -> PoolMetrics       - 获取连接池指标");
-    println!("  - collector.get_query_stats(type) -> QueryStats - 获取查询统计");
-    println!("  - collector.export_prometheus() -> String      - 导出 Prometheus 格式");
-    println!("  - PoolMetrics::utilization_rate()              - 连接使用率");
-    println!("  - MetricsCollectorTrait                        - 通用指标收集 trait");
+    println!("\n📚 Key concepts:");
+    println!("  - MetricsCollector::new()                      - create a metrics collector");
+    println!("  - collector.update_pool_status(t, a, i)        - sync the pool status");
+    println!("  - collector.record_query(type, dur, ok, bytes) - record a query metric");
+    println!("  - collector.pool_status() -> PoolMetrics       - get pool metrics");
+    println!("  - collector.get_query_stats(type) -> QueryStats - get query statistics");
+    println!("  - collector.export_prometheus() -> String      - export in Prometheus format");
+    println!("  - PoolMetrics::utilization_rate()              - connection utilization");
+    println!(
+        "  - MetricsCollectorTrait                        - the general metrics collection trait"
+    );
 
     Ok(())
 }

@@ -1005,7 +1005,10 @@ mod replica_pool_tests {
         let pool = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
         let replica = ReplicaPool::new(pool.clone(), Arc::new(StaticDetector::CaughtUp));
         let session = replica.get_read_session("admin").await;
-        assert!(session.is_some(), "已追上的副本必须承接读请求");
+        assert!(
+            session.is_some(),
+            "a caught-up replica must serve read requests"
+        );
         assert!(Arc::ptr_eq(replica.pool(), &pool));
     }
 
@@ -1016,7 +1019,7 @@ mod replica_pool_tests {
         let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed));
         assert!(
             replica.get_read_session("admin").await.is_none(),
-            "超阈值副本必须回退主库（返回 None）"
+            "a replica past the threshold must fall back to the primary (return None)"
         );
     }
 
@@ -1026,7 +1029,7 @@ mod replica_pool_tests {
         let replica = ReplicaPool::new(pool, Arc::new(StaticDetector::Failed));
         assert!(
             replica.get_read_session("admin").await.is_none(),
-            "探测失败必须回退主库，绝不假成功"
+            "a failed probe must fall back to the primary, never fake success"
         );
     }
 
@@ -1049,6 +1052,6 @@ mod replica_pool_tests {
         let _session = balancer
             .get_read_session("admin")
             .await
-            .expect("全副本失败必须回退主库承接");
+            .expect("when all replicas fail the primary must take over");
     }
 }

@@ -447,10 +447,10 @@ fn test_error_with_special_characters() {
 
 #[test]
 fn test_error_with_unicode() {
-    let error = ConfigError::InvalidUrl("错误消息".to_string());
+    let error = ConfigError::InvalidUrl("error message".to_string());
     let display = format!("{error}");
 
-    assert!(display.contains("错误消息"));
+    assert!(display.contains("error message"));
 }
 
 // ============================================================================

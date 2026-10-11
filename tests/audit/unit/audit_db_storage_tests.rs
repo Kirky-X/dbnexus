@@ -43,7 +43,7 @@ async fn test_db_audit_store_and_query_roundtrip() {
 
     // 全量查询
     let all = storage.query(&AuditQueryFilters::default()).await.unwrap();
-    assert_eq!(all.len(), 2, "应读回 2 条审计事件");
+    assert_eq!(all.len(), 2, "should read back 2 audit events");
 
     // 按 entity_type 过滤
     let filtered = storage
@@ -103,7 +103,7 @@ async fn test_db_audit_filters_time_and_cleanup() {
         })
         .await
         .unwrap();
-    assert_eq!(by_range.len(), 1, "只应命中 fresh 事件");
+    assert_eq!(by_range.len(), 1, "only fresh events should be hit");
     assert_eq!(by_range[0].entity_id, "new");
 
     // 清理旧事件
@@ -111,7 +111,7 @@ async fn test_db_audit_filters_time_and_cleanup() {
         .cleanup(&(now - chrono::Duration::hours(1)))
         .await
         .unwrap();
-    assert_eq!(removed, 1, "应清理 1 条旧事件");
+    assert_eq!(removed, 1, "should have cleaned up 1 old event");
 
     let remaining = storage.query(&AuditQueryFilters::default()).await.unwrap();
     assert_eq!(remaining.len(), 1);
@@ -133,7 +133,11 @@ async fn test_db_audit_upsert_same_id_overwrites() {
     storage.store(&event).await.unwrap();
 
     let all = storage.query(&AuditQueryFilters::default()).await.unwrap();
-    assert_eq!(all.len(), 1, "同 id 二次写入应覆盖（幂等 upsert）");
+    assert_eq!(
+        all.len(),
+        1,
+        "a second write with the same id should overwrite (idempotent upsert)"
+    );
     assert_eq!(all[0].after_value.as_deref(), Some(r#"{"done":true}"#));
 
     // operation 过滤（serde 序列化形态匹配）

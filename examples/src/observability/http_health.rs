@@ -34,14 +34,14 @@ use dbnexus::observability::MetricsCollector;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🌐 DBNexus HTTP 健康端点示例");
+    println!("🌐 DBNexus HTTP health endpoint example");
     println!("========================================\n");
 
     // 1. 池数据源：sqlite 临时库并预热一条查询（total > 0 → healthy）
     let pool = Arc::new(DbPool::new("sqlite::memory:").await?);
     let session = pool.get_session("admin").await?;
     session.execute_raw("SELECT 1").await?;
-    println!("✓ 池已就绪（预热查询完成）");
+    println!("✓ the pool is ready (preheat query completed)");
 
     // 2. 可选数据源：metrics 采集器（/metrics 输出 Prometheus 文本）
     let collector = Arc::new(MetricsCollector::new());
@@ -51,18 +51,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = HealthRouterBuilder::new(pool)
         .with_metrics_collector(collector)
         .build();
-    println!("✓ Router 已生成：/healthz /readyz /metrics");
+    println!("✓ Router generated: /healthz /readyz /metrics");
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8090").await?;
-    println!("\n监听 http://127.0.0.1:8090 —— 10 秒后自动退出\n");
-    println!("  curl -s localhost:8090/healthz   # liveness（恒 200）");
-    println!("  curl -s localhost:8090/readyz    # readiness（池快照判定）");
-    println!("  curl -s localhost:8090/metrics   # Prometheus 文本\n");
+    println!("\nListening on http://127.0.0.1:8090 — exits automatically after 10 seconds\n");
+    println!("  curl -s localhost:8090/healthz   # liveness (always 200)");
+    println!("  curl -s localhost:8090/readyz    # readiness (pool snapshot verdict)");
+    println!("  curl -s localhost:8090/metrics   # Prometheus text\n");
 
     // 演示进程：后台限时退出，期间可直接探测
     tokio::spawn(async {
         tokio::time::sleep(Duration::from_secs(10)).await;
-        println!("\n（示例限时 10 秒，已退出）");
+        println!("\n(the example is limited to 10 seconds; it has exited)");
         std::process::exit(0);
     });
 

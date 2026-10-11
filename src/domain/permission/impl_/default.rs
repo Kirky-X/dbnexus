@@ -6,6 +6,7 @@ use crate::domain::{
     PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle,
     PermissionProvider, PolicyManager, RolePolicy,
 };
+use crate::i18n;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -130,7 +131,13 @@ impl PermissionLifecycle for YamlPermissionProvider {
             PermissionConfig::validate_policy_path(path)?;
 
             tokio::fs::read(path).await.map_err(|e| {
-                anyhow::anyhow!("YamlPermissionProvider 策略文件不可读（{}）: {}", path, e)
+                anyhow::anyhow!(i18n::t(
+                    "perm-provider-yaml-file-unreadable",
+                    &[
+                        ("path", std::path::Path::new(path).display().to_string()),
+                        ("error", e.to_string())
+                    ],
+                ))
             })?;
         }
         Ok(())
@@ -184,7 +191,10 @@ mod tests {
         let provider = make_provider(config);
         let result = provider.health_check().await;
         std::fs::remove_file(&path).unwrap();
-        assert!(result.is_ok(), "可读策略文件必须健康: {result:?}");
+        assert!(
+            result.is_ok(),
+            "a readable policy file must be healthy: {result:?}"
+        );
     }
 
     #[tokio::test]

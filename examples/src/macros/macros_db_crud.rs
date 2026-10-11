@@ -57,14 +57,14 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔧 DBNexus db_crud 宏示例");
+    println!("🔧 DBNexus db_crud macro example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建连接池和 Session
     // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("✓ 连接池和 Session 创建成功 (角色: admin)\n");
+    println!("✓ pool and Session created (role: admin)\n");
 
     // ============================================
     // 2. 建表
@@ -79,12 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("✓ products 表创建成功\n");
+    println!("✓ products table created\n");
 
     // ============================================
     // 3. 批量插入（insert）
     // ============================================
-    println!("--- INSERT（批量插入） ---");
+    println!("--- INSERT (batch insert) ---");
     let products = vec![
         (1, "Laptop".to_string(), 1299.99, 15),
         (2, "Mouse".to_string(), 29.99, 100),
@@ -107,18 +107,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let inserted = Model::insert(&session, model).await?;
         println!(
-            "  ✓ 插入: id={}, name={}, price={:.2}, stock={}",
+            "  ✓ inserted: id={}, name={}, price={:.2}, stock={}",
             inserted.id, inserted.name, inserted.price, inserted.stock
         );
     }
-    println!("  共插入 {} 条记录", products.len());
+    println!("  inserted {} records in total", products.len());
 
     // ============================================
     // 4. count — 统计记录数
     // ============================================
     println!("\n--- COUNT ---");
     let total = Model::count(&session).await?;
-    println!("  ✓ 总记录数: {}", total);
+    println!("  ✓ total records: {}", total);
 
     // ============================================
     // 5. find_by_id — 按主键查询
@@ -126,19 +126,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- FIND_BY_ID ---");
     let product = Model::find_by_id(&session, 1).await?;
     if let Some(p) = product {
-        println!("  ✓ 找到 id=1: name={}, price={:.2}", p.name, p.price);
+        println!("  ✓ found id=1: name={}, price={:.2}", p.name, p.price);
     } else {
-        println!("  ✗ 未找到 id=1");
+        println!("  ✗ id=1 not found");
     }
 
     // 查询不存在的记录
     let missing = Model::find_by_id(&session, 999).await?;
     println!(
-        "  ✓ 查询 id=999: {}",
+        "  ✓ query id=999: {}",
         if missing.is_none() {
-            "未找到（符合预期）"
+            "not found (as expected)"
         } else {
-            "找到了"
+            "found"
         }
     );
 
@@ -147,11 +147,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("\n--- FIND_ALL ---");
     let all = Model::find_all(&session).await?;
-    println!("  ✓ 共 {} 条记录", all.len());
+    println!("  ✓ {} records in total", all.len());
     for p in all.iter().take(3) {
         println!("    - id={}, name={}, stock={}", p.id, p.name, p.stock);
     }
-    println!("    ... (省略其余)");
+    println!("    ... (the rest is omitted)");
 
     // ============================================
     // 7. find_by_condition — 条件查询
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 条件 1: stock < 10（低库存）
     let low_stock_cond = sea_orm::Condition::all().add(Column::Stock.lt(10));
     let low_stock = Model::find_by_condition(&session, low_stock_cond).await?;
-    println!("  [stock < 10] 共 {} 条:", low_stock.len());
+    println!("  [stock < 10] {} total:", low_stock.len());
     for p in &low_stock {
         println!("    - id={}, name={}, stock={}", p.id, p.name, p.stock);
     }
@@ -169,7 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 条件 2: price > 100
     let expensive_cond = sea_orm::Condition::all().add(Column::Price.gt(100.0));
     let expensive = Model::find_by_condition(&session, expensive_cond).await?;
-    println!("\n  [price > 100.0] 共 {} 条:", expensive.len());
+    println!("\n  [price > 100.0] {} total:", expensive.len());
     for p in &expensive {
         println!("    - id={}, name={}, price={:.2}", p.id, p.name, p.price);
     }
@@ -180,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add(Column::Price.lt(50.0));
     let affordable = Model::find_by_condition(&session, affordable_cond).await?;
     println!(
-        "\n  [stock > 0 AND price < 50.0] 共 {} 条:",
+        "\n  [stock > 0 AND price < 50.0] {} total:",
         affordable.len()
     );
     for p in &affordable {
@@ -193,12 +193,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 8. 分页查询（count + find_by_condition + 手动切片）
     // ============================================
-    println!("\n--- 分页查询 ---");
+    println!("\n--- paginated query ---");
     let page_size: u64 = 3;
     let total_count = Model::count(&session).await?;
     let total_pages = total_count.div_ceil(page_size);
     println!(
-        "  总记录数: {}, 每页: {}, 总页数: {}",
+        "  total records: {}, per page: {}, total pages: {}",
         total_count, page_size, total_pages
     );
 
@@ -207,7 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start = (page - 1) * page_size as usize;
         let end = std::cmp::min(start + page_size as usize, all_for_paging.len());
         let page_items = &all_for_paging[start..end];
-        println!("  第 {} 页 ({} 条):", page, page_items.len());
+        println!("  page {} ({} records):", page, page_items.len());
         for p in page_items {
             println!("    - id={}, name={}", p.id, p.name);
         }
@@ -219,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- UPDATE ---");
     let to_update = Model::find_by_id(&session, 5).await?.unwrap();
     println!(
-        "  更新前: id={}, name={}, price={:.2}, stock={}",
+        "  before update: id={}, name={}, price={:.2}, stock={}",
         to_update.id, to_update.name, to_update.price, to_update.stock
     );
 
@@ -233,7 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
     println!(
-        "  更新后: id={}, name={}, price={:.2}, stock={}",
+        "  after update: id={}, name={}, price={:.2}, stock={}",
         updated.id, updated.name, updated.price, updated.stock
     );
 
@@ -246,54 +246,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let before_count = Model::count(&session).await?;
     let deleted = Model::delete_many(&session, zero_stock_cond).await?;
     let after_count = Model::count(&session).await?;
-    println!("  ✓ 批量删除 stock=0 的记录: 删除 {} 行", deleted);
-    println!("  删除前: {} 条, 删除后: {} 条", before_count, after_count);
+    println!(
+        "  ✓ batch deleted records with stock=0: {} rows deleted",
+        deleted
+    );
+    println!(
+        "  before delete: {}, after delete: {}",
+        before_count, after_count
+    );
 
     // ============================================
     // 11. delete — 按主键删除
     // ============================================
     println!("\n--- DELETE ---");
     let deleted_one = Model::delete(&session, 1).await?;
-    println!("  ✓ 删除 id=1: 影响 {} 行", deleted_one);
+    println!("  ✓ deleted id=1: {} rows affected", deleted_one);
 
     // 验证删除
     let check = Model::find_by_id(&session, 1).await?;
     println!(
-        "  ✓ 删除后查询 id=1: {}",
+        "  ✓ query id=1 after delete: {}",
         if check.is_none() {
-            "未找到（符合预期）"
+            "not found (as expected)"
         } else {
-            "仍存在"
+            "still exists"
         }
     );
 
     // ============================================
     // 最终状态
     // ============================================
-    println!("\n--- 最终状态 ---");
+    println!("\n--- final state ---");
     let final_count = Model::count(&session).await?;
-    println!("  ✓ 剩余记录数: {}", final_count);
+    println!("  ✓ remaining records: {}", final_count);
 
     println!("\n========================================");
-    println!("✨ db_entity 宏 CRUD 示例完成！");
+    println!("✨ db_entity macro CRUD example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
+    println!("\n📚 Key concepts:");
     println!(
-        "  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏自动生成 CRUD 方法"
+        "  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  the unified attribute macro generates CRUD methods"
     );
-    println!("  - Model::insert(&session, model)     插入记录");
-    println!("  - Model::find_by_id(&session, id)    按主键查询");
-    println!("  - Model::find_all(&session)          查询全部");
-    println!("  - Model::find_by_condition(&session, cond)  条件查询");
-    println!("  - Model::count(&session)             统计记录数");
-    println!("  - Model::update(&session, model)     更新记录");
-    println!("  - Model::delete(&session, id)        按主键删除");
-    println!("  - Model::delete_many(&session, cond) 批量删除");
-    println!("  - sea_orm::Condition::all().add(...) 构建查询条件");
-    println!("  - Column::Xxx.lt/gt/eq(value)        列条件运算");
-    println!("\n⚠️  注意: #[db_entity] 生成的所有方法都通过 Session 自动执行权限检查。");
-    println!("   分页查询在 db_entity 层面通过 find_all + 手动切片实现；");
-    println!("   如需 DB 层面的 offset/limit，请直接使用 sea_orm::EntityTrait。");
+    println!("  - Model::insert(&session, model)     insert a record");
+    println!("  - Model::find_by_id(&session, id)    query by primary key");
+    println!("  - Model::find_all(&session)          query all");
+    println!("  - Model::find_by_condition(&session, cond)  conditional query");
+    println!("  - Model::count(&session)             count records");
+    println!("  - Model::update(&session, model)     update a record");
+    println!("  - Model::delete(&session, id)        delete by primary key");
+    println!("  - Model::delete_many(&session, cond) batch delete");
+    println!("  - sea_orm::Condition::all().add(...) build query conditions");
+    println!("  - Column::Xxx.lt/gt/eq(value)        column condition operators");
+    println!(
+        "\n⚠️  Note: all methods generated by #[db_entity] run permission checks automatically via Session."
+    );
+    println!("   pagination is implemented at the db_entity layer via find_all + manual slicing;");
+    println!("   for DB-level offset/limit, use sea_orm::EntityTrait directly.");
 
     Ok(())
 }

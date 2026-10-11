@@ -339,7 +339,7 @@ mod t410_session_retry_wiring_tests {
         // max_retries=1 → 首次执行 + 1 次退避(250ms) + 重试 = 至少 250ms
         assert!(
             elapsed >= Duration::from_millis(250),
-            "SELECT 应经重试退避（耗时 >= 250ms），实际 {:?}，err={}",
+            "SELECT should go through retry backoff (elapsed >= 250ms), actual {:?}, err={}",
             elapsed,
             err
         );
@@ -356,7 +356,7 @@ mod t410_session_retry_wiring_tests {
             .unwrap_err();
         assert!(
             start2.elapsed() < Duration::from_millis(250),
-            "无策略时不应退避"
+            "no backoff should occur without a policy"
         );
 
         let _ = std::fs::remove_file(&path);
@@ -378,7 +378,7 @@ mod t410_session_retry_wiring_tests {
         let elapsed = start.elapsed();
         assert!(
             elapsed < Duration::from_millis(900),
-            "写类操作不应重试（正确耗时 ~0ms，若错误重试 >= 900ms），实际 {:?}",
+            "write operations should not be retried (correct elapsed ~0ms; a wrong retry would be >= 900ms), actual {:?}",
             elapsed
         );
 

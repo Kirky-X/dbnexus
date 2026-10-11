@@ -1581,11 +1581,11 @@ mod tests {
         // to_lowercase，伪 TYPE 行同样以小写形态判定）
         assert!(
             !output.contains("\n# type fake"),
-            "不得出现伪造指标行，实际输出:\n{output}"
+            "no forged metric line should appear, actual output:\n{output}"
         );
         assert!(
             output.contains(r#"probe\"} 1\n# type fake counter\n"#),
-            "label value 应按 text exposition 规则转义（\\\" 与 \\n），实际输出:\n{output}"
+            "label value should be escaped per text exposition rules (\\\" and \\n), actual output:\n{output}"
         );
     }
 
@@ -1601,12 +1601,12 @@ mod tests {
         assert_eq!(
             collector.slow_queries_count(),
             collector.slow_queries().len(),
-            "计数访问器应与克隆访问器长度一致"
+            "the count accessor should match the length of the clone accessor"
         );
         assert_eq!(
             collector.slow_queries_count(),
             collector.max_slow_queries,
-            "环满后计数封顶"
+            "the count is capped once the ring is full"
         );
     }
 

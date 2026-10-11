@@ -20,7 +20,7 @@ use dbnexus::{ErrorCategory, QueryErrorReport, ShardConfig, ShardRouter};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🚨 DBNexus 结构化错误报告示例");
+    println!("🚨 DBNexus structured error report example");
     println!("========================================\n");
 
     // ============================================
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bound_key = "user_42";
     let bound_shard_id = router.shard_id_for_key(bound_key);
     println!(
-        "  绑定: shard_key='{}' → shard_id={}",
+        "  binding: shard_key='{}' → shard_id={}",
         bound_key, bound_shard_id
     );
 
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("should find a conflict key in 1000 attempts");
 
     println!(
-        "  冲突: shard_key='{}' → shard_id={}",
+        "  conflict: shard_key='{}' → shard_id={}",
         conflict_key,
         router.shard_id_for_key(&conflict_key)
     );
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 字段访问与断言
     // ============================================
-    println!("--- 5. 字段访问与断言 ---\n");
+    println!("--- 5. field access and assertions ---\n");
     println!("  perm_err.category    = {}", perm_err.category);
     println!("  perm_err.table       = {:?}", perm_err.table);
     println!("  perm_err.operation   = {:?}", perm_err.operation);
@@ -117,26 +117,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(injection_err.category, ErrorCategory::InjectionRisk);
     assert_eq!(syntax_err.category, ErrorCategory::SyntaxError);
     assert_eq!(shard_err.category, ErrorCategory::ShardConflict);
-    println!("  ✓ 4 个类别断言全部通过");
+    println!("  ✓ all 4 category assertions passed");
 
     // ============================================
     // 6. Display 与 Error trait 兼容性
     // ============================================
-    println!("\n--- 6. std::error::Error trait 兼容性 ---\n");
+    println!("\n--- 6. std::error::Error trait compatibility ---\n");
     let err_boxed: Box<dyn std::error::Error> = Box::new(perm_err.clone());
     println!("  Box<dyn Error> display: {}", err_boxed);
     println!("  source() = {:?}", err_boxed.source());
 
     println!("\n========================================");
-    println!("✨ 结构化错误报告示例完成！");
+    println!("✨ Structured error report example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
+    println!("\n📚 Key concepts:");
     println!("  - QueryErrorReport::new(category, message, suggestion)");
-    println!("  - .with_table(name) / .with_operation(op)   链式设置上下文");
+    println!("  - .with_table(name) / .with_operation(op)   chainable context setters");
     println!("  - ErrorCategory: Permission | InjectionRisk | SyntaxError | ShardConflict");
-    println!("  - ShardRouter::enforce_shard_binding(expected, key) 自动产生 ShardConflict 报告");
-    println!("  - impl From<DbNexusError> for QueryErrorReport 自动转换");
-    println!("  - impl std::error::Error 兼容标准错误处理链");
+    println!("  - ShardRouter::enforce_shard_binding(expected, key) auto-reports ShardConflict");
+    println!("  - impl From<DbNexusError> for QueryErrorReport  automatic conversion");
+    println!("  - impl std::error::Error  standard error-handling chain compatibility");
 
     Ok(())
 }

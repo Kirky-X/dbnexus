@@ -50,13 +50,13 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🏷️  DBNexus db_entity permissions 子参数示例");
+    println!("🏷️  DBNexus db_entity permissions sub-parameter example");
     println!("========================================\n");
 
     // ============================================
     // 1. 展示宏生成的常量
     // ============================================
-    println!("--- 宏生成的常量 ---\n");
+    println!("--- macro-generated constants ---\n");
     println!("  User::ALLOWED_ROLES      = {:?}", Model::ALLOWED_ROLES);
     println!(
         "  User::ALLOWED_OPERATIONS = {:?}",
@@ -74,44 +74,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- DbPool + Session ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("✓ Session 创建成功 (角色: {})", session.role());
+    println!("✓ Session created (role: {})", session.role());
 
     // 建表
     common::ddl::create_users_table(&session).await?;
-    println!("✓ users 表创建成功");
+    println!("✓ users table created");
 
     // ============================================
     // 3. 演示不同角色的权限校验
     // ============================================
-    println!("\n--- 权限校验场景 ---\n");
+    println!("\n--- permission check scenarios ---\n");
 
     // admin 角色 — 在 ALLOWED_ROLES 中
     let admin_ctx = PermissionContext::new_default_with_rate_limit("admin".to_string())
         .await
         .expect("Failed to create admin context");
 
-    println!("场景 1: admin 角色访问 users 表");
+    println!("Scenario 1: admin role accesses the users table");
     match Model::check_permission(&admin_ctx) {
-        Ok(()) => println!("  ✓ check_permission 通过 — admin 在允许角色列表中"),
-        Err(e) => println!("  ✗ check_permission 失败: {}", e),
+        Ok(()) => println!("  ✓ check_permission passed — admin is in the allowed role list"),
+        Err(e) => println!("  ✗ check_permission failed: {}", e),
     }
 
-    println!("\n场景 2: admin 角色执行 SELECT 操作");
+    println!("\nScenario 2: admin role executes SELECT");
     match Model::check_operation(&admin_ctx, &PermissionAction::Select) {
-        Ok(()) => println!("  ✓ check_operation(Select) 通过 — SELECT 在允许操作列表中"),
-        Err(e) => println!("  ✗ check_operation(Select) 失败: {}", e),
+        Ok(()) => {
+            println!("  ✓ check_operation(Select) passed — SELECT is in the allowed operation list")
+        }
+        Err(e) => println!("  ✗ check_operation(Select) failed: {}", e),
     }
 
-    println!("\n场景 3: admin 角色执行 INSERT 操作");
+    println!("\nScenario 3: admin role executes INSERT");
     match Model::check_operation(&admin_ctx, &PermissionAction::Insert) {
-        Ok(()) => println!("  ✓ check_operation(Insert) 通过 — INSERT 在允许操作列表中"),
-        Err(e) => println!("  ✗ check_operation(Insert) 失败: {}", e),
+        Ok(()) => {
+            println!("  ✓ check_operation(Insert) passed — INSERT is in the allowed operation list")
+        }
+        Err(e) => println!("  ✗ check_operation(Insert) failed: {}", e),
     }
 
-    println!("\n场景 4: admin 角色执行 DELETE 操作（不在 ALLOWED_OPERATIONS 中）");
+    println!("\nScenario 4: admin role executes DELETE (not in ALLOWED_OPERATIONS)");
     match Model::check_operation(&admin_ctx, &PermissionAction::Delete) {
-        Ok(()) => println!("  ✗ 意外: DELETE 被允许（应该在操作列表之外被拒绝）"),
-        Err(e) => println!("  ✓ check_operation(Delete) 正确拒绝: {}", e),
+        Ok(()) => println!(
+            "  ✗ unexpected: DELETE was allowed (it should be rejected outside the operation list)"
+        ),
+        Err(e) => println!("  ✓ check_operation(Delete) correctly rejected: {}", e),
     }
 
     // manager 角色 — 也在 ALLOWED_ROLES 中
@@ -119,10 +125,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to create manager context");
 
-    println!("\n场景 5: manager 角色访问 users 表");
+    println!("\nScenario 5: manager role accesses the users table");
     match Model::check_permission(&manager_ctx) {
-        Ok(()) => println!("  ✓ check_permission 通过 — manager 在允许角色列表中"),
-        Err(e) => println!("  ✗ check_permission 失败: {}", e),
+        Ok(()) => println!("  ✓ check_permission passed — manager is in the allowed role list"),
+        Err(e) => println!("  ✗ check_permission failed: {}", e),
     }
 
     // guest 角色 — 不在 ALLOWED_ROLES 中
@@ -130,33 +136,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to create guest context");
 
-    println!("\n场景 6: guest 角色访问 users 表（不在 ALLOWED_ROLES 中）");
+    println!("\nScenario 6: guest role accesses the users table (not in ALLOWED_ROLES)");
     match Model::check_permission(&guest_ctx) {
-        Ok(()) => println!("  ✗ 意外: guest 通过了 check_permission（应该被拒绝）"),
-        Err(e) => println!("  ✓ check_permission 正确拒绝: {}", e),
+        Ok(()) => println!("  ✗ unexpected: guest passed check_permission (it should be rejected)"),
+        Err(e) => println!("  ✓ check_permission correctly rejected: {}", e),
     }
 
-    println!("\n场景 7: guest 角色执行 SELECT 操作");
+    println!("\nScenario 7: guest role executes SELECT");
     match Model::check_operation(&guest_ctx, &PermissionAction::Select) {
-        Ok(()) => println!("  ✗ 意外: guest 的 SELECT 操作被允许"),
-        Err(e) => println!("  ✓ check_operation(Select) 正确拒绝: {}", e),
+        Ok(()) => println!("  ✗ unexpected: guest's SELECT operation was allowed"),
+        Err(e) => println!("  ✓ check_operation(Select) correctly rejected: {}", e),
     }
 
     // ============================================
     // 4. 总结
     // ============================================
     println!("\n========================================");
-    println!("✨ db_entity permissions 子参数示例完成！");
+    println!("✨ db_entity permissions sub-parameter example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  声明实体访问控制");
-    println!("  - Model::ALLOWED_ROLES       编译期生成的角色白名单常量");
-    println!("  - Model::ALLOWED_OPERATIONS  编译期生成的操作白名单常量");
-    println!("  - Model::check_permission(&ctx)         校验角色是否允许访问实体");
-    println!("  - Model::check_operation(&ctx, &op)     校验角色+操作是否允许");
-    println!("  - PermissionContext::new_default_with_rate_limit(role)  创建权限上下文");
-    println!("\n⚠️  注意: permissions 子参数在编译期验证角色名格式，");
-    println!("   无效角色名（如以数字开头、含连字符）会导致编译失败。");
+    println!("\n📚 Key concepts:");
+    println!(
+        "  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  declare entity access control"
+    );
+    println!("  - Model::ALLOWED_ROLES       the compile-time generated role allowlist constant");
+    println!(
+        "  - Model::ALLOWED_OPERATIONS  the compile-time generated operation allowlist constant"
+    );
+    println!(
+        "  - Model::check_permission(&ctx)         verify the role is allowed to access the entity"
+    );
+    println!("  - Model::check_operation(&ctx, &op)     verify the role + operation are allowed");
+    println!(
+        "  - PermissionContext::new_default_with_rate_limit(role)  create a permission context"
+    );
+    println!(
+        "\n⚠️  Note: the permissions sub-parameter validates role name formats at compile time,"
+    );
+    println!(
+        "   an invalid role name (e.g. starting with a digit or containing a hyphen) fails compilation."
+    );
 
     Ok(())
 }

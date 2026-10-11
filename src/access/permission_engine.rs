@@ -852,16 +852,16 @@ impl YamlPermissionProvider {
     /// 如果路径无效或不在允许的目录内，返回错误
     pub fn new(config_path: &str) -> Result<Self, String> {
         if config_path.is_empty() {
-            return Err("Config path cannot be empty".to_string());
+            return Err(crate::i18n::t_simple("perm-config-path-empty"));
         }
 
         // 防止路径遍历攻击：预编译正则检测父目录引用
         if PATH_TRAVERSAL_REGEX.is_match(config_path) {
-            return Err("Config path contains invalid parent directory reference".to_string());
+            return Err(crate::i18n::t_simple("perm-config-path-parent-reference"));
         }
 
         if !is_safe_config_path(config_path) {
-            return Err("Config path failed safety validation".to_string());
+            return Err(crate::i18n::t_simple("perm-config-path-safety-validation"));
         }
 
         Ok(Self {
@@ -897,7 +897,7 @@ impl YamlPermissionProvider {
         }
         #[cfg(not(feature = "yaml"))]
         {
-            return Err("Cannot parse permission config: 'yaml' feature is not enabled".into());
+            return Err(crate::i18n::t_simple("perm-config-yaml-feature-not-enabled").into());
         }
 
         // 构建角色映射：每个角色名映射到自身（subject 通过角色名匹配）
@@ -930,12 +930,19 @@ impl PermissionProvider for YamlPermissionProvider {
         if age.as_secs() > 60
             && let Err(e) = self.load_config().await
         {
-            return PermissionDecision::Error(format!("Failed to load config: {}", e));
+            return PermissionDecision::Error(crate::i18n::t(
+                "perm-provider-load-error",
+                &[("reason", e.to_string())],
+            ));
         }
 
         let roles = match self.roles.read() {
             Ok(r) => r,
-            Err(_) => return PermissionDecision::Error("Lock error".to_string()),
+            Err(_) => {
+                return PermissionDecision::Error(crate::i18n::t_simple(
+                    "perm-provider-lock-error",
+                ));
+            }
         };
         let subject_roles = self.get_subject_roles(&context.subject.id);
 

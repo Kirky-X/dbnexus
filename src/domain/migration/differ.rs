@@ -7,6 +7,7 @@
 use super::schema::*;
 use super::types::*;
 use crate::foundation::DatabaseType;
+use crate::i18n;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -15,18 +16,24 @@ use std::sync::LazyLock;
 /// # Arguments
 ///
 /// * `identifier` - 要验证的标识符
-/// * `identifier_type` - 标识符类型描述（用于错误信息）
+/// * `identifier_type` - 标识符类型描述（用于错误信息，经 i18n 目录本地化的类型名）
 ///
 /// # Returns
 ///
 /// 验证通过返回标识符，失败返回错误
 fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<String, String> {
     if identifier.is_empty() {
-        return Err(format!("{} 不能为空", identifier_type));
+        return Err(i18n::t(
+            "migration-identifier-empty",
+            &[("identifier_type", identifier_type.to_string())],
+        ));
     }
 
     if identifier.len() > 64 {
-        return Err(format!("{} 长度不能超过 64 个字符", identifier_type));
+        return Err(i18n::t(
+            "migration-identifier-too-long",
+            &[("identifier_type", identifier_type.to_string())],
+        ));
     }
 
     // 验证标识符格式：只允许字母、数字、下划线，且不能以数字开头
@@ -34,9 +41,12 @@ fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<St
         LazyLock::new(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap());
 
     if !IDENTIFIER_REGEX.is_match(identifier) {
-        return Err(format!(
-            "{} '{}' 包含无效字符，只允许字母、数字和下划线，且不能以数字开头",
-            identifier_type, identifier
+        return Err(i18n::t(
+            "migration-identifier-invalid-chars",
+            &[
+                ("identifier_type", identifier_type.to_string()),
+                ("identifier", identifier.to_string()),
+            ],
         ));
     }
 
@@ -76,9 +86,12 @@ fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<St
     ];
 
     if reserved_keywords.contains(&identifier.to_lowercase().as_str()) {
-        return Err(format!(
-            "{} '{}' 是 SQL 保留关键字，不允许使用",
-            identifier_type, identifier
+        return Err(i18n::t(
+            "migration-identifier-reserved-keyword",
+            &[
+                ("identifier_type", identifier_type.to_string()),
+                ("identifier", identifier.to_string()),
+            ],
         ));
     }
 
@@ -387,7 +400,10 @@ impl SqlGenerator {
     /// 生成创建表的 SQL
     pub fn generate_create_table_sql(&self, table: &Table) -> Result<String, String> {
         // 验证表名
-        let table_name = validate_sql_identifier(&table.name, "表名")?;
+        let table_name = validate_sql_identifier(
+            &table.name,
+            &i18n::t_simple("migration-identifier-type-table"),
+        )?;
 
         let mut sql = format!("CREATE TABLE {} (\n", table_name);
 
@@ -421,7 +437,12 @@ impl SqlGenerator {
             sql.push_str(",\n");
             let pk_columns: Vec<String> = table_level_pk
                 .iter()
-                .map(|col| validate_sql_identifier(col, "主键列名"))
+                .map(|col| {
+                    validate_sql_identifier(
+                        col,
+                        &i18n::t_simple("migration-identifier-type-primary-key-column"),
+                    )
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             sql.push_str(&format!("    PRIMARY KEY ({})", pk_columns.join(", ")));
         }
@@ -452,7 +473,10 @@ impl SqlGenerator {
         _pk_columns: &[String],
     ) -> Result<String, String> {
         // 验证列名
-        let column_name = validate_sql_identifier(&column.name, "列名")?;
+        let column_name = validate_sql_identifier(
+            &column.name,
+            &i18n::t_simple("migration-identifier-type-column"),
+        )?;
 
         let mut def = format!(
             "    {} {}",
@@ -490,16 +514,27 @@ impl SqlGenerator {
     /// 生成创建索引的 SQL
     pub fn generate_create_index_sql(&self, index: &Index) -> Result<String, String> {
         // 验证索引名
-        let index_name = validate_sql_identifier(&index.name, "索引名")?;
+        let index_name = validate_sql_identifier(
+            &index.name,
+            &i18n::t_simple("migration-identifier-type-index"),
+        )?;
 
         // 验证表名
-        let table_name = validate_sql_identifier(&index.table_name, "表名")?;
+        let table_name = validate_sql_identifier(
+            &index.table_name,
+            &i18n::t_simple("migration-identifier-type-table"),
+        )?;
 
         // 验证列名
         let validated_columns: Vec<String> = index
             .columns
             .iter()
-            .map(|col| validate_sql_identifier(col, "索引列名"))
+            .map(|col| {
+                validate_sql_identifier(
+                    col,
+                    &i18n::t_simple("migration-identifier-type-index-column"),
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let unique = if index.is_unique { "UNIQUE " } else { "" };
@@ -515,13 +550,26 @@ impl SqlGenerator {
     /// 生成添加外键的 SQL
     fn generate_add_foreign_key_sql(&self, fk: &ForeignKey) -> Result<String, String> {
         // 验证所有标识符
-        let table_name = validate_sql_identifier(&fk.table_name, "外键表名")?;
-        let constraint_name = validate_sql_identifier(&fk.name, "外键约束名")?;
-        let column_name = validate_sql_identifier(&fk.column_name, "外键列名")?;
-        let referenced_table_name =
-            validate_sql_identifier(&fk.referenced_table_name, "外键引用表名")?;
-        let referenced_column_name =
-            validate_sql_identifier(&fk.referenced_column_name, "外键引用列名")?;
+        let table_name = validate_sql_identifier(
+            &fk.table_name,
+            &i18n::t_simple("migration-identifier-type-fk-table"),
+        )?;
+        let constraint_name = validate_sql_identifier(
+            &fk.name,
+            &i18n::t_simple("migration-identifier-type-fk-constraint"),
+        )?;
+        let column_name = validate_sql_identifier(
+            &fk.column_name,
+            &i18n::t_simple("migration-identifier-type-fk-column"),
+        )?;
+        let referenced_table_name = validate_sql_identifier(
+            &fk.referenced_table_name,
+            &i18n::t_simple("migration-identifier-type-fk-referenced-table"),
+        )?;
+        let referenced_column_name = validate_sql_identifier(
+            &fk.referenced_column_name,
+            &i18n::t_simple("migration-identifier-type-fk-referenced-column"),
+        )?;
 
         let mut sql = format!(
             "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({})",
@@ -542,7 +590,10 @@ impl SqlGenerator {
 
     /// 生成删除表的 SQL
     pub fn generate_drop_table_sql(&self, table_name: &str) -> Result<String, String> {
-        let validated_name = validate_sql_identifier(table_name, "表名")?;
+        let validated_name = validate_sql_identifier(
+            table_name,
+            &i18n::t_simple("migration-identifier-type-table"),
+        )?;
         Ok(format!("DROP TABLE {};", validated_name))
     }
 
@@ -553,7 +604,10 @@ impl SqlGenerator {
         column: &Column,
     ) -> Result<String, String> {
         // 验证表名
-        let validated_table_name = validate_sql_identifier(table_name, "表名")?;
+        let validated_table_name = validate_sql_identifier(
+            table_name,
+            &i18n::t_simple("migration-identifier-type-table"),
+        )?;
 
         let col_def = self.generate_column_definition(column, &Vec::new())?;
         Ok(format!(
@@ -570,8 +624,14 @@ impl SqlGenerator {
         column_name: &str,
     ) -> Result<String, String> {
         // 验证表名和列名
-        let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-        let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+        let validated_table_name = validate_sql_identifier(
+            table_name,
+            &i18n::t_simple("migration-identifier-type-table"),
+        )?;
+        let validated_column_name = validate_sql_identifier(
+            column_name,
+            &i18n::t_simple("migration-identifier-type-column"),
+        )?;
 
         match self.db_type {
             DatabaseType::MySql => Ok(format!(
@@ -589,9 +649,14 @@ impl SqlGenerator {
             DatabaseType::Sqlite => {
                 // SQLite 不支持直接删除列，需要重建表
                 Ok(format!(
-                    "-- SQLite 不支持直接删除列，请手动重建表 {}
+                    "{}
  ALTER TABLE {} DROP COLUMN {};",
-                    validated_table_name, validated_table_name, validated_column_name
+                    i18n::t(
+                        "migration-sqlite-drop-column-note",
+                        &[("table", validated_table_name.to_string())]
+                    ),
+                    validated_table_name,
+                    validated_column_name
                 ))
             }
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
@@ -618,9 +683,18 @@ impl SqlGenerator {
                 self.generate_drop_column_sql(table_name, column_name)
             }
             ColumnChange::RenameColumn { old_name, new_name } => {
-                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-                let validated_old_name = validate_sql_identifier(old_name, "列名")?;
-                let validated_new_name = validate_sql_identifier(new_name, "新列名")?;
+                let validated_table_name = validate_sql_identifier(
+                    table_name,
+                    &i18n::t_simple("migration-identifier-type-table"),
+                )?;
+                let validated_old_name = validate_sql_identifier(
+                    old_name,
+                    &i18n::t_simple("migration-identifier-type-column"),
+                )?;
+                let validated_new_name = validate_sql_identifier(
+                    new_name,
+                    &i18n::t_simple("migration-identifier-type-new-column"),
+                )?;
 
                 match self.db_type {
                     DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
@@ -637,8 +711,14 @@ impl SqlGenerator {
                 column_name,
                 new_column,
             } => {
-                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+                let validated_table_name = validate_sql_identifier(
+                    table_name,
+                    &i18n::t_simple("migration-identifier-type-table"),
+                )?;
+                let validated_column_name = validate_sql_identifier(
+                    column_name,
+                    &i18n::t_simple("migration-identifier-type-column"),
+                )?;
 
                 match self.db_type {
                     // MySQL 的 MODIFY COLUMN 需要完整列定义，复用列定义生成
@@ -679,9 +759,12 @@ impl SqlGenerator {
                     }
                     DatabaseType::Sqlite => {
                         // SQLite 不支持 ALTER COLUMN，需要重建表
-                        Ok(format!(
-                            "-- SQLite 不支持修改列定义，请手动重建表 {} 以调整列 {}",
-                            validated_table_name, validated_column_name
+                        Ok(i18n::t(
+                            "migration-sqlite-modify-column-note",
+                            &[
+                                ("table", validated_table_name.to_string()),
+                                ("column", validated_column_name.to_string()),
+                            ],
                         ))
                     }
                     DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
@@ -695,8 +778,14 @@ impl SqlGenerator {
                 new_type,
                 ..
             } => {
-                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+                let validated_table_name = validate_sql_identifier(
+                    table_name,
+                    &i18n::t_simple("migration-identifier-type-table"),
+                )?;
+                let validated_column_name = validate_sql_identifier(
+                    column_name,
+                    &i18n::t_simple("migration-identifier-type-column"),
+                )?;
 
                 match self.db_type {
                     DatabaseType::Postgres | DatabaseType::DuckDb => Ok(format!(
@@ -713,9 +802,12 @@ impl SqlGenerator {
                     )),
                     DatabaseType::Sqlite => {
                         // SQLite 不支持 ALTER COLUMN，需要重建表
-                        Ok(format!(
-                            "-- SQLite 不支持修改列类型，请手动重建表 {} 以调整列 {} 的类型",
-                            validated_table_name, validated_column_name
+                        Ok(i18n::t(
+                            "migration-sqlite-modify-type-note",
+                            &[
+                                ("table", validated_table_name.to_string()),
+                                ("column", validated_column_name.to_string()),
+                            ],
                         ))
                     }
                     DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
@@ -729,8 +821,14 @@ impl SqlGenerator {
                 new_nullable,
                 ..
             } => {
-                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+                let validated_table_name = validate_sql_identifier(
+                    table_name,
+                    &i18n::t_simple("migration-identifier-type-table"),
+                )?;
+                let validated_column_name = validate_sql_identifier(
+                    column_name,
+                    &i18n::t_simple("migration-identifier-type-column"),
+                )?;
 
                 match self.db_type {
                     DatabaseType::Postgres | DatabaseType::DuckDb => Ok(format!(
@@ -745,15 +843,21 @@ impl SqlGenerator {
                     )),
                     // MySQL 修改可空性必须走 MODIFY COLUMN 且需要完整列定义，
                     // 而 NullabilityChanged 不携带列类型，无法生成合法 SQL，输出说明注释
-                    DatabaseType::MySql | DatabaseType::Sqlite => Ok(format!(
-                        "-- {} 不支持直接修改列可空性，请手动重建表 {} 以调整列 {} 的 NOT NULL 约束",
-                        if matches!(self.db_type, DatabaseType::MySql) {
-                            "MySQL"
-                        } else {
-                            "SQLite"
-                        },
-                        validated_table_name,
-                        validated_column_name
+                    DatabaseType::MySql | DatabaseType::Sqlite => Ok(i18n::t(
+                        "migration-sqlite-modify-nullability-note",
+                        &[
+                            (
+                                "database",
+                                if matches!(self.db_type, DatabaseType::MySql) {
+                                    "MySQL"
+                                } else {
+                                    "SQLite"
+                                }
+                                .to_string(),
+                            ),
+                            ("table", validated_table_name.to_string()),
+                            ("column", validated_column_name.to_string()),
+                        ],
                     )),
                     DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
                         "Graph databases do not support relational ALTER TABLE operations"
@@ -766,8 +870,14 @@ impl SqlGenerator {
                 new_default,
                 ..
             } => {
-                let validated_table_name = validate_sql_identifier(table_name, "表名")?;
-                let validated_column_name = validate_sql_identifier(column_name, "列名")?;
+                let validated_table_name = validate_sql_identifier(
+                    table_name,
+                    &i18n::t_simple("migration-identifier-type-table"),
+                )?;
+                let validated_column_name = validate_sql_identifier(
+                    column_name,
+                    &i18n::t_simple("migration-identifier-type-column"),
+                )?;
 
                 match self.db_type {
                     // MySQL 支持 `ALTER COLUMN c SET/DROP DEFAULT`，无需完整列定义
@@ -787,9 +897,12 @@ impl SqlGenerator {
                     }
                     DatabaseType::Sqlite => {
                         // SQLite 不支持 ALTER COLUMN，需要重建表
-                        Ok(format!(
-                            "-- SQLite 不支持修改列默认值，请手动重建表 {} 以调整列 {} 的默认值",
-                            validated_table_name, validated_column_name
+                        Ok(i18n::t(
+                            "migration-sqlite-modify-default-note",
+                            &[
+                                ("table", validated_table_name.to_string()),
+                                ("column", validated_column_name.to_string()),
+                            ],
                         ))
                     }
                     DatabaseType::Ladybug | DatabaseType::Neo4j => Err(
@@ -808,12 +921,20 @@ impl SqlGenerator {
         for change in &migration.table_changes {
             match change {
                 TableChange::CreateTable(table) => {
-                    sql.push_str(&format!("-- 创建表: {}\n", table.name));
+                    sql.push_str(&i18n::t(
+                        "migration-sql-comment-create-table",
+                        &[("name", table.name.to_string())],
+                    ));
+                    sql.push('\n');
                     sql.push_str(&self.generate_create_table_sql(table)?);
                     sql.push_str("\n\n");
                 }
                 TableChange::DropTable { table_name } => {
-                    sql.push_str(&format!("-- 删除表: {}\n", table_name));
+                    sql.push_str(&i18n::t(
+                        "migration-sql-comment-drop-table",
+                        &[("name", table_name.to_string())],
+                    ));
+                    sql.push('\n');
                     sql.push_str(&self.generate_drop_table_sql(table_name)?);
                     sql.push_str("\n\n");
                 }
@@ -827,7 +948,11 @@ impl SqlGenerator {
                     added_foreign_keys,
                     removed_foreign_keys,
                 } => {
-                    sql.push_str(&format!("-- 修改表: {}\n", table_name));
+                    sql.push_str(&i18n::t(
+                        "migration-sql-comment-alter-table",
+                        &[("name", table_name.to_string())],
+                    ));
+                    sql.push('\n');
 
                     // 列变更（类型/可空性/默认值等），此前被 `..` 丢弃导致从不生成 SQL
                     for change in column_changes {
@@ -836,36 +961,60 @@ impl SqlGenerator {
                     }
 
                     for col in added_columns {
-                        sql.push_str(&format!("-- 添加列: {}\n", col.name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-add-column",
+                            &[("name", col.name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&self.generate_add_column_sql(table_name, col)?);
                         sql.push('\n');
                     }
 
                     for col_name in removed_columns {
-                        sql.push_str(&format!("-- 删除列: {}\n", col_name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-drop-column",
+                            &[("name", col_name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&self.generate_drop_column_sql(table_name, col_name)?);
                         sql.push('\n');
                     }
 
                     for index in added_indexes {
-                        sql.push_str(&format!("-- 添加索引: {}\n", index.name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-add-index",
+                            &[("name", index.name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&self.generate_create_index_sql(index)?);
                         sql.push('\n');
                     }
 
                     for index_name in removed_indexes {
-                        sql.push_str(&format!("-- 删除索引: {}\n", index_name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-drop-index",
+                            &[("name", index_name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&format!("DROP INDEX {};\n", index_name));
                     }
 
                     for fk in added_foreign_keys {
-                        sql.push_str(&format!("-- 添加外键: {}\n", fk.name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-add-foreign-key",
+                            &[("name", fk.name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&self.generate_add_foreign_key_sql(fk)?);
                         sql.push('\n');
                     }
 
                     for fk_name in removed_foreign_keys {
-                        sql.push_str(&format!("-- 删除外键: {}\n", fk_name));
+                        sql.push_str(&i18n::t(
+                            "migration-sql-comment-drop-foreign-key",
+                            &[("name", fk_name.to_string())],
+                        ));
+                        sql.push('\n');
                         sql.push_str(&format!(
                             "ALTER TABLE {} DROP CONSTRAINT {};\n",
                             table_name, fk_name
@@ -1023,45 +1172,69 @@ mod tests {
 
     #[test]
     fn test_validate_sql_identifier_empty() {
-        let result = validate_sql_identifier("", "表名");
+        let result = validate_sql_identifier("", "table name");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("不能为空"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("must not be empty") || err.contains("不能为空"),
+            "actual error: {err}"
+        );
     }
 
     #[test]
     fn test_validate_sql_identifier_too_long() {
         let long_name = "a".repeat(65);
-        let result = validate_sql_identifier(&long_name, "表名");
+        let result = validate_sql_identifier(&long_name, "table name");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("长度不能超过 64"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("must not exceed 64 characters") || err.contains("长度不能超过 64"),
+            "actual error: {err}"
+        );
     }
 
     #[test]
     fn test_validate_sql_identifier_invalid_start_with_digit() {
-        let result = validate_sql_identifier("1table", "表名");
+        let result = validate_sql_identifier("1table", "table name");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("无效字符"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("invalid characters") || err.contains("无效字符"),
+            "actual error: {err}"
+        );
     }
 
     #[test]
     fn test_validate_sql_identifier_invalid_chars() {
-        let result = validate_sql_identifier("table-name", "表名");
+        let result = validate_sql_identifier("table-name", "table name");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("无效字符"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("invalid characters") || err.contains("无效字符"),
+            "actual error: {err}"
+        );
     }
 
     #[test]
     fn test_validate_sql_identifier_reserved_keyword() {
         for kw in &["select", "INSERT", "Drop", "TABLE"] {
-            let result = validate_sql_identifier(kw, "表名");
-            assert!(result.is_err(), "应该拒绝保留关键字: {}", kw);
-            assert!(result.unwrap_err().contains("保留关键字"));
+            let result = validate_sql_identifier(kw, "table name");
+            assert!(
+                result.is_err(),
+                "reserved keywords should be rejected: {}",
+                kw
+            );
+            let err = result.unwrap_err();
+            assert!(
+                err.contains("reserved SQL keyword") || err.contains("SQL 保留关键字"),
+                "actual error: {err}"
+            );
         }
     }
 
     #[test]
     fn test_validate_sql_identifier_valid_underscore_start() {
-        let result = validate_sql_identifier("_private_table", "表名");
+        let result = validate_sql_identifier("_private_table", "table name");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "_private_table");
     }
@@ -1069,7 +1242,7 @@ mod tests {
     #[test]
     fn test_validate_sql_identifier_valid_max_length() {
         let name = "a".repeat(64);
-        let result = validate_sql_identifier(&name, "表名");
+        let result = validate_sql_identifier(&name, "table name");
         assert!(result.is_ok());
     }
 
@@ -1768,7 +1941,10 @@ mod tests {
         let sql = sqlite
             .generate_drop_column_sql("users", "age")
             .expect("SQL generation failed");
-        assert!(sql.contains("-- SQLite 不支持直接删除列"));
+        assert!(
+            sql.contains("-- SQLite does not support dropping a column directly")
+                || sql.contains("-- SQLite 不支持直接删除列")
+        );
         assert!(sql.contains("ALTER TABLE users DROP COLUMN age;"));
     }
 
@@ -1821,7 +1997,7 @@ mod tests {
             .generate_alter_column_sql("users", &change)
             .expect("SQL generation failed");
         // SQLite 不支持 ALTER COLUMN，输出说明注释而非非法 SQL
-        assert!(sql.contains("-- SQLite 不支持修改列类型"));
+        assert!(sql.contains("does not support ALTER COLUMN") || sql.contains("不支持修改列类型"));
         assert!(sql.contains("age"));
         assert!(!sql.contains("ALTER TABLE"));
     }
@@ -1863,7 +2039,10 @@ mod tests {
             .generate_alter_column_sql("users", &change)
             .expect("SQL generation failed");
         // MySQL 需要完整列定义（MODIFY COLUMN），此处输出说明注释
-        assert!(sql.contains("-- MySQL 不支持直接修改列可空性"));
+        assert!(
+            sql.contains("does not support altering column nullability directly")
+                || sql.contains("不支持直接修改列可空性")
+        );
         assert!(sql.contains("name"));
     }
 
@@ -1959,8 +2138,11 @@ mod tests {
         let sql = pg
             .generate_migration_sql(&migration)
             .expect("SQL generation failed");
-        assert!(!sql.trim().is_empty(), "纯列变更不应产出空 SQL");
-        assert!(sql.contains("-- 修改表: users"));
+        assert!(
+            !sql.trim().is_empty(),
+            "a pure column change must not produce empty SQL"
+        );
+        assert!(sql.contains("-- 修改表: users") || sql.contains("-- Alter table: users"));
         assert!(sql.contains("ALTER TABLE users ALTER COLUMN age TYPE BIGINT;"));
         assert!(sql.contains("ALTER TABLE users ALTER COLUMN name SET NOT NULL;"));
         assert!(sql.contains("ALTER TABLE users ALTER COLUMN status SET DEFAULT 1;"));
@@ -2012,7 +2194,7 @@ mod tests {
         let sql = pg
             .generate_migration_sql(&migration)
             .expect("SQL generation failed");
-        assert!(sql.contains("-- 创建表: users"));
+        assert!(sql.contains("-- 创建表: users") || sql.contains("-- Create table: users"));
         assert!(sql.contains("CREATE TABLE users"));
     }
 
@@ -2027,7 +2209,7 @@ mod tests {
         let sql = pg
             .generate_migration_sql(&migration)
             .expect("SQL generation failed");
-        assert!(sql.contains("-- 删除表: users"));
+        assert!(sql.contains("-- 删除表: users") || sql.contains("-- Drop table: users"));
         assert!(sql.contains("DROP TABLE users;"));
     }
 
@@ -2063,21 +2245,23 @@ mod tests {
         let sql = pg
             .generate_migration_sql(&migration)
             .expect("SQL generation failed");
-        assert!(sql.contains("-- 修改表: users"));
-        assert!(sql.contains("-- 添加列: age"));
+        assert!(sql.contains("-- 修改表: users") || sql.contains("-- Alter table: users"));
+        assert!(sql.contains("-- 添加列: age") || sql.contains("-- Add column: age"));
         assert!(sql.contains("ALTER TABLE users ADD age INTEGER;"));
-        assert!(sql.contains("-- 删除列: old_col"));
+        assert!(sql.contains("-- 删除列: old_col") || sql.contains("-- Drop column: old_col"));
         assert!(sql.contains("ALTER TABLE users DROP COLUMN old_col;"));
-        assert!(sql.contains("-- 添加索引: idx_age"));
+        assert!(sql.contains("-- 添加索引: idx_age") || sql.contains("-- Add index: idx_age"));
         assert!(sql.contains("CREATE INDEX idx_age ON users (age)"));
-        assert!(sql.contains("-- 删除索引: idx_old"));
+        assert!(sql.contains("-- 删除索引: idx_old") || sql.contains("-- Drop index: idx_old"));
         assert!(sql.contains("DROP INDEX idx_old;"));
-        assert!(sql.contains("-- 添加外键: fk_role"));
+        assert!(
+            sql.contains("-- 添加外键: fk_role") || sql.contains("-- Add foreign key: fk_role")
+        );
         assert!(sql.contains(
             "ALTER TABLE users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id)"
         ));
         assert!(sql.contains("ON DELETE SET NULL"));
-        assert!(sql.contains("-- 删除外键: fk_old"));
+        assert!(sql.contains("-- 删除外键: fk_old") || sql.contains("-- Drop foreign key: fk_old"));
         assert!(sql.contains("ALTER TABLE users DROP CONSTRAINT fk_old;"));
     }
 
@@ -2254,7 +2438,7 @@ mod tests {
             .unwrap();
         assert!(
             sql.contains("DROP COLUMN gone_c"),
-            "删除应委托既有生成逻辑: {sql}"
+            "deletion should delegate to the existing generation logic: {sql}"
         );
     }
 
@@ -2291,15 +2475,20 @@ mod tests {
         let sql = mysql.generate_alter_column_sql("t9", &change).unwrap();
         assert!(
             sql.starts_with("ALTER TABLE t9 MODIFY COLUMN status"),
-            "MySQL 类型/默认值变更走 MODIFY COLUMN: {sql}"
+            "MySQL type/default-value changes go through MODIFY COLUMN: {sql}"
         );
-        assert!(sql.contains("DEFAULT 0"), "默认值须保留: {sql}");
+        assert!(
+            sql.contains("DEFAULT 0"),
+            "the default value must be kept: {sql}"
+        );
 
         let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
         let sql = sqlite.generate_alter_column_sql("t9", &change).unwrap();
         assert!(
-            sql.contains("不支持修改列定义") && sql.contains("t9") && sql.contains("status"),
-            "SQLite 输出重建说明注释: {sql}"
+            (sql.contains("does not support ALTER COLUMN") || sql.contains("不支持修改列定义"))
+                && sql.contains("t9")
+                && sql.contains("status"),
+            "SQLite outputs a rebuild note comment: {sql}"
         );
     }
 
@@ -2368,8 +2557,9 @@ mod tests {
         let sqlite = SqlGenerator::new(DatabaseType::Sqlite);
         let sql = sqlite.generate_alter_column_sql("t9", &change).unwrap();
         assert!(
-            sql.contains("不支持修改列类型") && sql.contains("amount"),
-            "SQLite 输出重建说明注释: {sql}"
+            (sql.contains("does not support ALTER COLUMN") || sql.contains("不支持修改列类型"))
+                && sql.contains("amount"),
+            "SQLite outputs a rebuild note comment: {sql}"
         );
 
         for db in [DatabaseType::Ladybug, DatabaseType::Neo4j] {
@@ -2405,8 +2595,10 @@ mod tests {
                 .generate_alter_column_sql("t9", &nullable(true))
                 .unwrap();
             assert!(
-                sql.contains("不支持直接修改列可空性") && sql.contains("nick"),
-                "{db:?} 输出重建说明注释: {sql}"
+                (sql.contains("does not support altering column nullability directly")
+                    || sql.contains("不支持直接修改列可空性"))
+                    && sql.contains("nick"),
+                "{db:?} outputs a rebuild note comment: {sql}"
             );
         }
 

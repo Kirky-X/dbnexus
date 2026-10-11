@@ -578,9 +578,11 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
         comment: None,
     };
 
-    // (方言, 删除列应含, 修改列应含；"--" 表示 SQLite 的人工重建提示)
+    // (方言, 删除列应含, 修改列应含；"--" 表示 SQLite 的人工重建提示，
+    //  其文案经 i18n 目录本地化，en/zh 两种渲染均视为命中)
+    let rebuild_note = |sql: &str| sql.contains("rebuild table") || sql.contains("请手动重建表");
     for (dt, expect_drop, expect_modify) in [
-        (DatabaseType::Sqlite, "请手动重建表", "--"),
+        (DatabaseType::Sqlite, "rebuild table", "--"),
         (
             DatabaseType::Postgres,
             "DROP COLUMN age;",
@@ -603,8 +605,9 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
             .generate_drop_column_sql("users", "age")
             .expect("drop column");
         assert!(
-            drop_sql.contains(expect_drop),
-            "{dt:?} 删除列输出异常: {drop_sql}"
+            drop_sql.contains(expect_drop)
+                || (expect_drop == "rebuild table" && rebuild_note(&drop_sql)),
+            "{dt:?} abnormal column drop output: {drop_sql}"
         );
 
         let modify_sql = generator
@@ -618,13 +621,13 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
             .expect("modify column");
         if expect_modify == "--" {
             assert!(
-                modify_sql.contains("请手动重建表"),
-                "{dt:?} SQLite 修改列应输出重建提示: {modify_sql}"
+                rebuild_note(&modify_sql),
+                "{dt:?} a SQLite column modification should output a rebuild hint: {modify_sql}"
             );
         } else {
             assert!(
                 modify_sql.contains(expect_modify),
-                "{dt:?} 修改列输出异常: {modify_sql}"
+                "{dt:?} abnormal column modification output: {modify_sql}"
             );
         }
 
@@ -639,8 +642,8 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
             )
             .expect("rename column");
         assert!(
-            rename_sql.contains("RENAME COLUMN") || rename_sql.contains("请手动重建表"),
-            "{dt:?} 重命名输出异常: {rename_sql}"
+            rename_sql.contains("RENAME COLUMN") || rebuild_note(&rename_sql),
+            "{dt:?} abnormal rename output: {rename_sql}"
         );
 
         // 其余变更类型在各方言都应有分支产出（形状由上面三类显式断言覆盖，
@@ -687,7 +690,7 @@ fn test_dialect_specific_alter_sql_covers_all_relational_backends() {
             .expect_err("graph databases must reject relational ALTER");
         assert!(
             err.contains("Graph databases do not support relational"),
-            "{dt:?} 拒绝信息异常: {err}"
+            "{dt:?} abnormal rejection message: {err}"
         );
     }
 }
@@ -723,12 +726,15 @@ async fn test_load_history_dialect_branches_are_explicit() {
             // 方言可被 sqlite 接受：历史为空但表已建（显性成功）
             Ok(()) => assert!(
                 executor.history().applied_migrations.is_empty(),
-                "{dt:?} 全新库历史应为空"
+                "{dt:?} the history of a brand-new database should be empty"
             ),
             // 方言不被 sqlite 接受：必须显性报错，不得静默吞掉
             Err(e) => {
                 let msg = format!("{e:?}");
-                assert!(!msg.is_empty(), "{dt:?} 方言不可用时必须给出显性错误");
+                assert!(
+                    !msg.is_empty(),
+                    "{dt:?} an explicit error must be given when the dialect is unavailable"
+                );
             }
         }
         let _ = std::fs::remove_file(&db_path);
@@ -767,21 +773,24 @@ async fn test_history_insert_sql_dialect_and_escaping() {
         );
         assert!(
             sql.contains("O''Brien''s migration"),
-            "{dt:?} 单引号应转义为 ''，实际: {sql}"
+            "{dt:?} a single quote should be escaped to '', actual: {sql}"
         );
-        assert!(sql.contains("007_migration.sql"), "{dt:?} 文件路径应入语句");
+        assert!(
+            sql.contains("007_migration.sql"),
+            "{dt:?} the file path should appear in the statement"
+        );
         match dt {
             // DuckDB 在 as_sea_orm 处被拒、仅编译兜底，显式映射为 Postgres 形态
             DatabaseType::Postgres | DatabaseType::DuckDb => assert!(
                 sql.contains("CAST(") && sql.contains(" AS TIMESTAMP)"),
-                "{dt:?} 分支应使用 CAST(... AS TIMESTAMP): {sql}"
+                "{dt:?} the branch should use CAST(... AS TIMESTAMP): {sql}"
             ),
             DatabaseType::Sqlite | DatabaseType::MySql => assert!(
                 !sql.contains("CAST("),
-                "{dt:?} 分支不应使用 Postgres 的 CAST 形态: {sql}"
+                "{dt:?} the branch should not use Postgres's CAST form: {sql}"
             ),
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
-                panic!("图数据库不参与关系型迁移")
+                panic!("graph databases do not participate in relational migrations")
             }
         }
         let _ = std::fs::remove_file(&db_path);

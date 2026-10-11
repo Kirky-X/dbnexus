@@ -18,7 +18,7 @@ use dbnexus::{DbConfig, DbPool};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("📝 DBNexus TOML 配置示例");
+    println!("📝 DBNexus TOML configuration example");
     println!("========================================\n");
 
     // ============================================
@@ -42,19 +42,19 @@ query_cache_capacity = 10000
 default_ttl = 300
 "#;
 
-    println!("TOML 配置内容:");
+    println!("TOML configuration content:");
     println!("{}", toml_content);
 
     // ============================================
     // 2. 解析 TOML 配置
     // ============================================
     let config: DbConfig = toml::from_str(toml_content)?;
-    println!("✓ TOML 配置解析成功");
+    println!("✓ TOML configuration parsed");
 
     // ============================================
     // 3. 打印配置信息
     // ============================================
-    println!("\n📋 解析后的 DbConfig:");
+    println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(
         "  - max_connections   : {}",
@@ -78,7 +78,7 @@ default_ttl = 300
         config.database_type().unwrap()
     );
 
-    println!("\n💾 缓存配置:");
+    println!("\n💾 Cache configuration:");
     println!(
         "  - policy_cache_capacity : {}",
         config.cache_config.policy_cache_capacity
@@ -92,23 +92,25 @@ default_ttl = 300
     // 4. 创建连接池
     // ============================================
     let pool = DbPool::with_config(config).await?;
-    println!("\n✓ 连接池创建成功");
-    println!("  - 实际 URL      : {}", pool.config().url);
-    println!("  - 实际管理员角色: {}", pool.config().admin_role);
+    println!("\n✓ Pool created");
+    println!("  - actual URL       : {}", pool.config().url);
+    println!("  - actual admin role: {}", pool.config().admin_role);
 
     let status = pool.status();
-    println!("\n📊 连接池状态:");
-    println!("  - 总连接数: {}", status.total);
-    println!("  - 活跃连接: {}", status.active);
-    println!("  - 空闲连接: {}", status.idle);
+    println!("\n📊 Pool status:");
+    println!("  - total connections: {}", status.total);
+    println!("  - active connections: {}", status.active);
+    println!("  - idle connections: {}", status.idle);
 
     println!("\n========================================");
-    println!("✨ TOML 配置示例完成！");
+    println!("✨ TOML configuration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DbConfig 实现 serde::Deserialize，可直接从 TOML 反序列化");
-    println!("  - toml::from_str 解析 TOML 字符串为 DbConfig");
-    println!("  - TOML 的 [cache_config] 段对应 DbConfig.cache_config 字段");
+    println!("\n📚 Key concepts:");
+    println!(
+        "  - DbConfig implements serde::Deserialize and can be deserialized from TOML directly"
+    );
+    println!("  - toml::from_str parses a TOML string into DbConfig");
+    println!("  - the TOML [cache_config] section maps to the DbConfig.cache_config field");
 
     Ok(())
 }

@@ -42,7 +42,7 @@ async fn try_connect() -> Option<Neo4jConnection> {
 /// 打印查询结果
 fn print_query_result(label: &str, result: &GraphExecResult) {
     if let GraphExecResult::Query(q) = result {
-        println!("  {} ({} 行):", label, q.rows.len());
+        println!("  {} ({} rows):", label, q.rows.len());
         for row in &q.rows {
             let cols: Vec<String> = row
                 .columns
@@ -61,63 +61,70 @@ fn print_query_result(label: &str, result: &GraphExecResult) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🕸️  DBNexus Neo4j 图数据库示例");
+    println!("🕸️  DBNexus Neo4j graph database example");
     println!("========================================\n");
 
     // ============================================
     // 1. URL 解析演示
     // ============================================
-    println!("--- 1. URL 解析 ---\n");
+    println!("--- 1. URL parsing ---\n");
 
     let url_cases = [
-        ("neo4j://admin:secret@dbhost:7687", "带凭据的标准 URL"), // pragma: allowlist secret
+        (
+            "neo4j://admin:secret@dbhost:7687",
+            "standard URL with credentials",
+        ), // pragma: allowlist secret
         (
             "neo4j+s://user:p%40ss@cluster.example.com:7687",
-            "TLS 加密连接 URL",
+            "TLS-encrypted connection URL",
         ), // pragma: allowlist secret
-        ("neo4j://user:pass@localhost", "默认端口 URL"),          // pragma: allowlist secret
+        ("neo4j://user:pass@localhost", "default-port URL"), // pragma: allowlist secret
     ];
 
     for (url, desc) in url_cases {
         match Neo4jConnection::parse_url(url) {
             Ok((uri, user, pass)) => {
                 println!("  ✓ {}", desc);
-                println!("    输入: {}", url);
+                println!("    input: {}", url);
                 println!("    URI:    {}", uri);
                 println!("    User:   {}", user);
                 println!(
                     "    Pass:   {}",
-                    if pass.is_empty() { "(空)" } else { "***" }
+                    if pass.is_empty() { "(empty)" } else { "***" }
                 );
             }
-            Err(e) => println!("  ✗ {} 解析失败: {}", desc, e),
+            Err(e) => println!("  ✗ {} parse failed: {}", desc, e),
         }
         println!();
     }
 
     // 无凭据 URL 需要环境变量（演示错误处理）
-    println!("  无凭据 URL（需要 NEO4J_USER/NEO4J_PASSWORD 环境变量）:");
+    println!(
+        "  URL without credentials (needs the NEO4J_USER/NEO4J_PASSWORD environment variables):"
+    );
     match Neo4jConnection::parse_url("neo4j://localhost:7687") {
-        Ok(_) => println!("    ✓ 从环境变量获取到凭据"),
-        Err(e) => println!("    ✓ 预期错误: {}", e),
+        Ok(_) => println!("    ✓ credentials fetched from environment variables"),
+        Err(e) => println!("    ✓ expected error: {}", e),
     }
 
     // ============================================
     // 2. 连接尝试（优雅降级）
     // ============================================
-    println!("\n--- 2. 连接尝试 ---\n");
+    println!("\n--- 2. connection attempt ---\n");
 
     let conn = match try_connect().await {
         Some(c) => {
-            println!("  ✓ 成功连接到 Neo4j 服务器");
-            println!("  后端名称: {}", c.backend_name());
+            println!("  ✓ connected to the Neo4j server successfully");
+            println!("  backend name: {}", c.backend_name());
             Some(c)
         }
         None => {
-            println!("  ⚠ 未检测到 Neo4j 服务器");
-            println!("  提示: 设置 NEO4J_URL 环境变量以连接真实服务器");
-            println!("  格式: neo4j://user:password@localhost:7687"); // pragma: allowlist secret
-            println!("\n  以下演示 API 使用模式（无需真实连接）...\n");
+            println!("  ⚠ no Neo4j server detected");
+            println!("  hint: set the NEO4J_URL environment variable to connect to a real server");
+            println!("  format: neo4j://user:password@localhost:7687"); // pragma: allowlist secret
+            println!(
+                "\n  the following demonstrates the API usage pattern (no real connection needed)...\n"
+            );
             None
         }
     };
@@ -126,14 +133,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. 完整使用流程（需要真实连接）
     // ============================================
     if let Some(ref conn) = conn {
-        println!("\n--- 3. 健康检查 ---\n");
+        println!("\n--- 3. health check ---\n");
         match conn.health_check().await {
-            Ok(()) => println!("  ✓ 健康检查通过"),
-            Err(e) => println!("  ✗ 健康检查失败: {}", e),
+            Ok(()) => println!("  ✓ health check passed"),
+            Err(e) => println!("  ✗ health check failed: {}", e),
         }
 
         // 创建测试节点
-        println!("\n--- 4. 创建节点和查询 ---\n");
+        println!("\n--- 4. create nodes and run queries ---\n");
         let _ = conn
             .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
             .await;
@@ -142,14 +149,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         conn.execute_cypher("CREATE (:DbNexusTest {name: 'Bob', score: 85})")
             .await?;
-        println!("  ✓ 创建 2 个测试节点");
+        println!("  ✓ created 2 test nodes");
 
         let result = conn
             .execute_cypher(
                 "MATCH (n:DbNexusTest) RETURN n.name AS name, n.score AS score ORDER BY n.name",
             )
             .await?;
-        print_query_result("查询结果", &result);
+        print_query_result("query results", &result);
 
         // 参数化查询
         println!();
@@ -161,31 +168,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 params,
             )
             .await?;
-        print_query_result("参数化查询", &result);
+        print_query_result("Parameterized query", &result);
 
         // 事务
-        println!("\n--- 5. 图事务 ---\n");
+        println!("\n--- 5. graph transactions ---\n");
         let txn = conn.begin_graph_txn().await?;
         txn.execute_cypher("CREATE (:DbNexusTest {name: 'Charlie', score: 92})")
             .await?;
-        println!("  ✓ 事务内插入: Charlie");
+        println!("  ✓ inserted inside the transaction: Charlie");
         txn.commit().await?;
-        println!("  ✓ 事务已提交");
+        println!("  ✓ transaction committed");
 
         let result = conn
             .execute_cypher("MATCH (n:DbNexusTest) RETURN COUNT(*) AS total")
             .await?;
-        print_query_result("提交后总数", &result);
+        print_query_result("total after commit", &result);
 
         // 清理
         let _ = conn
             .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
             .await;
-        println!("\n  ✓ 测试数据已清理");
+        println!("\n  ✓ test data cleaned up");
     } else {
         // 无连接时的 API 使用模式演示
-        println!("--- 3. API 使用模式（离线演示）---\n");
-        println!("  连接后可执行的操作:");
+        println!("--- 3. API usage patterns (offline demo) ---\n");
+        println!("  operations available after connecting:");
         println!("    conn.execute_cypher(\"CREATE (:Person {{name: 'Alice'}})\")");
         println!("    conn.execute_cypher(\"MATCH (p:Person) RETURN p\")");
         println!(
@@ -196,24 +203,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    txn.execute_cypher(\"CREATE (:Person {{name: 'Bob'}})\").await?;");
         println!("    txn.commit().await?;");
 
-        println!("\n--- 4. GraphConnection trait 统一抽象 ---\n");
-        println!("  Neo4jConnection 和 LadybugConnection 实现相同的 GraphConnection trait:");
-        println!("    - execute_cypher(cypher)           执行 Cypher 查询");
-        println!("    - execute_cypher_with_params(...)   参数化查询");
-        println!("    - health_check()                    健康检查");
-        println!("    - begin_graph_txn()                 开始事务");
-        println!("    - backend_name()                    后端标识（\"neo4j\" / \"ladybug\"）");
+        println!("\n--- 4. GraphConnection trait unified abstraction ---\n");
+        println!(
+            "  Neo4jConnection and LadybugConnection implement the same GraphConnection trait:"
+        );
+        println!("    - execute_cypher(cypher)            execute a Cypher query");
+        println!("    - execute_cypher_with_params(...)   parameterized query");
+        println!("    - health_check()                    health check");
+        println!("    - begin_graph_txn()                 begin a transaction");
+        println!(
+            "    - backend_name()                    backend identifier (\"neo4j\" / \"ladybug\")"
+        );
     }
 
     println!("\n========================================");
-    println!("✨ Neo4j 图数据库示例完成！");
+    println!("✨ Neo4j graph database example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - Neo4jConnection::new(uri, user, pass)  创建 Neo4j 连接");
-    println!("  - Neo4jConnection::parse_url(url)        解析 Bolt URL");
-    println!("  - GraphConnection trait                  图数据库统一抽象");
-    println!("  - begin_graph_txn() → commit/rollback    图事务");
-    println!("  - 无服务器时优雅降级                      生产就绪");
+    println!("\n📚 Key concepts:");
+    println!("  - Neo4jConnection::new(uri, user, pass)  create a Neo4j connection");
+    println!("  - Neo4jConnection::parse_url(url)        parse a Bolt URL");
+    println!("  - GraphConnection trait                  the unified graph database abstraction");
+    println!("  - begin_graph_txn() → commit/rollback    graph transactions");
+    println!("  - graceful degradation without a server production ready");
 
     Ok(())
 }

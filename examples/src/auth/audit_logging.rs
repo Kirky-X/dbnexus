@@ -25,13 +25,13 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("========================================");
-    println!("📝 DBNexus 审计日志示例");
+    println!("📝 DBNexus audit logging example");
     println!("========================================\n");
 
     // ============================================
     // 1. 配置 AuditConfig
     // ============================================
-    println!("--- 1. AuditConfig 配置 ---");
+    println!("--- 1. AuditConfig configuration ---");
     let config = AuditConfig {
         enabled: true,
         storage_path: None,
@@ -67,18 +67,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     // 2. 创建 AuditLogger + MemoryAuditStorage
     // ============================================
-    println!("\n--- 2. 创建 AuditLogger 与 MemoryAuditStorage ---");
+    println!("\n--- 2. create AuditLogger and MemoryAuditStorage ---");
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let storage_for_query = storage.clone();
     let logger = AuditLogger::with_config(config, storage);
 
-    println!("  ✓ MemoryAuditStorage 容量 = 1000");
-    println!("  ✓ AuditLogger 创建成功（with_config）");
+    println!("  ✓ MemoryAuditStorage capacity = 1000");
+    println!("  ✓ AuditLogger created (with_config)");
 
     // ============================================
     // 3. AuditOperation 全类型展示
     // ============================================
-    println!("\n--- 3. AuditOperation 类型 ---");
+    println!("\n--- 3. AuditOperation types ---");
     let operations = [
         AuditOperation::Create,
         AuditOperation::Read,
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     // 4. AuditSeverity 级别展示
     // ============================================
-    println!("\n--- 4. AuditSeverity 级别 ---");
+    println!("\n--- 4. AuditSeverity levels ---");
     let severities = [
         AuditSeverity::Info,
         AuditSeverity::Low,
@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     // 5. 使用 AuditEventBuilder 链式构建审计事件
     // ============================================
-    println!("\n--- 5. AuditEventBuilder 链式构建 ---");
+    println!("\n--- 5. AuditEventBuilder chain building ---");
     let event = AuditEventBuilder::new()
         .operation(AuditOperation::Update)
         .entity_type("users")
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .request_id("req-abc-123")
         .session_id("sess-xyz-789")
         .build()?;
-    println!("  ✓ 构建审计事件:");
+    println!("  ✓ building audit event:");
     println!("    operation    = {}", event.operation);
     println!("    entity_type  = {}", event.entity_type);
     println!("    entity_id    = {}", event.entity_id);
@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     // 6. 使用快捷构造方法记录各类审计事件
     // ============================================
-    println!("\n--- 6. 记录各类审计事件 ---");
+    println!("\n--- 6. record various audit events ---");
 
     // CREATE
     logger
@@ -178,7 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Some(r#"{"name":"bob"}"#.to_string()),
         )
         .await?;
-    println!("  ✓ log_delete: users/u_002 by admin (高危，触发告警)");
+    println!("  ✓ log_delete: users/u_002 by admin (high-risk, triggers alert)");
 
     // LOGIN
     let login_event = AuditEvent::new(
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .with_severity(AuditSeverity::Low);
     logger.log(login_event).await?;
-    println!("  ✓ Login 事件: session_001 by alice");
+    println!("  ✓ Login event: session_001 by alice");
 
     // PERMISSION_CHANGE
     let perm_event = AuditEvent::new(
@@ -205,7 +205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .with_severity(AuditSeverity::High)
     .with_extra(r#"{"granted":"delete"}"#);
     logger.log(perm_event).await?;
-    println!("  ✓ PermissionChange 事件: role_editor by admin");
+    println!("  ✓ PermissionChange event: role_editor by admin");
 
     // CONFIG_CHANGE
     let config_event = AuditEventBuilder::new()
@@ -217,25 +217,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .result(AuditStatus::Success)
         .build()?;
     logger.log(config_event).await?;
-    println!("  ✓ ConfigChange 事件: config_v2 by admin (Critical)");
+    println!("  ✓ ConfigChange event: config_v2 by admin (Critical)");
 
     // 记录 builder 构建的事件
     logger.log(event).await?;
-    println!("  ✓ Builder 构建的事件已记录");
+    println!("  ✓ Builder-constructed event recorded");
 
     // 验证存储数量
     let count = storage_for_query.event_count().await;
-    println!("\n  存储中共 {} 条审计事件", count);
+    println!("\n  storage holds {} audit events in total", count);
 
     // ============================================
     // 7. AuditQueryFilters 查询审计日志
     // ============================================
-    println!("\n--- 7. AuditQueryFilters 查询 ---");
+    println!("\n--- 7. AuditQueryFilters query ---");
 
     // 查询所有
     let all_filters = AuditQueryFilters::default();
     let all_events = logger.query(&all_filters).await?;
-    println!("  [全部查询] 共 {} 条", all_events.len());
+    println!("  [all queries] {} total", all_events.len());
 
     // 按 entity_type 查询
     let users_filters = AuditQueryFilters {
@@ -243,7 +243,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let users_events = logger.query(&users_filters).await?;
-    println!("  [entity_type=users] 共 {} 条", users_events.len());
+    println!("  [entity_type=users] {} total", users_events.len());
 
     // 按 operation 查询
     let delete_filters = AuditQueryFilters {
@@ -251,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let delete_events = logger.query(&delete_filters).await?;
-    println!("  [operation=Delete] 共 {} 条", delete_events.len());
+    println!("  [operation=Delete] {} total", delete_events.len());
     for ev in &delete_events {
         println!(
             "    - entity={}/{}, user={}, severity={}",
@@ -265,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let critical_events = logger.query(&critical_filters).await?;
-    println!("  [severity=Critical] 共 {} 条", critical_events.len());
+    println!("  [severity=Critical] {} total", critical_events.len());
 
     // 按 user_id 查询
     let admin_filters = AuditQueryFilters {
@@ -273,12 +273,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let admin_events = logger.query(&admin_filters).await?;
-    println!("  [user_id=admin] 共 {} 条", admin_events.len());
+    println!("  [user_id=admin] {} total", admin_events.len());
 
     // ============================================
     // 8. 敏感数据自动脱敏
     // ============================================
-    println!("\n--- 8. 敏感数据自动脱敏 ---");
+    println!("\n--- 8. sensitive data automatic masking ---");
     let sensitive_event = AuditEvent::create("users", "u_999", "admin")
         .with_after_value(r#"{"name":"secret_user","password":"p@ssw0rd","api_key":"ak_12345"}"#);
     logger.log(sensitive_event).await?;
@@ -292,27 +292,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(ev) = ev
         && let Some(after) = &ev.after_value
     {
-        println!("  原始 after_value 包含 password/api_key");
-        println!("  存储后 after_value = {}", after);
+        println!("  original after_value contains password/api_key");
+        println!("  stored after_value = {}", after);
         // 新脱敏行为：保留键名、值替换为 [REDACTED]（旧实现只改键名导致值泄漏）
-        assert!(after.contains("[REDACTED]"), "敏感值应被替换为 [REDACTED]");
+        assert!(
+            after.contains("[REDACTED]"),
+            "sensitive value should be replaced with [REDACTED]"
+        );
         // 原始敏感值不得残留（动态拼接，避免源码出现凭据形态字面量）
         let leaked_pw = ["p@ss", "w0rd"].concat();
         let leaked_key = ["ak_", "12345"].concat();
-        assert!(!after.contains(&leaked_pw), "原始密码值不应残留: {after}");
+        assert!(
+            !after.contains(&leaked_pw),
+            "raw password value should not remain: {after}"
+        );
         assert!(
             !after.contains(&leaked_key),
-            "原始 api_key 值不应残留: {after}"
+            "raw api_key value should not remain: {after}"
         );
         // 非敏感字段不受影响
-        assert!(after.contains("secret_user"), "非敏感字段应保留: {after}");
-        println!("  ✓ password 和 api_key 已被自动脱敏");
+        assert!(
+            after.contains("secret_user"),
+            "non-sensitive fields should be kept: {after}"
+        );
+        println!("  ✓ password and api_key masked automatically");
     }
 
     // ============================================
     // 9. 禁用审计的对比
     // ============================================
-    println!("\n--- 9. 禁用审计 ---");
+    println!("\n--- 9. disable audit ---");
     let disabled_storage = Arc::new(MemoryAuditStorage::new(100));
     let disabled_logger = AuditLogger::with_config(
         AuditConfig {
@@ -323,41 +332,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
     disabled_logger.log_create("test", "t_1", "u", None).await?;
     println!(
-        "  enabled=false 时 log_create 后存储数量 = {} (应为 0)",
+        "  with enabled=false, storage count after log_create = {} (should be 0)",
         disabled_storage.event_count().await
     );
 
     // ============================================
     // 10. 日志清理
     // ============================================
-    println!("\n--- 10. 日志清理 ---");
+    println!("\n--- 10. log cleanup ---");
     // 写入一条"过期"事件（手动调整时间戳）
     let mut old_event = AuditEvent::create("legacy", "old_1", "system");
     old_event.timestamp = chrono::Utc::now() - chrono::Duration::days(30);
     logger.log(old_event).await?;
-    println!("  写入一条 30 天前的事件");
+    println!("  writing an event from 30 days ago");
 
     let removed = logger.cleanup(7).await?;
-    println!("  ✓ cleanup(7 days) 清理了 {} 条事件", removed);
+    println!("  ✓ cleanup(7 days) removed {} events", removed);
 
     println!("\n========================================");
-    println!("✨ 审计日志示例完成！");
+    println!("✨ Audit logging example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - AuditConfig                              - 审计配置");
-    println!("  - AuditLogger::with_config(config, storage) - 创建日志器");
-    println!("  - MemoryAuditStorage::new(capacity)         - 内存存储");
-    println!("  - AuditEventBuilder                         - 链式构建事件");
-    println!("  - AuditEvent::create/read/update/delete     - 快捷构造");
-    println!("  - AuditOperation: Create/Read/Update/Delete/... - 操作类型");
-    println!("  - AuditSeverity: Info/Low/Medium/High/Critical - 严重级别");
-    println!("  - AuditStatus: Success/Failure/Partial      - 结果状态");
-    println!("  - logger.log(event)                         - 记录事件");
-    println!("  - logger.log_create/read/update/delete      - 快捷记录");
-    println!("  - AuditQueryFilters                         - 查询过滤");
-    println!("  - logger.query(&filters) -> Vec<AuditEvent> - 查询日志");
-    println!("  - logger.cleanup(days)                      - 清理旧日志");
-    println!("  - 自动敏感字段脱敏 (password/token/api_key)   - 安全特性");
+    println!("\n📚 Key concepts:");
+    println!("  - AuditConfig                              - audit configuration");
+    println!("  - AuditLogger::with_config(config, storage) - create logger");
+    println!("  - MemoryAuditStorage::new(capacity)         - in-memory storage");
+    println!("  - AuditEventBuilder                         - chain event building");
+    println!("  - AuditEvent::create/read/update/delete     - quick constructors");
+    println!("  - AuditOperation: Create/Read/Update/Delete/... - operation types");
+    println!("  - AuditSeverity: Info/Low/Medium/High/Critical - severity levels");
+    println!("  - AuditStatus: Success/Failure/Partial      - result status");
+    println!("  - logger.log(event)                         - record an event");
+    println!("  - logger.log_create/read/update/delete      - quick recording");
+    println!("  - AuditQueryFilters                         - query filters");
+    println!("  - logger.query(&filters) -> Vec<AuditEvent> - query logs");
+    println!("  - logger.cleanup(days)                      - clean up old logs");
+    println!("  - automatic sensitive field masking (password/token/api_key) - safety feature");
 
     Ok(())
 }

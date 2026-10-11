@@ -970,17 +970,17 @@ mod tests {
 
         assert!(
             conn.execute("THIS IS NOT SQL").await.is_err(),
-            "非法 SQL 应失败"
+            "invalid SQL should fail"
         );
         conn.execute("CREATE TABLE t (id INTEGER)")
             .await
-            .expect("execute 失败后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed execute");
 
         assert!(conn.query("SELECT * FROM no_such_table").await.is_err());
         let rows = conn
             .query("SELECT 1 AS one")
             .await
-            .expect("query 失败后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed query");
         assert_eq!(rows.len(), 1);
 
         assert!(
@@ -993,7 +993,9 @@ mod tests {
         );
         conn.execute_with_params("INSERT INTO t VALUES (?)", vec![DuckValue::Int(7)])
             .await
-            .expect("execute_with_params 失败后连接应已归还池");
+            .expect(
+                "the connection should be returned to the pool after a failed execute_with_params",
+            );
 
         assert!(
             conn.query_with_params(
@@ -1006,7 +1008,9 @@ mod tests {
         let rows = conn
             .query_with_params("SELECT id FROM t WHERE id = ?", vec![DuckValue::Int(7)])
             .await
-            .expect("query_with_params 失败后连接应已归还池");
+            .expect(
+                "the connection should be returned to the pool after a failed query_with_params",
+            );
         assert_eq!(rows.len(), 1);
 
         let statements = vec![
@@ -1020,14 +1024,17 @@ mod tests {
         let rows = conn
             .query("SELECT COUNT(*) AS n FROM t")
             .await
-            .expect("事务失败后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed transaction");
         let n = match &rows[0].columns[0].1 {
             DuckValue::Int(v) => *v,
             DuckValue::BigInt(v) => *v as i32,
-            other => panic!("意外列值: {other:?}"),
+            other => panic!("unexpected column value: {other:?}"),
         };
         // 事务前已有 1 行（id=7）；失败事务中的 id=8 已回滚，不应出现
-        assert_eq!(n, 1, "回滚后不应有事务内新行（仅保留事务前的 id=7）");
+        assert_eq!(
+            n, 1,
+            "no new in-transaction row after rollback (only the pre-transaction id=7 remains)"
+        );
     }
 
     #[tokio::test]
@@ -1499,7 +1506,10 @@ mod tests {
             .expect("query after batch");
         let count = rows[0].get("cnt").expect("should have cnt");
         match count {
-            DuckValue::BigInt(n) => assert_eq!(*n, 3, "批内两条语句应均已执行"),
+            DuckValue::BigInt(n) => assert_eq!(
+                *n, 3,
+                "both statements in the batch should have been executed"
+            ),
             other => panic!("Expected BigInt, got {:?}", other),
         }
     }
@@ -1514,26 +1524,26 @@ mod tests {
             conn.execute_batch("CREATE TABLE ok_table (id INTEGER); THIS IS NOT SQL")
                 .await
                 .is_err(),
-            "含非法语句的批应失败"
+            "a batch containing an invalid statement should fail"
         );
         // 失败批之后连接已归还池：后续 execute_batch / execute 均仍可用
         conn.execute_batch("CREATE TABLE ok_table (id INTEGER); INSERT INTO ok_table VALUES (1)")
             .await
-            .expect("失败批后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed batch");
         conn.execute("INSERT INTO ok_table VALUES (2)")
             .await
-            .expect("execute 仍可用");
+            .expect("execute should still be usable");
     }
 
     #[tokio::test]
     async fn test_duckdb_execute_batch_syntax_error_returns_error() {
         let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
         let result = conn.execute_batch("CREAT TABL broken (id INTEGER)").await;
-        assert!(result.is_err(), "语法错误应返回错误");
+        assert!(result.is_err(), "a syntax error should return an error");
         let msg = format!("{}", result.unwrap_err());
         assert!(
             msg.contains("execute_batch"),
-            "错误信息应标注来源方法: {msg}"
+            "the error message should name the source method: {msg}"
         );
     }
 
@@ -1567,8 +1577,11 @@ mod tests {
                 Ok(n)
             })
             .await
-            .expect("事务应提交成功");
-        assert_eq!(written, 1, "事务内应读到本事务写入");
+            .expect("the transaction should commit successfully");
+        assert_eq!(
+            written, 1,
+            "the in-transaction write should be readable inside the transaction"
+        );
 
         // 提交后对池上后续语句可见
         let rows = conn
@@ -1576,7 +1589,7 @@ mod tests {
             .await
             .expect("query after commit");
         match rows[0].get("cnt").expect("should have cnt") {
-            DuckValue::BigInt(n) => assert_eq!(*n, 1, "commit 后应落库"),
+            DuckValue::BigInt(n) => assert_eq!(*n, 1, "the write should be persisted after commit"),
             other => panic!("Expected BigInt, got {:?}", other),
         }
     }
@@ -1609,15 +1622,21 @@ mod tests {
                 Ok(())
             })
             .await;
-        assert!(result.is_err(), "事务内语句失败应返回错误");
+        assert!(
+            result.is_err(),
+            "a statement failing inside a transaction should return an error"
+        );
 
         // 回滚生效（事务内 INSERT 不落库）且连接已归还池（后续查询可用）
         let rows = conn
             .query("SELECT COUNT(*) AS cnt FROM rb_test")
             .await
-            .expect("语句失败后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed statement");
         match rows[0].get("cnt").expect("should have cnt") {
-            DuckValue::BigInt(n) => assert_eq!(*n, 1, "失败事务应整体回滚,仅保留事务前的 1 行"),
+            DuckValue::BigInt(n) => assert_eq!(
+                *n, 1,
+                "a failed transaction should roll back entirely, keeping only the 1 pre-transaction row"
+            ),
             other => panic!("Expected BigInt, got {:?}", other),
         }
     }
@@ -1643,12 +1662,12 @@ mod tests {
                 Ok(7)
             })
             .await;
-        assert!(result.is_err(), "commit 失败应返回错误");
+        assert!(result.is_err(), "a failed commit should return an error");
 
         // 连接归还：后续语句仍可用
         conn.execute("INSERT INTO cf_test VALUES (1)")
             .await
-            .expect("commit 失败后连接应已归还池");
+            .expect("the connection should be returned to the pool after a failed commit");
     }
 
     // =====================================================================
@@ -1659,7 +1678,10 @@ mod tests {
     #[tokio::test]
     async fn test_serialized_writes_default_off_and_clone_shares_gate() {
         let conn = DuckDbConnection::new(":memory:").expect("Failed to create connection");
-        assert!(conn.serialized_write_gate.is_none(), "默认不应启用串行写闸");
+        assert!(
+            conn.serialized_write_gate.is_none(),
+            "the serialized write gate must not be enabled by default"
+        );
 
         let enabled = conn.with_serialized_writes();
         let cloned = enabled.clone();
@@ -1669,7 +1691,7 @@ mod tests {
                 enabled.serialized_write_gate.as_ref().unwrap(),
                 cloned.serialized_write_gate.as_ref().unwrap(),
             ),
-            "Clone 句柄应共享同一写闸"
+            "cloned handles should share the same write gate"
         );
 
         // 幂等:对已启用句柄(含 Clone 出的)重复启用,必须复用现有闸而非
@@ -1680,7 +1702,7 @@ mod tests {
                 enabled.serialized_write_gate.as_ref().unwrap(),
                 re_enabled.serialized_write_gate.as_ref().unwrap(),
             ),
-            "重复启用应复用同一写闸(幂等)"
+            "repeated enabling must reuse the same write gate (idempotent)"
         );
     }
 
@@ -1705,7 +1727,7 @@ mod tests {
                         Ok(())
                     })
                     .await
-                    .expect("写事务应成功");
+                    .expect("the write transaction should succeed");
                 }));
             }
             for handle in handles {
@@ -1721,7 +1743,7 @@ mod tests {
         let pooled_max = peak_inflight(pooled).await;
         assert!(
             pooled_max >= 2,
-            "默认池化并发下写事务应可重叠,实际 max={pooled_max}"
+            "write transactions should overlap with default pooled concurrency, got max={pooled_max}"
         );
 
         // 启用串行写闸:互斥,峰值并发=1
@@ -1731,7 +1753,10 @@ mod tests {
                 .with_serialized_writes(),
         );
         let serialized_max = peak_inflight(serialized).await;
-        assert_eq!(serialized_max, 1, "串行写闸下写事务应互斥");
+        assert_eq!(
+            serialized_max, 1,
+            "write transactions must be mutually exclusive under the serialized write gate"
+        );
     }
 
     /// 读并发不受限:写事务持闸期间,读路径不排队,在写事务窗口内完成。
@@ -1761,7 +1786,7 @@ mod tests {
                     Ok(())
                 })
                 .await
-                .expect("写事务应成功");
+                .expect("the write transaction should succeed");
         });
 
         // 轮询等写事务进入持闸窗口(最多 2s)
@@ -1773,7 +1798,10 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(2)).await;
         }
-        assert!(in_window, "写事务应已进入持闸窗口");
+        assert!(
+            in_window,
+            "the write transaction should have entered the gate-holding window"
+        );
 
         // 读路径在写持闸窗口内完成(若读被写闸阻塞,只能等写结束,下方断言必失败)
         let reader_conn = conn.clone();
@@ -1781,15 +1809,15 @@ mod tests {
             reader_conn
                 .query("SELECT 1 AS one")
                 .await
-                .expect("读应成功")
+                .expect("the read should succeed")
         });
-        let _rows = read.await.expect("读任务不应 panic");
+        let _rows = read.await.expect("the read task should not panic");
         assert!(
             !writer.is_finished(),
-            "读完成时写事务仍应持闸,证明读未被写闸阻塞"
+            "the write transaction should still hold the gate when the read finishes, proving reads are not blocked by the write gate"
         );
 
-        writer.await.expect("写任务不应 panic");
+        writer.await.expect("the write task should not panic");
     }
 
     /// 取消安全：with_transaction 被超时取消后，spawn_blocking 任务跑完时
@@ -1811,7 +1839,10 @@ mod tests {
             }),
         )
         .await;
-        assert!(cancelled.is_err(), "长事务应在 50ms 处超时取消");
+        assert!(
+            cancelled.is_err(),
+            "a long transaction should time out and be cancelled at 50ms"
+        );
 
         // blocking 任务跑完(约 300ms)后连接已归还:单连接池上后续语句可用。
         // query 在连接归还前会因池空立即报错,故轮询等待归还完成。
@@ -1823,7 +1854,10 @@ mod tests {
                 break;
             }
         }
-        assert!(recovered, "取消后连接应归还池(2s 内恢复可用)");
+        assert!(
+            recovered,
+            "the connection should return to the pool after cancellation (usable again within 2s)"
+        );
     }
 
     /// 机制哨兵：commit(mut self) 按值消耗 Transaction,但其 Err 返回路径上
@@ -1842,7 +1876,7 @@ mod tests {
             tx.set_drop_behavior(duckdb::DropBehavior::Panic);
             tx.execute_batch("ROLLBACK").expect("manual rollback");
             let r = tx.commit();
-            assert!(r.is_err(), "手动回滚后 COMMIT 应失败");
+            assert!(r.is_err(), "COMMIT should fail after a manual rollback");
             "no-drop"
         }));
         match outcome {
@@ -1854,10 +1888,12 @@ mod tests {
                     .unwrap_or_default();
                 assert!(
                     msg.contains("Transaction dropped unexpectedly"),
-                    "panic 应来自 finish_ 的 Panic 分支,实际: {msg}"
+                    "the panic should come from the Panic branch of finish_, got: {msg}"
                 );
             }
-            Ok(_) => panic!("commit Err 路径未触发 Drop 兜底:doc 的 drop 清理论据失效,须同步修订"),
+            Ok(_) => panic!(
+                "the commit Err path did not trigger the Drop fallback: the drop-cleanup rationale in the doc no longer holds and must be updated"
+            ),
         }
     }
 }

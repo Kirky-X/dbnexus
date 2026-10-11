@@ -1227,7 +1227,7 @@ mod strategy_edge_tests {
             "consistent-hash",
             "YEARLY",
         ] {
-            assert!(is_known_strategy(name), "{name} 应为已知策略");
+            assert!(is_known_strategy(name), "{name} should be a known strategy");
         }
         assert!(!is_known_strategy("no-such-strategy"));
     }
@@ -1254,6 +1254,9 @@ mod strategy_edge_tests {
         router.add_shard(0, pool.clone());
         router.add_shard(1, pool);
         let session = router.get_session_for_key("order-1").await.unwrap();
-        assert!(session.is_some(), "已注册分片必须拿到会话");
+        assert!(
+            session.is_some(),
+            "a registered shard must obtain a session"
+        );
     }
 }

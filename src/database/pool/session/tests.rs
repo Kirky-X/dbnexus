@@ -1614,7 +1614,10 @@ mod txn_handle_error_path_tests {
             err.message()
         );
         drop(held);
-        assert!(session.rollback().await.is_err(), "拒绝路径已消耗事务句柄");
+        assert!(
+            session.rollback().await.is_err(),
+            "the rejection path has consumed the transaction handle"
+        );
     }
 
     /// isolation 变体同样受并发占用保护
@@ -1636,6 +1639,9 @@ mod txn_handle_error_path_tests {
         let err = session.commit().await.expect_err("must reject");
         assert!(err.message().contains("concurrent query"));
         drop(held);
-        assert!(session.commit().await.is_err(), "拒绝路径已消耗事务句柄");
+        assert!(
+            session.commit().await.is_err(),
+            "the rejection path has consumed the transaction handle"
+        );
     }
 }

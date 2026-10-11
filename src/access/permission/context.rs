@@ -1520,7 +1520,7 @@ mod tests {
             .await
             .unwrap();
         let err = ctx.load_policy(&config).await;
-        assert!(err.is_err(), "未定义角色加载必须报错");
+        assert!(err.is_err(), "loading an undefined role must fail");
     }
 
     #[tokio::test]

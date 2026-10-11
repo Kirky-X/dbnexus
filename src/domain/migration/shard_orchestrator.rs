@@ -8,6 +8,7 @@ use std::sync::Arc;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::database::sharding::ShardRouter;
+use crate::i18n;
 
 // ============================================================================
 // 类型定义
@@ -95,10 +96,9 @@ impl ShardMigrationOrchestrator {
                     shard_id,
                     success: false,
                     applied_versions: Vec::new(),
-                    error: Some(
-                        "分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移"
-                            .to_string(),
-                    ),
+                    error: Some(i18n::t_simple(
+                        "shard-migration-orchestration-not-implemented",
+                    )),
                 }
             });
         }
@@ -124,10 +124,9 @@ impl ShardMigrationOrchestrator {
                 shard_id,
                 success: false,
                 applied_versions: Vec::new(),
-                error: Some(
-                    "分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移"
-                        .to_string(),
-                ),
+                error: Some(i18n::t_simple(
+                    "shard-migration-orchestration-not-implemented",
+                )),
             });
         }
 
@@ -177,14 +176,21 @@ mod tests {
 
         assert_eq!(result.total_shards, 2);
         assert_eq!(result.results.len(), 2);
-        assert_eq!(result.success_count, 0, "占位实现不应报告任何成功分片");
+        assert_eq!(
+            result.success_count, 0,
+            "the placeholder implementation must not report any successful shards"
+        );
         assert_eq!(result.failed_shards.len(), 2);
         for shard in &result.results {
             assert!(!shard.success);
-            assert!(shard.error.is_some(), "error 应说明尚未实现");
             assert!(
-                shard.error.as_deref().unwrap().contains("尚未实现"),
-                "实际错误: {:?}",
+                shard.error.is_some(),
+                "the error should state that it is not implemented"
+            );
+            assert!(
+                shard.error.as_deref().unwrap().contains("not implemented")
+                    || shard.error.as_deref().unwrap().contains("尚未实现"),
+                "actual error: {:?}",
                 shard.error
             );
             assert!(shard.applied_versions.is_empty());

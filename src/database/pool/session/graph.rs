@@ -100,11 +100,10 @@ impl Session {
                 .check_graph_access(crate::access::permission::PermissionAction::Traverse)?;
         }
 
-        let conn = self.connection.as_ref().ok_or_else(|| {
-            DbError::Config(
-                "Connection not available - Session may have been invalidated".to_string(),
-            )
-        })?;
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("session-connection-not-available")))?;
 
         // 获取图操作互斥锁（防止并发 take → put back 窗口绕过事务隔离）
         let _graph_op_guard = self.graph_op_mutex.lock().await;

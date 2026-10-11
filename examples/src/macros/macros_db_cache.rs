@@ -58,24 +58,27 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("💾 DBNexus db_cache 宏示例");
+    println!("💾 DBNexus db_cache macro example");
     println!("========================================\n");
 
     // ============================================
     // 1. 展示宏生成的缓存常量
     // ============================================
-    println!("--- 1. 宏生成的缓存常量 ---\n");
-    println!("  CACHE_TTL          = {} 秒", Model::CACHE_TTL);
+    println!("--- 1. macro-generated cache constants ---\n");
+    println!("  CACHE_TTL          = {} sec", Model::CACHE_TTL);
     println!("  CACHE_STRATEGY     = \"{}\"", Model::CACHE_STRATEGY);
-    println!("  CACHE_MAX_CAPACITY = {} 条", Model::CACHE_MAX_CAPACITY);
+    println!(
+        "  CACHE_MAX_CAPACITY = {} entries",
+        Model::CACHE_MAX_CAPACITY
+    );
     println!("  CACHE_ENABLED      = {}", Model::CACHE_ENABLED);
 
     // ============================================
     // 2. 展示 cache_key() 方法
     // ============================================
-    println!("\n--- 2. cache_key() 方法 ---\n");
+    println!("\n--- 2. cache_key() method ---\n");
     let ids: Vec<i64> = vec![1, 2, 3, 100, 9999];
-    println!("  生成各 ID 的缓存键:");
+    println!("  generating the cache key for each ID:");
     for id in &ids {
         println!("    id={:<5} → key=\"{}\"", id, Model::cache_key(*id));
     }
@@ -83,9 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 展示 cache_config() 方法
     // ============================================
-    println!("\n--- 3. cache_config() 方法 ---\n");
+    println!("\n--- 3. cache_config() method ---\n");
     let cache_config: CacheConfig = Model::cache_config();
-    println!("  生成的 CacheConfig:");
+    println!("  the generated CacheConfig:");
     println!(
         "    policy_cache_capacity   = {}",
         cache_config.policy_cache_capacity
@@ -99,16 +102,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cache_config.query_cache_capacity
     );
     println!(
-        "    default_ttl             = {} 秒",
+        "    default_ttl             = {} sec",
         cache_config.default_ttl
     );
 
     // ============================================
     // 4. 创建 DbPool + Session
     // ============================================
-    println!("\n--- 4. 创建 DbPool + Session ---\n");
+    println!("\n--- 4. create DbPool + Session ---\n");
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("  ✓ Session 创建成功 (角色: admin)");
+    println!("  ✓ Session created (role: admin)");
 
     // 建表
     session
@@ -121,54 +124,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("  ✓ articles 表创建成功");
+    println!("  ✓ articles table created");
 
     // ============================================
     // 5. CRUD 操作 + 缓存键模式
     // ============================================
-    println!("\n--- 5. CRUD 操作 + 缓存键模式 ---\n");
+    println!("\n--- 5. CRUD operations + cache key patterns ---\n");
 
     // CREATE
     println!("[CREATE]");
     let article1 = Model {
         id: 1,
-        title: "Rust 异步编程指南".to_string(),
-        content: "本文介绍 Rust async/await 的核心概念...".to_string(),
+        title: "Rust Async Programming Guide".to_string(),
+        content: "This article introduces the core concepts of Rust async/await...".to_string(),
         author: "Alice".to_string(),
     };
     let created = Model::insert(&session, article1).await?;
     println!(
-        "  ✓ 插入文章: id={}, title=\"{}\"",
+        "  ✓ inserted article: id={}, title=\"{}\"",
         created.id, created.title
     );
     println!(
-        "    缓存键: \"{}\" (可用于写入缓存)",
+        "    cache key: \"{}\" (usable for writing to the cache)",
         Model::cache_key(created.id)
     );
 
     let article2 = Model {
         id: 2,
-        title: "Sea-ORM 实战教程".to_string(),
-        content: "Sea-ORM 是 Rust 的异步 ORM 框架...".to_string(),
+        title: "Sea-ORM in Practice".to_string(),
+        content: "Sea-ORM is an async ORM framework for Rust...".to_string(),
         author: "Bob".to_string(),
     };
     let created2 = Model::insert(&session, article2).await?;
     println!(
-        "  ✓ 插入文章: id={}, title=\"{}\"",
+        "  ✓ inserted article: id={}, title=\"{}\"",
         created2.id, created2.title
     );
-    println!("    缓存键: \"{}\"", Model::cache_key(created2.id));
+    println!("    cache key: \"{}\"", Model::cache_key(created2.id));
 
     // READ
     println!("\n[READ]");
     let found = Model::find_by_id(&session, 1).await?;
     if let Some(ref a) = found {
         println!(
-            "  ✓ 查询文章: id={}, title=\"{}\", author=\"{}\"",
+            "  ✓ queried article: id={}, title=\"{}\", author=\"{}\"",
             a.id, a.title, a.author
         );
         println!(
-            "    缓存键: \"{}\" (可用于读取/回填缓存)",
+            "    cache key: \"{}\" (usable for reading/backfilling the cache)",
             Model::cache_key(a.id)
         );
     }
@@ -179,31 +182,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let updated = Model::update(
         &session,
         Model {
-            title: "Rust 异步编程指南（第二版）".to_string(),
+            title: "Rust Async Programming Guide (2nd edition)".to_string(),
             ..before
         },
     )
     .await?;
     println!(
-        "  ✓ 更新文章: id={}, 新 title=\"{}\"",
+        "  ✓ updated article: id={}, new title=\"{}\"",
         updated.id, updated.title
     );
     println!(
-        "    缓存键: \"{}\" (更新后应失效缓存)",
+        "    cache key: \"{}\" (the cache should be invalidated after update)",
         Model::cache_key(updated.id)
     );
 
     // DELETE
     println!("\n[DELETE]");
     let deleted = Model::delete(&session, 2).await?;
-    println!("  ✓ 删除文章 id=2: 影响 {} 行", deleted);
-    println!("    缓存键: \"{}\" (删除后应清除缓存)", Model::cache_key(2));
+    println!("  ✓ deleted article id=2: {} rows affected", deleted);
+    println!(
+        "    cache key: \"{}\" (the cache should be cleared after delete)",
+        Model::cache_key(2)
+    );
 
     // ============================================
     // 6. 缓存键批量生成模式
     // ============================================
-    println!("\n--- 6. 缓存键批量生成模式 ---\n");
-    println!("  批量查询时生成缓存键列表:");
+    println!("\n--- 6. batch cache key generation pattern ---\n");
+    println!("  generating cache keys for batch queries:");
     let query_ids: Vec<i64> = vec![1, 2, 3, 4, 5];
     let cache_keys: Vec<String> = query_ids.iter().map(|id| Model::cache_key(*id)).collect();
     for (id, key) in query_ids.iter().zip(cache_keys.iter()) {
@@ -213,49 +219,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 7. CacheConfig 应用场景
     // ============================================
-    println!("\n--- 7. CacheConfig 应用场景 ---\n");
+    println!("\n--- 7. CacheConfig use cases ---\n");
     let cfg = Model::cache_config();
-    println!("  基于 db_cache 宏生成的 CacheConfig:");
+    println!("  CacheConfig generated by the db_cache macro:");
     println!(
-        "    - 策略缓存容量:     {} (来自 max_capacity={})",
+        "    - policy cache capacity:    {} (from max_capacity={})",
         cfg.policy_cache_capacity,
         Model::CACHE_MAX_CAPACITY
     );
     println!(
-        "    - SQL 解析缓存容量: {} (来自 max_capacity={})",
+        "    - SQL parse cache capacity: {} (from max_capacity={})",
         cfg.sql_parse_cache_capacity,
         Model::CACHE_MAX_CAPACITY
     );
     println!(
-        "    - 查询缓存容量:     {} (来自 max_capacity={})",
+        "    - query cache capacity:     {} (from max_capacity={})",
         cfg.query_cache_capacity,
         Model::CACHE_MAX_CAPACITY
     );
     println!(
-        "    - 默认 TTL:         {} 秒 (来自 CACHE_TTL={})",
+        "    - default TTL:         {} sec (from CACHE_TTL={})",
         cfg.default_ttl,
         Model::CACHE_TTL
     );
-    println!("\n  该配置可用于初始化 oxcache::Cache 或其他缓存后端。");
+    println!("\n  this config can initialize an oxcache::Cache or another cache backend.");
 
     println!("\n========================================");
-    println!("✨ db_entity 宏 cache 示例完成！");
+    println!("✨ db_entity macro cache example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
+    println!("\n📚 Key concepts:");
     println!(
-        "  - #[db_entity(..., cache(ttl=60, strategy=\"lru\", max_capacity=5000))]  生成缓存配置"
+        "  - #[db_entity(..., cache(ttl=60, strategy=\"lru\", max_capacity=5000))]  generates the cache config"
     );
-    println!("  - Model::CACHE_TTL           缓存 TTL（秒）");
-    println!("  - Model::CACHE_STRATEGY      缓存策略名称");
-    println!("  - Model::CACHE_MAX_CAPACITY  缓存最大容量");
-    println!("  - Model::CACHE_ENABLED       缓存是否启用");
-    println!("  - Model::cache_key(id)       生成缓存键 \"{{table_name}}:{{id}}\"");
-    println!("  - Model::cache_config()      生成 CacheConfig 实例");
+    println!("  - Model::CACHE_TTL           the cache TTL (seconds)");
+    println!("  - Model::CACHE_STRATEGY      the cache strategy name");
+    println!("  - Model::CACHE_MAX_CAPACITY  the max cache capacity");
+    println!("  - Model::CACHE_ENABLED       whether the cache is enabled");
+    println!("  - Model::cache_key(id)       generates the cache key \"{{table_name}}:{{id}}\"");
+    println!("  - Model::cache_config()      generates a CacheConfig instance");
     println!(
-        "\n⚠️  注意: #[db_entity] 的 cache 子参数仅生成配置常量和辅助方法，不自动执行缓存读写。"
+        "\n⚠️  Note: the cache sub-parameter of #[db_entity] only generates config constants and helper methods, it does not perform cache reads/writes automatically."
     );
-    println!("   开发者需在 CRUD 操作前后手动调用缓存 API 进行读写/失效。");
-    println!("   常量用于统一管理缓存策略，避免硬编码。");
+    println!(
+        "   developers must call the cache API manually around CRUD operations to read/write/invalidate."
+    );
+    println!("   the constants manage the cache policy centrally, avoiding hardcoding.");
 
     Ok(())
 }

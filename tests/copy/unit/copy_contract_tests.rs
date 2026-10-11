@@ -25,11 +25,11 @@ fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
 #[test]
 fn test_copy_statement_build_text() {
     let stmt = CopyStatement::new("t_copy", &["id".to_string(), "name".to_string()])
-        .expect("合法标识符应通过校验");
+        .expect("a valid identifier should pass validation");
     let sql = stmt.build();
     assert_eq!(
         sql, r#"COPY "t_copy" ("id", "name") FROM STDIN"#,
-        "语句应为 postgres 文本格式 COPY FROM STDIN，实际: {sql}"
+        "the statement should be a postgres text-format COPY FROM STDIN, actual: {sql}"
     );
     // format() 幂等（可重复取）
     assert_eq!(stmt.build(), sql);
@@ -46,10 +46,11 @@ fn test_copy_statement_rejects_injection_identifiers() {
         "",
         "t ",
     ] {
-        let err = CopyStatement::new(bad, &["id".to_string()]).expect_err("非法标识符应返回错误");
+        let err = CopyStatement::new(bad, &["id".to_string()])
+            .expect_err("an invalid identifier should return an error");
         assert!(
             format!("{err}").contains("identifier"),
-            "错误应说明 identifier 非法，实际: {err}"
+            "the error should state the identifier is invalid, actual: {err}"
         );
     }
     // 列名注入同样拒绝
@@ -82,7 +83,11 @@ fn test_copy_row_encoding_escapes_and_null() {
     ];
     let encoded = dbnexus::database::copy::encode_copy_rows(&rows);
     let lines: Vec<&str> = encoded.lines().collect();
-    assert_eq!(lines.len(), 2, "两行数据应以 \\n 分隔");
+    assert_eq!(
+        lines.len(),
+        2,
+        "the two data rows should be separated by \\n"
+    );
     assert_eq!(lines[0], "1\ta\\tb\tx\\ny\tb\\\\s\t\\N\t");
     assert_eq!(lines[1], "2.5\ttrue\t{\"k\":1}\t\\N\tc\t3");
 }
@@ -104,7 +109,7 @@ async fn test_copy_in_contract_rejects_non_postgres_backend() {
         DbError::Query(msg) | DbError::Config(msg) => {
             assert!(
                 msg.contains("postgres"),
-                "非 postgres 后端应报 COPY 仅 postgres 支持，实际: {msg}"
+                "a non-postgres backend should report that COPY supports postgres only, actual: {msg}"
             );
             // duckdb 驱动同启时本测试池为 sqlite 连接，copy_in 走 duckdb
             // 失配路径：统一文案必须以尾注保留原始下转错误的连接类型细节
@@ -112,16 +117,16 @@ async fn test_copy_in_contract_rejects_non_postgres_backend() {
             #[cfg(feature = "duckdb")]
             assert!(
                 msg.contains("got SeaOrm"),
-                "失配路径应保留原始连接类型细节供诊断，实际: {msg}"
+                "the mismatch path should preserve the original connection type detail for diagnosis, actual: {msg}"
             );
             // 无驱动组（sqlite-only）编译时错误应给出可执行的补救指引
             #[cfg(not(any(feature = "duckdb", feature = "postgres")))]
             assert!(
                 msg.contains("driver feature"),
-                "无驱动组错误应指引启用 postgres/duckdb 驱动，实际: {msg}"
+                "the no-driver-group error should direct enabling the postgres/duckdb driver, actual: {msg}"
             );
         }
-        other => panic!("应返回明确错误而非 panic，实际: {other:?}"),
+        other => panic!("should return a clear error instead of panicking, actual: {other:?}"),
     }
 
     let _ = std::fs::remove_file(&path);

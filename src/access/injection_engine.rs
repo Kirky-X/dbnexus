@@ -580,7 +580,7 @@ mod tests {
                 assert_eq!(
                     engine_contains(input),
                     legacy_contains(input),
-                    "引擎与遗留规则表判定不一致: {input}"
+                    "engine and legacy rule table disagree: {input}"
                 );
             }
         }
@@ -626,7 +626,7 @@ mod tests {
         assert_eq!(
             relational_count,
             LEGACY_RELATIONAL.len() - 4,
-            "关系型规则应恰剪除 4 条冗余"
+            "relational rules should prune exactly 4 redundant entries"
         );
         // "; EXECUTE" 场景仍由 "; EXEC" 命中
         assert!(engine_contains("SELECT 1; EXECUTE SP_X"));

@@ -321,11 +321,7 @@ impl Session {
     pub fn connection(&self) -> Result<&DatabaseConnection, DbError> {
         self.connection
             .as_ref()
-            .ok_or_else(|| {
-                DbError::Config(
-                    "Connection not available - Session may have been invalidated".to_string(),
-                )
-            })?
+            .ok_or_else(|| DbError::Config(i18n::t_simple("session-connection-not-available")))?
             .as_sea_orm()
     }
 

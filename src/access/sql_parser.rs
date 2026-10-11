@@ -1075,14 +1075,14 @@ mod tests {
         let result = parser
             .parse_single("INSERT INTO users (name, age) VALUES (?, ?)")
             .await
-            .expect("含 ? 占位符的 INSERT 应解析成功");
+            .expect("an INSERT with ? placeholders should parse successfully");
         assert_eq!(result.table_name.as_deref(), Some("users"));
         assert!(matches!(result.operation_type, SqlOperationType::Insert));
 
         let select = parser
             .parse_single("SELECT name FROM users WHERE id = ? AND age > ?")
             .await
-            .expect("含 ? 占位符的 SELECT 应解析成功");
+            .expect("a SELECT with ? placeholders should parse successfully");
         assert_eq!(select.table_name.as_deref(), Some("users"));
         assert!(matches!(select.operation_type, SqlOperationType::Select));
     }
@@ -1106,7 +1106,7 @@ mod tests {
     /// 解析 SQL 并提取全部引用表（仅用于测试的辅助函数）
     fn extract_tables(sql: &str) -> Vec<String> {
         let dialect = GenericDialect {};
-        let stmts = Parser::parse_sql(&dialect, sql).expect("解析失败");
+        let stmts = Parser::parse_sql(&dialect, sql).expect("parse failed");
         let mut out = Vec::new();
         if let Some(Statement::Query(query)) = stmts.first() {
             extract_query_tables(query, &mut out);
@@ -1212,22 +1212,26 @@ mod tests {
 
         assert!(
             parser.parse_single(bad_sql).await.is_err(),
-            "非法语句应解析失败"
+            "an invalid statement should fail to parse"
         );
         assert_eq!(
             parser.parse_cache.stats().size,
             0,
-            "失败解析不得写入缓存条目"
+            "failed parses must not write cache entries"
         );
 
         // 同一非法语句二次解析：仍计入未命中（重走解析），条目数仍为 0
         assert!(parser.parse_single(bad_sql).await.is_err());
         let (hits, misses) = parser.cache_stats();
-        assert_eq!((hits, misses), (0, 2), "两次失败解析均应计入未命中");
+        assert_eq!(
+            (hits, misses),
+            (0, 2),
+            "both failed parses should count as cache misses"
+        );
         assert_eq!(
             parser.parse_cache.stats().size,
             0,
-            "重复失败解析后缓存仍不得有条目"
+            "the cache must still hold no entries after repeated failed parses"
         );
 
         // 失败与成功互不干扰：成功语句正常入缓存命中
@@ -1236,7 +1240,7 @@ mod tests {
         assert_eq!(
             parser.cache_stats(),
             (1, 3),
-            "成功语句一次未命中 + 一次命中（失败解析的 2 次未命中保留）"
+            "one miss then one hit for a valid statement (the 2 misses from failed parses are kept)"
         );
     }
 
@@ -2035,7 +2039,7 @@ mod tests {
             let twj = &sel.from[0];
             assert!(
                 extract_table_name_from_table_with_joins(twj).is_none(),
-                "派生表关系应提取为 None"
+                "a derived-table relation should extract as None"
             );
         }
     }

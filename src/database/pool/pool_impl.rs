@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(
             builder.config.unwrap().admin_role,
             "new_admin",
-            "先设 admin_role 再设 config 应保留显式值"
+            "setting admin_role before config should keep the explicit value"
         );
     }
 
@@ -520,7 +520,10 @@ mod tests {
     #[tokio::test]
     async fn test_builder_without_url_or_config_rejected() {
         let result = DbPoolBuilder::new().build().await;
-        assert!(result.is_err(), "缺 url/config 必须显性拒绝");
+        assert!(
+            result.is_err(),
+            "a missing url/config must be explicitly rejected"
+        );
     }
 
     // sqlite::memory: 需 sqlite driver：neo4j-only 等无 sqlite 组合不可运行

@@ -804,7 +804,7 @@ mod tests {
         assert_eq!(
             mode & 0o777,
             0o600,
-            "COPY 载荷临时文件应仅属主可读写，实际: {:o}",
+            "the COPY payload temp file should be readable/writable by the owner only, got: {:o}",
             mode & 0o777
         );
         let _ = std::fs::remove_file(&path);

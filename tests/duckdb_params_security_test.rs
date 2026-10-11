@@ -25,7 +25,9 @@ async fn single_conn_pool(url: &str) -> DbPool {
         },
         ..Default::default()
     };
-    DbPool::with_config(config).await.expect("pool 创建失败")
+    DbPool::with_config(config)
+        .await
+        .expect("pool creation failed")
 }
 
 #[tokio::test]
@@ -36,7 +38,7 @@ async fn params_roundtrip_and_injection_safety() {
     session
         .execute_duckdb_raw("CREATE TABLE t_users (name VARCHAR, age INTEGER, score DOUBLE)")
         .await
-        .expect("建表");
+        .expect("create table");
 
     // 参数化插入（含单引号注入载荷：应作为字面量存储而非 SQL 执行）
     let injected = "r').payload; DROP TABLE t_users;--";
@@ -50,7 +52,7 @@ async fn params_roundtrip_and_injection_safety() {
             ],
         )
         .await
-        .expect("参数化插入");
+        .expect("parameterized insert");
     assert_eq!(affected.rows_affected, 1);
 
     // 参数化查询 + 表仍存在（注入未生效）
@@ -60,7 +62,7 @@ async fn params_roundtrip_and_injection_safety() {
             vec![DuckValue::Int(18)],
         )
         .await
-        .expect("参数化查询");
+        .expect("parameterized query");
     assert_eq!(rows.len(), 1);
     assert_eq!(
         rows[0].get("name"),
@@ -85,11 +87,11 @@ async fn sqlparser_gate_accepts_duckdb_dialect() {
     session
         .execute_duckdb_raw("CREATE SEQUENCE IF NOT EXISTS seq_test START 1")
         .await
-        .expect("CREATE SEQUENCE 应通过安全门");
+        .expect("CREATE SEQUENCE should pass the safety gate");
     session
         .execute_duckdb_raw("CREATE TABLE t_conflict (k VARCHAR PRIMARY KEY, v INTEGER)")
         .await
-        .expect("建表");
+        .expect("create table");
     // ON CONFLICT DO UPDATE（upsert）
     session
         .execute_duckdb_raw_with_params(
@@ -97,26 +99,26 @@ async fn sqlparser_gate_accepts_duckdb_dialect() {
             vec![DuckValue::Text("a".into()), DuckValue::Int(1)],
         )
         .await
-        .expect("ON CONFLICT upsert 应通过安全门");
+        .expect("ON CONFLICT upsert should pass the safety gate");
     session
         .execute_duckdb_raw_with_params(
             "INSERT INTO t_conflict (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v",
             vec![DuckValue::Text("a".into()), DuckValue::Int(2)],
         )
         .await
-        .expect("同 key 二次 upsert");
+        .expect("second upsert with the same key");
     // INSERT OR REPLACE（nav_history upsert 语法）
     session
         .execute_duckdb_raw("CREATE TABLE t_replace (k VARCHAR PRIMARY KEY, v INTEGER)")
         .await
-        .expect("建表 t_replace");
+        .expect("create table t_replace");
     session
         .execute_duckdb_raw_with_params(
             "INSERT OR REPLACE INTO t_replace (k, v) VALUES (?, ?)",
             vec![DuckValue::Text("x".into()), DuckValue::Int(9)],
         )
         .await
-        .expect("INSERT OR REPLACE 应通过安全门");
+        .expect("INSERT OR REPLACE should pass the safety gate");
     // INSERT ... SELECT ... WHERE NOT EXISTS（default 组合延迟创建语法）
     session
         .execute_duckdb_raw_with_params(
@@ -128,7 +130,7 @@ async fn sqlparser_gate_accepts_duckdb_dialect() {
             ],
         )
         .await
-        .expect("INSERT..SELECT..WHERE NOT EXISTS 应通过安全门");
+        .expect("INSERT..SELECT..WHERE NOT EXISTS should pass the safety gate");
     // RETURNING 子句（走查询路径，返回插入行；业务层取自增 id 依赖此能力）
     let rows = session
         .execute_duckdb_with_params(
@@ -136,17 +138,17 @@ async fn sqlparser_gate_accepts_duckdb_dialect() {
             vec![DuckValue::Text("c".into()), DuckValue::Int(4)],
         )
         .await
-        .expect("RETURNING 应通过安全门");
-    assert_eq!(rows.len(), 1, "RETURNING 应返回插入行");
+        .expect("RETURNING should pass the safety gate");
+    assert_eq!(rows.len(), 1, "RETURNING should return the inserted row");
 
     let final_rows = session
         .execute_duckdb("SELECT v FROM t_conflict WHERE k = 'a'")
         .await
-        .expect("查询");
+        .expect("query");
     assert_eq!(
         final_rows[0].get("v"),
         Some(&DuckValue::Int(2)),
-        "upsert 应覆盖为 2"
+        "the upsert should overwrite to 2"
     );
 }
 
@@ -158,7 +160,7 @@ async fn transaction_batch_atomic_commit_and_rollback() {
     session
         .execute_duckdb_raw("CREATE TABLE t_ledger (id INTEGER, amount DOUBLE)")
         .await
-        .expect("建表");
+        .expect("create table");
 
     // 提交路径：3 条语句同事务全部生效
     let results = session
@@ -177,7 +179,7 @@ async fn transaction_batch_atomic_commit_and_rollback() {
             ),
         ])
         .await
-        .expect("事务提交");
+        .expect("transaction commit");
     assert_eq!(results.len(), 3);
     assert_eq!(results[1].rows_affected, 1);
     assert_eq!(results[2].rows_affected, 1);
@@ -185,11 +187,11 @@ async fn transaction_batch_atomic_commit_and_rollback() {
     let rows = session
         .execute_duckdb("SELECT COUNT(*) AS c FROM t_ledger")
         .await
-        .expect("查询");
+        .expect("query");
     assert_eq!(
         rows[0].get("c"),
         Some(&DuckValue::BigInt(1)),
-        "提交后应剩 1 行"
+        "1 row should remain after commit"
     );
 
     // 回滚路径：第 2 条语句失败（引用不存在的表）→ 第 1 条的插入被回滚
@@ -205,16 +207,16 @@ async fn transaction_batch_atomic_commit_and_rollback() {
             ),
         ])
         .await;
-    assert!(err.is_err(), "失败事务应返回 Err");
+    assert!(err.is_err(), "a failed transaction should return Err");
 
     let rows = session
         .execute_duckdb("SELECT COUNT(*) AS c FROM t_ledger WHERE id = 99")
         .await
-        .expect("查询");
+        .expect("query");
     assert_eq!(
         rows[0].get("c"),
         Some(&DuckValue::BigInt(0)),
-        "回滚后 id=99 不应存在"
+        "id=99 should not exist after rollback"
     );
 }
 
@@ -222,7 +224,7 @@ async fn transaction_batch_atomic_commit_and_rollback() {
 async fn file_pool_single_connection_survives_sequential_sessions() {
     // 文件库 + max=1：多个 session 顺序获取/归还，不触发二次 open 文件锁冲突
     let dir = std::env::temp_dir().join(format!("dbnexus_param_test_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("建临时目录");
+    std::fs::create_dir_all(&dir).expect("create a temporary directory");
     let db_path = dir.join("file_pool_test.duckdb");
     let url = format!("duckdb://{}", db_path.display());
 
@@ -232,21 +234,21 @@ async fn file_pool_single_connection_survives_sequential_sessions() {
         session
             .execute_duckdb_raw("CREATE TABLE IF NOT EXISTS t_seq (v INTEGER)")
             .await
-            .expect("建表");
+            .expect("create table");
         session
             .execute_duckdb_raw_with_params(
                 "INSERT INTO t_seq (v) VALUES (?)",
                 vec![DuckValue::Int(i)],
             )
             .await
-            .expect("插入");
+            .expect("insert");
         drop(session);
     }
     let session = pool.get_session("admin").await.expect("session");
     let rows = session
         .execute_duckdb("SELECT COUNT(*) AS c FROM t_seq")
         .await
-        .expect("查询");
+        .expect("query");
     assert_eq!(rows[0].get("c"), Some(&DuckValue::BigInt(3)));
     drop(session);
     drop(pool);

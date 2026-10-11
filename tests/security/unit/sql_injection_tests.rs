@@ -16,37 +16,37 @@ fn test_stacked_queries_lowercase() {
     // ; drop table (小写)
     assert!(
         contains_sql_injection("select * from users; drop table users"),
-        "应该检测到小写的 '; drop table'"
+        "the lowercase '; drop table' should be detected"
     );
     // ; delete from (小写)
     assert!(
         contains_sql_injection("select * from users; delete from users"),
-        "应该检测到小写的 '; delete from'"
+        "the lowercase '; delete from' should be detected"
     );
     // ; update (小写)
     assert!(
         contains_sql_injection("select * from users; update users set admin = 1"),
-        "应该检测到小写的 '; update'"
+        "the lowercase '; update' should be detected"
     );
     // ; insert (小写)
     assert!(
         contains_sql_injection("select * from users; insert into users values (1, 'hacker')"),
-        "应该检测到小写的 '; insert'"
+        "the lowercase '; insert' should be detected"
     );
     // ; truncate (小写)
     assert!(
         contains_sql_injection("select * from users; truncate table users"),
-        "应该检测到小写的 '; truncate'"
+        "the lowercase '; truncate' should be detected"
     );
     // ; alter (小写)
     assert!(
         contains_sql_injection("select * from users; alter table users add column hacked int"),
-        "应该检测到小写的 '; alter'"
+        "the lowercase '; alter' should be detected"
     );
     // ; create (小写)
     assert!(
         contains_sql_injection("select * from users; create table hacked (id int)"),
-        "应该检测到小写的 '; create'"
+        "the lowercase '; create' should be detected"
     );
 }
 
@@ -56,17 +56,17 @@ fn test_union_injection_lowercase() {
     // union select (小写)
     assert!(
         contains_sql_injection("select * from users union select * from admin"),
-        "应该检测到小写的 'union select'"
+        "the lowercase 'union select' should be detected"
     );
     // union all select (小写)
     assert!(
         contains_sql_injection("select * from users union all select * from admin"),
-        "应该检测到小写的 'union all select'"
+        "the lowercase 'union all select' should be detected"
     );
     // union distinct select (小写)
     assert!(
         contains_sql_injection("select * from users union distinct select password from admin"),
-        "应该检测到小写的 'union distinct select'"
+        "the lowercase 'union distinct select' should be detected"
     );
 }
 
@@ -76,27 +76,27 @@ fn test_boolean_blind_lowercase() {
     // or 1=1 (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 or 1=1"),
-        "应该检测到小写的 'or 1=1'"
+        "the lowercase 'or 1=1' should be detected"
     );
     // or true (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 or true"),
-        "应该检测到小写的 'or true'"
+        "the lowercase 'or true' should be detected"
     );
     // or false (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 or false"),
-        "应该检测到小写的 'or false'"
+        "the lowercase 'or false' should be detected"
     );
     // and 1=1 (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 and 1=1"),
-        "应该检测到小写的 'and 1=1'"
+        "the lowercase 'and 1=1' should be detected"
     );
     // and true (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 and true"),
-        "应该检测到小写的 'and true'"
+        "the lowercase 'and true' should be detected"
     );
 }
 
@@ -106,29 +106,29 @@ fn test_time_blind_lowercase() {
     // MySQL: sleep( (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 and sleep(5)"),
-        "应该检测到小写的 'sleep('"
+        "the lowercase 'sleep(' should be detected"
     );
     // MySQL: benchmark( (小写)
     assert!(
         contains_sql_injection(
             "select * from users where id = 1 and benchmark(10000000,sha1('test'))"
         ),
-        "应该检测到小写的 'benchmark('"
+        "the lowercase 'benchmark(' should be detected"
     );
     // PostgreSQL: pg_sleep( (小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 and pg_sleep(5)"),
-        "应该检测到小写的 'pg_sleep('"
+        "the lowercase 'pg_sleep(' should be detected"
     );
     // SQL Server: waitfor delay (小写)
     assert!(
         contains_sql_injection("waitfor delay '0:0:5'"),
-        "应该检测到小写的 'waitfor delay'"
+        "the lowercase 'waitfor delay' should be detected"
     );
     // SQL Server: waitfor time (小写)
     assert!(
         contains_sql_injection("waitfor time '12:00:00'"),
-        "应该检测到小写的 'waitfor time'"
+        "the lowercase 'waitfor time' should be detected"
     );
 }
 
@@ -138,22 +138,22 @@ fn test_dynamic_sql_lowercase() {
     // exec( (小写)
     assert!(
         contains_sql_injection("exec('drop table users')"),
-        "应该检测到小写的 'exec('"
+        "the lowercase 'exec(' should be detected"
     );
     // execute( (小写)
     assert!(
         contains_sql_injection("execute('select * from users')"),
-        "应该检测到小写的 'execute('"
+        "the lowercase 'execute(' should be detected"
     );
     // sp_executesql (小写)
     assert!(
         contains_sql_injection("sp_executesql n'select * from users'"),
-        "应该检测到小写的 'sp_executesql'"
+        "the lowercase 'sp_executesql' should be detected"
     );
     // xp_cmdshell (小写)
     assert!(
         contains_sql_injection("xp_cmdshell 'dir'"),
-        "应该检测到小写的 'xp_cmdshell'"
+        "the lowercase 'xp_cmdshell' should be detected"
     );
 }
 
@@ -163,17 +163,17 @@ fn test_file_operations_lowercase() {
     // load_file( (小写)
     assert!(
         contains_sql_injection("select load_file('/etc/passwd')"),
-        "应该检测到小写的 'load_file('"
+        "the lowercase 'load_file(' should be detected"
     );
     // into outfile (小写)
     assert!(
         contains_sql_injection("select * from users into outfile '/tmp/users.txt'"),
-        "应该检测到小写的 'into outfile'"
+        "the lowercase 'into outfile' should be detected"
     );
     // into dumpfile (小写)
     assert!(
         contains_sql_injection("select * from users into dumpfile '/tmp/users.txt'"),
-        "应该检测到小写的 'into dumpfile'"
+        "the lowercase 'into dumpfile' should be detected"
     );
 }
 
@@ -183,32 +183,32 @@ fn test_info_disclosure_lowercase() {
     // information_schema (小写)
     assert!(
         contains_sql_injection("select * from information_schema.tables"),
-        "应该检测到小写的 'information_schema'"
+        "the lowercase 'information_schema' should be detected"
     );
     // sysobjects (小写)
     assert!(
         contains_sql_injection("select * from sysobjects"),
-        "应该检测到小写的 'sysobjects'"
+        "the lowercase 'sysobjects' should be detected"
     );
     // sys.tables (小写)
     assert!(
         contains_sql_injection("select * from sys.tables"),
-        "应该检测到小写的 'sys.tables'"
+        "the lowercase 'sys.tables' should be detected"
     );
     // mysql.user (小写)
     assert!(
         contains_sql_injection("select * from mysql.user"),
-        "应该检测到小写的 'mysql.user'"
+        "the lowercase 'mysql.user' should be detected"
     );
     // pg_user (小写)
     assert!(
         contains_sql_injection("select * from pg_user"),
-        "应该检测到小写的 'pg_user'"
+        "the lowercase 'pg_user' should be detected"
     );
     // pg_shadow (小写)
     assert!(
         contains_sql_injection("select * from pg_shadow"),
-        "应该检测到小写的 'pg_shadow'"
+        "the lowercase 'pg_shadow' should be detected"
     );
 }
 
@@ -218,22 +218,22 @@ fn test_encoding_bypass_lowercase() {
     // char( (小写)
     assert!(
         contains_sql_injection("select * from users where name = char(97,100,109,105,110)"),
-        "应该检测到小写的 'char('"
+        "the lowercase 'char(' should be detected"
     );
     // chr( (小写)
     assert!(
         contains_sql_injection("select * from users where name = chr(65)"),
-        "应该检测到小写的 'chr('"
+        "the lowercase 'chr(' should be detected"
     );
     // concat( (小写)
     assert!(
         contains_sql_injection("select * from users where name = concat('ad','min')"),
-        "应该检测到小写的 'concat('"
+        "the lowercase 'concat(' should be detected"
     );
     // concat_ws( (小写)
     assert!(
         contains_sql_injection("select concat_ws(',', 'a', 'b', 'c')"),
-        "应该检测到小写的 'concat_ws('"
+        "the lowercase 'concat_ws(' should be detected"
     );
 }
 
@@ -243,21 +243,21 @@ fn test_comment_injection() {
     // -- 注释（移除后面内容）
     assert!(
         contains_sql_injection("select * from users where id = 1 -- "),
-        "应该检测到 '-- ' 注释注入"
+        "the '-- ' comment injection should be detected"
     );
     assert!(
         contains_sql_injection("select * from users where id = 1 --+"),
-        "应该检测到 '--+' 注释注入"
+        "the '--+' comment injection should be detected"
     );
     // # 注释 (MySQL)
     assert!(
         contains_sql_injection("select * from users where id = 1 #"),
-        "应该检测到 '#' 注释注入"
+        "the '#' comment injection should be detected"
     );
     // /* */ 块注释
     assert!(
         contains_sql_injection("select * /* comment */ from users"),
-        "应该检测到 '/* ' 块注释注入"
+        "the '/* ' block comment injection should be detected"
     );
 }
 
@@ -267,22 +267,22 @@ fn test_mixed_case_injection() {
     // UnIoN SeLeCt (混合大小写)
     assert!(
         contains_sql_injection("select * from users UnIoN SeLeCt * from admin"),
-        "应该检测到混合大小写的 'UnIoN SeLeCt'"
+        "the mixed-case 'UnIoN SeLeCt' should be detected"
     );
     // ; DrOp TaBlE (混合大小写)
     assert!(
         contains_sql_injection("select * from users; DrOp TaBlE users"),
-        "应该检测到混合大小写的 '; DrOp TaBlE'"
+        "the mixed-case '; DrOp TaBlE' should be detected"
     );
     // InFoRmAtIoN_ScHeMa (混合大小写)
     assert!(
         contains_sql_injection("select * from InFoRmAtIoN_ScHeMa.TaBlEs"),
-        "应该检测到混合大小写的 'InFoRmAtIoN_ScHeMa'"
+        "the mixed-case 'InFoRmAtIoN_ScHeMa' should be detected"
     );
     // SlEeP( (混合大小写)
     assert!(
         contains_sql_injection("select * from users where id = 1 and SlEeP(5)"),
-        "应该检测到混合大小写的 'SlEeP('"
+        "the mixed-case 'SlEeP(' should be detected"
     );
 }
 
@@ -292,31 +292,31 @@ fn test_false_positives_lowercase() {
     // 正常的 select 语句（小写）
     assert!(
         !contains_sql_injection("select id, name from users where id = 1"),
-        "正常的 SELECT 不应被检测为注入"
+        "a normal SELECT should not be detected as injection"
     );
     // 正常的 insert 语句（小写）
     assert!(
         !contains_sql_injection(
             "insert into users (name, email) values ('test', 'test@example.com')"
         ),
-        "正常的 INSERT 不应被检测为注入"
+        "a normal INSERT should not be detected as injection"
     );
     // 正常的 update 语句（小写）
     assert!(
         !contains_sql_injection("update users set name = 'new_name' where id = 1"),
-        "正常的 UPDATE 不应被检测为注入"
+        "a normal UPDATE should not be detected as injection"
     );
     // 正常的 delete 语句（小写）
     assert!(
         !contains_sql_injection("delete from users where id = 1"),
-        "正常的 DELETE 不应被检测为注入"
+        "a normal DELETE should not be detected as injection"
     );
     // 正常的 join 操作（小写）
     assert!(
         !contains_sql_injection(
             "select u.name, o.order_id from users u join orders o on u.id = o.user_id"
         ),
-        "正常的 JOIN 不应被检测为注入"
+        "a normal JOIN should not be detected as injection"
     );
 }
 
@@ -337,7 +337,7 @@ fn test_ddl_guard_vs_sql_injection() {
     let result = guard.validate("CREATE TABLE users (id INT PRIMARY KEY)");
     assert!(
         matches!(result, Ok(DdlValidationResult::Allowed)),
-        "合法的 CREATE TABLE 应该通过 DDL Guard"
+        "a legal CREATE TABLE should pass the DDL Guard"
     );
 
     // DDL Guard 边界（真实行为核正，阶段 2 验收）：自 0540954 起白名单放行
@@ -347,12 +347,12 @@ fn test_ddl_guard_vs_sql_injection() {
     let result = guard.validate("DROP TABLE users");
     assert!(
         matches!(result, Ok(DdlValidationResult::Allowed)),
-        "DROP TABLE 应被 admin 白名单放行（迁移场景）"
+        "DROP TABLE should be allowed by the admin allowlist (migration scenarios)"
     );
     let result = guard.validate("DROP DATABASE users");
     assert!(
         matches!(result, Ok(DdlValidationResult::Forbidden(_))),
-        "DROP DATABASE 应被 DDL Guard 拒绝"
+        "DROP DATABASE should be rejected by the DDL Guard"
     );
 
     // 注入检测独立工作：contains_sql_injection 仅针对 DML，DDL 经 DdlGuard 验证
@@ -365,7 +365,7 @@ fn test_complete_sql_security_flow() {
     let safe_sql = "SELECT * FROM users WHERE id = 1";
     assert!(
         !contains_sql_injection(safe_sql),
-        "安全的 SQL 不应被标记为注入"
+        "safe SQL should not be flagged as injection"
     );
 
     let ddl_sql = "CREATE TABLE test_table (id INT)";
@@ -373,19 +373,19 @@ fn test_complete_sql_security_flow() {
     let result = guard.validate(ddl_sql);
     assert!(
         matches!(result, Ok(DdlValidationResult::Allowed)),
-        "合法 DDL 应该通过 DdlGuard"
+        "legal DDL should pass the DdlGuard"
     );
 
     let dangerous_ddl = "DROP DATABASE production";
     let result = guard.validate(dangerous_ddl);
     assert!(
         matches!(result, Ok(DdlValidationResult::Forbidden(_))),
-        "危险的 DDL 应该被拦截"
+        "dangerous DDL should be blocked"
     );
 
     let injection_sql = "SELECT * FROM users WHERE id = 1 OR 1=1";
     assert!(
         contains_sql_injection(injection_sql),
-        "包含注入模式的 SQL 应该被检测"
+        "SQL containing injection patterns should be detected"
     );
 }

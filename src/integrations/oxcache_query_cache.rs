@@ -374,19 +374,19 @@ mod unit_tests {
         let err = qc
             .query_cached("SELECT 1", &[], &[])
             .await
-            .expect_err("空表集必须拒绝");
+            .expect_err("an empty table set must be rejected");
         assert!(matches!(err, DbError::Config(_)), "got {err:?}");
 
         let err = qc
             .query_cached("SELECT 1", &[], &["bad;name"])
             .await
-            .expect_err("非法表名必须拒绝");
+            .expect_err("an invalid table name must be rejected");
         assert!(matches!(err, DbError::Config(_)), "got {err:?}");
 
         let err = qc
             .invalidate_table("bad;name")
             .await
-            .expect_err("非法表名失效也必须拒绝");
+            .expect_err("an invalid table name must also be rejected on invalidation");
         assert!(matches!(err, DbError::Config(_)), "got {err:?}");
     }
 
@@ -410,7 +410,7 @@ mod unit_tests {
         let err = qc
             .query_cached("SELECT 1", &[], &["t9"])
             .await
-            .expect_err("损坏载荷必须报错");
+            .expect_err("a corrupted payload must error");
         let msg = err.message();
         assert!(
             msg.contains("decode") || msg.contains("解析") || !msg.is_empty(),
@@ -434,6 +434,9 @@ mod unit_tests {
         let k1 = qc.derive_key("SELECT 1", &[], &["t9"]).await.unwrap();
         let other = make_qc(pool);
         let k2 = other.derive_key("SELECT 1", &[], &["t9"]).await.unwrap();
-        assert_ne!(k1, k2, "不同安全上下文必须派生不同 key");
+        assert_ne!(
+            k1, k2,
+            "different security contexts must derive different keys"
+        );
     }
 }

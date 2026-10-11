@@ -38,6 +38,8 @@ use oxcache::features::stale::StalePolicy;
 use oxcache::{Cache, OxCacheError};
 use tokio::sync::Mutex as AsyncMutex;
 
+use crate::i18n;
+
 use super::provider::PermissionProvider;
 use super::types::RolePolicy;
 
@@ -158,7 +160,7 @@ impl PermissionCache {
             .stale_ttl(stale_window)
             .stale_policy(StalePolicy::OffloadRevalidate)
             .build_sync()
-            .expect("oxcache 默认 memory 后端构建不应失败（无用户后端可失败）")
+            .expect("oxcache default memory backend build must not fail (no user backend can fail)")
     }
 
     /// 创建新的权限缓存（使用默认配置）
@@ -211,7 +213,10 @@ impl PermissionCache {
             .set_with_ttl(&key.to_string(), &value, Some(self.config.ttl))
             .await
         {
-            log::warn!("PermissionCache insert 失败（错误不含键原文）: {e}");
+            log::warn!(
+                "{}",
+                i18n::t("perm-cache-log-insert-failed", &[("error", e.to_string())])
+            );
         }
     }
 
@@ -219,7 +224,13 @@ impl PermissionCache {
     pub async fn invalidate(&self, key: &str) {
         self.revalidate_gate.remove(key);
         if let Err(e) = self.inner.delete(&key.to_string()).await {
-            log::warn!("PermissionCache invalidate 失败（错误不含键原文）: {e}");
+            log::warn!(
+                "{}",
+                i18n::t(
+                    "perm-cache-log-invalidate-failed",
+                    &[("error", e.to_string())]
+                )
+            );
         }
     }
 
@@ -227,7 +238,10 @@ impl PermissionCache {
     pub async fn clear(&self) {
         self.revalidate_gate.clear();
         if let Err(e) = self.inner.clear().await {
-            log::warn!("PermissionCache clear 失败: {e}");
+            log::warn!(
+                "{}",
+                i18n::t("perm-cache-log-clear-failed", &[("error", e.to_string())])
+            );
         }
     }
 
@@ -402,7 +416,10 @@ mod tests {
         // 超过 TTL（30ms）但仍在 stale 窗口（5s）内
         tokio::time::sleep(Duration::from_millis(80)).await;
         let got = cache.get("admin").await;
-        assert!(got.is_some(), "stale 窗口内应返回旧值");
+        assert!(
+            got.is_some(),
+            "the stale value should be returned within the stale window"
+        );
         assert_eq!(got.unwrap().tables[0].name, "users");
     }
 
@@ -417,7 +434,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(120)).await;
         assert!(
             cache.get("admin").await.is_none(),
-            "超过 stale 窗口应视为 miss"
+            "should be a miss once past the stale window"
         );
     }
 
@@ -490,7 +507,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(
             cache.get("ghost").await.is_some(),
-            "角色缺失时刷新必须保留旧值"
+            "refresh must keep the stale value when the role is missing"
         );
     }
 
@@ -501,10 +518,13 @@ mod tests {
         cache.insert("a", sample_policy("t1")).await;
         cache.insert("b", sample_policy("t2")).await;
         cache.invalidate("a").await;
-        assert!(cache.get("a").await.is_none(), "invalidate 后不可达");
+        assert!(
+            cache.get("a").await.is_none(),
+            "unreachable after invalidate"
+        );
         assert!(cache.get("b").await.is_some());
         cache.clear().await;
-        assert!(cache.get("b").await.is_none(), "clear 后不可达");
+        assert!(cache.get("b").await.is_none(), "unreachable after clear");
     }
 
     /// Debug 形态：配置快照 + provider 存在性
@@ -635,7 +655,7 @@ mod tests {
         while provider.calls.load(Ordering::SeqCst) < RACE_ROUNDS {
             assert!(
                 tokio::time::Instant::now() < deadline,
-                "等待最后一轮回源超时：calls = {}",
+                "timed out waiting for the last refresh round: calls = {}",
                 provider.calls.load(Ordering::SeqCst)
             );
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -644,7 +664,7 @@ mod tests {
         assert_eq!(
             provider.calls.load(Ordering::SeqCst),
             RACE_ROUNDS,
-            "refresh 与 get 两条路径并发时每轮仍只允许 1 次 provider 调用"
+            "concurrent refresh and get paths must still allow only 1 provider call per round"
         );
     }
 }

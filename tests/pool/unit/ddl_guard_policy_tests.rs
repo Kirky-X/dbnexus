@@ -50,7 +50,7 @@ async fn test_default_whitelist_guard_still_blocks_drop_database() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("forbidden") || format!("{err}").contains("not allowed"),
-        "默认白名单应拦截，实际: {err}"
+        "the default allowlist should block, actual: {err}"
     );
 
     // 白名单内语句正常放行
@@ -79,7 +79,7 @@ async fn test_injected_deny_guard_overrides_admin_ddl() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("deny all (test)"),
-        "注入的拒绝策略应生效，实际: {err}"
+        "the injected deny policy should take effect, actual: {err}"
     );
 
     // audit 钩子被漏斗调用
@@ -89,7 +89,7 @@ async fn test_injected_deny_guard_overrides_admin_ddl() {
             .unwrap()
             .iter()
             .any(|entry| entry.contains("t_denied")),
-        "audit 钩子应收到决策事件"
+        "the audit hook should receive decision events"
     );
     let _ = std::fs::remove_file(&url);
 }
@@ -115,7 +115,7 @@ async fn test_set_ddl_guard_runtime_swap() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("deny all (test)"),
-        "运行时换装应即时生效，实际: {err}"
+        "a runtime swap should take effect immediately, actual: {err}"
     );
     let _ = std::fs::remove_file(&url);
 }
@@ -150,7 +150,7 @@ async fn test_auditing_guard_receives_funnel_decisions() {
     let _ = session.execute_raw_ddl("DROP DATABASE prod").await;
 
     let events = events.lock().unwrap();
-    assert_eq!(events.len(), 2, "两条 DDL 的决策都应被审计");
+    assert_eq!(events.len(), 2, "both DDL decisions should be audited");
     assert!(events[0].allowed);
     assert!(!events[1].allowed);
     let _ = std::fs::remove_file(&url);
@@ -193,7 +193,7 @@ async fn test_parse_error_and_failing_guard_are_explicit_errors() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("parse") || format!("{err:?}").contains("Config"),
-        "解析失败应显性报错，实际: {err:?}"
+        "a parse failure should error explicitly, actual: {err:?}"
     );
     let _ = std::fs::remove_file(&url);
 
@@ -212,7 +212,7 @@ async fn test_parse_error_and_failing_guard_are_explicit_errors() {
         .unwrap_err();
     assert!(
         format!("{err2}").contains("policy backend down") || format!("{err2:?}").contains("Config"),
-        "策略故障应显性报错，实际: {err2:?}"
+        "a policy fault should error explicitly, actual: {err2:?}"
     );
     let _ = std::fs::remove_file(&url2);
 }

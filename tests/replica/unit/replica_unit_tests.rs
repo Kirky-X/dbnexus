@@ -161,7 +161,7 @@ mod t411_replica_load_balancer_tests {
         assert_eq!(
             balancer.last_selected_replica(),
             Some("replica-a".to_string()),
-            "读会话应路由到健康副本"
+            "a read session should route to a healthy replica"
         );
     }
 
@@ -181,7 +181,7 @@ mod t411_replica_load_balancer_tests {
             assert_eq!(
                 balancer.last_selected_replica(),
                 Some("replica-heavy".to_string()),
-                "高权重副本应确定性胜出"
+                "a high-weight replica should win deterministically"
             );
         }
     }
@@ -198,7 +198,7 @@ mod t411_replica_load_balancer_tests {
         assert_eq!(
             balancer.last_selected_replica(),
             Some("replica-fast".to_string()),
-            "等权重下低延迟副本应胜出"
+            "a low-latency replica should win at equal weights"
         );
     }
 
@@ -217,7 +217,7 @@ mod t411_replica_load_balancer_tests {
         assert_eq!(
             balancer.last_selected_replica(),
             Some("replica-fresh".to_string()),
-            "lag 超阈值的副本不应承接读流量"
+            "a replica exceeding the lag threshold should not take read traffic"
         );
     }
 
@@ -236,11 +236,15 @@ mod t411_replica_load_balancer_tests {
         // 连续失败达阈值（默认 3）→ 剔除
         for i in 0..3 {
             let session = balancer.get_read_session("admin").await;
-            assert!(session.is_ok(), "第 {} 次读应回退主库成功", i);
+            assert!(
+                session.is_ok(),
+                "read #{} should fall back to the primary successfully",
+                i
+            );
         }
         assert!(
             balancer.is_replica_evicted("replica-bad"),
-            "连续失败达阈值应被剔除"
+            "a replica reaching the failure threshold should be removed"
         );
 
         // 剔除后探测被跳过（仍可回退主库）
@@ -250,7 +254,7 @@ mod t411_replica_load_balancer_tests {
         balancer.revive_all();
         assert!(
             !balancer.is_replica_evicted("replica-bad"),
-            "revive 应清除剔除状态"
+            "revive should clear the removal state"
         );
     }
 

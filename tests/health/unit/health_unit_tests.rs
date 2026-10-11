@@ -31,7 +31,11 @@ async fn test_circuit_breaker_initial_state_is_closed() {
     });
 
     let state = breaker.state().await;
-    assert_eq!(state, CircuitBreakerState::Closed, "初始状态应该是 Closed");
+    assert_eq!(
+        state,
+        CircuitBreakerState::Closed,
+        "the initial state should be Closed"
+    );
 }
 
 /// 测试熔断器从关闭到打开的状态转换
@@ -80,7 +84,7 @@ async fn test_circuit_breaker_open_rejects_requests() {
 
     // 尝试执行应该被拒绝
     let result = breaker.can_execute().await;
-    assert!(result.is_err(), "Open 状态应该拒绝请求");
+    assert!(result.is_err(), "the Open state should reject requests");
 
     // 验证错误类型
     let err = result.unwrap_err();
@@ -100,7 +104,7 @@ async fn test_circuit_breaker_closed_allows_requests() {
     });
 
     let result = breaker.can_execute().await;
-    assert!(result.is_ok(), "Closed 状态应该允许请求");
+    assert!(result.is_ok(), "the Closed state should allow requests");
 }
 
 /// 测试熔断器成功后重置失败计数
@@ -138,10 +142,22 @@ async fn test_circuit_breaker_success_resets_failure_count() {
 async fn test_circuit_breaker_config_defaults() {
     let config = CircuitBreakerConfig::default();
 
-    assert_eq!(config.failure_threshold, 5, "失败阈值默认应为 5");
-    assert_eq!(config.success_threshold, 3, "成功阈值默认应为 3");
-    assert_eq!(config.timeout_ms, 30000, "超时时间默认应为 30000ms");
-    assert_eq!(config.window_size, 100, "窗口大小默认应为 100");
+    assert_eq!(
+        config.failure_threshold, 5,
+        "the default failure threshold should be 5"
+    );
+    assert_eq!(
+        config.success_threshold, 3,
+        "the default success threshold should be 3"
+    );
+    assert_eq!(
+        config.timeout_ms, 30000,
+        "the default timeout should be 30000ms"
+    );
+    assert_eq!(
+        config.window_size, 100,
+        "the default window size should be 100"
+    );
 }
 
 // ============================================================================
@@ -171,7 +187,10 @@ async fn test_circuit_breaker_timeout_transitions_to_half_open() {
 
     // 尝试执行以触发状态转换
     let result = breaker.can_execute().await;
-    assert!(result.is_ok(), "超时后应该允许尝试");
+    assert!(
+        result.is_ok(),
+        "a retry should be allowed after the timeout"
+    );
     assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 }
 
@@ -266,7 +285,10 @@ async fn test_circuit_breaker_half_open_failure_rate_threshold() {
 
     // 尝试执行应该被拒绝
     let result = breaker.can_execute().await;
-    assert!(result.is_err(), "失败率过高应该拒绝请求");
+    assert!(
+        result.is_err(),
+        "an excessive failure rate should reject requests"
+    );
 }
 
 /// 测试熔断器状态显示实现
@@ -307,9 +329,9 @@ async fn test_health_checker_timeout_returns_degraded() {
     assert!(
         matches!(result.status, HealthStatus::Degraded(_))
             || matches!(result.status, HealthStatus::Unhealthy(_)),
-        "超时应该返回降级或 unhealthy 状态"
+        "a timeout should return degraded or unhealthy"
     );
-    assert!(result.latency > Duration::ZERO, "应该记录延迟");
+    assert!(result.latency > Duration::ZERO, "should record latency");
 }
 
 /// 测试健康检查器正常完成
@@ -324,10 +346,13 @@ async fn test_health_checker_normal_completion() {
     // 正常完成时延迟应该小于超时时间
     assert!(
         result.latency < Duration::from_millis(1000),
-        "延迟应该小于超时时间"
+        "the latency should be less than the timeout"
     );
     // 应该包含详细信息
-    assert!(!result.details.is_empty(), "应该包含详细信息");
+    assert!(
+        !result.details.is_empty(),
+        "should contain detailed information"
+    );
 }
 
 /// 测试健康检查器超时包含建议
@@ -342,7 +367,7 @@ async fn test_health_checker_timeout_includes_recommendations() {
     // 超时时应该有建议
     assert!(
         !result.recommendations.is_empty() || matches!(result.status, HealthStatus::Healthy),
-        "超时或健康状态时应该有建议或状态"
+        "there should be a recommendation or status on timeout or unhealthy"
     );
 }
 
@@ -371,13 +396,13 @@ async fn test_pool_health_metrics_initial_state() {
     let metrics = PoolHealthMetrics::new();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.total, 0, "总连接数初始为 0");
-    assert_eq!(snapshot.active, 0, "活跃连接数初始为 0");
-    assert_eq!(snapshot.idle, 0, "空闲连接数初始为 0");
-    assert_eq!(snapshot.waiting, 0, "等待请求数初始为 0");
-    assert_eq!(snapshot.created, 0, "创建连接数初始为 0");
-    assert_eq!(snapshot.failed, 0, "失败连接数初始为 0");
-    assert_eq!(snapshot.closed, 0, "关闭连接数初始为 0");
+    assert_eq!(snapshot.total, 0, "the initial total count should be 0");
+    assert_eq!(snapshot.active, 0, "the initial active count should be 0");
+    assert_eq!(snapshot.idle, 0, "the initial idle count should be 0");
+    assert_eq!(snapshot.waiting, 0, "the initial wait count should be 0");
+    assert_eq!(snapshot.created, 0, "the initial create count should be 0");
+    assert_eq!(snapshot.failed, 0, "the initial failure count should be 0");
+    assert_eq!(snapshot.closed, 0, "the initial close count should be 0");
 }
 
 /// 测试连接池健康指标记录连接创建
@@ -390,9 +415,9 @@ async fn test_pool_health_metrics_record_connection_created() {
     metrics.record_connection_created();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.total, 1, "总连接数应为 1");
-    assert_eq!(snapshot.active, 1, "活跃连接数应为 1");
-    assert_eq!(snapshot.created, 1, "创建连接数应为 1");
+    assert_eq!(snapshot.total, 1, "the total count should be 1");
+    assert_eq!(snapshot.active, 1, "the active count should be 1");
+    assert_eq!(snapshot.created, 1, "the create count should be 1");
 }
 
 /// 测试连接池健康指标记录连接失败
@@ -405,7 +430,7 @@ async fn test_pool_health_metrics_record_connection_failed() {
     metrics.record_connection_failed();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.failed, 1, "失败连接数应为 1");
+    assert_eq!(snapshot.failed, 1, "the failure count should be 1");
 }
 
 /// 测试连接池健康指标记录连接关闭
@@ -419,8 +444,8 @@ async fn test_pool_health_metrics_record_connection_closed() {
     metrics.record_connection_closed();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.total, 0, "总连接数应为 0");
-    assert_eq!(snapshot.closed, 1, "关闭连接数应为 1");
+    assert_eq!(snapshot.total, 0, "the total count should be 0");
+    assert_eq!(snapshot.closed, 1, "the close count should be 1");
 }
 
 /// 测试连接池健康指标活跃连接计数
@@ -434,12 +459,12 @@ async fn test_pool_health_metrics_active_connection_counting() {
     metrics.increment_active();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.active, 2, "活跃连接数应为 2");
+    assert_eq!(snapshot.active, 2, "the active count should be 2");
 
     metrics.decrement_active();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.active, 1, "活跃连接数应为 1");
+    assert_eq!(snapshot.active, 1, "the active count should be 1");
 }
 
 /// 测试连接池健康指标空闲连接计数
@@ -453,12 +478,12 @@ async fn test_pool_health_metrics_idle_connection_counting() {
     metrics.increment_idle().await;
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.idle, 2, "空闲连接数应为 2");
+    assert_eq!(snapshot.idle, 2, "the idle count should be 2");
 
     metrics.decrement_idle();
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.idle, 1, "空闲连接数应为 1");
+    assert_eq!(snapshot.idle, 1, "the idle count should be 1");
 }
 
 /// 测试连接池健康指标 is_healthy 方法
@@ -469,12 +494,18 @@ async fn test_pool_health_metrics_is_healthy() {
     let metrics = PoolHealthMetrics::new();
 
     // 无连接时应该不健康
-    assert!(!metrics.is_healthy(), "无连接时应该不健康");
+    assert!(
+        !metrics.is_healthy(),
+        "should be unhealthy when there are no connections"
+    );
 
     // 有空闲连接时应该健康
     metrics.record_connection_created();
     metrics.increment_idle().await;
-    assert!(metrics.is_healthy(), "有空闲连接时应该健康");
+    assert!(
+        metrics.is_healthy(),
+        "should be healthy when an idle connection exists"
+    );
 }
 
 /// 测试连接池健康指标 should_create_connection 方法
@@ -485,14 +516,17 @@ async fn test_pool_health_metrics_should_create_connection() {
     let metrics = PoolHealthMetrics::new();
 
     // 无连接时应该创建
-    assert!(metrics.should_create_connection(1), "无连接时应该创建");
+    assert!(
+        metrics.should_create_connection(1),
+        "should create when there are no connections"
+    );
 
     // 有连接时不应该创建
     metrics.record_connection_created();
     metrics.increment_idle().await;
     assert!(
         !metrics.should_create_connection(1),
-        "有空闲连接时不应该创建"
+        "should not create when an idle connection exists"
     );
 }
 
@@ -506,7 +540,7 @@ async fn test_pool_health_metrics_set_waiting_requests() {
     metrics.set_waiting_requests(5);
 
     let snapshot = metrics.snapshot();
-    assert_eq!(snapshot.waiting, 5, "等待请求数应为 5");
+    assert_eq!(snapshot.waiting, 5, "the wait count should be 5");
 }
 
 // ============================================================================
@@ -724,7 +758,10 @@ async fn test_circuit_breaker_sliding_window_size_limit() {
 
     let status = breaker.status().await;
     // 连续失败次数应该大于窗口大小
-    assert!(status.consecutive_failures >= 5, "失败计数应该被正确追踪");
+    assert!(
+        status.consecutive_failures >= 5,
+        "failures should be tracked correctly"
+    );
 }
 
 /// 测试熔断器状态信息完整性
@@ -766,7 +803,7 @@ async fn test_health_checker_no_connections_state() {
     assert!(
         matches!(result.status, HealthStatus::Unhealthy(_))
             || matches!(result.status, HealthStatus::Degraded(_)),
-        "无连接时应该返回不健康或降级状态"
+        "should return unhealthy or degraded when there are no connections"
     );
 }
 
@@ -790,7 +827,7 @@ async fn test_health_checker_healthy_state() {
     assert!(
         matches!(result.status, HealthStatus::Healthy)
             || matches!(result.status, HealthStatus::Degraded(_)),
-        "有可用连接时应该返回健康或降级状态"
+        "should return healthy or degraded when a connection is available"
     );
 }
 

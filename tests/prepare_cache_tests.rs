@@ -41,7 +41,11 @@ async fn test_execute_cached_records_hits() {
 
     let stats = pool.prepare_cache_stats().expect("cache enabled");
     let PrepareCacheStats { hits, misses, .. } = stats;
-    assert_eq!((hits, misses), (1, 1), "同语句重复执行应命中: {stats:?}");
+    assert_eq!(
+        (hits, misses),
+        (1, 1),
+        "a repeated execution of the same statement should hit: {stats:?}"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -75,11 +79,17 @@ async fn test_builder_enabled_cache_and_eviction_accounting() {
         .expect("s2");
 
     let stats = pool.prepare_cache_stats().expect("cache enabled");
-    assert_eq!(stats.misses, 2, "两条不同语句均未命中");
-    assert_eq!(stats.size, 1, "容量 1 下仅存最新一条");
+    assert_eq!(
+        stats.misses, 2,
+        "neither of the two different statements hit"
+    );
+    assert_eq!(
+        stats.size, 1,
+        "with capacity 1 only the newest entry is kept"
+    );
     assert_eq!(
         stats.evictions, 0,
-        "oxcache memory 后端不暴露逐出计数，evictions 恒 0（由命中率口径取代）"
+        "the oxcache memory backend does not expose an eviction count; evictions is always 0 (replaced by a hit-rate measure)"
     );
 
     // 行为性验证淘汰：第一条语句已被逐出，再次执行为未命中（SELECT 幂等）
@@ -88,7 +98,10 @@ async fn test_builder_enabled_cache_and_eviction_accounting() {
         .await
         .expect("s3");
     let stats = pool.prepare_cache_stats().expect("cache enabled");
-    assert_eq!(stats.misses, 3, "被逐出的语句再次执行应未命中");
+    assert_eq!(
+        stats.misses, 3,
+        "an evicted statement should miss when executed again"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -97,7 +110,10 @@ async fn test_builder_enabled_cache_and_eviction_accounting() {
 #[tokio::test]
 async fn test_disabled_cache_is_passthrough() {
     let (pool, path) = temp_pool("off").await;
-    assert!(pool.prepare_cache_stats().is_none(), "未启用应返回 None");
+    assert!(
+        pool.prepare_cache_stats().is_none(),
+        "should return None when not enabled"
+    );
 
     let admin = pool.get_session("admin").await.expect("admin");
     admin
@@ -121,5 +137,5 @@ async fn test_standalone_generic_cache() {
     assert!(!hit1);
     let (v2, hit2) = cache.get_or_prepare("SELECT 1", |sql| format!("handle:{sql}"));
     assert!(hit2);
-    assert_eq!(&*v1, &*v2, "命中应复用同一产物");
+    assert_eq!(&*v1, &*v2, "a hit should reuse the same product");
 }

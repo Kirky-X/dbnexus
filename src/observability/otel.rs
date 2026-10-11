@@ -22,6 +22,7 @@
 //! # }
 //! ```
 
+use crate::i18n;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -67,11 +68,12 @@ impl HttpTransport {
 impl OtlpTransport for HttpTransport {
     async fn send(&self, endpoint: &str, body: &serde_json::Value) -> Result<(), String> {
         let endpoint = endpoint.to_string();
-        let payload = serde_json::to_vec(body).map_err(|e| format!("serialize failed: {e}"))?;
+        let payload = serde_json::to_vec(body)
+            .map_err(|e| i18n::t("otel-serialize-failed", &[("error", e.to_string())]))?;
         let timeout_ms = self.timeout_ms;
         tokio::task::spawn_blocking(move || http_post(&endpoint, &payload, timeout_ms))
             .await
-            .map_err(|e| format!("otlp http task failed: {e}"))?
+            .map_err(|e| i18n::t("otel-http-task-failed", &[("error", e.to_string())]))?
     }
 }
 
@@ -81,16 +83,19 @@ fn http_post(endpoint: &str, body: &[u8], timeout_ms: u64) -> Result<(), String>
     use std::net::TcpStream;
     use std::time::Duration;
 
-    let rest = endpoint
-        .strip_prefix("http://")
-        .ok_or_else(|| format!("otlp endpoint must be http:// (got: {endpoint})"))?;
+    let rest = endpoint.strip_prefix("http://").ok_or_else(|| {
+        i18n::t(
+            "otel-endpoint-not-http",
+            &[("endpoint", endpoint.to_string())],
+        )
+    })?;
     let (host_port, path) = match rest.split_once('/') {
         Some((hp, p)) => (hp, format!("/{p}")),
         None => (rest, "/".to_string()),
     };
 
-    let mut stream =
-        TcpStream::connect(host_port).map_err(|e| format!("otlp connect failed: {e}"))?;
+    let mut stream = TcpStream::connect(host_port)
+        .map_err(|e| i18n::t("otel-connect-failed", &[("error", e.to_string())]))?;
     let timeout = Duration::from_millis(timeout_ms.max(1));
     let _ = stream.set_read_timeout(Some(timeout));
     let _ = stream.set_write_timeout(Some(timeout));
@@ -102,20 +107,23 @@ fn http_post(endpoint: &str, body: &[u8], timeout_ms: u64) -> Result<(), String>
     stream
         .write_all(request.as_bytes())
         .and_then(|_| stream.write_all(body))
-        .map_err(|e| format!("otlp write failed: {e}"))?;
+        .map_err(|e| i18n::t("otel-write-failed", &[("error", e.to_string())]))?;
 
     let mut response = vec![0u8; 512];
     let n = stream
         .read(&mut response)
-        .map_err(|e| format!("otlp read failed: {e}"))?;
+        .map_err(|e| i18n::t("otel-read-failed", &[("error", e.to_string())]))?;
     let head = String::from_utf8_lossy(&response[..n]);
     // MVP：2xx 视为成功（mock collector 与常见 OTLP collector 均返回 200）
     if head.starts_with("HTTP/1.1 2") || head.starts_with("HTTP/1.0 2") {
         Ok(())
     } else {
-        Err(format!(
-            "otlp collector responded non-2xx: {}",
-            head.lines().next().unwrap_or("<empty>")
+        Err(i18n::t(
+            "otel-collector-non-2xx",
+            &[(
+                "status",
+                head.lines().next().unwrap_or("<empty>").to_string(),
+            )],
         ))
     }
 }
@@ -228,7 +236,7 @@ impl OtelExporter {
                 }
                 Ok(())
             }
-            Err(e) => Err(format!("otlp export failed: {e}")),
+            Err(e) => Err(i18n::t("otel-export-failed", &[("error", e)])),
         }
     }
 }
@@ -343,7 +351,7 @@ mod tests {
     #[test]
     fn test_metric_events_empty_snapshot() {
         let events = metric_events_from_health_snapshot(&serde_json::json!({}));
-        assert!(events.is_empty(), "空快照不产生事件");
+        assert!(events.is_empty(), "an empty snapshot produces no events");
     }
 
     #[test]
@@ -376,7 +384,10 @@ mod tests {
         });
 
         let result = http_post(&format!("http://{addr}/v1/metrics"), b"{\"x\":1}", 1000);
-        assert!(result.is_ok(), "2xx 应视为成功: {result:?}");
+        assert!(
+            result.is_ok(),
+            "2xx should be treated as success: {result:?}"
+        );
         server.join().unwrap();
     }
 
@@ -397,8 +408,12 @@ mod tests {
                 .unwrap();
         });
         let result = http_post(&format!("http://{addr}"), b"{}", 1000);
-        assert!(result.is_err(), "500 必须报错");
-        assert!(result.unwrap_err().contains("non-2xx"));
+        assert!(result.is_err(), "500 must report an error");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("non-2xx") || err.contains("非 2xx"),
+            "got: {err}"
+        );
         server.join().unwrap();
 
         // 非 http:// 端点拒绝
@@ -456,8 +471,11 @@ mod tests {
         exporter
             .export_health_snapshot(&snapshot)
             .await
-            .expect("fallback 应视为成功");
-        assert!(!lines.lock().unwrap().is_empty(), "fallback 必须输出事件行");
+            .expect("the fallback should be treated as success");
+        assert!(
+            !lines.lock().unwrap().is_empty(),
+            "the fallback must output event lines"
+        );
 
         // 失败 + fallback 关闭 → 显性错误
         let exporter = OtelExporter::with_transport(
@@ -471,6 +489,9 @@ mod tests {
             .export_health_snapshot(&snapshot)
             .await
             .unwrap_err();
-        assert!(err.contains("otlp export failed"), "got: {err}");
+        assert!(
+            err.contains("otlp export failed") || err.contains("导出失败"),
+            "got: {err}"
+        );
     }
 }

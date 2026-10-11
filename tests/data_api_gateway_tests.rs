@@ -73,8 +73,14 @@ async fn test_list_whitelist_projection_and_pagination() {
 
     // 白名单投影：secret 列不出现
     let first = &resp.items[0];
-    assert!(first.get("name").is_some(), "白名单列应返回");
-    assert!(first.get("secret").is_none(), "未暴露列不应出现");
+    assert!(
+        first.get("name").is_some(),
+        "an allowlisted column should be returned"
+    );
+    assert!(
+        first.get("secret").is_none(),
+        "an unexposed column should not appear"
+    );
 
     // 第 2 页
     let page2 = gateway
@@ -88,7 +94,10 @@ async fn test_list_whitelist_projection_and_pagination() {
         .await
         .expect("page 2");
     assert_eq!(page2.items.len(), 3);
-    assert_ne!(page2.items[0]["id"], resp.items[0]["id"], "翻页应移动窗口");
+    assert_ne!(
+        page2.items[0]["id"], resp.items[0]["id"],
+        "pagination should move the window"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -149,7 +158,10 @@ async fn test_list_order_and_page_size_clamp() {
         .await
         .expect("list desc");
     assert_eq!(resp.items.len(), 7);
-    assert_eq!(resp.items[0]["age"], 27, "降序首行应为最大 age");
+    assert_eq!(
+        resp.items[0]["age"], 27,
+        "the first row in descending order should be the max age"
+    );
 
     // page_size 超上限 → 钳制到 max_page_size
     let resp = gateway
@@ -187,7 +199,7 @@ async fn test_rejects_unexposed_columns_and_unknown_endpoint() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("not exposed"),
-        "未暴露列应被拒绝，实际: {err}"
+        "an unexposed column should be rejected, actual: {err}"
     );
 
     // name 未加入可排序列白名单 → Permission
@@ -204,7 +216,7 @@ async fn test_rejects_unexposed_columns_and_unknown_endpoint() {
         .unwrap_err();
     assert!(
         format!("{err}").contains("not orderable"),
-        "不可排序列应被拒绝，实际: {err}"
+        "a non-orderable column should be rejected, actual: {err}"
     );
 
     // 未知端点 → Config

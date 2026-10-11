@@ -35,7 +35,7 @@ fn test_encode_duckdb_rows_basic_types() {
     assert_eq!(
         encode_duckdb_copy_rows(&rows),
         "1,2.5,true,plain\n",
-        "普通值逗号分隔、无引用、行尾换行"
+        "ordinary values comma-separated, unquoted, trailing newline"
     );
 }
 
@@ -49,7 +49,7 @@ fn test_encode_duckdb_rows_null_vs_empty_string() {
     let encoded = encode_duckdb_copy_rows(&rows);
     assert_eq!(
         encoded, ",\"\",x\n",
-        "NULL 应为未引用空字段（配 NULLSTR ''），空串应为引用字段以区分"
+        "NULL should be an unquoted empty field (with NULLSTR '') and the empty string a quoted field to distinguish them"
     );
 }
 
@@ -73,7 +73,11 @@ fn test_encode_duckdb_rows_quotes_special_fields() {
 
 #[test]
 fn test_encode_duckdb_rows_empty_and_json_values() {
-    assert_eq!(encode_duckdb_copy_rows(&[]), "", "空集编码为空载荷");
+    assert_eq!(
+        encode_duckdb_copy_rows(&[]),
+        "",
+        "an empty set encodes to an empty payload"
+    );
     let rows = vec![vec![serde_json::json!({"k": 1}), serde_json::json!([1, 2])]];
     let encoded = encode_duckdb_copy_rows(&rows);
     // JSON 文本化（紧凑无空格）后含逗号/引号 → 整体引用并转义内嵌引号
@@ -87,26 +91,26 @@ fn test_encode_duckdb_rows_empty_and_json_values() {
 #[test]
 fn test_build_from_file_generates_csv_copy_with_paired_options() {
     let stmt = CopyStatement::new("t_copy", &["id".to_string(), "name".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let sql = stmt
         .build_from_file("/tmp/data.csv")
-        .expect("合法路径应通过");
+        .expect("a valid path should pass");
     assert_eq!(
         sql,
         r#"COPY "t_copy" ("id", "name") FROM '/tmp/data.csv' (FORMAT CSV, HEADER 0, DELIMITER ',', QUOTE '"', ESCAPE '"', NULLSTR '', ALLOW_QUOTED_NULLS false)"#,
-        "选项串应与 encode_duckdb_copy_rows 的编码契约配对，实际: {sql}"
+        "the options string should pair with the encoding contract of encode_duckdb_copy_rows, actual: {sql}"
     );
 }
 
 #[test]
 fn test_build_from_file_escapes_single_quotes_in_path() {
-    let stmt = CopyStatement::new("t", &["a".to_string()]).expect("合法标识符应通过");
+    let stmt = CopyStatement::new("t", &["a".to_string()]).expect("a valid identifier should pass");
     let sql = stmt
         .build_from_file("/tmp/it's.csv")
-        .expect("含单引号路径应通过（转义而非拒绝）");
+        .expect("a path containing a single quote should pass (escaped, not rejected)");
     assert!(
         sql.contains(r#"FROM '/tmp/it''s.csv'"#),
-        "路径内单引号应翻倍转义以防语句逃逸，实际: {sql}"
+        "a single quote inside a path should be doubled to escape it and prevent statement escape, actual: {sql}"
     );
 }
 
@@ -140,7 +144,7 @@ async fn count_rows(pool: &dbnexus::DbPool, table: &str) -> i64 {
     match rows[0].get("cnt").expect("cnt column") {
         DuckValue::BigInt(n) => *n,
         DuckValue::Int(n) => *n as i64,
-        other => panic!("意外计数类型: {other:?}"),
+        other => panic!("unexpected count type: {other:?}"),
     }
 }
 
@@ -149,14 +153,24 @@ async fn test_copy_in_duckdb_loads_rows_and_reports_count() {
     let pool = setup_duckdb_pool("CREATE TABLE t_duck_copy (id INTEGER, name VARCHAR)").await;
 
     let stmt = CopyStatement::new("t_duck_copy", &["id".to_string(), "name".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let rows: Vec<Vec<serde_json::Value>> = (0..100)
         .map(|i| vec![serde_json::json!(i), serde_json::json!(format!("n{i}"))])
         .collect();
 
-    let inserted = pool.copy_in(&stmt, &rows).await.expect("copy_in 应成功");
-    assert_eq!(inserted, 100, "copy_in 应返回导入行数");
-    assert_eq!(count_rows(&pool, "t_duck_copy").await, 100, "全部行应落库");
+    let inserted = pool
+        .copy_in(&stmt, &rows)
+        .await
+        .expect("copy_in should succeed");
+    assert_eq!(
+        inserted, 100,
+        "copy_in should return the number of imported rows"
+    );
+    assert_eq!(
+        count_rows(&pool, "t_duck_copy").await,
+        100,
+        "all rows should land in the database"
+    );
 
     drop(pool);
 }
@@ -170,7 +184,7 @@ async fn test_copy_in_duckdb_roundtrip_null_empty_and_special_fields() {
         "t_round",
         &["id".to_string(), "name".to_string(), "note".to_string()],
     )
-    .expect("合法标识符应通过");
+    .expect("a valid identifier should pass");
     let rows = vec![
         vec![
             serde_json::json!(1),
@@ -188,38 +202,49 @@ async fn test_copy_in_duckdb_roundtrip_null_empty_and_special_fields() {
             serde_json::Value::Null,
         ],
     ];
-    let inserted = pool.copy_in(&stmt, &rows).await.expect("copy_in 应成功");
+    let inserted = pool
+        .copy_in(&stmt, &rows)
+        .await
+        .expect("copy_in should succeed");
     assert_eq!(inserted, 3);
 
     let session = pool.get_session("admin").await.expect("admin session");
     let result: Vec<DuckDbRow> = session
         .execute_duckdb("SELECT id, name, note FROM t_round ORDER BY id")
         .await
-        .expect("round-trip 查询");
-    assert_eq!(result.len(), 3, "注入载荷不应生效，表应完整");
+        .expect("round-trip query");
+    assert_eq!(
+        result.len(),
+        3,
+        "the injected payload should not take effect; the table should be intact"
+    );
 
     let name_of = |r: &DuckDbRow| -> Option<String> {
         match r.get("name").expect("name column") {
             DuckValue::Null => None,
             DuckValue::Text(s) => Some(s.clone()),
-            other => panic!("意外 name 类型: {other:?}"),
+            other => panic!("unexpected name type: {other:?}"),
         }
     };
     let note_of = |r: &DuckDbRow| -> Option<String> {
         match r.get("note").expect("note column") {
             DuckValue::Null => None,
             DuckValue::Text(s) => Some(s.clone()),
-            other => panic!("意外 note 类型: {other:?}"),
+            other => panic!("unexpected note type: {other:?}"),
         }
     };
 
     // NULL 与空串语义可区分（round-trip 不塌缩）
-    assert_eq!(name_of(&result[0]), None, "NULL 应保持 NULL");
+    assert_eq!(name_of(&result[0]), None, "NULL should remain NULL");
     assert_eq!(
         name_of(&result[2]).as_deref(),
         Some("x'); DROP TABLE t_round;--")
     );
-    assert_eq!(note_of(&result[0]).as_deref(), Some(""), "空串应保持空串");
+    assert_eq!(
+        note_of(&result[0]).as_deref(),
+        Some(""),
+        "an empty string should remain an empty string"
+    );
     assert_eq!(note_of(&result[1]).as_deref(), Some("multi\nline"));
     assert_eq!(name_of(&result[1]).as_deref(), Some("a,b \"q\""));
 
@@ -230,14 +255,14 @@ async fn test_copy_in_duckdb_roundtrip_null_empty_and_special_fields() {
 #[tokio::test]
 async fn test_copy_in_duckdb_rejects_empty_rows() {
     let pool = setup_duckdb_pool("CREATE TABLE t_empty (id INTEGER)").await;
-    let stmt = CopyStatement::new("t_empty", &["id".to_string()]).expect("合法标识符应通过");
-    let err = pool
-        .copy_in(&stmt, &[])
-        .await
-        .expect_err("空集与 postgres 路径同契约：显式拒绝");
+    let stmt =
+        CopyStatement::new("t_empty", &["id".to_string()]).expect("a valid identifier should pass");
+    let err = pool.copy_in(&stmt, &[]).await.expect_err(
+        "the empty set follows the same contract as the postgres path: explicit rejection",
+    );
     assert!(
         format!("{err}").contains("row"),
-        "错误应说明空行集非法，实际: {err}"
+        "the error should state the empty row set is invalid, actual: {err}"
     );
     drop(pool);
 }
@@ -261,9 +286,10 @@ async fn test_copy_in_duckdb_error_leaves_no_temp_file() {
         .collect();
 
     // 目标表不存在 → COPY 失败
-    let stmt = CopyStatement::new("t_missing", &["id".to_string()]).expect("合法标识符应通过");
+    let stmt = CopyStatement::new("t_missing", &["id".to_string()])
+        .expect("a valid identifier should pass");
     let result = pool.copy_in(&stmt, &[vec![serde_json::json!(1)]]).await;
-    assert!(result.is_err(), "目标表不存在应报错");
+    assert!(result.is_err(), "a missing target table should error");
 
     // 本测试新建的载荷文件成败皆清理；其它测试的活跃载荷不纳入断言
     let mut clean = false;
@@ -288,7 +314,7 @@ async fn test_copy_in_duckdb_error_leaves_no_temp_file() {
     }
     assert!(
         clean,
-        "失败路径不得残留本次新建的 COPY 载荷文件（2s 内未收敛）"
+        "a failed path must not leave behind this run's COPY payload file (not converging within 2s)"
     );
     drop(pool);
 }
@@ -316,7 +342,7 @@ async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {
             "extra".to_string(),
         ],
     )
-    .expect("合法标识符应通过");
+    .expect("a valid identifier should pass");
     let rows = vec![
         vec![
             serde_json::json!(1),
@@ -333,8 +359,8 @@ async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {
     ];
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功");
-    assert_eq!(chunks.len(), 1, "两行单块");
+        .expect("the chunking should succeed");
+    assert_eq!(chunks.len(), 1, "two rows in a single chunk");
     {
         let session = pool.get_session("admin").await.expect("admin session");
         for (sql, params) in &chunks {
@@ -342,7 +368,7 @@ async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {
             session
                 .execute_duckdb_raw_with_params(sql, binds)
                 .await
-                .expect("duckdb 参数化执行应成功");
+                .expect("the duckdb parameterized execution should succeed");
         }
     }
 
@@ -350,14 +376,14 @@ async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {
     let result: Vec<DuckDbRow> = session
         .execute_duckdb("SELECT id, score, label, extra FROM t_duck_batch ORDER BY id")
         .await
-        .expect("round-trip 查询");
-    assert_eq!(result.len(), 2, "两行应全部落库");
+        .expect("round-trip query");
+    assert_eq!(result.len(), 2, "both rows should land in the database");
 
     let as_text = |r: &DuckDbRow, col: &str| -> Option<String> {
         match r.get(col).expect(col) {
             DuckValue::Null => None,
             DuckValue::Text(s) => Some(s.clone()),
-            other => panic!("意外 {col} 类型: {other:?}"),
+            other => panic!("unexpected {col} type: {other:?}"),
         }
     };
     // 类型 round-trip：整数列按 BIGINT 绑定读回整型、浮点保持 DOUBLE
@@ -367,16 +393,19 @@ async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {
     ) {
         (DuckValue::Int(i), DuckValue::Double(s)) => (*i as i64, *s),
         (DuckValue::BigInt(i), DuckValue::Double(s)) => (*i, *s),
-        other => panic!("意外 id/score 类型: {other:?}"),
+        other => panic!("unexpected id/score type: {other:?}"),
     };
     assert_eq!(id, 1);
-    assert!((score - 2.5).abs() < 1e-9, "浮点应原样落库");
+    assert!(
+        (score - 2.5).abs() < 1e-9,
+        "floats should land in the database as-is"
+    );
     assert_eq!(as_text(&result[0], "label").as_deref(), Some("hello"));
     // JSON 对象/数组经参数绑定文本化存储（与 sqlite 路径形态一致）
     assert_eq!(as_text(&result[0], "extra").as_deref(), Some(r#"{"k":1}"#));
     assert!(
         result[1].get("score").expect("score") == &DuckValue::Null,
-        "NULL 应保持 NULL"
+        "NULL should remain NULL"
     );
     assert_eq!(as_text(&result[1], "label"), None);
     assert_eq!(as_text(&result[1], "extra").as_deref(), Some("[1,2]"));

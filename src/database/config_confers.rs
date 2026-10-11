@@ -21,6 +21,7 @@
 //! ).await;
 //! ```
 
+use crate::i18n;
 use std::sync::Arc;
 
 /// 经 confers `ChangeStream` 驱动权限配置原子换装的后台任务
@@ -47,7 +48,12 @@ where
     let mut rx = match stream.subscribe().await {
         Ok(rx) => rx,
         Err(e) => {
-            return tokio::spawn(async move { Err(format!("confers subscribe failed: {e}")) });
+            return tokio::spawn(async move {
+                Err(i18n::t(
+                    "config-confers-subscribe-failed",
+                    &[("error", e.to_string())],
+                ))
+            });
         }
     };
 
@@ -60,20 +66,31 @@ where
             // 单个事件失败（解析失败 / 换装失败 / ack 失败）只跳过本次并确认，
             // 不终止重载循环——坏事件不得让后续合法配置变更全部失联
             let apply_result = match load(&event) {
-                Ok(config) => pool
-                    .set_permission_config(config)
-                    .await
-                    .map_err(|e| format!("permission hot reload failed: {e}")),
+                Ok(config) => pool.set_permission_config(config).await.map_err(|e| {
+                    i18n::t(
+                        "config-confers-hot-reload-failed",
+                        &[("error", e.to_string())],
+                    )
+                }),
                 Err(e) => {
                     // 解析失败的变更事件跳过（fail-closed：不换装坏配置）
-                    Err(format!("skip invalid permission event: {e}"))
+                    Err(i18n::t(
+                        "config-confers-skip-invalid-event",
+                        &[("error", e.to_string())],
+                    ))
                 }
             };
             if let Err(e) = apply_result {
-                eprintln!("[dbnexus] permission hot reload: {e}");
+                eprintln!(
+                    "[dbnexus] {}",
+                    i18n::t("config-confers-log-hot-reload", &[("error", e)])
+                );
             }
             if let Err(e) = confers::ChangeStream::ack(&*stream, event.version).await {
-                eprintln!("[dbnexus] confers ack failed: {e}");
+                eprintln!(
+                    "[dbnexus] {}",
+                    i18n::t("config-confers-log-ack-failed", &[("error", e.to_string())])
+                );
             }
         }
         Ok(())
@@ -178,7 +195,7 @@ roles:
         let session = pool.get_session("analyst").await;
         assert!(
             session.is_ok(),
-            "热重载后 analyst 角色应可用，实际: {:?}",
+            "the analyst role should be available after hot reload, got: {:?}",
             session.err().map(|e| e.to_string())
         );
 

@@ -30,7 +30,7 @@ async fn connect_for_migration(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔀 DBNexus 数据库迁移示例");
+    println!("🔀 DBNexus database migration example");
     println!("========================================\n");
 
     // 使用 file::memory:?cache=shared 让多个连接共享同一个内存数据库
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await?;
-    println!("✓ 连接池创建成功");
+    println!("✓ Pool created");
 
     // ============================================
     // 2. 创建迁移执行器
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // MigrationExecutor 需要一个 sea_orm::DatabaseConnection
     let conn = connect_for_migration(db_url).await?;
     let mut executor = MigrationExecutor::new(conn, dbnexus::foundation::DatabaseType::Sqlite);
-    println!("✓ 迁移执行器创建成功");
+    println!("✓ migration executor created");
 
     // ============================================
     // 3. 定义迁移：创建 users 表
@@ -107,17 +107,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     migration_v1.add_table_change(TableChange::CreateTable(users_table));
 
     println!(
-        "\n📋 迁移定义: v{} - {}",
+        "\n📋 Migration definition: v{} - {}",
         migration_v1.version, migration_v1.description
     );
-    println!("  - 表变更数量: {}", migration_v1.table_changes.len());
+    println!(
+        "  - table change count: {}",
+        migration_v1.table_changes.len()
+    );
 
     // ============================================
     // 4. 应用迁移
     // ============================================
-    println!("\n应用迁移 v{}...", migration_v1.version);
+    println!("\nApplying migration v{}...", migration_v1.version);
     executor.apply_migration(&migration_v1).await?;
-    println!("✓ 迁移 v{} 应用成功", migration_v1.version);
+    println!("✓ migration v{} applied", migration_v1.version);
 
     // ============================================
     // 5. 定义并应用第二个迁移：创建 posts 表
@@ -165,27 +168,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     migration_v2.add_table_change(TableChange::CreateTable(posts_table));
 
-    println!("\n应用迁移 v{}...", migration_v2.version);
+    println!("\nApplying migration v{}...", migration_v2.version);
     executor.apply_migration(&migration_v2).await?;
-    println!("✓ 迁移 v{} 应用成功", migration_v2.version);
+    println!("✓ migration v{} applied", migration_v2.version);
 
     // ============================================
     // 6. 查看迁移历史
     // ============================================
-    println!("\n📊 迁移历史记录:");
+    println!("\n📊 Migration history:");
     let history = executor.history();
-    println!("  - 已应用迁移数量: {}", history.applied_migrations.len());
+    println!(
+        "  - applied migration count: {}",
+        history.applied_migrations.len()
+    );
 
     for record in &history.applied_migrations {
         println!(
-            "  - v{}: {} (应用时间: {}, 文件: {})",
+            "  - v{}: {} (applied at: {}, file: {})",
             record.version, record.description, record.applied_at, record.file_path
         );
     }
 
-    println!("\n  已应用版本列表: {:?}", executor.get_all_versions());
+    println!(
+        "\n  applied version list: {:?}",
+        executor.get_all_versions()
+    );
     if let Some(latest) = executor.get_latest_migration() {
-        println!("  最新迁移: v{} - {}", latest.version, latest.description);
+        println!(
+            "  latest migration: v{} - {}",
+            latest.version, latest.description
+        );
     }
 
     // ============================================
@@ -196,7 +208,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connection()?
         .execute_unprepared("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         .await?;
-    println!("\n✓ 验证表创建: rows_affected = {}", result.rows_affected());
+    println!(
+        "\n✓ verify table creation: rows_affected = {}",
+        result.rows_affected()
+    );
 
     // 插入数据验证表结构正确
     session
@@ -205,7 +220,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session
         .execute_raw("INSERT INTO posts (id, title, user_id) VALUES (1, 'Hello World', 1)")
         .await?;
-    println!("✓ 数据插入成功（users + posts 表均可写入）");
+    println!("✓ data inserted successfully (users + posts tables are both writable)");
 
     // ============================================
     // 8. 手动回滚演示
@@ -215,33 +230,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 注意：DdlGuard 出于安全考虑会阻止 DROP TABLE 操作。
     // 生产环境中应通过 MigrationFile 的 DOWN SQL 进行受控回滚，
     // 或在需要 DROP TABLE 时直接使用 sea_orm 连接绕过 Session 层。
-    println!("\n🔄 手动回滚演示:");
-    println!("  尝试回滚 v2: 删除 posts 表...");
+    println!("\n🔄 Manual rollback demo:");
+    println!("  trying to roll back v2: delete the posts table...");
     match session.execute_raw_ddl("DROP TABLE IF EXISTS posts").await {
-        Ok(_) => println!("  ✓ posts 表已删除"),
+        Ok(_) => println!("  ✓ posts table deleted"),
         Err(e) => {
-            println!("  ⚠️  DdlGuard 阻止了 DROP TABLE 操作（安全特性）: {}", e);
-            println!("     生产环境应通过 MigrationFile 的 DOWN SQL 进行受控回滚。");
+            println!(
+                "  ⚠️  DdlGuard blocked the DROP TABLE operation (safety feature): {}",
+                e
+            );
+            println!(
+                "     production rollbacks should go through the DOWN SQL of a MigrationFile."
+            );
         }
     }
 
     // 重新加载历史确认状态
     executor.load_history().await?;
     println!(
-        "\n📊 回滚后迁移历史（数据库中的记录仍保留，仅表被删除）: {} 条记录",
+        "\n📊 Migration history after rollback (records remain in the database, only the table was dropped): {} records",
         executor.history().applied_migrations.len()
     );
 
     println!("\n========================================");
-    println!("✨ 数据库迁移示例完成！");
+    println!("✨ Database migration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - Migration::new(version, description) 创建迁移定义");
-    println!("  - migration.add_table_change(TableChange::CreateTable(table)) 添加表变更");
-    println!("  - MigrationExecutor::new(conn, db_type) 创建执行器");
-    println!("  - executor.apply_migration(&migration) 应用迁移（事务性）");
-    println!("  - executor.history() 查看已应用迁移记录");
-    println!("  - 回滚需手动执行反向 SQL（DROP TABLE 等）");
+    println!("\n📚 Key concepts:");
+    println!("  - Migration::new(version, description) create a migration definition");
+    println!("  - migration.add_table_change(TableChange::CreateTable(table)) add a table change");
+    println!("  - MigrationExecutor::new(conn, db_type) create an executor");
+    println!("  - executor.apply_migration(&migration) apply a migration (transactional)");
+    println!("  - executor.history() view the applied migration records");
+    println!("  - rollback requires running the reverse SQL manually (e.g. DROP TABLE)");
 
     Ok(())
 }

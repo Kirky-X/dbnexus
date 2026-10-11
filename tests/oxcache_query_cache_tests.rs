@@ -99,7 +99,10 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
         )
         .await
         .expect("top query first pass");
-    assert!(!top_first.from_cache, "首轮顶部查询应穿透");
+    assert!(
+        !top_first.from_cache,
+        "round 1 top query should pass through"
+    );
     assert_eq!(top_first.rows.len(), 10);
 
     let mut first_pass_rows = Vec::new();
@@ -112,7 +115,10 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
             )
             .await
             .expect("point query first pass");
-        assert!(!cq.from_cache, "首轮点查 user{user_id} 应穿透");
+        assert!(
+            !cq.from_cache,
+            "round 1 point query user{user_id} should pass through"
+        );
         first_pass_rows.push(cq.rows);
     }
 
@@ -125,7 +131,7 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
         )
         .await
         .expect("top query second pass");
-    assert!(top_second.from_cache, "二轮顶部查询应命中");
+    assert!(top_second.from_cache, "round 2 top query should hit");
     assert_eq!(top_second.rows, top_first.rows);
 
     for (idx, user_id) in (1..=3).enumerate() {
@@ -137,8 +143,14 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
             )
             .await
             .expect("point query second pass");
-        assert!(cq.from_cache, "二轮点查 user{user_id} 应命中（N+1 消除）");
-        assert_eq!(cq.rows, first_pass_rows[idx], "命中行内容应与穿透一致");
+        assert!(
+            cq.from_cache,
+            "round 2 point query user{user_id} should hit (N+1 eliminated)"
+        );
+        assert_eq!(
+            cq.rows, first_pass_rows[idx],
+            "the hit row content should match the pass-through"
+        );
     }
 
     cleanup(&path).await;
@@ -167,14 +179,14 @@ async fn test_invalidate_table_touches_only_target_table() {
             .await
             .expect("users warm 2")
             .from_cache,
-        "预热二轮 users 应命中"
+        "round 2 warm for users should hit"
     );
     assert!(
         qc.query_cached(orders_sql, &[], &["orders"])
             .await
             .expect("orders warm 2")
             .from_cache,
-        "预热二轮 orders 应命中"
+        "round 2 warm for orders should hit"
     );
 
     // 写路径：更新 user 1 并失效 users 表
@@ -196,11 +208,14 @@ async fn test_invalidate_table_touches_only_target_table() {
         .query_cached(users_sql, &[serde_json::json!(1)], &["users"])
         .await
         .expect("users after invalidate");
-    assert!(!users_after.from_cache, "失效后 users 查询应重新执行");
+    assert!(
+        !users_after.from_cache,
+        "the users query should re-execute after invalidation"
+    );
     assert_eq!(
         users_after.rows[0]["name"],
         serde_json::json!("renamed"),
-        "失效重查应读到写路径的新值"
+        "an invalidated re-query should read the new value from the write path"
     );
 
     // orders 查询：未失效表保持命中
@@ -208,7 +223,10 @@ async fn test_invalidate_table_touches_only_target_table() {
         .query_cached(orders_sql, &[], &["orders"])
         .await
         .expect("orders after users invalidate");
-    assert!(orders_after.from_cache, "未失效表应保持命中");
+    assert!(
+        orders_after.from_cache,
+        "a table that is not invalidated should keep hitting"
+    );
     assert_eq!(orders_after.rows, orders_first.rows);
 
     cleanup(&path).await;
@@ -234,7 +252,7 @@ async fn test_different_params_are_distinct_cache_entries() {
         .expect("param 2 first");
     assert!(
         !second.from_cache,
-        "同 SQL 不同参数应派生不同 key（不串缓存）"
+        "the same SQL with different parameters should derive different keys (no cache cross-talk)"
     );
     assert_eq!(first.rows[0]["name"], serde_json::json!("user1"));
     assert_eq!(second.rows[0]["name"], serde_json::json!("user2"));
@@ -264,10 +282,10 @@ async fn test_invalidate_unknown_table_is_idempotent() {
     let (qc, path) = setup("unknown").await;
     qc.invalidate_table("never_cached_table")
         .await
-        .expect("失效未知表应幂等成功");
+        .expect("invalidating an unknown table should succeed idempotently");
     qc.invalidate_table("never_cached_table")
         .await
-        .expect("重复失效同样成功");
+        .expect("duplicate invalidation should likewise succeed");
 
     let cq = qc
         .query_cached("SELECT COUNT(*) AS n FROM users", &[], &["users"])
@@ -288,7 +306,10 @@ async fn test_sql_change_derives_new_entry_even_without_invalidate() {
         .query_cached("SELECT id, name FROM users ORDER BY id", &[], &["users"])
         .await
         .expect("sql b first");
-    assert!(!a.from_cache && !b.from_cache, "SQL 变化应派生新 key");
+    assert!(
+        !a.from_cache && !b.from_cache,
+        "an SQL change should derive a new key"
+    );
     let a2 = qc
         .query_cached("SELECT id FROM users ORDER BY id", &[], &["users"])
         .await
@@ -333,7 +354,7 @@ async fn test_repeated_invalidations_always_produce_miss() {
             .expect("query after double invalidate");
         assert!(
             !cq.from_cache,
-            "round {round}: 双失效后必须重执行（版本戳编码必须单射）"
+            "round {round}: must re-execute after a double invalidation (the version stamp encoding must be injective)"
         );
     }
     cleanup(&path).await;
@@ -407,7 +428,7 @@ roles:
             .await
             .expect("admin second")
             .from_cache,
-        "admin 二轮应命中"
+        "round 2 for admin should hit"
     );
 
     // 受限角色：不得命中 admin 回填条目（安全上下文不同 → 不同 key）
@@ -417,7 +438,7 @@ roles:
         .expect("restricted first");
     assert!(
         !restricted_view.from_cache,
-        "受限角色不得命中 admin 回填的缓存条目（跨安全上下文隔离）"
+        "a restricted role must not hit admin-backfilled cache entries (cross-security-context isolation)"
     );
 
     cleanup(&path).await;
@@ -466,7 +487,7 @@ async fn test_namespace_isolates_tenants_on_shared_backend() {
             .await
             .expect("b first")
             .from_cache,
-        "不同 namespace 不得命中对方条目（租户隔离）"
+        "different namespaces must not hit each other's entries (tenant isolation)"
     );
 
     cleanup(&path).await;
@@ -539,17 +560,17 @@ async fn test_hash_field_injection_cannot_confuse_entries() {
             .await
             .expect("a second")
             .from_cache,
-        "A 自身的正常命中语义不受影响"
+        "A's own normal hit semantics should be unaffected"
     );
 
     // B/C 查询相同语句：不得命中 A 回填的条目（若命中则 from_cache 为
     // true 且不会走到数据库执行，即构成跨上下文越权读取）
-    for (name, ctx) in [("标签注入", &b), ("边界漂移", &c)] {
+    for (name, ctx) in [("tag injection", &b), ("boundary drift", &c)] {
         let outcome = ctx.query_cached(sql, &[], &["t"]).await;
         if let Ok(cq) = outcome {
             assert!(
                 !cq.from_cache,
-                "{name} 上下文不得命中他上下文回填的条目（哈希输入必须单射）"
+                "{name} context must not hit entries backfilled by another context (the hash input must be injective)"
             );
         }
     }
@@ -567,10 +588,10 @@ async fn test_empty_tables_and_invalid_table_names_are_rejected() {
     let err = qc
         .query_cached("SELECT id FROM users", &[], &[])
         .await
-        .expect_err("空 tables 必须拒绝（漏传即永不受失效影响）");
+        .expect_err("empty tables must be rejected (a missing pass means never being invalidated)");
     assert!(
         format!("{err}").contains("table"),
-        "错误应说明表集非法: {err}"
+        "the error should state the table set is invalid: {err}"
     );
 
     for bad in ["", "users;drop", "us ers", "用户"] {
@@ -578,7 +599,7 @@ async fn test_empty_tables_and_invalid_table_names_are_rejected() {
             qc.query_cached("SELECT id FROM users", &[], &[bad])
                 .await
                 .is_err(),
-            "非法表名 {bad:?} 应拒绝（版本键命名空间注入面）"
+            "the invalid table name {bad:?} should be rejected (version-key namespace injection surface)"
         );
     }
     cleanup(&path).await;
@@ -606,7 +627,10 @@ async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
         .query_cached(sql, &[serde_json::json!(1)], &tables)
         .await
         .expect("multi-table second");
-    assert!(second.from_cache, "二轮多表声明查询应命中");
+    assert!(
+        second.from_cache,
+        "round 2 of a multi-table declared query should hit"
+    );
 
     qc.invalidate_table("users")
         .await
@@ -617,7 +641,7 @@ async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
         .expect("multi-table after users invalidate");
     assert!(
         !third.from_cache,
-        "任一提及表失效都应重新执行（users 失效触及 orders 声明查询）"
+        "any mentioned-table invalidation should trigger re-execution (a users invalidation touches an orders declared query)"
     );
 
     // 只失效 orders 后同样重执行；orders 与 users 都失效后仍只重执行一次
@@ -633,7 +657,10 @@ async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
         .query_cached(sql, &[serde_json::json!(1)], &tables)
         .await
         .expect("multi-table second pass after both invalidations");
-    assert!(fifth.from_cache, "失效后的首轮穿透即回填，再查命中");
+    assert!(
+        fifth.from_cache,
+        "the first pass-through after invalidation backfills immediately, and the next query hits"
+    );
     cleanup(&path).await;
 }
 
@@ -682,14 +709,14 @@ async fn test_policy_change_invalidates_cached_entries() {
     assert_eq!(
         v1.rows[0]["email"].as_str().unwrap().len(),
         64,
-        "v1 出口为哈希脱敏"
+        "the v1 output is hash masking"
     );
     assert!(
         qc.query_cached(sql, &[], &["users"])
             .await
             .expect("v1 second")
             .from_cache,
-        "同策略内正常命中语义不受影响"
+        "normal hit semantics within the same policy should be unaffected"
     );
 
     // 策略 v2：撤销脱敏——key 派生纳入策略世代，旧策略脱敏行集必须失效，
@@ -702,18 +729,18 @@ async fn test_policy_change_invalidates_cached_entries() {
         .expect("v2 first");
     assert!(
         !v2.from_cache,
-        "set_data_protection 换装后旧 key 必须失效重执行"
+        "after a set_data_protection swap, old keys must be invalidated and re-executed"
     );
     assert_eq!(
         v2.rows[0]["email"], "alice@example.com",
-        "v2 出口为明文（撤销脱敏即时生效）"
+        "the v2 output is plaintext (masking revocation takes effect immediately)"
     );
     assert!(
         qc.query_cached(sql, &[], &["users"])
             .await
             .expect("v2 second")
             .from_cache,
-        "新策略世代下重新建立命中"
+        "hits should be re-established under the new policy generation"
     );
 
     cleanup(&path).await;

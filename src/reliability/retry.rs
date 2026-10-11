@@ -536,7 +536,7 @@ mod tests {
             let upper = (policy.max_backoff_ms as f64 * 1.25) as u128;
             assert!(
                 d.as_millis() >= 1 && d.as_millis() <= upper,
-                "attempt {attempt} backoff {}ms 越界",
+                "attempt {attempt} backoff of {}ms is out of bounds",
                 d.as_millis()
             );
         }

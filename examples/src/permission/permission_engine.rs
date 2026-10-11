@@ -52,7 +52,7 @@ fn rule(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("⚙️  DBNexus 权限引擎与 PDP 示例");
+    println!("⚙️  DBNexus permission engine and PDP example");
     println!("========================================\n");
 
     // ============================================
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // admin 角色：通配符权限，最高优先级
     provider.add_role(Role {
         name: "admin".to_string(),
-        description: "管理员，拥有全部权限".to_string(),
+        description: "administrator, has all permissions".to_string(),
         enabled: true,
         extends: vec![],
     });
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // editor 角色：可读写 articles，可读 users
     provider.add_role(Role {
         name: "editor".to_string(),
-        description: "编辑，可读写 articles".to_string(),
+        description: "editor, can read and write articles".to_string(),
         enabled: true,
         extends: vec![],
     });
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // viewer 角色：只读
     provider.add_role(Role {
         name: "viewer".to_string(),
-        description: "访客，只读".to_string(),
+        description: "visitor, read-only".to_string(),
         enabled: true,
         extends: vec!["editor".to_string()], // 继承 editor 的部分权限
     });
@@ -138,13 +138,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     provider.add_role_to_subject("bob", "editor");
     provider.add_role_to_subject("charlie", "viewer");
 
-    println!("✓ 已创建 3 个角色: admin / editor / viewer");
-    println!("✓ 已映射 3 个用户: alice(admin) / bob(editor) / charlie(viewer)\n");
+    println!("✓ created 3 roles: admin / editor / viewer");
+    println!("✓ mapped 3 users: alice(admin) / bob(editor) / charlie(viewer)\n");
 
     // ============================================
     // 2. 使用 PolicyDecisionPoint 进行权限决策
     // ============================================
-    println!("--- PolicyDecisionPoint 权限决策 ---\n");
+    println!("--- PolicyDecisionPoint permission decisions ---\n");
 
     let pdp_config = PolicyDecisionPointConfig {
         default_decision: PermissionDecision::Deny,
@@ -174,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let decision = pdp.check(user, resource, action).await;
         let mark = if decision == expected { "✔" } else { "✘" };
         println!(
-            "  {} {}.{} {} → {:?} (期望 {:?})",
+            "  {} {}.{} {} → {:?} (expected {:?})",
             mark, user, resource, action, decision, expected
         );
     }
@@ -182,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 使用 PolicyDecisionPoint builder 模式
     // ============================================
-    println!("\n--- PolicyDecisionPoint Builder 模式 ---\n");
+    println!("\n--- PolicyDecisionPoint builder pattern ---\n");
 
     let pdp = PolicyDecisionPoint::builder()
         .provider(provider.clone())
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .rate_limit(200, 60)
         .build();
 
-    println!("✓ PDP 创建成功（cache_ttl=300s, rate_limit=200/min）\n");
+    println!("✓ PDP created (cache_ttl=300s, rate_limit=200/min)\n");
 
     // 使用 PermissionContext 进行更细粒度的权限检查
     let context = PermissionContext::new(
@@ -202,19 +202,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_attribute("ip", "192.168.1.100")
     .with_environment("source", "web");
 
-    println!("--- PermissionContext 权限检查 ---\n");
+    println!("--- PermissionContext permission checks ---\n");
     println!(
-        "  上下文: subject={}, resource={}, action={:?}",
+        "  context: subject={}, resource={}, action={:?}",
         context.subject.id, context.resource.name, context.action
     );
-    println!("  属性: {:?}", context.attributes);
-    println!("  环境: {:?}", context.environment);
+    println!("  attributes: {:?}", context.attributes);
+    println!("  environment: {:?}", context.environment);
 
     let decision = pdp.check_permission(&context).await;
-    println!("  决策: {:?}\n", decision);
+    println!("  decision: {:?}\n", decision);
 
     // 批量权限检查
-    println!("--- 批量权限检查 ---\n");
+    println!("--- batch permission checks ---\n");
     let contexts = vec![
         PermissionContext::new(
             PermissionSubject::user("alice"),
@@ -244,12 +244,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. 获取可访问资源和操作
     // ============================================
-    println!("\n--- 资源与操作查询 ---\n");
+    println!("\n--- resource and action queries ---\n");
 
     for user in &["alice", "bob", "charlie"] {
         let resources = pdp.get_allowed_resources(user).await;
         let resource_names: Vec<&str> = resources.iter().map(|r| r.name.as_str()).collect();
-        println!("  {} 可访问资源: {:?}", user, resource_names);
+        println!("  {} can access resources: {:?}", user, resource_names);
 
         if let Some(first_resource) = resources.first() {
             // get_allowed_actions 是 PermissionProvider trait 的方法，直接在 provider 上调用
@@ -257,7 +257,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .get_allowed_actions(user, &first_resource.name)
                 .await;
             println!(
-                "    {} 对 {} 的操作: {:?}",
+                "    {}'s operation on {}: {:?}",
                 user, first_resource.name, actions
             );
         }
@@ -266,10 +266,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 速率限制演示
     // ============================================
-    println!("\n--- 速率限制演示 ---\n");
+    println!("\n--- rate limiting demo ---\n");
 
     let limited_pdp = PolicyDecisionPoint::with_rate_limit(provider.clone(), 5, 60);
-    println!("  速率限制: 5 次请求/分钟");
+    println!("  rate limit: 5 requests per minute");
 
     let mut allowed_count = 0;
     let mut denied_count = 0;
@@ -279,25 +279,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             PermissionDecision::Allow => allowed_count += 1,
             _ => denied_count += 1,
         }
-        println!("  请求 {}: {:?}", i, decision);
+        println!("  request {}: {:?}", i, decision);
     }
     println!(
-        "  统计: {} 允许, {} 拒绝（限流）",
+        "  statistics: {} allowed, {} rejected (rate limited)",
         allowed_count, denied_count
     );
 
     println!("\n========================================");
-    println!("✨ 权限引擎与 PDP 示例完成！");
+    println!("✨ Permission engine and PDP example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - RbacPermissionProvider::new()   创建 RBAC 权限提供者");
-    println!("  - provider.add_role(Role{{...}})  添加角色（支持继承）");
-    println!("  - provider.add_permission(role, rule)  添加权限规则");
-    println!("  - provider.add_role_to_subject(user, role)  映射用户到角色");
-    println!("  - PolicyDecisionPoint::with_config(provider, config)  创建带配置的策略决策点");
-    println!("  - pdp.check(user, res, act)  获取详细决策");
-    println!("  - PolicyDecisionPoint::builder()...build()  Builder 模式创建 PDP");
-    println!("  - PermissionContext  包含主体/资源/操作/属性/环境的上下文");
+    println!("\n📚 Key concepts:");
+    println!("  - RbacPermissionProvider::new()   create an RBAC permission provider");
+    println!("  - provider.add_role(Role{{...}})  add a role (supports inheritance)");
+    println!("  - provider.add_permission(role, rule)  add a permission rule");
+    println!("  - provider.add_role_to_subject(user, role)  map a user to a role");
+    println!("  - PolicyDecisionPoint::with_config(provider, config)  create a configured PDP");
+    println!("  - pdp.check(user, res, act)  get a detailed decision");
+    println!("  - PolicyDecisionPoint::builder()...build()  create a PDP with the builder pattern");
+    println!(
+        "  - PermissionContext  the context containing subject/resource/action/attributes/environment"
+    );
     println!("  - PermissionDecision::Allow / Deny / NotApplicable / Error");
 
     Ok(())

@@ -538,7 +538,7 @@ mod persist_failure_tests {
         let recovery = SagaRecovery::new(store.clone());
         assert!(
             recovery.list_pending().await.is_ok(),
-            "FailingStore load_pending 恒 Ok 空"
+            "FailingStore load_pending always returns Ok with an empty list"
         );
 
         let orchestrator =
@@ -583,7 +583,7 @@ mod external_id_tests {
         assert_eq!(result.saga_id, "caller-saga-001");
         match orchestrator.get_saga_log("caller-saga-001").await {
             Some(log) => assert_eq!(log.saga_id, "caller-saga-001"),
-            None => panic!("saga 日志必须以调用方提供的 saga_id 持久化"),
+            None => panic!("the saga log must persist with the caller-provided saga_id"),
         }
     }
 
@@ -591,7 +591,10 @@ mod external_id_tests {
     async fn execute_saga_with_id_falls_back_on_empty() {
         let orchestrator = SagaOrchestrator::new(Arc::new(ShardRouter::default()));
         let result = orchestrator.execute_saga_with_id("", single_step()).await;
-        assert!(!result.saga_id.is_empty(), "空 saga_id 必须回退为库生成");
+        assert!(
+            !result.saga_id.is_empty(),
+            "an empty saga_id must fall back to a database-generated one"
+        );
     }
 
     /// mock 动作契约：name 标识与执行成功语义
@@ -605,7 +608,10 @@ mod external_id_tests {
         let session = pool.get_session("admin").await.expect("session");
         let action = NoopAction;
         assert_eq!(action.name(), "noop");
-        action.execute(&session).await.expect("noop 执行恒成功");
+        action
+            .execute(&session)
+            .await
+            .expect("noop execution always succeeds");
     }
 }
 
@@ -776,7 +782,7 @@ mod replay_compensation_tests {
         });
         let recovery = SagaRecovery::new(store);
         let pending = recovery.list_pending().await.expect("list_pending");
-        assert_eq!(pending.len(), 1, "Compensating 属 pending");
+        assert_eq!(pending.len(), 1, "Compensating counts as pending");
         assert_eq!(pending[0].saga_id, saga_id);
 
         // mock 的 name 与 execute 契约（直调避免依赖编排路径）
@@ -788,10 +794,14 @@ mod replay_compensation_tests {
             calls: Arc::new(AtomicUsize::new(0)),
         };
         assert_eq!(comp.name(), "counting-comp");
-        comp.execute(&session).await.expect("计数补偿恒成功");
+        comp.execute(&session)
+            .await
+            .expect("counted compensation always succeeds");
         let fwd = NoopForward;
         assert_eq!(fwd.name(), "noop-forward");
-        fwd.execute(&session).await.expect("noop forward 恒成功");
+        fwd.execute(&session)
+            .await
+            .expect("noop forward always succeeds");
     }
 
     /// 恒失败补偿（重放失败路径专用）
@@ -1015,7 +1025,7 @@ mod session_failure_tests {
                 .await
                 .expect("list_pending")
                 .is_empty(),
-            "无日志时 pending 为空"
+            "pending is empty when there is no log"
         );
 
         let pool = crate::database::DbPool::new("sqlite::memory:")
@@ -1024,7 +1034,7 @@ mod session_failure_tests {
         let session = pool.get_session("admin").await.expect("session");
         let noop = NoopAction;
         assert_eq!(noop.name(), "noop");
-        noop.execute(&session).await.expect("noop 恒成功");
+        noop.execute(&session).await.expect("noop always succeeds");
     }
 }
 
@@ -1100,7 +1110,11 @@ mod execute_path_tests {
             })
             .collect();
         let result = orchestrator.execute_saga(steps).await;
-        assert!(result.success, "全成功应为 success: {:?}", result.failure);
+        assert!(
+            result.success,
+            "all-success should report success: {:?}",
+            result.failure
+        );
         assert_eq!(result.status, SagaStatus::Completed);
         assert_eq!(result.completed_steps.len(), 3);
         assert!(result.compensated_steps.is_empty());
@@ -1131,10 +1145,10 @@ mod execute_path_tests {
         assert_eq!(result.completed_steps, vec!["ok-step".to_string()]);
         assert!(
             result.compensated_steps.is_empty(),
-            "补偿失败不得计入已补偿: {:?}",
+            "failed compensation must not count as compensated: {:?}",
             result.compensated_steps
         );
-        let failure = result.failure.expect("必须携带失败信息");
+        let failure = result.failure.expect("must carry the failure information");
         assert_eq!(failure.step_name, "bad-step");
     }
 
@@ -1159,7 +1173,10 @@ mod execute_path_tests {
         let result = orchestrator.execute_saga(steps).await;
         assert!(!result.success);
         assert_eq!(result.status, SagaStatus::Failed);
-        assert!(result.failure.is_some(), "会话失败必须显性化");
+        assert!(
+            result.failure.is_some(),
+            "session failures must be surfaced"
+        );
     }
 
     /// compensate_recovered 对不存在的 saga 日志返回 Failed + 显性失败信息
@@ -1177,7 +1194,9 @@ mod execute_path_tests {
             .await;
         assert!(!result.success);
         assert_eq!(result.status, SagaStatus::Failed);
-        let failure = result.failure.expect("必须携带日志缺失失败信息");
+        let failure = result
+            .failure
+            .expect("must carry the missing-log failure information");
         assert!(
             failure.error.contains("not found"),
             "got: {}",
@@ -1192,7 +1211,7 @@ mod execute_path_tests {
         let store = Arc::new(super::super::store::InMemorySagaLog::new());
         let recovery = SagaRecovery::new(store.clone());
         let pending = recovery.list_pending().await.expect("list_pending");
-        assert!(pending.is_empty(), "空存储无 pending");
+        assert!(pending.is_empty(), "an empty store has no pending entries");
 
         // 经编排器产生一条 Failed 日志（Failed 不属于 pending）
         let orchestrator = SagaOrchestrator::new_with_log_store(router_with_sqlite().await, store);
@@ -1203,7 +1222,7 @@ mod execute_path_tests {
         let pending = recovery.list_pending().await.expect("list_pending");
         assert!(
             !pending.iter().any(|l| l.saga_id == "recovery-list-case"),
-            "Failed 终态不属于 pending"
+            "the Failed terminal state is not pending"
         );
     }
 

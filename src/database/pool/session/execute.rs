@@ -707,9 +707,12 @@ impl Session {
     pub async fn execute_raw_ddl(&self, sql: &str) -> DbResult<ExecResult> {
         // 检查角色白名单（只允许管理员角色执行 DDL）
         if !self.is_admin {
-            return Err(DbError::Permission(format!(
-                "DDL operations are only allowed for admin role. Current role: '{}', Admin role: '{}'",
-                self.role, self.pool_inner.admin_role
+            return Err(DbError::Permission(i18n::t(
+                "session-ddl-admin-only",
+                &[
+                    ("role", self.role.to_string()),
+                    ("admin_role", self.pool_inner.admin_role.to_string()),
+                ],
             )));
         }
 

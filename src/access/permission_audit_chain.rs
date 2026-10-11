@@ -314,10 +314,13 @@ mod tests {
             "op",
         ));
         assert_eq!(e1.seq, 1);
-        assert_eq!(e1.prev_hash, e0.hmac, "第二条 prev_hash 应为第一条 hmac");
+        assert_eq!(
+            e1.prev_hash, e0.hmac,
+            "the second entry's prev_hash should equal the first entry's hmac"
+        );
 
         assert_eq!(chain.len(), 2);
-        assert!(chain.verify(), "完好链条应通过校验");
+        assert!(chain.verify(), "an intact chain should verify");
     }
 
     #[test]
@@ -330,7 +333,7 @@ mod tests {
         entries[0].event_json = entries[0].event_json.replace("role_added", "role_removed");
         assert!(
             !verify_permission_chain(&entries, b"key"),
-            "篡改事件应被检出"
+            "tampered events must be detected"
         );
 
         // 篡改签名
@@ -360,13 +363,16 @@ mod tests {
             .collect();
         assert!(
             !verify_permission_chain(&deleted, b"key"),
-            "删除条目应被检出"
+            "removed entries must be detected"
         );
 
         // 重排
         let mut reordered = entries.clone();
         reordered.swap(0, 1);
-        assert!(!verify_permission_chain(&reordered, b"key"), "重排应被检出");
+        assert!(
+            !verify_permission_chain(&reordered, b"key"),
+            "reordering must be detected"
+        );
     }
 
     #[test]

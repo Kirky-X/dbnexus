@@ -816,7 +816,7 @@ impl DbPool {
         #[cfg(not(feature = "yaml"))]
         {
             let _ = (content, source);
-            Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
+            Err(i18n::t_simple("perm-config-yaml-feature-not-enabled"))
         }
     }
 
@@ -1187,7 +1187,7 @@ mod tests {
         DbConnection::Neo4j(Arc::new(
             crate::database::Neo4jConnection::new("neo4j://localhost:7687", "neo4j", "password")
                 .await
-                .expect("neo4rs 连接池惰性构建，无服务器也应成功"),
+                .expect("the neo4rs pool builds lazily and should succeed without a server"),
         ))
     }
 
@@ -1607,7 +1607,7 @@ mod tests {
 
         assert!(
             admin_bypass_count() > before,
-            "默认 admin 角色创建池应触发审计记录"
+            "creating a pool with the default admin role should trigger audit records"
         );
     }
 
@@ -1863,14 +1863,20 @@ async fn test_pool_metrics_reflects_collector_presence() {
     let session = pool.get_session("admin").await.expect("session");
     drop(session);
     let m = pool.pool_metrics();
-    assert_eq!(m.timeout_errors, 0, "正常获取不应有超时");
-    assert_eq!(m.max_waiters, 1, "单次获取的历史等待者峰值为 1");
+    assert_eq!(m.timeout_errors, 0, "a normal acquire should not time out");
+    assert_eq!(
+        m.max_waiters, 1,
+        "the historical waiter peak of a single acquire should be 1"
+    );
 
     // 清除 collector：采集器分支归零，历史峰值不受影响
     pool.set_metrics_collector(None).await;
     let m = pool.pool_metrics();
     assert_eq!(m.slow_acquires, 0);
-    assert_eq!(m.max_waiters, 1, "历史峰值不受 collector 清除影响");
+    assert_eq!(
+        m.max_waiters, 1,
+        "the historical peak is unaffected by collector clearing"
+    );
 }
 
 #[cfg(all(feature = "sqlite", feature = "pool-health-check"))]
@@ -1899,7 +1905,7 @@ async fn test_clean_invalid_connections_removes_dead() {
         .push(DbConnection::SeaOrm(dead));
 
     let removed = pool.clean_invalid_connections().await;
-    assert_eq!(removed, 1, "死连接必须被清除");
+    assert_eq!(removed, 1, "dead connections must be removed");
     // 池构造时预填充的活连接保留（new() 会按 min_connections 预热），只清死连接
     assert_eq!(
         pool.inner
@@ -1908,7 +1914,7 @@ async fn test_clean_invalid_connections_removes_dead() {
             .unwrap_or_else(|p| p.into_inner())
             .len(),
         baseline_idle,
-        "仅移除注入的死连接，预填充活连接不受影响"
+        "only the injected dead connection is removed; pre-filled live connections are unaffected"
     );
 }
 
@@ -1947,7 +1953,7 @@ async fn test_validate_and_recreate_connections_refills_min() {
         .expect("recreate");
     assert!(
         recreated >= 1,
-        "全部预填充连接死亡后应重建至 min_connections=2，实际 {recreated}"
+        "after all pre-filled connections die the pool should rebuild to min_connections=2, got {recreated}"
     );
     assert_eq!(
         pool.inner
@@ -1956,7 +1962,7 @@ async fn test_validate_and_recreate_connections_refills_min() {
             .unwrap_or_else(|p| p.into_inner())
             .len(),
         2,
-        "重建后应回填至 min_connections"
+        "the pool should refill to min_connections after rebuilding"
     );
 }
 
@@ -2040,10 +2046,10 @@ async fn test_acquire_connection_times_out_when_exhausted() {
     let first = pool.acquire_connection().await;
     assert!(
         first.is_ok(),
-        "首个连接必须成功: {:?}",
+        "the first connection must succeed: {:?}",
         first.as_ref().err()
     );
     let err = pool.acquire_connection().await;
-    assert!(err.is_err(), "第二个连接必须超时");
+    assert!(err.is_err(), "the second connection must time out");
     drop(first);
 }

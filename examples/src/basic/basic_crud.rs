@@ -54,21 +54,21 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("📝 DBNexus 基础 CRUD 示例");
+    println!("📝 DBNexus basic CRUD example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建连接池和 Session
     // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("✓ 连接池和 Session 创建成功 (角色: admin)\n");
+    println!("✓ pool and Session created (role: admin)\n");
 
     // ============================================
     // 2. 建表（CREATE TABLE）
     // ============================================
     // execute_raw_ddl 仅限 admin 角色调用，用于 DDL 操作。
     common::ddl::create_users_table(&session).await?;
-    println!("✓ users 表创建成功\n");
+    println!("✓ users table created\n");
 
     // ============================================
     // 3. 插入数据（Model::insert）
@@ -80,7 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         email: "alice@example.com".to_string(),
     };
     let inserted1 = Model::insert(&session, user1).await?;
-    println!("  ✓ 插入用户: id={}, name={}", inserted1.id, inserted1.name);
+    println!(
+        "  ✓ inserted user: id={}, name={}",
+        inserted1.id, inserted1.name
+    );
 
     let user2 = Model {
         id: 2,
@@ -88,7 +91,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         email: "bob@example.com".to_string(),
     };
     let inserted2 = Model::insert(&session, user2).await?;
-    println!("  ✓ 插入用户: id={}, name={}", inserted2.id, inserted2.name);
+    println!(
+        "  ✓ inserted user: id={}, name={}",
+        inserted2.id, inserted2.name
+    );
 
     let user3 = Model {
         id: 3,
@@ -96,14 +102,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         email: "charlie@example.com".to_string(),
     };
     let inserted3 = Model::insert(&session, user3).await?;
-    println!("  ✓ 插入用户: id={}, name={}", inserted3.id, inserted3.name);
+    println!(
+        "  ✓ inserted user: id={}, name={}",
+        inserted3.id, inserted3.name
+    );
 
     // ============================================
     // 4. 查询所有（Model::find_all）
     // ============================================
     println!("\n--- FIND_ALL ---");
     let all_users = Model::find_all(&session).await?;
-    println!("  ✓ 查询所有用户: 共 {} 条记录", all_users.len());
+    println!(
+        "  ✓ queried all users: {} records in total",
+        all_users.len()
+    );
     for u in &all_users {
         println!("    - id={}, name={}, email={}", u.id, u.name, u.email);
     }
@@ -120,35 +132,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .await?;
-    println!("  ✓ 更新用户 id={}: 新邮箱={}", updated.id, updated.email);
+    println!(
+        "  ✓ updated user id={}: new email={}",
+        updated.id, updated.email
+    );
 
     // ============================================
     // 6. 删除数据（Model::delete）
     // ============================================
     println!("\n--- DELETE ---");
     let affected = Model::delete(&session, inserted3.id).await?;
-    println!("  ✓ 删除用户 id={}: 影响 {} 行", inserted3.id, affected);
+    println!(
+        "  ✓ deleted user id={}: {} rows affected",
+        inserted3.id, affected
+    );
 
     // ============================================
     // 验证最终状态
     // ============================================
-    println!("\n--- 最终状态 ---");
+    println!("\n--- final state ---");
     let remaining = Model::find_all(&session).await?;
-    println!("  ✓ 剩余用户数: {}", remaining.len());
+    println!("  ✓ remaining users: {}", remaining.len());
     for u in &remaining {
         println!("    - id={}, name={}, email={}", u.id, u.name, u.email);
     }
 
     println!("\n========================================");
-    println!("✨ 基础 CRUD 示例完成！");
+    println!("✨ Basic CRUD example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  统一属性宏定义实体");
-    println!("  - Model::insert(&session, model)   - 插入记录");
-    println!("  - Model::find_all(&session)        - 查询所有");
-    println!("  - Model::update(&session, model)   - 更新记录");
-    println!("  - Model::delete(&session, id)      - 按 ID 删除");
-    println!("  - session.execute_raw_ddl(sql)     - 执行 DDL（仅 admin）");
+    println!("\n📚 Key concepts:");
+    println!("  - #[db_entity(table_name=\"...\", primary_key=\"...\")]  unified attribute macro");
+    println!("  - Model::insert(&session, model)   - insert a record");
+    println!("  - Model::find_all(&session)        - query all");
+    println!("  - Model::update(&session, model)   - update a record");
+    println!("  - Model::delete(&session, id)      - delete by ID");
+    println!("  - session.execute_raw_ddl(sql)     - execute DDL (admin only)");
 
     Ok(())
 }

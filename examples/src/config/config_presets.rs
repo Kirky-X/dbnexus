@@ -13,21 +13,21 @@
 
 fn main() {
     println!("========================================");
-    println!("🏗️  DBNexus 预设配置对比示例");
+    println!("🏗️  DBNexus preset configuration comparison example");
     println!("========================================\n");
 
     // ============================================
     // 1. 打印当前启用的特性
     // ============================================
-    println!("📋 当前启用的特性 (通过 cfg! 检测):");
+    println!("📋 Currently enabled features (detected via cfg!):");
     print_feature_status();
 
     // ============================================
     // 2. 预设配置对比表
     // ============================================
-    println!("\n📊 预设配置对比表:");
+    println!("\n📊 Preset configuration comparison table:");
     println!("┌─────────────┬──────────┬───────────────┬────────────┬─────────────┐");
-    println!("│ 特性        │ embedded │ microservice  │ monolith   │ enterprise  │");
+    println!("│ Feature      │ embedded │ microservice  │ monolith   │ enterprise  │");
     println!("├─────────────┼──────────┼───────────────┼────────────┼─────────────┤");
     println!("│ sqlite      │    ✓     │       -       │     -      │     -       │");
     println!("│ postgres    │    -     │       ✓       │     ✓      │     ✓       │");
@@ -44,79 +44,85 @@ fn main() {
     // ============================================
     // 3. 各预设的适用场景
     // ============================================
-    println!("\n🎯 预设适用场景:");
-    println!("\n  embedded (嵌入式/边缘设备):");
-    println!("    - 超轻量配置，仅 sqlite + config-env");
-    println!("    - 适用于 IoT 设备、边缘计算、嵌入式系统");
-    println!("    - 资源占用最小，无权限/可观测性开销");
+    println!("\n🎯 Preset use cases:");
+    println!("\n  embedded (embedded/edge devices):");
+    println!("    - ultra-lightweight configuration, sqlite + config-env only");
+    println!("    - for IoT devices, edge computing, and embedded systems");
+    println!("    - smallest resource footprint, no permission/observability overhead");
 
-    println!("\n  microservice (微服务):");
-    println!("    - postgres + 权限 + SQL 解析 + 可观测性");
-    println!("    - 适用于云原生微服务架构");
-    println!("    - 环境变量配置，适配 K8s/容器化部署");
+    println!("\n  microservice (microservices):");
+    println!("    - postgres + permissions + SQL parsing + observability");
+    println!("    - for cloud-native microservice architectures");
+    println!("    - environment variable configuration, fit for K8s/containerized deployment");
 
-    println!("\n  monolith (单体应用):");
-    println!("    - 完整功能：数据管理 + 安全 + 可观测性");
-    println!("    - 适用于中大型单体应用");
-    println!("    - YAML 配置，支持分片/全局索引/审计");
+    println!("\n  monolith (monolithic application):");
+    println!("    - full features: data management + security + observability");
+    println!("    - for medium and large monolithic applications");
+    println!("    - YAML configuration, supports sharding/global index/audit");
 
-    println!("\n  enterprise (企业级):");
-    println!("    - 在 monolith 基础上增加 permission-engine");
-    println!("    - 适用于金融、政务等高安全场景");
-    println!("    - 高级 RBAC 权限引擎 + 策略决策点");
+    println!("\n  enterprise (enterprise-grade):");
+    println!("    - adds permission-engine on top of monolith");
+    println!("    - for high-security scenarios such as finance and government");
+    println!("    - advanced RBAC permission engine + policy decision point");
 
     // ============================================
     // 4. 条件编译演示
     // ============================================
-    println!("\n🔧 条件编译能力演示:");
+    println!("\n🔧 Conditional compilation capability demo:");
 
     #[cfg(feature = "sqlite")]
-    println!("  ✓ SQLite 驱动已启用 — 支持 sqlite::memory: 和文件模式");
+    println!("  ✓ SQLite driver enabled — supports sqlite::memory: and file mode");
 
     #[cfg(feature = "postgres")]
-    println!("  ✓ PostgreSQL 驱动已启用 — 支持 postgres:// 连接");
+    println!("  ✓ PostgreSQL driver enabled — supports postgres:// connections");
 
     #[cfg(feature = "mysql")]
-    println!("  ✓ MySQL 驱动已启用 — 支持 mysql:// 连接");
+    println!("  ✓ MySQL driver enabled — supports mysql:// connections");
 
     #[cfg(feature = "permission")]
-    println!("  ✓ 权限控制已启用 — 支持 RBAC 角色策略");
+    println!("  ✓ Permission control enabled — supports RBAC role policies");
 
     #[cfg(feature = "macros")]
-    println!("  ✓ 过程宏已启用 — 支持 #[db_entity(...)] 统一属性宏");
+    println!(
+        "  ✓ Procedural macros enabled — supports the #[db_entity(...)] unified attribute macro"
+    );
 
     #[cfg(feature = "sql-parser")]
-    println!("  ✓ SQL 解析已启用 — 支持 SQL 注入检测和 DDL 防护");
+    println!("  ✓ SQL parsing enabled — supports SQL injection detection and DDL protection");
 
     #[cfg(feature = "migration")]
-    println!("  ✓ 数据库迁移已启用 — 支持 MigrationExecutor");
+    println!("  ✓ Database migration enabled — supports MigrationExecutor");
 
     #[cfg(feature = "sharding")]
-    println!("  ✓ 数据分片已启用 — 支持 ShardRouter 多策略分片");
+    println!("  ✓ Data sharding enabled — supports ShardRouter multi-strategy sharding");
 
     #[cfg(feature = "global-index")]
-    println!("  ✓ 全局索引已启用 — 支持 GlobalIndex 跨分片查询");
+    println!("  ✓ Global index enabled — supports GlobalIndex cross-shard queries");
 
     #[cfg(feature = "cache")]
-    println!("  ✓ 缓存已启用 — 支持 oxcache 查询结果缓存");
+    println!("  ✓ Cache enabled — supports oxcache query result caching");
 
     #[cfg(feature = "metrics")]
-    println!("  ✓ 指标收集已启用 — 支持 Prometheus metrics");
+    println!("  ✓ Metrics collection enabled — supports Prometheus metrics");
 
     #[cfg(feature = "health-check")]
-    println!("  ✓ 健康检查已启用 — 支持连接池健康监控");
+    println!("  ✓ Health check enabled — supports pool health monitoring");
 
     #[cfg(feature = "audit")]
-    println!("  ✓ 审计日志已启用 — 支持 AuditLogger 事件记录");
+    println!("  ✓ Audit logging enabled — supports AuditLogger event recording");
 
     println!("\n========================================");
-    println!("✨ 预设配置对比示例完成！");
+    println!("✨ Preset configuration comparison example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - 预设是 feature 的组合，通过 Cargo.toml 的 [features] 定义");
-    println!("  - embedded = 最小化，microservice = 云原生，monolith = 完整，enterprise = 全功能");
-    println!("  - 运行时可通过 cfg!(feature = \"...\") 检测特性是否启用");
-    println!("  - 选择预设而非逐个启用 feature，减少配置出错概率");
+    println!("\n📚 Key concepts:");
+    println!("  - presets are feature combinations defined in the [features] table of Cargo.toml");
+    println!(
+        "  - embedded = minimal, microservice = cloud-native, monolith = full, enterprise = all features"
+    );
+    println!("  - at runtime, use cfg!(feature = \"...\") to detect whether a feature is enabled");
+    println!(
+        "  - choose a preset instead of enabling features one by one, reducing misconfiguration"
+    );
 }
 
 fn print_feature_status() {
@@ -144,7 +150,7 @@ fn print_feature_status() {
 
     for (name, enabled) in features {
         let mark = if enabled { "✓" } else { "✗" };
-        let status = if enabled { "启用" } else { "未启用" };
+        let status = if enabled { "enabled" } else { "disabled" };
         println!("  {} {:<20} - {}", mark, name, status);
     }
 }

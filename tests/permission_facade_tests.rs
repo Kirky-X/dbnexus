@@ -98,9 +98,9 @@ async fn test_facade_single_config_global_effect() {
         )
         .await
         .expect("admin query");
-    assert_eq!(admin_rows.len(), 2, "admin 不受 RLS 限制");
+    assert_eq!(admin_rows.len(), 2, "admin is not subject to RLS");
     let email = admin_rows[0]["email"].as_str().unwrap();
-    assert_eq!(email.len(), 64, "admin 出口脱敏（SHA-256 hex）");
+    assert_eq!(email.len(), 64, "admin exit masking (SHA-256 hex)");
     assert!(!email.contains('@'));
 
     // default 角色：RLS 谓词只放行 t-100 + 脱敏
@@ -108,10 +108,14 @@ async fn test_facade_single_config_global_effect() {
         .query_rows("SELECT id, email, tenant_id FROM orders", "default")
         .await
         .expect("default query");
-    assert_eq!(default_rows.len(), 1, "RLS 谓词应只放行 t-100");
+    assert_eq!(
+        default_rows.len(),
+        1,
+        "the RLS predicate should let only t-100 through"
+    );
     assert_eq!(default_rows[0]["tenant_id"], "t-100");
     let email = default_rows[0]["email"].as_str().unwrap();
-    assert!(!email.contains('@'), "default 出口脱敏");
+    assert!(!email.contains('@'), "default exit masking");
 
     let _ = std::fs::remove_file(&path);
 }
@@ -148,7 +152,10 @@ async fn test_facade_reapply_hot_swap() {
         .await
         .expect("query t-200");
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0]["tenant_id"], "t-200", "RLS 租户应切换为 t-200");
+    assert_eq!(
+        rows[0]["tenant_id"], "t-200",
+        "the RLS tenant should switch to t-200"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -176,7 +183,7 @@ async fn test_facade_rbac_denies_unauthorized_table() {
         .unwrap_err();
     assert!(
         format!("{err}").to_lowercase().contains("denied") || format!("{err}").contains("权限"),
-        "default 对 orders 应被拒绝，实际: {err}"
+        "default should be denied on orders, actual: {err}"
     );
 
     let _ = std::fs::remove_file(&path);

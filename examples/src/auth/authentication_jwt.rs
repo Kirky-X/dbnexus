@@ -19,7 +19,7 @@ use dbnexus::{AuthError, JwtClaims, JwtManager, TokenType};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔐 DBNexus JWT 认证示例");
+    println!("🔐 DBNexus JWT authentication example");
     println!("========================================\n");
 
     // ============================================
@@ -28,12 +28,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ⚠️ 生产环境请从环境变量或密钥管理服务读取 secret，不要硬编码
     let secret = b"dbnexus-demo-secret-key-please-change-in-production";
     let manager = JwtManager::new(secret)?;
-    println!("✓ JwtManager 创建成功（使用默认过期时间：access=1h, refresh=7d）\n");
+    println!("✓ JwtManager created (default expiration: access=1h, refresh=7d)\n");
 
     // ============================================
     // 2. 生成 Access Token 与 Refresh Token
     // ============================================
-    println!("--- 生成 Token ---");
+    println!("--- Generate Token ---");
     let user_id = "u_10086";
     let username = "alice";
     let role = "admin";
@@ -41,32 +41,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let access_token = manager.generate_token(user_id, username, role, TokenType::Access)?;
     let refresh_token = manager.generate_token(user_id, username, role, TokenType::Refresh)?;
     println!(
-        "  ✓ Access token  (前 40 字符): {}...",
+        "  ✓ Access token  (first 40 chars): {}...",
         &access_token[..40.min(access_token.len())]
     );
     println!(
-        "  ✓ Refresh token (前 40 字符): {}...",
+        "  ✓ Refresh token (first 40 chars): {}...",
         &refresh_token[..40.min(refresh_token.len())]
     );
 
     // ============================================
     // 3. 验证并解析 Token → JwtClaims
     // ============================================
-    println!("\n--- 验证 Token ---");
+    println!("\n--- Verify Token ---");
     let access_claims: JwtClaims = manager.verify_token(&access_token)?;
     println!("  Access token claims:");
     println!("    sub        = {}", access_claims.sub);
     println!("    username   = {}", access_claims.username);
     println!("    role       = {}", access_claims.role);
-    println!("    iat        = {} (签发时间戳)", access_claims.iat);
-    println!("    exp        = {} (过期时间戳)", access_claims.exp);
+    println!(
+        "    iat        = {} (issued-at timestamp)",
+        access_claims.iat
+    );
+    println!(
+        "    exp        = {} (expiration timestamp)",
+        access_claims.exp
+    );
     println!("    token_type = {:?}", access_claims.token_type);
 
     let refresh_claims = manager.verify_token(&refresh_token)?;
     println!("\n  Refresh token claims:");
     println!("    token_type = {:?}", refresh_claims.token_type);
     println!(
-        "    有效期 = {} 秒 ({} → {})",
+        "    validity = {} sec ({} → {})",
         refresh_claims.exp - refresh_claims.iat,
         refresh_claims.iat,
         refresh_claims.exp
@@ -75,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. TokenType 区分
     // ============================================
-    println!("\n--- TokenType 类型区分 ---");
+    println!("\n--- TokenType type distinction ---");
     println!("  Access  token type = {:?}", access_claims.token_type);
     println!("  Refresh token type = {:?}", refresh_claims.token_type);
     assert_eq!(access_claims.token_type, TokenType::Access);
@@ -84,30 +90,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 使用 Refresh Token 刷新 Access Token
     // ============================================
-    println!("\n--- 刷新 Access Token ---");
+    println!("\n--- Refresh Access Token ---");
     let new_access_token = manager.refresh_access_token(&refresh_token).await?;
-    println!("  ✓ 使用 refresh token 生成新的 access token");
+    println!("  ✓ new access token generated with refresh token");
     println!(
-        "    新 token (前 40 字符): {}...",
+        "    new token (first 40 chars): {}...",
         &new_access_token[..40.min(new_access_token.len())]
     );
 
     let new_claims = manager.verify_token(&new_access_token)?;
     println!(
-        "  ✓ 新 token 验证成功: sub={}, role={}, type={:?}",
+        "  ✓ new token verified: sub={}, role={}, type={:?}",
         new_claims.sub, new_claims.role, new_claims.token_type
     );
 
     // ============================================
     // 6. 自定义过期时间
     // ============================================
-    println!("\n--- 自定义过期时间 ---");
+    println!("\n--- Custom expiration ---");
     let short_manager = JwtManager::with_expiration(secret, 60, 3600)?;
     let short_token = short_manager.generate_token(user_id, username, role, TokenType::Access)?;
     let short_claims = short_manager.verify_token(&short_token)?;
     println!("  ✓ access=60s, refresh=3600s");
     println!(
-        "    有效期 = {} 秒 (exp - iat = {} - {} = {})",
+        "    validity = {} sec (exp - iat = {} - {} = {})",
         short_claims.exp - short_claims.iat,
         short_claims.exp,
         short_claims.iat,
@@ -117,22 +123,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 7. 错误场景：无效 token 与过期 token
     // ============================================
-    println!("\n--- 错误场景 ---");
+    println!("\n--- Error scenarios ---");
 
     // 无效 token
     let invalid_result = manager.verify_token("invalid.token.here");
     match &invalid_result {
         Err(AuthError::InvalidToken) => {
-            println!("  ✓ 无效 token 被正确拒绝: InvalidToken");
+            println!("  ✓ invalid token correctly rejected: InvalidToken");
         }
         other => {
-            println!("  ✗ 预期 InvalidToken，实际得到: {:?}", other);
+            println!("  ✗ expected InvalidToken, got: {:?}", other);
         }
     }
 
     // 模拟过期 token：使用 1 秒过期时间生成后立即等待 2 秒
     // verify_token 使用 leeway = 0 严格过期检查，2s 后 token 必定失效
-    println!("\n  测试过期 token (1s 过期，等待 2s)...");
+    println!("\n  testing expired token (expires in 1s, waiting 2s)...");
     let expiring_manager = JwtManager::with_expiration(secret, 1, 1)?;
     let expiring_token =
         expiring_manager.generate_token(user_id, username, role, TokenType::Access)?;
@@ -140,10 +146,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expired_result = expiring_manager.verify_token(&expiring_token);
     match &expired_result {
         Err(AuthError::TokenExpired) => {
-            println!("  ✓ 过期 token 被正确识别: TokenExpired");
+            println!("  ✓ expired token correctly identified: TokenExpired");
         }
         other => {
-            println!("  ✗ 预期 TokenExpired，实际得到: {:?}", other);
+            println!("  ✗ expected TokenExpired, got: {:?}", other);
         }
     }
 
@@ -151,24 +157,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wrong_refresh = manager.refresh_access_token(&access_token).await;
     match &wrong_refresh {
         Err(AuthError::InvalidToken) => {
-            println!("  ✓ 用 access token 刷新被正确拒绝: InvalidToken");
+            println!("  ✓ refreshing with access token correctly rejected: InvalidToken");
         }
         other => {
-            println!("  ✗ 预期 InvalidToken，实际得到: {:?}", other);
+            println!("  ✗ expected InvalidToken, got: {:?}", other);
         }
     }
 
     println!("\n========================================");
-    println!("✨ JWT 认证示例完成！");
+    println!("✨ JWT authentication example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - JwtManager::new(secret)                       - 创建 JWT 管理器");
-    println!("  - JwtManager::with_expiration(secret, acc, ref) - 自定义过期时间");
-    println!("  - manager.generate_token(uid, name, role, type) - 生成 token");
-    println!("  - manager.verify_token(token) -> JwtClaims      - 验证并解析");
-    println!("  - manager.refresh_access_token(refresh_token)   - 刷新 access token");
-    println!("  - TokenType::Access / TokenType::Refresh        - 两种 token 类型");
-    println!("  - AuthError::InvalidToken / TokenExpired         - 错误类型");
+    println!("\n📚 Key concepts:");
+    println!("  - JwtManager::new(secret)                       - create JWT manager");
+    println!("  - JwtManager::with_expiration(secret, acc, ref) - custom expiration");
+    println!("  - manager.generate_token(uid, name, role, type) - generate token");
+    println!("  - manager.verify_token(token) -> JwtClaims      - verify and decode");
+    println!("  - manager.refresh_access_token(refresh_token)   - refresh access token");
+    println!("  - TokenType::Access / TokenType::Refresh        - two token types");
+    println!("  - AuthError::InvalidToken / TokenExpired         - error types");
 
     Ok(())
 }

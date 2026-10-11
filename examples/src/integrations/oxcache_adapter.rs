@@ -45,23 +45,23 @@ fn make_adapter(capacity: u64) -> OxcacheDbCacheAdapter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔗 DBNexus Oxcache 适配器示例");
+    println!("🔗 DBNexus Oxcache adapter example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建适配器
     // ============================================
-    println!("--- 1. 创建 OxcacheDbCacheAdapter ---\n");
+    println!("--- 1. create the OxcacheDbCacheAdapter ---\n");
 
     let adapter = make_adapter(100);
-    println!("  ✓ 适配器创建成功（MokaMemoryBackend, capacity=100）");
-    println!("  类型: OxcacheDbCacheAdapter");
-    println!("  实现: DbCacheProvider trait (get/set/delete)\n");
+    println!("  ✓ adapter created (MokaMemoryBackend, capacity=100)");
+    println!("  type: OxcacheDbCacheAdapter");
+    println!("  implementation: DbCacheProvider trait (get/set/delete)\n");
 
     // ============================================
     // 2. 基本 get/set/delete 操作
     // ============================================
-    println!("--- 2. 基本 CRUD 操作 ---\n");
+    println!("--- 2. basic CRUD operations ---\n");
 
     // set
     adapter.set("user:1", b"Alice".to_vec(), None).await?;
@@ -85,23 +85,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // get 不存在的 key
     let val = adapter.get("user:999").await?;
-    println!("  ✓ get(\"user:999\") → {:?} (不存在返回 None)", val);
+    println!(
+        "  ✓ get(\"user:999\") → {:?} (returns None when missing)",
+        val
+    );
 
     // delete
     adapter.delete("user:1").await?;
     println!("  ✓ delete(\"user:1\")");
 
     let val = adapter.get("user:1").await?;
-    println!("  ✓ get(\"user:1\") → {:?} (删除后返回 None)", val);
+    println!(
+        "  ✓ get(\"user:1\") → {:?} (returns None after delete)",
+        val
+    );
 
     // delete 幂等性
     adapter.delete("user:1").await?;
-    println!("  ✓ delete(\"user:1\") 再次执行（幂等，不报错）\n");
+    println!("  ✓ delete(\"user:1\") run again (idempotent, no error)\n");
 
     // ============================================
     // 3. TTL（过期时间）支持
     // ============================================
-    println!("--- 3. TTL 支持 ---\n");
+    println!("--- 3. TTL support ---\n");
 
     // 设置带 TTL 的缓存
     adapter
@@ -115,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let val = adapter.get("session:abc").await?;
     println!(
-        "  ✓ 立即 get → {:?} (值存在)",
+        "  ✓ immediate get → {:?} (value present)",
         val.map(|v| String::from_utf8_lossy(&v).to_string())
     );
 
@@ -132,33 +138,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 等待过期
     tokio::time::sleep(Duration::from_millis(50)).await;
     let val = adapter.get("temp:data").await?;
-    println!("  ✓ 50ms 后 get → {:?} (已过期)", val);
+    println!("  ✓ get after 50ms → {:?} (expired)", val);
 
     // ============================================
     // 4. 通过 trait 对象使用（dyn dispatch）
     // ============================================
-    println!("\n--- 4. Trait 对象（dyn dispatch）---\n");
+    println!("\n--- 4. trait objects (dyn dispatch) ---\n");
 
     let adapter2 = make_adapter(50);
     let provider: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(adapter2);
-    println!("  ✓ 创建 Arc<dyn DbCacheProvider + Send + Sync>");
+    println!("  ✓ created Arc<dyn DbCacheProvider + Send + Sync>");
 
     provider.set("dyn_key", b"dyn_value".to_vec(), None).await?;
-    println!("  ✓ 通过 trait 对象 set(\"dyn_key\")");
+    println!("  ✓ set(\"dyn_key\") through the trait object");
 
     let val = provider.get("dyn_key").await?;
     println!(
-        "  ✓ 通过 trait 对象 get(\"dyn_key\") → {:?}",
+        "  ✓ get(\"dyn_key\") through the trait object → {:?}",
         val.map(|v| String::from_utf8_lossy(&v).to_string())
     );
 
     provider.delete("dyn_key").await?;
-    println!("  ✓ 通过 trait 对象 delete(\"dyn_key\")\n");
+    println!("  ✓ delete(\"dyn_key\") through the trait object\n");
 
     // ============================================
     // 5. 批量操作模拟
     // ============================================
-    println!("--- 5. 批量操作 ---\n");
+    println!("--- 5. batch operations ---\n");
 
     let adapter3 = make_adapter(200);
     let keys = ["cache:a", "cache:b", "cache:c", "cache:d", "cache:e"];
@@ -168,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = format!("value_{}", i);
         adapter3.set(key, value.into_bytes(), None).await?;
     }
-    println!("  ✓ 批量写入 {} 个 key", keys.len());
+    println!("  ✓ wrote {} keys in batch", keys.len());
 
     // 批量读取
     let mut found = 0;
@@ -177,13 +183,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             found += 1;
         }
     }
-    println!("  ✓ 批量读取: {}/{} 命中", found, keys.len());
+    println!("  ✓ batch read: {}/{} hits", found, keys.len());
 
     // 批量删除
     for key in &keys {
         adapter3.delete(key).await?;
     }
-    println!("  ✓ 批量删除 {} 个 key", keys.len());
+    println!("  ✓ deleted {} keys in batch", keys.len());
 
     // 验证删除
     let mut remaining = 0;
@@ -192,34 +198,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             remaining += 1;
         }
     }
-    println!("  ✓ 验证: 剩余 {} 个 key（应为 0）\n", remaining);
+    println!("  ✓ verified: {} keys remain (should be 0)\n", remaining);
 
     // ============================================
     // 6. 错误处理
     // ============================================
-    println!("--- 6. 错误处理 ---\n");
+    println!("--- 6. error handling ---\n");
 
     // DbError::Cache 变体
     let err = DbError::Cache("cache get failed: simulated error".to_string());
-    println!("  DbError::Cache 错误: {}", err);
-    println!("  错误消息: {}", err.message());
+    println!("  DbError::Cache error: {}", err);
+    println!("  error message: {}", err.message());
 
     // 验证错误类型
     match err {
-        DbError::Cache(msg) => println!("  ✓ 错误变体匹配: Cache({})", msg),
-        _ => println!("  ✗ 意外错误类型"),
+        DbError::Cache(msg) => println!("  ✓ error variant matched: Cache({})", msg),
+        _ => println!("  ✗ unexpected error type"),
     }
 
     println!("\n========================================");
-    println!("✨ Oxcache 适配器示例完成！");
+    println!("✨ Oxcache adapter example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - OxcacheDbCacheAdapter::new(cache)       包装 oxcache 后端");
-    println!("  - DbCacheProvider trait                   统一缓存接口 (get/set/delete)");
-    println!("  - MokaMemoryBackend                       内存 LRU 缓存后端");
-    println!("  - TTL (Duration)                          过期时间支持");
-    println!("  - Arc<dyn DbCacheProvider + Send + Sync>  trait 对象（DI 注入）");
-    println!("  - DbError::Cache                          统一错误类型");
+    println!("\n📚 Key concepts:");
+    println!("  - OxcacheDbCacheAdapter::new(cache)       wraps an oxcache backend");
+    println!(
+        "  - DbCacheProvider trait                   the unified cache interface (get/set/delete)"
+    );
+    println!("  - MokaMemoryBackend                       in-memory LRU cache backend");
+    println!("  - TTL (Duration)                          expiration support");
+    println!("  - Arc<dyn DbCacheProvider + Send + Sync>  trait object (DI injection)");
+    println!("  - DbError::Cache                          the unified error type");
 
     Ok(())
 }

@@ -541,7 +541,7 @@ mod unit_tests {
         assert_eq!(resp.total, 5);
         assert_eq!(resp.page, 2);
         assert_eq!(resp.page_size, 2);
-        assert_eq!(resp.items.len(), 2, "第 2 页应剩 2 行");
+        assert_eq!(resp.items.len(), 2, "page 2 should have 2 remaining rows");
         let _ = std::fs::remove_file(&db_path);
     }
 }

@@ -37,7 +37,7 @@ fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
 fn test_batch_insert_chunk_size_matches_global_index_paradigm() {
     assert_eq!(
         BATCH_INSERT_CHUNK_SIZE, 500,
-        "多值 INSERT 分块应与 global_index 的 BATCH_SYNC_CHUNK_SIZE 同为 500"
+        "the multi-value INSERT chunk size should match global_index's BATCH_SYNC_CHUNK_SIZE at 500"
     );
 }
 
@@ -48,51 +48,52 @@ fn test_batch_insert_chunk_size_matches_global_index_paradigm() {
 #[test]
 fn test_build_qmark_single_row() {
     let stmt = BatchInsertStatement::new("t_logs", &["id".to_string(), "msg".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let sql = stmt
         .build(1, PlaceholderStyle::QMark)
-        .expect("单行构建应成功");
+        .expect("the single-row build should succeed");
     assert_eq!(
         sql, r#"INSERT INTO "t_logs" ("id", "msg") VALUES (?, ?)"#,
-        "单行多值 INSERT 应为 (?, ?)，实际: {sql}"
+        "a single-row multi-value INSERT should be (?, ?), actual: {sql}"
     );
 }
 
 #[test]
 fn test_build_qmark_multi_rows() {
     let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let sql = stmt
         .build(3, PlaceholderStyle::QMark)
-        .expect("多行构建应成功");
+        .expect("the multi-row build should succeed");
     assert_eq!(
         sql, r#"INSERT INTO "t" ("a", "b") VALUES (?, ?), (?, ?), (?, ?)"#,
-        "三行 VALUES 子句应逗号分隔，实际: {sql}"
+        "the VALUES clause of three rows should be comma-separated, actual: {sql}"
     );
 }
 
 #[test]
 fn test_build_dollar_placeholders_number_continuously_across_rows() {
     let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let sql = stmt
         .build(2, PlaceholderStyle::Dollar)
-        .expect("Dollar 构建应成功");
+        .expect("Dollar build should succeed");
     assert_eq!(
         sql, r#"INSERT INTO "t" ("a", "b") VALUES ($1, $2), ($3, $4)"#,
-        "$N 编号应跨行连续，实际: {sql}"
+        "$N numbering should be continuous across rows, actual: {sql}"
     );
 }
 
 #[test]
 fn test_build_zero_rows_is_error() {
-    let stmt = BatchInsertStatement::new("t", &["a".to_string()]).expect("合法标识符应通过");
+    let stmt =
+        BatchInsertStatement::new("t", &["a".to_string()]).expect("a valid identifier should pass");
     let err = stmt
         .build(0, PlaceholderStyle::QMark)
-        .expect_err("空 VALUES 子句无意义，应显性报错");
+        .expect_err("an empty VALUES clause is meaningless and should error explicitly");
     assert!(
         format!("{err}").contains("row"),
-        "错误应说明行数非法，实际: {err}"
+        "the error should state the row count is invalid, actual: {err}"
     );
 }
 
@@ -102,7 +103,10 @@ fn test_build_rejects_injection_identifiers() {
     assert!(BatchInsertStatement::new("t; DROP TABLE x", &["a".to_string()]).is_err());
     assert!(BatchInsertStatement::new("t", &["a; DROP TABLE x".to_string()]).is_err());
     assert!(BatchInsertStatement::new("", &["a".to_string()]).is_err());
-    assert!(BatchInsertStatement::new("t", &[]).is_err(), "空列应拒绝");
+    assert!(
+        BatchInsertStatement::new("t", &[]).is_err(),
+        "empty columns should be rejected"
+    );
 }
 
 // ============================================================================
@@ -111,41 +115,62 @@ fn test_build_rejects_injection_identifiers() {
 
 #[test]
 fn test_chunk_rows_empty_input_yields_no_statements() {
-    let stmt = BatchInsertStatement::new("t", &["a".to_string()]).expect("合法标识符应通过");
+    let stmt =
+        BatchInsertStatement::new("t", &["a".to_string()]).expect("a valid identifier should pass");
     let chunks = stmt
         .chunk_rows(&[], PlaceholderStyle::QMark)
-        .expect("空集是合法输入（调用方无事可做）");
-    assert!(chunks.is_empty(), "空集应产出零条语句");
+        .expect("an empty set is valid input (the caller has nothing to do)");
+    assert!(
+        chunks.is_empty(),
+        "an empty set should produce zero statements"
+    );
 }
 
 #[test]
 fn test_chunk_rows_splits_at_chunk_size() {
-    let stmt = BatchInsertStatement::new("t", &["n".to_string()]).expect("合法标识符应通过");
+    let stmt =
+        BatchInsertStatement::new("t", &["n".to_string()]).expect("a valid identifier should pass");
     // 501 行 → 2 条语句（500 + 1），正好覆盖分块边界
     let rows: Vec<Vec<serde_json::Value>> = (0..BATCH_INSERT_CHUNK_SIZE + 1)
         .map(|i| vec![serde_json::json!(i)])
         .collect();
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功");
-    assert_eq!(chunks.len(), 2, "501 行应分为 500+1 两块");
+        .expect("the chunking should succeed");
+    assert_eq!(
+        chunks.len(),
+        2,
+        "501 rows should split into 500+1 two chunks"
+    );
     // 第一块一条语句承载 500 行（500 个占位符）；尾块单行
     let (sql0, params0) = &chunks[0];
-    assert_eq!(sql0.matches('?').count(), 500, "首块语句应含 500 个占位符");
+    assert_eq!(
+        sql0.matches('?').count(),
+        500,
+        "the first chunk statement should contain 500 placeholders"
+    );
     assert_eq!(
         sql0,
         &stmt
             .build(BATCH_INSERT_CHUNK_SIZE, PlaceholderStyle::QMark)
-            .expect("同参构建应一致"),
-        "chunk_rows 产出的语句应与 build(500) 逐字节一致"
+            .expect("builds with the same parameters should be identical"),
+        "the statements produced by chunk_rows should be byte-identical to build(500)"
     );
-    assert_eq!(params0.len(), 500, "第一块应含 500 个参数");
+    assert_eq!(
+        params0.len(),
+        500,
+        "the first chunk should contain 500 parameters"
+    );
     assert_eq!(
         chunks[1].0, r#"INSERT INTO "t" ("n") VALUES (?)"#,
-        "尾块应为单行语句"
+        "the tail chunk should be a single-row statement"
     );
     let params1 = &chunks[1].1;
-    assert_eq!(params1.len(), 1, "第二块应含 1 个参数");
+    assert_eq!(
+        params1.len(),
+        1,
+        "the second chunk should contain 1 parameter"
+    );
     // 参数扁平化必须保持行序
     assert_eq!(params0[0], serde_json::json!(0));
     assert_eq!(params0[499], serde_json::json!(499));
@@ -155,7 +180,7 @@ fn test_chunk_rows_splits_at_chunk_size() {
 #[test]
 fn test_chunk_rows_flattens_row_major_order() {
     let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string(), "c".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let rows = vec![vec![
         serde_json::json!(1),
         serde_json::json!("x"),
@@ -163,7 +188,7 @@ fn test_chunk_rows_flattens_row_major_order() {
     ]];
     let params = &stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功")[0]
+        .expect("the chunking should succeed")[0]
         .1;
     assert_eq!(
         params,
@@ -172,25 +197,25 @@ fn test_chunk_rows_flattens_row_major_order() {
             serde_json::json!("x"),
             serde_json::Value::Null
         ],
-        "参数应按行内列序展开（行优先）"
+        "parameters should expand in row-major column order"
     );
 }
 
 #[test]
 fn test_chunk_rows_rejects_ragged_rows() {
     let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()])
-        .expect("合法标识符应通过");
+        .expect("a valid identifier should pass");
     let rows = vec![
         vec![serde_json::json!(1), serde_json::json!(2)],
         vec![serde_json::json!(3)], // 行宽 1 ≠ 列数 2
     ];
-    let err = stmt
-        .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect_err("行列数不匹配必须显性报错而非静默截断");
+    let err = stmt.chunk_rows(&rows, PlaceholderStyle::QMark).expect_err(
+        "a row/column count mismatch must error explicitly instead of silently truncating",
+    );
     let msg = format!("{err}");
     assert!(
         msg.contains("2") && msg.contains("1"),
-        "错误应含期望列数与实际列数，实际: {msg}"
+        "the error should include the expected and actual column counts, actual: {msg}"
     );
     // 过宽同样拒绝
     let rows = vec![vec![
@@ -200,7 +225,7 @@ fn test_chunk_rows_rejects_ragged_rows() {
     ]];
     assert!(
         stmt.chunk_rows(&rows, PlaceholderStyle::QMark).is_err(),
-        "行宽超出列数同样应拒绝"
+        "a row width exceeding the column count should also be rejected"
     );
 }
 
@@ -209,36 +234,40 @@ fn test_chunk_rows_shrinks_chunk_size_for_wide_rows_qmark() {
     // 70 列宽表：QMark 上限 32766，32766/70 = 468 → 有效块行数收缩为 468（<500）
     let cols: Vec<String> = (0..70).map(|i| format!("c{i}")).collect();
     let width = cols.len();
-    let stmt = BatchInsertStatement::new("t_wide", &cols).expect("合法标识符应通过");
+    let stmt = BatchInsertStatement::new("t_wide", &cols).expect("a valid identifier should pass");
     let rows: Vec<Vec<serde_json::Value>> = (0..1000)
         .map(|i| (0..width).map(|_| serde_json::json!(i)).collect())
         .collect();
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("宽表分块应成功");
+        .expect("the wide-table chunking build should succeed");
 
     let limit = bind_param_limit(PlaceholderStyle::QMark);
     let expected_chunk = BATCH_INSERT_CHUNK_SIZE.min(limit / width);
-    assert_eq!(expected_chunk, 468, "32766/70 应收缩为 468");
+    assert_eq!(expected_chunk, 468, "32766/70 should shrink to 468");
     assert_eq!(
         chunks.len(),
         1000_usize.div_ceil(expected_chunk),
-        "块数按收缩后大小计算"
+        "the chunk count should be computed from the shrunken size"
     );
     for (sql, params) in &chunks {
         let placeholders = sql.matches('?').count();
         assert!(
             placeholders <= limit,
-            "单语句占位符数不得超过后端绑定上限 {limit}，实际: {placeholders}"
+            "the placeholder count per statement must not exceed the backend bind limit {limit}, actual {placeholders}"
         );
-        assert_eq!(placeholders, params.len(), "占位符数与参数数一致");
+        assert_eq!(
+            placeholders,
+            params.len(),
+            "the placeholder count should match the parameter count"
+        );
     }
     let total: usize = chunks.iter().map(|(_, p)| p.len()).sum();
-    assert_eq!(total, 1000 * width, "分块不得丢数据");
+    assert_eq!(total, 1000 * width, "chunking must not lose data");
     assert_eq!(
         chunks[0].1.len(),
         expected_chunk * width,
-        "首块应按收缩后大小满载"
+        "the first chunk should be full at the shrunken size"
     );
 }
 
@@ -247,17 +276,18 @@ fn test_chunk_rows_shrinks_chunk_size_for_wide_rows_dollar() {
     // 200 列宽表：Dollar 上限 65535，65535/200 = 327 → 有效块行数收缩为 327
     let cols: Vec<String> = (0..200).map(|i| format!("c{i}")).collect();
     let width = cols.len();
-    let stmt = BatchInsertStatement::new("t_wide_d", &cols).expect("合法标识符应通过");
+    let stmt =
+        BatchInsertStatement::new("t_wide_d", &cols).expect("a valid identifier should pass");
     let rows: Vec<Vec<serde_json::Value>> = (0..3000)
         .map(|i| (0..width).map(|_| serde_json::json!(i)).collect())
         .collect();
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::Dollar)
-        .expect("宽表分块应成功");
+        .expect("the wide-table chunking build should succeed");
 
     let limit = bind_param_limit(PlaceholderStyle::Dollar);
     let expected_chunk = BATCH_INSERT_CHUNK_SIZE.min(limit / width);
-    assert_eq!(expected_chunk, 327, "65535/200 应收缩为 327");
+    assert_eq!(expected_chunk, 327, "65535/200 should shrink to 327");
     for (sql, _) in &chunks {
         // $N 编号跨行连续，语句内最大编号即占位符总数，必须不超后端上限
         let max_no: usize = sql
@@ -269,11 +299,11 @@ fn test_chunk_rows_shrinks_chunk_size_for_wide_rows_dollar() {
             .unwrap_or(0);
         assert!(
             max_no <= limit,
-            "Dollar 编号不得超过 {limit}，实际 {max_no}"
+            "the Dollar number must not exceed {limit}, actual {max_no}"
         );
     }
     let total: usize = chunks.iter().map(|(_, p)| p.len()).sum();
-    assert_eq!(total, 3000 * width, "分块不得丢数据");
+    assert_eq!(total, 3000 * width, "chunking must not lose data");
 }
 
 #[test]
@@ -282,15 +312,16 @@ fn test_chunk_rows_rejects_width_over_bind_param_limit() {
     // 构建期显性报错而非产出必败语句
     let width = bind_param_limit(PlaceholderStyle::QMark) + 1;
     let cols: Vec<String> = (0..width).map(|i| format!("c{i}")).collect();
-    let stmt = BatchInsertStatement::new("t_hyper_wide", &cols).expect("合法标识符应通过");
+    let stmt =
+        BatchInsertStatement::new("t_hyper_wide", &cols).expect("a valid identifier should pass");
     let row: Vec<serde_json::Value> = (0..width).map(|_| serde_json::json!(1)).collect();
-    let err = stmt
-        .chunk_rows(&[row], PlaceholderStyle::QMark)
-        .expect_err("列数超上限必须构建期报错而非产出必败语句");
+    let err = stmt.chunk_rows(&[row], PlaceholderStyle::QMark).expect_err(
+        "exceeding the column cap must fail at build time instead of producing a doomed statement",
+    );
     let msg = format!("{err}");
     assert!(
         msg.contains("column") && msg.contains("placeholder"),
-        "错误应说明列数与绑定上限矛盾，实际: {msg}"
+        "the error should state the column count contradicts the bind limit, actual: {msg}"
     );
 }
 
@@ -300,28 +331,35 @@ fn test_chunk_rows_rejects_width_over_bind_param_limit() {
 
 #[test]
 fn test_chunk_rows_owned_matches_borrowed_output() {
-    let stmt =
-        BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()]).expect("合法标识符");
+    let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()])
+        .expect("valid identifier");
     // 1207 行跨块：owned 版产出必须与借用版逐字节/逐值一致
     let rows: Vec<Vec<serde_json::Value>> = (0..1207)
         .map(|i| vec![serde_json::json!(i), serde_json::json!(format!("v{i}"))])
         .collect();
     let borrowed = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("借用版分块应成功");
+        .expect("the borrowed chunking build should succeed");
     let owned = stmt
         .chunk_rows_owned(rows, PlaceholderStyle::QMark)
-        .expect("所有权版分块应成功");
-    assert_eq!(borrowed, owned, "所有权版产出应与借用版完全一致");
-    assert_eq!(owned.len(), 3, "1207 行应分为 500+500+207 三块");
+        .expect("the owned chunking build should succeed");
+    assert_eq!(
+        borrowed, owned,
+        "the owned output should be identical to the borrowed output"
+    );
+    assert_eq!(
+        owned.len(),
+        3,
+        "1207 rows should split into 500+500+207 three chunks"
+    );
 }
 
 #[test]
 fn test_chunk_rows_owned_moves_json_trees_without_clone() {
     // 值相等性保证 move 语义不改变数据；大 JSON 树（对象/数组列）是
     // 深克隆成本的主体，此处验证其经 owned 路径后内容无损
-    let stmt =
-        BatchInsertStatement::new("t", &["id".to_string(), "doc".to_string()]).expect("合法标识符");
+    let stmt = BatchInsertStatement::new("t", &["id".to_string(), "doc".to_string()])
+        .expect("valid identifier");
     let docs: Vec<serde_json::Value> = (0..4)
         .map(|i| serde_json::json!({"id": i, "nested": {"arr": [i, i + 1, i + 2]}}))
         .collect();
@@ -332,38 +370,42 @@ fn test_chunk_rows_owned_moves_json_trees_without_clone() {
         .collect();
     let owned = stmt
         .chunk_rows_owned(rows, PlaceholderStyle::QMark)
-        .expect("所有权版分块应成功");
+        .expect("the owned chunking build should succeed");
     let flat: Vec<&serde_json::Value> = owned[0].1.iter().collect();
     assert_eq!(flat[0], &serde_json::json!(0));
-    assert_eq!(flat[1], &docs[0], "JSON 树应按 move 原样搬运");
+    assert_eq!(flat[1], &docs[0], "the JSON tree should be moved as-is");
     assert_eq!(flat[3], &docs[1]);
 }
 
 #[test]
 fn test_chunk_rows_owned_rejects_ragged_rows_before_consuming() {
-    let stmt =
-        BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()]).expect("合法标识符");
+    let stmt = BatchInsertStatement::new("t", &["a".to_string(), "b".to_string()])
+        .expect("valid identifier");
     let rows = vec![
         vec![serde_json::json!(1), serde_json::json!(2)],
         vec![serde_json::json!(3)],
     ];
     let err = stmt
         .chunk_rows_owned(rows, PlaceholderStyle::QMark)
-        .expect_err("行列数不匹配必须整体报错");
+        .expect_err("a row/column count mismatch must fail the whole build");
     assert!(
         format!("{err}").contains("row"),
-        "错误应说明行宽非法，实际: {err}"
+        "the error should state the row width is invalid, actual: {err}"
     );
     // 宽表收缩与超限拒绝对 owned 版同契约
     let cols: Vec<String> = (0..70).map(|i| format!("c{i}")).collect();
-    let wide = BatchInsertStatement::new("t_w", &cols).expect("合法标识符");
+    let wide = BatchInsertStatement::new("t_w", &cols).expect("valid identifier");
     let rows: Vec<Vec<serde_json::Value>> = (0..1000)
         .map(|i| (0..70).map(|_| serde_json::json!(i)).collect())
         .collect();
     let owned = wide
         .chunk_rows_owned(rows, PlaceholderStyle::QMark)
-        .expect("宽表 owned 分块应成功");
-    assert_eq!(owned[0].1.len(), 468 * 70, "首块应按收缩后大小满载");
+        .expect("the wide-table owned chunking build should succeed");
+    assert_eq!(
+        owned[0].1.len(),
+        468 * 70,
+        "the first chunk should be full at the shrunken size"
+    );
 }
 
 // ============================================================================
@@ -391,7 +433,7 @@ async fn test_batch_insert_roundtrip_types_via_execute_with_params() {
             "extra".to_string(),
         ],
     )
-    .expect("合法标识符应通过");
+    .expect("a valid identifier should pass");
     let rows = vec![
         vec![
             serde_json::json!(1),
@@ -410,33 +452,33 @@ async fn test_batch_insert_roundtrip_types_via_execute_with_params() {
     ];
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功");
+        .expect("the chunking should succeed");
     assert_eq!(chunks.len(), 1);
     for (sql, params) in &chunks {
         session
             .execute_with_params(sql, params)
             .await
-            .expect("参数化执行应成功");
+            .expect("the parameterized execution should succeed");
     }
 
     let result = session
         .query_rows("SELECT id, score, label, flag, extra FROM t_evt ORDER BY id")
         .await
-        .expect("查询应成功");
-    assert_eq!(result.len(), 2, "两行应全部落库");
+        .expect("the query should succeed");
+    assert_eq!(result.len(), 2, "both rows should land in the database");
     assert_eq!(result[0]["id"], serde_json::json!(1));
     assert_eq!(result[0]["score"], serde_json::json!(2.5));
     assert_eq!(result[0]["label"], serde_json::json!("hello"));
     assert_eq!(
         result[0]["flag"],
         serde_json::json!(1),
-        "sqlite 布尔以 0/1 存储"
+        "sqlite stores booleans as 0/1"
     );
     assert_eq!(result[0]["extra"], serde_json::json!(r#"{"k":1}"#));
     assert_eq!(
         result[1]["score"],
         serde_json::Value::Null,
-        "NULL 应落为 NULL"
+        "NULL should land as NULL"
     );
     assert_eq!(result[1]["flag"], serde_json::json!(0));
 
@@ -462,19 +504,19 @@ async fn test_batch_insert_binds_injection_payload_as_literal() {
     let rows = vec![vec![serde_json::json!(1), serde_json::json!(injection)]];
     for (sql, params) in stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功")
+        .expect("the chunking should succeed")
     {
         session
             .execute_with_params(&sql, &params)
             .await
-            .expect("参数化执行应成功");
+            .expect("the parameterized execution should succeed");
     }
 
     // 注入载荷按字面量落库，表未被 drop
     let result = session
         .query_rows("SELECT id, msg FROM t_msg")
         .await
-        .expect("表应仍存在且可查");
+        .expect("the table should still exist and be queryable");
     assert_eq!(result.len(), 1);
     assert_eq!(result[0]["msg"], serde_json::json!(injection));
 
@@ -502,13 +544,17 @@ async fn test_batch_insert_large_batch_crossing_chunk_boundary() {
         .collect();
     let chunks = stmt
         .chunk_rows(&rows, PlaceholderStyle::QMark)
-        .expect("分块应成功");
-    assert_eq!(chunks.len(), 3, "1207 行应分为 500+500+207 三块");
+        .expect("the chunking should succeed");
+    assert_eq!(
+        chunks.len(),
+        3,
+        "1207 rows should split into 500+500+207 three chunks"
+    );
     for (sql, params) in &chunks {
         session
             .execute_with_params(sql, params)
             .await
-            .expect("参数化执行应成功");
+            .expect("the parameterized execution should succeed");
     }
 
     // query_rows 的 sqlite 臂做主表列内省（聚合列不在内省列表），
@@ -516,14 +562,18 @@ async fn test_batch_insert_large_batch_crossing_chunk_boundary() {
     let all = session
         .query_rows("SELECT id FROM t_bulk ORDER BY id")
         .await
-        .expect("全行查询应成功");
-    assert_eq!(all.len(), 1207, "全部行应落库");
+        .expect("the full-row query should succeed");
+    assert_eq!(all.len(), 1207, "all rows should land in the database");
     assert_eq!(all[0]["id"], serde_json::json!(0));
-    assert_eq!(all[1206]["id"], serde_json::json!(1206), "尾块边界行应落库");
+    assert_eq!(
+        all[1206]["id"],
+        serde_json::json!(1206),
+        "tail chunk boundary rows should land in the database"
+    );
     let tail = session
         .query_rows("SELECT val FROM t_bulk WHERE id = 1206")
         .await
-        .expect("尾行查询应成功");
+        .expect("the tail-row query should succeed");
     assert_eq!(tail[0]["val"], serde_json::json!("v1206"));
 
     drop(session);

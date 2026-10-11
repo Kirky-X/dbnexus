@@ -151,7 +151,7 @@ async fn test_permission_cache_refresh_updates_value() {
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "等待 refresh 回源落库超时"
+            "timed out waiting for the refresh to land from the source"
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     };
@@ -208,7 +208,7 @@ async fn test_permission_cache_refresh_skipped_within_fresh_window() {
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "等待第一次 refresh 回源落库超时"
+            "timed out waiting for the first refresh to land from the source"
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
@@ -258,8 +258,14 @@ async fn test_permission_cache_clear() {
         .insert("b", sample_policy("t2", PermissionAction::Insert))
         .await;
     cache.clear().await;
-    assert!(cache.get("a").await.is_none(), "clear 后条目不可达");
-    assert!(cache.get("b").await.is_none(), "clear 后条目不可达");
+    assert!(
+        cache.get("a").await.is_none(),
+        "entries should be unreachable after clear"
+    );
+    assert!(
+        cache.get("b").await.is_none(),
+        "entries should be unreachable after clear"
+    );
 }
 
 /// 并发访问应线程安全（多任务读写）

@@ -78,13 +78,13 @@ fn should_audit(operation: &str, role: &str) -> bool {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("========================================");
-    println!("🔍 DBNexus db_audit 宏示例");
+    println!("🔍 DBNexus db_audit macro example");
     println!("========================================\n");
 
     // ============================================
     // 1. 展示宏生成的审计常量
     // ============================================
-    println!("--- 1. 宏生成的审计常量 ---\n");
+    println!("--- 1. macro-generated audit constants ---\n");
     println!("  AUDIT_TABLE_NAME  = {}", Model::AUDIT_TABLE_NAME);
     println!("  AUDIT_OPERATIONS  = {:?}", Model::AUDIT_OPERATIONS);
     println!("  AUDIT_ROLES       = {:?}", Model::AUDIT_ROLES);
@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ============================================
     // 2. 创建 AuditLogger + MemoryAuditStorage
     // ============================================
-    println!("\n--- 2. 创建 AuditLogger ---\n");
+    println!("\n--- 2. create the AuditLogger ---\n");
     let audit_config = AuditConfig {
         enabled: true,
         storage_path: None,
@@ -108,16 +108,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let storage = Arc::new(MemoryAuditStorage::new(1000));
     let storage_for_query = storage.clone();
     let logger = AuditLogger::with_config(audit_config, storage);
-    println!("  ✓ AuditLogger 创建成功 (storage 容量=1000)");
+    println!("  ✓ AuditLogger created (storage capacity=1000)");
 
     // ============================================
     // 3. 创建 DbPool + Session
     // ============================================
-    println!("\n--- 3. 创建 DbPool + Session ---\n");
+    println!("\n--- 3. create DbPool + Session ---\n");
     let (_pool, session) = common::db::setup_shared_sqlite_session()
         .await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
-    println!("  ✓ Session 创建成功 (角色: admin)");
+    println!("  ✓ Session created (role: admin)");
 
     // 建表
     session
@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )",
         )
         .await?;
-    println!("  ✓ products 表创建成功");
+    println!("  ✓ products table created");
 
     // 建审计日志表（使用宏生成的 AUDIT_TABLE_NAME）
     let audit_table_ddl = format!(
@@ -147,14 +147,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
     session.execute_raw_ddl(&audit_table_ddl).await?;
     println!(
-        "  ✓ {} 表创建成功 (使用 AUDIT_TABLE_NAME)",
+        "  ✓ {} table created (using AUDIT_TABLE_NAME)",
         Model::AUDIT_TABLE_NAME
     );
 
     // ============================================
     // 4. CRUD 操作 + 审计日志记录
     // ============================================
-    println!("\n--- 4. CRUD 操作 + 审计日志 ---\n");
+    println!("\n--- 4. CRUD operations + audit log ---\n");
     let role = session.role();
 
     // CREATE
@@ -166,7 +166,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         stock: 15,
     };
     let created = Model::insert(&session, product).await?;
-    println!("  ✓ 插入产品: id={}, name={}", created.id, created.name);
+    println!(
+        "  ✓ inserted product: id={}, name={}",
+        created.id, created.name
+    );
 
     if should_audit("CREATE", role) {
         let event = AuditEvent::create("products", &created.id.to_string(), role).with_after_value(
@@ -176,25 +179,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ),
         );
         logger.log(event).await?;
-        println!("  ✓ 审计日志已记录 (operation=CREATE, role={})", role);
+        println!("  ✓ audit log recorded (operation=CREATE, role={})", role);
     } else {
-        println!("  - 跳过审计 (CREATE 不在 AUDIT_OPERATIONS 或角色不匹配)");
+        println!(
+            "  - skip auditing (CREATE is not in AUDIT_OPERATIONS or the role does not match)"
+        );
     }
 
     // READ
     println!("\n[READ]");
     let found = Model::find_by_id(&session, 1).await?;
     if let Some(p) = &found {
-        println!("  ✓ 查询产品: id={}, name={}", p.id, p.name);
+        println!("  ✓ queried product: id={}, name={}", p.id, p.name);
     }
     // READ 不在 AUDIT_OPERATIONS 中，不审计
     if should_audit("READ", role) {
         let event = AuditEvent::read("products", "1", role);
         logger.log(event).await?;
-        println!("  ✓ 审计日志已记录 (operation=READ)");
+        println!("  ✓ audit log recorded (operation=READ)");
     } else {
         println!(
-            "  - 跳过审计 (READ 不在 AUDIT_OPERATIONS={:?})",
+            "  - skip auditing (READ is not in AUDIT_OPERATIONS={:?})",
             Model::AUDIT_OPERATIONS
         );
     }
@@ -216,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .await?;
     println!(
-        "  ✓ 更新产品: id={}, 新 price={:.2}, 新 stock={}",
+        "  ✓ updated product: id={}, new price={:.2}, new stock={}",
         updated.id, updated.price, updated.stock
     );
 
@@ -234,9 +239,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         )
         .with_severity(AuditSeverity::Medium);
         logger.log(event).await?;
-        println!("  ✓ 审计日志已记录 (operation=UPDATE, 含前后值)");
+        println!("  ✓ audit log recorded (operation=UPDATE, with before/after values)");
     } else {
-        println!("  - 跳过审计 (UPDATE 不在审计范围或 AUDIT_LOG_VALUES=false)");
+        println!("  - skip auditing (UPDATE is out of the audit scope or AUDIT_LOG_VALUES=false)");
     }
 
     // 再插入一条用于 DELETE 演示
@@ -255,27 +260,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // DELETE
     println!("\n[DELETE]");
     let deleted = Model::delete(&session, 2).await?;
-    println!("  ✓ 删除产品 id=2: 影响 {} 行", deleted);
+    println!("  ✓ deleted product id=2: {} rows affected", deleted);
 
     if should_audit("DELETE", role) {
         let event = AuditEvent::delete("products", "2", role).with_severity(AuditSeverity::High);
         logger.log(event).await?;
-        println!("  ✓ 审计日志已记录 (operation=DELETE, severity=High)");
+        println!("  ✓ audit log recorded (operation=DELETE, severity=High)");
     } else {
-        println!("  - 跳过审计 (DELETE 不在 AUDIT_OPERATIONS)");
+        println!("  - skip auditing (DELETE is not in AUDIT_OPERATIONS)");
     }
 
     // ============================================
     // 5. 审计历史查询
     // ============================================
-    println!("\n--- 5. 审计历史查询 ---\n");
+    println!("\n--- 5. audit history query ---\n");
     let total_events = storage_for_query.event_count().await;
-    println!("  存储中共 {} 条审计事件", total_events);
+    println!("  storage holds {} audit events in total", total_events);
 
     // 查询所有审计事件
     let all_filters = AuditQueryFilters::default();
     let all_events = logger.query(&all_filters).await?;
-    println!("\n  [全部审计事件]");
+    println!("\n  [all audit events]");
     for ev in &all_events {
         println!(
             "    - {} {}/{} by {} [{}]",
@@ -289,14 +294,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let create_events = logger.query(&create_filters).await?;
-    println!("\n  [operation=Create] 共 {} 条", create_events.len());
+    println!("\n  [operation=Create] {} total", create_events.len());
 
     let delete_filters = AuditQueryFilters {
         operation: Some(AuditOperation::Delete),
         ..Default::default()
     };
     let delete_events = logger.query(&delete_filters).await?;
-    println!("  [operation=Delete] 共 {} 条", delete_events.len());
+    println!("  [operation=Delete] {} total", delete_events.len());
 
     // 按 severity 查询
     let high_filters = AuditQueryFilters {
@@ -304,12 +309,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
     let high_events = logger.query(&high_filters).await?;
-    println!("  [severity=High] 共 {} 条", high_events.len());
+    println!("  [severity=High] {} total", high_events.len());
 
     // ============================================
     // 6. 验证 should_audit 逻辑（角色不匹配场景）
     // ============================================
-    println!("\n--- 6. 角色不匹配场景 ---\n");
+    println!("\n--- 6. role mismatch scenario ---\n");
     println!("  AUDIT_ROLES = {:?}", Model::AUDIT_ROLES);
     println!(
         "  should_audit(\"CREATE\", \"admin\")   = {}",
@@ -320,29 +325,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         should_audit("CREATE", "manager")
     );
     println!(
-        "  should_audit(\"CREATE\", \"guest\")   = {} (角色不在 AUDIT_ROLES)",
+        "  should_audit(\"CREATE\", \"guest\")   = {} (the role is not in AUDIT_ROLES)",
         should_audit("CREATE", "guest")
     );
     println!(
-        "  should_audit(\"READ\", \"admin\")     = {} (READ 不在 AUDIT_OPERATIONS)",
+        "  should_audit(\"READ\", \"admin\")     = {} (READ is not in AUDIT_OPERATIONS)",
         should_audit("READ", "admin")
     );
 
     println!("\n========================================");
-    println!("✨ db_entity 宏 audit 示例完成！");
+    println!("✨ db_entity macro audit example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - #[db_entity(..., audit(table_name=\"...\", log_values=true))]  生成审计配置常量");
-    println!("  - Model::AUDIT_TABLE_NAME   审计日志表名");
-    println!("  - Model::AUDIT_OPERATIONS   需要审计的操作列表 (CREATE/UPDATE/DELETE)");
-    println!("  - Model::AUDIT_ROLES        需要审计的角色列表");
-    println!("  - Model::AUDIT_LOG_VALUES   是否记录变更值");
-    println!("  - Model::AUDIT_ENABLED      审计是否启用");
-    println!("  - AuditLogger + AuditEvent  审计日志记录");
-    println!("  - AuditQueryFilters         审计日志查询过滤");
-    println!("\n⚠️  注意: #[db_entity] 的 audit 子参数仅生成配置常量，不自动记录审计日志。");
-    println!("   开发者需在 CRUD 操作后手动调用 AuditLogger.log() 记录事件。");
-    println!("   常量用于在运行时判断哪些操作/角色需要审计。");
+    println!("\n📚 Key concepts:");
+    println!(
+        "  - #[db_entity(..., audit(table_name=\"...\", log_values=true))]  generates audit config constants"
+    );
+    println!("  - Model::AUDIT_TABLE_NAME   the audit log table name");
+    println!(
+        "  - Model::AUDIT_OPERATIONS   the list of operations that need auditing (CREATE/UPDATE/DELETE)"
+    );
+    println!("  - Model::AUDIT_ROLES        the list of roles that need auditing");
+    println!("  - Model::AUDIT_LOG_VALUES   whether to record change values");
+    println!("  - Model::AUDIT_ENABLED      whether auditing is enabled");
+    println!("  - AuditLogger + AuditEvent  audit log recording");
+    println!("  - AuditQueryFilters         audit log query filters");
+    println!(
+        "\n⚠️  Note: the audit sub-parameter of #[db_entity] only generates config constants, it does not record audit logs automatically."
+    );
+    println!(
+        "   developers must call AuditLogger.log() manually after CRUD operations to record events."
+    );
+    println!("   the constants let you decide at runtime which operations/roles need auditing.");
 
     Ok(())
 }

@@ -23,9 +23,12 @@ impl Session {
         if is_ddl_operation(sql) {
             // DDL：仅 admin 角色（对齐 execute_raw_ddl 的角色白名单）
             if !self.is_admin {
-                return Err(DbError::Permission(format!(
-                    "DDL operations are only allowed for admin role in DuckDB context. Current role: '{}', Admin role: '{}'",
-                    self.role, self.pool_inner.admin_role
+                return Err(DbError::Permission(i18n::t(
+                    "session-duckdb-ddl-admin-only",
+                    &[
+                        ("role", self.role.to_string()),
+                        ("admin_role", self.pool_inner.admin_role.to_string()),
+                    ],
                 )));
             }
             // 统一守卫漏斗（白名单/干跑/审计经 DdlGuardPolicy 端口）
@@ -118,10 +121,9 @@ impl Session {
 
         #[cfg(feature = "sql-parser")]
         {
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let conn = self.connection.as_ref().ok_or_else(|| {
+                DbError::Config(i18n::t_simple("session-connection-not-available"))
+            })?;
             let duck_conn = conn.as_duckdb()?;
             duck_conn.query_with_params(sql, params).await
         }
@@ -162,10 +164,9 @@ impl Session {
 
         #[cfg(feature = "sql-parser")]
         {
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let conn = self.connection.as_ref().ok_or_else(|| {
+                DbError::Config(i18n::t_simple("session-connection-not-available"))
+            })?;
             let duck_conn = conn.as_duckdb()?;
             duck_conn.execute_with_params(sql, params).await
         }
@@ -208,10 +209,9 @@ impl Session {
 
         #[cfg(feature = "sql-parser")]
         {
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let conn = self.connection.as_ref().ok_or_else(|| {
+                DbError::Config(i18n::t_simple("session-connection-not-available"))
+            })?;
             let duck_conn = conn.as_duckdb()?;
             duck_conn.execute_transaction(statements).await
         }
@@ -289,10 +289,9 @@ impl Session {
                 }
             }
 
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let conn = self.connection.as_ref().ok_or_else(|| {
+                DbError::Config(i18n::t_simple("session-connection-not-available"))
+            })?;
             let duck_conn = conn.as_duckdb()?;
             duck_conn.query(sql).await
         }
@@ -326,16 +325,18 @@ impl Session {
                     // 不再走 parse_operation 权限检查（DDL 语句无法被
                     // parse_operation_async 正确解析，会返回 Err）
                     self.enforce_ddl_guard(sql)?;
-                    let conn = self
-                        .connection
-                        .as_ref()
-                        .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+                    let conn = self.connection.as_ref().ok_or_else(|| {
+                        DbError::Config(i18n::t_simple("session-connection-not-available"))
+                    })?;
                     let duck_conn = conn.as_duckdb()?;
                     return duck_conn.execute(sql).await;
                 } else {
-                    return Err(DbError::Permission(format!(
-                        "DDL operations are only allowed for admin role in DuckDB context. Current role: '{}', Admin role: '{}'",
-                        self.role, self.pool_inner.admin_role
+                    return Err(DbError::Permission(i18n::t(
+                        "session-duckdb-ddl-admin-only",
+                        &[
+                            ("role", self.role.to_string()),
+                            ("admin_role", self.pool_inner.admin_role.to_string()),
+                        ],
                     )));
                 }
             }
@@ -387,10 +388,9 @@ impl Session {
                 }
             }
 
-            let conn = self
-                .connection
-                .as_ref()
-                .ok_or_else(|| DbError::Config("Connection not available".to_string()))?;
+            let conn = self.connection.as_ref().ok_or_else(|| {
+                DbError::Config(i18n::t_simple("session-connection-not-available"))
+            })?;
             let duck_conn = conn.as_duckdb()?;
             duck_conn.execute(sql).await
         }

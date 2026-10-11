@@ -1198,7 +1198,10 @@ fn test_pool_config_defaults() {
 fn test_health_check_interval_default() {
     // 空字符串模拟环境变量未设置
     let interval = dbnexus::DbPool::parse_health_check_interval("");
-    assert_eq!(interval, 30, "默认健康检查间隔应为 30 秒");
+    assert_eq!(
+        interval, 30,
+        "the default health check interval should be 30 seconds"
+    );
 }
 
 /// 测试健康检查间隔 - 下边界值 0
@@ -1208,7 +1211,10 @@ fn test_health_check_interval_default() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_zero() {
     let interval = dbnexus::DbPool::parse_health_check_interval("0");
-    assert_eq!(interval, 5, "健康检查间隔 0 应被限制为最小值 5 秒");
+    assert_eq!(
+        interval, 5,
+        "a health check interval of 0 should be clamped to the minimum of 5 seconds"
+    );
 }
 
 /// 测试健康检查间隔 - 下边界值 5
@@ -1218,7 +1224,10 @@ fn test_health_check_interval_lower_bound_zero() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_lower_bound_five() {
     let interval = dbnexus::DbPool::parse_health_check_interval("5");
-    assert_eq!(interval, 5, "健康检查间隔 5 应保持不变");
+    assert_eq!(
+        interval, 5,
+        "a health check interval of 5 should stay unchanged"
+    );
 }
 
 /// 测试健康检查间隔 - 上边界值 300
@@ -1228,7 +1237,10 @@ fn test_health_check_interval_lower_bound_five() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_300() {
     let interval = dbnexus::DbPool::parse_health_check_interval("300");
-    assert_eq!(interval, 300, "健康检查间隔 300 应保持不变");
+    assert_eq!(
+        interval, 300,
+        "a health check interval of 300 should stay unchanged"
+    );
 }
 
 /// 测试健康检查间隔 - 超出上边界值 1000
@@ -1238,7 +1250,10 @@ fn test_health_check_interval_upper_bound_300() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_upper_bound_exceeded() {
     let interval = dbnexus::DbPool::parse_health_check_interval("1000");
-    assert_eq!(interval, 300, "健康检查间隔 1000 应被限制为最大值 300 秒");
+    assert_eq!(
+        interval, 300,
+        "a health check interval of 1000 should be clamped to the maximum of 300 seconds"
+    );
 }
 
 /// 测试健康检查间隔 - 有效中间值
@@ -1248,7 +1263,10 @@ fn test_health_check_interval_upper_bound_exceeded() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_valid_middle_value() {
     let interval = dbnexus::DbPool::parse_health_check_interval("60");
-    assert_eq!(interval, 60, "健康检查间隔 60 应保持不变");
+    assert_eq!(
+        interval, 60,
+        "a health check interval of 60 should stay unchanged"
+    );
 }
 
 /// 测试健康检查间隔 - 无效字符串
@@ -1258,7 +1276,10 @@ fn test_health_check_interval_valid_middle_value() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_invalid_string() {
     let interval = dbnexus::DbPool::parse_health_check_interval("invalid");
-    assert_eq!(interval, 30, "无效字符串应使用默认值 30 秒");
+    assert_eq!(
+        interval, 30,
+        "an invalid string should use the default value of 30 seconds"
+    );
 }
 
 /// 测试健康检查间隔 - 边界内值 1
@@ -1268,7 +1289,10 @@ fn test_health_check_interval_invalid_string() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_below_minimum() {
     let interval = dbnexus::DbPool::parse_health_check_interval("1");
-    assert_eq!(interval, 5, "健康检查间隔 1 应被限制为最小值 5 秒");
+    assert_eq!(
+        interval, 5,
+        "a health check interval of 1 should be clamped to the minimum of 5 seconds"
+    );
 }
 
 /// 测试健康检查间隔 - 边界内值 301
@@ -1278,7 +1302,10 @@ fn test_health_check_interval_below_minimum() {
 #[cfg(feature = "pool-health-check")]
 fn test_health_check_interval_above_maximum() {
     let interval = dbnexus::DbPool::parse_health_check_interval("301");
-    assert_eq!(interval, 300, "健康检查间隔 301 应被限制为最大值 300 秒");
+    assert_eq!(
+        interval, 300,
+        "a health check interval of 301 should be clamped to the maximum of 300 seconds"
+    );
 }
 
 // ============================================================================
@@ -1501,7 +1528,7 @@ async fn test_acquire_during_idle_check_keeps_accounting_consistent() {
     drop(sessions);
     assert!(
         pool.status().idle >= 1,
-        "预置后应有空闲连接: {:?}",
+        "there should be an idle connection after prewarming: {:?}",
         pool.status()
     );
 
@@ -1533,9 +1560,15 @@ async fn test_acquire_during_idle_check_keeps_accounting_consistent() {
     }
 
     let st = pool.status();
-    assert_eq!(st.active, 0, "全部归还后 active 应为 0: {st:?}");
-    assert!(st.total <= 5, "不得超过 max_connections: {st:?}");
-    assert_eq!(st.total, st.idle, "连接应全部回收到 idle: {st:?}");
+    assert_eq!(
+        st.active, 0,
+        "active should be 0 after all connections are returned: {st:?}"
+    );
+    assert!(st.total <= 5, "must not exceed max_connections: {st:?}");
+    assert_eq!(
+        st.total, st.idle,
+        "connections should all return to idle: {st:?}"
+    );
 }
 
 /// SQL 门禁的失败路径必须 fail-closed
@@ -1564,7 +1597,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("non-SELECT must be rejected by query_rows");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "query_rows 非 SELECT 应为权限拒绝，实际: {err:?}"
+        "a non-SELECT in query_rows should be denied by permissions, actual: {err:?}"
     );
 
     // query_rows 的 DDL 门禁：建表语句不得经由行查询入口执行
@@ -1574,7 +1607,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("DDL must be rejected by query_rows");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "query_rows 中的 DDL 应为权限拒绝，实际: {err:?}"
+        "DDL in query_rows should be denied by permissions, actual: {err:?}"
     );
 
     // 非 admin 的 SQL 解析失败：安全默认拒绝
@@ -1585,7 +1618,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("parse failure must be denied for non-admin");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "非 admin 解析失败应为权限拒绝，实际: {err:?}"
+        "a non-admin parse failure should be denied by permissions, actual: {err:?}"
     );
 
     // 非 admin 的无表名查询：无法判定所需权限时 fail-closed
@@ -1595,7 +1628,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("table-less query must be denied for non-admin");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "非 admin 无表名查询应为权限拒绝，实际: {err:?}"
+        "a non-admin query without a table name should be denied by permissions, actual: {err:?}"
     );
 
     // 非 admin 的非法表名：不得带着可疑表名去查权限（fail-closed）
@@ -1605,7 +1638,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("invalid table name must be denied for non-admin");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "非 admin 非法表名应为权限拒绝，实际: {err:?}"
+        "a non-admin invalid table name should be denied by permissions, actual: {err:?}"
     );
 
     // 非 admin 行查询的 SQL 解析失败：与 execute_raw 同口径 fail-closed
@@ -1615,7 +1648,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .expect_err("parse failure must be denied for non-admin query_rows");
     assert!(
         matches!(err, dbnexus::DbError::Permission(_)),
-        "非 admin 行查询解析失败应为权限拒绝，实际: {err:?}"
+        "a non-admin row query parse failure should be denied by permissions, actual: {err:?}"
     );
 
     // 执行层：DCL（GRANT/REVOKE）与 SET 会话变量都不是 DML，
@@ -1628,10 +1661,10 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         let err = admin
             .execute_raw(sql)
             .await
-            .expect_err("非 DML 语句必须被 execute_raw 拒绝");
+            .expect_err("non-DML statements must be rejected by execute_raw");
         assert!(
             matches!(err, dbnexus::DbError::Permission(_)),
-            "{sql} 应为权限拒绝，实际: {err:?}"
+            "{sql} should be denied by permissions, actual: {err:?}"
         );
     }
 }
@@ -1659,11 +1692,20 @@ async fn test_acquire_failure_is_explicit_and_rolls_back_counters() {
         let result = pool.get_session("admin").await;
         assert!(
             result.is_err(),
-            "不可达数据库的 acquire 必须显性报错，不得返回可用连接"
+            "acquire on an unreachable database must error explicitly and must not return a usable connection"
         );
         let st = pool.status();
-        assert_eq!(st.active, 0, "失败后不得残留活跃计数: {st:?}");
-        assert_eq!(st.total, 0, "失败后 total 必须回滚为 0: {st:?}");
-        assert_eq!(st.idle, 0, "失败后不得有 idle 连接: {st:?}");
+        assert_eq!(
+            st.active, 0,
+            "there should be no residual active count after a failure: {st:?}"
+        );
+        assert_eq!(
+            st.total, 0,
+            "total must roll back to 0 after a failure: {st:?}"
+        );
+        assert_eq!(
+            st.idle, 0,
+            "there should be no idle connections after a failure: {st:?}"
+        );
     }
 }

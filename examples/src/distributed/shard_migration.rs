@@ -20,21 +20,21 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🚀 DBNexus 分片迁移编排器示例");
+    println!("🚀 DBNexus shard migration orchestrator example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建分片路由器
     // ============================================
-    println!("--- 1. 创建分片路由器 ---\n");
+    println!("--- 1. create the shard router ---\n");
 
     let config = ShardConfig::new("hash", 4, "shard", "sqlite::memory:");
     let router = ShardRouter::with_config(&config).await?;
     let router = Arc::new(router);
 
-    println!("  ✓ 路由器创建成功");
-    println!("  - 分片数     : {}", router.total_shards());
-    println!("  - 已初始化池 : {:?}", router.initialized_shards());
+    println!("  ✓ Router created");
+    println!("  - shard count     : {}", router.total_shards());
+    println!("  - initialized pools : {:?}", router.initialized_shards());
     println!();
 
     // ============================================
@@ -42,67 +42,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     println!("--- 2. ShardMigrationOrchestrator ---\n");
 
-    println!("  分片迁移编排器负责:");
-    println!("  - 遍历所有已注册分片连接池");
-    println!("  - 对每个分片独立执行相同的迁移文件");
-    println!("  - 支持并行和串行两种执行模式");
-    println!("  - 部分失败不阻断其他分片");
+    println!("  the shard migration orchestrator:");
+    println!("  - iterate over all registered shard pools");
+    println!("  - execute the same migration file on each shard independently");
+    println!("  - supports both parallel and serial execution modes");
+    println!("  - a partial failure does not block the other shards");
     println!();
 
     // ============================================
     // 3. 并行 vs 串行模式对比
     // ============================================
-    println!("--- 3. 并行 vs 串行模式 ---\n");
+    println!("--- 3. parallel vs serial modes ---\n");
 
     println!("  ┌──────────┬──────────────────────────────────────────────┐");
-    println!("  │ 模式     │ 说明                                         │");
+    println!("  │ mode       │ description                                    │");
     println!("  ├──────────┼──────────────────────────────────────────────┤");
-    println!("  │ 并行     │ 所有分片同时执行迁移，速度最快               │");
-    println!("  │          │ 适合分片间无依赖的场景                       │");
+    println!("  │ parallel   │ execute migrations on all shards at once; fastest │");
+    println!("  │          │ good for scenarios with no cross-shard dependencies │");
     println!("  ├──────────┼──────────────────────────────────────────────┤");
-    println!("  │ 串行     │ 逐个分片顺序执行迁移                         │");
-    println!("  │          │ 适合需要严格控制迁移顺序的场景                 │");
+    println!("  │ serial     │ execute migrations shard by shard in order      │");
+    println!("  │          │ good for scenarios needing strict migration ordering  │");
     println!("  └──────────┴──────────────────────────────────────────────┘");
     println!();
 
     // ============================================
     // 4. 迁移结果结构
     // ============================================
-    println!("--- 4. 迁移结果结构 ---\n");
+    println!("--- 4. migration result structures ---\n");
 
     println!("  OrchestratedMigrationResult:");
     println!("  ┌────────────────────┬──────────────────────────────────┐");
-    println!("  │ 字段               │ 说明                             │");
+    println!("  │ field               │ description                             │");
     println!("  ├────────────────────┼──────────────────────────────────┤");
-    println!("  │ total_shards       │ 总分片数                         │");
-    println!("  │ success_count      │ 成功分片数                       │");
-    println!("  │ failed_shards      │ 失败分片列表                     │");
-    println!("  │ results            │ 所有分片结果详情                 │");
+    println!("  │ total_shards       │ the total number of shards                │");
+    println!("  │ success_count      │ the number of succeeded shards             │");
+    println!("  │ failed_shards      │ the list of failed shards                 │");
+    println!("  │ results            │ details of all shard results              │");
     println!("  └────────────────────┴──────────────────────────────────┘");
     println!();
 
-    println!("  ShardMigrationResult（单分片）:");
+    println!("  ShardMigrationResult (single shard):");
     println!("  ┌────────────────────┬──────────────────────────────────┐");
-    println!("  │ 字段               │ 说明                             │");
+    println!("  │ field               │ description                             │");
     println!("  ├────────────────────┼──────────────────────────────────┤");
-    println!("  │ shard_id           │ 分片 ID                          │");
-    println!("  │ success            │ 是否成功                         │");
-    println!("  │ applied_versions   │ 已应用的迁移版本列表             │");
-    println!("  │ error              │ 错误信息（失败时）               │");
+    println!("  │ shard_id           │ shard ID                                  │");
+    println!("  │ success            │ whether it succeeded                      │");
+    println!("  │ applied_versions   │ the list of applied migration versions    │");
+    println!("  │ error              │ the error message (on failure)            │");
     println!("  └────────────────────┴──────────────────────────────────┘");
     println!();
 
     // ============================================
     // 5. 模拟迁移结果展示
     // ============================================
-    println!("--- 5. 模拟迁移结果 ---\n");
+    println!("--- 5. simulated migration results ---\n");
 
     let total_shards = router.total_shards();
-    println!("  模拟 {} 个分片的迁移结果:", total_shards);
+    println!("  simulated migration results for {} shards:", total_shards);
     println!();
 
     // 模拟成功场景
-    println!("  场景 A: 全部成功");
+    println!("  Scenario A: all succeed");
     println!("  ┌──────────┬──────────┬────────────────────┐");
     println!("  │ shard_id │ success  │ applied_versions   │");
     println!("  ├──────────┼──────────┼────────────────────┤");
@@ -111,13 +111,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  └──────────┴──────────┴────────────────────┘");
     println!(
-        "  结果: total={}, success={}, failed=0",
+        "  result: total={}, success={}, failed=0",
         total_shards, total_shards
     );
     println!();
 
     // 模拟部分失败场景
-    println!("  场景 B: 部分失败");
+    println!("  Scenario B: partial failure");
     println!("  ┌──────────┬──────────┬────────────────────────────┐");
     println!("  │ shard_id │ success  │ error                      │");
     println!("  ├──────────┼──────────┼────────────────────────────┤");
@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  └──────────┴──────────┴────────────────────────────┘");
     println!(
-        "  结果: total={}, success={}, failed=1",
+        "  result: total={}, success={}, failed=1",
         total_shards,
         total_shards - 1
     );
@@ -139,21 +139,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 6. 架构说明
     // ============================================
-    println!("--- 6. 分片迁移编排架构 ---\n");
+    println!("--- 6. shard migration orchestration architecture ---\n");
 
     println!("  ┌─────────────────────────┐");
     println!("  │ ShardMigrationOrchestrator│");
     println!("  └───────────┬─────────────┘");
-    println!("              │ 遍历分片");
+    println!("              │ iterate over shards");
     println!("     ┌────────┼────────┬──────────┐");
     println!("     ▼        ▼        ▼          ▼");
     println!("  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐");
     println!("  │Shard0│ │Shard1│ │Shard2│ │Shard3│");
-    println!("  │迁移  │ │迁移  │ │迁移  │ │迁移  │");
+    println!("  │migration  │ │migration  │ │migration  │ │migration  │");
     println!("  └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘");
     println!("     │        │        │        │");
     println!("     └────────┴────────┴────────┘");
-    println!("              │ 汇总结果");
+    println!("              │ aggregate results");
     println!("              ▼");
     println!("  ┌───────────────────────────┐");
     println!("  │ OrchestratedMigrationResult│");
@@ -163,19 +163,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 7. 与其他模块的关系
     // ============================================
-    println!("--- 7. 与其他模块的关系 ---\n");
+    println!("--- 7. relations to other modules ---\n");
     println!("  ┌────────────────┬──────────────────────────────────────────┐");
-    println!("  │ 依赖模块       │ 关系                                     │");
+    println!("  │ dependencies       │ relationship                               │");
     println!("  ├────────────────┼──────────────────────────────────────────┤");
-    println!("  │ sharding       │ 提供 ShardRouter 获取所有分片连接池      │");
-    println!("  │ migration      │ 提供 MigrationExecutor 执行单分片迁移    │");
+    println!("  │ sharding       │ provides ShardRouter to get all shard pools  │");
+    println!("  │ migration      │ provides MigrationExecutor for single-shard migrations │");
     println!("  └────────────────┴──────────────────────────────────────────┘");
     println!();
 
     println!("========================================");
-    println!("✨ 分片迁移编排器示例完成！");
+    println!("✨ Shard migration orchestrator example complete!");
     println!("========================================");
-    println!("\n📚 关键 API:");
+    println!("\n📚 Key APIs:");
     println!("  - ShardMigrationOrchestrator::new(router, parallel)");
     println!("  - orchestrator.orchestrate_migration(dir) -> OrchestratedMigrationResult");
     println!("  - result.total_shards / success_count / failed_shards");

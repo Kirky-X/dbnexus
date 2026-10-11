@@ -57,7 +57,7 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔐 DBNexus RBAC 权限控制示例");
+    println!("🔐 DBNexus RBAC permission control example");
     println!("========================================\n");
 
     // ============================================
@@ -123,12 +123,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await;
 
-    println!("✓ 已配置 3 个角色: admin / manager / guest\n");
+    println!("✓ configured 3 roles: admin / manager / guest\n");
 
     // ============================================
     // 2. 演示权限检查通过和拒绝场景
     // ============================================
-    println!("--- MemoryPermissionProvider 权限检查 ---\n");
+    println!("--- MemoryPermissionProvider permission checks ---\n");
 
     let test_cases = [
         ("admin", "users", PermissionAction::Select, true),
@@ -146,10 +146,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (role, table, action, expected) in test_cases {
         let result = provider.check_access(role, table, action.clone())?;
-        let status = if result { "✓ 允许" } else { "✗ 拒绝" };
+        let status = if result { "✓ allowed" } else { "✗ reject" };
         let mark = if result == expected { "✔" } else { "✘" };
         println!(
-            "  {} [{}] {}.{} 期望={} 实际={}",
+            "  {} [{}] {}.{} expected={} actual={}",
             mark, role, table, action, expected, result
         );
         println!("     {}", status);
@@ -158,43 +158,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 创建 DbPool + Session
     // ============================================
-    println!("\n--- DbPool + Session 集成 ---\n");
+    println!("\n--- DbPool + Session integration ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("✓ 连接池和 Session 创建成功 (角色: admin)");
+    println!("  ✓ pool and Session created (role: admin)");
 
     // 建表
     common::ddl::create_users_table(&session).await?;
-    println!("✓ users 表创建成功");
+    println!("✓ users table created");
 
     // ============================================
     // 4. 使用 #[db_entity(..., permissions(...))] 宏生成的权限校验
     // ============================================
-    println!("\n--- #[db_entity] permissions 权限校验 ---\n");
+    println!("\n--- #[db_entity] permissions checks ---\n");
 
     // 宏生成的常量
-    println!("  User 实体允许的角色: {:?}", Model::allowed_roles());
-    println!("  User 实体允许的操作: {:?}", Model::allowed_operations());
+    println!(
+        "  roles allowed on the User entity: {:?}",
+        Model::allowed_roles()
+    );
+    println!(
+        "  operations allowed on the User entity: {:?}",
+        Model::allowed_operations()
+    );
 
     // 为 admin 角色创建 PermissionContext 并校验
     let admin_ctx = PermissionContext::new_default_with_rate_limit("admin".to_string())
         .await
         .expect("Failed to create admin context");
     match Model::check_permission(&admin_ctx) {
-        Ok(()) => println!("  ✓ admin 角色通过 check_permission 校验"),
-        Err(e) => println!("  ✗ admin 角色校验失败: {}", e),
+        Ok(()) => println!("  ✓ admin passed check_permission"),
+        Err(e) => println!("  ✗ admin's permission check failed: {}", e),
     }
 
     // 校验 admin 的 SELECT 操作
     match Model::check_operation(&admin_ctx, &PermissionAction::Select) {
-        Ok(()) => println!("  ✓ admin 角色通过 check_operation(Select) 校验"),
-        Err(e) => println!("  ✗ admin 角色操作校验失败: {}", e),
+        Ok(()) => println!("  ✓ admin passed check_operation(Select)"),
+        Err(e) => println!("  ✗ admin's operation check failed: {}", e),
     }
 
     // 校验 admin 的 DELETE 操作（不在 ALLOWED_OPERATIONS 中）
     match Model::check_operation(&admin_ctx, &PermissionAction::Delete) {
-        Ok(()) => println!("  ✗ 意外: admin 的 Delete 操作被允许"),
-        Err(e) => println!("  ✓ admin 的 Delete 操作被正确拒绝: {}", e),
+        Ok(()) => println!("  ✗ unexpected: admin's Delete operation was allowed"),
+        Err(e) => println!("  ✓ admin's Delete operation correctly rejected: {}", e),
     }
 
     // 为 guest 角色创建 PermissionContext（不在 ALLOWED_ROLES 中）
@@ -202,22 +208,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to create guest context");
     match Model::check_permission(&guest_ctx) {
-        Ok(()) => println!("  ✗ 意外: guest 角色通过了 check_permission 校验"),
-        Err(e) => println!("  ✓ guest 角色被正确拒绝: {}", e),
+        Ok(()) => println!("  ✗ unexpected: guest passed check_permission"),
+        Err(e) => println!("  ✓ guest correctly rejected: {}", e),
     }
 
     println!("\n========================================");
-    println!("✨ RBAC 权限控制示例完成！");
+    println!("✨ RBAC permission control example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - MemoryPermissionProvider::new()   创建内存权限提供者");
-    println!("  - provider.add_role(role, policy)  添加角色策略（async）");
-    println!("  - provider.check_access(role, table, op)  检查表级权限");
+    println!("\n📚 Key concepts:");
+    println!("  - MemoryPermissionProvider::new()   create an in-memory permission provider");
+    println!("  - provider.add_role(role, policy)  add a role policy (async)");
+    println!("  - provider.check_access(role, table, op)  check table-level permissions");
     println!(
-        "  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  编译期生成权限校验方法"
+        "  - #[db_entity(..., permissions(roles=[...], operations=[...]))]  compile-time permission checks"
     );
-    println!("  - Model::check_permission(&ctx)    校验角色是否允许访问实体");
-    println!("  - Model::check_operation(&ctx, &op) 校验角色+操作是否允许");
+    println!(
+        "  - Model::check_permission(&ctx)    verify the role is allowed to access the entity"
+    );
+    println!("  - Model::check_operation(&ctx, &op) verify the role + operation are allowed");
 
     Ok(())
 }

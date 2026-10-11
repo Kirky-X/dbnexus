@@ -30,7 +30,9 @@ async fn test_health_snapshot_shape_and_fields() {
     let _rows = pool.query_rows("SELECT 1 AS x", "admin").await;
 
     let snap = pool.health_snapshot().await;
-    let obj = snap.as_object().expect("health_snapshot 应返回 JSON 对象");
+    let obj = snap
+        .as_object()
+        .expect("health_snapshot should return a JSON object");
 
     // 顶层字段：status + pool + slow_queries + replicas
     assert!(
@@ -38,7 +40,7 @@ async fn test_health_snapshot_shape_and_fields() {
             && obj.contains_key("pool")
             && obj.contains_key("slow_queries")
             && obj.contains_key("replicas"),
-        "快照应含 status/pool/slow_queries/replicas，实际键: {:?}",
+        "the snapshot should contain status/pool/slow_queries/replicas, actual keys: {:?}",
         obj.keys().collect::<Vec<_>>()
     );
 
@@ -46,37 +48,40 @@ async fn test_health_snapshot_shape_and_fields() {
     let status = snap["status"].as_str().unwrap();
     assert!(
         ["healthy", "degraded", "unhealthy"].contains(&status),
-        "status 应为 healthy/degraded/unhealthy，实际: {status}"
+        "status should be healthy/degraded/unhealthy, actual: {status}"
     );
 
     // pool 子对象：饱和度字段与 PoolStatus 对齐
     let pool_obj = &snap["pool"];
-    assert!(pool_obj["total"].is_u64(), "pool.total 缺失");
-    assert!(pool_obj["active"].is_u64(), "pool.active 缺失");
-    assert!(pool_obj["idle"].is_u64(), "pool.idle 缺失");
-    assert!(pool_obj["wait_count"].is_u64(), "pool.wait_count 缺失");
+    assert!(pool_obj["total"].is_u64(), "pool.total is missing");
+    assert!(pool_obj["active"].is_u64(), "pool.active is missing");
+    assert!(pool_obj["idle"].is_u64(), "pool.idle is missing");
+    assert!(
+        pool_obj["wait_count"].is_u64(),
+        "pool.wait_count is missing"
+    );
     assert!(
         pool_obj["max_connections"].is_u64(),
-        "pool.max_connections 缺失"
+        "pool.max_connections is missing"
     );
     let saturation = pool_obj["saturation"]
         .as_f64()
-        .expect("pool.saturation 缺失");
+        .expect("pool.saturation is missing");
     assert!(
         (0.0..=1.0).contains(&saturation),
-        "饱和度应在 [0,1]，实际: {saturation}"
+        "saturation should be within [0,1], actual: {saturation}"
     );
 
     // slow_queries 子对象
     assert!(
         snap["slow_queries"]["count"].is_u64(),
-        "slow_queries.count 缺失"
+        "slow_queries.count is missing"
     );
 
     // replicas 为数组（无副本提供者时为空数组）
     assert!(
         snap["replicas"].as_array().unwrap().is_empty(),
-        "未注册副本提供者时 replicas 应为空数组"
+        "replicas should be an empty array when no replica provider is registered"
     );
 
     // 与既有 status() 数据一致（复用口径）
@@ -109,13 +114,13 @@ async fn test_health_snapshot_unhealthy_without_connections() {
     assert_eq!(
         snap["status"].as_str().unwrap(),
         "unhealthy",
-        "零连接池应报 unhealthy，实际: {snap}"
+        "a zero-connection pool should report unhealthy, actual: {snap}"
     );
     assert_eq!(snap["pool"]["total"].as_u64().unwrap(), 0);
     assert_eq!(
         snap["pool"]["saturation"].as_f64().unwrap(),
         1.0,
-        "零连接池饱和度应取 1.0（满载语义）"
+        "a zero-connection pool's saturation should be 1.0 (full-load semantics)"
     );
 
     let _ = std::fs::remove_file(&path);
@@ -141,7 +146,11 @@ async fn test_health_snapshot_replica_provider() {
 
     let snap = pool.health_snapshot().await;
     let replicas = snap["replicas"].as_array().unwrap();
-    assert_eq!(replicas.len(), 2, "副本提供者的条目应进入快照");
+    assert_eq!(
+        replicas.len(),
+        2,
+        "the replica provider's entries should appear in the snapshot"
+    );
     assert_eq!(replicas[0]["url"], "replica-a");
     assert_eq!(replicas[0]["healthy"], true);
     assert_eq!(replicas[1]["url"], "replica-b");
@@ -175,12 +184,12 @@ async fn test_health_snapshot_slow_query_count_from_metrics() {
     assert_eq!(
         snap["slow_queries"]["count"].as_u64().unwrap(),
         1,
-        "慢查询计数应来自 metrics collector"
+        "the slow query count should come from the metrics collector"
     );
     assert_eq!(
         snap["slow_queries"]["threshold_ms"].as_u64().unwrap(),
         1,
-        "慢查询阈值应随快照导出"
+        "the slow query threshold should be exported with the snapshot"
     );
 
     let _ = std::fs::remove_file(&path);

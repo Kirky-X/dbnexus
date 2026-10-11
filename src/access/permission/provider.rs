@@ -179,13 +179,19 @@ impl YamlPermissionProvider {
     fn parse_yaml_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
         #[cfg(feature = "yaml")]
         {
-            serde_yaml_ng::from_str(content)
-                .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+            serde_yaml_ng::from_str(content).map_err(|e| {
+                crate::i18n::t(
+                    "pool-yaml-parse-error",
+                    &[("source", source.to_string()), ("error", e.to_string())],
+                )
+            })
         }
         #[cfg(not(feature = "yaml"))]
         {
             let _ = (content, source);
-            Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
+            Err(crate::i18n::t_simple(
+                "perm-config-yaml-feature-not-enabled",
+            ))
         }
     }
 
@@ -246,13 +252,19 @@ async fn parse_permission_yaml_async(
 ) -> Result<PermissionConfig, String> {
     #[cfg(feature = "yaml")]
     {
-        serde_yaml_ng::from_str(content)
-            .map_err(|e| format!("YAML parse error in '{}': {}", source, e))
+        serde_yaml_ng::from_str(content).map_err(|e| {
+            crate::i18n::t(
+                "pool-yaml-parse-error",
+                &[("source", source.to_string()), ("error", e.to_string())],
+            )
+        })
     }
     #[cfg(not(feature = "yaml"))]
     {
         let _ = (content, source);
-        Err("Cannot parse permission config: 'yaml' feature is not enabled".to_string())
+        Err(crate::i18n::t_simple(
+            "perm-config-yaml-feature-not-enabled",
+        ))
     }
 }
 

@@ -706,14 +706,14 @@ async fn test_unicode_index_values() {
         table_name: "用户表".to_string(),
         record_id: "记录_001".to_string(),
         shard_id: 0,
-        index_key: "邮箱".to_string(),
+        index_key: "email".to_string(),
         index_value: "用户@例子.测试".to_string(),
     };
 
     global_index.batch_sync(vec![entry.clone()]).await.unwrap();
 
     let result = global_index
-        .query_by_index("用户表", "邮箱", "用户@例子.测试")
+        .query_by_index("用户表", "email", "用户@例子.测试")
         .await
         .unwrap();
 

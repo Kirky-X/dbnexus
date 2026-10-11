@@ -23,7 +23,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🌐 DBNexus 全局索引示例");
+    println!("🌐 DBNexus global index example");
     println!("========================================\n");
 
     // ============================================
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // GlobalIndex::new 接受 Arc<DbPool>，通过连接池统一管理连接生命周期
     let pool = DbPool::new("sqlite::memory:").await?;
     let global_index = GlobalIndex::new(Arc::new(pool)).await?;
-    println!("✓ 全局索引管理器创建成功（global_index 表已自动创建）");
+    println!("✓ GlobalIndex manager created (global_index table created automatically)");
 
     // ============================================
     // 2. 准备索引条目（模拟跨分片数据）
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     ];
 
-    println!("\n📋 准备同步 {} 条索引条目:", entries.len());
+    println!("\n📋 Preparing to sync {} index entries:", entries.len());
     for entry in &entries {
         println!(
             "  - {} (record: {}, shard: {}, {}: {})",
@@ -87,15 +87,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 批量同步索引条目
     // ============================================
-    println!("\n同步索引到全局索引表...");
+    println!("\nSyncing the index into the global index table...");
     let sync_result = global_index.batch_sync(entries).await?;
 
-    println!("\n📊 同步结果 (SyncResult):");
-    println!("  - 成功: {}", sync_result.success);
-    println!("  - 同步数量: {}", sync_result.synced_count);
-    println!("  - 失败数量: {}", sync_result.failed_count);
+    println!("\n📊 Sync result (SyncResult):");
+    println!("  - succeeded: {}", sync_result.success);
+    println!("  - synced count: {}", sync_result.synced_count);
+    println!("  - failed count: {}", sync_result.failed_count);
     if !sync_result.errors.is_empty() {
-        println!("  - 错误信息:");
+        println!("  - error message:");
         for err in &sync_result.errors {
             println!("    • {}", err);
         }
@@ -104,14 +104,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. 通过索引查询跨分片数据
     // ============================================
-    println!("\n─── 跨分片索引查询 ───\n");
+    println!("\n─── Cross-shard index query ───\n");
 
     // 查询 user_100 的所有订单（分布在分片 0 和 1）
-    println!("查询 user_id = user_100 的订单:");
+    println!("Query orders where user_id = user_100:");
     let results = global_index
         .query_by_index("orders", "user_id", "user_100")
         .await?;
-    println!("  ✓ 找到 {} 条记录", results.len());
+    println!("  ✓ found {} records", results.len());
     for entry in &results {
         println!(
             "    → record: {}, shard: {}",
@@ -120,11 +120,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 查询 user_200 的订单（分布在分片 0 和 2）
-    println!("\n查询 user_id = user_200 的订单:");
+    println!("\nQuery orders where user_id = user_200:");
     let results = global_index
         .query_by_index("orders", "user_id", "user_200")
         .await?;
-    println!("  ✓ 找到 {} 条记录", results.len());
+    println!("  ✓ found {} records", results.len());
     for entry in &results {
         println!(
             "    → record: {}, shard: {}",
@@ -133,21 +133,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 查询不存在的用户
-    println!("\n查询 user_id = user_999（不存在）的订单:");
+    println!("\nQuery orders where user_id = user_999 (does not exist):");
     let results = global_index
         .query_by_index("orders", "user_id", "user_999")
         .await?;
-    println!("  ✓ 找到 {} 条记录", results.len());
+    println!("  ✓ found {} records", results.len());
 
     // ============================================
     // 5. 展示同步状态常量和 SyncEvent
     // ============================================
-    println!("\n─── 同步状态常量 ───\n");
+    println!("\n─── Sync status constants ───\n");
     println!("  SYNC_STATUS_PENDING = \"{}\"", SYNC_STATUS_PENDING);
     println!("  SYNC_STATUS_SYNCED  = \"{}\"", SYNC_STATUS_SYNCED);
     println!("  SYNC_STATUS_FAILED  = \"{}\"", SYNC_STATUS_FAILED);
 
-    println!("\n─── SyncEvent 事件类型 ───\n");
+    println!("\n─── SyncEvent event types ───\n");
     // SyncEvent 用于表示数据变更事件（binlog/CDC 风格）
     let sample_entry = IndexEntry {
         table_name: "orders".to_string(),
@@ -161,10 +161,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let update_event = SyncEvent::Update(sample_entry.clone());
     let delete_event = SyncEvent::Delete(sample_entry);
 
-    println!("  SyncEvent::Insert(entry) - 数据插入事件");
-    println!("  SyncEvent::Update(entry) - 数据更新事件");
-    println!("  SyncEvent::Delete(entry) - 数据删除事件");
-    println!("\n  事件示例:");
+    println!("  SyncEvent::Insert(entry) - data insertion event");
+    println!("  SyncEvent::Update(entry) - data update event");
+    println!("  SyncEvent::Delete(entry) - data deletion event");
+    println!("\n  event examples:");
     match &insert_event {
         SyncEvent::Insert(e) => println!(
             "    Insert: {}@{} (shard {})",
@@ -190,7 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 6. 再次同步（验证 upsert 语义）
     // ============================================
-    println!("\n─── 验证 upsert 语义（重复同步相同条目） ───\n");
+    println!("\n─── Verify upsert semantics (sync the same entries twice) ───\n");
     let duplicate_entries = vec![IndexEntry {
         table_name: "orders".to_string(),
         record_id: "order_001".to_string(),
@@ -200,7 +200,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }];
     let result = global_index.batch_sync(duplicate_entries).await?;
     println!(
-        "  ✓ 重复同步完成: synced={}, failed={}",
+        "  ✓ duplicate sync completed: synced={}, failed={}",
         result.synced_count, result.failed_count
     );
 
@@ -208,7 +208,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let results = global_index
         .query_by_index("orders", "user_id", "user_100_updated")
         .await?;
-    println!("  ✓ 查询更新后的值: 找到 {} 条记录", results.len());
+    println!(
+        "  ✓ queried the updated value: found {} records",
+        results.len()
+    );
     for entry in &results {
         println!(
             "    → record: {}, shard: {}, value: {}",
@@ -217,16 +220,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n========================================");
-    println!("✨ 全局索引示例完成！");
+    println!("✨ Global index example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - GlobalIndex::new(Arc<DbPool>) 创建管理器并自动建表");
-    println!("  - IndexEntry 结构: table_name, record_id, shard_id, index_key, index_value");
-    println!("  - batch_sync(entries) 批量同步（支持 upsert，分批插入避免参数限制）");
-    println!("  - query_by_index(table, key, value) 跨分片查询");
-    println!("  - SyncEvent 枚举: Insert/Update/Delete，用于 CDC 风格变更捕获");
-    println!("  - 同步状态: SYNC_STATUS_PENDING/SYNCED/FAILED");
-    println!("  - batch_sync 使用 OnConflict 实现 upsert 语义");
+    println!("\n📚 Key concepts:");
+    println!("  - GlobalIndex::new(Arc<DbPool>) creates the manager and the table automatically");
+    println!("  - IndexEntry struct: table_name, record_id, shard_id, index_key, index_value");
+    println!("  - batch_sync(entries) batch sync (upsert; batched inserts avoid parameter limits)");
+    println!("  - query_by_index(table, key, value) cross-shard query");
+    println!("  - SyncEvent enum: Insert/Update/Delete, for CDC-style change capture");
+    println!("  - sync status: SYNC_STATUS_PENDING/SYNCED/FAILED");
+    println!("  - batch_sync implements upsert semantics via OnConflict");
 
     Ok(())
 }

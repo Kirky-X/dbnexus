@@ -22,26 +22,26 @@ use dbnexus::{DdlGuard, DdlValidationResult};
 fn print_result(label: &str, sql: &str, result: Result<DdlValidationResult, String>) -> bool {
     match result {
         Ok(DdlValidationResult::Allowed) => {
-            println!("  ✓ [{}] 通过", label);
+            println!("  ✓ [{}] passed", label);
             println!("    SQL: {}", sql);
             true
         }
         Ok(DdlValidationResult::Forbidden(reason)) => {
-            println!("  ✗ [{}] 拦截", label);
+            println!("  ✗ [{}] blocked", label);
             println!("    SQL: {}", sql);
-            println!("    原因: {}", reason);
+            println!("    reason: {}", reason);
             false
         }
         Ok(DdlValidationResult::ParseError(msg)) => {
-            println!("  ⚠ [{}] 解析错误", label);
+            println!("  ⚠ [{}] parse error", label);
             println!("    SQL: {}", sql);
-            println!("    错误: {}", msg);
+            println!("    error: {}", msg);
             false
         }
         Err(msg) => {
-            println!("  ⚠ [{}] 系统错误", label);
+            println!("  ⚠ [{}] system error", label);
             println!("    SQL: {}", sql);
-            println!("    错误: {}", msg);
+            println!("    error: {}", msg);
             false
         }
     }
@@ -49,16 +49,16 @@ fn print_result(label: &str, sql: &str, result: Result<DdlValidationResult, Stri
 
 fn main() {
     println!("========================================");
-    println!("🛡  DBNexus DDL 安全守卫示例");
+    println!("🛡  DBNexus DDL safety guard example");
     println!("========================================\n");
 
     let guard = DdlGuard::new();
-    println!("✓ DdlGuard 实例创建成功\n");
+    println!("✓ DdlGuard instance created\n");
 
     // ============================================
     // 1. 合法的 DDL 语句（应通过验证）
     // ============================================
-    println!("--- 场景 1：合法的 DDL 语句（应通过） ---");
+    println!("--- Scenario 1: valid DDL statements (should pass) ---");
 
     let valid_cases = [
         (
@@ -66,7 +66,7 @@ fn main() {
             "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))",
         ),
         (
-            "CREATE TABLE 小写",
+            "CREATE TABLE lowercase",
             "create table products (id int, price real)",
         ),
         (
@@ -84,7 +84,7 @@ fn main() {
         ),
         ("DROP INDEX", "DROP INDEX idx_name"),
         ("DROP VIEW", "DROP VIEW active_users"),
-        ("SELECT 查询", "SELECT 1"),
+        ("SELECT query", "SELECT 1"),
         ("TRUNCATE", "TRUNCATE TABLE audit_log"),
     ];
 
@@ -95,17 +95,21 @@ fn main() {
             passed += 1;
         }
     }
-    println!("\n  合法 DDL 验证：{}/{} 通过\n", passed, valid_cases.len());
+    println!(
+        "\n  valid DDL verified: {}/{} passed\n",
+        passed,
+        valid_cases.len()
+    );
 
     // ============================================
     // 2. 危险的 DDL 语句（应被拦截）
     // ============================================
-    println!("--- 场景 2：危险的 DDL 语句（应被拦截） ---");
+    println!("--- Scenario 2: dangerous DDL statements (should be blocked) ---");
 
     let dangerous_cases = [
         ("DROP TABLE", "DROP TABLE users"),
         ("DROP DATABASE", "DROP DATABASE production"),
-        ("DROP DATABASE 小写", "drop database production"),
+        ("DROP DATABASE lowercase", "drop database production"),
         ("DROP ALL", "DROP ALL TABLES"),
         ("DROP SCHEMA", "DROP SCHEMA public"),
     ];
@@ -118,7 +122,7 @@ fn main() {
         }
     }
     println!(
-        "\n  危险 DDL 拦截：{}/{} 成功\n",
+        "\n  dangerous DDL blocked: {}/{} succeeded\n",
         blocked,
         dangerous_cases.len()
     );
@@ -126,13 +130,13 @@ fn main() {
     // ============================================
     // 3. 非 DDL 语句（DML，应被拦截）
     // ============================================
-    println!("--- 场景 3：非 DDL 语句（DML，应被拦截） ---");
+    println!("--- Scenario 3: non-DDL statement (DML, should be blocked) ---");
 
     let dml_cases = [
         ("INSERT", "INSERT INTO users (id, name) VALUES (1, 'Alice')"),
         ("UPDATE", "UPDATE users SET name = 'Bob' WHERE id = 1"),
         ("DELETE", "DELETE FROM users WHERE id = 1"),
-        ("DELETE 小写", "delete from users where id = 1"),
+        ("DELETE lowercase", "delete from users where id = 1"),
     ];
 
     let mut dml_blocked = 0;
@@ -142,42 +146,46 @@ fn main() {
             dml_blocked += 1;
         }
     }
-    println!("\n  DML 拦截：{}/{} 成功\n", dml_blocked, dml_cases.len());
+    println!(
+        "\n  DML blocked: {}/{} succeeded\n",
+        dml_blocked,
+        dml_cases.len()
+    );
 
     // ============================================
     // 4. 边界场景
     // ============================================
-    println!("--- 场景 4：边界场景 ---");
+    println!("--- Scenario 4: edge cases ---");
 
     // 空 SQL
     let empty_result = guard.validate("");
-    print_result("空 SQL", "", empty_result);
+    print_result("empty SQL", "", empty_result);
 
     // 纯空白字符
     let whitespace_result = guard.validate("   \n\t  ");
-    print_result("纯空白", "   \\n\\t  ", whitespace_result);
+    print_result("whitespace only", "   \\n\\t  ", whitespace_result);
 
     // 解析错误（语法不合法）
     let invalid_sql = "CREATE TABLED users (id INT)";
     let parse_result = guard.validate(invalid_sql);
-    print_result("语法错误", invalid_sql, parse_result);
+    print_result("syntax error", invalid_sql, parse_result);
 
     println!();
 
     // ============================================
     // 5. Default trait 演示
     // ============================================
-    println!("--- 场景 5：Default trait ---");
+    println!("--- Scenario 5: the Default trait ---");
     let default_guard: DdlGuard = DdlGuard::default();
     let result = default_guard.validate("CREATE TABLE test (id INT)");
-    print_result("Default 创建", "CREATE TABLE test (id INT)", result);
+    print_result("created via Default", "CREATE TABLE test (id INT)", result);
 
     println!();
 
     // ============================================
     // 6. 批量验证场景（模拟 DDL 审计）
     // ============================================
-    println!("--- 场景 6：批量 DDL 审计 ---");
+    println!("--- Scenario 6: batch DDL audit ---");
     let audit_batch = [
         "CREATE TABLE orders (id INT, user_id INT, amount REAL)",
         "CREATE INDEX idx_orders_user ON orders (user_id)",
@@ -210,21 +218,21 @@ fn main() {
         }
     }
     println!(
-        "\n  审计结果：{} 通过，{} 拦截",
+        "\n  audit result: {} passed, {} blocked",
         allowed_count, blocked_count
     );
 
     println!("\n========================================");
-    println!("✨ DDL 安全守卫示例完成！");
+    println!("✨ DDL safety guard example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DdlGuard::new()              - 创建守卫实例");
-    println!("  - DdlGuard::default()          - 使用 Default trait 创建");
-    println!("  - guard.validate(sql)          - 验证 SQL 语句");
-    println!("  - DdlValidationResult::Allowed - 验证通过");
-    println!("  - DdlValidationResult::Forbidden - 验证失败（含原因）");
-    println!("  - DdlValidationResult::ParseError - SQL 解析错误");
-    println!("  - 白名单：CREATE TABLE/INDEX/VIEW, ALTER TABLE, TRUNCATE, SELECT");
-    println!("  - 拦截：DROP TABLE/DATABASE/SCHEMA, INSERT/UPDATE/DELETE");
-    println!("  - 允许 DROP：DROP INDEX, DROP VIEW");
+    println!("\n📚 Key concepts:");
+    println!("  - DdlGuard::new()              - create a guard instance");
+    println!("  - DdlGuard::default()          - create via the Default trait");
+    println!("  - guard.validate(sql)          - validate a SQL statement");
+    println!("  - DdlValidationResult::Allowed - validation passed");
+    println!("  - DdlValidationResult::Forbidden - validation failed (with a reason)");
+    println!("  - DdlValidationResult::ParseError - SQL parse error");
+    println!("  - allowlist: CREATE TABLE/INDEX/VIEW, ALTER TABLE, TRUNCATE, SELECT");
+    println!("  - block: DROP TABLE/DATABASE/SCHEMA, INSERT/UPDATE/DELETE");
+    println!("  - allow DROP: DROP INDEX, DROP VIEW");
 }

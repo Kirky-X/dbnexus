@@ -19,13 +19,13 @@ use dbnexus::{FailoverConfig, ReplicaConfig, t_simple};
 
 fn main() {
     println!("========================================");
-    println!("🔀 DBNexus 副本路由（读写分离）示例");
+    println!("🔀 DBNexus replica routing (read/write splitting) example");
     println!("========================================\n");
 
     // ============================================
     // 1. ReplicaConfig 配置
     // ============================================
-    println!("--- 1. ReplicaConfig 配置 ---\n");
+    println!("--- 1. ReplicaConfig configuration ---\n");
 
     let replica_config = ReplicaConfig {
         replica_urls: vec![
@@ -36,77 +36,82 @@ fn main() {
         lag_check_interval_secs: 10,
     };
 
-    println!("  副本路由配置:");
-    println!("  - 副本数量      : {}", replica_config.replica_urls.len());
+    println!("  replica routing configuration:");
+    println!(
+        "  - replica count      : {}",
+        replica_config.replica_urls.len()
+    );
     for (i, url) in replica_config.replica_urls.iter().enumerate() {
         println!("    - replica {}   : {}", i + 1, url);
     }
     println!(
-        "  - 最大延迟阈值  : {:.1} 秒",
+        "  - max lag threshold  : {:.1} sec",
         replica_config.max_lag_seconds
     );
     println!(
-        "  - 检测间隔      : {} 秒",
+        "  - check interval      : {} sec",
         replica_config.lag_check_interval_secs
     );
     println!();
 
     // 默认配置
     let default_config = ReplicaConfig::default();
-    println!("  默认配置:");
+    println!("  default configuration:");
     println!(
         "  - max_lag_seconds      : {:.1}",
         default_config.max_lag_seconds
     );
     println!(
-        "  - lag_check_interval   : {} 秒",
+        "  - lag_check_interval   : {} sec",
         default_config.lag_check_interval_secs
     );
-    println!("  - replica_urls         : (空)",);
+    println!("  - replica_urls         : (empty)",);
     println!();
 
     // ============================================
     // 2. ReplicationLag 结构体
     // ============================================
-    println!("--- 2. ReplicationLag 结构体 ---\n");
+    println!("--- 2. ReplicationLag struct ---\n");
 
-    println!("  ReplicationLag 字段:");
+    println!("  ReplicationLag fields:");
     println!("  ┌────────────────┬──────────────────────────────────────────┐");
-    println!("  │ 字段           │ 说明                                     │");
+    println!("  │ field          │ description                              │");
     println!("  ├────────────────┼──────────────────────────────────────────┤");
-    println!("  │ lag_bytes      │ 字节级延迟（PostgreSQL pg_wal_lsn_diff） │");
-    println!("  │ lag_seconds    │ 秒级延迟（MySQL Seconds_Behind_Master）  │");
-    println!("  │ is_caught_up   │ 是否已追上主库（lag < 阈值）             │");
+    println!("  │ lag_bytes      │ byte-level lag (PostgreSQL pg_wal_lsn_diff) │");
+    println!("  │ lag_seconds    │ second-level lag (MySQL Seconds_Behind_Master) │");
+    println!("  │ is_caught_up   │ whether the replica has caught up (lag < threshold) │");
     println!("  └────────────────┴──────────────────────────────────────────┘");
     println!();
 
     // ============================================
     // 3. ReplicationLagDetector 各后端实现
     // ============================================
-    println!("--- 3. ReplicationLagDetector 后端实现 ---\n");
+    println!("--- 3. ReplicationLagDetector backend implementations ---\n");
 
     println!("  ┌──────────────────────┬───────────────────────────────────────────────┐");
-    println!("  │ 检测器               │ 实现方式                                      │");
+    println!("  │ detector               │ implementation approach                 │");
     println!("  ├──────────────────────┼───────────────────────────────────────────────┤");
     println!("  │ PostgresLagDetector  │ pg_wal_lsn_diff(pg_current_wal_lsn(), ...)    │");
-    println!("  │                      │ 字节级精度，默认阈值 10MB                      │");
+    println!("  │                      │ byte-level precision, default threshold 10MB        │");
     println!("  ├──────────────────────┼───────────────────────────────────────────────┤");
     println!("  │ MySqlLagDetector     │ SHOW SLAVE STATUS → Seconds_Behind_Master     │");
-    println!("  │                      │ 秒级精度，默认阈值 5.0 秒                      │");
+    println!("  │                      │ second-level precision, default threshold 5.0 sec  │");
     println!("  ├──────────────────────┼───────────────────────────────────────────────┤");
-    println!("  │ SqliteLagDetector    │ SQLite 无副本语义，始终返回 is_caught_up=true  │");
+    println!(
+        "  │ SqliteLagDetector    │ SQLite has no replica semantics; always is_caught_up=true │"
+    );
     println!("  └──────────────────────┴───────────────────────────────────────────────┘");
     println!();
 
     // ============================================
     // 4. ReplicaPool 路由逻辑
     // ============================================
-    println!("--- 4. ReplicaPool 路由逻辑 ---\n");
+    println!("--- 4. ReplicaPool routing logic ---\n");
 
-    println!("  读请求路由流程:");
+    println!("  read request routing flow:");
     println!();
     println!("  ┌──────────┐   get_read_session()   ┌──────────────┐");
-    println!("  │ 客户端   │ ──────────────────────→ │ ReplicaPool  │");
+    println!("  │ client    │ ──────────────────────→ │ ReplicaPool  │");
     println!("  └──────────┘                         └──────┬───────┘");
     println!("                                              │");
     println!("                                    detect_lag()");
@@ -119,15 +124,15 @@ fn main() {
     println!("                                  Yes  │           │ No");
     println!("                                       ▼           ▼");
     println!("                              ┌──────────┐  ┌──────────┐");
-    println!("                              │ 返回副本  │  │ 返回 None│");
-    println!("                              │ Session  │  │ (回退主库)│");
+    println!("                              │ return replica │  │ return None│");
+    println!("                              │ Session  │  │ (fall back to primary)│");
     println!("                              └──────────┘  └──────────┘");
     println!();
 
     // ============================================
     // 5. FailoverConfig 故障转移配置
     // ============================================
-    println!("--- 5. FailoverConfig 故障转移配置 ---\n");
+    println!("--- 5. FailoverConfig failover configuration ---\n");
 
     let failover_config = FailoverConfig {
         urls: vec![
@@ -139,27 +144,27 @@ fn main() {
         failover_threshold: 3,
     };
 
-    println!("  故障转移配置:");
-    println!("  - 故障转移链:");
+    println!("  failover configuration:");
+    println!("  - failover chain:");
     for (i, url) in failover_config.urls.iter().enumerate() {
         let role = if i == 0 { "primary" } else { "standby" };
         println!("    [{}] {} : {}", i, role, url);
     }
     println!(
-        "  - 健康检查 SQL : {:?}",
+        "  - health check SQL: {:?}",
         failover_config.health_check_query
     );
     println!(
-        "  - 触发阈值     : 连续失败 {} 次",
+        "  - trigger threshold     : {} consecutive failures",
         failover_config.failover_threshold
     );
     println!();
 
     // 默认配置
     let default_failover = FailoverConfig::default();
-    println!("  默认配置:");
-    println!("  - urls              : (空)");
-    println!("  - health_check_query: None (默认 SELECT 1)");
+    println!("  default configuration:");
+    println!("  - urls              : (empty)");
+    println!("  - health_check_query: None (default SELECT 1)");
     println!(
         "  - failover_threshold: {}",
         default_failover.failover_threshold
@@ -169,39 +174,41 @@ fn main() {
     // ============================================
     // 6. Failover + CircuitBreaker 协同
     // ============================================
-    println!("--- 6. 故障转移 + CircuitBreaker 协同 ---\n");
+    println!("--- 6. failover + CircuitBreaker cooperation ---\n");
 
-    println!("  ┌──────────┐   查询失败    ┌────────────────┐");
-    println!("  │ 查询请求  │ ────────────→ │ CircuitBreaker │");
+    println!("  ┌──────────┐   query failed   ┌────────────────┐");
+    println!("  │ query request │ ────────────→ │ CircuitBreaker │");
     println!("  └──────────┘               └───────┬────────┘");
     println!("                                     │");
-    println!("                        连续失败 >= threshold");
+    println!("                        consecutive failures >= threshold");
     println!("                                     │");
     println!("                                     ▼");
     println!("                          ┌──────────────────┐");
-    println!("                          │ 触发故障转移      │");
-    println!("                          │ 切换到下一个 URL  │");
+    println!("                          │ trigger failover      │");
+    println!("                          │ switch to the next URL │");
     println!("                          └──────────────────┘");
     println!();
 
     // ============================================
     // 7. 生产环境建议
     // ============================================
-    println!("--- 7. 生产环境建议 ---\n");
+    println!("--- 7. production recommendations ---\n");
     println!("  ┌────────────────────┬──────────────────────────────────────────────┐");
-    println!("  │ 参数               │ 建议值                                       │");
+    println!("  │ parameter           │ recommended value                        │");
     println!("  ├────────────────────┼──────────────────────────────────────────────┤");
-    println!("  │ max_lag_seconds    │ 1-10 秒（根据业务容忍度）                    │");
-    println!("  │ lag_check_interval │ 5-30 秒（避免频繁检测增加主库压力）          │");
-    println!("  │ failover_threshold │ 3-5 次（避免瞬时网络抖动触发误切换）         │");
-    println!("  │ health_check_query │ SELECT 1（轻量级探活）                       │");
+    println!("  │ max_lag_seconds    │ 1-10 sec (per your business tolerance)      │");
+    println!("  │ lag_check_interval │ 5-30 sec (avoid frequent checks that burden the primary) │");
+    println!(
+        "  │ failover_threshold │ 3-5 failures (avoids spurious switches from transient jitter) │"
+    );
+    println!("  │ health_check_query │ SELECT 1 (lightweight liveness probe)          │");
     println!("  └────────────────────┴──────────────────────────────────────────────┘");
     println!();
 
     println!("========================================");
-    println!("✨ 副本路由示例完成！");
+    println!("✨ Replica routing example complete!");
     println!("========================================");
-    println!("\n📚 关键 API:");
+    println!("\n📚 Key APIs:");
     println!("  - ReplicaConfig {{ replica_urls, max_lag_seconds, lag_check_interval_secs }}");
     println!("  - FailoverConfig {{ urls, health_check_query, failover_threshold }}");
     println!(

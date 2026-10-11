@@ -39,12 +39,12 @@ impl SagaAction for DebitAction {
     async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
         if self.should_fail {
             Err(SagaError::ExecutionFailed(format!(
-                "{}: 扣款失败（模拟故障）",
+                "{}: debit failed (simulated fault)",
                 self.name
             )))
         } else {
             self.executed.store(true, Ordering::SeqCst);
-            println!("    ✅ [正向] {} 执行成功", self.name);
+            println!("    ✅ [forward] {} succeeded", self.name);
             Ok(())
         }
     }
@@ -62,7 +62,7 @@ struct RefundAction {
 #[async_trait]
 impl SagaAction for RefundAction {
     async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
-        println!("    🔙 [补偿] {} 执行成功", self.name);
+        println!("    🔙 [compensation] {} succeeded", self.name);
         Ok(())
     }
 
@@ -83,12 +83,12 @@ impl SagaAction for CreditAction {
     async fn execute(&self, _session: &dbnexus::Session) -> Result<(), SagaError> {
         if self.should_fail {
             Err(SagaError::ExecutionFailed(format!(
-                "{}: 入账失败（模拟故障）",
+                "{}: credit failed (simulated fault)",
                 self.name
             )))
         } else {
             self.executed.store(true, Ordering::SeqCst);
-            println!("    ✅ [正向] {} 执行成功", self.name);
+            println!("    ✅ [forward] {} succeeded", self.name);
             Ok(())
         }
     }
@@ -100,70 +100,70 @@ impl SagaAction for CreditAction {
 
 fn print_result(result: &SagaExecutionResult) {
     println!();
-    println!("  执行结果:");
+    println!("  Execution result:");
     println!("  - saga_id   : {}", result.saga_id);
-    println!("  - 成功      : {}", result.success);
-    println!("  - 状态      : {:?}", result.status);
-    println!("  - 已完成步骤: {:?}", result.completed_steps);
-    println!("  - 已补偿步骤: {:?}", result.compensated_steps);
+    println!("  - succeeded    : {}", result.success);
+    println!("  - status      : {:?}", result.status);
+    println!("  - completed steps: {:?}", result.completed_steps);
+    println!("  - compensated steps: {:?}", result.compensated_steps);
     if let Some(ref failure) = result.failure {
-        println!("  - 失败步骤  : {}", failure.step_name);
-        println!("  - 失败原因  : {}", failure.error);
+        println!("  - failed step   : {}", failure.step_name);
+        println!("  - failure reason : {}", failure.error);
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔗 DBNexus 分布式事务 Saga 编排器示例");
+    println!("🔗 DBNexus distributed transaction Saga orchestrator example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建分片路由器（Saga 需要 ShardRouter）
     // ============================================
-    println!("--- 1. 创建分片路由器 ---\n");
+    println!("--- 1. create the shard router ---\n");
 
     let config = ShardConfig::new("hash", 2, "shard", "sqlite::memory:");
     let router = ShardRouter::with_config(&config).await?;
     let router = Arc::new(router);
 
-    println!("  ✓ 路由器创建成功");
-    println!("  - 分片数: {}", router.total_shards());
-    println!("  - 已初始化池: {:?}", router.initialized_shards());
+    println!("  ✓ Router created");
+    println!("  - shard count: {}", router.total_shards());
+    println!("  - initialized pools: {:?}", router.initialized_shards());
     println!();
 
     // ============================================
     // 2. 成功场景：跨分片转账全部成功
     // ============================================
-    println!("--- 2. 成功场景：跨分片转账 ---\n");
-    println!("  场景: 用户 A (shard 0) → 用户 B (shard 1) 转账 100 元\n");
+    println!("--- 2. success scenario: cross-shard transfer ---\n");
+    println!("  Scenario: user A (shard 0) → user B (shard 1) transfer 100\n");
 
     let debit_executed = Arc::new(AtomicBool::new(false));
     let credit_executed = Arc::new(AtomicBool::new(false));
 
     let steps = vec![
         SagaStep {
-            name: "扣款-账户A".to_string(),
+            name: "debit-accountA".to_string(),
             shard_id: 0,
             action: Box::new(DebitAction {
-                name: "扣款-账户A".to_string(),
+                name: "debit-accountA".to_string(),
                 should_fail: false,
                 executed: Arc::clone(&debit_executed),
             }),
             compensation: Box::new(RefundAction {
-                name: "退款-账户A".to_string(),
+                name: "refund-accountA".to_string(),
             }),
         },
         SagaStep {
-            name: "入账-账户B".to_string(),
+            name: "credit-accountB".to_string(),
             shard_id: 1,
             action: Box::new(CreditAction {
-                name: "入账-账户B".to_string(),
+                name: "credit-accountB".to_string(),
                 should_fail: false,
                 executed: Arc::clone(&credit_executed),
             }),
             compensation: Box::new(RefundAction {
-                name: "退款-账户B".to_string(),
+                name: "refund-accountB".to_string(),
             }),
         },
     ];
@@ -176,9 +176,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 查看 Saga 日志
     if let Some(log) = orchestrator.get_saga_log(&result.saga_id).await {
-        println!("  Saga 日志:");
+        println!("  Saga log:");
         println!("  - saga_id: {}", log.saga_id);
-        println!("  - 状态   : {:?}", log.status);
+        println!("  - status   : {:?}", log.status);
         for step_log in &log.steps {
             println!(
                 "    - {} (shard {}): action_success={}",
@@ -191,32 +191,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 3. 失败场景：第二步失败触发补偿
     // ============================================
-    println!("--- 3. 失败场景：入账失败触发补偿 ---\n");
-    println!("  场景: 扣款成功，但入账失败 → 自动补偿扣款\n");
+    println!("--- 3. failure scenario: credit failure triggers compensation ---\n");
+    println!("  Scenario: debit succeeded but credit failed → auto-compensate the debit\n");
 
     let steps = vec![
         SagaStep {
-            name: "扣款-账户A".to_string(),
+            name: "debit-accountA".to_string(),
             shard_id: 0,
             action: Box::new(DebitAction {
-                name: "扣款-账户A".to_string(),
+                name: "debit-accountA".to_string(),
                 should_fail: false,
                 executed: Arc::new(AtomicBool::new(false)),
             }),
             compensation: Box::new(RefundAction {
-                name: "退款-账户A".to_string(),
+                name: "refund-accountA".to_string(),
             }),
         },
         SagaStep {
-            name: "入账-账户B".to_string(),
+            name: "credit-accountB".to_string(),
             shard_id: 1,
             action: Box::new(CreditAction {
-                name: "入账-账户B".to_string(),
+                name: "credit-accountB".to_string(),
                 should_fail: true, // 模拟入账失败
                 executed: Arc::new(AtomicBool::new(false)),
             }),
             compensation: Box::new(RefundAction {
-                name: "退款-账户B".to_string(),
+                name: "refund-accountB".to_string(),
             }),
         },
     ];
@@ -230,13 +230,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. Saga 状态流转说明
     // ============================================
-    println!("--- 4. Saga 状态流转 ---\n");
-    println!("  ┌─────────┐    全部成功    ┌───────────┐");
+    println!("--- 4. Saga state transitions ---\n");
+    println!("  ┌─────────┐    all succeeded    ┌───────────┐");
     println!("  │ Running │ ──────────────→ │ Completed │");
     println!("  └────┬────┘                └───────────┘");
-    println!("       │ 某步失败");
+    println!("       │ a step failed");
     println!("       ▼");
-    println!("  ┌─────────────┐  补偿完成  ┌─────────┐");
+    println!("  ┌─────────────┐  compensation done  ┌─────────┐");
     println!("  │ Compensating│ ──────────→│ Failed  │");
     println!("  └─────────────┘            └─────────┘");
     println!();
@@ -244,20 +244,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. SagaError 类型
     // ============================================
-    println!("--- 5. SagaError 类型 ---\n");
+    println!("--- 5. SagaError types ---\n");
     println!("  ┌──────────────────────┬──────────────────────────────────┐");
-    println!("  │ 变体                 │ 说明                             │");
+    println!("  │ variant              │ description                              │");
     println!("  ├──────────────────────┼──────────────────────────────────┤");
-    println!("  │ ExecutionFailed      │ 正向动作执行失败                 │");
-    println!("  │ CompensationFailed   │ 补偿动作执行失败                 │");
-    println!("  │ Timeout              │ Saga 执行超时                    │");
+    println!("  │ ExecutionFailed      │ the forward action failed                │");
+    println!("  │ CompensationFailed   │ the compensation action failed           │");
+    println!("  │ Timeout              │ the Saga execution timed out             │");
     println!("  └──────────────────────┴──────────────────────────────────┘");
     println!();
 
     println!("========================================");
-    println!("✨ 分布式事务 Saga 示例完成！");
+    println!("✨ Distributed transaction Saga example complete!");
     println!("========================================");
-    println!("\n📚 关键 API:");
+    println!("\n📚 Key APIs:");
     println!("  - SagaOrchestrator::new(router)");
     println!("  - SagaStep {{ name, shard_id, action, compensation }}");
     println!("  - orchestrator.execute_saga(steps) -> SagaExecutionResult");

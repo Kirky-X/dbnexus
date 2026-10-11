@@ -6,6 +6,7 @@ use crate::domain::{
     PermissionAction, PermissionChecker, PermissionConfig, PermissionError, PermissionLifecycle,
     PermissionProvider, PolicyManager, RolePolicy,
 };
+use crate::i18n;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -71,9 +72,9 @@ impl PermissionLifecycle for MemoryPermissionProvider {
     async fn health_check(&self) -> anyhow::Result<()> {
         let guard = self.policies.read().unwrap();
         if guard.is_empty() {
-            return Err(anyhow::anyhow!(
-                "MemoryPermissionProvider 策略表未初始化：无任何角色策略（容量 0）"
-            ));
+            return Err(anyhow::anyhow!(i18n::t_simple(
+                "perm-provider-memory-policy-table-uninitialized"
+            )));
         }
         Ok(())
     }
@@ -94,7 +95,10 @@ mod tests {
     async fn health_check_fails_when_strategy_table_empty() {
         let provider = MemoryPermissionProvider::new();
         let result = provider.health_check().await;
-        assert!(result.is_err(), "空策略表必须报告不健康");
+        assert!(
+            result.is_err(),
+            "an empty policy table must report unhealthy"
+        );
     }
 
     #[tokio::test]
@@ -106,6 +110,9 @@ mod tests {
             .unwrap()
             .insert("admin".to_string(), RolePolicy { tables: Vec::new() });
         let result = provider.health_check().await;
-        assert!(result.is_ok(), "已加载策略的 provider 必须健康: {result:?}");
+        assert!(
+            result.is_ok(),
+            "a provider with loaded policies must be healthy: {result:?}"
+        );
     }
 }

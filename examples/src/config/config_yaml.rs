@@ -18,7 +18,7 @@ use dbnexus::{DbConfig, DbPool};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("📄 DBNexus YAML 配置示例");
+    println!("📄 DBNexus YAML configuration example");
     println!("========================================\n");
 
     // ============================================
@@ -43,19 +43,19 @@ cache_config:
   default_ttl: 600
 "#;
 
-    println!("YAML 配置内容:");
+    println!("YAML configuration content:");
     println!("{}", yaml_content);
 
     // ============================================
     // 2. 解析 YAML 配置
     // ============================================
     let config: DbConfig = serde_yaml_ng::from_str(yaml_content)?;
-    println!("✓ YAML 配置解析成功");
+    println!("✓ YAML configuration parsed");
 
     // ============================================
     // 3. 打印配置信息
     // ============================================
-    println!("\n📋 解析后的 DbConfig:");
+    println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(
         "  - max_connections   : {}",
@@ -83,26 +83,28 @@ cache_config:
     // 4. 创建连接池
     // ============================================
     let pool = DbPool::with_config(config).await?;
-    println!("\n✓ 连接池创建成功");
-    println!("  - 实际 URL      : {}", pool.config().url);
+    println!("\n✓ Pool created");
+    println!("  - actual URL       : {}", pool.config().url);
     println!(
-        "  - 实际最大连接数: {}",
+        "  - actual max connections: {}",
         pool.config().pool_config.max_connections
     );
 
     let status = pool.status();
-    println!("\n📊 连接池状态:");
-    println!("  - 总连接数: {}", status.total);
-    println!("  - 活跃连接: {}", status.active);
-    println!("  - 空闲连接: {}", status.idle);
+    println!("\n📊 Pool status:");
+    println!("  - total connections: {}", status.total);
+    println!("  - active connections: {}", status.active);
+    println!("  - idle connections: {}", status.idle);
 
     println!("\n========================================");
-    println!("✨ YAML 配置示例完成！");
+    println!("✨ YAML configuration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DbConfig 实现 serde::Deserialize，可直接从 YAML 反序列化");
-    println!("  - serde_yaml_ng::from_str 解析 YAML 字符串为 DbConfig");
-    println!("  - DbPool::with_config 使用 DbConfig 创建连接池");
+    println!("\n📚 Key concepts:");
+    println!(
+        "  - DbConfig implements serde::Deserialize and can be deserialized from YAML directly"
+    );
+    println!("  - serde_yaml_ng::from_str parses a YAML string into DbConfig");
+    println!("  - DbPool::with_config creates a pool from DbConfig");
 
     Ok(())
 }

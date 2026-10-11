@@ -25,23 +25,23 @@ fn workspace_metadata() -> Value {
         ])
         .current_dir(manifest_dir)
         .output()
-        .expect("cargo metadata 执行失败");
+        .expect("failed to run cargo metadata");
     assert!(
         output.status.success(),
-        "cargo metadata 失败：{}",
+        "cargo metadata failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).expect("cargo metadata 输出非合法 JSON")
+    serde_json::from_slice(&output.stdout).expect("cargo metadata output is not valid JSON")
 }
 
 /// 在 workspace 元数据中按名查找包
 fn workspace_package<'a>(meta: &'a Value, name: &str) -> &'a Value {
     meta["packages"]
         .as_array()
-        .expect("packages 数组")
+        .expect("packages array")
         .iter()
         .find(|p| p["name"] == name)
-        .unwrap_or_else(|| panic!("workspace 内必有 {name} 包"))
+        .unwrap_or_else(|| panic!("the workspace must contain the {name} package"))
 }
 
 /// 读取 dbnexus 包的 feature 依赖表
@@ -49,7 +49,7 @@ fn dbnexus_features() -> serde_json::Map<String, Value> {
     let meta = workspace_metadata();
     workspace_package(&meta, "dbnexus")["features"]
         .as_object()
-        .expect("features 表")
+        .expect("features table")
         .clone()
 }
 
@@ -99,12 +99,12 @@ fn sql_parser_feature_does_not_imply_cache() {
     let features = dbnexus_features();
     let sql_parser = features["sql-parser"]
         .as_array()
-        .expect("sql-parser feature 依赖列表");
+        .expect("sql-parser feature dependency list");
     assert!(
         !sql_parser
             .iter()
             .any(|dep| dep.as_str().is_some_and(implies_cache_entry)),
-        "sql-parser 不得隐含 cache（解析结果缓存改由库内同步 LRU 承接），实际依赖：{sql_parser:?}"
+        "sql-parser must not implicitly include cache (parse result caching is handled by an in-library sync LRU), actual dependencies: {sql_parser:?}"
     );
 }
 
@@ -117,7 +117,7 @@ fn sql_parser_closure_transitively_excludes_cache() {
     let closure = feature_closure(&features, "sql-parser");
     assert!(
         !closure.contains("cache"),
-        "sql-parser 传递闭包不得包含 cache（防间接拉取 oxcache），实际闭包：{closure:?}"
+        "the sql-parser transitive closure must not contain cache (prevents indirectly pulling oxcache), actual closure: {closure:?}"
     );
 }
 
@@ -129,10 +129,10 @@ fn permission_feature_carries_cache_explicitly() {
     let features = dbnexus_features();
     let permission = features["permission"]
         .as_array()
-        .expect("permission feature 依赖列表");
+        .expect("permission feature dependency list");
     assert!(
         permission.iter().any(|dep| dep.as_str() == Some("cache")),
-        "permission 须显式携带 cache（DbPool 权限策略缓存依赖），实际依赖：{permission:?}"
+        "permission must carry cache explicitly (DbPool permission policy cache dependency), actual dependencies: {permission:?}"
     );
 }
 
@@ -145,12 +145,12 @@ fn global_index_implies_entity_macros() {
     let features = dbnexus_features();
     let global_index = features["global-index"]
         .as_array()
-        .expect("global-index feature 依赖列表");
+        .expect("global-index feature dependency list");
     assert!(
         global_index
             .iter()
             .any(|dep| dep.as_str() == Some("entity-macros")),
-        "global-index 须蕴含 entity-macros（无驱动组合的实体 derive 依赖），实际依赖：{global_index:?}"
+        "global-index must imply entity-macros (entity derive without a driver combination), actual dependencies: {global_index:?}"
     );
 }
 
@@ -158,7 +158,7 @@ fn global_index_implies_entity_macros() {
 fn normal_dep_names(package: &Value) -> std::collections::BTreeSet<String> {
     package["dependencies"]
         .as_array()
-        .expect("dependencies 数组")
+        .expect("dependencies array")
         .iter()
         .filter(|d| d["kind"].is_null())
         .map(|d| d["name"].as_str().expect("dependency name").to_string())
@@ -179,7 +179,7 @@ fn limiter_port_does_not_depend_on_dbnexus_or_limiteron() {
         .collect();
     assert!(
         offenders.is_empty(),
-        "限流端口不得依赖 dbnexus/limiteron（防包级循环依赖），实际：{offenders:?}"
+        "the rate limit port must not depend on dbnexus/limiteron (prevents package-level cyclic dependencies), actual: {offenders:?}"
     );
 }
 
@@ -195,6 +195,6 @@ fn limiter_port_stays_async_trait_only() {
         ["async-trait"].into_iter().map(str::to_string).collect();
     assert_eq!(
         deps, expected,
-        "限流端口常规依赖须仅 async-trait（防依赖面膨胀/描述失真）"
+        "the rate limit port's regular dependencies must be async-trait only (prevents dependency-surface bloat/misdescription)"
     );
 }

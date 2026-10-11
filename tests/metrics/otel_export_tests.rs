@@ -44,11 +44,14 @@ async fn health_snapshot_json() -> (Arc<DbPool>, serde_json::Value, std::path::P
 async fn test_otel_events_from_health_snapshot() {
     let (_pool, snap, path) = health_snapshot_json().await;
     let events = metric_events_from_health_snapshot(&snap);
-    assert!(!events.is_empty(), "健康快照应映射出指标事件");
+    assert!(
+        !events.is_empty(),
+        "a health snapshot should map to metric events"
+    );
     let names: Vec<&str> = events.iter().map(|e| e.name.as_str()).collect();
     assert!(
         names.contains(&"dbnexus.pool.saturation"),
-        "池饱和度事件缺失: {names:?}"
+        "the pool saturation event is missing: {names:?}"
     );
     assert!(names.contains(&"dbnexus.pool.wait_count"));
     assert!(names.contains(&"dbnexus.slow_queries.count"));
@@ -116,10 +119,13 @@ async fn test_otel_export_to_mock_collector() {
     let rm = &body["resourceMetrics"][0];
     assert_eq!(
         rm["resource"]["attributes"][0]["key"], "service.name",
-        "OTLP 信封应含 resource 属性"
+        "the OTLP envelope should contain resource attributes"
     );
     let metrics = rm["scopeMetrics"][0]["metrics"].as_array().unwrap();
-    assert!(metrics.len() >= 3, "至少导出饱和度/等待/慢查询指标");
+    assert!(
+        metrics.len() >= 3,
+        "at least saturation/wait/slow-query metrics should be exported"
+    );
     let names: Vec<&str> = metrics
         .iter()
         .map(|m| m["name"].as_str().unwrap())
@@ -168,9 +174,15 @@ async fn test_otel_stdout_fallback_on_transport_failure() {
     // 传输失败但 stdout fallback 兜底 → 导出仍成功
     exporter.export_health_snapshot(&snap).await.unwrap();
     let lines = fallback_lines.lock().unwrap();
-    assert!(!lines.is_empty(), "传输失败时应输出 stdout fallback 行");
+    assert!(
+        !lines.is_empty(),
+        "a stdout fallback line should be output when the transport fails"
+    );
     let parsed: serde_json::Value = serde_json::from_str(&lines[0]).unwrap();
-    assert!(parsed["name"].is_string(), "fallback 行应为指标事件 JSON");
+    assert!(
+        parsed["name"].is_string(),
+        "the fallback line should be metric-event JSON"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -243,7 +255,7 @@ async fn test_otel_http_transport_against_mock_collector_socket() {
     let request = server.join().unwrap();
     assert!(
         request.starts_with("POST /v1/metrics HTTP/1.1\r\n"),
-        "应发出 OTLP metrics POST: {request}"
+        "an OTLP metrics POST should be issued: {request}"
     );
     assert!(request.contains("Content-Type: application/json"));
     // 请求体应包含指标名

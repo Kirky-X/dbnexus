@@ -39,8 +39,11 @@ fn temp_db_url(tag: &str) -> (PathBuf, String) {
 }
 
 fn parse_json_line(stdout: &str) -> serde_json::Value {
-    let line = stdout.lines().last().expect("至少输出一行 JSON");
-    serde_json::from_str(line).expect("stdout 末行应为合法 JSON")
+    let line = stdout
+        .lines()
+        .last()
+        .expect("should output at least one JSON line");
+    serde_json::from_str(line).expect("the last stdout line should be valid JSON")
 }
 
 #[cfg(feature = "sqlite")]
@@ -51,7 +54,11 @@ fn test_health_healthy_exit_0() {
         .args(["health", "--database-url", &url])
         .output()
         .expect("run health");
-    assert_eq!(output.status.code(), Some(0), "健康库应退出 0");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "reachable database should exit 0"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "healthy");
     assert_eq!(json["checks"]["connect"], "ok");
@@ -71,7 +78,11 @@ fn test_health_unreachable_exit_1() {
         ])
         .output()
         .expect("run health");
-    assert_eq!(output.status.code(), Some(1), "不可达库应退出 1");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "unreachable database should exit 1"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "unhealthy");
 }
@@ -82,7 +93,11 @@ fn test_health_invalid_url_exit_2() {
         .args(["health", "--database-url", "foo://localhost/db"])
         .output()
         .expect("run health");
-    assert_eq!(output.status.code(), Some(2), "非法协议应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid protocol should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "unhealthy");
     assert_eq!(json["checks"]["url"], "invalid");
@@ -116,7 +131,11 @@ fn test_migrate_applies_directory_exit_0() {
         ])
         .output()
         .expect("run migrate");
-    assert_eq!(output.status.code(), Some(0), "迁移成功应退出 0");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "a successful migration should exit 0"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
     assert_eq!(json["pending_total"], 2);
@@ -162,7 +181,7 @@ fn test_user_add_list_remove_lifecycle() {
         ])
         .output()
         .expect("run user add");
-    assert_eq!(output.status.code(), Some(0), "add 应退出 0");
+    assert_eq!(output.status.code(), Some(0), "add should exit 0");
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
     assert_eq!(json["action"], "add");
@@ -182,7 +201,7 @@ fn test_user_add_list_remove_lifecycle() {
         ])
         .output()
         .expect("run duplicate add");
-    assert_eq!(dup.status.code(), Some(1), "重复 add 应退出 1");
+    assert_eq!(dup.status.code(), Some(1), "a duplicate add should exit 1");
 
     // list
     let list = cli()
@@ -220,7 +239,11 @@ fn test_user_add_list_remove_lifecycle() {
         ])
         .output()
         .expect("run user remove again");
-    assert_eq!(rm2.status.code(), Some(1), "删除不存在用户应退出 1");
+    assert_eq!(
+        rm2.status.code(),
+        Some(1),
+        "deleting a non-existent user should exit 1"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -243,7 +266,11 @@ fn test_user_invalid_args_exit_2() {
         ])
         .output()
         .expect("run invalid add");
-    assert_eq!(output.status.code(), Some(2), "非法用户名应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid username should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "invalid_username");
 
@@ -261,7 +288,11 @@ fn test_user_invalid_args_exit_2() {
         ])
         .output()
         .expect("run empty password");
-    assert_eq!(output2.status.code(), Some(2), "空密码应退出 2");
+    assert_eq!(
+        output2.status.code(),
+        Some(2),
+        "empty password should exit 2"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -278,15 +309,25 @@ fn test_pool_status_healthy_exit_0() {
         .args(["pool-status", "--database-url", &url])
         .output()
         .expect("run pool-status");
-    assert_eq!(output.status.code(), Some(0), "可连库应退出 0");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "connectable database should exit 0"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert!(
         json["status"] == "healthy" || json["status"] == "degraded",
-        "可连库状态应为 healthy/degraded: {}",
+        "connectable status should be healthy/degraded: {}",
         json["status"]
     );
-    assert!(json["pool"]["total"].is_u64(), "应输出池连接总数");
-    assert!(json["pool"]["saturation"].is_number(), "应输出池饱和度");
+    assert!(
+        json["pool"]["total"].is_u64(),
+        "should print the pool total connection count"
+    );
+    assert!(
+        json["pool"]["saturation"].is_number(),
+        "should print the pool saturation"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -301,7 +342,11 @@ fn test_pool_status_unreachable_exit_1() {
         ])
         .output()
         .expect("run pool-status");
-    assert_eq!(output.status.code(), Some(1), "不可达库应退出 1");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "unreachable database should exit 1"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "unhealthy");
 }
@@ -313,7 +358,11 @@ fn test_pool_status_invalid_url_exit_2() {
         .args(["pool-status", "--database-url", "foo://localhost/db"])
         .output()
         .expect("run pool-status");
-    assert_eq!(output.status.code(), Some(2), "非法协议应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid protocol should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["checks"]["url"], "invalid");
 }
@@ -341,7 +390,7 @@ fn test_shard_info_lists_all_shards_exit_0() {
     assert_eq!(json["status"], "ok");
     assert_eq!(json["strategy"], "yearly");
     assert_eq!(json["total_shards"], 4);
-    let shards = json["shards"].as_array().expect("shards 数组");
+    let shards = json["shards"].as_array().expect("shards array");
     assert_eq!(shards.len(), 4);
     assert_eq!(shards[0]["shard_id"], 0);
     assert_eq!(shards[0]["name"], "db_0");
@@ -366,8 +415,12 @@ fn test_shard_info_route_key_exit_0() {
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     let route = &json["route"];
     assert_eq!(route["key"], "user-42");
-    let shard_id = route["shard_id"].as_u64().expect("shard_id 数值");
-    assert!(shard_id < 8, "路由结果必须落在分片范围内: {}", shard_id);
+    let shard_id = route["shard_id"].as_u64().expect("shard_id numeric value");
+    assert!(
+        shard_id < 8,
+        "routing result must fall within the shard range: {}",
+        shard_id
+    );
 }
 
 #[test]
@@ -376,7 +429,11 @@ fn test_shard_info_zero_shards_exit_2() {
         .args(["shard-info", "--strategy", "yearly", "--total-shards", "0"])
         .output()
         .expect("run shard-info");
-    assert_eq!(output.status.code(), Some(2), "total_shards=0 应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "total_shards=0 should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "error");
     assert_eq!(json["error_code"], "invalid_total_shards");
@@ -397,7 +454,7 @@ fn test_shard_info_unknown_strategy_exit_2() {
     assert_eq!(
         output.status.code(),
         Some(2),
-        "未知策略应退出 2（禁止静默回落）"
+        "unknown policy should exit 2 (silent fallback is forbidden)"
     );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "unknown_strategy");
@@ -415,7 +472,11 @@ fn test_audit_query_empty_exit_0() {
         .args(["audit-query", "--database-url", &url])
         .output()
         .expect("run audit-query");
-    assert_eq!(output.status.code(), Some(0), "空审计集应退出 0");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "empty audit set should exit 0"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
     assert_eq!(json["count"], 0);
@@ -515,8 +576,11 @@ fn test_audit_query_limit_truncates() {
         .expect("run audit-query --limit");
     assert_eq!(output.status.code(), Some(0));
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
-    assert_eq!(json["count"], 1, "limit=1 应只返回 1 条");
-    assert_eq!(json["truncated"], true, "超出上限应报告截断");
+    assert_eq!(json["count"], 1, "limit=1 should return only 1 row");
+    assert_eq!(
+        json["truncated"], true,
+        "exceeding the cap should report truncation"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -537,10 +601,17 @@ fn test_audit_query_other_operation_filter() {
         ])
         .output()
         .expect("run audit-query other:");
-    assert_eq!(output.status.code(), Some(0), "other: 前缀应可解析");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "other: prefix should be parseable"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
-    assert_eq!(json["count"], 0, "未写入 Other 事件时应为空集");
+    assert_eq!(
+        json["count"], 0,
+        "the set should be empty when no Other events were written"
+    );
     let _ = std::fs::remove_file(&path);
 }
 
@@ -592,7 +663,11 @@ fn test_audit_query_invalid_operation_exit_2() {
         ])
         .output()
         .expect("run audit-query");
-    assert_eq!(output.status.code(), Some(2), "非法操作枚举应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid operation enum should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "invalid_operation");
 }
@@ -611,7 +686,11 @@ fn test_audit_query_invalid_since_exit_2() {
         ])
         .output()
         .expect("run audit-query");
-    assert_eq!(output.status.code(), Some(2), "非法时间格式应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid time format should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "invalid_since");
 }
@@ -651,7 +730,11 @@ fn test_permission_check_allow_exit_0() {
         ])
         .output()
         .expect("run permission-check");
-    assert_eq!(output.status.code(), Some(0), "allow 决策应退出 0");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "allow decision should exit 0"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
     assert_eq!(json["decision"], "allow");
@@ -680,13 +763,16 @@ fn test_permission_check_deny_exit_1() {
         ])
         .output()
         .expect("run permission-check");
-    assert_eq!(output.status.code(), Some(1), "deny 决策应退出 1");
+    assert_eq!(output.status.code(), Some(1), "deny decision should exit 1");
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["status"], "ok");
-    assert_eq!(json["decision"], "deny", "fail-closed 退出语义不变");
+    assert_eq!(
+        json["decision"], "deny",
+        "fail-closed exit semantics unchanged"
+    );
     assert_eq!(
         json["raw_decision"], "not_applicable",
-        "无匹配策略应可辨（多为拼写/subject 配错）"
+        "an unmatched policy should be discernible (often a typo/subject mismatch)"
     );
     std::fs::remove_file(&perms).unwrap();
 }
@@ -707,7 +793,11 @@ fn test_permission_check_missing_file_exit_2() {
         ])
         .output()
         .expect("run permission-check");
-    assert_eq!(output.status.code(), Some(2), "权限文件缺失应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "missing permission file should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "permissions_file_unavailable");
 }
@@ -729,7 +819,11 @@ fn test_permission_check_invalid_action_exit_2() {
         ])
         .output()
         .expect("run permission-check");
-    assert_eq!(output.status.code(), Some(2), "非法 action 应退出 2");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid action should exit 2"
+    );
     let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(json["error_code"], "invalid_action");
     std::fs::remove_file(&perms).unwrap();

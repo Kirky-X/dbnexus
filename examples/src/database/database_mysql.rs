@@ -30,7 +30,7 @@ use dbnexus::{DbConfig, DbPool};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🐬 DBNexus MySQL 集成示例");
+    println!("🐬 DBNexus MySQL integration example");
     println!("========================================\n");
 
     // ============================================
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "mysql://root:root@localhost:3306/dbnexus_example".to_string());
 
-    println!("连接字符串: {}", db_url);
+    println!("connection string: {}", db_url);
 
     let config = DbConfig {
         url: db_url.clone(),
@@ -58,28 +58,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 2. 尝试创建连接池
     // ============================================
-    println!("\n尝试连接 MySQL...");
+    println!("\nTrying to connect to MySQL...");
     let pool = match DbPool::with_config(config).await {
         Ok(pool) => {
-            println!("✓ MySQL 连接成功！");
+            println!("✓ MySQL connected!");
             pool
         }
         Err(e) => {
-            println!("✗ 无法连接 MySQL");
-            println!("\n⚠️  连接失败，可能是以下原因：");
-            println!("  - MySQL 服务未启动");
-            println!("  - 连接字符串中的用户名/密码不正确");
-            println!("  - 数据库不存在");
-            println!("  - 网络不可达");
-            println!("\n📋 错误详情: {:?}", e);
-            println!("\n💡 解决方案：");
-            println!("  1. 使用 Docker 启动 MySQL：");
+            println!("✗ cannot connect to MySQL");
+            println!("\n⚠️  Connection failed. Possible reasons:");
+            println!("  - the MySQL server is not running");
+            println!("  - the username/password in the connection string is incorrect");
+            println!("  - the database does not exist");
+            println!("  - the network is unreachable");
+            println!("\n📋 Error details: {:?}", e);
+            println!("\n💡 Solution:");
+            println!("  1. start MySQL with Docker:");
             println!("     docker run -d --name mysql-dbnexus \\");
             println!("       -e MYSQL_ROOT_PASSWORD=root \\");
             println!("       -e MYSQL_DATABASE=dbnexus_example \\");
             println!("       -p 3306:3306 mysql:8");
-            println!("  2. 或设置 DATABASE_URL 环境变量指向可用实例");
-            println!("\nℹ️  示例已优雅处理连接失败，未 panic。");
+            println!("  2. or set the DATABASE_URL environment variable to an available instance");
+            println!(
+                "\nℹ️  The example handled the connection failure gracefully, without panicking."
+            );
             return Ok(());
         }
     };
@@ -88,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. 基本操作
     // ============================================
     let session = pool.get_session("admin").await?;
-    println!("\n✓ Session 获取成功 (角色: {})", session.role());
+    println!("\n✓ Session acquired (role: {})", session.role());
 
     // DDL: 建表
     session
@@ -101,37 +103,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )",
         )
         .await?;
-    println!("✓ users 表创建/确认成功");
+    println!("✓ users table created/confirmed");
 
     // DML: 插入（使用 INSERT IGNORE 避免重复插入报错）
     let insert_result = session
         .execute_raw("INSERT IGNORE INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
         .await?;
     println!(
-        "✓ 插入操作完成 (rows_affected: {})",
+        "✓ insert completed (rows_affected: {})",
         insert_result.rows_affected()
     );
 
     drop(session);
-    println!("ℹ️  Session 释放");
+    println!("ℹ️  Session released");
 
     // ============================================
     // 4. 连接池状态
     // ============================================
     let status = pool.status();
-    println!("\n📊 连接池状态:");
-    println!("  - 总连接数: {}", status.total);
-    println!("  - 活跃连接: {}", status.active);
-    println!("  - 空闲连接: {}", status.idle);
+    println!("\n📊 Pool status:");
+    println!("  - total connections: {}", status.total);
+    println!("  - active connections: {}", status.active);
+    println!("  - idle connections: {}", status.idle);
 
     println!("\n========================================");
-    println!("✨ MySQL 集成示例完成！");
+    println!("✨ MySQL integration example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - MySQL 连接字符串: mysql://user:pass@host:port/db");
-    println!("  - DbPool::with_config 统一入口，与 SQLite/PostgreSQL 用法一致");
-    println!("  - 无 MySQL 环境时通过 match 优雅处理，不 panic");
-    println!("  - AUTO_INCREMENT 是 MySQL 的自增主键语法");
+    println!("\n📚 Key concepts:");
+    println!("  - MySQL connection string: mysql://user:pass@host:port/db");
+    println!("  - DbPool::with_config is the unified entry point, same as SQLite/PostgreSQL");
+    println!("  - without a MySQL environment, handle it gracefully via match, no panic");
+    println!("  - AUTO_INCREMENT is MySQL's auto-increment primary key syntax");
 
     Ok(())
 }

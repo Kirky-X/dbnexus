@@ -23,13 +23,13 @@ use dbnexus::is_ddl_operation;
 
 fn main() {
     println!("========================================");
-    println!("🛡️  DBNexus SQL 注入检测示例");
+    println!("🛡️  DBNexus SQL injection detection example");
     println!("========================================\n");
 
     // ============================================
     // 1. 安全 SQL 检测（不应被标记为注入）
     // ============================================
-    println!("--- ✅ 安全 SQL（不应被检测为注入）---\n");
+    println!("--- ✅ safe SQL (should not be detected as injection) ---\n");
 
     let safe_sqls = [
         "SELECT id, name FROM users WHERE id = 1",
@@ -44,13 +44,13 @@ fn main() {
     for sql in safe_sqls {
         let is_injection = contains_sql_injection(sql);
         let mark = if !is_injection { "✅" } else { "❌" };
-        println!("  {} 安全: {}", mark, sql);
+        println!("  {} safe: {}", mark, sql);
     }
 
     // ============================================
     // 2. UNION 注入检测
     // ============================================
-    println!("\n--- 🚫 UNION 注入 ---\n");
+    println!("\n--- 🚫 UNION injection ---\n");
 
     let union_injections = [
         "SELECT * FROM users UNION SELECT * FROM admin",
@@ -62,13 +62,13 @@ fn main() {
     for sql in union_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 3. 布尔盲注检测（OR 1=1 等）
     // ============================================
-    println!("\n--- 🚫 布尔盲注 ---\n");
+    println!("\n--- 🚫 boolean blind injection ---\n");
 
     let boolean_injections = [
         "SELECT * FROM users WHERE id = 1 OR 1=1",
@@ -82,13 +82,13 @@ fn main() {
     for sql in boolean_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 4. 注释注入检测
     // ============================================
-    println!("\n--- 🚫 注释注入 ---\n");
+    println!("\n--- 🚫 comment injection ---\n");
 
     let comment_injections = [
         "SELECT * FROM users WHERE id = 1 -- ",
@@ -101,13 +101,13 @@ fn main() {
     for sql in comment_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 5. 堆叠查询检测
     // ============================================
-    println!("\n--- 🚫 堆叠查询 ---\n");
+    println!("\n--- 🚫 stacked queries ---\n");
 
     let stacked_injections = [
         "SELECT * FROM users; DROP TABLE users",
@@ -122,13 +122,13 @@ fn main() {
     for sql in stacked_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 6. 时间盲注检测
     // ============================================
-    println!("\n--- 🚫 时间盲注 ---\n");
+    println!("\n--- 🚫 time-based blind injection ---\n");
 
     let time_injections = [
         "SELECT * FROM users WHERE id = 1 AND SLEEP(5)",
@@ -141,13 +141,13 @@ fn main() {
     for sql in time_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 7. 信息泄露检测
     // ============================================
-    println!("\n--- 🚫 信息泄露 ---\n");
+    println!("\n--- 🚫 information disclosure ---\n");
 
     let info_injections = [
         "SELECT * FROM INFORMATION_SCHEMA.TABLES",
@@ -160,13 +160,13 @@ fn main() {
     for sql in info_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 8. Unicode 绕过防护
     // ============================================
-    println!("\n--- 🚫 Unicode 绕过防护 ---\n");
+    println!("\n--- 🚫 Unicode bypass protection ---\n");
 
     let unicode_injections = [
         // 全角字符尝试绕过
@@ -177,13 +177,13 @@ fn main() {
     for sql in unicode_injections {
         let detected = contains_sql_injection(sql);
         let mark = if detected { "🚫" } else { "❌" };
-        println!("  {} 检测到注入: {}", mark, sql);
+        println!("  {} injection detected: {}", mark, sql);
     }
 
     // ============================================
     // 9. DDL 操作检测
     // ============================================
-    println!("\n--- 🏗️  DDL 操作检测（is_ddl_operation）---\n");
+    println!("\n--- 🏗️  DDL operation detection (is_ddl_operation) ---\n");
 
     let ddl_cases = [
         ("CREATE TABLE users (id INT)", true),
@@ -200,14 +200,14 @@ fn main() {
     for (sql, expected) in ddl_cases {
         let is_ddl = is_ddl_operation(sql);
         let mark = if is_ddl == expected { "✔" } else { "✘" };
-        let category = if is_ddl { "DDL" } else { "非DDL" };
+        let category = if is_ddl { "DDL" } else { "non-DDL" };
         println!("  {} [{}] {}", mark, category, sql);
     }
 
     // ============================================
     // 10. 字符串字面量中的注入模式不误报
     // ============================================
-    println!("\n--- ✅ 字符串字面量不误报 ---\n");
+    println!("\n--- ✅ no false positives inside string literals ---\n");
 
     let string_literal_sqls = [
         "SELECT * FROM users WHERE name = 'test OR 1=1'",
@@ -217,23 +217,25 @@ fn main() {
     for sql in string_literal_sqls {
         let detected = contains_sql_injection(sql);
         let mark = if !detected { "✅" } else { "❌" };
-        println!("  {} 未误报: {}", mark, sql);
+        println!("  {} no false positive: {}", mark, sql);
     }
 
     println!("\n========================================");
-    println!("✨ SQL 注入检测示例完成！");
+    println!("✨ SQL injection detection example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - contains_sql_injection(sql)   检测 SQL 注入模式");
-    println!("  - is_ddl_operation(sql)         检测 DDL 操作");
-    println!("\n🛡️  检测覆盖的注入类型:");
-    println!("  • UNION 注入（UNION SELECT / UNION ALL SELECT）");
-    println!("  • 布尔盲注（OR 1=1 / OR TRUE / AND 1=1）");
-    println!("  • 时间盲注（SLEEP / BENCHMARK / PG_SLEEP / WAITFOR）");
-    println!("  • 堆叠查询（; DROP / ; DELETE / ; UPDATE 等）");
-    println!("  • 注释注入（-- / # / /* */）");
-    println!("  • 信息泄露（INFORMATION_SCHEMA / SYSOBJECTS）");
-    println!("  • 动态执行（EXEC / SP_EXECUTESQL / XP_CMDSHELL）");
-    println!("  • Unicode 绕过（全角字符 NFKC 规范化）");
-    println!("\n⚠️  字符串字面量中的注入模式不会被误报（已移除字符串内容）");
+    println!("\n📚 Key concepts:");
+    println!("  - contains_sql_injection(sql)   detect SQL injection patterns");
+    println!("  - is_ddl_operation(sql)         detect DDL operations");
+    println!("\n🛡️  Injection types covered:");
+    println!("  • UNION injection (UNION SELECT / UNION ALL SELECT)");
+    println!("  • boolean blind injection (OR 1=1 / OR TRUE / AND 1=1)");
+    println!("  • time-based blind injection (SLEEP / BENCHMARK / PG_SLEEP / WAITFOR)");
+    println!("  • stacked queries (; DROP / ; DELETE / ; UPDATE etc.)");
+    println!("  • comment injection (-- / # / /* */)");
+    println!("  • information disclosure (INFORMATION_SCHEMA / SYSOBJECTS)");
+    println!("  • dynamic execution (EXEC / SP_EXECUTESQL / XP_CMDSHELL)");
+    println!("  • Unicode bypass (full-width characters NFKC normalized)");
+    println!(
+        "\n⚠️  injection patterns inside string literals are not false positives (string content removed)"
+    );
 }

@@ -58,7 +58,10 @@ static EN_BUNDLE: OnceLock<FluentBundle<FluentResource>> = OnceLock::new();
 static ZH_BUNDLE: OnceLock<FluentBundle<FluentResource>> = OnceLock::new();
 
 /// Format a message from the Fluent catalog for the given language.
-fn format_from_bundle(lang: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
+///
+/// Visible to the crate so `DbI18nFormatter` can resolve messages for an
+/// explicit locale instead of the process-global current locale.
+pub(crate) fn format_from_bundle(lang: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
     let bundle = match lang {
         "zh" => ZH_BUNDLE.get_or_init(build_zh_bundle),
         _ => EN_BUNDLE.get_or_init(build_en_bundle),
@@ -115,6 +118,11 @@ config-invalid-url = Invalid URL: { $url }
 config-unsupported-protocol = Unsupported database protocol: { $protocol }
 config-parse-error = Parse error: { $reason }
 config-validation-error = Validation error: { $reason }
+config-confers-subscribe-failed = confers subscribe failed: { $error }
+config-confers-hot-reload-failed = permission hot reload failed: { $error }
+config-confers-skip-invalid-event = skip invalid permission event: { $error }
+config-confers-log-hot-reload = permission hot reload: { $error }
+config-confers-log-ack-failed = confers ack failed: { $error }
 
 db-connection = Database connection error: { $error }
 db-config = Configuration error: { $message }
@@ -139,6 +147,40 @@ migration-parse-error = Failed to parse migration file: { $reason }
 migration-execution-error = Migration execution failed: { $reason }
 migration-version-conflict = Migration version conflict: { $reason }
 migration-rollback-error = Migration rollback failed: { $reason }
+migration-rollback-no-down-section = Migration v{ $version } ({ $description }) has no rollable-back DOWN section
+migration-rollback-down-not-executable = The DOWN section exists but contains no executable statement; rollback is rejected to avoid a false rollback
+migration-identifier-empty = { $identifier_type } must not be empty
+migration-identifier-too-long = { $identifier_type } must not exceed 64 characters
+migration-identifier-invalid-chars = { $identifier_type } '{ $identifier }' contains invalid characters; only letters, digits and underscore are allowed, and it must not start with a digit
+migration-identifier-reserved-keyword = { $identifier_type } '{ $identifier }' is a reserved SQL keyword and is not allowed
+migration-identifier-type-table = table name
+migration-identifier-type-primary-key-column = primary key column name
+migration-identifier-type-column = column name
+migration-identifier-type-index = index name
+migration-identifier-type-index-column = index column name
+migration-identifier-type-new-column = new column name
+migration-identifier-type-fk-table = foreign key table name
+migration-identifier-type-fk-constraint = foreign key constraint name
+migration-identifier-type-fk-column = foreign key column name
+migration-identifier-type-fk-referenced-table = foreign key referenced table name
+migration-identifier-type-fk-referenced-column = foreign key referenced column name
+migration-sql-comment-create-table = -- Create table: { $name }
+migration-sql-comment-drop-table = -- Drop table: { $name }
+migration-sql-comment-alter-table = -- Alter table: { $name }
+migration-sql-comment-add-column = -- Add column: { $name }
+migration-sql-comment-drop-column = -- Drop column: { $name }
+migration-sql-comment-add-index = -- Add index: { $name }
+migration-sql-comment-drop-index = -- Drop index: { $name }
+migration-sql-comment-add-foreign-key = -- Add foreign key: { $name }
+migration-sql-comment-drop-foreign-key = -- Drop foreign key: { $name }
+migration-sqlite-drop-column-note = -- SQLite does not support dropping a column directly; rebuild table { $table } manually
+migration-sqlite-modify-column-note = -- SQLite does not support ALTER COLUMN; rebuild table { $table } manually to adjust column { $column }
+migration-sqlite-modify-type-note = -- SQLite does not support ALTER COLUMN; rebuild table { $table } manually to change the type of column { $column }
+migration-sqlite-modify-nullability-note = -- { $database } does not support altering column nullability directly; rebuild table { $table } manually to adjust the NOT NULL constraint of column { $column }
+migration-sqlite-modify-default-note = -- SQLite does not support ALTER COLUMN; rebuild table { $table } manually to change the default of column { $column }
+migration-scan-read-dir-failed = Failed to read migration directory: { $error }
+migration-scan-read-entry-failed = Failed to read migration entry: { $error }
+migration-scan-read-file-failed = Failed to read migration file: { $error }
 
 audit-write-error = Failed to write audit log: { $reason }
 audit-serialization-error = Failed to serialize audit data: { $reason }
@@ -147,6 +189,10 @@ audit-config-error = Invalid audit configuration: { $reason }
 perm-config-missing-field = missing required field: { $field }
 perm-config-invalid-value = invalid value for field '{ $field }': { $reason }
 perm-config-policy-not-found = policy file not found: { $path }
+perm-config-path-empty = Config path cannot be empty
+perm-config-path-parent-reference = Config path contains an invalid parent directory reference
+perm-config-path-safety-validation = Config path failed safety validation
+perm-config-yaml-feature-not-enabled = Cannot parse permission config: the 'yaml' feature is not enabled
 
 perm-denied = permission denied for { $operation } on { $resource }
 perm-role-not-found = role not found: { $role }
@@ -158,8 +204,18 @@ perm-provider-role-not-found = Role '{ $role }' not found
 perm-provider-load-error = Failed to load config: { $reason }
 perm-provider-check-error = Permission check failed: { $reason }
 perm-provider-unknown = Unknown error: { $reason }
+perm-provider-memory-policy-table-uninitialized = MemoryPermissionProvider policy table is not initialized: no role policies at all (capacity 0)
+perm-provider-yaml-file-unreadable = YamlPermissionProvider policy file is not readable ({ $path }): { $error }
+perm-provider-config-read-error = Permission config file read error (path='{ $path }'): { $error }
+perm-provider-lock-error = Lock error: permission provider internal state is poisoned
 perm-rate-limiter-error = rate limiter backend error: { $error }
 perm-rate-limit-audit-dropped = rate limit audit event dropped: { $error }
+perm-cache-log-insert-failed = PermissionCache insert failed (error omits the raw key): { $error }
+perm-cache-log-invalidate-failed = PermissionCache invalidate failed (error omits the raw key): { $error }
+perm-cache-log-clear-failed = PermissionCache clear failed: { $error }
+prepare-cache-log-read-miss = PreparedStatementCache { $op } read failed, treated as a cache miss: { $error }
+prepare-cache-log-write-failed = PreparedStatementCache { $op } write failed: { $error }
+prepare-cache-log-clear-failed = PreparedStatementCache clear failed: { $error }
 
 sql-parse-error = Failed to parse SQL: { $reason }
 sql-unsupported-statement = Unsupported SQL statement type: { $stmt_type }
@@ -221,10 +277,7 @@ error-category-syntax-error = SyntaxError
 error-category-shard-conflict = ShardConflict
 
 query-error-report = [{ $category }] { $message } — Suggestion: { $suggestion }
-query-error-suggestion = Suggestion: { $suggestion }
 query-error-suggestion-code-table = Refer to the error code table to determine the handling strategy
-query-error-table = Table: { $table }
-query-error-operation = Operation: { $operation }
 
 error-code = Error code: { $code } ({ $name })
 
@@ -318,6 +371,13 @@ cli-permissions-file-unavailable = permissions file does not exist or is not rea
 cli-permissions-file-load-failed = permissions file could not be loaded: { $error }
 cli-permissions-file-invalid = permissions file could not be evaluated (malformed config)
 cli-unsupported-db-url-protocol = unsupported database URL protocol
+cli-migration-file-not-found-for-rollback = Migration file for v{ $version } ({ $description }) was not found; cannot run the DOWN rollback
+cli-migration-rollback-failed = Migration rollback failed for v{ $version }: { $error }
+cli-schema-diff-up-placeholder = -- Auto-generated UP SQL, please edit manually
+cli-schema-diff-down-placeholder = -- Auto-generated DOWN SQL, please edit manually
+cli-invalid-database-url-format = Invalid database URL format: { $error }
+cli-database-not-supported = { $database } is not supported
+cli-unsupported-database-protocol = Unsupported database protocol: '{ $protocol }'. Supported protocols: sqlite, postgres, mysql
 
 pool-invalid-config = Invalid configuration: { $error }
 pool-read-config-failed = Failed to read permission config file '{ $path }': { $error }
@@ -327,6 +387,24 @@ pool-invalid-db-url = Invalid database URL: { $error }
 pool-recreate-failed = Failed to recreate connections: { $error }
 pool-log-acquire-timeout = pool acquire timeout: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
 pool-log-idle-check-wait-timeout = pool acquire waited for idle-connection check: waited_ms={ $waited_ms } in_progress={ $in_progress }
+
+health-check-timeout = Health check timed out
+health-check-timeout-recommendation = Health check timed out; optimize the check logic
+health-recommendation-check-connection-config = Check that the database connection configuration is correct
+health-recommendation-check-network = Verify that the network connection is stable
+health-recommendation-ensure-pool-initialized = Ensure that the database connection pool is initialized correctly
+health-recommendation-wait-circuit-breaker = Wait for the circuit breaker to recover
+health-recommendation-increase-pool-size = Consider increasing the connection pool size
+health-recommendation-check-connection-leak = Check for connection leaks
+health-recommendation-increase-min-connections = Consider increasing the minimum number of connections
+health-status-failure-rate-too-high = Connection failure rate too high: { $failed }/{ $created } ({ $percent }%)
+health-status-no-connections = No connections available
+health-status-circuit-breaker-open = Circuit breaker is open; requests are rejected
+health-status-pool-full = Connection pool full: { $active }/{ $total } active, { $waiting } waiting
+health-status-no-idle-connections = No idle connections
+health-details-pool = Connection pool: total={ $total }, active={ $active }, idle={ $idle }, waiting={ $waiting }
+health-details-stats = Statistics: created={ $created }, failed={ $failed }, closed={ $closed }
+health-details-circuit-breaker = Circuit breaker: { $state } ({ $failures } failures, { $successes } successes)
 session-txn-begin-failed = Failed to begin transaction: { $error }
 session-txn-begin-graph-failed = Failed to begin graph transaction: { $error }
 session-txn-commit-failed = Failed to commit graph transaction: { $error }
@@ -347,7 +425,15 @@ session-log-rate-limited = rate limited: table access throttled (retry_after={ $
 session-already-in-transaction = Already in transaction
 session-already-in-transaction-concurrent = Already in transaction (concurrent begin detected)
 session-already-in-graph-transaction = Already in graph transaction
+session-already-in-graph-transaction-concurrent = Already in graph transaction (concurrent begin detected)
 session-connection-not-available = Connection not available - Session may have been invalidated
+session-not-in-transaction = Not in transaction
+session-no-active-transaction-commit = No active transaction to commit
+session-no-active-transaction-rollback = No active transaction to rollback
+session-commit-transaction-in-use = Cannot commit: transaction is in use by a concurrent query
+session-rollback-transaction-in-use = Cannot rollback: transaction is in use by a concurrent query
+session-duckdb-ddl-admin-only = DDL operations are only allowed for the admin role in DuckDB context. Current role: '{ $role }', Admin role: '{ $admin_role }'
+session-ddl-admin-only = DDL operations are only allowed for the admin role. Current role: '{ $role }', Admin role: '{ $admin_role }'
 
 copy-path-empty = COPY file path must not be empty
 copy-insert-column-required = INSERT requires at least one column
@@ -373,6 +459,24 @@ duckdb-txn-begin-failed = DuckDB begin transaction failed: { $error }
 duckdb-txn-commit-failed = DuckDB commit failed: { $error }
 duckdb-spawn-blocking-join-failed = spawn_blocking join failed: { $error }
 
+neo4j-connect-failed = neo4j connect: { $error }
+neo4j-url-no-credentials-env = neo4j URL has no credentials and the { $variable } environment variable is not set
+neo4j-url-invalid-and-env-missing = neo4j URL is not a valid URL and the { $variable } environment variable is not set
+neo4j-not-connected = Neo4jConnection not connected (placeholder)
+neo4j-execute-failed = neo4j execute: { $error }
+neo4j-execute-with-params-failed = neo4j execute (params): { $error }
+neo4j-row-fetch-failed = neo4j row fetch: { $error }
+neo4j-row-deserialize-failed = neo4j row deserialize: { $error }
+neo4j-health-check-no-rows = neo4j health check returned no rows
+neo4j-start-txn-failed = neo4j start_txn: { $error }
+neo4j-transaction-consumed = neo4j transaction already consumed
+neo4j-commit-failed = neo4j commit: { $error }
+neo4j-rollback-failed = neo4j rollback: { $error }
+neo4j-txn-execute-failed = neo4j txn execute: { $error }
+neo4j-txn-execute-with-params-failed = neo4j txn execute (params): { $error }
+neo4j-txn-row-fetch-failed = neo4j txn row fetch: { $error }
+neo4j-txn-row-deserialize-failed = neo4j txn row deserialize: { $error }
+
 repository-version-column-unsafe = repository version column must be a safe identifier: '{ $column }'
 repository-version-field-missing = update_if_version requires field '{ $column }' on the entity
 repository-version-column-integer = version column '{ $column }' must be an integer
@@ -380,6 +484,7 @@ repository-column-unsafe = repository column must be a safe identifier: '{ $colu
 repository-entity-deserialize-failed = entity deserialize failed: { $error }
 
 shard-route-unregistered = shard key '{ $key }' routed to unregistered shard { $shard_id }
+shard-migration-orchestration-not-implemented = Shard migration orchestration is not implemented yet: the MigrationExecutor is not wired in, so this shard ran no migrations
 
 migration-history-table-invalid = illegal migration history table name: { $name }
 
@@ -393,6 +498,19 @@ query-cache-tables-required = query cache requires at least one table in `tables
 query-cache-version-read-failed = query cache table version read failed: { $error }
 query-cache-params-encode-failed = query cache params encode failed: { $error }
 query-cache-table-name-invalid = query cache table name is invalid: '{ $table }' (allowed: letters/digits/underscore/dot, must not start with a digit)
+
+otel-serialize-failed = serialize failed: { $error }
+otel-http-task-failed = otlp http task failed: { $error }
+otel-endpoint-not-http = otlp endpoint must be http:// (got: { $endpoint })
+otel-connect-failed = otlp connect failed: { $error }
+otel-write-failed = otlp write failed: { $error }
+otel-read-failed = otlp read failed: { $error }
+otel-collector-non-2xx = otlp collector responded non-2xx: { $status }
+otel-export-failed = otlp export failed: { $error }
+
+kit-health-no-connections = no connections established
+kit-health-waiting = { $waiting } waiting, { $active }/{ $total } active/total
+kit-health-no-idle = no idle connections, { $active }/{ $total } active/total
 
 example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
 "#;
@@ -413,6 +531,11 @@ config-invalid-url = 无效的 URL: { $url }
 config-unsupported-protocol = 不支持的数据库协议: { $protocol }
 config-parse-error = 解析错误: { $reason }
 config-validation-error = 验证错误: { $reason }
+config-confers-subscribe-failed = confers 订阅失败: { $error }
+config-confers-hot-reload-failed = 权限热重载失败: { $error }
+config-confers-skip-invalid-event = 跳过无效的权限变更事件: { $error }
+config-confers-log-hot-reload = 权限热重载: { $error }
+config-confers-log-ack-failed = confers 确认失败: { $error }
 
 db-connection = 数据库连接错误: { $error }
 db-config = 配置错误: { $message }
@@ -437,6 +560,40 @@ migration-parse-error = 迁移文件解析失败: { $reason }
 migration-execution-error = 迁移执行失败: { $reason }
 migration-version-conflict = 迁移版本冲突: { $reason }
 migration-rollback-error = 迁移回滚失败: { $reason }
+migration-rollback-no-down-section = 迁移 v{ $version } ({ $description }) 无可回滚的 DOWN 部分
+migration-rollback-down-not-executable = DOWN 段存在但不含可执行语句，拒绝回滚以避免假回滚
+migration-identifier-empty = { $identifier_type }不能为空
+migration-identifier-too-long = { $identifier_type }长度不能超过 64 个字符
+migration-identifier-invalid-chars = { $identifier_type } '{ $identifier }' 包含无效字符，只允许字母、数字和下划线，且不能以数字开头
+migration-identifier-reserved-keyword = { $identifier_type } '{ $identifier }' 是 SQL 保留关键字，不允许使用
+migration-identifier-type-table = 表名
+migration-identifier-type-primary-key-column = 主键列名
+migration-identifier-type-column = 列名
+migration-identifier-type-index = 索引名
+migration-identifier-type-index-column = 索引列名
+migration-identifier-type-new-column = 新列名
+migration-identifier-type-fk-table = 外键表名
+migration-identifier-type-fk-constraint = 外键约束名
+migration-identifier-type-fk-column = 外键列名
+migration-identifier-type-fk-referenced-table = 外键引用表名
+migration-identifier-type-fk-referenced-column = 外键引用列名
+migration-sql-comment-create-table = -- 创建表: { $name }
+migration-sql-comment-drop-table = -- 删除表: { $name }
+migration-sql-comment-alter-table = -- 修改表: { $name }
+migration-sql-comment-add-column = -- 添加列: { $name }
+migration-sql-comment-drop-column = -- 删除列: { $name }
+migration-sql-comment-add-index = -- 添加索引: { $name }
+migration-sql-comment-drop-index = -- 删除索引: { $name }
+migration-sql-comment-add-foreign-key = -- 添加外键: { $name }
+migration-sql-comment-drop-foreign-key = -- 删除外键: { $name }
+migration-sqlite-drop-column-note = -- SQLite 不支持直接删除列，请手动重建表 { $table }
+migration-sqlite-modify-column-note = -- SQLite 不支持修改列定义，请手动重建表 { $table } 以调整列 { $column }
+migration-sqlite-modify-type-note = -- SQLite 不支持修改列类型，请手动重建表 { $table } 以调整列 { $column } 的类型
+migration-sqlite-modify-nullability-note = -- { $database } 不支持直接修改列可空性，请手动重建表 { $table } 以调整列 { $column } 的 NOT NULL 约束
+migration-sqlite-modify-default-note = -- SQLite 不支持修改列默认值，请手动重建表 { $table } 以调整列 { $column } 的默认值
+migration-scan-read-dir-failed = 读取迁移目录失败: { $error }
+migration-scan-read-entry-failed = 读取迁移目录条目失败: { $error }
+migration-scan-read-file-failed = 读取迁移文件失败: { $error }
 
 audit-write-error = 审计日志写入失败: { $reason }
 audit-serialization-error = 审计数据序列化失败: { $reason }
@@ -445,6 +602,10 @@ audit-config-error = 审计配置无效: { $reason }
 perm-config-missing-field = 缺少必填字段: { $field }
 perm-config-invalid-value = 字段 '{ $field }' 的值无效: { $reason }
 perm-config-policy-not-found = 策略文件未找到: { $path }
+perm-config-path-empty = 配置路径不能为空
+perm-config-path-parent-reference = 配置路径包含无效的父目录引用
+perm-config-path-safety-validation = 配置路径未通过安全性校验
+perm-config-yaml-feature-not-enabled = 无法解析权限配置：未启用 'yaml' 特性
 
 perm-denied = 对 { $resource } 的 { $operation } 操作权限被拒绝
 perm-role-not-found = 角色未找到: { $role }
@@ -456,8 +617,18 @@ perm-provider-role-not-found = 角色 '{ $role }' 未找到
 perm-provider-load-error = 加载配置失败: { $reason }
 perm-provider-check-error = 权限检查失败: { $reason }
 perm-provider-unknown = 未知错误: { $reason }
+perm-provider-memory-policy-table-uninitialized = MemoryPermissionProvider 策略表未初始化：无任何角色策略（容量 0）
+perm-provider-yaml-file-unreadable = YamlPermissionProvider 策略文件不可读（{ $path }）: { $error }
+perm-provider-config-read-error = 权限配置文件读取错误（path='{ $path }'）: { $error }
+perm-provider-lock-error = 锁错误: 权限提供器内部状态已中毒
 perm-rate-limiter-error = 限流后端故障: { $error }
 perm-rate-limit-audit-dropped = 限流审计事件已丢弃: { $error }
+perm-cache-log-insert-failed = PermissionCache 插入失败（错误不含键原文）: { $error }
+perm-cache-log-invalidate-failed = PermissionCache invalidate 失败（错误不含键原文）: { $error }
+perm-cache-log-clear-failed = PermissionCache clear 失败: { $error }
+prepare-cache-log-read-miss = PreparedStatementCache { $op } 读取失败，按未命中处理: { $error }
+prepare-cache-log-write-failed = PreparedStatementCache { $op } 写入失败: { $error }
+prepare-cache-log-clear-failed = PreparedStatementCache clear 失败: { $error }
 
 sql-parse-error = SQL 解析失败: { $reason }
 sql-unsupported-statement = 不支持的 SQL 语句类型: { $stmt_type }
@@ -519,10 +690,7 @@ error-category-syntax-error = 语法错误
 error-category-shard-conflict = 分片冲突
 
 query-error-report = [{ $category }] { $message } — 建议: { $suggestion }
-query-error-suggestion = 建议: { $suggestion }
 query-error-suggestion-code-table = 参考错误码表定位处理策略
-query-error-table = 表: { $table }
-query-error-operation = 操作: { $operation }
 
 error-code = 错误码: { $code }（{ $name }）
 
@@ -616,6 +784,13 @@ cli-permissions-file-unavailable = 权限配置文件不存在或不可读
 cli-permissions-file-load-failed = 权限配置文件加载失败: { $error }
 cli-permissions-file-invalid = 权限配置文件无法求值（配置格式错误）
 cli-unsupported-db-url-protocol = 不支持的数据库 URL 协议
+cli-migration-file-not-found-for-rollback = 未找到迁移 v{ $version } ({ $description }) 的迁移文件，无法执行 DOWN 回滚
+cli-migration-rollback-failed = 迁移 v{ $version } 回滚失败: { $error }
+cli-schema-diff-up-placeholder = -- 自动生成的 UP SQL 请手动编辑
+cli-schema-diff-down-placeholder = -- 自动生成的 DOWN SQL 请手动编辑
+cli-invalid-database-url-format = 无效的数据库 URL 格式: { $error }
+cli-database-not-supported = 不支持 { $database }
+cli-unsupported-database-protocol = 不支持的数据库协议: '{ $protocol }'。支持的协议: sqlite、postgres、mysql
 
 pool-invalid-config = 无效的配置: { $error }
 pool-read-config-failed = 读取权限配置文件 '{ $path }' 失败: { $error }
@@ -625,6 +800,24 @@ pool-invalid-db-url = 无效的数据库 URL: { $error }
 pool-recreate-failed = 重新创建连接失败: { $error }
 pool-log-acquire-timeout = 连接池获取超时: waited_ms={ $waited_ms } timeout_ms={ $timeout_ms } waiters={ $waiters }
 pool-log-idle-check-wait-timeout = 连接池获取等待空闲连接校验回填超时: waited_ms={ $waited_ms } in_progress={ $in_progress }
+
+health-check-timeout = 健康检查超时
+health-check-timeout-recommendation = 健康检查超时，建议优化检查逻辑
+health-recommendation-check-connection-config = 检查数据库连接配置是否正确
+health-recommendation-check-network = 验证网络连接是否稳定
+health-recommendation-ensure-pool-initialized = 请确保数据库连接池已正确初始化
+health-recommendation-wait-circuit-breaker = 等待熔断器恢复
+health-recommendation-increase-pool-size = 考虑增加连接池大小
+health-recommendation-check-connection-leak = 检查是否有连接泄露
+health-recommendation-increase-min-connections = 考虑增加最小连接数
+health-status-failure-rate-too-high = 连接失败率过高: { $failed }/{ $created } ({ $percent }%)
+health-status-no-connections = 无可用连接
+health-status-circuit-breaker-open = 熔断器已打开，请求被拒绝
+health-status-pool-full = 连接池已满: { $active }/{ $total } 活跃, { $waiting } 等待
+health-status-no-idle-connections = 无空闲连接
+health-details-pool = 连接池: total={ $total }, active={ $active }, idle={ $idle }, waiting={ $waiting }
+health-details-stats = 统计: created={ $created }, failed={ $failed }, closed={ $closed }
+health-details-circuit-breaker = 熔断器: { $state } ({ $failures } 次失败, { $successes } 次成功)
 session-txn-begin-failed = 开始事务失败: { $error }
 session-txn-begin-graph-failed = 开始图事务失败: { $error }
 session-txn-commit-failed = 提交图事务失败: { $error }
@@ -645,7 +838,15 @@ session-log-rate-limited = 速率受限: 表访问被限流 (retry_after={ $retr
 session-already-in-transaction = 已处于事务中
 session-already-in-transaction-concurrent = 已处于事务中（检测到并发开启）
 session-already-in-graph-transaction = 已处于图事务中
+session-already-in-graph-transaction-concurrent = 已处于图事务中（检测到并发开启）
 session-connection-not-available = 连接不可用 - 会话可能已失效
+session-not-in-transaction = 不在事务中
+session-no-active-transaction-commit = 没有活动事务可提交
+session-no-active-transaction-rollback = 没有活动事务可回滚
+session-commit-transaction-in-use = 无法提交：事务正被并发查询使用
+session-rollback-transaction-in-use = 无法回滚：事务正被并发查询使用
+session-duckdb-ddl-admin-only = DuckDB 上下文中 DDL 操作仅允许 admin 角色。当前角色: '{ $role }'，admin 角色: '{ $admin_role }'
+session-ddl-admin-only = DDL 操作仅允许 admin 角色。当前角色: '{ $role }'，admin 角色: '{ $admin_role }'
 
 copy-path-empty = COPY 文件路径不能为空
 copy-insert-column-required = INSERT 至少需要一列
@@ -671,6 +872,24 @@ duckdb-txn-begin-failed = DuckDB 开始事务失败: { $error }
 duckdb-txn-commit-failed = DuckDB 提交事务失败: { $error }
 duckdb-spawn-blocking-join-failed = spawn_blocking 任务 join 失败: { $error }
 
+neo4j-connect-failed = neo4j 连接失败: { $error }
+neo4j-url-no-credentials-env = neo4j URL 无凭据，且未设置 { $variable } 环境变量
+neo4j-url-invalid-and-env-missing = neo4j URL 不是合法 URL，且未设置 { $variable } 环境变量
+neo4j-not-connected = Neo4jConnection 未连接（占位连接）
+neo4j-execute-failed = neo4j 执行失败: { $error }
+neo4j-execute-with-params-failed = neo4j 参数化执行失败: { $error }
+neo4j-row-fetch-failed = neo4j 行读取失败: { $error }
+neo4j-row-deserialize-failed = neo4j 行反序列化失败: { $error }
+neo4j-health-check-no-rows = neo4j 健康检查未返回任何行
+neo4j-start-txn-failed = neo4j 开启事务失败: { $error }
+neo4j-transaction-consumed = neo4j 事务已被消耗
+neo4j-commit-failed = neo4j 提交失败: { $error }
+neo4j-rollback-failed = neo4j 回滚失败: { $error }
+neo4j-txn-execute-failed = neo4j 事务内执行失败: { $error }
+neo4j-txn-execute-with-params-failed = neo4j 事务内参数化执行失败: { $error }
+neo4j-txn-row-fetch-failed = neo4j 事务内行读取失败: { $error }
+neo4j-txn-row-deserialize-failed = neo4j 事务内行反序列化失败: { $error }
+
 repository-version-column-unsafe = repository 版本列必须是安全标识符: '{ $column }'
 repository-version-field-missing = update_if_version 要求实体包含字段 '{ $column }'
 repository-version-column-integer = 版本列 '{ $column }' 必须是整数
@@ -678,6 +897,7 @@ repository-column-unsafe = repository 列必须是安全标识符: '{ $column }'
 repository-entity-deserialize-failed = 实体反序列化失败: { $error }
 
 shard-route-unregistered = 分片键 '{ $key }' 路由到未注册的分片 { $shard_id }
+shard-migration-orchestration-not-implemented = 分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移
 
 migration-history-table-invalid = 非法的迁移历史表名: { $name }
 
@@ -691,6 +911,19 @@ query-cache-tables-required = 查询缓存要求 tables 中至少声明一个表
 query-cache-version-read-failed = 查询缓存表版本读取失败: { $error }
 query-cache-params-encode-failed = 查询缓存参数编码失败: { $error }
 query-cache-table-name-invalid = 查询缓存表名无效: '{ $table }'（允许字母/数字/下划线/点，不得以数字开头）
+
+otel-serialize-failed = 序列化失败: { $error }
+otel-http-task-failed = otlp HTTP 任务失败: { $error }
+otel-endpoint-not-http = otlp 端点必须为 http://（当前: { $endpoint }）
+otel-connect-failed = otlp 连接失败: { $error }
+otel-write-failed = otlp 写入失败: { $error }
+otel-read-failed = otlp 读取失败: { $error }
+otel-collector-non-2xx = otlp collector 返回非 2xx: { $status }
+otel-export-failed = otlp 导出失败: { $error }
+
+kit-health-no-connections = 尚未建立任何连接
+kit-health-waiting = { $waiting } 个等待，{ $active }/{ $total } 活跃/总数
+kit-health-no-idle = 无空闲连接，{ $active }/{ $total } 活跃/总数
 
 example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
 "#;
@@ -936,6 +1169,121 @@ mod tests {
             "query-cache-params-encode-failed",
             "query-cache-table-name-invalid",
             "example-replica-routing-api-replica-pool-new",
+            // i18n 审计接线批次（zh 硬编码英文化 + 硬编码英文字符串入目录）
+            "migration-rollback-no-down-section",
+            "migration-rollback-down-not-executable",
+            "migration-identifier-empty",
+            "migration-identifier-too-long",
+            "migration-identifier-invalid-chars",
+            "migration-identifier-reserved-keyword",
+            "migration-identifier-type-table",
+            "migration-identifier-type-primary-key-column",
+            "migration-identifier-type-column",
+            "migration-identifier-type-index",
+            "migration-identifier-type-index-column",
+            "migration-identifier-type-new-column",
+            "migration-identifier-type-fk-table",
+            "migration-identifier-type-fk-constraint",
+            "migration-identifier-type-fk-column",
+            "migration-identifier-type-fk-referenced-table",
+            "migration-identifier-type-fk-referenced-column",
+            "migration-sql-comment-create-table",
+            "migration-sql-comment-drop-table",
+            "migration-sql-comment-alter-table",
+            "migration-sql-comment-add-column",
+            "migration-sql-comment-drop-column",
+            "migration-sql-comment-add-index",
+            "migration-sql-comment-drop-index",
+            "migration-sql-comment-add-foreign-key",
+            "migration-sql-comment-drop-foreign-key",
+            "migration-sqlite-drop-column-note",
+            "migration-sqlite-modify-column-note",
+            "migration-sqlite-modify-type-note",
+            "migration-sqlite-modify-nullability-note",
+            "migration-sqlite-modify-default-note",
+            "migration-scan-read-dir-failed",
+            "migration-scan-read-entry-failed",
+            "migration-scan-read-file-failed",
+            "config-confers-subscribe-failed",
+            "config-confers-hot-reload-failed",
+            "config-confers-skip-invalid-event",
+            "config-confers-log-hot-reload",
+            "config-confers-log-ack-failed",
+            "perm-config-path-empty",
+            "perm-config-path-parent-reference",
+            "perm-config-path-safety-validation",
+            "perm-config-yaml-feature-not-enabled",
+            "perm-provider-memory-policy-table-uninitialized",
+            "perm-provider-yaml-file-unreadable",
+            "perm-provider-config-read-error",
+            "perm-provider-lock-error",
+            "cli-migration-file-not-found-for-rollback",
+            "cli-migration-rollback-failed",
+            "cli-schema-diff-up-placeholder",
+            "cli-schema-diff-down-placeholder",
+            "cli-invalid-database-url-format",
+            "cli-database-not-supported",
+            "cli-unsupported-database-protocol",
+            "session-already-in-graph-transaction-concurrent",
+            "session-not-in-transaction",
+            "session-no-active-transaction-commit",
+            "session-no-active-transaction-rollback",
+            "session-commit-transaction-in-use",
+            "session-rollback-transaction-in-use",
+            "session-duckdb-ddl-admin-only",
+            "session-ddl-admin-only",
+            "health-check-timeout",
+            "health-check-timeout-recommendation",
+            "health-recommendation-check-connection-config",
+            "health-recommendation-check-network",
+            "health-recommendation-ensure-pool-initialized",
+            "health-recommendation-wait-circuit-breaker",
+            "health-recommendation-increase-pool-size",
+            "health-recommendation-check-connection-leak",
+            "health-recommendation-increase-min-connections",
+            "health-status-failure-rate-too-high",
+            "health-status-no-connections",
+            "health-status-circuit-breaker-open",
+            "health-status-pool-full",
+            "health-status-no-idle-connections",
+            "health-details-pool",
+            "health-details-stats",
+            "health-details-circuit-breaker",
+            "shard-migration-orchestration-not-implemented",
+            "neo4j-connect-failed",
+            "neo4j-url-no-credentials-env",
+            "neo4j-url-invalid-and-env-missing",
+            "neo4j-not-connected",
+            "neo4j-execute-failed",
+            "neo4j-execute-with-params-failed",
+            "neo4j-row-fetch-failed",
+            "neo4j-row-deserialize-failed",
+            "neo4j-health-check-no-rows",
+            "neo4j-start-txn-failed",
+            "neo4j-transaction-consumed",
+            "neo4j-commit-failed",
+            "neo4j-rollback-failed",
+            "neo4j-txn-execute-failed",
+            "neo4j-txn-execute-with-params-failed",
+            "neo4j-txn-row-fetch-failed",
+            "neo4j-txn-row-deserialize-failed",
+            "otel-serialize-failed",
+            "otel-http-task-failed",
+            "otel-endpoint-not-http",
+            "otel-connect-failed",
+            "otel-write-failed",
+            "otel-read-failed",
+            "otel-collector-non-2xx",
+            "otel-export-failed",
+            "kit-health-no-connections",
+            "kit-health-waiting",
+            "kit-health-no-idle",
+            "perm-cache-log-insert-failed",
+            "perm-cache-log-invalidate-failed",
+            "perm-cache-log-clear-failed",
+            "prepare-cache-log-read-miss",
+            "prepare-cache-log-write-failed",
+            "prepare-cache-log-clear-failed",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -1102,6 +1450,27 @@ mod tests {
             ("query_type", "Q".to_string()),
             ("duration_ms", "10".to_string()),
             ("threshold_ms", "11".to_string()),
+            ("identifier_type", "IT".to_string()),
+            ("identifier", "I".to_string()),
+            ("database", "Sqlite".to_string()),
+            ("version", "V".to_string()),
+            ("description", "D".to_string()),
+            ("path", "P".to_string()),
+            ("admin_role", "admin".to_string()),
+            ("failed", "1".to_string()),
+            ("created", "2".to_string()),
+            ("closed", "3".to_string()),
+            ("percent", "10.0".to_string()),
+            ("active", "4".to_string()),
+            ("total", "5".to_string()),
+            ("waiting", "6".to_string()),
+            ("idle", "7".to_string()),
+            ("state", "Open".to_string()),
+            ("variable", "NEO4J_USER".to_string()),
+            ("endpoint", "http://localhost:4318".to_string()),
+            ("status", "HTTP/1.1 500".to_string()),
+            ("protocol", "ftp".to_string()),
+            ("op", "get_or_prepare".to_string()),
         ];
         const NEW_KEYS: &[&str] = &[
             "db-unsupported",
@@ -1150,6 +1519,109 @@ mod tests {
             "query-cache-version-read-failed",
             "query-cache-params-encode-failed",
             "query-cache-table-name-invalid",
+            "migration-rollback-no-down-section",
+            "migration-rollback-down-not-executable",
+            "migration-identifier-empty",
+            "migration-identifier-too-long",
+            "migration-identifier-invalid-chars",
+            "migration-identifier-reserved-keyword",
+            "migration-sql-comment-create-table",
+            "migration-sql-comment-drop-table",
+            "migration-sql-comment-alter-table",
+            "migration-sql-comment-add-column",
+            "migration-sql-comment-drop-column",
+            "migration-sql-comment-add-index",
+            "migration-sql-comment-drop-index",
+            "migration-sql-comment-add-foreign-key",
+            "migration-sql-comment-drop-foreign-key",
+            "migration-sqlite-drop-column-note",
+            "migration-sqlite-modify-column-note",
+            "migration-sqlite-modify-type-note",
+            "migration-sqlite-modify-nullability-note",
+            "migration-sqlite-modify-default-note",
+            "migration-scan-read-dir-failed",
+            "migration-scan-read-entry-failed",
+            "migration-scan-read-file-failed",
+            "config-confers-subscribe-failed",
+            "config-confers-hot-reload-failed",
+            "config-confers-skip-invalid-event",
+            "config-confers-log-hot-reload",
+            "config-confers-log-ack-failed",
+            "perm-config-path-empty",
+            "perm-config-path-parent-reference",
+            "perm-config-path-safety-validation",
+            "perm-config-yaml-feature-not-enabled",
+            "perm-provider-memory-policy-table-uninitialized",
+            "perm-provider-yaml-file-unreadable",
+            "perm-provider-config-read-error",
+            "perm-provider-lock-error",
+            "cli-migration-file-not-found-for-rollback",
+            "cli-migration-rollback-failed",
+            "cli-schema-diff-up-placeholder",
+            "cli-schema-diff-down-placeholder",
+            "cli-invalid-database-url-format",
+            "cli-database-not-supported",
+            "cli-unsupported-database-protocol",
+            "session-already-in-graph-transaction-concurrent",
+            "session-not-in-transaction",
+            "session-no-active-transaction-commit",
+            "session-no-active-transaction-rollback",
+            "session-commit-transaction-in-use",
+            "session-rollback-transaction-in-use",
+            "session-duckdb-ddl-admin-only",
+            "session-ddl-admin-only",
+            "health-check-timeout",
+            "health-check-timeout-recommendation",
+            "health-recommendation-check-connection-config",
+            "health-recommendation-check-network",
+            "health-recommendation-ensure-pool-initialized",
+            "health-recommendation-wait-circuit-breaker",
+            "health-recommendation-increase-pool-size",
+            "health-recommendation-check-connection-leak",
+            "health-recommendation-increase-min-connections",
+            "health-status-failure-rate-too-high",
+            "health-status-no-connections",
+            "health-status-circuit-breaker-open",
+            "health-status-pool-full",
+            "health-status-no-idle-connections",
+            "health-details-pool",
+            "health-details-stats",
+            "health-details-circuit-breaker",
+            "shard-migration-orchestration-not-implemented",
+            "neo4j-connect-failed",
+            "neo4j-url-no-credentials-env",
+            "neo4j-url-invalid-and-env-missing",
+            "neo4j-not-connected",
+            "neo4j-execute-failed",
+            "neo4j-execute-with-params-failed",
+            "neo4j-row-fetch-failed",
+            "neo4j-row-deserialize-failed",
+            "neo4j-health-check-no-rows",
+            "neo4j-start-txn-failed",
+            "neo4j-transaction-consumed",
+            "neo4j-commit-failed",
+            "neo4j-rollback-failed",
+            "neo4j-txn-execute-failed",
+            "neo4j-txn-execute-with-params-failed",
+            "neo4j-txn-row-fetch-failed",
+            "neo4j-txn-row-deserialize-failed",
+            "otel-serialize-failed",
+            "otel-http-task-failed",
+            "otel-endpoint-not-http",
+            "otel-connect-failed",
+            "otel-write-failed",
+            "otel-read-failed",
+            "otel-collector-non-2xx",
+            "otel-export-failed",
+            "kit-health-no-connections",
+            "kit-health-waiting",
+            "kit-health-no-idle",
+            "perm-cache-log-insert-failed",
+            "perm-cache-log-invalidate-failed",
+            "perm-cache-log-clear-failed",
+            "prepare-cache-log-read-miss",
+            "prepare-cache-log-write-failed",
+            "prepare-cache-log-clear-failed",
         ];
         for key in NEW_KEYS {
             for lang in ["en", "zh"] {
@@ -1160,6 +1632,69 @@ mod tests {
                     "{lang}/{key} left an unresolved placeholder: {formatted}"
                 );
             }
+        }
+    }
+
+    /// 从 FTL 常量体解析 (键, 占位符名集合)，供目录级守卫使用
+    fn catalog_entries(ftl: &str) -> Vec<(String, Vec<String>)> {
+        let mut out = Vec::new();
+        for line in ftl.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                if key.is_empty()
+                    || !key
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                {
+                    continue;
+                }
+                let mut names: Vec<String> = value
+                    .match_indices("{ $")
+                    .filter_map(|(idx, _)| {
+                        let rest = &value[idx + 3..];
+                        rest.find('}').map(|end| rest[..end].trim().to_string())
+                    })
+                    .collect();
+                names.sort();
+                names.dedup();
+                out.push((key.to_string(), names));
+            }
+        }
+        out
+    }
+
+    /// 守卫：en/zh 两份目录的键集合与逐键占位符集合完全一致
+    ///
+    /// 单侧缺键会让 `translate()` 退化为裸键，占位符名不一致则让某一语言
+    /// 残留 `{ $…}` 字面量。此前该一致性只由仓外脚本比对，此处把它变成
+    /// 编译进测试的不变式，任何新增键漏登记即刻失败。
+    #[test]
+    fn test_en_zh_catalogs_share_key_and_placeholder_sets() {
+        let en = catalog_entries(EN_FTL);
+        let zh = catalog_entries(ZH_FTL);
+
+        let en_keys: Vec<&str> = en.iter().map(|(k, _)| k.as_str()).collect();
+        let zh_keys: Vec<&str> = zh.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            en_keys.len(),
+            zh_keys.len(),
+            "en/zh 键数量不一致（可能存在重复键或单侧缺失）"
+        );
+
+        for (key, names) in &en {
+            let zh_entry = zh
+                .iter()
+                .find(|(k, _)| k == key)
+                .unwrap_or_else(|| panic!("zh bundle missing key: {key}"));
+            assert_eq!(
+                &zh_entry.1, names,
+                "placeholder set drifted for key: {key} (en={names:?}, zh={:?})",
+                zh_entry.1
+            );
         }
     }
 }

@@ -513,7 +513,10 @@ mod error_code_tests {
             crate::foundation::DbError::Permission("denied on users".to_string()).into();
         assert_eq!(unified.code(), ErrorCode::PermissionDenied);
         assert!(unified.message().contains("denied on users"));
-        assert!(unified.source_text().is_some(), "应保留底层错误文本");
+        assert!(
+            unified.source_text().is_some(),
+            "the underlying error text should be kept"
+        );
 
         let unified: UnifiedDbError =
             crate::foundation::DbError::Connection(sea_orm::DbErr::RecordNotFound("x".into()))
@@ -540,7 +543,7 @@ mod error_code_tests {
         let legacy: crate::foundation::DbError = unified.into();
         assert!(
             matches!(legacy, crate::foundation::DbError::Connection(_)),
-            "Connection 码应映射回 Connection 变体"
+            "the Connection code should map back to the Connection variant"
         );
 
         let unified = UnifiedDbError::new(ErrorCode::Query, "bad query");
@@ -859,7 +862,10 @@ mod tests {
             let legacy: crate::foundation::DbError = unified.into();
             let text = legacy.to_string();
             assert!(text.contains(msg), "code {code:?} text: {text}");
-            assert!(text.contains("detail"), "source 文本应保留: {text}");
+            assert!(
+                text.contains("detail"),
+                "the source text should be kept: {text}"
+            );
         }
     }
 

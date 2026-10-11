@@ -28,7 +28,7 @@ async fn simulate_operation(
     let attempt = attempt_counter.fetch_add(1, Ordering::SeqCst);
     if attempt < fail_times {
         Err(dbnexus::foundation::DbError::Query(format!(
-            "模拟失败（第 {} 次尝试）",
+            "simulated failure (attempt {})",
             attempt + 1
         )))
     } else {
@@ -39,13 +39,13 @@ async fn simulate_operation(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔄 DBNexus 运行时重试 + 指数退避示例");
+    println!("🔄 DBNexus runtime retry + exponential backoff example");
     println!("========================================\n");
 
     // ============================================
     // 1. 幂等性判断
     // ============================================
-    println!("--- 1. 幂等性判断 ---\n");
+    println!("--- 1. idempotency detection ---\n");
 
     let test_cases = [
         ("SELECT * FROM users", true),
@@ -61,14 +61,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     println!("  ┌──────────────────────────────────────┬──────────┐");
-    println!("  │ SQL                                  │ 可重试？ │");
+    println!("  │ SQL                                  │ retryable? │");
     println!("  ├──────────────────────────────────────┼──────────┤");
     for (sql, expected) in &test_cases {
         let result = is_idempotent_operation(sql);
-        let icon = if result { "✅ 是" } else { "❌ 否" };
+        let icon = if result { "✅ yes" } else { "❌ no" };
         let display_sql = if sql.len() > 36 { &sql[..36] } else { sql };
         println!("  │ {:<36} │ {} │", display_sql, icon);
-        assert_eq!(result, *expected, "幂等性判断失败: {}", sql);
+        assert_eq!(result, *expected, "idempotency check failed: {}", sql);
     }
     println!("  └──────────────────────────────────────┴──────────┘");
     println!();
@@ -76,10 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 2. 默认重试策略 — 幂等查询最终成功
     // ============================================
-    println!("--- 2. 幂等查询重试（失败 2 次后成功） ---\n");
+    println!("--- 2. idempotent query retry (succeeding after 2 failures) ---\n");
 
     let policy = RetryPolicy::default();
-    println!("  重试策略:");
+    println!("  retry strategy:");
     println!("  - max_retries      : {}", policy.max_retries);
     println!("  - initial_backoff  : {} ms", policy.initial_backoff_ms);
     println!("  - max_backoff      : {} ms", policy.max_backoff_ms);
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &policy,
         || {
             let counter = &counter;
-            async move { simulate_operation(counter, 2, "查询成功").await }
+            async move { simulate_operation(counter, 2, "query succeeded").await }
         },
         "SELECT * FROM users",
     )
@@ -101,38 +101,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &result {
         Ok(val) => {
             let attempts = counter.load(Ordering::SeqCst);
-            println!("  ✅ 重试成功！");
-            println!("  - 返回值     : {}", val);
-            println!("  - 总尝试次数 : {}", attempts);
+            println!("  ✅ retry succeeded!");
+            println!("  - return value     : {}", val);
+            println!("  - total attempts : {}", attempts);
         }
-        Err(e) => println!("  ❌ 失败: {}", e),
+        Err(e) => println!("  ❌ failed: {}", e),
     }
     println!();
 
     // ============================================
     // 3. 非幂等操作 — 直接失败不重试
     // ============================================
-    println!("--- 3. 非幂等操作（INSERT，不重试） ---\n");
+    println!("--- 3. non-idempotent operation (INSERT, not retried) ---\n");
 
     let counter = AtomicU32::new(0);
     let result = RetryExecutor::execute_with_retry(
         &policy,
         || {
             let counter = &counter;
-            async move { simulate_operation(counter, 5, "不应该到达").await }
+            async move { simulate_operation(counter, 5, "should not be reached").await }
         },
         "INSERT INTO users VALUES (1)",
     )
     .await;
 
     match &result {
-        Ok(_) => println!("  ❌ 不应该成功"),
+        Ok(_) => println!("  ❌ should not have succeeded"),
         Err(e) => {
             let attempts = counter.load(Ordering::SeqCst);
-            println!("  ✅ 正确拒绝重试！");
-            println!("  - 错误类型   : RetryError::NonRetryable");
-            println!("  - 错误信息   : {}", e);
-            println!("  - 实际尝试   : {} 次（仅 1 次）", attempts);
+            println!("  ✅ correctly rejected the retry!");
+            println!("  - error type   : RetryError::NonRetryable");
+            println!("  - error message   : {}", e);
+            println!("  - actual attempts  : {} (only 1)", attempts);
         }
     }
     println!();
@@ -140,30 +140,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 4. 重试耗尽 — 超过最大重试次数
     // ============================================
-    println!("--- 4. 重试耗尽（失败 10 次，最大重试 3 次） ---\n");
+    println!("--- 4. retry exhausted (10 failures, max 3 retries) ---\n");
 
     let counter = AtomicU32::new(0);
     let result = RetryExecutor::execute_with_retry(
         &policy,
         || {
             let counter = &counter;
-            async move { simulate_operation(counter, 10, "不会成功").await }
+            async move { simulate_operation(counter, 10, "will not succeed").await }
         },
         "SELECT * FROM large_table",
     )
     .await;
 
     match &result {
-        Ok(_) => println!("  ❌ 不应该成功"),
+        Ok(_) => println!("  ❌ should not have succeeded"),
         Err(e) => {
             let attempts = counter.load(Ordering::SeqCst);
-            println!("  ✅ 正确返回 Exhausted 错误！");
-            println!("  - 错误类型   : RetryError::Exhausted");
+            println!("  ✅ correctly returned the Exhausted error!");
+            println!("  - error type   : RetryError::Exhausted");
             println!(
-                "  - 总尝试次数 : {} (1 首次 + {} 重试)",
+                "  - total attempts : {} (1 initial + {} retries)",
                 attempts, policy.max_retries
             );
-            println!("  - 错误信息   : {}", e);
+            println!("  - error message   : {}", e);
         }
     }
     println!();
@@ -171,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 自定义重试策略
     // ============================================
-    println!("--- 5. 自定义重试策略 ---\n");
+    println!("--- 5. custom retry strategy ---\n");
 
     let custom_policy = RetryPolicy {
         max_retries: 5,
@@ -182,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         overall_timeout_ms: Some(5000),
     };
 
-    println!("  自定义策略:");
+    println!("  custom strategy:");
     println!("  - max_retries      : {}", custom_policy.max_retries);
     println!(
         "  - initial_backoff  : {} ms",
@@ -198,11 +198,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // 展示退避时间序列
-    println!("  退避时间序列（无 jitter）:");
+    println!("  backoff sequence (no jitter):");
     let mut backoff = custom_policy.initial_backoff_ms as f64;
     for i in 0..custom_policy.max_retries {
         let capped = backoff.min(custom_policy.max_backoff_ms as f64);
-        println!("    第 {} 次重试: {:.0} ms", i + 1, capped);
+        println!("    retry #{}: {:.0} ms", i + 1, capped);
         backoff *= custom_policy.multiplier;
     }
     println!();
@@ -212,7 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &custom_policy,
         || {
             let counter = &counter;
-            async move { simulate_operation(counter, 4, "自定义策略成功").await }
+            async move { simulate_operation(counter, 4, "custom strategy succeeded").await }
         },
         "SELECT count(*) FROM orders",
     )
@@ -221,25 +221,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &result {
         Ok(val) => {
             let attempts = counter.load(Ordering::SeqCst);
-            println!("  ✅ 自定义策略重试成功！");
-            println!("  - 返回值     : {}", val);
-            println!("  - 总尝试次数 : {}", attempts);
+            println!("  ✅ the custom strategy retry succeeded!");
+            println!("  - return value     : {}", val);
+            println!("  - total attempts : {}", attempts);
         }
-        Err(e) => println!("  ❌ 失败: {}", e),
+        Err(e) => println!("  ❌ failed: {}", e),
     }
     println!();
 
     // ============================================
     // 6. 首次即成功 — 无需重试
     // ============================================
-    println!("--- 6. 首次即成功（无需重试） ---\n");
+    println!("--- 6. success on the first try (no retry needed) ---\n");
 
     let counter = AtomicU32::new(0);
     let result = RetryExecutor::execute_with_retry(
         &policy,
         || {
             let counter = &counter;
-            async move { simulate_operation(counter, 0, "首次成功").await }
+            async move { simulate_operation(counter, 0, "succeeded on the first attempt").await }
         },
         "SELECT 1",
     )
@@ -248,31 +248,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &result {
         Ok(val) => {
             let attempts = counter.load(Ordering::SeqCst);
-            println!("  ✅ 首次执行即成功！");
-            println!("  - 返回值     : {}", val);
-            println!("  - 总尝试次数 : {}（无重试）", attempts);
+            println!("  ✅ succeeded on the first try!");
+            println!("  - return value     : {}", val);
+            println!("  - total attempts : {} (no retry)", attempts);
         }
-        Err(e) => println!("  ❌ 失败: {}", e),
+        Err(e) => println!("  ❌ failed: {}", e),
     }
     println!();
 
     // ============================================
     // 7. RetryError 类型展示
     // ============================================
-    println!("--- 7. RetryError 类型 ---\n");
+    println!("--- 7. RetryError types ---\n");
     println!("  ┌─────────────────┬──────────────────────────────────────┐");
-    println!("  │ 变体            │ 说明                                 │");
+    println!("  │ variant           │ description                                 │");
     println!("  ├─────────────────┼──────────────────────────────────────┤");
-    println!("  │ Exhausted       │ 重试次数耗尽，包含最后一次错误       │");
-    println!("  │ NonRetryable    │ 非幂等操作被拒绝重试                 │");
-    println!("  │ Timeout         │ 整体 wall-clock 超时                 │");
+    println!("  │ Exhausted       │ retries exhausted, contains the last error     │");
+    println!("  │ NonRetryable    │ a non-idempotent operation is not retried     │");
+    println!("  │ Timeout         │ the overall wall-clock timeout               │");
     println!("  └─────────────────┴──────────────────────────────────────┘");
     println!();
 
     println!("========================================");
-    println!("✨ 运行时重试示例完成！");
+    println!("✨ Runtime retry example complete!");
     println!("========================================");
-    println!("\n📚 关键 API:");
+    println!("\n📚 Key APIs:");
     println!("  - RetryPolicy {{ max_retries, initial_backoff_ms, .. }}");
     println!("  - RetryExecutor::execute_with_retry(&policy, closure, sql)");
     println!("  - is_idempotent_operation(sql) -> bool");

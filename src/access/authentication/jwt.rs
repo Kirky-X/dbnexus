@@ -702,7 +702,7 @@ mod tests {
         let err = manager
             .verify_refresh_token(&refresh)
             .await
-            .expect_err("远程缓存标记撤销必须拒绝");
+            .expect_err("remote cache revocation marker must be rejected");
         assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
     }
 
@@ -715,7 +715,7 @@ mod tests {
         JwtManager::evict_revoked_entries(&mut revoked, manager.refresh_expiration_secs);
         assert!(
             revoked.is_empty(),
-            "refresh_expiration=0 时撤销条目应立即全部淘汰"
+            "revoked entries must all be evicted immediately when refresh_expiration=0"
         );
     }
 
@@ -734,7 +734,7 @@ mod tests {
         assert_eq!(
             manager.compute_remaining_ttl(&claims),
             Duration::ZERO,
-            "过期 claims 的剩余 TTL 必须为 0"
+            "expired claims must have a remaining TTL of 0"
         );
     }
 }

@@ -132,23 +132,23 @@ impl DbCacheProvider for SimpleMemoryCache {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("💾 DBNexus 独立缓存功能示例");
+    println!("💾 DBNexus standalone cache feature example");
     println!("========================================\n");
 
     // ============================================
     // 1. 创建自定义缓存
     // ============================================
-    println!("--- 1. 创建自定义 DbCacheProvider ---\n");
+    println!("--- 1. create a custom DbCacheProvider ---\n");
 
     let cache = SimpleMemoryCache::new(100);
-    println!("  ✓ SimpleMemoryCache 创建成功（capacity=100）");
-    println!("  实现: DbCacheProvider trait (get/set/delete)");
-    println!("  存储: Mutex<HashMap<String, CacheEntry>>\n");
+    println!("  ✓ SimpleMemoryCache created (capacity=100)");
+    println!("  implementation: DbCacheProvider trait (get/set/delete)");
+    println!("  storage: Mutex<HashMap<String, CacheEntry>>\n");
 
     // ============================================
     // 2. 基本操作
     // ============================================
-    println!("--- 2. 基本 get/set/delete ---\n");
+    println!("--- 2. basic get/set/delete ---\n");
 
     cache.set("key1", b"value1".to_vec(), None).await?;
     println!("  ✓ set(\"key1\", b\"value1\")");
@@ -166,16 +166,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ delete(\"key1\")");
 
     let val = cache.get("key1").await?;
-    println!("  ✓ get(\"key1\") → {:?} (已删除)", val);
+    println!("  ✓ get(\"key1\") → {:?} (deleted)", val);
 
     let val = cache.get("nonexistent").await?;
-    println!("  ✓ get(\"nonexistent\") → {:?} (不存在)", val);
+    println!("  ✓ get(\"nonexistent\") → {:?} (missing)", val);
     println!();
 
     // ============================================
     // 3. TTL 过期
     // ============================================
-    println!("--- 3. TTL 过期 ---\n");
+    println!("--- 3. TTL expiration ---\n");
 
     cache
         .set(
@@ -188,28 +188,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let val = cache.get("ttl_key").await?;
     println!(
-        "  ✓ 立即 get → {:?} (存在)",
+        "  ✓ immediate get → {:?} (present)",
         val.map(|v| String::from_utf8_lossy(&v).to_string())
     );
 
     tokio::time::sleep(Duration::from_millis(150)).await;
 
     let val = cache.get("ttl_key").await?;
-    println!("  ✓ 150ms 后 get → {:?} (已过期)", val);
+    println!("  ✓ get after 150ms → {:?} (expired)", val);
     println!();
 
     // ============================================
     // 4. 通过 trait 对象使用
     // ============================================
-    println!("--- 4. Trait 对象（dyn dispatch）---\n");
+    println!("--- 4. trait objects (dyn dispatch) ---\n");
 
     let provider: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(SimpleMemoryCache::new(50));
-    println!("  ✓ 创建 Arc<dyn DbCacheProvider + Send + Sync>");
+    println!("  ✓ created Arc<dyn DbCacheProvider + Send + Sync>");
 
     provider.set("dyn:test", b"dynamic".to_vec(), None).await?;
     let val = provider.get("dyn:test").await?;
     println!(
-        "  ✓ 通过 trait 对象: set + get → {:?}",
+        "  ✓ through trait object: set + get → {:?}",
         val.map(|v| String::from_utf8_lossy(&v).to_string())
     );
     println!();
@@ -217,7 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 5. 与 DbPoolBuilder 集成
     // ============================================
-    println!("--- 5. 与 DbPoolBuilder 集成 ---\n");
+    println!("--- 5. integration with DbPoolBuilder ---\n");
 
     let custom_cache: Arc<dyn DbCacheProvider + Send + Sync> =
         Arc::new(SimpleMemoryCache::new(200));
@@ -236,8 +236,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cache_provider(custom_cache)
         .build()
         .await?;
-    println!("  ✓ DbPoolBuilder 构建成功（注入自定义缓存）");
-    println!("  连接池 URL: {}", pool.config().url);
+    println!("  ✓ DbPoolBuilder built successfully (custom cache injected)");
+    println!("  pool URL: {}", pool.config().url);
     println!(
         "  max_connections: {}",
         pool.config().pool_config.max_connections
@@ -245,13 +245,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证连接池可用
     let session = pool.get_session("admin").await?;
-    println!("  ✓ 获取 Session 成功 (角色: {})", session.role());
+    println!("  ✓ Session acquired (role: {})", session.role());
     println!();
 
     // ============================================
     // 6. 容量管理
     // ============================================
-    println!("--- 6. 容量管理 ---\n");
+    println!("--- 6. capacity management ---\n");
 
     let small_cache = SimpleMemoryCache::new(5);
 
@@ -261,7 +261,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = format!("value_{}", i).into_bytes();
         small_cache.set(&key, value, None).await?;
     }
-    println!("  ✓ 写入 8 个条目（capacity=5）");
+    println!("  ✓ wrote 8 entries (capacity=5)");
 
     // 检查哪些条目还在
     let mut present = Vec::new();
@@ -271,19 +271,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             present.push(key);
         }
     }
-    println!("  ✓ 当前存在 {} 个条目: {:?}", present.len(), present);
-    println!("  ✓ FIFO 淘汰策略保留了最近的 5 个条目");
+    println!(
+        "  ✓ {} entries currently present: {:?}",
+        present.len(),
+        present
+    );
+    println!("  ✓ FIFO eviction kept the most recent 5 entries");
 
     println!("\n========================================");
-    println!("✨ 独立缓存功能示例完成！");
+    println!("✨ Standalone cache feature example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  - DbCacheProvider trait              统一缓存接口");
-    println!("  - 自定义实现                          实现 get/set/delete 即可");
-    println!("  - TTL (Duration)                     过期时间支持");
-    println!("  - Arc<dyn DbCacheProvider>            trait 对象（DI 注入）");
-    println!("  - DbPoolBuilder::cache_provider()    注入到连接池");
-    println!("  - DbError::Cache                     统一错误类型");
+    println!("\n📚 Key concepts:");
+    println!("  - DbCacheProvider trait              unified cache interface");
+    println!("  - custom implementation               implement get/set/delete");
+    println!("  - TTL (Duration)                     expiration support");
+    println!("  - Arc<dyn DbCacheProvider>            trait object (DI injection)");
+    println!("  - DbPoolBuilder::cache_provider()     inject into the pool");
+    println!("  - DbError::Cache                      unified error type");
 
     Ok(())
 }

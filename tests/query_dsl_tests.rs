@@ -147,7 +147,7 @@ async fn test_macro_fragment_executes_end_to_end() {
         .query_rows(&fragment.to_sql(), "admin")
         .await
         .expect("query");
-    assert_eq!(rows.len(), 1, "成人过滤应只剩 alice");
+    assert_eq!(rows.len(), 1, "the adults filter should leave only alice");
     assert_eq!(rows[0]["name"], "alice");
 
     let _ = std::fs::remove_file(&path);

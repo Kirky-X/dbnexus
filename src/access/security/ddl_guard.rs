@@ -521,7 +521,11 @@ mod tests {
         auditing.audit("DROP DATABASE prod", &forbidden);
 
         let events = events.lock().unwrap();
-        assert_eq!(events.len(), 2, "audit 钩子应逐决策转发");
+        assert_eq!(
+            events.len(),
+            2,
+            "the audit hook should forward every decision"
+        );
         assert!(events[0].allowed);
         assert!(!events[1].allowed);
         assert!(
@@ -540,14 +544,25 @@ mod tests {
         // 单条干跑查询
         assert!(dry.would_allow("CREATE TABLE t (id INT)"));
         assert!(!dry.would_allow("DROP DATABASE prod"));
-        assert_eq!(dry.records().len(), 2, "would_allow 应记录决策");
+        assert_eq!(
+            dry.records().len(),
+            2,
+            "would_allow should record the decision"
+        );
 
         // 批量预检：不执行，逐条给出决策
         let plan = dry.plan(&["ALTER TABLE t ADD COLUMN c INT", "GRANT ALL ON t TO x"]);
         assert_eq!(plan.len(), 2);
         assert!(plan[0].allowed);
-        assert!(!plan[1].allowed, "GRANT 不在白名单，应标记拦截");
-        assert_eq!(dry.records().len(), 4, "plan 决策并入记录");
+        assert!(
+            !plan[1].allowed,
+            "GRANT is not in the whitelist and must be flagged as blocked"
+        );
+        assert_eq!(
+            dry.records().len(),
+            4,
+            "plan decisions are merged into the records"
+        );
 
         // 作为守卫注入时语义与内部策略一致
         assert!(matches!(
@@ -569,12 +584,12 @@ mod tests {
             "THIS IS NOT SQL",
         ]);
         assert_eq!(plan.len(), 3);
-        assert!(plan[0].allowed, "白名单 DDL 应放行");
-        assert!(!plan[1].allowed, "DROP DATABASE 必须拒绝");
-        assert!(!plan[2].allowed, "解析失败必须拒绝");
+        assert!(plan[0].allowed, "whitelisted DDL should be allowed");
+        assert!(!plan[1].allowed, "DROP DATABASE must be rejected");
+        assert!(!plan[2].allowed, "a failed parse must be rejected");
 
         let records = guard.records();
-        assert_eq!(records.len(), 3, "plan 与 validate 各记录一次");
+        assert_eq!(records.len(), 3, "plan and validate each record once");
 
         assert!(guard.would_allow("CREATE INDEX idx ON t9 (id)"));
         assert!(!guard.would_allow("DROP DATABASE y"));
@@ -587,7 +602,7 @@ mod tests {
                 &forbidden,
                 Some(crate::access::DdlValidationResult::Forbidden(_))
             ),
-            "空语句应 Forbidden: {forbidden:?}"
+            "an empty statement should be Forbidden: {forbidden:?}"
         );
         assert!(inner.validate("TOTAL GARBAGE").is_err());
     }

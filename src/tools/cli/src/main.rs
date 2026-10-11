@@ -1026,9 +1026,12 @@ async fn run_migrations_down(
         let Some(migration_file) = find_migration_file(&migration_files, *version) else {
             println!("❌");
             println!("\n⚠️  {}", i18n::t_simple("cli-rollback-error-stop"));
-            return Err(DbError::Migration(format!(
-                "未找到迁移 v{} ({}) 的迁移文件，无法执行 DOWN 回滚",
-                version, description
+            return Err(DbError::Migration(i18n::t(
+                "cli-migration-file-not-found-for-rollback",
+                &[
+                    ("version", version.to_string()),
+                    ("description", description.clone()),
+                ],
             )));
         };
 
@@ -1044,9 +1047,9 @@ async fn run_migrations_down(
                 );
                 // 回滚失败时停止并返回错误，避免状态不一致
                 println!("\n⚠️  {}", i18n::t_simple("cli-rollback-error-stop"));
-                return Err(DbError::Migration(format!(
-                    "Migration rollback failed for v{}: {}",
-                    version, e
+                return Err(DbError::Migration(i18n::t(
+                    "cli-migration-rollback-failed",
+                    &[("version", version.to_string()), ("error", e.to_string())],
                 )));
             }
         }
@@ -1082,7 +1085,7 @@ fn find_migration_file(
 ///
 /// 通过 `MigrationExecutor::rollback_version` 在同一事务内先执行迁移文件的 DOWN SQL，
 /// 成功后再删除 `dbnexus_migrations` 历史行：
-/// - 无 DOWN 段时返回"该迁移无可回滚的 DOWN 部分"错误；
+/// - 无 DOWN 段时返回 no-rollable-back DOWN section 错误；
 /// - DOWN 执行失败时不删除历史记录并返回错误。
 #[cfg(feature = "migration")]
 async fn rollback_migration(
@@ -1230,8 +1233,8 @@ fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<Di
     // 这里是一个简化实现
     // 实际实现需要解析 schema 文件并计算差异
     Ok(DiffSql {
-        up: "-- 自动生成的 UP SQL 请手动编辑".to_string(),
-        down: "-- 自动生成的 DOWN SQL 请手动编辑".to_string(),
+        up: i18n::t_simple("cli-schema-diff-up-placeholder"),
+        down: i18n::t_simple("cli-schema-diff-down-placeholder"),
     })
 }
 
@@ -2117,8 +2120,12 @@ fn classify_connect_error(database_url: &str) -> ExitCode {
 /// 使用 URL 解析器验证数据库 URL 格式，
 /// 只返回已知支持的数据库类型，不支持时返回错误
 fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbError> {
-    let url = url::Url::parse(database_url)
-        .map_err(|e| DbError::Config(format!("Invalid database URL format: {}", e)))?;
+    let url = url::Url::parse(database_url).map_err(|e| {
+        DbError::Config(i18n::t(
+            "cli-invalid-database-url-format",
+            &[("error", e.to_string())],
+        ))
+    })?;
 
     let scheme = url.scheme().to_lowercase();
 
@@ -2127,15 +2134,17 @@ fn detect_database_type(database_url: &str) -> Result<MigrationDatabaseType, DbE
         "postgres" | "postgresql" => Ok(MigrationDatabaseType::Postgres),
         "mysql" => Ok(MigrationDatabaseType::MySql),
         "sqlite" | "sqlite3" | "file" => Ok(MigrationDatabaseType::Sqlite),
-        "oci" | "oracle" => Err(DbError::Config(
-            "Oracle database is not supported".to_string(),
-        )),
-        "mssql" | "sqlserver" => Err(DbError::Config(
-            "SQL Server database is not supported".to_string(),
-        )),
-        _ => Err(DbError::Config(format!(
-            "Unsupported database protocol: '{}'. Supported protocols: sqlite, postgres, mysql",
-            scheme
+        "oci" | "oracle" => Err(DbError::Config(i18n::t(
+            "cli-database-not-supported",
+            &[("database", "Oracle".to_string())],
+        ))),
+        "mssql" | "sqlserver" => Err(DbError::Config(i18n::t(
+            "cli-database-not-supported",
+            &[("database", "SQL Server".to_string())],
+        ))),
+        _ => Err(DbError::Config(i18n::t(
+            "cli-unsupported-database-protocol",
+            &[("protocol", scheme.to_string())],
         ))),
     }
 }
@@ -2201,7 +2210,8 @@ mod tests {
     #[test]
     fn test_extract_down_sql_present() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
-        let down = MigrationExecutor::extract_down_sql(content).expect("应提取到 DOWN SQL");
+        let down =
+            MigrationExecutor::extract_down_sql(content).expect("the DOWN SQL should be extracted");
         assert_eq!(down, "DROP TABLE users;");
     }
 
@@ -2209,11 +2219,12 @@ mod tests {
     #[test]
     fn test_extract_down_sql_case_insensitive() {
         let content = "-- up:\nALTER TABLE users ADD COLUMN c TEXT;\n-- down:\nALTER TABLE users DROP COLUMN c;\n";
-        let down = MigrationExecutor::extract_down_sql(content).expect("应提取到 DOWN SQL");
+        let down =
+            MigrationExecutor::extract_down_sql(content).expect("the DOWN SQL should be extracted");
         assert!(down.contains("DROP COLUMN c"));
     }
 
-    /// DOWN 缺失时的错误分支：extract 返回 None → rollback 报"无可回滚的 DOWN 部分"
+    /// DOWN 缺失时的错误分支：extract 返回 None → rollback 报 no-rollable-back DOWN section 错误
     #[cfg(feature = "migration")]
     #[test]
     fn test_extract_down_sql_missing_yields_no_rollback_error() {
@@ -2226,13 +2237,19 @@ mod tests {
             PathBuf::from("/migrations/001_no_down.sql"),
             content.to_string(),
         );
-        let err = DbError::Migration(format!(
-            "迁移 v{} ({}) 无可回滚的 DOWN 部分",
-            file.version(),
-            file.description()
+        let err = DbError::Migration(i18n::t(
+            "migration-rollback-no-down-section",
+            &[
+                ("version", file.version().to_string()),
+                ("description", file.description().to_string()),
+            ],
         ));
         let msg = err.to_string();
-        assert!(msg.contains("无可回滚的 DOWN 部分"), "实际错误: {}", msg);
+        assert!(
+            msg.contains("has no rollable-back DOWN section")
+                || msg.contains("无可回滚的 DOWN 部分"),
+            "actual error: {msg}"
+        );
     }
 
     // ===== find_migration_file =====
@@ -2255,7 +2272,7 @@ mod tests {
             ),
         ];
 
-        let found = find_migration_file(&files, 2).expect("应找到 v2 的迁移文件");
+        let found = find_migration_file(&files, 2).expect("the v2 migration file should be found");
         assert_eq!(found.version(), 2);
         assert_eq!(found.description(), "add_column");
 
@@ -2334,7 +2351,7 @@ mod tests {
     fn test_users_table_ddl_has_all_columns() {
         let ddl = users_table_ddl();
         for col in ["username", "password_hash", "role", "created_at"] {
-            assert!(ddl.contains(col), "DDL 缺少列 {col}: {ddl}");
+            assert!(ddl.contains(col), "DDL is missing column {col}: {ddl}");
         }
         assert!(ddl.contains("PRIMARY KEY"));
     }

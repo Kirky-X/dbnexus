@@ -639,12 +639,20 @@ impl MigrationExecutor {
             return Ok(migrations);
         }
 
-        let entries = std::fs::read_dir(dir)
-            .map_err(|e| DbError::Config(format!("Failed to read migration directory: {}", e)))?;
+        let entries = std::fs::read_dir(dir).map_err(|e| {
+            DbError::Config(i18n::t(
+                "migration-scan-read-dir-failed",
+                &[("error", e.to_string())],
+            ))
+        })?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| DbError::Config(format!("Failed to read migration entry: {}", e)))?;
+            let entry = entry.map_err(|e| {
+                DbError::Config(i18n::t(
+                    "migration-scan-read-entry-failed",
+                    &[("error", e.to_string())],
+                ))
+            })?;
             let path = entry.path();
 
             if path.is_file()
@@ -653,7 +661,10 @@ impl MigrationExecutor {
                 && let Some((version, description)) = Self::parse_filename(filename)
             {
                 let content = std::fs::read_to_string(&path).map_err(|e| {
-                    DbError::Config(format!("Failed to read migration file: {}", e))
+                    DbError::Config(i18n::t(
+                        "migration-scan-read-file-failed",
+                        &[("error", e.to_string())],
+                    ))
                 })?;
 
                 migrations.push(MigrationFile {
@@ -896,9 +907,12 @@ impl MigrationExecutor {
         // 无 DOWN 段的迁移无法回滚，提前返回明确错误（不删除历史记录）
         let down_sql = Self::extract_down_sql_with(&migration_file.content, &self.markers.down)
             .ok_or_else(|| {
-                DbError::Migration(format!(
-                    "迁移 v{} ({}) 无可回滚的 DOWN 部分",
-                    version, migration_file.description
+                DbError::Migration(i18n::t(
+                    "migration-rollback-no-down-section",
+                    &[
+                        ("version", version.to_string()),
+                        ("description", migration_file.description.to_string()),
+                    ],
                 ))
             })?;
 
@@ -907,9 +921,9 @@ impl MigrationExecutor {
         // DOWN 实际未执行，版本却被标记为已回滚。因此剥离注释与空白后必须仍存在
         // 可执行内容，否则拒绝回滚（历史行保留）。
         if !Self::down_has_executable_sql(down_sql) {
-            return Err(DbError::Migration(
-                "DOWN 段存在但不含可执行语句，拒绝回滚以避免假回滚".to_string(),
-            ));
+            return Err(DbError::Migration(i18n::t_simple(
+                "migration-rollback-down-not-executable",
+            )));
         }
 
         let backend = match self.sql_generator.db_type {
@@ -1172,7 +1186,10 @@ mod tests {
             let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
             let result =
                 MigrationExecutor::new(connection, DatabaseType::Sqlite).with_history_table(bad);
-            assert!(result.is_err(), "非法表名 {bad:?} 应被拒绝");
+            assert!(
+                result.is_err(),
+                "invalid table name {bad:?} should be rejected"
+            );
         }
     }
 
@@ -1190,7 +1207,7 @@ mod tests {
         let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
         let mut executor = MigrationExecutor::new(connection, DatabaseType::Sqlite)
             .with_history_table("schema_migrations")
-            .expect("合法表名应通过校验");
+            .expect("a valid table name should pass validation");
 
         let migration = MigrationFile::new(
             1,
@@ -1201,12 +1218,15 @@ mod tests {
         );
 
         // 先经 load_history 触发定制历史表创建（与 run_migrations 前置行为一致）
-        executor.load_history().await.expect("历史表初始化应成功");
+        executor
+            .load_history()
+            .await
+            .expect("history table initialization should succeed");
 
         executor
             .apply_migration_file_public(&migration)
             .await
-            .expect("迁移应成功");
+            .expect("the migration should succeed");
 
         let versions = executor
             .connection
@@ -1215,8 +1235,12 @@ mod tests {
                 "SELECT version FROM schema_migrations",
             ))
             .await
-            .expect("定制历史表应存在且可查");
-        assert_eq!(versions.len(), 1, "定制历史表应有 1 行历史");
+            .expect("the custom history table should exist and be queryable");
+        assert_eq!(
+            versions.len(),
+            1,
+            "the custom history table should have 1 history row"
+        );
 
         let default_table = executor
             .connection
@@ -1225,13 +1249,16 @@ mod tests {
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'dbnexus_migrations'",
             ))
             .await
-            .expect("查询 sqlite_master 应成功");
-        assert!(default_table.is_empty(), "默认历史表不应被创建");
+            .expect("querying sqlite_master should succeed");
+        assert!(
+            default_table.is_empty(),
+            "the default history table should not be created"
+        );
 
         executor
             .rollback_version(1, &migration)
             .await
-            .expect("回滚应成功");
+            .expect("the rollback should succeed");
 
         let versions = executor
             .connection
@@ -1240,8 +1267,11 @@ mod tests {
                 "SELECT version FROM schema_migrations",
             ))
             .await
-            .expect("回滚后查询定制表应成功");
-        assert!(versions.is_empty(), "回滚后定制历史表的历史行应被删除");
+            .expect("querying the custom table should succeed after rollback");
+        assert!(
+            versions.is_empty(),
+            "the history rows of the custom history table should be deleted after rollback"
+        );
     }
 
     // =====================================================================
@@ -1505,11 +1535,18 @@ mod tests {
             sql.starts_with(
                 "INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (7, 'it''s', '"
             ),
-            "默认表名/列序/转义不符: {sql}"
+            "default table name / column order / escaping mismatch: {sql}"
         );
-        assert!(sql.ends_with("', '/tmp/x.sql')"), "尾部值/引号不符: {sql}");
+        assert!(
+            sql.ends_with("', '/tmp/x.sql')"),
+            "trailing value / quote mismatch: {sql}"
+        );
         let body = &sql["INSERT INTO dbnexus_migrations (version, description, applied_at, file_path) VALUES (".len()..];
-        assert_eq!(body.matches(',').count(), 3, "应为 4 个占位值");
+        assert_eq!(
+            body.matches(',').count(),
+            3,
+            "there should be 4 placeholder values"
+        );
     }
 
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
@@ -1611,7 +1648,7 @@ mod tests {
     fn test_extract_down_sql_with_up_and_down() {
         let content = "-- UP:\nCREATE TABLE users (id INTEGER);\n-- DOWN:\nDROP TABLE users;\n";
         let result = MigrationExecutor::extract_down_sql(content);
-        let down = result.expect("应提取到 DOWN SQL");
+        let down = result.expect("the DOWN SQL should be extracted");
         assert_eq!(down, "DROP TABLE users;");
     }
 
@@ -1620,7 +1657,7 @@ mod tests {
     fn test_extract_down_sql_case_insensitive_markers() {
         let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- down:\nDROP TABLE t;\n";
         let result = MigrationExecutor::extract_down_sql(content);
-        let down = result.expect("应提取到 DOWN SQL");
+        let down = result.expect("the DOWN SQL should be extracted");
         assert_eq!(down, "DROP TABLE t;");
     }
 
@@ -1629,7 +1666,7 @@ mod tests {
     fn test_extract_down_sql_only_down() {
         let content = "-- DOWN:\nDROP TABLE users;\n";
         let result = MigrationExecutor::extract_down_sql(content);
-        let down = result.expect("应提取到 DOWN SQL");
+        let down = result.expect("the DOWN SQL should be extracted");
         assert_eq!(down, "DROP TABLE users;");
     }
 
@@ -1660,9 +1697,15 @@ mod tests {
         assert_eq!(executor.get_all_versions(), vec![1]);
 
         let result = executor.rollback_version(1, &file).await;
-        assert!(result.is_err(), "仅注释的 DOWN 段应拒绝回滚");
+        assert!(
+            result.is_err(),
+            "a DOWN section that is only comments must be rejected for rollback"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("不含可执行语句"), "实际错误: {}", err);
+        assert!(
+            err.contains("contains no executable statement") || err.contains("不含可执行语句"),
+            "actual error: {err}"
+        );
 
         // 历史行未被删除：未发生假回滚
         executor.load_history().await.unwrap();
@@ -1703,7 +1746,7 @@ mod tests {
             .await;
         assert!(
             dropped.is_err(),
-            "DOWN SQL 未执行，down_comment_test 仍存在"
+            "the DOWN SQL was not executed, so down_comment_test still exists"
         );
     }
 
@@ -1742,7 +1785,8 @@ mod tests {
     #[test]
     fn test_extract_down_sql_mixed_case_down_marker() {
         let content = "-- up:\nCREATE TABLE t (id INTEGER);\n-- Down:\nDROP TABLE t;\n";
-        let down = MigrationExecutor::extract_down_sql(content).expect("应识别 -- Down: 标记");
+        let down = MigrationExecutor::extract_down_sql(content)
+            .expect("the -- Down: marker should be recognized");
         assert_eq!(down, "DROP TABLE t;");
     }
 
@@ -1754,7 +1798,8 @@ mod tests {
         let up = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
         assert!(up.contains("CREATE TABLE t"));
         assert!(!up.contains("DROP TABLE"));
-        let down = MigrationExecutor::extract_down_sql(content).expect("应识别裸 DOWN 标记");
+        let down = MigrationExecutor::extract_down_sql(content)
+            .expect("a bare DOWN marker should be recognized");
         assert_eq!(down, "DROP TABLE t;");
     }
 
@@ -1765,8 +1810,14 @@ mod tests {
     fn test_extract_up_sql_not_truncated_by_up_down_prefixed_identifiers() {
         let content = "-- UP:\nCREATE TABLE posts (\n    id INTEGER PRIMARY KEY,\n    updated_at TIMESTAMP,\n    download_url TEXT\n);\n-- DOWN:\nDROP TABLE posts;\n";
         let up = MigrationExecutor::extract_up_sql(content, &MigrationMarkers::default());
-        assert!(up.contains("updated_at"), "UP 段不应被 updated_at 截断");
-        assert!(up.contains("download_url"), "UP 段不应被 download_url 截断");
+        assert!(
+            up.contains("updated_at"),
+            "the UP section must not be truncated at updated_at"
+        );
+        assert!(
+            up.contains("download_url"),
+            "the UP section must not be truncated at download_url"
+        );
         assert!(up.contains(");"));
         assert!(!up.contains("DROP TABLE"));
         let down = MigrationExecutor::extract_down_sql(content).unwrap();
@@ -2188,7 +2239,10 @@ mod tests {
             .connection
             .execute_unprepared("DROP TABLE rollback_test")
             .await;
-        assert!(dropped.is_err(), "DOWN SQL 未执行，rollback_test 仍存在");
+        assert!(
+            dropped.is_err(),
+            "the DOWN SQL was not executed, so rollback_test still exists"
+        );
     }
 
     /// 无 DOWN 段时返回明确错误，且不删除历史记录
@@ -2213,9 +2267,16 @@ mod tests {
         assert_eq!(executor.get_all_versions(), vec![1]);
 
         let result = executor.rollback_version(1, &file).await;
-        assert!(result.is_err(), "无 DOWN 段的迁移应回滚失败");
+        assert!(
+            result.is_err(),
+            "a migration without a DOWN section should fail to roll back"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("无可回滚的 DOWN 部分"), "实际错误: {}", err);
+        assert!(
+            err.contains("has no rollable-back DOWN section")
+                || err.contains("无可回滚的 DOWN 部分"),
+            "actual error: {err}"
+        );
 
         // 历史记录保持不变
         executor.load_history().await.unwrap();
@@ -2245,7 +2306,10 @@ mod tests {
         assert_eq!(executor.get_all_versions(), vec![1]);
 
         let result = executor.rollback_version(1, &file).await;
-        assert!(result.is_err(), "非法 DOWN SQL 应导致回滚失败");
+        assert!(
+            result.is_err(),
+            "invalid DOWN SQL should cause the rollback to fail"
+        );
 
         // 事务回滚后历史记录保留
         executor.load_history().await.unwrap();
@@ -2285,7 +2349,7 @@ mod tests {
         assert_eq!(
             MigrationExecutor::extract_up_sql(content, &markers),
             content,
-            "默认标记集下分隔线形态不识别,应全文回退"
+            "with the default marker set the separator form is not recognized, so it should fall back to full-text execution"
         );
     }
 
@@ -2302,11 +2366,11 @@ mod tests {
         assert_eq!(
             MigrationExecutor::extract_up_sql(content, &markers),
             "CREATE TABLE a(id INT);",
-            "定制标记应切分出 UP 段"
+            "custom markers should split out the UP section"
         );
         assert_eq!(
             MigrationExecutor::extract_down_sql_with(content, &markers.down)
-                .expect("定制 DOWN 标记应识别"),
+                .expect("the custom DOWN marker should be recognized"),
             "DROP TABLE a;"
         );
 
@@ -2348,7 +2412,7 @@ mod tests {
         executor
             .apply_migration_file_public(&migration)
             .await
-            .expect("默认标记集下全文执行应成功");
+            .expect("full-text execution with the default marker set should succeed");
         let rows = executor
             .connection
             .query_all_raw(sea_orm::Statement::from_string(
@@ -2357,7 +2421,10 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert!(rows.is_empty(), "默认标记集下 DOWN 段随全文执行,表不应存在");
+        assert!(
+            rows.is_empty(),
+            "with the default marker set the DOWN section runs with the full text, so the table should not exist"
+        );
 
         // 定制标记集：UP/DOWN 正确切分，表保留
         let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
@@ -2377,7 +2444,7 @@ mod tests {
         executor
             .apply_migration_file_public(&migration)
             .await
-            .expect("定制标记下迁移应成功");
+            .expect("the migration should succeed with custom markers");
         let rows = executor
             .connection
             .query_all_raw(sea_orm::Statement::from_string(
@@ -2386,13 +2453,17 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(rows.len(), 1, "定制标记下 DOWN 段不应被执行,表应保留");
+        assert_eq!(
+            rows.len(),
+            1,
+            "with custom markers the DOWN section must not be executed, so the table should remain"
+        );
 
         // 回滚按定制 DOWN 标记工作
         executor
             .rollback_version(1, &migration)
             .await
-            .expect("定制 DOWN 标记应支持回滚");
+            .expect("the custom DOWN marker should support rollback");
     }
 
     // =====================================================================

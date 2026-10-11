@@ -37,31 +37,9 @@ fn plural_category_name(category: PluralCategory) -> &'static str {
 // 消息目录（Message Catalog）
 // ============================================
 
-/// Get a locale-specific message template by key.
-///
-/// Returns the translated template string with `{count}` placeholders
-/// where applicable. Falls back to English for unsupported locales.
-fn get_message(locale: &Locale, key: &str) -> &'static str {
-    let lang = locale.id.language.as_str();
-    match (lang, key) {
-        // --- 迁移消息 ---
-        ("zh", "migration") => "已应用 {count} 个迁移",
-        // English and fallback
-        (_, "migration") => "{count} migrations applied",
-
-        // --- 通用消息 ---
-        ("zh", "hello_world") => "你好，世界！",
-        (_, "hello_world") => "Hello, World!",
-
-        // Unknown key fallback
-        _ => "",
-    }
-}
-
-/// Replace `{count}` placeholder in a message template with a formatted string.
-fn substitute_count(template: &str, formatted_count: &str) -> String {
-    template.replace("{count}", formatted_count)
-}
+// 同一语义的迁移消息只在 FTL 目录（catalog.rs 的 `migration` 键）保留一份：
+// format_migration_message 经 catalog::format_from_bundle 取该键，
+// 避免此处再维护第二套占位符语法不同的模板目录。
 
 impl DbI18nFormatter {
     /// Create a new formatter for the given BCP-47 locale tag.
@@ -126,15 +104,22 @@ impl DbI18nFormatter {
     }
 
     /// Build a locale-aware migration message combining the formatted
-    /// count with a locale-specific translated template
-    /// (e.g. `"1 migration applied"` for en-US, `"已应用 1 个迁移"` for zh-CN).
+    /// count with the FTL catalog's `migration` template
+    /// (e.g. `"5 migrations applied"` for en, `"已应用 5 个迁移"` for zh-CN).
+    ///
+    /// Falls back to the bare key if the template is missing
+    /// (same last-resort contract as [`super::translate`]).
     ///
     /// # Errors
     /// Returns [`I18nError::InvalidNumber`] if the count cannot be formatted.
     pub fn format_migration_message(&self, count: u64) -> Result<String, I18nError> {
         let count_str = self.format_number(count as f64)?;
-        let template = get_message(&self.locale, "migration");
-        Ok(substitute_count(template, &count_str))
+        Ok(super::catalog::format_from_bundle(
+            self.locale.id.language.as_str(),
+            "migration",
+            &[("count", count_str)],
+        )
+        .unwrap_or_else(|| "migration".to_string()))
     }
 
     /// Format an ISO calendar date (year / month / day) as a migration
@@ -264,42 +249,5 @@ mod tests {
             .format_migration_message(10)
             .expect("fr migration message");
         assert!(msg.contains("migrations"), "fr message: got '{msg}'");
-    }
-
-    // 直接测试私有函数以覆盖 get_message 的 hello_world 分支和 unknown key fallback
-    #[test]
-    fn test_get_message_hello_world_all_locales() {
-        use icu::locale::Locale;
-        use std::str::FromStr;
-
-        // zh hello_world
-        let zh = Locale::from_str("zh").unwrap();
-        assert_eq!(get_message(&zh, "hello_world"), "你好，世界！");
-
-        // en (fallback) hello_world
-        let en = Locale::from_str("en").unwrap();
-        assert_eq!(get_message(&en, "hello_world"), "Hello, World!");
-    }
-
-    #[test]
-    fn test_get_message_unknown_key_returns_empty() {
-        use icu::locale::Locale;
-        use std::str::FromStr;
-
-        let en = Locale::from_str("en").unwrap();
-        assert_eq!(get_message(&en, "nonexistent_key"), "");
-
-        let zh = Locale::from_str("zh").unwrap();
-        assert_eq!(get_message(&zh, "nonexistent_key"), "");
-    }
-
-    #[test]
-    fn test_substitute_count() {
-        assert_eq!(
-            substitute_count("{count} migrations applied", "5"),
-            "5 migrations applied"
-        );
-        assert_eq!(substitute_count("no placeholder", "5"), "no placeholder");
-        assert_eq!(substitute_count("{count} of {count}", "3"), "3 of 3");
     }
 }

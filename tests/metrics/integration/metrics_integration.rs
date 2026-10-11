@@ -195,7 +195,7 @@ async fn test_error_counting() {
 
     // 验证错误已记录
     let error_count = collector.connection_error_count();
-    assert_eq!(error_count, 2, "连接错误计数应该为 2");
+    assert_eq!(error_count, 2, "the connection error count should be 2");
 }
 
 /// 多查询类型指标测试

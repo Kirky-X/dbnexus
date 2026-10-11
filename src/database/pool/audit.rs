@@ -228,7 +228,10 @@ mod tests {
         assert_eq!(mine[0].operation, "Select");
         assert_eq!(mine[1].operation, "Insert");
         assert_eq!(mine[2].table, "tbl-c");
-        assert!(mine[0].at <= mine[2].at, "事件应按记录顺序保存");
+        assert!(
+            mine[0].at <= mine[2].at,
+            "events should be stored in recording order"
+        );
 
         // take 后清空：标记事件不再残留
         assert!(take_admin_bypass_events().iter().all(|e| e.role != marker));
@@ -243,7 +246,7 @@ mod tests {
         warn_and_record_default_admin_role("admin");
         assert!(
             admin_bypass_count() > before,
-            "默认 admin 角色应触发审计记录"
+            "the default admin role should trigger audit records"
         );
 
         let events = take_admin_bypass_events();
@@ -253,7 +256,7 @@ mod tests {
                 .any(|e| e.kind == BYPASS_KIND_DEFAULT_ADMIN_ROLE
                     && e.table == "-"
                     && e.operation == "PoolInit"),
-            "应存在 default_admin_role 类别的池初始化事件"
+            "a pool initialization event of category default_admin_role should exist"
         );
     }
 

@@ -58,11 +58,12 @@ fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
     // 验证 timestamps 已设置 updated_at（编排顺序：timestamps → hooks）
     match &am.updated_at {
         sea_orm::ActiveValue::Set(Some(_)) => {
-            println!("    [hook] before_insert: timestamps 已设置 ✓");
+            println!("    [hook] before_insert: timestamps set ✓");
         }
         _ => {
             return Err(sea_orm::DbErr::Custom(
-                "编排顺序错误: timestamps 应在 before_insert 钩子之前执行".to_string(),
+                "orchestration order error: timestamps should run before the before_insert hook"
+                    .to_string(),
             ));
         }
     }
@@ -73,7 +74,7 @@ fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
 fn after_insert_hook(model: &Model) -> Result<(), sea_orm::DbErr> {
     AFTER_INSERT_CALLS.fetch_add(1, Ordering::SeqCst);
     println!(
-        "    [hook] after_insert: 已保存记录 id={}, name={}",
+        "    [hook] after_insert: record id={}, name={} saved",
         model.id, model.name
     );
     Ok(())
@@ -82,7 +83,7 @@ fn after_insert_hook(model: &Model) -> Result<(), sea_orm::DbErr> {
 /// update 前钩子
 fn before_update_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
     BEFORE_UPDATE_CALLS.fetch_add(1, Ordering::SeqCst);
-    println!("    [hook] before_update: 即将更新记录");
+    println!("    [hook] before_update: about to update the record");
     // 可在此修改 ActiveModel 字段
     let _ = am;
     Ok(())
@@ -92,7 +93,7 @@ fn before_update_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
 fn after_update_hook(model: &Model) -> Result<(), sea_orm::DbErr> {
     AFTER_UPDATE_CALLS.fetch_add(1, Ordering::SeqCst);
     println!(
-        "    [hook] after_update: 已更新记录 id={}, name={}",
+        "    [hook] after_update: record id={}, name={} updated",
         model.id, model.name
     );
     Ok(())
@@ -150,10 +151,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ============================================
     // 1. 创建数据库 + 表
     // ============================================
-    println!("--- 1. 创建 members 表（schema() 自动生成）---\n");
+    println!("--- 1. create the members table (schema() auto-generated) ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("  ✓ 连接 SQLite 内存数据库成功");
+    println!("  ✓ connected to the SQLite in-memory database");
 
     // 使用宏生成的 schema() 方法创建表
     let table = Model::schema(DbBackend::Sqlite);
@@ -162,12 +163,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut migration = Migration::new(1, "create_members_table".to_string());
     migration.add_table_change(TableChange::CreateTable(table));
     executor.apply_migration(&migration).await?;
-    println!("  ✓ schema() 生成表并应用迁移成功\n");
+    println!("  ✓ schema() generated the table and applied the migration\n");
 
     // ============================================
     // 2. 插入有效记录（timestamps + hooks 触发）
     // ============================================
-    println!("--- 2. 插入有效记录（timestamps + before_insert + after_insert）---\n");
+    println!("--- 2. insert a valid record (timestamps + before_insert + after_insert) ---\n");
 
     // 使用 Model { ... }.into() 模式创建 ActiveModel（所有字段为 Unchanged）
     // 注意：当 validate + timestamps 同时启用时，验证步骤会调用 TryIntoModel，
@@ -183,13 +184,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let inserted = new_member.insert(session.connection()?).await?;
     println!(
-        "  ✓ 插入成功: id={}, name={}, email={}",
+        "  ✓ insert succeeded: id={}, name={}, email={}",
         inserted.id, inserted.name, inserted.email
     );
     println!("    created_at = {:?}", inserted.created_at);
     println!("    updated_at = {:?}", inserted.updated_at);
     println!(
-        "    钩子调用: before_insert={}, after_insert={}",
+        "    hook calls: before_insert={}, after_insert={}",
         BEFORE_INSERT_CALLS.load(Ordering::SeqCst),
         AFTER_INSERT_CALLS.load(Ordering::SeqCst)
     );
@@ -197,18 +198,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 验证 timestamps 已自动设置
     assert!(
         inserted.created_at.is_some(),
-        "created_at 应被 timestamps 自动设置"
+        "created_at should be set automatically by timestamps"
     );
     assert!(
         inserted.updated_at.is_some(),
-        "updated_at 应被 timestamps 自动设置"
+        "updated_at should be set automatically by timestamps"
     );
-    println!("  ✓ timestamps 自动设置验证通过\n");
+    println!("  ✓ timestamps auto-set verification passed\n");
 
     // ============================================
     // 3. 插入无效记录（validate 拦截）
     // ============================================
-    println!("--- 3. 插入无效记录（validate 拦截：name 太短）---\n");
+    println!("--- 3. insert an invalid record (validate intercepts: name too short) ---\n");
 
     let invalid_member: ActiveModel = Model {
         id: 2,
@@ -222,25 +223,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = invalid_member.insert(session.connection()?).await;
     match &result {
         Err(e) => {
-            println!("  ✓ 验证拦截成功: {}", e);
-            println!("    → name=\"A\" 长度不足 2，触发 #[validate(length(min=2))]");
+            println!("  ✓ validation intercepted: {}", e);
+            println!("    → name=\"A\" is shorter than 2, triggering #[validate(length(min=2))]");
         }
-        Ok(_) => println!("  ✗ 验证未拦截（不应发生）"),
+        Ok(_) => println!("  ✗ validation did not intercept (should not happen)"),
     }
-    assert!(result.is_err(), "无效记录应被验证拦截");
+    assert!(
+        result.is_err(),
+        "the invalid record should be intercepted by validation"
+    );
 
     // 验证钩子未被调用（验证失败短路）
     let before_insert_after_fail = BEFORE_INSERT_CALLS.load(Ordering::SeqCst);
     assert_eq!(
         before_insert_after_fail, 1,
-        "验证失败应短路，before_insert 钩子不应被再次调用"
+        "validation failure should short-circuit; the before_insert hook should not be called again"
     );
-    println!("  ✓ 短路验证: before_insert 钩子未被调用（验证失败短路）\n");
+    println!(
+        "  ✓ short-circuit verification: the before_insert hook was not called (validation short-circuited)\n"
+    );
 
     // ============================================
     // 4. 插入无效邮箱（validate 拦截）
     // ============================================
-    println!("--- 4. 插入无效邮箱（validate 拦截：email 格式错误）---\n");
+    println!("--- 4. insert an invalid email (validate intercepts: bad email format) ---\n");
 
     let invalid_email: ActiveModel = Model {
         id: 3,
@@ -252,57 +258,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .into();
 
     let result = invalid_email.insert(session.connection()?).await;
-    assert!(result.is_err(), "无效邮箱应被验证拦截");
-    println!("  ✓ 验证拦截成功: email=\"not-an-email\" 格式无效");
-    println!("    → 触发 #[validate(email)]\n");
+    assert!(
+        result.is_err(),
+        "the invalid email should be intercepted by validation"
+    );
+    println!("  ✓ validation intercepted: email=\"not-an-email\" has an invalid format");
+    println!("    → trigger #[validate(email)]\n");
 
     // ============================================
     // 5. 更新记录（timestamps + hooks 触发）
     // ============================================
-    println!("--- 5. 更新记录（timestamps + before_update + after_update）---\n");
+    println!("--- 5. update the record (timestamps + before_update + after_update) ---\n");
 
     // 查询已插入的记录
-    let existing = Model::find_by_id(&session, 1).await?.expect("记录应存在");
+    let existing = Model::find_by_id(&session, 1)
+        .await?
+        .expect("the record should exist");
 
     // 转为 ActiveModel 并修改 name（主键设为 Unchanged 表示 update）
     let mut am: ActiveModel = existing.into();
     am.name = sea_orm::Set("Alice Updated".to_string());
 
     let updated = am.update(session.connection()?).await?;
-    println!("  ✓ 更新成功: id={}, name={}", updated.id, updated.name);
-    println!("    created_at = {:?}（不变）", updated.created_at);
-    println!("    updated_at = {:?}（已更新）", updated.updated_at);
     println!(
-        "    钩子调用: before_update={}, after_update={}",
+        "  ✓ update succeeded: id={}, name={}",
+        updated.id, updated.name
+    );
+    println!("    created_at = {:?} (unchanged)", updated.created_at);
+    println!("    updated_at = {:?} (updated)", updated.updated_at);
+    println!(
+        "    hook calls: before_update={}, after_update={}",
         BEFORE_UPDATE_CALLS.load(Ordering::SeqCst),
         AFTER_UPDATE_CALLS.load(Ordering::SeqCst)
     );
 
     // 验证 updated_at 已变化（timestamps 在 update 时仅设 updated_at）
-    assert!(updated.updated_at.is_some(), "updated_at 应被设置");
-    println!("  ✓ timestamps update 验证通过: 仅 updated_at 被更新\n");
+    assert!(updated.updated_at.is_some(), "updated_at should be set");
+    println!("  ✓ timestamps update verification passed: only updated_at was updated\n");
 
     // ============================================
     // 总结
     // ============================================
     println!("========================================");
-    println!("✨ 示例完成！");
+    println!("✨ Example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  timestamps = true       自动管理 created_at / updated_at");
-    println!("    → insert: 设置 created_at + updated_at");
-    println!("    → update: 仅更新 updated_at");
-    println!("  validate                 集成 validator crate 字段验证");
-    println!("    → #[validate(length(min=2))]  字段长度验证");
-    println!("    → #[validate(email)]          邮箱格式验证");
-    println!("    → 验证失败短路，不执行后续 timestamps 和 hooks");
-    println!("  hooks(...)               事件钩子（6 个可选）");
+    println!("\n📚 Key concepts:");
+    println!("  timestamps = true       automatically manage created_at / updated_at");
+    println!("    → insert: set created_at + updated_at");
+    println!("    → update: update updated_at only");
+    println!("  validate                 integrates validator crate field validation");
+    println!("    → #[validate(length(min=2))]  field length validation");
+    println!("    → #[validate(email)]          email format validation");
+    println!("    → validation failure short-circuits; the later timestamps and hooks do not run");
+    println!("  hooks(...)               event hooks (6 optional)");
     println!("    → before_insert: fn(&mut ActiveModel) -> Result<(), DbErr>");
     println!("    → after_insert:  fn(&Model) -> Result<(), DbErr>");
     println!("    → before_update: fn(&mut ActiveModel) -> Result<(), DbErr>");
     println!("    → after_update:  fn(&Model) -> Result<(), DbErr>");
-    println!("\n⚡ 编排顺序: validate → timestamps → user_hooks");
-    println!("    任一失败短路，后续步骤不执行");
+    println!("\n⚡ Orchestration order: validate → timestamps → user_hooks");
+    println!("    any failure short-circuits and later steps do not run");
 
     Ok(())
 }

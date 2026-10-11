@@ -39,6 +39,8 @@ use trait_kit::prelude::*;
 
 use oxcache::integrations::kit::OxcacheModule;
 
+use crate::i18n;
+
 // 仅 sqlite 专测消费 trait 对象断言；非 sqlite 组合下避免 unused import
 #[cfg(all(test, feature = "sqlite"))]
 use crate::database::ConnectionPool;
@@ -291,18 +293,25 @@ impl AsyncHealthCheck for DbNexusModule {
     fn check(cap: &Self::Capability) -> HealthStatus {
         let status = cap.status();
         if status.total == 0 {
-            HealthStatus::unhealthy("no connections established")
+            HealthStatus::unhealthy(i18n::t_simple("kit-health-no-connections"))
         } else if status.idle > 0 && status.wait_count == 0 {
             HealthStatus::Healthy
         } else if status.wait_count > 0 {
-            HealthStatus::degraded(format!(
-                "{} waiting, {}/{} active/total",
-                status.wait_count, status.active, status.total
+            HealthStatus::degraded(i18n::t(
+                "kit-health-waiting",
+                &[
+                    ("waiting", status.wait_count.to_string()),
+                    ("active", status.active.to_string()),
+                    ("total", status.total.to_string()),
+                ],
             ))
         } else {
-            HealthStatus::degraded(format!(
-                "no idle connections, {}/{} active/total",
-                status.active, status.total
+            HealthStatus::degraded(i18n::t(
+                "kit-health-no-idle",
+                &[
+                    ("active", status.active.to_string()),
+                    ("total", status.total.to_string()),
+                ],
             ))
         }
     }
@@ -662,7 +671,11 @@ mod tests {
             .await
             .expect("cache set");
         let got = cache.get("t413-key").await.expect("cache get");
-        assert_eq!(got.as_deref(), Some(&b"t413-value"[..]), "缓存能力应可读写");
+        assert_eq!(
+            got.as_deref(),
+            Some(&b"t413-value"[..]),
+            "the cache capability should be readable and writable"
+        );
     }
 
     /// 全能力注册端到端 — 池/缓存/审计/健康四能力在构建后全部
@@ -706,7 +719,10 @@ mod tests {
             .expect("AsyncKit::build should build all four modules");
 
         let pool = kit.require::<DbNexusModule>().expect("require pool");
-        assert!(pool.config().url.contains("t413"), "池能力可用");
+        assert!(
+            pool.config().url.contains("t413"),
+            "the pool capability should be usable"
+        );
 
         let cache = kit.require::<DbNexusCacheModule>().expect("require cache");
         cache
@@ -729,7 +745,7 @@ mod tests {
             events
                 .iter()
                 .any(|e| e.entity_type == "t413_entities" && e.entity_id == "42"),
-            "审计能力应可写入并查回事件"
+            "the audit capability should be writable and able to read events back"
         );
 
         let health = kit
@@ -738,7 +754,7 @@ mod tests {
         let snapshot = health.snapshot().await;
         assert!(
             snapshot["pool"]["saturation"].is_number() && snapshot["status"].is_string(),
-            "健康能力应输出结构化快照: {snapshot}"
+            "the health capability should emit a structured snapshot: {snapshot}"
         );
 
         let _ = std::fs::remove_file(&db_path);

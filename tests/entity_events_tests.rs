@@ -49,7 +49,7 @@ async fn test_record_dispatch_once_and_mark() {
     let dispatched = OutboxDispatcher::dispatch_once(store.as_ref(), bus.as_ref(), 10)
         .await
         .expect("dispatch once");
-    assert_eq!(dispatched, 2, "两事件应全部投递");
+    assert_eq!(dispatched, 2, "both events should be delivered");
 
     let first = rx.recv().await.expect("first event");
     assert_eq!(first.entity, "users");
@@ -64,7 +64,10 @@ async fn test_record_dispatch_once_and_mark() {
     let replayed = OutboxDispatcher::dispatch_once(store.as_ref(), bus.as_ref(), 10)
         .await
         .expect("re-dispatch");
-    assert_eq!(replayed, 0, "dispatched 状态不应再投递");
+    assert_eq!(
+        replayed, 0,
+        "a dispatched status should not be dispatched again"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -86,11 +89,14 @@ async fn test_pending_events_survive_for_replay() {
     // 只取第一条（模拟批处理中断）
     let pending = store.fetch_pending(1).await.expect("fetch pending");
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].1.entity_id, "7", "按登记顺序取最旧");
+    assert_eq!(
+        pending[0].1.entity_id, "7",
+        "the oldest should be taken in registration order"
+    );
 
     // 剩余 pending 保持可重放
     let again = store.fetch_pending(10).await.expect("fetch again");
-    assert_eq!(again.len(), 2, "未标记的事件保持 pending");
+    assert_eq!(again.len(), 2, "an unmarked event stays pending");
 
     let _ = std::fs::remove_file(&path);
 }
@@ -110,11 +116,17 @@ async fn test_record_escapes_quote_bearing_fields() {
     let dispatched = OutboxDispatcher::dispatch_once(store.as_ref(), bus.as_ref(), 10)
         .await
         .expect("dispatch once");
-    assert_eq!(dispatched, 1, "转义后的记录应正常登记与投递");
+    assert_eq!(
+        dispatched, 1,
+        "an escaped record should register and dispatch normally"
+    );
 
     let event = rx.recv().await.expect("event");
     assert_eq!(event.entity, "order_items");
-    assert_eq!(event.entity_id, "o'brien-1", "单引号字段应无损往返");
+    assert_eq!(
+        event.entity_id, "o'brien-1",
+        "a field containing a single quote should round-trip losslessly"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -142,7 +154,7 @@ async fn test_background_dispatcher_smoke() {
 
     let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
         .await
-        .expect("应在超时前收到事件")
+        .expect("events should be received before the timeout")
         .expect("channel open");
     assert_eq!(event.action, EntityAction::Delete);
     assert_eq!(event.entity_id, "9");

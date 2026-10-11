@@ -547,10 +547,10 @@ impl HealthChecker {
             Err(_) => {
                 // 超时返回降级状态
                 HealthCheckResult {
-                    status: HealthStatus::Degraded("健康检查超时".to_string()),
+                    status: HealthStatus::Degraded(i18n::t_simple("health-check-timeout")),
                     latency: self.check_timeout,
-                    details: "检查超时".to_string(),
-                    recommendations: vec!["健康检查超时，建议优化检查逻辑".to_string()],
+                    details: i18n::t_simple("health-check-timeout"),
+                    recommendations: vec![i18n::t_simple("health-check-timeout-recommendation")],
                 }
             }
         }
@@ -567,53 +567,88 @@ impl HealthChecker {
         let snapshot = self.metrics.snapshot();
 
         // 评估健康状态
-        let status =
-            if snapshot.failed > snapshot.created.saturating_sub(10) && snapshot.created > 10 {
-                recommendations.push("检查数据库连接配置是否正确".to_string());
-                recommendations.push("验证网络连接是否稳定".to_string());
-                HealthStatus::Unhealthy(format!(
-                    "连接失败率过高: {}/{} ({:.1}%)",
-                    snapshot.failed,
-                    snapshot.created,
-                    snapshot.created as f64 / (snapshot.created + snapshot.failed) as f64 * 100.0
-                ))
-            } else if snapshot.total == 0 {
-                recommendations.push("请确保数据库连接池已正确初始化".to_string());
-                HealthStatus::Unhealthy("无可用连接".to_string())
-            } else if cb_status.state == CircuitBreakerState::Open {
-                recommendations.push("等待熔断器恢复".to_string());
-                HealthStatus::Degraded("熔断器已打开，请求被拒绝".to_string())
-            } else if snapshot.active >= snapshot.total && snapshot.waiting > 10 {
-                recommendations.push("考虑增加连接池大小".to_string());
-                recommendations.push("检查是否有连接泄露".to_string());
-                HealthStatus::Degraded(format!(
-                    "连接池已满: {}/{} 活跃, {} 等待",
-                    snapshot.active, snapshot.total, snapshot.waiting
-                ))
-            } else if snapshot.idle == 0 && snapshot.active > 0 {
-                recommendations.push("考虑增加最小连接数".to_string());
-                HealthStatus::Degraded("无空闲连接".to_string())
-            } else {
-                HealthStatus::Healthy
-            };
+        let status = if snapshot.failed > snapshot.created.saturating_sub(10)
+            && snapshot.created > 10
+        {
+            recommendations.push(i18n::t_simple(
+                "health-recommendation-check-connection-config",
+            ));
+            recommendations.push(i18n::t_simple("health-recommendation-check-network"));
+            HealthStatus::Unhealthy(i18n::t(
+                "health-status-failure-rate-too-high",
+                &[
+                    ("failed", snapshot.failed.to_string()),
+                    ("created", snapshot.created.to_string()),
+                    (
+                        "percent",
+                        format!(
+                            "{:.1}",
+                            snapshot.created as f64 / (snapshot.created + snapshot.failed) as f64
+                                * 100.0
+                        ),
+                    ),
+                ],
+            ))
+        } else if snapshot.total == 0 {
+            recommendations.push(i18n::t_simple(
+                "health-recommendation-ensure-pool-initialized",
+            ));
+            HealthStatus::Unhealthy(i18n::t_simple("health-status-no-connections"))
+        } else if cb_status.state == CircuitBreakerState::Open {
+            recommendations.push(i18n::t_simple("health-recommendation-wait-circuit-breaker"));
+            HealthStatus::Degraded(i18n::t_simple("health-status-circuit-breaker-open"))
+        } else if snapshot.active >= snapshot.total && snapshot.waiting > 10 {
+            recommendations.push(i18n::t_simple("health-recommendation-increase-pool-size"));
+            recommendations.push(i18n::t_simple(
+                "health-recommendation-check-connection-leak",
+            ));
+            HealthStatus::Degraded(i18n::t(
+                "health-status-pool-full",
+                &[
+                    ("active", snapshot.active.to_string()),
+                    ("total", snapshot.total.to_string()),
+                    ("waiting", snapshot.waiting.to_string()),
+                ],
+            ))
+        } else if snapshot.idle == 0 && snapshot.active > 0 {
+            recommendations.push(i18n::t_simple(
+                "health-recommendation-increase-min-connections",
+            ));
+            HealthStatus::Degraded(i18n::t_simple("health-status-no-idle-connections"))
+        } else {
+            HealthStatus::Healthy
+        };
 
         // 更新健康检查时间
         self.metrics.update_health_check_time().await;
 
         let details = format!(
-            "连接池: total={}, active={}, idle={}, waiting={}\n\
-             统计: created={}, failed={}, closed={}\n\
-             熔断器: {:?} ({} 次失败, {} 次成功)",
-            snapshot.total,
-            snapshot.active,
-            snapshot.idle,
-            snapshot.waiting,
-            snapshot.created,
-            snapshot.failed,
-            snapshot.closed,
-            cb_status.state,
-            cb_status.consecutive_failures,
-            cb_status.consecutive_successes
+            "{}\n{}\n{}",
+            i18n::t(
+                "health-details-pool",
+                &[
+                    ("total", snapshot.total.to_string()),
+                    ("active", snapshot.active.to_string()),
+                    ("idle", snapshot.idle.to_string()),
+                    ("waiting", snapshot.waiting.to_string()),
+                ],
+            ),
+            i18n::t(
+                "health-details-stats",
+                &[
+                    ("created", snapshot.created.to_string()),
+                    ("failed", snapshot.failed.to_string()),
+                    ("closed", snapshot.closed.to_string()),
+                ],
+            ),
+            i18n::t(
+                "health-details-circuit-breaker",
+                &[
+                    ("state", format!("{:?}", cb_status.state)),
+                    ("failures", cb_status.consecutive_failures.to_string()),
+                    ("successes", cb_status.consecutive_successes.to_string()),
+                ],
+            ),
         );
 
         HealthCheckResult {

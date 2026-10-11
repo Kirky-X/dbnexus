@@ -462,7 +462,7 @@ mod tests {
         // 密码值应被脱敏（键名保留，值替换为 [REDACTED]）
         assert!(
             !after_value.contains("secret123"),
-            "敏感值不应残留: {after_value}"
+            "no sensitive value should remain: {after_value}"
         );
         let parsed: serde_json::Value = serde_json::from_str(after_value).unwrap();
         assert_eq!(parsed["password"], "[REDACTED]");
@@ -728,7 +728,7 @@ mod tests {
         // 验证超过最大深度时返回占位符
         assert!(
             sanitized.contains("[MAX_DEPTH_EXCEEDED]"),
-            "应该包含 MAX_DEPTH_EXCEEDED 标记"
+            "should contain the MAX_DEPTH_EXCEEDED marker"
         );
     }
 

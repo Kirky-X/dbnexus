@@ -540,13 +540,13 @@ fn test_index_entry_unicode_characters() {
         table_name: "用户表".to_string(),
         record_id: "记录_123".to_string(),
         shard_id: 0,
-        index_key: "邮箱".to_string(),
+        index_key: "email".to_string(),
         index_value: "用户@例子.测试".to_string(),
     };
 
     assert_eq!(entry.table_name, "用户表");
     assert_eq!(entry.record_id, "记录_123");
-    assert_eq!(entry.index_key, "邮箱");
+    assert_eq!(entry.index_key, "email");
     assert_eq!(entry.index_value, "用户@例子.测试");
 }
 

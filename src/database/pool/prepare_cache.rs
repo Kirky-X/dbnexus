@@ -48,6 +48,8 @@ use oxcache::{Cache, DashMapMemoryBackend};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::i18n;
+
 /// 池级缓存实例别名（DbPool 集成口径 —— 就绪标记 + 命中率指标；
 /// 下游如需缓存驱动句柄可用自定义 V 的 PreparedStatementCache）
 // 生产消费方（enable_prepare_cache/execute_cached）随 prepare-cache 门控；
@@ -108,7 +110,7 @@ where
             .sync_backend_arc(Arc::new(backend))
             .sync_mode(true)
             .build_sync()
-            .expect("oxcache 用户同步后端构建不应失败（无更多可失败分支）");
+            .expect("building the oxcache user sync backend should not fail (no remaining fallible branches)");
         Self {
             inner,
             hits: AtomicU64::new(0),
@@ -138,14 +140,32 @@ where
             }
             Ok(None) => {}
             Err(e) => {
-                log::warn!("PreparedStatementCache get_or_prepare 读取失败，按未命中处理: {e}");
+                log::warn!(
+                    "{}",
+                    i18n::t(
+                        "prepare-cache-log-read-miss",
+                        &[
+                            ("op", "get_or_prepare".to_string()),
+                            ("error", e.to_string())
+                        ]
+                    )
+                );
             }
         }
 
         self.misses.fetch_add(1, Ordering::Relaxed);
         let value = Arc::new(prepare(&key));
         if let Err(e) = self.inner.set_sync(&cache_key, &value) {
-            log::warn!("PreparedStatementCache get_or_prepare 写入失败: {e}");
+            log::warn!(
+                "{}",
+                i18n::t(
+                    "prepare-cache-log-write-failed",
+                    &[
+                        ("op", "get_or_prepare".to_string()),
+                        ("error", e.to_string())
+                    ]
+                )
+            );
         }
         (value, false)
     }
@@ -176,7 +196,13 @@ where
                 None
             }
             Err(e) => {
-                log::warn!("PreparedStatementCache get 读取失败，按未命中处理: {e}");
+                log::warn!(
+                    "{}",
+                    i18n::t(
+                        "prepare-cache-log-read-miss",
+                        &[("op", "get".to_string()), ("error", e.to_string())]
+                    )
+                );
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 None
             }
@@ -188,14 +214,26 @@ where
     pub fn insert(&self, key: impl Into<Arc<str>>, value: V) {
         let key: Arc<str> = key.into();
         if let Err(e) = self.inner.set_sync(&key.to_string(), &value) {
-            log::warn!("PreparedStatementCache insert 写入失败: {e}");
+            log::warn!(
+                "{}",
+                i18n::t(
+                    "prepare-cache-log-write-failed",
+                    &[("op", "insert".to_string()), ("error", e.to_string())]
+                )
+            );
         }
     }
 
     /// 清空全部条目并重置命中/未命中统计
     pub fn clear(&self) {
         if let Err(e) = self.inner.clear_sync() {
-            log::warn!("PreparedStatementCache clear 失败: {e}");
+            log::warn!(
+                "{}",
+                i18n::t(
+                    "prepare-cache-log-clear-failed",
+                    &[("error", e.to_string())]
+                )
+            );
         }
         self.hits.store(0, Ordering::Relaxed);
         self.misses.store(0, Ordering::Relaxed);
@@ -217,16 +255,23 @@ mod tests {
             prepares.fetch_add(1, Ordering::SeqCst);
             format!("prepared:{sql}")
         });
-        assert!(!hit1, "首次应未命中");
+        assert!(!hit1, "the first access should miss");
         assert_eq!(&*v1, "prepared:SELECT 1");
 
         let (v2, hit2) = cache.get_or_prepare("SELECT 1", |sql| {
             prepares.fetch_add(1, Ordering::SeqCst);
             format!("prepared:{sql}")
         });
-        assert!(hit2, "二次应命中");
-        assert_eq!(&*v2, "prepared:SELECT 1", "命中应返回同一准备产物");
-        assert_eq!(prepares.load(Ordering::SeqCst), 1, "prepare 只应执行一次");
+        assert!(hit2, "the second access should hit");
+        assert_eq!(
+            &*v2, "prepared:SELECT 1",
+            "a hit should return the same prepared product"
+        );
+        assert_eq!(
+            prepares.load(Ordering::SeqCst),
+            1,
+            "prepare should run only once"
+        );
 
         // 不同语句 → 未命中
         let (_, hit3) = cache.get_or_prepare("SELECT 2", |_| String::new());
@@ -244,12 +289,20 @@ mod tests {
         cache.insert("a", 1);
         cache.insert("a", 10);
 
-        assert_eq!(cache.get("a").map(|v| *v), Some(10), "同键应覆盖原值");
+        assert_eq!(
+            cache.get("a").map(|v| *v),
+            Some(10),
+            "the same key should overwrite the previous value"
+        );
         let stats = cache.stats();
-        assert_eq!(stats.size, 1, "覆盖不得新增条目");
-        assert_eq!(stats.evictions, 0, "覆盖不得触发淘汰");
+        assert_eq!(stats.size, 1, "overwriting must not add an entry");
+        assert_eq!(stats.evictions, 0, "overwriting must not trigger eviction");
         // 唯一一次命中来自上面的 get 探测；插入自身不计入命中/未命中
-        assert_eq!((stats.hits, stats.misses), (1, 0), "插入不计入命中/未命中");
+        assert_eq!(
+            (stats.hits, stats.misses),
+            (1, 0),
+            "insert does not count as a hit or a miss"
+        );
     }
 
     /// (d) 清空语义：条目与统计一并归零
@@ -265,7 +318,7 @@ mod tests {
         let stats = cache.stats();
         assert_eq!(stats.size, 0);
         assert_eq!((stats.hits, stats.misses, stats.evictions), (0, 0, 0));
-        assert_eq!(cache.get("a"), None, "清空后条目不可达");
+        assert_eq!(cache.get("a"), None, "entries are unreachable after clear");
     }
 
     /// (b) 容量有界与统计账目一致：满容量稳态循环后 size 恒等于 capacity、
@@ -283,21 +336,28 @@ mod tests {
         // 稳态循环：每轮 1 条新键进、淘汰 1 条旧键
         for round in 0..6 {
             cache.insert(format!("n{round}"), round as u32);
-            assert_eq!(cache.stats().size, 3, "第 {round} 轮后容量不得越界");
+            assert_eq!(
+                cache.stats().size,
+                3,
+                "the capacity must not be exceeded after round {round}"
+            );
         }
 
         // 性质：最新条目存活
         for k in ["n3", "n4", "n5"] {
-            assert!(cache.get(k).is_some(), "{k} 应存活");
+            assert!(cache.get(k).is_some(), "{k} should survive");
         }
 
         // 统计口径：oxcache memory 后端不暴露淘汰计数——evictions 恒 0，
         // 淘汰行为由 size 容量界与命中率口径观测（见 PrepareCacheStats 字段 doc）
         let stats = cache.stats();
-        assert_eq!(stats.size, 3, "存活集合不得越界");
+        assert_eq!(
+            stats.size, 3,
+            "the surviving set must not exceed the capacity"
+        );
         assert_eq!(
             stats.evictions, 0,
-            "oxcache memory 后端不暴露逐出计数，evictions 恒 0"
+            "the oxcache memory backend does not expose an eviction count, so evictions is always 0"
         );
         // 账目一致：3 次 get 探测命中 + 淘汰发生后被淘汰键的探测未命中
         assert_eq!(stats.hits, 3);
@@ -309,8 +369,14 @@ mod tests {
     fn test_lru_eviction_respects_capacity_and_recency() {
         let cache: PreparedStatementCache<()> = PreparedStatementCache::new(2);
 
-        assert!(!cache.get_or_prepare("a", |_| ()).1, "a 首次未命中");
-        assert!(!cache.get_or_prepare("b", |_| ()).1, "b 首次未命中");
+        assert!(
+            !cache.get_or_prepare("a", |_| ()).1,
+            "the first access of a should miss"
+        );
+        assert!(
+            !cache.get_or_prepare("b", |_| ()).1,
+            "the first access of b should miss"
+        );
         // 访问 a
         assert!(cache.get_or_prepare("a", |_| ()).1);
         // 插入 c → 容量满，发生淘汰（淘汰对象由 TinyLFU 准入决定，不锚定）
@@ -325,12 +391,15 @@ mod tests {
         // 性质：最新插入的 c 存活；容量 2 下 a/b 中至多一个存活
         // （oxcache DashMapMemoryBackend 为插入序 FIFO 淘汰——访问不改变
         // 淘汰序，"最近使用条目存活"属于已删除的 LRU 性质， newest 存活）
-        assert!(cache.get("c").is_some(), "c 应仍存活");
+        assert!(cache.get("c").is_some(), "c should still survive");
         let reachable = ["a", "b", "c"]
             .iter()
             .filter(|k| cache.get(k).is_some())
             .count();
-        assert_eq!(reachable, 2, "容量 2 下可达键应恰为 2，got {reachable}");
+        assert_eq!(
+            reachable, 2,
+            "with capacity 2 exactly 2 keys should be reachable, got {reachable}"
+        );
     }
 
     /// (b) 探测语义：命中/未命中计入统计，不锚淘汰对象
@@ -338,13 +407,21 @@ mod tests {
     fn test_get_probes_and_counts_stats() {
         let cache: PreparedStatementCache<u32> = PreparedStatementCache::new(2);
 
-        assert_eq!(cache.get("a"), None, "空缓存探测应未命中");
+        assert_eq!(
+            cache.get("a"),
+            None,
+            "a probe on an empty cache should miss"
+        );
         let stats = cache.stats();
         assert_eq!((stats.hits, stats.misses), (0, 1));
 
         cache.insert("a", 1);
         cache.insert("b", 2);
-        assert_eq!(cache.get("a").map(|v| *v), Some(1), "探测命中应返回条目");
+        assert_eq!(
+            cache.get("a").map(|v| *v),
+            Some(1),
+            "a hit probe should return the entry"
+        );
         // 新键 c 插入：容量满，淘汰一例（对象不锚定）
         cache.insert("c", 3);
 
@@ -355,6 +432,6 @@ mod tests {
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.evictions, 0);
         // 性质：最新条目存活
-        assert!(cache.get("c").is_some(), "c 应仍存活");
+        assert!(cache.get("c").is_some(), "c should still survive");
     }
 }

@@ -55,16 +55,16 @@ pub enum Relation {}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🔍 db_entity 高级查询: schema + query + paginate + batch");
+    println!("🔍 db_entity advanced queries: schema + query + paginate + batch");
     println!("========================================\n");
 
     // ============================================
     // 1. schema() — 从 Entity 自动生成表结构
     // ============================================
-    println!("--- 1. schema() 自动生成表结构 ---\n");
+    println!("--- 1. schema() auto-generates the table structure ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
-    println!("  ✓ 连接 SQLite 内存数据库成功");
+    println!("  ✓ connected to the SQLite in-memory database");
 
     // schema() 调用 sea_orm::Schema::create_table_from_entity 并转换为 migration::schema::Table
     let table = Model::schema(DbBackend::Sqlite);
@@ -73,12 +73,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut migration = Migration::new(1, "create_users_table".to_string());
     migration.add_table_change(TableChange::CreateTable(table));
     executor.apply_migration(&migration).await?;
-    println!("  ✓ schema(DbBackend::Sqlite) 生成表并应用迁移成功\n");
+    println!("  ✓ schema(DbBackend::Sqlite) generated the table and applied the migration\n");
 
     // ============================================
     // 2. insert_many() — 批量插入
     // ============================================
-    println!("--- 2. insert_many() 批量插入 5 条记录 ---\n");
+    println!("--- 2. insert_many() batch inserts 5 records ---\n");
 
     let users = vec![
         Model {
@@ -115,17 +115,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = Model::insert_many(&session, users).await?;
     println!(
-        "  ✓ insert_many 成功, last_insert_id = {:?}",
+        "  ✓ insert_many succeeded, last_insert_id = {:?}",
         result.last_insert_id
     );
 
     let total = Model::count(&session).await?;
-    println!("  ✓ 当前总记录数: {}\n", total);
+    println!("  ✓ current total records: {}\n", total);
 
     // ============================================
     // 3. query() — 链式查询（filter + order_by + limit）
     // ============================================
-    println!("--- 3. query() 链式查询: age >= 18, ORDER BY age DESC, LIMIT 2 ---\n");
+    println!("--- 3. query() chained queries: age >= 18, ORDER BY age DESC, LIMIT 2 ---\n");
 
     // query() 返回 Sea-ORM 原生 Select<E>，可链式调用所有 Sea-ORM 查询方法
     let select = Model::query(&session).await?;
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .all(conn)
         .await?;
 
-    println!("  ✓ 查询结果 (age >= 18, 按 age 降序, 前 2 条):");
+    println!("  ✓ query result (age >= 18, ordered by age desc, first 2):");
     for u in &adults {
         println!("    - id={}, name={}, age={}", u.id, u.name, u.age);
     }
@@ -145,34 +145,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(adults.len(), 2);
     assert_eq!(adults[0].name, "Charlie");
     assert_eq!(adults[1].name, "Alice");
-    println!("  ✓ 断言通过\n");
+    println!("  ✓ assertions passed\n");
 
     // ============================================
     // 4. paginate() — 分页查询
     // ============================================
-    println!("--- 4. paginate() 分页查询: page_size = 2 ---\n");
+    println!("--- 4. paginate() paginated query: page_size = 2 ---\n");
 
     let paginator = Model::paginate(&session, 2).await?;
 
     let total_items = paginator.num_items().await?;
     let total_pages = paginator.num_pages().await?;
-    println!("  ✓ 总记录数: {}, 总页数: {}", total_items, total_pages);
+    println!(
+        "  ✓ total records: {}, total pages: {}",
+        total_items, total_pages
+    );
     assert_eq!(total_items, 5);
     assert_eq!(total_pages, 3); // 5 条 / 每页 2 条 = 3 页
 
     for page_num in 0..total_pages {
         let page = paginator.fetch_page(page_num).await?;
-        println!("    第 {} 页: {} 条记录", page_num, page.len());
+        println!("    page {}: {} records", page_num, page.len());
         for u in &page {
             println!("      - id={}, name={}, age={}", u.id, u.name, u.age);
         }
     }
-    println!("  ✓ 分页断言通过\n");
+    println!("  ✓ pagination assertions passed\n");
 
     // ============================================
     // 5. update_many() — 条件批量更新
     // ============================================
-    println!("--- 5. update_many() 条件批量更新: age < 18 → age = 0 ---\n");
+    println!("--- 5. update_many() conditional batch update: age < 18 → age = 0 ---\n");
 
     // 将所有未成年人 (age < 18) 的 age 设为 0
     // 预期: Bob(17) 和 Diana(16) 被更新
@@ -180,34 +183,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 0i64.into())];
 
     let affected = Model::update_many(&session, filter, updates).await?;
-    println!("  ✓ update_many 完成, 受影响行数: {}", affected);
-    assert_eq!(affected, 2, "应更新 2 条记录 (Bob 和 Diana)");
+    println!("  ✓ update_many done, rows affected: {}", affected);
+    assert_eq!(affected, 2, "should update 2 records (Bob and Diana)");
 
     // 验证更新结果
     let conn = session.connection()?;
-    let bob = Entity::find_by_id(2).one(conn).await?.expect("Bob 应存在");
+    let bob = Entity::find_by_id(2)
+        .one(conn)
+        .await?
+        .expect("Bob should exist");
     let diana = Entity::find_by_id(4)
         .one(conn)
         .await?
-        .expect("Diana 应存在");
+        .expect("Diana should exist");
     let alice = Entity::find_by_id(1)
         .one(conn)
         .await?
-        .expect("Alice 应存在");
+        .expect("Alice should exist");
 
     println!("    Bob   (id=2): age {} → {}", 17, bob.age);
     println!("    Diana (id=4): age {} → {}", 16, diana.age);
-    println!("    Alice (id=1): age {} (未变)", alice.age);
+    println!("    Alice (id=1): age {} (unchanged)", alice.age);
 
-    assert_eq!(bob.age, 0, "Bob 的 age 应为 0");
-    assert_eq!(diana.age, 0, "Diana 的 age 应为 0");
-    assert_eq!(alice.age, 25, "Alice 的 age 应保持 25");
-    println!("  ✓ 断言通过\n");
+    assert_eq!(bob.age, 0, "Bob's age should be 0");
+    assert_eq!(diana.age, 0, "Diana's age should be 0");
+    assert_eq!(alice.age, 25, "Alice's age should remain 25");
+    println!("  ✓ assertions passed\n");
 
     // ============================================
     // 6. 复合条件 update_many()
     // ============================================
-    println!("--- 6. update_many() 复合条件: age < 18 OR age > 28 → age = 100 ---\n");
+    println!("--- 6. update_many() composite condition: age < 18 OR age > 28 → age = 100 ---\n");
 
     // 重置数据：先恢复 Bob 和 Diana 的 age 为 17（< 18，以满足后续复合条件）
     let restore_filter: Condition = Column::Age.eq(0).into();
@@ -222,8 +228,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 100i64.into())];
 
     let affected = Model::update_many(&session, cond, updates).await?;
-    println!("  ✓ update_many 复合条件完成, 受影响行数: {}", affected);
-    assert_eq!(affected, 3, "应更新 3 条 (Bob, Diana, Charlie)");
+    println!(
+        "  ✓ update_many with composite conditions done, rows affected: {}",
+        affected
+    );
+    assert_eq!(affected, 3, "should update 3 (Bob, Diana, Charlie)");
 
     // 验证
     let conn = session.connection()?;
@@ -231,30 +240,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(Column::Age.eq(100))
         .count(conn)
         .await?;
-    println!("  ✓ age=100 的记录数: {}", count_age_100);
+    println!("  ✓ count of records with age=100: {}", count_age_100);
     assert_eq!(count_age_100, 3);
-    println!("  ✓ 断言通过\n");
+    println!("  ✓ assertions passed\n");
 
     // ============================================
     // 总结
     // ============================================
     println!("========================================");
-    println!("✨ 示例完成！");
+    println!("✨ Example complete!");
     println!("========================================");
-    println!("\n📚 关键概念:");
-    println!("  schema(backend)         从 Entity 自动生成 migration::schema::Table");
-    println!("    → 复用 sea_orm::Schema::create_table_from_entity");
-    println!("    → 转换器将 TableCreateStatement 转为 migration::schema::Table");
-    println!("  query(session)          返回 Sea-ORM 原生 Select<E>");
-    println!("    → 支持 .filter().order_by().limit().all() 链式调用");
-    println!("    → 0 重复实现，完全复用 Sea-ORM 查询能力");
-    println!("  paginate(session, size) 分页查询");
+    println!("\n📚 Key concepts:");
+    println!("  schema(backend)         generates migration::schema::Table from the Entity");
+    println!("    → reuses sea_orm::Schema::create_table_from_entity");
+    println!("    → the converter turns TableCreateStatement into migration::schema::Table");
+    println!("  query(session)          returns the native Sea-ORM Select<E>");
+    println!("    → supports .filter().order_by().limit().all() chaining");
+    println!("    → zero duplicate implementation, fully reusing the Sea-ORM query capability");
+    println!("  paginate(session, size) paginated query");
     println!("    → .num_items() / .num_pages() / .fetch_page(n)");
-    println!("  insert_many(session, v) 批量插入");
-    println!("    → 返回 InsertResult 含 last_insert_id");
-    println!("  update_many(session, c, u) 条件批量更新");
-    println!("    → 接受 Condition + Vec<(Column, Value)>");
-    println!("    → 返回受影响行数");
+    println!("  insert_many(session, v) batch insert");
+    println!("    → returns InsertResult including last_insert_id");
+    println!("  update_many(session, c, u) conditional batch update");
+    println!("    → accepts Condition + Vec<(Column, Value)>");
+    println!("    → returns the number of affected rows");
 
     Ok(())
 }

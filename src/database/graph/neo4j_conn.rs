@@ -33,6 +33,7 @@ use crate::database::graph::{
     GraphConnection, GraphExecResult, GraphQueryResult, GraphRow, GraphTransaction, GraphValue,
 };
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 
 /// Neo4j 图数据库连接
 ///
@@ -69,7 +70,10 @@ impl Neo4jConnection {
     /// 连接失败时返回 `DbError::Connection`
     pub async fn new(uri: &str, user: &str, password: &str) -> DbResult<Self> {
         let graph = neo4rs::Graph::new(uri, user, password).map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j connect: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-connect-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
         Ok(Self {
             graph: Some(Arc::new(graph)),
@@ -104,16 +108,16 @@ impl Neo4jConnection {
 
                 if user.is_empty() {
                     let env_user = std::env::var("NEO4J_USER").map_err(|_| {
-                        DbError::Connection(sea_orm::DbErr::Custom(
-                            "neo4j URL has no credentials and NEO4J_USER env var is not set"
-                                .to_string(),
-                        ))
+                        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "neo4j-url-no-credentials-env",
+                            &[("variable", "NEO4J_USER".to_string())],
+                        )))
                     })?;
                     let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
-                        DbError::Connection(sea_orm::DbErr::Custom(
-                            "neo4j URL has no credentials and NEO4J_PASSWORD env var is not set"
-                                .to_string(),
-                        ))
+                        DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                            "neo4j-url-no-credentials-env",
+                            &[("variable", "NEO4J_PASSWORD".to_string())],
+                        )))
                     })?;
                     Ok((uri, env_user, env_pass))
                 } else {
@@ -124,16 +128,16 @@ impl Neo4jConnection {
                 // 非 URL 格式，原样返回 uri，凭据从环境变量读取
                 // 错误信息不回显原始 URL，避免凭据泄露
                 let env_user = std::env::var("NEO4J_USER").map_err(|_| {
-                    DbError::Connection(sea_orm::DbErr::Custom(
-                        "neo4j URL is not a valid URL and NEO4J_USER env var is not set"
-                            .to_string(),
-                    ))
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "neo4j-url-invalid-and-env-missing",
+                        &[("variable", "NEO4J_USER".to_string())],
+                    )))
                 })?;
                 let env_pass = std::env::var("NEO4J_PASSWORD").map_err(|_| {
-                    DbError::Connection(sea_orm::DbErr::Custom(
-                        "neo4j URL is not a valid URL and NEO4J_PASSWORD env var is not set"
-                            .to_string(),
-                    ))
+                    DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                        "neo4j-url-invalid-and-env-missing",
+                        &[("variable", "NEO4J_PASSWORD".to_string())],
+                    )))
                 })?;
                 Ok((url.to_string(), env_user, env_pass))
             }
@@ -156,21 +160,29 @@ impl std::fmt::Debug for Neo4jConnection {
 #[async_trait::async_trait]
 impl GraphConnection for Neo4jConnection {
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
-        let graph = self.graph.as_ref().ok_or_else(|| {
-            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
-        })?;
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("neo4j-not-connected")))?;
 
         let mut stream = graph.execute(neo4rs::query(cypher)).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j execute: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-execute-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
 
         let mut rows = Vec::new();
         while let Some(row) = stream.next().await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-row-fetch-failed",
+                &[("error", e.to_string())],
+            )))
         })? {
             let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "neo4j row deserialize: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "neo4j-row-deserialize-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
 
@@ -199,9 +211,10 @@ impl GraphConnection for Neo4jConnection {
         cypher: &str,
         params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        let graph = self.graph.as_ref().ok_or_else(|| {
-            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
-        })?;
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("neo4j-not-connected")))?;
 
         let mut query = neo4rs::query(cypher);
         for (key, value) in params {
@@ -209,18 +222,23 @@ impl GraphConnection for Neo4jConnection {
         }
 
         let mut stream = graph.execute(query).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "neo4j execute (params): {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-execute-with-params-failed",
+                &[("error", e.to_string())],
             )))
         })?;
 
         let mut rows = Vec::new();
         while let Some(row) = stream.next().await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j row fetch: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-row-fetch-failed",
+                &[("error", e.to_string())],
+            )))
         })? {
             let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "neo4j row deserialize: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "neo4j-row-deserialize-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
 
@@ -245,19 +263,23 @@ impl GraphConnection for Neo4jConnection {
         match result {
             GraphExecResult::Query(q) if !q.rows.is_empty() => Ok(()),
             GraphExecResult::Query(_) => Err(DbError::Connection(sea_orm::DbErr::Custom(
-                "neo4j health check returned no rows".to_string(),
+                i18n::t_simple("neo4j-health-check-no-rows"),
             ))),
             GraphExecResult::Write { .. } => Ok(()),
         }
     }
 
     async fn begin_graph_txn(&self) -> DbResult<Box<dyn GraphTransaction + Send>> {
-        let graph = self.graph.as_ref().ok_or_else(|| {
-            DbError::Config("Neo4jConnection not connected (placeholder)".to_string())
-        })?;
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("neo4j-not-connected")))?;
 
         let txn = graph.start_txn().await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j start_txn: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-start-txn-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
 
         Ok(Box::new(Neo4jTransaction {
@@ -314,48 +336,61 @@ impl GraphTransaction for Neo4jTransaction {
     async fn commit(self: Box<Self>) -> DbResult<()> {
         let mut guard = self.txn.lock().await;
         let txn = guard.take().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom(
-                "neo4j transaction already consumed".to_string(),
-            ))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                "neo4j-transaction-consumed",
+            )))
         })?;
         drop(guard);
-        txn.commit()
-            .await
-            .map_err(|e| DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j commit: {e}"))))
+        txn.commit().await.map_err(|e| {
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-commit-failed",
+                &[("error", e.to_string())],
+            )))
+        })
     }
 
     async fn rollback(self: Box<Self>) -> DbResult<()> {
         let mut guard = self.txn.lock().await;
         let txn = guard.take().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom(
-                "neo4j transaction already consumed".to_string(),
-            ))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                "neo4j-transaction-consumed",
+            )))
         })?;
         drop(guard);
         txn.rollback().await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j rollback: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-rollback-failed",
+                &[("error", e.to_string())],
+            )))
         })
     }
 
     async fn execute_cypher(&self, cypher: &str) -> DbResult<GraphExecResult> {
         let mut guard = self.txn.lock().await;
         let txn = guard.as_mut().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom(
-                "neo4j transaction already consumed".to_string(),
-            ))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                "neo4j-transaction-consumed",
+            )))
         })?;
 
         let mut stream = txn.execute(neo4rs::query(cypher)).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn execute: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-txn-execute-failed",
+                &[("error", e.to_string())],
+            )))
         })?;
 
         let mut rows = Vec::new();
         while let Some(row) = stream.next(&mut *txn).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-txn-row-fetch-failed",
+                &[("error", e.to_string())],
+            )))
         })? {
             let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "neo4j txn row deserialize: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "neo4j-txn-row-deserialize-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
 
@@ -386,9 +421,9 @@ impl GraphTransaction for Neo4jTransaction {
     ) -> DbResult<GraphExecResult> {
         let mut guard = self.txn.lock().await;
         let txn = guard.as_mut().ok_or_else(|| {
-            DbError::Connection(sea_orm::DbErr::Custom(
-                "neo4j transaction already consumed".to_string(),
-            ))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                "neo4j-transaction-consumed",
+            )))
         })?;
 
         let mut query = neo4rs::query(cypher);
@@ -397,18 +432,23 @@ impl GraphTransaction for Neo4jTransaction {
         }
 
         let mut stream = txn.execute(query).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!(
-                "neo4j txn execute (params): {e}"
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-txn-execute-with-params-failed",
+                &[("error", e.to_string())],
             )))
         })?;
 
         let mut rows = Vec::new();
         while let Some(row) = stream.next(&mut *txn).await.map_err(|e| {
-            DbError::Connection(sea_orm::DbErr::Custom(format!("neo4j txn row fetch: {e}")))
+            DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "neo4j-txn-row-fetch-failed",
+                &[("error", e.to_string())],
+            )))
         })? {
             let json_val: serde_json::Value = row.to::<serde_json::Value>().map_err(|e| {
-                DbError::Connection(sea_orm::DbErr::Custom(format!(
-                    "neo4j txn row deserialize: {e}"
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "neo4j-txn-row-deserialize-failed",
+                    &[("error", e.to_string())],
                 )))
             })?;
 
@@ -870,7 +910,9 @@ mod negative_int_integration {
     #[tokio::test]
     async fn negative_integer_properties_roundtrip_exactly() {
         if !integration_enabled() {
-            eprintln!("skip: NEO4J_PASSWORD 未设置，跳过负整数往返集成测试");
+            eprintln!(
+                "skip: NEO4J_PASSWORD is not set, skipping the negative-integer round-trip integration test"
+            );
             return;
         }
         let uri = std::env::var("NEO4J_URL").unwrap_or_else(|_| "bolt://localhost:7687".into());
@@ -898,18 +940,22 @@ mod negative_int_integration {
             ))
             .await
             .unwrap();
-        let row = stream.next().await.unwrap().expect("行应存在");
+        let row = stream
+            .next()
+            .await
+            .unwrap()
+            .expect("a row should be present");
         // 两条读取路径（serde_json 反序列化 + 类型化 get）都必须精确
         let via_serde: serde_json::Value = row.to::<serde_json::Value>().unwrap();
         assert_eq!(
             via_serde["a"], -1,
-            "serde 路径 -1 往返（neo4rs 0.8 tiny-int 回绕回归点）"
+            "serde path -1 round-trip (neo4rs 0.8 tiny-int wraparound regression point)"
         );
         assert_eq!(via_serde["b"], -2);
         assert_eq!(via_serde["d"], 255);
         let a: i64 = row.get("a").unwrap();
         let b: i64 = row.get("b").unwrap();
-        assert_eq!(a, -1, "类型化路径 -1 往返");
+        assert_eq!(a, -1, "typed path -1 round-trip");
         assert_eq!(b, -2);
 
         // 清理探针节点

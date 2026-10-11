@@ -859,7 +859,7 @@ mod tests {
         assert_eq!(
             decision.retry_after,
             Some(Duration::from_millis(334)),
-            "Retry-After 须向上取整到完整补充周期"
+            "Retry-After must round up to a full refill period"
         );
     }
 
@@ -870,7 +870,11 @@ mod tests {
         let mut limiter = RateLimiter::with_defaults(3, Duration::from_secs(60), 1000);
         // 桶容量 = max_requests：3 连续通过，第 4 次拒绝
         for i in 0..3 {
-            assert!(limiter.check("cfg-key").await, "第 {} 次应通过", i + 1);
+            assert!(
+                limiter.check("cfg-key").await,
+                "attempt {} should be allowed",
+                i + 1
+            );
         }
         assert!(!limiter.check("cfg-key").await);
         assert!(!limiter.is_empty());
@@ -881,7 +885,10 @@ mod tests {
 
         // 动态收紧：更新配置后新桶仍按 burst 容量发放（burst 不随 update 变）
         limiter.update_config(1, Duration::from_secs(30));
-        assert!(limiter.check("fresh-key").await, "新桶首查应允许");
+        assert!(
+            limiter.check("fresh-key").await,
+            "the first check of a new bucket should be allowed"
+        );
         assert!(!limiter.check("cfg-key").await || true);
     }
 
@@ -893,7 +900,13 @@ mod tests {
         // 过期阈值 = 10 倍窗口 = 100ms：等待超过阈值
         tokio::time::sleep(Duration::from_millis(150)).await;
         let removed = limiter.cleanup();
-        assert_eq!(removed, 2, "过期桶应被清理，removed={removed}");
-        assert!(limiter.is_empty(), "清理后桶位应为空");
+        assert_eq!(
+            removed, 2,
+            "expired buckets should be cleaned up, removed={removed}"
+        );
+        assert!(
+            limiter.is_empty(),
+            "the bucket map should be empty after cleanup"
+        );
     }
 }
