@@ -146,7 +146,7 @@ pub trait GraphConnection: Send + Sync {
     /// 通过 `params` 提供 `name` 的值，底层使用 prepared statement，
     /// 数据库不会将参数值解析为 Cypher 代码，从根本上防止注入。
     ///
-    /// # 默认实现（HD-1 修复）
+    /// # 默认实现
     ///
     /// 默认实现返回 `DbError::Config` 错误，**不再静默回退到 `execute_cypher`**。
     /// 原回退实现会丢弃 `params`，违反 Liskov 替换：调用方预期参数化查询被执行，
@@ -164,7 +164,7 @@ pub trait GraphConnection: Send + Sync {
         _cypher: &str,
         _params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        // HD-1 修复：默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
+        // 默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
         // 原回退实现违反 Liskov 替换：子类静默忽略 params 可导致 Cypher 注入
         Err(DbError::Config(
             "execute_cypher_with_params not implemented for this GraphConnection implementor; \
@@ -241,7 +241,7 @@ pub trait GraphTransaction: Send + Sync {
     /// 语义同 [`GraphConnection::execute_cypher_with_params`]，
     /// 但在事务上下文内执行，确保事务内所有操作使用同一连接。
     ///
-    /// # 默认实现（HD-1 修复）
+    /// # 默认实现
     ///
     /// 默认实现返回 `DbError::Config` 错误，**不再静默回退到 `execute_cypher`**。
     /// 原回退实现会丢弃 `params`，违反 Liskov 替换。强制每个事务实现显式重写。
@@ -257,7 +257,7 @@ pub trait GraphTransaction: Send + Sync {
         _cypher: &str,
         _params: HashMap<String, serde_json::Value>,
     ) -> DbResult<GraphExecResult> {
-        // HD-1 修复：默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
+        // 默认实现返回错误，不再静默丢弃 params 回退到 execute_cypher
         Err(DbError::Config(
             "execute_cypher_with_params not implemented for this GraphTransaction implementor; \
              must override to provide parameterized queries (vuln-0005/HD-1)"
@@ -541,9 +541,9 @@ mod tests {
         }
     }
 
-    // ===== HD-1 测试：execute_cypher_with_params 默认实现返回错误（不静默回退） =====
+    // ===== 测试：execute_cypher_with_params 默认实现返回错误（不静默回退） =====
 
-    /// HD-1 Red-1：GraphConnection 默认 execute_cypher_with_params 返回错误而非回退
+    /// Red-1：GraphConnection 默认 execute_cypher_with_params 返回错误而非回退
     ///
     /// 构造一个仅实现必需方法的 mock GraphConnection，验证未重写的
     /// `execute_cypher_with_params` 返回 `DbError::Config` 错误，
@@ -595,7 +595,7 @@ mod tests {
         }
     }
 
-    /// HD-1 Red-2：GraphTransaction 默认 execute_cypher_with_params 返回错误而非回退
+    /// Red-2：GraphTransaction 默认 execute_cypher_with_params 返回错误而非回退
     ///
     /// 构造一个仅实现必需方法的 mock GraphTransaction，验证未重写的
     /// `execute_cypher_with_params` 返回 `DbError::Config` 错误。

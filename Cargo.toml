@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0-rc.6"
+version = "0.6.0-rc.7"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -41,9 +41,9 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "0.6.0-rc.6" }
+dbnexus-macros = { path = "macros", version = "0.6.0-rc.7" }
 # 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
-dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.6" }
+dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.7" }
 
 # Validation（root + examples 共享）
 validator = { version = "0.21", features = ["derive"] }
@@ -276,7 +276,7 @@ axum = { workspace = true, optional = true }
 parking_lot = { version = "0.12", optional = true }
 chrono = { version = "0.4", optional = true, features = ["serde"] }
 sha2 = { version = "0.11", optional = true }
-confers = { version = "0.6.0-rc.6", default-features = false, optional = true }
+confers = { version = "0.6.0-rc.8", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
@@ -295,14 +295,14 @@ dashmap = { version = "6.2", optional = true }
 # Lock-free read for permission config (COW pattern)
 arc-swap = { version = "1.9", optional = true }
 # Cache via oxcache - moka is used internally by oxcache as backend.
-oxcache = { version = "0.5.0-rc.6", optional = true }
+oxcache = { version = "0.5.0-rc.8", optional = true }
 
 # Rate limiter port（限流端口，permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
 # Mirrors oxcache/limiteron pattern.
-trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.9", default-features = false, features = ["async"], optional = true }
 
 # DuckDB embedded database (duckdb feature)
 duckdb = { version = "1.10505", optional = true, features = ["bundled"] }

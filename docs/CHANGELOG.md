@@ -27,7 +27,7 @@
 
 </details>
 
-## [Unreleased]
+## [0.6.0-rc.7] - 2026-10-10
 
 ### Removed
 

@@ -136,7 +136,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.6", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.7", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -323,16 +323,16 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # 嵌入式/边缘设备（最小配置）
-dbnexus = { version = "0.6.0-rc.6", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.7", features = ["embedded"] }
 
 # 微服务
-dbnexus = { version = "0.6.0-rc.6", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.7", features = ["microservice"] }
 
 # 单体应用
-dbnexus = { version = "0.6.0-rc.6", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.7", features = ["monolith"] }
 
 # 企业级（完整功能）
-dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.7", features = ["enterprise"] }
 ```
 
 ---
@@ -357,7 +357,7 @@ dbnexus = { version = "0.6.0-rc.6", features = ["enterprise"] }
 
 ## 💻 示例
 
-全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.6）：
+全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.7）：
 
 ```bash
 cd examples
@@ -440,7 +440,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 测试分六层承载：`src/**` 内 `#[cfg(test)]` 单元测试、`tests/**` 显式注册的集成测试目标（按 feature 门控）、`tests/e2e/` 端到端场景（按 `cfg(feature)` 隔离）、`postgres_testcontainers` / `mysql_testcontainers` 容器级测试（每测试独立容器隔离）、doc tests（CI 单独运行 `cargo test --doc`）与 [benches/](benches/) 基准测试（见[性能](#-性能)）。金字塔基线、驱动组矩阵与 E2E 场景定义详见 [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)。
 
-### 测试规模（截至 0.6.0-rc.6）
+### 测试规模（截至 0.6.0-rc.7）
 
 | 指标 | 数值 | 来源 |
 |------|------|------|
@@ -527,7 +527,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
-| 0.6.0-rc.6 | 2026-10-06 | 运维 CLI 剩余命令（权限校验/池状态/审计查询/分片信息）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
+| 0.6.0-rc.7 | 2026-10-06 | 运维 CLI 剩余命令（权限校验/池状态/审计查询/分片信息）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` 转发 sea-orm 派生宏；`sea_orm` re-export 解绑驱动 feature；i18n 整改；sha2 0.11；跨仓 path 依赖改走 crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | 统一行查询 `query_rows`；Saga 持久化恢复；字段级脱敏与行级安全（`data-protection`）；权限统一门面与查询 DSL；COPY 批量写入与 OTel 导出桥；端到端基准 `e2e_bench`；运维 CLI `migrate`/`health`/`user` 子命令（0.6.0-rc.3 版本号跳过未发布，内容随本版发布） |
 | 0.6.0-rc.2 | 2026-09-03 | 移除 `tracing` 特性；四驱动互斥严格化（编译期 `compile_error!`）；补全 JOIN/子查询跨表权限检查；`h2` 安全升级 |

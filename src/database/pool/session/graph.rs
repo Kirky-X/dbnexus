@@ -70,7 +70,7 @@ impl Session {
     /// 使用 `Option<HashMap>` 区分两种操作。`params.take()` 在互斥分支中消耗参数，
     /// 避免在调用路径强制构造空 HashMap，也无需 clone。
     ///
-    /// # HD-2 误报说明（架构审查）
+    /// # 误报说明（架构审查）
     ///
     /// 审查曾标记"Session 直接依赖 Ladybug/Neo4j 具体实现"为 HIGH 架构问题。此为误报：
     /// 所有图操作通过 `conn.as_graph()?` 获取 `&dyn GraphConnection` trait 对象，

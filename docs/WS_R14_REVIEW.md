@@ -2,7 +2,7 @@
 
 > 对应变更：`base-roadmap-full-completion`（T034）。复核对象：FEATURE_AUDIT_REPORT.md §2.3/§9.2-1
 > dbnexus 命名迁移项与 sql-parser→cache/oxcache 解耦项；附 cargo-hack 主要 feature 组合抽查。
-> 复核日期：2026-09-30。基线：0.6.0-rc.6（2861e3c 之后的工作树）。
+> 复核日期：2026-09-30。基线：0.6.0-rc.7（2861e3c 之后的工作树）。
 
 ## 一、§9.2-1 解耦项
 

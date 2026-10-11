@@ -795,7 +795,7 @@ impl Session {
 
         let result = self.execute_raw(sql).await?;
 
-        // LD-2 修复：复用 record_metrics_and_mark_write 统一 metrics 记录与 mark_write 逻辑，
+        // 复用 record_metrics_and_mark_write 统一 metrics 记录与 mark_write 逻辑，
         // 消除与 execute() 方法中重复的手动展开（record_query_metrics + is_write_action + mark_write）
         self.record_metrics_and_mark_write(operation, start).await;
 
@@ -852,7 +852,7 @@ impl Session {
                 Ok(results)
             }
             Err(e) => {
-                // LD-4 修复：保留原始错误上下文，rollback 失败时组合错误消息（不覆盖原始错误）
+                // 保留原始错误上下文，rollback 失败时组合错误消息（不覆盖原始错误）
                 match self.rollback().await {
                     Ok(()) => Err(e),
                     Err(rollback_err) => Err(DbError::Transaction(format!(

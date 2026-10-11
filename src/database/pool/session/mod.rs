@@ -87,7 +87,7 @@ struct SessionState {
 
     /// 最后写操作时间（用于读写分离）
     ///
-    /// LD-1 误报说明（架构审查）：审查曾标记"`Option<Instant>` 存在原子时序问题"为
+    /// 误报说明（架构审查）：审查曾标记"`Option<Instant>` 存在原子时序问题"为
     /// LOW 架构问题。此为误报：`last_write` 由外层 `state: Mutex<SessionState>` 保护，
     /// 所有读写均持锁（`mark_write` 写、`should_use_master` 读、`commit/rollback` 清除），
     /// 不存在无锁并发访问，无需使用 `AtomicInstant`。`Mutex<SessionState>` 的串行化

@@ -92,12 +92,12 @@ impl AuthenticationManager {
 
     /// 添加或更新用户（跳过密码哈希验证）
     ///
-    /// **HD-3 文档明确**：此方法可见性为 `pub(crate)`，**不对外暴露**。
+    /// 文档明确** 此方法可见性为 `pub(crate)`，**不对外暴露**。
     /// 仅限 crate 内部迁移/测试场景使用（如批量导入历史用户、测试 fixture 构造）。
     /// 外部代码必须使用 [`add_user`](Self::add_user)（验证 bcrypt 格式）或
     /// [`register_user`](Self::register_user)（验证密码强度 + 哈希 + 存储）。
     ///
-    /// `pub(crate)` 可见性是 HD-3 修复的硬性约束：确保外部调用方无法绕过
+    /// `pub(crate)` 可见性是的硬性约束：确保外部调用方无法绕过
     /// `add_user` 的 bcrypt 格式验证（vuln-0002），从源头杜绝无效哈希进入存储。
     /// 若未来需要对外暴露，必须先增加等价的安全验证，不得直接放宽可见性。
     ///
@@ -396,9 +396,9 @@ mod tests {
         );
     }
 
-    // ===== HD-3 测试：add_user vs add_user_unchecked 职责清晰分离 =====
+    // ===== 测试：add_user vs add_user_unchecked 职责清晰分离 =====
 
-    /// HD-3 测试：add_user 必须验证 bcrypt 格式（公共 API 职责）
+    /// 测试：add_user 必须验证 bcrypt 格式（公共 API 职责）
     ///
     /// 同一无效 password_hash，add_user 必须拒绝，add_user_unchecked 必须接受。
     /// 验证两者职责清晰分离：公共 API 强制安全，内部 API 跳过验证。
@@ -432,7 +432,7 @@ mod tests {
         );
     }
 
-    /// HD-3 测试：add_user_unchecked 接受的 user 可被 get_user 读回
+    /// 测试：add_user_unchecked 接受的 user 可被 get_user 读回
     ///
     /// 验证 pub(crate) 内部 API 写入的数据可被公共读取 API 读回，
     /// 确保迁移场景（如批量导入）的数据完整性。

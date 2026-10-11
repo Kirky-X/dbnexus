@@ -151,13 +151,13 @@ const COMMON_PASSWORDS: &[&str] = &[
     "test@12345",
 ];
 
-/// 密码策略（HD-4 + LD-3 修复）
+/// 密码策略
 ///
 /// 将原硬编码的 `BCRYPT_COST`/`MIN_PASSWORD_LEN`/`MAX_PASSWORD_LEN`/`COMMON_PASSWORDS`
 /// 抽象为可配置的策略对象，支持：
-/// - 自定义 bcrypt cost factor（HD-4）
-/// - 自定义最小/最大密码长度（HD-4）
-/// - 自定义弱密码黑名单（LD-3，支持追加/替换/清空）
+/// - 自定义 bcrypt cost factor
+/// - 自定义最小/最大密码长度
+/// - 自定义弱密码黑名单（支持追加/替换/清空）
 ///
 /// # 向后兼容
 ///
@@ -199,7 +199,7 @@ pub struct PasswordPolicy {
     /// 密码最大长度（防止 bcrypt 72 字节截断导致的密码碰撞）
     pub max_len: usize,
 
-    /// 常见弱密码黑名单（大小写不敏感匹配，LD-3：可自定义）
+    /// 常见弱密码黑名单（大小写不敏感匹配，：可自定义）
     ///
     /// 默认值为 `COMMON_PASSWORDS` 的 Vec 转换。调用方可：
     /// - 追加企业专属弱密码
@@ -291,12 +291,12 @@ impl PasswordPolicy {
 
 /// 密码哈希器
 ///
-/// HD-4 修复：内部持有 [`PasswordPolicy`]，支持自定义 cost/length/blacklist。
+/// 内部持有 [`PasswordPolicy`]，支持自定义 cost/length/blacklist。
 /// 通过 [`new`](Self::new) 创建的实例使用默认策略（等价于原行为），
 /// 通过 [`with_policy`](Self::with_policy) 可注入自定义策略。
 #[derive(Debug, Clone)]
 pub struct PasswordHasher {
-    /// 密码策略（HD-4：可配置）
+    /// 密码策略（可配置）
     policy: PasswordPolicy,
 }
 
@@ -308,7 +308,7 @@ impl PasswordHasher {
         Self::with_policy(PasswordPolicy::default())
     }
 
-    /// 使用自定义密码策略创建哈希器（HD-4）
+    /// 使用自定义密码策略创建哈希器
     ///
     /// # 参数
     ///
@@ -353,7 +353,7 @@ impl PasswordHasher {
         self.policy.validate(password)
     }
 
-    /// 验证密码强度（使用外部传入的策略，HD-4 修复）
+    /// 验证密码强度（使用外部传入的策略）
     ///
     /// 与 [`validate_strength`](Self::validate_strength) 的区别：不依赖实例自身的策略，
     /// 而是接受外部 `policy` 参数。适用于：
@@ -508,10 +508,10 @@ mod tests {
     }
 
     // ============================================================================
-    // HD-4 测试：PasswordPolicy 可配置（cost / min_len / max_len）
+    // 测试：PasswordPolicy 可配置（cost / min_len / max_len）
     // ============================================================================
 
-    /// HD-4：Default policy 必须保持原硬编码默认值（向后兼容）
+    /// Default policy 必须保持原硬编码默认值（向后兼容）
     #[test]
     fn test_hd4_default_policy_preserves_original_values() {
         let policy = PasswordPolicy::default();
@@ -538,7 +538,7 @@ mod tests {
         );
     }
 
-    /// HD-4：自定义 min_len=8 应接受 8 字符密码，Default policy（min_len=12）应拒绝
+    /// 自定义 min_len=8 应接受 8 字符密码，Default policy（min_len=12）应拒绝
     #[test]
     fn test_hd4_custom_min_len_accepts_shorter_password() {
         let custom_policy = PasswordPolicy {
@@ -557,7 +557,7 @@ mod tests {
         );
     }
 
-    /// HD-4：自定义 bcrypt_cost=10 应反映在生成的 hash 中
+    /// 自定义 bcrypt_cost=10 应反映在生成的 hash 中
     #[test]
     fn test_hd4_custom_cost_reflected_in_hash() {
         let custom_policy = PasswordPolicy {
@@ -573,7 +573,7 @@ mod tests {
         assert_eq!(cost_str, "10", "custom policy must use cost=10");
     }
 
-    /// HD-4：with_policy 创建的 hasher 仍能正确 hash + verify
+    /// with_policy 创建的 hasher 仍能正确 hash + verify
     #[test]
     fn test_hd4_hasher_with_policy_preserves_hash_verify() {
         let policy = PasswordPolicy {
@@ -587,7 +587,7 @@ mod tests {
         assert!(hasher.verify("wrong-password", &hash).is_err());
     }
 
-    /// HD-4：自定义 max_len 应拒绝超长密码
+    /// 自定义 max_len 应拒绝超长密码
     #[test]
     fn test_hd4_custom_max_len_rejects_overlong_password() {
         // 自定义 max_len=20，21 字符密码应被拒绝
@@ -610,7 +610,7 @@ mod tests {
         );
     }
 
-    /// HD-4：向后兼容 - validate_strength (无 policy 参数) 行为不变
+    /// 向后兼容 - validate_strength (无 policy 参数) 行为不变
     #[test]
     fn test_hd4_backward_compat_validate_strength_unchanged() {
         let hasher = PasswordHasher::new();
@@ -621,10 +621,10 @@ mod tests {
     }
 
     // ============================================================================
-    // LD-3 测试：自定义黑名单支持
+    // 测试：自定义黑名单支持
     // ============================================================================
 
-    /// LD-3：自定义黑名单应拒绝用户指定的密码
+    /// 自定义黑名单应拒绝用户指定的密码
     #[test]
     fn test_ld3_custom_blacklist_rejects_specified_password() {
         // "MyCustom@1234" 满足复杂度（13 字符 + 大小写 + 数字 + 特殊字符）
@@ -644,7 +644,7 @@ mod tests {
         );
     }
 
-    /// LD-3：在默认黑名单基础上追加额外项
+    /// 在默认黑名单基础上追加额外项
     #[test]
     fn test_ld3_extend_default_blacklist_with_extra_entries() {
         let mut blacklist = PasswordPolicy::default().blacklist;
@@ -666,7 +666,7 @@ mod tests {
         );
     }
 
-    /// LD-3：空黑名单应接受原黑名单中的密码（仍需满足复杂度）
+    /// 空黑名单应接受原黑名单中的密码（仍需满足复杂度）
     #[test]
     fn test_ld3_empty_blacklist_accepts_former_blacklisted_password() {
         let empty_blacklist_policy = PasswordPolicy {
@@ -681,7 +681,7 @@ mod tests {
         );
     }
 
-    /// LD-3：黑名单匹配必须大小写不敏感
+    /// 黑名单匹配必须大小写不敏感
     #[test]
     fn test_ld3_blacklist_matching_is_case_insensitive() {
         let custom_policy = PasswordPolicy {

@@ -408,7 +408,7 @@ mod tests {
 
     /// (a) 过期条目在 stale 窗口内：get 返回旧值（SWR）
     ///
-    /// stale 窗口由 `with_refresh_interval` 映射承载（见 R-permission-cache-004）。
+    /// stale 窗口由 `with_refresh_interval` 映射承载（见）。
     #[tokio::test]
     async fn test_expired_within_stale_window_returns_stale_value() {
         let cache = PermissionCache::new()
@@ -541,7 +541,7 @@ mod tests {
     }
 
     /// 并发 refresh 过期 key：provider 恰好被调用一次
-    ///（R-permission-cache-002：in-flight 去重同时覆盖显式 refresh 路径）
+    ///（in-flight 去重同时覆盖显式 refresh 路径）
     #[tokio::test(flavor = "multi_thread", worker_threads = 18)]
     async fn test_concurrent_refresh_single_provider_call() {
         let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
