@@ -1,6 +1,6 @@
 # 限流统一迁移指南（Limiter 端口 / limiteron 后端）
 
-> 适用版本：dbnexus 0.6.0-rc.7+（R-dbnexus-003 限流统一）
+> 适用版本：dbnexus 0.6.0-rc.8+（R-dbnexus-003 限流统一）
 
 ## 背景
 
