@@ -12,7 +12,8 @@ mod db_pool;
 pub mod health_export;
 mod pool_impl;
 // prepare_cache 模块随消费方编译：prepare-cache（池级语句准备缓存）与
-// sql-parser（解析结果缓存，解耦 oxcache 依赖）两条路径恰好覆盖全部
+// sql-parser（解析结果缓存，经 dep:oxcache 激活，prepare_cache 直接以
+// oxcache DashMapMemoryBackend 为后端）两条路径恰好覆盖全部
 // 使用点，无消费方的裸组合下整体 dead code；模块可见性收缩为 crate 内
 // （`pub` 会使 `dbnexus::database::pool::prepare_cache::` 全路径绕过
 // prepare-cache 门控直达），对外仅经下方 prepare-cache 门控 re-export

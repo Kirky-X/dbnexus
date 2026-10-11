@@ -52,7 +52,7 @@
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.8", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -72,13 +72,13 @@ tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.6.0-rc.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
+dbnexus = { version = "0.6.0-rc.9", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.6.0-rc.8", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.6.0-rc.8", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
 **重要**：关系型驱动之间一次只能启用一个，混用在编译期直接报错。
@@ -608,7 +608,7 @@ tx.commit().await?; // 显式提交；若此前发生错误且守护被丢弃，
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["cache"]
 ```
 
@@ -637,7 +637,7 @@ assert_eq!(Product::cache_key(1), "products:1");
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["metrics"]
 ```
 
@@ -652,7 +652,7 @@ println!("{}", collector.export_prometheus());
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["audit"]
 ```
 
@@ -677,7 +677,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景，以分析只读旁�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["duckdb"]
 ```
 
@@ -716,7 +716,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["authentication"]
 ```
 
@@ -756,7 +756,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["sql-parser"]
 ```
 
@@ -805,7 +805,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["sharding"]
 ```
 
@@ -833,7 +833,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["validation"]
 ```
 
@@ -863,7 +863,7 @@ DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 features = ["ladybug"]  # 或 "neo4j"
 ```
 

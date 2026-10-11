@@ -136,7 +136,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.8", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -323,16 +323,16 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ```toml
 # Embedded/edge devices (minimal)
-dbnexus = { version = "0.6.0-rc.8", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0-rc.8", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0-rc.8", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["monolith"] }
 
 # Enterprise (full features)
-dbnexus = { version = "0.6.0-rc.8", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.9", features = ["enterprise"] }
 ```
 
 ---
@@ -357,7 +357,7 @@ dbnexus = { version = "0.6.0-rc.8", features = ["enterprise"] }
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.8):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.9):
 
 ```bash
 cd examples
@@ -440,7 +440,7 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicitly registered integration targets under `tests/**` (feature-gated), end-to-end scenarios in `tests/e2e/` (isolated via `cfg(feature)`), `postgres_testcontainers` / `mysql_testcontainers` container-level tests (per-test container isolation), doc tests (run separately in CI via `cargo test --doc`), and criterion benchmarks under [benches/](benches/) (see [Performance](#-performance)). The test pyramid baseline, driver-group matrix and E2E scenario definitions are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
-### Test scale (as of 0.6.0-rc.8)
+### Test scale (as of 0.6.0-rc.9)
 
 | Metric | Value | Source |
 |------|------|------|
@@ -527,7 +527,7 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.6.0-rc.8 | 2026-10-06 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
+| 0.6.0-rc.9 | 2026-10-06 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` forwarding sea-orm derives; `sea_orm` re-export decoupled from driver features; i18n overhaul; sha2 0.11; cross-repo path deps moved to crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands (version 0.6.0-rc.3 was skipped and never published; its content shipped with this release) |
 | 0.6.0-rc.2 | 2026-09-03 | Removed the `tracing` feature; strict four-driver mutual exclusion (compile-time `compile_error!`); completed JOIN/subquery cross-table permission checks; `h2` security upgrade |

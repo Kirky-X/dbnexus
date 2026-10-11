@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0-rc.8"
+version = "0.6.0-rc.9"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -41,9 +41,9 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 # Caching - 基于 oxcache 的缓存系统
 
 # Internal packages
-dbnexus-macros = { path = "macros", version = "0.6.0-rc.8" }
+dbnexus-macros = { path = "macros", version = "0.6.0-rc.9" }
 # 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
-dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.8" }
+dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.9" }
 
 # Validation（root + examples 共享）
 validator = { version = "0.21", features = ["derive"] }
@@ -132,7 +132,7 @@ permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "
 # 移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
 # 启用带缓存的权限控制请使用：permission + cache
 # sql-parser 自带解析结果缓存（prepare_cache 同步 LRU 端口），不隐含 cache→oxcache
-sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json"]
+sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json", "dep:oxcache", "oxcache/memory"]  # prepare_cache（同步 LRU）直接以 oxcache DashMapMemoryBackend 为后端，sql-parser 单开须激活 oxcache（历史注释「解耦 oxcache」与实现不符，2026-10-10 修正）
 data-protection = ["dep:sha2"]  # 字段脱敏与行级安全
 config-confers = ["dep:confers", "confers/change-stream", "permission"]  # confers 配置热重载
 macros = ["dbnexus-macros"]
