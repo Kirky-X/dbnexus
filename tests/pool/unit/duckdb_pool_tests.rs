@@ -13,8 +13,9 @@
 
 #![cfg(feature = "duckdb")]
 
+use dbnexus::database::DuckValue;
 use dbnexus::foundation::PoolConfig;
-use dbnexus::{DbConfig, DbPool};
+use dbnexus::{DbConfig, DbError, DbPool};
 
 // ============================================================================
 // 辅助函数
@@ -122,7 +123,6 @@ async fn test_duckdb_session_ddl_and_query() {
     assert_eq!(rows.len(), 2, "Should have 2 rows");
     assert_eq!(rows[0].column_count(), 2, "Should have 2 columns");
 
-    // 验证第一行数据
     let name = rows[0].get("name").expect("Should have 'name' column");
     if let duckdb::types::Value::Text(s) = name {
         assert_eq!(s, "Alice", "First row name should be Alice");
@@ -180,7 +180,6 @@ async fn test_duckdb_pool_health_check() {
         "get_session should succeed with healthy connection"
     );
 
-    // 验证 Session 可以执行查询
     let session = session.unwrap();
     let rows = session
         .execute_duckdb("SELECT 1 AS health")
@@ -333,7 +332,6 @@ async fn test_duckdb_pool_status_invariants() {
     let pool = make_duckdb_pool().await;
     let status = pool.status();
 
-    // 验证连接池状态不变量
     assert!(
         status.total >= status.active,
         "total ({}) should be >= active ({})",
@@ -385,7 +383,6 @@ async fn test_duckdb_admin_ddl_allowed() {
         .await
         .expect("admin DDL should succeed");
 
-    // 验证表已创建
     session
         .execute_duckdb_raw("INSERT INTO admin_table VALUES (1, 'test')")
         .await
@@ -452,7 +449,6 @@ async fn test_duckdb_multiple_data_types() {
     assert_eq!(rows.len(), 2, "should have 2 rows");
     assert_eq!(rows[0].column_count(), 4, "should have 4 columns");
 
-    // 验证第一行
     let name = rows[0].get("name").expect("should have name");
     if let duckdb::types::Value::Text(s) = name {
         assert_eq!(s, "Alice");
@@ -460,11 +456,319 @@ async fn test_duckdb_multiple_data_types() {
         panic!("Expected Text, got {:?}", name);
     }
 
-    // 验证第二行 NULL
     let score = rows[1].get("score").expect("should have score");
     assert!(
         matches!(score, duckdb::types::Value::Null),
         "Bob's score should be NULL, got {:?}",
         score
+    );
+}
+
+// ============================================================================
+// 既有连接接入（with_existing_duckdb_connection）
+// ============================================================================
+
+/// 从既有 DuckDB 连接构建池：池大小按参数复制连接，副本共享同一数据库
+#[tokio::test]
+async fn test_pool_from_existing_duckdb_connection() {
+    let conn = duckdb::Connection::open_in_memory().expect("open in-memory duckdb");
+    let pool =
+        DbPool::with_existing_duckdb_connection(conn, 2).expect("pool from an existing connection");
+
+    assert_eq!(
+        pool.status().total,
+        2,
+        "the pool should be filled with pool_size connections"
+    );
+
+    let session = pool.get_session("admin").await.expect("admin session");
+    session
+        .execute_duckdb_raw("CREATE TABLE shared_t (id INTEGER)")
+        .await
+        .expect("create table on the shared database");
+    session
+        .execute_duckdb_raw("INSERT INTO shared_t VALUES (7)")
+        .await
+        .expect("insert on the shared database");
+    let rows = session
+        .execute_duckdb("SELECT id FROM shared_t")
+        .await
+        .expect("select on the shared database");
+    assert_eq!(rows.len(), 1);
+    drop(session);
+
+    // try_clone 共享底层数据库实例：换一条池内连接仍读到同一张表
+    let session = pool.get_session("admin").await.expect("second session");
+    let rows = session
+        .execute_duckdb("SELECT id FROM shared_t")
+        .await
+        .expect("select through another pooled connection");
+    assert_eq!(
+        rows.len(),
+        1,
+        "cloned connections must share the same database"
+    );
+}
+
+/// pool_size = 0 收敛为单连接池（与其他构造入口同口径）
+#[tokio::test]
+async fn test_pool_from_existing_duckdb_connection_clamps_zero() {
+    let conn = duckdb::Connection::open_in_memory().expect("open in-memory duckdb");
+    let pool = DbPool::with_existing_duckdb_connection(conn, 0).expect("pool with clamped size");
+    assert_eq!(pool.status().total, 1, "pool_size 0 must clamp to 1");
+}
+
+// ============================================================================
+// 权限门（非 admin 会话的 DuckDB 安全链）
+// ============================================================================
+
+const ANALYST_YAML: &str = r#"
+roles:
+  admin:
+    tables:
+      - name: "*"
+        operations: ["select", "insert", "update", "delete"]
+  analyst:
+    tables:
+      - name: "users"
+        operations: ["select"]
+"#;
+
+/// 写入临时权限文件并返回路径（唯一名：并发用例不共享文件）
+fn write_analyst_permissions() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_duckdb_perm_{}_{}.yaml",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&path, ANALYST_YAML).expect("write permissions yaml");
+    path
+}
+
+/// 带 analyst 角色权限配置的 DuckDB 池（单连接：`duckdb::memory:` 按连接隔离）
+async fn make_duckdb_pool_with_analyst() -> (std::path::PathBuf, DbPool) {
+    let path = write_analyst_permissions();
+    let config = DbConfig {
+        url: "duckdb::memory:".to_string(),
+        permissions_path: Some(path.to_string_lossy().to_string()),
+        pool_config: PoolConfig {
+            max_connections: 1,
+            min_connections: 1,
+            idle_timeout: 300,
+            acquire_timeout: 10000,
+        },
+        ..Default::default()
+    };
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("duckdb pool with permission config");
+    (path, pool)
+}
+
+/// 非 admin 会话的 DuckDB 安全门：允许的表放行、未列出表/DDL/无法解析语句全部拒绝
+#[tokio::test]
+async fn test_duckdb_analyst_permission_gates() {
+    let (perm_path, pool) = make_duckdb_pool_with_analyst().await;
+
+    let admin = pool.get_session("admin").await.expect("admin session");
+    admin
+        .execute_duckdb_raw("CREATE TABLE users (id INTEGER)")
+        .await
+        .expect("create users");
+    admin
+        .execute_duckdb_raw("CREATE TABLE secrets (id INTEGER)")
+        .await
+        .expect("create secrets");
+    drop(admin);
+
+    let analyst = pool.get_session("analyst").await.expect("analyst session");
+
+    // 允许的表：参数化查询经安全门 → 表级权限通过
+    let rows = analyst
+        .execute_duckdb_with_params("SELECT id FROM users WHERE id = ?", vec![DuckValue::Int(1)])
+        .await
+        .expect("a permitted parameterized select must pass");
+    assert!(rows.is_empty(), "users is empty after creation");
+
+    // 未列出的表：非参数化查询路径拒绝
+    let err = analyst
+        .execute_duckdb("SELECT * FROM secrets")
+        .await
+        .expect_err("an unlisted table must be denied");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+    // 未列出的表：参数化 DML 路径同样拒绝
+    let err = analyst
+        .execute_duckdb_with_params(
+            "SELECT id FROM secrets WHERE id = ?",
+            vec![DuckValue::Int(1)],
+        )
+        .await
+        .expect_err("an unlisted table must be denied on the parameterized path");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+    // DDL：非 admin 在两条 raw 路径上均被拒绝
+    let err = analyst
+        .execute_duckdb_raw("CREATE TABLE denied_t (id INTEGER)")
+        .await
+        .expect_err("non-admin DDL must be denied");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+    let err = analyst
+        .execute_duckdb_raw_with_params("CREATE TABLE denied_t2 (id INTEGER)", vec![])
+        .await
+        .expect_err("non-admin DDL must be denied on the parameterized path");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+    // 无表名（SELECT 1）与解析失败：非 admin 无法完成权限检查 → 拒绝
+    for sql in ["SELECT 1", "SELEC * FROM users"] {
+        let err = analyst
+            .execute_duckdb(sql)
+            .await
+            .expect_err("a statement without a resolvable table must be denied");
+        assert!(
+            matches!(err, DbError::Permission(_)),
+            "sql {sql}: got {err:?}"
+        );
+    }
+
+    // 同两条路径经安全门（参数化入口）：门内同样拒绝
+    for sql in ["SELECT 1", "SELEC * FROM users"] {
+        let err = analyst
+            .execute_duckdb_with_params(sql, vec![])
+            .await
+            .expect_err("the gate must deny unresolvable statements for non-admin roles");
+        assert!(
+            matches!(err, DbError::Permission(_)),
+            "sql {sql}: got {err:?}"
+        );
+    }
+
+    let _ = std::fs::remove_file(perm_path);
+}
+
+/// admin 会话经参数化 raw 路径执行 DDL：走 DdlGuard 放行后落库
+#[tokio::test]
+async fn test_duckdb_admin_ddl_through_parameterized_path() {
+    let (perm_path, pool) = make_duckdb_pool_with_analyst().await;
+    let admin = pool.get_session("admin").await.expect("admin session");
+
+    admin
+        .execute_duckdb_raw_with_params("CREATE TABLE gate_t (id INTEGER)", vec![])
+        .await
+        .expect("admin DDL must pass the security gate");
+    admin
+        .execute_duckdb_raw("INSERT INTO gate_t VALUES (1)")
+        .await
+        .expect("insert after DDL");
+    let rows = admin
+        .execute_duckdb("SELECT id FROM gate_t")
+        .await
+        .expect("select");
+    assert_eq!(rows.len(), 1);
+
+    let _ = std::fs::remove_file(perm_path);
+}
+
+// ============================================================================
+// 失败路径：查询错误统一映射为连接错误（不 panic）
+// ============================================================================
+
+/// 空表标识符（无法提取有效表名）：安全门按权限错误拒绝，不进入执行
+#[tokio::test]
+async fn test_duckdb_empty_table_identifier_rejected() {
+    let pool = make_duckdb_pool().await;
+    let session = pool.get_session("admin").await.expect("session");
+
+    let sql = "SELECT * FROM \"\"";
+    let err = session
+        .execute_duckdb(sql)
+        .await
+        .expect_err("an empty table identifier must be rejected");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+    let err = session
+        .execute_duckdb_raw(sql)
+        .await
+        .expect_err("an empty table identifier must be rejected on the raw path");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+
+    let err = session
+        .execute_duckdb_with_params(sql, vec![])
+        .await
+        .expect_err("an empty table identifier must be rejected on the parameterized path");
+    assert!(matches!(err, DbError::Permission(_)), "got {err:?}");
+}
+
+/// 缺失表 / 非法 SQL：查询失败经映射返回错误
+#[tokio::test]
+async fn test_duckdb_query_failures_are_mapped() {
+    let pool = make_duckdb_pool().await;
+    let session = pool.get_session("admin").await.expect("session");
+
+    let err = session
+        .execute_duckdb("SELECT * FROM missing_table")
+        .await
+        .expect_err("a missing table must fail the query");
+    assert!(format!("{err}").contains("DuckDB"), "got {err}");
+
+    let err = session
+        .execute_duckdb_with_params(
+            "SELECT * FROM missing_table WHERE id = ?",
+            vec![DuckValue::Int(1)],
+        )
+        .await
+        .expect_err("a missing table must fail the parameterized query");
+    assert!(format!("{err}").contains("DuckDB"), "got {err}");
+}
+
+// ============================================================================
+// 配置校验与自动迁移跳过
+// ============================================================================
+
+/// 非法池配置（max_connections = 0）在建立连接前被拒绝
+#[tokio::test]
+async fn test_pool_rejects_invalid_config() {
+    let config = DbConfig {
+        url: "duckdb::memory:".to_string(),
+        pool_config: PoolConfig {
+            max_connections: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let err = match DbPool::with_config(config).await {
+        Ok(_) => panic!("max_connections = 0 must be rejected before connecting"),
+        Err(err) => err,
+    };
+    assert!(
+        format!("{err}").contains("max_connections"),
+        "the error should name the invalid key, got {err}"
+    );
+}
+
+/// 启用自动迁移但目录不存在：池创建跳过迁移而非报错
+#[cfg(feature = "auto-migrate")]
+#[tokio::test]
+async fn test_auto_migrate_skips_missing_directory() {
+    let missing =
+        std::env::temp_dir().join(format!("dbnexus_missing_migrations_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&missing);
+
+    let config = DbConfig {
+        url: "duckdb::memory:".to_string(),
+        auto_migrate: true,
+        migrations_dir: Some(missing),
+        ..Default::default()
+    };
+    // DuckDB 池不支持 run_migrations（迁移器要求 SeaORM 连接），
+    // 本用例只锚池创建阶段的跳过语义：目录缺失不得让 with_config 失败
+    let pool = DbPool::with_config(config)
+        .await
+        .expect("pool creation must not fail when the migrations dir is absent");
+    assert_eq!(
+        pool.status().total,
+        pool.status().active + pool.status().idle
     );
 }

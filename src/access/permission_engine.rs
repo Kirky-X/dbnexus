@@ -54,17 +54,14 @@ static PATH_TRAVERSAL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// 防止路径遍历攻击，确保路径不会访问预期目录之外的文件
 fn is_safe_config_path(path: &str) -> bool {
-    // 检查空路径
     if path.is_empty() {
         return false;
     }
 
-    // 检查路径遍历攻击模式
     if PATH_TRAVERSAL_REGEX.is_match(path) {
         return false;
     }
 
-    // 检查绝对路径是否在允许的目录内
     let path_buf = std::path::Path::new(path);
     if path_buf.is_absolute() {
         // 允许的配置目录前缀
@@ -260,12 +257,10 @@ fn default_enabled() -> bool {
 /// 条件评估：若规则定义了 `condition`，则必须匹配上下文的 attributes 或 environment。
 /// 条件格式为 `key=value` 对（逗号分隔），所有条件必须满足（AND 语义）。
 fn matches_rule(rule: &PermissionRule, context: &PermissionContext) -> bool {
-    // 检查主体匹配
     if rule.subject != "*" && rule.subject != context.subject.id {
         return false;
     }
 
-    // 检查资源匹配
     if rule.resource != "*" && rule.resource != context.resource.name {
         return false;
     }
@@ -655,7 +650,6 @@ impl PolicyDecisionPoint {
         let now = Instant::now();
         let window_duration = Duration::from_secs(self.rate_limit_window_seconds as u64);
 
-        // 获取或创建速率限制条目
         let mut entry = self
             .rate_limit_store
             .entry(key.clone())
@@ -681,12 +675,10 @@ impl PolicyDecisionPoint {
 
     /// 检查权限（带 TTL 缓存和速率限制）
     pub async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
-        // 检查速率限制
         if !self.check_rate_limit(&context.subject.id) {
             return PermissionDecision::Deny;
         }
 
-        // 生成缓存键
         let cache_key = self.generate_cache_key(context);
 
         // 检查缓存（带 TTL 验证）
@@ -696,7 +688,6 @@ impl PolicyDecisionPoint {
             return decision;
         }
 
-        // 获取权限决策
         let decision = self.provider.check_permission(context).await;
 
         // 应用默认决策：当提供者返回 NotApplicable 时，使用配置的默认决策
@@ -879,7 +870,6 @@ impl YamlPermissionProvider {
 
         let content = tokio::fs::read_to_string(&self.config_path).await?;
 
-        // 解析配置
         #[derive(Debug, Deserialize)]
         struct YamlConfig {
             roles: HashMap<String, Vec<PermissionRule>>,
@@ -890,7 +880,6 @@ impl YamlPermissionProvider {
         {
             let config: YamlConfig = serde_yaml_ng::from_str(&content)?;
 
-            // 更新角色权限
             if let Ok(mut roles) = self.roles.write() {
                 *roles = config.roles;
             }
@@ -968,7 +957,6 @@ impl PermissionProvider for YamlPermissionProvider {
             if rule.allow.contains(&context.action) {
                 return PermissionDecision::Allow;
             }
-            // 检查 Deny 规则
             if rule.deny.contains(&context.action) {
                 return PermissionDecision::Deny;
             }
@@ -1191,7 +1179,6 @@ impl PermissionProvider for RbacPermissionProvider {
     async fn check_permission(&self, context: &PermissionContext) -> PermissionDecision {
         let subject_roles = self.get_subject_roles(&context.subject.id);
 
-        // 获取所有角色的权限
         let mut all_rules = Vec::new();
         for role in &subject_roles {
             let rules = self.get_role_permissions(role).await;
@@ -1518,7 +1505,6 @@ mod tests {
         // 将用户 "admin" 映射到角色 "admin"
         provider.add_role_to_subject("admin", "admin");
 
-        // 创建带速率限制的 PDP
         let pdp = PolicyDecisionPoint::with_rate_limit(provider, 10, 60);
 
         // 前 10 次请求应该成功
@@ -1634,7 +1620,6 @@ mod tests {
         };
         provider.add_role(child_role.clone());
 
-        // 验证角色存在
         assert!(provider.has_role("base_user"));
         assert!(provider.has_role("premium_user"));
     }

@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 MemoryPermissionProvider 并配置角色策略
+    // 创建 MemoryPermissionProvider 并配置角色策略
     // ============================================
     let provider = MemoryPermissionProvider::new();
 
@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ configured 3 roles: admin / manager / guest\n");
 
     // ============================================
-    // 2. 演示权限检查通过和拒绝场景
+    // 演示权限检查通过和拒绝场景
     // ============================================
     println!("--- MemoryPermissionProvider permission checks ---\n");
 
@@ -156,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 创建 DbPool + Session
+    // 创建 DbPool + Session
     // ============================================
     println!("\n--- DbPool + Session integration ---\n");
 
@@ -168,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ users table created");
 
     // ============================================
-    // 4. 使用 #[db_entity(..., permissions(...))] 宏生成的权限校验
+    // 使用 #[db_entity(..., permissions(...))] 宏生成的权限校验
     // ============================================
     println!("\n--- #[db_entity] permissions checks ---\n");
 

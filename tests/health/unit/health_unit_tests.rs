@@ -86,7 +86,6 @@ async fn test_circuit_breaker_open_rejects_requests() {
     let result = breaker.can_execute().await;
     assert!(result.is_err(), "the Open state should reject requests");
 
-    // 验证错误类型
     let err = result.unwrap_err();
     assert_eq!(err.state(), CircuitBreakerState::Open);
 }
@@ -120,14 +119,12 @@ async fn test_circuit_breaker_success_resets_failure_count() {
     };
     let breaker = CircuitBreaker::new(config);
 
-    // 记录两次失败
     breaker.record_failure().await;
     breaker.record_failure().await;
 
     let status_before = breaker.status().await;
     assert_eq!(status_before.consecutive_failures, 2);
 
-    // 记录成功
     breaker.record_success().await;
 
     // 失败计数应该被重置
@@ -552,7 +549,6 @@ async fn test_pool_health_metrics_set_waiting_requests() {
 /// 验证多个数据源的健康状态可以正确聚合。
 #[tokio::test]
 async fn test_multi_datasource_health_aggregation() {
-    // 创建多个健康检查器
     let checker1 = Arc::new(HealthChecker::new(1000));
     let checker2 = Arc::new(HealthChecker::new(1000));
 
@@ -566,7 +562,6 @@ async fn test_multi_datasource_health_aggregation() {
     metrics2.record_connection_created();
     metrics2.increment_idle().await;
 
-    // 执行健康检查
     let result1 = checker1.check().await;
     let result2 = checker2.check().await;
 
@@ -717,7 +712,6 @@ async fn test_health_check_recommendations_generation() {
     let checker = HealthChecker::new(1000);
     let metrics = checker.metrics();
 
-    // 模拟连接池满的情况
     metrics.record_connection_created();
     metrics.record_connection_created();
     metrics.increment_active();
@@ -779,7 +773,6 @@ async fn test_circuit_breaker_status_completeness() {
 
     let status = breaker.status().await;
 
-    // 验证所有字段
     assert_eq!(status.state, CircuitBreakerState::Closed);
     assert_eq!(status.consecutive_failures, 0);
     assert_eq!(status.consecutive_successes, 0);
@@ -815,7 +808,6 @@ async fn test_health_checker_healthy_state() {
     let checker = HealthChecker::new(1000);
     let metrics = checker.metrics();
 
-    // 创建足够的连接
     for _ in 0..5 {
         metrics.record_connection_created();
         metrics.increment_idle().await;
@@ -961,7 +953,6 @@ async fn test_health_check_result_clone() {
     let result1 = checker.check().await;
     let result2 = result1.clone();
 
-    // 验证基本字段一致
     assert_eq!(result1.status, result2.status);
     assert!(result1.latency >= result2.latency || result2.latency >= result1.latency);
 }

@@ -232,7 +232,6 @@ async fn test_insert_many_batch_insert() {
         .expect("count should succeed");
     assert_eq!(count, 3, "should have 3 records after insert_many");
 
-    // 验证各记录可独立查询
     for id in [10i64, 11, 12] {
         let found: Option<Model> = Entity::find_by_id(id)
             .one(session.connection().expect("conn"))
@@ -257,9 +256,7 @@ async fn test_update_many_conditional_batch() {
         .await
         .expect("Failed to get session");
 
-    // 初始数据中 age < 18 的有 Bob(17) 和 Diana(16) → 2 条
-    // 但我们的 Model 没有 status 字段，所以改为更新 age 字段
-    // filter: age < 18, update: age = 0
+    // 初始数据 age < 18 的有 Bob(17)、Diana(16)；Model 无 status 字段，故改用 age 过滤（update: age = 0）
     let filter: Condition = Column::Age.lt(18).into();
     let updates: Vec<(Column, sea_orm::Value)> = vec![(Column::Age, 0i64.into())];
 
@@ -271,7 +268,6 @@ async fn test_update_many_conditional_batch() {
         "should update 2 records (Bob and Diana, both age < 18)"
     );
 
-    // 验证 Bob 和 Diana 的 age 现在都是 0
     let conn = session.connection().expect("conn");
     let bob: Option<Model> = Entity::find_by_id(2)
         .one(conn)
@@ -316,7 +312,6 @@ async fn test_update_many_with_complex_condition() {
         .expect("update_many should succeed");
     assert_eq!(affected, 3, "should update 3 records (Bob, Diana, Charlie)");
 
-    // 验证 age=100 的记录数 = 3
     let conn = session.connection().expect("conn");
     let count = Entity::find()
         .filter(Column::Age.eq(100))

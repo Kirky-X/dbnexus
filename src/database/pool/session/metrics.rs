@@ -116,7 +116,6 @@ impl Session {
     #[cfg(feature = "metrics")]
     pub fn record_metric(&self, operation: &str, table_name: &str, success: bool) {
         if let Some(metrics) = &self.metrics_collector {
-            // 使用表名的哈希值作为 bytes 参数
             let bytes = Some(table_name.len() as u64);
             metrics.record_query(
                 operation,

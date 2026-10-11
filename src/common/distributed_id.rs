@@ -204,7 +204,6 @@ impl DistributedIdGenerator for SnowflakeIdGenerator {
                 }
             }
 
-            // 计算新的 ts_seq 值
             let new_ts_seq = if timestamp > last_ts {
                 // 新毫秒：序列号重置为 0
                 timestamp << 12

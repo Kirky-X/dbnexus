@@ -153,7 +153,6 @@ mod tests {
                 "current_locale should return {locale_str} after set"
             );
         }
-        // Clean up
         clear_locale_override();
     }
 

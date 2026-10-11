@@ -485,7 +485,6 @@ mod tests {
     /// 提供有效的 YAML 配置文件路径应成功加载
     #[test]
     fn yaml_provider_new_with_valid_file_loads_roles() {
-        // 创建临时文件
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("dbnexus_test_permissions_valid.yaml");
         let yaml_content =
@@ -501,14 +500,12 @@ mod tests {
         );
         let policy = p.get_role_policy("admin");
         assert!(policy.is_some(), "admin policy should be Some");
-        // 验证权限检查
         assert!(
             p.check_access("admin", "any_table", PermissionAction::Select)
                 .unwrap(),
             "admin should have Select on any_table"
         );
 
-        // 清理
         let _ = std::fs::remove_file(&file_path);
     }
 
@@ -528,7 +525,6 @@ mod tests {
             Ok(_) => panic!("expected error, got Ok"),
         }
 
-        // 清理
         let _ = std::fs::remove_file(&file_path);
     }
 
@@ -578,7 +574,6 @@ mod tests {
             roles
         );
 
-        // 清理
         let _ = std::fs::remove_file(&file_path);
     }
 
@@ -616,7 +611,6 @@ mod tests {
 
         let mut p = YamlPermissionProvider::new(file_path.to_str().unwrap()).unwrap();
 
-        // 写入无效内容
         let malformed = "not valid: yaml: [[[";
         std::fs::write(&file_path, malformed).expect("failed to rewrite temp file");
 
@@ -628,7 +622,6 @@ mod tests {
             Ok(_) => panic!("expected error, got Ok"),
         }
 
-        // 清理
         let _ = std::fs::remove_file(&file_path);
     }
 
@@ -647,5 +640,47 @@ mod tests {
         let result =
             <YamlPermissionProvider as RefreshablePermissionProvider>::refresh(&mut p).await;
         assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // PermissionProviderError 的 i18n 键与参数（LocalizedMsg 契约）
+    // ========================================================================
+
+    /// 每个错误变体映射到固定消息键，参数名与变体语义一致
+    #[test]
+    fn permission_provider_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let cases = [
+            (
+                PermissionProviderError::RoleNotFound("admin".to_string()),
+                "perm-provider-role-not-found",
+                ("role", "admin"),
+            ),
+            (
+                PermissionProviderError::LoadError("io".to_string()),
+                "perm-provider-load-error",
+                ("reason", "io"),
+            ),
+            (
+                PermissionProviderError::CheckError("denied".to_string()),
+                "perm-provider-check-error",
+                ("reason", "denied"),
+            ),
+            (
+                PermissionProviderError::Unknown("?".to_string()),
+                "perm-provider-unknown",
+                ("reason", "?"),
+            ),
+        ];
+
+        for (err, key, (arg_name, arg_value)) in cases {
+            assert_eq!(err.message_key(), key, "unexpected key for {err:?}");
+            assert_eq!(
+                err.message_args(),
+                vec![(arg_name, arg_value.to_string())],
+                "unexpected args for {err:?}"
+            );
+        }
     }
 }

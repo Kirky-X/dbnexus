@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 幂等性判断
+    // 幂等性判断
     // ============================================
     println!("--- 1. idempotency detection ---\n");
 
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. 默认重试策略 — 幂等查询最终成功
+    // 默认重试策略 — 幂等查询最终成功
     // ============================================
     println!("--- 2. idempotent query retry (succeeding after 2 failures) ---\n");
 
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. 非幂等操作 — 直接失败不重试
+    // 非幂等操作 — 直接失败不重试
     // ============================================
     println!("--- 3. non-idempotent operation (INSERT, not retried) ---\n");
 
@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. 重试耗尽 — 超过最大重试次数
+    // 重试耗尽 — 超过最大重试次数
     // ============================================
     println!("--- 4. retry exhausted (10 failures, max 3 retries) ---\n");
 
@@ -169,7 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. 自定义重试策略
+    // 自定义重试策略
     // ============================================
     println!("--- 5. custom retry strategy ---\n");
 
@@ -197,7 +197,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // 展示退避时间序列
     println!("  backoff sequence (no jitter):");
     let mut backoff = custom_policy.initial_backoff_ms as f64;
     for i in 0..custom_policy.max_retries {
@@ -230,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 6. 首次即成功 — 无需重试
+    // 首次即成功 — 无需重试
     // ============================================
     println!("--- 6. success on the first try (no retry needed) ---\n");
 
@@ -257,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 7. RetryError 类型展示
+    // RetryError 类型展示
     // ============================================
     println!("--- 7. RetryError types ---\n");
     println!("  ┌─────────────────┬──────────────────────────────────────┐");

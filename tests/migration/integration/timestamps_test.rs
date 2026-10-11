@@ -77,7 +77,6 @@ async fn test_insert_sets_both_timestamps() {
         .expect("insert should succeed");
     assert_eq!(model.id, 1);
 
-    // 查询验证
     let found: Option<Model> = Entity::find_by_id(1)
         .one(conn)
         .await
@@ -126,7 +125,6 @@ async fn test_update_only_changes_updated_at() {
         .await
         .expect("insert should succeed");
 
-    // 查询获取原始时间戳
     let original: Model = Entity::find_by_id(1)
         .one(conn)
         .await
@@ -143,7 +141,6 @@ async fn test_update_only_changes_updated_at() {
     to_update.name = Set("updated".to_string());
     let _: Model = to_update.update(conn).await.expect("update should succeed");
 
-    // 查询验证
     let found: Model = Entity::find_by_id(1)
         .one(conn)
         .await

@@ -437,8 +437,8 @@ mod tests {
     }
 
     #[cfg(feature = "cache-available")]
-    #[test]
-    fn test_builder_cache_provider() {
+    #[tokio::test]
+    async fn test_builder_cache_provider() {
         use crate::foundation::DbError;
         use std::future::Future;
         use std::pin::Pin;
@@ -469,8 +469,14 @@ mod tests {
         }
 
         let provider = Arc::new(NoopCacheProvider);
-        let builder = DbPoolBuilder::new().cache_provider(provider);
+        let mut builder = DbPoolBuilder::new().cache_provider(provider);
         assert!(builder.cache_provider.is_some());
+
+        // builder 携带的 provider 可用：get 未命中、set/delete 成功
+        let injected = builder.cache_provider.take().expect("provider is set");
+        assert!(injected.get("k").await.expect("get").is_none());
+        injected.set("k", b"v".to_vec(), None).await.expect("set");
+        injected.delete("k").await.expect("delete");
     }
 
     #[cfg(all(feature = "cache-available", feature = "sqlite"))]
@@ -513,6 +519,12 @@ mod tests {
             .await
             .expect("should build pool with cache provider");
         assert!(pool.cache_provider().is_some());
+
+        // 池上暴露的 provider 可用：get 未命中、set/delete 成功
+        let injected = pool.cache_provider().expect("provider is set");
+        assert!(injected.get("k").await.expect("get").is_none());
+        injected.set("k", b"v".to_vec(), None).await.expect("set");
+        injected.delete("k").await.expect("delete");
     }
 
     // ===== 补充测试：builder 池参数应用与缺参拒绝 =====

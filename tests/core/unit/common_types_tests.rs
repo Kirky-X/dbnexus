@@ -40,7 +40,7 @@ fn test_database_type_clone() {
 #[test]
 fn test_database_type_copy() {
     let original = DatabaseType::MySql;
-    let copied = original; // Copy 发生
+    let copied = original;
     assert_eq!(original, copied);
 }
 

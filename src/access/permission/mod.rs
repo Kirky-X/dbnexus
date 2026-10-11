@@ -81,7 +81,6 @@ mod tests {
         let _action = PermissionAction::Select;
         let _operation: PermissionAction = PermissionAction::Insert;
 
-        // 验证 Display 实现
         assert_eq!(PermissionAction::Select.to_string(), "SELECT");
         assert_eq!(PermissionAction::Insert.to_string(), "INSERT");
         assert_eq!(PermissionAction::Update.to_string(), "UPDATE");

@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. Permission 类别
+    // Permission 类别
     // ============================================
     println!("--- 1. ErrorCategory::Permission ---\n");
     let perm_err = QueryErrorReport::new(
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. InjectionRisk 类别
+    // InjectionRisk 类别
     // ============================================
     println!("--- 2. ErrorCategory::InjectionRisk ---\n");
     let injection_err = QueryErrorReport::new(
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. SyntaxError 类别
+    // SyntaxError 类别
     // ============================================
     println!("--- 3. ErrorCategory::SyntaxError ---\n");
     let syntax_err = QueryErrorReport::new(
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. ShardConflict 类别（来自 ShardRouter::enforce_shard_binding）
+    // ShardConflict 类别（来自 ShardRouter::enforce_shard_binding）
     // ============================================
     println!("--- 4. ErrorCategory::ShardConflict (via ShardRouter) ---\n");
 
@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. 字段访问与断言
+    // 字段访问与断言
     // ============================================
     println!("--- 5. field access and assertions ---\n");
     println!("  perm_err.category    = {}", perm_err.category);
@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ all 4 category assertions passed");
 
     // ============================================
-    // 6. Display 与 Error trait 兼容性
+    // Display 与 Error trait 兼容性
     // ============================================
     println!("\n--- 6. std::error::Error trait compatibility ---\n");
     let err_boxed: Box<dyn std::error::Error> = Box::new(perm_err.clone());

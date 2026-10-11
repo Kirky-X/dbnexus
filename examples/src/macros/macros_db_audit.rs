@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 展示宏生成的审计常量
+    // 展示宏生成的审计常量
     // ============================================
     println!("--- 1. macro-generated audit constants ---\n");
     println!("  AUDIT_TABLE_NAME  = {}", Model::AUDIT_TABLE_NAME);
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  AUDIT_ENABLED     = {}", Model::AUDIT_ENABLED);
 
     // ============================================
-    // 2. 创建 AuditLogger + MemoryAuditStorage
+    // 创建 AuditLogger + MemoryAuditStorage
     // ============================================
     println!("\n--- 2. create the AuditLogger ---\n");
     let audit_config = AuditConfig {
@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ AuditLogger created (storage capacity=1000)");
 
     // ============================================
-    // 3. 创建 DbPool + Session
+    // 创建 DbPool + Session
     // ============================================
     println!("\n--- 3. create DbPool + Session ---\n");
     let (_pool, session) = common::db::setup_shared_sqlite_session()
@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     // ============================================
-    // 4. CRUD 操作 + 审计日志记录
+    // CRUD 操作 + 审计日志记录
     // ============================================
     println!("\n--- 4. CRUD operations + audit log ---\n");
     let role = session.role();
@@ -271,13 +271,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // ============================================
-    // 5. 审计历史查询
+    // 审计历史查询
     // ============================================
     println!("\n--- 5. audit history query ---\n");
     let total_events = storage_for_query.event_count().await;
     println!("  storage holds {} audit events in total", total_events);
 
-    // 查询所有审计事件
     let all_filters = AuditQueryFilters::default();
     let all_events = logger.query(&all_filters).await?;
     println!("\n  [all audit events]");
@@ -312,7 +311,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  [severity=High] {} total", high_events.len());
 
     // ============================================
-    // 6. 验证 should_audit 逻辑（角色不匹配场景）
+    // 验证 should_audit 逻辑（角色不匹配场景）
     // ============================================
     println!("\n--- 6. role mismatch scenario ---\n");
     println!("  AUDIT_ROLES = {:?}", Model::AUDIT_ROLES);

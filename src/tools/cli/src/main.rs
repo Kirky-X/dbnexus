@@ -459,7 +459,6 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
         ))
     })?;
 
-    // 生成时间戳作为版本号
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| {
@@ -489,7 +488,6 @@ async fn create_migration(description: &str, directory: &Path) -> DbResult<()> {
     let filename = format!("{}_{}.sql", timestamp, sanitized_description);
     let filepath = directory.join(&filename);
 
-    // 创建迁移文件模板
     let migration_content = format!(
         r#"-- Migration: {description}
 -- Version: {timestamp}
@@ -719,7 +717,6 @@ async fn test_connection(database_url: &str) -> DbResult<()> {
 
     let elapsed = start_time.elapsed();
 
-    // 获取会话以验证连接
     match pool.get_session("admin").await {
         Ok(session) => {
             let _conn = session.connection()?.clone();
@@ -961,7 +958,6 @@ async fn run_migrations_down(
             .map(|m| m.version)
             .collect()
     } else {
-        // 回滚上一个版本
         if let Some(max_version) = applied_migrations.iter().map(|m| m.version).max() {
             vec![max_version]
         } else {
@@ -995,7 +991,6 @@ async fn run_migrations_down(
         println!("   {}", i18n::t_simple("cli-mode-rollback-last"));
     }
 
-    // 执行回滚
     println!("\n🔄 {}", i18n::t_simple("cli-starting-rollback"));
     let mut success_count = 0;
 
@@ -1108,7 +1103,6 @@ async fn generate_migration(
     println!("║  {:58}  ║", i18n::t_simple("cli-generate-title"));
     println!("╚══════════════════════════════════════════════════════════════╝");
 
-    // 生成时间戳作为版本号
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| {
@@ -1138,7 +1132,6 @@ async fn generate_migration(
             ))
         })?;
 
-        // 生成差异 SQL
         let diff_sql = generate_schema_diff_sql(&from_content, &to_content)?;
 
         migration_content = format!(
@@ -1162,7 +1155,6 @@ async fn generate_migration(
 
         println!("✓ {}", i18n::t_simple("cli-schema-diff-generated"));
     } else {
-        // 生成空白迁移模板
         migration_content = format!(
             r#"-- Migration: {description}
 -- Version: {timestamp}
@@ -2318,7 +2310,7 @@ mod tests {
         assert!(!is_valid_identifier("")); // 空
         assert!(!is_valid_identifier("a b")); // 空格
         assert!(!is_valid_identifier("用户")); // 非ASCII
-        assert!(!is_valid_identifier("'; DROP TABLE t; --")); // 注入尝试
+        assert!(!is_valid_identifier("'; DROP TABLE t; --"));
         assert!(!is_valid_identifier(&"x".repeat(65))); // 超长
         assert!(is_valid_identifier(&"x".repeat(64))); // 边界
     }

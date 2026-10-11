@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = "sqlite:file:migration_demo?mode=memory&cache=shared";
 
     // ============================================
-    // 1. 创建连接池和 Session
+    // 创建连接池和 Session
     // ============================================
     let config = DbConfig {
         url: db_url.to_string(),
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ Pool created");
 
     // ============================================
-    // 2. 创建迁移执行器
+    // 创建迁移执行器
     // ============================================
     // MigrationExecutor 需要一个 sea_orm::DatabaseConnection
     let conn = connect_for_migration(db_url).await?;
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ migration executor created");
 
     // ============================================
-    // 3. 定义迁移：创建 users 表
+    // 定义迁移：创建 users 表
     // ============================================
     let mut migration_v1 = Migration::new(1, "create_users_table".to_string());
 
@@ -116,14 +116,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. 应用迁移
+    // 应用迁移
     // ============================================
     println!("\nApplying migration v{}...", migration_v1.version);
     executor.apply_migration(&migration_v1).await?;
     println!("✓ migration v{} applied", migration_v1.version);
 
     // ============================================
-    // 5. 定义并应用第二个迁移：创建 posts 表
+    // 定义并应用第二个迁移：创建 posts 表
     // ============================================
     let mut migration_v2 = Migration::new(2, "create_posts_table".to_string());
 
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ migration v{} applied", migration_v2.version);
 
     // ============================================
-    // 6. 查看迁移历史
+    // 查看迁移历史
     // ============================================
     println!("\n📊 Migration history:");
     let history = executor.history();
@@ -201,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 7. 验证表已创建
+    // 验证表已创建
     // ============================================
     let session = pool.get_session("admin").await?;
     let result = session
@@ -223,7 +223,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ data inserted successfully (users + posts tables are both writable)");
 
     // ============================================
-    // 8. 手动回滚演示
+    // 手动回滚演示
     // ============================================
     // MigrationExecutor 没有内置的 rollback API，
     // 回滚需要手动执行反向 SQL（DROP TABLE）。

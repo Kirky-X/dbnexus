@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 内存模式
+    // 内存模式
     // ============================================
     println!("─── In-memory mode (sqlite::memory:) ───\n");
     let memory_config = DbConfig {
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 2. 文件模式
+    // 文件模式
     // ============================================
     println!("\n─── File mode (sqlite://example.db) ───\n");
 
@@ -139,7 +139,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - for production environments needing data persistence");
     println!("  - supports multi-process access (requires WAL mode)");
 
-    // 验证文件已创建
     let metadata = std::fs::metadata(db_path)?;
     println!(
         "\n✓ Database file created: {} ({} bytes)",
@@ -147,13 +146,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metadata.len()
     );
 
-    // 清理示例文件
     drop(file_pool);
     let _ = std::fs::remove_file(db_path);
     println!("ℹ️  Example database file cleaned up");
 
     // ============================================
-    // 3. 两种模式对比
+    // 两种模式对比
     // ============================================
     println!("\n─── Mode comparison ───\n");
     println!("┌────────────┬───────────────┬──────────────────┐");

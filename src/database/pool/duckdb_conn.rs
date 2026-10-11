@@ -1174,7 +1174,6 @@ mod tests {
             .expect("Failed to create connection with pool size 2");
         assert_eq!(conn.pool_size(), 2);
 
-        // 验证基本功能正常
         conn.execute("CREATE TABLE custom_pool_test (id INTEGER)")
             .await
             .expect("Failed to create table");
@@ -1221,7 +1220,6 @@ mod tests {
             assert!(result.is_ok(), "Task {} should succeed: {:?}", i, result);
         }
 
-        // 验证数据
         let rows = conn
             .query("SELECT COUNT(*) AS cnt FROM parallel_test")
             .await
@@ -1436,7 +1434,6 @@ mod tests {
             other => panic!("Expected Text, got {:?}", other),
         }
         drop(conn2);
-        // 清理临时文件
         let _ = std::fs::remove_file(&db_path);
     }
 

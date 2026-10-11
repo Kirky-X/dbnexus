@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     reset_counters();
 
     // ============================================
-    // 1. 创建数据库 + 表
+    // 创建数据库 + 表
     // ============================================
     println!("--- 1. create the members table (schema() auto-generated) ---\n");
 
@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ schema() generated the table and applied the migration\n");
 
     // ============================================
-    // 2. 插入有效记录（timestamps + hooks 触发）
+    // 插入有效记录（timestamps + hooks 触发）
     // ============================================
     println!("--- 2. insert a valid record (timestamps + before_insert + after_insert) ---\n");
 
@@ -195,7 +195,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AFTER_INSERT_CALLS.load(Ordering::SeqCst)
     );
 
-    // 验证 timestamps 已自动设置
     assert!(
         inserted.created_at.is_some(),
         "created_at should be set automatically by timestamps"
@@ -207,7 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ timestamps auto-set verification passed\n");
 
     // ============================================
-    // 3. 插入无效记录（validate 拦截）
+    // 插入无效记录（validate 拦截）
     // ============================================
     println!("--- 3. insert an invalid record (validate intercepts: name too short) ---\n");
 
@@ -244,7 +243,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. 插入无效邮箱（validate 拦截）
+    // 插入无效邮箱（validate 拦截）
     // ============================================
     println!("--- 4. insert an invalid email (validate intercepts: bad email format) ---\n");
 
@@ -266,11 +265,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    → trigger #[validate(email)]\n");
 
     // ============================================
-    // 5. 更新记录（timestamps + hooks 触发）
+    // 更新记录（timestamps + hooks 触发）
     // ============================================
     println!("--- 5. update the record (timestamps + before_update + after_update) ---\n");
 
-    // 查询已插入的记录
     let existing = Model::find_by_id(&session, 1)
         .await?
         .expect("the record should exist");

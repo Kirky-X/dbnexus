@@ -37,17 +37,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌐 DBNexus HTTP health endpoint example");
     println!("========================================\n");
 
-    // 1. 池数据源：sqlite 临时库并预热一条查询（total > 0 → healthy）
+    // 池数据源：sqlite 临时库并预热一条查询（total > 0 → healthy）
     let pool = Arc::new(DbPool::new("sqlite::memory:").await?);
     let session = pool.get_session("admin").await?;
     session.execute_raw("SELECT 1").await?;
     println!("✓ the pool is ready (preheat query completed)");
 
-    // 2. 可选数据源：metrics 采集器（/metrics 输出 Prometheus 文本）
+    // 可选数据源：metrics 采集器（/metrics 输出 Prometheus 文本）
     let collector = Arc::new(MetricsCollector::new());
     pool.set_metrics_collector(Some(collector.clone())).await;
 
-    // 3. 生成 Router：三端点一次装配；服务生命周期由消费方编排
+    // 生成 Router：三端点一次装配；服务生命周期由消费方编排
     let app = HealthRouterBuilder::new(pool)
         .with_metrics_collector(collector)
         .build();

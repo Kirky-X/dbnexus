@@ -28,14 +28,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 独立使用 LatencyHistogram
+    // 独立使用 LatencyHistogram
     // ============================================
     println!("--- 1. LatencyHistogram standalone ---");
     // 定义桶边界（毫秒）：≤1ms, ≤5ms, ≤10ms, ≤50ms, ≤100ms, ≤500ms, ≤1s, >1s
     let bucket_boundaries: Vec<u64> = vec![1, 5, 10, 50, 100, 500, 1000];
     let histogram = LatencyHistogram::new(bucket_boundaries.clone());
 
-    // 模拟记录一组查询延迟
     let samples = [
         Duration::from_micros(500),  // 0.5ms → 落入 ≤1ms 桶
         Duration::from_millis(2),    // 2ms → 落入 ≤5ms 桶
@@ -52,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ recorded {} samples", samples.len());
 
     // ============================================
-    // 2. 展示 HistogramStats（桶分布）
+    // 展示 HistogramStats（桶分布）
     // ============================================
     println!("\n--- 2. HistogramStats bucket distribution ---");
     let stats: HistogramStats = histogram.stats();
@@ -71,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 通过 MetricsCollector 展示 LatencyPercentiles
+    // 通过 MetricsCollector 展示 LatencyPercentiles
     // ============================================
     println!("\n--- 3. LatencyPercentiles latency percentiles ---");
     let collector = MetricsCollector::new();
@@ -99,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  max  = {:?}", percentiles.max());
 
     // ============================================
-    // 4. SlowQueryConfig 与 SlowQueryRecord
+    // SlowQueryConfig 与 SlowQueryRecord
     // ============================================
     println!("\n--- 4. SlowQueryConfig slow query configuration ---");
     let slow_config = SlowQueryConfig {
@@ -138,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 禁用慢查询记录的对比
+    // 禁用慢查询记录的对比
     // ============================================
     println!("\n--- 5. disable slow query recording ---");
     let disabled_collector = MetricsCollector::new();

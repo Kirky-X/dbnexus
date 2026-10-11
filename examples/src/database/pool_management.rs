@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. pool-warmup：连接预热
+    // pool-warmup：连接预热
     // ============================================
     println!("─── 1. pool-warmup connection prewarming ───\n");
     println!("  set DbConfig.auto_migrate = true and specify migrations_dir,");
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. pool-health-check：后台健康检查
+    // pool-health-check：后台健康检查
     // ============================================
     println!("─── 2. pool-health-check background health checks ───\n");
     println!(
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. auto-migrate：自动迁移
+    // auto-migrate：自动迁移
     // ============================================
     println!("─── 3. auto-migrate automatic migration ───\n");
     println!("  rebuilding them to maintain min_connections.");
@@ -143,7 +143,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("  ⚠ INSERT users failed after auto-migrate: {}", e),
     }
 
-    // 清理临时迁移文件
     let _ = std::fs::remove_dir_all(&temp_dir);
 
     println!();

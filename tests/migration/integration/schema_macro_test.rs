@@ -37,7 +37,6 @@ pub enum Relation {}
 async fn test_schema_returns_complete_table() {
     let table = Model::schema(DbBackend::Sqlite);
 
-    // 验证表名
     assert_eq!(table.name, "users");
 
     // 验证列存在（至少 id、name、email）
@@ -47,7 +46,6 @@ async fn test_schema_returns_complete_table() {
         table.columns.iter().map(|c| &c.name).collect::<Vec<_>>()
     );
 
-    // 验证 id 列是主键
     let id_col = table
         .columns
         .iter()
@@ -62,7 +60,6 @@ async fn test_schema_returns_complete_table() {
         table.primary_key_columns
     );
 
-    // 验证 name 和 email 列存在
     assert!(
         table.columns.iter().any(|c| c.name == "name"),
         "name column should exist"
@@ -76,7 +73,6 @@ async fn test_schema_returns_complete_table() {
 /// Scenario 2: schema() 返回的 Table 可直接喂 Migration，apply_migration 成功建表
 #[tokio::test]
 async fn test_schema_table_applied_by_executor() {
-    // 使用内存 SQLite 数据库
     let conn = sea_orm::Database::connect("sqlite::memory:")
         .await
         .expect("Failed to connect to SQLite");
@@ -95,7 +91,6 @@ async fn test_schema_table_applied_by_executor() {
         .await
         .expect("Migration should succeed");
 
-    // 验证 users 表已在数据库中创建
     let stmt = Statement::from_sql_and_values(
         DbBackend::Sqlite,
         "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
@@ -112,7 +107,6 @@ async fn test_schema_table_applied_by_executor() {
         "users table should exist in sqlite_master after migration"
     );
 
-    // 验证迁移版本已记录
     assert_eq!(
         executor.get_all_versions(),
         vec![1],

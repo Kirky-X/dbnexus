@@ -61,13 +61,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建连接池和 Session
+    // 创建连接池和 Session
     // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool and Session created (role: admin)\n");
 
     // ============================================
-    // 2. 建表
+    // 建表
     // ============================================
     session
         .execute_raw_ddl(
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ products table created\n");
 
     // ============================================
-    // 3. 批量插入（insert）
+    // 批量插入（insert）
     // ============================================
     println!("--- INSERT (batch insert) ---");
     let products = vec![
@@ -114,14 +114,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  inserted {} records in total", products.len());
 
     // ============================================
-    // 4. count — 统计记录数
+    // count — 统计记录数
     // ============================================
     println!("\n--- COUNT ---");
     let total = Model::count(&session).await?;
     println!("  ✓ total records: {}", total);
 
     // ============================================
-    // 5. find_by_id — 按主键查询
+    // find_by_id — 按主键查询
     // ============================================
     println!("\n--- FIND_BY_ID ---");
     let product = Model::find_by_id(&session, 1).await?;
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 6. find_all — 查询全部
+    // find_all — 查询全部
     // ============================================
     println!("\n--- FIND_ALL ---");
     let all = Model::find_all(&session).await?;
@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    ... (the rest is omitted)");
 
     // ============================================
-    // 7. find_by_condition — 条件查询
+    // find_by_condition — 条件查询
     // ============================================
     println!("\n--- FIND_BY_CONDITION ---");
 
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 8. 分页查询（count + find_by_condition + 手动切片）
+    // 分页查询（count + find_by_condition + 手动切片）
     // ============================================
     println!("\n--- paginated query ---");
     let page_size: u64 = 3;
@@ -214,7 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 9. update — 更新记录
+    // update — 更新记录
     // ============================================
     println!("\n--- UPDATE ---");
     let to_update = Model::find_by_id(&session, 5).await?.unwrap();
@@ -238,7 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 10. delete_many — 批量删除
+    // delete_many — 批量删除
     // ============================================
     println!("\n--- DELETE_MANY ---");
     // 删除所有 stock == 0 的记录
@@ -256,13 +256,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 11. delete — 按主键删除
+    // delete — 按主键删除
     // ============================================
     println!("\n--- DELETE ---");
     let deleted_one = Model::delete(&session, 1).await?;
     println!("  ✓ deleted id=1: {} rows affected", deleted_one);
 
-    // 验证删除
     let check = Model::find_by_id(&session, 1).await?;
     println!(
         "  ✓ query id=1 after delete: {}",

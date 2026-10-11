@@ -209,7 +209,6 @@ fn test_mixed_types_active_model() {
         modified_at: ActiveValue::Set(Some(now)),
         related_id: ActiveValue::Set(Some(related)),
     };
-    // 验证所有字段都已设置
     assert!(active.id.is_set());
     assert!(active.name.is_set());
     assert!(active.created_at.is_set());

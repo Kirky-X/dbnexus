@@ -119,7 +119,6 @@ impl SensitiveMasker {
 
     /// 手机号脱敏：138****1234
     fn mask_phone(phone: &str) -> SensitiveResult<String> {
-        // 移除可能的空格和横线
         let cleaned: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 7 {
@@ -174,7 +173,6 @@ impl SensitiveMasker {
 
     /// 身份证脱敏：1101************1234
     fn mask_id_card(id: &str) -> SensitiveResult<String> {
-        // 移除可能的空格和横线
         let cleaned: String = id
             .chars()
             .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
@@ -200,7 +198,6 @@ impl SensitiveMasker {
 
     /// 银行卡脱敏：6222****1234
     fn mask_bank_card(card: &str) -> SensitiveResult<String> {
-        // 移除可能的空格
         let cleaned: String = card.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if cleaned.len() < 8 {

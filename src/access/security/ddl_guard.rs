@@ -606,4 +606,88 @@ mod tests {
         );
         assert!(inner.validate("TOTAL GARBAGE").is_err());
     }
+
+    // ===== 语句类型名：白名单放行与拒绝原因 =====
+
+    /// TRUNCATE 在白名单内放行；SET / DROP SCHEMA 不在白名单，
+    /// 拒绝原因必须带上具体语句类型名（便于审计定位）。
+    #[test]
+    fn test_statement_type_names_drive_allow_and_rejection_reason() {
+        let guard = guard();
+
+        assert!(
+            matches!(
+                guard
+                    .validate("TRUNCATE TABLE t9")
+                    .expect("TRUNCATE parses"),
+                DdlValidationResult::Allowed
+            ),
+            "TRUNCATE is whitelisted and must be allowed"
+        );
+
+        match guard
+            .validate("SET statement_timeout = 1000")
+            .expect("SET parses")
+        {
+            DdlValidationResult::Forbidden(reason) => assert!(
+                reason.contains("Set"),
+                "the reason should name the statement type, got: {reason}"
+            ),
+            other => panic!("SET is not whitelisted, expected Forbidden, got {other:?}"),
+        }
+
+        match guard
+            .validate("DROP SCHEMA s1")
+            .expect("DROP SCHEMA parses")
+        {
+            DdlValidationResult::Forbidden(reason) => assert!(
+                reason.contains("DropSchema"),
+                "non table/index/view/database drop falls back to the ObjectType name, got: {reason}"
+            ),
+            other => panic!("DROP SCHEMA is not whitelisted, expected Forbidden, got {other:?}"),
+        }
+    }
+
+    /// DryRunDdlGuard 直接 validate 解析失败语句：记入 records 并把原因透传
+    #[test]
+    fn test_dry_run_validate_records_parse_failure() {
+        use std::sync::Arc;
+
+        let guard = DryRunDdlGuard::new(Arc::new(DdlGuard::new()));
+        let err = DdlGuardPolicy::validate(&guard, "TOTAL GARBAGE")
+            .expect_err("unparsable SQL must surface the parser error");
+
+        let records = guard.records();
+        assert_eq!(records.len(), 1, "the failed decision must be recorded");
+        assert!(!records[0].allowed);
+        assert_eq!(records[0].reason.as_deref(), Some(err.as_str()));
+        assert_eq!(records[0].sql, "TOTAL GARBAGE");
+    }
+
+    /// from_result 对 ParseError 决策的映射：不可放行且保留解析错误
+    /// （DdlGuardPolicy 的外部实现可返回该变体）
+    #[test]
+    fn test_audit_record_from_parse_error_decision() {
+        let record = DdlAuditRecord::from_result(
+            "SELEC 1",
+            &DdlValidationResult::ParseError("unexpected token".to_string()),
+        );
+        assert!(!record.allowed);
+        assert_eq!(record.sql, "SELEC 1");
+        assert_eq!(record.reason.as_deref(), Some("unexpected token"));
+    }
+
+    /// Default 构造与 new 等价（同一白名单守卫）
+    #[test]
+    fn test_default_guard_matches_new() {
+        let guard = DdlGuard::default();
+        assert!(matches!(
+            guard.validate("CREATE TABLE t9 (id INTEGER)"),
+            Ok(DdlValidationResult::Allowed)
+        ));
+        assert!(matches!(
+            guard.validate("DROP DATABASE prod"),
+            Ok(DdlValidationResult::Forbidden(_))
+        ));
+    }
 }

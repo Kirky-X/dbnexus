@@ -153,7 +153,6 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 |------|------|
 | `lib.rs` | 模块声明、编译期特性互斥检查、公共 API 导出 |
 | `error.rs` | `DbNexusError`、`ErrorCode`、`UnifiedDbError`、`QueryErrorReport`（顶层统一错误体系） |
-| `generated_roles.rs` | 编译时生成的角色常量（由 `#[db_entity]` 宏生成） |
 | `tools/cli/` | `dbnexus-cli` 运维 CLI（`create` / `up` / `migrate` / `health` / `user` 子命令） |
 
 ### 公共类型层 `common/`

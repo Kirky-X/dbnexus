@@ -494,7 +494,7 @@ fn test_error_category_display() {
 #[test]
 fn test_error_category_traits() {
     let a = ErrorCategory::Permission;
-    let b = a; // Copy
+    let b = a;
     assert_eq!(a, b); // PartialEq + Eq
     let c = b; // Copy (clone on Copy type is redundant)
     assert_eq!(a, c);

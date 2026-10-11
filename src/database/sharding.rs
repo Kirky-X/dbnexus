@@ -232,7 +232,6 @@ impl ConsistentHashStrategy {
 
         use std::hash::{Hash, Hasher};
 
-        // 生成所有虚拟节点位置并排序
         let mut positions: Vec<(u64, u32)> =
             Vec::with_capacity(total_shards as usize * virtual_nodes as usize);
 
@@ -487,7 +486,6 @@ impl ShardRouter {
             results.push(result);
         }
 
-        // 注册所有分片
         for (shard_id, name, result) in results {
             match result {
                 Ok(pool) => {

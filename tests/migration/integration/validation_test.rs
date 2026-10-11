@@ -99,7 +99,6 @@ async fn test_validate_email_invalid() {
         err_msg
     );
 
-    // 验证记录未被插入
     let count = Entity::find()
         .count(conn)
         .await
@@ -136,7 +135,6 @@ async fn test_validate_email_valid() {
         .expect("insert with valid email should succeed");
     assert_eq!(model.id, 1);
 
-    // 验证记录已插入
     let count = Entity::find()
         .count(conn)
         .await
@@ -274,7 +272,6 @@ async fn test_validate_and_timestamps_combined() {
         .await
         .expect("insert should succeed (validate + timestamps)");
 
-    // 验证 timestamps 被设置
     assert!(
         model.created_at.is_some(),
         "created_at should be set after validate+timestamps"

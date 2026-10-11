@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 展示宏生成的常量
+    // 展示宏生成的常量
     // ============================================
     println!("--- macro-generated constants ---\n");
     println!("  User::ALLOWED_ROLES      = {:?}", Model::ALLOWED_ROLES);
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 2. 创建 DbPool + Session
+    // 创建 DbPool + Session
     // ============================================
     println!("\n--- DbPool + Session ---\n");
 
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ users table created");
 
     // ============================================
-    // 3. 演示不同角色的权限校验
+    // 演示不同角色的权限校验
     // ============================================
     println!("\n--- permission check scenarios ---\n");
 
@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 总结
+    // 总结
     // ============================================
     println!("\n========================================");
     println!("✨ db_entity permissions sub-parameter example complete!");

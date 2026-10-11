@@ -461,7 +461,6 @@ mod unit_tests {
         assert!(req.filters.is_empty());
         assert!(req.order.is_none());
 
-        // 过滤构造器
         let f = Filter::eq("a", 1);
         assert_eq!(f.column, "a");
         let f = Filter::contains("name", "x");
@@ -543,5 +542,29 @@ mod unit_tests {
         assert_eq!(resp.page_size, 2);
         assert_eq!(resp.items.len(), 2, "page 2 should have 2 remaining rows");
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// 查询执行角色：默认 admin，`with_role` 后 manifest 必须报告新角色
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_with_role_updates_manifest_role() {
+        let pool = std::sync::Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let endpoint = TableEndpoint::new("t9", &["id"]).unwrap();
+        let gateway = DataApiGateway::new(pool)
+            .register("t9_list", endpoint)
+            .expect("register");
+
+        assert_eq!(
+            gateway.manifest()["role"],
+            "admin",
+            "the default query role is admin"
+        );
+
+        let gateway = gateway.with_role("analyst");
+        assert_eq!(
+            gateway.manifest()["role"],
+            "analyst",
+            "with_role must be reflected in the endpoint manifest"
+        );
     }
 }

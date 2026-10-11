@@ -735,7 +735,6 @@ mod tests {
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
 
-        // 清理
         let _ = conn
             .execute_cypher("MATCH (n:T029Test) DETACH DELETE n")
             .await;
@@ -773,7 +772,6 @@ mod tests {
             GraphExecResult::Write { .. } => panic!("expected Query variant"),
         }
 
-        // 清理
         let _ = conn
             .execute_cypher("MATCH (n:T029RollbackTest) DETACH DELETE n")
             .await;
@@ -854,7 +852,6 @@ mod tests {
         let conn = neo4j_test_connection()
             .await
             .expect("NEO4J_URL not set or connection failed");
-        // 清理
         let _ = conn
             .execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n")
             .await;
@@ -887,7 +884,6 @@ mod tests {
             GraphExecResult::Write { .. } => panic!("expected Query"),
         }
 
-        // 清理
         let _ = conn
             .execute_cypher("MATCH (n:T029ParamTest) DETACH DELETE n")
             .await;
@@ -958,7 +954,6 @@ mod negative_int_integration {
         assert_eq!(a, -1, "typed path -1 round-trip");
         assert_eq!(b, -2);
 
-        // 清理探针节点
         let mut clean = graph
             .execute(Query::new(
                 "MATCH (w:Word {id: 'dbnexus-neg-int-roundtrip'}) DETACH DELETE w".to_string(),

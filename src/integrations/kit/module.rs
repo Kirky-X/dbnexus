@@ -531,7 +531,6 @@ mod tests {
     /// Health check on a pool with zero connections reports `Unhealthy`.
     #[test]
     fn health_check_unhealthy_when_no_connections() {
-        // Construct a minimal pool status with total=0.
         let pool_status = crate::database::PoolStatus {
             total: 0,
             active: 0,
@@ -546,6 +545,86 @@ mod tests {
             let status = HealthStatus::unhealthy("no connections established");
             assert!(!status.is_healthy());
         }
+    }
+
+    /// Health check 三态由真实池状态驱动：
+    /// 无连接 → Unhealthy；连接全部借出（无空闲无等待）→ Degraded；
+    /// 出现等待者 → Degraded；归还后有空闲 → Healthy
+    #[cfg(all(feature = "health-check", feature = "sqlite"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn health_check_tracks_real_pool_states() {
+        use crate::database::DbPool;
+        use crate::foundation::PoolConfig;
+
+        let pool = Arc::new(
+            DbPool::with_config(DbConfig {
+                url: "sqlite::memory:".to_string(),
+                pool_config: PoolConfig {
+                    max_connections: 1,
+                    min_connections: 0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .await
+            .expect("pool"),
+        );
+
+        // 未建连接（total == 0）→ Unhealthy
+        assert!(
+            !DbNexusModule::check(&pool).is_healthy(),
+            "a pool without connections must not be healthy"
+        );
+
+        // 唯一连接借出中（无空闲、无等待）→ Degraded
+        let held = pool.get_session("admin").await.expect("session");
+        assert!(
+            !DbNexusModule::check(&pool).is_healthy(),
+            "a fully borrowed pool must not be healthy"
+        );
+
+        // 第二个调用方进入等待 → wait_count > 0 → Degraded
+        let waiting = tokio::spawn({
+            let pool = pool.clone();
+            async move {
+                let _ = pool.get_session("admin").await;
+            }
+        });
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        while pool.status().wait_count == 0 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the second caller never registered as a waiter"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !DbNexusModule::check(&pool).is_healthy(),
+            "a pool with waiters must not be healthy"
+        );
+
+        // 归还连接并等等待者完成 → 有空闲连接 → Healthy
+        drop(held);
+        let _ = waiting.await;
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        while pool.status().idle == 0 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the connection was never returned to the idle set"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            DbNexusModule::check(&pool).is_healthy(),
+            "a pool with an idle connection should be healthy"
+        );
+
+        // 健康能力句柄暴露底层池
+        let capability = DbHealthCapability { pool: pool.clone() };
+        assert!(
+            Arc::ptr_eq(capability.pool(), &pool),
+            "the health capability must expose the underlying pool handle"
+        );
     }
 
     /// `DbNexusBuildObserver` counts built and error modules.
@@ -595,13 +674,11 @@ mod tests {
             ..Default::default()
         });
 
-        // Register modules.
         kit.register::<OxcacheModule>()
             .expect("register OxcacheModule");
         kit.register::<DbNexusModule>()
             .expect("register DbNexusModule");
 
-        // Register lifecycle + health hooks.
         kit.register_lifecycle::<DbNexusModule>();
         kit.register_health_check::<DbNexusModule>();
 

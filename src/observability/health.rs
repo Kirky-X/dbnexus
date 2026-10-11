@@ -116,7 +116,6 @@ impl PoolHealthMetrics {
     /// 检查是否健康
     pub fn is_healthy(&self) -> bool {
         let snapshot = self.snapshot();
-        // 检查是否有可用连接
         snapshot.idle > 0 || snapshot.active < snapshot.total
     }
 
@@ -540,7 +539,6 @@ impl HealthChecker {
 
         match result {
             Ok(check_result) => {
-                // 更新健康检查时间
                 self.metrics.update_health_check_time().await;
                 check_result
             }
@@ -563,7 +561,6 @@ impl HealthChecker {
 
         let cb_status = self.circuit_breaker.status().await;
 
-        // 检查连接池指标
         let snapshot = self.metrics.snapshot();
 
         // 评估健康状态
@@ -619,7 +616,6 @@ impl HealthChecker {
             HealthStatus::Healthy
         };
 
-        // 更新健康检查时间
         self.metrics.update_health_check_time().await;
 
         let details = format!(
@@ -705,9 +701,7 @@ impl AutoRecoverer {
         loop {
             interval.tick().await;
 
-            // 检查熔断器状态
             if let Ok(()) = self.health_checker.circuit_breaker().can_execute().await {
-                // 记录成功
                 let _ = self.health_checker.circuit_breaker().record_success().await;
             } else {
                 // 熔断器打开，尝试恢复
@@ -742,7 +736,6 @@ mod tests {
         // 初始状态应该是关闭
         assert_eq!(breaker.state().await, CircuitBreakerState::Closed);
 
-        // 记录失败
         for _ in 0..3 {
             breaker.record_failure().await;
         }
@@ -774,7 +767,6 @@ mod tests {
         // 应该转换为半开状态
         assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 
-        // 记录成功
         breaker.record_success().await;
         breaker.record_success().await;
 
@@ -792,25 +784,21 @@ mod tests {
         assert_eq!(snapshot.active, 0);
         assert_eq!(snapshot.idle, 0);
 
-        // 模拟连接创建
         metrics.record_connection_created();
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.total, 1);
         assert_eq!(snapshot.active, 1);
 
-        // 模拟连接激活
         metrics.increment_active();
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.active, 2);
 
-        // 模拟连接变为空闲
         metrics.decrement_active();
         metrics.increment_idle().await;
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.active, 1);
         assert_eq!(snapshot.idle, 1);
 
-        // 模拟连接关闭
         metrics.record_connection_closed();
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.total, 0);
@@ -820,7 +808,6 @@ mod tests {
     async fn test_health_checker() {
         let checker = HealthChecker::new(1000);
 
-        // 执行健康检查
         let result = checker.check().await;
 
         // 初始状态应该是降级的（因为没有连接）
@@ -868,7 +855,6 @@ mod tests {
         // total < min_connections → true
         assert!(metrics.should_create_connection(5));
 
-        // 创建足够连接后
         metrics.record_connection_created(); // total=1, active=1
         metrics.decrement_active();
         metrics.increment_idle().await; // total=1, active=0, idle=1
@@ -1120,7 +1106,6 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_healthy_with_idle_connections() {
         let checker = HealthChecker::new(1000);
-        // 模拟有连接且有空闲
         checker.metrics().record_connection_created();
         checker.metrics().decrement_active();
         checker.metrics().increment_idle().await;
@@ -1219,7 +1204,6 @@ mod tests {
             recoverer_clone.start().await;
         });
 
-        // 等待一小段时间让它启动
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         // 停止恢复器
@@ -1227,5 +1211,52 @@ mod tests {
 
         // 取消任务
         handle.abort();
+    }
+
+    /// 熔断器错误的 i18n 键与参数（LocalizedMsg 契约）
+    #[test]
+    fn circuit_breaker_error_localized_msg() {
+        use crate::i18n::error_ext::LocalizedMsg;
+
+        let err = CircuitBreakerError::new(CircuitBreakerState::Open);
+        assert_eq!(err.message_key(), "circuit-breaker");
+        assert_eq!(err.message_args(), vec![("state", "open".to_string())]);
+    }
+
+    /// 半开态下窗口内失败率仍高于 50%：拒绝放行并按 Open 处理
+    #[tokio::test]
+    async fn half_open_rejects_when_failure_rate_high() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 2,
+            timeout_ms: 20,
+            window_size: 8,
+            ..Default::default()
+        });
+
+        // 连续失败达阈值 → Open（滑动窗口内全为失败）
+        breaker.record_failure().await;
+        breaker.record_failure().await;
+        assert!(
+            matches!(breaker.status().await.state, CircuitBreakerState::Open),
+            "reaching the failure threshold must open the breaker"
+        );
+
+        // 超过恢复超时后首次探测放行并翻转为 HalfOpen
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        breaker
+            .can_execute()
+            .await
+            .expect("the first probe after the recovery timeout must be admitted");
+
+        // 半开态下失败率 1.0 > 0.5 → 拒绝
+        let err = breaker
+            .can_execute()
+            .await
+            .expect_err("a half-open breaker with a high failure rate must reject");
+        assert!(
+            matches!(err.state(), CircuitBreakerState::Open),
+            "the rejection should report the Open state, got {:?}",
+            err.state()
+        );
     }
 }

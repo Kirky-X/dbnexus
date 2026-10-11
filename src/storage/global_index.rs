@@ -421,7 +421,6 @@ mod tests {
         assert_eq!(result.synced_count, 1);
         assert_eq!(result.failed_count, 0);
 
-        // 验证条目已被持久化
         let queried = index
             .query_by_index("users", "email", "test@example.com")
             .await
@@ -446,7 +445,6 @@ mod tests {
         assert_eq!(result.synced_count, 3);
         assert_eq!(result.failed_count, 0);
 
-        // 验证所有条目
         let queried = index
             .query_by_index("users", "email", "a@example.com")
             .await
@@ -532,7 +530,6 @@ mod tests {
         ];
         index.batch_sync(entries).await.expect("sync failed");
 
-        // 查询所有 status=active 的记录
         let results = index
             .query_by_index("users", "status", "active")
             .await
@@ -554,7 +551,6 @@ mod tests {
         assert_eq!(result.synced_count, 600);
         assert_eq!(result.failed_count, 0);
 
-        // 验证条目数
         let queried = index
             .query_by_index("users", "id", "599")
             .await

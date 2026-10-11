@@ -23,7 +23,7 @@ fn main() {
     println!("========================================\n");
 
     // ============================================
-    // 1. ReplicaConfig 配置
+    // ReplicaConfig 配置
     // ============================================
     println!("--- 1. ReplicaConfig configuration ---\n");
 
@@ -69,7 +69,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 2. ReplicationLag 结构体
+    // ReplicationLag 结构体
     // ============================================
     println!("--- 2. ReplicationLag struct ---\n");
 
@@ -84,7 +84,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 3. ReplicationLagDetector 各后端实现
+    // ReplicationLagDetector 各后端实现
     // ============================================
     println!("--- 3. ReplicationLagDetector backend implementations ---\n");
 
@@ -104,7 +104,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 4. ReplicaPool 路由逻辑
+    // ReplicaPool 路由逻辑
     // ============================================
     println!("--- 4. ReplicaPool routing logic ---\n");
 
@@ -130,7 +130,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 5. FailoverConfig 故障转移配置
+    // FailoverConfig 故障转移配置
     // ============================================
     println!("--- 5. FailoverConfig failover configuration ---\n");
 
@@ -172,7 +172,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 6. Failover + CircuitBreaker 协同
+    // Failover + CircuitBreaker 协同
     // ============================================
     println!("--- 6. failover + CircuitBreaker cooperation ---\n");
 
@@ -190,7 +190,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 7. 生产环境建议
+    // 生产环境建议
     // ============================================
     println!("--- 7. production recommendations ---\n");
     println!("  ┌────────────────────┬──────────────────────────────────────────────┐");

@@ -76,7 +76,6 @@ mod tests {
 
         let token = manager.authenticate(credentials).await.unwrap();
 
-        // 验证 token
         let claims = manager.verify_token(&token).unwrap();
         assert_eq!(claims.username, "testuser");
         assert_eq!(claims.role, "admin");
@@ -138,7 +137,6 @@ mod tests {
         };
         let _access_token = manager.authenticate(credentials).await.unwrap();
 
-        // 生成刷新令牌
         let refresh_token = manager
             .jwt_manager
             .generate_token("user123", "testuser", "admin", TokenType::Refresh)
@@ -204,7 +202,6 @@ mod tests {
             .await
             .unwrap();
 
-        // 注册后应能认证
         let token = manager
             .authenticate(AuthCredentials {
                 username: "alice".to_string(),

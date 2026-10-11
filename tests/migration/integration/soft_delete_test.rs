@@ -200,7 +200,6 @@ async fn test_delete_soft_force_delete_physical() {
         .expect("force_delete should succeed");
     assert_eq!(affected, 1, "should physically delete 1 record");
 
-    // 验证记录已从数据库中删除
     let with_deleted = Model::find_with_deleted(&session)
         .await
         .expect("find_with_deleted should succeed");

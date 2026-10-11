@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 RbacPermissionProvider 并注册角色
+    // 创建 RbacPermissionProvider 并注册角色
     // ============================================
     let provider = Arc::new(RbacPermissionProvider::new());
 
@@ -142,7 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ mapped 3 users: alice(admin) / bob(editor) / charlie(viewer)\n");
 
     // ============================================
-    // 2. 使用 PolicyDecisionPoint 进行权限决策
+    // 使用 PolicyDecisionPoint 进行权限决策
     // ============================================
     println!("--- PolicyDecisionPoint permission decisions ---\n");
 
@@ -180,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 使用 PolicyDecisionPoint builder 模式
+    // 使用 PolicyDecisionPoint builder 模式
     // ============================================
     println!("\n--- PolicyDecisionPoint builder pattern ---\n");
 
@@ -242,7 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 获取可访问资源和操作
+    // 获取可访问资源和操作
     // ============================================
     println!("\n--- resource and action queries ---\n");
 
@@ -264,7 +264,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 速率限制演示
+    // 速率限制演示
     // ============================================
     println!("\n--- rate limiting demo ---\n");
 

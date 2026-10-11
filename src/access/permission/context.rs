@@ -956,7 +956,6 @@ mod tests {
     /// 缓存未命中时自动重新加载策略 - 成功场景
     #[tokio::test]
     async fn test_cache_miss_reload_success() {
-        // 创建权限配置
         let config = PermissionConfig {
             roles: [(
                 "test_role".to_string(),
@@ -971,7 +970,6 @@ mod tests {
             .collect(),
         };
 
-        // 创建权限提供者
         let provider = Arc::new(MemoryPermissionProvider::new());
         provider
             .add_role("test_role", config.roles.get("test_role").unwrap().clone())
@@ -1013,7 +1011,6 @@ mod tests {
                 .await
         );
 
-        // 验证统计信息
         let stats = ctx.check_stats().snapshot();
         assert_eq!(stats.cache_misses, 1);
         assert_eq!(stats.denied_checks, 1);
@@ -1022,10 +1019,8 @@ mod tests {
     /// 缓存未命中时角色不存在于提供者 - 安全拒绝
     #[tokio::test]
     async fn test_cache_miss_role_not_found_safe_deny() {
-        // 创建空的权限提供者
         let provider = Arc::new(MemoryPermissionProvider::new());
 
-        // 创建权限上下文
         let cache = create_test_cache().await;
         let ctx =
             PermissionContext::new_with_provider("non_existent_role".to_string(), cache, provider);
@@ -1036,7 +1031,6 @@ mod tests {
                 .await
         );
 
-        // 验证统计信息
         let stats = ctx.check_stats().snapshot();
         assert_eq!(stats.cache_misses, 1);
         assert_eq!(stats.denied_checks, 1);
@@ -1045,7 +1039,6 @@ mod tests {
     /// try_reload_policy 方法测试 - 成功场景
     #[tokio::test]
     async fn test_try_reload_policy_success() {
-        // 创建权限配置
         let config = PermissionConfig {
             roles: [(
                 "admin".to_string(),
@@ -1065,20 +1058,17 @@ mod tests {
             .collect(),
         };
 
-        // 创建权限提供者
         let provider = Arc::new(MemoryPermissionProvider::new());
         provider
             .add_role("admin", config.roles.get("admin").unwrap().clone())
             .await;
 
-        // 创建权限上下文
         let cache = create_test_cache().await;
         let ctx = PermissionContext::new_with_provider("admin".to_string(), cache, provider);
 
         let result = ctx.try_reload_policy().await;
         assert!(result);
 
-        // 验证策略已加载到缓存
         let cached = ctx
             .policy_cache
             .get(&"admin".to_string())
@@ -1102,7 +1092,6 @@ mod tests {
     /// 缓存命中后缓存未命中的混合场景
     #[tokio::test]
     async fn test_cache_hit_then_miss_reload() {
-        // 创建权限配置
         let config = PermissionConfig {
             roles: [(
                 "editor".to_string(),
@@ -1121,13 +1110,11 @@ mod tests {
             .collect(),
         };
 
-        // 创建权限提供者
         let provider = Arc::new(MemoryPermissionProvider::new());
         provider
             .add_role("editor", config.roles.get("editor").unwrap().clone())
             .await;
 
-        // 创建权限上下文
         let cache = create_test_cache().await;
         let ctx = PermissionContext::new_with_provider("editor".to_string(), cache, provider);
 
@@ -1158,7 +1145,6 @@ mod tests {
     /// set_permission_provider 方法测试
     #[tokio::test]
     async fn test_set_permission_provider() {
-        // 创建权限配置
         let config = PermissionConfig {
             roles: [(
                 "viewer".to_string(),
@@ -1173,7 +1159,6 @@ mod tests {
             .collect(),
         };
 
-        // 创建权限提供者
         let provider = Arc::new(MemoryPermissionProvider::new());
         provider
             .add_role("viewer", config.roles.get("viewer").unwrap().clone())
@@ -1189,7 +1174,6 @@ mod tests {
                 .await
         );
 
-        // 设置权限提供者
         ctx.set_permission_provider(provider);
 
         // 清除缓存后再次访问（现在应该能自动重新加载）
@@ -1209,7 +1193,6 @@ mod tests {
     async fn test_permission_context_with_config() {
         use crate::foundation::{CacheConfig, DbConfig};
 
-        // 创建自定义缓存容量配置
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             cache_config: CacheConfig {
@@ -1219,12 +1202,10 @@ mod tests {
             ..Default::default()
         };
 
-        // 使用配置创建权限上下文
         let ctx = PermissionContext::with_config("admin".to_string(), &config)
             .await
             .unwrap();
 
-        // 验证缓存容量
         let stats = ctx.cache_stats().await;
         assert_eq!(stats.capacity, 8192);
     }
@@ -1237,7 +1218,6 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
 
-        // 创建自定义缓存容量配置
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             cache_config: CacheConfig {
@@ -1250,7 +1230,6 @@ mod tests {
         // 使用配置创建权限上下文（同步版本）
         let ctx = PermissionContext::new_with_config("admin".to_string(), &config);
 
-        // 验证缓存容量
         let stats = rt.block_on(async { ctx.cache_stats().await });
         assert_eq!(stats.capacity, 16384);
     }
@@ -1260,7 +1239,6 @@ mod tests {
     async fn test_permission_context_default_capacity() {
         let ctx = PermissionContext::new_default().await.unwrap();
 
-        // 验证默认缓存容量
         let stats = ctx.cache_stats().await;
         assert_eq!(stats.capacity, 4096);
     }
@@ -1272,7 +1250,6 @@ mod tests {
             .await
             .unwrap();
 
-        // 验证自定义缓存容量
         let stats = ctx.cache_stats().await;
         assert_eq!(stats.capacity, 2048);
     }
@@ -1282,7 +1259,6 @@ mod tests {
     async fn test_permission_context_with_config_and_rate_limit() {
         use crate::foundation::{CacheConfig, DbConfig};
 
-        // 创建自定义缓存容量配置
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             cache_config: CacheConfig {
@@ -1292,7 +1268,6 @@ mod tests {
             ..Default::default()
         };
 
-        // 使用配置和速率限制创建权限上下文
         let ctx = PermissionContext::with_config_and_rate_limit(
             "admin".to_string(),
             &config,
@@ -1302,7 +1277,6 @@ mod tests {
         .await
         .unwrap();
 
-        // 验证缓存容量
         let stats = ctx.cache_stats().await;
         assert_eq!(stats.capacity, 4096);
     }
@@ -1408,7 +1382,6 @@ mod tests {
         let cache = create_test_cache().await;
         let ctx = PermissionContext::new_with_provider("admin".to_string(), cache, provider);
 
-        // 执行一些访问以产生指标
         ctx.clear_cache().await;
         ctx.check_table_access("users", &PermissionAction::Select)
             .await;

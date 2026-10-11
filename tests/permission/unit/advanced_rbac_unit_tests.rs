@@ -122,7 +122,6 @@ fn test_rbac_inheritance_multi_level_chain_grants_access() {
 fn test_rbac_inheritance_deep_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
-    // 创建五层继承链
     for i in 0..5 {
         provider.add_role(
             format!("level_{}", i),
@@ -189,7 +188,6 @@ fn test_rbac_inheritance_multiple_parents_grants_access() {
         },
     );
 
-    // 设置多重继承
     provider.add_role_inheritance(
         "combined".to_string(),
         vec![
@@ -268,7 +266,6 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
         },
     );
 
-    // 设置继承关系
     provider.add_role_inheritance("parent_a".to_string(), vec!["grandparent".to_string()]);
     provider.add_role_inheritance("parent_b".to_string(), vec!["grandparent".to_string()]);
     provider.add_role_inheritance(
@@ -329,7 +326,6 @@ fn test_direct_circular_inheritance() {
         },
     );
 
-    // 设置循环继承
     provider.add_role_inheritance("role_a".to_string(), vec!["role_b".to_string()]);
     provider.add_role_inheritance("role_b".to_string(), vec!["role_a".to_string()]);
 
@@ -361,7 +357,6 @@ fn test_indirect_circular_inheritance() {
         );
     }
 
-    // 设置间接循环继承
     provider.add_role_inheritance("role_a".to_string(), vec!["role_b".to_string()]);
     provider.add_role_inheritance("role_b".to_string(), vec!["role_c".to_string()]);
     provider.add_role_inheritance("role_c".to_string(), vec!["role_a".to_string()]);
@@ -387,7 +382,6 @@ fn test_rbac_inheritance_self_reference_terminates_safely() {
         },
     );
 
-    // 设置自引用
     provider.add_role_inheritance("self_ref".to_string(), vec!["self_ref".to_string()]);
 
     // 应该能够处理自引用
@@ -426,7 +420,6 @@ fn test_rbac_permissions_multiple_parents_merges_access() {
         },
     );
 
-    // 设置继承
     provider.add_role_inheritance(
         "combined".to_string(),
         vec!["reader".to_string(), "writer".to_string()],
@@ -582,7 +575,6 @@ fn test_rbac_cache_clear_empties_cache() {
 fn test_rbac_cache_role_add_invalidates_cache() {
     let provider = AdvancedRbacProvider::new();
 
-    // 设置继承
     provider.add_role_inheritance("child".to_string(), vec!["admin".to_string()]);
 
     // 触发缓存填充
@@ -656,7 +648,6 @@ fn test_rbac_get_direct_parents_returns_parents() {
         vec!["parent1".to_string(), "parent2".to_string()],
     );
 
-    // 获取直接父角色
     let parents = provider.get_direct_parents("child");
     assert!(parents.is_some());
     let parents = parents.unwrap();
@@ -677,7 +668,6 @@ fn test_rbac_remove_inheritance_removes_link() {
     provider.add_role_inheritance("child".to_string(), vec!["admin".to_string()]);
     assert!(provider.has_inheritance("child"));
 
-    // 移除继承关系
     let removed = provider.remove_inheritance("child");
     assert!(removed);
     assert!(!provider.has_inheritance("child"));
@@ -702,12 +692,10 @@ fn test_rbac_set_inheritances_batch_sets_links() {
         ),
     ]);
 
-    // 验证继承关系已设置
     assert!(provider.has_inheritance("role_a"));
     assert!(provider.has_inheritance("role_b"));
     assert!(provider.has_inheritance("role_c"));
 
-    // 验证权限继承
     assert!(
         provider
             .check_access("role_c", "users", PermissionAction::Insert)
@@ -849,12 +837,10 @@ fn test_rbac_concurrent_check_returns_allow() {
 
     let provider = Arc::new(AdvancedRbacProvider::new());
 
-    // 设置继承关系
     provider.add_role_inheritance("manager".to_string(), vec!["admin".to_string()]);
 
     let mut handles = vec![];
 
-    // 启动多个线程进行并发权限检查
     for _ in 0..10 {
         let p = provider.clone();
         let handle = thread::spawn(move || {
@@ -864,7 +850,6 @@ fn test_rbac_concurrent_check_returns_allow() {
         handles.push(handle);
     }
 
-    // 等待所有线程完成
     for handle in handles {
         assert!(handle.join().unwrap());
     }
@@ -906,7 +891,6 @@ fn test_rbac_concurrent_add_completes_safely() {
         handles.push(handle);
     }
 
-    // 等待所有线程完成
     for handle in handles {
         handle.join().unwrap();
     }

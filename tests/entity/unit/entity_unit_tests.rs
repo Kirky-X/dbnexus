@@ -122,7 +122,6 @@ fn test_condition_logical_operations() {
     let and_result = condition1.clone().add(condition2.clone());
     assert!(!format!("{and_result:?}").is_empty());
 
-    // 验证原始条件未被修改
     assert!(!format!("{condition1:?}").is_empty());
     assert!(!format!("{condition2:?}").is_empty());
 }

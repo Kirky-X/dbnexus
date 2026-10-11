@@ -240,9 +240,7 @@ impl RetryExecutor {
             Err(e) => e,
         };
 
-        // 重试循环
         for attempt in 0..policy.max_retries {
-            // 检查整体超时
             if let Some(timeout) = deadline
                 && start.elapsed() >= timeout
             {

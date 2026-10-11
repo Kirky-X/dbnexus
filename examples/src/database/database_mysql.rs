@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 配置连接字符串
+    // 配置连接字符串
     // ============================================
     // 标准 MySQL 连接字符串格式：
     //   mysql://user:password@host:port/database
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // ============================================
-    // 2. 尝试创建连接池
+    // 尝试创建连接池
     // ============================================
     println!("\nTrying to connect to MySQL...");
     let pool = match DbPool::with_config(config).await {
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // ============================================
-    // 3. 基本操作
+    // 基本操作
     // ============================================
     let session = pool.get_session("admin").await?;
     println!("\n✓ Session acquired (role: {})", session.role());
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("ℹ️  Session released");
 
     // ============================================
-    // 4. 连接池状态
+    // 连接池状态
     // ============================================
     let status = pool.status();
     println!("\n📊 Pool status:");

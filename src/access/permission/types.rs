@@ -85,11 +85,8 @@ impl RolePolicy {
     pub fn allows(&self, table: &str, operation: &PermissionAction) -> bool {
         for perm in &self.tables {
             // 检查表名匹配（支持通配符）
-            if perm.name == "*" || perm.name == table {
-                // 检查操作权限
-                if perm.operations.contains(operation) {
-                    return true;
-                }
+            if (perm.name == "*" || perm.name == table) && perm.operations.contains(operation) {
+                return true;
             }
         }
         false
@@ -201,14 +198,11 @@ impl PermissionConfig {
     pub fn validate(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
-        // 检查是否定义了至少一个角色
         if self.roles.is_empty() {
             errors.push("No roles defined in permission config".to_string());
         }
 
-        // 检查每个角色的配置
         for (role_name, policy) in &self.roles {
-            // 检查角色是否有表权限配置
             if policy.tables.is_empty() {
                 errors.push(format!(
                     "Role '{}' has no table permissions defined",
@@ -216,9 +210,7 @@ impl PermissionConfig {
                 ));
             }
 
-            // 检查每个表权限
             for table_perm in &policy.tables {
-                // 检查表名是否为空
                 if table_perm.name.trim().is_empty() {
                     errors.push(format!(
                         "Role '{}' has a table permission with empty name",
@@ -226,7 +218,6 @@ impl PermissionConfig {
                     ));
                 }
 
-                // 检查操作列表是否为空
                 if table_perm.operations.is_empty() {
                     errors.push(format!(
                         "Table '{}' in role '{}' has no operations defined",
@@ -265,7 +256,6 @@ impl PermissionConfig {
         if let Some(policy) = self.get_role_policy(role) {
             // 检查角色是否有 "*" 表的所有操作权限
             if let Some(table_perm) = policy.tables.iter().find(|tp| tp.name == "*") {
-                // 检查是否包含所有 DDL 相关操作
                 table_perm.operations.contains(&PermissionAction::Select)
                     && table_perm.operations.contains(&PermissionAction::Insert)
                     && table_perm.operations.contains(&PermissionAction::Update)
@@ -429,12 +419,10 @@ mod tests {
         // 使用 serde_yaml_ng 解析 JSON（YAML 是 JSON 的超集）
         let config: PermissionConfig = serde_yaml_ng::from_str(yaml).expect("Failed to parse YAML");
 
-        // 检查 admin 角色
         let admin_policy = config.get_role_policy("admin").unwrap();
         assert!(admin_policy.allows("users", &PermissionAction::Select));
         assert!(admin_policy.allows("users", &PermissionAction::Delete));
 
-        // 检查 user 角色
         let user_policy = config.get_role_policy("user").unwrap();
         assert!(user_policy.allows("users", &PermissionAction::Select));
         assert!(!user_policy.allows("users", &PermissionAction::Insert));
@@ -476,12 +464,10 @@ mod tests {
             },
         };
 
-        // 检查 admin 角色
         let admin_policy = config.get_role_policy("admin").unwrap();
         assert!(admin_policy.allows("users", &PermissionAction::Select));
         assert!(admin_policy.allows("users", &PermissionAction::Delete));
 
-        // 检查 user 角色
         let user_policy = config.get_role_policy("user").unwrap();
         assert!(user_policy.allows("users", &PermissionAction::Select));
         assert!(!user_policy.allows("users", &PermissionAction::Insert));
@@ -677,5 +663,99 @@ mod tests {
             "error should contain admin role 'superadmin': {}",
             err_msg
         );
+    }
+
+    // ========================================================================
+
+    /// DDL 角色判定：只有对 "*" 表同时具备四种 DML 操作的角色才被放行
+    #[test]
+    fn test_is_ddl_allowed_role_requires_all_dml_on_wildcard() {
+        let all_actions = vec![
+            PermissionAction::Select,
+            PermissionAction::Insert,
+            PermissionAction::Update,
+            PermissionAction::Delete,
+        ];
+        let mut roles = HashMap::new();
+        roles.insert(
+            "admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".to_string(),
+                    operations: all_actions.clone(),
+                }],
+            },
+        );
+        roles.insert(
+            "readonly_admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "*".to_string(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
+        roles.insert(
+            "users_admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "users".to_string(),
+                    operations: all_actions,
+                }],
+            },
+        );
+        let config = PermissionConfig { roles };
+
+        assert!(
+            config.is_ddl_allowed_role("admin"),
+            "a role with all DML on '*' is an admin role and may run DDL"
+        );
+        assert!(
+            !config.is_ddl_allowed_role("readonly_admin"),
+            "select-only on '*' is not enough for DDL"
+        );
+        assert!(
+            !config.is_ddl_allowed_role("users_admin"),
+            "DML on named tables without '*' must not grant DDL"
+        );
+        assert!(
+            !config.is_ddl_allowed_role("missing"),
+            "an unknown role must not be granted DDL"
+        );
+    }
+
+    /// 配置校验：表权限名为空白字符串时必须被指出（trim 后为空）
+    #[test]
+    fn test_permission_config_validation_flags_blank_table_name() {
+        let mut roles = HashMap::new();
+        roles.insert(
+            "admin".to_string(),
+            RolePolicy {
+                tables: vec![TablePermission {
+                    name: "   ".to_string(),
+                    operations: vec![PermissionAction::Select],
+                }],
+            },
+        );
+        let config = PermissionConfig { roles };
+
+        let errors = config
+            .validate()
+            .expect_err("a blank table name must fail validation");
+        assert_eq!(
+            errors.len(),
+            1,
+            "only the blank name is invalid: {errors:?}"
+        );
+        assert!(
+            errors[0].contains("empty name"),
+            "error should name the blank table permission, got: {}",
+            errors[0]
+        );
+        // validate_with_first_error 暴露同一条错误
+        let first = config
+            .validate_with_first_error()
+            .expect_err("validate_with_first_error must propagate the failure");
+        assert!(first.contains("empty name"), "got: {first}");
     }
 }

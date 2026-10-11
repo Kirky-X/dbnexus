@@ -114,7 +114,6 @@ mod saga_integration {
     fn test_saga_lifecycle() {
         let store = InMemorySagaLog::new();
 
-        // 创建 saga 日志
         let log = SagaLog {
             saga_id: "e2e-test-saga".to_string(),
             status: SagaStatus::Running,
@@ -122,11 +121,9 @@ mod saga_integration {
         };
         store.insert(log);
 
-        // 验证初始状态
         let retrieved = store.get("e2e-test-saga").unwrap();
         assert_eq!(retrieved.status, SagaStatus::Running);
 
-        // 更新为完成
         store.update_status("e2e-test-saga", SagaStatus::Completed);
         let final_log = store.get("e2e-test-saga").unwrap();
         assert_eq!(final_log.status, SagaStatus::Completed);

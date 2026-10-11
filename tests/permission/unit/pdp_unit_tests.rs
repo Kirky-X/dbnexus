@@ -296,7 +296,6 @@ async fn test_pdp_cache_refresh_returns_allow() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::new(provider);
 
-    // 执行检查
     let _ = pdp.check("admin_user", "users", "SELECT").await;
 
     // 刷新缓存
@@ -318,10 +317,8 @@ async fn test_pdp_cache_disabled_returns_allow() {
     let provider = create_test_rbac_provider();
     let mut pdp = PolicyDecisionPoint::new(provider);
 
-    // 禁用缓存
     pdp.set_cache_enabled(false);
 
-    // 检查仍然应该工作
     let result = pdp.check("admin_user", "users", "SELECT").await;
     assert_eq!(
         result,
@@ -594,7 +591,6 @@ async fn test_pdp_disabled_rule_returns_not_applicable() {
         extends: vec![],
     });
 
-    // 禁用的规则
     provider.add_permission(
         "test_role",
         PermissionRule {
@@ -605,7 +601,7 @@ async fn test_pdp_disabled_rule_returns_not_applicable() {
             allow: vec![PermissionAction::Select],
             deny: vec![],
             condition: None,
-            enabled: false, // 禁用
+            enabled: false,
         },
     );
 
@@ -613,7 +609,6 @@ async fn test_pdp_disabled_rule_returns_not_applicable() {
 
     let pdp = PolicyDecisionPoint::new(provider);
 
-    // 禁用的规则不应该生效
     let result = pdp.check("test_user", "users", "SELECT").await;
     assert_eq!(
         result,

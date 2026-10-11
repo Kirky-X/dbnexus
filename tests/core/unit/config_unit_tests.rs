@@ -337,7 +337,7 @@ fn test_foundation_database_type_display() {
 #[test]
 fn test_foundation_database_type_traits() {
     let a = FoundationDatabaseType::Postgres;
-    let b = a; // Copy
+    let b = a;
     assert_eq!(a, b);
     assert_ne!(a, FoundationDatabaseType::Sqlite);
 }

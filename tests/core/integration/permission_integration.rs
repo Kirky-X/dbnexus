@@ -27,12 +27,10 @@ async fn test_permission_context_role() {
     let pool = DbPool::with_config(config)
         .await
         .expect("Failed to create test pool");
-    // 使用配置中定义的 admin 角色
     let session = pool
         .get_session("admin")
         .await
         .expect("Failed to get session");
-    // 加载权限策略到缓存
     let perm_path = pool
         .config()
         .permissions_path
@@ -77,7 +75,6 @@ async fn test_permission_check() {
         .get_session("admin")
         .await
         .expect("Failed to get session");
-    // 加载权限策略到缓存
     let perm_path = pool
         .config()
         .permissions_path
@@ -226,7 +223,6 @@ async fn test_permission_cache_miss_behavior() {
 async fn test_permission_check_with_auto_load() {
     use dbnexus::access::PermissionContext;
 
-    // 创建权限配置
     let config = PermissionConfig {
         roles: [(
             "test_role".to_string(),
@@ -241,7 +237,6 @@ async fn test_permission_check_with_auto_load() {
         .collect(),
     };
 
-    // 创建权限上下文
     let ctx: PermissionContext = PermissionContext::with_cache_size("test_role".to_string(), 256)
         .await
         .expect("Failed to create permission context");

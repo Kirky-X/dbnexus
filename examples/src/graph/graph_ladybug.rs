@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 Ladybug 内存连接
+    // 创建 Ladybug 内存连接
     // ============================================
     println!("--- 1. create the Ladybug in-memory connection ---\n");
     let conn = LadybugConnection::new(":memory:", 4)?;
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Debug format: {:?}\n", conn);
 
     // ============================================
-    // 2. 创建节点表（DDL）
+    // 创建节点表（DDL）
     // ============================================
     println!("--- 2. create node tables ---\n");
 
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ relationship table created: LIVES_IN(Person → City)\n");
 
     // ============================================
-    // 3. 插入节点数据
+    // 插入节点数据
     // ============================================
     println!("--- 3. insert nodes and relationships ---\n");
 
@@ -88,7 +88,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  ✓ node inserted: City({})", name);
     }
 
-    // 创建关系
     conn.execute_cypher(
         "MATCH (p:Person), (c:City) WHERE p.name = 'Alice' AND c.name = 'Beijing' CREATE (p)-[:LIVES_IN]->(c)",
     )
@@ -102,11 +101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ relationship created: Bob -[:LIVES_IN]-> Shanghai\n");
 
     // ============================================
-    // 4. Cypher 查询
+    // Cypher 查询
     // ============================================
     println!("--- 4. Cypher queries ---\n");
 
-    // 查询所有 Person
     let result = conn
         .execute_cypher("MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY p.name")
         .await?;
@@ -153,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 参数化查询（防止 Cypher 注入）
+    // 参数化查询（防止 Cypher 注入）
     // ============================================
     println!("\n--- 5. parameterized queries ---\n");
 
@@ -185,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ parameterized queries use prepared statements to prevent Cypher injection\n");
 
     // ============================================
-    // 6. 图事务
+    // 图事务
     // ============================================
     println!("--- 6. graph transactions ---\n");
 
@@ -231,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 7. 健康检查
+    // 健康检查
     // ============================================
     println!("--- 7. health check ---\n");
     match conn.health_check().await {
@@ -240,7 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 8. Clone 行为验证
+    // Clone 行为验证
     // ============================================
     println!("\n--- 8. Clone sharing the database ---\n");
     let conn2 = conn.clone();

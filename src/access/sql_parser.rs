@@ -312,7 +312,6 @@ impl SqlParser {
             ));
         }
 
-        // Check for variables that might indicate dynamic SQL
         if contains_variables(sql) {
             return Err(SqlParseError::ContainsVariables(
                 "SQL contains potentially dangerous variables. Use parameterized queries instead."
@@ -358,10 +357,8 @@ impl SqlParser {
     /// 在异步上下文中（如 `#[tokio::test]`）会导致运行时冲突。
     /// 请使用 `parse_operation_async()` 替代。
     pub fn parse_operation(&self, sql: &str) -> Option<(String, PermissionAction)> {
-        // Check if we're already in an async context
+        // 已在异步上下文中：返回 None，调用方改用 parse_operation_async
         if tokio::runtime::Handle::try_current().is_ok() {
-            // We're in an async context - this method should not be called
-            // Return None and let callers use parse_operation_async instead
             return None;
         }
         // Safe to block_on in sync context
@@ -518,7 +515,6 @@ impl SqlParser {
             _ => (SqlOperationType::Other, None, Vec::new()),
         };
 
-        // 验证表名长度
         if let Some(ref table) = table_name
             && table.len() > MAX_TABLE_NAME_LENGTH
         {
@@ -1196,7 +1192,6 @@ mod tests {
             .await;
         assert!(result2.is_ok());
 
-        // 验证结果是相同的
         assert_eq!(result1.unwrap().sql, result2.unwrap().sql);
 
         // 缓存统计：一次未命中 + 一次命中
@@ -2210,5 +2205,64 @@ mod tests {
 
         let tables = tables_of_raw("SELECT * FROM t1 WHERE foo(bar => (SELECT id FROM t2)) = 1");
         assert!(tables.contains(&"t2".to_string()), "got {tables:?}");
+    }
+
+    /// DDL 分类是字面关键字过滤（contains_ddl_operation）之外的语义兜底：
+    /// 下列合法 DDL 形式不命中字面过滤，仍必须被 AST 归为 Ddl，
+    /// 且不得映射为 DML 权限动作。
+    #[tokio::test]
+    async fn test_classify_ddl_missed_by_literal_filter() {
+        let parser = SqlParser::new().await;
+        let cases = [
+            ("CREATE OR REPLACE TABLE users (id INTEGER)", Some("users")),
+            ("ALTER  TABLE users ADD COLUMN name TEXT", Some("users")),
+            ("DROP TEMPORARY TABLE users", Some("users")),
+            (
+                "CREATE UNIQUE INDEX idx_users_id ON users (id)",
+                Some("users"),
+            ),
+        ];
+
+        for (sql, expected_table) in cases {
+            let parsed = parser.parse_single(sql).await.expect("DDL should parse");
+            assert_eq!(parsed.operation_type, SqlOperationType::Ddl, "sql: {sql}");
+            assert_eq!(parsed.table_name.as_deref(), expected_table, "sql: {sql}");
+            assert!(
+                parser
+                    .parse_operation_async(sql)
+                    .await
+                    .expect("parse")
+                    .is_none(),
+                "DDL must not map to a DML permission action: {sql}"
+            );
+        }
+    }
+
+    /// 单赋值 SET 变量：DDL 相关变量归 Ddl，普通变量归 Other（均无表名）
+    #[tokio::test]
+    async fn test_classify_set_single_assignment_non_ddl_variable() {
+        let parser = SqlParser::new().await;
+
+        let parsed = parser
+            .parse_single("SET statement_timeout = 1000")
+            .await
+            .expect("SET should parse");
+        assert_eq!(
+            parsed.operation_type,
+            SqlOperationType::Other,
+            "a non-DDL variable assignment is not a DDL operation"
+        );
+        assert!(parsed.table_name.is_none());
+        assert!(parsed.all_table_names.is_empty());
+
+        let parsed = parser
+            .parse_single("SET foreign_keys = ON")
+            .await
+            .expect("SET should parse");
+        assert_eq!(
+            parsed.operation_type,
+            SqlOperationType::Ddl,
+            "a DDL-related variable assignment maps to Ddl"
+        );
     }
 }

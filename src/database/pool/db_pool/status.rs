@@ -226,7 +226,6 @@ impl DbPool {
             .database_type()
             .map_err(|e| DbError::Config(e.to_string()))?;
 
-        // 获取一个连接来执行迁移
         let connection = self.acquire_connection().await?;
 
         // 无论成功失败都归还连接：错误路径漏归还将永久占用池槽位

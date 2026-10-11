@@ -43,7 +43,6 @@ async fn test_migration_executor_creation() {
         .await
         .expect("Failed to create test pool");
 
-    // 获取会话
     let session = pool
         .get_session("admin")
         .await
@@ -71,7 +70,6 @@ async fn test_migration_executor_creation() {
         .await
         .expect("Should be able to create table");
 
-    // 清理
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
@@ -120,7 +118,6 @@ async fn test_migration_apply() {
     let result = conn.execute_unprepared(&check_sql).await;
     assert!(result.is_ok(), "Migration should be applied");
 
-    // 清理
     let _ = session
         .execute_raw_ddl(&format!("DROP TABLE IF EXISTS {}", table_name))
         .await;
@@ -175,10 +172,8 @@ async fn test_migration_executor_first_run() {
         .connection()
         .expect("Connection should be available");
 
-    // 创建临时目录存放迁移文件
     let migration_dir = TempDir::new().expect("Failed to create temp dir");
 
-    // 创建一个简单的迁移文件
     let migration_file_path = migration_dir.path().join("001_create_test_table.sql");
     let mut file =
         std::fs::File::create(&migration_file_path).expect("Failed to create migration file");
@@ -194,7 +189,6 @@ async fn test_migration_executor_first_run() {
     .expect("Failed to write migration file");
     drop(file);
 
-    // 创建迁移执行器
     let db_type = pool.config().database_type().unwrap();
     let mut executor = MigrationExecutor::new(conn.clone(), db_type);
 
@@ -209,7 +203,6 @@ async fn test_migration_executor_first_run() {
     assert!(result.is_ok(), "Migration should succeed on first run");
     assert_eq!(result.unwrap(), 1, "One migration should be applied");
 
-    // 验证历史记录已更新
     assert_eq!(executor.history().applied_migrations.len(), 1);
     assert_eq!(executor.get_latest_migration().map(|m| m.version), Some(1));
 
@@ -226,7 +219,6 @@ async fn test_migration_executor_first_run() {
         "No migration should be applied on second run"
     );
 
-    // 清理测试表
     let _ = session
         .execute_raw_ddl(&format!(
             "DROP TABLE IF EXISTS test_first_run_{}",

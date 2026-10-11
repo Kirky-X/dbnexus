@@ -491,4 +491,113 @@ mod tests {
         assert!(AuthenticationManager::with_config(b"short", 300, 3600).is_err());
         assert!(AuthenticationManager::with_max_users(b"short", 2).is_err());
     }
+
+    // ===== bcrypt 校验分支：长度为 60 的输入才真正进入各拒绝分支 =====
+    //
+    // 既有用例的输入长度均不等于 60，一律在长度检查处返回，因此
+    // ASCII/前缀/cost/`$` 四个分支的拒绝语义未被钉住。以下用例用
+    // 恰好 60 字节的输入逐一进入各分支，并断言拒绝原因。
+
+    /// 拒绝非 ASCII 的 60 字节哈希（多字节 UTF-8 会破坏后续字节切片）
+    #[test]
+    fn test_validate_bcrypt_hash_rejects_non_ascii_60_bytes() {
+        let hash = format!("$2b$12$é{}", "a".repeat(51));
+        assert_eq!(hash.len(), 60, "input must be exactly 60 bytes");
+        match validate_bcrypt_hash(&hash) {
+            Err(AuthError::PasswordHash(msg)) => {
+                assert!(msg.contains("ASCII"), "unexpected reason: {msg}");
+            }
+            other => panic!("expected PasswordHash error, got {other:?}"),
+        }
+    }
+
+    /// 拒绝前缀不在 $2a$/$2b$/$2y$ 之列的 60 字节哈希
+    #[test]
+    fn test_validate_bcrypt_hash_rejects_unknown_prefix_60_bytes() {
+        let hash = format!("$1a$12${}", "a".repeat(53));
+        assert_eq!(hash.len(), 60, "input must be exactly 60 bytes");
+        match validate_bcrypt_hash(&hash) {
+            Err(AuthError::PasswordHash(msg)) => {
+                assert!(msg.contains("$2a$"), "unexpected reason: {msg}");
+            }
+            other => panic!("expected PasswordHash error, got {other:?}"),
+        }
+    }
+
+    /// 拒绝 cost 字段非两位数字的 60 字节哈希
+    #[test]
+    fn test_validate_bcrypt_hash_rejects_non_numeric_cost_60_bytes() {
+        let hash = format!("$2b$ab${}", "a".repeat(53));
+        assert_eq!(hash.len(), 60, "input must be exactly 60 bytes");
+        match validate_bcrypt_hash(&hash) {
+            Err(AuthError::PasswordHash(msg)) => {
+                assert!(msg.contains("cost factor"), "unexpected reason: {msg}");
+            }
+            other => panic!("expected PasswordHash error, got {other:?}"),
+        }
+    }
+
+    /// 拒绝 cost 与 salt 之间缺少 `$` 的 60 字节哈希
+    #[test]
+    fn test_validate_bcrypt_hash_rejects_missing_dollar_after_cost_60_bytes() {
+        let hash = format!("$2b$12#{}", "a".repeat(53));
+        assert_eq!(hash.len(), 60, "input must be exactly 60 bytes");
+        match validate_bcrypt_hash(&hash) {
+            Err(AuthError::PasswordHash(msg)) => {
+                assert!(msg.contains("missing $"), "unexpected reason: {msg}");
+            }
+            other => panic!("expected PasswordHash error, got {other:?}"),
+        }
+    }
+
+    /// 用户存储上限：超出 max_users 的新用户被拒绝，已存在用户的更新不占槽位
+    #[tokio::test]
+    async fn test_add_user_rejects_beyond_max_users() {
+        let mgr = AuthenticationManager::with_max_users(b"test-secret-key-for-testing-32bx", 1)
+            .expect("valid secret");
+        let hash = PasswordHasher::new().hash("ValidPass@123").unwrap();
+        let user = |name: &str| User {
+            id: name.to_string(),
+            username: name.to_string(),
+            password_hash: hash.clone(),
+            role: "user".to_string(),
+            email: None,
+            created_at: None,
+        };
+
+        mgr.add_user(user("first")).await.expect("first user fits");
+        let err = mgr
+            .add_user(user("second"))
+            .await
+            .expect_err("a new user beyond max_users must be rejected");
+        match err {
+            AuthError::UserLimitReached(msg) => {
+                assert!(msg.contains("second"), "unexpected reason: {msg}");
+                assert!(msg.contains('1'), "should report the limit: {msg}");
+            }
+            other => panic!("expected UserLimitReached, got {other:?}"),
+        }
+        mgr.add_user(user("first"))
+            .await
+            .expect("updating an existing user must not be counted against the limit");
+    }
+
+    /// 注册路径同样受用户上限约束（register_user 经 add_user_unchecked 落库）
+    #[tokio::test]
+    async fn test_register_user_rejects_beyond_max_users() {
+        let mgr = AuthenticationManager::with_max_users(b"test-secret-key-for-testing-32bx", 1)
+            .expect("valid secret");
+
+        mgr.register_user("first", "ValidPass@1234", "user")
+            .await
+            .expect("first registration fits");
+        let err = mgr
+            .register_user("second", "ValidPass@1234", "user")
+            .await
+            .expect_err("a second user beyond max_users must be rejected");
+        assert!(
+            matches!(err, AuthError::UserLimitReached(_)),
+            "expected UserLimitReached, got {err:?}"
+        );
+    }
 }

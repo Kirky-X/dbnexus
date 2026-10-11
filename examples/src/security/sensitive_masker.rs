@@ -46,7 +46,7 @@ fn main() {
     let _ = masker; // 验证 new() 可用，实际使用静态方法 mask()
 
     // ============================================
-    // 1. 手机号脱敏（保留前3后4）
+    // 手机号脱敏（保留前3后4）
     // ============================================
     println!("--- 1. phone number masking (keeps first 3 and last 4) ---");
     print_mask("standard 11 digits", "13812345678", MaskType::Phone);
@@ -56,7 +56,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 2. 邮箱脱敏（保留前2字符和域名）
+    // 邮箱脱敏（保留前2字符和域名）
     // ============================================
     println!("--- 2. email masking (keeps the first 2 chars and the domain) ---");
     print_mask("standard email", "test@example.com", MaskType::Email);
@@ -66,7 +66,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 3. 身份证脱敏（保留前4后4）
+    // 身份证脱敏（保留前4后4）
     // ============================================
     println!("--- 3. ID card masking (keeps first 4 and last 4) ---");
     print_mask("18-digit ID card", "110101199001011234", MaskType::IdCard);
@@ -75,7 +75,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 4. 银行卡脱敏（保留前4后4）
+    // 银行卡脱敏（保留前4后4）
     // ============================================
     println!("--- 4. bank card masking (keeps first 4 and last 4) ---");
     print_mask("16-digit bank card", "6222021234567890", MaskType::BankCard);
@@ -88,7 +88,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 5. 姓名脱敏（保留姓氏）
+    // 姓名脱敏（保留姓氏）
     // ============================================
     println!("--- 5. name masking (keeps the surname) ---");
     print_mask("two-character name", "张三", MaskType::Name);
@@ -98,7 +98,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 6. 地址脱敏（保留省市）
+    // 地址脱敏（保留省市）
     // ============================================
     println!("--- 6. address masking (keeps province/city) ---");
     print_mask(
@@ -119,7 +119,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 7. 自定义脱敏（指定保留前后位数）
+    // 自定义脱敏（指定保留前后位数）
     // ============================================
     println!("--- 7. custom masking ---");
     print_mask(
@@ -157,7 +157,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 8. 错误处理（无效输入）
+    // 错误处理（无效输入）
     // ============================================
     println!("--- 8. error handling (invalid input) ---");
 
@@ -174,7 +174,6 @@ fn main() {
             Ok(_) => println!("  ⚠ [{}] should have failed but succeeded", label),
             Err(err) => {
                 println!("  ✓ [{}] correctly failed: {}", label, err);
-                // 验证错误类型
                 match err {
                     SensitiveError::InvalidInput(_) => {
                         println!("    (error type: InvalidInput ✓)");
@@ -190,7 +189,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 9. Default trait 演示
+    // Default trait 演示
     // ============================================
     println!("--- 9. Default trait ---");
     let default_masker: SensitiveMasker = SensitiveMasker;
@@ -203,7 +202,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 10. 批量脱敏场景（模拟用户数据导出）
+    // 批量脱敏场景（模拟用户数据导出）
     // ============================================
     println!("--- 10. batch masking scenario (user data export) ---");
     let user_records: &[(&str, &str, &str, &str, &str)] = &[

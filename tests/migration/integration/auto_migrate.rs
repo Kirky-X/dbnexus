@@ -116,7 +116,6 @@ DROP TABLE orders_{table_suffix};
     )
     .expect("Failed to write migration file 2");
 
-    // 使用内存数据库
     let config = dbnexus::DbConfig {
         url,
         admin_role: "admin".to_string(),
@@ -144,7 +143,6 @@ DROP TABLE orders_{table_suffix};
         .await
         .expect("Failed to run migrations");
 
-    // 验证迁移已应用
     assert_eq!(migrations, 2, "Should have applied 2 migrations");
 }
 
@@ -236,13 +234,11 @@ async fn test_nonexistent_migrations_directory() {
 #[cfg(feature = "config-env")]
 async fn test_migration_config_from_env() {
     let _env_guard = DB_ENV_LOCK.lock().unwrap();
-    // 保存原始环境变量值
     let original_database_url = std::env::var("DATABASE_URL").ok();
     let original_migrations_dir = std::env::var("DB_MIGRATIONS_DIR").ok();
     let original_auto_migrate = std::env::var("DB_AUTO_MIGRATE").ok();
     let original_migration_timeout = std::env::var("DB_MIGRATION_TIMEOUT").ok();
 
-    // 设置测试环境变量
     unsafe {
         std::env::set_var("DATABASE_URL", "sqlite::memory:");
         std::env::set_var("DB_MIGRATIONS_DIR", "/custom/migrations");
@@ -263,7 +259,6 @@ async fn test_migration_config_from_env() {
         assert_eq!(config.migration_timeout, 120);
     }));
 
-    // 恢复原始环境变量
     unsafe {
         match original_database_url {
             Some(val) => std::env::set_var("DATABASE_URL", val),
@@ -310,7 +305,6 @@ async fn test_migration_version_sorting() {
     let v2 = base_version + 1;
     let v3 = base_version + 2;
 
-    // 创建乱序的迁移文件
     let migration_v3 = format!(
         r#"-- Migration: third
 -- Version: {v3}

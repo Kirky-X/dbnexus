@@ -574,7 +574,6 @@ mod tests {
             users.comment = Some("updated comment".to_string());
         }
 
-        // 验证修改生效
         let users = s.get_table("users").expect("table should exist");
         assert_eq!(users.comment.as_deref(), Some("updated comment"));
 

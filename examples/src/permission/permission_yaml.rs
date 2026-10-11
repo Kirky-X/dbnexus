@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 构建权限配置
+    // 构建权限配置
     // ============================================
     // 本示例通过编程方式构建 PermissionConfig（与 YAML 结构完全一致）。
     // 生产环境推荐使用 serde_yaml_ng::from_str 或 YamlPermissionProvider::new(path)。
@@ -138,7 +138,7 @@ roles:
     };
 
     // ============================================
-    // 2. 创建 YamlPermissionProvider
+    // 创建 YamlPermissionProvider
     // ============================================
     let provider = YamlPermissionProvider::from_config(config);
 
@@ -151,7 +151,7 @@ roles:
     println!();
 
     // ============================================
-    // 3. 演示不同角色的权限差异
+    // 演示不同角色的权限差异
     // ============================================
     println!("--- permission check results ---\n");
 
@@ -201,7 +201,7 @@ roles:
     println!("\n  statistics: {} passed, {} failed", passed, failed);
 
     // ============================================
-    // 4. 展示角色策略详情
+    // 展示角色策略详情
     // ============================================
     println!("\n--- role policy details ---\n");
 
@@ -221,7 +221,7 @@ roles:
     }
 
     // ============================================
-    // 5. 结合 DbPool + Session（展示集成场景）
+    // 结合 DbPool + Session（展示集成场景）
     // ============================================
     println!("\n--- DbPool integration ---\n");
 

@@ -484,7 +484,6 @@ async fn test_check_permission_denied_returns_permission_error() {
         ..Default::default()
     };
     let pool = DbPool::with_config(config).await.unwrap();
-    // 使用非 admin 角色进行权限测试
     let session = pool.get_session("test_user").await.unwrap();
 
     let perm_config = parse_json_config(&std::fs::read_to_string(&perm_file).unwrap())
@@ -737,7 +736,6 @@ async fn test_execute_denied_by_permission() {
     let pool = DbPool::with_config(config)
         .await
         .expect("Failed to create test pool");
-    // 使用非 admin 角色进行权限测试
     let session = pool
         .get_session("test_user")
         .await
@@ -1257,7 +1255,6 @@ async fn test_transaction_short_lock_pattern_works() {
     session.commit().await.expect("commit failed");
     assert!(!session.is_in_transaction().await);
 
-    // 验证数据已提交
     let result = session.execute_raw("SELECT * FROM short_lock_test").await;
     assert!(result.is_ok(), "select after commit failed");
 }
@@ -1303,7 +1300,6 @@ async fn test_transaction_multiple_executes_in_same_transaction() {
 
     session.commit().await.expect("commit failed");
 
-    // 验证所有数据已提交
     let result = session.execute_raw("SELECT * FROM multi_exec_test").await;
     assert!(result.is_ok());
 }

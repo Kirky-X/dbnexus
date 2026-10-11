@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. PasswordHasher — 哈希与验证
+    // PasswordHasher — 哈希与验证
     // ============================================
     println!("--- 1. PasswordHasher hashing and verification ---");
     let hasher = PasswordHasher::new();
@@ -39,7 +39,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "bcrypt hash should start with $2b$"
     );
 
-    // 验证正确密码
     let verify_ok = hasher.verify(password, &password_hash);
     println!(
         "\n  verifying correct password: {:?}",
@@ -50,7 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     assert!(verify_ok.is_ok());
 
-    // 验证错误密码
     let verify_fail = hasher.verify("WrongPassword", &password_hash);
     println!(
         "  verifying wrong password: {:?}",
@@ -62,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(matches!(verify_fail, Err(AuthError::InvalidCredentials)));
 
     // ============================================
-    // 2. 密码强度校验
+    // 密码强度校验
     // ============================================
     println!("\n--- 2. password strength check ---");
     let test_cases = [
@@ -82,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. AuthenticationManager — 用户管理
+    // AuthenticationManager — 用户管理
     // ============================================
     println!("\n--- 3. AuthenticationManager user management ---");
     let manager = AuthenticationManager::new(b"dbnexus-demo-secret-key-32bytes-ok!!")?;
@@ -111,7 +109,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // 查询用户
     println!("\n  [look up user]");
     let fetched = manager.get_user("alice").await?;
     println!(
@@ -120,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. AuthCredentials — 凭据认证流程
+    // AuthCredentials — 凭据认证流程
     // ============================================
     println!("\n--- 4. AuthCredentials credential authentication ---");
 
@@ -140,7 +137,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &token[..40.min(token.len())]
     );
 
-    // 验证 token
     let claims = manager.verify_token(&token)?;
     println!(
         "  ✓ Token verified: sub={}, username={}, role={}",
@@ -174,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 5. Token 刷新流程
+    // Token 刷新流程
     // ============================================
     println!("\n--- 5. token refresh flow ---");
     // AuthenticationManager 内部的 jwt_manager 是私有的，
@@ -191,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 6. 用户删除
+    // 用户删除
     // ============================================
     println!("\n--- 6. user removal ---");
     manager.remove_user("carol").await?;

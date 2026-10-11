@@ -234,4 +234,72 @@ mod tests {
         };
         assert!(YamlPermissionProvider::new(config).await.is_err());
     }
+
+    /// 绝对路径通过安全校验但文件不可读：health_check 必须报错（读取失败路径）
+    #[tokio::test]
+    async fn health_check_reports_unreadable_absolute_policy_file() {
+        let path = std::env::temp_dir().join(format!(
+            "dbnexus_missing_policy_{}.yaml",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let provider = make_provider(PermissionConfig {
+            policy_path: Some(path.to_string_lossy().to_string()),
+            ..PermissionConfig::default()
+        });
+
+        let err = provider
+            .health_check()
+            .await
+            .expect_err("an absolute but unreadable policy file must be unhealthy");
+        assert!(
+            !err.to_string().is_empty(),
+            "the error must carry the locale message"
+        );
+    }
+
+    /// 带缓存构造：加载策略文件时同步写入注入的策略缓存
+    #[cfg(feature = "cache")]
+    #[tokio::test]
+    async fn with_cache_populates_policy_cache_on_load() {
+        let path =
+            std::env::temp_dir().join(format!("dbnexus_perm_cache_{}.yaml", std::process::id()));
+        std::fs::write(
+            &path,
+            b"admin:\n  tables:\n    - name: \"*\"\n      operations: [Select, Insert, Update, Delete]\n",
+        )
+        .expect("write policy file");
+
+        let cache = std::sync::Arc::new(
+            oxcache::Cache::<String, RolePolicy>::builder()
+                .capacity(8)
+                .build()
+                .await
+                .expect("cache"),
+        );
+        let config = PermissionConfig {
+            policy_path: Some(path.to_string_lossy().to_string()),
+            ..PermissionConfig::default()
+        };
+        let provider = YamlPermissionProvider::with_cache(config, cache.clone())
+            .await
+            .expect("provider with cache");
+        std::fs::remove_file(&path).unwrap();
+
+        // 加载的每个角色都进入缓存，provider 自身同样可查询
+        let cached = cache
+            .get(&"admin".to_string())
+            .await
+            .expect("cache lookup")
+            .expect("the loaded role must be cached");
+        assert_eq!(cached.tables.len(), 1);
+        assert!(
+            provider
+                .get_policy("admin")
+                .await
+                .expect("get_policy")
+                .is_some(),
+            "the provider must expose the loaded policy"
+        );
+    }
 }

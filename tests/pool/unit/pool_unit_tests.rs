@@ -37,7 +37,6 @@ async fn test_pool_builder_basic_initialization() {
         .await
         .expect("Failed to create pool");
 
-    // 验证配置正确应用
     assert_eq!(pool.config().pool_config.max_connections, 10);
     assert_eq!(pool.config().pool_config.min_connections, 2);
     assert_eq!(pool.config().pool_config.idle_timeout, 300);
@@ -53,7 +52,6 @@ async fn test_pool_builder_basic_initialization() {
 async fn test_pool_builder_default_values() {
     let pool = common::make_sqlite_memory_pool().await;
 
-    // 验证默认值
     assert_eq!(pool.config().pool_config.max_connections, 20);
     assert_eq!(pool.config().pool_config.min_connections, 5);
     assert_eq!(pool.config().pool_config.idle_timeout, 300);
@@ -222,7 +220,6 @@ async fn test_pool_status_structure() {
 
     let status = pool.status();
 
-    // 验证所有字段都存在且类型正确
     let _total: u32 = status.total;
     let _active: u32 = status.active;
     let _idle: u32 = status.idle;
@@ -230,7 +227,6 @@ async fn test_pool_status_structure() {
     let _borrow_count: u64 = status.borrow_count;
     let _max_active: u32 = status.max_active;
 
-    // 验证基本不变式
     assert_eq!(status.total, status.active + status.idle);
 }
 
@@ -261,7 +257,6 @@ async fn test_pool_max_connections_limit() {
         .expect("Failed to create pool");
     let pool = Arc::new(pool);
 
-    // 获取所有连接
     let mut sessions = Vec::new();
     for _ in 0..max_connections {
         let session = pool
@@ -378,7 +373,6 @@ async fn test_pool_concurrent_connection_acquire() {
     // 显式释放所有 Session
     drop(results);
 
-    // 等待所有 session 释放
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let status = pool.status();
@@ -413,7 +407,6 @@ async fn test_pool_acquire_timeout() {
             .expect("Failed to create pool"),
     );
 
-    // 获取唯一的连接
     let _session = pool
         .get_session("admin")
         .await
@@ -460,7 +453,6 @@ async fn test_pool_timeout_then_release() {
             .expect("Failed to create pool"),
     );
 
-    // 获取连接
     let session = pool
         .get_session("admin")
         .await
@@ -470,7 +462,6 @@ async fn test_pool_timeout_then_release() {
     let pool_clone = pool.clone();
     let timeout_task = tokio::spawn(async move { pool_clone.get_session("admin").await });
 
-    // 等待一小段时间
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // 释放连接
@@ -545,7 +536,6 @@ async fn test_pool_borrow_count_tracking() {
     let initial_status = pool.status();
     let initial_borrow_count = initial_status.borrow_count;
 
-    // 借用连接多次
     for _ in 0..3 {
         let _session = pool
             .get_session("admin")
@@ -779,7 +769,6 @@ async fn test_connection_lifecycle_wait_tracking() {
             .expect("Failed to create pool"),
     );
 
-    // 获取唯一的连接
     let _session = pool
         .get_session("admin")
         .await
@@ -814,7 +803,6 @@ fn test_pool_config_default_values_reasonable() {
         ..Default::default()
     };
 
-    // 验证默认值在合理范围内
     assert!(
         config.pool_config.max_connections > 0,
         "max_connections should be > 0"
@@ -973,7 +961,6 @@ async fn test_session_transaction_state() {
         .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
 
-    // 提交事务
     session
         .commit()
         .await
@@ -1001,7 +988,6 @@ async fn test_session_transaction_rollback() {
         .expect("Failed to begin transaction");
     assert!(session.is_in_transaction().await);
 
-    // 回滚事务
     session
         .rollback()
         .await
@@ -1338,7 +1324,6 @@ async fn test_wait_count_increments_during_contention() {
 
     let pool = Arc::new(pool);
 
-    // 获取初始状态
     let initial_status = pool.status();
     assert_eq!(
         initial_status.wait_count, 0,
@@ -1363,21 +1348,18 @@ async fn test_wait_count_increments_during_contention() {
         })
         .collect();
 
-    // 等待所有请求完成
     let results: Vec<_> = futures::future::join_all(handles).await;
     let success_count = results
         .iter()
         .filter(|r| r.as_ref().is_ok_and(|r| r.is_ok()))
         .count();
 
-    // 验证至少有部分请求成功
     assert!(
         success_count >= 2,
         "Expected at least 2 successful acquires, got {}",
         success_count
     );
 
-    // 等待所有请求完全结束
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // 验证最终状态：wait_count 应恢复到 0
@@ -1482,7 +1464,6 @@ async fn test_release_connection_no_leak() {
         drop(session); // 触发 release_connection
     }
 
-    // 等待异步路径完成
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let status = pool.status();

@@ -24,7 +24,6 @@ use std::time::Duration;
 fn test_metrics_aggregation_basic() {
     let collector = MetricsCollector::new();
 
-    // 记录多条不同类型的查询
     for _ in 0..10 {
         collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     }
@@ -35,7 +34,6 @@ fn test_metrics_aggregation_basic() {
         collector.record_query("UPDATE", Duration::from_millis(15), false, None);
     }
 
-    // 验证聚合统计
     let select_stats = collector.get_query_stats("SELECT").unwrap();
     let insert_stats = collector.get_query_stats("INSERT").unwrap();
     let update_stats = collector.get_query_stats("UPDATE").unwrap();
@@ -51,13 +49,11 @@ fn test_metrics_aggregation_basic() {
 fn test_metrics_aggregation_multiple_types() {
     let collector = MetricsCollector::new();
 
-    // 记录多种查询类型
     collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     collector.record_query("INSERT", Duration::from_millis(20), true, Some(200));
     collector.record_query("UPDATE", Duration::from_millis(15), true, Some(150));
     collector.record_query("DELETE", Duration::from_millis(25), true, Some(250));
 
-    // 获取所有统计
     let all_stats = collector.all_query_stats();
 
     assert_eq!(all_stats.len(), 4);
@@ -72,7 +68,6 @@ fn test_metrics_aggregation_multiple_types() {
 fn test_total_throughput_aggregation() {
     let collector = MetricsCollector::new();
 
-    // 记录多个类型的查询
     for _ in 0..10 {
         collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     }
@@ -80,7 +75,6 @@ fn test_total_throughput_aggregation() {
         collector.record_query("INSERT", Duration::from_millis(20), false, None);
     }
 
-    // 获取总吞吐量
     let total = collector.total_throughput();
 
     assert_eq!(total.total_operations, 15);
@@ -111,7 +105,6 @@ fn test_empty_collector_aggregation() {
 fn test_query_type_filtering() {
     let collector = MetricsCollector::new();
 
-    // 记录不同类型的查询
     for _ in 0..20 {
         collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     }
@@ -119,11 +112,9 @@ fn test_query_type_filtering() {
         collector.record_query("INSERT", Duration::from_millis(20), true, Some(200));
     }
 
-    // 过滤获取 SELECT 统计
     let select_stats = collector.get_query_stats("SELECT").unwrap();
     assert_eq!(select_stats.count, 20);
 
-    // 过滤获取 INSERT 统计
     let insert_stats = collector.get_query_stats("INSERT").unwrap();
     assert_eq!(insert_stats.count, 10);
 
@@ -137,7 +128,6 @@ fn test_query_type_filtering() {
 fn test_success_failure_filtering() {
     let collector = MetricsCollector::new();
 
-    // 记录成功和失败的查询
     for _ in 0..10 {
         collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     }
@@ -149,7 +139,6 @@ fn test_success_failure_filtering() {
     assert_eq!(stats.count, 15);
     assert_eq!(stats.error_count, 5);
 
-    // 验证错误率计算
     let expected_error_rate = 5.0 / 15.0;
     assert!((stats.error_rate() - expected_error_rate).abs() < 0.01);
 }
@@ -159,7 +148,6 @@ fn test_success_failure_filtering() {
 fn test_pool_metrics_filtering() {
     let collector = MetricsCollector::new();
 
-    // 设置不同的连接池状态
     collector.update_pool_status(20, 15, 5);
 
     let pool_metrics = collector.pool_status();
@@ -186,11 +174,8 @@ fn test_latency_percentiles_time_window() {
     let stats = collector.get_query_stats("SELECT").unwrap();
     let percentiles = stats.latency_percentiles;
 
-    // 验证 P50 约在 50ms
     assert!(percentiles.p50_ns >= 49_000_000 && percentiles.p50_ns <= 51_000_000);
-    // 验证 P90 约在 90ms
     assert!(percentiles.p90_ns >= 89_000_000 && percentiles.p90_ns <= 91_000_000);
-    // 验证 P99 约在 99ms
     assert!(percentiles.p99_ns >= 98_000_000 && percentiles.p99_ns <= 100_000_000);
 }
 
@@ -199,7 +184,6 @@ fn test_latency_percentiles_time_window() {
 fn test_latency_percentiles_boundary_values() {
     let collector = MetricsCollector::new();
 
-    // 记录固定延迟
     for _ in 0..100 {
         collector.record_query("SELECT", Duration::from_millis(100), true, None);
     }
@@ -231,7 +215,6 @@ fn test_latency_percentiles_empty() {
 fn test_histogram_time_window() {
     let histogram = LatencyHistogram::new(vec![1, 5, 10, 50, 100, 500]);
 
-    // 记录不同范围的延迟
     histogram.record(Duration::from_millis(2)); // 桶 1 (<=5)
     histogram.record(Duration::from_millis(7)); // 桶 2 (<=10)
     histogram.record(Duration::from_millis(15)); // 桶 3 (<=50)
@@ -286,7 +269,6 @@ fn test_prometheus_export_basic() {
 
     let prometheus = collector.export_prometheus();
 
-    // 验证必需指标存在
     assert!(prometheus.contains("dbnexus_uptime_seconds"));
     assert!(prometheus.contains("dbnexus_pool_connections_total"));
     assert!(prometheus.contains("dbnexus_pool_connections_active"));
@@ -299,14 +281,12 @@ fn test_prometheus_export_basic() {
 fn test_prometheus_export_percentiles() {
     let collector = MetricsCollector::new();
 
-    // 记录足够的样本以生成百分位
     for i in 1..=100 {
         collector.record_query("SELECT", Duration::from_millis(i), true, Some(100));
     }
 
     let prometheus = collector.export_prometheus();
 
-    // 验证百分位指标
     assert!(prometheus.contains("dbnexus_query_latency_p50_seconds"));
     assert!(prometheus.contains("dbnexus_query_latency_p90_seconds"));
     assert!(prometheus.contains("dbnexus_query_latency_p95_seconds"));
@@ -403,7 +383,6 @@ fn test_latency_storage_sliding_window() {
 fn test_histogram_bucket_count_boundary() {
     let histogram = LatencyHistogram::new(vec![10, 50, 100]);
 
-    // 记录边界值
     histogram.record(Duration::from_millis(10)); // 边界
     histogram.record(Duration::from_millis(11)); // 超过边界
     histogram.record(Duration::from_millis(50)); // 边界
@@ -411,7 +390,6 @@ fn test_histogram_bucket_count_boundary() {
 
     let stats = histogram.stats();
 
-    // 验证总样本数
     assert_eq!(stats.total_samples, 4);
 }
 
@@ -528,7 +506,6 @@ fn test_high_cardinality_detection_many_types() {
 fn test_memory_control_high_cardinality() {
     let collector = MetricsCollector::new();
 
-    // 记录大量不同的查询类型
     for i in 0..500 {
         collector.record_query(
             &format!("type_{}", i),
@@ -538,7 +515,6 @@ fn test_memory_control_high_cardinality() {
         );
     }
 
-    // 验证仍然可以获取统计
     let stats = collector.get_query_stats("type_0");
     assert!(stats.is_some());
     assert_eq!(stats.unwrap().count, 1);
@@ -556,7 +532,6 @@ fn test_percentiles_accuracy_high_cardinality() {
         }
     }
 
-    // 验证每种类型的百分位都正确
     for query_type in &["A", "B", "C", "D", "E"] {
         let stats = collector.get_query_stats(query_type).unwrap();
         assert_eq!(stats.count, 1000);
@@ -572,7 +547,6 @@ fn test_percentiles_accuracy_high_cardinality() {
 fn test_histogram_accuracy_high_cardinality() {
     let collector = MetricsCollector::new();
 
-    // 记录多种类型
     for _ in 0..10 {
         collector.record_query("SELECT", Duration::from_millis(5), true, None);
         collector.record_query("SELECT", Duration::from_millis(15), true, None);
@@ -589,7 +563,6 @@ fn test_histogram_accuracy_high_cardinality() {
 fn test_prometheus_export_high_cardinality() {
     let collector = MetricsCollector::new();
 
-    // 记录多种查询类型
     for i in 0..50 {
         collector.record_query(
             &format!("query_type_{}", i),
@@ -601,7 +574,6 @@ fn test_prometheus_export_high_cardinality() {
 
     let prometheus = collector.export_prometheus();
 
-    // 验证导出的指标数量与查询类型数匹配
     let query_count = prometheus.matches("dbnexus_queries_total").count();
     assert!(query_count >= 50);
 }
@@ -623,7 +595,6 @@ fn test_time_window_high_cardinality() {
         }
     }
 
-    // 验证所有类型都能正确聚合
     let all_stats = collector.all_query_stats();
     assert_eq!(all_stats.len(), 100);
 
@@ -642,7 +613,6 @@ fn test_time_window_high_cardinality() {
 fn test_metrics_collector_trait_default() {
     let collector = MetricsCollector::new();
 
-    // 使用 trait 方法记录查询
     MetricsCollectorTrait::record_query(&collector, Duration::from_millis(10));
 
     let stats = collector.query_stats();
@@ -717,13 +687,11 @@ fn test_metrics_collector_trait_clear() {
     collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     collector.update_pool_status(10, 5, 5);
 
-    // 验证有数据
     assert!(!collector.all_query_stats().is_empty());
 
     // 清空
     MetricsCollectorTrait::clear(&collector);
 
-    // 验证已清空
     assert!(collector.all_query_stats().is_empty());
 }
 
@@ -792,14 +760,11 @@ fn test_histogram_empty_stats() {
 fn test_reset_clears_all_metrics() {
     let collector = MetricsCollector::new();
 
-    // 记录初始数据
     collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
     assert_eq!(collector.get_query_stats("SELECT").unwrap().count, 1);
 
-    // 重置
     collector.reset();
 
-    // 验证已清空
     assert!(collector.get_query_stats("SELECT").is_none());
 }
 
@@ -808,16 +773,13 @@ fn test_reset_clears_all_metrics() {
 fn test_re_record_after_reset_succeeds() {
     let collector = MetricsCollector::new();
 
-    // 记录初始数据
     collector.record_query("SELECT", Duration::from_millis(10), true, Some(100));
 
-    // 重置
     collector.reset();
 
     // 重新记录
     collector.record_query("SELECT", Duration::from_millis(20), true, Some(200));
 
-    // 验证新数据
     let stats = collector.get_query_stats("SELECT").unwrap();
     assert_eq!(stats.count, 1);
     assert_eq!(stats.latency_percentiles.p50_ns, 20_000_000);
@@ -848,12 +810,10 @@ fn test_concurrent_data_consistency() {
         handles.push(handle);
     }
 
-    // 等待所有线程完成
     for handle in handles {
         handle.join().unwrap();
     }
 
-    // 验证总数正确
     let stats = collector.get_query_stats("SELECT").unwrap();
     assert_eq!(stats.count, 1000);
 }
@@ -900,19 +860,16 @@ fn test_slow_query_limit() {
 fn test_error_count_accumulation() {
     let collector = MetricsCollector::new();
 
-    // 记录多个错误
     for _ in 0..5 {
         collector.record_connection_error();
     }
 
     assert_eq!(collector.connection_error_count(), 5);
 
-    // 记录更多错误
     for _ in 0..3 {
         collector.record_query("SELECT", Duration::from_millis(10), false, None);
     }
 
-    // 验证累积
     let stats = collector.get_query_stats("SELECT").unwrap();
     assert_eq!(stats.error_count, 3);
 }

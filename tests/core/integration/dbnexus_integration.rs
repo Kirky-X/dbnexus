@@ -25,7 +25,6 @@ async fn test_dbpool_new_basic() {
         .await
         .expect("Failed to create DbPool with new()");
 
-    // 验证连接池配置
     let config = pool.config();
     assert!(!config.url.is_empty());
     assert!(config.pool_config.max_connections > 0);
@@ -54,7 +53,6 @@ async fn test_dbpool_with_config() {
         .await
         .expect("Failed to create DbPool with config");
 
-    // 验证配置被正确应用
     assert_eq!(pool.config().pool_config.max_connections, 10);
     assert_eq!(pool.config().pool_config.min_connections, 2);
     assert_eq!(pool.config().admin_role, "admin");
@@ -173,7 +171,6 @@ async fn test_get_session_multiple() {
         .await
         .expect("Failed to create pool");
 
-    // 获取多个会话
     let session1 = pool
         .get_session("admin")
         .await
@@ -186,7 +183,6 @@ async fn test_get_session_multiple() {
     assert_eq!(session1.role(), "admin");
     assert_eq!(session2.role(), "admin");
 
-    // 验证连接池状态
     let status = pool.status();
     assert!(status.active >= 2);
 }
@@ -202,7 +198,6 @@ async fn test_pool_status() {
 
     let status = pool.status();
 
-    // 验证状态字段
     assert!(status.total <= pool.config().pool_config.max_connections);
     assert!(status.active <= status.total);
     assert_eq!(status.idle, status.total.saturating_sub(status.active));
@@ -217,7 +212,6 @@ async fn test_pool_health_check() {
         .await
         .expect("Failed to create pool");
 
-    // 获取会话后检查连接池健康状态
     let session = pool
         .get_session("admin")
         .await
@@ -258,7 +252,6 @@ async fn test_pool_config_access() {
         .await
         .expect("Failed to create pool");
 
-    // 验证配置访问
     let pool_config = pool.config();
     assert_eq!(pool_config.pool_config.max_connections, 15);
     assert_eq!(pool_config.pool_config.min_connections, 3);
@@ -305,7 +298,6 @@ async fn test_pool_drop_with_multiple_sessions() {
             .await
             .expect("Failed to create pool");
 
-        // 创建多个会话
         let session1 = pool
             .get_session("admin")
             .await
@@ -329,8 +321,6 @@ async fn test_pool_drop_with_multiple_sessions() {
 
         // 然后连接池释放
     } // pool 在此处被 Drop
-
-    // 验证所有资源正常释放
 }
 
 /// 克隆连接池测试
@@ -357,7 +347,6 @@ async fn test_pool_clone_succeeds() {
     assert_eq!(session1.role(), "admin");
     assert_eq!(session2.role(), "admin");
 
-    // 验证是同一个连接池
     let status1 = pool1.status();
     let status2 = pool2.status();
     assert_eq!(status1.total, status2.total);
@@ -405,7 +394,6 @@ async fn test_builder_basic() {
         .await
         .expect("Failed to build pool with builder");
 
-    // 验证默认配置
     assert_eq!(pool.config().pool_config.max_connections, 20);
     assert_eq!(pool.config().pool_config.min_connections, 5);
 }
@@ -519,7 +507,6 @@ async fn test_builder_defaults() {
         .await
         .expect("Failed to build pool");
 
-    // 验证默认值
     assert_eq!(pool.config().pool_config.max_connections, 20);
     assert_eq!(pool.config().pool_config.min_connections, 5);
     assert_eq!(pool.config().pool_config.idle_timeout, 300);
@@ -560,7 +547,6 @@ fn test_builder_debug() {
 
     let debug_str = format!("{:?}", builder);
 
-    // 验证 Debug 输出包含关键字段
     assert!(debug_str.contains("url"));
     assert!(debug_str.contains("admin_role"));
 }
@@ -637,7 +623,6 @@ async fn test_pool_clone() {
         .expect("Failed to create pool");
     let pool2 = pool1.clone();
 
-    // 验证克隆后的连接池共享内部状态
     let status1 = pool1.status();
     let status2 = pool2.status();
 
@@ -699,12 +684,10 @@ async fn test_concurrent_session_access() {
         }));
     }
 
-    // 等待所有任务完成
     for handle in handles {
         handle.await.expect("Task panicked");
     }
 
-    // 验证连接池状态正常
     let status = pool.status();
     assert!(status.total <= pool.config().pool_config.max_connections);
 }
@@ -715,7 +698,6 @@ async fn test_concurrent_session_access() {
 async fn test_pool_get_actual_config() {
     let url = common::get_test_database_url();
 
-    // 使用可能被修正的配置
     let config = dbnexus::DbConfig {
         url,
         pool_config: dbnexus::foundation::PoolConfig {
@@ -731,10 +713,8 @@ async fn test_pool_get_actual_config() {
         .await
         .expect("Failed to create pool");
 
-    // 获取实际应用的配置
     let actual_config = pool.get_actual_config();
 
-    // 验证配置有效
     assert!(actual_config.pool_config.max_connections > 0);
     assert!(actual_config.pool_config.min_connections > 0);
 }
@@ -839,7 +819,6 @@ async fn test_session_lifecycle() {
         .await
         .expect("Failed to create pool");
 
-    // 获取会话前
     let _status_before = pool.status();
 
     let status_during = {
@@ -909,7 +888,6 @@ async fn test_clean_invalid_connections() {
     // 清理无效连接（应该正常执行，即使没有无效连接）
     let _removed = pool.clean_invalid_connections().await;
 
-    // 清理后连接池状态应该正常
     let status = pool.status();
     assert!(status.total <= pool.config().pool_config.max_connections);
 }
@@ -926,7 +904,6 @@ async fn test_validate_connections_succeeds() {
         .await
         .expect("Failed to create pool");
 
-    // 验证并重建连接
     let result = pool.validate_and_recreate_connections().await;
 
     assert!(result.is_ok());
@@ -944,7 +921,6 @@ async fn test_recreate_connections_succeeds() {
         .await
         .expect("Failed to create pool");
 
-    // 验证并重建连接
     let result = pool.validate_and_recreate_connections().await;
 
     assert!(result.is_ok());
@@ -966,7 +942,6 @@ async fn test_connection_health_check() {
         .await
         .expect("Failed to create pool");
 
-    // 获取一个连接
     let session = pool
         .get_session("admin")
         .await
@@ -990,7 +965,6 @@ async fn test_pool_status_fields() {
 
     let status = pool.status();
 
-    // 验证所有状态字段
     assert!(status.total <= pool.config().pool_config.max_connections);
     assert!(status.active <= status.total);
     assert_eq!(status.idle, status.total.saturating_sub(status.active));
@@ -1187,7 +1161,6 @@ async fn test_pool_stress() {
         }));
     }
 
-    // 等待所有任务完成
     for handle in handles {
         handle.await.expect("Task panicked");
     }

@@ -87,7 +87,6 @@ roles:
 /// YAML 权限提供者创建测试
 #[tokio::test]
 async fn test_yaml_permission_provider_creation_succeeds() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -109,7 +108,6 @@ async fn test_yaml_permission_provider_creation_succeeds() {
 /// YAML 权限检查测试
 #[tokio::test]
 async fn test_yaml_permission_check_returns_correct_decisions() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -166,10 +164,8 @@ async fn test_yaml_permission_check_returns_correct_decisions() {
 /// RBAC 权限提供者测试
 #[tokio::test]
 async fn test_rbac_permission_provider_creation_succeeds() {
-    // 创建 RBAC 提供者
     let provider = Arc::new(RbacPermissionProvider::new());
 
-    // 创建角色
     let admin_role = Role {
         name: "admin".to_string(),
         description: "管理员".to_string(),
@@ -196,7 +192,6 @@ async fn test_rbac_permission_provider_creation_succeeds() {
     provider.add_role(user_role.clone());
     provider.add_role(viewer_role.clone());
 
-    // 映射主体到角色
     provider.add_role_to_subject("admin", "admin");
     provider.add_role_to_subject("user", "user");
     provider.add_role_to_subject("user", "viewer");
@@ -235,7 +230,6 @@ async fn test_rbac_permission_provider_creation_succeeds() {
 /// PolicyDecisionPoint 测试
 #[tokio::test]
 async fn test_policy_decision_point_returns_expected_decisions() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -268,7 +262,6 @@ async fn test_policy_decision_point_returns_expected_decisions() {
 /// 权限提供者刷新测试
 #[tokio::test]
 async fn test_permission_provider_refresh_returns_allow() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -290,7 +283,6 @@ async fn test_permission_provider_refresh_returns_allow() {
 /// 获取允许的资源列表测试
 #[tokio::test]
 async fn test_get_allowed_resources_returns_expected_resources() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -317,7 +309,6 @@ async fn test_get_allowed_resources_returns_expected_resources() {
 /// 获取允许的操作列表测试
 #[tokio::test]
 async fn test_get_allowed_actions_returns_expected_actions() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -347,7 +338,6 @@ async fn test_get_allowed_actions_returns_expected_actions() {
 /// 通配符资源匹配测试
 #[tokio::test]
 async fn test_wildcard_resource_matching_returns_allow() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -369,7 +359,6 @@ async fn test_wildcard_resource_matching_returns_allow() {
 /// 多提供者优先级测试
 #[tokio::test]
 async fn test_multiple_providers_priority_returns_allow() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");
@@ -394,7 +383,6 @@ async fn test_multiple_providers_priority_returns_allow() {
 /// 权限决策延迟测试
 #[tokio::test]
 async fn test_permission_decision_latency_under_threshold() {
-    // 创建临时目录和文件
     let temp_dir = common::create_temp_dir();
     let perm_file = temp_dir.path().join("permissions.yaml");
     std::fs::write(&perm_file, TEST_PERMISSIONS_YAML).expect("Failed to write test permissions");

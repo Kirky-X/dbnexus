@@ -405,4 +405,63 @@ mod tests {
         assert_eq!(parsed.role, "admin");
         assert_eq!(parsed.detail.as_deref(), Some(r#"{"tables":["*"]}"#));
     }
+
+    /// 空链与链头：is_empty / last_hash 报告 GENESIS，追随后指向末条签名
+    #[test]
+    fn test_chain_is_empty_and_last_hash() {
+        let mut chain = PermissionAuditChain::new(b"key");
+        assert!(chain.is_empty(), "a fresh chain has no entries");
+        assert_eq!(
+            chain.last_hash(),
+            hex_encode(&GENESIS_HASH),
+            "an empty chain is anchored at the genesis hash"
+        );
+
+        let entry = chain.append(&PermissionChangeRecord::new("admin", "role_added", "op"));
+        assert!(!chain.is_empty());
+        assert_eq!(
+            chain.last_hash(),
+            entry.hmac,
+            "the chain head must be the last entry's signature"
+        );
+    }
+
+    /// ChainEntry::compute_hmac 必须复现链条写入时使用的签名公式
+    #[test]
+    fn test_entry_compute_hmac_matches_stored_signature() {
+        let mut chain = PermissionAuditChain::new(b"key");
+        let entry = chain.append(&PermissionChangeRecord::new("admin", "role_added", "op"));
+
+        assert_eq!(
+            entry.compute_hmac(b"key"),
+            entry.hmac,
+            "recomputing with the chain key must reproduce the stored hmac"
+        );
+        assert_ne!(
+            entry.compute_hmac(b"other-key"),
+            entry.hmac,
+            "a different key must not reproduce the signature"
+        );
+    }
+
+    /// 非十六进制 prev_hash / hmac 一律判为篡改（不 panic 且返回 false）
+    #[test]
+    fn test_verify_rejects_malformed_hex_fields() {
+        let mut chain = PermissionAuditChain::new(b"key");
+        chain.append(&PermissionChangeRecord::new("admin", "role_added", "op"));
+
+        let mut bad_prev = chain.entries().to_vec();
+        bad_prev[0].prev_hash = "zz".to_string();
+        assert!(
+            !verify_permission_chain(&bad_prev, b"key"),
+            "a non-hex prev_hash must fail verification"
+        );
+
+        let mut bad_hmac = chain.entries().to_vec();
+        bad_hmac[0].hmac = "not-hex".to_string();
+        assert!(
+            !verify_permission_chain(&bad_hmac, b"key"),
+            "a non-hex hmac must fail verification"
+        );
+    }
 }

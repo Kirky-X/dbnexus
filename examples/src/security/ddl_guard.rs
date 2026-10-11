@@ -56,7 +56,7 @@ fn main() {
     println!("✓ DdlGuard instance created\n");
 
     // ============================================
-    // 1. 合法的 DDL 语句（应通过验证）
+    // 合法的 DDL 语句（应通过验证）
     // ============================================
     println!("--- Scenario 1: valid DDL statements (should pass) ---");
 
@@ -102,7 +102,7 @@ fn main() {
     );
 
     // ============================================
-    // 2. 危险的 DDL 语句（应被拦截）
+    // 危险的 DDL 语句（应被拦截）
     // ============================================
     println!("--- Scenario 2: dangerous DDL statements (should be blocked) ---");
 
@@ -128,7 +128,7 @@ fn main() {
     );
 
     // ============================================
-    // 3. 非 DDL 语句（DML，应被拦截）
+    // 非 DDL 语句（DML，应被拦截）
     // ============================================
     println!("--- Scenario 3: non-DDL statement (DML, should be blocked) ---");
 
@@ -153,7 +153,7 @@ fn main() {
     );
 
     // ============================================
-    // 4. 边界场景
+    // 边界场景
     // ============================================
     println!("--- Scenario 4: edge cases ---");
 
@@ -173,7 +173,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 5. Default trait 演示
+    // Default trait 演示
     // ============================================
     println!("--- Scenario 5: the Default trait ---");
     let default_guard: DdlGuard = DdlGuard::default();
@@ -183,7 +183,7 @@ fn main() {
     println!();
 
     // ============================================
-    // 6. 批量验证场景（模拟 DDL 审计）
+    // 批量验证场景（模拟 DDL 审计）
     // ============================================
     println!("--- Scenario 6: batch DDL audit ---");
     let audit_batch = [

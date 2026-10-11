@@ -885,7 +885,6 @@ impl MetricsCollector {
         let latency_ns = duration.as_nanos() as u64;
         let duration_ms = duration.as_millis() as u64;
 
-        // 获取或创建指标
         let metrics = {
             let mut map = self.query_metrics.write();
             if let Some(m) = map.get(query_type) {
@@ -904,11 +903,9 @@ impl MetricsCollector {
             }
         };
 
-        // 记录延迟
         metrics.latency.write().record(latency_ns);
         metrics.histogram.record(duration);
 
-        // 记录吞吐量
         if success {
             metrics.throughput.record_success(bytes);
         } else {
@@ -1162,7 +1159,7 @@ impl MetricsCollector {
         let mut slow = self.slow_queries.write();
         slow.clear();
 
-        // 移除 RwLock 后改用原子 reset() 替代整体替换
+        // 原子 reset() 替代整体替换（无锁）
         self.connection_acquire.reset();
         self.transaction.reset();
     }
@@ -1338,7 +1335,6 @@ impl MetricsCollector {
         )
         .unwrap();
 
-        // 查询指标
         let stats = self.all_query_stats();
         for (query_type, stat) in stats {
             // query_type 是 record_query 公开 API 的自由字符串（可能携带
@@ -1654,7 +1650,6 @@ mod tests {
     fn test_mock_metrics_trait_object() {
         use std::sync::Arc;
 
-        // 验证 MockMetrics 可以作为 trait 对象使用
         let mock: Arc<dyn MetricsCollectorTrait> = Arc::new(MockMetrics::new());
 
         mock.record_query(Duration::from_millis(10));
@@ -1662,7 +1657,6 @@ mod tests {
         mock.record_transaction(Duration::from_millis(100), false);
         mock.record_pool_usage(10, 5, 5);
 
-        // 验证返回的统计是默认值
         let stats = mock.query_stats();
         assert_eq!(stats.count, 0);
 
@@ -1675,7 +1669,6 @@ mod tests {
     /// MockMetrics 与 MetricsCollector Trait 兼容性测试
     #[test]
     fn test_mock_metrics_trait_compatibility() {
-        // 验证 MockMetrics 实现了所有 MetricsCollectorTrait 的方法
         fn _assert_impl_trait(_mock: &dyn MetricsCollectorTrait) {}
 
         let mock = MockMetrics::new();
@@ -1687,7 +1680,6 @@ mod tests {
     fn test_latency_percentiles() {
         let collector = MetricsCollector::new();
 
-        // 记录不同延迟
         for i in 1..=100 {
             collector.record_query("SELECT", Duration::from_millis(i), true, Some(100));
         }
@@ -1695,12 +1687,10 @@ mod tests {
         let stats = collector.get_query_stats("SELECT").unwrap();
         assert_eq!(stats.count, 100);
 
-        // 验证 P50 大约为 50ms
         assert!(
             stats.latency_percentiles.p50_ns >= 49_000_000
                 && stats.latency_percentiles.p50_ns <= 51_000_000
         );
-        // 验证 P99 大约为 99ms
         assert!(
             stats.latency_percentiles.p99_ns >= 98_000_000
                 && stats.latency_percentiles.p99_ns <= 100_000_000
@@ -1744,7 +1734,6 @@ mod tests {
     fn test_latency_histogram() {
         let collector = MetricsCollector::new();
 
-        // 记录不同延迟
         collector.record_query("SELECT", Duration::from_millis(5), true, None);
         collector.record_query("SELECT", Duration::from_millis(15), true, None);
         collector.record_query("SELECT", Duration::from_millis(75), true, None);
@@ -1862,17 +1851,14 @@ mod tests {
         collector.record_connection_error();
         collector.update_pool_status(10, 5, 5);
 
-        // 验证填充
         assert!(collector.total_throughput().total_operations > 0);
         assert!(collector.connection_acquire_stats().total_attempts > 0);
         assert!(collector.transaction_stats().total_transactions > 0);
         assert_eq!(collector.connection_error_count(), 1);
         assert_eq!(collector.pool_status().total, 10);
 
-        // 执行 reset
         collector.reset();
 
-        // 验证所有指标归零
         assert_eq!(collector.total_throughput().total_operations, 0);
         assert_eq!(collector.connection_acquire_stats().total_attempts, 0);
         assert_eq!(collector.transaction_stats().total_transactions, 0);

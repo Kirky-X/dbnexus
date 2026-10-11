@@ -387,20 +387,17 @@ impl MigrationExecutor {
         // 确保迁移历史表存在
         self.ensure_migration_table_exists().await?;
 
-        // 生成迁移 SQL
         let sql = self.sql_generator.generate_migration_sql(migration)?;
 
         // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
-        // 执行迁移 SQL
         if !sql.is_empty() {
             txn.execute_unprepared(&sql)
                 .await
                 .map_err(DbError::Connection)?;
         }
 
-        // 记录迁移历史
         let version_record = MigrationVersion {
             version: migration.version,
             description: migration.description.clone(),
@@ -438,7 +435,6 @@ impl MigrationExecutor {
         );
 
         txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
-        // 提交事务
         txn.commit().await.map_err(DbError::Connection)?;
 
         self.history.add_migration(version_record);
@@ -772,13 +768,11 @@ impl MigrationExecutor {
         &mut self,
         migration_file: &MigrationFile,
     ) -> Result<(), DbError> {
-        // 解析迁移文件内容
         let sql = Self::extract_up_sql(&migration_file.content, &self.markers);
 
         // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
-        // 执行迁移 SQL
         if !sql.is_empty() {
             txn.execute_unprepared(sql)
                 .await
@@ -813,7 +807,6 @@ impl MigrationExecutor {
 
         txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
 
-        // 提交事务
         txn.commit().await.map_err(DbError::Connection)?;
 
         // 添加到历史记录
@@ -964,7 +957,6 @@ impl MigrationExecutor {
 
         txn.execute_raw(stmt).await.map_err(DbError::Connection)?;
 
-        // 提交事务
         txn.commit().await.map_err(DbError::Connection)?;
 
         Ok(())
@@ -1904,7 +1896,6 @@ mod tests {
         let executor = create_sqlite_executor().await;
         let dir = tempfile::tempdir().unwrap();
 
-        // 创建迁移文件
         std::fs::write(
             dir.path().join("002_add_column.sql"),
             "ALTER TABLE t ADD COLUMN c TEXT;",
@@ -1991,7 +1982,6 @@ mod tests {
         let result = executor.apply_migration(&migration).await;
         assert!(result.is_ok(), "apply_migration failed: {:?}", result.err());
 
-        // 验证历史记录
         assert_eq!(executor.get_all_versions(), vec![1]);
         assert!(executor.get_latest_migration().is_some());
         assert_eq!(executor.get_latest_migration().unwrap().version, 1);
@@ -2047,7 +2037,6 @@ mod tests {
         });
         executor.apply_migration(&m2).await.unwrap();
 
-        // 验证
         assert_eq!(executor.get_all_versions(), vec![1, 2]);
         assert_eq!(executor.get_latest_migration().unwrap().version, 2);
         assert!(executor.is_fully_migrated(2));
@@ -2102,7 +2091,6 @@ mod tests {
         let mut executor = create_sqlite_executor().await;
         let dir = tempfile::tempdir().unwrap();
 
-        // 创建迁移文件
         let sql = "-- UP:\nCREATE TABLE test_table (id INTEGER PRIMARY KEY);\n";
         std::fs::write(dir.path().join("001_create_test_table.sql"), sql).unwrap();
 
@@ -2162,7 +2150,6 @@ mod tests {
         }));
         executor.apply_migration(&m1).await.unwrap();
 
-        // 检查待应用迁移
         let all = vec![
             m1,
             Migration::new(2, "second".into()),
@@ -2475,5 +2462,56 @@ mod tests {
     async fn create_sqlite_executor() -> MigrationExecutor {
         let connection = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
         MigrationExecutor::new(connection, DatabaseType::Sqlite)
+    }
+
+    /// 迁移扫描的读取失败显性化：目录位置不是目录 / 迁移文件非 UTF-8
+    /// 都必须返回错误，不得静默当作「无迁移」（静默会掩盖未应用的迁移）
+    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[tokio::test]
+    async fn test_scan_migrations_surfaces_read_errors() {
+        let executor = create_sqlite_executor().await;
+
+        // 目录路径指向普通文件 → read_dir 失败
+        let not_a_dir =
+            std::env::temp_dir().join(format!("dbnexus_scan_not_a_dir_{}", std::process::id()));
+        std::fs::write(&not_a_dir, b"plain file").expect("write file");
+        let err = executor
+            .scan_migrations(&not_a_dir)
+            .expect_err("a file path must fail directory scanning");
+        assert!(
+            matches!(err, crate::foundation::DbError::Config(_)),
+            "got {err:?}"
+        );
+        assert!(
+            !err.to_string().is_empty(),
+            "the error must carry a message"
+        );
+        std::fs::remove_file(&not_a_dir).expect("cleanup");
+
+        // 迁移文件不是合法 UTF-8 → read_to_string 失败
+        let dir = std::env::temp_dir().join(format!("dbnexus_scan_dir_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let bad_sql = dir.join("0001_bad_encoding.sql");
+        std::fs::write(&bad_sql, [0xff, 0xfe, 0xfd]).expect("write non-utf8 sql");
+        let err = executor
+            .scan_migrations(&dir)
+            .expect_err("a non-UTF-8 migration file must fail scanning");
+        assert!(
+            matches!(err, crate::foundation::DbError::Config(_)),
+            "got {err:?}"
+        );
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+
+        // 不存在的目录仍是「无迁移」（与读取失败区分开）
+        let missing =
+            std::env::temp_dir().join(format!("dbnexus_scan_missing_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&missing);
+        assert!(
+            executor
+                .scan_migrations(&missing)
+                .expect("missing dir is not an error")
+                .is_empty(),
+            "a missing directory must scan as empty"
+        );
     }
 }

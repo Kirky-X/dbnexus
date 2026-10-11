@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 展示宏生成的缓存常量
+    // 展示宏生成的缓存常量
     // ============================================
     println!("--- 1. macro-generated cache constants ---\n");
     println!("  CACHE_TTL          = {} sec", Model::CACHE_TTL);
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  CACHE_ENABLED      = {}", Model::CACHE_ENABLED);
 
     // ============================================
-    // 2. 展示 cache_key() 方法
+    // 展示 cache_key() 方法
     // ============================================
     println!("\n--- 2. cache_key() method ---\n");
     let ids: Vec<i64> = vec![1, 2, 3, 100, 9999];
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 展示 cache_config() 方法
+    // 展示 cache_config() 方法
     // ============================================
     println!("\n--- 3. cache_config() method ---\n");
     let cache_config: CacheConfig = Model::cache_config();
@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. 创建 DbPool + Session
+    // 创建 DbPool + Session
     // ============================================
     println!("\n--- 4. create DbPool + Session ---\n");
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -127,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ articles table created");
 
     // ============================================
-    // 5. CRUD 操作 + 缓存键模式
+    // CRUD 操作 + 缓存键模式
     // ============================================
     println!("\n--- 5. CRUD operations + cache key patterns ---\n");
 
@@ -206,7 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 6. 缓存键批量生成模式
+    // 缓存键批量生成模式
     // ============================================
     println!("\n--- 6. batch cache key generation pattern ---\n");
     println!("  generating cache keys for batch queries:");
@@ -217,7 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 7. CacheConfig 应用场景
+    // CacheConfig 应用场景
     // ============================================
     println!("\n--- 7. CacheConfig use cases ---\n");
     let cfg = Model::cache_config();

@@ -568,13 +568,11 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     let struct_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // 解析参数
     let entity_args = match parse_db_entity_args(args) {
         Ok(args) => args,
         Err(err) => return err.to_compile_error().into(),
     };
 
-    // 验证必需参数
     if entity_args.table_name.is_empty() {
         return syn::Error::new(
             struct_name.span(),
@@ -675,7 +673,6 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
 
-    // 生成 permissions 常量与方法
     let permissions_tokens = if let Some(ref p) = permissions_params {
         let roles: Vec<&str> = p.roles.iter().map(|s| s.as_str()).collect();
         let operations: Vec<&str> = p.operations.iter().map(|s| s.as_str()).collect();
@@ -736,7 +733,6 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // 生成 cache 常量与方法
     let cache_tokens = if let Some(ref c) = cache_params {
         let ttl = c.ttl;
         let strategy = &c.strategy;
@@ -775,7 +771,6 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // 生成 audit 常量
     let audit_tokens = if let Some(ref a) = audit_params {
         let audit_table_name = &a.table_name;
         let audit_ops: Vec<&str> = a.operations.iter().map(|s| s.as_str()).collect();

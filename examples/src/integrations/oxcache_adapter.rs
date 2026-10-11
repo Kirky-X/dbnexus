@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建适配器
+    // 创建适配器
     // ============================================
     println!("--- 1. create the OxcacheDbCacheAdapter ---\n");
 
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  implementation: DbCacheProvider trait (get/set/delete)\n");
 
     // ============================================
-    // 2. 基本 get/set/delete 操作
+    // 基本 get/set/delete 操作
     // ============================================
     println!("--- 2. basic CRUD operations ---\n");
 
@@ -105,11 +105,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ delete(\"user:1\") run again (idempotent, no error)\n");
 
     // ============================================
-    // 3. TTL（过期时间）支持
+    // TTL（过期时间）支持
     // ============================================
     println!("--- 3. TTL support ---\n");
 
-    // 设置带 TTL 的缓存
     adapter
         .set(
             "session:abc",
@@ -125,7 +124,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         val.map(|v| String::from_utf8_lossy(&v).to_string())
     );
 
-    // 设置短 TTL 的缓存
     adapter
         .set(
             "temp:data",
@@ -141,7 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ get after 50ms → {:?} (expired)", val);
 
     // ============================================
-    // 4. 通过 trait 对象使用（dyn dispatch）
+    // 通过 trait 对象使用（dyn dispatch）
     // ============================================
     println!("\n--- 4. trait objects (dyn dispatch) ---\n");
 
@@ -162,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ delete(\"dyn_key\") through the trait object\n");
 
     // ============================================
-    // 5. 批量操作模拟
+    // 批量操作模拟
     // ============================================
     println!("--- 5. batch operations ---\n");
 
@@ -191,7 +189,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  ✓ deleted {} keys in batch", keys.len());
 
-    // 验证删除
     let mut remaining = 0;
     for key in &keys {
         if adapter3.get(key).await?.is_some() {
@@ -201,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ verified: {} keys remain (should be 0)\n", remaining);
 
     // ============================================
-    // 6. 错误处理
+    // 错误处理
     // ============================================
     println!("--- 6. error handling ---\n");
 
@@ -210,7 +207,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  DbError::Cache error: {}", err);
     println!("  error message: {}", err.message());
 
-    // 验证错误类型
     match err {
         DbError::Cache(msg) => println!("  ✓ error variant matched: Cache({})", msg),
         _ => println!("  ✗ unexpected error type"),

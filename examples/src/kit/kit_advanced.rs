@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 通过 AsyncKit 构建连接池
+    // 通过 AsyncKit 构建连接池
     // ============================================
     println!("--- 1. AsyncKit builds the connection pool ---\n");
 
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ pool fetched via AsyncKit DI successfully");
 
     // ============================================
-    // 2. 初始化辅助能力（Metrics + Permission）
+    // 初始化辅助能力（Metrics + Permission）
     // ============================================
     println!("\n--- 2. initialize Metrics + Permission ---\n");
 
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ PermissionProvider created (in-memory implementation)");
 
     // ============================================
-    // 3. 准备测试数据
+    // 准备测试数据
     // ============================================
     println!("\n--- 3. prepare test data ---\n");
 
@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ initial pool metrics recorded");
 
     // ============================================
-    // 4. 业务编排：权限检查 → SQL 执行 → 指标记录
+    // 业务编排：权限检查 → SQL 执行 → 指标记录
     // ============================================
     println!("\n--- 4. business orchestration: permissions → query → metrics ---\n");
 
@@ -157,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 事务回滚演示
+    // 事务回滚演示
     // ============================================
     println!("\n--- 5. transaction rollback ---\n");
 
@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ id=4 no longer exists after rollback");
 
     // ============================================
-    // 6. 查看汇总指标
+    // 查看汇总指标
     // ============================================
     println!("\n--- 6. summary metrics ---\n");
 
@@ -207,7 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 7. 多角色 Session 并发
+    // 多角色 Session 并发
     // ============================================
     println!("\n--- 7. multi-role Session ---\n");
 

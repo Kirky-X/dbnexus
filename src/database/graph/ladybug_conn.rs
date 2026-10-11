@@ -1070,7 +1070,6 @@ mod tests {
             .await
             .expect("create table");
 
-        // 使用参数化查询插入
         let mut params = HashMap::new();
         params.insert("name".to_string(), serde_json::json!("Alice"));
         params.insert("age".to_string(), serde_json::json!(25));
@@ -1097,7 +1096,6 @@ mod tests {
             .await
             .expect("create rel table");
 
-        // 创建节点和关系
         conn.execute_cypher("CREATE (:Person {name: 'Alice'})")
             .await
             .expect("create alice");
@@ -1110,7 +1108,6 @@ mod tests {
         .await
         .expect("create relationship");
 
-        // 查询关系
         let result = conn
             .execute_cypher(
                 "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a.name AS src, b.name AS dst",

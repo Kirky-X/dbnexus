@@ -19,16 +19,17 @@
 //! ```
 
 use dbnexus::access::RateLimiter;
+use dbnexus::t_simple;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("⏱  DBNexus rate limiter example");
+    println!("{}", t_simple("example-rate-limiter-title"));
     println!("========================================\n");
 
     // ============================================
-    // 1. 基本使用：new() 创建并消耗令牌
+    // 基本使用：new() 创建并消耗令牌
     // ============================================
     println!("--- Scenario 1: basic usage ---");
     let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
@@ -57,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. 不同键独立计数
+    // 不同键独立计数
     // ============================================
     println!("--- Scenario 2: independent counting per key ---");
     let limiter2 = RateLimiter::with_defaults(3, Duration::from_secs(60), 10000);
@@ -75,7 +76,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = limiter2.check("user_B").await;
     println!("    user_B remaining = {}", limiter2.remaining("user_B"));
 
-    // 验证 user_A 仍有 1 个令牌
     println!("\n  verify user_A still has 1 token (independent counting):");
     let allowed_a = limiter2.check("user_A").await;
     println!(
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. reset() 重置指定键
+    // reset() 重置指定键
     // ============================================
     println!("--- Scenario 3: reset() resets a given key ---");
     let limiter3 = RateLimiter::new(2, Duration::from_secs(60), 10000, 2);
@@ -111,7 +111,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("    remaining = {}", limiter3.remaining("user_reset"));
 
-    // 重置
     println!("\n  executing limiter.reset(\"user_reset\")");
     limiter3.reset("user_reset");
     println!(
@@ -128,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. 突发流量（burst_capacity > max_requests）
+    // 突发流量（burst_capacity > max_requests）
     // ============================================
     println!("--- Scenario 4: burst traffic handling ---");
     // refill_rate = 1/sec (max_requests=1 / window=1s), burst=10
@@ -158,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. 令牌桶填充（等待后令牌恢复）
+    // 令牌桶填充（等待后令牌恢复）
     // ============================================
     println!("--- Scenario 5: token bucket refill ---");
     let limiter5 = RateLimiter::new(10, Duration::from_secs(1), 10000, 10);
@@ -174,7 +173,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         limiter5.remaining("refill_user")
     );
 
-    // 等待 1.1 秒让令牌填充
     println!("\n  wait 1.1 seconds for tokens to refill...");
     tokio::time::sleep(Duration::from_millis(1100)).await;
 
@@ -187,13 +185,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 6. cleanup() 清理孤立条目
+    // cleanup() 清理孤立条目
     // ============================================
     println!("--- Scenario 6: cleanup() removes stale entries ---");
     let limiter6 = RateLimiter::new(10, Duration::from_millis(100), 10000, 10);
     println!("  ✓ RateLimiter created: window=100ms (short window for the demo)");
 
-    // 创建多个条目
     println!("\n  create 5 entries:");
     for i in 0..5 {
         let key = format!("cleanup_user_{}", i);
@@ -207,7 +204,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n  immediate cleanup: removed = {} (not expired)", removed);
     println!("    len = {}", limiter6.len());
 
-    // 等待 1.5 秒让条目过期（10 倍窗口 = 1 秒）
     println!("\n  wait 1.5 seconds for entries to expire (expiry threshold = 10 * 100ms = 1s)...");
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let removed = limiter6.cleanup();
@@ -217,7 +213,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 7. 模拟高频率权限检查场景
+    // 模拟高频率权限检查场景
     // ============================================
     println!("--- Scenario 7: simulated high-frequency permission checks ---");
     let limiter7 = RateLimiter::new(20, Duration::from_secs(60), 10000, 20);
@@ -255,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 8. Default trait 演示
+    // Default trait 演示
     // ============================================
     println!("--- Scenario 8: the Default trait ---");
     let default_limiter: RateLimiter = RateLimiter::default();
@@ -269,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 9. update_config() 动态调整配置
+    // update_config() 动态调整配置
     // ============================================
     println!("--- Scenario 9: update_config() dynamic adjustment ---");
     let mut limiter9 = RateLimiter::new(10, Duration::from_secs(60), 10000, 10);

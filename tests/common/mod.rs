@@ -106,7 +106,6 @@ pub fn get_test_config_with_permissions(with_permissions: bool) -> (DbConfig, Op
             .expect("Failed to write test permissions file");
         let perm_path = perm_file.to_string_lossy().to_string();
 
-        // 使用结构体字面量构建配置
         let config = dbnexus::DbConfig {
             url,
             pool_config: PoolConfig {
@@ -211,13 +210,11 @@ pub async fn cleanup_migration_versions(pool: &dbnexus::DbPool, versions: &[u32]
 ///
 /// 返回连接池和临时目录（用于自动清理）
 pub async fn create_sqlite_file_pool() -> Result<(dbnexus::DbPool, TempDir), dbnexus::DbError> {
-    // 使用 tempfile 创建临时目录
     let temp_dir = tempfile::Builder::new()
         .prefix("dbnexus_tracing_test_")
         .tempdir()
         .expect("Failed to create temp directory");
 
-    // 获取数据库文件路径
     let db_path = temp_dir.path().join("test.db");
     let db_path_str = db_path.to_string_lossy();
 

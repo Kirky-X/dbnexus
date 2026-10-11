@@ -352,7 +352,6 @@ impl DbPool {
             std::mem::take(&mut *idle)
         };
 
-        // 使用辅助方法验证连接
         let (valid_connections, removed_count) =
             Self::validate_idle_connections(taken, config).await;
 
@@ -533,7 +532,6 @@ impl DbPool {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        // 执行连接健康检查
                         let _ = pool.validate_and_recreate_connections().await;
                     }
                     _ = shutdown.notified() => {

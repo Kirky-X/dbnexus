@@ -213,6 +213,8 @@ perm-rate-limit-audit-dropped = rate limit audit event dropped: { $error }
 perm-cache-log-insert-failed = PermissionCache insert failed (error omits the raw key): { $error }
 perm-cache-log-invalidate-failed = PermissionCache invalidate failed (error omits the raw key): { $error }
 perm-cache-log-clear-failed = PermissionCache clear failed: { $error }
+perm-cache-provider-no-policy = permission provider has no policy for role '{ $role }'
+perm-cache-provider-not-configured = no permission provider configured for role '{ $role }'
 prepare-cache-log-read-miss = PreparedStatementCache { $op } read failed, treated as a cache miss: { $error }
 prepare-cache-log-write-failed = PreparedStatementCache { $op } write failed: { $error }
 prepare-cache-log-clear-failed = PreparedStatementCache clear failed: { $error }
@@ -513,6 +515,12 @@ kit-health-waiting = { $waiting } waiting, { $active }/{ $total } active/total
 kit-health-no-idle = no idle connections, { $active }/{ $total } active/total
 
 example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
+
+example-basic-crud-title = 📝 DBNexus basic CRUD example
+example-audit-logging-title = 📝 DBNexus audit logging example
+example-rate-limiter-title = ⏱  DBNexus rate limiter example
+example-kit-usage-title = 🧰 DBNexus AsyncKit + DbNexusModule dependency injection example
+example-health-check-title = 🩺 DBNexus health check and circuit breaker example
 "#;
 
 // ============================================================================
@@ -626,6 +634,8 @@ perm-rate-limit-audit-dropped = 限流审计事件已丢弃: { $error }
 perm-cache-log-insert-failed = PermissionCache 插入失败（错误不含键原文）: { $error }
 perm-cache-log-invalidate-failed = PermissionCache invalidate 失败（错误不含键原文）: { $error }
 perm-cache-log-clear-failed = PermissionCache clear 失败: { $error }
+perm-cache-provider-no-policy = 权限提供器没有角色 '{ $role }' 的策略
+perm-cache-provider-not-configured = 未为角色 '{ $role }' 配置权限提供器
 prepare-cache-log-read-miss = PreparedStatementCache { $op } 读取失败，按未命中处理: { $error }
 prepare-cache-log-write-failed = PreparedStatementCache { $op } 写入失败: { $error }
 prepare-cache-log-clear-failed = PreparedStatementCache clear 失败: { $error }
@@ -926,6 +936,12 @@ kit-health-waiting = { $waiting } 个等待，{ $active }/{ $total } 活跃/总�
 kit-health-no-idle = 无空闲连接，{ $active }/{ $total } 活跃/总数
 
 example-replica-routing-api-replica-pool-new = - ReplicaPool::new(pool, lag_detector)
+
+example-basic-crud-title = 📝 DBNexus 基础 CRUD 示例
+example-audit-logging-title = 📝 DBNexus 审计日志示例
+example-rate-limiter-title = ⏱  DBNexus 速率限制器示例
+example-kit-usage-title = 🧰 DBNexus AsyncKit + DbNexusModule 依赖注入示例
+example-health-check-title = 🩺 DBNexus 健康检查与熔断器示例
 "#;
 
 // ============================================================================
@@ -1284,6 +1300,14 @@ mod tests {
             "prepare-cache-log-read-miss",
             "prepare-cache-log-write-failed",
             "prepare-cache-log-clear-failed",
+            // i18n 接线批次（权限缓存错误文案 + 示例标题行）
+            "perm-cache-provider-no-policy",
+            "perm-cache-provider-not-configured",
+            "example-basic-crud-title",
+            "example-audit-logging-title",
+            "example-rate-limiter-title",
+            "example-kit-usage-title",
+            "example-health-check-title",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -1405,6 +1429,48 @@ mod tests {
                 &[],
                 "- ReplicaPool::new(pool, lag_detector)",
                 "- ReplicaPool::new(pool, lag_detector)",
+            ),
+            (
+                "perm-cache-provider-no-policy",
+                &[("role", "admin")],
+                "permission provider has no policy for role 'admin'",
+                "权限提供器没有角色 'admin' 的策略",
+            ),
+            (
+                "perm-cache-provider-not-configured",
+                &[("role", "admin")],
+                "no permission provider configured for role 'admin'",
+                "未为角色 'admin' 配置权限提供器",
+            ),
+            (
+                "example-basic-crud-title",
+                &[],
+                "📝 DBNexus basic CRUD example",
+                "📝 DBNexus 基础 CRUD 示例",
+            ),
+            (
+                "example-audit-logging-title",
+                &[],
+                "📝 DBNexus audit logging example",
+                "📝 DBNexus 审计日志示例",
+            ),
+            (
+                "example-rate-limiter-title",
+                &[],
+                "⏱  DBNexus rate limiter example",
+                "⏱  DBNexus 速率限制器示例",
+            ),
+            (
+                "example-kit-usage-title",
+                &[],
+                "🧰 DBNexus AsyncKit + DbNexusModule dependency injection example",
+                "🧰 DBNexus AsyncKit + DbNexusModule 依赖注入示例",
+            ),
+            (
+                "example-health-check-title",
+                &[],
+                "🩺 DBNexus health check and circuit breaker example",
+                "🩺 DBNexus 健康检查与熔断器示例",
             ),
         ];
         for (key, args, en, zh) in cases {
@@ -1622,6 +1688,8 @@ mod tests {
             "prepare-cache-log-read-miss",
             "prepare-cache-log-write-failed",
             "prepare-cache-log-clear-failed",
+            "perm-cache-provider-no-policy",
+            "perm-cache-provider-not-configured",
         ];
         for key in NEW_KEYS {
             for lang in ["en", "zh"] {

@@ -101,13 +101,11 @@ async fn test_set_ddl_guard_runtime_swap() {
     let pool = DbPool::new(&url).await.unwrap();
     let session = pool.get_session("admin").await.unwrap();
 
-    // 注入前正常
     session
         .execute_raw_ddl("CREATE TABLE t_swap (id INTEGER)")
         .await
         .unwrap();
 
-    // 注入拒绝策略后同一 admin 路径被拦截
     pool.set_ddl_guard(Arc::new(DenyAllGuard));
     let err = session
         .execute_raw_ddl("ALTER TABLE t_swap ADD COLUMN c INTEGER")

@@ -269,7 +269,6 @@ impl RateLimiter {
     pub async fn check(&self, key: &str) -> bool {
         // 检查是否需要 LRU 驱逐（在 entry() 之前检查，避免在持有 entry 时删除）
         if self.buckets.len() >= self.max_buckets && !self.buckets.contains_key(key) {
-            // 执行 LRU 驱逐：移除最长时间未访问的桶
             self.evict_lru_bucket();
         }
 
@@ -396,7 +395,6 @@ impl RateLimiter {
             }
         }
 
-        // 删除找到的桶
         if let Some(key) = oldest_key {
             self.buckets.remove(&key);
         }
@@ -574,7 +572,6 @@ mod tests {
             handles.push(handle);
         }
 
-        // 等待所有任务完成
         let results: Vec<u32> = futures::future::join_all(handles)
             .await
             .into_iter()
@@ -615,7 +612,6 @@ mod tests {
             handles.push(handle);
         }
 
-        // 等待所有任务完成
         let results: Vec<u32> = futures::future::join_all(handles)
             .await
             .into_iter()
@@ -642,7 +638,6 @@ mod tests {
         // 创建速率限制器：窗口 1 秒
         let limiter = RateLimiter::new(10, std::time::Duration::from_secs(1), 10000, 10);
 
-        // 创建一些条目
         limiter.check("user1").await;
         limiter.check("user2").await;
         limiter.check("user3").await;
@@ -669,7 +664,6 @@ mod tests {
     async fn test_token_bucket_o1_complexity() {
         let limiter = RateLimiter::new(1000, std::time::Duration::from_secs(60), 10000, 1000);
 
-        // 创建大量条目
         for i in 0..1000 {
             let key = format!("user{}", i);
             limiter.check(&key).await;
@@ -715,7 +709,6 @@ mod tests {
             "6th request should be denied"
         );
 
-        // 验证剩余令牌
         assert_eq!(limiter.remaining("user1"), 0);
     }
 
@@ -732,7 +725,6 @@ mod tests {
         }
         assert_eq!(limiter.remaining("user1"), 0);
 
-        // 重置
         limiter.reset("user1");
 
         // 验证重置后状态（条目被移除，remaining 返回最大值）
@@ -769,7 +761,6 @@ mod tests {
             handles.push(handle);
         }
 
-        // 等待所有任务完成
         let results: Vec<u32> = futures::future::join_all(handles)
             .await
             .into_iter()

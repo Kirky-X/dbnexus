@@ -261,7 +261,6 @@ async fn test_db_pool_get_session_role_matches() {
 async fn test_db_pool_clone_usable() {
     let pool = common::make_sqlite_memory_pool().await;
     let cloned = pool.clone();
-    // 克隆的 pool 也应能获取 session
     let session = cloned.get_session("admin").await;
     assert!(session.is_ok(), "cloned pool should be usable");
 }
@@ -336,7 +335,6 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
         }));
     }
 
-    // 等待所有任务完成
     for handle in handles {
         handle.await.unwrap();
     }

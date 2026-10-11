@@ -188,7 +188,6 @@ roles:
             .await
             .unwrap();
 
-        // 等待任务换装完成
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         // analyst 角色已可 get_session（换装生效）

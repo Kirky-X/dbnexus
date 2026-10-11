@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. URL 解析演示
+    // URL 解析演示
     // ============================================
     println!("--- 1. URL parsing ---\n");
 
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 2. 连接尝试（优雅降级）
+    // 连接尝试（优雅降级）
     // ============================================
     println!("\n--- 2. connection attempt ---\n");
 
@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // ============================================
-    // 3. 完整使用流程（需要真实连接）
+    // 完整使用流程（需要真实连接）
     // ============================================
     if let Some(ref conn) = conn {
         println!("\n--- 3. health check ---\n");
@@ -139,7 +139,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => println!("  ✗ health check failed: {}", e),
         }
 
-        // 创建测试节点
         println!("\n--- 4. create nodes and run queries ---\n");
         let _ = conn
             .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
@@ -184,7 +183,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         print_query_result("total after commit", &result);
 
-        // 清理
         let _ = conn
             .execute_cypher("MATCH (n:DbNexusTest) DETACH DELETE n")
             .await;

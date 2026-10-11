@@ -129,7 +129,6 @@ fn test_yearly_strategy_multiple_years() {
         shards.push(strategy.calculate(dt, total_shards));
     }
 
-    // 验证年份取模结果
     for (year, shard) in years.iter().zip(shards.iter()) {
         assert_eq!(*shard, (*year as u32) % total_shards);
     }
@@ -162,7 +161,6 @@ fn test_monthly_strategy_cross_year() {
     let shard_dec_2024 = strategy.calculate(dt_dec_2024, total_shards);
     let shard_jan_2025 = strategy.calculate(dt_jan_2025, total_shards);
 
-    // 验证计算公式
     assert_eq!(shard_jan_2024, (2024 * 12 + 1) % total_shards);
     assert_eq!(shard_dec_2024, (2024 * 12 + 12) % total_shards);
     assert_eq!(shard_jan_2025, (2025 * 12 + 1) % total_shards);
@@ -574,7 +572,6 @@ fn test_shard_hotspot_detection_distribution() {
         }
     }
 
-    // 计算访问分布的统计信息
     let total_access: u32 = access_counts.iter().sum();
     let avg_access = total_access as f64 / 10.0;
 
@@ -592,7 +589,6 @@ fn test_shard_hotspot_detection_distribution() {
         avg_access, hotspots
     );
 
-    // 验证总访问次数
     assert_eq!(total_access, 10000);
 }
 
@@ -602,7 +598,6 @@ fn test_shard_temporal_hotspot() {
     // 按年月分片时，某些时间点的数据量会特别大（如年末、月末）
     let strategy = create_strategy("monthly");
 
-    // 模拟一年的访问模式
     let mut monthly_shards: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
 
     for month in 1..=12 {
@@ -650,7 +645,6 @@ fn test_hash_sharding_uniformity() {
         counts[shard_id as usize] += 1;
     }
 
-    // 计算分布的统计信息
     let total: u32 = counts.iter().sum();
     let avg = total as f64 / total_shards as f64;
     let variance: f64 = counts
@@ -689,7 +683,6 @@ fn test_shard_router_pool_management() {
     assert!(!router.has_pool(0));
     assert!(!router.has_pool(1));
 
-    // 注册分片
     for i in 0..4 {
         router.register_shard(i, format!("db_{}", i), format!("sqlite:./data/db_{}.db", i));
     }
@@ -742,7 +735,6 @@ fn test_shard_router_clear_pools() {
 fn test_shard_failure_isolation() {
     let mut router = ShardRouter::with_strategy("hash", 4);
 
-    // 注册分片
     for i in 0..4 {
         router.register_shard(i, format!("db_{}", i), format!("sqlite:./data/db_{}.db", i));
     }
@@ -753,10 +745,8 @@ fn test_shard_failure_isolation() {
     let shard_0 = router.route(dt);
     let shard_1 = router.route_with_key(dt, "key_1");
 
-    // 验证至少可以路由到某个分片
     assert!(shard_0.is_some() || shard_1.is_some());
 
-    // 验证路由结果的分片 ID 在有效范围内
     if let Some(s) = shard_0 {
         assert!(s.shard_id < 4);
     }
@@ -786,7 +776,6 @@ fn test_shard_failover_routing() {
         shards.push(s);
     }
 
-    // 验证路由至少能返回有效分片 ID
     for s in &shards {
         assert!(*s < 4);
     }
@@ -817,7 +806,6 @@ fn test_cross_shard_query_routing() {
 
     assert_eq!(all_shards.len(), 12);
 
-    // 验证每个分片都有有效的 ID
     for shard in &all_shards {
         assert!(shard.shard_id < 12);
     }
@@ -848,7 +836,6 @@ fn test_cross_shard_time_range_query() {
         start_year, end_year, affected_shards
     );
 
-    // 验证跨越了多个分片
     assert!(!affected_shards.is_empty());
 }
 
@@ -873,7 +860,6 @@ fn test_cross_shard_aggregation_preparation() {
             .push(key.to_string());
     }
 
-    // 验证分片映射
     println!("Shard to keys mapping: {:?}", shard_key_map);
 
     // 聚合所有分片上的 keys
@@ -1053,7 +1039,7 @@ fn test_router_initialized_shards() {
 }
 
 // ============================================================================
-// 新增 API 单元测试
+// API 单元测试
 //
 // 以下测试覆盖 ShardRouter 的 default/new 构造器、get_pool/get_session 的 None 路径、
 // shard_id_for_key 的零分片防御、get_session_for_shard 的错误路径、enforce_shard_binding 的

@@ -706,6 +706,27 @@ mod tests {
         assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
     }
 
+    /// 撤销缓存 mock 的写路径契约：set/delete 接受写入且不报错
+    ///
+    /// 该 mock 的 `get` 恒报「已撤销」以驱动校验拒绝路径；写路径在此单独锚定，
+    /// 保证测试替身与 `DbCacheProvider` 契约一致（替身失真会掩盖真实写回缺陷）。
+    #[cfg(feature = "oxcache-integration")]
+    #[tokio::test]
+    async fn test_revoked_cache_mock_write_contract() {
+        use crate::domain::DbCacheProvider;
+
+        let cache = RevokedCacheMock;
+        assert!(
+            cache.get("revoked_jti:x").await.expect("get").is_some(),
+            "the mock reports every key as revoked"
+        );
+        cache
+            .set("revoked_jti:x", vec![1], Some(Duration::from_secs(60)))
+            .await
+            .expect("set");
+        cache.delete("revoked_jti:x").await.expect("delete");
+    }
+
     #[test]
     fn test_evict_removes_expired_entries_with_zero_expiry() {
         let manager =
@@ -716,6 +737,153 @@ mod tests {
         assert!(
             revoked.is_empty(),
             "revoked entries must all be evicted immediately when refresh_expiration=0"
+        );
+    }
+
+    /// 记录写入的撤销缓存 mock：get 恒未命中，set 记录 (key, ttl) 供断言
+    #[cfg(feature = "oxcache-integration")]
+    struct RecordingCacheMock {
+        sets: std::sync::Mutex<Vec<(String, Option<std::time::Duration>)>>,
+    }
+
+    #[cfg(feature = "oxcache-integration")]
+    impl RecordingCacheMock {
+        fn new() -> Self {
+            Self {
+                sets: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn recorded(&self) -> Vec<(String, Option<std::time::Duration>)> {
+            self.sets.lock().expect("recording cache lock").clone()
+        }
+    }
+
+    #[cfg(feature = "oxcache-integration")]
+    impl crate::domain::DbCacheProvider for RecordingCacheMock {
+        fn get<'a>(
+            &'a self,
+            _key: &'a str,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<Option<Vec<u8>>, crate::foundation::DbError>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn set<'a>(
+            &'a self,
+            key: &'a str,
+            _value: Vec<u8>,
+            ttl: Option<std::time::Duration>,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<(), crate::foundation::DbError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                self.sets
+                    .lock()
+                    .expect("recording cache lock")
+                    .push((key.to_string(), ttl));
+                Ok(())
+            })
+        }
+
+        fn delete<'a>(
+            &'a self,
+            _key: &'a str,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<(), crate::foundation::DbError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    /// 刷新成功后必须把被撤销的 refresh jti 写入远程缓存，
+    /// TTL 取令牌剩余有效期（远端实例据此拒绝重放，而非只靠本进程 HashMap）。
+    #[cfg(feature = "oxcache-integration")]
+    #[tokio::test]
+    async fn test_refresh_writes_revoked_jti_to_remote_cache() {
+        let cache = Arc::new(RecordingCacheMock::new());
+        // refresh 有效期 3600s：撤销标记的 TTL 必须落在该剩余寿命之内
+        let mut manager = JwtManager::with_expiration(TEST_SECRET, 60, 3600).expect("valid secret");
+        manager.with_revocation_cache(cache.clone());
+
+        let refresh = manager
+            .generate_token("u10", "User Ten", "admin", TokenType::Refresh)
+            .expect("generate refresh");
+        let claims = manager
+            .verify_refresh_token(&refresh)
+            .await
+            .expect("fresh refresh token verifies");
+
+        manager
+            .refresh_access_token(&refresh)
+            .await
+            .expect("refresh should succeed");
+
+        // 写入为 fire-and-forget（tokio::spawn），轮询等待其落地
+        let mut waited_ms = 0;
+        while cache.recorded().is_empty() && waited_ms < 2_000 {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            waited_ms += 10;
+        }
+
+        let recorded = cache.recorded();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "rotation must write exactly one revocation marker, got {recorded:?}"
+        );
+        assert_eq!(recorded[0].0, format!("revoked_jti:{}", claims.jti));
+        let ttl = recorded[0].1.expect("revocation marker must carry a TTL");
+        assert!(
+            ttl > std::time::Duration::ZERO && ttl <= std::time::Duration::from_secs(3_600),
+            "TTL must be the refresh token's remaining lifetime, got {ttl:?}"
+        );
+
+        // 本地集合同样被写入：旧 refresh token 不可重放
+        let err = manager
+            .verify_refresh_token(&refresh)
+            .await
+            .expect_err("rotated refresh token must be rejected");
+        assert!(matches!(err, AuthError::InvalidToken), "got {err:?}");
+    }
+
+    /// 未过期令牌的剩余 TTL 必须为正（远端撤销标记的存活时长依据）
+    #[cfg(feature = "oxcache-integration")]
+    #[test]
+    fn test_compute_remaining_ttl_positive_for_future_claims() {
+        let manager = JwtManager::new(TEST_SECRET).expect("valid secret");
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_secs();
+        let claims = JwtClaims {
+            sub: "u".to_string(),
+            username: "u".to_string(),
+            role: "admin".to_string(),
+            exp: now_secs as usize + 300,
+            iat: now_secs as usize,
+            token_type: TokenType::Refresh,
+            jti: "j".to_string(),
+        };
+
+        let ttl = manager.compute_remaining_ttl(&claims);
+        assert!(
+            ttl > Duration::ZERO && ttl <= Duration::from_secs(300),
+            "remaining TTL should be the positive lifetime left, got {ttl:?}"
         );
     }
 

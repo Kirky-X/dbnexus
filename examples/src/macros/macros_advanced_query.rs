@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. schema() — 从 Entity 自动生成表结构
+    // schema() — 从 Entity 自动生成表结构
     // ============================================
     println!("--- 1. schema() auto-generates the table structure ---\n");
 
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ schema(DbBackend::Sqlite) generated the table and applied the migration\n");
 
     // ============================================
-    // 2. insert_many() — 批量插入
+    // insert_many() — 批量插入
     // ============================================
     println!("--- 2. insert_many() batch inserts 5 records ---\n");
 
@@ -123,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ current total records: {}\n", total);
 
     // ============================================
-    // 3. query() — 链式查询（filter + order_by + limit）
+    // query() — 链式查询（filter + order_by + limit）
     // ============================================
     println!("--- 3. query() chained queries: age >= 18, ORDER BY age DESC, LIMIT 2 ---\n");
 
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ assertions passed\n");
 
     // ============================================
-    // 4. paginate() — 分页查询
+    // paginate() — 分页查询
     // ============================================
     println!("--- 4. paginate() paginated query: page_size = 2 ---\n");
 
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ pagination assertions passed\n");
 
     // ============================================
-    // 5. update_many() — 条件批量更新
+    // update_many() — 条件批量更新
     // ============================================
     println!("--- 5. update_many() conditional batch update: age < 18 → age = 0 ---\n");
 
@@ -186,7 +186,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ update_many done, rows affected: {}", affected);
     assert_eq!(affected, 2, "should update 2 records (Bob and Diana)");
 
-    // 验证更新结果
     let conn = session.connection()?;
     let bob = Entity::find_by_id(2)
         .one(conn)
@@ -211,7 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ assertions passed\n");
 
     // ============================================
-    // 6. 复合条件 update_many()
+    // 复合条件 update_many()
     // ============================================
     println!("--- 6. update_many() composite condition: age < 18 OR age > 28 → age = 100 ---\n");
 
@@ -234,7 +233,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     assert_eq!(affected, 3, "should update 3 (Bob, Diana, Charlie)");
 
-    // 验证
     let conn = session.connection()?;
     let count_age_100 = Entity::find()
         .filter(Column::Age.eq(100))

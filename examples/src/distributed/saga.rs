@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建分片路由器（Saga 需要 ShardRouter）
+    // 创建分片路由器（Saga 需要 ShardRouter）
     // ============================================
     println!("--- 1. create the shard router ---\n");
 
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. 成功场景：跨分片转账全部成功
+    // 成功场景：跨分片转账全部成功
     // ============================================
     println!("--- 2. success scenario: cross-shard transfer ---\n");
     println!("  Scenario: user A (shard 0) → user B (shard 1) transfer 100\n");
@@ -189,7 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. 失败场景：第二步失败触发补偿
+    // 失败场景：第二步失败触发补偿
     // ============================================
     println!("--- 3. failure scenario: credit failure triggers compensation ---\n");
     println!("  Scenario: debit succeeded but credit failed → auto-compensate the debit\n");
@@ -212,7 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             shard_id: 1,
             action: Box::new(CreditAction {
                 name: "credit-accountB".to_string(),
-                should_fail: true, // 模拟入账失败
+                should_fail: true,
                 executed: Arc::new(AtomicBool::new(false)),
             }),
             compensation: Box::new(RefundAction {
@@ -228,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. Saga 状态流转说明
+    // Saga 状态流转说明
     // ============================================
     println!("--- 4. Saga state transitions ---\n");
     println!("  ┌─────────┐    all succeeded    ┌───────────┐");
@@ -242,7 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. SagaError 类型
+    // SagaError 类型
     // ============================================
     println!("--- 5. SagaError types ---\n");
     println!("  ┌──────────────────────┬──────────────────────────────────┐");

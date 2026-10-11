@@ -687,7 +687,6 @@ mod sharding_advanced {
         let connections = config.generate_all_connections();
         assert_eq!(connections.len(), 4);
 
-        // 验证模板替换
         for (shard_id, conn) in &connections {
             assert!(
                 conn.contains(&shard_id.to_string()),
@@ -707,7 +706,6 @@ mod sharding_advanced {
         // 原 router 添加新分片
         router.register_shard(1, "s1".to_string(), "c1".to_string());
 
-        // 克隆不应受影响
         assert_eq!(
             cloned.all_shards().len(),
             1,
@@ -820,7 +818,6 @@ mod global_index_advanced {
         assert_eq!(result.synced_count, 1000);
         assert_eq!(result.failed_count, 0);
 
-        // 验证首尾
         assert!(
             index
                 .query_by_index("orders", "order_id", "0")
@@ -1135,7 +1132,6 @@ mod authentication_advanced {
         .await
         .expect("first authenticate should succeed");
 
-        // 删除用户
         mgr.remove_user("alice")
             .await
             .expect("remove should succeed");

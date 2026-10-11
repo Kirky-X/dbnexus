@@ -720,7 +720,6 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         self.enforce_ddl_guard(sql)?;
 
-        // 执行 SQL
         let conn = self.connection()?;
         conn.execute_unprepared(sql)
             .await
@@ -761,7 +760,6 @@ impl Session {
 
         #[cfg(not(feature = "permission"))]
         {
-            // 执行 SQL
             let result = self.execute_raw(sql).await?;
             Ok(result)
         }
@@ -788,7 +786,6 @@ impl Session {
         // 提取表名（vuln-0003 修复：使用 SqlParser AST 解析替代朴素字符串匹配）
         let table_name: String = extract_table_name_via_parser(sql).await.unwrap_or_default();
 
-        // 检查权限
         #[cfg(feature = "permission")]
         {
             if !table_name.is_empty() {
@@ -796,7 +793,6 @@ impl Session {
             }
         }
 
-        // 执行 SQL
         let result = self.execute_raw(sql).await?;
 
         // LD-2 修复：复用 record_metrics_and_mark_write 统一 metrics 记录与 mark_write 逻辑，

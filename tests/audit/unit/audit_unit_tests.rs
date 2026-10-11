@@ -40,7 +40,6 @@ async fn test_audit_log_rotation_on_capacity() {
         logger.log(event).await.unwrap();
     }
 
-    // 验证存储容量限制生效
     let count = storage.event_count().await;
     assert!(
         count <= 5,
@@ -58,13 +57,11 @@ async fn test_audit_manual_rotation() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 写入当前时间的日志
     for i in 0..5 {
         let event = AuditEvent::create("manual_rotation", &i.to_string(), "admin");
         logger.log(event).await.unwrap();
     }
 
-    // 写入过去的日志
     let old_time = Utc::now() - chrono::Duration::days(10);
     for i in 0..3 {
         let mut event = AuditEvent::create("manual_rotation", &format!("old_{}", i), "admin");
@@ -75,7 +72,6 @@ async fn test_audit_manual_rotation() {
     // 清理 7 天前的日志
     let removed = logger.cleanup(7).await.unwrap();
 
-    // 验证旧日志被清理
     assert_eq!(removed, 3, "Should remove 3 old logs");
     let remaining = storage.event_count().await;
     assert_eq!(remaining, 5, "Should have 5 logs remaining");
@@ -90,7 +86,6 @@ async fn test_audit_rotation_retain_high_severity() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 写入普通日志直到接近容量
     for i in 0..8 {
         let event =
             AuditEvent::create("normal", &i.to_string(), "user").with_severity(AuditSeverity::Info);
@@ -157,7 +152,6 @@ async fn test_audit_sanitize_json_sensitive_fields() {
         "Secret value must not remain, got: {}",
         stored_value
     );
-    // 验证非敏感字段未被修改
     assert!(
         stored_value.contains("username") && stored_value.contains("test"),
         "Non-sensitive fields should remain"
@@ -215,7 +209,6 @@ async fn test_audit_sanitize_base64_values() {
 async fn test_audit_sanitize_custom_fields() {
     let _event = AuditEvent::create("test", "1", "admin");
 
-    // 使用自定义敏感字段
     let custom_fields = vec!["api_key".to_string(), "jwt_token".to_string()];
     let input = r#"{"api_key": "key123", "jwt_token": "token456", "data": "normal"}"#;
     let sanitized = AuditEvent::sanitize_value(input, Some(custom_fields));
@@ -251,7 +244,6 @@ async fn test_audit_sanitize_nested_fields() {
     let results = logger.query(&filters).await.unwrap();
     let stored_value = results[0].after_value.as_ref().unwrap();
 
-    // 验证嵌套字段被脱敏
     assert!(
         stored_value.contains("REDACTED"),
         "Nested sensitive fields should be redacted, got: {}",
@@ -272,7 +264,6 @@ async fn test_audit_storage_compression_ratio() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 写入大量重复模式的日志
     for i in 0..500 {
         let event = AuditEvent::create("logs", &i.to_string(), "system")
             .with_extra(r#"{"action": "login", "status": "success"}"#);
@@ -282,7 +273,6 @@ async fn test_audit_storage_compression_ratio() {
     let count = storage.event_count().await;
     assert_eq!(count, 500, "All logs should be stored");
 
-    // 验证可以正常查询
     let filters = AuditQueryFilters {
         entity_type: Some("logs".to_string()),
         ..Default::default()
@@ -300,7 +290,6 @@ async fn test_audit_cleanup_efficiency() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 写入大量日志
     for i in 0..1000 {
         let event = AuditEvent::create("cleanup_test", &i.to_string(), "admin");
         logger.log(event).await.unwrap();
@@ -340,7 +329,6 @@ async fn test_audit_export_json_format() {
     assert!(json.contains("123"));
     assert!(json.contains("admin"));
 
-    // 验证可以反向解析
     let parsed = AuditEvent::from_json(&json).unwrap();
     assert_eq!(parsed.entity_type, "users");
     assert_eq!(parsed.entity_id, "123");
@@ -355,7 +343,6 @@ async fn test_audit_batch_export() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 创建多个事件
     let mut events = Vec::new();
     for i in 0..10 {
         let event = AuditEvent::create("export_test", &i.to_string(), "admin");
@@ -370,10 +357,8 @@ async fn test_audit_batch_export() {
     };
     let results = storage.query(&filters).await.unwrap();
 
-    // 验证导出数量
     assert_eq!(results.len(), 10, "Should export all 10 events");
 
-    // 验证每条日志都可以序列化为 JSON
     for event in &results {
         let json = event.to_json().unwrap();
         let _ = AuditEvent::from_json(&json).expect("Should be able to parse exported JSON");
@@ -388,16 +373,13 @@ async fn test_audit_export_with_sanitization() {
     let event = AuditEvent::create("users", "1", "admin")
         .with_after_value(r#"{"password": "secret", "data": "public"}"#);
 
-    // 获取脱敏后的副本
     let sanitized = event.sanitized();
 
-    // 验证原始值未被修改
     assert!(
         event.after_value.as_ref().unwrap().contains("secret"),
         "Original should not be modified"
     );
 
-    // 验证脱敏副本
     assert!(
         sanitized.after_value.as_ref().unwrap().contains("REDACTED"),
         "Sanitized copy should have redacted values"
@@ -439,7 +421,6 @@ async fn test_audit_timestamp_ordering() {
         let event = AuditEvent::create("timestamp_test", &i.to_string(), "admin");
         logger.log(event).await.unwrap();
 
-        // 获取最新插入的事件
         let filters = AuditQueryFilters {
             entity_type: Some("timestamp_test".to_string()),
             ..Default::default()
@@ -447,7 +428,6 @@ async fn test_audit_timestamp_ordering() {
         let results = storage.query(&filters).await.unwrap();
         let latest = results.last().unwrap();
 
-        // 验证时间戳不早于之前的时间
         assert!(
             latest.timestamp >= previous_time,
             "Timestamp should be monotonically increasing"
@@ -466,7 +446,6 @@ async fn test_audit_required_fields() {
         .with_severity(AuditSeverity::High)
         .with_result(AuditStatus::Success);
 
-    // 验证必需字段存在且非空
     assert!(!event.id.is_empty(), "ID should not be empty");
     assert!(
         !event.entity_type.is_empty(),
@@ -492,14 +471,12 @@ async fn test_audit_log_integrity_checksum() {
     let config = AuditConfig::default();
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 创建并记录事件
     let event = AuditEvent::create("integrity_test", "1", "admin")
         .with_before_value(r#"{"name": "old"}"#)
         .with_after_value(r#"{"name": "new"}"#);
     let original_json = event.to_json().unwrap();
     logger.log(event).await.unwrap();
 
-    // 查询并验证
     let filters = AuditQueryFilters {
         entity_type: Some("integrity_test".to_string()),
         ..Default::default()
@@ -539,12 +516,10 @@ async fn test_audit_async_concurrent_write() {
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     for handle in handles {
         handle.await.unwrap();
     }
 
-    // 验证所有事件都被写入
     let count = storage.event_count().await;
     assert_eq!(count, 50, "All 50 concurrent events should be logged");
 }
@@ -554,7 +529,6 @@ async fn test_audit_async_concurrent_write() {
 /// 验证异步写入出错时能够正确处理。
 #[tokio::test]
 async fn test_audit_async_write_error_handling() {
-    // 使用禁用的审计日志
     let storage = Arc::new(MemoryAuditStorage::new(100));
     let config = AuditConfig {
         enabled: false,
@@ -566,7 +540,6 @@ async fn test_audit_async_write_error_handling() {
     let result = logger.log(AuditEvent::create("test", "1", "admin")).await;
     assert!(result.is_ok(), "Disabled audit should return Ok");
 
-    // 验证没有写入任何内容
     let count = storage.event_count().await;
     assert_eq!(count, 0, "No events should be logged when disabled");
 }
@@ -593,7 +566,6 @@ async fn test_audit_async_write_ordering() {
         handles.push(handle);
     }
 
-    // 等待所有写入完成
     for handle in handles {
         handle.await.unwrap();
     }
@@ -601,7 +573,6 @@ async fn test_audit_async_write_ordering() {
     // 等待所有写入完成
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // 验证所有事件都被记录
     let filters = AuditQueryFilters {
         entity_type: Some("ordering_test".to_string()),
         ..Default::default()
@@ -745,13 +716,11 @@ async fn test_audit_sanitize_json_array() {
     let results = logger.query(&filters).await.unwrap();
     let stored_value = results[0].after_value.as_ref().unwrap();
 
-    // 验证数组中的敏感字段被脱敏
     assert!(
         stored_value.contains("REDACTED"),
         "Array sensitive fields should be redacted, got: {}",
         stored_value
     );
-    // 验证非敏感字段保留
     assert!(
         stored_value.contains("user1") && stored_value.contains("user2"),
         "Non-sensitive fields should remain"

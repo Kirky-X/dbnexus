@@ -744,7 +744,6 @@ mod tests {
         let stmt = make_users_stmt();
         let table = convert_table(&stmt);
 
-        // 验证完整结构
         assert_eq!(table.name, "users");
         assert_eq!(table.columns.len(), 4);
         assert_eq!(table.primary_key_columns, vec!["id".to_string()]);

@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建全局索引管理器
+    // 创建全局索引管理器
     // ============================================
     // GlobalIndex::new 接受 Arc<DbPool>，通过连接池统一管理连接生命周期
     let pool = DbPool::new("sqlite::memory:").await?;
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ GlobalIndex manager created (global_index table created automatically)");
 
     // ============================================
-    // 2. 准备索引条目（模拟跨分片数据）
+    // 准备索引条目（模拟跨分片数据）
     // ============================================
     // 模拟 3 个分片的订单数据
     let entries = vec![
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 批量同步索引条目
+    // 批量同步索引条目
     // ============================================
     println!("\nSyncing the index into the global index table...");
     let sync_result = global_index.batch_sync(entries).await?;
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 通过索引查询跨分片数据
+    // 通过索引查询跨分片数据
     // ============================================
     println!("\n─── Cross-shard index query ───\n");
 
@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ found {} records", results.len());
 
     // ============================================
-    // 5. 展示同步状态常量和 SyncEvent
+    // 展示同步状态常量和 SyncEvent
     // ============================================
     println!("\n─── Sync status constants ───\n");
     println!("  SYNC_STATUS_PENDING = \"{}\"", SYNC_STATUS_PENDING);
@@ -188,7 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 6. 再次同步（验证 upsert 语义）
+    // 再次同步（验证 upsert 语义）
     // ============================================
     println!("\n─── Verify upsert semantics (sync the same entries twice) ───\n");
     let duplicate_entries = vec![IndexEntry {
@@ -196,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         record_id: "order_001".to_string(),
         shard_id: 0,
         index_key: "user_id".to_string(),
-        index_value: "user_100_updated".to_string(), // 更新值
+        index_value: "user_100_updated".to_string(),
     }];
     let result = global_index.batch_sync(duplicate_entries).await?;
     println!(
@@ -204,7 +204,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         result.synced_count, result.failed_count
     );
 
-    // 验证更新后的值
     let results = global_index
         .query_by_index("orders", "user_id", "user_100_updated")
         .await?;

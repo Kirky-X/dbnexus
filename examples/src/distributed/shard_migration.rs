@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建分片路由器
+    // 创建分片路由器
     // ============================================
     println!("--- 1. create the shard router ---\n");
 
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. 分片迁移编排器说明
+    // 分片迁移编排器说明
     // ============================================
     println!("--- 2. ShardMigrationOrchestrator ---\n");
 
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. 并行 vs 串行模式对比
+    // 并行 vs 串行模式对比
     // ============================================
     println!("--- 3. parallel vs serial modes ---\n");
 
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. 迁移结果结构
+    // 迁移结果结构
     // ============================================
     println!("--- 4. migration result structures ---\n");
 
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. 模拟迁移结果展示
+    // 模拟迁移结果展示
     // ============================================
     println!("--- 5. simulated migration results ---\n");
 
@@ -101,7 +101,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  simulated migration results for {} shards:", total_shards);
     println!();
 
-    // 模拟成功场景
     println!("  Scenario A: all succeed");
     println!("  ┌──────────┬──────────┬────────────────────┐");
     println!("  │ shard_id │ success  │ applied_versions   │");
@@ -116,7 +115,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // 模拟部分失败场景
     println!("  Scenario B: partial failure");
     println!("  ┌──────────┬──────────┬────────────────────────────┐");
     println!("  │ shard_id │ success  │ error                      │");
@@ -137,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 6. 架构说明
+    // 架构说明
     // ============================================
     println!("--- 6. shard migration orchestration architecture ---\n");
 
@@ -161,7 +159,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 7. 与其他模块的关系
+    // 与其他模块的关系
     // ============================================
     println!("--- 7. relations to other modules ---\n");
     println!("  ┌────────────────┬──────────────────────────────────────────┐");

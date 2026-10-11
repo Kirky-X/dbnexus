@@ -27,13 +27,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建连接池（用于真实场景下的指标采集上下文）
+    // 创建连接池（用于真实场景下的指标采集上下文）
     // ============================================
     let (_pool, _session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool created (max_connections=5)\n");
 
     // ============================================
-    // 2. 创建 MetricsCollector 并同步连接池状态
+    // 创建 MetricsCollector 并同步连接池状态
     // ============================================
     let collector = MetricsCollector::new();
 
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 3. 记录查询指标（模拟业务流量）
+    // 记录查询指标（模拟业务流量）
     // ============================================
     println!("\n--- record query metrics ---");
     for i in 1..=20 {
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ recorded 20 SELECT + 1 INSERT + 1 UPDATE");
 
     // ============================================
-    // 4. 展示 QueryStats（查询统计）
+    // 展示 QueryStats（查询统计）
     // ============================================
     println!("\n--- query statistics (QueryStats) ---");
     if let Some(stats) = collector.get_query_stats("SELECT") {
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 记录事务与连接获取指标
+    // 记录事务与连接获取指标
     // ============================================
     println!("\n--- transaction and connection acquisition metrics ---");
     collector.record_transaction_commit();
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 6. 慢查询记录
+    // 慢查询记录
     // ============================================
     println!("\n--- slow query records ---");
     collector.set_slow_query_threshold(100);
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 7. 导出 Prometheus 格式指标
+    // 导出 Prometheus 格式指标
     // ============================================
     println!("\n--- Prometheus format export ---");
     let prometheus_output = collector.export_prometheus();

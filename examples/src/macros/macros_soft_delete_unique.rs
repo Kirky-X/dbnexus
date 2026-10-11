@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建数据库 + 带复合唯一约束的表
+    // 创建数据库 + 带复合唯一约束的表
     // ============================================
     println!("--- 1. create the members table (UNIQUE(email, deleted_at)) ---\n");
 
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    → the same email can be re-registered after a soft delete\n");
 
     // ============================================
-    // 2. 注册第一个用户 alice@example.com
+    // 注册第一个用户 alice@example.com
     // ============================================
     println!("--- 2. register the user alice@example.com ---\n");
 
@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 3. 软删除 alice
+    // 软删除 alice
     // ============================================
     println!("\n--- 3. soft-delete alice (DELETE SET deleted_at = now) ---\n");
 
@@ -121,7 +121,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(affected, 1, "the soft delete should affect 1 row");
     println!("  ✓ soft-deleted id=1; deleted_at set (not a physical delete)");
 
-    // 验证 find_all 不返回软删除记录
     let active = Model::find_all(&session).await?;
     assert!(
         active.is_empty(),
@@ -149,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. 用同一 email 重新注册（关键演示）
+    // 用同一 email 重新注册（关键演示）
     // ============================================
     println!(
         "\n--- 4. re-register with the same email (UNIQUE(email, deleted_at) in effect) ---\n"
@@ -172,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 5. 验证最终状态
+    // 验证最终状态
     // ============================================
     println!("\n--- 5. verify the final state ---\n");
 

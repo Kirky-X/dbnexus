@@ -597,7 +597,6 @@ impl AuditLogger {
         // 存储事件
         self.storage.store(&event).await?;
 
-        // 检查是否需要告警
         if self.should_alert(&event) {
             self.trigger_alert(&event);
         }

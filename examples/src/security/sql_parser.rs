@@ -27,13 +27,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 SQL 解析器
+    // 创建 SQL 解析器
     // ============================================
     let parser = SqlParser::new().await;
     println!("✓ SqlParser created (built-in LRU cache)\n");
 
     // ============================================
-    // 2. 解析 DML 操作（SELECT / INSERT / UPDATE / DELETE）
+    // 解析 DML 操作（SELECT / INSERT / UPDATE / DELETE）
     // ============================================
     println!("--- DML operation parsing ---\n");
 
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 3. 解析 DDL 操作（CREATE / ALTER / DROP）
+    // 解析 DDL 操作（CREATE / ALTER / DROP）
     // ============================================
     println!("--- DDL operation parsing ---\n");
     println!("  note: SqlParser::parse_single blocks DDL operations (for safety)");
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 使用 parse_operation_async 提取操作和表名
+    // 使用 parse_operation_async 提取操作和表名
     // ============================================
     println!("--- parse_operation_async (DML operation extraction) ---\n");
 
@@ -142,7 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 展示 DDL vs DML 区分
+    // 展示 DDL vs DML 区分
     // ============================================
     println!("\n--- DDL vs DML distinction ---\n");
 
@@ -164,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 6. 缓存统计
+    // 缓存统计
     // ============================================
     println!("\n--- cache statistics ---\n");
     let (hits, misses) = parser.cache_stats();

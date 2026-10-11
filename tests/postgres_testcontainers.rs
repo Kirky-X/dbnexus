@@ -532,7 +532,6 @@ async fn test_postgres_concurrent_access() {
             .expect("Failed to create pool"),
     );
 
-    // 创建测试表
     {
         let session = pool
             .get_session("admin")
@@ -572,7 +571,6 @@ async fn test_postgres_concurrent_access() {
         "All concurrent inserts should succeed"
     );
 
-    // 验证数据
     let session = pool
         .get_session("admin")
         .await

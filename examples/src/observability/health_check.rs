@@ -16,34 +16,31 @@
 
 use dbnexus::{
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, HealthChecker, HealthStatus,
-    PoolHealthMetrics,
+    PoolHealthMetrics, t_simple,
 };
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🩺 DBNexus health check and circuit breaker example");
+    println!("{}", t_simple("example-health-check-title"));
     println!("========================================\n");
 
     // ============================================
-    // 1. PoolHealthMetrics — 连接池健康指标采集
+    // PoolHealthMetrics — 连接池健康指标采集
     // ============================================
     println!("--- 1. PoolHealthMetrics pool metrics ---");
     let metrics = PoolHealthMetrics::new();
 
-    // 模拟连接创建
     metrics.record_connection_created();
     metrics.record_connection_created();
     metrics.record_connection_created();
     println!("  ✓ simulated the creation of 3 connections");
 
-    // 模拟一个连接转入空闲
     metrics.decrement_active();
     metrics.increment_idle().await;
     println!("  ✓ 1 connection became idle");
 
-    // 模拟一次连接失败
     metrics.record_connection_failed();
     println!("  ✓ simulated 1 connection failure");
 
@@ -55,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  is_healthy = {}", metrics.is_healthy());
 
     // ============================================
-    // 2. HealthChecker — 执行健康检查
+    // HealthChecker — 执行健康检查
     // ============================================
     println!("\n--- 2. HealthChecker health checks ---");
     let checker = HealthChecker::new(1000); // 检查超时 1000ms
@@ -65,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_health_status(&result.status, &result.details, &result.recommendations);
 
     // ============================================
-    // 3. CircuitBreaker — 熔断器状态转换
+    // CircuitBreaker — 熔断器状态转换
     // ============================================
     println!("\n--- 3. CircuitBreaker state transitions ---");
     let config = CircuitBreakerConfig {
@@ -132,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ the breaker has closed again (Closed), serving normally");
 
     // ============================================
-    // 4. 通过 HealthChecker 访问内置的 CircuitBreaker
+    // 通过 HealthChecker 访问内置的 CircuitBreaker
     // ============================================
     println!("\n--- 4. the CircuitBreaker built into HealthChecker ---");
     let inner_breaker = checker.circuit_breaker();
@@ -143,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 5. 演示 Degraded 状态（通过设置高等待数）
+    // 演示 Degraded 状态（通过设置高等待数）
     // ============================================
     println!("\n--- 5. simulate a Degraded state ---");
     let degraded_metrics = PoolHealthMetrics::new();

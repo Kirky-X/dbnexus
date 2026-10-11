@@ -50,7 +50,6 @@ fn validate_sql_identifier(identifier: &str, identifier_type: &str) -> Result<St
         ));
     }
 
-    // 检查保留关键字
     let reserved_keywords = [
         "select",
         "insert",
@@ -399,7 +398,6 @@ impl SqlGenerator {
 
     /// 生成创建表的 SQL
     pub fn generate_create_table_sql(&self, table: &Table) -> Result<String, String> {
-        // 验证表名
         let table_name = validate_sql_identifier(
             &table.name,
             &i18n::t_simple("migration-identifier-type-table"),
@@ -449,7 +447,6 @@ impl SqlGenerator {
 
         sql.push_str("\n);");
 
-        // 生成索引
         for index in &table.indexes {
             if !index.is_constraint {
                 sql.push_str("\n\n");
@@ -457,7 +454,6 @@ impl SqlGenerator {
             }
         }
 
-        // 生成外键
         for fk in &table.foreign_keys {
             sql.push_str("\n\n");
             sql.push_str(&self.generate_add_foreign_key_sql(fk)?);
@@ -472,7 +468,6 @@ impl SqlGenerator {
         column: &Column,
         _pk_columns: &[String],
     ) -> Result<String, String> {
-        // 验证列名
         let column_name = validate_sql_identifier(
             &column.name,
             &i18n::t_simple("migration-identifier-type-column"),
@@ -513,19 +508,16 @@ impl SqlGenerator {
 
     /// 生成创建索引的 SQL
     pub fn generate_create_index_sql(&self, index: &Index) -> Result<String, String> {
-        // 验证索引名
         let index_name = validate_sql_identifier(
             &index.name,
             &i18n::t_simple("migration-identifier-type-index"),
         )?;
 
-        // 验证表名
         let table_name = validate_sql_identifier(
             &index.table_name,
             &i18n::t_simple("migration-identifier-type-table"),
         )?;
 
-        // 验证列名
         let validated_columns: Vec<String> = index
             .columns
             .iter()
@@ -549,7 +541,6 @@ impl SqlGenerator {
 
     /// 生成添加外键的 SQL
     fn generate_add_foreign_key_sql(&self, fk: &ForeignKey) -> Result<String, String> {
-        // 验证所有标识符
         let table_name = validate_sql_identifier(
             &fk.table_name,
             &i18n::t_simple("migration-identifier-type-fk-table"),
@@ -603,7 +594,6 @@ impl SqlGenerator {
         table_name: &str,
         column: &Column,
     ) -> Result<String, String> {
-        // 验证表名
         let validated_table_name = validate_sql_identifier(
             table_name,
             &i18n::t_simple("migration-identifier-type-table"),
@@ -623,7 +613,6 @@ impl SqlGenerator {
         table_name: &str,
         column_name: &str,
     ) -> Result<String, String> {
-        // 验证表名和列名
         let validated_table_name = validate_sql_identifier(
             table_name,
             &i18n::t_simple("migration-identifier-type-table"),

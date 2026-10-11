@@ -90,7 +90,6 @@ async fn test_set_type() {
     let option = ActiveValue::Set(Some(42));
     let none_value: ActiveValue<Option<i32>> = ActiveValue::Set(None);
 
-    // 验证 Set 类型可以正确创建
     assert!(matches!(string, ActiveValue::Set(_)));
     assert!(matches!(number, ActiveValue::Set(42)));
     assert!(matches!(option, ActiveValue::Set(Some(42))));
@@ -109,7 +108,6 @@ async fn test_entity_with_session() {
     let pool = DbPool::new(&url).await.unwrap();
     let session = pool.get_session("admin").await.unwrap();
 
-    // 验证 session 可以正常工作
     assert_eq!(session.role(), "admin");
     assert!(!session.is_in_transaction().await);
 
@@ -197,7 +195,6 @@ async fn test_entity_integration_with_sql_operations() {
     let pool = DbPool::new(&url).await.unwrap();
     let session = pool.get_session("admin").await.unwrap();
 
-    // 验证 session 可以正常工作
     assert_eq!(session.role(), "admin");
     assert!(!session.is_in_transaction().await);
 

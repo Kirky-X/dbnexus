@@ -671,13 +671,9 @@ mod tests {
         let sanitized = AuditEvent::sanitize_value(nested_json, None);
         let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
 
-        // 验证第一层敏感字段被脱敏
         assert_eq!(parsed["password"], "[REDACTED]");
-        // 验证嵌套对象中的敏感字段被脱敏
         assert_eq!(parsed["user"]["password"], "[REDACTED]");
-        // 验证深层嵌套的敏感字段被脱敏
         assert_eq!(parsed["user"]["profile"]["token"], "[REDACTED]");
-        // 验证非敏感字段保持不变
         assert_eq!(parsed["name"], "test");
         assert_eq!(parsed["user"]["name"], "john");
         assert_eq!(parsed["user"]["profile"]["age"], 30);
@@ -697,11 +693,9 @@ mod tests {
         let sanitized = AuditEvent::sanitize_value(array_json, None);
         let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
 
-        // 验证数组中每个对象的敏感字段都被脱敏
         assert_eq!(parsed["users"][0]["password"], "[REDACTED]");
         assert_eq!(parsed["users"][1]["password"], "[REDACTED]");
         assert_eq!(parsed["users"][1]["token"], "[REDACTED]");
-        // 验证非敏感字段保持不变
         assert_eq!(parsed["users"][0]["name"], "user1");
         assert_eq!(parsed["users"][1]["name"], "user2");
         assert_eq!(parsed["count"], 2);
@@ -746,7 +740,6 @@ mod tests {
         let sanitized = AuditEvent::sanitize_value(json, None);
         let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
 
-        // 验证所有大小写变体都被脱敏
         assert_eq!(parsed["PASSWORD"], "[REDACTED]");
         assert_eq!(parsed["Password"], "[REDACTED]");
         assert_eq!(parsed["api_key"], "[REDACTED]");
@@ -767,7 +760,6 @@ mod tests {
         let sanitized = AuditEvent::sanitize_value(json, Some(custom_fields));
         let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
 
-        // 验证自定义字段被脱敏
         assert_eq!(parsed["custom_sensitive"], "[REDACTED]");
         // 默认字段不在自定义列表中，不会被脱敏
         assert_eq!(parsed["password"], "also_redacted");
@@ -804,7 +796,6 @@ mod tests {
         let sanitized = AuditEvent::sanitize_value(complex_json, None);
         let parsed: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
 
-        // 验证多层嵌套中的敏感字段都被脱敏
         assert_eq!(parsed["user"]["auth_data"]["password"], "[REDACTED]");
         assert_eq!(
             parsed["user"]["auth_data"]["auth_list"][0]["access_token"],
@@ -815,7 +806,6 @@ mod tests {
             "[REDACTED]"
         );
         assert_eq!(parsed["user"]["settings"]["config"]["secret"], "[REDACTED]");
-        // 验证非敏感字段保持不变
         assert_eq!(
             parsed["user"]["auth_data"]["auth_list"][0]["auth_type"],
             "bearer"

@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 JwtManager
+    // 创建 JwtManager
     // ============================================
     // ⚠️ 生产环境请从环境变量或密钥管理服务读取 secret，不要硬编码
     let secret = b"dbnexus-demo-secret-key-please-change-in-production";
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ JwtManager created (default expiration: access=1h, refresh=7d)\n");
 
     // ============================================
-    // 2. 生成 Access Token 与 Refresh Token
+    // 生成 Access Token 与 Refresh Token
     // ============================================
     println!("--- Generate Token ---");
     let user_id = "u_10086";
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 3. 验证并解析 Token → JwtClaims
+    // 验证并解析 Token → JwtClaims
     // ============================================
     println!("\n--- Verify Token ---");
     let access_claims: JwtClaims = manager.verify_token(&access_token)?;
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. TokenType 区分
+    // TokenType 区分
     // ============================================
     println!("\n--- TokenType type distinction ---");
     println!("  Access  token type = {:?}", access_claims.token_type);
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(refresh_claims.token_type, TokenType::Refresh);
 
     // ============================================
-    // 5. 使用 Refresh Token 刷新 Access Token
+    // 使用 Refresh Token 刷新 Access Token
     // ============================================
     println!("\n--- Refresh Access Token ---");
     let new_access_token = manager.refresh_access_token(&refresh_token).await?;
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 6. 自定义过期时间
+    // 自定义过期时间
     // ============================================
     println!("\n--- Custom expiration ---");
     let short_manager = JwtManager::with_expiration(secret, 60, 3600)?;
@@ -121,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 7. 错误场景：无效 token 与过期 token
+    // 错误场景：无效 token 与过期 token
     // ============================================
     println!("\n--- Error scenarios ---");
 

@@ -75,19 +75,16 @@ async fn test_semaphore_permit_return_concurrent() {
                 .get_session("admin")
                 .await
                 .expect("Failed to get session");
-            // 模拟短暂使用
             tokio::time::sleep(Duration::from_millis(1)).await;
             drop(session);
         });
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     for handle in handles {
         handle.await.expect("Task panicked");
     }
 
-    // 等待所有异步释放完成
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let status = pool.status();
@@ -164,7 +161,6 @@ async fn test_no_deadlock_high_concurrency() {
             round
         );
 
-        // 等待所有释放完成
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
@@ -223,7 +219,6 @@ async fn test_semaphore_permit_reuse_after_max() {
     let status = pool.status();
     assert_eq!(status.active, 2, "Should have 2 active connections again");
 
-    // 清理
     drop(session2);
     drop(session3);
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -272,7 +267,6 @@ async fn test_pool_stress_rapid_acquire_release() {
         .filter(|r| r.as_ref().unwrap_or(&None).is_some())
         .count();
 
-    // 等待所有异步释放完成
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let status = pool.status();
@@ -282,7 +276,6 @@ async fn test_pool_stress_rapid_acquire_release() {
     );
     assert!(success_count > 0, "At least some operations should succeed");
 
-    // 验证连接池仍然可用
     let session = pool
         .get_session("admin")
         .await
@@ -311,7 +304,6 @@ async fn test_semaphore_fairness() {
             .expect("Failed to create pool"),
     );
 
-    // 获取所有连接
     let session1 = pool
         .get_session("admin")
         .await
@@ -321,11 +313,9 @@ async fn test_semaphore_fairness() {
         .await
         .expect("Failed to get session 2");
 
-    // 启动多个等待任务
     let pool_clone = pool.clone();
     let wait_task1 = tokio::spawn(async move {
         let result = pool_clone.get_session("admin").await.ok();
-        // 模拟短暂使用后释放
         tokio::time::sleep(Duration::from_millis(50)).await;
         drop(result);
     });
@@ -333,7 +323,6 @@ async fn test_semaphore_fairness() {
     let pool_clone = pool.clone();
     let wait_task2 = tokio::spawn(async move {
         let result = pool_clone.get_session("admin").await.ok();
-        // 模拟短暂使用后释放
         tokio::time::sleep(Duration::from_millis(50)).await;
         drop(result);
     });
@@ -345,7 +334,6 @@ async fn test_semaphore_fairness() {
     drop(session1);
     drop(session2);
 
-    // 等待任务完成
     let result1 = tokio::time::timeout(Duration::from_secs(3), wait_task1).await;
     let result2 = tokio::time::timeout(Duration::from_secs(3), wait_task2).await;
 
@@ -355,7 +343,6 @@ async fn test_semaphore_fairness() {
         "At least one waiting task should succeed"
     );
 
-    // 等待所有连接释放
     tokio::time::sleep(Duration::from_millis(200)).await;
     let status = pool.status();
     assert_eq!(status.active, 0, "All sessions should be released");

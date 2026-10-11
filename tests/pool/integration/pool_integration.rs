@@ -240,7 +240,6 @@ async fn test_pool_exhaustion_alert_levels() {
         timeout_count
     );
 
-    // 验证 wait_count 正确记录
     tokio::time::sleep(Duration::from_millis(50)).await;
     let status = pool.status();
     // holder 释放后 wait_count 应该为 0
@@ -289,7 +288,6 @@ async fn test_concurrent_get_session_arcswap_safety() {
         handles.push(handle);
     }
 
-    // 等待所有 task 完成
     for handle in handles {
         handle.await.expect("Task panicked");
     }

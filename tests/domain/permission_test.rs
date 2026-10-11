@@ -462,7 +462,6 @@ rate_limit_max_requests: 50
 
     #[tokio::test]
     async fn test_yaml_provider_load_from_file_succeeds() {
-        // 写入临时 YAML 策略文件
         let dir = tempfile::tempdir().expect("failed to create tempdir");
         let path = dir.path().join("policy.yaml");
         let yaml = r#"
@@ -496,14 +495,12 @@ reader:
                 .unwrap()
         );
 
-        // 清理
         drop(provider);
         drop(dir);
     }
 
     #[tokio::test]
     async fn test_yaml_provider_check_permission_succeeds() {
-        // 写入临时 YAML 策略文件
         let dir = tempfile::tempdir().expect("failed to create tempdir");
         let path = dir.path().join("policy.yaml");
         let yaml = r#"
@@ -551,7 +548,6 @@ reader:
                 .unwrap()
         );
 
-        // 清理
         drop(provider);
         drop(dir);
     }

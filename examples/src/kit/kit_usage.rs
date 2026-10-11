@@ -26,6 +26,7 @@ use std::sync::Arc;
 use dbnexus::DbNexusModule;
 use dbnexus::database::ConnectionPool;
 use dbnexus::foundation::{DbConfig, PoolConfig};
+use dbnexus::t_simple;
 use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
 use trait_kit::prelude::*;
 
@@ -36,11 +37,11 @@ use trait_kit::prelude::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
-    println!("🧰 DBNexus AsyncKit + DbNexusModule dependency injection example");
+    println!("{}", t_simple("example-kit-usage-title"));
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 AsyncKit 并配置
+    // 创建 AsyncKit 并配置
     // ============================================
     println!("--- 1. create AsyncKit and set the configuration ---\n");
 
@@ -66,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ DbConfig set (sqlite shared memory, max_connections=5)");
 
     // ============================================
-    // 2. 注册模块
+    // 注册模块
     // ============================================
     println!("\n--- 2. register modules ---\n");
 
@@ -81,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  dependencies: DbNexusModule → OxcacheModule");
 
     // ============================================
-    // 3. 构建 Kit 并获取连接池
+    // 构建 Kit 并获取连接池
     // ============================================
     println!("\n--- 3. build the Kit ---\n");
 
@@ -98,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Arc<dyn ConnectionPool> acquired successfully");
 
     // ============================================
-    // 4. 使用连接池
+    // 使用连接池
     // ============================================
     println!("\n--- 4. use the connection pool ---\n");
 
@@ -124,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ DDL executed: CREATE TABLE kit_demo");
 
     // ============================================
-    // 5. INSERT 数据
+    // INSERT 数据
     // ============================================
     println!("\n--- 5. INSERT data ---\n");
 
@@ -140,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ inserted 3 test rows");
 
     // ============================================
-    // 6. SELECT 查询
+    // SELECT 查询
     // ============================================
     println!("\n--- 6. SELECT query ---\n");
 
@@ -150,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ queried the kit_demo table successfully");
 
     // ============================================
-    // 7. 事务操作
+    // 事务操作
     // ============================================
     println!("\n--- 7. transactions ---\n");
 
@@ -171,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ transaction committed");
 
     // ============================================
-    // 8. 错误处理演示
+    // 错误处理演示
     // ============================================
     println!("\n--- 8. error handling ---\n");
 
@@ -199,7 +200,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 9. 多 Session 使用
+    // 多 Session 使用
     // ============================================
     println!("\n--- 9. multiple Sessions ---\n");
 

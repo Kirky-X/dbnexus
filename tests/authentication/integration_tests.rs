@@ -238,7 +238,6 @@ async fn test_authenticate_success() {
 
     assert!(!token.is_empty(), "token must be non-empty");
 
-    // 验证 token 的 claims
     let claims = mgr
         .verify_token(&token)
         .expect("verify_token should succeed");

@@ -101,7 +101,6 @@ impl DbPool {
     /// ```
     ///
     pub async fn get_session(&self, role: &str) -> DbResult<Session> {
-        // 验证角色名称
         #[cfg(feature = "permission")]
         self.validate_role_name(role).await?;
 
@@ -182,7 +181,6 @@ impl DbPool {
             return Ok(());
         }
 
-        // 检查角色是否存在
         if permission_config
             .as_ref()
             .is_some_and(|c| c.get_role_policy(role).is_none())

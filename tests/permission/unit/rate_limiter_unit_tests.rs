@@ -24,7 +24,6 @@ async fn test_rate_limiter_single_acquire() {
     // 单次获取应该成功
     assert!(limiter.check("user1").await, "First acquire should succeed");
 
-    // 验证剩余令牌数
     assert_eq!(
         limiter.remaining("user1"),
         4,
@@ -42,7 +41,6 @@ async fn test_rate_limiter_exhaustion() {
     assert!(limiter.check("user1").await, "2nd acquire should succeed");
     assert!(limiter.check("user1").await, "3rd acquire should succeed");
 
-    // 验证令牌已耗尽
     assert_eq!(
         limiter.remaining("user1"),
         0,
@@ -105,7 +103,6 @@ async fn test_rate_limiter_concurrent_50_tasks() {
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     let results: Vec<u32> = futures::future::join_all(handles)
         .await
         .into_iter()
@@ -153,7 +150,6 @@ async fn test_rate_limiter_concurrent_multiple_keys() {
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     let results: Vec<u32> = futures::future::join_all(handles)
         .await
         .into_iter()
@@ -188,7 +184,6 @@ async fn test_rate_limiter_bucket_eviction() {
         assert!(limiter.check(&key).await);
     }
 
-    // 验证当前桶数量
     assert_eq!(limiter.len(), 10, "Should have 10 buckets");
 
     // 创建第 11 个桶，应该触发 LRU 驱逐
@@ -204,7 +199,6 @@ async fn test_rate_limiter_bucket_eviction() {
         "Should still have 10 buckets after eviction"
     );
 
-    // 验证新桶存在
     assert!(
         limiter.remaining("user_new") > 0,
         "New bucket should exist and have tokens"
@@ -314,14 +308,12 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
         handles.push(handle);
     }
 
-    // 等待所有任务完成
     let results: Vec<u32> = futures::future::join_all(handles)
         .await
         .into_iter()
         .map(|r| r.unwrap())
         .collect();
 
-    // 验证每个任务都成功获取了一些令牌
     for (i, result) in results.iter().enumerate() {
         assert!(
             *result > 0,
@@ -346,13 +338,11 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
 async fn test_rate_limiter_max_buckets_one() {
     let limiter = RateLimiter::new(10, Duration::from_secs(60), 1, 10);
 
-    // 创建第一个桶
     assert!(limiter.check("user_0").await);
 
     // 创建第二个桶，应该驱逐第一个
     assert!(limiter.check("user_1").await);
 
-    // 验证只有一个桶
     assert_eq!(limiter.len(), 1, "Should have exactly 1 bucket");
 
     // user_1 应该存在
@@ -374,10 +364,8 @@ async fn test_rate_limiter_reset() {
 
     assert_eq!(limiter.remaining("user1"), 0);
 
-    // 重置
     limiter.reset("user1");
 
-    // 重置后应该恢复满桶
     assert_eq!(limiter.remaining("user1"), 5);
     assert!(limiter.check("user1").await);
 }
@@ -387,7 +375,6 @@ async fn test_rate_limiter_reset() {
 async fn test_rate_limiter_cleanup() {
     let limiter = RateLimiter::new(10, Duration::from_secs(1), 10000, 10);
 
-    // 创建一些桶
     limiter.check("user1").await;
     limiter.check("user2").await;
     limiter.check("user3").await;

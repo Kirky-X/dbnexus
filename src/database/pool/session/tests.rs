@@ -281,13 +281,11 @@ mod graph_tests {
         match result {
             GraphExecResult::Query(q) => {
                 assert_eq!(q.rows.len(), 2, "should return 2 persons");
-                // 验证第一行
                 let name0 = &q.rows[0].columns[0].1;
                 match name0 {
                     GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Alice"),
                     other => panic!("expected String Scalar, got {other:?}"),
                 }
-                // 验证第二行
                 let name1 = &q.rows[1].columns[0].1;
                 match name1 {
                     GraphValue::Scalar(serde_json::Value::String(s)) => assert_eq!(s, "Bob"),
@@ -494,7 +492,6 @@ roles:
             result.err()
         );
 
-        // 清理临时文件
         let _ = std::fs::remove_file(&yaml_path);
     }
 
@@ -649,7 +646,6 @@ mod vuln_0005_tests {
             long_cypher.len()
         );
 
-        // 验证错误类型为 Permission
         match &result {
             Err(DbError::Permission(msg)) => {
                 assert!(
@@ -1013,7 +1009,6 @@ mod session_basic_tests {
         assert!(session.is_in_transaction().await);
         assert!(session.should_use_master().await);
 
-        // 提交事务
         session.commit().await.expect("commit");
         assert!(!session.is_in_transaction().await);
     }
@@ -1448,6 +1443,27 @@ roles:
             .expect("select on permitted table must pass");
     }
 
+    /// 非 admin 会话的表级权限门：允许表放行、未列出表拒绝
+    #[tokio::test]
+    async fn analyst_table_permission_gate_allows_and_denies() {
+        let (_path, pool) = pool_with_analyst_role(None).await;
+        let session = analyst_session(&pool).await;
+
+        session
+            .check_table_permission("users", "SELECT")
+            .await
+            .expect("select on a permitted table must pass the gate");
+
+        let err = session
+            .check_table_permission("secrets", "SELECT")
+            .await
+            .expect_err("an unlisted table must be denied");
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(_)),
+            "got {err:?}"
+        );
+    }
+
     #[tokio::test]
     async fn analyst_select_on_unlisted_table_denied() {
         let (_path, pool) = pool_with_analyst_role(None).await;
@@ -1642,6 +1658,67 @@ mod txn_handle_error_path_tests {
         assert!(
             session.commit().await.is_err(),
             "the rejection path has consumed the transaction handle"
+        );
+    }
+}
+
+// ============================================================================
+// metrics 接线：会话把执行与自定义操作记入注入的收集器
+// ============================================================================
+
+#[cfg(all(feature = "metrics", feature = "sqlite"))]
+mod metrics_wiring_tests {
+    #[allow(unused_imports)]
+    use super::*;
+    use crate::observability::MetricsCollector;
+    use std::sync::Arc;
+
+    /// `execute_raw` 与 `record_metric` 均落入池注入的收集器
+    #[tokio::test]
+    async fn session_records_execute_and_custom_metrics() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let collector = Arc::new(MetricsCollector::new());
+        pool.set_metrics_collector(Some(collector.clone())).await;
+
+        let session = pool.get_session("admin").await.expect("session");
+        session.execute_raw("SELECT 1").await.expect("select");
+        session.record_metric("select", "users", true);
+
+        let execute_stats = collector
+            .get_query_stats("execute_raw")
+            .expect("execute_raw must be recorded for a metrics-injected session");
+        assert!(execute_stats.count >= 1, "got {execute_stats:?}");
+
+        let custom = collector
+            .get_query_stats("select")
+            .expect("record_metric must record the given operation");
+        assert_eq!(custom.count, 1, "exactly one custom record expected");
+        assert_eq!(custom.error_count, 0, "a successful record has no errors");
+    }
+}
+
+// ============================================================================
+// 表级权限门：操作白名单先于 admin 绕过
+// ============================================================================
+
+#[cfg(all(feature = "permission", feature = "sqlite"))]
+mod table_permission_gate_tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    /// 未知操作符即拒绝（admin 会话也不例外：操作白名单先于 admin 绕过）
+    #[tokio::test]
+    async fn unknown_operation_is_rejected_for_admin() {
+        let pool = DbPool::new("sqlite::memory:").await.expect("pool");
+        let session = pool.get_session("admin").await.expect("session");
+
+        let err = session
+            .check_table_permission("users", "MERGE")
+            .await
+            .expect_err("an unknown operation must be rejected");
+        assert!(
+            matches!(err, crate::foundation::DbError::Permission(_)),
+            "got {err:?}"
         );
     }
 }

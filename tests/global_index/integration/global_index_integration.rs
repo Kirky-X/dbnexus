@@ -114,7 +114,6 @@ async fn test_query_single_index_entry() {
     let sync_result = global_index.batch_sync(vec![entry]).await;
     assert!(sync_result.is_ok(), "Sync should succeed");
 
-    // 查询索引
     let result = global_index
         .query_by_index("orders", "user_id", "user_123")
         .await;
@@ -161,7 +160,6 @@ async fn test_query_multiple_index_entries() {
     let sync_result = global_index.batch_sync(entries).await;
     assert!(sync_result.is_ok());
 
-    // 查询索引
     let result = global_index
         .query_by_index("orders", "user_id", "user_123")
         .await;
@@ -205,7 +203,6 @@ async fn test_query_different_tables() {
     assert_eq!(orders.len(), 1);
     assert_eq!(orders[0].table_name, "orders");
 
-    // 查询 products 表
     let products = global_index
         .query_by_index("products", "user_id", "user_123")
         .await
@@ -284,7 +281,6 @@ async fn test_index_update() {
 
     global_index.batch_sync(vec![updated_entry]).await.unwrap();
 
-    // 查询验证更新
     let result = global_index
         .query_by_index("orders", "user_id", "user_123")
         .await
@@ -323,7 +319,6 @@ async fn test_batch_update() {
 async fn test_update_query_consistency() {
     let global_index = create_global_index().await;
 
-    // 创建初始条目
     let entry = IndexEntry {
         table_name: "products".to_string(),
         record_id: "prod_1".to_string(),
@@ -341,7 +336,6 @@ async fn test_update_query_consistency() {
         .unwrap();
     assert_eq!(result1.len(), 1);
 
-    // 更新
     let updated_entry = IndexEntry {
         table_name: "products".to_string(),
         record_id: "prod_1".to_string(),
@@ -370,7 +364,6 @@ async fn test_update_query_consistency() {
 async fn test_index_nonexistent_query() {
     let global_index = create_global_index().await;
 
-    // 创建索引
     let entry = IndexEntry {
         table_name: "orders".to_string(),
         record_id: "order_1".to_string(),
@@ -456,7 +449,6 @@ async fn test_multi_shard_sync() {
     assert!(result.success);
     assert_eq!(result.synced_count, 4);
 
-    // 验证跨分片查询
     let user_123_orders = global_index
         .query_by_index("orders", "user_id", "user_123")
         .await
@@ -524,7 +516,6 @@ async fn test_large_shard_sync() {
 async fn test_index_consistency_basic() {
     let global_index = create_global_index().await;
 
-    // 创建索引
     let entry = IndexEntry {
         table_name: "orders".to_string(),
         record_id: "order_1".to_string(),
@@ -553,7 +544,6 @@ async fn test_concurrent_query_consistency() {
 
     let global_index = Arc::new(create_global_index().await);
 
-    // 创建索引
     let entries: Vec<IndexEntry> = (0..10)
         .map(|i| IndexEntry {
             table_name: "orders".to_string(),
@@ -578,7 +568,6 @@ async fn test_concurrent_query_consistency() {
         handles.push(handle);
     }
 
-    // 等待所有查询完成
     for handle in handles {
         let result = handle.await.unwrap();
         assert!(result.is_ok(), "Concurrent query should succeed");
@@ -610,13 +599,11 @@ async fn test_concurrent_sync_consistency() {
         handles.push(handle);
     }
 
-    // 等待所有同步完成
     for handle in handles {
         let result = handle.await.unwrap();
         assert!(result.is_ok(), "Concurrent sync should succeed");
     }
 
-    // 验证所有条目都已同步
     for i in 0..5 {
         let result = global_index
             .query_by_index("orders", "batch", &format!("batch_{}", i))
@@ -631,7 +618,6 @@ async fn test_concurrent_sync_consistency() {
 async fn test_index_data_integrity() {
     let global_index = create_global_index().await;
 
-    // 创建包含特殊字符的索引
     let entry = IndexEntry {
         table_name: "special_table".to_string(),
         record_id: "rec-with-special_chars.123".to_string(),
@@ -642,7 +628,6 @@ async fn test_index_data_integrity() {
 
     global_index.batch_sync(vec![entry.clone()]).await.unwrap();
 
-    // 查询并验证数据完整性
     let result = global_index
         .query_by_index(
             "special_table",
@@ -826,7 +811,6 @@ async fn test_duplicate_sync() {
 async fn test_mixed_operations() {
     let global_index = create_global_index().await;
 
-    // 创建多个条目
     let entries: Vec<IndexEntry> = (0..5)
         .map(|i| IndexEntry {
             table_name: "mixed".to_string(),
@@ -839,7 +823,6 @@ async fn test_mixed_operations() {
 
     global_index.batch_sync(entries).await.unwrap();
 
-    // 查询
     for i in 0..5 {
         let result = global_index
             .query_by_index("mixed", "key", &format!("value_{}", i))
@@ -848,7 +831,6 @@ async fn test_mixed_operations() {
         assert_eq!(result.len(), 1);
     }
 
-    // 更新部分条目
     let updated = IndexEntry {
         table_name: "mixed".to_string(),
         record_id: "rec_0".to_string(),
@@ -859,7 +841,6 @@ async fn test_mixed_operations() {
 
     global_index.batch_sync(vec![updated]).await.unwrap();
 
-    // 验证更新
     let result = global_index
         .query_by_index("mixed", "key", "value_0")
         .await
@@ -876,7 +857,6 @@ async fn test_mixed_operations() {
 async fn test_query_performance() {
     let global_index = create_global_index().await;
 
-    // 创建大量索引
     let entries: Vec<IndexEntry> = (0..10000)
         .map(|i| IndexEntry {
             table_name: "perf_test".to_string(),
@@ -889,7 +869,6 @@ async fn test_query_performance() {
 
     global_index.batch_sync(entries).await.unwrap();
 
-    // 执行查询
     let start = std::time::Instant::now();
 
     for _ in 0..100 {
@@ -901,7 +880,6 @@ async fn test_query_performance() {
 
     let duration = start.elapsed();
 
-    // 查询应该在合理时间内完成
     assert!(
         duration.as_millis() < 5000,
         "Queries should complete in reasonable time"
@@ -927,7 +905,6 @@ async fn test_connection_reuse() {
         assert!(result.success);
     }
 
-    // 验证所有条目
     for i in 0..100 {
         let result = global_index
             .query_by_index("reuse_test", "batch", &format!("batch_{}", i))

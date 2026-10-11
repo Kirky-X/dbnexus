@@ -32,13 +32,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建连接池和 Session
+    // 创建连接池和 Session
     // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool and Session created (role: admin)\n");
 
     // ============================================
-    // 2. 建表
+    // 建表
     // ============================================
     session
         .execute_raw_ddl(
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ accounts table created\n");
 
     // ============================================
-    // 3. 开始事务并插入多条数据（演示 commit）
+    // 开始事务并插入多条数据（演示 commit）
     // ============================================
     println!("--- Transaction 1: insert data and commit ---");
     session.begin_transaction().await?;
@@ -71,7 +71,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.commit().await?;
     println!("  ✓ transaction committed\n");
 
-    // 验证 commit 后的数据
     let result = session.execute_raw("SELECT COUNT(*) FROM accounts").await?;
     println!(
         "  ✓ query after commit: row count = {}",
@@ -79,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 4. 模拟错误场景，演示 rollback
+    // 模拟错误场景，演示 rollback
     // ============================================
     println!("\n--- Transaction 2: simulate an error and roll back ---");
     session.begin_transaction().await?;
@@ -106,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 5. 再次事务，演示 commit（转账场景）
+    // 再次事务，演示 commit（转账场景）
     // ============================================
     println!("\n--- Transaction 3: transfer scenario and commit ---");
     session.begin_transaction().await?;
@@ -127,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ transfer transaction committed\n");
 
     // ============================================
-    // 6. 查询验证最终状态
+    // 查询验证最终状态
     // ============================================
     println!("--- final state verification ---");
     let result = session.execute_raw("SELECT * FROM accounts").await?;

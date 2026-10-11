@@ -18,18 +18,18 @@
 
 use dbnexus::{
     AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
-    AuditSeverity, AuditStatus, MemoryAuditStorage,
+    AuditSeverity, AuditStatus, MemoryAuditStorage, t_simple,
 };
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("========================================");
-    println!("📝 DBNexus audit logging example");
+    println!("{}", t_simple("example-audit-logging-title"));
     println!("========================================\n");
 
     // ============================================
-    // 1. 配置 AuditConfig
+    // 配置 AuditConfig
     // ============================================
     println!("--- 1. AuditConfig configuration ---");
     let config = AuditConfig {
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     // ============================================
-    // 2. 创建 AuditLogger + MemoryAuditStorage
+    // 创建 AuditLogger + MemoryAuditStorage
     // ============================================
     println!("\n--- 2. create AuditLogger and MemoryAuditStorage ---");
     let storage = Arc::new(MemoryAuditStorage::new(1000));
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  ✓ AuditLogger created (with_config)");
 
     // ============================================
-    // 3. AuditOperation 全类型展示
+    // AuditOperation 全类型展示
     // ============================================
     println!("\n--- 3. AuditOperation types ---");
     let operations = [
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // ============================================
-    // 4. AuditSeverity 级别展示
+    // AuditSeverity 级别展示
     // ============================================
     println!("\n--- 4. AuditSeverity levels ---");
     let severities = [
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // ============================================
-    // 5. 使用 AuditEventBuilder 链式构建审计事件
+    // 使用 AuditEventBuilder 链式构建审计事件
     // ============================================
     println!("\n--- 5. AuditEventBuilder chain building ---");
     let event = AuditEventBuilder::new()
@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("    request_id   = {}", event.request_id);
 
     // ============================================
-    // 6. 使用快捷构造方法记录各类审计事件
+    // 使用快捷构造方法记录各类审计事件
     // ============================================
     println!("\n--- 6. record various audit events ---");
 
@@ -219,20 +219,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     logger.log(config_event).await?;
     println!("  ✓ ConfigChange event: config_v2 by admin (Critical)");
 
-    // 记录 builder 构建的事件
     logger.log(event).await?;
     println!("  ✓ Builder-constructed event recorded");
 
-    // 验证存储数量
     let count = storage_for_query.event_count().await;
     println!("\n  storage holds {} audit events in total", count);
 
     // ============================================
-    // 7. AuditQueryFilters 查询审计日志
+    // AuditQueryFilters 查询审计日志
     // ============================================
     println!("\n--- 7. AuditQueryFilters query ---");
 
-    // 查询所有
     let all_filters = AuditQueryFilters::default();
     let all_events = logger.query(&all_filters).await?;
     println!("  [all queries] {} total", all_events.len());
@@ -276,7 +273,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  [user_id=admin] {} total", admin_events.len());
 
     // ============================================
-    // 8. 敏感数据自动脱敏
+    // 敏感数据自动脱敏
     // ============================================
     println!("\n--- 8. sensitive data automatic masking ---");
     let sensitive_event = AuditEvent::create("users", "u_999", "admin")
@@ -319,7 +316,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // ============================================
-    // 9. 禁用审计的对比
+    // 禁用审计的对比
     // ============================================
     println!("\n--- 9. disable audit ---");
     let disabled_storage = Arc::new(MemoryAuditStorage::new(100));
@@ -337,7 +334,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     // ============================================
-    // 10. 日志清理
+    // 日志清理
     // ============================================
     println!("\n--- 10. log cleanup ---");
     // 写入一条"过期"事件（手动调整时间戳）

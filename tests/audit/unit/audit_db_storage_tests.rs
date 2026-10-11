@@ -106,7 +106,6 @@ async fn test_db_audit_filters_time_and_cleanup() {
     assert_eq!(by_range.len(), 1, "only fresh events should be hit");
     assert_eq!(by_range[0].entity_id, "new");
 
-    // 清理旧事件
     let removed = storage
         .cleanup(&(now - chrono::Duration::hours(1)))
         .await

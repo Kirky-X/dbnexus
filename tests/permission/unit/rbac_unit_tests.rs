@@ -46,12 +46,10 @@ fn test_rbac_provider_add_role() {
     };
     provider.add_role("admin".to_string(), admin_policy);
 
-    // 验证角色已添加
     let roles = provider.get_roles();
     assert_eq!(roles.len(), 1);
     assert!(roles.contains(&"admin".to_string()));
 
-    // 验证可以获取角色策略
     let policy = provider.get_role_policy("admin");
     assert!(policy.is_some());
 }
@@ -99,7 +97,6 @@ fn test_rbac_provider_add_multiple_roles() {
         },
     );
 
-    // 验证所有角色都已添加
     let roles = provider.get_roles();
     assert_eq!(roles.len(), 3);
     assert!(roles.contains(&"admin".to_string()));
@@ -134,7 +131,6 @@ fn test_rbac_provider_override_role() {
         },
     );
 
-    // 验证角色被覆盖
     let policy = provider.get_role_policy("test_role").unwrap();
     assert_eq!(policy.tables.len(), 1);
     assert_eq!(policy.tables[0].name, "table2");
@@ -187,7 +183,6 @@ fn test_rbac_check_access_allowed() {
         },
     );
 
-    // 检查允许的操作
     let result = provider.check_access("user", "users", PermissionAction::Select);
     assert!(
         result.is_ok(),
@@ -218,7 +213,6 @@ fn test_rbac_check_access_denied() {
         },
     );
 
-    // 检查拒绝的操作
     let result = provider.check_access("user", "users", PermissionAction::Delete);
     assert!(
         result.is_ok(),
@@ -632,7 +626,6 @@ fn test_rbac_concurrent_access() {
 
     let mut handles = vec![];
 
-    // 启动多个线程进行并发读取
     for i in 0..10 {
         let p = provider.clone();
         let handle = thread::spawn(move || {
@@ -644,7 +637,6 @@ fn test_rbac_concurrent_access() {
         handles.push(handle);
     }
 
-    // 等待所有线程完成
     for handle in handles {
         handle.join().unwrap();
     }

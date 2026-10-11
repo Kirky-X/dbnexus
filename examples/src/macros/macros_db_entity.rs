@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 展示宏生成的 table_name() 和 primary_key_column()
+    // 展示宏生成的 table_name() 和 primary_key_column()
     // ============================================
     println!("--- 1. macro-generated metadata methods ---\n");
 
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 2. 展示实体关系声明
+    // 展示实体关系声明
     // ============================================
     println!("\n--- 2. entity relation declarations ---\n");
 
@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  to declare relations, use the sea-orm #[sea_orm(has_many/belongs_to)] attribute.");
 
     // ============================================
-    // 3. 创建数据库并验证表名匹配
+    // 创建数据库并验证表名匹配
     // ============================================
     println!("\n--- 3. create the database and verify table names ---\n");
 
@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 验证 primary_key_column() 与实际列匹配
+    // 验证 primary_key_column() 与实际列匹配
     // ============================================
     println!("\n--- 4. verify primary key column names ---\n");
     println!(

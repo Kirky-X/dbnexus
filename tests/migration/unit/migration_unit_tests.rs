@@ -66,7 +66,6 @@ fn test_migration_history_sorted() {
         file_path: "v2.sql".to_string(),
     });
 
-    // 验证已排序
     assert_eq!(history.applied_migrations[0].version, 1);
     assert_eq!(history.applied_migrations[1].version, 2);
     assert_eq!(history.applied_migrations[2].version, 3);

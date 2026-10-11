@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建自定义缓存
+    // 创建自定义缓存
     // ============================================
     println!("--- 1. create a custom DbCacheProvider ---\n");
 
@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  storage: Mutex<HashMap<String, CacheEntry>>\n");
 
     // ============================================
-    // 2. 基本操作
+    // 基本操作
     // ============================================
     println!("--- 2. basic get/set/delete ---\n");
 
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. TTL 过期
+    // TTL 过期
     // ============================================
     println!("--- 3. TTL expiration ---\n");
 
@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. 通过 trait 对象使用
+    // 通过 trait 对象使用
     // ============================================
     println!("--- 4. trait objects (dyn dispatch) ---\n");
 
@@ -215,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. 与 DbPoolBuilder 集成
+    // 与 DbPoolBuilder 集成
     // ============================================
     println!("--- 5. integration with DbPoolBuilder ---\n");
 
@@ -243,13 +243,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool.config().pool_config.max_connections
     );
 
-    // 验证连接池可用
     let session = pool.get_session("admin").await?;
     println!("  ✓ Session acquired (role: {})", session.role());
     println!();
 
     // ============================================
-    // 6. 容量管理
+    // 容量管理
     // ============================================
     println!("--- 6. capacity management ---\n");
 
@@ -263,7 +262,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  ✓ wrote 8 entries (capacity=5)");
 
-    // 检查哪些条目还在
     let mut present = Vec::new();
     for i in 0..8 {
         let key = format!("item:{}", i);

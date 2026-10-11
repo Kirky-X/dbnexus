@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建分片路由器
+    // 创建分片路由器
     // ============================================
     println!("--- 1. create the shard router ---\n");
 
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 2. 创建 Scatter-Gather 执行器
+    // 创建 Scatter-Gather 执行器
     // ============================================
     println!("--- 2. create the Scatter-Gather executor ---\n");
 
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. 执行 scatter 查询
+    // 执行 scatter 查询
     // ============================================
     println!("--- 3. execute a Scatter query ---\n");
     println!("  send SQL to all shards in parallel and collect each shard's row count\n");
@@ -84,11 +84,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 4. 聚合函数演示
+    // 聚合函数演示
     // ============================================
     println!("--- 4. aggregate functions ---\n");
 
-    // 模拟各分片返回的行数
     let shard_counts = vec![(0, 150_u64), (1, 230), (2, 180), (3, 90)];
     let total_rows: u64 = shard_counts.iter().map(|(_, c)| c).sum();
 
@@ -119,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 5. PartialFailurePolicy 对比
+    // PartialFailurePolicy 对比
     // ============================================
     println!("--- 5. partial failure policy comparison ---\n");
 
@@ -132,7 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 6. AggregateFunction 类型
+    // AggregateFunction 类型
     // ============================================
     println!("--- 6. AggregateFunction types ---\n");
 
@@ -154,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 7. 架构说明
+    // 架构说明
     // ============================================
     println!("--- 7. Scatter-Gather architecture ---\n");
     println!("  ┌──────────┐     SQL      ┌─────────┐");

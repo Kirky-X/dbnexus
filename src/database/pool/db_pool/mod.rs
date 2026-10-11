@@ -444,7 +444,6 @@ impl DbPool {
         // vuln-0001 修复：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
         super::audit::warn_and_record_default_admin_role(&config.admin_role);
 
-        // 启动后台健康检查任务
         #[cfg(feature = "pool-health-check")]
         pool.start_background_health_check();
 
@@ -549,7 +548,6 @@ impl DbPool {
         // 安全审计：检查是否使用了默认 admin 角色（不安全），记录安全审计事件
         super::audit::warn_and_record_default_admin_role(&config.admin_role);
 
-        // 启动后台健康检查
         #[cfg(feature = "pool-health-check")]
         pool.start_background_health_check();
 
@@ -1662,6 +1660,25 @@ mod tests {
 
         // Now cache provider should be Some (covers lines 319-320)
         assert!(pool.cache_provider().is_some());
+
+        // 注入后会话的缓存通道走该 provider：Noop 实现恒未命中且写入为 no-op
+        let session = pool.get_session("admin").await.expect("session");
+        assert!(
+            session.query_cache_get("k").await.is_none(),
+            "a noop provider never hits"
+        );
+        session.query_cache_set("k", b"v".to_vec()).await;
+        assert!(
+            session.query_cache_get("k").await.is_none(),
+            "a noop provider stores nothing"
+        );
+
+        // provider 契约本身：get 未命中、set/delete 成功
+        use crate::domain::DbCacheProvider;
+        let provider = pool.cache_provider().expect("provider is set");
+        assert!(provider.get("k").await.expect("get").is_none());
+        provider.set("k", b"v".to_vec(), None).await.expect("set");
+        provider.delete("k").await.expect("delete");
     }
 
     /// 未注入 cache_provider 时，query_cache_get 返回 None（直通）。
@@ -1750,6 +1767,15 @@ mod tests {
         // Cache hit
         let hit = session.query_cache_get("select:users").await;
         assert_eq!(hit, Some(b"cached_result".to_vec()), "expected cache hit");
+
+        // 失效语义：delete 后同一键不再是命中
+        use crate::domain::DbCacheProvider;
+        let provider = pool.cache_provider().expect("cache provider is set");
+        provider.delete("select:users").await.expect("delete");
+        assert!(
+            session.query_cache_get("select:users").await.is_none(),
+            "the entry must be unreachable after delete"
+        );
     }
 
     #[cfg(all(feature = "permission", feature = "sqlite"))]
@@ -1856,10 +1882,21 @@ async fn test_pool_metrics_reflects_collector_presence() {
     assert_eq!(m.timeout_errors, 0);
     assert_eq!(m.critical_timeouts, 0);
     assert_eq!(m.wait_count, 0);
+    assert!(
+        pool.metrics().is_none(),
+        "metrics() must report no collector before injection"
+    );
 
     // 注入 collector 后获取会话产生采集数据
-    pool.set_metrics_collector(Some(Arc::new(MetricsCollector::new())))
-        .await;
+    let collector = Arc::new(MetricsCollector::new());
+    pool.set_metrics_collector(Some(collector.clone())).await;
+    let fetched = pool
+        .metrics()
+        .expect("metrics() must expose the injected collector");
+    assert!(
+        Arc::ptr_eq(&fetched, &collector),
+        "metrics() must return the injected instance, not a copy"
+    );
     let session = pool.get_session("admin").await.expect("session");
     drop(session);
     let m = pool.pool_metrics();
@@ -1871,6 +1908,10 @@ async fn test_pool_metrics_reflects_collector_presence() {
 
     // 清除 collector：采集器分支归零，历史峰值不受影响
     pool.set_metrics_collector(None).await;
+    assert!(
+        pool.metrics().is_none(),
+        "clearing the collector must be visible via metrics()"
+    );
     let m = pool.pool_metrics();
     assert_eq!(m.slow_acquires, 0);
     assert_eq!(

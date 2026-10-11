@@ -203,5 +203,15 @@ mod tests {
             AuthError::PasswordHash("argon2".to_string()).message_args(),
             vec![("reason", "argon2".to_string())]
         );
+        assert_eq!(
+            AuthError::TokenGeneration("rng".to_string()).message_args(),
+            vec![("reason", "rng".to_string())]
+        );
+        assert!(AuthError::InvalidToken.message_args().is_empty());
+        assert!(AuthError::TokenExpired.message_args().is_empty());
+        assert_eq!(
+            AuthError::UserLimitReached("1000".to_string()).message_args(),
+            vec![("reason", "1000".to_string())]
+        );
     }
 }

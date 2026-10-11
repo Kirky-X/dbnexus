@@ -312,7 +312,6 @@ impl PermissionProvider for AdvancedRbacProvider {
         table: &str,
         operation: PermissionAction,
     ) -> Result<bool, PermissionProviderError> {
-        // 获取角色的所有继承角色
         let inherited_roles = self.get_inherited_roles(role);
 
         // 逐个检查每个继承角色的权限
@@ -508,7 +507,6 @@ mod tests {
     fn test_get_inherited_roles() {
         let provider = AdvancedRbacProvider::new();
 
-        // 设置继承关系
         provider.add_role_inheritance(
             "child".to_string(),
             vec!["parent1".to_string(), "parent2".to_string()],
@@ -582,7 +580,6 @@ mod tests {
             },
         );
 
-        // 检查自定义角色权限
         assert!(
             provider
                 .check_access("custom_role", "custom_table", PermissionAction::Select)
@@ -627,7 +624,6 @@ mod tests {
             vec!["custom_role".to_string()],
         );
 
-        // 验证继承
         assert!(
             provider
                 .check_access("inherited_role", "custom_table", PermissionAction::Select)
@@ -793,7 +789,6 @@ mod tests {
     fn test_circular_inheritance_no_infinite_loop_iterative() {
         let provider = AdvancedRbacProvider::new();
 
-        // 创建一个复杂的循环继承结构
         provider.add_role_inheritance("a".to_string(), vec!["b".to_string()]);
         provider.add_role_inheritance("b".to_string(), vec!["c".to_string()]);
         provider.add_role_inheritance("c".to_string(), vec!["d".to_string()]);

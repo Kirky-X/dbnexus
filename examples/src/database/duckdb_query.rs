@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // ============================================
-    // 1. 创建 DuckDB 内存连接（默认连接池大小 4）
+    // 创建 DuckDB 内存连接（默认连接池大小 4）
     // ============================================
     println!("--- 1. create a DuckDB in-memory connection ---");
     let conn = DuckDbConnection::new(":memory:")?;
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(conn.pool_size(), 4);
 
     // ============================================
-    // 2. 创建表并插入测试数据
+    // 创建表并插入测试数据
     // ============================================
     println!("\n--- 2. create a table and insert test data ---");
     conn.execute(
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ inserted 6 sales records (3 categories)");
 
     // ============================================
-    // 3. 简单查询：SELECT COUNT(*)
+    // 简单查询：SELECT COUNT(*)
     // ============================================
     println!("\n--- 3. simple query: SELECT COUNT(*) ---");
     let rows = conn.query("SELECT COUNT(*) AS cnt FROM sales").await?;
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ============================================
-    // 4. 聚合查询：GROUP BY + AVG / SUM
+    // 聚合查询：GROUP BY + AVG / SUM
     // ============================================
     println!("\n--- 4. aggregate query: GROUP BY + AVG / SUM ---");
     let rows = conn
@@ -134,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(rows.len(), 3, "Expected 3 categories");
 
     // ============================================
-    // 5. 自定义连接池大小
+    // 自定义连接池大小
     // ============================================
     println!("\n--- 5. custom pool size ---");
     let conn2 = DuckDbConnection::with_pool_size("duckdb::memory:", 8)?;
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(conn2.pool_size(), 8);
 
     // ============================================
-    // 6. 并发查询验证连接池真正并行
+    // 并发查询验证连接池真正并行
     // ============================================
     println!("\n--- 6. concurrent query verification (8 tasks vs pool_size=8) ---");
     let shared = Arc::new(DuckDbConnection::with_pool_size(":memory:", 8)?);
@@ -182,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // 7. 健康检查
+    // 健康检查
     // ============================================
     println!("\n--- 7. health check ---");
     shared.health_check().await?;

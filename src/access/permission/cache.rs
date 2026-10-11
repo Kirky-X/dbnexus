@@ -277,12 +277,14 @@ impl PermissionCache {
                         // provider 返回 None（角色缺失）映射为 Err：任何路径不写
                         // 缓存，旧值保留（负缓存属 Non-Goals）
                         Some(p) => p.get_role_policy(&key_owned).map(Ok).unwrap_or_else(|| {
-                            Err(OxCacheError::NotFound(format!(
-                                "permission provider has no policy for role '{key_owned}'"
+                            Err(OxCacheError::NotFound(i18n::t(
+                                "perm-cache-provider-no-policy",
+                                &[("role", key_owned.clone())],
                             )))
                         }),
-                        None => Err(OxCacheError::NotFound(format!(
-                            "no permission provider configured for role '{key_owned}'"
+                        None => Err(OxCacheError::NotFound(i18n::t(
+                            "perm-cache-provider-not-configured",
+                            &[("role", key_owned.clone())],
                         ))),
                     }
                 }
@@ -465,10 +467,8 @@ mod tests {
         for h in handles {
             h.await.unwrap();
         }
-        // 等待后台刷新任务执行完毕
-        tokio::time::sleep(Duration::from_millis(150)).await;
 
-        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+        wait_for_provider_calls(&provider, &cache, "admin", 1).await;
     }
 
     /// (d) provider 返回 None（角色缺失）时旧值保留且缓存不写入
@@ -562,9 +562,8 @@ mod tests {
         for h in handles {
             h.await.unwrap();
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+        wait_for_provider_calls(&provider, &cache, "admin", 1).await;
     }
 
     // =========================================================================
@@ -602,6 +601,41 @@ mod tests {
                 }
             }
             tokio::task::yield_now().await;
+        }
+    }
+
+    /// 等待 provider 累计调用次数达到 `expected`
+    ///
+    /// 后台回源是 best-effort：oxcache offload 在同 key 已在飞**或并发许可
+    /// 耗尽**时直接丢弃 spawn（fire-and-forget 不排队，被丢弃的一轮不再回源，
+    /// 只能由下一次请求触发）。因此固定 sleep 后断言精确次数在高负载下会
+    /// 假失败——改用轮询等待，未达期望时以 `cache.refresh(key)` 按契约补触发
+    /// （fresh 条目不回源、同 key 在飞被去重吸收，均不产生额外调用）；
+    /// 轮询期间一旦发现调用数超过 `expected`，即判定去重失效（本组测试
+    /// 要抓的回归）。
+    async fn wait_for_provider_calls(
+        provider: &CountingProvider,
+        cache: &PermissionCache,
+        key: &str,
+        expected: usize,
+    ) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let calls = provider.calls.load(Ordering::SeqCst);
+            assert!(
+                calls <= expected,
+                "provider must be called at most {expected} time(s) for {key}, got {calls} (dedup broken)"
+            );
+            if calls == expected {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "provider was never called {expected} time(s) for {key}: calls = {calls}"
+            );
+            // offload 丢弃后的再次触发（同 key 在飞时被在飞去重吸收，不额外回源）
+            cache.refresh(key).await;
+            tokio::time::sleep(Duration::from_millis(5)).await;
         }
     }
 
@@ -648,17 +682,10 @@ mod tests {
             for h in handles {
                 h.await.unwrap();
             }
-        }
 
-        // 最后一轮的回源任务在竞速后异步启动，轮询等待其落库
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-        while provider.calls.load(Ordering::SeqCst) < RACE_ROUNDS {
-            assert!(
-                tokio::time::Instant::now() < deadline,
-                "timed out waiting for the last refresh round: calls = {}",
-                provider.calls.load(Ordering::SeqCst)
-            );
-            tokio::time::sleep(Duration::from_millis(5)).await;
+            // 每轮竞速后等该轮回源落地再进入下一轮：计数逐轮推进，
+            // 轮与轮之间不会互相借调计数。去重保证每轮至多 1 次回源。
+            wait_for_provider_calls(&provider, &cache, &key, round + 1).await;
         }
 
         assert_eq!(
@@ -666,5 +693,33 @@ mod tests {
             RACE_ROUNDS,
             "concurrent refresh and get paths must still allow only 1 provider call per round"
         );
+    }
+
+    /// 计数 provider 的权限判定契约与缓存默认构造
+    #[tokio::test]
+    async fn test_counting_provider_contract_and_default_cache() {
+        let provider = CountingProvider::with_delay(Duration::ZERO);
+
+        assert!(
+            provider
+                .check_access("admin", "users", PermissionAction::Select)
+                .expect("check_access"),
+            "the sample policy grants select on users"
+        );
+        assert!(
+            !provider
+                .check_access("admin", "users", PermissionAction::Update)
+                .expect("check_access"),
+            "the sample policy does not grant update"
+        );
+        assert_eq!(
+            provider.get_roles(),
+            vec!["admin".to_string()],
+            "the counting provider advertises the admin role"
+        );
+
+        // Default 与 new 等价：空缓存未命中返回 None
+        let cache = PermissionCache::default();
+        assert!(cache.get("missing").await.is_none());
     }
 }

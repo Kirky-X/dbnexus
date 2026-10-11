@@ -147,7 +147,6 @@ impl InMemoryEntityEventBus {
 impl EntityEventBus for InMemoryEntityEventBus {
     async fn publish(&self, event: &EntityEvent) -> DbResult<()> {
         let mut senders = self.senders.lock().await;
-        // 清理已关闭的订阅端
         senders.retain(|tx| !tx.is_closed());
         for tx in senders.iter() {
             tx.send(event.clone())
