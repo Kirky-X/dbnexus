@@ -602,7 +602,7 @@ mod tests {
         let mgr = AuthenticationManager::with_max_users(&derived_test_secret(32).into_bytes(), 1)
             .expect("valid secret");
 
-        mgr.register_user("first", "ValidPass@1234", "user")
+        mgr.register_user("first", &derived_test_password(14), "user")
             .await
             .expect("first registration fits");
         let err = mgr

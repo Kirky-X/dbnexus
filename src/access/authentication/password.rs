@@ -593,7 +593,7 @@ mod tests {
             .hash(&derived_test_password(9))
             .expect("hash should succeed");
         assert!(hasher.verify(&derived_test_password(9), &hash).is_ok());
-        assert!(hasher.verify("wrong-password", &hash).is_err());
+        assert!(hasher.verify(&derived_test_password(14), &hash).is_err());
     }
 
     /// 自定义 max_len 应拒绝超长密码
