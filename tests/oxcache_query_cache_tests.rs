@@ -115,10 +115,7 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
             )
             .await
             .expect("point query first pass");
-        assert!(
-            !cq.from_cache,
-            "round 1 point query user{user_id} should pass through"
-        );
+        assert!(!cq.from_cache, "round 1 point query should pass through");
         first_pass_rows.push(cq.rows);
     }
 
@@ -145,7 +142,7 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
             .expect("point query second pass");
         assert!(
             cq.from_cache,
-            "round 2 point query user{user_id} should hit (N+1 eliminated)"
+            "round 2 point query should hit (N+1 eliminated)"
         );
         assert_eq!(
             cq.rows, first_pass_rows[idx],
