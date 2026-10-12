@@ -450,20 +450,29 @@ async fn test_scatter_timeout_is_explicit() {
         .unwrap();
     router.set_pool(0, pool0).unwrap();
 
-    // 1 纳秒超时：collect 必然超时 → 显性错误
+    // 1 纳秒超时：collect 必然超时 → 显性错误。
+    // 满负载下若查询在首个 poll 内完成，结果合法地先于 1ns 时限返回（竞态），
+    // 此时重试；超时错误一次即证契约，全部命中 Ok 才判失败。
     let executor = ScatterGatherExecutor::new(
         Arc::new(router),
         Duration::from_nanos(1),
         PartialFailurePolicy::BestEffort,
     );
-    let err = executor
-        .scatter_query_rows("SELECT val FROM t_to", "admin", None)
-        .await
-        .expect_err("a timeout must error explicitly");
-    assert!(
-        err.contains("timed out"),
-        "the timeout error message should be identifiable, actual: {err}"
-    );
+    let mut timed_out = false;
+    for _ in 0..10 {
+        match executor
+            .scatter_query_rows("SELECT val FROM t_to", "admin", None)
+            .await
+        {
+            Err(err) if err.contains("timed out") => {
+                timed_out = true;
+                break;
+            }
+            Err(err) => panic!("scatter error must mention timeout, actual: {err}"),
+            Ok(_) => continue,
+        }
+    }
+    assert!(timed_out, "a timeout must error explicitly");
 
     let _ = std::fs::remove_file(&tmp0);
 }
