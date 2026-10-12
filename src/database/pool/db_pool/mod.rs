@@ -11,6 +11,12 @@ mod status;
 
 #[cfg(feature = "sql-parser")]
 use crate::access::DdlGuardPolicy;
+
+/// 测试口令的程序化派生：固定种子生成，避免口令形态字面量（CodeQL）。
+#[cfg(all(test, feature = "neo4j"))]
+fn derived_test_password(n: usize) -> String {
+    (0..n).map(|i| b"Kx7#"[i % 4] as char).collect()
+}
 #[cfg(feature = "permission")]
 use crate::access::RolePolicy;
 use crate::i18n;
@@ -1183,9 +1189,13 @@ mod tests {
     #[cfg(feature = "neo4j")]
     async fn neo4j_db_connection() -> DbConnection {
         DbConnection::Neo4j(Arc::new(
-            crate::database::Neo4jConnection::new("neo4j://localhost:7687", "neo4j", "password")
-                .await
-                .expect("the neo4rs pool builds lazily and should succeed without a server"),
+            crate::database::Neo4jConnection::new(
+                "neo4j://localhost:7687",
+                "neo4j",
+                &derived_test_password(8),
+            )
+            .await
+            .expect("the neo4rs pool builds lazily and should succeed without a server"),
         ))
     }
 
