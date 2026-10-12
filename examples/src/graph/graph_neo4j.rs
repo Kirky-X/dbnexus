@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match Neo4jConnection::parse_url(url) {
             Ok((uri, user, pass)) => {
                 println!("  ✓ {}", desc);
-                println!("    input: {}", url);
+                println!("    input: <{} chars>", url.len());
                 println!("    URI:    {}", uri);
                 println!("    User:   {}", user);
                 println!(

@@ -25,7 +25,7 @@ fn print_mask(label: &str, data: &str, mask_type: MaskType) {
     match SensitiveMasker::mask(data, mask_type) {
         Ok(masked) => {
             println!("  ✓ [{}]", label);
-            println!("    original: {}", data);
+            println!("    original: <{} chars>", data.len());
             println!("    masked: {}", masked);
         }
         Err(err) => {
@@ -194,9 +194,11 @@ fn main() {
     println!("--- 9. Default trait ---");
     let default_masker: SensitiveMasker = SensitiveMasker;
     let _ = default_masker;
-    let result = SensitiveMasker::mask("13812345678", MaskType::Phone).unwrap();
+    let demo_phone = "13800000000";
+    let result = SensitiveMasker::mask(demo_phone, MaskType::Phone).unwrap();
     println!(
-        "  ✓ created via Default + static method call: 13812345678 → {}",
+        "  ✓ created via Default + static method call: <{} chars> → {}",
+        demo_phone.len(),
         result
     );
     println!();

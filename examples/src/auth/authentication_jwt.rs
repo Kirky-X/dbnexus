@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let access_claims: JwtClaims = manager.verify_token(&access_token)?;
     println!("  Access token claims:");
     println!("    sub        = {}", access_claims.sub);
-    println!("    username   = {}", access_claims.username);
+    println!("    username   = <{} chars>", access_claims.username.len());
     println!("    role       = {}", access_claims.role);
     println!(
         "    iat        = {} (issued-at timestamp)",

@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("    operation    = {}", event.operation);
     println!("    entity_type  = {}", event.entity_type);
     println!("    entity_id    = {}", event.entity_id);
-    println!("    user_id      = {}", event.user_id);
+    println!("    user_id      = <{} chars>", event.user_id.len());
     println!("    severity     = {}", event.severity);
     println!("    result       = {}", event.result);
     println!("    request_id   = {}", event.request_id);
