@@ -308,7 +308,7 @@ trait-kit = { version = "0.5.0-rc.9", default-features = false, features = ["asy
 duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
 
 # Ladybug embedded graph database (ladybug feature)
-lbug = { version = "0.20", optional = true }
+lbug = { version = "0.21", optional = true }
 # Neo4j graph database server (neo4j feature)
 neo4rs = { version = "0.9.0-rc.10", optional = true }
 
