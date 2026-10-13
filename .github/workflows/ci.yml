@@ -238,7 +238,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
       - name: Install tools
-        uses: taiki-e/install-action@c3ec0de9ae7f1019cea21aa96aa0a895b9552063 # v2
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2
         with:
           tool: cargo-audit,cargo-deny
       - name: cargo deny
@@ -258,14 +258,14 @@ jobs:
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@c3ec0de9ae7f1019cea21aa96aa0a895b9552063 # v2
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2
         with:
           tool: cargo-llvm-cov
       - name: Generate coverage (gate ≥95% lines)
         run: |
           cargo llvm-cov --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-cli --exclude dbnexus-macros --exclude dbnexus-examples --fail-under-lines 95 --lcov --output-path lcov.info
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
