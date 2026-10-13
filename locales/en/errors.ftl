@@ -99,6 +99,7 @@ perm-provider-unknown = Unknown error: { $reason }
 perm-provider-memory-policy-table-uninitialized = MemoryPermissionProvider policy table is not initialized: no role policies at all (capacity 0)
 perm-provider-yaml-file-unreadable = YamlPermissionProvider policy file is not readable ({ $path }): { $error }
 perm-provider-config-read-error = Permission config file read error (path='{ $path }'): { $error }
+perm-provider-yaml-parse-error = YAML parse error (path='{ $path }'): { $error }
 perm-provider-lock-error = Lock error: permission provider internal state is poisoned
 perm-rate-limiter-error = rate limiter backend error: { $error }
 perm-rate-limit-audit-dropped = rate limit audit event dropped: { $error }

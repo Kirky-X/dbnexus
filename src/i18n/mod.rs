@@ -3,8 +3,10 @@
 //! ICU4X + Fluent-backed internationalization for database operations.
 //!
 //! Provides:
-//! - **Locale detection**: Automatic system locale detection with `DBNEXUS_LANG`
-//!   environment variable override and manual `set_locale()` API.
+//! - **Locale detection**: Default display language is strictly English;
+//!   `DBNEXUS_LANG` environment variable, the CLI `--lang` flag, and the
+//!   manual `set_locale()` API negotiate explicitly, and
+//!   `set_locale_from_system()` opts into host-locale detection.
 //! - **Message catalog**: Fluent (FTL) translations embedded at compile time
 //!   for 2 languages (en, zh), resolved via `fluent-bundle` concurrent bundles.
 //!   Covers all error types and CLI output.
@@ -16,10 +18,12 @@
 //!
 //! # Locale Priority
 //!
-//! 1. `set_locale()` override
+//! 1. `set_locale()` override (also the CLI `--lang` fast path)
 //! 2. `DBNEXUS_LANG` environment variable
-//! 3. `sys-locale` system detection
-//! 4. `"en"` fallback
+//! 3. `"en"` — the default display language is strictly English
+//!
+//! System locale detection is an explicit opt-in (`set_locale_from_system()`),
+//! never part of the default chain.
 //!
 //! # Example
 //!
@@ -47,7 +51,7 @@ pub mod locale;
 #[allow(unused_imports)]
 pub use catalog::{t, t_simple, translate};
 #[allow(unused_imports)]
-pub use locale::{current_locale, set_locale};
+pub use locale::{current_locale, set_locale, set_locale_from_system};
 
 use icu::collator::CollatorBorrowed;
 use icu::decimal::DecimalFormatter;

@@ -249,8 +249,8 @@ enum ExitCode {
 
 /// 预扫描命令行参数中的 `--lang`，在首次 i18n 输出（含 help 渲染）前应用语言覆盖。
 ///
-/// 非法语言值静默忽略（由后续 `set_locale` 正常报错）；未指定时走自动检测链
-/// （`DBNEXUS_LANG` → 系统语言 → en），`LANG=zh` 时即为中文。
+/// 非法语言值静默忽略（由后续 `set_locale` 正常报错）；未指定时默认严格英文
+/// （`DBNEXUS_LANG` → en，系统语言检测仅经显式 opt-in）。
 fn pre_apply_lang_override() {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -270,8 +270,11 @@ fn pre_apply_lang_override() {
 
 /// 构建本地化 CLI 命令：about 与参数 help 经 i18n 动态生成，
 /// 覆盖 derive 从中文文档注释生成的静态 help。
+///
+/// `mut_subcommand` / `mut_arg` 对未定义的子命令/参数会 panic（clap 契约），
+/// 故按 feature 门控分组覆写：feature 关闭时对应枚举变体不存在，整组跳过。
 fn build_cli() -> Command {
-    Cli::command()
+    let mut cmd = Cli::command()
         .about(i18n::t_simple("cli-help-about"))
         .mut_arg("database_url", |a| {
             let help = i18n::t_simple("cli-help-database-url");
@@ -288,13 +291,167 @@ fn build_cli() -> Command {
         .mut_arg("lang", |a| {
             let help = i18n::t_simple("cli-help-lang");
             a.help(help.clone()).long_help(help)
+        });
+
+    #[cfg(feature = "migration")]
+    {
+        cmd = cmd
+            .mut_subcommand("create", |s| {
+                s.about(i18n::t_simple("cli-help-create"))
+                    .mut_arg("description", |a| {
+                        a.help(i18n::t_simple("cli-help-create-description"))
+                    })
+                    .mut_arg("directory", |a| {
+                        a.help(i18n::t_simple("cli-help-create-directory"))
+                    })
+            })
+            .mut_subcommand("up", |s| {
+                s.about(i18n::t_simple("cli-help-up"))
+                    .mut_arg("version", |a| a.help(i18n::t_simple("cli-help-up-version")))
+            })
+            .mut_subcommand("down", |s| {
+                s.about(i18n::t_simple("cli-help-down"))
+                    .mut_arg("version", |a| {
+                        a.help(i18n::t_simple("cli-help-down-version"))
+                    })
+                    .mut_arg("all", |a| a.help(i18n::t_simple("cli-help-down-all")))
+            })
+            .mut_subcommand("status", |s| s.about(i18n::t_simple("cli-help-status")))
+            .mut_subcommand("generate", |s| {
+                s.about(i18n::t_simple("cli-help-generate"))
+                    .mut_arg("from_schema", |a| {
+                        a.help(i18n::t_simple("cli-help-generate-from-schema"))
+                    })
+                    .mut_arg("to_schema", |a| {
+                        a.help(i18n::t_simple("cli-help-generate-to-schema"))
+                    })
+                    .mut_arg("output", |a| {
+                        a.help(i18n::t_simple("cli-help-generate-output"))
+                    })
+                    .mut_arg("description", |a| {
+                        a.help(i18n::t_simple("cli-help-generate-description"))
+                    })
+            })
+            .mut_subcommand("list", |s| s.about(i18n::t_simple("cli-help-list")))
+            .mut_subcommand("migrate", |s| {
+                s.about(i18n::t_simple("cli-help-migrate"))
+                    .mut_arg("version", |a| {
+                        a.help(i18n::t_simple("cli-help-migrate-version"))
+                    })
+            });
+    }
+
+    cmd = cmd
+        .mut_subcommand("test-connection", |s| {
+            s.about(i18n::t_simple("cli-help-test-connection"))
         })
+        .mut_subcommand("health", |s| s.about(i18n::t_simple("cli-help-health")))
+        .mut_subcommand("user", |u| {
+            u.about(i18n::t_simple("cli-help-user"))
+                .mut_subcommand("add", |a| {
+                    a.about(i18n::t_simple("cli-help-user-add"))
+                        .mut_arg("username", |arg| {
+                            arg.help(i18n::t_simple("cli-help-user-add-username"))
+                        })
+                        .mut_arg("password", |arg| {
+                            arg.help(i18n::t_simple("cli-help-user-add-password"))
+                        })
+                        .mut_arg("role", |arg| {
+                            arg.help(i18n::t_simple("cli-help-user-add-role"))
+                        })
+                })
+                .mut_subcommand("remove", |a| {
+                    a.about(i18n::t_simple("cli-help-user-remove"))
+                        .mut_arg("username", |arg| {
+                            arg.help(i18n::t_simple("cli-help-user-remove-username"))
+                        })
+                })
+                .mut_subcommand("list", |a| a.about(i18n::t_simple("cli-help-user-list")))
+        });
+
+    #[cfg(feature = "health-check")]
+    {
+        cmd = cmd.mut_subcommand("pool-status", |s| {
+            s.about(i18n::t_simple("cli-help-pool-status"))
+        });
+    }
+    #[cfg(feature = "audit")]
+    {
+        cmd = cmd.mut_subcommand("audit-query", |s| {
+            s.about(i18n::t_simple("cli-help-audit-query"))
+                .mut_arg("user", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-user"))
+                })
+                .mut_arg("entity", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-entity"))
+                })
+                .mut_arg("operation", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-operation"))
+                })
+                .mut_arg("severity", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-severity"))
+                })
+                .mut_arg("status", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-status"))
+                })
+                .mut_arg("since", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-since"))
+                })
+                .mut_arg("until", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-until"))
+                })
+                .mut_arg("limit", |a| {
+                    a.help(i18n::t_simple("cli-help-audit-query-limit"))
+                })
+        });
+    }
+    #[cfg(feature = "sharding")]
+    {
+        cmd = cmd.mut_subcommand("shard-info", |s| {
+            s.about(i18n::t_simple("cli-help-shard-info"))
+                .mut_arg("strategy", |a| {
+                    a.help(i18n::t_simple("cli-help-shard-info-strategy"))
+                })
+                .mut_arg("total_shards", |a| {
+                    a.help(i18n::t_simple("cli-help-shard-info-total-shards"))
+                })
+                .mut_arg("prefix", |a| {
+                    a.help(i18n::t_simple("cli-help-shard-info-prefix"))
+                })
+                .mut_arg("template", |a| {
+                    a.help(i18n::t_simple("cli-help-shard-info-template"))
+                })
+                .mut_arg("route_key", |a| {
+                    a.help(i18n::t_simple("cli-help-shard-info-route-key"))
+                })
+        });
+    }
+    #[cfg(feature = "permission-engine")]
+    {
+        cmd = cmd.mut_subcommand("permission-check", |s| {
+            s.about(i18n::t_simple("cli-help-permission-check"))
+                .mut_arg("role", |a| {
+                    a.help(i18n::t_simple("cli-help-permission-check-role"))
+                })
+                .mut_arg("table", |a| {
+                    a.help(i18n::t_simple("cli-help-permission-check-table"))
+                })
+                .mut_arg("action", |a| {
+                    a.help(i18n::t_simple("cli-help-permission-check-action"))
+                })
+                .mut_arg("permissions", |a| {
+                    a.help(i18n::t_simple("cli-help-permission-check-permissions"))
+                })
+        });
+    }
+
+    cmd
 }
 
 /// 程序入口
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 启动早期初始化 i18n（显式 --lang 优先于自动检测）
+    // 启动早期初始化 i18n（显式 --lang 优先；未指定时默认严格英文）
     pre_apply_lang_override();
 
     let matches = build_cli().get_matches();
@@ -1460,7 +1617,7 @@ async fn run_health_json(database_url: &str) -> ExitCode {
         print_json(&serde_json::json!({
             "status": "unhealthy",
             "checks": { "url": "invalid" },
-            "error": "unsupported database URL protocol"
+            "error": i18n::t_simple("cli-unsupported-db-url-protocol")
         }));
         return ExitCode::UsageError;
     }

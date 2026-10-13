@@ -371,7 +371,9 @@ pub use crate::integrations::{DbNexusBuildObserver, DbNexusModule};
 // I18n 导出（核心特性 — ICU4X 国际化格式化 + 全局 locale 管理）
 pub use crate::i18n::catalog::{t, t_simple, translate, translate_en};
 pub use crate::i18n::error_ext::{I18nExt, LocalizedMsg};
-pub use crate::i18n::locale::{clear_locale_override, current_locale, detected_locale, set_locale};
+pub use crate::i18n::locale::{
+    clear_locale_override, current_locale, detected_locale, set_locale, set_locale_from_system,
+};
 pub use crate::i18n::{DbI18nFormatter, I18nError};
 
 // ============================================================================

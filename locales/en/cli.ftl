@@ -96,3 +96,55 @@ cli-schema-diff-down-placeholder = -- Auto-generated DOWN SQL, please edit manua
 cli-invalid-database-url-format = Invalid database URL format: { $error }
 cli-database-not-supported = { $database } is not supported
 cli-unsupported-database-protocol = Unsupported database protocol: '{ $protocol }'. Supported protocols: sqlite, postgres, mysql
+
+# --- Subcommand about (runtime-localized clap help, build_cli()) ---
+cli-help-create = Create a new migration file
+cli-help-up = Apply migrations
+cli-help-down = Roll back migrations
+cli-help-status = Show migration status
+cli-help-test-connection = Test database connection
+cli-help-generate = Generate a migration file (based on schema diff)
+cli-help-list = List all migration files
+cli-help-migrate = Apply all pending migrations in the migrations directory (machine-readable output, exit codes 0/1/2)
+cli-help-health = Database health check (JSON output, exit codes 0 healthy / 1 unhealthy / 2 usage error)
+cli-help-user = Admin user add/remove MVP (dbnexus_users table, JSON output)
+cli-help-pool-status = Connection pool status snapshot (health_snapshot struct, JSON output)
+cli-help-audit-query = Audit event query (DbAuditStorage filtered query, JSON output, exit codes 0/1/2)
+cli-help-shard-info = Shard info (strategy/shard list/routing demo, JSON output)
+cli-help-permission-check = Permission check (permission config file + PDP decision, JSON output)
+cli-help-user-add = Add a user
+cli-help-user-remove = Remove a user
+cli-help-user-list = List users
+
+# --- Arg help (runtime-localized clap help, build_cli()) ---
+cli-help-create-description = Migration description
+cli-help-create-directory = Migration file output directory
+cli-help-up-version = Target version number (optional; defaults to all pending migrations)
+cli-help-down-version = Target version number (optional; defaults to rolling back the previous version)
+cli-help-down-all = Roll back all migrations
+cli-help-generate-from-schema = Source schema file (JSON format)
+cli-help-generate-to-schema = Target schema file (JSON format)
+cli-help-generate-output = Output migration file path
+cli-help-generate-description = Migration description
+cli-help-migrate-version = Target version number (optional; defaults to all pending migrations)
+cli-help-audit-query-user = Filter by user ID (single-quote escaping only; never pass untrusted input)
+cli-help-audit-query-entity = Filter by entity type (single-quote escaping only; never pass untrusted input)
+cli-help-audit-query-operation = Filter by operation type (create/read/update/delete/login/logout/permission-change/config-change/other:<text>)
+cli-help-audit-query-severity = Filter by severity (info/low/medium/high/critical)
+cli-help-audit-query-status = Filter by result (success/failure/partial/unknown)
+cli-help-audit-query-since = Start time (RFC 3339, e.g. 2026-01-01T00:00:00Z)
+cli-help-audit-query-until = End time (RFC 3339)
+cli-help-audit-query-limit = Maximum returned rows (default 500; 0 means no limit)
+cli-help-shard-info-strategy = Shard strategy (yearly/monthly/daily/hash/consistent-hash)
+cli-help-shard-info-total-shards = Total number of shards (>= 1)
+cli-help-shard-info-prefix = Shard name prefix
+cli-help-shard-info-template = Connection string template (shard placeholder)
+cli-help-shard-info-route-key = Routing demo: compute the target shard ID from the business shard key
+cli-help-permission-check-role = Role name to check
+cli-help-permission-check-table = Target resource (table name)
+cli-help-permission-check-action = Operation (select/insert/update/delete, case-insensitive)
+cli-help-permission-check-permissions = Permission config file path (YAML/JSON: roles.<role> is a rule array)
+cli-help-user-add-username = Username (1-64 letters/digits/_.-)
+cli-help-user-add-password = Password (stored as salted SHA-256 digest, MVP; production should use authentication bcrypt)
+cli-help-user-add-role = Role (1-64 letters/digits/_-, default admin)
+cli-help-user-remove-username = Username

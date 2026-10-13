@@ -291,9 +291,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -353,9 +353,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -401,9 +401,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -497,9 +497,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 
@@ -555,9 +555,9 @@ impl DuckDbConnection {
         let conn = {
             let mut pool = self.pool.lock().expect("DuckDB pool mutex poisoned");
             pool.pop().ok_or_else(|| {
-                DbError::Connection(sea_orm::DbErr::Custom(
-                    "DuckDB pool exhausted: no connection available".to_string(),
-                ))
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t_simple(
+                    "duckdb-pool-exhausted",
+                )))
             })?
         };
 

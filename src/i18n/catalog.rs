@@ -527,6 +527,8 @@ mod tests {
             // i18n 接线批次（权限缓存错误文案 + 示例标题行）
             "perm-cache-provider-no-policy",
             "perm-cache-provider-not-configured",
+            // i18n 复核批次：YAML 权限提供器解析错误补接线（上一轮建键漏改调用点）
+            "perm-provider-yaml-parse-error",
             "example-basic-crud-title",
             "example-audit-logging-title",
             "example-rate-limiter-title",
@@ -695,6 +697,30 @@ mod tests {
                 &[],
                 "🩺 DBNexus health check and circuit breaker example",
                 "🩺 DBNexus 健康检查与熔断器示例",
+            ),
+            (
+                "perm-provider-yaml-parse-error",
+                &[("path", "p.yaml"), ("error", "E")],
+                "YAML parse error (path='p.yaml'): E",
+                "YAML 解析错误（path='p.yaml'）: E",
+            ),
+            (
+                "cli-help-migrate",
+                &[],
+                "Apply all pending migrations in the migrations directory (machine-readable output, exit codes 0/1/2)",
+                "应用迁移目录中的所有待应用迁移（机器可读输出，退出码 0/1/2）",
+            ),
+            (
+                "cli-help-audit-query-operation",
+                &[],
+                "Filter by operation type (create/read/update/delete/login/logout/permission-change/config-change/other:<text>)",
+                "按操作类型过滤（create/read/update/delete/login/logout/permission-change/config-change/other:<text>）",
+            ),
+            (
+                "cli-help-shard-info-template",
+                &[],
+                "Connection string template (shard placeholder)",
+                "连接字符串模板（shard 占位符）",
             ),
         ];
         for (key, args, en, zh) in cases {
@@ -914,6 +940,7 @@ mod tests {
             "prepare-cache-log-clear-failed",
             "perm-cache-provider-no-policy",
             "perm-cache-provider-not-configured",
+            "perm-provider-yaml-parse-error",
         ];
         for key in NEW_KEYS {
             for lang in ["en", "zh"] {
@@ -1041,6 +1068,32 @@ mod tests {
             assert!(
                 FluentResource::try_new((*ftl).to_string()).is_ok(),
                 "{path} must parse as Fluent without errors"
+            );
+        }
+    }
+
+    /// 守卫：`cli-help-*` 键全部在 CLI 二进制源码里有字面量引用。
+    ///
+    /// 防「语言包建了键、调用点漏改」——本轮就发现了
+    /// `perm-provider-config-read-error` 这类上一轮遗留的孤儿键（调用点
+    /// 是硬编码 format!）。该测试把它变成自动防线：cli.ftl 每新增一个
+    /// help 键，build_cli() 必须出现同名字符量。
+    #[test]
+    fn test_cli_help_keys_all_wired_in_cli_binary() {
+        let cli_main = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tools/cli/src/main.rs"),
+        )
+        .unwrap_or_else(|e| panic!("CLI binary source must be readable: {e}"));
+
+        let en_ftl = catalog_ftl("en");
+        for (key, _) in catalog_entries(&en_ftl) {
+            if !key.starts_with("cli-help-") {
+                continue;
+            }
+            assert!(
+                cli_main.contains(&format!("\"{key}\"")),
+                "cli.ftl key '{key}' is not referenced by the CLI binary \
+                 (src/tools/cli/src/main.rs, build_cli())"
             );
         }
     }

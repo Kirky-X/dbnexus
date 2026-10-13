@@ -153,15 +153,15 @@ impl YamlPermissionProvider {
     pub fn new(path: &str) -> Result<Self, PermissionProviderError> {
         let config = match std::fs::read_to_string(path) {
             Ok(content) => Self::parse_yaml_content(&content, path).map_err(|e| {
-                PermissionProviderError::LoadError(format!(
-                    "YAML parse error (path='{}'): {}",
-                    path, e
+                PermissionProviderError::LoadError(crate::i18n::t(
+                    "perm-provider-yaml-parse-error",
+                    &[("path", path.to_string()), ("error", e)],
                 ))
             })?,
             Err(e) => {
-                return Err(PermissionProviderError::LoadError(format!(
-                    "Permission config file read error (path='{}'): {}",
-                    path, e
+                return Err(PermissionProviderError::LoadError(crate::i18n::t(
+                    "perm-provider-config-read-error",
+                    &[("path", path.to_string()), ("error", e.to_string())],
                 )));
             }
         };

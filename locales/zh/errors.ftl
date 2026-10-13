@@ -96,6 +96,7 @@ perm-provider-unknown = 未知错误: { $reason }
 perm-provider-memory-policy-table-uninitialized = MemoryPermissionProvider 策略表未初始化：无任何角色策略（容量 0）
 perm-provider-yaml-file-unreadable = YamlPermissionProvider 策略文件不可读（{ $path }）: { $error }
 perm-provider-config-read-error = 权限配置文件读取错误（path='{ $path }'）: { $error }
+perm-provider-yaml-parse-error = YAML 解析错误（path='{ $path }'）: { $error }
 perm-provider-lock-error = 锁错误: 权限提供器内部状态已中毒
 perm-rate-limiter-error = 限流后端故障: { $error }
 perm-rate-limit-audit-dropped = 限流审计事件已丢弃: { $error }

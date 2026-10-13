@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: MIT
 //! Locale detection and global locale context.
 //!
-//! Provides the locale detection priority chain:
-//! 1. `DBNEXUS_LANG` environment variable
-//! 2. `sys-locale` system locale detection
-//! 3. `"en"` fallback
+//! Provides the default-locale policy and explicit language negotiation:
+//! 1. [`set_locale()`] explicit override (and the CLI `--lang` fast path)
+//! 2. `DBNEXUS_LANG` environment variable (explicit, opt-in)
+//! 3. `"en"` — the default display language is **strictly English**
+//!
+//! System locale detection is available only through the explicit opt-in
+//! [`set_locale_from_system()`] — an implicit system locale must never make
+//! the default display language Chinese on a Chinese host.
 //!
 //! Also provides a global locale context that is async-safe
 //! (uses `std::sync::OnceLock` + `RwLock` instead of `thread_local!`).
@@ -21,19 +25,18 @@ static GLOBAL_LOCALE: OnceLock<Locale> = OnceLock::new();
 /// Override locale set via `set_locale()`.
 static OVERRIDE_LOCALE: std::sync::RwLock<Option<Locale>> = std::sync::RwLock::new(None);
 
-/// Detect the user's locale using the priority chain.
+/// Default-locale resolution for the global locale context.
 ///
-/// Priority: `DBNEXUS_LANG` env var → `sys-locale` → `"en"` fallback.
+/// **The default display language is strictly English**: the only implicit
+/// inputs are an explicit `DBNEXUS_LANG` selection and, absent it, `"en"`.
+/// System locale detection is deliberately excluded from this chain — it is
+/// reachable only through the explicit opt-in [`set_locale_from_system()`],
+/// so a Chinese system locale never silently turns the default display
+/// language Chinese.
 fn detect_locale() -> Locale {
     if let Ok(lang) = std::env::var("DBNEXUS_LANG")
         && !lang.is_empty()
         && let Ok(locale) = Locale::from_str(&lang)
-    {
-        return locale;
-    }
-
-    if let Some(sys_locale) = sys_locale::get_locale()
-        && let Ok(locale) = Locale::from_str(&sys_locale)
     {
         return locale;
     }
@@ -86,9 +89,29 @@ pub fn clear_locale_override() {
     *guard = None;
 }
 
+/// Explicitly adopt the system locale as the display language (opt-in).
+///
+/// The default locale policy is strictly English (see module docs); system
+/// locale detection is preserved behind this call for callers that want
+/// negotiation by host locale. Applies the detected system locale as the
+/// override, so it wins over `DBNEXUS_LANG` until cleared.
+///
+/// # Errors
+/// Returns [`super::I18nError::InvalidLocale`] if the system locale is
+/// unavailable or cannot be parsed as BCP-47.
+pub fn set_locale_from_system() -> Result<(), super::I18nError> {
+    let sys = sys_locale::get_locale().ok_or_else(|| super::I18nError::InvalidLocale {
+        input: "(system)".to_string(),
+        reason: "system locale is unavailable".to_string(),
+    })?;
+    set_locale(&sys)
+}
+
 /// Get the auto-detected locale (ignoring any override).
 ///
-/// Useful for diagnostics and logging.
+/// Resolves the default-locale chain (`DBNEXUS_LANG` → `"en"`) — it does
+/// **not** consult the system locale, matching the strictly-English default
+/// policy. Useful for diagnostics and logging.
 pub fn detected_locale() -> Locale {
     GLOBAL_LOCALE.get_or_init(detect_locale).clone()
 }
@@ -167,17 +190,37 @@ mod tests {
     fn test_detect_locale_without_env_var() {
         // Note: set_var/remove_var are unsafe in Rust 2024 edition,
         // and this crate uses #![forbid(unsafe_code)], so we can't test
-        // the env var override path. Instead, verify detect_locale works
-        // when DBNEXUS_LANG is not set (or falls back to sys-locale/en).
+        // the env var override path. Instead, verify detect_locale returns
+        // a valid locale when DBNEXUS_LANG is unset — the strictly-English
+        // default policy resolves to "en" (system locale is opt-in only).
         clear_locale_override();
 
         let detected = detect_locale();
-        // Should return a valid locale (either sys-locale or "en" fallback)
+        // Should return a valid locale (either DBNEXUS_LANG or "en" fallback)
         let locale_str = detected.to_string();
         assert!(
             !locale_str.is_empty(),
             "detect_locale should return a valid locale"
         );
+    }
+
+    #[test]
+    fn test_set_locale_from_system_applies_or_errors_explicitly() {
+        clear_locale_override();
+        // 显式 opt-in：系统 locale 可用时应用为覆盖；不可用时显式报错，
+        // 绝不静默回退（失败显性化）。
+        match set_locale_from_system() {
+            Ok(()) => {
+                let current = current_locale();
+                assert!(
+                    !current.to_string().is_empty(),
+                    "system locale override must be a valid locale"
+                );
+            }
+            Err(super::super::I18nError::InvalidLocale { .. }) => {}
+            other => panic!("expected InvalidLocale, got {other:?}"),
+        }
+        clear_locale_override();
     }
 
     #[test]
