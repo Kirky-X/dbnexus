@@ -773,7 +773,7 @@ impl DbPool {
 
     /// 加载权限配置文件
     ///
-    /// 通过 `serde_yaml_ng` / `serde_json` 直接解析 YAML/JSON 文件，与项目配置管理策略一致
+    /// 通过 `serde-saphyr` / `serde_json` 直接解析 YAML/JSON 文件，与项目配置管理策略一致
     ///
     /// # Returns
     ///
@@ -805,12 +805,12 @@ impl DbPool {
 
     /// 解析权限配置
     ///
-    /// 使用 `serde_yaml_ng` 解析（YAML 是 JSON 超集，兼容两种输入）。
+    /// 使用 `serde-saphyr` 解析（YAML 是 JSON 超集，兼容两种输入）。
     #[cfg(feature = "permission")]
     fn parse_permission_yaml(content: &str, source: &str) -> Result<PermissionConfig, String> {
         #[cfg(feature = "yaml")]
         {
-            serde_yaml_ng::from_str(content).map_err(|e| {
+            serde_saphyr::from_str(content).map_err(|e| {
                 i18n::t(
                     "pool-yaml-parse-error",
                     &[("source", source.to_string()), ("error", e.to_string())],

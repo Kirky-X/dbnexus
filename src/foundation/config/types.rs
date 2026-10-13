@@ -184,14 +184,14 @@ impl CacheConfig {
 
     /// 从 YAML 字符串加载配置
     ///
-    /// 使用 `serde_yaml_ng` 直接反序列化，缺失字段使用 serde 默认值。
+    /// 使用 `serde-saphyr` 直接反序列化，缺失字段使用 serde 默认值。
     ///
     /// # Errors
     ///
     /// 如果 YAML 格式无效或字段类型不匹配，返回解析错误
     #[cfg(feature = "yaml")]
-    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
-        serde_yaml_ng::from_str(yaml)
+    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_saphyr::Error> {
+        serde_saphyr::from_str(yaml)
     }
 
     /// 从 `serde_json::Value` 加载配置
@@ -710,7 +710,7 @@ impl DbConfig {
 
     /// 从 YAML 字符串加载配置
     ///
-    /// 使用 `serde_yaml_ng` 直接反序列化，缺失字段使用 serde 默认值。
+    /// 使用 `serde-saphyr` 直接反序列化，缺失字段使用 serde 默认值。
     /// `cache_config` 子结构通过 `#[serde(default)]` 嵌入，serde 会自动反序列化
     /// `cache_config:` 子节点（缺失时回退到 `CacheConfig::default()`）。
     ///
@@ -730,8 +730,8 @@ impl DbConfig {
     ///
     /// 如果 YAML 格式无效或字段类型不匹配，返回解析错误
     #[cfg(feature = "yaml")]
-    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
-        serde_yaml_ng::from_str(yaml)
+    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_saphyr::Error> {
+        serde_saphyr::from_str(yaml)
     }
 
     /// 从 JSON 字符串加载配置

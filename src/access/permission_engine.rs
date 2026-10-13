@@ -875,10 +875,10 @@ impl YamlPermissionProvider {
             roles: HashMap<String, Vec<PermissionRule>>,
         }
 
-        // 使用 serde_yaml_ng 解析（YAML 是 JSON 超集，兼容两种输入）
+        // 使用 serde-saphyr 解析（YAML 是 JSON 超集，兼容两种输入）
         #[cfg(feature = "yaml")]
         {
-            let config: YamlConfig = serde_yaml_ng::from_str(&content)?;
+            let config: YamlConfig = serde_saphyr::from_str(&content)?;
 
             if let Ok(mut roles) = self.roles.write() {
                 *roles = config.roles;

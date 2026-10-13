@@ -104,7 +104,7 @@ pub struct PermissionConfig {
 impl PermissionConfig {
     /// 从 YAML 字符串加载配置
     ///
-    /// 使用 `serde_yaml_ng` 直接反序列化，与项目配置管理策略一致
+    /// 使用 `serde-saphyr` 直接反序列化，与项目配置管理策略一致
     ///
     /// # Example
     ///
@@ -125,8 +125,8 @@ impl PermissionConfig {
     ///
     /// 如果 YAML 格式无效或字段类型不匹配，返回解析错误
     #[cfg(feature = "yaml")]
-    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
-        serde_yaml_ng::from_str(yaml)
+    pub fn from_yaml_str(yaml: &str) -> Result<Self, serde_saphyr::Error> {
+        serde_saphyr::from_str(yaml)
     }
 
     /// 从 JSON 字符串加载配置
@@ -388,11 +388,11 @@ mod tests {
         assert!(!policy.allows("orders", &PermissionAction::Update));
     }
 
-    /// PermissionConfig YAML 解析测试（通过 serde_yaml_ng）
+    /// PermissionConfig YAML 解析测试（通过 serde-saphyr）
     #[cfg(feature = "yaml")]
     #[test]
     fn test_permission_config_yaml_parsing() {
-        // 测试 YAML 格式与 serde_yaml_ng + serde Deserialize 的兼容性
+        // 测试 YAML 格式与 serde-saphyr + serde Deserialize 的兼容性
         let yaml = r#"
 {
   "roles": {
@@ -416,8 +416,8 @@ mod tests {
 }
 "#;
 
-        // 使用 serde_yaml_ng 解析 JSON（YAML 是 JSON 的超集）
-        let config: PermissionConfig = serde_yaml_ng::from_str(yaml).expect("Failed to parse YAML");
+        // 使用 serde-saphyr 解析 JSON（YAML 是 JSON 的超集）
+        let config: PermissionConfig = serde_saphyr::from_str(yaml).expect("Failed to parse YAML");
 
         let admin_policy = config.get_role_policy("admin").unwrap();
         assert!(admin_policy.allows("users", &PermissionAction::Select));

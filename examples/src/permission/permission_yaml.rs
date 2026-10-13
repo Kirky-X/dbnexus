@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 构建权限配置
     // ============================================
     // 本示例通过编程方式构建 PermissionConfig（与 YAML 结构完全一致）。
-    // 生产环境推荐使用 serde_yaml_ng::from_str 或 YamlPermissionProvider::new(path)。
+    // 生产环境推荐使用 serde_saphyr::from_str 或 YamlPermissionProvider::new(path)。
 
     let yaml_content = r#"
 roles:
@@ -102,9 +102,9 @@ roles:
     println!("--- YAML configuration content ---");
     println!("{}", yaml_content);
 
-    // 使用 serde_yaml_ng 解析 YAML（yaml feature 提供）
+    // 使用 serde_saphyr 解析 YAML（yaml feature 提供）
     let config: dbnexus::access::PermissionConfig =
-        serde_yaml_ng::from_str(yaml_content).expect("Failed to parse YAML config");
+        serde_saphyr::from_str(yaml_content).expect("Failed to parse YAML config");
 
     println!("✓ YAML configuration parsed\n");
 
@@ -252,7 +252,7 @@ roles:
         "  - YamlPermissionProvider::new(path)           load from a YAML file (needs the yaml feature)"
     );
     println!(
-        "  - serde_yaml_ng::from_str(yaml)              parse a YAML string into PermissionConfig"
+        "  - serde_saphyr::from_str(yaml)              parse a YAML string into PermissionConfig"
     );
     println!("  - PermissionConfig.roles                     the HashMap of roles to policies");
     println!("  - RolePolicy.tables                          the table permission list");

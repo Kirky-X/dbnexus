@@ -18,10 +18,8 @@ ignore = [
     "RUSTSEC-2024-0384",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2025-0134",
-    # RUSTSEC-2024-0449（2026-10-12 入库）：unsafe-libyaml 2024-03 起归档无人维护，
-    # 经本仓 yaml feature 的 serde_yaml_ng 入图；源头豁免与 serde-saphyr 迁移裁决
-    # 在 limiteron 仓，此处随行豁免直至上游迁移完成。
-    "RUSTSEC-2024-0449",
+    # RUSTSEC-2024-0449(unsafe-libyaml unmaintained)已随 yaml 后端迁移
+    # serde_yaml_ng → serde-saphyr(纯 Rust)退出依赖图,豁免条目回收。
 ]
 
 [licenses]

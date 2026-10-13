@@ -67,7 +67,7 @@ impl YamlPermissionProvider {
                 PermissionError::ParseError(format!("Failed to read {}: {}", path, e))
             })?;
 
-            let policies: HashMap<String, RolePolicy> = serde_yaml_ng::from_str(&content)
+            let policies: HashMap<String, RolePolicy> = serde_saphyr::from_str(&content)
                 .map_err(|e| PermissionError::ParseError(e.to_string()))?;
 
             // 将策略存入缓存

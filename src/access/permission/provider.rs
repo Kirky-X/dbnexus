@@ -141,7 +141,7 @@ pub struct YamlPermissionProvider {
 impl YamlPermissionProvider {
     /// 创建新的 YAML 权限提供者
     ///
-    /// 通过 `serde_yaml_ng` 直接解析 YAML 文件，与项目配置管理策略一致
+    /// 通过 `serde-saphyr` 直接解析 YAML 文件，与项目配置管理策略一致
     ///
     /// # Arguments
     ///
@@ -172,14 +172,14 @@ impl YamlPermissionProvider {
         })
     }
 
-    /// 使用 `serde_yaml_ng` 解析 YAML 内容
+    /// 使用 `serde-saphyr` 解析 YAML 内容
     ///
-    /// YAML 是 JSON 的超集，因此 `serde_yaml_ng` 同时兼容 JSON 输入，
+    /// YAML 是 JSON 的超集，因此 `serde-saphyr` 同时兼容 JSON 输入，
     /// 无需根据 `json` feature 切换解析器。
     fn parse_yaml_content(content: &str, source: &str) -> Result<PermissionConfig, String> {
         #[cfg(feature = "yaml")]
         {
-            serde_yaml_ng::from_str(content).map_err(|e| {
+            serde_saphyr::from_str(content).map_err(|e| {
                 crate::i18n::t(
                     "pool-yaml-parse-error",
                     &[("source", source.to_string()), ("error", e.to_string())],
@@ -242,9 +242,9 @@ impl RefreshablePermissionProvider for YamlPermissionProvider {
     }
 }
 
-/// 使用 `serde_yaml_ng` 异步解析 YAML 内容（独立函数）
+/// 使用 `serde-saphyr` 异步解析 YAML 内容（独立函数）
 ///
-/// YAML 是 JSON 的超集，因此 `serde_yaml_ng` 同时兼容 JSON 输入，
+/// YAML 是 JSON 的超集，因此 `serde-saphyr` 同时兼容 JSON 输入，
 /// 无需根据 `json` feature 切换解析器。
 async fn parse_permission_yaml_async(
     content: &str,
@@ -252,7 +252,7 @@ async fn parse_permission_yaml_async(
 ) -> Result<PermissionConfig, String> {
     #[cfg(feature = "yaml")]
     {
-        serde_yaml_ng::from_str(content).map_err(|e| {
+        serde_saphyr::from_str(content).map_err(|e| {
             crate::i18n::t(
                 "pool-yaml-parse-error",
                 &[("source", source.to_string()), ("error", e.to_string())],

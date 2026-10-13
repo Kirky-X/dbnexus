@@ -7,7 +7,7 @@
 //! # 测试说明
 //!
 //! - 验证 DbConfig 结构体及其 serde Deserialize 实现
-//! - `#[cfg(feature = "yaml")]` 测试：验证 DbConfig 的 serde_yaml_ng 反序列化
+//! - `#[cfg(feature = "yaml")]` 测试：验证 DbConfig 的 serde-saphyr 反序列化
 
 use dbnexus::foundation::{DatabaseType, PoolConfig};
 use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
@@ -35,7 +35,7 @@ async fn test_config_builder_basic() {
 #[tokio::test]
 async fn test_yaml_loading() {
     let yaml = r#"url: "sqlite::memory:""#;
-    let config = serde_yaml_ng::from_str::<DbConfig>(yaml).unwrap();
+    let config = serde_saphyr::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
 }
 
@@ -49,7 +49,7 @@ min_connections: 5
 idle_timeout: 300
 acquire_timeout: 5000
 "#;
-    let config = serde_yaml_ng::from_str::<DbConfig>(yaml).unwrap();
+    let config = serde_saphyr::from_str::<DbConfig>(yaml).unwrap();
     assert_eq!(config.url, "sqlite::memory:");
     assert_eq!(config.pool_config.max_connections, 20);
     assert_eq!(config.pool_config.min_connections, 5);
@@ -192,7 +192,7 @@ async fn test_config_builder_chaining() {
 #[tokio::test]
 async fn test_config_invalid_yaml() {
     let invalid_yaml = r#"url: "sqlite::memory:" invalid syntax"#;
-    let result = serde_yaml_ng::from_str::<DbConfig>(invalid_yaml);
+    let result = serde_saphyr::from_str::<DbConfig>(invalid_yaml);
     assert!(result.is_err());
 }
 
@@ -200,7 +200,7 @@ async fn test_config_invalid_yaml() {
 #[tokio::test]
 async fn test_config_missing_required_field() {
     let yaml = r#"max_connections: 10"#;
-    let result = serde_yaml_ng::from_str::<DbConfig>(yaml);
+    let result = serde_saphyr::from_str::<DbConfig>(yaml);
     assert!(result.is_err());
 }
 

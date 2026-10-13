@@ -300,7 +300,7 @@ sea-orm = { workspace = true, default-features = false, features = ["runtime-tok
 
 # Serialization
 serde = { workspace = true }
-serde_yaml_ng = { workspace = true }
+serde-saphyr = { workspace = true }
 toml = "1.1"
 
 # Async trait (#[db_entity] 宏展开生成 #[::async_trait::async_trait]，需要直接依赖)

@@ -271,7 +271,7 @@ default_policy: allow_all
 rate_limit_enabled: true
 rate_limit_max_requests: 50
 "#;
-        let cfg: PermissionConfig = serde_yaml_ng::from_str(yaml).unwrap();
+        let cfg: PermissionConfig = serde_saphyr::from_str(yaml).unwrap();
         assert_eq!(cfg.admin_role, "root");
         assert!(matches!(cfg.default_policy, DefaultPolicy::AllowAll));
         assert!(cfg.rate_limit_enabled);

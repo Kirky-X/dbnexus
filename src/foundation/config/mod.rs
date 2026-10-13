@@ -13,7 +13,7 @@
 //!
 //! # 使用方式
 //!
-//! 通过 `serde_yaml_ng` / `serde_json` 直接反序列化创建配置实例：
+//! 通过 `serde-saphyr` / `serde_json` 直接反序列化创建配置实例：
 //!
 //! ```rust,ignore
 //! use dbnexus::DbConfig;

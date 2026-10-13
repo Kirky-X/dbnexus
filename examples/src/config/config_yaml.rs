@@ -4,7 +4,7 @@
 //!
 //! 演示如何通过 YAML 字符串创建 [`DbConfig`] 并构建连接池：
 //! - 编写 YAML 配置字符串
-//! - 使用 `serde_yaml_ng` 反序列化为 `DbConfig`
+//! - 使用 `serde-saphyr` 反序列化为 `DbConfig`
 //! - 用配置创建 `DbPool`
 //!
 //! # 运行示例
@@ -49,7 +49,7 @@ cache_config:
     // ============================================
     // 解析 YAML 配置
     // ============================================
-    let config: DbConfig = serde_yaml_ng::from_str(yaml_content)?;
+    let config: DbConfig = serde_saphyr::from_str(yaml_content)?;
     println!("✓ YAML configuration parsed");
 
     // ============================================
@@ -103,7 +103,7 @@ cache_config:
     println!(
         "  - DbConfig implements serde::Deserialize and can be deserialized from YAML directly"
     );
-    println!("  - serde_yaml_ng::from_str parses a YAML string into DbConfig");
+    println!("  - serde_saphyr::from_str parses a YAML string into DbConfig");
     println!("  - DbPool::with_config creates a pool from DbConfig");
 
     Ok(())
