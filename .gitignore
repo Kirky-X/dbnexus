@@ -110,6 +110,20 @@ CLAUDE.md
 GEMINI.md
 CODEIUM.md
 
+# =============================================================================
+# Design Documents (not for version control)
+# =============================================================================
+**/PRD*
+**/ADD*
+**/TRD*
+**/DDD*
+**/HUB_PROTOCOL*
+docs/PRD*
+docs/ADD*
+docs/TRD*
+docs/DDD*
+docs/HUB_PROTOCOL*
+
 # mimosa 安全扫描工具产物
 .mimosa/
 
