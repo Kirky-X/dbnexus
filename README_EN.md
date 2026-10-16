@@ -4,7 +4,7 @@
 
 [![CI Status](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/dbnexus.svg)](https://crates.io/crates/dbnexus) [![Docs.rs](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus) [![Downloads](https://img.shields.io/crates/d/dbnexus.svg)](https://crates.io/crates/dbnexus) [![License](https://img.shields.io/crates/l/dbnexus.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/dbnexus/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/dbnexus)
 
-**[中文](README.md)** | English
+**[Chinese](README.md)** | English
 
 **Enterprise-grade Database Abstraction Layer for Rust**
 
@@ -31,24 +31,24 @@ Define entities with derive macros; connection pooling, permissions, auditing, a
 ## 📋 Table of Contents
 
 <details open>
-<summary>📑 目录</summary>
+<summary>Table of Contents</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)
 - [🎨 Feature Flags](#-feature-flags)
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
-- [🏗️ Architecture](#️-architecture)
+- [🏗️ Architecture](#-architecture)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
-- [🗺️ Roadmap](#️-roadmap)
+- [🗺️ Roadmap](#-roadmap)
 - [🤝 Contributing](#-contributing)
 - [📋 Changelog](#-changelog)
 - [📄 License](#-license)
 - [🙏 Acknowledgments](#-acknowledgments)
 - [📞 Contact & Support](#-contact--support)
-- [⭐ Star History](#-star-history)
+- [⭐ Star History](#star-history)
 
 </details>
 
@@ -221,6 +221,8 @@ Model::find_all(&session).await?; // Error: permission denied
 ### Database Drivers
 
 Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers. `sqlite` / `postgres` / `mysql` are backed by the corresponding sea-orm/sqlx drivers, while `duckdb` (embedded analytical), `ladybug` (formerly Kuzu) and `neo4j` use their own native bindings; see [Database Support](#-database-support) for each driver's database, type and introduction version.
+
+> 🚫 **Do not enable the `duckdb` feature** (since 2026-10-16): the upstream `zip` crate has been fully yanked on crates.io (only 9.0.3 remains). The `duckdb` chain resolves through `libduckdb-sys` (pinned to `zip ^6`), which can no longer be resolved — enabling this feature from scratch fails at dependency resolution. Existing projects with a committed `Cargo.lock` are unaffected. This will be lifted once duckdb-rs upstream publishes a release adapted to zip 9.x; until then use the `sqlite` / `postgres` / `mysql` drivers instead.
 
 ### Core Capabilities
 
@@ -401,13 +403,13 @@ More code snippets on advanced configuration and environment variables, transact
 
 DBNexus follows a layered module design: `foundation` provides the config and error base; the `database` module hosts the connection pool, Session, migrations, sharding, Saga and scatter-gather; the `access` module concentrates SQL parsing, the permission engine, authentication and masking; the `domain` module holds domain abstractions for permission/audit/migration; `observability` and `reliability` provide metrics/health and retry/failover respectively. All optional capabilities are trimmed at compile time via feature gates, and the `dbnexus-macros` proc-macro crate generates permission-checked CRUD code for entities at compile time.
 
-The layered module design, per-layer responsibilities and the full module overview diagram are detailed in the [Architecture document](docs/ARCHITECTURE.md#系统架构) (design philosophy, module breakdown, data flow, and security/performance design).
+The layered module design, per-layer responsibilities and the full module overview diagram are detailed in the [Architecture document](docs/ARCHITECTURE.md#system-architecture) (design philosophy, module breakdown, data flow, and security/performance design).
 
 ### 🔗 Core Execution Path
 
 Under the `sql-parser` + `permission` feature combination, `Session::execute_raw` runs a real pipeline: after `get_session` validates the role, every statement goes through "reject DDL → parse → permission check → driver execution"; table-name checks (extraction validity + per-table authorization) belong to the permission-check stage and are bypassed up front for the admin role as a whole (table-free statements such as `SELECT 1` touch no tables), while non-admin roles fail closed — a missing or invalid table name is rejected, every target table in JOINs / subqueries is checked (completed in rc.2), and on parse failure admin is allowed while non-admin roles are denied; the `retry` idempotent retry, `metrics` slow-query observability and the `audit` recording of admin bypasses all hook into this pipeline (source: [src/database/pool/session/](src/database/pool/session/mod.rs)).
 
-See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行管道) for the full sequence diagram and path notes.
+See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#core-execution-pipeline) for the full sequence diagram and path notes.
 
 ### 🌐 Database Support
 
@@ -416,7 +418,7 @@ See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行�
 | `sqlite` | SQLite | Embedded relational | Initial |
 | `postgres` | PostgreSQL | Server relational | Initial |
 | `mysql` | MySQL | Server relational | Initial |
-| `duckdb` | DuckDB | Embedded analytical | 0.3.0 |
+| `duckdb` 🚫 | DuckDB | Embedded analytical (currently unusable: upstream zip yank breaks resolution, see the feature flags notice) | 0.3.0 |
 | `ladybug` | Ladybug (formerly Kuzu) | Embedded graph | 0.4.0 |
 | `neo4j` | Neo4j | Graph server | 0.4.0 |
 
@@ -468,15 +470,15 @@ cargo test --no-default-features --features sqlite,default-no-db,all-optional --
 
 ## 📊 Performance
 
-DBNexus follows the zero-cost abstraction principle; its performance characteristics are guaranteed at the design level: zero-cost feature gating (compiled out via `#[cfg(feature = ...)]`), lock-free hot paths (pool state via atomics, permission config and cache provider read via lock-free `ArcSwap`, `AcqRel` ordering), async first (all I/O uses `async/await`, read-heavy state uses `RwLock`), pool strategy (LRU connection reuse, max-connection limits, minimum-connection warmup, health checks to evict dead connections), plus the 0.5.1 hot-path optimizations (static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing). See [Architecture · Performance](docs/ARCHITECTURE.md#性能架构) for the design details.
+DBNexus follows the zero-cost abstraction principle; its performance characteristics are guaranteed at the design level: zero-cost feature gating (compiled out via `#[cfg(feature = ...)]`), lock-free hot paths (pool state via atomics, permission config and cache provider read via lock-free `ArcSwap`, `AcqRel` ordering), async first (all I/O uses `async/await`, read-heavy state uses `RwLock`), pool strategy (LRU connection reuse, max-connection limits, minimum-connection warmup, health checks to evict dead connections), plus the 0.5.1 hot-path optimizations (static SQL injection detection pattern table, pre-indexed Saga compensation lookup, `Session` concurrent-read optimization, `DbConfig` Arc sharing). See [Architecture · Performance](docs/ARCHITECTURE.md#performance-architecture) for the design details.
 
 ### End-to-end benchmarks
 
-The repository ships 9 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench`, `batch_insert_bench`, `duckdb_copy_bench`, `oxcache_query_cache_bench`, `prepare_cache_bench` (under [benches/](benches/), run via `cargo bench`). The end-to-end baseline (sampled 2026-09-11, not an SLA): `DbPool::get_session` handle acquisition ≈ 0.24 µs, `DbPool::query_rows` single-row full pipeline ≈ 480 µs, `Session::execute_raw` 64-row INSERT loop ≈ 708 ms/iteration (≈ 11 ms/row). The measurement environment, per-item interpretation and reproduction commands live in [Performance Baseline · End-to-end baseline](docs/PERFORMANCE.md#端到端基线).
+The repository ships 9 criterion benchmarks: `permission_bench`, `permission_engine_bench`, `sharding_bench`, `metrics_bench`, `e2e_bench`, `batch_insert_bench`, `duckdb_copy_bench`, `oxcache_query_cache_bench`, `prepare_cache_bench` (under [benches/](benches/), run via `cargo bench`). The end-to-end baseline (sampled 2026-09-11, not an SLA): `DbPool::get_session` handle acquisition ≈ 0.24 µs, `DbPool::query_rows` single-row full pipeline ≈ 480 µs, `Session::execute_raw` 64-row INSERT loop ≈ 708 ms/iteration (≈ 11 ms/row). The measurement environment, per-item interpretation and reproduction commands live in [Performance Baseline · End-to-end baseline](docs/PERFORMANCE.md#end-to-end-baseline).
 
 ### Historical optimization comparison
 
-The cumulative results of the two platform optimization rounds (all 6 benchmarks improved with no regressions, about 5.5% on average) are recorded in [benches/baseline-after.md](benches/baseline-after.md) and [Performance Baseline · Historical comparison](docs/PERFORMANCE.md#历史优化对照).
+The cumulative results of the two platform optimization rounds (all 6 benchmarks improved with no regressions, about 5.5% on average) are recorded in [benches/baseline-after.md](benches/baseline-after.md) and [Performance Baseline · Historical comparison](docs/PERFORMANCE.md#historical-optimization-comparison).
 
 ---
 
