@@ -27,6 +27,12 @@
 
 </details>
 
+## [Unreleased]
+
+### Changed
+
+- **依赖升级（2026-10-19 入库）**：`rustls` 0.23.45 → 0.23.46——修 RUSTSEC-2026-0346/0347/0348/0349（`Debug` 泄露 TLS 会话密钥、ECH 拒绝后缓冲的应用数据外发、Brotli 证书解压 1 GiB 分配、未认证 ServerHello 降级为经典密钥交换）；`duckdb` 1.10506.0 → 1.10506.1（`libduckdb-sys` 同步升级，其构建期 `zip` 需求 ^6 → ^9）——修 zip 6.0.0 的 RUSTSEC-2026-0367/0368/0369（符号链接逃逸 / 经符号链接施加 Unix 权限 / SUID·SGID 位保留，最高 critical 9.1）。`deny.toml` / `.cargo/audit.toml` 未新增豁免（7 项公告均为升级即修）
+
 ## [0.6.0-rc.9] - 2026-10-10
 
 ### Removed
