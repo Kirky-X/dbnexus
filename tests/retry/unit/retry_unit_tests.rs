@@ -30,6 +30,7 @@ fn test_retry_policy_custom_values() {
         multiplier: 3.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
     assert_eq!(policy.max_retries, 5);
     assert_eq!(policy.initial_backoff_ms, 200);
@@ -138,6 +139,7 @@ async fn test_execute_with_retry_success_first_try() {
         multiplier: 2.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
 
     let result =
@@ -155,6 +157,7 @@ async fn test_execute_with_retry_success_after_failures() {
         multiplier: 2.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -195,6 +198,7 @@ async fn test_execute_with_retry_exhausted() {
         multiplier: 2.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -230,6 +234,7 @@ async fn test_non_idempotent_no_retry() {
         multiplier: 2.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -262,6 +267,7 @@ async fn test_retry_policy_zero_retries() {
         multiplier: 2.0,
         jitter: false,
         overall_timeout_ms: None,
+        retry_busy_writes: false,
     };
 
     let attempt = Arc::new(AtomicU32::new(0));
@@ -312,6 +318,7 @@ mod t410_session_retry_wiring_tests {
                 multiplier: 2.0,
                 jitter: false,
                 overall_timeout_ms: None,
+                retry_busy_writes: false,
             }),
             ..Default::default()
         }

@@ -62,6 +62,8 @@ fn test_db_config_custom_values() {
         failover_config: None,
         #[cfg(feature = "replica-routing")]
         replica_config: None,
+        #[cfg(feature = "sqlite")]
+        sqlite_pragmas: None,
     };
     assert_eq!(config.url, "postgres://localhost/db");
     assert_eq!(config.pool_config.max_connections, 50);

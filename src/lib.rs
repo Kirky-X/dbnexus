@@ -133,6 +133,8 @@ pub use crate::foundation::FailoverConfig;
 pub use crate::foundation::PermissionResult;
 #[cfg(feature = "replica-routing")]
 pub use crate::foundation::ReplicaConfig;
+#[cfg(feature = "sqlite")]
+pub use crate::foundation::SqlitePragmas;
 pub use crate::foundation::{ActiveModelTrait, Condition, EntityTrait, Set};
 pub use crate::foundation::{AuditError, MigrationError, MigrationResult};
 pub use crate::foundation::{CacheConfig, ConfigError, DbConfig, PoolConfig};
@@ -285,7 +287,9 @@ pub use crate::access::permission_audit_chain::{
 
 // Reliability 导出（retry feature）
 #[cfg(feature = "retry")]
-pub use crate::reliability::{RetryError, RetryExecutor, RetryPolicy, is_idempotent_operation};
+pub use crate::reliability::{
+    RetryError, RetryExecutor, RetryPolicy, is_busy_error, is_idempotent_operation,
+};
 
 // Replica routing 导出（replica-routing feature）
 #[cfg(feature = "replica-routing")]

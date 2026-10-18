@@ -4,7 +4,83 @@
 
 use super::*;
 
+#[cfg(feature = "sqlite")]
+use crate::foundation::SqlitePragmas;
+
 impl DbPool {
+    /// journal_mode 合法值（SQLite 对语义非法值静默回退当前值，须应用层拦截）
+    #[cfg(feature = "sqlite")]
+    const JOURNAL_MODES: [&str; 6] = ["DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"];
+    /// synchronous 合法值（同上：不能依赖驱动报错）
+    #[cfg(feature = "sqlite")]
+    const SYNCHRONOUS_MODES: [&str; 4] = ["OFF", "NORMAL", "FULL", "EXTRA"];
+
+    /// 校验 PRAGMA 文本值：大小写不敏感的枚举白名单
+    ///
+    /// 白名单同时消除「配置值 → PRAGMA 语句」的注入面与 SQLite 宽恕语义
+    /// 下的静默不生效（如 `journal_mode=FOO` 被驱动无声忽略）——配置了
+    /// 却未生效的值在校验层即显性拒绝。
+    #[cfg(feature = "sqlite")]
+    fn validate_pragma_value(value: &str, name: &str, allowed: &[&str]) -> DbResult<String> {
+        let upper = value.to_ascii_uppercase();
+        if allowed.contains(&upper.as_str()) {
+            Ok(upper)
+        } else {
+            Err(DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                "pool-sqlite-pragma-invalid",
+                &[("name", name.to_string()), ("value", value.to_string())],
+            ))))
+        }
+    }
+
+    /// 建连后应用 sqlite PRAGMA（busy_timeout / journal_mode / synchronous / foreign_keys）
+    ///
+    /// 每个 PRAGMA 连接级生效；本池所有连接都经 [`Self::create_connection`]
+    /// 创建，此处是唯一应用点。任一 PRAGMA 失败即整体建连失败——配置了
+    /// pragma 却未生效属静默偏差，禁止。
+    ///
+    /// 前提不变量：连接级 PRAGMA 能覆盖全部物理连接，依赖 sea-orm sqlite
+    /// 驱动在内池未显式配置时强制 `max_connections(1)`（sea-orm 2.0.x
+    /// `driver/sqlx_sqlite.rs`），dbnexus 经裸 URL 建连恰落在该路径。未来
+    /// 若接入多连接内池（`ConnectOptions`/连接池调参），必须改走驱动建连
+    /// 钩子逐连接应用，否则 PRAGMA 将静默只作用于部分连接。
+    #[cfg(feature = "sqlite")]
+    pub(super) async fn apply_sqlite_pragmas(
+        conn: &sea_orm::DatabaseConnection,
+        pragmas: &SqlitePragmas,
+    ) -> DbResult<()> {
+        use sea_orm::ConnectionTrait;
+
+        let mut statements = Vec::new();
+        if let Some(mode) = &pragmas.journal_mode {
+            let mode = Self::validate_pragma_value(mode, "journal_mode", &Self::JOURNAL_MODES)?;
+            statements.push(format!("PRAGMA journal_mode={mode}"));
+        }
+        if let Some(ms) = pragmas.busy_timeout_ms {
+            statements.push(format!("PRAGMA busy_timeout={ms}"));
+        }
+        if let Some(mode) = &pragmas.synchronous {
+            let mode = Self::validate_pragma_value(mode, "synchronous", &Self::SYNCHRONOUS_MODES)?;
+            statements.push(format!("PRAGMA synchronous={mode}"));
+        }
+        if let Some(on) = pragmas.foreign_keys {
+            statements.push(format!(
+                "PRAGMA foreign_keys={}",
+                if on { "ON" } else { "OFF" }
+            ));
+        }
+
+        for stmt in &statements {
+            conn.execute_unprepared(stmt).await.map_err(|e| {
+                DbError::Connection(sea_orm::DbErr::Custom(i18n::t(
+                    "pool-sqlite-pragma-failed",
+                    &[("statement", stmt.to_string()), ("error", e.to_string())],
+                )))
+            })?;
+        }
+        Ok(())
+    }
+
     /// 创建单个数据库连接
     ///
     /// 使用配置中的 URL 建立新的数据库连接。
@@ -75,6 +151,12 @@ impl DbPool {
             }
             _ => {
                 let conn = sea_orm::Database::connect(&config.url).await?;
+                #[cfg(feature = "sqlite")]
+                if matches!(db_type, crate::foundation::DatabaseType::Sqlite)
+                    && let Some(pragmas) = &config.sqlite_pragmas
+                {
+                    Self::apply_sqlite_pragmas(&conn, pragmas).await?;
+                }
                 Ok(DbConnection::SeaOrm(conn))
             }
         }
@@ -540,5 +622,158 @@ impl DbPool {
                 }
             }
         });
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod sqlite_pragma_tests {
+    use super::*;
+    use crate::foundation::{DbConfig, SqlitePragmas};
+    use sea_orm::ConnectionTrait;
+
+    fn file_db_config(
+        dir: &tempfile::TempDir,
+        name: &str,
+        pragmas: Option<SqlitePragmas>,
+    ) -> DbConfig {
+        DbConfig {
+            // mode=rwc（sqlx 白名单参数）：库文件不存在时创建
+            url: format!("sqlite:{}?mode=rwc", dir.path().join(name).display()),
+            sqlite_pragmas: pragmas,
+            ..Default::default()
+        }
+    }
+
+    async fn scalar_string(conn: &sea_orm::DatabaseConnection, sql: &str) -> String {
+        let row = conn
+            .query_one_raw(sea_orm::Statement::from_string(
+                sea_orm::DatabaseBackend::Sqlite,
+                sql.to_string(),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        row.try_get_by(0).unwrap()
+    }
+
+    async fn scalar_int(conn: &sea_orm::DatabaseConnection, sql: &str) -> i64 {
+        let row = conn
+            .query_one_raw(sea_orm::Statement::from_string(
+                sea_orm::DatabaseBackend::Sqlite,
+                sql.to_string(),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        row.try_get_by(0).unwrap()
+    }
+
+    async fn sea_conn_of(config: &DbConfig) -> sea_orm::DatabaseConnection {
+        #[allow(unreachable_patterns)]
+        match DbPool::create_connection(config).await.unwrap() {
+            DbConnection::SeaOrm(conn) => conn,
+            _ => panic!("test only exercises the SeaOrm backend"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_pragmas_applied_on_connect() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = file_db_config(
+            &dir,
+            "pragma.db",
+            Some(SqlitePragmas {
+                busy_timeout_ms: Some(1234),
+                journal_mode: Some("WAL".to_string()),
+                synchronous: Some("NORMAL".to_string()),
+                foreign_keys: Some(true),
+            }),
+        );
+        let conn = sea_conn_of(&config).await;
+        assert_eq!(scalar_string(&conn, "PRAGMA journal_mode").await, "wal");
+        assert_eq!(scalar_int(&conn, "PRAGMA busy_timeout").await, 1234);
+        assert_eq!(scalar_int(&conn, "PRAGMA foreign_keys").await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_no_pragmas_connects_with_default_behavior() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = file_db_config(&dir, "plain.db", None);
+        let conn = sea_conn_of(&config).await;
+        assert_eq!(scalar_string(&conn, "PRAGMA journal_mode").await, "delete");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_journal_mode_fails_connect() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = file_db_config(
+            &dir,
+            "bad.db",
+            Some(SqlitePragmas {
+                journal_mode: Some("WAL; DROP TABLE t".to_string()),
+                ..Default::default()
+            }),
+        );
+        let err = DbPool::create_connection(&config).await.unwrap_err();
+        assert!(
+            err.to_string().contains("journal_mode"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_semantic_invalid_pragma_rejected_at_connect() {
+        // 语义非法但形如 token 的值（如 FOO）在白名单校验层即拒绝——
+        // SQLite 对这类值会静默回退当前值（宽恕语义），不能依赖驱动报错。
+        let dir = tempfile::tempdir().unwrap();
+        let config = file_db_config(
+            &dir,
+            "reject.db",
+            Some(SqlitePragmas {
+                synchronous: Some("FOO".to_string()),
+                ..Default::default()
+            }),
+        );
+        let err = DbPool::create_connection(&config).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("synchronous") && msg.contains("FOO"),
+            "error should name the rejected pragma value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_pragma_value_validation() {
+        // 白名单命中（大小写不敏感，规范化为大写）
+        assert_eq!(
+            DbPool::validate_pragma_value("WAL", "journal_mode", &DbPool::JOURNAL_MODES).unwrap(),
+            "WAL"
+        );
+        assert_eq!(
+            DbPool::validate_pragma_value("wal", "journal_mode", &DbPool::JOURNAL_MODES).unwrap(),
+            "WAL"
+        );
+        assert_eq!(
+            DbPool::validate_pragma_value("normal", "synchronous", &DbPool::SYNCHRONOUS_MODES)
+                .unwrap(),
+            "NORMAL"
+        );
+        // 白名单外：注入串、语义非法 token、空串全部拒绝
+        assert!(
+            DbPool::validate_pragma_value(
+                "WAL; DROP TABLE t",
+                "journal_mode",
+                &DbPool::JOURNAL_MODES
+            )
+            .is_err()
+        );
+        assert!(
+            DbPool::validate_pragma_value("FOO", "journal_mode", &DbPool::JOURNAL_MODES).is_err()
+        );
+        assert!(DbPool::validate_pragma_value("", "journal_mode", &DbPool::JOURNAL_MODES).is_err());
+        assert!(
+            DbPool::validate_pragma_value("foo", "synchronous", &DbPool::SYNCHRONOUS_MODES)
+                .is_err()
+        );
     }
 }

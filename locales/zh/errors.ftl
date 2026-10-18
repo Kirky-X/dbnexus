@@ -170,6 +170,8 @@ pool-parse-config-failed = 解析权限配置文件 '{ $path }' 失败: { $error
 pool-yaml-parse-error = '{ $source }' 中的 YAML 解析错误: { $error }
 pool-invalid-db-url = 无效的数据库 URL: { $error }
 pool-recreate-failed = 重新创建连接失败: { $error }
+pool-sqlite-pragma-invalid = 无效的 SQLite PRAGMA 值 '{ $name }': '{ $value }'
+pool-sqlite-pragma-failed = SQLite PRAGMA '{ $statement }' 执行失败: { $error }
 
 health-check-timeout = 健康检查超时
 health-check-timeout-recommendation = 健康检查超时，建议优化检查逻辑

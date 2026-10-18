@@ -531,6 +531,31 @@ fn default_lag_check_interval() -> u64 {
     10
 }
 
+// ============================================================================
+// SQLite PRAGMA 配置
+// ============================================================================
+
+/// SQLite 连接级 PRAGMA 配置
+///
+/// 仅 sqlite 后端生效（`sqlite` feature）；`None` 字段保持驱动默认，
+/// 整体缺省时连接行为与未引入本配置前完全一致。
+#[cfg(feature = "sqlite")]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SqlitePragmas {
+    /// busy 超时（毫秒）；驱动默认 5000（sqlx 内建 `sqlite3_busy_timeout`）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub busy_timeout_ms: Option<u64>,
+    /// journal 模式（如 `WAL`）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journal_mode: Option<String>,
+    /// synchronous 模式（如 `NORMAL`）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synchronous: Option<String>,
+    /// 外键约束开关
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreign_keys: Option<bool>,
+}
+
 /// 数据库配置
 ///
 /// 纯数据结构，通过 `from_yaml_str()` / `from_json_str()` 直接反序列化加载
@@ -600,6 +625,11 @@ pub struct DbConfig {
     #[cfg(feature = "replica-routing")]
     #[serde(default)]
     pub replica_config: Option<ReplicaConfig>,
+
+    /// SQLite 连接级 PRAGMA 配置（`sqlite` feature；仅 sqlite 后端生效）
+    #[cfg(feature = "sqlite")]
+    #[serde(default)]
+    pub sqlite_pragmas: Option<SqlitePragmas>,
 }
 
 impl Default for DbConfig {
@@ -621,6 +651,8 @@ impl Default for DbConfig {
             failover_config: None,
             #[cfg(feature = "replica-routing")]
             replica_config: None,
+            #[cfg(feature = "sqlite")]
+            sqlite_pragmas: None,
         }
     }
 }
@@ -705,6 +737,8 @@ impl DbConfig {
             failover_config: None,
             #[cfg(feature = "replica-routing")]
             replica_config: None,
+            #[cfg(feature = "sqlite")]
+            sqlite_pragmas: None,
         })
     }
 
@@ -1429,6 +1463,8 @@ mod tests {
             failover_config: None,
             #[cfg(feature = "replica-routing")]
             replica_config: None,
+            #[cfg(feature = "sqlite")]
+            sqlite_pragmas: None,
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let deserialized: DbConfig = serde_json::from_str(&json).unwrap();
@@ -1732,5 +1768,57 @@ mod config_error_i18n_tests {
             CacheConfig::default().default_ttl_duration(),
             Duration::from_secs(300)
         );
+    }
+}
+
+#[cfg(test)]
+mod sqlite_pragmas_config_tests {
+    use super::*;
+
+    #[test]
+    fn test_sqlite_pragmas_serde_roundtrip_full() {
+        let pragmas = SqlitePragmas {
+            busy_timeout_ms: Some(8000),
+            journal_mode: Some("WAL".to_string()),
+            synchronous: Some("NORMAL".to_string()),
+            foreign_keys: Some(true),
+        };
+        let json = serde_json::to_string(&pragmas).unwrap();
+        let back: SqlitePragmas = serde_json::from_str(&json).unwrap();
+        assert_eq!(pragmas, back);
+    }
+
+    #[test]
+    fn test_sqlite_pragmas_none_fields_skipped() {
+        let pragmas = SqlitePragmas {
+            busy_timeout_ms: Some(1),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&pragmas).unwrap();
+        assert_eq!(json, r#"{"busy_timeout_ms":1}"#);
+    }
+
+    #[test]
+    fn test_db_config_without_sqlite_pragmas_key_is_none() {
+        let config: DbConfig = serde_json::from_str(r#"{"url": "sqlite:data/test.db"}"#).unwrap();
+        assert!(config.sqlite_pragmas.is_none());
+    }
+
+    #[test]
+    fn test_db_config_with_sqlite_pragmas_roundtrip() {
+        let config: DbConfig = serde_json::from_str(
+            r#"{"url": "sqlite:data/test.db",
+                "sqlite_pragmas": {"journal_mode": "WAL", "busy_timeout_ms": 5000}}"#,
+        )
+        .unwrap();
+        let pragmas = config.sqlite_pragmas.as_ref().unwrap();
+        assert_eq!(pragmas.journal_mode.as_deref(), Some("WAL"));
+        assert_eq!(pragmas.busy_timeout_ms, Some(5000));
+        assert!(pragmas.synchronous.is_none());
+        assert!(pragmas.foreign_keys.is_none());
+
+        let json = serde_json::to_string(&config).unwrap();
+        let back: DbConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sqlite_pragmas, config.sqlite_pragmas);
     }
 }

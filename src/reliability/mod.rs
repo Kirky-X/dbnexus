@@ -13,6 +13,12 @@ pub use retry::{RetryError, RetryExecutor, RetryPolicy};
 #[cfg(feature = "retry")]
 pub use retry::is_idempotent_operation;
 
+#[cfg(feature = "retry")]
+pub use retry::is_busy_error;
+
+#[cfg(feature = "retry")]
+pub(crate) use retry::retry_write_on_busy;
+
 #[cfg(feature = "cache-available")]
 pub mod cache_guard;
 

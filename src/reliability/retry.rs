@@ -48,6 +48,13 @@ pub struct RetryPolicy {
     /// 整体 wall-clock 超时（毫秒），`None` 表示无超时限制，默认 `None`
     #[serde(default)]
     pub overall_timeout_ms: Option<u64>,
+    /// 非 BUSY 写错误一律不重试；BUSY 写错误仅事务外语句在开关开启时重试，默认 false
+    ///
+    /// BUSY（`database is locked`）意味着语句未生效，语句级重试无副作用重复；
+    /// 其他写错误重试可能重复副作用，保持不重试。事务内 BUSY 可能是 WAL 下的
+    /// SQLITE_BUSY_SNAPSHOT（读快照失效），必须回滚事务，故事务内永不语句级重试。
+    #[serde(default)]
+    pub retry_busy_writes: bool,
 }
 
 impl Default for RetryPolicy {
@@ -59,6 +66,7 @@ impl Default for RetryPolicy {
             multiplier: 2.0,
             jitter: true,
             overall_timeout_ms: None,
+            retry_busy_writes: false,
         }
     }
 }
@@ -191,6 +199,49 @@ pub fn is_idempotent_operation(sql: &str) -> bool {
         || trimmed.len() >= 7 && trimmed[..7].eq_ignore_ascii_case(b"EXPLAIN")
 }
 
+/// 判断错误链是否包含数据库 busy/锁定错误（SQLITE_BUSY / SQLITE_LOCKED）。
+///
+/// 沿 `source()` 链收集 Display 文本做大小写不敏感匹配，不依赖具体驱动
+/// 类型——经 sea-orm/sqlx 透明包装的 sqlite 锁错误均可命中。
+///
+/// 信任假设：子串匹配不校验错误来源，若错误文本内嵌了外部可控内容（如
+/// 恶意命名的数据库对象出现在错误消息里），非 BUSY 错误可能被误判为
+/// BUSY；误判后果限于多一次重试尝试（仅 `retry_busy_writes` 开启时），
+/// 单语句粒度重试无副作用重复。成本：仅错误路径执行（默认开关关闭时
+/// 永不触达），两次有界分配。
+pub fn is_busy_error(err: &DbError) -> bool {
+    const NEEDLES: [&str; 5] = [
+        "database is locked",
+        "database table is locked",
+        "database is busy",
+        "sqlite_busy",
+        "sqlite_locked",
+    ];
+
+    let mut text = String::new();
+    let mut current: Option<&dyn std::error::Error> = Some(err);
+    while let Some(e) = current {
+        text.push_str(&e.to_string());
+        text.push('\n');
+        current = e.source();
+    }
+    let lower = text.to_lowercase();
+    NEEDLES.iter().any(|needle| lower.contains(needle))
+}
+
+/// 写路径 BUSY 重试决策（[`RetryExecutor`] 与 Session 内联重试循环共用语义）。
+///
+/// 仅「开关开启 + 事务外 + BUSY 错误」同时成立才允许语句级重试：BUSY 意味着
+/// 语句未生效；事务内 BUSY 可能是 WAL 下的 SQLITE_BUSY_SNAPSHOT（读快照失效），
+/// 语句级重试不安全，必须回滚整个事务。
+pub(crate) fn retry_write_on_busy(
+    policy: &RetryPolicy,
+    in_transaction: bool,
+    err: &DbError,
+) -> bool {
+    policy.retry_busy_writes && !in_transaction && is_busy_error(err)
+}
+
 // ============================================================================
 // RetryExecutor — 重试执行器
 // ============================================================================
@@ -204,7 +255,11 @@ impl RetryExecutor {
     /// 执行可重试操作（关联函数，非实例方法）。
     ///
     /// 仅当 `sql` 被判定为幂等操作时才自动重试。非幂等操作直接执行一次，
-    /// 失败时返回 `RetryError::NonRetryable`。
+    /// 失败时返回 `RetryError::NonRetryable`；`retry_busy_writes` 开启时，
+    /// 事务外 BUSY 写错误（见 `retry_write_on_busy`）除外。
+    ///
+    /// 调用方契约：本执行器不感知事务，写 BUSY 重试按事务外语义处理——
+    /// `operation` 闭包失败返回时不得遗留未回滚的打开事务。
     ///
     /// # 参数
     ///
@@ -226,8 +281,9 @@ impl RetryExecutor {
         Fut: Future<Output = Result<T, DbError>> + Send,
         T: Send,
     {
-        // 非幂等操作：直接执行，不重试
-        if !is_idempotent_operation(sql) {
+        let idempotent = is_idempotent_operation(sql);
+        // 非幂等且未开启 BUSY 写重试：直接执行，不重试
+        if !idempotent && !policy.retry_busy_writes {
             return operation().await.map_err(RetryError::NonRetryable);
         }
 
@@ -237,7 +293,12 @@ impl RetryExecutor {
         // 首次执行
         let mut last_error = match operation().await {
             Ok(val) => return Ok(val),
-            Err(e) => e,
+            Err(e) => {
+                if !idempotent && !retry_write_on_busy(policy, false, &e) {
+                    return Err(RetryError::NonRetryable(e));
+                }
+                e
+            }
         };
 
         for attempt in 0..policy.max_retries {
@@ -266,7 +327,12 @@ impl RetryExecutor {
 
             match operation().await {
                 Ok(val) => return Ok(val),
-                Err(e) => last_error = e,
+                Err(e) => {
+                    if !idempotent && !retry_write_on_busy(policy, false, &e) {
+                        return Err(RetryError::NonRetryable(e));
+                    }
+                    last_error = e;
+                }
             }
         }
 
@@ -492,6 +558,203 @@ mod tests {
 
         assert!(matches!(result, Err(RetryError::NonRetryable(_))));
         assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    /// BUSY/locked 错误各形态命中（大小写不敏感）
+    #[test]
+    fn test_is_busy_error_matches_lock_variants() {
+        let cases = [
+            "database is locked",
+            "Database Is Locked",
+            "database table is locked",
+            "database is busy",
+            "SQLITE_BUSY: too many writers",
+            "SQLITE_LOCKED",
+        ];
+        for msg in cases {
+            assert!(
+                is_busy_error(&DbError::Query(msg.to_string())),
+                "should match: {msg}"
+            );
+        }
+    }
+
+    /// BUSY 识别沿 source 链下探（DbError::Connection 透明透传 DbErr）
+    #[test]
+    fn test_is_busy_error_walks_source_chain() {
+        let err = DbError::Connection(sea_orm::DbErr::Custom("database is locked".to_string()));
+        assert!(is_busy_error(&err));
+    }
+
+    /// 非 BUSY 错误不命中
+    #[test]
+    fn test_is_busy_error_non_busy_not_matched() {
+        let cases = [
+            "syntax error in \"SELECT\"",
+            "permission denied for table t",
+            "connection closed",
+            "boom",
+        ];
+        for msg in cases {
+            assert!(
+                !is_busy_error(&DbError::Query(msg.to_string())),
+                "should not match: {msg}"
+            );
+        }
+    }
+
+    /// 开关开启：BUSY 写错误重试至 Exhausted
+    #[tokio::test]
+    async fn test_busy_write_retried_until_exhausted_when_enabled() {
+        let policy = RetryPolicy {
+            max_retries: 2,
+            initial_backoff_ms: 1,
+            jitter: false,
+            retry_busy_writes: true,
+            ..Default::default()
+        };
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err::<u32, _>(DbError::Connection(sea_orm::DbErr::Custom(
+                        "database is locked".to_string(),
+                    )))
+                }
+            },
+            "INSERT INTO t VALUES (1)",
+        )
+        .await;
+
+        match result {
+            Err(RetryError::Exhausted { attempts, .. }) => assert_eq!(attempts, 3),
+            other => panic!("expected Exhausted, got {other:?}"),
+        }
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    /// 开关开启：非 BUSY 写错误立即 NonRetryable（副作用安全侧）
+    #[tokio::test]
+    async fn test_non_busy_write_not_retried_when_enabled() {
+        let policy = RetryPolicy {
+            retry_busy_writes: true,
+            ..Default::default()
+        };
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err::<u32, _>(DbError::Query("syntax error".to_string()))
+                }
+            },
+            "INSERT INTO t VALUES (1)",
+        )
+        .await;
+
+        assert!(matches!(result, Err(RetryError::NonRetryable(_))));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    /// 开关开启：BUSY 写错误第 2 次成功
+    #[tokio::test]
+    async fn test_busy_write_succeeds_on_retry_when_enabled() {
+        let policy = RetryPolicy {
+            initial_backoff_ms: 1,
+            retry_busy_writes: true,
+            ..Default::default()
+        };
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    if c.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err(DbError::Connection(sea_orm::DbErr::Custom(
+                            "database is locked".to_string(),
+                        )))
+                    } else {
+                        Ok(7u32)
+                    }
+                }
+            },
+            "UPDATE t SET a = 1",
+        )
+        .await;
+
+        assert_eq!(result.expect("should succeed on 2nd attempt"), 7);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    /// 开关关闭：BUSY 写错误不重试（与现状一致）
+    #[tokio::test]
+    async fn test_busy_write_not_retried_when_disabled() {
+        let policy = RetryPolicy::default();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+
+        let result = RetryExecutor::execute_with_retry(
+            &policy,
+            move || {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err::<u32, _>(DbError::Connection(sea_orm::DbErr::Custom(
+                        "database is locked".to_string(),
+                    )))
+                }
+            },
+            "INSERT INTO t VALUES (1)",
+        )
+        .await;
+
+        assert!(matches!(result, Err(RetryError::NonRetryable(_))));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    /// retry_busy_writes 缺省 false，旧配置反序列化不受影响
+    #[test]
+    fn test_retry_busy_writes_defaults_false_and_backcompat() {
+        assert!(!RetryPolicy::default().retry_busy_writes);
+        // 既有字段均无 serde default（存量行为）：旧配置不含新键即可反序列化
+        let policy: RetryPolicy = serde_json::from_str(
+            r#"{"max_retries": 5, "initial_backoff_ms": 200,
+                "max_backoff_ms": 5000, "multiplier": 2.0, "jitter": true}"#,
+        )
+        .unwrap();
+        assert!(!policy.retry_busy_writes);
+    }
+
+    /// 写路径 BUSY 重试决策四象限：开关 × 事务 × BUSY
+    #[test]
+    fn test_retry_write_on_busy_decision_matrix() {
+        let on = RetryPolicy {
+            retry_busy_writes: true,
+            ..Default::default()
+        };
+        let off = RetryPolicy::default();
+        let busy = || DbError::Connection(sea_orm::DbErr::Custom("database is locked".to_string()));
+        let plain = || DbError::Query("boom".to_string());
+
+        assert!(retry_write_on_busy(&on, false, &busy()));
+        // 事务内永不语句级重试（SQLITE_BUSY_SNAPSHOT 安全约束）
+        assert!(!retry_write_on_busy(&on, true, &busy()));
+        // 非 BUSY 写错误不重试
+        assert!(!retry_write_on_busy(&on, false, &plain()));
+        // 开关关闭维持现状
+        assert!(!retry_write_on_busy(&off, false, &busy()));
     }
 
     /// 重试耗尽：attempts = 1 + max_retries

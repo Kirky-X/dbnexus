@@ -173,6 +173,8 @@ pool-parse-config-failed = Failed to parse permission config file '{ $path }': {
 pool-yaml-parse-error = YAML parse error in '{ $source }': { $error }
 pool-invalid-db-url = Invalid database URL: { $error }
 pool-recreate-failed = Failed to recreate connections: { $error }
+pool-sqlite-pragma-invalid = Invalid SQLite PRAGMA value for '{ $name }': '{ $value }'
+pool-sqlite-pragma-failed = SQLite PRAGMA '{ $statement }' execution failed: { $error }
 
 health-check-timeout = Health check timed out
 health-check-timeout-recommendation = Health check timed out; optimize the check logic

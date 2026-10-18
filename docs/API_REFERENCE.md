@@ -195,6 +195,11 @@ pub struct DbConfig {
     #[cfg(feature = "replica-routing")]
     #[serde(default)]
     pub replica_config: Option<ReplicaConfig>,
+
+    /// SQLite 连接级 PRAGMA 配置（`sqlite` feature 启用时可用）
+    #[cfg(feature = "sqlite")]
+    #[serde(default)]
+    pub sqlite_pragmas: Option<SqlitePragmas>,
 }
 ```
 
@@ -237,8 +242,27 @@ pub struct PoolConfig {
 | `retry_policy` | `None`（`retry`） | 无（仅配置源 / 程序化） |
 | `failover_config` | `None`（`failover`） | 无（仅配置源 / 程序化） |
 | `replica_config` | `None`（`replica-routing`） | 无（仅配置源 / 程序化） |
+| `sqlite_pragmas` | `None`（`sqlite`） | 无（仅配置源 / 程序化） |
 
-> `from_env` 不读这四个字段的环境变量（固定 `CacheConfig::default()` 与 `None`）；后三个字段是对应 feature 下的 `#[cfg]` 可选字段，未启用时既不存在于结构体、也不参与序列化。配置类型均未标 `deny_unknown_fields`，因此向未启用 feature 的配置源写 `failover_config:` 等子节点会被 serde **静默忽略**（不报错），需对应 feature 重新构建才会生效。
+> `from_env` 不读这四个字段的环境变量（固定 `CacheConfig::default()` 与 `None`）；后四个字段是对应 feature 下的 `#[cfg]` 可选字段，未启用时既不存在于结构体、也不参与序列化。配置类型均未标 `deny_unknown_fields`，因此向未启用 feature 的配置源写 `failover_config:` 等子节点会被 serde **静默忽略**（不报错），需对应 feature 重新构建才会生效。
+
+### `SqlitePragmas`（`sqlite` feature，`sqlite_pragmas:` 子节点）
+
+```rust
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SqlitePragmas {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub busy_timeout_ms: Option<u64>,   // 驱动默认 5000（sqlx 内建）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journal_mode: Option<String>,   // 如 "WAL"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synchronous: Option<String>,    // 如 "NORMAL"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreign_keys: Option<bool>,
+}
+```
+
+仅 sqlite 后端生效：`sqlite_pragmas = Some` 时，池内每个连接建立后依次执行对应 `PRAGMA` 语句（本池所有连接都经同一建连点创建）；任一 PRAGMA 失败即建连失败。`journal_mode` / `synchronous` 为大小写不敏感枚举白名单（journal_mode ∈ {DELETE,TRUNCATE,PERSIST,MEMORY,WAL,OFF}；synchronous ∈ {OFF,NORMAL,FULL,EXTRA}），白名单外在建连时报错——SQLite 对语义非法值会静默忽略，应用层白名单保证「配置了必生效」。整体缺省（`None`）时连接行为与未引入本配置前完全一致；不配置时 sqlx 默认 busy_timeout 为 5 秒。连接串查询参数不承载 PRAGMA 配置——sqlx 0.9 对白名单（`mode`/`cache`/`immutable`/`vfs`）外的 URL 参数直接报错。
 
 ### `CacheConfig`（`cache_config:` 子节点）
 
@@ -871,16 +895,22 @@ pub struct RetryPolicy {
     pub jitter: bool,
     /// 整体 wall-clock 超时（毫秒），`None` 表示无超时限制，默认 `None`
     pub overall_timeout_ms: Option<u64>,
+    /// 非 BUSY 写错误一律不重试；BUSY 写错误仅事务外语句在开关开启时重试，默认 false
+    #[serde(default)]
+    pub retry_busy_writes: bool,
 }
 ```
 
 退避策略：第 N 次重试的等待时间 = `min(initial_backoff * multiplier^N, max_backoff)`；`jitter = true` 时添加 ±25% 的随机抖动。
 
+**写路径 BUSY 重试**：`retry_busy_writes`（默认 `false`）开启后，非幂等语句仅在「事务外 + 错误为 BUSY/锁定（`database is locked` / `SQLITE_BUSY` / `SQLITE_LOCKED` 等，经 `is_busy_error` 识别）」时进入既有退避重试——BUSY 意味着语句未生效，重试无副作用重复；事务内 BUSY 可能是 WAL 下的 `SQLITE_BUSY_SNAPSHOT`，必须回滚事务，故永不语句级重试。开启后写延迟上界 ≈ `(1 + max_retries) × busy_timeout + Σ backoff`：busy_timeout 为驱动内每次尝试的等待上界（sqlx 默认 5 秒，可经 `sqlite_pragmas.busy_timeout_ms` 调整）是主导项，Σ backoff 为重试退避总和。
+
 ```rust
 pub struct RetryExecutor;
 
 impl RetryExecutor {
-    /// 关联函数（非实例方法）。仅当 sql 被判定为幂等操作时才自动重试。
+    /// 关联函数（非实例方法）。仅当 sql 被判定为幂等操作时才自动重试；
+    /// `retry_busy_writes` 开启时，事务外 BUSY 写错误同样可重试。
     pub async fn execute_with_retry<F, Fut, T>(
         policy: &RetryPolicy,
         operation: F,
@@ -911,7 +941,7 @@ assert!(is_idempotent_operation("SELECT * FROM users"));
 assert!(!is_idempotent_operation("INSERT INTO users VALUES (1)"));
 ```
 
-**导出类型**：`RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation`
+**导出类型**：`RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation`、`is_busy_error`
 
 > 其余分布式能力（`failover` / `replica-routing` / `scatter-gather` / `shard-migration` / `saga` / `distributed-id`）的入口类型见[特性门控 API 总览](#-特性门控-api-总览)，端到端用法见 `examples/` 中的同名示例。
 

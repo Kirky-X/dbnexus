@@ -137,12 +137,12 @@ impl Session {
                 state.transaction.clone()
             };
 
-            // retry feature: 幂等查询自动重试 + 指数退避
+            // retry feature: 幂等查询自动重试 + 指数退避；写路径仅在
+            // retry_busy_writes 开启时对事务外 BUSY 错误重试
             #[cfg(feature = "retry")]
-            {
-                if let Some(ref policy) = self.pool_inner.config.retry_policy
-                    && crate::reliability::is_idempotent_operation(sql)
-                {
+            if let Some(ref policy) = self.pool_inner.config.retry_policy {
+                let idempotent = crate::reliability::is_idempotent_operation(sql);
+                if idempotent || policy.retry_busy_writes {
                     let mut last_error: Option<DbError> = None;
                     // 首次执行 + 重试循环
                     for attempt in 0..=policy.max_retries {
@@ -160,7 +160,20 @@ impl Session {
                                 self.record_execute_metrics(query_start, true);
                                 return Ok(exec_result);
                             }
-                            Err(e) => last_error = Some(e),
+                            Err(e) => {
+                                if !idempotent
+                                    && !crate::reliability::retry_write_on_busy(
+                                        policy,
+                                        tx_opt.is_some(),
+                                        &e,
+                                    )
+                                {
+                                    #[cfg(all(feature = "metrics", feature = "sql-parser"))]
+                                    self.record_execute_metrics(query_start, false);
+                                    return Err(e);
+                                }
+                                last_error = Some(e);
+                            }
                         }
                     }
                     // 重试耗尽，记录失败

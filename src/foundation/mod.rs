@@ -13,6 +13,8 @@ pub mod error;
 pub use config::FailoverConfig;
 #[cfg(feature = "replica-routing")]
 pub use config::ReplicaConfig;
+#[cfg(feature = "sqlite")]
+pub use config::SqlitePragmas;
 pub use config::{CacheConfig, ConfigError, DatabaseType, DbConfig, PoolConfig};
 #[cfg(feature = "permission")]
 pub use error::PermissionError;
