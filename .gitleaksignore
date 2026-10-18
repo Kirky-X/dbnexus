@@ -1,0 +1,5 @@
+# gitleaks 指纹忽略清单（.gitleaksignore）
+# 格式：{commit}:{file}:{rule-id}:{startline}；逐条为已核实的 src 内联测试夹具/占位（非真实凭据），
+# surgical 逐行忽略，不放行整份文件。目录级噪声由同目录 .gitleaks.toml 处理。
+66cacbc2e7e9a2a1228e51f561864e9dd933e646:scripts/pre-commit-check.sh:private-key:464
+ff5ccb610d18e31464262b531e747e8db0895642:scripts/pre-commit-check.sh:private-key:464
