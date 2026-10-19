@@ -34,8 +34,9 @@
 git clone https://github.com/Kirky-X/dbnexus.git
 cd dbnexus
 
-# 安装 pre-commit hooks
-./scripts/install-pre-commit.sh
+# 安装 Git 钩子（二选一）
+lefthook install
+# 或：pip install pre-commit && pre-commit install
 
 # 验证环境（嵌入式/服务器驱动互斥，禁用 --all-features：src/lib.rs compile_error! 守卫）
 cargo build --no-default-features --features sqlite,default-no-db,all-optional
@@ -63,8 +64,9 @@ cargo test --no-default-features --features sqlite,default-no-db,all-optional --
 项目使用 pre-commit hooks（lefthook / pre-commit，二者功能等价）保证代码质量：
 
 ```bash
-# 安装
-./scripts/install-pre-commit.sh
+# 安装（二选一）
+lefthook install
+# 或：pip install pre-commit && pre-commit install
 
 # 手动运行
 pre-commit run --all-files

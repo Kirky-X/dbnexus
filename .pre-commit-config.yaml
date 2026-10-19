@@ -12,9 +12,6 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: detect-private-key
-        # scripts/pre-commit-check.sh 的 patterns 数组以字面量列出各类私钥 PEM 头
-        # （脚本自身的检测规则定义），非真实私钥，予以排除
-        exclude: '^scripts/pre-commit-check\.sh$'
       - id: check-merge-conflict
         args: ['--assume-in-merge']
       # 不设 no-commit-to-branch：本仓工作流为 main 直提，钩子保护的是 master，

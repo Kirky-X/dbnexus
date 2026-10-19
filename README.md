@@ -574,7 +574,7 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 ## 🤝 参与贡献
 
-欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装脚本 `./scripts/install-pre-commit.sh`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 95%），以及提交/PR 流程。
+欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装方式 `lefthook install` 或 `pip install pre-commit && pre-commit install`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 95%），以及提交/PR 流程。
 
 ---
 
