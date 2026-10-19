@@ -594,7 +594,9 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 ## 📄 许可证
 
-本项目基于 **MIT + Commons Clause** 许可证发布：在 MIT 许可的基础上附加 Commons Clause 条件，未经单独书面授权不得销售本软件或将其用于商业用途。详见 [LICENSE](LICENSE)。
+本项目基于 [MIT](LICENSE) 许可证发布。
+
+Copyright (c) 2025-2026 Kirky.X🌠
 
 ---
 

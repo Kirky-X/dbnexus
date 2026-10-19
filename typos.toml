@@ -1,5 +1,5 @@
-# typos 白名单 —— 仅收录已人工核实的"非笔误"用法
-# (缩写、故意构造的测试数据、外文示例)，避免 typos --write-changes 误改真实内容。
+# typos 白名单 —— 仅登记「确为真词 / 真实标识符 / 刻意测试数据」的命中，
+# 不放宽任何门禁：真正的拼写错误仍会由 typos 报告并阻断提交。
 # 新增条目务必写明依据，禁止整目录/整文件排除。
 
 [default]
@@ -20,3 +20,12 @@ ECT = "ECT"
 # src/database/pool/duckdb_conn.rs#test_duckdb_syntax_error_returns_error:
 # 故意写错的 SQL 关键字，用于触发语法错误分支
 TABL = "TABL"
+# tests/ 与 src/ 内的语法错误用例："SELEC * FORM nonexistent" 等残缺 SQL
+# （tests/mysql_testcontainers.rs、tests/postgres_testcontainers.rs、
+# tests/pool/unit/duckdb_pool_tests.rs、src/access/security/ddl_guard.rs、
+# src/access/sql_parser.rs、src/database/pool/session/tests.rs）
+# 用于验证解析器与驱动的错误分支，属刻意构造的非法输入，不可"修正"
+SELEC = "SELEC"
+# src/i18n/i18n_impl.rs: ICU4X 组件 crate 的真实名字是 writeable（无 r），
+# 源码 import 与依赖表中的引用均为真实标识符，不是 writable 的拼写错误
+writeable = "writeable"

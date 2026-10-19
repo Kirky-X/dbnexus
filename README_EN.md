@@ -594,7 +594,9 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 ## 📄 License
 
-This project is licensed under **MIT + Commons Clause**: the MIT license with the additional Commons Clause condition — the right to sell the Software or use it commercially is not granted without separate written authorization. See [LICENSE](LICENSE).
+This project is licensed under the [MIT](LICENSE) License.
+
+Copyright (c) 2025-2026 Kirky.X🌠
 
 ---
 

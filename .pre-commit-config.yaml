@@ -1,4 +1,4 @@
-# pre-commit 配置 — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
+# pre-commit 配置 — 7 仓库统一基线（与 lefthook.yml 功能等价，二选一启用）
 # 安装: pip install pre-commit && pre-commit install --install-hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -13,22 +13,22 @@ repos:
         args: ['--maxkb=1000']
       - id: detect-private-key
         # scripts/pre-commit-check.sh 的 patterns 数组以字面量列出各类私钥 PEM 头
-        # (脚本自身的检测规则定义)，非真实私钥，予以排除
+        # （脚本自身的检测规则定义），非真实私钥，予以排除
         exclude: '^scripts/pre-commit-check\.sh$'
       - id: check-merge-conflict
         args: ['--assume-in-merge']
-      - id: no-commit-to-branch
-        # 本仓工作流在 main 上提交，故仅保护 master
-        args: ['--branch', 'master']
+      # 不设 no-commit-to-branch：本仓工作流为 main 直提，钩子保护的是 master，
+      # 保留该钩子不会生效，只会造成「有护栏」的误解
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        # --baseline: 本仓 .secrets.baseline 记录已知误报(示例/测试中的演示凭据),
-        # 仅新增真实密钥才报警
+        # --baseline: .secrets.baseline 记录已人工核实的误报（测试夹具/文档占位符），
+        # 带 --baseline 时基线内的发现放行，基线外的新发现仍阻断
         args: [--baseline, .secrets.baseline, --exclude-files, tests/, --exclude-files, examples/]
-        exclude: '^Cargo\.lock$'
+        # 自排除: 基线文件本身（内含凭证哈希）与锁文件不参与扫描
+        exclude: '^(Cargo\.lock|\.secrets\.baseline)$'
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.28.0
@@ -47,7 +47,7 @@ repos:
 
       - id: cargo-check
         name: cargo check
-        # 零告警门槛 feature 组合(与 CI lint job 一致);dbnexus 驱动互斥,不可 --all-features
+        # 零告警门槛 feature 组合（与 CI check job 一致）；dbnexus 驱动互斥，不可 --all-features
         entry: cargo check --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
         language: system
         types: [rust]
@@ -55,11 +55,30 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy
-        # 零告警门槛 feature 组合(与 CI clippy job 一致);dbnexus 驱动互斥,不可 --all-features
+        # 零告警门槛 feature 组合（与 CI clippy job 一致）；dbnexus 驱动互斥，不可 --all-features
         entry: cargo clippy --all-targets --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
+
+  # === 推送前门禁（与 lefthook 的 pre-push 等价；启用: pre-commit install -t pre-push） ===
+  - repo: local
+    hooks:
+      - id: cargo-deny
+        name: cargo deny
+        description: Check advisories, licenses, bans and sources
+        entry: cargo deny check
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: cargo-audit
+        name: cargo audit
+        description: Scan the dependency tree against the RustSec advisory database
+        entry: cargo audit
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
 
   # === 提交完成后清理本地编译产物（post-commit 阶段；启用: pre-commit install -t post-commit） ===
   - repo: local

@@ -1,9 +1,11 @@
-# 覆盖率状态口径：项目与补丁目标统一 90%（与 CI / pre-push 门禁同口径）
+# 覆盖率口径：codecov 项目与补丁目标与硬门禁统一为 95% 行覆盖。
+# CI coverage job 与 lefthook pre-push 均为 `cargo llvm-cov --fail-under-lines 95`；
+# 本文件 target 与其同步，调整任一侧须同步另一侧。
 coverage:
   status:
     project:
       default:
-        target: 90%
+        target: 95%
     patch:
       default:
-        target: 90%
+        target: 95%
