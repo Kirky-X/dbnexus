@@ -9,6 +9,7 @@
 <summary>📑 版本索引</summary>
 
 - [Unreleased](#unreleased)
+- [0.6.0-rc.10 - 2026-10-19](#060-rc10---2026-10-19)
 - [0.6.0-rc.6 - 2026-10-06](#060-rc6---2026-10-06)
 - [0.6.0-rc.5 - 2026-09-21](#060-rc5---2026-09-21)
 - [0.6.0-rc.4 - 2026-09-14](#060-rc4---2026-09-14)
@@ -29,8 +30,17 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.10] - 2026-10-19
+
+### Added
+
+- **SQLite PRAGMA 配置面与 BUSY 感知写重试**：新增 PRAGMA 配置接口；写事务遇 SQLITE_BUSY 按退避重试，降低并发写锁冲突失败。
+
 ### Changed
 
+- **YAML 后端迁移**：`serde_yaml_ng` → `serde-saphyr`（纯 Rust，消除 `RUSTSEC-2024-0449` unsafe-libyaml 根源）。
+- **i18n**：CLI 帮助与错误文案全量迁移 i18n 双轨，新增 `set_locale_from_system`；`build_bundle` 补未知 locale 的 EN 回退。
+- **发布依赖传播**：`confers` rc.10 → rc.11、`trait-kit` rc.9 → rc.10（子 crate `dbnexus-macros`/`dbnexus-limiter-port` 自钉同步 rc.10）；`oxcache` 保持 rc.8（反向可选边，断环约定）。
 - **依赖升级（2026-10-19 入库）**：`rustls` 0.23.45 → 0.23.46——修 RUSTSEC-2026-0346/0347/0348/0349（`Debug` 泄露 TLS 会话密钥、ECH 拒绝后缓冲的应用数据外发、Brotli 证书解压 1 GiB 分配、未认证 ServerHello 降级为经典密钥交换）；`duckdb` 1.10506.0 → 1.10506.1（`libduckdb-sys` 同步升级，其构建期 `zip` 需求 ^6 → ^9）——修 zip 6.0.0 的 RUSTSEC-2026-0367/0368/0369（符号链接逃逸 / 经符号链接施加 Unix 权限 / SUID·SGID 位保留，最高 critical 9.1）。`deny.toml` / `.cargo/audit.toml` 未新增豁免（7 项公告均为升级即修）
 
 ## [0.6.0-rc.9] - 2026-10-10

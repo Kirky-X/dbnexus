@@ -136,7 +136,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -325,16 +325,16 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ```toml
 # 嵌入式/边缘设备（最小配置）
-dbnexus = { version = "0.6.0-rc.9", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["embedded"] }
 
 # 微服务
-dbnexus = { version = "0.6.0-rc.9", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["microservice"] }
 
 # 单体应用
-dbnexus = { version = "0.6.0-rc.9", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["monolith"] }
 
 # 企业级（完整功能）
-dbnexus = { version = "0.6.0-rc.9", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 ```
 
 ---
