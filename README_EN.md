@@ -2,9 +2,9 @@
 
 <img src="docs/assets/dbnexus.png" alt="DBNexus Logo" width="240">
 
-[![CI Status](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/dbnexus.svg)](https://crates.io/crates/dbnexus) [![Docs.rs](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus) [![Downloads](https://img.shields.io/crates/d/dbnexus.svg)](https://crates.io/crates/dbnexus) [![License](https://img.shields.io/crates/l/dbnexus.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/dbnexus/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/dbnexus)
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-edded?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![Rustc 1.97.1+](https://img.shields.io/badge/Rustc-1.97.1+-orange.svg?style=for-the-badge)](https://www.rust-lang.org/) [![crates.io](https://img.shields.io/crates/v/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![docs.rs](https://img.shields.io/docsrs/dbnexus?style=for-the-badge)](https://docs.rs/dbnexus) [![downloads](https://img.shields.io/crates/d/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![CI](https://img.shields.io/github/actions/workflow/status/Kirky-X/dbnexus/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![coverage](https://img.shields.io/codecov/c/github/Kirky-X/dbnexus?style=for-the-badge)](https://codecov.io/gh/Kirky-X/dbnexus) [![license](https://img.shields.io/crates/l/dbnexus?style=for-the-badge)](LICENSE)
 
-**[Chinese](README.md)** | English
+[中文](README.md) | **English**
 
 **Enterprise-grade Database Abstraction Layer for Rust**
 
@@ -38,11 +38,11 @@ Define entities with derive macros; connection pooling, permissions, auditing, a
 - [🎨 Feature Flags](#-feature-flags)
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
-- [🏗️ Architecture](#-architecture)
+- [🏗️ Architecture](#️-architecture)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
-- [🗺️ Roadmap](#-roadmap)
+- [🗺️ Roadmap](#️-roadmap)
 - [🤝 Contributing](#-contributing)
 - [📋 Changelog](#-changelog)
 - [📄 License](#-license)
@@ -58,39 +58,37 @@ Define entities with derive macros; connection pooling, permissions, auditing, a
 
 DBNexus is built on Sea-ORM and provides a **declarative** database access approach: one macro defines the entity, one permission layer guards every SQL statement, and one set of features tailors the build.
 
-<div align="center">
-
-<table>
+<table style="width:100%; border-collapse: collapse">
 <tr>
-<td align="center" width="25%">🔒<br><b>Secure by Design</b><br>Unsafe forbidden crate-wide; table-level RBAC covers JOINs and subqueries</td>
-<td align="center" width="25%">🧩<br><b>Declarative Macros</b><br><code>#[db_entity]</code> generates permission-checked CRUD methods</td>
-<td align="center" width="25%">🗄️<br><b>Multi-Database</b><br>SQLite / PostgreSQL / MySQL / DuckDB / Ladybug / Neo4j</td>
-<td align="center" width="25%">📊<br><b>Observable & Reliable</b><br>Prometheus metrics, health checks, retry and circuit breaker</td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>Secure by design</b><br><span style="color:#64748B">Unsafe forbidden crate-wide; table-level RBAC covers JOINs and subqueries</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧩 <b>Declarative macros</b><br><span style="color:#64748B"><code>#[db_entity]</code> generates permission-checked CRUD methods</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🗄️ <b>Multi-database</b><br><span style="color:#64748B">SQLite / PostgreSQL / MySQL / DuckDB / Ladybug / Neo4j</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">📊 <b>Observable &amp; reliable</b><br><span style="color:#64748B">Prometheus metrics, health checks, retry and circuit breaker</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔄 <b>Connection pool &amp; transactions</b><br><span style="color:#64748B">RAII-style connection lifecycle, pool state maintained with atomics; <code>begin_transaction</code> / <code>commit</code> / rollback for full transaction management</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧾 <b>Unified error system</b><br><span style="color:#64748B"><code>ErrorCode</code> table + <code>QueryErrorReport</code> structured error reporting</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">⚙️ <b>Configuration</b><br><span style="color:#64748B"><code>DbConfig</code> / <code>PoolConfig</code>, environment variable / YAML / TOML multi-source</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌍 <b>Internationalization</b><br><span style="color:#64748B">ICU4X + Fluent locale-aware formatting (core feature, always compiled)</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>Permission control</b><br><span style="color:#64748B"><code>permission</code>: role-based table-level access control (RBAC), hard-depends on <code>sql-parser</code> to prevent injection bypass</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔍 <b>SQL parsing</b><br><span style="color:#64748B"><code>sql-parser</code>: operation type and table extraction, injection detection, cached parse results</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">📦 <b>Procedural macros &amp; env config</b><br><span style="color:#64748B"><code>macros</code> provides <code>#[db_repository]</code> and other macros; <code>config-env</code> supports <code>DbConfig::from_env</code> to read env vars directly</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🏢 <b>Enterprise features on demand</b><br><span style="color:#64748B">metrics / audit / migration / sharding / authentication / saga and 20+ feature-gated options, see the collapsible list below</span></td>
 </tr>
 </table>
 
-</div>
+The core foundation (no optional-feature dependencies) and the `default-no-db` aggregate capabilities are already listed in the table above; the remaining enterprise features are all feature-gated and enabled on demand — see the full collapsible list below.
 
-### 🎯 Core Foundation (no optional features required)
-
-| Capability | Description |
-|------|------|
-| **Connection Pooling** | RAII-style connection lifecycle; pool state maintained with atomics, lock-free on hot paths |
-| **Transactions** | Complete transaction management with `begin_transaction` / `commit` / rollback and RAII guarantees |
-| **Unified Errors** | `ErrorCode` table + `QueryErrorReport` structured error reporting (unified in 0.6.0-rc.4) |
-| **Configuration** | `DbConfig` / `PoolConfig` with environment variable / YAML / TOML sources |
-| **Internationalization** | ICU4X + Fluent locale-aware formatting (core feature, always compiled) |
-
-### ⚙️ Core Optional Features (`default-no-db` aggregate)
-
-| Capability | Description |
-|------|------|
-| **Permission Control** (`permission`) | Role-based table-level access control (RBAC); hard-depends on `sql-parser` to prevent injection bypass |
-| **SQL Parsing** (`sql-parser`) | Operation type and table extraction, injection detection, cached parse results |
-| **Procedural Macros** (`macros`) | `#[db_entity]` / `#[db_repository]` generate permission-checked CRUD |
-| **Environment Config** (`config-env`) | `DbConfig::from_env` reads configuration directly from environment variables |
-
-### ⚡ Enterprise Features (opt-in)
+<details>
+<summary>🏢 Enterprise features complete list (opt-in)</summary>
 
 | Feature | Description |
 |------|------|
@@ -121,6 +119,8 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 
 > 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (http-health unreleased).
 
+</details>
+
 ---
 
 ## 🚀 Quick Start
@@ -129,10 +129,18 @@ DBNexus is built on Sea-ORM and provides a **declarative** database access appro
 
 Requirements: Rust **1.97.1+** (pinned by `rust-toolchain.toml`, edition 2024), plus at least one runtime and one database driver feature.
 
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 cargo add dbnexus --features runtime-tokio-rustls,sqlite,permission,macros
 cargo add tokio --features rt-multi-thread,macros
 ```
+
+</details>
+
+<details>
+<summary>📄 Code · toml</summary>
 
 ```toml
 [dependencies]
@@ -140,11 +148,16 @@ dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
+</details>
+
 > `permission` force-enables `sql-parser` and `cache` (prevents SQL injection bypassing permission checks; `cache` is the explicit dependency of the permission policy cache). `default = []`: every feature must be enabled explicitly.
 
 ### 💡 Minimal Example
 
 Define an entity and get macro-generated CRUD (adapted from [examples/src/basic/basic_crud.rs](examples/src/basic/basic_crud.rs); `ActiveModelBehavior` is implemented by the macro):
+
+<details>
+<summary>📄 Code · rust</summary>
 
 ```rust
 use dbnexus::{DbPool, db_entity};
@@ -178,6 +191,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+</details>
 
 <details>
 <summary>🎬 Permission Control: unauthorized roles are denied</summary>
@@ -235,6 +250,9 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ### Data Access & Integrations
 
+<details>
+<summary>📋 Table</summary>
+
 | Flag | Description | Default |
 |------|------|:----:|
 | `cache` | oxcache cache (moka L1 backend) + lock-free `ArcSwap` reads | No |
@@ -250,6 +268,8 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `data-protection` | Field masking and row-level security predicate injection | No |
 | `permission-facade` | RBAC + masking + RLS unified facade | No |
 | `config-confers` | confers hot config reload | No |
+
+</details>
 
 ### Observability
 
@@ -275,6 +295,9 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ### Distributed Capabilities
 
+<details>
+<summary>📋 Table</summary>
+
 | Flag | Description | Default |
 |------|------|:----:|
 | `retry` | Runtime retry + exponential backoff (idempotency check) | No |
@@ -285,6 +308,8 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 | `saga` | Saga distributed transaction orchestration (persistent recovery) | No |
 | `distributed-id` | Snowflake distributed ID | No |
 | `distributed-capabilities` | Aggregate of the seven above | No |
+
+</details>
 
 ### Security & Compliance
 
@@ -323,6 +348,9 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ### Usage Examples
 
+<details>
+<summary>📄 Code · toml</summary>
+
 ```toml
 # Embedded/edge devices (minimal)
 dbnexus = { version = "0.6.0-rc.9", features = ["embedded"] }
@@ -337,9 +365,14 @@ dbnexus = { version = "0.6.0-rc.9", features = ["monolith"] }
 dbnexus = { version = "0.6.0-rc.9", features = ["enterprise"] }
 ```
 
+</details>
+
 ---
 
 ## 📚 Documentation
+
+<details>
+<summary>📋 Table</summary>
 
 | Document | Description |
 |------|------|
@@ -355,11 +388,16 @@ dbnexus = { version = "0.6.0-rc.9", features = ["enterprise"] }
 | [📦 Online API Docs](https://docs.rs/dbnexus) | Latest documentation auto-generated by docs.rs |
 | [📦 crates.io](https://crates.io/crates/dbnexus) | Release page |
 
+</details>
+
 ---
 
 ## 💻 Examples
 
 All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.9):
+
+<details>
+<summary>📄 Code · bash</summary>
 
 ```bash
 cd examples
@@ -370,6 +408,11 @@ cargo run --bin basic_crud --features "sqlite,permission,macros"
 # Build all examples
 cargo build --all-targets
 ```
+
+</details>
+
+<details>
+<summary>📋 Table</summary>
 
 | Module | Examples | Description |
 |------|------|------|
@@ -388,6 +431,8 @@ cargo build --all-targets
 | Integrations & Cache | `oxcache_adapter`, `cache_standalone` | oxcache adapter / custom cache provider |
 | Kit | `kit_usage`, `kit_advanced` | Capability registration / multi-capability composition |
 | Common | `error_handling` | Structured error reporting |
+
+</details>
 
 \* `graph_ladybug` is not registered as a bin due to an mbedtls link conflict with `duckdb`; build it separately: `cargo build --bin graph_ladybug --no-default-features --features "runtime-tokio-rustls,sqlite,cache,ladybug"`.
 
@@ -413,6 +458,9 @@ See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行�
 
 ### 🌐 Database Support
 
+<details>
+<summary>📋 Table</summary>
+
 | Driver feature | Database | Type | Introduced |
 |----------|--------|------|----------|
 | `sqlite` | SQLite | Embedded relational | Initial |
@@ -421,6 +469,8 @@ See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行�
 | `duckdb` 🚫 | DuckDB | Embedded analytical (currently unusable: upstream zip yank breaks resolution, see the feature flags notice) | 0.3.0 |
 | `ladybug` | Ladybug (formerly Kuzu) | Embedded graph | 0.4.0 |
 | `neo4j` | Neo4j | Graph server | 0.4.0 |
+
+</details>
 
 Protocol-compatible databases (no extra feature needed, just use the corresponding protocol driver):
 
@@ -453,6 +503,9 @@ Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicit
 
 ### Commands (identical to CI)
 
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 # Full test suite (CI standard feature combination; sqlite/postgres/mysql/duckdb drivers are mutually exclusive, do NOT use --all-features)
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
@@ -463,6 +516,8 @@ cargo test --no-default-features --features postgres,default-no-db,all-optional 
 # Doc tests
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 ```
+
+</details>
 
 > Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time (`compile_error!`); verify multiple drivers via grouped feature combinations.
 

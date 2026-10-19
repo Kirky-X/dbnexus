@@ -2,7 +2,7 @@
 
 <img src="docs/assets/dbnexus.png" alt="DBNexus Logo" width="240">
 
-[![CI Status](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/dbnexus.svg)](https://crates.io/crates/dbnexus) [![Docs.rs](https://docs.rs/dbnexus/badge.svg)](https://docs.rs/dbnexus) [![Downloads](https://img.shields.io/crates/d/dbnexus.svg)](https://crates.io/crates/dbnexus) [![License](https://img.shields.io/crates/l/dbnexus.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/dbnexus/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/dbnexus)
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-edded?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![Rustc 1.97.1+](https://img.shields.io/badge/Rustc-1.97.1+-orange.svg?style=for-the-badge)](https://www.rust-lang.org/) [![crates.io](https://img.shields.io/crates/v/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![docs.rs](https://img.shields.io/docsrs/dbnexus?style=for-the-badge)](https://docs.rs/dbnexus) [![downloads](https://img.shields.io/crates/d/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![CI](https://img.shields.io/github/actions/workflow/status/Kirky-X/dbnexus/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![coverage](https://img.shields.io/codecov/c/github/Kirky-X/dbnexus?style=for-the-badge)](https://codecov.io/gh/Kirky-X/dbnexus) [![license](https://img.shields.io/crates/l/dbnexus?style=for-the-badge)](LICENSE)
 
 **中文** | [English](README_EN.md)
 
@@ -38,11 +38,11 @@
 - [🎨 特性标志](#-特性标志)
 - [📚 文档](#-文档)
 - [💻 示例](#-示例)
-- [🏗️ 架构](#-架构)
+- [🏗️ 架构](#️-架构)
 - [🧪 测试](#-测试)
 - [📊 性能](#-性能)
 - [🔒 安全](#-安全)
-- [🗺️ 开发路线图](#-开发路线图)
+- [🗺️ 开发路线图](#️-开发路线图)
 - [🤝 参与贡献](#-参与贡献)
 - [📋 更新日志](#-更新日志)
 - [📄 许可证](#-许可证)
@@ -129,10 +129,18 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 
 要求：Rust **1.97.1+**（`rust-toolchain.toml` 锁定，edition 2024），并至少启用一个运行时与一个数据库驱动特性。
 
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 cargo add dbnexus --features runtime-tokio-rustls,sqlite,permission,macros
 cargo add tokio --features rt-multi-thread,macros
 ```
+
+</details>
+
+<details>
+<summary>📄 代码 · toml</summary>
 
 ```toml
 [dependencies]
@@ -140,11 +148,16 @@ dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
+</details>
+
 > `permission` 会强制启用 `sql-parser` 与 `cache`（防 SQL 注入绕过权限检查；`cache` 为权限策略缓存的显式依赖）。`default = []`：所有特性均需显式启用。
 
 ### 💡 最小示例
 
 定义实体并获得宏生成的 CRUD（改编自 [examples/src/basic/basic_crud.rs](examples/src/basic/basic_crud.rs)，`ActiveModelBehavior` 由宏自动实现）：
+
+<details>
+<summary>📄 代码 · rust</summary>
 
 ```rust
 use dbnexus::{DbPool, db_entity};
@@ -178,6 +191,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+</details>
 
 <details>
 <summary>🎬 权限控制：未授权角色被拒绝</summary>
@@ -235,6 +250,9 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ### 数据访问与集成
 
+<details>
+<summary>📋 表格</summary>
+
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `cache` | oxcache 缓存（moka L1 后端）+ `ArcSwap` 无锁读取 | 否 |
@@ -250,6 +268,8 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `data-protection` | 字段脱敏与行级安全谓词注入 | 否 |
 | `permission-facade` | RBAC + 脱敏 + RLS 统一门面 | 否 |
 | `config-confers` | confers 配置热重载 | 否 |
+
+</details>
 
 ### 可观测性
 
@@ -275,6 +295,9 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ### 分布式能力
 
+<details>
+<summary>📋 表格</summary>
+
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `retry` | 运行时重试 + 指数退避（幂等判断） | 否 |
@@ -285,6 +308,8 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 | `saga` | Saga 分布式事务编排（持久化恢复） | 否 |
 | `distributed-id` | Snowflake 分布式 ID | 否 |
 | `distributed-capabilities` | 上述 7 项的聚合 | 否 |
+
+</details>
 
 ### 安全与合规
 
@@ -323,6 +348,9 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ### 使用示例
 
+<details>
+<summary>📄 代码 · toml</summary>
+
 ```toml
 # 嵌入式/边缘设备（最小配置）
 dbnexus = { version = "0.6.0-rc.10", features = ["embedded"] }
@@ -337,9 +365,14 @@ dbnexus = { version = "0.6.0-rc.10", features = ["monolith"] }
 dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 ```
 
+</details>
+
 ---
 
 ## 📚 文档
+
+<details>
+<summary>📋 表格</summary>
 
 | 文档 | 说明 |
 |------|------|
@@ -355,11 +388,16 @@ dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 | [📦 在线 API 文档](https://docs.rs/dbnexus) | docs.rs 自动生成的最新文档 |
 | [📦 crates.io](https://crates.io/crates/dbnexus) | 发布页面 |
 
+</details>
+
 ---
 
 ## 💻 示例
 
 全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.9）：
+
+<details>
+<summary>📄 代码 · bash</summary>
 
 ```bash
 cd examples
@@ -370,6 +408,11 @@ cargo run --bin basic_crud --features "sqlite,permission,macros"
 # 编译全部示例
 cargo build --all-targets
 ```
+
+</details>
+
+<details>
+<summary>📋 表格</summary>
 
 | 模块 | 示例 | 说明 |
 |------|------|------|
@@ -388,6 +431,8 @@ cargo build --all-targets
 | 集成与缓存 | `oxcache_adapter`、`cache_standalone` | oxcache 适配 / 自定义缓存 Provider |
 | Kit | `kit_usage`、`kit_advanced` | 能力注册 / 多能力组合 |
 | 通用 | `error_handling` | 结构化错误报告 |
+
+</details>
 
 \* `graph_ladybug` 因与 `duckdb` 存在 mbedtls 链接冲突未注册为 bin，需单独编译：`cargo build --bin graph_ladybug --no-default-features --features "runtime-tokio-rustls,sqlite,cache,ladybug"`。
 
@@ -413,6 +458,9 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 ### 🌐 数据库支持
 
+<details>
+<summary>📋 表格</summary>
+
 | 驱动特性 | 数据库 | 类型 | 引入版本 |
 |----------|--------|------|----------|
 | `sqlite` | SQLite | 嵌入式关系型 | 初始 |
@@ -421,6 +469,8 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 | `duckdb` | DuckDB | 嵌入式分析型 | 0.3.0 |
 | `ladybug` | Ladybug（原 Kuzu） | 嵌入式图数据库 | 0.4.0 |
 | `neo4j` | Neo4j | 图数据库服务器 | 0.4.0 |
+
+</details>
 
 通过标准协议支持的兼容数据库（无需额外特性，使用对应协议驱动即可）：
 
@@ -453,6 +503,9 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 ### 运行命令（与 CI 一致）
 
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 # 全量测试（CI 标准特性组合；sqlite/postgres/mysql/duckdb 驱动互斥，不使用 --all-features）
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
@@ -463,6 +516,8 @@ cargo test --no-default-features --features postgres,default-no-db,all-optional 
 # 文档测试
 cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 ```
+
+</details>
 
 > 嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动在编译期严格互斥（`compile_error!`），验证多驱动时按分组特性组合运行。
 
