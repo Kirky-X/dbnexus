@@ -4,6 +4,15 @@
 
 **Rust 版本要求：1.97.1+**（与 workspace 的 `rust-version` 一致）。
 
+## 与父 crate 的关系
+
+| 项 | 内容 |
+|---|---|
+| 所属仓库 | [dbnexus](https://github.com/Kirky-X/dbnexus) |
+| 依赖方向 | 本 crate → `dbnexus`（示例以 `path = ".."` 依赖父 crate） |
+| 是否发布 | 否：`publish = false`，仅用于演示与回归验证 |
+| 版本与支持 | 版本经 `version.workspace = true` 随仓库统一；仅维护当前 minor 版本线，见 [安全文档 · 支持的版本](../docs/SECURITY.md#-支持的版本与维护策略) |
+
 ## 目录
 
 - [基础模块 (basic/)](#基础模块-basic)

@@ -144,7 +144,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -353,16 +353,16 @@ Pick exactly one relational driver (compile-time mutual exclusion); graph driver
 
 ```toml
 # Embedded/edge devices (minimal)
-dbnexus = { version = "0.6.0-rc.9", features = ["embedded"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0-rc.9", features = ["microservice"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0-rc.9", features = ["monolith"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["monolith"] }
 
 # Enterprise (full features)
-dbnexus = { version = "0.6.0-rc.9", features = ["enterprise"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 ```
 
 </details>
