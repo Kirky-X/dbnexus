@@ -1771,7 +1771,7 @@ mod config_error_i18n_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 mod sqlite_pragmas_config_tests {
     use super::*;
 

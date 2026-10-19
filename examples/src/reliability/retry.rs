@@ -180,6 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         multiplier: 1.5,
         jitter: false,
         overall_timeout_ms: Some(5000),
+        retry_busy_writes: false,
     };
 
     println!("  custom strategy:");
