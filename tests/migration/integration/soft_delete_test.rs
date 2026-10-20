@@ -107,7 +107,7 @@ async fn test_find_all_excludes_soft_deleted() {
         "soft-deleted record should not appear in find_all"
     );
 
-    // find_with_deleted 返回 3 条（包括已软删除）
+    // find_with_deleted 返回 3 条（包括已软删除的）
     let with_deleted = Model::find_with_deleted(&session)
         .await
         .expect("find_with_deleted should succeed");

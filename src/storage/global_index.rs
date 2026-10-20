@@ -308,7 +308,7 @@ mod tests {
         }
     }
 
-    // ===== 常量测试 =====
+    // 常量测试
 
     #[test]
     fn test_sync_status_constants() {
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(SYNC_STATUS_FAILED, "failed");
     }
 
-    // ===== IndexEntry / SyncEvent / SyncResult 结构测试 =====
+    // IndexEntry / SyncEvent / SyncResult 结构测试
 
     #[test]
     fn test_index_entry_construction() {
@@ -384,7 +384,7 @@ mod tests {
         assert_eq!(result.errors.len(), 1);
     }
 
-    // ===== 数据库测试 =====
+    // 数据库测试
 
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     #[tokio::test]

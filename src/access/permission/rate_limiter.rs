@@ -528,7 +528,7 @@ mod tests {
         // 创建速率限制器：每秒填充 5 个令牌，最大 20 个
         let limiter = RateLimiter::new(20, std::time::Duration::from_secs(4), 10000, 20);
 
-        // 等待桶填满（初始就是满）
+        // 等待桶填满（初始就是满的）
         assert_eq!(limiter.remaining("user1"), 20);
 
         // 突发请求：一次性使用所有令牌

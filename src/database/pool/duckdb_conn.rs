@@ -1689,7 +1689,7 @@ mod tests {
             "cloned handles should share the same write gate"
         );
 
-        // 幂等:对已启用句柄(含 Clone 出)重复启用,必须复用现有闸而非
+        // 幂等:对已启用句柄(含 Clone 出的)重复启用,必须复用现有闸而非
         // 各自新建——否则两句柄共享池却各持一把闸,写互斥静默失效
         let re_enabled = cloned.with_serialized_writes();
         assert!(

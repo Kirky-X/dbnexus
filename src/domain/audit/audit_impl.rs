@@ -762,7 +762,7 @@ impl AuditLogger {
                 }
             } else {
                 // 裸键：field（大小写不敏感，token 需 ASCII 字母数字单词边界），
-                // 其后允许 `_`/`-` 分隔的键尾字符（复合键），直至（可跨空白）冒号
+                // 其后允许 `_`/`-` 分隔的键尾字符（复合键），直至（可跨空白的）冒号
                 match Self::starts_with_case_insensitive(&text[i..], field) {
                     Some(consumed) if Self::at_word_boundary(text, i, consumed) => {
                         (consumed + Self::scan_key_tail(&text[i + consumed..]), true)

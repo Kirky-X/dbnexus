@@ -1122,7 +1122,7 @@ async fn run_migrations_down(
         }
     };
 
-    // 按版本号降序排序（先回滚最新）
+    // 按版本号降序排序（先回滚最新的）
     let mut versions_to_rollback = versions_to_rollback;
     versions_to_rollback.sort_by_key(|v| std::cmp::Reverse(*v));
 
