@@ -162,7 +162,7 @@ validation = ["validator", "with-time"]  # 数据验证（validator crate + time
 # sea-orm MockDatabase 转发（仅测试用；经 dbnexus::sea_orm re-export 使用 MockDatabase
 # 的消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
 mock = ["sea-orm/mock"]
-# sea-orm 派生宏转发（entity::prelude 的 DeriveEntityModel/DeriveRelation/FromQueryResult 等 derive 均由 sea-orm 的 macros feature 门控）
+# sea-orm 派生宏转发：DeriveEntityModel/DeriveRelation/FromQueryResult 由 macros 门控
 entity-macros = ["sea-orm/macros"]
 
 # === 分布式能力 ===
@@ -170,7 +170,7 @@ retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sq
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
-# 批量写入：COPY 封装（语句构建 + text/CSV 行编码；协议传输经 #cfg(feature="postgres")门控，DuckDB 文件 COPY 传输经 #cfg(feature="duckdb") 门控）+ 多值 INSERT 构建（batch_insert，500 行分块参数化）
+# 批量写入：COPY 封装 + 多值 INSERT（batch_insert，500 行分块参数化）
 copy = []
 repository = []  # 泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
 data-api = ["repository"]  # 数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
@@ -713,7 +713,7 @@ name = "entity_unit_tests"
 path = "tests/entity/unit/entity_unit_tests.rs"
 required-features = ["sqlite", "macros", "with-chrono"]
 
-# db_entity 宏主键类型泛型化回归测试验证 #[db_entity] 在 i64 / Uuid / String 主键下的 find_by_id / find_by_ids / delete / force_delete 编译期与签名正确性 0.4.1 回归 bug：Uuid 主键实体编译失败 'the trait bound uuid::Uuid:…
+# db_entity 主键泛型回归测试：i64/Uuid/String 主键的 find/delete 签名正确性
 [[test]]
 name = "db_entity_pk_types_test"
 path = "tests/entity/unit/db_entity_pk_types_test.rs"
@@ -743,7 +743,7 @@ required-features = ["health-check", "sqlite"]
 [[test]]
 name = "edge_cases"
 path = "tests/core/unit/edge_cases.rs"
-# sqlite：经 common::make_sqlite_memory_pool 依赖 sqlite::memory:（embedded 专属）；多库运行需先对目标内并发测试做表名唯一化改造（否则共享库下 CREATE TABLE 同名冲突）
+# sqlite：依赖 sqlite::memory:；多库运行需先做表名唯一化
 required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine", "sqlite"]
 
 # Cache 集成测试 - CacheConfig/moka Cache
@@ -826,7 +826,7 @@ name = "pool_integration"
 path = "tests/pool/integration/pool_integration.rs"
 required-features = ["sqlite"]
 
-# E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层） required-features 修正：原含 authentication，但 CI 口径（<db>,default-no-db,all-optional）的 feature 闭包不…
+# E2E 高级测试位于 tests/e2e/，按 cfg(feature) 隔离；required-features 对齐 CI 口径
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e/e2e_advanced.rs"
@@ -868,7 +868,7 @@ name = "distributed_id_tests"
 path = "tests/distributed_id/unit/distributed_id_tests.rs"
 required-features = ["distributed-id"]
 
-# 分布式能力端到端集成测试：位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层） required-features 修正：原含聚合名 distributed-capabilities，但 CI 口径的 all-optional 仅列其 7 个成员不列聚合名，目标因此从未编译运行；文件按成员级 cfg(feature) 隔离，移除聚合名后 CI 口径下全部激活
+# 分布式能力 E2E：tests/e2e/ 承载；移除聚合名后按成员 feature 激活
 [[test]]
 name = "e2e_distributed"
 path = "tests/e2e/e2e_distributed.rs"
