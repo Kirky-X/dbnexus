@@ -11,18 +11,13 @@
 //! - i18n 边界（i18n）
 //! - TracingGuard 边界（tracing）
 
-// ============================================================================
 // 模块导入
-// ============================================================================
 
 #[allow(unused_imports)]
 use dbnexus::{MaskType, SensitiveError, SensitiveMasker};
 
-// ============================================================================
 // SensitiveMasker 高级边界测试（无 feature gate，始终可用）
-// ============================================================================
 // 覆盖场景：B33（空字符串）、B34（输入短于保留位数）、自定义脱敏边界
-// ============================================================================
 
 /// B33: 空字符串输入 — 每种脱敏类型都应返回错误或不 panic
 #[test]
@@ -259,9 +254,7 @@ fn test_mask_very_long_input() {
     }
 }
 
-// ============================================================================
 // CircuitBreaker 高级边界测试（health-check feature）
-// ============================================================================
 #[cfg(feature = "health-check")]
 mod circuit_breaker_advanced {
     use dbnexus::{CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitBreakerState};
@@ -533,9 +526,7 @@ mod circuit_breaker_advanced {
     }
 }
 
-// ============================================================================
 // ShardRouter 高级边界测试（sharding feature）
-// ============================================================================
 #[cfg(feature = "sharding")]
 mod sharding_advanced {
     use dbnexus::chrono::{Datelike, Utc};
@@ -719,9 +710,7 @@ mod sharding_advanced {
     }
 }
 
-// ============================================================================
 // GlobalIndex batch_sync 边界测试（global-index + sqlite feature）
-// ============================================================================
 #[cfg(all(
     feature = "global-index",
     feature = "sqlite",
@@ -767,7 +756,6 @@ mod global_index_advanced {
         assert_eq!(result.failed_count, 0);
         assert!(result.errors.is_empty());
 
-        // 验证最后一条
         let queried = index
             .query_by_index("users", "id", "499")
             .await
@@ -972,9 +960,7 @@ mod global_index_advanced {
     }
 }
 
-// ============================================================================
 // Authentication 高级边界测试（authentication feature）
-// ============================================================================
 #[cfg(feature = "authentication")]
 mod authentication_advanced {
     use dbnexus::{
@@ -1258,9 +1244,7 @@ mod authentication_advanced {
     }
 }
 
-// ============================================================================
 // i18n 高级边界测试（核心特性，始终可用）
-// ============================================================================
 mod i18n_advanced {
     use dbnexus::{DbI18nFormatter, I18nError};
     use std::cmp::Ordering;
@@ -1497,9 +1481,7 @@ mod i18n_advanced {
     }
 }
 
-// ===========================================================================
 // PoolHealthMetrics 边界测试（health-check feature）
-// ============================================================================
 #[cfg(feature = "health-check")]
 mod pool_health_metrics_advanced {
     use dbnexus::PoolHealthMetrics;

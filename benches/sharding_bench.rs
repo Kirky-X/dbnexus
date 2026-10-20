@@ -14,9 +14,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use dbnexus::ShardRouter;
 use std::hint::black_box;
 
-// ============================================================================
 // 基准测试
-// ============================================================================
 
 /// 分片路由计算：测量 `shard_id_for_key` 的吞吐量
 ///

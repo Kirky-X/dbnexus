@@ -22,9 +22,7 @@ fn main() {
     println!("🔀 DBNexus data sharding example");
     println!("========================================\n");
 
-    // ============================================
     // 配置分片
-    // ============================================
     // 连接模板中 {shard} 会被替换为分片名称（prefix_shardId）
     let config = ShardConfig::new(
         "hash",                     // 策略：hash 均匀分布
@@ -44,18 +42,14 @@ fn main() {
         println!("  - shard {}: {}", shard_id, conn_str);
     }
 
-    // ============================================
     // 创建分片路由器（同步版本，不创建连接池）
-    // ============================================
     let router = ShardRouter::with_config_sync(&config);
     println!("\n✓ Router created");
     println!("  - strategy name: {}", router.strategy_name());
     println!("  - total shards: {}", router.total_shards());
     println!("  - registered shards: {}", router.all_shards().len());
 
-    // ============================================
     // 演示不同策略的路由结果
-    // ============================================
     println!("\n─── Strategy comparison: routing results for the same timestamp ───\n");
 
     let test_time = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
@@ -77,9 +71,7 @@ fn main() {
         );
     }
 
-    // ============================================
     // 哈希分片：时间戳路由
-    // ============================================
     println!("\n─── Hash sharding: routing results for different timestamps ───\n");
 
     let timestamps = vec![
@@ -114,9 +106,7 @@ fn main() {
         );
     }
 
-    // ============================================
     // 哈希分片：带关键字的路由（更均匀分布）
-    // ============================================
     println!("\n─── Hash sharding: routing with a key (user ID distribution) ───\n");
 
     let now = Utc::now();
@@ -145,9 +135,7 @@ fn main() {
         println!("  shard {}: {:>2} {} entries", shard_id, count, bar);
     }
 
-    // ============================================
     // 分片策略特性说明
-    // ============================================
     println!("\n─── Sharding strategy features ───\n");
     println!("┌──────────┬────────────────────────────────────────────┐");
     println!("│ strategy │ features                                        │");

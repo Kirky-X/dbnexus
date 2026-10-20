@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(lines.lock().unwrap().len(), 1);
     }
 
-    // ===== 补充测试：HTTP 传输 / stdout fallback / 自定义传输 =====
+    // 补充测试：HTTP 传输 / stdout fallback / 自定义传输
 
     #[test]
     fn test_http_post_against_local_collector() {

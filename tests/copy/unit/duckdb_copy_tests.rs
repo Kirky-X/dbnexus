@@ -20,9 +20,7 @@
 use dbnexus::database::copy::{CopyStatement, encode_duckdb_copy_rows};
 use dbnexus::database::{DuckDbRow, DuckValue};
 
-// ============================================================================
 // 编码层：DuckDB CSV 转义规则
-// ============================================================================
 
 #[test]
 fn test_encode_duckdb_rows_basic_types() {
@@ -84,9 +82,7 @@ fn test_encode_duckdb_rows_empty_and_json_values() {
     assert_eq!(encoded, "\"{\"\"k\"\":1}\",\"[1,2]\"\n");
 }
 
-// ============================================================================
 // 语句层：build_from_file
-// ============================================================================
 
 #[test]
 fn test_build_from_file_generates_csv_copy_with_paired_options() {
@@ -114,9 +110,7 @@ fn test_build_from_file_escapes_single_quotes_in_path() {
     );
 }
 
-// ============================================================================
 // 传输层：DbPool::copy_in（duckdb 驱动组）
-// ============================================================================
 
 async fn setup_duckdb_pool(table_ddl: &str) -> dbnexus::DbPool {
     let pool = dbnexus::DbPool::new("duckdb::memory:")
@@ -319,9 +313,7 @@ async fn test_copy_in_duckdb_error_leaves_no_temp_file() {
     drop(pool);
 }
 
-// ============================================================================
 // batch_insert × duckdb 参数化通道（json_to_duck_value 对接）
-// ============================================================================
 
 #[tokio::test]
 async fn test_batch_insert_via_duckdb_param_channel_roundtrip() {

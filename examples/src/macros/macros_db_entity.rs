@@ -20,9 +20,7 @@ mod common;
 use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
 
-// ============================================
 // User 实体
-// ============================================
 
 /// 用户实体模块
 ///
@@ -50,9 +48,7 @@ mod user {
     pub enum Relation {}
 }
 
-// ============================================
 // Product 实体
-// ============================================
 
 /// 产品实体模块
 mod product {
@@ -75,9 +71,7 @@ mod product {
     pub enum Relation {}
 }
 
-// ============================================
 // Order 实体
-// ============================================
 
 /// 订单实体模块
 mod order {
@@ -101,9 +95,7 @@ mod order {
     pub enum Relation {}
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -111,9 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🏷️  DBNexus db_entity macro example");
     println!("========================================\n");
 
-    // ============================================
     // 展示宏生成的 table_name() 和 primary_key_column()
-    // ============================================
     println!("--- 1. macro-generated metadata methods ---\n");
 
     println!("  [User entity]");
@@ -140,9 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         order::Model::primary_key_column()
     );
 
-    // ============================================
     // 展示实体关系声明
-    // ============================================
     println!("\n--- 2. entity relation declarations ---\n");
 
     println!(
@@ -150,9 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  to declare relations, use the sea-orm #[sea_orm(has_many/belongs_to)] attribute.");
 
-    // ============================================
     // 创建数据库并验证表名匹配
-    // ============================================
     println!("\n--- 3. create the database and verify table names ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -186,9 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  ✓ table created: {} (DDL from table_name())", table_name);
     }
 
-    // ============================================
     // 验证 primary_key_column() 与实际列匹配
-    // ============================================
     println!("\n--- 4. verify primary key column names ---\n");
     println!(
         "  User::primary_key_column()    = {} (corresponds to users.id)",

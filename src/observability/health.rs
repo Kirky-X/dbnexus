@@ -352,7 +352,6 @@ impl CircuitBreaker {
             );
         }
 
-        // 更新滑动窗口
         self.update_failure_window(false).await;
     }
 
@@ -415,7 +414,6 @@ impl CircuitBreaker {
             None => {}
         }
 
-        // 更新滑动窗口
         self.update_failure_window(true).await;
     }
 
@@ -753,7 +751,6 @@ mod tests {
             window_size: 10,
         });
 
-        // 打开熔断器
         breaker.record_failure().await;
         breaker.record_failure().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
@@ -761,7 +758,6 @@ mod tests {
         // 等待超时
         tokio::time::sleep(Duration::from_millis(150)).await;
 
-        // 尝试执行以触发状态转换
         let _ = breaker.can_execute().await;
 
         // 应该转换为半开状态
@@ -821,7 +817,7 @@ mod tests {
         );
     }
 
-    // ===== PoolHealthMetrics 补充测试 =====
+    // PoolHealthMetrics 补充测试
 
     #[tokio::test]
     async fn test_pool_health_metrics_default() {
@@ -895,7 +891,7 @@ mod tests {
         metrics.update_health_check_time().await;
     }
 
-    // ===== CircuitBreakerState / Error / Config 测试 =====
+    // CircuitBreakerState / Error / Config 测试
 
     #[test]
     fn test_circuit_breaker_state_display() {
@@ -920,7 +916,7 @@ mod tests {
         assert_eq!(config.window_size, 100);
     }
 
-    // ===== CircuitBreaker 补充测试 =====
+    // CircuitBreaker 补充测试
 
     #[tokio::test]
     async fn test_circuit_breaker_record_success_in_closed() {
@@ -941,7 +937,6 @@ mod tests {
             window_size: 10,
         });
 
-        // 打开熔断器
         breaker.record_failure().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 
@@ -967,7 +962,6 @@ mod tests {
         breaker.record_failure().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 
-        // Open 状态下记录成功不应改变状态
         breaker.record_success().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
     }
@@ -984,7 +978,6 @@ mod tests {
         breaker.record_failure().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 
-        // Open 状态下再次失败不应改变状态
         breaker.record_failure().await;
         assert_eq!(breaker.state().await, CircuitBreakerState::Open);
     }
@@ -1049,7 +1042,6 @@ mod tests {
             window_size: 3, // 很小的窗口
         });
 
-        // 记录超过窗口大小的操作
         breaker.record_success().await;
         breaker.record_success().await;
         breaker.record_success().await;
@@ -1085,7 +1077,7 @@ mod tests {
         let _ = result.unwrap_err();
     }
 
-    // ===== HealthChecker 补充测试 =====
+    // HealthChecker 补充测试
 
     #[tokio::test]
     async fn test_health_checker_metrics_and_circuit_breaker_getters() {
@@ -1183,7 +1175,7 @@ mod tests {
         let _ = result; // 不严格断言，因为时序不确定
     }
 
-    // ===== AutoRecoverer 测试 =====
+    // AutoRecoverer 测试
 
     #[tokio::test]
     async fn test_auto_recoverer_new_and_stop() {
@@ -1206,7 +1198,6 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        // 停止恢复器
         recoverer.stop();
 
         // 取消任务

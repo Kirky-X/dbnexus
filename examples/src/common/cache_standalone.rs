@@ -27,9 +27,7 @@ use std::time::Duration;
 use dbnexus::foundation::{DbConfig, DbError, PoolConfig};
 use dbnexus::{DbCacheProvider, DbPoolBuilder};
 
-// ============================================
 // 自定义缓存实现
-// ============================================
 
 /// 基于 HashMap 的简单内存缓存
 ///
@@ -125,9 +123,7 @@ impl DbCacheProvider for SimpleMemoryCache {
     }
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -135,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("💾 DBNexus standalone cache feature example");
     println!("========================================\n");
 
-    // ============================================
     // 创建自定义缓存
-    // ============================================
     println!("--- 1. create a custom DbCacheProvider ---\n");
 
     let cache = SimpleMemoryCache::new(100);
@@ -145,9 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  implementation: DbCacheProvider trait (get/set/delete)");
     println!("  storage: Mutex<HashMap<String, CacheEntry>>\n");
 
-    // ============================================
     // 基本操作
-    // ============================================
     println!("--- 2. basic get/set/delete ---\n");
 
     cache.set("key1", b"value1".to_vec(), None).await?;
@@ -172,9 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ get(\"nonexistent\") → {:?} (missing)", val);
     println!();
 
-    // ============================================
     // TTL 过期
-    // ============================================
     println!("--- 3. TTL expiration ---\n");
 
     cache
@@ -198,9 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ get after 150ms → {:?} (expired)", val);
     println!();
 
-    // ============================================
     // 通过 trait 对象使用
-    // ============================================
     println!("--- 4. trait objects (dyn dispatch) ---\n");
 
     let provider: Arc<dyn DbCacheProvider + Send + Sync> = Arc::new(SimpleMemoryCache::new(50));
@@ -214,9 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // 与 DbPoolBuilder 集成
-    // ============================================
     println!("--- 5. integration with DbPoolBuilder ---\n");
 
     let custom_cache: Arc<dyn DbCacheProvider + Send + Sync> =
@@ -247,14 +233,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Session acquired (role: {})", session.role());
     println!();
 
-    // ============================================
     // 容量管理
-    // ============================================
     println!("--- 6. capacity management ---\n");
 
     let small_cache = SimpleMemoryCache::new(5);
 
-    // 写入超过容量的条目
     for i in 0..8 {
         let key = format!("item:{}", i);
         let value = format!("value_{}", i).into_bytes();

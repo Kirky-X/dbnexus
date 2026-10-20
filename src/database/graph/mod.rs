@@ -29,9 +29,7 @@ use crate::foundation::{DbError, DbResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 图数据类型
-// ============================================================================
 
 /// 图节点
 ///
@@ -116,9 +114,7 @@ pub enum GraphExecResult {
     },
 }
 
-// ============================================================================
 // 图连接 Trait
-// ============================================================================
 
 /// 图数据库连接 trait
 ///
@@ -272,7 +268,7 @@ mod tests {
     use crate::foundation::DbError;
     use serde_json::json;
 
-    // ===== GraphNode 测试 =====
+    // GraphNode 测试
 
     #[test]
     fn test_graph_node_serde_roundtrip() {
@@ -298,7 +294,7 @@ mod tests {
         assert_eq!(node, restored);
     }
 
-    // ===== GraphRel 测试 =====
+    // GraphRel 测试
 
     #[test]
     fn test_graph_rel_serde_roundtrip() {
@@ -328,7 +324,7 @@ mod tests {
         assert_eq!(rel, restored);
     }
 
-    // ===== GraphValue 测试 =====
+    // GraphValue 测试
 
     #[test]
     fn test_graph_value_node_variant() {
@@ -467,7 +463,7 @@ mod tests {
         assert_eq!(val, restored);
     }
 
-    // ===== GraphRow 测试 =====
+    // GraphRow 测试
 
     #[test]
     fn test_graph_row_construction() {
@@ -488,7 +484,7 @@ mod tests {
         assert!(row.columns.is_empty());
     }
 
-    // ===== GraphQueryResult 测试 =====
+    // GraphQueryResult 测试
 
     #[test]
     fn test_graph_query_result_construction() {
@@ -511,7 +507,7 @@ mod tests {
         assert!(result.rows.is_empty());
     }
 
-    // ===== GraphExecResult 测试 =====
+    // GraphExecResult 测试
 
     #[test]
     fn test_graph_exec_result_query_variant() {
@@ -541,7 +537,7 @@ mod tests {
         }
     }
 
-    // ===== 测试：execute_cypher_with_params 默认实现返回错误（不静默回退） =====
+    // 测试：execute_cypher_with_params 默认实现返回错误（不静默回退）
 
     /// Red-1：GraphConnection 默认 execute_cypher_with_params 返回错误而非回退
     ///

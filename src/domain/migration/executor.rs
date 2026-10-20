@@ -389,7 +389,6 @@ impl MigrationExecutor {
 
         let sql = self.sql_generator.generate_migration_sql(migration)?;
 
-        // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
         if !sql.is_empty() {
@@ -770,7 +769,6 @@ impl MigrationExecutor {
     ) -> Result<(), DbError> {
         let sql = Self::extract_up_sql(&migration_file.content, &self.markers);
 
-        // 开始事务
         let txn = self.connection.begin().await.map_err(DbError::Connection)?;
 
         if !sql.is_empty() {
@@ -809,7 +807,6 @@ impl MigrationExecutor {
 
         txn.commit().await.map_err(DbError::Connection)?;
 
-        // 添加到历史记录
         self.history.add_migration(MigrationVersion {
             version: migration_file.version,
             description: migration_file.description.clone(),
@@ -980,7 +977,6 @@ impl MigrationFileParser {
 
     /// 从迁移文件中提取描述
     fn extract_description(content: &str) -> String {
-        // 尝试从注释中提取描述
         for line in content.lines() {
             let trimmed = line.trim();
             if let Some(stripped) = trimmed.strip_prefix("-- Migration:") {
@@ -1027,9 +1023,7 @@ mod tests {
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     use crate::domain::TableChange;
 
-    // =====================================================================
     // build_placeholder_list
-    // =====================================================================
 
     #[test]
     fn test_build_placeholder_list_postgres() {
@@ -1061,9 +1055,7 @@ mod tests {
         assert_eq!(build_placeholder_list(sea_orm::DbBackend::Sqlite, 0), "");
     }
 
-    // =====================================================================
     // build_migration_insert_sql
-    // =====================================================================
 
     #[test]
     fn test_build_migration_insert_sql_postgres() {
@@ -1087,9 +1079,7 @@ mod tests {
         assert!(sql.contains("?, ?, ?, ?"));
     }
 
-    // =====================================================================
     // 迁移历史表名字段化
-    // =====================================================================
 
     /// 默认表名下生成的 INSERT SQL 必须与历史字面量逐字节一致（快照锁定）
     #[test]
@@ -1266,9 +1256,7 @@ mod tests {
         );
     }
 
-    // =====================================================================
     // sql_escape_single_quotes
-    // =====================================================================
 
     #[test]
     fn test_sql_escape_single_quotes_no_quotes() {
@@ -1290,9 +1278,7 @@ mod tests {
         assert_eq!(sql_escape_single_quotes(""), "");
     }
 
-    // =====================================================================
     // format_mysql_applied_at
-    // =====================================================================
 
     #[test]
     fn test_format_mysql_applied_at() {
@@ -1305,9 +1291,7 @@ mod tests {
         assert_eq!(result, "2026-06-25 12:30:45");
     }
 
-    // =====================================================================
     // format_applied_at_for_backend
-    // =====================================================================
 
     #[test]
     fn test_format_applied_at_for_backend_mysql() {
@@ -1332,9 +1316,7 @@ mod tests {
         assert!(result.contains("2026-01-01"));
     }
 
-    // =====================================================================
     // parse_mysql_applied_at
-    // =====================================================================
 
     #[test]
     fn test_parse_mysql_applied_at_without_subseconds() {
@@ -1358,9 +1340,7 @@ mod tests {
         assert!(parse_mysql_applied_at("").is_none());
     }
 
-    // =====================================================================
     // parse_applied_at_for_db
-    // =====================================================================
 
     #[test]
     fn test_parse_applied_at_for_db_mysql() {
@@ -1380,9 +1360,7 @@ mod tests {
         assert!(parse_applied_at_for_db(DatabaseType::MySql, "invalid").is_none());
     }
 
-    // =====================================================================
     // MigrationFile
-    // =====================================================================
 
     #[test]
     fn test_migration_file_new_and_getters() {
@@ -1401,9 +1379,7 @@ mod tests {
         assert_eq!(file.content(), "CREATE TABLE users (id INTEGER);");
     }
 
-    // =====================================================================
     // MigrationFileParser
-    // =====================================================================
 
     #[test]
     fn test_migration_file_parser_valid_with_up_down() {
@@ -1466,9 +1442,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // =====================================================================
     // MigrationExecutor - non-database methods (需要 sqlite 以构造执行器)
-    // =====================================================================
 
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     #[tokio::test]
@@ -1553,9 +1527,7 @@ mod tests {
         assert!(sql.contains("it''s a ''test''"));
     }
 
-    // =====================================================================
     // MigrationExecutor - auto-migrate feature methods
-    // =====================================================================
 
     #[cfg(feature = "auto-migrate")]
     #[test]
@@ -1631,9 +1603,7 @@ mod tests {
         assert!(result.is_empty());
     }
 
-    // =====================================================================
     // extract_down_sql
-    // =====================================================================
 
     #[cfg(feature = "auto-migrate")]
     #[test]
@@ -1759,9 +1729,7 @@ mod tests {
         assert!(result.is_none());
     }
 
-    // =====================================================================
     // find_marker_line 按行、大小写不敏感前缀匹配
-    // =====================================================================
 
     /// find_marker_line 命中时返回整行边界（含换行符），未命中返回 None
     #[test]
@@ -1828,9 +1796,7 @@ mod tests {
         assert!(MigrationFileParser::parse_migration_file("-- Up:\n-- Down:\n").is_ok());
     }
 
-    // =====================================================================
     // down_has_executable_sql
-    // =====================================================================
 
     #[cfg(feature = "auto-migrate")]
     #[test]
@@ -1854,9 +1820,7 @@ mod tests {
         ));
     }
 
-    // =====================================================================
     // MigrationExecutor - scan_migrations (需要 auto-migrate)
-    // =====================================================================
 
     #[cfg(all(
         feature = "auto-migrate",
@@ -1926,9 +1890,7 @@ mod tests {
         assert_eq!(files[1].description(), "add_column");
     }
 
-    // =====================================================================
     // MigrationExecutor - 数据库测试 (需要 sqlite feature)
-    // =====================================================================
 
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
     #[tokio::test]
@@ -2187,9 +2149,7 @@ mod tests {
         assert_eq!(executor.get_all_versions(), vec![1]);
     }
 
-    // =====================================================================
     // rollback_version
-    // =====================================================================
 
     /// 正常回滚：DOWN SQL 与历史行删除在同一事务内完成
     #[cfg(all(
@@ -2303,9 +2263,7 @@ mod tests {
         assert_eq!(executor.get_all_versions(), vec![1]);
     }
 
-    // =====================================================================
     // 迁移标记集（MigrationMarkers）
-    // =====================================================================
 
     /// Default 值必须等于内置 UP/DOWN 常量副本（定制能力不得漂移既有口径）
     #[cfg(feature = "auto-migrate")]
@@ -2453,9 +2411,7 @@ mod tests {
             .expect("the custom DOWN marker should support rollback");
     }
 
-    // =====================================================================
     // 辅助函数
-    // =====================================================================
 
     /// 创建基于 SQLite 内存数据库的 MigrationExecutor
     #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]

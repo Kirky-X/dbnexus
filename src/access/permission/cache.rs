@@ -566,7 +566,6 @@ mod tests {
         wait_for_provider_calls(&provider, &cache, "admin", 1).await;
     }
 
-    // =========================================================================
     // 强同步并发回归测试（Barrier 多轮竞速版）
     //
     // oxcache 承载下刷新去重由 offload in-flight 表承担：每轮 16 个任务先在
@@ -574,7 +573,6 @@ mod tests {
     // refresh / get 两条路径——同 key 的在飞去重必须保证每轮 provider
     // 恰好被调用 1 次。刷新成功回写后条目回到 Fresh，stale 窗口内不重复
     // 回源（时间维度由 stale 窗口承担）。
-    // =========================================================================
 
     /// 竞速任务数（与 worker_threads 相同，保证放行时全员并行）
     const RACE_TASKS: usize = 16;

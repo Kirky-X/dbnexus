@@ -27,9 +27,7 @@ use dbnexus::OxcacheDbCacheAdapter;
 use dbnexus::foundation::DbError;
 use oxcache::backend::{CacheBackend, MokaMemoryBackend};
 
-// ============================================
 // 辅助函数
-// ============================================
 
 /// 创建基于 MokaMemoryBackend 的 OxcacheDbCacheAdapter
 fn make_adapter(capacity: u64) -> OxcacheDbCacheAdapter {
@@ -38,9 +36,7 @@ fn make_adapter(capacity: u64) -> OxcacheDbCacheAdapter {
     OxcacheDbCacheAdapter::new(cache)
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,9 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔗 DBNexus Oxcache adapter example");
     println!("========================================\n");
 
-    // ============================================
     // 创建适配器
-    // ============================================
     println!("--- 1. create the OxcacheDbCacheAdapter ---\n");
 
     let adapter = make_adapter(100);
@@ -58,9 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  type: OxcacheDbCacheAdapter");
     println!("  implementation: DbCacheProvider trait (get/set/delete)\n");
 
-    // ============================================
     // 基本 get/set/delete 操作
-    // ============================================
     println!("--- 2. basic CRUD operations ---\n");
 
     // set
@@ -104,9 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     adapter.delete("user:1").await?;
     println!("  ✓ delete(\"user:1\") run again (idempotent, no error)\n");
 
-    // ============================================
     // TTL（过期时间）支持
-    // ============================================
     println!("--- 3. TTL support ---\n");
 
     adapter
@@ -133,14 +123,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ set(\"temp:data\", ttl=1ms)");
 
-    // 等待过期
     tokio::time::sleep(Duration::from_millis(50)).await;
     let val = adapter.get("temp:data").await?;
     println!("  ✓ get after 50ms → {:?} (expired)", val);
 
-    // ============================================
     // 通过 trait 对象使用（dyn dispatch）
-    // ============================================
     println!("\n--- 4. trait objects (dyn dispatch) ---\n");
 
     let adapter2 = make_adapter(50);
@@ -159,9 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     provider.delete("dyn_key").await?;
     println!("  ✓ delete(\"dyn_key\") through the trait object\n");
 
-    // ============================================
     // 批量操作模拟
-    // ============================================
     println!("--- 5. batch operations ---\n");
 
     let adapter3 = make_adapter(200);
@@ -197,9 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  ✓ verified: {} keys remain (should be 0)\n", remaining);
 
-    // ============================================
     // 错误处理
-    // ============================================
     println!("--- 6. error handling ---\n");
 
     // DbError::Cache 变体

@@ -1294,7 +1294,7 @@ mod tests {
         }
     }
 
-    // ===== 补充测试：get_database_backend, status, config =====
+    // 补充测试：get_database_backend, status, config
 
     #[test]
     fn test_get_database_backend_sqlite() {
@@ -1485,7 +1485,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：Debug trait, ConnectionPool trait, health check, release_connection =====
+    // 补充测试：Debug trait, ConnectionPool trait, health check, release_connection
 
     #[cfg(feature = "sqlite")]
     #[tokio::test]
@@ -1619,7 +1619,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：cache 方法, validate_role_name =====
+    // 补充测试：cache 方法, validate_role_name
 
     #[cfg(all(feature = "cache-available", feature = "sqlite"))]
     #[tokio::test]
@@ -1878,7 +1878,7 @@ roles:
     }
 }
 
-// ===== 补充测试：池指标、死连接清理与重建 =====
+// 补充测试：池指标、死连接清理与重建
 
 #[cfg(all(feature = "metrics", feature = "health-check", feature = "sqlite"))]
 #[tokio::test]

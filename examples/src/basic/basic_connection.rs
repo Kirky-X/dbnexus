@@ -22,9 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔌 DBNexus basic connection example");
     println!("========================================\n");
 
-    // ============================================
     // 创建 SQLite 内存连接池
-    // ============================================
     let config = DbConfig {
         url: "sqlite::memory:".to_string(),
         admin_role: "admin".to_string(),
@@ -48,9 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  - admin role: {}", pool.config().admin_role);
 
-    // ============================================
     // 获取 admin Session
-    // ============================================
     // Session 自动从连接池获取连接，并在 drop 时自动归还。
     // "admin" 角色在无权限配置文件时是允许的安全默认角色。
     let session = pool.get_session("admin").await?;
@@ -58,14 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - current role: {}", session.role());
     println!("  - in transaction: {}", session.is_in_transaction().await);
 
-    // ============================================
     // 打印连接成功信息
-    // ============================================
     println!("\n✓ Database connected!");
 
-    // ============================================
     // 展示连接池状态
-    // ============================================
     // session drop 后连接归还到池中，再查看状态
     drop(session);
     let status = pool.status();

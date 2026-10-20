@@ -934,7 +934,6 @@ mod tests {
                 .await
                 .unwrap();
 
-        // Load policy first
         ctx.load_policy(&config).await.unwrap();
 
         // First request should succeed
@@ -949,9 +948,7 @@ mod tests {
         );
     }
 
-    // ============================================================================
     // 缓存未命中容错机制测试 (TOCTOU 修复验证)
-    // ============================================================================
 
     /// 缓存未命中时自动重新加载策略 - 成功场景
     #[tokio::test]
@@ -1124,7 +1121,6 @@ mod tests {
                 .await
         );
 
-        // 验证缓存命中
         let stats_after_hit = ctx.check_stats().snapshot();
         assert!(stats_after_hit.cache_hits > 0 || stats_after_hit.cache_misses > 0);
 
@@ -1446,7 +1442,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：构造器 / 批量检查 / Debug =====
+    // 补充测试：构造器 / 批量检查 / Debug
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_context_new_default_constructors() {

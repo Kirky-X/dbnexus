@@ -148,9 +148,7 @@ impl std::fmt::Debug for LadybugConnection {
     }
 }
 
-// ============================================================================
 // GraphConnection impl
-// ============================================================================
 
 #[async_trait::async_trait]
 impl GraphConnection for LadybugConnection {
@@ -290,9 +288,7 @@ impl GraphConnection for LadybugConnection {
     }
 }
 
-// ============================================================================
 // LadybugTransaction（事务 actor 模式）
-// ============================================================================
 
 /// 事务命令（通过 channel 发送到 blocking 线程）
 enum TxnCommand {
@@ -434,9 +430,7 @@ impl GraphTransaction for LadybugTransaction {
     }
 }
 
-// ============================================================================
 // 内部辅助函数
-// ============================================================================
 
 /// 在 blocking 线程内通过指定 Connection 执行 Cypher 查询
 fn execute_cypher_on_conn(conn: &lbug::Connection, cypher: &str) -> DbResult<GraphExecResult> {
@@ -666,7 +660,7 @@ mod tests {
     /// 默认并发连接数
     const DEFAULT_POOL_SIZE: usize = 4;
 
-    // ===== new / with_pool_size 测试 =====
+    // new / with_pool_size 测试
 
     #[test]
     fn test_ladybug_new_memory_default_pool_size() {
@@ -701,7 +695,7 @@ mod tests {
         assert_eq!(conn.pool_size(), 8);
     }
 
-    // ===== parse_url 测试 =====
+    // parse_url 测试
 
     #[test]
     fn test_ladybug_parse_url_memory() {
@@ -743,7 +737,7 @@ mod tests {
         assert!(result.is_err(), "path traversal should be rejected");
     }
 
-    // ===== Clone + Debug 测试 =====
+    // Clone + Debug 测试
 
     #[test]
     fn test_ladybug_clone_shares_database() {
@@ -761,7 +755,7 @@ mod tests {
         assert!(debug_str.contains("pool_size: 4"));
     }
 
-    // ===== GraphConnection execute_cypher 测试 =====
+    // GraphConnection execute_cypher 测试
 
     #[tokio::test]
     async fn test_ladybug_execute_return_1() {
@@ -849,7 +843,7 @@ mod tests {
         assert!(result.is_err(), "invalid cypher should return error");
     }
 
-    // ===== health_check 测试 =====
+    // health_check 测试
 
     #[tokio::test]
     async fn test_ladybug_health_check_passes() {
@@ -857,7 +851,7 @@ mod tests {
         conn.health_check().await.expect("health check should pass");
     }
 
-    // ===== backend_name 测试 =====
+    // backend_name 测试
 
     #[test]
     fn test_ladybug_backend_name() {
@@ -865,7 +859,7 @@ mod tests {
         assert_eq!(conn.backend_name(), "ladybug");
     }
 
-    // ===== 事务测试 =====
+    // 事务测试
 
     #[tokio::test]
     async fn test_ladybug_txn_commit() {
@@ -883,7 +877,6 @@ mod tests {
             .expect("create in txn");
         txn.commit().await.expect("commit should succeed");
 
-        // 验证事务提交后数据可见
         let result = conn
             .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
             .await
@@ -912,7 +905,6 @@ mod tests {
             .expect("create in txn");
         txn.rollback().await.expect("rollback should succeed");
 
-        // 验证事务回滚后数据不可见
         let result = conn
             .execute_cypher("MATCH (p:Person) RETURN p.name AS name")
             .await
@@ -950,7 +942,7 @@ mod tests {
         txn.commit().await.expect("commit");
     }
 
-    // ===== 值映射测试 =====
+    // 值映射测试
 
     #[test]
     fn test_map_lbug_value_null() {
@@ -1007,7 +999,7 @@ mod tests {
         }
     }
 
-    // ===== 缺失的值映射测试 =====
+    // 缺失的值映射测试
 
     #[test]
     fn test_map_lbug_value_double() {
@@ -1061,7 +1053,7 @@ mod tests {
         );
     }
 
-    // ===== execute_cypher_with_params 测试 =====
+    // execute_cypher_with_params 测试
 
     #[tokio::test]
     async fn test_ladybug_execute_cypher_with_params() {
@@ -1082,7 +1074,7 @@ mod tests {
         assert!(result.is_ok() || result.is_err(), "should not panic");
     }
 
-    // ===== 关系表测试 =====
+    // 关系表测试
 
     #[tokio::test]
     async fn test_ladybug_relationship_table() {
@@ -1134,7 +1126,7 @@ mod tests {
         }
     }
 
-    // ===== 路径（RecursiveRel）映射测试（RICE 10 修复） =====
+    // 路径（RecursiveRel）映射测试（RICE 10 修复）
 
     /// 构造 RecursiveRel 值后映射，nodes 与 rels 必须同时保留且长度一致
     #[test]
@@ -1263,7 +1255,7 @@ mod tests {
         }
     }
 
-    // ===== 空查询结果测试 =====
+    // 空查询结果测试
 
     #[tokio::test]
     async fn test_ladybug_empty_match_returns_zero_rows() {

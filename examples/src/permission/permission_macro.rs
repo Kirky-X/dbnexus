@@ -21,9 +21,7 @@ use dbnexus::access::{PermissionAction, PermissionContext};
 use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
 
-// ============================================
 // 定义带 permissions 注解的实体
-// ============================================
 
 /// 用户实体 — 仅 admin 和 manager 角色可访问，允许 SELECT/INSERT/UPDATE
 #[db_entity(
@@ -43,9 +41,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,9 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🏷️  DBNexus db_entity permissions sub-parameter example");
     println!("========================================\n");
 
-    // ============================================
     // 展示宏生成的常量
-    // ============================================
     println!("--- macro-generated constants ---\n");
     println!("  User::ALLOWED_ROLES      = {:?}", Model::ALLOWED_ROLES);
     println!(
@@ -68,9 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Model::allowed_operations()
     );
 
-    // ============================================
     // 创建 DbPool + Session
-    // ============================================
     println!("\n--- DbPool + Session ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -80,9 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     common::ddl::create_users_table(&session).await?;
     println!("✓ users table created");
 
-    // ============================================
     // 演示不同角色的权限校验
-    // ============================================
     println!("\n--- permission check scenarios ---\n");
 
     // admin 角色 — 在 ALLOWED_ROLES 中
@@ -148,9 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("  ✓ check_operation(Select) correctly rejected: {}", e),
     }
 
-    // ============================================
     // 总结
-    // ============================================
     println!("\n========================================");
     println!("✨ db_entity permissions sub-parameter example complete!");
     println!("========================================");

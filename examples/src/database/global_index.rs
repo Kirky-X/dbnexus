@@ -26,17 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌐 DBNexus global index example");
     println!("========================================\n");
 
-    // ============================================
     // 创建全局索引管理器
-    // ============================================
     // GlobalIndex::new 接受 Arc<DbPool>，通过连接池统一管理连接生命周期
     let pool = DbPool::new("sqlite::memory:").await?;
     let global_index = GlobalIndex::new(Arc::new(pool)).await?;
     println!("✓ GlobalIndex manager created (global_index table created automatically)");
 
-    // ============================================
     // 准备索引条目（模拟跨分片数据）
-    // ============================================
     // 模拟 3 个分片的订单数据
     let entries = vec![
         IndexEntry {
@@ -84,9 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 批量同步索引条目
-    // ============================================
     println!("\nSyncing the index into the global index table...");
     let sync_result = global_index.batch_sync(entries).await?;
 
@@ -101,9 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 通过索引查询跨分片数据
-    // ============================================
     println!("\n─── Cross-shard index query ───\n");
 
     // 查询 user_100 的所有订单（分布在分片 0 和 1）
@@ -139,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ found {} records", results.len());
 
-    // ============================================
     // 展示同步状态常量和 SyncEvent
-    // ============================================
     println!("\n─── Sync status constants ───\n");
     println!("  SYNC_STATUS_PENDING = \"{}\"", SYNC_STATUS_PENDING);
     println!("  SYNC_STATUS_SYNCED  = \"{}\"", SYNC_STATUS_SYNCED);
@@ -187,9 +177,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => unreachable!(),
     }
 
-    // ============================================
     // 再次同步（验证 upsert 语义）
-    // ============================================
     println!("\n─── Verify upsert semantics (sync the same entries twice) ───\n");
     let duplicate_entries = vec![IndexEntry {
         table_name: "orders".to_string(),

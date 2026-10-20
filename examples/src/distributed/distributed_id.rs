@@ -25,9 +25,7 @@ fn main() {
     println!("🆔 DBNexus distributed ID generator example");
     println!("========================================\n");
 
-    // ============================================
     // 创建 Snowflake ID 生成器
-    // ============================================
     println!("--- 1. create a generator ---\n");
 
     let machine_id = 42;
@@ -39,9 +37,7 @@ fn main() {
     println!("  - epoch      : {} (custom epoch)", epoch);
     println!();
 
-    // ============================================
     // 批量生成 ID
-    // ============================================
     println!("--- 2. batch generate IDs ---\n");
 
     let count = 10;
@@ -54,9 +50,7 @@ fn main() {
     }
     println!();
 
-    // ============================================
     // 解析 ID 组成
-    // ============================================
     println!("--- 3. parse the ID structure ---\n");
 
     println!("  ┌────┬──────────────────┬────────────┬──────────┐");
@@ -84,9 +78,7 @@ fn main() {
     println!("  - sequence     : {}", sample.sequence);
     println!();
 
-    // ============================================
     // 唯一性验证
-    // ============================================
     println!("--- 4. uniqueness verification ---\n");
 
     let large_count = 10_000;
@@ -113,9 +105,7 @@ fn main() {
     );
     println!();
 
-    // ============================================
     // 多线程并发生成
-    // ============================================
     println!("--- 5. multithreaded concurrent generation ---\n");
 
     let thread_count = 4;
@@ -167,9 +157,7 @@ fn main() {
     );
     println!();
 
-    // ============================================
     // 错误场景：machine_id 溢出
-    // ============================================
     println!("--- 6. error scenarios ---\n");
 
     match SnowflakeIdGenerator::new(1024, epoch) {
@@ -189,9 +177,7 @@ fn main() {
     }
     println!();
 
-    // ============================================
     // ID 布局说明
-    // ============================================
     println!("--- 7. Snowflake ID layout ---\n");
     println!("  ┌───┬──────────────────────────────┬───────────────┬──────────────┐");
     println!("  │ 0 │     timestamp (41 bits)      │ machine (10b) │ seq (12 bit) │");

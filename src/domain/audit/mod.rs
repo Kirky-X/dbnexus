@@ -719,7 +719,6 @@ mod tests {
 
         let sanitized = AuditEvent::sanitize_value(&json_str, None);
 
-        // 验证超过最大深度时返回占位符
         assert!(
             sanitized.contains("[MAX_DEPTH_EXCEEDED]"),
             "should contain the MAX_DEPTH_EXCEEDED marker"

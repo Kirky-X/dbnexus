@@ -44,7 +44,6 @@ fn test_migration_history_add() {
 fn test_migration_history_sorted() {
     let mut history = MigrationHistory::new();
 
-    // 添加乱序的版本
     history.add_migration(dbnexus::MigrationVersion {
         version: 3,
         description: "Third".to_string(),
@@ -478,7 +477,6 @@ fn test_migration_creation() {
 fn test_migration_history_pending() {
     let mut history = MigrationHistory::new();
 
-    // 添加已应用的迁移
     history.add_migration(dbnexus::MigrationVersion {
         version: 1,
         description: "v1".to_string(),

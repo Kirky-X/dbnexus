@@ -23,9 +23,7 @@ use dbnexus::{
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// ============================================
 // 自定义 Saga 动作
-// ============================================
 
 /// 转账动作：从账户 A 扣款
 struct DebitAction {
@@ -118,9 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔗 DBNexus distributed transaction Saga orchestrator example");
     println!("========================================\n");
 
-    // ============================================
     // 创建分片路由器（Saga 需要 ShardRouter）
-    // ============================================
     println!("--- 1. create the shard router ---\n");
 
     let config = ShardConfig::new("hash", 2, "shard", "sqlite::memory:");
@@ -132,9 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - initialized pools: {:?}", router.initialized_shards());
     println!();
 
-    // ============================================
     // 成功场景：跨分片转账全部成功
-    // ============================================
     println!("--- 2. success scenario: cross-shard transfer ---\n");
     println!("  Scenario: user A (shard 0) → user B (shard 1) transfer 100\n");
 
@@ -188,9 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 失败场景：第二步失败触发补偿
-    // ============================================
     println!("--- 3. failure scenario: credit failure triggers compensation ---\n");
     println!("  Scenario: debit succeeded but credit failed → auto-compensate the debit\n");
 
@@ -227,9 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_result(&result2);
     println!();
 
-    // ============================================
     // Saga 状态流转说明
-    // ============================================
     println!("--- 4. Saga state transitions ---\n");
     println!("  ┌─────────┐    all succeeded    ┌───────────┐");
     println!("  │ Running │ ──────────────→ │ Completed │");
@@ -241,9 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └─────────────┘            └─────────┘");
     println!();
 
-    // ============================================
     // SagaError 类型
-    // ============================================
     println!("--- 5. SagaError types ---\n");
     println!("  ┌──────────────────────┬──────────────────────────────────┐");
     println!("  │ variant              │ description                              │");

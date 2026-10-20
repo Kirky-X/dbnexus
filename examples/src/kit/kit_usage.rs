@@ -30,9 +30,7 @@ use dbnexus::t_simple;
 use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
 use trait_kit::prelude::*;
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,9 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", t_simple("example-kit-usage-title"));
     println!("========================================\n");
 
-    // ============================================
     // 创建 AsyncKit 并配置
-    // ============================================
     println!("--- 1. create AsyncKit and set the configuration ---\n");
 
     let mut kit = AsyncKit::new();
@@ -66,9 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     kit.set_config(db_config);
     println!("  ✓ DbConfig set (sqlite shared memory, max_connections=5)");
 
-    // ============================================
     // 注册模块
-    // ============================================
     println!("\n--- 2. register modules ---\n");
 
     // OxcacheModule 必须先注册（DbNexusModule 依赖它）
@@ -81,9 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ DbNexusModule registered (the database pool module)");
     println!("  dependencies: DbNexusModule → OxcacheModule");
 
-    // ============================================
     // 构建 Kit 并获取连接池
-    // ============================================
     println!("\n--- 3. build the Kit ---\n");
 
     let kit = kit
@@ -98,9 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("require DbNexusModule: {e}"))?;
     println!("  ✓ Arc<dyn ConnectionPool> acquired successfully");
 
-    // ============================================
     // 使用连接池
-    // ============================================
     println!("\n--- 4. use the connection pool ---\n");
 
     let status = pool.status();
@@ -124,9 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ DDL executed: CREATE TABLE kit_demo");
 
-    // ============================================
     // INSERT 数据
-    // ============================================
     println!("\n--- 5. INSERT data ---\n");
 
     session
@@ -140,9 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ inserted 3 test rows");
 
-    // ============================================
     // SELECT 查询
-    // ============================================
     println!("\n--- 6. SELECT query ---\n");
 
     session
@@ -150,9 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("  ✓ queried the kit_demo table successfully");
 
-    // ============================================
     // 事务操作
-    // ============================================
     println!("\n--- 7. transactions ---\n");
 
     session.begin_transaction().await?;
@@ -171,9 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.commit().await?;
     println!("  ✓ transaction committed");
 
-    // ============================================
     // 错误处理演示
-    // ============================================
     println!("\n--- 8. error handling ---\n");
 
     // 演示：未注册 OxcacheModule 时 build 会失败
@@ -199,9 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 多 Session 使用
-    // ============================================
     println!("\n--- 9. multiple Sessions ---\n");
 
     let admin_session = pool.get_session("admin").await?;

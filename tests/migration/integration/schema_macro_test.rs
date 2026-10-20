@@ -85,7 +85,6 @@ async fn test_schema_table_applied_by_executor() {
     let mut migration = Migration::new(1, "create_users_table".to_string());
     migration.add_table_change(TableChange::CreateTable(table));
 
-    // 执行迁移 — 应该成功
     executor
         .apply_migration(&migration)
         .await

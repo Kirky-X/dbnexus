@@ -42,9 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔄 DBNexus runtime retry + exponential backoff example");
     println!("========================================\n");
 
-    // ============================================
     // 幂等性判断
-    // ============================================
     println!("--- 1. idempotency detection ---\n");
 
     let test_cases = [
@@ -73,9 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └──────────────────────────────────────┴──────────┘");
     println!();
 
-    // ============================================
     // 默认重试策略 — 幂等查询最终成功
-    // ============================================
     println!("--- 2. idempotent query retry (succeeding after 2 failures) ---\n");
 
     let policy = RetryPolicy::default();
@@ -109,9 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 非幂等操作 — 直接失败不重试
-    // ============================================
     println!("--- 3. non-idempotent operation (INSERT, not retried) ---\n");
 
     let counter = AtomicU32::new(0);
@@ -137,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 重试耗尽 — 超过最大重试次数
-    // ============================================
     println!("--- 4. retry exhausted (10 failures, max 3 retries) ---\n");
 
     let counter = AtomicU32::new(0);
@@ -168,9 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 自定义重试策略
-    // ============================================
     println!("--- 5. custom retry strategy ---\n");
 
     let custom_policy = RetryPolicy {
@@ -229,9 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 首次即成功 — 无需重试
-    // ============================================
     println!("--- 6. success on the first try (no retry needed) ---\n");
 
     let counter = AtomicU32::new(0);
@@ -256,9 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // RetryError 类型展示
-    // ============================================
     println!("--- 7. RetryError types ---\n");
     println!("  ┌─────────────────┬──────────────────────────────────────┐");
     println!("  │ variant           │ description                                 │");

@@ -27,9 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌐 DBNexus Scatter-Gather cross-shard query example");
     println!("========================================\n");
 
-    // ============================================
     // 创建分片路由器
-    // ============================================
     println!("--- 1. create the shard router ---\n");
 
     let config = ShardConfig::new("hash", 4, "shard", "sqlite::memory:");
@@ -41,9 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - initialized pools  : {:?}", router.initialized_shards());
     println!();
 
-    // ============================================
     // 创建 Scatter-Gather 执行器
-    // ============================================
     println!("--- 2. create the Scatter-Gather executor ---\n");
 
     let timeout = Duration::from_secs(10);
@@ -56,9 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - failure policy   : {:?}", policy);
     println!();
 
-    // ============================================
     // 执行 scatter 查询
-    // ============================================
     println!("--- 3. execute a Scatter query ---\n");
     println!("  send SQL to all shards in parallel and collect each shard's row count\n");
 
@@ -83,9 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // ============================================
     // 聚合函数演示
-    // ============================================
     println!("--- 4. aggregate functions ---\n");
 
     let shard_counts = vec![(0, 150_u64), (1, 230), (2, 180), (3, 90)];
@@ -117,9 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  MAX aggregation  : {:?}", max_result);
     println!();
 
-    // ============================================
     // PartialFailurePolicy 对比
-    // ============================================
     println!("--- 5. partial failure policy comparison ---\n");
 
     println!("  ┌──────────────┬──────────────────────────────────────────────┐");
@@ -130,9 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └──────────────┴──────────────────────────────────────────────┘");
     println!();
 
-    // ============================================
     // AggregateFunction 类型
-    // ============================================
     println!("--- 6. AggregateFunction types ---\n");
 
     let agg_functions = [
@@ -152,9 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └─────────────────┴──────────────────────────┘");
     println!();
 
-    // ============================================
     // 架构说明
-    // ============================================
     println!("--- 7. Scatter-Gather architecture ---\n");
     println!("  ┌──────────┐     SQL      ┌─────────┐");
     println!("  │ Executor │ ────────────→ │ Shard 0 │");

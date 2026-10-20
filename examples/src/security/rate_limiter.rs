@@ -28,9 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", t_simple("example-rate-limiter-title"));
     println!("========================================\n");
 
-    // ============================================
     // 基本使用：new() 创建并消耗令牌
-    // ============================================
     println!("--- Scenario 1: basic usage ---");
     let limiter = RateLimiter::new(5, Duration::from_secs(60), 10000, 5);
     println!("  ✓ RateLimiter created: max_requests=5, window=60s, burst=5");
@@ -57,9 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // 不同键独立计数
-    // ============================================
     println!("--- Scenario 2: independent counting per key ---");
     let limiter2 = RateLimiter::with_defaults(3, Duration::from_secs(60), 10000);
     println!("  ✓ RateLimiter created: max_requests=3 (with_defaults)");
@@ -94,9 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // reset() 重置指定键
-    // ============================================
     println!("--- Scenario 3: reset() resets a given key ---");
     let limiter3 = RateLimiter::new(2, Duration::from_secs(60), 10000, 2);
     println!("  ✓ RateLimiter created: max_requests=2");
@@ -118,7 +112,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         limiter3.remaining("user_reset")
     );
 
-    // 验证可再次请求
     let allowed = limiter3.check("user_reset").await;
     println!(
         "\n  request after reset: allowed={} (should be allowed)",
@@ -126,9 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // 突发流量（burst_capacity > max_requests）
-    // ============================================
     println!("--- Scenario 4: burst traffic handling ---");
     // refill_rate = 1/sec (max_requests=1 / window=1s), burst=10
     let limiter4 = RateLimiter::new(1, Duration::from_secs(1), 10000, 10);
@@ -156,9 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    remaining = {}", limiter4.remaining("burst_user"));
     println!();
 
-    // ============================================
     // 令牌桶填充（等待后令牌恢复）
-    // ============================================
     println!("--- Scenario 5: token bucket refill ---");
     let limiter5 = RateLimiter::new(10, Duration::from_secs(1), 10000, 10);
     println!("  ✓ RateLimiter created: max_requests=10/s, burst=10");
@@ -184,9 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    remaining = {}", limiter5.remaining("refill_user"));
     println!();
 
-    // ============================================
     // cleanup() 清理孤立条目
-    // ============================================
     println!("--- Scenario 6: cleanup() removes stale entries ---");
     let limiter6 = RateLimiter::new(10, Duration::from_millis(100), 10000, 10);
     println!("  ✓ RateLimiter created: window=100ms (short window for the demo)");
@@ -212,9 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    is_empty = {}", limiter6.is_empty());
     println!();
 
-    // ============================================
     // 模拟高频率权限检查场景
-    // ============================================
     println!("--- Scenario 7: simulated high-frequency permission checks ---");
     let limiter7 = RateLimiter::new(20, Duration::from_secs(60), 10000, 20);
     println!("  ✓ RateLimiter created: max_requests=20/min (simulated API rate limit)");
@@ -250,9 +235,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // Default trait 演示
-    // ============================================
     println!("--- Scenario 8: the Default trait ---");
     let default_limiter: RateLimiter = RateLimiter::default();
     println!("  ✓ Default configuration: 100 req/min, 10000 buckets, burst=100");
@@ -264,9 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // update_config() 动态调整配置
-    // ============================================
     println!("--- Scenario 9: update_config() dynamic adjustment ---");
     let mut limiter9 = RateLimiter::new(10, Duration::from_secs(60), 10000, 10);
     println!("  ✓ initial configuration: max_requests=10, window=60s");
@@ -277,9 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ⚠ note: update_config only affects newly created buckets, not existing ones");
     println!();
 
-    // ============================================
     // 总结
-    // ============================================
     println!("========================================");
     println!("✨ Rate limiter example complete!");
     println!("========================================");

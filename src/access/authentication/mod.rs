@@ -50,7 +50,6 @@ mod tests {
         let manager =
             AuthenticationManager::new(b"test-secret-key-for-testing-32bx").expect("valid secret");
 
-        // 添加测试用户
         let password_hash = manager.password_hasher.hash(TEST_PASSWORD).unwrap();
         let user = User {
             id: "user123".to_string(),
@@ -149,9 +148,7 @@ mod tests {
         assert_eq!(claims.username, "testuser");
     }
 
-    // ============================================================================
     // register_user 密码强度验证测试（security 修复）
-    // ============================================================================
 
     #[tokio::test]
     async fn test_register_user_weak_password_rejected() {

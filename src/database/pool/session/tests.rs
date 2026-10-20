@@ -387,9 +387,7 @@ mod graph_tests {
     }
 }
 
-// ============================================================================
 // vuln-0001 安全审计测试
-// ============================================================================
 
 #[cfg(test)]
 #[cfg(all(feature = "permission", feature = "sqlite"))]
@@ -516,9 +514,7 @@ roles:
     }
 }
 
-// ============================================================================
 // vuln-0003 测试：SqlParser 表名提取安全验证
-// ============================================================================
 
 #[cfg(test)]
 #[cfg(all(feature = "permission", feature = "sql-parser"))]
@@ -590,9 +586,7 @@ mod vuln_0003_tests {
     }
 }
 
-// ============================================================================
 // vuln-0005 测试：Cypher 注入防护
-// ============================================================================
 //
 // 漏洞描述：
 //   `Session::execute_cypher` 直接接受 Cypher 字符串并执行，
@@ -607,7 +601,6 @@ mod vuln_0003_tests {
 // 测试策略：
 //   - 单元测试 `validate_cypher_safety` 各检查项（拒绝/允许）
 //   - 集成测试 `execute_cypher_with_params` 端到端验证参数化查询
-// ============================================================================
 
 #[cfg(all(test, feature = "ladybug"))]
 mod vuln_0005_tests {
@@ -624,7 +617,7 @@ mod vuln_0005_tests {
             .expect("Failed to create Ladybug pool")
     }
 
-    // ===== validate_cypher_safety 拒绝路径 =====
+    // validate_cypher_safety 拒绝路径
 
     /// vuln-0005 Red-1：超过 10KB 的 Cypher 被拒绝（DoS 防护）
     ///
@@ -755,7 +748,7 @@ mod vuln_0005_tests {
         }
     }
 
-    // ===== validate_cypher_safety 允许路径 =====
+    // validate_cypher_safety 允许路径
 
     /// vuln-0005 Green-1：正常 Cypher 查询通过安全检查
     ///
@@ -785,7 +778,7 @@ mod vuln_0005_tests {
         );
     }
 
-    // ===== execute_cypher_with_params 端到端测试 =====
+    // execute_cypher_with_params 端到端测试
 
     /// vuln-0005 Green-3：参数化查询端到端验证
     ///
@@ -874,7 +867,6 @@ mod vuln_0005_tests {
             .await
             .expect("create node table");
 
-        // 开始事务
         session
             .begin_transaction()
             .await
@@ -948,9 +940,7 @@ mod vuln_0005_tests {
     }
 }
 
-// ============================================================================
 // Session 基础测试（仅需 sqlite feature）
-// ============================================================================
 
 #[cfg(test)]
 #[cfg(feature = "sqlite")]
@@ -1001,7 +991,6 @@ mod session_basic_tests {
     async fn test_session_begin_and_commit_transaction() {
         let (_pool, session) = make_test_session("admin").await;
 
-        // 开始事务
         session
             .begin_transaction()
             .await
@@ -1163,7 +1152,7 @@ mod session_basic_tests {
         );
     }
 
-    // ===== 补充测试：is_invalid_table_name, create_migration_executor =====
+    // 补充测试：is_invalid_table_name, create_migration_executor
 
     #[cfg(feature = "permission")]
     #[tokio::test]
@@ -1662,9 +1651,7 @@ mod txn_handle_error_path_tests {
     }
 }
 
-// ============================================================================
 // metrics 接线：会话把执行与自定义操作记入注入的收集器
-// ============================================================================
 
 #[cfg(all(feature = "metrics", feature = "sqlite"))]
 mod metrics_wiring_tests {
@@ -1697,9 +1684,7 @@ mod metrics_wiring_tests {
     }
 }
 
-// ============================================================================
 // 表级权限门：操作白名单先于 admin 绕过
-// ============================================================================
 
 #[cfg(all(feature = "permission", feature = "sqlite"))]
 mod table_permission_gate_tests {

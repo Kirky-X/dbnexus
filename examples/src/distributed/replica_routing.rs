@@ -22,9 +22,7 @@ fn main() {
     println!("🔀 DBNexus replica routing (read/write splitting) example");
     println!("========================================\n");
 
-    // ============================================
     // ReplicaConfig 配置
-    // ============================================
     println!("--- 1. ReplicaConfig configuration ---\n");
 
     let replica_config = ReplicaConfig {
@@ -68,9 +66,7 @@ fn main() {
     println!("  - replica_urls         : (empty)",);
     println!();
 
-    // ============================================
     // ReplicationLag 结构体
-    // ============================================
     println!("--- 2. ReplicationLag struct ---\n");
 
     println!("  ReplicationLag fields:");
@@ -83,9 +79,7 @@ fn main() {
     println!("  └────────────────┴──────────────────────────────────────────┘");
     println!();
 
-    // ============================================
     // ReplicationLagDetector 各后端实现
-    // ============================================
     println!("--- 3. ReplicationLagDetector backend implementations ---\n");
 
     println!("  ┌──────────────────────┬───────────────────────────────────────────────┐");
@@ -103,9 +97,7 @@ fn main() {
     println!("  └──────────────────────┴───────────────────────────────────────────────┘");
     println!();
 
-    // ============================================
     // ReplicaPool 路由逻辑
-    // ============================================
     println!("--- 4. ReplicaPool routing logic ---\n");
 
     println!("  read request routing flow:");
@@ -129,9 +121,7 @@ fn main() {
     println!("                              └──────────┘  └──────────┘");
     println!();
 
-    // ============================================
     // FailoverConfig 故障转移配置
-    // ============================================
     println!("--- 5. FailoverConfig failover configuration ---\n");
 
     let failover_config = FailoverConfig {
@@ -171,9 +161,7 @@ fn main() {
     );
     println!();
 
-    // ============================================
     // Failover + CircuitBreaker 协同
-    // ============================================
     println!("--- 6. failover + CircuitBreaker cooperation ---\n");
 
     println!("  ┌──────────┐   query failed   ┌────────────────┐");
@@ -189,9 +177,7 @@ fn main() {
     println!("                          └──────────────────┘");
     println!();
 
-    // ============================================
     // 生产环境建议
-    // ============================================
     println!("--- 7. production recommendations ---\n");
     println!("  ┌────────────────────┬──────────────────────────────────────────────┐");
     println!("  │ parameter           │ recommended value                        │");

@@ -23,9 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 DBNexus shard migration orchestrator example");
     println!("========================================\n");
 
-    // ============================================
     // 创建分片路由器
-    // ============================================
     println!("--- 1. create the shard router ---\n");
 
     let config = ShardConfig::new("hash", 4, "shard", "sqlite::memory:");
@@ -37,9 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - initialized pools : {:?}", router.initialized_shards());
     println!();
 
-    // ============================================
     // 分片迁移编排器说明
-    // ============================================
     println!("--- 2. ShardMigrationOrchestrator ---\n");
 
     println!("  the shard migration orchestrator:");
@@ -49,9 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - a partial failure does not block the other shards");
     println!();
 
-    // ============================================
     // 并行 vs 串行模式对比
-    // ============================================
     println!("--- 3. parallel vs serial modes ---\n");
 
     println!("  ┌──────────┬──────────────────────────────────────────────┐");
@@ -65,9 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └──────────┴──────────────────────────────────────────────┘");
     println!();
 
-    // ============================================
     // 迁移结果结构
-    // ============================================
     println!("--- 4. migration result structures ---\n");
 
     println!("  OrchestratedMigrationResult:");
@@ -92,9 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └────────────────────┴──────────────────────────────────┘");
     println!();
 
-    // ============================================
     // 模拟迁移结果展示
-    // ============================================
     println!("--- 5. simulated migration results ---\n");
 
     let total_shards = router.total_shards();
@@ -134,9 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // ============================================
     // 架构说明
-    // ============================================
     println!("--- 6. shard migration orchestration architecture ---\n");
 
     println!("  ┌─────────────────────────┐");
@@ -158,9 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  └───────────────────────────┘");
     println!();
 
-    // ============================================
     // 与其他模块的关系
-    // ============================================
     println!("--- 7. relations to other modules ---\n");
     println!("  ┌────────────────┬──────────────────────────────────────────┐");
     println!("  │ dependencies       │ relationship                               │");

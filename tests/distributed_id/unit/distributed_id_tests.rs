@@ -8,9 +8,7 @@ use std::thread;
 
 use dbnexus::{DistributedIdGenerator, IdComponents, SnowflakeIdGenerator};
 
-// ============================================================================
 // SnowflakeIdGenerator 基础测试
-// ============================================================================
 
 #[test]
 fn test_new_generator_valid_machine_id() {
@@ -63,9 +61,7 @@ fn test_ids_are_unique() {
     }
 }
 
-// ============================================================================
 // parse_id 测试
-// ============================================================================
 
 #[test]
 fn test_parse_id_extracts_machine_id() {
@@ -107,9 +103,7 @@ fn test_parse_id_roundtrip() {
     assert_eq!(recomposed, id);
 }
 
-// ============================================================================
 // 并发安全测试
-// ============================================================================
 
 #[test]
 fn test_concurrent_id_generation_no_duplicates() {
@@ -177,9 +171,7 @@ fn test_concurrent_ids_monotonically_increasing_per_thread() {
     }
 }
 
-// ============================================================================
 // IdComponents 结构测试
-// ============================================================================
 
 #[test]
 fn test_id_components_equality() {

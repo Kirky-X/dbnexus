@@ -26,9 +26,7 @@ mod health_tests {
         None
     }
 
-    // ============================================================================
     // 熔断器集成测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_circuit_breaker_state_transitions() {
@@ -111,9 +109,7 @@ mod health_tests {
         assert!(status.time_since_last_change > Duration::ZERO);
     }
 
-    // ============================================================================
     // 健康指标集成测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_pool_health_metrics_operations() {
@@ -176,9 +172,7 @@ mod health_tests {
         assert!(!metrics.should_create_connection(1));
     }
 
-    // ============================================================================
     // 健康检查器集成测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_health_checker_initial_state() {
@@ -199,9 +193,7 @@ mod health_tests {
         assert!(result.latency > Duration::ZERO);
     }
 
-    // ============================================================================
     // 数据库连接健康测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_pool_status_health() {
@@ -215,9 +207,7 @@ mod health_tests {
         let _ = status.active;
     }
 
-    // ============================================================================
     // 综合健康场景测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_health_metrics_circuit_breaker_integration() {
@@ -261,9 +251,7 @@ mod health_tests {
         assert_eq!(format!("{}", CircuitBreakerState::Open), "open");
     }
 
-    // ============================================================================
     // 并发健康检查测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_concurrent_health_checks() {
@@ -313,9 +301,7 @@ mod health_tests {
         assert!(matches!(state, CircuitBreakerState::Closed));
     }
 
-    // ============================================================================
     // 熔断器配置测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_circuit_breaker_config_defaults() {
@@ -346,9 +332,7 @@ mod health_tests {
         assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
     }
 
-    // ============================================================================
     // 滑动窗口测试
-    // ============================================================================
 
     #[tokio::test]
     async fn test_failure_window_size_limit() {
@@ -368,9 +352,7 @@ mod health_tests {
         assert!(status.consecutive_failures >= 5);
     }
 
-    // ============================================================================
     // 压力测试场景
-    // ============================================================================
 
     #[tokio::test]
     async fn test_health_metrics_stress() {

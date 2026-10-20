@@ -18,9 +18,7 @@ use thiserror::Error;
 
 use crate::i18n;
 
-// ============================================================================
 // MetricsCollector Trait Interface
-// ============================================================================
 
 /// 指标收集器错误类型
 #[derive(Debug, Error)]
@@ -1171,7 +1169,7 @@ impl MetricsCollector {
 
     /// 导出为 Prometheus 格式
     pub fn export_prometheus(&self) -> String {
-        // 优化：预分配缓冲区，减少字符串分配
+        // 预分配缓冲区，减少字符串分配
         let mut output = String::with_capacity(2048);
         let now = time::OffsetDateTime::now_utc();
 
@@ -1420,9 +1418,7 @@ impl MetricsCollector {
     }
 }
 
-// ============================================================================
 // MetricsCollector Trait Implementation
-// ============================================================================
 
 impl MetricsCollectorTrait for MetricsCollector {
     fn record_query(&self, duration: Duration) {
@@ -1480,9 +1476,7 @@ impl MetricsCollectorTrait for MetricsCollector {
     }
 }
 
-// ============================================================================
 // MockMetrics - 用于测试的 Mock 实现
-// ============================================================================
 
 /// Mock 指标收集器
 ///
@@ -1675,7 +1669,7 @@ mod tests {
         _assert_impl_trait(&mock);
     }
 
-    // ========== Latency Percentiles Tests ==========
+    // Latency Percentiles Tests
     #[test]
     fn test_latency_percentiles() {
         let collector = MetricsCollector::new();
@@ -1904,7 +1898,7 @@ mod tests {
         assert_eq!(txn_stats.total_transactions, 4000);
     }
 
-    // ===== 补充测试：MetricsError i18n / 分位访问器 / 采集器全链路 =====
+    // 补充测试：MetricsError i18n / 分位访问器 / 采集器全链路
 
     #[test]
     fn test_metrics_error_localized_msg() {

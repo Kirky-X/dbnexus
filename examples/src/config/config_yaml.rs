@@ -21,9 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📄 DBNexus YAML configuration example");
     println!("========================================\n");
 
-    // ============================================
     // 编写 YAML 配置字符串
-    // ============================================
     // 生产中通常从文件读取，这里为了演示使用内联字符串。
     // DbConfig 的所有字段都实现了 serde，可直接反序列化。
     let yaml_content = r#"
@@ -46,15 +44,11 @@ cache_config:
     println!("YAML configuration content:");
     println!("{}", yaml_content);
 
-    // ============================================
     // 解析 YAML 配置
-    // ============================================
     let config: DbConfig = serde_saphyr::from_str(yaml_content)?;
     println!("✓ YAML configuration parsed");
 
-    // ============================================
     // 打印配置信息
-    // ============================================
     println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(
@@ -79,9 +73,7 @@ cache_config:
         config.database_type().unwrap()
     );
 
-    // ============================================
     // 创建连接池
-    // ============================================
     let pool = DbPool::with_config(config).await?;
     println!("\n✓ Pool created");
     println!("  - actual URL       : {}", pool.config().url);

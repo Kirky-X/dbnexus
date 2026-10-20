@@ -187,7 +187,6 @@ async fn test_rbac_permission_provider_creation_succeeds() {
         extends: vec![],
     };
 
-    // 添加角色
     provider.add_role(admin_role.clone());
     provider.add_role(user_role.clone());
     provider.add_role(viewer_role.clone());
@@ -196,7 +195,6 @@ async fn test_rbac_permission_provider_creation_succeeds() {
     provider.add_role_to_subject("user", "user");
     provider.add_role_to_subject("user", "viewer");
 
-    // 添加 admin 的权限规则
     provider.add_permission(
         "admin",
         PermissionRule {
@@ -393,7 +391,6 @@ async fn test_permission_decision_latency_under_threshold() {
     );
     let pdp = PolicyDecisionPoint::new(provider);
 
-    // 执行多次权限检查以测试延迟
     let start = Instant::now();
     for _ in 0..100 {
         let _ = pdp.check("admin", "users", "SELECT").await;

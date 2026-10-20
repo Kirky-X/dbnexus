@@ -32,9 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔑 DBNexus password hashing and user authentication example");
     println!("========================================\n");
 
-    // ============================================
     // PasswordHasher — 哈希与验证
-    // ============================================
     println!("--- 1. PasswordHasher hashing and verification ---");
     let hasher = PasswordHasher::new();
 
@@ -67,9 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     assert!(matches!(verify_fail, Err(AuthError::InvalidCredentials)));
 
-    // ============================================
     // 密码强度校验
-    // ============================================
     println!("\n--- 2. password strength check ---");
     // 密码形态字面量按 CodeQL 要求派生：负例用种子截断（长度/字符类语义保持）
     let seed_pw: String = (0..12)
@@ -95,13 +91,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {:>15} [{}] - {}", pwd, status, desc);
     }
 
-    // ============================================
     // AuthenticationManager — 用户管理
-    // ============================================
     println!("\n--- 3. AuthenticationManager user management ---");
     let manager = AuthenticationManager::new(b"dbnexus-demo-secret-key-32bytes-ok!!")?;
 
-    // 添加用户
     println!("\n  [add user]");
     let users_to_add = [
         ("u_001", "alice", "admin", "alice@example.com"),
@@ -132,9 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fetched.id, fetched.role, fetched.email
     );
 
-    // ============================================
     // AuthCredentials — 凭据认证流程
-    // ============================================
     println!("\n--- 4. AuthCredentials credential authentication ---");
 
     // 正确凭据
@@ -186,9 +177,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("✗ {}", e))
     );
 
-    // ============================================
     // Token 刷新流程
-    // ============================================
     println!("\n--- 5. token refresh flow ---");
     // AuthenticationManager 内部的 jwt_manager 是私有的，
     // 这里使用相同 secret 创建独立 JwtManager 来签发 refresh token（生产中通常由登录接口返回）
@@ -203,9 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         new_claims.sub, new_claims.token_type
     );
 
-    // ============================================
     // 用户删除
-    // ============================================
     println!("\n--- 6. user removal ---");
     manager.remove_user("carol").await?;
     println!("  ✓ removed user carol");

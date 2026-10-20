@@ -258,11 +258,9 @@ async fn test_slow_query_disabled() {
 async fn test_slow_query_threshold_adjustment() {
     let collector = MetricsCollector::new();
 
-    // 设置较高的阈值
     collector.set_slow_query_threshold(1000);
     collector.set_slow_query_enabled(true);
 
-    // 记录低于阈值的查询
     collector.record_query("SELECT", Duration::from_millis(500), true, Some(100));
 
     // 获取慢查询记录（应该为空）
@@ -272,7 +270,6 @@ async fn test_slow_query_threshold_adjustment() {
     // 降低阈值
     collector.set_slow_query_threshold(100);
 
-    // 记录高于阈值的查询
     collector.record_query("SELECT", Duration::from_millis(150), true, Some(100));
 
     // 获取慢查询记录（应该不为空）

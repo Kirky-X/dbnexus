@@ -23,9 +23,7 @@ mod common;
 use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::{db_entity, t_simple};
 
-// ============================================
 // 定义 User 实体
-// ============================================
 
 /// 用户实体模型
 ///
@@ -47,9 +45,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -57,22 +53,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", t_simple("example-basic-crud-title"));
     println!("========================================\n");
 
-    // ============================================
     // 创建连接池和 Session
-    // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool and Session created (role: admin)\n");
 
-    // ============================================
     // 建表（CREATE TABLE）
-    // ============================================
     // execute_raw_ddl 仅限 admin 角色调用，用于 DDL 操作。
     common::ddl::create_users_table(&session).await?;
     println!("✓ users table created\n");
 
-    // ============================================
     // 插入数据（Model::insert）
-    // ============================================
     println!("--- INSERT ---");
     let user1 = Model {
         id: 1,
@@ -107,9 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inserted3.id, inserted3.name
     );
 
-    // ============================================
     // 查询所有（Model::find_all）
-    // ============================================
     println!("\n--- FIND_ALL ---");
     let all_users = Model::find_all(&session).await?;
     println!(
@@ -120,9 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    - id={}, name={}, email={}", u.id, u.name, u.email);
     }
 
-    // ============================================
     // 更新数据（Model::update）
-    // ============================================
     println!("\n--- UPDATE ---");
     let updated = Model::update(
         &session,
@@ -137,9 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         updated.id, updated.email
     );
 
-    // ============================================
     // 删除数据（Model::delete）
-    // ============================================
     println!("\n--- DELETE ---");
     let affected = Model::delete(&session, inserted3.id).await?;
     println!(
@@ -147,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inserted3.id, affected
     );
 
-    // ============================================
     // 验证最终状态
-    // ============================================
     println!("\n--- final state ---");
     let remaining = Model::find_all(&session).await?;
     println!("  ✓ remaining users: {}", remaining.len());

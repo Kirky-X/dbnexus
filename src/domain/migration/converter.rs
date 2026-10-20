@@ -416,7 +416,7 @@ mod tests {
             .to_owned()
     }
 
-    // ===== 基本列类型映射测试 =====
+    // 基本列类型映射测试
 
     #[test]
     fn test_convert_integer_column() {
@@ -571,7 +571,7 @@ mod tests {
         assert!(age_col.default_value.is_some());
     }
 
-    // ===== 主键映射测试 =====
+    // 主键映射测试
 
     #[test]
     fn test_convert_primary_key() {
@@ -612,7 +612,7 @@ mod tests {
         assert!(table.primary_key_columns.contains(&"b".to_string()));
     }
 
-    // ===== 外键映射测试 =====
+    // 外键映射测试
 
     #[test]
     fn test_convert_foreign_key() {
@@ -675,7 +675,7 @@ mod tests {
         }
     }
 
-    // ===== 索引映射测试 =====
+    // 索引映射测试
 
     #[test]
     fn test_convert_index() {
@@ -750,7 +750,7 @@ mod tests {
         assert!(!table.foreign_keys.is_empty() || table.foreign_keys.is_empty()); // users 表无外键
     }
 
-    // ===== 补充测试：更多列类型转换 =====
+    // 补充测试：更多列类型转换
 
     #[test]
     fn test_convert_column_type_exotic() {

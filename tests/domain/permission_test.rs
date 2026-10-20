@@ -23,9 +23,7 @@ mod permission_tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    // =========================================================================
     // PermissionAction
-    // =========================================================================
 
     #[test]
     fn test_permission_action_display() {
@@ -49,9 +47,7 @@ mod permission_tests {
         assert_eq!(parsed, PermissionAction::Delete);
     }
 
-    // =========================================================================
     // TablePermission
-    // =========================================================================
 
     #[test]
     fn test_table_permission_allows() {
@@ -81,9 +77,7 @@ mod permission_tests {
         }
     }
 
-    // =========================================================================
     // RolePolicy
-    // =========================================================================
 
     #[test]
     fn test_role_policy_allows_specific_table() {
@@ -155,9 +149,7 @@ mod permission_tests {
         assert_eq!(parsed.tables[0].operations.len(), 2);
     }
 
-    // =========================================================================
     // PolicySet
-    // =========================================================================
 
     #[test]
     fn test_policy_set_default() {
@@ -184,9 +176,7 @@ mod permission_tests {
         assert!(set.roles.contains_key("admin"));
     }
 
-    // =========================================================================
     // DefaultPolicy
-    // =========================================================================
     // 注意：DefaultPolicy 仅 derive(Debug, Clone, Copy, Default, Deserialize)，
     // 未实现 PartialEq / Serialize，因此这里只能用 matches! 和反序列化测试。
 
@@ -205,9 +195,7 @@ mod permission_tests {
         assert!(matches!(parsed, DefaultPolicy::DenyAll));
     }
 
-    // =========================================================================
     // PermissionConfig
-    // =========================================================================
 
     #[test]
     fn test_permission_config_default() {
@@ -278,9 +266,7 @@ rate_limit_max_requests: 50
         assert_eq!(cfg.rate_limit_max_requests, 50);
     }
 
-    // =========================================================================
     // PermissionConfigError
-    // =========================================================================
 
     #[test]
     fn test_permission_config_error_display_missing_field() {
@@ -309,9 +295,7 @@ rate_limit_max_requests: 50
         assert!(msg.contains("/tmp/missing.yaml"));
     }
 
-    // =========================================================================
     // PermissionError
-    // =========================================================================
 
     #[test]
     fn test_permission_error_display_denied() {
@@ -349,9 +333,7 @@ rate_limit_max_requests: 50
         assert!(err.to_string().contains("yaml broken"));
     }
 
-    // =========================================================================
     // MemoryPermissionProvider
-    // =========================================================================
 
     #[tokio::test]
     async fn test_memory_permission_provider_check_admin() {
@@ -413,9 +395,7 @@ rate_limit_max_requests: 50
         assert!(result.unwrap());
     }
 
-    // =========================================================================
     // YamlPermissionProvider (通过 new() 工厂函数)
-    // =========================================================================
 
     #[tokio::test]
     async fn test_yaml_provider_new_without_policy_path() {
@@ -456,9 +436,7 @@ rate_limit_max_requests: 50
         }
     }
 
-    // =========================================================================
     // YamlPermissionProvider - 从临时 YAML 文件加载策略
-    // =========================================================================
 
     #[tokio::test]
     async fn test_yaml_provider_load_from_file_succeeds() {
@@ -709,9 +687,7 @@ editor:
         );
     }
 
-    // =========================================================================
     // with_cache (cache feature)
-    // =========================================================================
 
     #[cfg(feature = "cache")]
     #[tokio::test]
@@ -739,9 +715,7 @@ editor:
         assert!(result.is_err());
     }
 
-    // =========================================================================
     // 辅助：验证 PermissionProvider trait object 可用性
-    // =========================================================================
 
     #[tokio::test]
     async fn test_permission_provider_as_dyn_trait() {
@@ -763,9 +737,7 @@ editor:
         lifecycle.shutdown().await;
     }
 
-    // =========================================================================
     // HashMap / Arc 使用（防止 unused import 警告）
-    // =========================================================================
 
     #[test]
     fn test_hashmap_implementation_used() {

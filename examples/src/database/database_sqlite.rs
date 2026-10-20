@@ -22,9 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🗄️  DBNexus SQLite integration example");
     println!("========================================\n");
 
-    // ============================================
     // 内存模式
-    // ============================================
     println!("─── In-memory mode (sqlite::memory:) ───\n");
     let memory_config = DbConfig {
         url: "sqlite::memory:".to_string(),
@@ -79,9 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  - each connection gets an independent in-memory database (unless file::memory:?cache=shared)"
     );
 
-    // ============================================
     // 文件模式
-    // ============================================
     println!("\n─── File mode (sqlite://example.db) ───\n");
 
     let db_path = "dbnexus_example.db";
@@ -150,9 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::fs::remove_file(db_path);
     println!("ℹ️  Example database file cleaned up");
 
-    // ============================================
     // 两种模式对比
-    // ============================================
     println!("\n─── Mode comparison ───\n");
     println!("┌────────────┬───────────────┬──────────────────┐");
     println!("│ dimension    │ in-memory mode│ file mode       │");

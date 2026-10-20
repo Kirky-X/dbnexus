@@ -265,9 +265,7 @@ async fn test_mysql_transaction_commit() {
     );
 }
 
-// ============================================================================
 // 数据类型测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_mysql_data_types() {
@@ -350,9 +348,7 @@ async fn test_mysql_null_handling() {
     assert_eq!(result.rows_affected(), 0, "Query should succeed");
 }
 
-// ============================================================================
 // 错误路径测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_mysql_syntax_error_returns_error() {
@@ -414,9 +410,7 @@ async fn test_mysql_duplicate_key_returns_error() {
     assert!(result.is_err(), "Duplicate primary key should return error");
 }
 
-// ============================================================================
 // 聚合与 JOIN 测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_mysql_aggregate_query() {
@@ -498,9 +492,7 @@ async fn test_mysql_join_query() {
     assert_eq!(result.rows_affected(), 0, "JOIN query should succeed");
 }
 
-// ============================================================================
 // 健康检查与并发测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_mysql_health_check() {

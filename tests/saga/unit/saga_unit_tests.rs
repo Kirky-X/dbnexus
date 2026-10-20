@@ -4,9 +4,7 @@
 
 use dbnexus::{InMemorySagaLog, SagaError, SagaLog, SagaStatus, SagaStepLog};
 
-// ============================================================================
 // SagaStatus 测试
-// ============================================================================
 
 #[test]
 fn test_saga_status_equality() {
@@ -27,9 +25,7 @@ fn test_saga_status_clone_copy() {
     assert_eq!(status, cloned);
 }
 
-// ============================================================================
 // SagaError 测试
-// ============================================================================
 
 #[test]
 fn test_saga_error_execution_failed_display() {
@@ -61,9 +57,7 @@ fn test_saga_error_is_error_trait() {
     assert!(err.source().is_none());
 }
 
-// ============================================================================
 // SagaStepLog 测试
-// ============================================================================
 
 #[test]
 fn test_saga_step_log_success() {
@@ -104,9 +98,7 @@ fn test_saga_step_log_failed() {
     assert!(log.error.is_some());
 }
 
-// ============================================================================
 // SagaLog 测试
-// ============================================================================
 
 #[test]
 fn test_saga_log_creation() {
@@ -138,9 +130,7 @@ fn test_saga_log_clone() {
     assert_eq!(cloned.steps.len(), 1);
 }
 
-// ============================================================================
 // InMemorySagaLog 测试
-// ============================================================================
 
 #[test]
 fn test_in_memory_saga_log_insert_and_get() {
@@ -202,9 +192,7 @@ fn test_in_memory_saga_log_default() {
     assert!(store.get("any").is_none());
 }
 
-// ============================================================================
 // SagaLogStore 内存实现 + 补偿重放测试
-// ============================================================================
 
 #[test]
 fn test_memory_store_persist_and_load_pending() {
@@ -255,9 +243,7 @@ mod futures_now {
     }
 }
 
-// ============================================================================
 // DbSagaLog 持久化 + 启动恢复 + 补偿重放
-// ============================================================================
 
 #[cfg(feature = "sql-parser")]
 mod db_saga_recovery_tests {

@@ -82,9 +82,7 @@ async fn cleanup(path: &std::path::Path) {
     let _ = std::fs::remove_file(path);
 }
 
-// ============================================================================
 // N+1 场景：首轮穿透、二轮全命中
-// ============================================================================
 
 #[tokio::test]
 async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
@@ -153,9 +151,7 @@ async fn test_n_plus_one_first_pass_misses_second_pass_hits() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 写路径失效：invalidate_table 只触碰目标表
-// ============================================================================
 
 #[tokio::test]
 async fn test_invalidate_table_touches_only_target_table() {
@@ -229,9 +225,7 @@ async fn test_invalidate_table_touches_only_target_table() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // key 派生：参数参与派生（不同参数互不串缓存）
-// ============================================================================
 
 #[tokio::test]
 async fn test_different_params_are_distinct_cache_entries() {
@@ -270,9 +264,7 @@ async fn test_different_params_are_distinct_cache_entries() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 失效语义边界：未知表幂等、SQL 变化派生不同 key
-// ============================================================================
 
 #[tokio::test]
 async fn test_invalidate_unknown_table_is_idempotent() {
@@ -315,9 +307,7 @@ async fn test_sql_change_derives_new_entry_even_without_invalidate() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 版本戳编码单射性：连续失效不得碰撞出相同版本串（CRITICAL 回归）
-// ============================================================================
 
 #[tokio::test]
 async fn test_repeated_invalidations_always_produce_miss() {
@@ -357,9 +347,7 @@ async fn test_repeated_invalidations_always_produce_miss() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 安全上下文隔离：role/namespace 参与 key 派生
-// ============================================================================
 
 #[tokio::test]
 async fn test_cross_role_instances_never_share_entries() {
@@ -490,9 +478,7 @@ async fn test_namespace_isolates_tenants_on_shared_backend() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // key 哈希输入单射性：字段值含换行不得混淆条目（注入回归）
-// ============================================================================
 
 #[tokio::test]
 async fn test_hash_field_injection_cannot_confuse_entries() {
@@ -575,9 +561,7 @@ async fn test_hash_field_injection_cannot_confuse_entries() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // fail-closed：空 tables 与非法表名拒绝
-// ============================================================================
 
 #[tokio::test]
 async fn test_empty_tables_and_invalid_table_names_are_rejected() {
@@ -602,9 +586,7 @@ async fn test_empty_tables_and_invalid_table_names_are_rejected() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 多表查询：任一表失效即重执行
-// ============================================================================
 
 #[tokio::test]
 async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
@@ -661,9 +643,7 @@ async fn test_multi_table_query_invalidated_by_any_mentioned_table() {
     cleanup(&path).await;
 }
 
-// ============================================================================
 // 策略换装失效：set_data_protection 运行时换策略后旧 key 命中失效
-// ============================================================================
 
 #[cfg(feature = "data-protection")]
 use dbnexus::access::data_protection::{DataProtection, MaskStrategy, MaskingEngine};

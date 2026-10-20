@@ -17,18 +17,14 @@
 use dbnexus::contains_sql_injection;
 use dbnexus::is_ddl_operation;
 
-// ============================================
 // 主函数
-// ============================================
 
 fn main() {
     println!("========================================");
     println!("🛡️  DBNexus SQL injection detection example");
     println!("========================================\n");
 
-    // ============================================
     // 安全 SQL 检测（不应被标记为注入）
-    // ============================================
     println!("--- ✅ safe SQL (should not be detected as injection) ---\n");
 
     let safe_sqls = [
@@ -47,9 +43,7 @@ fn main() {
         println!("  {} safe: {}", mark, sql);
     }
 
-    // ============================================
     // UNION 注入检测
-    // ============================================
     println!("\n--- 🚫 UNION injection ---\n");
 
     let union_injections = [
@@ -65,9 +59,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // 布尔盲注检测（OR 1=1 等）
-    // ============================================
     println!("\n--- 🚫 boolean blind injection ---\n");
 
     let boolean_injections = [
@@ -85,9 +77,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // 注释注入检测
-    // ============================================
     println!("\n--- 🚫 comment injection ---\n");
 
     let comment_injections = [
@@ -104,9 +94,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // 堆叠查询检测
-    // ============================================
     println!("\n--- 🚫 stacked queries ---\n");
 
     let stacked_injections = [
@@ -125,9 +113,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // 时间盲注检测
-    // ============================================
     println!("\n--- 🚫 time-based blind injection ---\n");
 
     let time_injections = [
@@ -144,9 +130,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // 信息泄露检测
-    // ============================================
     println!("\n--- 🚫 information disclosure ---\n");
 
     let info_injections = [
@@ -163,9 +147,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // Unicode 绕过防护
-    // ============================================
     println!("\n--- 🚫 Unicode bypass protection ---\n");
 
     let unicode_injections = [
@@ -180,9 +162,7 @@ fn main() {
         println!("  {} injection detected: {}", mark, sql);
     }
 
-    // ============================================
     // DDL 操作检测
-    // ============================================
     println!("\n--- 🏗️  DDL operation detection (is_ddl_operation) ---\n");
 
     let ddl_cases = [
@@ -204,9 +184,7 @@ fn main() {
         println!("  {} [{}] {}", mark, category, sql);
     }
 
-    // ============================================
     // 字符串字面量中的注入模式不误报
-    // ============================================
     println!("\n--- ✅ no false positives inside string literals ---\n");
 
     let string_literal_sqls = [

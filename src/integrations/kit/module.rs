@@ -117,9 +117,7 @@ impl AsyncAutoBuilder for DbNexusModule {
     }
 }
 
-// ---------------------------------------------------------------------------
 // 全能力注册 — 缓存 / 审计 / 健康卫星模块
-// ---------------------------------------------------------------------------
 
 /// Cache capability module：把 `OxcacheModule` 后端适配为
 /// dbnexus [`DbCacheProvider`](crate::domain::DbCacheProvider) 并作为独立
@@ -260,9 +258,7 @@ impl AsyncAutoBuilder for DbNexusHealthModule {
     }
 }
 
-// ---------------------------------------------------------------------------
 // trait-kit 0.4 enhanced integrations (lifecycle / health / observability)
-// ---------------------------------------------------------------------------
 
 /// Async lifecycle hooks for `DbNexusModule`.
 ///
@@ -469,9 +465,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // trait-kit 0.4 enhanced integration tests
-    // ========================================================================
 
     /// `DbNexusModule` satisfies `AsyncLifecycle` trait bounds.
     #[test]
@@ -707,9 +701,7 @@ mod tests {
         kit.shutdown_async().await;
     }
 
-    // ========================================================================
     // 全能力注册 — 池/缓存/审计/健康全部能力可 require
-    // ========================================================================
 
     /// 新增卫星模块满足 `AsyncAutoBuilder` trait bounds。
     #[test]

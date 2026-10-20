@@ -20,9 +20,7 @@ use dbnexus::{DbConfig, DbPool, DbPoolBuilder};
 #[path = "../../common/mod.rs"]
 mod common;
 
-// ============================================================================
 // 构造测试
-// ============================================================================
 
 /// DbPool::new(sqlite::memory:) 应成功
 #[tokio::test]
@@ -76,9 +74,7 @@ async fn test_db_pool_new_invalid_url_fails() {
     assert!(result.is_err(), "invalid URL should fail");
 }
 
-// ============================================================================
 // DbPoolBuilder 测试
-// ============================================================================
 
 /// DbPoolBuilder 通过 url 构造
 #[tokio::test]
@@ -132,9 +128,7 @@ async fn test_db_pool_builder_admin_role() {
     assert_eq!(pool.config().admin_role, "root");
 }
 
-// ============================================================================
 // status / config 测试
-// ============================================================================
 
 /// 初始 status 应满足 total = active + idle（min_connections=0 时为 0）
 #[tokio::test]
@@ -199,9 +193,7 @@ async fn test_db_pool_get_actual_config() {
     );
 }
 
-// ============================================================================
 // get_session 权限测试
-// ============================================================================
 
 /// get_session("admin") 应成功
 #[tokio::test]
@@ -252,9 +244,7 @@ async fn test_db_pool_get_session_role_matches() {
     drop(session);
 }
 
-// ============================================================================
 // Clone 测试
-// ============================================================================
 
 /// Clone 后的 pool 应独立可用
 #[tokio::test]
@@ -277,9 +267,7 @@ async fn test_db_pool_clone_config_equal() {
     );
 }
 
-// ============================================================================
 // 边界测试
-// ============================================================================
 
 /// max_connections=1 边界
 #[tokio::test]
@@ -313,9 +301,7 @@ async fn test_db_pool_serial_get_session_reuses_connection() {
     }
 }
 
-// ============================================================================
 // 并发测试
-// ============================================================================
 
 /// 并发 get_session 不破坏 status 不变量
 #[tokio::test]
@@ -347,9 +333,7 @@ async fn test_db_pool_concurrent_get_session_preserves_invariants() {
     );
 }
 
-// ============================================================================
 // Drop 测试
-// ============================================================================
 
 /// DbPool drop 不应 panic
 #[tokio::test]
@@ -369,9 +353,7 @@ async fn test_db_pool_drop_with_active_session_no_panic() {
     drop(_session);
 }
 
-// ============================================================================
 // try_from 同步构造器测试（permission feature 启用时返回 Err）
-// ============================================================================
 
 /// try_from 在 permission feature 启用时应返回 Err
 #[cfg(feature = "permission")]
@@ -392,9 +374,7 @@ fn test_db_pool_try_from_with_permission_returns_err() {
     );
 }
 
-// ============================================================================
 // DbPoolBuilder 边界测试
-// ============================================================================
 
 /// DbPoolBuilder::build() 未提供 url 或 config 应返回 Err
 #[tokio::test]
@@ -444,9 +424,7 @@ async fn test_db_pool_builder_min_connections_with_url_only() {
     assert_eq!(pool.config().pool_config.min_connections, 2);
 }
 
-// ============================================================================
 // parse_health_check_interval 单元测试
-// ============================================================================
 
 /// parse_health_check_interval 边界值
 #[cfg(feature = "pool-health-check")]
@@ -472,9 +450,7 @@ fn test_parse_health_check_interval_boundaries() {
     assert_eq!(DbPool::parse_health_check_interval("-5"), 30);
 }
 
-// ============================================================================
 // check_connection_health 测试
-// ============================================================================
 
 /// check_connection_health 对健康的 SeaORM 连接应返回 true
 #[tokio::test]
@@ -487,9 +463,7 @@ async fn test_check_connection_health_healthy_seaorm() {
     assert!(is_healthy, "healthy SeaORM connection should return true");
 }
 
-// ============================================================================
 // 健康检查与清理测试（pool-health-check feature）
-// ============================================================================
 
 /// clean_invalid_connections 对健康池应返回 0
 #[cfg(feature = "pool-health-check")]
@@ -517,9 +491,7 @@ async fn test_validate_and_recreate_connections_healthy_pool() {
     );
 }
 
-// ============================================================================
 // pool_metrics 测试（metrics feature）
-// ============================================================================
 
 /// pool_metrics 在未设置 collector 时应返回全零
 #[cfg(feature = "metrics")]
@@ -532,9 +504,7 @@ async fn test_pool_metrics_no_collector_returns_zeros() {
     assert_eq!(metrics.critical_timeouts, 0);
 }
 
-// ============================================================================
 // run_auto_migrate 测试（auto-migrate feature）
-// ============================================================================
 
 /// run_auto_migrate 在无 migrations_dir 时应返回 Ok(0)
 #[cfg(feature = "auto-migrate")]
@@ -552,9 +522,7 @@ async fn test_run_auto_migrate_no_dir_returns_zero() {
     assert_eq!(result.unwrap(), 0, "should apply 0 migrations when no dir");
 }
 
-// ============================================================================
 // DbConnection 方法测试
-// ============================================================================
 
 /// DbConnection::as_sea_orm 应返回 Ok
 #[tokio::test]

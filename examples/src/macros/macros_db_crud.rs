@@ -28,9 +28,7 @@ mod common;
 use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
 
-// ============================================
 // 定义 Product 实体（带 db_entity 宏）
-// ============================================
 
 /// 产品实体
 ///
@@ -50,9 +48,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -60,15 +56,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 DBNexus db_crud macro example");
     println!("========================================\n");
 
-    // ============================================
     // 创建连接池和 Session
-    // ============================================
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool and Session created (role: admin)\n");
 
-    // ============================================
     // 建表
-    // ============================================
     session
         .execute_raw_ddl(
             "CREATE TABLE products (
@@ -81,9 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("✓ products table created\n");
 
-    // ============================================
     // 批量插入（insert）
-    // ============================================
     println!("--- INSERT (batch insert) ---");
     let products = vec![
         (1, "Laptop".to_string(), 1299.99, 15),
@@ -113,16 +103,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  inserted {} records in total", products.len());
 
-    // ============================================
     // count — 统计记录数
-    // ============================================
     println!("\n--- COUNT ---");
     let total = Model::count(&session).await?;
     println!("  ✓ total records: {}", total);
 
-    // ============================================
     // find_by_id — 按主键查询
-    // ============================================
     println!("\n--- FIND_BY_ID ---");
     let product = Model::find_by_id(&session, 1).await?;
     if let Some(p) = product {
@@ -142,9 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     );
 
-    // ============================================
     // find_all — 查询全部
-    // ============================================
     println!("\n--- FIND_ALL ---");
     let all = Model::find_all(&session).await?;
     println!("  ✓ {} records in total", all.len());
@@ -153,9 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("    ... (the rest is omitted)");
 
-    // ============================================
     // find_by_condition — 条件查询
-    // ============================================
     println!("\n--- FIND_BY_CONDITION ---");
 
     // 条件 1: stock < 10（低库存）
@@ -190,9 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 分页查询（count + find_by_condition + 手动切片）
-    // ============================================
     println!("\n--- paginated query ---");
     let page_size: u64 = 3;
     let total_count = Model::count(&session).await?;
@@ -213,9 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // update — 更新记录
-    // ============================================
     println!("\n--- UPDATE ---");
     let to_update = Model::find_by_id(&session, 5).await?.unwrap();
     println!(
@@ -237,9 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         updated.id, updated.name, updated.price, updated.stock
     );
 
-    // ============================================
     // delete_many — 批量删除
-    // ============================================
     println!("\n--- DELETE_MANY ---");
     // 删除所有 stock == 0 的记录
     let zero_stock_cond = sea_orm::Condition::all().add(Column::Stock.eq(0));
@@ -255,9 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         before_count, after_count
     );
 
-    // ============================================
     // delete — 按主键删除
-    // ============================================
     println!("\n--- DELETE ---");
     let deleted_one = Model::delete(&session, 1).await?;
     println!("  ✓ deleted id=1: {} rows affected", deleted_one);
@@ -272,9 +246,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     );
 
-    // ============================================
     // 最终状态
-    // ============================================
     println!("\n--- final state ---");
     let final_count = Model::count(&session).await?;
     println!("  ✓ remaining records: {}", final_count);

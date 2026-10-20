@@ -408,7 +408,7 @@ mod tests {
         );
     }
 
-    // ===== 测试：add_user vs add_user_unchecked 职责清晰分离 =====
+    // 测试：add_user vs add_user_unchecked 职责清晰分离
 
     /// 测试：add_user 必须验证 bcrypt 格式（公共 API 职责）
     ///
@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(read.email.as_deref(), Some("migrated@example.com"));
     }
 
-    // ===== 补充测试：bcrypt 哈希校验其余拒绝分支 / 构造变体 =====
+    // 补充测试：bcrypt 哈希校验其余拒绝分支 / 构造变体
 
     #[test]
     fn test_validate_bcrypt_hash_remaining_rejections() {
@@ -504,7 +504,7 @@ mod tests {
         assert!(AuthenticationManager::with_max_users(b"short", 2).is_err());
     }
 
-    // ===== bcrypt 校验分支：长度为 60 的输入才真正进入各拒绝分支 =====
+    // bcrypt 校验分支：长度为 60 的输入才真正进入各拒绝分支
     //
     // 既有用例的输入长度均不等于 60，一律在长度检查处返回，因此
     // ASCII/前缀/cost/`$` 四个分支的拒绝语义未被钉住。以下用例用

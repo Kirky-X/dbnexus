@@ -20,16 +20,13 @@ use dbnexus::{
 #[cfg(feature = "permission-engine")]
 use std::sync::Arc;
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 /// 创建测试用的 RBAC 权限提供者
 #[cfg(feature = "permission-engine")]
 fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
     let provider = Arc::new(RbacPermissionProvider::new());
 
-    // 添加 admin 角色
     provider.add_role(Role {
         name: "admin".to_string(),
         description: "管理员".to_string(),
@@ -37,7 +34,6 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
         extends: vec![],
     });
 
-    // 添加 admin 的权限规则
     provider.add_permission(
         "admin",
         PermissionRule {
@@ -60,7 +56,6 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
     // 将用户 "admin_user" 映射到角色 "admin"
     provider.add_role_to_subject("admin_user", "admin");
 
-    // 添加 user 角色
     provider.add_role(Role {
         name: "user".to_string(),
         description: "普通用户".to_string(),
@@ -68,7 +63,6 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
         extends: vec![],
     });
 
-    // 添加 user 的权限规则
     provider.add_permission(
         "user",
         PermissionRule {
@@ -103,9 +97,7 @@ fn create_test_rbac_provider() -> Arc<RbacPermissionProvider> {
     provider
 }
 
-// ============================================================================
 // 基本决策测试
-// ============================================================================
 
 /// 基本权限检查 - 允许
 #[cfg(feature = "permission-engine")]
@@ -191,9 +183,7 @@ async fn test_pdp_check_unknown_action_returns_default_decision() {
     );
 }
 
-// ============================================================================
 // 权限上下文测试
-// ============================================================================
 
 /// 使用 PermissionContext 检查权限
 #[cfg(feature = "permission-engine")]
@@ -261,9 +251,7 @@ async fn test_pdp_permission_resource_types_returns_correct_fields() {
     assert_eq!(resource_with_type.resource_type, "log_file");
 }
 
-// ============================================================================
 // 缓存机制测试
-// ============================================================================
 
 /// 缓存命中
 #[cfg(feature = "permission-engine")]
@@ -342,9 +330,7 @@ async fn test_pdp_custom_cache_ttl_returns_allow() {
     );
 }
 
-// ============================================================================
 // 速率限制测试
-// ============================================================================
 
 /// 速率限制 - 基本功能
 #[cfg(feature = "permission-engine")]
@@ -372,7 +358,6 @@ async fn test_pdp_rate_limit_exceeded_returns_deny() {
     let provider = create_test_rbac_provider();
     let pdp = PolicyDecisionPoint::with_rate_limit(provider, 3, 60); // 每分钟 3 次
 
-    // 执行 3 次请求
     for _ in 0..3 {
         let _ = pdp.check("limited_user", "users", "SELECT").await;
     }
@@ -407,9 +392,7 @@ async fn test_pdp_rate_limit_different_users_independent_count() {
     );
 }
 
-// ============================================================================
 // 批量检查测试
-// ============================================================================
 
 /// 批量权限检查
 #[cfg(feature = "permission-engine")]
@@ -463,9 +446,7 @@ async fn test_pdp_batch_check_empty_returns_empty() {
     assert!(results.is_empty());
 }
 
-// ============================================================================
 // 权限冲突解决测试
-// ============================================================================
 
 /// 规则优先级 - 高优先级规则优先
 #[cfg(feature = "permission-engine")]
@@ -617,9 +598,7 @@ async fn test_pdp_disabled_rule_returns_not_applicable() {
     );
 }
 
-// ============================================================================
 // 获取资源和方法测试
-// ============================================================================
 
 /// 获取允许的资源
 #[cfg(feature = "permission-engine")]
@@ -646,9 +625,7 @@ async fn test_pdp_get_allowed_resources_admin_includes_wildcard() {
     assert!(resources.iter().any(|r| r.name == "*"));
 }
 
-// ============================================================================
 // 通配符匹配测试
-// ============================================================================
 
 /// 通配符资源匹配
 #[cfg(feature = "permission-engine")]
@@ -707,9 +684,7 @@ async fn test_pdp_wildcard_subject_returns_allow() {
     );
 }
 
-// ============================================================================
 // PermissionAction 测试
-// ============================================================================
 
 /// PermissionAction Display 实现
 #[cfg(feature = "permission-engine")]
@@ -733,9 +708,7 @@ fn test_permission_action_serialization_roundtrips() {
     assert_eq!(deserialized, PermissionAction::Select);
 }
 
-// ============================================================================
 // PermissionDecision 测试
-// ============================================================================
 
 /// PermissionDecision 相等比较
 #[cfg(feature = "permission-engine")]
@@ -762,9 +735,7 @@ fn test_permission_decision_serialization_roundtrips() {
     assert_eq!(deserialized, PermissionDecision::Allow);
 }
 
-// ============================================================================
 // 并发测试
-// ============================================================================
 
 /// 并发权限检查
 #[cfg(feature = "permission-engine")]

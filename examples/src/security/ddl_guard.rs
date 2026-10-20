@@ -55,9 +55,7 @@ fn main() {
     let guard = DdlGuard::new();
     println!("✓ DdlGuard instance created\n");
 
-    // ============================================
     // 合法的 DDL 语句（应通过验证）
-    // ============================================
     println!("--- Scenario 1: valid DDL statements (should pass) ---");
 
     let valid_cases = [
@@ -101,9 +99,7 @@ fn main() {
         valid_cases.len()
     );
 
-    // ============================================
     // 危险的 DDL 语句（应被拦截）
-    // ============================================
     println!("--- Scenario 2: dangerous DDL statements (should be blocked) ---");
 
     let dangerous_cases = [
@@ -127,9 +123,7 @@ fn main() {
         dangerous_cases.len()
     );
 
-    // ============================================
     // 非 DDL 语句（DML，应被拦截）
-    // ============================================
     println!("--- Scenario 3: non-DDL statement (DML, should be blocked) ---");
 
     let dml_cases = [
@@ -152,9 +146,7 @@ fn main() {
         dml_cases.len()
     );
 
-    // ============================================
     // 边界场景
-    // ============================================
     println!("--- Scenario 4: edge cases ---");
 
     // 空 SQL
@@ -172,9 +164,7 @@ fn main() {
 
     println!();
 
-    // ============================================
     // Default trait 演示
-    // ============================================
     println!("--- Scenario 5: the Default trait ---");
     let default_guard: DdlGuard = DdlGuard::default();
     let result = default_guard.validate("CREATE TABLE test (id INT)");
@@ -182,9 +172,7 @@ fn main() {
 
     println!();
 
-    // ============================================
     // 批量验证场景（模拟 DDL 审计）
-    // ============================================
     println!("--- Scenario 6: batch DDL audit ---");
     let audit_batch = [
         "CREATE TABLE orders (id INT, user_id INT, amount REAL)",

@@ -29,9 +29,7 @@ use dbnexus::sea_orm::{
 };
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 
-// ============================================
 // 实体定义
-// ============================================
 
 /// 用户实体 — 用于演示高级查询和批量操作
 #[db_entity(table_name = "users", primary_key = "id")]
@@ -48,9 +46,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,9 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 db_entity advanced queries: schema + query + paginate + batch");
     println!("========================================\n");
 
-    // ============================================
     // schema() — 从 Entity 自动生成表结构
-    // ============================================
     println!("--- 1. schema() auto-generates the table structure ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -75,9 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     executor.apply_migration(&migration).await?;
     println!("  ✓ schema(DbBackend::Sqlite) generated the table and applied the migration\n");
 
-    // ============================================
     // insert_many() — 批量插入
-    // ============================================
     println!("--- 2. insert_many() batch inserts 5 records ---\n");
 
     let users = vec![
@@ -122,9 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total = Model::count(&session).await?;
     println!("  ✓ current total records: {}\n", total);
 
-    // ============================================
     // query() — 链式查询（filter + order_by + limit）
-    // ============================================
     println!("--- 3. query() chained queries: age >= 18, ORDER BY age DESC, LIMIT 2 ---\n");
 
     // query() 返回 Sea-ORM 原生 Select<E>，可链式调用所有 Sea-ORM 查询方法
@@ -147,9 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(adults[1].name, "Alice");
     println!("  ✓ assertions passed\n");
 
-    // ============================================
     // paginate() — 分页查询
-    // ============================================
     println!("--- 4. paginate() paginated query: page_size = 2 ---\n");
 
     let paginator = Model::paginate(&session, 2).await?;
@@ -172,9 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  ✓ pagination assertions passed\n");
 
-    // ============================================
     // update_many() — 条件批量更新
-    // ============================================
     println!("--- 5. update_many() conditional batch update: age < 18 → age = 0 ---\n");
 
     // 将所有未成年人 (age < 18) 的 age 设为 0
@@ -209,9 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(alice.age, 25, "Alice's age should remain 25");
     println!("  ✓ assertions passed\n");
 
-    // ============================================
     // 复合条件 update_many()
-    // ============================================
     println!("--- 6. update_many() composite condition: age < 18 OR age > 28 → age = 100 ---\n");
 
     // 重置数据：先恢复 Bob 和 Diana 的 age 为 17（< 18，以满足后续复合条件）
@@ -242,9 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(count_age_100, 3);
     println!("  ✓ assertions passed\n");
 
-    // ============================================
     // 总结
-    // ============================================
     println!("========================================");
     println!("✨ Example complete!");
     println!("========================================");

@@ -791,7 +791,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：构造校验与 update_if_version 前置错误 =====
+    // 补充测试：构造校验与 update_if_version 前置错误
 
     #[cfg(feature = "sqlite")]
     #[derive(serde::Serialize, serde::Deserialize)]

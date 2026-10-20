@@ -29,9 +29,7 @@ fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
-// ============================================================================
 // 分块常量（对齐 global_index 的 500 分块范式）
-// ============================================================================
 
 #[test]
 fn test_batch_insert_chunk_size_matches_global_index_paradigm() {
@@ -41,9 +39,7 @@ fn test_batch_insert_chunk_size_matches_global_index_paradigm() {
     );
 }
 
-// ============================================================================
 // build：多值 VALUES 子句构建
-// ============================================================================
 
 #[test]
 fn test_build_qmark_single_row() {
@@ -109,9 +105,7 @@ fn test_build_rejects_injection_identifiers() {
     );
 }
 
-// ============================================================================
 // chunk_rows：500 分块 + 参数扁平化
-// ============================================================================
 
 #[test]
 fn test_chunk_rows_empty_input_yields_no_statements() {
@@ -325,9 +319,7 @@ fn test_chunk_rows_rejects_width_over_bind_param_limit() {
     );
 }
 
-// ============================================================================
 // chunk_rows_owned：消费所有权变体（零深拷贝扁平化）
-// ============================================================================
 
 #[test]
 fn test_chunk_rows_owned_matches_borrowed_output() {
@@ -408,9 +400,7 @@ fn test_chunk_rows_owned_rejects_ragged_rows_before_consuming() {
     );
 }
 
-// ============================================================================
 // 执行层（sqlite）：构建产物经 execute_with_params 参数化落库
-// ============================================================================
 
 #[tokio::test]
 async fn test_batch_insert_roundtrip_types_via_execute_with_params() {

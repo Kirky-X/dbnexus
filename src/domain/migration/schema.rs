@@ -478,7 +478,7 @@ mod tests {
         assert_eq!(ForeignKeyAction::NoAction.to_string(), "NO ACTION");
     }
 
-    // ===== 补充测试：覆盖未覆盖的分支 =====
+    // 补充测试：覆盖未覆盖的分支
 
     #[test]
     fn test_column_type_to_sql_big_integer() {
@@ -686,7 +686,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：DuckDb 分支覆盖 =====
+    // 补充测试：DuckDb 分支覆盖
 
     #[test]
     fn test_column_type_to_sql_duckdb_string() {

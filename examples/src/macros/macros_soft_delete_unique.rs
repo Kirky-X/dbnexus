@@ -37,9 +37,7 @@ use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
 use dbnexus::sea_orm::{ActiveModelTrait, EntityTrait};
 
-// ============================================
 // Member 实体（启用 soft_delete）
-// ============================================
 
 /// 会员实体
 ///
@@ -61,9 +59,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -71,9 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🗑️  Soft delete + composite unique constraint example");
     println!("========================================\n");
 
-    // ============================================
     // 创建数据库 + 带复合唯一约束的表
-    // ============================================
     println!("--- 1. create the members table (UNIQUE(email, deleted_at)) ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -94,9 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ created the members table with the constraint: UNIQUE(email, deleted_at)");
     println!("    → the same email can be re-registered after a soft delete\n");
 
-    // ============================================
     // 注册第一个用户 alice@example.com
-    // ============================================
     println!("--- 2. register the user alice@example.com ---\n");
 
     let alice_v1 = Model {
@@ -112,9 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inserted.id, inserted.email, inserted.name
     );
 
-    // ============================================
     // 软删除 alice
-    // ============================================
     println!("\n--- 3. soft-delete alice (DELETE SET deleted_at = now) ---\n");
 
     let affected = Model::delete(&session, 1).await?;
@@ -147,9 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         with_deleted.len()
     );
 
-    // ============================================
     // 用同一 email 重新注册（关键演示）
-    // ============================================
     println!(
         "\n--- 4. re-register with the same email (UNIQUE(email, deleted_at) in effect) ---\n"
     );
@@ -170,9 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "    → if UNIQUE(email) were used instead of UNIQUE(email, deleted_at), this insert would fail!"
     );
 
-    // ============================================
     // 验证最终状态
-    // ============================================
     println!("\n--- 5. verify the final state ---\n");
 
     // find_all 仅返回活跃记录（id=2）
@@ -226,9 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 总结
-    // ============================================
     println!("\n========================================");
     println!("✨ Example complete!");
     println!("========================================");

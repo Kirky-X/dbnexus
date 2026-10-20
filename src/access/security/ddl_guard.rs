@@ -571,7 +571,7 @@ mod tests {
         ));
     }
 
-    // ===== 补充测试：DryRun 记录与拒绝/解析失败路径 =====
+    // 补充测试：DryRun 记录与拒绝/解析失败路径
 
     #[test]
     fn test_dry_run_guard_records_and_would_allow() {
@@ -607,7 +607,7 @@ mod tests {
         assert!(inner.validate("TOTAL GARBAGE").is_err());
     }
 
-    // ===== 语句类型名：白名单放行与拒绝原因 =====
+    // 语句类型名：白名单放行与拒绝原因
 
     /// TRUNCATE 在白名单内放行；SET / DROP SCHEMA 不在白名单，
     /// 拒绝原因必须带上具体语句类型名（便于审计定位）。

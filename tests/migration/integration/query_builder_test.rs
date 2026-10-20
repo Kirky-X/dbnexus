@@ -225,7 +225,6 @@ async fn test_insert_many_batch_insert() {
         "last_insert_id should be Some"
     );
 
-    // 验证总行数 = 3
     let count = Entity::find()
         .count(session.connection().expect("conn"))
         .await

@@ -262,9 +262,7 @@ async fn test_postgres_transaction_commit() {
     );
 }
 
-// ============================================================================
 // 数据类型测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_postgres_data_types() {
@@ -345,9 +343,7 @@ async fn test_postgres_null_handling() {
     assert_eq!(result.rows_affected(), 1, "Should return 1 row");
 }
 
-// ============================================================================
 // 错误路径测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_postgres_syntax_error_returns_error() {
@@ -409,9 +405,7 @@ async fn test_postgres_duplicate_key_returns_error() {
     assert!(result.is_err(), "Duplicate primary key should return error");
 }
 
-// ============================================================================
 // 聚合与 JOIN 测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_postgres_aggregate_query() {
@@ -491,9 +485,7 @@ async fn test_postgres_join_query() {
     assert_eq!(result.rows_affected(), 2, "Should return 2 customers");
 }
 
-// ============================================================================
 // 健康检查与并发测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_postgres_health_check() {

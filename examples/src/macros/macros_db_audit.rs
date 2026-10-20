@@ -25,9 +25,7 @@ use dbnexus::{
 };
 use std::sync::Arc;
 
-// ============================================
 // 定义 Product 实体（带 audit 子参数）
-// ============================================
 
 /// 产品实体
 ///
@@ -55,9 +53,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 辅助函数：根据宏常量判断是否需要审计
-// ============================================
 
 /// 检查给定操作和角色是否需要审计
 ///
@@ -71,9 +67,7 @@ fn should_audit(operation: &str, role: &str) -> bool {
     op_match && role_match
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -81,9 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔍 DBNexus db_audit macro example");
     println!("========================================\n");
 
-    // ============================================
     // 展示宏生成的审计常量
-    // ============================================
     println!("--- 1. macro-generated audit constants ---\n");
     println!("  AUDIT_TABLE_NAME  = {}", Model::AUDIT_TABLE_NAME);
     println!("  AUDIT_OPERATIONS  = {:?}", Model::AUDIT_OPERATIONS);
@@ -91,9 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  AUDIT_LOG_VALUES  = {}", Model::AUDIT_LOG_VALUES);
     println!("  AUDIT_ENABLED     = {}", Model::AUDIT_ENABLED);
 
-    // ============================================
     // 创建 AuditLogger + MemoryAuditStorage
-    // ============================================
     println!("\n--- 2. create the AuditLogger ---\n");
     let audit_config = AuditConfig {
         enabled: true,
@@ -110,9 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let logger = AuditLogger::with_config(audit_config, storage);
     println!("  ✓ AuditLogger created (storage capacity=1000)");
 
-    // ============================================
     // 创建 DbPool + Session
-    // ============================================
     println!("\n--- 3. create DbPool + Session ---\n");
     let (_pool, session) = common::db::setup_shared_sqlite_session()
         .await
@@ -151,9 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Model::AUDIT_TABLE_NAME
     );
 
-    // ============================================
     // CRUD 操作 + 审计日志记录
-    // ============================================
     println!("\n--- 4. CRUD operations + audit log ---\n");
     let role = session.role();
 
@@ -270,9 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("  - skip auditing (DELETE is not in AUDIT_OPERATIONS)");
     }
 
-    // ============================================
     // 审计历史查询
-    // ============================================
     println!("\n--- 5. audit history query ---\n");
     let total_events = storage_for_query.event_count().await;
     println!("  storage holds {} audit events in total", total_events);
@@ -310,9 +294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let high_events = logger.query(&high_filters).await?;
     println!("  [severity=High] {} total", high_events.len());
 
-    // ============================================
     // 验证 should_audit 逻辑（角色不匹配场景）
-    // ============================================
     println!("\n--- 6. role mismatch scenario ---\n");
     println!("  AUDIT_ROLES = {:?}", Model::AUDIT_ROLES);
     println!(

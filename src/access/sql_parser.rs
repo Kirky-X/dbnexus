@@ -1097,7 +1097,7 @@ mod tests {
         assert!(!is_ddl_operation("DELETE FROM users WHERE id = 1"));
     }
 
-    // ========== extract_query_tables 集合操作测试 ==========
+    // extract_query_tables 集合操作测试
 
     /// 解析 SQL 并提取全部引用表（仅用于测试的辅助函数）
     fn extract_tables(sql: &str) -> Vec<String> {
@@ -1258,7 +1258,7 @@ mod tests {
         assert_eq!(parser.cache_stats(), (0, 1));
     }
 
-    // ==================== shared() 单例测试 ====================
+    // shared() 单例测试
 
     #[tokio::test]
     async fn test_shared_returns_same_instance() {
@@ -1295,7 +1295,7 @@ mod tests {
         );
     }
 
-    // ==================== SQL 注入检测测试 ====================
+    // SQL 注入检测测试
 
     /// 测试 UNION 注入检测
     #[test]
@@ -1629,7 +1629,7 @@ mod tests {
         ));
     }
 
-    // ==================== Unicode 规范化测试 ====================
+    // Unicode 规范化测试
 
     /// 测试 Unicode 规范化函数
     #[test]
@@ -1682,9 +1682,7 @@ mod tests {
         assert!(normalized.contains("fi") || normalized.contains("\u{FB01}"));
     }
 
-    // ========================================================================
     // SqlParseError 的 i18n 键与参数
-    // ========================================================================
 
     #[test]
     fn test_sql_parse_error_localized_msg() {
@@ -1726,9 +1724,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // parse_single 错误路径
-    // ========================================================================
 
     #[tokio::test]
     async fn test_statement_exceeds_max_length_rejected() {
@@ -1775,9 +1771,7 @@ mod tests {
         assert!(matches!(err, SqlParseError::ParseError(_)));
     }
 
-    // ========================================================================
     // classify_statement 其余语句类型
-    // ========================================================================
 
     #[tokio::test]
     async fn test_classify_truncate_without_table_keyword() {
@@ -1855,9 +1849,7 @@ mod tests {
         assert!(parsed.all_table_names.contains(&"t2".to_string()));
     }
 
-    // ========================================================================
     // 表提取：JOIN / 派生表 / 子查询 / 集合操作
-    // ========================================================================
 
     async fn tables_of(parser: &SqlParser, sql: &str) -> Vec<String> {
         parser.parse_single(sql).await.unwrap().all_table_names
@@ -1946,9 +1938,7 @@ mod tests {
         }
     }
 
-    // ========================================================================
     // 字面量剥离 / 块注释 / 深度估算
-    // ========================================================================
 
     #[test]
     fn test_remove_string_literals_escapes_and_backticks() {
@@ -1994,9 +1984,7 @@ mod tests {
         assert_eq!(estimate_query_depth("SELECT 1)))"), 1);
     }
 
-    // ========================================================================
     // 提取函数边界臂（直调内部函数：解析器公开面被注入拦截挡住的分支）
-    // ========================================================================
 
     #[test]
     fn test_extract_delete_variants() {
@@ -2117,9 +2105,7 @@ mod tests {
         assert_eq!(parsed.operation_type, SqlOperationType::Dcl);
     }
 
-    // ========================================================================
     // extract_subquery_tables 表达式臂：逐变体直调，权限面依赖全部表提取
-    // ========================================================================
 
     fn tables_of_raw(sql: &str) -> Vec<String> {
         let dialect = GenericDialect {};

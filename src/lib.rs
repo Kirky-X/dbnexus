@@ -11,9 +11,7 @@
 #![forbid(unsafe_code)]
 #![doc(html_root_url = "https://docs.rs/dbnexus/0.6.0-rc.6")]
 
-// ============================================================================
 // 编译期数据库特性互斥检查
-// ============================================================================
 
 // 规则 1：postgres 与 mysql 互斥（当未启用嵌入式数据库时，服务器端数据库不能同时启用）
 #[cfg(all(
@@ -67,9 +65,7 @@ compile_error!("The 'permission-engine' feature requires the 'cache' feature to 
 #[cfg(all(not(clippy), feature = "permission", not(feature = "cache")))]
 compile_error!("The 'permission' feature requires the 'cache' feature to be enabled");
 
-// ============================================================================
 // 模块声明
-// ============================================================================
 
 /// 公共类型模块
 mod common;
@@ -111,9 +107,7 @@ pub mod i18n;
 ))]
 pub mod integrations;
 
-// ============================================================================
 // 公共 API 导出
-// ============================================================================
 
 // Common 导出 (新架构)
 pub use crate::error::{DbNexusError, DbNexusResult, ErrorCategory, QueryErrorReport};
@@ -380,9 +374,7 @@ pub use crate::i18n::locale::{
 };
 pub use crate::i18n::{DbI18nFormatter, I18nError};
 
-// ============================================================================
 // Re-export underlying dependencies
-// ============================================================================
 // Scope: only type references (L1) — e.g. `use dbnexus::sea_orm::ActiveValue`,
 // `use dbnexus::chrono::Utc`, `use dbnexus::tokio::sync::Mutex`,
 // `use dbnexus::async_trait::async_trait`. Macro attributes that expand to

@@ -195,7 +195,6 @@ async fn test_migration_executor_first_run() {
     // 清理本测试将使用的迁移版本记录（持久化 postgres/mysql 测试库跨运行隔离）
     common::cleanup_migration_versions(&pool, &[1]).await;
 
-    // 验证首次运行时历史为空
     assert!(executor.history().applied_migrations.is_empty());
 
     // 运行迁移（这会调用 load_applied_versions）

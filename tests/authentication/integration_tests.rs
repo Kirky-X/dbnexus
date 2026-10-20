@@ -9,9 +9,7 @@ use dbnexus::{
     AuthCredentials, AuthError, AuthenticationManager, JwtManager, PasswordHasher, TokenType, User,
 };
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 const TEST_SECRET: &[u8] = b"test_secret_key_for_integration_tests_2026";
 const ALT_SECRET: &[u8] = b"different_secret_key_for_signature_mismatch";
@@ -46,9 +44,7 @@ async fn make_manager_with_user() -> AuthenticationManager {
     mgr
 }
 
-// ============================================================================
 // JWT 签发与验证集成测试
-// ============================================================================
 
 /// JWT 签发与验证往返
 #[tokio::test]
@@ -79,7 +75,6 @@ async fn test_jwt_expired() {
         .generate_token("user_2", "bob", "user", TokenType::Access)
         .expect("generate_token should succeed");
 
-    // 等待过期
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     let result = mgr.verify_token(&token);
@@ -141,9 +136,7 @@ async fn test_jwt_invalid_signature() {
     );
 }
 
-// ============================================================================
 // 密码哈希集成测试
-// ============================================================================
 
 /// 密码哈希与验证
 #[test]
@@ -219,9 +212,7 @@ fn test_password_update() {
     );
 }
 
-// ============================================================================
 // AuthenticationManager 集成测试
-// ============================================================================
 
 /// 认证成功
 #[tokio::test]

@@ -16,9 +16,7 @@ use dbnexus::{LatencyHistogram, MetricsCollector};
 use std::hint::black_box;
 use std::time::Duration;
 
-// ============================================================================
 // 基准测试
-// ============================================================================
 
 /// P50/P90/P99 计算：记录 100 条查询后读取百分位
 ///
@@ -31,7 +29,6 @@ fn bench_percentile_calculation(c: &mut Criterion) {
                 let latency = Duration::from_millis(i as u64);
                 collector.record_query("SELECT", latency, true, Some(100));
             }
-            // 读取百分位
             if let Some(stats) = collector.get_query_stats("SELECT") {
                 let _ = black_box(stats.latency_percentiles.p50());
                 let _ = black_box(stats.latency_percentiles.p90());

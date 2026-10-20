@@ -21,9 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📝 DBNexus TOML configuration example");
     println!("========================================\n");
 
-    // ============================================
     // 编写 TOML 配置字符串
-    // ============================================
     // 生产中通常从 .toml 文件读取，这里为了演示使用内联字符串。
     let toml_content = r#"
 url = "sqlite::memory:"
@@ -45,15 +43,11 @@ default_ttl = 300
     println!("TOML configuration content:");
     println!("{}", toml_content);
 
-    // ============================================
     // 解析 TOML 配置
-    // ============================================
     let config: DbConfig = toml::from_str(toml_content)?;
     println!("✓ TOML configuration parsed");
 
-    // ============================================
     // 打印配置信息
-    // ============================================
     println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(
@@ -88,9 +82,7 @@ default_ttl = 300
         config.cache_config.default_ttl
     );
 
-    // ============================================
     // 创建连接池
-    // ============================================
     let pool = DbPool::with_config(config).await?;
     println!("\n✓ Pool created");
     println!("  - actual URL       : {}", pool.config().url);

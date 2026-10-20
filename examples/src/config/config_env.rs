@@ -21,9 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚙️  DBNexus environment variable configuration example");
     println!("========================================\n");
 
-    // ============================================
     // 设置环境变量
-    // ============================================
     // 生产中这些变量通常由容器/CI 注入，这里为了演示直接设置。
     // 注意：Rust 2024 edition 中 set_var 是 unsafe 的（可能引发数据竞争）。
     unsafe {
@@ -62,15 +60,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("DB_ADMIN_ROLE")?
     );
 
-    // ============================================
     // 从环境变量加载配置
-    // ============================================
     let config = DbConfig::from_env()?;
     println!("\n✓ configuration loaded");
 
-    // ============================================
     // 打印配置信息
-    // ============================================
     println!("\n📋 Parsed DbConfig:");
     println!("  - url              : {}", config.url);
     println!(

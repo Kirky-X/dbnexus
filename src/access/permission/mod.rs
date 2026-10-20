@@ -21,9 +21,7 @@ mod rate_limiter;
 mod stats;
 mod types;
 
-// ============================================================================
 // 公共类型重导出
-// ============================================================================
 
 // 从 types.rs 重导出
 #[cfg(any(feature = "ladybug", feature = "neo4j"))]
@@ -52,13 +50,9 @@ pub use cache::{PermissionCache, PermissionCacheConfig};
 #[cfg(feature = "cache")]
 pub use context::{PermissionContext, RateLimitBackend, TableAccessDecision};
 
-// ============================================================================
 // 内部使用（pub(crate)）
-// ============================================================================
 
-// ============================================================================
 // Public API Re-exports
-// ============================================================================
 
 // Re-export AdvancedRbacProvider for easy access
 pub use self::advanced::AdvancedRbacProvider;
@@ -66,9 +60,7 @@ pub use self::advanced::AdvancedRbacProvider;
 // Re-export RbacProvider for easy access
 pub use self::rbac::RbacProvider;
 
-// ============================================================================
 // 测试模块
-// ============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -77,7 +69,6 @@ mod tests {
     /// 测试公共 API 可访问性
     #[test]
     fn test_public_api_accessible() {
-        // 验证所有公共类型都可以访问
         let _action = PermissionAction::Select;
         let _operation: PermissionAction = PermissionAction::Insert;
 

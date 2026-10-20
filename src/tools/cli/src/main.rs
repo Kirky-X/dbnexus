@@ -1122,7 +1122,7 @@ async fn run_migrations_down(
         }
     };
 
-    // 按版本号降序排序（先回滚最新的）
+    // 按版本号降序排序（先回滚最新）
     let mut versions_to_rollback = versions_to_rollback;
     versions_to_rollback.sort_by_key(|v| std::cmp::Reverse(*v));
 
@@ -1442,9 +1442,7 @@ async fn list_migrations(database_url: &str, migrations_dir: &Path) -> DbResult<
     Ok(())
 }
 
-// ============================================================================
 // 运维子命令（migrate / health / user）— 机器可读 JSON + 退出码 0/1/2
-// ============================================================================
 
 /// 输出一行 JSON 到 stdout
 fn print_json(value: &serde_json::Value) {
@@ -1812,10 +1810,8 @@ VALUES ('{username}', '{hash}', '{role}', '{created_at}')"
     }
 }
 
-// ============================================================================
 // 运维子命令（pool-status / audit-query / shard-info / permission-check）
 // — 机器可读 JSON + 退出码 0/1/2
-// ============================================================================
 
 /// 连接池状态快照（JSON 输出 health_snapshot 结构）
 ///
@@ -2353,7 +2349,7 @@ fn mask_url_in_text(text: &str, url: &str) -> String {
 mod tests {
     use super::*;
 
-    // ===== DOWN 提取（rollback 前置校验依赖的逻辑） =====
+    // DOWN 提取（rollback 前置校验依赖的逻辑）
 
     #[cfg(feature = "migration")]
     #[test]
@@ -2401,7 +2397,7 @@ mod tests {
         );
     }
 
-    // ===== find_migration_file =====
+    // find_migration_file
 
     #[cfg(feature = "migration")]
     #[test]
@@ -2429,7 +2425,7 @@ mod tests {
         assert!(find_migration_file(&files, 3).is_none());
     }
 
-    // ===== 既有纯逻辑辅助 =====
+    // 既有纯逻辑辅助
 
     #[test]
     fn test_mask_database_url_hides_password() {

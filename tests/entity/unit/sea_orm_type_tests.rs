@@ -16,9 +16,7 @@
 
 use dbnexus::sea_orm::ActiveValue;
 
-// ============================================================================
 // chrono 类型实体测试（with-chrono 特性）
-// ============================================================================
 
 mod chrono_entity {
     use dbnexus::sea_orm::entity::prelude::*;
@@ -88,9 +86,7 @@ fn test_chrono_datetime_serialization() {
     assert!(!format!("{}", model.created_at).is_empty());
 }
 
-// ============================================================================
 // uuid 类型实体测试（with-uuid 特性）
-// ============================================================================
 
 mod uuid_entity {
     use dbnexus::sea_orm::entity::prelude::*;
@@ -154,9 +150,7 @@ fn test_uuid_serialization() {
     assert!(!format!("{}", model.id).is_empty());
 }
 
-// ============================================================================
 // 混合类型实体测试（with-chrono + with-uuid 同时使用）
-// ============================================================================
 
 mod mixed_entity {
     use dbnexus::sea_orm::entity::prelude::*;

@@ -196,9 +196,9 @@ impl InjectionEngine {
 
     /// 构建全局规则表（合并 + 去重剪枝）
     fn build_global() -> Self {
-        // --- 关系型管线规则（来源：sql_parser::INJECTION_PATTERNS，去重后） ---
+        // 关系型管线规则（来源：sql_parser::INJECTION_PATTERNS，去重后）
         const RELATIONAL: &[(&str, RuleCategory, &str)] = &[
-            // === UNION 注入 ===
+            // UNION 注入
             // （"UNION ALL SELECT"/"UNION DISTINCT SELECT" 与 "UNION SELECT" 无子串
             //   包含关系，各自独立保留）
             ("union.select", RuleCategory::Union, "UNION SELECT"),
@@ -208,7 +208,7 @@ impl InjectionEngine {
                 RuleCategory::Union,
                 "UNION DISTINCT SELECT",
             ),
-            // === 布尔盲注 ===
+            // 布尔盲注
             ("bool.or_1eq1", RuleCategory::BooleanBlind, " OR 1=1"),
             ("bool.or_1sp1", RuleCategory::BooleanBlind, " OR 1 =1"),
             ("bool.or_1sp_eq1", RuleCategory::BooleanBlind, " OR 1= 1"),
@@ -222,10 +222,10 @@ impl InjectionEngine {
             ("bool.and_1eq1", RuleCategory::BooleanBlind, " AND 1=1"),
             ("bool.and_true", RuleCategory::BooleanBlind, " AND TRUE"),
             ("bool.and_false", RuleCategory::BooleanBlind, " AND FALSE"),
-            // === 时间盲注 - MySQL ===
+            // 时间盲注 - MySQL
             ("time.sleep", RuleCategory::TimeBlind, "SLEEP("),
             ("time.benchmark", RuleCategory::TimeBlind, "BENCHMARK("),
-            // === 时间盲注 - PostgreSQL ===
+            // 时间盲注 - PostgreSQL
             ("time.pg_sleep", RuleCategory::TimeBlind, "PG_SLEEP("),
             (
                 "time.pg_sleep_for",
@@ -237,14 +237,14 @@ impl InjectionEngine {
                 RuleCategory::TimeBlind,
                 "PG_SLEEP_UNTIL(",
             ),
-            // === 时间盲注 - SQL Server ===
+            // 时间盲注 - SQL Server
             (
                 "time.waitfor_delay",
                 RuleCategory::TimeBlind,
                 "WAITFOR DELAY",
             ),
             ("time.waitfor_time", RuleCategory::TimeBlind, "WAITFOR TIME"),
-            // === 时间盲注 - Oracle ===
+            // 时间盲注 - Oracle
             (
                 "time.dbms_pipe",
                 RuleCategory::TimeBlind,
@@ -255,7 +255,7 @@ impl InjectionEngine {
                 RuleCategory::TimeBlind,
                 "DBMS_LOCK.SLEEP(",
             ),
-            // === 动态 SQL 执行 ===
+            // 动态 SQL 执行
             // （"; EXECUTE" 被 "; EXEC" 包含；"EXEC xp_"/"EXECUTE xp_" 被 " xp_"
             //   包含——三条冗余模式已在去重中剪除，见模块文档）
             ("exec.exec", RuleCategory::DynamicExec, "EXEC("),
@@ -267,11 +267,11 @@ impl InjectionEngine {
             ),
             ("exec.xp_cmdshell", RuleCategory::DynamicExec, "XP_CMDSHELL"),
             ("exec.xp_generic", RuleCategory::DynamicExec, " xp_"),
-            // === 文件操作 ===
+            // 文件操作
             ("file.load_file", RuleCategory::FileOps, "LOAD_FILE("),
             ("file.into_outfile", RuleCategory::FileOps, "INTO OUTFILE"),
             ("file.into_dumpfile", RuleCategory::FileOps, "INTO DUMPFILE"),
-            // === 信息泄露 ===
+            // 信息泄露
             (
                 "info.information_schema",
                 RuleCategory::InfoLeak,
@@ -302,13 +302,13 @@ impl InjectionEngine {
                 RuleCategory::InfoLeak,
                 "USER_TAB_COLUMNS",
             ),
-            // === 编码绕过 ===
+            // 编码绕过
             ("enc.char", RuleCategory::Encoding, "CHAR("),
             ("enc.chr", RuleCategory::Encoding, "CHR("),
             ("enc.concat", RuleCategory::Encoding, "CONCAT("),
             ("enc.concat_ws", RuleCategory::Encoding, "CONCAT_WS("),
             ("enc.hex_prefix", RuleCategory::Encoding, "0X"),
-            // === 堆叠查询 ===
+            // 堆叠查询
             // （"; EXECUTE" 剪除，见上）
             ("stack.drop", RuleCategory::Stacked, "; DROP"),
             ("stack.delete", RuleCategory::Stacked, "; DELETE"),
@@ -318,11 +318,11 @@ impl InjectionEngine {
             ("stack.alter", RuleCategory::Stacked, "; ALTER"),
             ("stack.create", RuleCategory::Stacked, "; CREATE"),
             ("stack.exec", RuleCategory::Stacked, "; EXEC"),
-            // === 注释注入 ===
+            // 注释注入
             ("comment.dash_space", RuleCategory::Comment, "-- "),
             ("comment.dash_plus", RuleCategory::Comment, "--+"),
             ("comment.hash", RuleCategory::Comment, "#"),
-            // === 其他危险模式 ===
+            // 其他危险模式
             // （"ORDER BY 1#" 被 "#" 包含，剪除；"ORDER BY 1--" 无尾随空格，
             //   与 "-- " 无包含关系，保留）
             ("other.having_tautology", RuleCategory::Other, "HAVING 1=1"),
@@ -348,7 +348,7 @@ impl InjectionEngine {
             ),
         ];
 
-        // --- DDL 管线规则（来源：ddl_guard::FORBIDDEN_PATTERNS） ---
+        // DDL 管线规则（来源：ddl_guard::FORBIDDEN_PATTERNS）
         const DDL: &[(&str, RuleCategory, &str)] = &[
             (
                 "ddl.drop_database",
@@ -358,7 +358,7 @@ impl InjectionEngine {
             ("ddl.drop_all", RuleCategory::DdlForbidden, "DROP ALL"),
         ];
 
-        // --- 图管线规则（来源：validate_cypher_safety 第 4/5 步） ---
+        // 图管线规则（来源：validate_cypher_safety 第 4/5 步）
         const GRAPH: &[(&str, RuleCategory, &str)] = &[
             // 块注释标记为关系型与图管线共享的唯一 "/*" 规则
             // （关系型管线经 scan_relational 的早退分支消费，见模块文档）

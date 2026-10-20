@@ -21,9 +21,7 @@ use dbnexus::access::{
     MemoryPermissionProvider, PermissionAction, PermissionCache, RolePolicy, TablePermission,
 };
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 fn sample_policy(table: &str, op: PermissionAction) -> RolePolicy {
     RolePolicy {
@@ -40,9 +38,7 @@ async fn make_provider_with_role(role: &str, policy: RolePolicy) -> Arc<MemoryPe
     Arc::new(provider)
 }
 
-// ============================================================================
 // 配置测试
-// ============================================================================
 
 /// 默认配置应启用 SWR 且 TTL=300s
 #[tokio::test]
@@ -67,9 +63,7 @@ async fn test_permission_cache_builder_chaining() {
     assert!(!config.stale_while_revalidate);
 }
 
-// ============================================================================
 // TTL 行为测试
-// ============================================================================
 
 /// 未过期条目应命中返回值
 #[tokio::test]
@@ -119,9 +113,7 @@ async fn test_permission_cache_get_expired_with_swr_returns_stale() {
     assert_eq!(got.tables[0].name, "users");
 }
 
-// ============================================================================
 // 后台刷新测试
-// ============================================================================
 
 /// refresh 应从 provider 更新缓存值
 #[tokio::test]
@@ -228,9 +220,7 @@ async fn test_permission_cache_refresh_skipped_within_fresh_window() {
     assert_eq!(after_second.tables[0].name, "v2");
 }
 
-// ============================================================================
 // 失效与并发测试
-// ============================================================================
 
 /// invalidate 应使单个条目不可达（其余条目保持可达）
 #[tokio::test]

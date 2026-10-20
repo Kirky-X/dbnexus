@@ -16,9 +16,7 @@
 
 use dbnexus::SqlParser;
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,15 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 DBNexus SQL parser example");
     println!("========================================\n");
 
-    // ============================================
     // 创建 SQL 解析器
-    // ============================================
     let parser = SqlParser::new().await;
     println!("✓ SqlParser created (built-in LRU cache)\n");
 
-    // ============================================
     // 解析 DML 操作（SELECT / INSERT / UPDATE / DELETE）
-    // ============================================
     println!("--- DML operation parsing ---\n");
 
     let dml_cases = [
@@ -87,9 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 解析 DDL 操作（CREATE / ALTER / DROP）
-    // ============================================
     println!("--- DDL operation parsing ---\n");
     println!("  note: SqlParser::parse_single blocks DDL operations (for safety)");
     println!("  use the is_ddl_operation() function to detect DDL separately\n");
@@ -117,9 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 使用 parse_operation_async 提取操作和表名
-    // ============================================
     println!("--- parse_operation_async (DML operation extraction) ---\n");
 
     let dml_sqls = [
@@ -141,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 展示 DDL vs DML 区分
-    // ============================================
     println!("\n--- DDL vs DML distinction ---\n");
 
     let mixed_sqls = [
@@ -163,9 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {} [{}] {}", mark, category, sql);
     }
 
-    // ============================================
     // 缓存统计
-    // ============================================
     println!("\n--- cache statistics ---\n");
     let (hits, misses) = parser.cache_stats();
     println!("  cache hits: {}", hits);

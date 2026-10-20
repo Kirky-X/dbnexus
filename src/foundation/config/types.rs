@@ -9,9 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error;
 
-// ============================================================================
 // 错误类型
-// ============================================================================
 
 /// 配置错误
 #[derive(Debug, Error)]
@@ -102,9 +100,7 @@ impl crate::i18n::error_ext::LocalizedMsg for ConfigError {
     }
 }
 
-// ============================================================================
 // 缓存配置
-// ============================================================================
 
 /// 缓存配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,9 +200,7 @@ impl CacheConfig {
     }
 }
 
-// ============================================================================
 // 连接池配置
-// ============================================================================
 
 /// 数据库连接池配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,9 +289,7 @@ impl PoolConfig {
     }
 }
 
-// ============================================================================
 // 数据库类型
-// ============================================================================
 
 /// 数据库类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -438,9 +430,7 @@ impl std::fmt::Display for DatabaseType {
     }
 }
 
-// ============================================================================
 // 数据库配置
-// ============================================================================
 
 // 数据库配置
 //
@@ -452,9 +442,7 @@ impl std::fmt::Display for DatabaseType {
 // |------|--------|
 // | `url` | **必填** |
 // | `pool_config` (flatten) | `PoolConfig::default()` |
-// ============================================================================
 // 故障转移配置
-// ============================================================================
 
 /// 连接故障转移配置
 ///
@@ -490,9 +478,7 @@ fn default_failover_threshold() -> u32 {
     3
 }
 
-// ============================================================================
 // 副本路由配置
-// ============================================================================
 
 /// 副本路由配置
 ///
@@ -531,9 +517,7 @@ fn default_lag_check_interval() -> u64 {
     10
 }
 
-// ============================================================================
 // SQLite PRAGMA 配置
-// ============================================================================
 
 /// SQLite 连接级 PRAGMA 配置
 ///
@@ -891,7 +875,7 @@ impl DbConfig {
 mod tests {
     use super::*;
 
-    // ===== ConfigError Display 测试 =====
+    // ConfigError Display 测试
 
     #[test]
     fn test_config_error_display_variants() {
@@ -945,7 +929,7 @@ mod tests {
         );
     }
 
-    // ===== CacheConfig 测试 =====
+    // CacheConfig 测试
 
     #[test]
     fn test_cache_config_default() {
@@ -1027,7 +1011,7 @@ mod tests {
         assert!(err.to_string().contains("query_cache_capacity"));
     }
 
-    // ===== PoolConfig 测试 =====
+    // PoolConfig 测试
 
     #[test]
     fn test_pool_config_default() {
@@ -1091,7 +1075,7 @@ mod tests {
         assert!(err.to_string().contains("acquire_timeout"));
     }
 
-    // ===== DatabaseType 测试 =====
+    // DatabaseType 测试
 
     #[test]
     fn test_database_type_from_url_postgres() {
@@ -1307,7 +1291,7 @@ mod tests {
         }
     }
 
-    // ===== DbConfig 测试 =====
+    // DbConfig 测试
 
     #[test]
     fn test_db_config_default() {
@@ -1501,7 +1485,7 @@ mod tests {
         assert!(!cfg.auto_migrate);
     }
 
-    // ===== 补充测试：FailoverConfig / ReplicaConfig Default =====
+    // 补充测试：FailoverConfig / ReplicaConfig Default
 
     #[cfg(feature = "failover")]
     #[test]
@@ -1521,7 +1505,7 @@ mod tests {
         assert_eq!(cfg.lag_check_interval_secs, 10);
     }
 
-    // ===== 补充测试：from_yaml_str, from_json_str, from_env =====
+    // 补充测试：from_yaml_str, from_json_str, from_env
 
     #[cfg(feature = "yaml")]
     #[test]
@@ -1607,7 +1591,7 @@ mod tests {
     // set_var/remove_var 为 unsafe，但 lib crate 有 #![forbid(unsafe_code)]。
     // from_env 的覆盖率为外部测试目录（tests/）中独立 crate 的测试覆盖。
 
-    // ===== for_sqlite_path 测试 =====
+    // for_sqlite_path 测试
 
     #[test]
     fn test_for_sqlite_path_memory_has_no_fs_side_effect() {
@@ -1668,7 +1652,7 @@ mod tests {
 mod config_error_i18n_tests {
     use super::*;
 
-    // ===== 补充测试：ConfigError i18n 全变体 =====
+    // 补充测试：ConfigError i18n 全变体
 
     #[test]
     fn test_config_error_localized_msg_matrix() {

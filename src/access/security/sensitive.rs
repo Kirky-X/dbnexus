@@ -243,7 +243,6 @@ impl SensitiveMasker {
             return Err(SensitiveError::InvalidInput("Address is empty".to_string()));
         }
 
-        // 尝试找到省市区关键词
         let keywords = ["省", "市", "区", "县", "镇"];
 
         // 找到最后一个行政区划关键词的位置
@@ -514,7 +513,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ===== 补充测试：SensitiveError i18n 键与参数 =====
+    // 补充测试：SensitiveError i18n 键与参数
 
     #[test]
     fn test_sensitive_error_localized_msg() {

@@ -252,9 +252,7 @@ fn test_shard_id_for_key_within_range() {
     }
 }
 
-// ============================================================================
 // add_shard / remove_shard 动态分片管理测试
-// ============================================================================
 
 /// add_shard 支持运行时动态添加分片连接池（&self 调用，无需 &mut self）
 #[tokio::test]
@@ -272,7 +270,6 @@ async fn test_add_shard_dynamic() {
     assert_eq!(router.pool_count(), 1);
     assert!(router.has_pool(0));
 
-    // 添加多个分片
     let pool2 = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
     router.add_shard(2, pool2);
     assert_eq!(router.pool_count(), 2);

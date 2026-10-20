@@ -19,18 +19,14 @@ use dbnexus::{DbError, DbPool};
 #[path = "../../common/mod.rs"]
 mod common;
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 /// 创建 SQLite 内存连接池并返回
 async fn make_pool() -> DbPool {
     common::make_sqlite_memory_pool().await
 }
 
-// ============================================================================
 // 基础属性测试
-// ============================================================================
 
 /// role() 应返回创建时指定的角色
 #[tokio::test]
@@ -51,9 +47,7 @@ async fn test_session_permission_ctx_returns_context() {
     assert_eq!(ctx.role(), "admin");
 }
 
-// ============================================================================
 // 事务生命周期测试
-// ============================================================================
 
 /// 初始 is_in_transaction 应为 false
 #[tokio::test]
@@ -144,9 +138,7 @@ async fn test_session_rollback_without_transaction_fails() {
     );
 }
 
-// ============================================================================
 // execute_raw_ddl 测试
-// ============================================================================
 
 /// admin 角色 execute_raw_ddl CREATE TABLE 应成功
 #[tokio::test]
@@ -220,9 +212,7 @@ async fn test_session_execute_raw_ddl_drop_table() {
     );
 }
 
-// ============================================================================
 // execute_raw 测试
-// ============================================================================
 
 /// sql-parser feature 下 execute_raw 对 DDL 应返回 Permission 错误
 #[cfg(feature = "sql-parser")]
@@ -284,9 +274,7 @@ async fn test_session_execute_raw_select_admin_success() {
     );
 }
 
-// ============================================================================
 // batch_execute 测试
-// ============================================================================
 
 /// batch_execute 多条 INSERT 应返回多个结果
 #[cfg(feature = "sql-parser")]
@@ -322,9 +310,7 @@ async fn test_session_batch_execute_multiple_inserts() {
     }
 }
 
-// ============================================================================
 // batch_execute_in_transaction 测试
-// ============================================================================
 
 /// batch_execute_in_transaction 全部成功时应 commit
 #[cfg(feature = "sql-parser")]
@@ -375,9 +361,7 @@ async fn test_session_batch_execute_in_transaction_atomicity() {
     assert!(!session.is_in_transaction().await);
 }
 
-// ============================================================================
 // check_table_permission 测试
-// ============================================================================
 
 /// admin 角色 check_table_permission 应绕过检查
 #[tokio::test]
@@ -393,9 +377,7 @@ async fn test_session_check_table_permission_admin_bypass() {
     );
 }
 
-// ============================================================================
 // should_use_master 测试
-// ============================================================================
 
 /// 初始 should_use_master 应为 false（无写操作、无事务）
 #[tokio::test]
@@ -432,9 +414,7 @@ async fn test_session_mark_write_affects_should_use_master() {
     );
 }
 
-// ============================================================================
 // Drop 行为测试
-// ============================================================================
 
 /// session drop 后 pool status 应恢复
 #[tokio::test]

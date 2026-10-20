@@ -12,9 +12,7 @@ use dbnexus::{
 use std::sync::Arc;
 use std::time::Duration;
 
-// ============================================================================
 // 审计日志轮转测试
-// ============================================================================
 
 /// 测试日志容量达到上限时自动轮转
 ///
@@ -34,7 +32,6 @@ async fn test_audit_log_rotation_on_capacity() {
     };
     let logger = AuditLogger::with_config(config, storage.clone());
 
-    // 写入超过容量的日志
     for i in 0..10 {
         let event = AuditEvent::create("rotation_test", &i.to_string(), "admin");
         logger.log(event).await.unwrap();
@@ -69,7 +66,6 @@ async fn test_audit_manual_rotation() {
         logger.log(event).await.unwrap();
     }
 
-    // 清理 7 天前的日志
     let removed = logger.cleanup(7).await.unwrap();
 
     assert_eq!(removed, 3, "Should remove 3 old logs");
@@ -92,7 +88,6 @@ async fn test_audit_rotation_retain_high_severity() {
         logger.log(event).await.unwrap();
     }
 
-    // 写入高优先级日志
     let critical_event =
         AuditEvent::create("critical", "1", "admin").with_severity(AuditSeverity::Critical);
     logger.log(critical_event).await.unwrap();
@@ -102,7 +97,6 @@ async fn test_audit_rotation_retain_high_severity() {
         AuditEvent::create("normal", "last", "user").with_severity(AuditSeverity::Info);
     logger.log(last_event).await.unwrap();
 
-    // 验证高优先级日志存在
     let filters = AuditQueryFilters {
         severity: Some(AuditSeverity::Critical),
         ..Default::default()
@@ -114,9 +108,7 @@ async fn test_audit_rotation_retain_high_severity() {
     );
 }
 
-// ============================================================================
 // 敏感数据脱敏测试
-// ============================================================================
 
 /// 测试 JSON 格式敏感字段脱敏
 ///
@@ -194,7 +186,6 @@ async fn test_audit_sanitize_base64_values() {
     let results = logger.query(&filters).await.unwrap();
     let stored_value = results[0].after_value.as_ref().unwrap();
 
-    // 验证 Base64 值被脱敏
     assert!(
         stored_value.contains("REDACTED"),
         "Base64 value should be redacted, got: {}",
@@ -251,9 +242,7 @@ async fn test_audit_sanitize_nested_fields() {
     );
 }
 
-// ============================================================================
 // 审计日志压缩存储测试
-// ============================================================================
 
 /// 测试内存存储压缩比
 ///
@@ -303,9 +292,7 @@ async fn test_audit_cleanup_efficiency() {
     assert_eq!(removed, 1000, "All logs should be cleaned up");
 }
 
-// ============================================================================
 // 审计日志导出测试
-// ============================================================================
 
 /// 测试 JSON 格式导出
 ///
@@ -386,9 +373,7 @@ async fn test_audit_export_with_sanitization() {
     );
 }
 
-// ============================================================================
 // 审计日志完整性校验测试
-// ============================================================================
 
 /// 测试事件 ID 唯一性
 ///
@@ -397,7 +382,6 @@ async fn test_audit_export_with_sanitization() {
 async fn test_audit_event_id_uniqueness() {
     let mut ids = std::collections::HashSet::new();
 
-    // 创建多个事件
     for _ in 0..100 {
         let event = AuditEvent::create("test", "1", "admin");
         assert!(ids.insert(event.id.clone()), "Event ID should be unique");
@@ -492,9 +476,7 @@ async fn test_audit_log_integrity_checksum() {
     );
 }
 
-// ============================================================================
 // 异步审计写入测试
-// ============================================================================
 
 /// 测试异步并发写入
 ///
@@ -570,7 +552,6 @@ async fn test_audit_async_write_ordering() {
         handle.await.unwrap();
     }
 
-    // 等待所有写入完成
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let filters = AuditQueryFilters {
@@ -592,7 +573,6 @@ async fn test_audit_high_throughput_writes() {
 
     let start_time = std::time::Instant::now();
 
-    // 写入 500 个事件
     for i in 0..500 {
         let event = AuditEvent::create("throughput_test", &i.to_string(), "admin");
         logger.log(event).await.unwrap();
@@ -600,7 +580,6 @@ async fn test_audit_high_throughput_writes() {
 
     let elapsed = start_time.elapsed();
 
-    // 验证所有事件都被写入
     let count = storage.event_count().await;
     assert_eq!(count, 500);
 

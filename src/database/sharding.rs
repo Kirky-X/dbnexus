@@ -445,7 +445,6 @@ impl ShardRouter {
     pub async fn with_config(config: &ShardConfig) -> Result<Self, crate::foundation::DbError> {
         let mut router = Self::with_strategy(&config.strategy, config.total_shards);
 
-        // 收集所有分片信息
         let connections: Vec<(u32, String, String)> = config
             .generate_all_connections()
             .into_iter()
@@ -475,7 +474,6 @@ impl ShardRouter {
         let mut pool_stream =
             stream::iter(pool_futures).buffer_unordered(config.total_shards as usize);
 
-        // 收集结果
         let mut results: Vec<(
             u32,
             String,
@@ -965,9 +963,7 @@ mod tests {
         assert_eq!(router.strategy_name(), "yearly");
     }
 
-    // ============================================================================
     // 策略工厂函数测试 - 从 tests/sharding/integration.rs 移动到这里
-    // ============================================================================
 
     #[test]
     fn test_strategy_factory_invalid_name() {
@@ -1022,7 +1018,7 @@ mod tests {
         }
     }
 
-    // ===== ConsistentHashStrategy 测试 =====
+    // ConsistentHashStrategy 测试
 
     #[test]
     fn test_consistent_hash_deterministic() {

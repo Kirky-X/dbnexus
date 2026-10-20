@@ -18,9 +18,7 @@ fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
-// ============================================================================
 // COPY 语句构建（纯函数，任意驱动组可测）
-// ============================================================================
 
 #[test]
 fn test_copy_statement_build_text() {
@@ -57,9 +55,7 @@ fn test_copy_statement_rejects_injection_identifiers() {
     assert!(CopyStatement::new("t", &["id; DROP TABLE x".to_string()]).is_err());
 }
 
-// ============================================================================
 // 行编码（PG text COPY 格式转义）
-// ============================================================================
 
 #[test]
 fn test_copy_row_encoding_escapes_and_null() {
@@ -92,9 +88,7 @@ fn test_copy_row_encoding_escapes_and_null() {
     assert_eq!(lines[1], "2.5\ttrue\t{\"k\":1}\t\\N\tc\t3");
 }
 
-// ============================================================================
 // sqlite 契约：非 postgres 后端 copy_in 显式拒绝（跳过说明）
-// ============================================================================
 
 #[tokio::test]
 async fn test_copy_in_contract_rejects_non_postgres_backend() {

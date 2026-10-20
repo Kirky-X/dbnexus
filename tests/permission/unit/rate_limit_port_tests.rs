@@ -43,9 +43,7 @@ impl Limiter for FixedLimiter {
     }
 }
 
-// ============================================================================
 // Limiter 端口契约
-// ============================================================================
 
 /// 旧令牌桶实现 Limiter 端口：作为 Arc<dyn Limiter> 消费，拒绝时携带 Retry-After
 #[tokio::test]
@@ -63,9 +61,7 @@ async fn test_token_bucket_impls_limiter_port() {
     );
 }
 
-// ============================================================================
 // 双后端切换配置生效
-// ============================================================================
 
 /// 默认令牌桶后端：配额耗尽产生 RateLimited 决策（429 语义），而非策略 Denied
 #[tokio::test]
@@ -162,9 +158,7 @@ async fn test_external_backend_allow_then_policy_applies() {
     assert_eq!(ctx.check_stats().snapshot().rate_limited_checks, 0);
 }
 
-// ============================================================================
 // 429 响应语义
-// ============================================================================
 
 /// DbError::RateLimited：429 语义载体，携带 Retry-After 秒数
 #[test]
@@ -205,9 +199,7 @@ async fn test_backend_error_fails_closed() {
     assert_eq!(ctx.check_stats().snapshot().rate_limited_checks, 1);
 }
 
-// ============================================================================
 // 审计事件（audit feature）
-// ============================================================================
 
 /// 限流拒绝产生审计事件：operation=rate_limit_exceeded，result=Failure，
 /// 事件携带表名/操作/Retry-After 上下文

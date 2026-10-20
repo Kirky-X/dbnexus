@@ -8,9 +8,7 @@
 mod cache_tests {
     use dbnexus::CacheConfig;
 
-    // ============================================================================
     // CacheConfig 测试
-    // ============================================================================
 
     #[test]
     fn test_cache_config_default() {
@@ -52,9 +50,7 @@ mod cache_tests {
         assert!(!debug.is_empty());
     }
 
-    // ============================================================================
     // CacheKey 测试
-    // ============================================================================
 
     #[test]
     fn test_cache_key_string() {
@@ -114,9 +110,7 @@ mod cache_tests {
         assert!(!debug.is_empty());
     }
 
-    // ============================================================================
     // DbCacheProvider 集成测试（使用 MockCacheProvider）
-    // ============================================================================
 
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -242,7 +236,6 @@ mod cache_tests {
             handles.push(handle);
         }
 
-        // Wait for all writes
         for handle in handles {
             handle.await.expect("task panicked");
         }

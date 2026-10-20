@@ -13,9 +13,7 @@ use dbnexus::access::{
     TablePermission,
 };
 
-// ============================================================================
 // RbacProvider CRUD 测试
-// ============================================================================
 
 /// 创建空的 RBAC 提供者
 #[test]
@@ -32,7 +30,6 @@ fn test_rbac_provider_new_empty() {
 fn test_rbac_provider_add_role() {
     let provider = RbacProvider::new();
 
-    // 添加 admin 角色
     let admin_policy = RolePolicy {
         tables: vec![TablePermission {
             name: "*".to_string(),
@@ -59,7 +56,6 @@ fn test_rbac_provider_add_role() {
 fn test_rbac_provider_add_multiple_roles() {
     let provider = RbacProvider::new();
 
-    // 添加 admin 角色
     provider.add_role(
         "admin".to_string(),
         RolePolicy {
@@ -75,7 +71,6 @@ fn test_rbac_provider_add_multiple_roles() {
         },
     );
 
-    // 添加 readonly 角色
     provider.add_role(
         "readonly".to_string(),
         RolePolicy {
@@ -86,7 +81,6 @@ fn test_rbac_provider_add_multiple_roles() {
         },
     );
 
-    // 添加 user 角色
     provider.add_role(
         "user".to_string(),
         RolePolicy {
@@ -109,7 +103,6 @@ fn test_rbac_provider_add_multiple_roles() {
 fn test_rbac_provider_override_role() {
     let provider = RbacProvider::new();
 
-    // 添加初始角色
     provider.add_role(
         "test_role".to_string(),
         RolePolicy {
@@ -164,9 +157,7 @@ fn test_rbac_provider_with_default_admin() {
     assert_eq!(policy.tables[0].operations.len(), 4);
 }
 
-// ============================================================================
 // 权限检查测试
-// ============================================================================
 
 /// 基本权限检查 - 允许
 #[test]
@@ -233,7 +224,6 @@ fn test_rbac_check_access_denied() {
 fn test_rbac_check_access_nonexistent_role() {
     let provider = RbacProvider::new();
 
-    // 检查不存在的角色应该返回错误
     let result = provider.check_access("ghost", "users", PermissionAction::Select);
     assert!(result.is_err());
 
@@ -264,9 +254,7 @@ fn test_rbac_check_access_nonexistent_table() {
     assert!(!result.unwrap());
 }
 
-// ============================================================================
 // 通配符匹配测试
-// ============================================================================
 
 /// 通配符表名匹配
 #[test]
@@ -362,9 +350,7 @@ fn test_rbac_mixed_wildcard_and_exact() {
     );
 }
 
-// ============================================================================
 // 边界条件和错误处理测试
-// ============================================================================
 
 /// 空操作列表
 #[test]
@@ -608,7 +594,6 @@ fn test_rbac_concurrent_access() {
 
     let provider = Arc::new(RbacProvider::new());
 
-    // 添加初始角色
     provider.add_role(
         "admin".to_string(),
         RolePolicy {

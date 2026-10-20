@@ -23,9 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚨 DBNexus structured error report example");
     println!("========================================\n");
 
-    // ============================================
     // Permission 类别
-    // ============================================
     println!("--- 1. ErrorCategory::Permission ---\n");
     let perm_err = QueryErrorReport::new(
         ErrorCategory::Permission,
@@ -38,9 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", perm_err);
     println!();
 
-    // ============================================
     // InjectionRisk 类别
-    // ============================================
     println!("--- 2. ErrorCategory::InjectionRisk ---\n");
     let injection_err = QueryErrorReport::new(
         ErrorCategory::InjectionRisk,
@@ -53,9 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", injection_err);
     println!();
 
-    // ============================================
     // SyntaxError 类别
-    // ============================================
     println!("--- 3. ErrorCategory::SyntaxError ---\n");
     let syntax_err = QueryErrorReport::new(
         ErrorCategory::SyntaxError,
@@ -67,9 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", syntax_err);
     println!();
 
-    // ============================================
     // ShardConflict 类别（来自 ShardRouter::enforce_shard_binding）
-    // ============================================
     println!("--- 4. ErrorCategory::ShardConflict (via ShardRouter) ---\n");
 
     // 配置 4 个分片但不创建实际连接池（仅用于路由计算）
@@ -105,9 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", shard_err);
     println!();
 
-    // ============================================
     // 字段访问与断言
-    // ============================================
     println!("--- 5. field access and assertions ---\n");
     println!("  perm_err.category    = {}", perm_err.category);
     println!("  perm_err.table       = {:?}", perm_err.table);
@@ -119,9 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(shard_err.category, ErrorCategory::ShardConflict);
     println!("  ✓ all 4 category assertions passed");
 
-    // ============================================
     // Display 与 Error trait 兼容性
-    // ============================================
     println!("\n--- 6. std::error::Error trait compatibility ---\n");
     let err_boxed: Box<dyn std::error::Error> = Box::new(perm_err.clone());
     println!("  Box<dyn Error> display: {}", err_boxed);

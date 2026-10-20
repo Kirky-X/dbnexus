@@ -15,9 +15,7 @@ use dbnexus::foundation::{
 };
 use std::time::Duration;
 
-// ============================================================================
 // DbConfig 测试
-// ============================================================================
 
 /// DbConfig 默认值应符合约定
 #[test]
@@ -218,9 +216,7 @@ fn test_db_config_clone() {
     );
 }
 
-// ============================================================================
 // foundation::config::PoolConfig 测试
-// ============================================================================
 
 /// foundation::config::PoolConfig 默认值
 #[test]
@@ -248,9 +244,7 @@ fn test_foundation_pool_config_duration_conversions() {
     );
 }
 
-// ============================================================================
 // CacheConfig 测试
-// ============================================================================
 
 /// CacheConfig 默认值
 #[test]
@@ -272,9 +266,7 @@ fn test_cache_config_default_ttl_duration() {
     assert_eq!(cache.default_ttl_duration(), Duration::from_secs(600));
 }
 
-// ============================================================================
 // foundation::config::DatabaseType 测试
-// ============================================================================
 
 /// DatabaseType::from_url() 各协议解析
 #[test]
@@ -344,9 +336,7 @@ fn test_foundation_database_type_traits() {
     assert_ne!(a, FoundationDatabaseType::Sqlite);
 }
 
-// ============================================================================
 // ConfigError Display 测试
-// ============================================================================
 
 /// ConfigError::MissingField Display
 #[test]

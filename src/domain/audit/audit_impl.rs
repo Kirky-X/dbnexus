@@ -365,7 +365,6 @@ impl AuditEvent {
     pub fn sanitize_value(value: &str, sensitive_fields: Option<Vec<String>>) -> String {
         let fields = sensitive_fields.unwrap_or_else(default_sensitive_fields);
 
-        // 尝试解析 JSON
         if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(value) {
             let sanitized = sanitize_json_object(json_value, &fields, 0);
             serde_json::to_string(&sanitized)
@@ -763,7 +762,7 @@ impl AuditLogger {
                 }
             } else {
                 // 裸键：field（大小写不敏感，token 需 ASCII 字母数字单词边界），
-                // 其后允许 `_`/`-` 分隔的键尾字符（复合键），直至（可跨空白的）冒号
+                // 其后允许 `_`/`-` 分隔的键尾字符（复合键），直至（可跨空白）冒号
                 match Self::starts_with_case_insensitive(&text[i..], field) {
                     Some(consumed) if Self::at_word_boundary(text, i, consumed) => {
                         (consumed + Self::scan_key_tail(&text[i + consumed..]), true)
@@ -1365,7 +1364,7 @@ mod tests {
         assert!(matches!(err, BuildError::IdEmpty));
     }
 
-    // ===== 补充测试：with_error 便捷构造器 =====
+    // 补充测试：with_error 便捷构造器
 
     #[test]
     fn test_with_error_sets_failure_context() {
@@ -1395,7 +1394,7 @@ mod tests {
         assert_eq!(ctx.span_id, "span-9");
     }
 
-    // ===== 补充测试：AuditLogger 构造与 builder 必填校验 =====
+    // 补充测试：AuditLogger 构造与 builder 必填校验
 
     #[test]
     fn test_audit_logger_constructors() {

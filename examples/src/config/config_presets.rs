@@ -16,15 +16,11 @@ fn main() {
     println!("🏗️  DBNexus preset configuration comparison example");
     println!("========================================\n");
 
-    // ============================================
     // 打印当前启用的特性
-    // ============================================
     println!("📋 Currently enabled features (detected via cfg!):");
     print_feature_status();
 
-    // ============================================
     // 预设配置对比表
-    // ============================================
     println!("\n📊 Preset configuration comparison table:");
     println!("┌─────────────┬──────────┬───────────────┬────────────┬─────────────┐");
     println!("│ Feature      │ embedded │ microservice  │ monolith   │ enterprise  │");
@@ -41,9 +37,7 @@ fn main() {
     println!("│ perm-engine │    -     │       -       │     -      │     ✓       │");
     println!("└─────────────┴──────────┴───────────────┴────────────┴─────────────┘");
 
-    // ============================================
     // 各预设的适用场景
-    // ============================================
     println!("\n🎯 Preset use cases:");
     println!("\n  embedded (embedded/edge devices):");
     println!("    - ultra-lightweight configuration, sqlite + config-env only");
@@ -65,9 +59,7 @@ fn main() {
     println!("    - for high-security scenarios such as finance and government");
     println!("    - advanced RBAC permission engine + policy decision point");
 
-    // ============================================
     // 条件编译演示
-    // ============================================
     println!("\n🔧 Conditional compilation capability demo:");
 
     #[cfg(feature = "sqlite")]

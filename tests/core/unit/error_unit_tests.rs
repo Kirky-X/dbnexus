@@ -7,9 +7,7 @@
 use dbnexus::foundation::{PermissionError, PoolError};
 use dbnexus::{AuditError, ConfigError, DbError, MigrationError};
 
-// ============================================================================
 // DbError 测试
-// ============================================================================
 
 #[test]
 fn test_db_error_creation() {
@@ -37,9 +35,7 @@ fn test_db_error_display() {
     assert!(format!("{db_error}").contains("Database error"));
 }
 
-// ============================================================================
 // PoolError 测试
-// ============================================================================
 
 #[test]
 fn test_pool_error_acquire_timeout() {
@@ -80,9 +76,7 @@ fn test_pool_error_debug() {
     assert!(!format!("{error:?}").is_empty());
 }
 
-// ============================================================================
 // PermissionError 测试
-// ============================================================================
 
 #[test]
 fn test_permission_error_denied() {
@@ -130,9 +124,7 @@ fn test_permission_error_display_variants() {
     assert!(format!("{rate_limited}").contains("rate"));
 }
 
-// ============================================================================
 // ConfigError 测试
-// ============================================================================
 
 #[test]
 fn test_config_error_missing_field() {
@@ -187,9 +179,7 @@ fn test_config_error_variants() {
     assert!(format!("{unsupported}").contains("Unsupported"));
 }
 
-// ============================================================================
 // MigrationError 测试
-// ============================================================================
 
 #[test]
 fn test_migration_error_file_not_found() {
@@ -248,9 +238,7 @@ fn test_migration_error_all_variants() {
     assert!(format!("{rollback}").contains("failed"));
 }
 
-// ============================================================================
 // AuditError 测试
-// ============================================================================
 
 #[test]
 fn test_audit_error_write_error() {
@@ -287,9 +275,7 @@ fn test_audit_error_all_variants() {
     assert!(format!("{config}").contains("field"));
 }
 
-// ============================================================================
 // 结果类型别名测试
-// ============================================================================
 
 #[test]
 fn test_db_result_type_alias() {
@@ -361,9 +347,7 @@ fn test_audit_result_type_alias() {
     assert!(failure.is_err());
 }
 
-// ============================================================================
 // 错误转换测试
-// ============================================================================
 
 #[test]
 fn test_error_source_chain() {
@@ -414,9 +398,7 @@ fn test_error_display_consistency() {
     }
 }
 
-// ============================================================================
 // 错误消息边界测试
-// ============================================================================
 
 #[test]
 fn test_error_with_empty_message() {
@@ -453,9 +435,7 @@ fn test_error_with_unicode() {
     assert!(display.contains("error message"));
 }
 
-// ============================================================================
 // 错误 Debug 实现测试
-// ============================================================================
 
 #[test]
 fn test_all_errors_debug_impl() {
@@ -475,9 +455,7 @@ fn test_all_errors_debug_impl() {
     }
 }
 
-// ============================================================================
 // QueryErrorReport 测试
-// ============================================================================
 
 use dbnexus::{ErrorCategory, QueryErrorReport};
 

@@ -13,9 +13,7 @@ use dbnexus::access::{
     AdvancedRbacProvider, PermissionAction, PermissionProvider, RolePolicy, TablePermission,
 };
 
-// ============================================================================
 // 角色继承链解析测试
-// ============================================================================
 
 /// 单层继承 - 子角色继承父角色权限
 #[test]
@@ -57,7 +55,6 @@ fn test_rbac_inheritance_single_level_grants_access() {
 fn test_rbac_inheritance_multi_level_chain_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加自定义角色
     provider.add_role(
         "base".to_string(),
         RolePolicy {
@@ -148,16 +145,13 @@ fn test_rbac_inheritance_deep_chain_grants_access() {
     }
 }
 
-// ============================================================================
 // 多重继承测试
-// ============================================================================
 
 /// 多重继承 - 继承多个父角色
 #[test]
 fn test_rbac_inheritance_multiple_parents_grants_access() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加角色
     provider.add_role(
         "role_a".to_string(),
         RolePolicy {
@@ -296,16 +290,13 @@ fn test_rbac_inheritance_diamond_structure_grants_access() {
     );
 }
 
-// ============================================================================
 // 循环继承检测测试
-// ============================================================================
 
 /// 直接循环继承 A -> B -> A
 #[test]
 fn test_direct_circular_inheritance() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加角色
     provider.add_role(
         "role_a".to_string(),
         RolePolicy {
@@ -344,7 +335,6 @@ fn test_direct_circular_inheritance() {
 fn test_indirect_circular_inheritance() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加角色
     for name in ["role_a", "role_b", "role_c"] {
         provider.add_role(
             name.to_string(),
@@ -390,9 +380,7 @@ fn test_rbac_inheritance_self_reference_terminates_safely() {
     assert!(result.unwrap());
 }
 
-// ============================================================================
 // 权限冲突解决测试
-// ============================================================================
 
 /// 权限合并 - 多个父角色的权限合并
 #[test]
@@ -533,9 +521,7 @@ fn test_rbac_inheritance_wildcard_grants_access() {
     );
 }
 
-// ============================================================================
 // 缓存机制测试
-// ============================================================================
 
 /// 继承缓存基本功能
 #[test]
@@ -545,7 +531,6 @@ fn test_rbac_cache_first_check_populates_cache() {
     // 初始缓存为空
     assert_eq!(provider.cache_size(), 0);
 
-    // 执行权限检查会填充缓存
     provider
         .check_access("admin", "users", PermissionAction::Select)
         .unwrap();
@@ -583,7 +568,6 @@ fn test_rbac_cache_role_add_invalidates_cache() {
         .unwrap();
     assert!(provider.cache_size() > 0);
 
-    // 添加角色应该清除相关缓存
     provider.add_role(
         "child".to_string(),
         RolePolicy {
@@ -608,7 +592,6 @@ fn test_rbac_cache_inheritance_add_invalidates_cache() {
         .check_access("admin", "users", PermissionAction::Select)
         .unwrap();
 
-    // 添加继承关系应该清除相关缓存
     provider.add_role_inheritance("new_child".to_string(), vec!["admin".to_string()]);
 
     // 新角色的缓存条目不应该存在
@@ -617,9 +600,7 @@ fn test_rbac_cache_inheritance_add_invalidates_cache() {
     assert!(cached.contains("admin"));
 }
 
-// ============================================================================
 // 继承管理方法测试
-// ============================================================================
 
 /// has_inheritance 方法
 #[test]
@@ -629,7 +610,6 @@ fn test_rbac_has_inheritance_returns_correct_bool() {
     // admin 默认没有继承关系
     assert!(!provider.has_inheritance("admin"));
 
-    // 添加继承关系
     provider.add_role_inheritance("manager".to_string(), vec!["admin".to_string()]);
     assert!(provider.has_inheritance("manager"));
 
@@ -642,7 +622,6 @@ fn test_rbac_has_inheritance_returns_correct_bool() {
 fn test_rbac_get_direct_parents_returns_parents() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加继承关系
     provider.add_role_inheritance(
         "child".to_string(),
         vec!["parent1".to_string(), "parent2".to_string()],
@@ -664,7 +643,6 @@ fn test_rbac_get_direct_parents_returns_parents() {
 fn test_rbac_remove_inheritance_removes_link() {
     let provider = AdvancedRbacProvider::new();
 
-    // 添加继承关系
     provider.add_role_inheritance("child".to_string(), vec!["admin".to_string()]);
     assert!(provider.has_inheritance("child"));
 
@@ -708,9 +686,7 @@ fn test_rbac_set_inheritances_batch_sets_links() {
     ); // from role_b -> readonly
 }
 
-// ============================================================================
 // 默认角色测试
-// ============================================================================
 
 /// 默认 admin 角色权限
 #[test]
@@ -825,9 +801,7 @@ fn test_rbac_undefined_role_denies_access() {
     );
 }
 
-// ============================================================================
 // 并发测试
-// ============================================================================
 
 /// 并发继承解析
 #[test]

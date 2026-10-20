@@ -33,9 +33,7 @@ fn plural_category_name(category: PluralCategory) -> &'static str {
     }
 }
 
-// ============================================
 // 消息目录（Message Catalog）
-// ============================================
 
 // 同一语义的迁移消息只在 FTL 目录（catalog.rs 的 `migration` 键）保留一份：
 // format_migration_message 经 catalog::format_from_bundle 取该键，

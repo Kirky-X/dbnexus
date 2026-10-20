@@ -205,9 +205,7 @@ async fn test_entity_integration_with_sql_operations() {
     assert!(!session.is_in_transaction().await);
 }
 
-// ============================================================================
 // 完整 CRUD 操作集成测试（使用权限配置）
-// ============================================================================
 
 const CRUD_TEST_TABLE: &str = "crud_entity_test";
 

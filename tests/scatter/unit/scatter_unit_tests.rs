@@ -4,9 +4,7 @@
 
 use dbnexus::{AggregateFunction, AggregateValue, PartialFailurePolicy, ScatterResult};
 
-// ============================================================================
 // PartialFailurePolicy 测试
-// ============================================================================
 
 #[test]
 fn test_partial_failure_policy_equality() {
@@ -25,9 +23,7 @@ fn test_partial_failure_policy_clone() {
     assert_eq!(policy, cloned);
 }
 
-// ============================================================================
 // AggregateFunction 测试
-// ============================================================================
 
 #[test]
 fn test_aggregate_function_count() {
@@ -66,9 +62,7 @@ fn test_aggregate_function_min_max() {
     }
 }
 
-// ============================================================================
 // AggregateValue 测试
-// ============================================================================
 
 #[test]
 fn test_aggregate_value_count() {
@@ -105,9 +99,7 @@ fn test_aggregate_value_min_max() {
     }
 }
 
-// ============================================================================
 // ScatterResult 测试
-// ============================================================================
 
 #[test]
 fn test_scatter_result_empty() {
@@ -141,9 +133,7 @@ fn test_scatter_result_with_data() {
     assert!(result.aggregated.is_some());
 }
 
-// ============================================================================
 // ShardError 测试
-// ============================================================================
 
 #[test]
 fn test_shard_error_debug() {
@@ -169,9 +159,7 @@ fn test_shard_error_clone() {
     assert_eq!(cloned.error, "error");
 }
 
-// ============================================================================
 // AggregateFunction::compute_from_rows 行级聚合测试
-// ============================================================================
 
 #[test]
 fn test_compute_from_rows_count() {

@@ -26,9 +26,7 @@ use dbnexus::observability::{MetricsCollector, MetricsCollectorTrait};
 use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
 use trait_kit::prelude::*;
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,9 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧰 DBNexus AsyncKit advanced example: pool + permission + metrics");
     println!("========================================\n");
 
-    // ============================================
     // 通过 AsyncKit 构建连接池
-    // ============================================
     println!("--- 1. AsyncKit builds the connection pool ---\n");
 
     let mut kit = AsyncKit::new();
@@ -69,9 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("require DbNexusModule: {e}"))?;
     println!("  ✓ pool fetched via AsyncKit DI successfully");
 
-    // ============================================
     // 初始化辅助能力（Metrics + Permission）
-    // ============================================
     println!("\n--- 2. initialize Metrics + Permission ---\n");
 
     let metrics: Arc<MetricsCollector> = Arc::new(MetricsCollector::new());
@@ -80,9 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let perm_provider: Arc<dyn dbnexus::PermissionProvider> = Arc::new(permission::new_in_memory());
     println!("  ✓ PermissionProvider created (in-memory implementation)");
 
-    // ============================================
     // 准备测试数据
-    // ============================================
     println!("\n--- 3. prepare test data ---\n");
 
     let session = pool.get_session("admin").await?;
@@ -118,9 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  ✓ initial pool metrics recorded");
 
-    // ============================================
     // 业务编排：权限检查 → SQL 执行 → 指标记录
-    // ============================================
     println!("\n--- 4. business orchestration: permissions → query → metrics ---\n");
 
     let test_role = "admin";
@@ -156,9 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 事务回滚演示
-    // ============================================
     println!("\n--- 5. transaction rollback ---\n");
 
     let txn_session = pool.get_session("admin").await?;
@@ -179,16 +167,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     txn_session.rollback().await?;
     println!("  ✓ transaction rolled back");
 
-    // 验证回滚后数据不存在
     let check_session = pool.get_session("admin").await?;
     let _ = check_session
         .execute_raw("SELECT COUNT(*) FROM orders WHERE id = 4")
         .await?;
     println!("  ✓ id=4 no longer exists after rollback");
 
-    // ============================================
     // 查看汇总指标
-    // ============================================
     println!("\n--- 6. summary metrics ---\n");
 
     let pool_metrics = metrics.pool_metrics();
@@ -206,9 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         stats.latency_percentiles.p99(),
     );
 
-    // ============================================
     // 多角色 Session 并发
-    // ============================================
     println!("\n--- 7. multi-role Session ---\n");
 
     let admin_session = pool.get_session("admin").await?;

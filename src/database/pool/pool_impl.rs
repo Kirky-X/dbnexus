@@ -527,7 +527,7 @@ mod tests {
         injected.delete("k").await.expect("delete");
     }
 
-    // ===== 补充测试：builder 池参数应用与缺参拒绝 =====
+    // 补充测试：builder 池参数应用与缺参拒绝
 
     #[tokio::test]
     async fn test_builder_without_url_or_config_rejected() {

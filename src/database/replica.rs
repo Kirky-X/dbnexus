@@ -15,9 +15,7 @@ use sea_orm::{ConnectionTrait, Statement};
 use crate::database::DbPool;
 use crate::foundation::{DbError, DbResult};
 
-// ============================================================================
 // ReplicationLag — 复制延迟信息
-// ============================================================================
 
 /// 复制延迟检测结果
 #[derive(Debug, Clone)]
@@ -30,9 +28,7 @@ pub struct ReplicationLag {
     pub is_caught_up: bool,
 }
 
-// ============================================================================
 // ReplicationLagDetector — 复制 lag 检测 trait
-// ============================================================================
 
 /// 复制 lag 检测 trait
 ///
@@ -43,9 +39,7 @@ pub trait ReplicationLagDetector: Send + Sync {
     async fn detect_lag(&self, pool: &DbPool) -> DbResult<ReplicationLag>;
 }
 
-// ============================================================================
 // PostgreSQL lag 检测
-// ============================================================================
 
 /// PostgreSQL 复制 lag 检测器
 ///
@@ -94,9 +88,7 @@ impl ReplicationLagDetector for PostgresLagDetector {
     }
 }
 
-// ============================================================================
 // MySQL lag 检测
-// ============================================================================
 
 /// MySQL 复制 lag 检测器
 ///
@@ -158,9 +150,7 @@ impl ReplicationLagDetector for MySqlLagDetector {
     }
 }
 
-// ============================================================================
 // lag 值纯函数解析（与具体连接解耦，便于单元测试）
-// ============================================================================
 
 /// 解析 PostgreSQL `pg_wal_lsn_diff` 查询结果为字节级延迟
 ///
@@ -206,9 +196,7 @@ fn parse_mysql_seconds_behind(raw: SecondsBehindRaw) -> Option<f64> {
     }
 }
 
-// ============================================================================
 // SQLite lag 检测（无副本语义）
-// ============================================================================
 
 /// SQLite 复制 lag 检测器
 ///
@@ -226,9 +214,7 @@ impl ReplicationLagDetector for SqliteLagDetector {
     }
 }
 
-// ============================================================================
 // ReplicaPool — 副本连接池
-// ============================================================================
 
 /// 副本连接池
 ///
@@ -272,9 +258,7 @@ impl ReplicaPool {
     }
 }
 
-// ============================================================================
 // 副本负载均衡（读写分离 + 权重/延迟选择 + 故障剔除）
-// ============================================================================
 
 /// 副本节点：池 + lag 探测器 + 选择权重
 pub struct ReplicaNode {
@@ -578,7 +562,7 @@ impl ReplicaLoadBalancer {
 mod tests {
     use super::*;
 
-    // ===== parse_pg_wal_lag 测试 =====
+    // parse_pg_wal_lag 测试
 
     #[test]
     fn test_parse_pg_wal_lag_zero() {
@@ -621,7 +605,7 @@ mod tests {
         assert_eq!(parse_pg_wal_lag("NaN"), None);
     }
 
-    // ===== parse_mysql_seconds_behind 测试 =====
+    // parse_mysql_seconds_behind 测试
 
     #[test]
     fn test_parse_mysql_seconds_behind_numeric() {
@@ -661,7 +645,7 @@ mod tests {
         );
     }
 
-    // ===== is_caught_up 阈值判定语义测试 =====
+    // is_caught_up 阈值判定语义测试
 
     #[test]
     fn test_pg_caught_up_respects_max_lag_bytes() {

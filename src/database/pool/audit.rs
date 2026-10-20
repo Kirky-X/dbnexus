@@ -144,9 +144,7 @@ pub fn take_admin_bypass_events() -> Vec<BypassEvent> {
 mod tests {
     use super::*;
 
-    // ============================================================================
     // vuln-0001 安全审计单元测试（从 session.rs 移入）
-    // ============================================================================
 
     /// vuln-0001 回归测试：warn_if_default_admin_role_used 对默认 "admin" 返回 true
     #[test]

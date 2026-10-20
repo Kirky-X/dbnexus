@@ -27,9 +27,7 @@ use dbnexus::Neo4jConnection;
 use dbnexus::database::GraphConnection;
 use dbnexus::database::GraphExecResult;
 
-// ============================================
 // 辅助函数
-// ============================================
 
 /// 尝试从环境变量创建 Neo4j 连接
 async fn try_connect() -> Option<Neo4jConnection> {
@@ -54,9 +52,7 @@ fn print_query_result(label: &str, result: &GraphExecResult) {
     }
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,9 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🕸️  DBNexus Neo4j graph database example");
     println!("========================================\n");
 
-    // ============================================
     // URL 解析演示
-    // ============================================
     println!("--- 1. URL parsing ---\n");
 
     let url_cases = [
@@ -107,9 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("    ✓ expected error: {}", e),
     }
 
-    // ============================================
     // 连接尝试（优雅降级）
-    // ============================================
     println!("\n--- 2. connection attempt ---\n");
 
     let conn = match try_connect().await {
@@ -129,9 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // ============================================
     // 完整使用流程（需要真实连接）
-    // ============================================
     if let Some(ref conn) = conn {
         println!("\n--- 3. health check ---\n");
         match conn.health_check().await {

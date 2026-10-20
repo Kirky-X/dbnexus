@@ -17,9 +17,7 @@ fn temp_db_url(tag: &str) -> (String, std::path::PathBuf) {
     (format!("sqlite:{}?mode=rwc", path.display()), path)
 }
 
-// ============================================================================
 // 快照结构与池饱和度
-// ============================================================================
 
 #[tokio::test]
 async fn test_health_snapshot_shape_and_fields() {
@@ -126,9 +124,7 @@ async fn test_health_snapshot_unhealthy_without_connections() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // 副本状态提供者注入（副本路由可接入）
-// ============================================================================
 
 #[tokio::test]
 async fn test_health_snapshot_replica_provider() {
@@ -164,9 +160,7 @@ async fn test_health_snapshot_replica_provider() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // 慢查询计数（metrics collector 注入路径）
-// ============================================================================
 
 #[cfg(feature = "metrics")]
 #[tokio::test]

@@ -1157,7 +1157,7 @@ mod tests {
         assert!(sql.contains("PRIMARY KEY (id)"));
     }
 
-    // ===== validate_sql_identifier 测试 =====
+    // validate_sql_identifier 测试
 
     #[test]
     fn test_validate_sql_identifier_empty() {
@@ -1235,7 +1235,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ===== sanitize_default_value 测试 =====
+    // sanitize_default_value 测试
 
     #[test]
     fn test_sanitize_default_value_suspicious_select() {
@@ -1315,7 +1315,7 @@ mod tests {
         assert_eq!(result, "'O''Brien'");
     }
 
-    // ===== SchemaDiffer 测试 =====
+    // SchemaDiffer 测试
 
     fn make_column(
         name: &str,
@@ -1604,7 +1604,7 @@ mod tests {
         }
     }
 
-    // ===== SqlGenerator 测试 =====
+    // SqlGenerator 测试
 
     #[test]
     fn test_generate_create_table_sql_with_indexes_and_fks() {
@@ -1944,7 +1944,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ===== generate_alter_column_sql 测试 =====
+    // generate_alter_column_sql 测试
 
     #[test]
     fn test_generate_alter_column_sql_type_changed_postgres() {
@@ -2090,7 +2090,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ===== generate_migration_sql 中列变更的端到端测试 =====
+    // generate_migration_sql 中列变更的端到端测试
 
     /// 纯列变更（无新增/删除列等）时也应生成 ALTER SQL，而不是空 SQL
     #[test]
@@ -2278,7 +2278,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ===== MigrationCommand / MigrationPlan 类型测试 =====
+    // MigrationCommand / MigrationPlan 类型测试
 
     #[test]
     fn test_migration_direction_variants() {
@@ -2382,7 +2382,7 @@ mod tests {
         }
     }
 
-    // ===== generate_alter_column_sql 方言矩阵 =====
+    // generate_alter_column_sql 方言矩阵
 
     fn named_column(name: &str) -> Column {
         Column {

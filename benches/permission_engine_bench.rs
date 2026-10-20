@@ -16,9 +16,7 @@ use dbnexus::access::permission::{PermissionAction, PermissionCache, RolePolicy,
 use std::hint::black_box;
 use std::time::Duration;
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 /// 构造一个包含单表权限的 `RolePolicy`
 fn sample_policy(table: &str, action: PermissionAction) -> RolePolicy {
@@ -56,9 +54,7 @@ fn populate_cache(cache: &PermissionCache, n: usize) {
     });
 }
 
-// ============================================================================
 // 基准测试
-// ============================================================================
 
 /// 角色策略加载：测量 `PermissionCache::insert` 的吞吐量
 fn bench_role_policy_load(c: &mut Criterion) {

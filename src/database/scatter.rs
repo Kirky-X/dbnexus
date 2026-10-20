@@ -11,9 +11,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::database::sharding::ShardRouter;
 
-// ============================================================================
 // 类型定义
-// ============================================================================
 
 /// 部分失败策略
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,9 +256,7 @@ pub fn apply_global_pagination(
     rows.into_iter().skip(start).take(end - start).collect()
 }
 
-// ============================================================================
 // ScatterGatherExecutor
-// ============================================================================
 
 /// Scatter-Gather 查询执行器
 pub struct ScatterGatherExecutor {
@@ -560,7 +556,7 @@ mod merge_tests {
         assert!(apply_global_pagination(merged, 0, 0).is_empty());
     }
 
-    // ===== 补充测试：聚合辅助与全局排序分页 =====
+    // 补充测试：聚合辅助与全局排序分页
 
     #[test]
     fn test_aggregate_helpers() {

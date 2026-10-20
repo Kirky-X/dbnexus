@@ -21,9 +21,7 @@ use dbnexus::access::permission_engine::{
 };
 use std::sync::Arc;
 
-// ============================================
 // 辅助函数：创建权限规则
-// ============================================
 
 /// 快速创建一条权限规则
 fn rule(
@@ -45,9 +43,7 @@ fn rule(
     }
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,9 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚙️  DBNexus permission engine and PDP example");
     println!("========================================\n");
 
-    // ============================================
     // 创建 RbacPermissionProvider 并注册角色
-    // ============================================
     let provider = Arc::new(RbacPermissionProvider::new());
 
     // admin 角色：通配符权限，最高优先级
@@ -141,9 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ created 3 roles: admin / editor / viewer");
     println!("✓ mapped 3 users: alice(admin) / bob(editor) / charlie(viewer)\n");
 
-    // ============================================
     // 使用 PolicyDecisionPoint 进行权限决策
-    // ============================================
     println!("--- PolicyDecisionPoint permission decisions ---\n");
 
     let pdp_config = PolicyDecisionPointConfig {
@@ -179,9 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 使用 PolicyDecisionPoint builder 模式
-    // ============================================
     println!("\n--- PolicyDecisionPoint builder pattern ---\n");
 
     let pdp = PolicyDecisionPoint::builder()
@@ -241,9 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 获取可访问资源和操作
-    // ============================================
     println!("\n--- resource and action queries ---\n");
 
     for user in &["alice", "bob", "charlie"] {
@@ -263,9 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 速率限制演示
-    // ============================================
     println!("\n--- rate limiting demo ---\n");
 
     let limited_pdp = PolicyDecisionPoint::with_rate_limit(provider.clone(), 5, 60);

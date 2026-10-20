@@ -1232,7 +1232,7 @@ mod tests {
         }
     }
 
-    // ===== 数据类型映射测试 =====
+    // 数据类型映射测试
 
     #[tokio::test]
     async fn test_duckdb_data_types_boolean() {
@@ -1310,7 +1310,7 @@ mod tests {
         }
     }
 
-    // ===== 错误路径测试 =====
+    // 错误路径测试
 
     #[tokio::test]
     async fn test_duckdb_syntax_error_returns_error() {
@@ -1342,7 +1342,7 @@ mod tests {
         assert!(result.is_err(), "duplicate PK should return error");
     }
 
-    // ===== DuckDbRow API 测试 =====
+    // DuckDbRow API 测试
 
     #[tokio::test]
     async fn test_duckdb_row_get_nonexistent_column_returns_none() {
@@ -1381,7 +1381,7 @@ mod tests {
         assert_eq!(rows.len(), 0, "empty table should return 0 rows");
     }
 
-    // ===== Debug 输出测试 =====
+    // Debug 输出测试
 
     #[tokio::test]
     async fn test_duckdb_connection_debug_format() {
@@ -1398,7 +1398,7 @@ mod tests {
         );
     }
 
-    // ===== 文件数据库测试 =====
+    // 文件数据库测试
 
     #[tokio::test]
     async fn test_duckdb_file_database_persistence() {
@@ -1437,7 +1437,7 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
     }
 
-    // ===== 连接池耗尽测试 =====
+    // 连接池耗尽测试
 
     #[tokio::test]
     async fn test_duckdb_pool_exhaustion_queues_requests() {
@@ -1468,7 +1468,7 @@ mod tests {
         }
     }
 
-    // ===== URL 解析边界测试 =====
+    // URL 解析边界测试
 
     #[tokio::test]
     async fn test_duckdb_parse_url_case_insensitive() {
@@ -1480,7 +1480,7 @@ mod tests {
         assert_eq!(DuckDbConnection::parse_url("duckdb:test.db"), "test.db");
     }
 
-    // ===== execute_batch 测试 =====
+    // execute_batch 测试
 
     #[tokio::test]
     async fn test_duckdb_execute_batch_multi_statement() {
@@ -1544,7 +1544,7 @@ mod tests {
         );
     }
 
-    // ===== with_transaction 测试 =====
+    // with_transaction 测试
 
     /// 成功路径：闭包返回 Ok → commit → 落库；事务内可读到本事务的写入
     #[tokio::test]
@@ -1667,9 +1667,7 @@ mod tests {
             .expect("the connection should be returned to the pool after a failed commit");
     }
 
-    // =====================================================================
     // 串行写闸（with_serialized_writes）测试
-    // =====================================================================
 
     /// 默认不启用写闸（维持池化并发写）；启用后 Clone 句柄经 Arc 共享同一闸
     #[tokio::test]
@@ -1691,7 +1689,7 @@ mod tests {
             "cloned handles should share the same write gate"
         );
 
-        // 幂等:对已启用句柄(含 Clone 出的)重复启用,必须复用现有闸而非
+        // 幂等:对已启用句柄(含 Clone 出)重复启用,必须复用现有闸而非
         // 各自新建——否则两句柄共享池却各持一把闸,写互斥静默失效
         let re_enabled = cloned.with_serialized_writes();
         assert!(

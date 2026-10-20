@@ -7,9 +7,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// ============================================================================
 // SnowflakeError — ID 生成错误
-// ============================================================================
 
 /// Snowflake ID 生成器错误
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,9 +65,7 @@ impl crate::i18n::error_ext::LocalizedMsg for SnowflakeError {
     }
 }
 
-// ============================================================================
 // IdComponents — ID 解析结果
-// ============================================================================
 
 /// ID 组成成分
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,9 +78,7 @@ pub struct IdComponents {
     pub sequence: u32,
 }
 
-// ============================================================================
 // DistributedIdGenerator trait
-// ============================================================================
 
 /// 分布式 ID 生成器 trait
 pub trait DistributedIdGenerator: Send + Sync {
@@ -98,9 +92,7 @@ pub trait DistributedIdGenerator: Send + Sync {
     fn parse_id(&self, id: u64) -> IdComponents;
 }
 
-// ============================================================================
 // SnowflakeIdGenerator
-// ============================================================================
 
 /// Snowflake ID 生成器
 ///

@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(EntityAction::from_str_raw("bogus"), None);
     }
 
-    // ===== 补充测试：事件构造器 / outbox 表名校验 =====
+    // 补充测试：事件构造器 / outbox 表名校验
 
     #[test]
     fn test_entity_event_constructors_and_payload() {

@@ -269,9 +269,7 @@ impl PermissionConfig {
     }
 }
 
-// ============================================================================
 // 图权限上下文（stub）
-// ============================================================================
 
 /// 图权限上下文
 ///
@@ -427,7 +425,6 @@ mod tests {
         assert!(user_policy.allows("users", &PermissionAction::Select));
         assert!(!user_policy.allows("users", &PermissionAction::Insert));
 
-        // 检查不存在的角色
         assert!(config.get_role_policy("guest").is_none());
     }
 
@@ -472,7 +469,6 @@ mod tests {
         assert!(user_policy.allows("users", &PermissionAction::Select));
         assert!(!user_policy.allows("users", &PermissionAction::Insert));
 
-        // 检查不存在的角色
         assert!(config.get_role_policy("guest").is_none());
     }
 
@@ -591,9 +587,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // GraphPermissionContext 测试
-    // ========================================================================
 
     /// admin 角色调用 check_graph_access 应返回 Ok
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
@@ -664,8 +658,6 @@ mod tests {
             err_msg
         );
     }
-
-    // ========================================================================
 
     /// DDL 角色判定：只有对 "*" 表同时具备四种 DML 操作的角色才被放行
     #[test]

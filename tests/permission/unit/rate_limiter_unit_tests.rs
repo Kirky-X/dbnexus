@@ -12,9 +12,7 @@ use dbnexus::access::RateLimiter;
 use std::sync::Arc;
 use std::time::Duration;
 
-// ============================================================================
 // 基本功能测试
-// ============================================================================
 
 /// 单次令牌获取
 #[tokio::test]
@@ -53,7 +51,6 @@ async fn test_rate_limiter_exhaustion() {
         "4th acquire should fail (exhausted)"
     );
 
-    // 验证剩余令牌仍然为 0
     assert_eq!(limiter.remaining("user1"), 0, "Should still have 0 tokens");
 }
 
@@ -76,9 +73,7 @@ async fn test_rate_limiter_independent_keys() {
     assert!(!limiter.check("user2").await, "user2 should be exhausted");
 }
 
-// ============================================================================
 // 并发测试（50 任务）
-// ============================================================================
 
 /// 50 任务并发获取测试
 ///
@@ -116,7 +111,6 @@ async fn test_rate_limiter_concurrent_50_tasks() {
         "Total successful acquires should equal bucket capacity (100)"
     );
 
-    // 验证剩余令牌为 0
     assert_eq!(
         limiter.remaining("shared_user"),
         0,
@@ -166,9 +160,7 @@ async fn test_rate_limiter_concurrent_multiple_keys() {
     }
 }
 
-// ============================================================================
 // 桶驱逐测试
-// ============================================================================
 
 /// 桶驱逐测试（达到最大容量）
 ///
@@ -192,7 +184,6 @@ async fn test_rate_limiter_bucket_eviction() {
         "11th bucket creation should succeed"
     );
 
-    // 验证桶数量仍然为 10
     assert_eq!(
         limiter.len(),
         10,
@@ -212,7 +203,6 @@ async fn test_rate_limiter_bucket_eviction() {
 async fn test_rate_limiter_lru_eviction_order() {
     let limiter = RateLimiter::new(100, Duration::from_secs(60), 5, 100);
 
-    // 创建 5 个桶
     for i in 0..5 {
         let key = format!("user_{}", i);
         assert!(limiter.check(&key).await);
@@ -225,7 +215,6 @@ async fn test_rate_limiter_lru_eviction_order() {
     // 创建新桶，应该驱逐最久未访问的桶（user_2、user_3 或 user_4）
     limiter.check("user_new").await;
 
-    // 验证桶数量仍为 5
     assert_eq!(limiter.len(), 5, "Should have 5 buckets after eviction");
 
     // 验证 user_new 桶存在（刚创建）
@@ -277,7 +266,6 @@ async fn test_rate_limiter_evicted_key_reuse() {
         "Evicted key should be reusable"
     );
 
-    // 验证桶数量仍为 3
     assert_eq!(limiter.len(), 3, "Should have 3 buckets");
 }
 
@@ -329,9 +317,7 @@ async fn test_rate_limiter_concurrent_eviction_safety() {
     );
 }
 
-// ============================================================================
 // 边界条件测试
-// ============================================================================
 
 /// max_buckets = 1 的极端情况
 #[tokio::test]

@@ -22,9 +22,7 @@ use std::cmp::Ordering;
 
 use dbnexus::{DbI18nFormatter, I18nError};
 
-// ============================================
 // 辅助函数
-// ============================================
 
 /// 演示指定 locale 的数字格式化
 fn demo_number_formatting(fmt: &DbI18nFormatter, locale: &str) -> Result<(), I18nError> {
@@ -56,9 +54,7 @@ fn demo_migration_messages(fmt: &DbI18nFormatter, locale: &str) -> Result<(), I1
     Ok(())
 }
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -66,9 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 DBNexus internationalization (i18n) formatting example");
     println!("========================================\n");
 
-    // ============================================
     // 创建不同 locale 的格式化器
-    // ============================================
     println!("--- 1. create formatters ---\n");
 
     let locales = ["en-US", "zh-CN", "de-DE", "ja-JP", "fr-FR"];
@@ -84,9 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ============================================
     // 数字格式化（locale 敏感）
-    // ============================================
     println!("\n--- 2. number formatting ---\n");
 
     for (locale, fmt) in &formatters {
@@ -94,9 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 迁移消息（复数规则）
-    // ============================================
     println!("--- 3. migration messages (plural rules) ---\n");
 
     for (locale, fmt) in &formatters {
@@ -104,9 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 日期格式化
-    // ============================================
     println!("--- 4. date formatting ---\n");
 
     let dates = [(2026, 1, 15), (2026, 7, 4), (2026, 12, 25)];
@@ -124,9 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 字符串排序（locale 敏感 collation）
-    // ============================================
     println!("--- 5. string ordering ---\n");
 
     let words = ["banana", "apple", "cherry", "date", "éclair"];
@@ -139,9 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // ============================================
     // 错误处理
-    // ============================================
     println!("--- 6. error handling ---\n");
 
     // 无效 locale

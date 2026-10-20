@@ -32,9 +32,7 @@ use dbnexus::sea_orm::{ActiveModelTrait, DbBackend, EntityTrait};
 use dbnexus::{Migration, MigrationExecutor, TableChange};
 use validator::Validate;
 
-// ============================================
 // 钩子调用计数器（演示钩子触发）
-// ============================================
 
 static BEFORE_INSERT_CALLS: AtomicUsize = AtomicUsize::new(0);
 static AFTER_INSERT_CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -48,9 +46,7 @@ fn reset_counters() {
     AFTER_UPDATE_CALLS.store(0, Ordering::SeqCst);
 }
 
-// ============================================
 // 钩子函数定义
-// ============================================
 
 /// insert 前钩子：验证 timestamps 已在钩子之前执行（编排顺序验证）
 fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
@@ -99,9 +95,7 @@ fn after_update_hook(model: &Model) -> Result<(), sea_orm::DbErr> {
     Ok(())
 }
 
-// ============================================
 // 实体定义（timestamps + validate + hooks）
-// ============================================
 
 /// 会员实体 — 启用全部行为特性
 ///
@@ -136,9 +130,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -148,9 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     reset_counters();
 
-    // ============================================
     // 创建数据库 + 表
-    // ============================================
     println!("--- 1. create the members table (schema() auto-generated) ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -165,9 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     executor.apply_migration(&migration).await?;
     println!("  ✓ schema() generated the table and applied the migration\n");
 
-    // ============================================
     // 插入有效记录（timestamps + hooks 触发）
-    // ============================================
     println!("--- 2. insert a valid record (timestamps + before_insert + after_insert) ---\n");
 
     // 使用 Model { ... }.into() 模式创建 ActiveModel（所有字段为 Unchanged）
@@ -205,9 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  ✓ timestamps auto-set verification passed\n");
 
-    // ============================================
     // 插入无效记录（validate 拦截）
-    // ============================================
     println!("--- 3. insert an invalid record (validate intercepts: name too short) ---\n");
 
     let invalid_member: ActiveModel = Model {
@@ -242,9 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  ✓ short-circuit verification: the before_insert hook was not called (validation short-circuited)\n"
     );
 
-    // ============================================
     // 插入无效邮箱（validate 拦截）
-    // ============================================
     println!("--- 4. insert an invalid email (validate intercepts: bad email format) ---\n");
 
     let invalid_email: ActiveModel = Model {
@@ -264,9 +248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ validation intercepted: email=\"not-an-email\" has an invalid format");
     println!("    → trigger #[validate(email)]\n");
 
-    // ============================================
     // 更新记录（timestamps + hooks 触发）
-    // ============================================
     println!("--- 5. update the record (timestamps + before_update + after_update) ---\n");
 
     let existing = Model::find_by_id(&session, 1)
@@ -294,9 +276,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(updated.updated_at.is_some(), "updated_at should be set");
     println!("  ✓ timestamps update verification passed: only updated_at was updated\n");
 
-    // ============================================
     // 总结
-    // ============================================
     println!("========================================");
     println!("✨ Example complete!");
     println!("========================================");

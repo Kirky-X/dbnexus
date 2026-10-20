@@ -10,9 +10,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use crate::database::sharding::ShardRouter;
 use crate::i18n;
 
-// ============================================================================
 // 类型定义
-// ============================================================================
 
 /// 单分片迁移结果
 #[derive(Debug, Clone)]
@@ -40,9 +38,7 @@ pub struct OrchestratedMigrationResult {
     pub results: Vec<ShardMigrationResult>,
 }
 
-// ============================================================================
 // ShardMigrationOrchestrator
-// ============================================================================
 
 /// 分片迁移编排器
 ///

@@ -138,9 +138,7 @@ async fn test_scatter_query_rows_with_aggregate() {
     let _ = std::fs::remove_file(&tmp1);
 }
 
-// ============================================================================
 // query_rows 出口脱敏 + RLS 谓词注入（data-protection feature）
-// ============================================================================
 
 #[cfg(all(feature = "data-protection", feature = "permission"))]
 #[tokio::test]

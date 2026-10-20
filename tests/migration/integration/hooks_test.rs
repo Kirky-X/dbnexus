@@ -22,9 +22,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// 每个 setup() 获取锁并持有整个测试生命周期
 static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
-// ============================================================================
 // Hook 调用计数器（static + 测试前重置）
-// ============================================================================
 
 static BEFORE_INSERT_CALLS: AtomicUsize = AtomicUsize::new(0);
 static AFTER_INSERT_CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -50,9 +48,7 @@ fn reset_counters() {
     AFTER_INSERT_MODEL_ID.store(0, Ordering::SeqCst);
 }
 
-// ============================================================================
 // Hook 函数定义
-// ============================================================================
 
 /// before_insert 钩子：记录调用 + 验证编排顺序（timestamps 应已执行）
 fn before_insert_hook(am: &mut ActiveModel) -> Result<(), sea_orm::DbErr> {
@@ -147,9 +143,7 @@ fn after_delete_hook(_model: &Model) -> Result<(), sea_orm::DbErr> {
     Ok(())
 }
 
-// ============================================================================
 // 测试实体定义
-// ============================================================================
 
 /// 测试用实体 — 启用 hooks + timestamps
 ///
@@ -181,9 +175,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================================================
 // 测试夹具
-// ============================================================================
 
 /// 创建内存 SQLite 数据库 + products 表
 /// 返回 (DbPool, MutexGuard) — guard 必须在测试期间持有以串行化
@@ -216,9 +208,7 @@ async fn setup() -> (dbnexus::DbPool, std::sync::MutexGuard<'static, ()>) {
     (pool, guard)
 }
 
-// ============================================================================
 // 测试用例
-// ============================================================================
 
 /// `before_insert` 钩子在 insert 时触发，`before_update` 在 update 时触发
 #[tokio::test]
@@ -230,7 +220,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
         .expect("Failed to get session");
     let conn = session.connection().expect("conn");
 
-    // === INSERT: 应触发 before_insert ===
+    // INSERT: 应触发 before_insert
     let am: ActiveModel = Model {
         id: 1,
         name: "Widget".to_string(),
@@ -253,7 +243,7 @@ async fn test_before_insert_and_before_update_hooks_trigger() {
         "before_update should NOT be called on insert"
     );
 
-    // === UPDATE: 应触发 before_update ===
+    // UPDATE: 应触发 before_update
     let existing = Entity::find_by_id(1)
         .one(conn)
         .await

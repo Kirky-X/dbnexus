@@ -26,9 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", t_simple("example-health-check-title"));
     println!("========================================\n");
 
-    // ============================================
     // PoolHealthMetrics — 连接池健康指标采集
-    // ============================================
     println!("--- 1. PoolHealthMetrics pool metrics ---");
     let metrics = PoolHealthMetrics::new();
 
@@ -51,9 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  is_healthy = {}", metrics.is_healthy());
 
-    // ============================================
     // HealthChecker — 执行健康检查
-    // ============================================
     println!("\n--- 2. HealthChecker health checks ---");
     let checker = HealthChecker::new(1000); // 检查超时 1000ms
 
@@ -61,9 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = checker.check().await;
     print_health_status(&result.status, &result.details, &result.recommendations);
 
-    // ============================================
     // CircuitBreaker — 熔断器状态转换
-    // ============================================
     println!("\n--- 3. CircuitBreaker state transitions ---");
     let config = CircuitBreakerConfig {
         failure_threshold: 3, // 连续失败 3 次触发 Open
@@ -128,9 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(final_state, CircuitBreakerState::Closed);
     println!("  ✓ the breaker has closed again (Closed), serving normally");
 
-    // ============================================
     // 通过 HealthChecker 访问内置的 CircuitBreaker
-    // ============================================
     println!("\n--- 4. the CircuitBreaker built into HealthChecker ---");
     let inner_breaker = checker.circuit_breaker();
     let inner_status = inner_breaker.status().await;
@@ -139,9 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inner_status.state, inner_status.consecutive_failures, inner_status.consecutive_successes
     );
 
-    // ============================================
     // 演示 Degraded 状态（通过设置高等待数）
-    // ============================================
     println!("\n--- 5. simulate a Degraded state ---");
     let degraded_metrics = PoolHealthMetrics::new();
     // 创建 2 个连接，全部 active，并设置 20 个等待请求

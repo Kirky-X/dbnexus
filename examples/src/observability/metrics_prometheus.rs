@@ -26,15 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 DBNexus Prometheus metrics export example");
     println!("========================================\n");
 
-    // ============================================
     // 创建连接池（用于真实场景下的指标采集上下文）
-    // ============================================
     let (_pool, _session) = common::db::setup_shared_sqlite_session().await?;
     println!("✓ pool created (max_connections=5)\n");
 
-    // ============================================
     // 创建 MetricsCollector 并同步连接池状态
-    // ============================================
     let collector = MetricsCollector::new();
 
     // 将连接池状态同步到指标收集器（total/active/idle）
@@ -50,9 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool_metrics.utilization_rate() * 100.0
     );
 
-    // ============================================
     // 记录查询指标（模拟业务流量）
-    // ============================================
     println!("\n--- record query metrics ---");
     for i in 1..=20 {
         let latency_ms = if i % 5 == 0 { 120 } else { 5 + (i % 10) };
@@ -66,9 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("  ✓ recorded 20 SELECT + 1 INSERT + 1 UPDATE");
 
-    // ============================================
     // 展示 QueryStats（查询统计）
-    // ============================================
     println!("\n--- query statistics (QueryStats) ---");
     if let Some(stats) = collector.get_query_stats("SELECT") {
         print_query_stats("SELECT", &stats);
@@ -77,9 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         print_query_stats("INSERT", &stats);
     }
 
-    // ============================================
     // 记录事务与连接获取指标
-    // ============================================
     println!("\n--- transaction and connection acquisition metrics ---");
     collector.record_transaction_commit();
     collector.record_transaction_commit();
@@ -103,9 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conn_stats.total_attempts, conn_stats.success_count, conn_stats.timeout_count
     );
 
-    // ============================================
     // 慢查询记录
-    // ============================================
     println!("\n--- slow query records ---");
     collector.set_slow_query_threshold(100);
     let slow_queries = collector.slow_queries();
@@ -117,9 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  - type={}, duration_ms={}", sq.query_type, sq.duration_ms);
     }
 
-    // ============================================
     // 导出 Prometheus 格式指标
-    // ============================================
     println!("\n--- Prometheus format export ---");
     let prometheus_output = collector.export_prometheus();
     // 只打印前 30 行，避免刷屏

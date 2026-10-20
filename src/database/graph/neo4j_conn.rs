@@ -153,9 +153,7 @@ impl std::fmt::Debug for Neo4jConnection {
     }
 }
 
-// ============================================================================
 // GraphConnection impl
-// ============================================================================
 
 #[async_trait::async_trait]
 impl GraphConnection for Neo4jConnection {
@@ -292,9 +290,7 @@ impl GraphConnection for Neo4jConnection {
     }
 }
 
-// ============================================================================
 // Neo4jTransaction
-// ============================================================================
 
 /// Neo4j 图数据库事务
 ///
@@ -469,9 +465,7 @@ impl GraphTransaction for Neo4jTransaction {
     }
 }
 
-// ============================================================================
 // 内部辅助函数
-// ============================================================================
 
 /// 将 `serde_json::Value` 转换为 `BoltType` 并 attach 到 query（vuln-0005 修复）
 ///
@@ -533,7 +527,7 @@ mod tests {
         Neo4jConnection { graph: None }
     }
 
-    // ===== parse_url 测试 =====
+    // parse_url 测试
 
     #[test]
     fn test_parse_url_neo4j_with_credentials() {
@@ -587,7 +581,7 @@ mod tests {
         assert_eq!(pass, "p%40ss");
     }
 
-    // ===== backend_name 测试 =====
+    // backend_name 测试
 
     #[test]
     fn test_neo4j_backend_name() {
@@ -595,7 +589,7 @@ mod tests {
         assert_eq!(conn.backend_name(), "neo4j");
     }
 
-    // ===== Debug / Clone 测试 =====
+    // Debug / Clone 测试
 
     #[test]
     fn test_neo4j_debug_format_placeholder() {
@@ -618,7 +612,7 @@ mod tests {
         assert_eq!(conn.backend_name(), cloned.backend_name());
     }
 
-    // ===== placeholder GraphConnection 方法返回错误 =====
+    // placeholder GraphConnection 方法返回错误
 
     #[tokio::test]
     async fn test_neo4j_placeholder_execute_cypher_returns_error() {
@@ -649,7 +643,7 @@ mod tests {
         assert!(result.is_err(), "placeholder should return error");
     }
 
-    // ===== 集成测试（需要 Neo4j 服务器，标记 #[ignore]） =====
+    // 集成测试（需要 Neo4j 服务器，标记 #[ignore]）
 
     /// 从环境变量获取 Neo4j 连接信息，未设置则返回 None
     async fn neo4j_test_connection() -> Option<Neo4jConnection> {
@@ -702,7 +696,6 @@ mod tests {
         let conn = neo4j_test_connection()
             .await
             .expect("NEO4J_URL not set or connection failed");
-        // 清理可能存在的测试数据
         let _ = conn
             .execute_cypher("MATCH (n:T029Test) DETACH DELETE n")
             .await;
@@ -716,7 +709,6 @@ mod tests {
             .expect("create in txn should succeed");
         txn.commit().await.expect("commit should succeed");
 
-        // 验证事务提交后数据可见
         let result = conn
             .execute_cypher("MATCH (n:T029Test) RETURN n.name AS name")
             .await
@@ -760,7 +752,6 @@ mod tests {
             .expect("create in txn should succeed");
         txn.rollback().await.expect("rollback should succeed");
 
-        // 验证事务回滚后数据不可见
         let result = conn
             .execute_cypher("MATCH (n:T029RollbackTest) RETURN n.name AS name")
             .await
@@ -777,7 +768,7 @@ mod tests {
             .await;
     }
 
-    // ===== json_to_bolt_type 全类型覆盖测试 =====
+    // json_to_bolt_type 全类型覆盖测试
 
     #[test]
     fn test_json_to_bolt_null() {
@@ -821,7 +812,7 @@ mod tests {
         assert!(matches!(bolt, neo4rs::BoltType::Map(_)));
     }
 
-    // ===== placeholder execute_cypher_with_params 测试 =====
+    // placeholder execute_cypher_with_params 测试
 
     #[tokio::test]
     async fn test_neo4j_placeholder_execute_with_params_returns_error() {
@@ -844,7 +835,7 @@ mod tests {
         }
     }
 
-    // ===== 真实服务器：参数化查询测试 =====
+    // 真实服务器：参数化查询测试
 
     #[tokio::test]
     #[ignore = "需要 Neo4j 服务器"]

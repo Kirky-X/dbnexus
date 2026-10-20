@@ -7,9 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-// ============================================================================
 // RetryPolicy 默认值测试
-// ============================================================================
 
 #[test]
 fn test_retry_policy_default_values() {
@@ -46,9 +44,7 @@ fn test_retry_policy_duration_accessors() {
     assert_eq!(policy.max_backoff(), Duration::from_secs(5));
 }
 
-// ============================================================================
 // 幂等性判断测试
-// ============================================================================
 
 #[test]
 fn test_is_idempotent_select() {
@@ -126,9 +122,7 @@ fn test_not_idempotent_unknown() {
     assert!(!dbnexus::reliability::is_idempotent_operation(""));
 }
 
-// ============================================================================
 // RetryExecutor 测试
-// ============================================================================
 
 #[tokio::test]
 async fn test_execute_with_retry_success_first_try() {
@@ -290,9 +284,7 @@ async fn test_retry_policy_zero_retries() {
     assert_eq!(attempt.load(Ordering::SeqCst), 1); // max_retries=0，只执行 1 次
 }
 
-// ============================================================================
 // Retry 自动接线（Session 执行路径）
-// ============================================================================
 //
 // SELECT/SHOW/EXPLAIN（幂等）类查询经 RetryPolicy 自动重试；写类（INSERT/
 // UPDATE/DELETE/DDL）不重试。接线位置：Session::execute_raw（rc3 既有）与

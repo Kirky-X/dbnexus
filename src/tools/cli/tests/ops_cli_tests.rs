@@ -297,9 +297,7 @@ fn test_user_invalid_args_exit_2() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // pool-status（池状态：health_snapshot JSON 输出）
-// ============================================================================
 
 #[cfg(all(feature = "sqlite", feature = "health-check"))]
 #[test]
@@ -367,9 +365,7 @@ fn test_pool_status_invalid_url_exit_2() {
     assert_eq!(json["checks"]["url"], "invalid");
 }
 
-// ============================================================================
 // shard-info（分片信息：策略/分片清单/路由演示）
-// ============================================================================
 
 #[test]
 fn test_shard_info_lists_all_shards_exit_0() {
@@ -460,9 +456,7 @@ fn test_shard_info_unknown_strategy_exit_2() {
     assert_eq!(json["error_code"], "unknown_strategy");
 }
 
-// ============================================================================
 // audit-query（审计查询：DbAuditStorage + AuditQueryFilters）
-// ============================================================================
 
 #[cfg(all(feature = "audit", feature = "sqlite"))]
 #[test]
@@ -695,9 +689,7 @@ fn test_audit_query_invalid_since_exit_2() {
     assert_eq!(json["error_code"], "invalid_since");
 }
 
-// ============================================================================
 // permission-check（权限校验：YamlPermissionProvider + PDP，allow/deny 分流）
-// ============================================================================
 
 /// 权限配置文件（YAML 为 JSON 超集，两种写法均可被 provider 解析）
 fn write_permissions_file(tag: &str, body: &str) -> PathBuf {

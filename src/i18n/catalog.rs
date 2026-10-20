@@ -66,9 +66,7 @@ pub fn tr_args(key: &str, args: &[(&str, String)]) -> String {
     translate(key, args)
 }
 
-// ============================================================================
 // Fluent bundle management
-// ============================================================================
 
 /// Cached concurrent Fluent bundles (thread-safe, built once on first access).
 /// Format a message from the Fluent catalog for the given language.
@@ -91,9 +89,7 @@ pub(crate) fn format_from_bundle(lang: &str, key: &str, args: &[(&str, String)])
     Some(result.to_string())
 }
 
-// ============================================================================
 // Embedded Fluent resources (compile-time mirror of the locales/ directory)
-// ============================================================================
 
 /// Language packs embedded at compile time, as `(locales-relative path, FTL source)`.
 ///
@@ -168,9 +164,7 @@ fn build_bundle(lang: &str) -> FluentBundle<FluentResource> {
     bundle
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

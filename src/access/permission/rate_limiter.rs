@@ -345,7 +345,6 @@ impl RateLimiter {
 
         let mut removed_count = 0;
 
-        // 收集需要删除的键
         let keys_to_remove: Vec<String> = self
             .buckets
             .iter()
@@ -358,7 +357,6 @@ impl RateLimiter {
             .map(|entry| entry.key().clone())
             .collect();
 
-        // 删除过期条目
         for key in keys_to_remove {
             if self.buckets.remove(&key).is_some() {
                 removed_count += 1;
@@ -530,7 +528,7 @@ mod tests {
         // 创建速率限制器：每秒填充 5 个令牌，最大 20 个
         let limiter = RateLimiter::new(20, std::time::Duration::from_secs(4), 10000, 20);
 
-        // 等待桶填满（初始就是满的）
+        // 等待桶填满（初始就是满）
         assert_eq!(limiter.remaining("user1"), 20);
 
         // 突发请求：一次性使用所有令牌
@@ -653,7 +651,6 @@ mod tests {
         limiter.reset("user1");
         limiter.check("user1").await;
 
-        // 验证 user1 仍然存在
         assert_eq!(limiter.remaining("user1"), 9);
     }
 
@@ -854,7 +851,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：构造变体 / 动态配置 / 计数与清理 =====
+    // 补充测试：构造变体 / 动态配置 / 计数与清理
 
     #[tokio::test]
     async fn test_limiter_with_defaults_and_config_update() {

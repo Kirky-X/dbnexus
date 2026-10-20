@@ -21,9 +21,7 @@ fn main() {
     println!("🔌 DBNexus connection failover example");
     println!("========================================\n");
 
-    // ============================================
     // FailoverConfig 基础配置
-    // ============================================
     println!("--- 1. FailoverConfig basic configuration ---\n");
 
     let failover_config = FailoverConfig {
@@ -57,9 +55,7 @@ fn main() {
     );
     println!();
 
-    // ============================================
     // 与 DbConfig 集成
-    // ============================================
     println!("--- 2. integration with DbConfig ---\n");
 
     let db_config = DbConfig {
@@ -88,9 +84,7 @@ fn main() {
     }
     println!();
 
-    // ============================================
     // 故障转移流程
-    // ============================================
     println!("--- 3. failover flow ---\n");
 
     println!("  normal state:");
@@ -111,9 +105,7 @@ fn main() {
     println!("  └──────────┘         └──────────┘");
     println!();
 
-    // ============================================
     // CircuitBreaker 协同
-    // ============================================
     println!("--- 4. CircuitBreaker state machine ---\n");
 
     println!("  ┌─────────┐  failures >= N  ┌─────────┐  probe after timeout  ┌──────────────┐");
@@ -132,9 +124,7 @@ fn main() {
     println!("  4. once the original primary recovers, switch back manually or automatically");
     println!();
 
-    // ============================================
     // 默认配置
-    // ============================================
     println!("--- 5. default configuration ---\n");
 
     let default_config = FailoverConfig::default();
@@ -147,9 +137,7 @@ fn main() {
     );
     println!();
 
-    // ============================================
     // 生产环境最佳实践
-    // ============================================
     println!("--- 6. production best practices ---\n");
 
     println!("  ┌────────────────────────┬──────────────────────────────────────────┐");

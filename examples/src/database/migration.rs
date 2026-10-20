@@ -36,9 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 使用 file::memory:?cache=shared 让多个连接共享同一个内存数据库
     let db_url = "sqlite:file:migration_demo?mode=memory&cache=shared";
 
-    // ============================================
     // 创建连接池和 Session
-    // ============================================
     let config = DbConfig {
         url: db_url.to_string(),
         admin_role: "admin".to_string(),
@@ -52,17 +50,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::with_config(config).await?;
     println!("✓ Pool created");
 
-    // ============================================
     // 创建迁移执行器
-    // ============================================
     // MigrationExecutor 需要一个 sea_orm::DatabaseConnection
     let conn = connect_for_migration(db_url).await?;
     let mut executor = MigrationExecutor::new(conn, dbnexus::foundation::DatabaseType::Sqlite);
     println!("✓ migration executor created");
 
-    // ============================================
     // 定义迁移：创建 users 表
-    // ============================================
     let mut migration_v1 = Migration::new(1, "create_users_table".to_string());
 
     let users_table = Table {
@@ -115,16 +109,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         migration_v1.table_changes.len()
     );
 
-    // ============================================
     // 应用迁移
-    // ============================================
     println!("\nApplying migration v{}...", migration_v1.version);
     executor.apply_migration(&migration_v1).await?;
     println!("✓ migration v{} applied", migration_v1.version);
 
-    // ============================================
     // 定义并应用第二个迁移：创建 posts 表
-    // ============================================
     let mut migration_v2 = Migration::new(2, "create_posts_table".to_string());
 
     let posts_table = Table {
@@ -172,9 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     executor.apply_migration(&migration_v2).await?;
     println!("✓ migration v{} applied", migration_v2.version);
 
-    // ============================================
     // 查看迁移历史
-    // ============================================
     println!("\n📊 Migration history:");
     let history = executor.history();
     println!(
@@ -200,9 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // ============================================
     // 验证表已创建
-    // ============================================
     let session = pool.get_session("admin").await?;
     let result = session
         .connection()?
@@ -222,9 +208,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("✓ data inserted successfully (users + posts tables are both writable)");
 
-    // ============================================
     // 手动回滚演示
-    // ============================================
     // MigrationExecutor 没有内置的 rollback API，
     // 回滚需要手动执行反向 SQL（DROP TABLE）。
     // 注意：DdlGuard 出于安全考虑会阻止 DROP TABLE 操作。

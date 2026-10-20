@@ -63,9 +63,7 @@ async fn send(router: Router, uri: &str) -> (StatusCode, String) {
     (status, String::from_utf8_lossy(&body).into_owned())
 }
 
-// ============================================================================
 // /healthz：liveness——进程存活即 200，不探测池状态
-// ============================================================================
 
 #[tokio::test]
 async fn test_healthz_always_ok_with_alive_body() {
@@ -85,9 +83,7 @@ async fn test_healthz_always_ok_with_alive_body() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // /readyz：readiness——按快照状态判定
-// ============================================================================
 
 #[tokio::test]
 async fn test_readyz_ok_for_warm_pool() {
@@ -156,9 +152,7 @@ async fn test_readyz_not_ready_for_zero_connection_pool() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // /readyz × CircuitBreaker：熔断打开 → 不就绪
-// ============================================================================
 
 #[tokio::test]
 async fn test_readyz_unready_when_circuit_breaker_open() {
@@ -211,9 +205,7 @@ async fn test_readyz_includes_circuit_breaker_field_when_closed() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // /metrics：Prometheus 文本（注入采集器 → 200；未注入 → 404）
-// ============================================================================
 
 #[tokio::test]
 async fn test_metrics_prometheus_text_when_collector_injected() {
@@ -249,9 +241,7 @@ async fn test_metrics_404_without_collector() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // 路由面：未注册路径 404，构建器链式配置语义
-// ============================================================================
 
 #[tokio::test]
 async fn test_unknown_path_is_404() {

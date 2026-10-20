@@ -18,9 +18,7 @@ use dbnexus::access::{PermissionAction, PermissionProvider, YamlPermissionProvid
 use dbnexus::{DbConfig, DbPool};
 use std::collections::HashMap;
 
-// ============================================
 // YAML 权限策略配置（文档参考）
-// ============================================
 //
 // 以下是等价的 YAML 配置文件内容：
 //
@@ -55,9 +53,7 @@ use std::collections::HashMap;
 // 在生产环境中，可以使用 `YamlPermissionProvider::new("path/to/permissions.yaml")`
 // 从文件加载（需要启用 `yaml` feature）。
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -65,9 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📄 DBNexus YAML permission policy example");
     println!("========================================\n");
 
-    // ============================================
     // 构建权限配置
-    // ============================================
     // 本示例通过编程方式构建 PermissionConfig（与 YAML 结构完全一致）。
     // 生产环境推荐使用 serde_saphyr::from_str 或 YamlPermissionProvider::new(path)。
 
@@ -137,9 +131,7 @@ roles:
         ]),
     };
 
-    // ============================================
     // 创建 YamlPermissionProvider
-    // ============================================
     let provider = YamlPermissionProvider::from_config(config);
 
     println!("--- configured roles ---");
@@ -150,9 +142,7 @@ roles:
     }
     println!();
 
-    // ============================================
     // 演示不同角色的权限差异
-    // ============================================
     println!("--- permission check results ---\n");
 
     let test_cases = [
@@ -200,9 +190,7 @@ roles:
 
     println!("\n  statistics: {} passed, {} failed", passed, failed);
 
-    // ============================================
     // 展示角色策略详情
-    // ============================================
     println!("\n--- role policy details ---\n");
 
     for role in &["admin", "manager", "guest"] {
@@ -220,9 +208,7 @@ roles:
         }
     }
 
-    // ============================================
     // 结合 DbPool + Session（展示集成场景）
-    // ============================================
     println!("\n--- DbPool integration ---\n");
 
     let db_config = DbConfig {

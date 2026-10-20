@@ -12,9 +12,7 @@ use quote::{ToTokens, quote};
 use regex::Regex;
 use syn::{DeriveInput, parse::Parser, parse_macro_input, spanned::Spanned};
 
-// ============================================================================
 // db_entity 统一属性宏（替代 DbEntity + db_crud + db_permission + db_cache + db_audit）
-// ============================================================================
 
 /// `db_entity` 属性宏参数
 ///
@@ -276,9 +274,7 @@ fn parse_db_entity_args(args: TokenStream) -> Result<DbEntityArgs, syn::Error> {
     Ok(result)
 }
 
-// ============================================================================
 // 嵌套参数解析辅助函数（permissions/cache/audit 子参数）
-// ============================================================================
 
 /// 解析嵌套的 name = value 参数对，返回 (参数名, 参数名 span, 值 token) 列表
 fn parse_nested_params(
@@ -820,7 +816,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
         needs_before_save || needs_after_save || needs_before_delete || needs_after_delete;
 
     let (behavior_attr, behavior_impl) = if needs_behavior {
-        // === before_save 生成 ===
+        // before_save 生成
         let before_save_fn = if needs_before_save {
             // 验证逻辑（validate = true 时）
             //
@@ -922,7 +918,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        // === after_save 生成 ===
+        // after_save 生成
         // Sea-ORM 2.0 的 after_save 签名：`fn(model: Model, db, insert) -> Result<Model, DbErr>`
         // 注意：第一个参数是 Model（不是 self/ActiveModel），所以钩子可直接用 &model
         let after_save_fn = if needs_after_save {
@@ -976,7 +972,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        // === before_delete 生成 ===
+        // before_delete 生成
         let before_delete_fn = if needs_before_delete {
             let before_delete_ident = entity_args
                 .hooks
@@ -1003,7 +999,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        // === after_delete 生成 ===
+        // after_delete 生成
         // Sea-ORM 2.0 的 after_delete 签名：`fn(self, db) -> Result<Self, DbErr>`
         // 钩子签名：fn(&Model) -> Result<(), E>，需将 self 转为 Model
         let after_delete_fn = if needs_after_delete {
@@ -1665,9 +1661,7 @@ pub fn db_entity(args: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-// ============================================================================
 // 辅助函数（保留供 hooks/permissions/cache/audit 实现使用）
-// ============================================================================
 
 /// 验证角色名格式
 ///
@@ -1699,9 +1693,7 @@ fn validate_role_names(roles: &[String], struct_name: &syn::Ident) -> Result<(),
     Ok(())
 }
 
-// ============================================================================
 // db_repository — 仓储模式代码生成宏
-// ============================================================================
 
 /// `db_repository` 属性宏参数
 #[derive(Default)]

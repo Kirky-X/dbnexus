@@ -34,9 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🐘 DBNexus PostgreSQL integration example");
     println!("========================================\n");
 
-    // ============================================
     // 配置连接字符串
-    // ============================================
     // 标准 PostgreSQL 连接字符串格式：
     //   postgres://user:password@host:port/database
     //   postgresql://user:password@host:port/database
@@ -58,9 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    // ============================================
     // 尝试创建连接池
-    // ============================================
     println!("\nTrying to connect to PostgreSQL...");
     let pool = match DbPool::with_config(config).await {
         Ok(pool) => {
@@ -90,9 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // ============================================
     // 基本操作
-    // ============================================
     let session = pool.get_session("admin").await?;
     println!("\n✓ Session acquired (role: {})", session.role());
 
@@ -123,9 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(session);
     println!("ℹ️  Session released");
 
-    // ============================================
     // 连接池状态
-    // ============================================
     let status = pool.status();
     println!("\n📊 Pool status:");
     println!("  - total connections: {}", status.total);

@@ -24,9 +24,7 @@ use dbnexus::access::{
 use dbnexus::db_entity;
 use dbnexus::sea_orm::entity::prelude::*;
 
-// ============================================
 // 定义 User 实体（带 permissions 注解）
-// ============================================
 
 /// 用户实体
 ///
@@ -50,9 +48,7 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
-// ============================================
 // 主函数
-// ============================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -60,9 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 DBNexus RBAC permission control example");
     println!("========================================\n");
 
-    // ============================================
     // 创建 MemoryPermissionProvider 并配置角色策略
-    // ============================================
     let provider = MemoryPermissionProvider::new();
 
     // admin: 通配符表，拥有全部操作权限
@@ -125,9 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("✓ configured 3 roles: admin / manager / guest\n");
 
-    // ============================================
     // 演示权限检查通过和拒绝场景
-    // ============================================
     println!("--- MemoryPermissionProvider permission checks ---\n");
 
     let test_cases = [
@@ -155,9 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("     {}", status);
     }
 
-    // ============================================
     // 创建 DbPool + Session
-    // ============================================
     println!("\n--- DbPool + Session integration ---\n");
 
     let (_pool, session) = common::db::setup_shared_sqlite_session().await?;
@@ -167,9 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     common::ddl::create_users_table(&session).await?;
     println!("✓ users table created");
 
-    // ============================================
     // 使用 #[db_entity(..., permissions(...))] 宏生成的权限校验
-    // ============================================
     println!("\n--- #[db_entity] permissions checks ---\n");
 
     // 宏生成的常量

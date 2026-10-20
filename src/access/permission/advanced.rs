@@ -80,7 +80,6 @@ impl AdvancedRbacProvider {
             },
         );
 
-        // 添加读写角色
         roles.insert(
             "readwrite".to_string(),
             RolePolicy {
@@ -486,7 +485,6 @@ mod tests {
         provider.add_role_inheritance("role_a".to_string(), vec!["role_b".to_string()]);
         provider.add_role_inheritance("role_b".to_string(), vec!["role_a".to_string()]);
 
-        // 添加一个实际的策略
         provider.add_role(
             "role_a".to_string(),
             RolePolicy {
@@ -569,7 +567,6 @@ mod tests {
     fn test_custom_role_addition() {
         let provider = AdvancedRbacProvider::new();
 
-        // 添加自定义角色
         provider.add_role(
             "custom_role".to_string(),
             RolePolicy {
@@ -607,7 +604,6 @@ mod tests {
     fn test_inherit_custom_role() {
         let provider = AdvancedRbacProvider::new();
 
-        // 添加自定义角色
         provider.add_role(
             "custom_role".to_string(),
             RolePolicy {
@@ -794,7 +790,6 @@ mod tests {
         provider.add_role_inheritance("c".to_string(), vec!["d".to_string()]);
         provider.add_role_inheritance("d".to_string(), vec!["a".to_string()]);
 
-        // 添加权限
         provider.add_role(
             "a".to_string(),
             RolePolicy {

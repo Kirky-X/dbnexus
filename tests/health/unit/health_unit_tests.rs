@@ -14,9 +14,7 @@ use dbnexus::{
     HealthStatus, PoolHealthMetrics,
 };
 
-// ============================================================================
 // 熔断器状态转换测试
-// ============================================================================
 
 /// 测试熔断器初始状态为关闭
 ///
@@ -82,7 +80,6 @@ async fn test_circuit_breaker_open_rejects_requests() {
     breaker.record_failure().await;
     assert_eq!(breaker.state().await, CircuitBreakerState::Open);
 
-    // 尝试执行应该被拒绝
     let result = breaker.can_execute().await;
     assert!(result.is_err(), "the Open state should reject requests");
 
@@ -157,9 +154,7 @@ async fn test_circuit_breaker_config_defaults() {
     );
 }
 
-// ============================================================================
 // 熔断器半开状态测试
-// ============================================================================
 
 /// 测试熔断器超时后转换为半开状态
 ///
@@ -182,7 +177,6 @@ async fn test_circuit_breaker_timeout_transitions_to_half_open() {
     // 等待超时
     tokio::time::sleep(Duration::from_millis(60)).await;
 
-    // 尝试执行以触发状态转换
     let result = breaker.can_execute().await;
     assert!(
         result.is_ok(),
@@ -214,7 +208,6 @@ async fn test_circuit_breaker_half_open_recovers_to_closed() {
     let _ = breaker.can_execute().await;
     assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 
-    // 记录成功达到阈值
     breaker.record_success().await;
     assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 
@@ -275,12 +268,10 @@ async fn test_circuit_breaker_half_open_failure_rate_threshold() {
     let _ = breaker.can_execute().await;
     assert_eq!(breaker.state().await, CircuitBreakerState::HalfOpen);
 
-    // 记录多次失败以提高失败率
     for _ in 0..6 {
         breaker.record_failure().await;
     }
 
-    // 尝试执行应该被拒绝
     let result = breaker.can_execute().await;
     assert!(
         result.is_err(),
@@ -308,9 +299,7 @@ async fn test_circuit_breaker_error_implementation() {
     assert!(format!("{:?}", error).contains("Open"));
 }
 
-// ============================================================================
 // 健康检查超时测试
-// ============================================================================
 
 /// 测试健康检查器超时返回降级状态
 ///
@@ -381,9 +370,7 @@ async fn test_health_checker_timeout_configuration() {
     assert!(result.latency > Duration::ZERO);
 }
 
-// ============================================================================
 // 连接池健康指标测试
-// ============================================================================
 
 /// 测试连接池健康指标初始化
 ///
@@ -540,9 +527,7 @@ async fn test_pool_health_metrics_set_waiting_requests() {
     assert_eq!(snapshot.waiting, 5, "the wait count should be 5");
 }
 
-// ============================================================================
 // 多数据源健康聚合测试
-// ============================================================================
 
 /// 测试多数据源健康状态聚合
 ///
@@ -634,9 +619,7 @@ async fn test_concurrent_multi_datasource_health_check() {
     }
 }
 
-// ============================================================================
 // 健康检查缓存测试
-// ============================================================================
 
 /// 测试健康检查结果缓存行为
 ///
@@ -660,7 +643,6 @@ async fn test_health_check_details_contain_pool_info() {
     let checker = HealthChecker::new(1000);
     let metrics = checker.metrics();
 
-    // 添加一些连接
     metrics.record_connection_created();
     metrics.increment_idle().await;
 
@@ -728,9 +710,7 @@ async fn test_health_check_recommendations_generation() {
     );
 }
 
-// ============================================================================
 // 熔断器滑动窗口测试
-// ============================================================================
 
 /// 测试熔断器滑动窗口大小限制
 ///
@@ -745,7 +725,6 @@ async fn test_circuit_breaker_sliding_window_size_limit() {
     };
     let breaker = CircuitBreaker::new(config);
 
-    // 记录超过窗口大小的失败
     for _ in 0..10 {
         breaker.record_failure().await;
     }
@@ -779,9 +758,7 @@ async fn test_circuit_breaker_status_completeness() {
     assert!(status.time_since_last_change >= Duration::ZERO);
 }
 
-// ============================================================================
 // 健康检查器综合测试
-// ============================================================================
 
 /// 测试健康检查器无连接时状态
 ///
@@ -847,9 +824,7 @@ async fn test_health_checker_get_metrics() {
     assert_eq!(snapshot.total, 0);
 }
 
-// ============================================================================
 // 边界条件测试
-// ============================================================================
 
 /// 测试熔断器配置边界值
 ///

@@ -36,9 +36,7 @@ async fn health_snapshot_json() -> (Arc<DbPool>, serde_json::Value, std::path::P
     (pool, snap, path)
 }
 
-// ============================================================================
 // 指标事件映射
-// ============================================================================
 
 #[tokio::test]
 async fn test_otel_events_from_health_snapshot() {
@@ -63,9 +61,7 @@ async fn test_otel_events_from_health_snapshot() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // mock collector（内存传输）
-// ============================================================================
 
 /// 内存传输：记录请求体与端点（mock collector）
 struct InMemoryCollector {
@@ -139,9 +135,7 @@ async fn test_otel_export_to_mock_collector() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // stdout fallback（传输失败时落本地输出，注入收集器断言）
-// ============================================================================
 
 struct FailingTransport;
 
@@ -187,9 +181,7 @@ async fn test_otel_stdout_fallback_on_transport_failure() {
     let _ = std::fs::remove_file(&path);
 }
 
-// ============================================================================
 // 本地 socket mock collector（真实 HTTP/1.1 传输层）
-// ============================================================================
 
 #[tokio::test]
 async fn test_otel_http_transport_against_mock_collector_socket() {

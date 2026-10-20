@@ -24,9 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 DBNexus pool lifecycle management example");
     println!("========================================\n");
 
-    // ============================================
     // pool-warmup：连接预热
-    // ============================================
     println!("─── 1. pool-warmup connection prewarming ───\n");
     println!("  set DbConfig.auto_migrate = true and specify migrations_dir,");
     println!(
@@ -67,9 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
 
-    // ============================================
     // pool-health-check：后台健康检查
-    // ============================================
     println!("─── 2. pool-health-check background health checks ───\n");
     println!(
         "  with the pool-health-check feature enabled, DbPool starts a background task on construction,"
@@ -95,9 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
 
-    // ============================================
     // auto-migrate：自动迁移
-    // ============================================
     println!("─── 3. auto-migrate automatic migration ───\n");
     println!("  rebuilding them to maintain min_connections.");
     println!(

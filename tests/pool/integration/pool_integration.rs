@@ -218,7 +218,6 @@ async fn test_pool_exhaustion_alert_levels() {
         }
     });
 
-    // 等待 holder 获取连接
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // 现在发送 3 个并发请求，它们应该都超时
