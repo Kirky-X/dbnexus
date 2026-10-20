@@ -52,11 +52,7 @@ validator = { version = "0.21", features = ["derive"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 
 [workspace.lints.rust]
-# 宏（#[db_entity]/#[db_repository]）展开后会在消费方代码中生成
-# #[cfg(feature = "metrics")] 指标插桩，检查的是 dbnexus 的特性而非本 crate 的
-# [features] 表，rustc check-cfg lint 只认本 crate [features]，故把宏发射的
-# feature 名补记为预期值；其余 feature cfg 仍按各 crate 自身 [features] 以 warn
-# 级校验（保留拼写错误检出能力，宏发射名单见 macros/src 中 cfg(feature = ...)）。
+# 宏会发射 cfg(feature="metrics")，但 check-cfg 只认本 crate 的 [features]，故补记
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("metrics"))'] }
 
 [workspace.lints.clippy]
@@ -80,18 +76,10 @@ description = "An enterprise-grade database abstraction layer for Rust with buil
 autoexamples = false
 
 [features]
-# ⚠️ 驱动互斥（严格，无逃生门）：embedded（sqlite/duckdb）与 server-side（postgres/mysql）
-# 任何混合（含 --all-features 全开）一律编译失败。多后端 crate 不适用 --all-features
-# 验证（Cargo 无 feature 互斥语法），请按驱动分组启用 features 验证。
-# Rule 6: default features 最小化 — 所有依赖通过显式 features 启用。
-# 与 oxcache/inklog/sdforge 保持一致（default = []）。
-# 使用者需显式启用 runtime + 数据库驱动 + 所需功能特性。
-# CI 使用 `--no-default-features --features <db>,default-no-db,all-optional`。
+# ⚠️ 驱动互斥（严格无例外）：embedded（sqlite/duckdb）与 server-side（postgres/mysql）不可混合
 default = []
 
-# default without database driver — for CI matrix testing where
-# the database backend is selected via --features <db>,default-no-db
-# Provides a convenience aggregate for the common non-driver feature set.
+# 无驱动默认集：供 CI 矩阵以 --features <db> 选择后端
 default-no-db = [
     "runtime-tokio-rustls",
     "permission",
@@ -128,22 +116,15 @@ ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
 # === 核心功能 (可选) ===
-permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port", "oxcache/stale"]  # 权限控制（强制依赖 sql-parser 防止 SQL 注入绕过；dashmap 用于 access/permission，yaml 用于策略解析，futures 用于测试，arc-swap 用于无锁配置读取；cache 为 DbPool 权限策略缓存的显式依赖——sql-parser 已解耦不再传递携带；dbnexus-limiter-port 为限流端口——旧令牌桶实现端口保持默认后端，外部限流后端（limiteron 等）经端口注入）
-# 移除 permission-with-cache 聚合 feature（纯别名，无独占代码）
-# 启用带缓存的权限控制请使用：permission + cache
-# sql-parser 自带解析结果缓存（prepare_cache 同步 LRU 端口），不隐含 cache→oxcache
-sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json", "dep:oxcache", "oxcache/memory"]  # prepare_cache（同步 LRU）直接以 oxcache DashMapMemoryBackend 为后端，sql-parser 单开须激活 oxcache（历史注释「解耦 oxcache」与实现不符，2026-10-10 修正）
+permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port", "oxcache/stale"]  # 权限控制（sql-parser 防注入；cache 为策略缓存；limiter-port 可注入外部限流）
+# permission-with-cache 聚合已移除（纯别名）；带缓存用 permission + cache
+sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json", "dep:oxcache", "oxcache/memory"]  # prepare_cache 以 oxcache 为后端，单开须激活 oxcache
 data-protection = ["dep:sha2"]  # 字段脱敏与行级安全
 config-confers = ["dep:confers", "confers/change-stream", "permission"]  # confers 配置热重载
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache", "arc-swap", "cache-available"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
 
-# trait-kit 0.4 AsyncKit integration (DbNexusModule). Pulls in trait-kit
-# with the `async` feature only — default features are disabled (Rule 6).
-# `oxcache-integration` enables the OxcacheDbCacheAdapter 与 OxcacheQueryCache
-# 查询缓存装饰器（key 派生需 sha2）；`kit` adds the DbNexusModule that wires
-# OxcacheModule's capability into a DbPool.
-# Mirrors oxcache/limiteron `kit` feature pattern.
+# trait-kit 0.4 AsyncKit integration (DbNexusModule).
 oxcache-integration = ["dep:oxcache", "arc-swap", "cache-available", "dep:sha2"]
 # 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration
 # 均隐含本 feature，池/会话代码统一以此判定缓存能力，避免重复 any(...) 组合。
@@ -164,10 +145,7 @@ observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
 otel = ["health-check"]  # OTel 导出桥（慢查询/池指标 → OTLP/HTTP + stdout fallback，手工 HTTP 客户端无新增依赖）
-# HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 /healthz /readyz /metrics
-# 的 axum Router（liveness/readiness/Prometheus 三分语义）；仅生成 Router 不含
-# serve，默认不引入任何 HTTP 依赖，启用本 feature 才拉入 axum（server 能力
-# 留给消费方挂载）。数据源 health_snapshot + 可选 CircuitBreaker/MetricsCollector
+# http-health：产出 /healthz /readyz /metrics 的 axum Router（不含 serve）
 http-health = ["dep:axum", "health-check"]
 
 # === 数据管理 ===
@@ -184,9 +162,7 @@ validation = ["validator", "with-time"]  # 数据验证（validator crate + time
 # sea-orm MockDatabase 转发（仅测试用；经 dbnexus::sea_orm re-export 使用 MockDatabase
 # 的消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
 mock = ["sea-orm/mock"]
-# sea-orm 派生宏转发（entity::prelude 的 DeriveEntityModel/DeriveRelation/FromQueryResult
-# 等 derive 均由 sea-orm 的 macros feature 门控；经 dbnexus::sea_orm re-export 定义实体/
-# 查询行的消费方开启此 feature，避免为派生宏保留 sea-orm 直依赖；与驱动 feature 正交）
+# sea-orm 派生宏转发（entity::prelude 的 DeriveEntityModel/DeriveRelation/FromQueryResult 等 derive 均由 sea-orm 的 macros feature 门控）
 entity-macros = ["sea-orm/macros"]
 
 # === 分布式能力 ===
@@ -194,11 +170,7 @@ retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sq
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
 scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行器）
-# 批量写入：COPY 封装（语句构建 + text/CSV 行编码；协议传输经 #cfg(feature="postgres")
-# 门控，DuckDB 文件 COPY 传输经 #cfg(feature="duckdb") 门控）+ 多值 INSERT 构建
-# （batch_insert，500 行分块参数化）。取舍：copy 保持零依赖（[]）——postgres/duckdb
-# 是互斥驱动 feature，本 feature 不绑定任何驱动，传输路径按驱动 cfg 双门控，避免
-# feature 互斥矩阵爆炸；无驱动组时仅编译语句构建/编码纯函数，copy_in 显式报错。
+# 批量写入：COPY 封装（语句构建 + text/CSV 行编码；协议传输经 #cfg(feature="postgres")门控，DuckDB 文件 COPY 传输经 #cfg(feature="duckdb") 门控）+ 多值 INSERT 构建（batch_insert，500 行分块参数化）
 copy = []
 repository = []  # 泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
 data-api = ["repository"]  # 数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
@@ -217,9 +189,7 @@ audit = ["chrono", "dep:uuid"]  # 审计日志
 permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
-# === 开发工具 ===
-# bench 已删除：criterion 经 [dev-dependencies] 提供（benches 不经 feature 启用），
-# 原 optional 依赖从未被任何代码路径激活。
+# 开发工具：bench 已删除：criterion 经 [dev-dependencies] 提供（benches 不经 feature 启用），原 optional 依赖从未被任何代码路径激活
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
@@ -283,10 +253,7 @@ async-trait = "0.1"
 uuid = { version = "1.26", optional = true, features = ["v4"] }
 validator = { workspace = true, optional = true }
 
-# External dependencies
-# 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；
-# 未安装 logger 时为 no-op，默认构建行为不变。具体后端（如 inklog
-# LoggerManager）由消费方自行安装，dbnexus 不依赖任何日志后端 crate。
+# External dependencies 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；未安装 logger 时为 no-op，默认构建行为不变
 log = { version = "0.4", default-features = false, features = ["std"] }
 regex = { version = "1.13", optional = true }
 sqlparser = { version = "0.63", optional = true }
@@ -349,10 +316,7 @@ http-body-util = "0.1"
 [lints]
 workspace = true
 
-# docs.rs 显式清单：仅启用 sqlite 单一驱动 + 无互斥风险的功能 feature。
-# 不能用 all-features = true——embedded（sqlite/duckdb）与 server-side
-# （postgres/mysql）混用会触发 src/lib.rs 的编译期互斥 compile_error，
-# rustdoc 的 not(clippy) 门控不约束 rustdoc，docs.rs 构建必失败。
+# docs.rs 显式清单：仅启用 sqlite 单一驱动 + 无互斥风险的功能 feature
 [package.metadata.docs.rs]
 features = ["default-no-db", "sqlite", "cache", "metrics", "health-check", "migration", "kit"]
 rustdoc-args = ["--cfg", "docsrs"]
@@ -749,17 +713,13 @@ name = "entity_unit_tests"
 path = "tests/entity/unit/entity_unit_tests.rs"
 required-features = ["sqlite", "macros", "with-chrono"]
 
-# db_entity 宏主键类型泛型化回归测试
-# 验证 #[db_entity] 在 i64 / Uuid / String 主键下的 find_by_id / find_by_ids / delete / force_delete 编译期与签名正确性
-# 0.4.1 回归 bug：Uuid 主键实体编译失败 'the trait bound uuid::Uuid: From<i64> is not satisfied'
+# db_entity 宏主键类型泛型化回归测试验证 #[db_entity] 在 i64 / Uuid / String 主键下的 find_by_id / find_by_ids / delete / force_delete 编译期与签名正确性 0.4.1 回归 bug：Uuid 主键实体编译失败 'the trait bound uuid::Uuid:…
 [[test]]
 name = "db_entity_pk_types_test"
 path = "tests/entity/unit/db_entity_pk_types_test.rs"
 required-features = ["sqlite", "macros", "permission", "with-uuid", "with-time"]
 
-# ============================================================================
 # 以下测试此前存在于 tests/ 但未注册，显式注册以恢复编译运行
-# ============================================================================
 
 # Core 集成测试 - DbPool 初始化/连接/关闭
 [[test]]
@@ -783,9 +743,7 @@ required-features = ["health-check", "sqlite"]
 [[test]]
 name = "edge_cases"
 path = "tests/core/unit/edge_cases.rs"
-# sqlite：经 common::make_sqlite_memory_pool 依赖 sqlite::memory:（embedded
-# 专属）；多库运行需先对目标内并发测试做表名唯一化改造（否则共享库下
-# CREATE TABLE 同名冲突）
+# sqlite：经 common::make_sqlite_memory_pool 依赖 sqlite::memory:（embedded 专属）；多库运行需先对目标内并发测试做表名唯一化改造（否则共享库下 CREATE TABLE 同名冲突）
 required-features = ["sql-parser", "cache", "metrics", "permission", "permission-engine", "sqlite"]
 
 # Cache 集成测试 - CacheConfig/moka Cache
@@ -868,13 +826,7 @@ name = "pool_integration"
 path = "tests/pool/integration/pool_integration.rs"
 required-features = ["sqlite"]
 
-# E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）
-# 位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层）
-# required-features 修正：原含 authentication，但 CI 口径
-# （<db>,default-no-db,all-optional）的 feature 闭包不含 authentication，
-# 目标因此从未编译运行；文件按 cfg(feature) 隔离设计，authentication
-# 模块在无该 feature 时自动跳过，故移出 required-features（其激活验证
-# 归入组合矩阵：sqlite+all-optional+authentication）
+# E2E 高级测试 - 覆盖边界/异常/交叉组合场景（各模块按 cfg(feature) 隔离）位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层） required-features 修正：原含 authentication，但 CI 口径（<db>,default-no-db,all-optional）的 feature 闭包不…
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e/e2e_advanced.rs"
@@ -916,11 +868,7 @@ name = "distributed_id_tests"
 path = "tests/distributed_id/unit/distributed_id_tests.rs"
 required-features = ["distributed-id"]
 
-# 分布式能力端到端集成测试
-# 位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层）
-# required-features 修正：原含聚合名 distributed-capabilities，
-# 但 CI 口径的 all-optional 仅列其 7 个成员不列聚合名，目标因此从未编译
-# 运行；文件按成员级 cfg(feature) 隔离，移除聚合名后 CI 口径下全部激活
+# 分布式能力端到端集成测试：位于 tests/e2e/ 目录承载（e2e_* 不得裸放 tests/ 顶层） required-features 修正：原含聚合名 distributed-capabilities，但 CI 口径的 all-optional 仅列其 7 个成员不列聚合名，目标因此从未编译运行；文件按成员级 cfg(feature) 隔离，移除聚合名后 CI 口径下全部激活
 [[test]]
 name = "e2e_distributed"
 path = "tests/e2e/e2e_distributed.rs"
@@ -955,6 +903,4 @@ strip = true
 [profile.bench]
 inherits = "release"
 
-# ============================================================================
 # 本地开发联调 [patch] 占位（当前无）
-# ============================================================================
