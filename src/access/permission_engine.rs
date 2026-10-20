@@ -658,7 +658,6 @@ impl PolicyDecisionPoint {
                 window_start: now,
             });
 
-        // 检查窗口是否过期
         if now.duration_since(entry.window_start) >= window_duration {
             entry.count = 0;
             entry.window_start = now;
@@ -777,11 +776,10 @@ impl PolicyDecisionPoint {
     /// 获取缓存的决策（带 TTL 检查）
     fn get_cached_decision(&self, key: &str) -> Option<PermissionDecision> {
         // DashMap 直接读取，无需锁
-        if let Some(cached) = self.cache.get(key) {
-            // 检查是否过期
-            if !cached.is_expired(self.cache_ttl_seconds) {
-                return Some(cached.decision.clone());
-            }
+        if let Some(cached) = self.cache.get(key)
+            && !cached.is_expired(self.cache_ttl_seconds)
+        {
+            return Some(cached.decision.clone());
         }
         None
     }
@@ -935,7 +933,7 @@ impl PermissionProvider for YamlPermissionProvider {
         };
         let subject_roles = self.get_subject_roles(&context.subject.id);
 
-        // 优化：收集所有匹配的规则
+        // 收集所有匹配的规则
         let mut matched_rules: Vec<(i32, &PermissionRule)> = Vec::new();
 
         for role_name in &subject_roles {
@@ -1132,7 +1130,7 @@ impl RbacPermissionProvider {
         }
     }
 
-    /// 获取角色的所有权限（包括继承的）
+    /// 获取角色的所有权限（包括继承）
     async fn get_role_permissions(&self, role: &str) -> Vec<PermissionRule> {
         let mut all_permissions = Vec::new();
         let mut visited = std::collections::HashSet::new();
@@ -1155,12 +1153,10 @@ impl RbacPermissionProvider {
             }
             visited.insert(current_role.clone());
 
-            // 添加当前角色的权限
             if let Some(rules) = permissions.get(&current_role) {
                 all_permissions.extend(rules.iter().cloned());
             }
 
-            // 添加继承角色的权限
             if let Some(extends) = hierarchy.get(&current_role) {
                 for parent_role in extends {
                     if !visited.contains(parent_role) {
@@ -1340,7 +1336,6 @@ mod tests {
         // 使用 RBAC 提供者进行测试，因为它不需要配置文件
         let provider = Arc::new(RbacPermissionProvider::new());
 
-        // 添加角色和权限
         provider.add_role(Role {
             name: "admin".to_string(),
             description: "管理员角色".to_string(),
@@ -1376,7 +1371,6 @@ mod tests {
     async fn test_rbac_permission_provider() {
         let provider = Arc::new(RbacPermissionProvider::new());
 
-        // 添加角色
         provider.add_role(Role {
             name: "admin".to_string(),
             description: "管理员角色".to_string(),
@@ -1384,7 +1378,6 @@ mod tests {
             extends: vec![],
         });
 
-        // 添加权限规则
         provider.add_permission(
             "admin",
             PermissionRule {
@@ -1421,7 +1414,6 @@ mod tests {
     async fn test_permission_engine() {
         let provider = Arc::new(RbacPermissionProvider::new());
 
-        // 添加角色
         provider.add_role(Role {
             name: "admin".to_string(),
             description: "管理员角色".to_string(),
@@ -1429,7 +1421,6 @@ mod tests {
             extends: vec![],
         });
 
-        // 添加权限规则
         provider.add_permission(
             "admin",
             PermissionRule {
@@ -1479,7 +1470,6 @@ mod tests {
     async fn test_policy_decision_point_with_rate_limit() {
         let provider = Arc::new(RbacPermissionProvider::new());
 
-        // 添加角色
         provider.add_role(Role {
             name: "admin".to_string(),
             description: "管理员角色".to_string(),
@@ -1487,7 +1477,6 @@ mod tests {
             extends: vec![],
         });
 
-        // 添加权限规则
         provider.add_permission(
             "admin",
             PermissionRule {
@@ -1603,7 +1592,6 @@ mod tests {
     async fn test_role_hierarchy() {
         let provider = RbacPermissionProvider::new();
 
-        // 添加角色及其继承
         let base_role = Role {
             name: "base_user".to_string(),
             description: "基础用户角色".to_string(),
@@ -1665,9 +1653,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // 主体 / 资源 / 上下文构造器
-    // ========================================================================
 
     #[test]
     fn test_permission_resource_with_type() {
@@ -1688,9 +1674,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // 规则匹配与条件评估（纯函数直测）
-    // ========================================================================
 
     fn rule(subject: &str, resource: &str, allow: Vec<PermissionAction>) -> PermissionRule {
         PermissionRule {
@@ -1782,9 +1766,7 @@ mod tests {
         assert!(!evaluate_condition("noequals", &base));
     }
 
-    // ========================================================================
     // 角色继承与 RBAC 查询接口
-    // ========================================================================
 
     #[tokio::test]
     async fn test_rbac_inheritance_and_query_apis() {
@@ -1868,9 +1850,7 @@ mod tests {
         provider.refresh().await.unwrap();
     }
 
-    // ========================================================================
     // PDP 构造器全家桶 + 缓存行为
-    // ========================================================================
 
     fn allow_all_provider() -> Arc<RbacPermissionProvider> {
         let provider = Arc::new(RbacPermissionProvider::new());
@@ -1997,9 +1977,7 @@ mod tests {
         assert!(resources.iter().any(|r| r.name == "*"));
     }
 
-    // ========================================================================
     // 配置路径安全检查
-    // ========================================================================
 
     #[test]
     fn test_is_safe_config_path_matrix() {
@@ -2021,9 +1999,7 @@ mod tests {
         assert!(is_safe_config_path("permissions.yaml"));
     }
 
-    // ========================================================================
     // YamlPermissionProvider 错误路径
-    // ========================================================================
 
     #[tokio::test]
     async fn test_yaml_provider_missing_file_errors_on_check() {
@@ -2045,7 +2021,7 @@ mod tests {
         );
     }
 
-    // ===== 补充测试：YamlPermissionProvider 全流程（允许/拒绝/优先级/查询） =====
+    // 补充测试：YamlPermissionProvider 全流程（允许/拒绝/优先级/查询）
 
     #[tokio::test]
     async fn test_yaml_provider_full_flow() {
