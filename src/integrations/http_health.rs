@@ -68,6 +68,13 @@ struct HealthState {
 /// `/readyz` 不含熔断字段、`/metrics` 返回 404 说明）。注入方法跟随数据
 /// 源类型的 feature 门控：熔断器随 `health-check`（本 feature 依赖），
 /// 采集器随 `metrics`（未启用时 `/metrics` 恒 404）。
+///
+/// # 安全边界
+///
+/// 本 crate 不带认证栈，`build()` 产出的三个端点**无鉴权、无限流、
+/// 无请求体上限**；`/readyz` 与 `/metrics` 回显池拓扑与慢查询计数，
+/// 属内部部署面信息。宿主必须把它们挂在鉴权反代之后，或只绑定回环
+/// 地址——直接对公网暴露即把内部拓扑交给未认证调用方。
 #[derive(Clone)]
 pub struct HealthRouterBuilder {
     pool: Arc<DbPool>,

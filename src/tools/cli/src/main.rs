@@ -41,6 +41,9 @@ struct Cli {
 }
 
 /// CLI 子命令
+///
+/// 子命令参数不得声明与 global 参数同名的短选项：global 短选项会被 clap 传播进
+/// 每个子命令的作用域，同名短选项会导致命令树构建期 panic
 #[derive(Subcommand)]
 enum Commands {
     /// 创建新的迁移文件
@@ -50,7 +53,7 @@ enum Commands {
         description: String,
 
         /// 迁移文件输出目录
-        #[arg(short, long, default_value = "./migrations")]
+        #[arg(long, default_value = "./migrations")]
         directory: PathBuf,
     },
 
@@ -97,7 +100,7 @@ enum Commands {
         output: PathBuf,
 
         /// 迁移描述
-        #[arg(short, long, default_value = "auto_generated")]
+        #[arg(long, default_value = "auto_generated")]
         description: String,
     },
 

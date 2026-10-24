@@ -47,8 +47,12 @@ cargo run -p dbnexus-cli --no-default-features --features mysql -- health
 
 ## 全局参数
 
+- `-d, --database-url <URL>`：数据库连接字符串（可置于子命令前后任意位置），亦可经环境变量 `DATABASE_URL` 提供
 - `-m, --migrations-dir <DIR>`：迁移文件目录，默认 `./migrations`（可置于子命令前后任意位置）
 - `--lang <en|zh>`：手动指定输出语言
+
+global 参数的短选项会被子命令继承：子命令作用域内 `-d` 恒指 `--database-url`、`-m` 恒指
+`--migrations-dir`，故子命令参数不声明同名短选项（`create` 用 `--directory`、`generate` 用 `--description`）。
 
 ## 版本与支持
 
