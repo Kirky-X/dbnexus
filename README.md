@@ -100,8 +100,8 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `cache` | oxcache 缓存（moka 为 L1 后端），`ArcSwap` 无锁读取 |
 | `permission-engine` | 高级权限引擎：策略决策点、角色继承链、缓存与限流 |
 | `authentication` | JWT 认证（访问/刷新令牌区分校验）+ bcrypt 密码强度策略 |
-| `data-protection` 🆕 | 字段级自动脱敏（mask/哈希/截断）与行级安全谓词注入 |
-| `permission-facade` 🆕 | RBAC + 脱敏 + RLS 统一门面，一处配置全局生效 |
+| `data-protection` 🆕 | 字段级自动脱敏（mask/哈希/截断）与行级安全谓词注入（读出口 + raw 写出口 UPDATE/DELETE；单表语句；多表/集合操作 fail-closed 拒绝） |
+| `permission-facade` 🆕 | RBAC + 脱敏 + RLS 统一门面，一处配置全局生效（admin 通道不注入租户谓词） |
 | `query-dsl` 🆕 | `q!` 类型安全查询片段宏，标识符与值注入免疫 |
 | `repository` / `data-api` 🆕 | 泛型仓储 `Repository<T>`；实体到 JSON 的数据 API 网关 |
 | `prepare-cache` 🆕 | 语句级 prepared statement LRU 缓存与命中率指标 |

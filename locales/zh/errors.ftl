@@ -22,7 +22,7 @@ db-cache = 缓存错误: { $message }
 db-query = 查询错误: { $message }
 db-validation = 验证错误: { $message }
 db-unsupported = 不支持的操作: { $message }
-db-version-conflict = 表 '{ $table }' 中 ID 为 { $id } 的记录版本冲突
+db-version-conflict = ID 为 { $id } 的记录版本冲突
 db-rate-limited = 请求过于频繁，已被速率限制，请稍后重试
 db-rate-limited-retry = 请求过于频繁，已被速率限制，{ $retry_after_secs } 秒后重试
 
@@ -150,7 +150,7 @@ saga-compensation-session-unavailable = 补偿会话不可用: { $error }
 snowflake-clock-backtrack = 时钟回拨: 等待后的时间戳 { $waited_ts } 仍落后于上次使用的 { $last_ts }
 snowflake-timestamp-overflow = 时间戳溢出: { $timestamp } 超出 41 位容量
 
-nexus-unsupported-database = 不支持的数据库 URL 方案: { $scheme }
+nexus-unsupported-database = 无效的数据库 URL: { $scheme }
 
 error-category-permission = 权限
 error-category-injection-risk = 注入风险

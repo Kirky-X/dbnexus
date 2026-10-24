@@ -100,8 +100,8 @@ The core foundation (no optional-feature dependencies) and the `default-no-db` a
 | `cache` | oxcache cache (moka L1 backend), lock-free `ArcSwap` reads |
 | `permission-engine` | Advanced permission engine: policy decision point, role inheritance, caching and rate limiting |
 | `authentication` | JWT authentication (access/refresh token distinction) + bcrypt password policy |
-| `data-protection` 🆕 | Field-level masking (mask/hash/truncate) and row-level security predicate injection |
-| `permission-facade` 🆕 | RBAC + masking + RLS unified facade, configure once and it applies everywhere |
+| `data-protection` 🆕 | Field-level masking (mask/hash/truncate) and row-level security predicate injection (row-read exit + raw write exit UPDATE/DELETE; single-table statements; multi-table/set operations are rejected fail-closed) |
+| `permission-facade` 🆕 | RBAC + masking + RLS unified facade, configure once and it applies everywhere (the admin channel skips tenant predicates) |
 | `query-dsl` 🆕 | `q!` type-safe query fragment macro, immune to identifier and value injection |
 | `repository` / `data-api` 🆕 | Generic `Repository<T>`; entity-to-JSON data API gateway |
 | `prepare-cache` 🆕 | Statement-level prepared statement LRU cache with hit-rate metrics |

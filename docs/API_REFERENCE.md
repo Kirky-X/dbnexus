@@ -489,7 +489,7 @@ let found = Model::find_by_id(&session, 1).await?;
 
 ### `#[db_repository]`
 
-泛型仓储宏（`repository` 特性，0.6.0-rc.4 新增）：为实体生成 `Repository<T>` CRUD 端口实现，配合 `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 `query_rows` 管道）与 `impl_json_repository!` 实现宏。
+泛型仓储宏（`repository` 特性，0.6.0-rc.4 新增）：为实体生成 `Repository<T>` CRUD 端口实现，配合 `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 `query_rows` 管道）与 `impl_json_repository!` 实现宏。执行角色须显式声明（`JsonRepository::with_role` / 宏的 `role = "..."`）：角色未声明时查询 fail-closed 报错，不以 admin 兜底（admin 会同时绕过表级 RBAC 与行级 RLS）。
 
 ---
 
@@ -617,8 +617,8 @@ pub type Operation = PermissionAction;
 | `audit` | `AuditLogger`、`AuditEvent`、`AuditStorage` |
 | `permission` | `PermissionContext`、`PermissionConfig`、`PermissionAction` |
 | `permission-engine` | `PolicyDecisionPoint`、`RbacPermissionProvider` |
-| `permission-facade` | `PermissionFacade`（RBAC + 脱敏 + RLS 统一门面） |
-| `data-protection` | 查询出口字段脱敏与行级安全谓词注入 |
+| `permission-facade` | `PermissionFacade`（RBAC + 脱敏 + RLS 统一门面；租户谓词只注入单表 SELECT，admin 通道不注入） |
+| `data-protection` | 字段脱敏与行级安全谓词注入（读出口 `query_rows` + raw 写出口 UPDATE/DELETE；谓词列名白名单校验，谓词值转义后写为字面量） |
 | `authentication` | `AuthenticationManager`、`JwtManager`、`PasswordHasher` |
 | `sql-parser` | `SqlParser`、`DdlGuard`、`InjectionEngine`、`is_ddl_operation`、`contains_sql_injection` |
 | `sharding` | `ShardRouter`、`ShardConfig`、`create_strategy` |

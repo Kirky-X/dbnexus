@@ -88,13 +88,13 @@ Dbnexus 采用纵深防御（defense-in-depth）设计，自下而上分为五�
 ### 第 4 层：认证与配置安全
 
 - **JWT 认证**（`authentication` 特性）：访问/刷新令牌区分校验（`verify_access_token` / `verify_refresh_token` 额外校验 `token_type`，防止刷新令牌冒用为访问令牌）；JWT 密钥有最小长度要求；0.6.0-rc.4 起撤销缓存 TTL 化（等于令牌剩余有效期）。
-- **密码安全**：bcrypt 哈希存储；`PasswordPolicy` 支持密码黑名单 + 复杂度要求；`register_user` 提供校验强度 → 哈希 → 入库的完整注册流程；`add_user` 会校验传入哈希格式，拒绝畸形哈希。
+- **密码安全**：bcrypt 哈希存储；`PasswordPolicy` 支持密码黑名单 + 复杂度要求（最大长度按**字节**计：bcrypt 只消费前 72 字节，超限口令直接拒绝，不静默截断以免口令碰撞）；配置的 `max_len` 超过 72 字节不生效，实际生效上限为 `min(max_len, 72)`（`PasswordPolicy::effective_max_len`，创建哈希器时显式告警）；旧策略按字符计数放行的超长存量口令可用 `PasswordHasher::verify_legacy` 按前 72 字节口径迁移（验证成功后应立即重设口令）；`register_user` 提供校验强度 → 哈希 → 入库的完整注册流程；`add_user` 会校验传入哈希格式，拒绝畸形哈希。
 - **路径与凭据**：连接 URL / 策略文件路径做遍历校验（拒绝含 `..` 的路径）；URL 解析失败时不回显原始 URL，避免凭据泄露。
 
 ### 第 5 层：审计与脱敏
 
 - **审计日志**（`audit` 特性）：完整操作日志与用户上下文跟踪；admin 绕过权限的操作也会被记录审计（0.4.2 起）。权限变更另有 HMAC-SHA256 链式签名的审计链与篡改检测（0.6.0-rc.4）。
-- **敏感数据脱敏**：内置 `SensitiveMasker`，支持邮箱、电话、身份证号等多种脱敏类型（含 Unicode 安全处理）；`data-protection` 特性提供查询出口字段级脱敏与行级安全谓词注入（admin bypass 通道保留）。
+- **敏感数据脱敏**：内置 `SensitiveMasker`，支持邮箱、电话、身份证号等多种脱敏类型（含 Unicode 安全处理）；`data-protection` 特性提供查询出口字段级脱敏与行级安全谓词注入（admin bypass 通道保留）。行级谓词注入**单表**语句：读出口（`query_rows`）与 raw 写出口（`execute_raw` / `execute_with_params` / `execute` 的 UPDATE/DELETE）均受行级隔离——表级权限不替代行级谓词；多表语句与集合操作（UNION/INTERSECT/EXCEPT）无法用单表谓词覆盖全部行，RLS 生效时按权限错误拒绝（fail-closed），语句无法解析时同样拒绝；谓词列名经标识符白名单校验，谓词值经后端转义后写为字符串字面量（字面量在 PostgreSQL 中由列类型决定，text/uuid/int 等列类型通用）；INSERT 的租户列由调用方赋值，不在行级谓词覆盖范围；PostgreSQL 与 SQLite 后端均消费注入后的语句。
 
 ### 纵深防御补充
 

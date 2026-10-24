@@ -25,7 +25,7 @@ db-cache = Cache error: { $message }
 db-query = Query error: { $message }
 db-validation = Validation error: { $message }
 db-unsupported = Unsupported operation: { $message }
-db-version-conflict = Version conflict on table '{ $table }' for id { $id }
+db-version-conflict = Version conflict for id { $id }
 db-rate-limited = Rate limit exceeded: too many requests, please retry later
 db-rate-limited-retry = Rate limit exceeded: too many requests; retry after { $retry_after_secs }s
 
@@ -153,7 +153,7 @@ saga-compensation-session-unavailable = compensation session unavailable: { $err
 snowflake-clock-backtrack = Clock backtrack: waited timestamp { $waited_ts } still behind last used { $last_ts }
 snowflake-timestamp-overflow = Timestamp overflow: { $timestamp } exceeds 41-bit capacity
 
-nexus-unsupported-database = Unsupported database scheme in URL: { $scheme }
+nexus-unsupported-database = Invalid database URL: { $scheme }
 
 error-category-permission = Permission
 error-category-injection-risk = InjectionRisk
