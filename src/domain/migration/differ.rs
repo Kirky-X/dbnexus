@@ -649,7 +649,7 @@ impl SqlGenerator {
                 ))
             }
             DatabaseType::Ladybug | DatabaseType::Neo4j => {
-                Err("Graph databases do not support relational ALTER TABLE operations".to_string())
+                Err(crate::i18n::t_simple("migration-graph-alter-unsupported"))
             }
         }
     }

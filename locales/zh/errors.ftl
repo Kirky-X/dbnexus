@@ -284,3 +284,20 @@ query-cache-table-name-invalid = 查询缓存表名无效: '{ $table }'（允许
 kit-health-no-connections = 尚未建立任何连接
 kit-health-waiting = { $waiting } 个等待，{ $active }/{ $total } 活跃/总数
 kit-health-no-idle = 无空闲连接，{ $active }/{ $total } 活跃/总数
+
+# --- Scatter-gather（canonical mirror：英文模式与 src/database/scatter.rs 构造点
+# 内嵌的规范串逐字一致） ---
+scatter-query-timed-out = Scatter-gather 查询超时
+scatter-partial-failure = Scatter-gather 失败：{ $shards } 个分片失败
+
+# --- 审计日志清理（canonical mirror，与 src/domain/audit/audit_impl.rs 内嵌的
+# 规范串逐字一致） ---
+audit-cleanup-invalid-date = 日期计算无效
+
+# --- 迁移差异（canonical mirror，与 src/domain/migration/differ.rs 内嵌的规范串
+# 逐字一致） ---
+migration-graph-alter-unsupported = 图数据库不支持关系型 ALTER TABLE 操作
+
+# --- 权限配置（canonical mirror，与 src/access/permission/context.rs 内嵌的
+# 规范串逐字一致） ---
+perm-config-role-not-found = 权限配置中未找到该角色

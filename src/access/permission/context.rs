@@ -801,7 +801,7 @@ impl PermissionContext {
             self.policy_cache.set(&self.role, policy).await.ok();
             Ok(())
         } else {
-            Err("Role not found in permission config".to_string())
+            Err(crate::i18n::t_simple("perm-config-role-not-found"))
         }
     }
 

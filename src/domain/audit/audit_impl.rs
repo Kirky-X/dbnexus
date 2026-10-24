@@ -673,10 +673,11 @@ impl AuditLogger {
         &self,
         days: i64,
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-        let delta = chrono::Duration::try_days(days).ok_or("Invalid date calculation")?;
+        let delta = chrono::Duration::try_days(days)
+            .ok_or_else(|| crate::i18n::t_simple("audit-cleanup-invalid-date"))?;
         let before = Utc::now()
             .checked_sub_signed(delta)
-            .ok_or("Invalid date calculation")?;
+            .ok_or_else(|| crate::i18n::t_simple("audit-cleanup-invalid-date"))?;
         self.storage.cleanup(&before).await
     }
 

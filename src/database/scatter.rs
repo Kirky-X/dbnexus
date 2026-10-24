@@ -343,14 +343,14 @@ impl ScatterGatherExecutor {
         // 超时控制
         match tokio::time::timeout(self.timeout, collect_future).await {
             Ok(()) => {}
-            Err(_) => return Err("Scatter-gather query timed out".to_string()),
+            Err(_) => return Err(crate::i18n::t_simple("scatter-query-timed-out")),
         }
 
         // 部分失败策略
         if !failed_shards.is_empty() && self.partial_failure == PartialFailurePolicy::Fail {
-            return Err(format!(
-                "Scatter-gather failed: {} shard(s) failed",
-                failed_shards.len()
+            return Err(crate::i18n::t(
+                "scatter-partial-failure",
+                &[("shards", failed_shards.len().to_string())],
             ));
         }
 

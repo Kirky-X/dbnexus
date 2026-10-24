@@ -287,3 +287,20 @@ query-cache-table-name-invalid = query cache table name is invalid: '{ $table }'
 kit-health-no-connections = no connections established
 kit-health-waiting = { $waiting } waiting, { $active }/{ $total } active/total
 kit-health-no-idle = no idle connections, { $active }/{ $total } active/total
+
+# --- Scatter-gather (canonical mirror: English patterns identical to the
+# canonical strings embedded at the construction sites in src/database/scatter.rs) ---
+scatter-query-timed-out = Scatter-gather query timed out
+scatter-partial-failure = Scatter-gather failed: { $shards } shard(s) failed
+
+# --- Audit log cleanup (canonical mirror of the string embedded in
+# src/domain/audit/audit_impl.rs) ---
+audit-cleanup-invalid-date = Invalid date calculation
+
+# --- Migration differ (canonical mirror of the string embedded in
+# src/domain/migration/differ.rs) ---
+migration-graph-alter-unsupported = Graph databases do not support relational ALTER TABLE operations
+
+# --- Permission config (canonical mirror of the string embedded in
+# src/access/permission/context.rs) ---
+perm-config-role-not-found = Role not found in permission config

@@ -528,6 +528,12 @@ mod tests {
             "example-rate-limiter-title",
             "example-kit-usage-title",
             "example-health-check-title",
+            // 散射查询 / 审计清理 / 迁移差异 / 权限配置的错误载荷接线
+            "scatter-query-timed-out",
+            "scatter-partial-failure",
+            "audit-cleanup-invalid-date",
+            "migration-graph-alter-unsupported",
+            "perm-config-role-not-found",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -715,6 +721,36 @@ mod tests {
                 &[],
                 "Connection string template (shard placeholder)",
                 "连接字符串模板（shard 占位符）",
+            ),
+            (
+                "scatter-query-timed-out",
+                &[],
+                "Scatter-gather query timed out",
+                "Scatter-gather 查询超时",
+            ),
+            (
+                "scatter-partial-failure",
+                &[("shards", "2")],
+                "Scatter-gather failed: 2 shard(s) failed",
+                "Scatter-gather 失败：2 个分片失败",
+            ),
+            (
+                "audit-cleanup-invalid-date",
+                &[],
+                "Invalid date calculation",
+                "日期计算无效",
+            ),
+            (
+                "migration-graph-alter-unsupported",
+                &[],
+                "Graph databases do not support relational ALTER TABLE operations",
+                "图数据库不支持关系型 ALTER TABLE 操作",
+            ),
+            (
+                "perm-config-role-not-found",
+                &[],
+                "Role not found in permission config",
+                "权限配置中未找到该角色",
             ),
         ];
         for (key, args, en, zh) in cases {
