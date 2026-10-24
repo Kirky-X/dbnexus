@@ -102,6 +102,9 @@ specmark/
 docs/superpowers/
 strix_runs
 .gitnexus
+# codenexus 工具索引缓存（本地 lbug 数据库与日志）
+.codenexus/
+**/.codenexus/
 .workbuddy-ai/
 
 # AI assistant config (local only)
