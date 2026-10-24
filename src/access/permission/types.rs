@@ -320,9 +320,10 @@ impl GraphPermissionContext {
         if self.role == self.admin_role {
             Ok(())
         } else {
+            // 不回显 admin 角色名（内部配置，不应成为调用方的探测信道）
             Err(crate::foundation::DbError::Permission(format!(
-                "Graph operation denied for role '{}': admin role '{}' required",
-                self.role, self.admin_role
+                "Graph operation denied for role '{}': administrator role required",
+                self.role
             )))
         }
     }
@@ -636,7 +637,7 @@ mod tests {
         assert!(ctx.check_graph_access(PermissionAction::Select).is_err());
     }
 
-    /// 错误消息包含角色名和管理员角色名
+    /// 错误消息包含调用方角色名，但不回显 admin 角色名（内部配置）
     #[cfg(any(feature = "ladybug", feature = "neo4j"))]
     #[test]
     fn test_graph_permission_context_error_message_contains_roles() {
@@ -653,8 +654,8 @@ mod tests {
             err_msg
         );
         assert!(
-            err_msg.contains("superadmin"),
-            "error should contain admin role 'superadmin': {}",
+            !err_msg.contains("superadmin"),
+            "error must not expose the admin role name: {}",
             err_msg
         );
     }

@@ -8,6 +8,12 @@
 //!
 //! # 安全口径
 //!
+//! - **执行角色必须显式声明**：`DataApiGateway::new` 不带角色（`None`），
+//!   查询一律 fail-closed 报错；须经 `with_role` 显式指定角色。
+//!   admin 角色会同时绕过表级 RBAC 与 RLS 谓词注入，只能显式 opt-in；
+//! - **归属判定**：网关不做隐式归属隔离——`get`/`list` 只按主键与调用方
+//!   给出的过滤条件取数；多租户场景须用 `get_owned`/`list_owned` 传入
+//!   来自认证上下文的 [`OwnerScope`]，归属值不得取自请求参数；
 //! - **列白名单**：SELECT 仅返回声明暴露的列；过滤/排序列同样必须
 //!   在白名单内，违规返回 `DbError::Permission`（可映射 HTTP 403/400）；
 //! - **标识符校验**：表名/列名一律 `is_safe_identifier` 白名单校验；
@@ -19,6 +25,7 @@
 //!
 //! ```ignore
 //! let gateway = DataApiGateway::new(pool.clone())
+//!     .with_role("reader")
 //!     .register("users", TableEndpoint::new("t_users", &["id", "name"])?, )?;
 //! let resp = gateway.list("users", &ListRequest {
 //!     page: 1, page_size: 20,
@@ -214,30 +221,77 @@ pub struct ListResponse {
     pub total: u64,
 }
 
+/// 归属作用域：端点的归属列与归属值
+///
+/// 归属值来自认证上下文（如租户 ID / 用户 ID），**不得**取自请求参数，
+/// 否则归属判定形同虚设。
+#[derive(Debug, Clone)]
+pub struct OwnerScope {
+    /// 归属列（如 `tenant_id`）
+    column: String,
+    /// 归属值（如租户 ID）
+    value: String,
+}
+
+impl OwnerScope {
+    /// 构造归属作用域
+    ///
+    /// # Errors
+    ///
+    /// 归属列名不是安全标识符时返回 `DbError::Config`
+    pub fn new(column: &str, value: &str) -> DbResult<Self> {
+        if !is_safe_identifier(column) {
+            return Err(DbError::Config(format!(
+                "data-api owner column must be a safe identifier: '{column}'"
+            )));
+        }
+        Ok(Self {
+            column: column.to_string(),
+            value: value.to_string(),
+        })
+    }
+
+    /// 归属谓词（列名经白名单校验，值经 `sql_literal` 转义）
+    fn clause(&self, backend: crate::database::repository::SqlBackend) -> DbResult<String> {
+        let literal = sql_literal(&Value::String(self.value.clone()), backend)?;
+        Ok(format!("{} = {}", self.column, literal))
+    }
+}
+
 /// 数据 API 网关
 ///
-/// 持有池与端点注册表；全部查询以声明的角色执行（默认 admin，
-/// 生产部署建议换成最小权限角色）。
+/// 持有池与端点注册表；全部查询以显式声明的角色执行（角色未声明时
+/// 查询 fail-closed 报错，不以 admin 兜底）。
 pub struct DataApiGateway {
     pool: Arc<DbPool>,
-    role: String,
+    role: Option<String>,
     endpoints: HashMap<String, TableEndpoint>,
 }
 
 impl DataApiGateway {
-    /// 创建网关
+    /// 创建网关（执行角色未声明：查询前须经 `with_role` 指定角色）
     pub fn new(pool: Arc<DbPool>) -> Self {
         Self {
             pool,
-            role: "admin".to_string(),
+            role: None,
             endpoints: HashMap::new(),
         }
     }
 
     /// 指定查询执行角色
     pub fn with_role(mut self, role: &str) -> Self {
-        self.role = role.to_string();
+        self.role = Some(role.to_string());
         self
+    }
+
+    /// 查询执行角色（未声明 → fail-closed）
+    fn query_role(&self) -> DbResult<&str> {
+        self.role.as_deref().ok_or_else(|| {
+            DbError::Config(
+                "data-api query role is not configured; call with_role() before querying"
+                    .to_string(),
+            )
+        })
     }
 
     /// 注册端点
@@ -261,6 +315,10 @@ impl DataApiGateway {
     }
 
     /// 端点清单（供 sdforge 生成 OpenAPI/路由表）
+    ///
+    /// 输出含**内部实现面**：物理表名、列白名单、执行角色名。它是构建期
+    /// 喂给代码生成器的契约，不是给客户端的响应体——把返回值直接挂到
+    /// 对外路由等于公开数据库 schema 与权限模型。
     pub fn manifest(&self) -> Value {
         let endpoints: Vec<Value> = self
             .endpoints
@@ -301,21 +359,78 @@ impl DataApiGateway {
     }
 
     /// 按主键查询单行（仅白名单列）
+    ///
+    /// 不做归属判定：返回的行可能属于其他租户/用户。多租户场景须改用
+    /// [`Self::get_owned`]（归属值来自认证上下文）。
     pub async fn get(&self, name: &str, id: i64) -> DbResult<Option<Value>> {
+        self.get_with_scope(name, id, None).await
+    }
+
+    /// 按主键查询单行并强制归属谓词
+    ///
+    /// 归属列与归属值来自 [`OwnerScope`]（认证上下文），拼入 WHERE 后
+    /// 与主键条件同时成立才返回行。
+    pub async fn get_owned(
+        &self,
+        name: &str,
+        id: i64,
+        scope: &OwnerScope,
+    ) -> DbResult<Option<Value>> {
+        self.get_with_scope(name, id, Some(scope)).await
+    }
+
+    async fn get_with_scope(
+        &self,
+        name: &str,
+        id: i64,
+        scope: Option<&OwnerScope>,
+    ) -> DbResult<Option<Value>> {
         let ep = self.endpoint(name)?;
-        let sql = format!(
+        let role = self.query_role()?;
+        let mut sql = format!(
             "SELECT {} FROM {} WHERE id = {}",
             ep.columns.join(", "),
             ep.table,
             id
         );
-        let rows = self.pool.query_rows(&sql, &self.role).await?;
+        if let Some(scope) = scope {
+            let backend = crate::database::repository::resolve_sql_backend(&self.pool);
+            sql.push_str(" AND ");
+            sql.push_str(&scope.clause(backend)?);
+        }
+        let rows = self.pool.query_rows(&sql, role).await?;
         Ok(self.project(ep, rows).into_iter().next())
     }
 
     /// 列表查询：白名单投影 + 过滤 + 排序 + 分页（含总数）
+    ///
+    /// 不做归属判定：过滤条件完全来自调用方（`req.filters`）。多租户场景
+    /// 须改用 [`Self::list_owned`]。
     pub async fn list(&self, name: &str, req: &ListRequest) -> DbResult<ListResponse> {
+        self.list_with_scope(name, req, None).await
+    }
+
+    /// 列表查询并强制归属谓词
+    ///
+    /// 归属列与归属值来自 [`OwnerScope`]（认证上下文），与调用方过滤条件
+    /// 以 AND 组合。
+    pub async fn list_owned(
+        &self,
+        name: &str,
+        req: &ListRequest,
+        scope: &OwnerScope,
+    ) -> DbResult<ListResponse> {
+        self.list_with_scope(name, req, Some(scope)).await
+    }
+
+    async fn list_with_scope(
+        &self,
+        name: &str,
+        req: &ListRequest,
+        scope: Option<&OwnerScope>,
+    ) -> DbResult<ListResponse> {
         let ep = self.endpoint(name)?;
+        let role = self.query_role()?;
 
         // 分页参数校验与钳制
         if req.page == 0 {
@@ -370,6 +485,19 @@ impl DataApiGateway {
         } else {
             format!(" WHERE {}", where_clauses.join(" AND "))
         };
+        // 归属谓词与调用方过滤条件以 AND 组合（归属值来自认证上下文）
+        let owner_sql = match scope {
+            Some(scope) => {
+                let backend = crate::database::repository::resolve_sql_backend(&self.pool);
+                Some(scope.clause(backend)?)
+            }
+            None => None,
+        };
+        let where_sql = match owner_sql {
+            Some(owner) if where_sql.is_empty() => format!(" WHERE {owner}"),
+            Some(owner) => format!("{where_sql} AND {owner}"),
+            None => where_sql,
+        };
 
         // 排序：列必须在可排序列白名单内
         let order_sql = match &req.order {
@@ -392,7 +520,7 @@ impl DataApiGateway {
 
         // 总数（MVP：主列全量取回后计行数——sqlite 行内省方言不保留聚合列）
         let count_sql = format!("SELECT {} FROM {}{}", ep.columns[0], ep.table, where_sql);
-        let total = self.pool.query_rows(&count_sql, &self.role).await?.len() as u64;
+        let total = self.pool.query_rows(&count_sql, role).await?.len() as u64;
 
         let offset = (req.page - 1) * page_size;
         let sql = format!(
@@ -404,7 +532,7 @@ impl DataApiGateway {
             page_size,
             offset
         );
-        let items = self.project(ep, self.pool.query_rows(&sql, &self.role).await?);
+        let items = self.project(ep, self.pool.query_rows(&sql, role).await?);
 
         Ok(ListResponse {
             items,
@@ -473,10 +601,13 @@ mod unit_tests {
     #[tokio::test]
     async fn test_list_flow_filters_order_pagination() {
         // 内存库每连接独立：用临时文件库保证建表与查询同库
+        // 文件名带进程号：失败残留的库文件不得被下一次运行复用
         let db_path = std::env::temp_dir().join(format!(
-            "dbnexus_data_api_{}.db",
+            "dbnexus_data_api_{}_{}.db",
+            std::process::id(),
             std::time::Instant::now().elapsed().as_nanos()
         ));
+        let _ = std::fs::remove_file(&db_path);
         let pool = std::sync::Arc::new(
             DbPool::new(&format!("sqlite:{}?mode=rwc", db_path.display()))
                 .await
@@ -502,6 +633,7 @@ mod unit_tests {
             .with_orderable(&["id"])
             .unwrap();
         let gateway = DataApiGateway::new(pool)
+            .with_role("admin")
             .register("t9_list", endpoint)
             .expect("register");
 
@@ -544,7 +676,7 @@ mod unit_tests {
         let _ = std::fs::remove_file(&db_path);
     }
 
-    /// 查询执行角色：默认 admin，`with_role` 后 manifest 必须报告新角色
+    /// 查询执行角色：未声明时 manifest 不报告角色，`with_role` 后报告新角色
     #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_with_role_updates_manifest_role() {
@@ -554,10 +686,9 @@ mod unit_tests {
             .register("t9_list", endpoint)
             .expect("register");
 
-        assert_eq!(
-            gateway.manifest()["role"],
-            "admin",
-            "the default query role is admin"
+        assert!(
+            gateway.manifest()["role"].is_null(),
+            "the query role must not be declared by default"
         );
 
         let gateway = gateway.with_role("analyst");
@@ -565,6 +696,23 @@ mod unit_tests {
             gateway.manifest()["role"],
             "analyst",
             "with_role must be reflected in the endpoint manifest"
+        );
+    }
+
+    /// 未声明执行角色时查询 fail-closed（不以 admin 兜底）
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_query_without_role_is_rejected() {
+        let pool = std::sync::Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
+        let endpoint = TableEndpoint::new("t9", &["id"]).unwrap();
+        let gateway = DataApiGateway::new(pool)
+            .register("t9_list", endpoint)
+            .expect("register");
+
+        let err = gateway.get("t9_list", 1).await.unwrap_err();
+        assert!(
+            matches!(err, DbError::Config(_)),
+            "querying without a declared role must be rejected, got {err:?}"
         );
     }
 }

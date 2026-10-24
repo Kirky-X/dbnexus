@@ -18,8 +18,11 @@ pub enum DbNexusError {
     #[error(transparent)]
     PermissionConfig(#[from] crate::domain::PermissionConfigError),
 
-    /// 不支持的数据库协议
-    #[error("Unsupported database scheme in URL: {0}")]
+    /// 数据库 URL 不可用（scheme 不支持或 URL 无法解析）
+    ///
+    /// 载荷为具体原因（解析失败详情或不支持的 scheme 名），前缀保持中性：
+    /// 解析失败不是"scheme 不支持"，前缀须与实际语义一致。
+    #[error("Invalid database URL: {0}")]
     UnsupportedDatabaseScheme(String),
 }
 

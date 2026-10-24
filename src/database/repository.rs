@@ -14,7 +14,10 @@
 //!   解析校验/权限检查/注入检测/慢查询统计整条防御链；
 //! - 表名与列名做标识符白名单校验（防注入）；**值一律经绑定参数传递**
 //!   （PostgreSQL `$N`、其余方言 `?`），SQL 文本不含值字面量；
-//!   复杂值（数组/对象）序列化为 JSON 字符串后绑定。
+//!   复杂值（数组/对象）序列化为 JSON 字符串后绑定；
+//! - 执行角色须显式声明（`with_role` / 宏的 `role = "..."`）：角色未声明
+//!   时查询 fail-closed 报错，不以 admin 兜底（admin 会同时绕过表级 RBAC
+//!   与 RLS 行级谓词注入）。
 //!
 //! # 示例
 //!
@@ -26,7 +29,7 @@
 //!
 //! #[derive(Default)]
 //! struct UserRepo;
-//! dbnexus::impl_json_repository!(UserRepo, User, table = "users");
+//! dbnexus::impl_json_repository!(UserRepo, User, table = "users", role = "reader");
 //!
 //! // let rows = repo.find_all(&pool, 10, 0).await?;
 //! ```
@@ -38,8 +41,12 @@ use serde_json::Value;
 
 use crate::database::DbPool;
 use crate::database::identifier::is_safe_identifier;
+use crate::database::sql_text::escape_sql_literal_content;
 use crate::foundation::{DbError, DbResult};
 use crate::i18n;
+
+/// 字符串字面量转义的数据库后端口径（共享口径，路径保持不变）
+pub use crate::database::sql_text::SqlBackend;
 
 /// 泛型仓储 CRUD 端口
 ///
@@ -88,35 +95,13 @@ pub(crate) fn sql_literal(value: &Value, backend: SqlBackend) -> DbResult<String
         Value::Null => Ok("NULL".to_string()),
         Value::Bool(b) => Ok(if *b { "TRUE" } else { "FALSE" }.to_string()),
         Value::Number(n) => Ok(n.to_string()),
-        Value::String(s) => Ok(format!("'{}'", escape_sql_string(s, backend))),
+        Value::String(s) => Ok(format!("'{}'", escape_sql_literal_content(s, backend))),
         Value::Array(_) | Value::Object(_) => {
             let json = serde_json::to_string(value).map_err(|e| {
                 DbError::Config(format!("entity nested value serialize failed: {e}"))
             })?;
-            Ok(format!("'{}'", escape_sql_string(&json, backend)))
+            Ok(format!("'{}'", escape_sql_literal_content(&json, backend)))
         }
-    }
-}
-
-/// 字符串字面量转义的数据库后端口径
-///
-/// 反斜杠语义按后端分化：MySQL 默认模式（`NO_BACKSLASH_ESCAPES` 关闭）下
-/// `\` 是转义符，仅加倍单引号可被 `\'` 序列击穿（注入向量）；PostgreSQL
-/// （standard_conforming_strings=on）、SQLite、DuckDB 遵循 SQL 标准，
-/// `\` 是字面量，加倍会引入多余字符。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SqlBackend {
-    /// MySQL：先加倍反斜杠，再加倍单引号
-    MySql,
-    /// SQL 标准口径（PostgreSQL / SQLite / DuckDB）：仅加倍单引号
-    Standard,
-}
-
-/// 按后端转义字符串字面量内容（不含外层引号）
-fn escape_sql_string(s: &str, backend: SqlBackend) -> String {
-    match backend {
-        SqlBackend::MySql => s.replace('\\', "\\\\").replace('\'', "''"),
-        SqlBackend::Standard => s.replace('\'', "''"),
     }
 }
 
@@ -151,13 +136,14 @@ pub(crate) fn resolve_sql_backend(pool: &DbPool) -> SqlBackend {
 pub struct JsonRepository {
     table: String,
     id_column: String,
-    role: String,
+    /// 执行角色（`None` = 未声明：查询 fail-closed，不以 admin 兜底）
+    role: Option<String>,
     /// 显式列清单（`with_columns` 设置后查询生成列投影，替代 `SELECT *`）
     columns: Option<Vec<String>>,
 }
 
 impl JsonRepository {
-    /// 创建仓储（默认主键列 `id`，默认执行角色 `admin`）
+    /// 创建仓储（默认主键列 `id`；执行角色未声明，须经 `with_role` 指定）
     ///
     /// # Errors
     ///
@@ -171,8 +157,21 @@ impl JsonRepository {
         Ok(Self {
             table: table.to_string(),
             id_column: "id".to_string(),
-            role: "admin".to_string(),
+            role: None,
             columns: None,
+        })
+    }
+
+    /// 执行角色（未声明 → fail-closed）
+    ///
+    /// 未声明角色时拒绝执行查询：默认 admin 会同时绕过表级 RBAC 与
+    /// RLS 谓词注入，仓储是 CRUD 出口，不应以超管身份静默兜底。
+    fn role_ref(&self) -> DbResult<&str> {
+        self.role.as_deref().ok_or_else(|| {
+            DbError::Config(
+                "repository query role is not configured; call with_role() before querying"
+                    .to_string(),
+            )
         })
     }
 
@@ -230,7 +229,7 @@ impl JsonRepository {
             self.id_column,
             placeholder(backend, 2)
         );
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let rows = session
             .query_rows_with_params(
                 &sql,
@@ -268,8 +267,11 @@ impl JsonRepository {
     }
 
     /// 自定义执行角色（透传给 `query_rows` 的角色参数）
+    ///
+    /// 角色未在权限配置中定义时查询被拒（见 `validate_role_name`）；
+    /// admin 角色会绕过表级 RBAC 与 RLS 谓词注入，仅在管理通道显式使用。
     pub fn with_role(mut self, role: &str) -> Self {
-        self.role = role.to_string();
+        self.role = Some(role.to_string());
         self
     }
 
@@ -357,7 +359,7 @@ impl JsonRepository {
         );
         params.push(Value::from(id));
         params.push(Value::from(expected));
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let exec = session.execute_with_params(&sql, &params).await?;
         let affected = exec.rows_affected();
         if affected == 0 {
@@ -417,7 +419,7 @@ where
             columns.join(", "),
             placeholders.join(", ")
         );
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let exec = session.execute_with_params(&sql, &params).await?;
         Ok(exec.last_insert_id() as i64)
     }
@@ -430,7 +432,7 @@ where
             self.id_column,
             placeholder(sea_backend(pool), 1)
         );
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let rows = session
             .query_rows_with_params(&sql, &[serde_json::Value::from(id)])
             .await?;
@@ -455,7 +457,7 @@ where
             placeholder(backend, 1),
             placeholder(backend, 2)
         );
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let rows = session
             .query_rows_with_params(
                 &sql,
@@ -515,7 +517,7 @@ where
             placeholder(backend, n)
         );
         params.push(serde_json::Value::from(id));
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let exec = session.execute_with_params(&sql, &params).await?;
         Ok(exec.rows_affected())
     }
@@ -527,7 +529,7 @@ where
             self.id_column,
             placeholder(sea_backend(pool), 1)
         );
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let exec = session
             .execute_with_params(&sql, &[serde_json::Value::from(id)])
             .await?;
@@ -539,7 +541,7 @@ where
         // `SELECT COUNT(*) AS cnt` 的聚合列不在表列清单内会被丢弃，
         // 故以主键列全量取回后计行数（MVP 口径，大表请配合分页/上游聚合）。
         let sql = format!("SELECT {} FROM {}", self.id_column, self.table);
-        let session = pool.get_session(&self.role).await?;
+        let session = pool.get_session(self.role_ref()?).await?;
         let rows = session.query_rows_with_params(&sql, &[]).await?;
         Ok(rows.len() as u64)
     }
@@ -551,16 +553,19 @@ where
 /// 无共享状态）。实体需 `Serialize + DeserializeOwned`，承载结构体需
 /// `Default`（或自行提供构造）。
 ///
+/// 执行角色经 `role = "..."` 声明：未声明时查询 fail-closed 报错
+/// （不以 admin 兜底——admin 会绕过表级 RBAC 与 RLS 谓词注入）。
+///
 /// ```ignore
 /// #[derive(Default)]
 /// struct UserRepo;
-/// dbnexus::impl_json_repository!(UserRepo, User, table = "users");
+/// dbnexus::impl_json_repository!(UserRepo, User, table = "users", role = "reader");
 /// // 或自定义主键列：
-/// dbnexus::impl_json_repository!(UserRepo, User, table = "users", id = "user_id");
+/// dbnexus::impl_json_repository!(UserRepo, User, table = "users", id = "user_id", role = "reader");
 /// ```
 #[macro_export]
 macro_rules! impl_json_repository {
-    ($repo:ident, $entity:ty, table = $table:expr $(, id = $id:expr)?) => {
+    ($repo:ident, $entity:ty, table = $table:expr $(, id = $id:expr)? $(, role = $role:expr)?) => {
         #[async_trait::async_trait]
         impl $crate::database::repository::Repository<$entity> for $repo {
             fn table(&self) -> &str {
@@ -575,7 +580,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<i64> {
                 $crate::database::repository::Repository::<$entity>::insert(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                     entity,
                 )
@@ -589,7 +595,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<Option<$entity>> {
                 $crate::database::repository::Repository::<$entity>::find_by_id(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                     id,
                 )
@@ -604,7 +611,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<Vec<$entity>> {
                 $crate::database::repository::Repository::<$entity>::find_all(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                     limit,
                     offset,
@@ -620,7 +628,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<u64> {
                 $crate::database::repository::Repository::<$entity>::update(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                     id,
                     entity,
@@ -635,7 +644,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<u64> {
                 $crate::database::repository::Repository::<$entity>::delete(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                     id,
                 )
@@ -648,7 +658,8 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<u64> {
                 $crate::database::repository::Repository::<$entity>::count(
                     &($crate::database::repository::JsonRepository::new($table)?
-                        $(.with_id_column($id)?)?),
+                        $(.with_id_column($id)?)?
+                        $(.with_role($role))?),
                     pool,
                 )
                 .await
@@ -669,6 +680,7 @@ macro_rules! impl_json_repository {
             ) -> $crate::foundation::DbResult<u64> {
                 $crate::database::repository::JsonRepository::new($table)?
                     $(.with_id_column($id)?)?
+                    $(.with_role($role))?
                     .update_if_version(pool, id, entity, version_column)
                     .await
             }

@@ -15,7 +15,9 @@
         feature = "repository",
         feature = "data-api",
         feature = "entity-events",
-        feature = "migration"
+        feature = "migration",
+        feature = "data-protection",
+        feature = "query-dsl"
     )),
     allow(dead_code)
 )]

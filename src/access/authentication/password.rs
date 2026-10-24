@@ -18,8 +18,12 @@ const BCRYPT_COST: u32 = 12;
 /// 密码最小长度（vuln-0004：从 8 提升至 12）
 const MIN_PASSWORD_LEN: usize = 12;
 
-/// 密码最大长度（防止 bcrypt 72 字节截断导致的密码碰撞）
+/// 密码最大长度（**字节**）：bcrypt 只消费前 72 字节，超限口令若放行
+/// 会被静默截断——前 72 字节相同的不同口令产生同一哈希（口令碰撞）
 const MAX_PASSWORD_LEN: usize = 72;
+
+/// bcrypt 算法硬上限（字节）：与 bcrypt 实现的截断点一致
+const BCRYPT_MAX_BYTES: usize = 72;
 
 /// 常见弱密码黑名单（top 100+，vuln-0004 修复）
 ///
@@ -163,13 +167,14 @@ const COMMON_PASSWORDS: &[&str] = &[
 /// 将原硬编码的 `BCRYPT_COST`/`MIN_PASSWORD_LEN`/`MAX_PASSWORD_LEN`/`COMMON_PASSWORDS`
 /// 抽象为可配置的策略对象，支持：
 /// - 自定义 bcrypt cost factor
-/// - 自定义最小/最大密码长度
+/// - 自定义最小/最大密码长度（最小按字符、最大按字节）
 /// - 自定义弱密码黑名单（支持追加/替换/清空）
 ///
 /// # 向后兼容
 ///
 /// [`PasswordPolicy::default()`] 保持原硬编码默认值（cost=12, min_len=12, max_len=72,
-/// blacklist=COMMON_PASSWORDS），确保现有调用方行为不变。
+/// blacklist=COMMON_PASSWORDS）。`max_len` 的计量单位为字节（bcrypt 72 字节上限），
+/// 非 ASCII 口令的长度判定因此与纯 ASCII 口令一致。
 ///
 /// # 用法示例
 ///
@@ -200,10 +205,14 @@ pub struct PasswordPolicy {
     /// bcrypt cost factor（vuln-0004：默认 12）
     pub bcrypt_cost: u32,
 
-    /// 密码最小长度（vuln-0004：默认 12）
+    /// 密码最小长度（vuln-0004：默认 12，按字符计）
     pub min_len: usize,
 
-    /// 密码最大长度（防止 bcrypt 72 字节截断导致的密码碰撞）
+    /// 密码最大长度（**按字节计**，默认 72：bcrypt 只消费前 72 字节，
+    /// 按字符计会让多字节口令被静默截断而产生口令碰撞）
+    ///
+    /// 超过 bcrypt 硬上限（72 字节）的配置不生效：实际生效上限为
+    /// `min(max_len, 72)`（见 [`PasswordPolicy::effective_max_len`]）。
     pub max_len: usize,
 
     /// 常见弱密码黑名单（大小写不敏感匹配，：可自定义）
@@ -228,19 +237,28 @@ impl Default for PasswordPolicy {
 }
 
 impl PasswordPolicy {
+    /// 实际生效的最大口令长度（字节）
+    ///
+    /// bcrypt 只消费前 72 字节，配置 `max_len` 超过该值时不生效：
+    /// 生效上限恒为 `min(max_len, 72)`，避免"配置写了 100、实际按 72"
+    /// 的静默覆盖。
+    pub fn effective_max_len(&self) -> usize {
+        self.max_len.min(BCRYPT_MAX_BYTES)
+    }
+
     /// 验证密码强度（核心逻辑）
     ///
     /// vuln-0004 修复：增强密码策略
     /// - 最小长度 `self.min_len` 字符
     /// - 必须包含大写字母、小写字母、数字、特殊字符
     /// - 不在 `self.blacklist` 中（大小写不敏感）
-    /// - 最大长度 `self.max_len` 字符（bcrypt 限制）
+    /// - 最大长度 [`Self::effective_max_len`] **字节**（bcrypt 只消费 72 字节）
     ///
     /// # Errors
     ///
     /// 密码不满足任一条件时返回 `AuthError::PasswordHash`。
     pub fn validate(&self, password: &str) -> AuthResult<()> {
-        // 长度检查（使用字符计数而非字节计数，确保 Unicode 密码的安全保证一致）
+        // 最小长度按字符计（复杂度口径）
         let char_count = password.chars().count();
         if char_count < self.min_len {
             return Err(AuthError::PasswordHash(format!(
@@ -249,10 +267,13 @@ impl PasswordPolicy {
             )));
         }
 
-        if char_count > self.max_len {
+        // 最大长度按字节计：bcrypt 只取前 72 字节，按字符计会让多字节口令
+        // （如 30 个汉字 = 90 字节）通过校验后被静默截断，产生口令碰撞
+        let max_len = self.effective_max_len();
+        let byte_len = password.as_bytes().len();
+        if byte_len > max_len {
             return Err(AuthError::PasswordHash(format!(
-                "Password must not exceed {} characters (bcrypt truncation limit)",
-                self.max_len
+                "Password must not exceed {max_len} bytes (bcrypt truncation limit)"
             )));
         }
 
@@ -320,7 +341,19 @@ impl PasswordHasher {
     /// # 参数
     ///
     /// * `policy` - 自定义密码策略（cost/length/blacklist）
+    ///
+    /// 策略的 `max_len` 超过 bcrypt 硬上限（72 字节）时不生效：实际生效
+    /// 上限为 `min(max_len, 72)`，此处显式告警（不静默覆盖配置）。
     pub fn with_policy(policy: PasswordPolicy) -> Self {
+        if policy.max_len > BCRYPT_MAX_BYTES {
+            log::warn!(
+                "password policy max_len {} exceeds the bcrypt limit of {} bytes; \
+                 the effective limit is {} bytes",
+                policy.max_len,
+                BCRYPT_MAX_BYTES,
+                BCRYPT_MAX_BYTES
+            );
+        }
         Self { policy }
     }
 
@@ -332,12 +365,21 @@ impl PasswordHasher {
     /// 哈希密码
     ///
     /// 使用 bcrypt 算法，cost factor 取自当前策略（vuln-0004 修复：默认 12）。
+    ///
+    /// 超过 bcrypt 72 字节上限的口令直接拒绝：bcrypt 会静默截断到前
+    /// 72 字节，前 72 字节相同的不同口令将得到同一哈希（口令碰撞）。
     pub fn hash(&self, password: &str) -> AuthResult<String> {
+        Self::ensure_bcrypt_length(password)?;
         hash(password, self.policy.bcrypt_cost).map_err(|e| AuthError::PasswordHash(e.to_string()))
     }
 
     /// 验证密码
+    ///
+    /// 超过 bcrypt 72 字节上限的口令按凭据无效处理（不做截断比对）。
     pub fn verify(&self, password: &str, hash: &str) -> AuthResult<()> {
+        if Self::exceeds_bcrypt_length(password) {
+            return Err(AuthError::InvalidCredentials);
+        }
         let is_valid = verify(password, hash).map_err(|_| AuthError::InvalidCredentials)?;
 
         if is_valid {
@@ -347,13 +389,83 @@ impl PasswordHasher {
         }
     }
 
+    /// 存量口令校验（迁移专用）
+    ///
+    /// 旧策略按**字符**计数放行过 73~100 字符的 ASCII 口令，bcrypt 静默
+    /// 截断到前 72 字节后入库——存量哈希只覆盖前 72 字节，`verify` 对
+    /// 超限口令直接判无效，存量用户将永久无法登录。本方法按截断口径
+    /// 校验，仅供迁移存量用户使用：验证成功后应立即要求用户重设口令
+    /// （新策略拒绝超过 72 字节的口令）。
+    ///
+    /// # 安全边界
+    ///
+    /// 截断口径下"前 72 字节相同"的口令互相等价——这是存量哈希固有的
+    /// 属性，本方法只在显式调用时启用，默认验证路径不启用。
+    pub fn verify_legacy(&self, password: &str, hash: &str) -> AuthResult<()> {
+        if Self::exceeds_bcrypt_length(password) {
+            log::warn!(
+                "legacy password verification: password exceeds the bcrypt limit, \
+                        verifying against the legacy 72-byte prefix"
+            );
+            let truncated = Self::bcrypt_prefix(password);
+            let is_valid = verify(truncated, hash).map_err(|_| AuthError::InvalidCredentials)?;
+            if is_valid {
+                return Ok(());
+            }
+            // bcrypt truncates at 72 *bytes* without regard for character
+            // boundaries, so a legacy hash may cover a byte sequence that
+            // is not valid UTF-8 (the 72nd byte falls inside a multi-byte
+            // character). Such a hash cannot be re-verified through the
+            // bcrypt API, which only accepts `&str`. The account has to be
+            // migrated by a password reset. The client still sees the
+            // indistinguishable "invalid credentials" answer — telling it
+            // that the account exists but needs a reset would leak account
+            // existence; the operator gets the detail from this log.
+            if !password.is_char_boundary(BCRYPT_MAX_BYTES) {
+                log::warn!(
+                    "legacy password verification failed and the 72-byte cut splits a \
+                            multi-byte character: the stored hash covers a byte sequence that \
+                            is not valid UTF-8 and cannot be re-verified — this account requires \
+                            a password reset"
+                );
+            }
+            return Err(AuthError::InvalidCredentials);
+        }
+        self.verify(password, hash)
+    }
+
+    /// bcrypt 消费的前 72 字节（按字符边界回退，不切碎多字节字符）
+    fn bcrypt_prefix(password: &str) -> &str {
+        let mut end = BCRYPT_MAX_BYTES.min(password.len());
+        while end > 0 && !password.is_char_boundary(end) {
+            end -= 1;
+        }
+        &password[..end]
+    }
+
+    /// 口令是否超过 bcrypt 的 72 字节消费上限
+    fn exceeds_bcrypt_length(password: &str) -> bool {
+        password.as_bytes().len() > BCRYPT_MAX_BYTES
+    }
+
+    /// bcrypt 长度守卫：超限口令拒绝（不做静默截断）
+    fn ensure_bcrypt_length(password: &str) -> AuthResult<()> {
+        let byte_len = password.as_bytes().len();
+        if byte_len > BCRYPT_MAX_BYTES {
+            return Err(AuthError::PasswordHash(format!(
+                "Password must not exceed {BCRYPT_MAX_BYTES} bytes (bcrypt truncation limit)"
+            )));
+        }
+        Ok(())
+    }
+
     /// 验证密码强度（使用当前实例的策略）
     ///
     /// vuln-0004 修复：增强密码策略
     /// - 最小长度 `self.policy.min_len` 字符
     /// - 必须包含大写字母、小写字母、数字、特殊字符
     /// - 不在 `self.policy.blacklist` 中（大小写不敏感）
-    /// - 最大长度 `self.policy.max_len` 字符（bcrypt 限制）
+    /// - 最大长度 `self.policy.max_len` **字节**（bcrypt 限制）
     ///
     /// 向后兼容：`new()` 创建的实例行为等价于原硬编码实现。
     pub fn validate_strength(&self, password: &str) -> AuthResult<()> {
@@ -540,6 +652,116 @@ mod tests {
         assert!(
             policy.blacklist.iter().any(|p| p == "password123!"),
             "default blacklist must contain 'password123!'"
+        );
+    }
+
+    /// 多字节口令必须按字节判长：超过 bcrypt 72 字节上限的口令被拒绝，
+    /// 否则 bcrypt 静默截断会让前 72 字节相同的不同口令产生同一哈希
+    #[test]
+    fn test_multibyte_password_over_byte_limit_is_rejected() {
+        let hasher = PasswordHasher::new();
+        // 30 个汉字 = 90 字节 > 72 字节上限（字符数 30 未超限）
+        let password: String = std::iter::repeat('汉').take(30).collect();
+        assert_eq!(password.chars().count(), 30);
+        assert!(password.as_bytes().len() > 72);
+        assert!(
+            hasher.validate_strength(&password).is_err(),
+            "a password longer than 72 bytes must fail validation"
+        );
+        assert!(
+            hasher.hash(&password).is_err(),
+            "hashing must reject a password longer than 72 bytes"
+        );
+    }
+
+    /// 截断碰撞回归：前 72 字节相同的多字节口令不得互相通过验证
+    #[test]
+    fn test_multibyte_password_prefix_collision_is_rejected() {
+        let hasher = PasswordHasher::new();
+        // 共享前缀（前 72 字节相同），尾部不同
+        let shared: String = std::iter::repeat('密').take(24).collect();
+        let p1 = format!("{shared}Aa1!");
+        let p2 = format!("{shared}Bb2!");
+        assert!(p1.as_bytes().len() > 72);
+        assert!(p2.as_bytes().len() > 72);
+        // 两者都超限 → 直接拒绝，不产生同哈希
+        assert!(hasher.hash(&p1).is_err());
+        assert!(hasher.hash(&p2).is_err());
+    }
+
+    /// 存量超长口令（旧策略按字符计数放行、bcrypt 静默截断入库）必须
+    /// 有迁移通道：默认校验拒绝，迁移校验按前 72 字节口径通过
+    #[test]
+    fn test_legacy_over_length_password_has_migration_path() {
+        let hasher = PasswordHasher::new();
+        // 旧策略下 80 字符 ASCII 口令可入库（bcrypt 只消费前 72 字节）
+        let legacy_password = format!("Aa1!{}", "x".repeat(76));
+        assert_eq!(legacy_password.chars().count(), 80);
+        assert!(legacy_password.as_bytes().len() > 72);
+        // 存量哈希 = 前 72 字节的哈希（bcrypt 截断语义）
+        let legacy_hash = bcrypt::hash(&legacy_password[..72], 4).expect("legacy hash");
+
+        // 默认校验：超限口令一律判无效（不回退到截断口径）
+        assert!(hasher.verify(&legacy_password, &legacy_hash).is_err());
+        // 迁移校验：按截断口径通过
+        assert!(hasher.verify_legacy(&legacy_password, &legacy_hash).is_ok());
+        // 迁移校验对错误口令仍然拒绝
+        assert!(
+            hasher
+                .verify_legacy(&format!("Bb1!{}", "x".repeat(76)), &legacy_hash)
+                .is_err()
+        );
+    }
+
+    /// 多字节存量口令的迁移校验：按字符边界回退，不切碎多字节字符
+    #[test]
+    fn test_legacy_multibyte_password_migration_keeps_char_boundary() {
+        let hasher = PasswordHasher::new();
+        // 24 个汉字 = 72 字节，追加 ASCII 尾缀后超过 72 字节
+        let legacy_password = format!("{}Aa1!", "密".repeat(24));
+        assert!(legacy_password.as_bytes().len() > 72);
+        let legacy_hash = bcrypt::hash(&legacy_password[..72], 4).expect("legacy hash");
+        assert!(hasher.verify(&legacy_password, &legacy_hash).is_err());
+        assert!(hasher.verify_legacy(&legacy_password, &legacy_hash).is_ok());
+    }
+
+    /// 72 字节切点落在多字节字符中间的存量口令：bcrypt 按字节截断，
+    /// 存量哈希覆盖的不是合法 UTF-8 序列，bcrypt 的公开 API（只收 &str）
+    /// 无法复验。该账号只能靠重置口令迁移——对调用方仍返回与"口令错误"
+    /// 不可区分的错误，避免泄露账号存在性。
+    #[test]
+    fn test_legacy_password_split_by_multibyte_char_needs_reset() {
+        let hasher = PasswordHasher::new();
+        // 🔑(4 字节) + 23×密(69 字节) = 73 字节，第 72 字节落在第 24 个「密」中间
+        let legacy_password = format!("🔑{}Aa1!", "密".repeat(23));
+        assert!(legacy_password.as_bytes().len() > 72);
+        assert!(!legacy_password.is_char_boundary(72));
+        // 旧系统按整串入库，bcrypt 内部截断到 72 字节
+        let legacy_hash = bcrypt::hash(&legacy_password, 4).expect("legacy hash");
+
+        // 迁移校验无法复验 → 与口令错误不可区分
+        assert!(matches!(
+            hasher.verify_legacy(&legacy_password, &legacy_hash),
+            Err(AuthError::InvalidCredentials)
+        ));
+    }
+
+    /// 自定义 max_len 超过 bcrypt 硬上限时：生效上限取 72 字节并显式告警
+    #[test]
+    fn test_policy_max_len_above_bcrypt_limit_is_capped_explicitly() {
+        let policy = PasswordPolicy {
+            max_len: 100,
+            ..Default::default()
+        };
+        assert_eq!(policy.effective_max_len(), 72);
+        // 73 字节口令按 72 字节上限拒绝（错误文案给出实际生效上限）
+        let hasher = PasswordHasher::with_policy(policy);
+        let too_long = format!("Aa1!{}", "x".repeat(69));
+        assert_eq!(too_long.as_bytes().len(), 73);
+        let err = hasher.validate_strength(&too_long).unwrap_err();
+        assert!(
+            err.to_string().contains("72 bytes"),
+            "the effective limit must be reported, got: {err}"
         );
     }
 

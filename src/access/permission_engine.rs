@@ -320,7 +320,9 @@ fn evaluate_condition(condition: &str, context: &PermissionContext) -> bool {
 
 /// 获取主体的所有角色（含继承）
 ///
-/// 仅从角色映射表中获取，不允许 subject ID 直接匹配预定义角色名（防止权限提升）。
+/// 仅从显式映射表中获取：主体 ID 与角色名同名不自动继承该角色
+/// （防止权限提升）。角色名主体的解析由各 provider 自行决定
+/// （见 `YamlPermissionProvider::resolve_subject_roles`）。
 fn get_subject_roles<V>(
     mapping: &HashMap<String, Vec<String>>,
     _roles: &HashMap<String, V>,
@@ -391,6 +393,28 @@ const DEFAULT_CACHE_TTL_SECONDS: u64 = 300;
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS: u32 = 100;
 /// 默认速率限制窗口（1 分钟）
 const DEFAULT_RATE_LIMIT_WINDOW_SECONDS: u32 = 60;
+
+/// 缓存键段编码：`<字节长度>:<内容>`
+///
+/// 长度前缀使内容无法越段拼接（属性值内嵌 `:k=v` 不再与另一组属性同键），
+/// 不同上下文只有在各段完全相同时才会得到同一个键。
+fn push_key_segment(key: &mut String, value: &str) {
+    key.push_str(&value.len().to_string());
+    key.push(':');
+    key.push_str(value);
+}
+
+/// 缓存键段序列编码：条目数 + 逐段键值（按键排序，消除 HashMap 迭代序影响）
+fn push_sorted_map(key: &mut String, map: &HashMap<String, String>) {
+    let mut pairs: Vec<(&String, &String)> = map.iter().collect();
+    pairs.sort_by(|a, b| a.0.cmp(b.0));
+    key.push_str(&pairs.len().to_string());
+    key.push(':');
+    for (k, v) in pairs {
+        push_key_segment(key, k);
+        push_key_segment(key, v);
+    }
+}
 
 /// 策略决策点
 /// 统一处理权限决策，支持多种权限提供者
@@ -703,7 +727,10 @@ impl PolicyDecisionPoint {
         decision
     }
 
-    /// 检查用户是否有权限执行操作
+    /// 检查主体是否有权限执行操作
+    ///
+    /// 主体按**角色名**解析（`SubjectType::Role`）：角色名主体的 provider
+    /// 以主体名匹配角色，用户主体则只认显式的主体→角色映射。
     pub async fn check(&self, subject: &str, resource: &str, action: &str) -> PermissionDecision {
         let action = match action.to_uppercase().as_str() {
             "SELECT" => PermissionAction::Select,
@@ -715,7 +742,7 @@ impl PolicyDecisionPoint {
         };
 
         let context = PermissionContext::new(
-            PermissionSubject::user(subject),
+            PermissionSubject::role(subject),
             PermissionResource::new(resource),
             action,
         );
@@ -760,17 +787,21 @@ impl PolicyDecisionPoint {
     }
 
     /// 生成缓存键
+    ///
+    /// 键必须无歧义：各段以长度前缀编码（内容无法越段伪造），属性与环境
+    /// 按键排序后逐段写入（消除 HashMap 迭代序影响）。`environment` 与
+    /// `attributes` 同样参与条件判定（见 `evaluate_condition`），必须入键，
+    /// 否则不同环境下的决策会被互相复用。
     fn generate_cache_key(&self, context: &PermissionContext) -> String {
-        format!(
-            "{}:{}:{}:{}",
-            context.subject.id,
-            context.resource.name,
-            context.action,
-            context
-                .attributes
-                .iter()
-                .fold(String::new(), |acc, (k, v)| format!("{}:{}={}", acc, k, v))
-        )
+        let mut key = String::new();
+        push_key_segment(&mut key, &context.subject.id);
+        // 主体类型参与角色解析（同名用户主体与角色主体决策不同），必须入键
+        push_key_segment(&mut key, &format!("{:?}", context.subject.subject_type));
+        push_key_segment(&mut key, &context.resource.name);
+        push_key_segment(&mut key, &context.action.to_string());
+        push_sorted_map(&mut key, &context.attributes);
+        push_sorted_map(&mut key, &context.environment);
+        key
     }
 
     /// 获取缓存的决策（带 TTL 检查）
@@ -803,7 +834,7 @@ pub struct YamlPermissionProvider {
     last_refresh: RwLock<Instant>,
     /// 提供者名称
     name: String,
-    /// 角色映射表（禁止用户名直接作为角色）
+    /// 显式主体→角色映射（配置 `subjects` 段；角色名不自动等于主体身份）
     role_mapping: RwLock<HashMap<String, Vec<String>>>,
 }
 
@@ -871,6 +902,9 @@ impl YamlPermissionProvider {
         #[derive(Debug, Deserialize)]
         struct YamlConfig {
             roles: HashMap<String, Vec<PermissionRule>>,
+            /// 显式主体→角色映射（可选）：只有在此声明的主体才获得角色
+            #[serde(default)]
+            subjects: HashMap<String, Vec<String>>,
         }
 
         // 使用 serde-saphyr 解析（YAML 是 JSON 超集，兼容两种输入）
@@ -881,20 +915,14 @@ impl YamlPermissionProvider {
             if let Ok(mut roles) = self.roles.write() {
                 *roles = config.roles;
             }
+            // 角色映射只保留显式声明：角色名不自动等于主体身份
+            if let Ok(mut role_mapping) = self.role_mapping.write() {
+                *role_mapping = config.subjects;
+            }
         }
         #[cfg(not(feature = "yaml"))]
         {
             return Err(crate::i18n::t_simple("perm-config-yaml-feature-not-enabled").into());
-        }
-
-        // 构建角色映射：每个角色名映射到自身（subject 通过角色名匹配）
-        if let Ok(mut role_mapping) = self.role_mapping.write() {
-            role_mapping.clear();
-            if let Ok(roles) = self.roles.read() {
-                for role_name in roles.keys() {
-                    role_mapping.insert(role_name.clone(), vec![role_name.clone()]);
-                }
-            }
         }
 
         if let Ok(mut last_refresh) = self.last_refresh.write() {
@@ -931,7 +959,7 @@ impl PermissionProvider for YamlPermissionProvider {
                 ));
             }
         };
-        let subject_roles = self.get_subject_roles(&context.subject.id);
+        let subject_roles = self.resolve_subject_roles(&context.subject);
 
         // 收集所有匹配的规则
         let mut matched_rules: Vec<(i32, &PermissionRule)> = Vec::new();
@@ -968,7 +996,9 @@ impl PermissionProvider for YamlPermissionProvider {
             Ok(r) => r,
             Err(_) => return Vec::new(),
         };
-        let subject_roles = self.get_subject_roles(subject);
+        // 主体名只按显式 `subjects` 映射解析：主体名与角色名同名不继承
+        // 该角色（与决策路径的用户/组主体口径一致）
+        let subject_roles = self.explicit_subject_roles(subject);
         let mut resources = std::collections::HashSet::new();
 
         for role_name in &subject_roles {
@@ -989,7 +1019,8 @@ impl PermissionProvider for YamlPermissionProvider {
             Ok(r) => r,
             Err(_) => return Vec::new(),
         };
-        let subject_roles = self.get_subject_roles(subject);
+        // 主体名只按显式 `subjects` 映射解析（见 get_allowed_resources）
+        let subject_roles = self.explicit_subject_roles(subject);
         let mut actions = std::collections::HashSet::new();
 
         for role_name in &subject_roles {
@@ -1020,16 +1051,71 @@ impl PermissionProvider for YamlPermissionProvider {
 }
 
 impl YamlPermissionProvider {
-    fn get_subject_roles(&self, subject: &str) -> Vec<String> {
+    /// 解析主体角色（决策路径）
+    ///
+    /// - 角色主体（`SubjectType::Role`）：主体名即角色名
+    /// - 用户/组主体：只认配置里显式声明的 `subjects` 映射——主体名与
+    ///   角色名同名不再自动继承该角色（防权限提升）
+    fn resolve_subject_roles(&self, subject: &PermissionSubject) -> Vec<String> {
+        let mut resolved = self.explicit_subject_roles(&subject.id);
+        if subject.subject_type == SubjectType::Role && !resolved.iter().any(|r| r == &subject.id) {
+            resolved.push(subject.id.clone());
+        }
+        resolved
+    }
+
+    /// 配置中显式声明的主体→角色映射
+    fn explicit_subject_roles(&self, subject: &str) -> Vec<String> {
         let mapping = match self.role_mapping.read() {
             Ok(m) => m,
             Err(_) => return Vec::new(),
         };
+        mapping.get(subject).cloned().unwrap_or_default()
+    }
+
+    /// 角色可访问的资源列表（角色主体的显式查询入口）
+    ///
+    /// 主体名路径（[`PermissionProvider::get_allowed_resources`]）只认显式
+    /// `subjects` 映射：主体名与角色名同名不继承该角色（防越权与信息
+    /// 泄露）。按角色枚举资源必须走本方法。
+    pub async fn get_role_resources(&self, role: &str) -> Vec<PermissionResource> {
         let roles = match self.roles.read() {
             Ok(r) => r,
             Err(_) => return Vec::new(),
         };
-        get_subject_roles(&mapping, &roles, subject)
+        let mut resources = std::collections::HashSet::new();
+        if let Some(rules) = roles.get(role) {
+            for rule in rules {
+                if rule.enabled && (rule.subject == "*" || rule.subject == role) {
+                    resources.insert(PermissionResource::new(&rule.resource));
+                }
+            }
+        }
+        resources.into_iter().collect()
+    }
+
+    /// 角色在资源上可执行的操作列表（角色主体的显式查询入口）
+    ///
+    /// 口径同 [`Self::get_role_resources`]。
+    pub async fn get_role_actions(&self, role: &str, resource: &str) -> Vec<PermissionAction> {
+        let roles = match self.roles.read() {
+            Ok(r) => r,
+            Err(_) => return Vec::new(),
+        };
+        let mut actions = std::collections::HashSet::new();
+        if let Some(rules) = roles.get(role) {
+            for rule in rules {
+                if rule.enabled
+                    && (rule.subject == "*" || rule.subject == role)
+                    && (rule.resource == "*" || rule.resource == resource)
+                {
+                    for action in &rule.allow {
+                        actions.insert(action.clone());
+                    }
+                }
+            }
+        }
+        actions.into_iter().collect()
     }
 }
 
@@ -1046,7 +1132,7 @@ pub struct RbacPermissionProvider {
     last_refresh: RwLock<Instant>,
     /// 提供者名称
     name: String,
-    /// 角色映射表（禁止用户名直接作为角色）
+    /// 显式主体→角色映射（`add_role_to_subject` 写入；角色名不自动等于主体身份）
     role_mapping: RwLock<HashMap<String, Vec<String>>>,
 }
 
@@ -1131,6 +1217,9 @@ impl RbacPermissionProvider {
     }
 
     /// 获取角色的所有权限（包括继承）
+    ///
+    /// 角色级停用开关生效：`enabled = false` 的角色不授予任何权限，
+    /// 其继承链上的父角色也不再随之继承（停用即整条链失效）。
     async fn get_role_permissions(&self, role: &str) -> Vec<PermissionRule> {
         let mut all_permissions = Vec::new();
         let mut visited = std::collections::HashSet::new();
@@ -1146,12 +1235,22 @@ impl RbacPermissionProvider {
         } else {
             return Vec::new();
         };
+        let roles = if let Ok(r) = self.roles.read() {
+            r
+        } else {
+            return Vec::new();
+        };
 
         while let Some(current_role) = to_visit.pop() {
             if visited.contains(&current_role) {
                 continue;
             }
             visited.insert(current_role.clone());
+
+            // 角色被显式停用：不再授予该角色及其继承链上的任何权限
+            if roles.get(&current_role).is_some_and(|r| !r.enabled) {
+                continue;
+            }
 
             if let Some(rules) = permissions.get(&current_role) {
                 all_permissions.extend(rules.iter().cloned());
@@ -1318,7 +1417,7 @@ mod tests {
         let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
         let decision = provider
             .check_permission(&PermissionContext::new(
-                PermissionSubject::user("ops"),
+                PermissionSubject::role("ops"),
                 PermissionResource::new("users"),
                 PermissionAction::Select,
             ))
@@ -1329,6 +1428,177 @@ mod tests {
             "first check must load config and allow, got: {decision:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 回归：用户主体不得因与角色名同名而自动继承该角色
+    ///
+    /// YAML provider 的角色名主体语义只对 `SubjectType::Role` 生效；
+    /// 用户主体只认配置里显式声明的 `subjects` 映射。
+    #[tokio::test]
+    async fn yaml_provider_user_subject_does_not_inherit_role_by_name() {
+        let dir = std::env::temp_dir().join(format!(
+            "dbnexus_perm_engine_user_{}_{}",
+            std::process::id(),
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("permissions.json");
+        std::fs::write(
+            &config_path,
+            r#"{"roles": {"ops": [{"name": "ops-read", "subject": "ops", "resource": "users", "allow": ["select"], "deny": []}]}}"#,
+        )
+        .unwrap();
+
+        let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("ops"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+
+        assert!(
+            matches!(decision, PermissionDecision::NotApplicable),
+            "a user subject must not inherit the role of the same name, got: {decision:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 配置 `subjects` 显式声明的主体→角色映射生效
+    #[tokio::test]
+    async fn yaml_provider_explicit_subject_assignment_grants_role() {
+        let dir = std::env::temp_dir().join(format!(
+            "dbnexus_perm_engine_subj_{}_{}",
+            std::process::id(),
+            std::time::Instant::now().elapsed().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("permissions.json");
+        std::fs::write(
+            &config_path,
+            r#"{"roles": {"ops": [{"name": "ops-read", "subject": "*", "resource": "users", "allow": ["select"], "deny": []}]}, "subjects": {"alice": ["ops"]}}"#,
+        )
+        .unwrap();
+
+        let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("alice"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+
+        assert!(
+            matches!(decision, PermissionDecision::Allow),
+            "an explicitly assigned subject must get the role, got: {decision:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 回归：缓存键必须无歧义——属性值内嵌 `:k=v` 不得与另一组属性同键，
+    /// 且 `environment` 参与键（环境值影响条件判定）
+    #[tokio::test]
+    async fn permission_cache_key_is_unambiguous() {
+        let provider = Arc::new(RbacPermissionProvider::new());
+        let pdp = PolicyDecisionPoint::builder()
+            .provider(provider)
+            .cache_enabled(true)
+            .build();
+
+        let ctx_a = PermissionContext::new(
+            PermissionSubject::user("u1"),
+            PermissionResource::new("t1"),
+            PermissionAction::Select,
+        )
+        .with_attribute("region", "us-east")
+        .with_attribute("extra", "1");
+
+        let ctx_b = PermissionContext::new(
+            PermissionSubject::user("u1"),
+            PermissionResource::new("t1"),
+            PermissionAction::Select,
+        )
+        .with_attribute("region", "us-east:extra=1");
+
+        assert_ne!(
+            pdp.generate_cache_key(&ctx_a),
+            pdp.generate_cache_key(&ctx_b),
+            "attribute values must not be able to forge another context's cache key"
+        );
+
+        // 环境参与条件判定，必须参与键
+        let ctx_env_a = PermissionContext::new(
+            PermissionSubject::user("u1"),
+            PermissionResource::new("t1"),
+            PermissionAction::Select,
+        )
+        .with_environment("region", "us-east");
+        let ctx_env_b = PermissionContext::new(
+            PermissionSubject::user("u1"),
+            PermissionResource::new("t1"),
+            PermissionAction::Select,
+        )
+        .with_environment("region", "eu-west");
+        assert_ne!(
+            pdp.generate_cache_key(&ctx_env_a),
+            pdp.generate_cache_key(&ctx_env_b),
+            "the environment must take part in the cache key"
+        );
+
+        // 键对同一上下文稳定（与 HashMap 迭代序无关）
+        assert_eq!(
+            pdp.generate_cache_key(&ctx_a),
+            pdp.generate_cache_key(&ctx_a),
+            "the cache key must be stable for equal contexts"
+        );
+    }
+
+    /// 回归：`Role.enabled = false` 的角色不授予任何权限（含继承链）
+    #[tokio::test]
+    async fn rbac_disabled_role_grants_no_permissions() {
+        let provider = Arc::new(RbacPermissionProvider::new());
+        provider.add_role(Role {
+            name: "contractor".to_string(),
+            description: String::new(),
+            enabled: false,
+            extends: vec![],
+        });
+        provider.add_permission(
+            "contractor",
+            PermissionRule {
+                name: "contractor_select".to_string(),
+                priority: 100,
+                subject: "*".to_string(),
+                resource: "users".to_string(),
+                allow: vec![PermissionAction::Select],
+                deny: vec![],
+                condition: None,
+                enabled: true,
+            },
+        );
+        provider.add_role_to_subject("alice", "contractor");
+
+        let decision = provider
+            .check_permission(&PermissionContext::new(
+                PermissionSubject::user("alice"),
+                PermissionResource::new("users"),
+                PermissionAction::Select,
+            ))
+            .await;
+
+        assert!(
+            matches!(decision, PermissionDecision::NotApplicable),
+            "a disabled role must grant no permissions, got: {decision:?}"
+        );
+        assert!(
+            provider
+                .get_allowed_actions("alice", "users")
+                .await
+                .is_empty(),
+            "a disabled role must expose no allowed actions"
+        );
     }
 
     #[tokio::test]
@@ -2045,10 +2315,10 @@ mod tests {
 
         let provider = YamlPermissionProvider::new(config_path.to_string_lossy().as_ref()).unwrap();
 
-        // 高优先级 deny 压过低优先级 allow
+        // 高优先级 deny 压过低优先级 allow（YAML provider 的主体为角色名）
         let denied = provider
             .check_permission(&PermissionContext::new(
-                PermissionSubject::user("ops"),
+                PermissionSubject::role("ops"),
                 PermissionResource::new("users"),
                 PermissionAction::Delete,
             ))
@@ -2058,7 +2328,7 @@ mod tests {
         // allow 命中
         let allowed = provider
             .check_permission(&PermissionContext::new(
-                PermissionSubject::user("ops"),
+                PermissionSubject::role("ops"),
                 PermissionResource::new("users"),
                 PermissionAction::Select,
             ))
@@ -2068,18 +2338,32 @@ mod tests {
         // 未覆盖的操作 → NotApplicable
         let na = provider
             .check_permission(&PermissionContext::new(
-                PermissionSubject::user("ops"),
+                PermissionSubject::role("ops"),
                 PermissionResource::new("users"),
                 PermissionAction::Update,
             ))
             .await;
         assert_eq!(na, PermissionDecision::NotApplicable);
 
-        // 资源 / 动作查询
-        let resources = provider.get_allowed_resources("ops").await;
+        // 资源 / 动作查询（角色主体走角色专用入口）
+        let resources = provider.get_role_resources("ops").await;
         assert!(resources.iter().any(|r| r.name == "users"));
-        let actions = provider.get_allowed_actions("ops", "users").await;
+        let actions = provider.get_role_actions("ops", "users").await;
         assert!(actions.contains(&PermissionAction::Select));
+
+        // 主体名路径只认显式 subjects 映射：与角色同名的用户主体不得继承
+        // 该角色的资源/动作清单（信息泄露）
+        assert!(
+            provider.get_allowed_resources("ops").await.is_empty(),
+            "a subject named like a role must not inherit that role's resources"
+        );
+        assert!(
+            provider
+                .get_allowed_actions("ops", "users")
+                .await
+                .is_empty(),
+            "a subject named like a role must not inherit that role's actions"
+        );
 
         // refresh 走 load_config（时间戳刷新）
         provider.refresh().await.expect("refresh");

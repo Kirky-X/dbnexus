@@ -243,8 +243,13 @@ impl DdlGuard {
             )));
         }
 
-        let statements = Parser::parse_sql(&self.dialect, sql_trimmed)
-            .map_err(|e| format!("Failed to parse SQL: {}", e))?;
+        let statements = Parser::parse_sql(&self.dialect, sql_trimmed).map_err(|e| {
+            // 解析错误不回显出错 token 原文（可能含字面量敏感值）
+            format!(
+                "Failed to parse SQL: {}",
+                crate::access::sql_parser::redact_parse_error(&e.to_string())
+            )
+        })?;
 
         if statements.is_empty() {
             return Ok(DdlValidationResult::Forbidden(

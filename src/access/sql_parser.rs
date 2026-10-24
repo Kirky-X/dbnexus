@@ -60,6 +60,32 @@ pub enum PermissionAction {
 /// 不再隐含 cache→oxcache 依赖（oxcache 仅供 permission 等真正消费方携带）
 use crate::database::pool::prepare_cache::PreparedStatementCache;
 
+/// 解析错误脱敏：剥离出错 token 原文
+///
+/// 解析器错误文本形如 `Expected: X, found: '<token>' at Line: L, Column: C`，
+/// 其中 `<token>` 可能是字符串字面量原文（误写入的口令、令牌、个人数据）。
+/// 公开错误只保留错误类别与行列位置，token 原文以 `<redacted>` 代替。
+pub(crate) fn redact_parse_error(message: &str) -> String {
+    const MARKER: &str = "found: ";
+    let Some(start) = message.find(MARKER) else {
+        return message.to_string();
+    };
+    let value_start = start + MARKER.len();
+    // 位置标记取最后一次出现（真实行列位置在末尾），避免 token 内含同名片段时截断
+    let Some(end) = message.rfind(" at Line:") else {
+        // 无位置信息：整段 token 不可保留
+        return format!("{}<redacted>", &message[..value_start]);
+    };
+    if end < value_start {
+        return message.to_string();
+    }
+    let mut out = String::with_capacity(message.len());
+    out.push_str(&message[..value_start]);
+    out.push_str("<redacted>");
+    out.push_str(&message[end..]);
+    out
+}
+
 /// Errors that can occur during SQL parsing
 #[derive(Debug, Error)]
 pub enum SqlParseError {
@@ -320,7 +346,7 @@ impl SqlParser {
         }
 
         let statements = Parser::parse_sql(&self.dialect, sql)
-            .map_err(|e| SqlParseError::ParseError(e.to_string()))?;
+            .map_err(|e| SqlParseError::ParseError(redact_parse_error(&e.to_string())))?;
 
         if statements.len() != 1 {
             return Err(SqlParseError::MultipleStatements);
@@ -439,7 +465,15 @@ impl SqlParser {
                     TableObject::TableName(name) => Some(name.to_string()),
                     _ => None,
                 };
-                let all = table_name.iter().cloned().collect();
+                let mut all = Vec::new();
+                if let Some(ref name) = table_name {
+                    all.push(name.clone());
+                }
+                // INSERT ... SELECT 的来源表同样参与判定：来源表的读不受
+                // 目标表的行级谓词覆盖
+                if let Some(source) = &insert.source {
+                    extract_query_tables(source, &mut all);
+                }
                 (SqlOperationType::Insert, table_name, all)
             }
             Statement::Update(update) => {
@@ -454,11 +488,19 @@ impl SqlParser {
                         all.push(name.to_string());
                     }
                 }
+                // WHERE 子句中的子查询表：子查询的读不受目标表的行级谓词覆盖
+                if let Some(selection) = &update.selection {
+                    extract_subquery_tables(selection, &mut all);
+                }
                 (SqlOperationType::Update, table_name, all)
             }
             Statement::Delete(delete) => {
                 let table_name = extract_table_from_delete(&delete);
-                let all = table_name.iter().cloned().collect();
+                let mut all = table_name.iter().cloned().collect();
+                // WHERE 子句中的子查询表（DELETE ... WHERE id IN (SELECT ...)）
+                if let Some(selection) = &delete.selection {
+                    extract_subquery_tables(selection, &mut all);
+                }
                 (SqlOperationType::Delete, table_name, all)
             }
             Statement::CreateTable(create_table) => {
@@ -733,12 +775,20 @@ fn extract_table_from_query(query: &Query) -> (Option<String>, Vec<String>) {
     (primary, all_tables)
 }
 
-/// 递归提取 Query 中所有被引用的表（FROM/JOIN/派生表/WHERE/HAVING 子查询/集合操作）
+/// 递归提取 Query 中所有被引用的表（FROM/JOIN/派生表/WHERE/HAVING 子查询/集合操作/CTE 体）
 ///
 /// 供权限检查使用：只检查主表会让受限角色通过 JOIN/子查询越权访问未授权表，
 /// 因此必须收集语句涉及的**全部**表。
 fn extract_query_tables(query: &Query, out: &mut Vec<String>) {
     extract_set_expr_tables(query.body.as_ref(), out);
+    // CTE 体（WITH ... AS (...)）内的表同样参与判定：CTE 内的读写不受外层
+    // 单表谓词覆盖，行级隔离与表级权限都必须看到这些表。
+    // 追加在主体表之后：主表（首个表名）语义不变。
+    if let Some(with) = &query.with {
+        for cte in &with.cte_tables {
+            extract_query_tables(&cte.query, out);
+        }
+    }
 }
 
 /// 递归提取 SetExpr（查询主体）中引用的表

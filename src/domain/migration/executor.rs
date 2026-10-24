@@ -829,7 +829,11 @@ impl MigrationExecutor {
     ///
     /// UP 与 DOWN 均无标记时回退返回全文（trim 后）；UP 无标记而 DOWN 有
     /// 标记时返回 DOWN 标记行之前的全部内容。
-    fn extract_up_sql<'a>(content: &'a str, markers: &MigrationMarkers) -> &'a str {
+    ///
+    /// 公开以便下游项目（自定义标记形态，如 `-- --- UP ---` 分隔线）能复用
+    /// 与执行器完全一致的切分口径，避免出现"执行器按 A 切、测试按 B 切"的
+    /// 口径分裂。所有分支（含无标记回退）统一 `trim`。
+    pub fn extract_up_sql<'a>(content: &'a str, markers: &MigrationMarkers) -> &'a str {
         let up_marker = find_marker_line(content, &markers.up);
         let down_marker = find_marker_line(content, &markers.down);
 
@@ -845,7 +849,12 @@ impl MigrationExecutor {
     }
 
     /// 从迁移文件中提取 DOWN SQL（按给定 DOWN 标记集切分）
-    fn extract_down_sql_with<'a>(content: &'a str, down_markers: &[String]) -> Option<&'a str> {
+    ///
+    /// 与公开的同名无参版 [`Self::extract_down_sql`] 的区别仅在于标记集：本
+    /// 函数接受调用方定制的标记，`extract_down_sql` 固定使用内置标记集。
+    /// 公开以便与 [`Self::extract_up_sql`] 对称——两者是同一套切分口径的
+    /// UP/DOWN 两侧。
+    pub fn extract_down_sql_with<'a>(content: &'a str, down_markers: &[String]) -> Option<&'a str> {
         find_marker_line(content, down_markers).map(|(_, down_end)| content[down_end..].trim())
     }
 
@@ -2422,7 +2431,11 @@ mod tests {
 
     /// 迁移扫描的读取失败显性化：目录位置不是目录 / 迁移文件非 UTF-8
     /// 都必须返回错误，不得静默当作「无迁移」（静默会掩盖未应用的迁移）
-    #[cfg(all(feature = "sqlite", feature = "runtime-tokio-rustls"))]
+    #[cfg(all(
+        feature = "sqlite",
+        feature = "runtime-tokio-rustls",
+        feature = "auto-migrate"
+    ))]
     #[tokio::test]
     async fn test_scan_migrations_surfaces_read_errors() {
         let executor = create_sqlite_executor().await;

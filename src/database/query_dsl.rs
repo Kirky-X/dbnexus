@@ -13,7 +13,7 @@
 //!     order by id desc
 //!     limit 10
 //! };
-//! assert_eq!(fragment.to_sql(), "SELECT id, name FROM users WHERE age > 18 AND status = 'active' ORDER BY id DESC LIMIT 10");
+//! assert_eq!(fragment.to_sql().unwrap(), "SELECT id, name FROM users WHERE age > 18 AND status = 'active' ORDER BY id DESC LIMIT 10");
 //! ```
 //!
 //! # 类型安全口径
@@ -25,6 +25,9 @@
 //! - 运算符为宏匹配的固定 token（`==`/`!=`/`>`/`<`/`>=`/`<=`），
 //!   不接受任意文本；
 //! - 多个条件以 `AND` 组合（条件组合 MVP：AND 语义）。
+//!
+//! 标识符白名单为 ASCII（字母/数字/下划线）：非 ASCII 标识符不满足白名单，
+//! `to_sql()` 返回 `DbError::Config`（不 panic）。
 
 /// 运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,59 +93,79 @@ pub struct QueryFragment {
 
 /// 标识符安全校验（与仓储/网关同口径：字母或下划线开头，仅含字母/数字/下划线）
 pub fn is_safe_ident(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
-        && name.len() <= 64
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    crate::database::identifier::is_safe_identifier(name)
+}
+
+/// 标识符 token → 标识符文本（内部：供宏展开调用）
+///
+/// Rust 原始标识符（`r#type`）的 `stringify!` 文本带 `r#` 前缀，
+/// 该前缀不属于 SQL 标识符，剥除后再做白名单校验。
+pub fn ident_from_token(token: &str) -> String {
+    token.strip_prefix("r#").unwrap_or(token).to_string()
 }
 
 impl QueryFragment {
     /// 组装为 SELECT SQL
     ///
-    /// # Panics
+    /// 标识符（表名/投影列/条件列/排序列）逐一经白名单校验；非法标识符
+    /// 返回 `DbError::Config`，不 panic——公共 API 不得用 panic 表达输入
+    /// 校验失败（外部输入进入标识符槽位即可触发线程 panic）。
     ///
-    /// 仅当 `q!` 产物被手工构造出非法标识符时（宏路径不可能发生）panic。
-    pub fn to_sql(&self) -> String {
+    /// # Errors
+    ///
+    /// 任一标识符不在白名单内时返回 `DbError::Config`。
+    pub fn to_sql(&self) -> crate::foundation::DbResult<String> {
         let columns = if self.columns.is_empty() {
             "*".to_string()
         } else {
             self.columns
                 .iter()
                 .map(|c| {
-                    assert!(is_safe_ident(c), "unsafe column identifier: {c}");
-                    c.clone()
+                    if !is_safe_ident(c) {
+                        return Err(crate::foundation::DbError::Config(format!(
+                            "query fragment column name must be a safe identifier: '{c}'"
+                        )));
+                    }
+                    Ok(c.clone())
                 })
-                .collect::<Vec<_>>()
+                .collect::<Result<Vec<_>, crate::foundation::DbError>>()?
                 .join(", ")
         };
         let table = self.table.as_deref().unwrap_or("(?)");
-        assert!(
-            table == "(?)" || is_safe_ident(table),
-            "unsafe table identifier: {table}"
-        );
+        if !(table == "(?)" || is_safe_ident(table)) {
+            return Err(crate::foundation::DbError::Config(format!(
+                "query fragment table name must be a safe identifier: '{table}'"
+            )));
+        }
 
         let mut sql = format!("SELECT {columns} FROM {table}");
         if !self.conditions.is_empty() {
-            let clauses: Vec<String> = self
-                .conditions
-                .iter()
-                .map(|c| {
-                    assert!(is_safe_ident(&c.column), "unsafe column: {}", c.column);
-                    format!("{} {} {}", c.column, c.op.as_sql(), c.literal)
-                })
-                .collect();
+            let mut clauses: Vec<String> = Vec::with_capacity(self.conditions.len());
+            for c in &self.conditions {
+                if !is_safe_ident(&c.column) {
+                    return Err(crate::foundation::DbError::Config(format!(
+                        "query fragment condition column must be a safe identifier: '{}'",
+                        c.column
+                    )));
+                }
+                clauses.push(format!("{} {} {}", c.column, c.op.as_sql(), c.literal));
+            }
             sql.push_str(" WHERE ");
             sql.push_str(&clauses.join(" AND "));
         }
         if let Some(order) = &self.order_column {
-            assert!(is_safe_ident(order), "unsafe order column: {order}");
+            if !is_safe_ident(order) {
+                return Err(crate::foundation::DbError::Config(format!(
+                    "query fragment order column must be a safe identifier: '{order}'"
+                )));
+            }
             let dir = if self.order_desc { "DESC" } else { "ASC" };
             sql.push_str(&format!(" ORDER BY {order} {dir}"));
         }
         if let Some(limit) = self.limit {
             sql.push_str(&format!(" LIMIT {limit}"));
         }
-        sql
+        Ok(sql)
     }
 }
 
@@ -261,14 +284,14 @@ macro_rules! __dsl_op {
 macro_rules! __dsl_conditions {
     ($builder:ident, $col:ident $op:tt $val:literal) => {
         $builder.add_condition(
-            stringify!($col),
+            &$crate::database::query_dsl::ident_from_token(stringify!($col)),
             $crate::__dsl_op!($op),
             $crate::__dsl_value!($val),
         );
     };
     ($builder:ident, $col:ident $op:tt $val:literal, $($rest:tt)+) => {
         $builder.add_condition(
-            stringify!($col),
+            &$crate::database::query_dsl::ident_from_token(stringify!($col)),
             $crate::__dsl_op!($op),
             $crate::__dsl_value!($val),
         );
@@ -301,12 +324,12 @@ macro_rules! q {
     ) => {{
         #[allow(unused_mut)]
         let mut fragment = $crate::database::query_dsl::QueryFragment {
-            table: Some(stringify!($table).to_string()),
-            columns: vec![$(stringify!($col).to_string()),+],
+            table: Some($crate::database::query_dsl::ident_from_token(stringify!($table))),
+            columns: vec![$($crate::database::query_dsl::ident_from_token(stringify!($col))),+],
             ..Default::default()
         };
         $( $crate::__dsl_conditions!(fragment, $($wcol $wop $wval),+); )?
-        $( fragment.order_column = Some(stringify!($ocol).to_string());
+        $( fragment.order_column = Some($crate::database::query_dsl::ident_from_token(stringify!($ocol)));
            fragment.order_desc = match stringify!($odir) { "desc" => true, _ => false }; )?
         $( fragment.limit = Some($lim); )?
         fragment
@@ -320,7 +343,7 @@ macro_rules! q {
     ) => {{
         #[allow(unused_mut)]
         let mut fragment = $crate::database::query_dsl::QueryFragment {
-            table: Some(stringify!($table).to_string()),
+            table: Some($crate::database::query_dsl::ident_from_token(stringify!($table))),
             ..Default::default()
         };
         $( $crate::__dsl_conditions!(fragment, $($wcol $wop $wval),+); )?
