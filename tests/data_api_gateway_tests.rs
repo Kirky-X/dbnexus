@@ -39,6 +39,7 @@ async fn setup_gateway(tag: &str) -> (DataApiGateway, std::path::PathBuf) {
     }
 
     let gateway = DataApiGateway::new(pool)
+        .with_role("admin")
         .register(
             "users",
             TableEndpoint::new("t419_users", &["id", "name", "age"])
@@ -260,5 +261,84 @@ async fn test_get_and_manifest() {
     assert_eq!(endpoints[0]["name"], "users");
     assert_eq!(endpoints[0]["columns"].as_array().unwrap().len(), 3);
 
+    let _ = std::fs::remove_file(&path);
+}
+
+/// 归属作用域：归属谓词与主键条件同时成立才返回行（跨租户读被阻断）
+#[tokio::test]
+async fn test_get_owned_scopes_by_owner_column() {
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_t419_owner_{}_{}.db",
+        std::process::id(),
+        std::time::Instant::now().elapsed().as_nanos()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let url = format!("sqlite:{}?mode=rwc", path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.expect("pool"));
+    let admin = pool.get_session("admin").await.expect("admin session");
+    admin
+        .execute_raw_ddl(
+            "CREATE TABLE t419_owned (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT)",
+        )
+        .await
+        .expect("create table");
+    admin
+        .execute_raw(
+            "INSERT INTO t419_owned (id, tenant_id, name) VALUES (1, 't-1', 'alice'), (2, 't-2', 'bob')",
+        )
+        .await
+        .expect("insert");
+
+    let gateway = DataApiGateway::new(pool)
+        .with_role("admin")
+        .register(
+            "owned",
+            TableEndpoint::new("t419_owned", &["id", "name"]).expect("endpoint"),
+        )
+        .expect("register");
+
+    // 归属列非法 → 拒绝构造
+    assert!(dbnexus::database::data_api::OwnerScope::new("tenant id", "t-1").is_err());
+
+    let scope = dbnexus::database::data_api::OwnerScope::new("tenant_id", "t-1").expect("scope");
+    let row = gateway.get_owned("owned", 1, &scope).await.expect("get");
+    assert_eq!(
+        row.expect("row").get("name").and_then(|v| v.as_str()),
+        Some("alice")
+    );
+
+    // 他人行：归属谓词不成立 → 取不到
+    let row = gateway.get_owned("owned", 2, &scope).await.expect("get");
+    assert!(
+        row.is_none(),
+        "a row of another tenant must not be returned"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// 未声明执行角色时查询 fail-closed（不以 admin 兜底）
+#[tokio::test]
+async fn test_query_without_declared_role_is_rejected() {
+    let path = std::env::temp_dir().join(format!(
+        "dbnexus_t419_norole_{}_{}.db",
+        std::process::id(),
+        std::time::Instant::now().elapsed().as_nanos()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let url = format!("sqlite:{}?mode=rwc", path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.expect("pool"));
+    let gateway = DataApiGateway::new(pool)
+        .register(
+            "users",
+            TableEndpoint::new("t419_users_none", &["id"]).expect("endpoint"),
+        )
+        .expect("register");
+
+    let err = gateway.get("users", 1).await.unwrap_err();
+    assert!(
+        matches!(err, dbnexus::DbError::Config(_)),
+        "querying without a declared role must be rejected, got {err:?}"
+    );
     let _ = std::fs::remove_file(&path);
 }

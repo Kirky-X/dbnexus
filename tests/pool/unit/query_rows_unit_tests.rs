@@ -474,3 +474,290 @@ async fn test_scatter_timeout_is_explicit() {
 
     let _ = std::fs::remove_file(&tmp0);
 }
+
+/// RLS 谓词必须落在 WHERE 子句内：带 ORDER BY / LIMIT 的查询仍按租户过滤
+///
+/// 回归：谓词曾被追加到语句末尾（ORDER BY / LIMIT 之后），被解析为排序键
+/// 而静默失效——受限角色拿到其他租户的行。
+#[cfg(all(feature = "data-protection", feature = "permission"))]
+#[tokio::test]
+async fn test_query_rows_rls_predicate_survives_order_by_and_limit() {
+    use dbnexus::access::data_protection::{DataProtection, RlsEngine};
+    use std::sync::Arc;
+
+    let db_path = std::env::temp_dir().join(format!(
+        "dbnexus_dp_order_{}_{}.db",
+        std::process::id(),
+        std::time::Instant::now().elapsed().as_nanos()
+    ));
+    let _ = std::fs::remove_file(&db_path);
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+    let admin = pool.get_session("admin").await.unwrap();
+    admin
+        .execute_raw_ddl("CREATE TABLE orders (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, amount REAL NOT NULL)")
+        .await
+        .unwrap();
+    for (id, tenant) in [(1, "t-100"), (2, "t-200"), (3, "t-100")] {
+        admin
+            .execute_raw(&format!(
+                "INSERT INTO orders (id, tenant_id, amount) VALUES ({id}, '{tenant}', 10.0)"
+            ))
+            .await
+            .unwrap();
+    }
+
+    let mut roles = std::collections::HashMap::new();
+    roles.insert(
+        "admin".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "*".to_string(),
+                operations: vec![dbnexus::access::permission::PermissionAction::Select],
+            }],
+        },
+    );
+    roles.insert(
+        "default".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "orders".to_string(),
+                operations: vec![dbnexus::access::permission::PermissionAction::Select],
+            }],
+        },
+    );
+    pool.set_permission_config(dbnexus::access::permission::PermissionConfig { roles })
+        .await
+        .unwrap();
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "orders",
+            "tenant_id",
+            "t-100",
+        ))),
+    })
+    .await;
+
+    // ORDER BY + LIMIT：谓词必须仍在 WHERE 内
+    let rows = pool
+        .query_rows(
+            "SELECT id, tenant_id FROM orders WHERE amount > 5 ORDER BY id LIMIT 10",
+            "default",
+        )
+        .await
+        .expect("query");
+    assert_eq!(
+        rows.len(),
+        2,
+        "the RLS predicate must filter rows even with ORDER BY/LIMIT, got {rows:?}"
+    );
+    assert!(
+        rows.iter().all(|r| r["tenant_id"] == "t-100"),
+        "no row of another tenant may be returned, got {rows:?}"
+    );
+
+    // 已有 WHERE 条件时谓词以 AND 并入
+    let rows = pool
+        .query_rows(
+            "SELECT id, tenant_id FROM orders WHERE id > 1 ORDER BY id",
+            "default",
+        )
+        .await
+        .expect("query");
+    assert_eq!(rows.len(), 1, "got {rows:?}");
+    assert_eq!(rows[0]["tenant_id"], "t-100");
+
+    let _ = std::fs::remove_file(&db_path);
+}
+
+/// raw 写出口同样受行级隔离约束：受限角色的 UPDATE/DELETE 不得触及其他租户的行
+///
+/// 回归：raw 出口（execute_raw / execute_with_params / execute）此前完全没有
+/// 行级谓词——凭表级 Update 权限即可改写其他租户的行。
+#[cfg(all(feature = "data-protection", feature = "permission"))]
+#[tokio::test]
+async fn test_raw_write_path_is_row_level_scoped() {
+    use dbnexus::access::data_protection::{DataProtection, RlsEngine};
+    use std::sync::Arc;
+
+    let db_path = std::env::temp_dir().join(format!(
+        "dbnexus_dp_raw_write_{}_{}.db",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_file(&db_path);
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+    let admin = pool.get_session("admin").await.unwrap();
+    admin
+        .execute_raw_ddl("CREATE TABLE orders (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, amount REAL NOT NULL)")
+        .await
+        .unwrap();
+    for (id, tenant) in [(1, "t-100"), (2, "t-200")] {
+        admin
+            .execute_raw(&format!(
+                "INSERT INTO orders (id, tenant_id, amount) VALUES ({id}, '{tenant}', 10.0)"
+            ))
+            .await
+            .unwrap();
+    }
+
+    let mut roles = std::collections::HashMap::new();
+    roles.insert(
+        "admin".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "*".to_string(),
+                operations: vec![dbnexus::access::permission::PermissionAction::Select],
+            }],
+        },
+    );
+    roles.insert(
+        "default".to_string(),
+        dbnexus::access::permission::RolePolicy {
+            tables: vec![dbnexus::access::permission::TablePermission {
+                name: "orders".to_string(),
+                operations: vec![
+                    dbnexus::access::permission::PermissionAction::Select,
+                    dbnexus::access::permission::PermissionAction::Update,
+                    dbnexus::access::permission::PermissionAction::Delete,
+                ],
+            }],
+        },
+    );
+    pool.set_permission_config(dbnexus::access::permission::PermissionConfig { roles })
+        .await
+        .unwrap();
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "orders",
+            "tenant_id",
+            "t-100",
+        ))),
+    })
+    .await;
+
+    let reader = pool.get_session("default").await.unwrap();
+
+    // UPDATE 只能命中本租户的行
+    let affected = reader
+        .execute_with_params(
+            "UPDATE orders SET amount = 99.0 WHERE id = ?",
+            &[serde_json::json!(2)],
+        )
+        .await
+        .expect("update");
+    assert_eq!(
+        affected.rows_affected(),
+        0,
+        "an update of another tenant's row must not affect any row"
+    );
+
+    // 本租户的行可正常更新
+    let affected = reader
+        .execute_with_params(
+            "UPDATE orders SET amount = 99.0 WHERE id = ?",
+            &[serde_json::json!(1)],
+        )
+        .await
+        .expect("update");
+    assert_eq!(affected.rows_affected(), 1, "the own row must be updatable");
+
+    // DELETE 只能命中本租户的行
+    let affected = reader
+        .execute_raw("DELETE FROM orders WHERE id = 2")
+        .await
+        .expect("delete");
+    assert_eq!(
+        affected.rows_affected(),
+        0,
+        "a delete of another tenant's row must not affect any row"
+    );
+
+    // 剩余行：另一租户的行仍在
+    let rows = pool
+        .query_rows("SELECT id, tenant_id, amount FROM orders", "admin")
+        .await
+        .expect("query");
+    assert_eq!(rows.len(), 2, "got {rows:?}");
+    let other = rows
+        .iter()
+        .find(|r| r["tenant_id"] == "t-200")
+        .expect("the other tenant's row must survive");
+    assert_eq!(other["amount"], 10.0, "got {rows:?}");
+
+    // 多表语句在 raw 出口同样 fail-closed
+    let err = reader
+        .execute_raw("UPDATE orders SET amount = 1.0 WHERE id IN (SELECT id FROM orders)")
+        .await
+        .expect_err("a multi-table statement must be rejected");
+    assert!(
+        err.to_string().contains("row-level security"),
+        "unexpected error: {err}"
+    );
+
+    let _ = std::fs::remove_file(&db_path);
+}
+
+/// 回归：RLS 生效时语句解析失败必须 fail-closed
+///
+/// 未启用 permission 特性时没有"解析失败即拒绝"的权限链，RLS 若把解析
+/// 失败当作"无表可注入"，语句就会在**没有行级谓词**的情况下执行。
+#[cfg(all(feature = "data-protection", not(feature = "permission")))]
+#[tokio::test]
+async fn test_rls_rejects_unparsable_statement() {
+    use dbnexus::access::data_protection::{DataProtection, RlsEngine};
+    use std::sync::Arc;
+
+    let db_path = std::env::temp_dir().join(format!(
+        "dbnexus_dp_unparsable_{}_{}.db",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_file(&db_path);
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+    let pool = Arc::new(dbnexus::DbPool::new(&url).await.unwrap());
+
+    let admin = pool.get_session("admin").await.unwrap();
+    admin
+        .execute_raw_ddl("CREATE TABLE orders (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL)")
+        .await
+        .unwrap();
+    admin
+        .execute_raw("INSERT INTO orders (id, tenant_id) VALUES (1, 't-100')")
+        .await
+        .unwrap();
+
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "orders",
+            "tenant_id",
+            "t-100",
+        ))),
+    })
+    .await;
+
+    // 非 admin 会话（无 permission 特性时不做角色白名单校验）
+    let reader = pool.get_session("reader").await.unwrap();
+    let err = reader
+        .query_rows("SELECT * FROM orders WHERE")
+        .await
+        .expect_err("an unparsable statement must not run without the RLS predicate");
+    assert!(
+        err.to_string().contains("row-level security"),
+        "unexpected error: {err}"
+    );
+
+    let _ = std::fs::remove_file(&db_path);
+}

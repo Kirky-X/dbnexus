@@ -28,7 +28,7 @@ struct User {
 #[derive(Default)]
 struct UserRepo;
 
-dbnexus::impl_json_repository!(UserRepo, User, table = "t418_users");
+dbnexus::impl_json_repository!(UserRepo, User, table = "t418_users", role = "admin");
 
 async fn setup_pool(tag: &str) -> (DbPool, std::path::PathBuf) {
     let path = std::env::temp_dir().join(format!("dbnexus_t418_{}_{}.db", tag, std::process::id()));
@@ -49,7 +49,9 @@ async fn setup_pool(tag: &str) -> (DbPool, std::path::PathBuf) {
 #[tokio::test]
 async fn test_json_repository_crud_roundtrip() {
     let (pool, path) = setup_pool("crud").await;
-    let repo = JsonRepository::new("t418_users").expect("repo");
+    let repo = JsonRepository::new("t418_users")
+        .expect("repo")
+        .with_role("admin");
 
     // insert（实体携带显式主键；insert 返回 last_insert_id）
     let user = User {
@@ -94,7 +96,9 @@ async fn test_json_repository_crud_roundtrip() {
 #[tokio::test]
 async fn test_json_repository_pagination_and_count() {
     let (pool, path) = setup_pool("page").await;
-    let repo = JsonRepository::new("t418_users").expect("repo");
+    let repo = JsonRepository::new("t418_users")
+        .expect("repo")
+        .with_role("admin");
 
     for i in 1..=5i64 {
         let user = User {
@@ -132,7 +136,9 @@ async fn test_json_repository_pagination_and_count() {
 #[tokio::test]
 async fn test_string_values_with_quotes_roundtrip() {
     let (pool, path) = setup_pool("quotes").await;
-    let repo = JsonRepository::new("t418_users").expect("repo");
+    let repo = JsonRepository::new("t418_users")
+        .expect("repo")
+        .with_role("admin");
 
     let tricky = User {
         id: 11,
@@ -202,7 +208,12 @@ struct Versioned {
 #[derive(Default)]
 struct VersionedRepo;
 
-dbnexus::impl_json_repository!(VersionedRepo, Versioned, table = "t418_versioned");
+dbnexus::impl_json_repository!(
+    VersionedRepo,
+    Versioned,
+    table = "t418_versioned",
+    role = "admin"
+);
 
 async fn setup_version_pool(tag: &str) -> (DbPool, std::path::PathBuf) {
     let path = std::env::temp_dir().join(format!(
@@ -227,7 +238,9 @@ async fn setup_version_pool(tag: &str) -> (DbPool, std::path::PathBuf) {
 #[tokio::test]
 async fn test_update_if_version_success_bumps_version() {
     let (pool, path) = setup_version_pool("cas_ok").await;
-    let repo = JsonRepository::new("t418_versioned").expect("repo");
+    let repo = JsonRepository::new("t418_versioned")
+        .expect("repo")
+        .with_role("admin");
 
     repo.insert(
         &pool,
@@ -265,7 +278,9 @@ async fn test_update_if_version_success_bumps_version() {
 #[tokio::test]
 async fn test_update_if_version_stale_version_conflicts() {
     let (pool, path) = setup_version_pool("cas_stale").await;
-    let repo = JsonRepository::new("t418_versioned").expect("repo");
+    let repo = JsonRepository::new("t418_versioned")
+        .expect("repo")
+        .with_role("admin");
 
     repo.insert(
         &pool,
@@ -357,6 +372,7 @@ async fn test_with_columns_generates_projection() {
     // —— 以此证明 SQL 生成确实只取了投影列）
     let repo = JsonRepository::new("t418_users")
         .unwrap()
+        .with_role("admin")
         .with_columns(&["id", "name"])
         .expect("with_columns");
     let (pool, path) = setup_pool("projection").await;
@@ -374,6 +390,7 @@ async fn test_with_columns_generates_projection() {
     // 完整实体反序列化会因缺 email/age 失败——改用游标 + 宽投影查全列验证不报错
     let wide = JsonRepository::new("t418_users")
         .unwrap()
+        .with_role("admin")
         .with_columns(&["id", "name"])
         .expect("wide");
     let rows = wide.find_all_cursor::<User>(&pool, 0, 10).await;
@@ -386,6 +403,7 @@ async fn test_with_columns_generates_projection() {
     // 投影覆盖全列时查询正常
     let all_cols = JsonRepository::new("t418_users")
         .unwrap()
+        .with_role("admin")
         .with_columns(&["id", "name", "email", "age"])
         .expect("all cols");
     let found: Vec<User> = all_cols
@@ -401,7 +419,9 @@ async fn test_with_columns_generates_projection() {
 #[tokio::test]
 async fn test_find_all_cursor_walks_all_rows_without_duplicates() {
     let (pool, path) = setup_pool("cursor").await;
-    let repo = JsonRepository::new("t418_users").expect("repo");
+    let repo = JsonRepository::new("t418_users")
+        .expect("repo")
+        .with_role("admin");
     for i in 0..7i64 {
         repo.insert(
             &pool,
@@ -443,7 +463,9 @@ async fn test_find_all_cursor_walks_all_rows_without_duplicates() {
 #[tokio::test]
 async fn test_bound_params_roundtrip_malicious_values() {
     let (pool, path) = setup_pool("bind_roundtrip").await;
-    let repo = JsonRepository::new("t418_users").expect("repo");
+    let repo = JsonRepository::new("t418_users")
+        .expect("repo")
+        .with_role("admin");
 
     let evil_name = "O'Brien \\ ; DROP TABLE t418_users; -- ' OR '1'='1";
     let evil_email = "x\\'@example.com";

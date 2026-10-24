@@ -573,3 +573,172 @@ async fn test_postgres_concurrent_access() {
         .expect("COUNT query should succeed");
     assert_eq!(result.rows_affected(), 1, "Should return 1 row");
 }
+
+/// 回归：RLS 租户谓词在 PostgreSQL 上必须下发到数据库
+///
+/// 此前 PostgreSQL 取数臂用原始 SQL 做 row_to_json 包装，注入产物被丢弃，
+/// 非 admin 角色的 SELECT 返回全表行（跨租户读）。本用例断言谓词生效。
+#[cfg(feature = "data-protection")]
+#[tokio::test]
+async fn test_postgres_rls_predicate_is_applied() {
+    use dbnexus::access::data_protection::{DataProtection, RlsEngine};
+    use dbnexus::access::permission::{
+        PermissionAction, PermissionConfig, RolePolicy, TablePermission,
+    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+
+    let admin = pool.get_session("admin").await.expect("admin session");
+    admin
+        .execute_raw_ddl(
+            "CREATE TABLE pg_rls_orders (
+                id INTEGER PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL
+            )",
+        )
+        .await
+        .expect("create table");
+    admin
+        .execute_raw("INSERT INTO pg_rls_orders (id, tenant_id) VALUES (1, 't-100'), (2, 't-200')")
+        .await
+        .expect("insert");
+
+    // 受限角色：仅 pg_rls_orders 表的 select
+    let mut roles = HashMap::new();
+    roles.insert(
+        "admin".to_string(),
+        RolePolicy {
+            tables: vec![TablePermission {
+                name: "*".to_string(),
+                operations: vec![PermissionAction::Select],
+            }],
+        },
+    );
+    roles.insert(
+        "reader".to_string(),
+        RolePolicy {
+            tables: vec![TablePermission {
+                name: "pg_rls_orders".to_string(),
+                operations: vec![PermissionAction::Select],
+            }],
+        },
+    );
+    pool.set_permission_config(PermissionConfig { roles })
+        .await
+        .expect("permission config");
+
+    // RLS：pg_rls_orders 表的 tenant_id = 't-100'
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "pg_rls_orders",
+            "tenant_id",
+            "t-100",
+        ))),
+    })
+    .await;
+
+    // 受限角色：只应看到 t-100 的行
+    let rows = pool
+        .query_rows("SELECT id, tenant_id FROM pg_rls_orders", "reader")
+        .await
+        .expect("reader query");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the RLS predicate must be applied on PostgreSQL, got {rows:?}"
+    );
+    assert_eq!(rows[0]["tenant_id"], "t-100");
+
+    // admin 走管理通道：不注入谓词（可见全部行）
+    let admin_rows = pool
+        .query_rows("SELECT id, tenant_id FROM pg_rls_orders", "admin")
+        .await
+        .expect("admin query");
+    assert_eq!(admin_rows.len(), 2, "admin is not subject to RLS");
+}
+
+/// 回归：非文本租户列（INTEGER）上 RLS 谓词必须可用
+///
+/// 谓词值曾以绑定参数传递，sea-orm 把字符串值声明为 TEXT 参数，
+/// PostgreSQL 侧 `integer = text` 无匹配操作符 → 查询直接报错。
+/// 谓词值改为转义后的字面量（unknown 类型，由列类型决定）后恢复可用。
+#[cfg(feature = "data-protection")]
+#[tokio::test]
+async fn test_postgres_rls_predicate_on_non_text_column() {
+    use dbnexus::access::data_protection::{DataProtection, RlsEngine};
+    use dbnexus::access::permission::{
+        PermissionAction, PermissionConfig, RolePolicy, TablePermission,
+    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    let (_container, url) = setup_postgres().await;
+    let pool = DbPool::with_config(make_config(url))
+        .await
+        .expect("Failed to create pool");
+
+    let admin = pool.get_session("admin").await.expect("admin session");
+    admin
+        .execute_raw_ddl(
+            "CREATE TABLE pg_rls_int_orders (
+                id INTEGER PRIMARY KEY,
+                tenant_id INTEGER NOT NULL
+            )",
+        )
+        .await
+        .expect("create table");
+    admin
+        .execute_raw("INSERT INTO pg_rls_int_orders (id, tenant_id) VALUES (1, 100), (2, 200)")
+        .await
+        .expect("insert");
+
+    let mut roles = HashMap::new();
+    roles.insert(
+        "admin".to_string(),
+        RolePolicy {
+            tables: vec![TablePermission {
+                name: "*".to_string(),
+                operations: vec![PermissionAction::Select],
+            }],
+        },
+    );
+    roles.insert(
+        "reader".to_string(),
+        RolePolicy {
+            tables: vec![TablePermission {
+                name: "pg_rls_int_orders".to_string(),
+                operations: vec![PermissionAction::Select],
+            }],
+        },
+    );
+    pool.set_permission_config(PermissionConfig { roles })
+        .await
+        .expect("permission config");
+
+    pool.set_data_protection(DataProtection {
+        masking: None,
+        rls: Some(Arc::new(RlsEngine::new().policy(
+            "pg_rls_int_orders",
+            "tenant_id",
+            "100",
+        ))),
+    })
+    .await;
+
+    let rows = pool
+        .query_rows("SELECT id, tenant_id FROM pg_rls_int_orders", "reader")
+        .await
+        .expect("the RLS predicate must apply to an INTEGER tenant column");
+    assert_eq!(
+        rows.len(),
+        1,
+        "only the tenant's row may be returned, got {rows:?}"
+    );
+    assert_eq!(rows[0]["tenant_id"], 100);
+}

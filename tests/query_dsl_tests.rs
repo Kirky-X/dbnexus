@@ -18,7 +18,7 @@ use dbnexus::{QueryFragment, q};
 #[test]
 fn test_basic_projection() {
     let fragment = q!(select [id, name] from users);
-    assert_eq!(fragment.to_sql(), "SELECT id, name FROM users");
+    assert_eq!(fragment.to_sql().unwrap(), "SELECT id, name FROM users");
 }
 
 /// 条件组合：多条件 AND、各运算符、字符串转义、数值/布尔字面量
@@ -29,7 +29,7 @@ fn test_condition_combinations() {
         where age > 18, status == "active", deleted != true, score >= 1.5, level <= 9
     };
     assert_eq!(
-        fragment.to_sql(),
+        fragment.to_sql().unwrap(),
         "SELECT id, name FROM users WHERE age > 18 AND status = 'active' AND deleted != true AND score >= 1.5 AND level <= 9"
     );
 }
@@ -43,7 +43,7 @@ fn test_order_and_limit() {
         limit 20
     };
     assert_eq!(
-        fragment.to_sql(),
+        fragment.to_sql().unwrap(),
         "SELECT id FROM orders ORDER BY created_at DESC LIMIT 20"
     );
 
@@ -53,7 +53,7 @@ fn test_order_and_limit() {
         limit 5
     };
     assert_eq!(
-        fragment.to_sql(),
+        fragment.to_sql().unwrap(),
         "SELECT id FROM orders ORDER BY id ASC LIMIT 5"
     );
 }
@@ -66,7 +66,7 @@ fn test_string_value_escaping() {
         where name == "O'Brien"
     };
     assert_eq!(
-        fragment.to_sql(),
+        fragment.to_sql().unwrap(),
         "SELECT id FROM users WHERE name = 'O''Brien'"
     );
 }
@@ -105,7 +105,10 @@ fn test_select_star() {
         select * from users
         where id == 1
     };
-    assert_eq!(fragment.to_sql(), "SELECT * FROM users WHERE id = 1");
+    assert_eq!(
+        fragment.to_sql().unwrap(),
+        "SELECT * FROM users WHERE id = 1"
+    );
 }
 
 /// 条件组合 API：程序化追加（非宏路径）
@@ -116,7 +119,64 @@ fn test_programmatic_condition_addition() {
         ..Default::default()
     };
     fragment.add_condition("age", dbnexus::DslOp::Gt, "10".to_string());
-    assert_eq!(fragment.to_sql(), "SELECT * FROM t422 WHERE age > 10");
+    assert_eq!(
+        fragment.to_sql().unwrap(),
+        "SELECT * FROM t422 WHERE age > 10"
+    );
+}
+
+/// 非法标识符返回错误而非 panic（公共 API 不得用 panic 表达输入校验失败）
+#[test]
+fn test_unsafe_identifier_returns_error_not_panic() {
+    // 非法表名
+    let fragment = QueryFragment {
+        table: Some("users; DROP TABLE users".to_string()),
+        ..Default::default()
+    };
+    assert!(
+        fragment.to_sql().is_err(),
+        "an unsafe table must be rejected"
+    );
+
+    // 非法投影列
+    let fragment = QueryFragment {
+        table: Some("users".to_string()),
+        columns: vec!["id".to_string(), "id; --".to_string()],
+        ..Default::default()
+    };
+    assert!(
+        fragment.to_sql().is_err(),
+        "an unsafe column must be rejected"
+    );
+
+    // 非法排序列
+    let fragment = QueryFragment {
+        table: Some("users".to_string()),
+        order_column: Some("id, (SELECT 1)".to_string()),
+        ..Default::default()
+    };
+    assert!(
+        fragment.to_sql().is_err(),
+        "an unsafe order column must be rejected"
+    );
+
+    // 非法条件列
+    let mut fragment = QueryFragment {
+        table: Some("users".to_string()),
+        ..Default::default()
+    };
+    fragment.add_condition("id OR 1=1", dbnexus::DslOp::Eq, "1".to_string());
+    assert!(
+        fragment.to_sql().is_err(),
+        "an unsafe condition column must be rejected"
+    );
+}
+
+/// Rust 原始标识符（`r#type`）剥除 `r#` 前缀后可用
+#[test]
+fn test_raw_identifier_is_accepted() {
+    let fragment = q!(select [r#type] from t_raw);
+    assert_eq!(fragment.to_sql().unwrap(), "SELECT type FROM t_raw");
 }
 
 /// 端到端：宏产物经 query_rows 执行返回数据行
@@ -144,7 +204,7 @@ async fn test_macro_fragment_executes_end_to_end() {
         order by id desc
     };
     let rows = pool
-        .query_rows(&fragment.to_sql(), "admin")
+        .query_rows(&fragment.to_sql().unwrap(), "admin")
         .await
         .expect("query");
     assert_eq!(rows.len(), 1, "the adults filter should leave only alice");

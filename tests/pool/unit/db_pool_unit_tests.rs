@@ -32,12 +32,30 @@ async fn test_db_pool_new_sqlite_memory() {
     );
     let pool = pool.unwrap();
     let status = pool.status();
-    // 默认 min_connections=5，池会预热创建连接
+    // 本文件被两个测试目标编译：`pool_db_pool_unit_tests`（required-features 含
+    // pool-warmup）与伞形 `mod` 目标（不含）。预热是 feature 门控能力——启用时
+    // 构造即预建 min_connections（默认 5）个连接，未启用时池按需懒建连接。
+    #[cfg(feature = "pool-warmup")]
     assert!(
         status.total >= 1,
         "pool should have at least 1 connection after warmup, got {}",
         status.total
     );
+    #[cfg(not(feature = "pool-warmup"))]
+    assert_eq!(
+        status.total, 0,
+        "without pool-warmup the pool creates connections on demand, got {}",
+        status.total
+    );
+
+    // 两种特性组合共同成立：取到会话后池中至少持有一个连接
+    let session = pool.get_session("admin").await.expect("session");
+    assert!(
+        pool.status().total >= 1,
+        "pool should hold at least 1 connection once a session is acquired, got {}",
+        pool.status().total
+    );
+    drop(session);
 }
 
 /// DbPool::with_config 应成功

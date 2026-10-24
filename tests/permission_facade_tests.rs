@@ -188,3 +188,41 @@ async fn test_facade_rbac_denies_unauthorized_table() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+/// RLS 生效时多表语句 fail-closed 拒绝（单表谓词无法覆盖全部行）
+#[tokio::test]
+async fn test_facade_rls_rejects_multi_table_query() {
+    let (pool, path) = temp_pool("multi").await;
+    let facade = PermissionFacade::new(&pool);
+    facade
+        .apply(
+            PermissionFacadeConfig::new()
+                .with_roles(rbac_roles(vec![
+                    TablePermission {
+                        name: "orders".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    },
+                    TablePermission {
+                        name: "audit".to_string(),
+                        operations: vec![PermissionAction::Select],
+                    },
+                ]))
+                .with_rls_policy("orders", "tenant_id", "t-100"),
+        )
+        .await
+        .expect("apply");
+
+    let err = pool
+        .query_rows(
+            "SELECT o.id FROM orders o JOIN audit a ON a.id = o.id",
+            "default",
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, dbnexus::DbError::Permission(_)),
+        "a multi-table statement must be rejected while RLS is effective, got {err:?}"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}

@@ -20,6 +20,9 @@ use std::time::{Duration, Instant};
 mod common;
 
 /// 权限配置测试数据（PermissionRule 格式：roles → Vec<PermissionRule>）
+///
+/// `subjects` 段是主体→角色的显式映射：主体名与角色名同名不自动继承该角色
+/// （防权限提升），主体路径的资源/操作枚举只认此处的显式声明。
 const TEST_PERMISSIONS_YAML: &str = r#"
 roles:
   admin:
@@ -80,6 +83,28 @@ roles:
       resource: products
       allow:
         - select
+      deny: []
+      enabled: true
+subjects:
+  admin:
+    - admin
+  user:
+    - user
+"#;
+
+/// 未声明 `subjects` 映射的权限配置：同名主体不继承同名角色
+const TEST_PERMISSIONS_YAML_NO_SUBJECTS: &str = r#"
+roles:
+  admin:
+    - name: admin_all
+      priority: 100
+      subject: "*"
+      resource: "*"
+      allow:
+        - select
+        - insert
+        - update
+        - delete
       deny: []
       enabled: true
 "#;
@@ -294,9 +319,10 @@ async fn test_get_allowed_resources_returns_expected_resources() {
     // 先刷新缓存以加载配置
     pdp.refresh_cache().await;
 
-    // admin 可以访问所有资源
+    // admin 通过显式 subjects 映射获得角色，可访问所有资源（通配符 *）
     let resources = pdp.get_allowed_resources("admin").await;
     assert!(!resources.is_empty());
+    assert!(resources.iter().any(|r| r.name == "*"));
 
     // user 只能访问特定资源
     let resources = pdp.get_allowed_resources("user").await;
@@ -331,6 +357,44 @@ async fn test_get_allowed_actions_returns_expected_actions() {
     let actions = provider.get_allowed_actions("user", "users").await;
     assert!(actions.contains(&PermissionAction::Select));
     assert!(!actions.contains(&PermissionAction::Delete));
+}
+
+/// 主体名路径与角色路径的边界：主体只认显式 `subjects` 映射，按角色枚举走角色专用入口
+#[tokio::test]
+async fn test_subject_path_requires_explicit_role_mapping() {
+    let temp_dir = common::create_temp_dir();
+    let perm_file = temp_dir.path().join("permissions.yaml");
+    std::fs::write(&perm_file, TEST_PERMISSIONS_YAML_NO_SUBJECTS)
+        .expect("Failed to write test permissions");
+
+    let provider = Arc::new(
+        EngineYamlPermissionProvider::new(perm_file.to_str().unwrap_or("permissions.yaml"))
+            .expect("Failed to create YAML provider"),
+    );
+    let pdp = PolicyDecisionPoint::new(provider.clone());
+
+    // 先刷新缓存以加载配置
+    pdp.refresh_cache().await;
+
+    // 与角色同名的主体未显式声明角色 → 无资源、无操作（防越权与信息泄露）
+    assert!(
+        pdp.get_allowed_resources("admin").await.is_empty(),
+        "a subject named like a role must not inherit that role's resources"
+    );
+    assert!(
+        provider
+            .get_allowed_actions("admin", "users")
+            .await
+            .is_empty(),
+        "a subject named like a role must not inherit that role's actions"
+    );
+
+    // 按角色枚举照常返回（角色专用入口）
+    let role_resources = provider.get_role_resources("admin").await;
+    assert!(role_resources.iter().any(|r| r.name == "*"));
+    let role_actions = provider.get_role_actions("admin", "users").await;
+    assert!(role_actions.contains(&PermissionAction::Select));
+    assert!(role_actions.contains(&PermissionAction::Delete));
 }
 
 /// 通配符资源匹配测试

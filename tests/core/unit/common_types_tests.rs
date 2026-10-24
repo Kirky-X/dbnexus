@@ -126,21 +126,27 @@ fn test_from_url_mysql_with_query_params() {
     assert_eq!(db_type, DatabaseType::MySql);
 }
 
-/// 无 scheme 的字符串应返回错误（不回退到默认值）
+/// 不受支持的 scheme 应返回错误并保留具体原因
 #[test]
-fn test_from_url_no_scheme_returns_error() {
-    // 仅 host:port 形式，url::Url::parse 视为相对路径，无 scheme
+fn test_from_url_unsupported_scheme_reports_cause() {
+    // url 把 "localhost:5432" 解析为非特殊 scheme（scheme="localhost"），
+    // 故走「不支持的 scheme」分支，而非「解析失败」分支
     let result = DatabaseType::from_url("localhost:5432");
     assert!(
         result.is_err(),
-        "URL without scheme should return error, got {:?}",
+        "unsupported scheme should return error, got {:?}",
         result.ok()
     );
     let err = result.unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Unsupported database scheme") || msg.contains("failed to parse URL"),
-        "error message should mention unsupported scheme or parse failure, got: {msg}"
+        msg.contains("Invalid database URL"),
+        "error message should identify the database URL as invalid, got: {msg}"
+    );
+    // 错误前缀之外，底层原因（不支持的 scheme）不得被吞掉
+    assert!(
+        msg.contains("not a supported database scheme"),
+        "error message should keep the underlying cause, got: {msg}"
     );
 }
 
@@ -153,6 +159,22 @@ fn test_from_url_relative_path_returns_error() {
         result.is_err(),
         "relative path should return error, got {:?}",
         result.ok()
+    );
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    // 解析失败分支的原因必须可见
+    assert!(
+        msg.contains("failed to parse URL"),
+        "error message should report the parse failure, got: {msg}"
+    );
+    assert!(
+        msg.contains("scheme=<unknown>"),
+        "the scheme hint must be redacted, got: {msg}"
+    );
+    // 原始 URL 不得回显（连接串可能含凭据）
+    assert!(
+        !msg.contains("path/to/db.sqlite"),
+        "the URL content must not be echoed, got: {msg}"
     );
 }
 
