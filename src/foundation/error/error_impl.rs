@@ -32,10 +32,9 @@ impl DbError {
             #[cfg(feature = "validation")]
             DbError::Validation(msg) => msg.clone(),
             DbError::Unsupported(msg) => msg.clone(),
-            DbError::VersionConflict { table, id } => crate::i18n::t(
-                "db-version-conflict",
-                &[("table", table.clone()), ("id", id.to_string())],
-            ),
+            DbError::VersionConflict { id, .. } => {
+                crate::i18n::t("db-version-conflict", &[("id", id.to_string())])
+            }
         }
     }
 }
@@ -139,8 +138,8 @@ mod tests {
         };
         let msg = err.message();
         assert!(
-            msg.contains("orders"),
-            "should carry the table name: {msg:?}"
+            !msg.contains("orders"),
+            "must not expose the table name: {msg:?}"
         );
         assert!(msg.contains("42"), "should carry the row ID: {msg:?}");
     }

@@ -70,7 +70,10 @@ pub enum DbError {
     Unsupported(String),
 
     /// 乐观锁版本冲突（`update_if_version` 条件未命中时返回）
-    #[error("Version conflict on table '{table}' for id {id}")]
+    ///
+    /// 面向调用方的文本只含行 id：表名属库内结构信息，不随错误外泄
+    /// （`table` 字段保留，供服务端日志与结构化上报使用）。
+    #[error("Version conflict for id {id}")]
     VersionConflict {
         /// 冲突的表名
         table: String,

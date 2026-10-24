@@ -213,13 +213,66 @@ impl Session {
         } else {
             self.connection()?.get_database_backend()
         };
-        let stmt = build_statement(backend, sql.to_owned(), params);
+        // RLS 谓词注入（raw 出口）：行级隔离不只覆盖 query_rows 读出口
+        #[cfg(feature = "data-protection")]
+        let effective_sql = self.rls_inject_raw(sql, backend).await?;
+        #[cfg(not(feature = "data-protection"))]
+        let effective_sql = sql;
+        let stmt = build_statement(backend, effective_sql.into(), params);
         if let Some(tx) = tx_opt {
             tx.execute_raw(stmt).await.map_err(DbError::Connection)
         } else {
             let conn = self.connection()?;
             conn.execute_raw(stmt).await.map_err(DbError::Connection)
         }
+    }
+
+    /// raw 出口的行级谓词注入（SELECT / UPDATE / DELETE）
+    ///
+    /// 受限角色凭表级权限即可改写/删除其他租户的行，raw 出口必须与
+    /// `query_rows` 同样受行级隔离约束。无法判定受影响表的语句一律拒绝
+    /// （fail-closed）：解析失败、多表语句（含 CTE 体与 INSERT...SELECT
+    /// 来源表）都不放行。INSERT 不在覆盖范围——租户列由调用方赋值，
+    /// 行级谓词无法表达。
+    #[cfg(all(feature = "sql-parser", feature = "data-protection"))]
+    async fn rls_inject_raw(&self, sql: &str, backend: sea_orm::DbBackend) -> DbResult<String> {
+        let dp = { self.pool_inner.data_protection.read().await.clone() };
+        let Some(rls) = dp.rls.as_ref() else {
+            return Ok(sql.to_string());
+        };
+        if self.is_admin || rls.is_empty() {
+            return Ok(sql.to_string());
+        }
+        let parser = SqlParser::shared().await;
+        let parsed = parser.parse_single(sql).await.map_err(|_| {
+            DbError::Permission("failed to parse SQL statement for row-level security".to_string())
+        })?;
+        if parsed.all_table_names.len() > 1 {
+            return Err(DbError::Permission(rls_multi_table_error(
+                &parsed.all_table_names,
+            )));
+        }
+        // 局部引入：SqlOperationType 在 permission 组合下由上层导入，
+        // 此处需在 data-protection 单独启用时也可用
+        use crate::access::sql_parser::SqlOperationType;
+        if !matches!(
+            parsed.operation_type,
+            SqlOperationType::Select | SqlOperationType::Update | SqlOperationType::Delete
+        ) {
+            return Ok(sql.to_string());
+        }
+        rls.inject(
+            sql,
+            parsed.all_table_names.first().map(String::as_str),
+            sql_dialect(backend),
+        )
+        .map_err(|e| {
+            // 细节只进服务端日志，对外不回显策略细节
+            log::warn!("row-level security policy rejected: {e}");
+            DbError::Permission(
+                "row-level security policy cannot be applied to this statement".to_string(),
+            )
+        })
     }
 
     /// 当前读：在活动事务中执行行锁定查询（`SELECT ... FOR UPDATE`）
@@ -324,17 +377,26 @@ impl Session {
                 ));
             }
 
+            // 行查询只允许 SELECT：query_rows 是只读出口，该约束与
+            // permission 特性无关（否则未启用 permission 时 DELETE/UPDATE
+            // 可经 query_rows 执行）
+            {
+                use crate::access::sql_parser::SqlOperationType;
+                let parser = SqlParser::shared().await;
+                if let Ok(parsed) = parser.parse_single(sql).await
+                    && parsed.operation_type != SqlOperationType::Select
+                {
+                    return Err(DbError::Permission(
+                        "query_rows only allows SELECT statements".to_string(),
+                    ));
+                }
+            }
+
             #[cfg(all(feature = "sql-parser", feature = "permission"))]
             {
                 let parser = SqlParser::shared().await;
                 match parser.parse_single(sql).await {
                     Ok(parsed) => {
-                        // 行查询只允许 SELECT
-                        if parsed.operation_type != SqlOperationType::Select {
-                            return Err(DbError::Permission(
-                                "query_rows only allows SELECT statements".to_string(),
-                            ));
-                        }
                         // Admin 角色绕过权限检查（含表名有效性检查，同 execute_raw）；
                         // 非 admin 保持 fail-closed 并逐表校验 Select 权限
                         if !self.is_admin {
@@ -486,17 +548,17 @@ impl Session {
             self.connection()?.get_database_backend()
         };
 
+        // 解析结果：None = 解析失败（RLS 生效时 fail-closed，不静默放行）
         #[allow(unused_variables)]
-        let primary_table: Option<String> = {
+        let parsed_tables: Option<Vec<String>> = {
             #[cfg(feature = "sql-parser")]
             {
                 let parser = SqlParser::shared().await;
-                match parser.parse_single(sql).await {
-                    Ok(parsed) if parsed.all_table_names.len() == 1 => {
-                        Some(parsed.all_table_names[0].clone())
-                    }
-                    _ => None,
-                }
+                parser
+                    .parse_single(sql)
+                    .await
+                    .ok()
+                    .map(|parsed| parsed.all_table_names)
             }
             #[cfg(not(feature = "sql-parser"))]
             {
@@ -504,36 +566,64 @@ impl Session {
                 None
             }
         };
+        #[allow(unused_variables)]
+        let primary_table: Option<String> = match parsed_tables.as_ref() {
+            Some(tables) if tables.len() == 1 => Some(tables[0].clone()),
+            _ => None,
+        };
 
-        // RLS 谓词注入（admin 角色走管理通道不注入；MVP 边界——
-        // 无 permission feature 时 primary_table 为 None，注入自动失效）
-        // postgres 取数臂按 MVP 设计使用原始 sql 做 row_to_json 包装，
-        // 注入产物仅 sqlite 臂消费——sqlite 关闭时该绑定不参与编译使用。
+        // RLS 谓词注入（admin 角色走管理通道不注入；多表语句 fail-closed）
+        // 谓词值经后端转义后写为字面量：字面量在 PostgreSQL 中是 unknown
+        // 类型，由列类型决定（text/uuid/int 通用），绑定参数被声明为 TEXT，
+        // 非文本列无匹配操作符
         #[cfg(feature = "data-protection")]
-        #[cfg_attr(not(feature = "sqlite"), allow(unused_variables))]
-        let sql_for_fetch = {
+        #[cfg_attr(
+            not(any(feature = "postgres", feature = "sqlite")),
+            allow(unused_variables)
+        )]
+        let sql_for_fetch: String = {
             let dp = { self.pool_inner.data_protection.read().await.clone() };
-            if !self.is_admin {
-                if let Some(rls) = dp.rls.as_ref() {
-                    rls.inject(sql, primary_table.as_deref())
-                } else {
-                    sql.to_string()
+            match dp.rls.as_ref() {
+                Some(rls) if !self.is_admin && !rls.is_empty() => {
+                    // 解析失败 → 无法判定受影响表 → 拒绝而非放行
+                    // （不注入谓词即等于无行级隔离）
+                    let Some(tables) = parsed_tables.as_ref() else {
+                        return Err(DbError::Permission(
+                            "failed to parse SQL statement for row-level security".to_string(),
+                        ));
+                    };
+                    // 多表语句无法用单表谓词表达行级隔离 → 拒绝而非放行
+                    if tables.len() > 1 {
+                        return Err(DbError::Permission(rls_multi_table_error(tables)));
+                    }
+                    rls.inject(sql, primary_table.as_deref(), sql_dialect(backend))
+                        .map_err(|e| {
+                            // 细节只进服务端日志，对外不回显策略细节
+                            log::warn!("row-level security policy rejected: {e}");
+                            DbError::Permission(
+                                "row-level security policy cannot be applied to this statement"
+                                    .to_string(),
+                            )
+                        })?
                 }
-            } else {
-                sql.to_string()
+                _ => sql.to_string(),
             }
         };
         #[cfg(not(feature = "data-protection"))]
-        #[cfg_attr(not(feature = "sqlite"), allow(unused_variables))]
-        let sql_for_fetch = sql.to_string();
+        #[cfg_attr(
+            not(any(feature = "postgres", feature = "sqlite")),
+            allow(unused_variables)
+        )]
+        let sql_for_fetch: String = sql.to_string();
 
         match backend {
             #[cfg(feature = "postgres")]
             sea_orm::DbBackend::Postgres => {
                 // postgres：row_to_json 包装（零列名依赖、类型精确）
+                // 包装的是 RLS 注入后的 SQL：谓词缺失即租户隔离缺失
                 let wrapped = format!(
                     "SELECT row_to_json(sub.*) AS row_data FROM ({}) AS sub",
-                    sql.trim_end().trim_end_matches(';')
+                    sql_for_fetch.trim_end().trim_end_matches(';')
                 );
                 let stmt = build_statement(backend, wrapped, params);
                 let rows = if let Some(tx) = tx_opt.as_ref() {
@@ -939,5 +1029,30 @@ async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, Permiss
         Ok(Some((table, action))) => Ok(Some((table, action))),
         Ok(None) => Ok(None),
         Err(_) => Ok(None),
+    }
+}
+
+/// SQL 字面量转义的后端口径（MySQL 反斜杠语义与 SQL 标准不同）
+#[cfg(feature = "data-protection")]
+fn sql_dialect(backend: sea_orm::DbBackend) -> crate::database::sql_text::SqlBackend {
+    match backend {
+        sea_orm::DbBackend::MySql => crate::database::sql_text::SqlBackend::MySql,
+        _ => crate::database::sql_text::SqlBackend::Standard,
+    }
+}
+
+/// 多表语句的行级隔离拒绝文案
+///
+/// 区分"同一张表被多次引用"（自连接/自引用子查询）与真正的多表语句：
+/// 前者语句本身是单表语义，报"单表"会误导排查。
+#[cfg(feature = "data-protection")]
+fn rls_multi_table_error(tables: &[String]) -> String {
+    let mut distinct: Vec<&str> = tables.iter().map(String::as_str).collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    if distinct.len() == 1 {
+        "row-level security does not support statements referencing the protected table more than once (self-join or subquery)".to_string()
+    } else {
+        "row-level security requires a single-table statement".to_string()
     }
 }

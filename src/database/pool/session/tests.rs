@@ -1370,6 +1370,11 @@ mod rate_limited_error_tests {
 mod permission_flow_tests {
     use crate::foundation::DbConfig;
     use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// 临时权限文件序号：同前缀文件被多个并行用例共用会互相覆盖，
+    /// 序号保证每个用例独占一份文件（否则权限配置偶发读空）
+    static PERM_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
 
     const ANALYST_YAML: &str = r#"
 roles:
@@ -1387,8 +1392,9 @@ roles:
         retry_policy: Option<crate::reliability::RetryPolicy>,
     ) -> (std::path::PathBuf, crate::database::DbPool) {
         let path = std::env::temp_dir().join(format!(
-            "dbnexus_session_perm_{}.yaml",
-            std::time::Instant::now().elapsed().as_nanos()
+            "dbnexus_session_perm_{}_{}.yaml",
+            std::process::id(),
+            PERM_FILE_SEQ.fetch_add(1, Ordering::Relaxed)
         ));
         let mut f = std::fs::File::create(&path).expect("create temp perm file");
         f.write_all(ANALYST_YAML.as_bytes())

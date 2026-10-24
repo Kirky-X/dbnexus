@@ -309,6 +309,33 @@ pub enum DatabaseType {
     Neo4j,
 }
 
+/// URL 的 scheme 片段（解析失败时用于错误提示；只回显已知协议名）
+///
+/// 只回显本库已支持的协议名（固定集合）：URL 形态异常时首段可能是口令/
+/// 凭据片段（如 "hunter2"），整体回显即泄漏。未命中已知协议名时返回
+/// `<unknown>`，不回显任何 URL 内容。
+fn url_scheme_hint(url: &str) -> &str {
+    const KNOWN_SCHEMES: &[&str] = &[
+        "sqlite",
+        "sqlite3",
+        "postgres",
+        "postgresql",
+        "mysql",
+        "duckdb",
+        "lbug",
+        "ladybug",
+        "neo4j",
+        "neo4j+s",
+        "neo4j+ssc",
+    ];
+    let head = url.split([':', '/', '?']).next().unwrap_or("");
+    if KNOWN_SCHEMES.iter().any(|s| s.eq_ignore_ascii_case(head)) {
+        head
+    } else {
+        "<unknown>"
+    }
+}
+
 impl DatabaseType {
     /// 从 URL 解析数据库类型
     ///
@@ -344,9 +371,11 @@ impl DatabaseType {
             return Ok(DatabaseType::Neo4j);
         }
 
-        let parsed = url::Url::parse(url).map_err(|_| {
+        let parsed = url::Url::parse(url).map_err(|e| {
+            // 错误文本不回显原始 URL：连接串常含用户名/口令，回显即凭据泄漏
             crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
-                "failed to parse URL: {url}"
+                "failed to parse URL (scheme={}): {e}",
+                url_scheme_hint(url)
             ))
         })?;
 
@@ -1638,9 +1667,15 @@ mod tests {
         // 空格原样保留；% 与 ? 编码后不被 sqlx 误读为转义/查询串
         let db_path = dir.path().join("report 2026%1?.db");
         let config = DbConfig::for_sqlite_path(db_path.to_str().unwrap(), true);
+        // 期望值按实现口径构造：路径原样入 URL（保留平台分隔符），
+        // 仅把 % 与 ? 做百分号编码。
         let expected = format!(
-            "sqlite:{}/report 2026%251%3F.db?mode=rwc",
-            dir.path().to_str().unwrap()
+            "sqlite:{}?mode=rwc",
+            db_path
+                .to_str()
+                .unwrap()
+                .replace('%', "%25")
+                .replace('?', "%3F")
         );
         assert_eq!(config.url, expected);
         // 文件系统侧用原始路径，父目录已建
@@ -1804,5 +1839,38 @@ mod sqlite_pragmas_config_tests {
         let json = serde_json::to_string(&config).unwrap();
         let back: DbConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.sqlite_pragmas, config.sqlite_pragmas);
+    }
+
+    /// URL 形态异常时错误信息不得回显 URL 内容（可能是口令/凭据片段）
+    #[test]
+    fn test_url_parse_failure_does_not_echo_url_content() {
+        // 无 scheme 的裸串：整串都可能被当作 scheme 回显
+        let err = DatabaseType::from_url("hunter2").expect_err("a bare token is not a valid URL");
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("hunter2"),
+            "the URL content must not be echoed, got: {msg}"
+        );
+        assert!(
+            msg.contains("scheme=<unknown>"),
+            "the scheme hint must be redacted, got: {msg}"
+        );
+    }
+
+    /// 已知协议名仍可回显（诊断信息保留）
+    #[test]
+    fn test_url_parse_failure_keeps_known_scheme_hint() {
+        // 端口非法 → url 解析失败，但 scheme 仍是已知的 postgres
+        let err = DatabaseType::from_url("postgres://user:secret@host:notaport/db")
+            .expect_err("an unparsable postgres URL must fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("scheme=postgres"),
+            "the known scheme must stay visible, got: {msg}"
+        );
+        assert!(
+            !msg.contains("secret"),
+            "credentials must never be echoed, got: {msg}"
+        );
     }
 }

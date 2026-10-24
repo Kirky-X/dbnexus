@@ -172,10 +172,10 @@ impl DbPool {
             // 只允许预定义的安全角色，防止未授权访问
             let safe_roles = ["admin", "system"];
             if !safe_roles.contains(&role) {
+                // 不回显允许角色清单（内部配置，不应成为调用方的探测信道）
                 return Err(DbError::Permission(format!(
-                    "Role '{}' is not allowed without explicit permission configuration. Allowed roles: {}",
-                    role,
-                    safe_roles.join(", ")
+                    "Role '{}' is not allowed without explicit permission configuration",
+                    role
                 )));
             }
             return Ok(());
