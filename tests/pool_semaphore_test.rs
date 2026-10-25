@@ -1,6 +1,6 @@
 // Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! 信号量许可管理测试（Perf-1 修复验证）
+//! 信号量许可管理测试（修复验证）
 //!
 //! 测试连接池信号量许可的正确归还，确保无死锁和许可泄漏。
 
@@ -172,7 +172,7 @@ async fn test_no_deadlock_high_concurrency() {
 }
 
 /// 测试信号量许可 - 达到最大连接数后可继续获取
-/// 这是 Perf-1 修复的核心验证：信号量许可正确归还。
+/// 这是修复的核心验证：信号量许可正确归还。
 #[tokio::test]
 #[cfg(feature = "sqlite")]
 async fn test_semaphore_permit_reuse_after_max() {

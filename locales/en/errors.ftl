@@ -304,3 +304,25 @@ migration-graph-alter-unsupported = Graph databases do not support relational AL
 # --- Permission config (canonical mirror of the string embedded in
 # src/access/permission/context.rs) ---
 perm-config-role-not-found = Role not found in permission config
+
+# --- Session layer (canonical mirror: English patterns identical to the
+# canonical strings embedded at the construction sites in
+# src/database/pool/session/{execute,duckdb,mod}.rs) ---
+session-ddl-not-allowed-context = DDL operations are not allowed in this context
+session-ddl-not-allowed-duckdb = DDL operations are not allowed in DuckDB query context
+session-permission-table-name-required = SQL statement requires a valid table name for permission checking
+session-permission-table-extract-failed = Failed to extract table name for permission checking
+session-permission-parse-failed = Failed to parse SQL statement for permission checking
+session-sql-parser-feature-required = { $function } requires the sql-parser feature to be enabled
+session-sql-parser-feature-required-secure = { $function } requires the sql-parser feature to be enabled for security checks
+session-rls-parse-failed = failed to parse SQL statement for row-level security
+session-rls-not-applicable = row-level security policy cannot be applied to this statement
+session-query-rows-select-only = query_rows only allows SELECT statements
+session-query-rows-sqlite-single-table = query_rows on sqlite (MVP) requires a single-table SELECT statement
+session-query-rows-sqlite-postgres-only = query_rows MVP supports postgres/sqlite backends only
+session-batch-rollback-failed = batch failed: { $error }; rollback also failed: { $rollback_error }
+session-cypher-length-exceeded = Cypher query exceeds maximum length ({ $max } bytes, got { $actual } bytes) - potential DoS payload
+session-cypher-multiple-statements = Cypher query contains multiple statements (';' inside query) - potential injection
+session-cypher-line-comment = Cypher query contains line comment '//' - potential injection
+session-cypher-block-comment = Cypher query contains block comment '/* */' - potential injection
+session-cypher-dangerous-procedure = Cypher query calls dangerous procedure ('{ $procedure }') - potential privilege escalation

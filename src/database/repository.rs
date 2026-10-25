@@ -405,8 +405,9 @@ where
         let mut params = Vec::with_capacity(map.len());
         for (i, (col, value)) in map.iter().enumerate() {
             if !is_safe_identifier(col) {
-                return Err(DbError::Config(format!(
-                    "repository column must be a safe identifier: '{col}'"
+                return Err(DbError::Config(i18n::t(
+                    "repository-column-unsafe",
+                    &[("column", col.to_string())],
                 )));
             }
             columns.push(col.clone());
@@ -492,8 +493,9 @@ where
         let mut n = 0usize;
         for (col, value) in &map {
             if !is_safe_identifier(col) {
-                return Err(DbError::Config(format!(
-                    "repository column must be a safe identifier: '{col}'"
+                return Err(DbError::Config(i18n::t(
+                    "repository-column-unsafe",
+                    &[("column", col.to_string())],
                 )));
             }
             if col == &self.id_column {

@@ -270,7 +270,7 @@ impl PasswordPolicy {
         // 最大长度按字节计：bcrypt 只取前 72 字节，按字符计会让多字节口令
         // （如 30 个汉字 = 90 字节）通过校验后被静默截断，产生口令碰撞
         let max_len = self.effective_max_len();
-        let byte_len = password.as_bytes().len();
+        let byte_len = password.len();
         if byte_len > max_len {
             return Err(AuthError::PasswordHash(format!(
                 "Password must not exceed {max_len} bytes (bcrypt truncation limit)"
@@ -445,12 +445,12 @@ impl PasswordHasher {
 
     /// 口令是否超过 bcrypt 的 72 字节消费上限
     fn exceeds_bcrypt_length(password: &str) -> bool {
-        password.as_bytes().len() > BCRYPT_MAX_BYTES
+        password.len() > BCRYPT_MAX_BYTES
     }
 
     /// bcrypt 长度守卫：超限口令拒绝（不做静默截断）
     fn ensure_bcrypt_length(password: &str) -> AuthResult<()> {
-        let byte_len = password.as_bytes().len();
+        let byte_len = password.len();
         if byte_len > BCRYPT_MAX_BYTES {
             return Err(AuthError::PasswordHash(format!(
                 "Password must not exceed {BCRYPT_MAX_BYTES} bytes (bcrypt truncation limit)"
@@ -661,9 +661,9 @@ mod tests {
     fn test_multibyte_password_over_byte_limit_is_rejected() {
         let hasher = PasswordHasher::new();
         // 30 个汉字 = 90 字节 > 72 字节上限（字符数 30 未超限）
-        let password: String = std::iter::repeat('汉').take(30).collect();
+        let password: String = "汉".repeat(30);
         assert_eq!(password.chars().count(), 30);
-        assert!(password.as_bytes().len() > 72);
+        assert!(password.len() > 72);
         assert!(
             hasher.validate_strength(&password).is_err(),
             "a password longer than 72 bytes must fail validation"
@@ -679,11 +679,11 @@ mod tests {
     fn test_multibyte_password_prefix_collision_is_rejected() {
         let hasher = PasswordHasher::new();
         // 共享前缀（前 72 字节相同），尾部不同
-        let shared: String = std::iter::repeat('密').take(24).collect();
+        let shared: String = "密".repeat(24);
         let p1 = format!("{shared}Aa1!");
         let p2 = format!("{shared}Bb2!");
-        assert!(p1.as_bytes().len() > 72);
-        assert!(p2.as_bytes().len() > 72);
+        assert!(p1.len() > 72);
+        assert!(p2.len() > 72);
         // 两者都超限 → 直接拒绝，不产生同哈希
         assert!(hasher.hash(&p1).is_err());
         assert!(hasher.hash(&p2).is_err());
@@ -697,7 +697,7 @@ mod tests {
         // 旧策略下 80 字符 ASCII 口令可入库（bcrypt 只消费前 72 字节）
         let legacy_password = format!("Aa1!{}", "x".repeat(76));
         assert_eq!(legacy_password.chars().count(), 80);
-        assert!(legacy_password.as_bytes().len() > 72);
+        assert!(legacy_password.len() > 72);
         // 存量哈希 = 前 72 字节的哈希（bcrypt 截断语义）
         let legacy_hash = bcrypt::hash(&legacy_password[..72], 4).expect("legacy hash");
 
@@ -719,7 +719,7 @@ mod tests {
         let hasher = PasswordHasher::new();
         // 24 个汉字 = 72 字节，追加 ASCII 尾缀后超过 72 字节
         let legacy_password = format!("{}Aa1!", "密".repeat(24));
-        assert!(legacy_password.as_bytes().len() > 72);
+        assert!(legacy_password.len() > 72);
         let legacy_hash = bcrypt::hash(&legacy_password[..72], 4).expect("legacy hash");
         assert!(hasher.verify(&legacy_password, &legacy_hash).is_err());
         assert!(hasher.verify_legacy(&legacy_password, &legacy_hash).is_ok());
@@ -734,7 +734,7 @@ mod tests {
         let hasher = PasswordHasher::new();
         // 🔑(4 字节) + 23×密(69 字节) = 73 字节，第 72 字节落在第 24 个「密」中间
         let legacy_password = format!("🔑{}Aa1!", "密".repeat(23));
-        assert!(legacy_password.as_bytes().len() > 72);
+        assert!(legacy_password.len() > 72);
         assert!(!legacy_password.is_char_boundary(72));
         // 旧系统按整串入库，bcrypt 内部截断到 72 字节
         let legacy_hash = bcrypt::hash(&legacy_password, 4).expect("legacy hash");
@@ -757,7 +757,7 @@ mod tests {
         // 73 字节口令按 72 字节上限拒绝（错误文案给出实际生效上限）
         let hasher = PasswordHasher::with_policy(policy);
         let too_long = format!("Aa1!{}", "x".repeat(69));
-        assert_eq!(too_long.as_bytes().len(), 73);
+        assert_eq!(too_long.len(), 73);
         let err = hasher.validate_strength(&too_long).unwrap_err();
         assert!(
             err.to_string().contains("72 bytes"),

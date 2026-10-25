@@ -301,3 +301,24 @@ migration-graph-alter-unsupported = 图数据库不支持关系型 ALTER TABLE �
 # --- 权限配置（canonical mirror，与 src/access/permission/context.rs 内嵌的
 # 规范串逐字一致） ---
 perm-config-role-not-found = 权限配置中未找到该角色
+
+# --- 会话层（canonical mirror：英文模式与 src/database/pool/session/
+# {execute,duckdb,mod}.rs 构造点内嵌的规范串逐字一致） ---
+session-ddl-not-allowed-context = 当前上下文不允许 DDL 操作
+session-ddl-not-allowed-duckdb = DuckDB 查询上下文不允许 DDL 操作
+session-permission-table-name-required = SQL 语句缺少用于权限检查的有效表名
+session-permission-table-extract-failed = 提取权限检查所需表名失败
+session-permission-parse-failed = 解析权限检查所需 SQL 语句失败
+session-sql-parser-feature-required = { $function } 需要启用 sql-parser 特性
+session-sql-parser-feature-required-secure = { $function } 需要启用 sql-parser 特性以执行安全检查
+session-rls-parse-failed = 解析行级安全所需的 SQL 语句失败
+session-rls-not-applicable = 行级安全策略无法应用于该语句
+session-query-rows-select-only = query_rows 只允许 SELECT 语句
+session-query-rows-sqlite-single-table = sqlite 上的 query_rows（MVP）要求单表 SELECT 语句
+session-query-rows-sqlite-postgres-only = query_rows 的 MVP 仅支持 postgres/sqlite 后端
+session-batch-rollback-failed = 批量执行失败: { $error }; 回滚也失败: { $rollback_error }
+session-cypher-length-exceeded = Cypher 查询超过最大长度（{ $max } 字节，实际 { $actual } 字节）- 疑似 DoS 载荷
+session-cypher-multiple-statements = Cypher 查询包含多条语句（查询内含 ';'）- 疑似注入
+session-cypher-line-comment = Cypher 查询包含行注释 '//' - 疑似注入
+session-cypher-block-comment = Cypher 查询包含块注释 '/* */' - 疑似注入
+session-cypher-dangerous-procedure = Cypher 查询调用了危险过程（'{ $procedure }'）- 疑似提权

@@ -45,12 +45,12 @@ impl Session {
         cypher: &str,
         params: HashMap<String, serde_json::Value>,
     ) -> DbResult<crate::database::graph::GraphExecResult> {
-        // MD-1 修复：委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
+        // 委托给 execute_cypher_in_transaction helper 复用事务分发逻辑
         self.execute_cypher_in_transaction(cypher, Some(params))
             .await
     }
 
-    /// 执行 Cypher 查询的内部 helper（MD-1 提取，统一事务分发逻辑）
+    /// 执行 Cypher 查询的内部 helper（统一事务分发逻辑）
     ///
     /// `execute_cypher_with_params` 的完整事务分发流程：
     /// 1. 注入防护（vuln-0005）

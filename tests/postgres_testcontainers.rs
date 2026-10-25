@@ -22,7 +22,7 @@ use testcontainers::runners::AsyncRunner;
 ///
 /// 使用本地 `postgres:16-alpine` 镜像（需预先 `docker pull postgres:16-alpine`）。
 /// 容器必须在测试期间保持存活，否则 Docker 会回收它。
-/// 阶段 2 验收修正：移除 TEST_DATABASE_URL/DATABASE_URL 复用分支——共享库
+/// 移除 TEST_DATABASE_URL/DATABASE_URL 复用分支——共享库
 /// 无预清理，跨轮残留表（42P07 already exists）必现冲突；本文件设计为
 /// 每测试独立容器隔离，一律自起容器保证正确性。
 async fn setup_postgres() -> (Option<ContainerAsync<GenericImage>>, String) {

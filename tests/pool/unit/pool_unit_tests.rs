@@ -1400,7 +1400,7 @@ async fn test_max_waiters_tracks_historical_peak() {
     );
 }
 
-// 信号量许可管理测试（Perf-1 修复验证）
+// 信号量许可管理测试（修复验证）
 //
 // 注意：信号量许可管理的并发测试已移至 tests/pool_semaphore_test.rs
 // 这里的测试专注于单元级别的验证。

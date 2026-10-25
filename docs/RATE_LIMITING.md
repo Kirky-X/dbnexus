@@ -5,7 +5,7 @@
 ## 背景
 
 dbnexus 的权限检查链路（`PermissionContext::check_table_access`）内置了令牌桶
-限流器（`RateLimiter`）。roadmap R2 要求接入 limiteron 作为可选限流后端，但存在
+限流器（`RateLimiter`）。roadmap 要求接入 limiteron 作为可选限流后端，但存在
 一个硬约束：
 
 - limiteron 已 **optional 依赖 dbnexus**（其 `postgres`/`sqlite`/`mysql` 存储

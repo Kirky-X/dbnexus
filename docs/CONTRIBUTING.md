@@ -98,8 +98,8 @@ pre-commit run --all-files
 
 | 工具 | 用途 | 典型场景 |
 |------|------|----------|
-| diting | 代码质量审查：简化、架构优化、性能审查 | review / audit / tech debt / over-engineering / simplify；任意 write / add / refactor / fix 任务 |
-| tiangang | SAST 安全扫描：漏洞与注入检测 | 安全审查 / 漏洞扫描；hardcoded secrets / SQL injection / unsafe eval；发布前安全检查 |
+| 代码质量审查 | 简化、架构优化、性能审查 | review / audit / tech debt / over-engineering / simplify；任意 write / add / refactor / fix 任务 |
+| SAST 安全扫描 | 漏洞与注入检测 | 安全审查 / 漏洞扫描；hardcoded secrets / SQL injection / unsafe eval；发布前安全检查 |
 | kueiku | 方法论框架：根因分析与结构化思考 | 分析 / 策略 / 决策 / 根因分析 |
 
 ---

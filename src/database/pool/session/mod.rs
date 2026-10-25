@@ -485,10 +485,12 @@ fn is_write_action(action: &PermissionAction) -> bool {
 fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
     const MAX_CYPHER_BYTES: usize = 10_240;
     if cypher.len() > MAX_CYPHER_BYTES {
-        return Err(DbError::Permission(format!(
-            "Cypher query exceeds maximum length ({} bytes, got {} bytes) - potential DoS payload",
-            MAX_CYPHER_BYTES,
-            cypher.len()
+        return Err(DbError::Permission(i18n::t(
+            "session-cypher-length-exceeded",
+            &[
+                ("max", MAX_CYPHER_BYTES.to_string()),
+                ("actual", cypher.len().to_string()),
+            ],
         )));
     }
 
@@ -496,10 +498,9 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
     let trimmed = cypher.trim();
     let inner = trimmed.trim_end_matches(';').trim();
     if inner.contains(';') {
-        return Err(DbError::Permission(
-            "Cypher query contains multiple statements (';' inside query) - potential injection"
-                .to_string(),
-        ));
+        return Err(DbError::Permission(i18n::t_simple(
+            "session-cypher-multiple-statements",
+        )));
     }
 
     // Cypher 不支持 `//` 行注释（OpenCypher 标准用 `//` 是合法注释，但极少在正常查询中使用）。
@@ -510,9 +511,9 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
             prev.is_ascii_alphabetic()
         };
         if !is_url_scheme {
-            return Err(DbError::Permission(
-                "Cypher query contains line comment '//' - potential injection".to_string(),
-            ));
+            return Err(DbError::Permission(i18n::t_simple(
+                "session-cypher-line-comment",
+            )));
         }
     }
 
@@ -522,9 +523,9 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         .iter()
         .any(|rule| rule.category == crate::access::RuleCategory::Comment)
     {
-        return Err(DbError::Permission(
-            "Cypher query contains block comment '/* */' - potential injection".to_string(),
-        ));
+        return Err(DbError::Permission(i18n::t_simple(
+            "session-cypher-block-comment",
+        )));
     }
     // 危险过程调用：`CALL apoc.`（APOC 是 Neo4j 管理员过程库，可执行系统操作）；
     // 其他危险过程（如 `dbms.`、`db.`）也在黑名单中，防止提权 / 系统访问
@@ -532,9 +533,9 @@ fn validate_cypher_safety(cypher: &str) -> DbResult<()> {
         .iter()
         .find(|rule| rule.category == crate::access::RuleCategory::GraphProcedure)
     {
-        return Err(DbError::Permission(format!(
-            "Cypher query calls dangerous procedure ('{}') - potential privilege escalation",
-            rule.pattern
+        return Err(DbError::Permission(i18n::t(
+            "session-cypher-dangerous-procedure",
+            &[("procedure", rule.pattern.to_string())],
         )));
     }
 

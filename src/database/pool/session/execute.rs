@@ -41,18 +41,19 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in this context".to_string(),
-                ));
+                return Err(DbError::Permission(i18n::t_simple(
+                    "session-ddl-not-allowed-context",
+                )));
             }
         }
 
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            Err(DbError::Permission(
-                "execute_raw requires the sql-parser feature to be enabled".to_string(),
-            ))
+            Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required",
+                &[("function", "execute_raw".to_string())],
+            )))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -71,9 +72,9 @@ impl Session {
                             // 解析成功但是不支持的语句类型（DDL/DCL/Transaction），
                             // 这些情况需要拒绝执行以确保安全
                             _ => {
-                                return Err(DbError::Permission(
-                                    "SQL statement requires a valid table name for permission checking".to_string(),
-                                ));
+                                return Err(DbError::Permission(i18n::t_simple(
+                                    "session-permission-table-name-required",
+                                )));
                             }
                         };
 
@@ -84,17 +85,15 @@ impl Session {
                             // admin 有完全权限，跳过检查
                         } else {
                             if parsed.all_table_names.is_empty() {
-                                return Err(DbError::Permission(
-                                    "Failed to extract table name for permission checking"
-                                        .to_string(),
-                                ));
+                                return Err(DbError::Permission(i18n::t_simple(
+                                    "session-permission-table-extract-failed",
+                                )));
                             }
                             for table in &parsed.all_table_names {
                                 if table.is_empty() || is_invalid_table_name(table) {
-                                    return Err(DbError::Permission(
-                                        "Failed to extract table name for permission checking"
-                                            .to_string(),
-                                    ));
+                                    return Err(DbError::Permission(i18n::t_simple(
+                                        "session-permission-table-extract-failed",
+                                    )));
                                 }
                             }
 
@@ -119,9 +118,9 @@ impl Session {
                                     &[("role", sanitize_log_field(&self.role))]
                                 )
                             );
-                            return Err(DbError::Permission(
-                                "Failed to parse SQL statement for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-parse-failed",
+                            )));
                         }
                     }
                 }
@@ -218,7 +217,7 @@ impl Session {
         let effective_sql = self.rls_inject_raw(sql, backend).await?;
         #[cfg(not(feature = "data-protection"))]
         let effective_sql = sql;
-        let stmt = build_statement(backend, effective_sql.into(), params);
+        let stmt = build_statement(backend, effective_sql, params);
         if let Some(tx) = tx_opt {
             tx.execute_raw(stmt).await.map_err(DbError::Connection)
         } else {
@@ -244,9 +243,10 @@ impl Session {
             return Ok(sql.to_string());
         }
         let parser = SqlParser::shared().await;
-        let parsed = parser.parse_single(sql).await.map_err(|_| {
-            DbError::Permission("failed to parse SQL statement for row-level security".to_string())
-        })?;
+        let parsed = parser
+            .parse_single(sql)
+            .await
+            .map_err(|_| DbError::Permission(i18n::t_simple("session-rls-parse-failed")))?;
         if parsed.all_table_names.len() > 1 {
             return Err(DbError::Permission(rls_multi_table_error(
                 &parsed.all_table_names,
@@ -269,9 +269,7 @@ impl Session {
         .map_err(|e| {
             // 细节只进服务端日志，对外不回显策略细节
             log::warn!("row-level security policy rejected: {e}");
-            DbError::Permission(
-                "row-level security policy cannot be applied to this statement".to_string(),
-            )
+            DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
         })
     }
 
@@ -363,18 +361,19 @@ impl Session {
             // cfg 互斥块中此 return 在 not 分支恰为函数尾——clippy
             // needless_return 按单组合误报，语义上必须显性提前返回
             #[allow(clippy::needless_return)]
-            return Err(DbError::Permission(
-                "query_rows requires the sql-parser feature to be enabled".to_string(),
-            ));
+            return Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required",
+                &[("function", "query_rows".to_string())],
+            )));
         }
 
         #[cfg(feature = "sql-parser")]
         {
             // 与 execute_raw 一致：DDL 一律拒绝
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in this context".to_string(),
-                ));
+                return Err(DbError::Permission(i18n::t_simple(
+                    "session-ddl-not-allowed-context",
+                )));
             }
 
             // 行查询只允许 SELECT：query_rows 是只读出口，该约束与
@@ -386,9 +385,9 @@ impl Session {
                 if let Ok(parsed) = parser.parse_single(sql).await
                     && parsed.operation_type != SqlOperationType::Select
                 {
-                    return Err(DbError::Permission(
-                        "query_rows only allows SELECT statements".to_string(),
-                    ));
+                    return Err(DbError::Permission(i18n::t_simple(
+                        "session-query-rows-select-only",
+                    )));
                 }
             }
 
@@ -401,17 +400,15 @@ impl Session {
                         // 非 admin 保持 fail-closed 并逐表校验 Select 权限
                         if !self.is_admin {
                             if parsed.all_table_names.is_empty() {
-                                return Err(DbError::Permission(
-                                    "Failed to extract table name for permission checking"
-                                        .to_string(),
-                                ));
+                                return Err(DbError::Permission(i18n::t_simple(
+                                    "session-permission-table-extract-failed",
+                                )));
                             }
                             for table in &parsed.all_table_names {
                                 if table.is_empty() || is_invalid_table_name(table) {
-                                    return Err(DbError::Permission(
-                                        "Failed to extract table name for permission checking"
-                                            .to_string(),
-                                    ));
+                                    return Err(DbError::Permission(i18n::t_simple(
+                                        "session-permission-table-extract-failed",
+                                    )));
                                 }
                             }
                             for table in &parsed.all_table_names {
@@ -434,9 +431,9 @@ impl Session {
                                     &[("role", sanitize_log_field(&self.role))]
                                 )
                             );
-                            return Err(DbError::Permission(
-                                "Failed to parse SQL statement for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-parse-failed",
+                            )));
                         }
                     }
                 }
@@ -588,9 +585,9 @@ impl Session {
                     // 解析失败 → 无法判定受影响表 → 拒绝而非放行
                     // （不注入谓词即等于无行级隔离）
                     let Some(tables) = parsed_tables.as_ref() else {
-                        return Err(DbError::Permission(
-                            "failed to parse SQL statement for row-level security".to_string(),
-                        ));
+                        return Err(DbError::Permission(i18n::t_simple(
+                            "session-rls-parse-failed",
+                        )));
                     };
                     // 多表语句无法用单表谓词表达行级隔离 → 拒绝而非放行
                     if tables.len() > 1 {
@@ -600,10 +597,7 @@ impl Session {
                         .map_err(|e| {
                             // 细节只进服务端日志，对外不回显策略细节
                             log::warn!("row-level security policy rejected: {e}");
-                            DbError::Permission(
-                                "row-level security policy cannot be applied to this statement"
-                                    .to_string(),
-                            )
+                            DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
                         })?
                 }
                 _ => sql.to_string(),
@@ -647,10 +641,7 @@ impl Session {
             sea_orm::DbBackend::Sqlite => {
                 // sqlite：主表列内省 + 类型探测（MVP：单表查询）
                 let table = primary_table.as_deref().ok_or_else(|| {
-                    DbError::Query(
-                        "query_rows on sqlite (MVP) requires a single-table SELECT statement"
-                            .to_string(),
-                    )
+                    DbError::Query(i18n::t_simple("session-query-rows-sqlite-single-table"))
                 })?;
                 let cols = self.sqlite_table_columns(table, tx_opt.as_ref()).await?;
                 let stmt = build_statement(backend, sql_for_fetch.clone(), params);
@@ -667,9 +658,9 @@ impl Session {
                 self.apply_masking(&mut out).await;
                 Ok(out)
             }
-            _ => Err(DbError::Query(
-                "query_rows MVP supports postgres/sqlite backends only".to_string(),
-            )),
+            _ => Err(DbError::Query(i18n::t_simple(
+                "session-query-rows-sqlite-postgres-only",
+            ))),
         }
         // 所有分支均已 return（postgres/sqlite 成功路径、其他方言 Err）
     }
@@ -842,9 +833,9 @@ impl Session {
             match parsed {
                 Some((table_name, action)) => {
                     if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                        return Err(DbError::Permission(
-                            "Failed to extract table name for permission checking".to_string(),
-                        ));
+                        return Err(DbError::Permission(i18n::t_simple(
+                            "session-permission-table-extract-failed",
+                        )));
                     }
                     // 权限检查（含 admin 角色绕过）
                     self.check_permission(&table_name, &action).await?;
@@ -880,9 +871,9 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in this context".to_string(),
-                ));
+                return Err(DbError::Permission(i18n::t_simple(
+                    "session-ddl-not-allowed-context",
+                )));
             }
         }
 
@@ -939,7 +930,7 @@ impl Session {
     pub async fn batch_execute_in_transaction(&self, sqls: Vec<&str>) -> DbResult<Vec<ExecResult>> {
         self.begin_transaction().await?;
 
-        // MD-3 修复：用 async block + ? 简化事务执行，消除 last_error + break 命令式风格
+        // 用 async block + ? 简化事务执行，消除 last_error + break 命令式风格
         let result: DbResult<Vec<ExecResult>> = async {
             let mut results = Vec::with_capacity(sqls.len());
             for sql in sqls {
@@ -958,9 +949,12 @@ impl Session {
                 // 保留原始错误上下文，rollback 失败时组合错误消息（不覆盖原始错误）
                 match self.rollback().await {
                     Ok(()) => Err(e),
-                    Err(rollback_err) => Err(DbError::Transaction(format!(
-                        "batch failed: {}; rollback also failed: {}",
-                        e, rollback_err
+                    Err(rollback_err) => Err(DbError::Transaction(i18n::t(
+                        "session-batch-rollback-failed",
+                        &[
+                            ("error", e.to_string()),
+                            ("rollback_error", rollback_err.to_string()),
+                        ],
                     ))),
                 }
             }
@@ -1011,9 +1005,9 @@ fn run_ddl_policy(policy: &dyn DdlGuardPolicy, sql: &str) -> DbResult<DdlValidat
 #[cfg(feature = "sql-parser")]
 fn check_ddl_operation(sql: &str) -> DbResult<()> {
     if is_ddl_operation(sql) {
-        return Err(DbError::Permission(
-            "DDL operations are not allowed in this context".to_string(),
-        ));
+        return Err(DbError::Permission(i18n::t_simple(
+            "session-ddl-not-allowed-context",
+        )));
     }
     Ok(())
 }

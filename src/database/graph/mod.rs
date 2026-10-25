@@ -197,7 +197,7 @@ pub trait GraphConnection: Send + Sync {
 /// 两个内置 implementor（`LadybugTransaction`/`Neo4jTransaction`）的内部字段
 /// 均为 `Sync` 类型（`mpsc::Sender`/`AsyncMutex`），天然满足此约束。
 ///
-/// # MD-2 误报说明（架构审查）
+/// # 误报说明（架构审查）
 ///
 /// 审查曾标记"`Send + Sync` 约束过严"为 MEDIUM 架构问题。此为误报：
 /// `async_trait` 为 `&self` 方法生成的 future 持有 `&Self`，要使 future `Send`

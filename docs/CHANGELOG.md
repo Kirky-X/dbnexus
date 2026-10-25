@@ -62,7 +62,7 @@
 - **分片策略单一事实源**：`database::sharding` 新增 `is_known_strategy` 导出，别名注册表 `STRATEGY_ALIASES` 供 `is_known_strategy`/`create_strategy` 共用
 - **审计查询有界化**：`AuditQueryFilters` 新增 `limit` 字段（`DbAuditStorage` 线程化为 SQL `LIMIT`，`MemoryAuditStorage` 同步截断），下游字面量构造需补 `..Default::default()`
 - **YAML 权限提供者首查即加载**：修复 `EngineYamlPermissionProvider` 新建实例在 60s 惰性阈值窗口内静默返回空规则（deny-everything 无信号）的行为缺陷
-- **运维 CLI 剩余命令（R4）**：`dbnexus-cli` 新增 `pool-status`（`health_snapshot` 结构化池快照，unhealthy 分流退出码 1）/`audit-query`（`DbAuditStorage` 过滤查询，user/entity/operation/severity/status/时间区间参数，幂等建表空集即成功）/`shard-info`（策略与分片清单输出，`--route-key` 演示哈希路由，未知策略显性拒绝禁止静默回落）/`permission-check`（权限配置文件 + PDP 决策，allow→0 / deny→1 / 配置错误→2），沿用 JSON 输出 + 退出码 0/1/2 契约；`--database-url` 改为按需收敛（shard-info/permission-check 免库）
+- **运维 CLI 剩余命令**：`dbnexus-cli` 新增 `pool-status`（`health_snapshot` 结构化池快照，unhealthy 分流退出码 1）/`audit-query`（`DbAuditStorage` 过滤查询，user/entity/operation/severity/status/时间区间参数，幂等建表空集即成功）/`shard-info`（策略与分片清单输出，`--route-key` 演示哈希路由，未知策略显性拒绝禁止静默回落）/`permission-check`（权限配置文件 + PDP 决策，allow→0 / deny→1 / 配置错误→2），沿用 JSON 输出 + 退出码 0/1/2 契约；`--database-url` 改为按需收敛（shard-info/permission-check 免库）
 
 - **结构化日志接线测试**：`tests/observability_inklog_wiring_tests.rs` 经进程内 TestLogger 断言四类接线点的记录级别与内容（含畸形标识符日志注入消毒用例）
 - **duckdb 能力扩展**：串行写闸 `with_serialized_writes`（默认不启用，读并发不受限）；`with_transaction` 泛型事务闭包（事务内可读、成败皆归还连接）；连接池模式新增 `execute_batch` 多语句批量执行
@@ -72,8 +72,8 @@
 - **session 当前读与隔离级别**：`query_rows_for_update` 当前读、`begin_transaction_with_isolation` 隔离级别控制
 - **绑定参数化执行 API**：session/repository 绑定参数化执行与 JsonRepository 全链路值绑定
 - **业务分片键路由**：`calculate_for_key` / `route_for_key`（sharding）
-- **限流统一（R2，limiteron 端口抽取）**：权限检查限流抽为 `Limiter` 端口（新 workspace 成员 `dbnexus-limiter-port`，仅依赖 `async-trait`，不依赖 dbnexus 与 limiteron 任何一方）——limiteron 已 optional 依赖 dbnexus，Cargo 禁包级循环依赖（optional 亦然），dbnexus 反向接入必成环，故端口独立成 crate 由两侧单向依赖、装配在应用组合根（全图解析零依赖环，方案见 `docs/RATE_LIMITING.md`）；旧令牌桶保留为默认后端（行为不变），新增 `PermissionContext::with_cache_size_and_backend` 双后端切换（`TokenBucket`/`External(Arc<dyn Limiter>)`）；**429 响应语义**：新增 `TableAccessDecision`（`Allowed`/`Denied`/`RateLimited{retry_after}`）与 `DbError::RateLimited{retry_after_secs}`（`ErrorCode::RateLimited = 2002`），会话层全部执行路径区分策略拒绝（403）与限流拒绝（429，携带 `Retry-After`），限流后端故障 fail-closed 显性告警；**审计事件**：`audit` feature 下 `set_audit_logger` 挂载后限流拒绝产生 `rate_limit_exceeded` 审计事件（表名/SQL 动作/Retry-After 入 extra，写入失败不阻断判定但显性告警）；旧布尔 API `check_table_access` 行为兼容；迁移指南 `docs/RATE_LIMITING.md`
-- **HTTP 健康端点生成器（R6）**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
+- **限流统一（limiteron 端口抽取）**：权限检查限流抽为 `Limiter` 端口（新 workspace 成员 `dbnexus-limiter-port`，仅依赖 `async-trait`，不依赖 dbnexus 与 limiteron 任何一方）——limiteron 已 optional 依赖 dbnexus，Cargo 禁包级循环依赖（optional 亦然），dbnexus 反向接入必成环，故端口独立成 crate 由两侧单向依赖、装配在应用组合根（全图解析零依赖环，方案见 `docs/RATE_LIMITING.md`）；旧令牌桶保留为默认后端（行为不变），新增 `PermissionContext::with_cache_size_and_backend` 双后端切换（`TokenBucket`/`External(Arc<dyn Limiter>)`）；**429 响应语义**：新增 `TableAccessDecision`（`Allowed`/`Denied`/`RateLimited{retry_after}`）与 `DbError::RateLimited{retry_after_secs}`（`ErrorCode::RateLimited = 2002`），会话层全部执行路径区分策略拒绝（403）与限流拒绝（429，携带 `Retry-After`），限流后端故障 fail-closed 显性告警；**审计事件**：`audit` feature 下 `set_audit_logger` 挂载后限流拒绝产生 `rate_limit_exceeded` 审计事件（表名/SQL 动作/Retry-After 入 extra，写入失败不阻断判定但显性告警）；旧布尔 API `check_table_access` 行为兼容；迁移指南 `docs/RATE_LIMITING.md`
+- **HTTP 健康端点生成器**：新增 `http-health` feature（axum `0.8` optional，`default-features = false`），`dbnexus::integrations::http_health::HealthRouterBuilder` 链式注入池（必选）/熔断器/metrics 采集器（可选）后产出挂载 `/healthz`（liveness 恒 200）/`/readyz`（readiness：`health_snapshot` 判定，healthy/degraded → 200，unhealthy 与未知状态 fail-closed → 503，熔断 `Open` 覆盖为不就绪并上报 `circuit_breaker` 字段）/`/metrics`（Prometheus 文本，未注入采集器显性 404）的 axum Router；生成而非服务（监听/优雅停机由消费方 `axum::serve` 编排），feature 未启用时库零 HTTP 依赖；示例 `examples/src/observability/http_health.rs`
 - **批量写入（`copy`）**：`BatchInsertStatement::chunk_rows_owned` 消费所有权变体——行集按值消费、参数经 `Vec::append` 指针级搬运，持有行集所有权的调用方免去借用版逐值深拷贝（JSON 对象/数组列收益最大）；校验与分块契约与借用版一致
 - **指标（`metrics`）**：`MetricsCollector::slow_queries_count()` 零克隆计数访问器（健康快照等只需计数的场景免整环深拷贝）
 - **oxcache 查询缓存一等集成（`oxcache-integration`）**：新增 `OxcacheQueryCache` 查询缓存装饰器——`query_cached` 以 **role/namespace 安全上下文 + 数据保护策略世代 + SQL + 绑定参数 + 表版本原始字节**派生 key（SHA-256，长度前缀编码单射；行集内容依赖执行时 RLS/脱敏/权限上下文，共享后端的多实例必须以 `with_role`/`with_namespace` 区分，跨上下文命中即越权读取），命中返回缓存行集（`from_cache` 标记）、未命中穿透执行并回填；**策略换装失效**：`data-protection` 特性下池侧世代计数参与 key 派生，`set_data_protection` 运行时换装即失效旧策略下回填的条目（旧 RLS 谓词/脱敏出口不脏读，收紧/放宽即时生效，免调用方手动失效）；`invalidate_table` 写路径后按表纳秒时间戳十进制串戳版本（单射、幂等、免读改写竞态，重复失效不碰撞回旧 key），使提及该表的缓存项自然失效；`tables` 空集与非法表名 fail-closed 拒绝（漏传即永不受失效影响）、版本读取失败与缓存回填失败均显性报错；feature 依赖新增 `sha2`（key 派生）
@@ -132,37 +132,37 @@
 - **慢查询检测接线**：`Session::execute_raw` 在所有返回路径前插入计时，超 `SlowQueryConfig` 阈值自动记录到 `MetricsCollector`
 - **缓存 DI 闭环**：`Session` 新增 `query_cache_get`/`query_cache_set` 方法，通过注入的 `DbCacheProvider` 驱动只读查询结果缓存；`cache_provider` 字段移入 `DbPoolInner` 并用 `ArcSwapOption` 无锁读取
 - **kit observer 修复**：`kit` feature 显式包含 `trait-kit/observer`；新增 `tests/kit_feature_gate.rs` 门控集成测试
-- **统一行查询 API（T401）**：`DbPool::query_rows` 返回真实数据行，scatter-gather 行取回修复并支持跨分片 SUM/COUNT/AVG 聚合合并
-- **Saga 持久化恢复（T402）**：SagaLog 落库表 + 启动恢复未完成 saga（续跑/补偿），补偿失败可人工重放
-- **字段级自动脱敏与 RLS（T403/T404）**：`data-protection` feature——查询出口统一脱敏（mask/哈希/截断）与行级安全谓词自动注入（admin bypass 通道保留）
-- **confers 热重载（T405）**：`config-confers` feature——权限策略/池参数经 confers watch 热更新（ArcSwap COW 原子换装）
-- **结构化健康导出（T406）**：`DbPool::health_snapshot()` 汇聚池饱和度/副本状态/慢查询计数为单个 JSON，供 HTTP /healthz 与 kit 健康聚合消费
-- **COPY 批量写入（T407）**：`copy` feature——COPY FROM STDIN 语句构建与 text 行编码（pg 协议路径特性门控，非 pg 后端显式拒绝）
-- **DB 审计存储（T408）**：`DbAuditStorage`（audit+sql-parser 门控，saga_logs 同款 DDL/upsert/query 模式），与内存实现并列可注入
-- **权限变更审计链（T409）**：PermissionAuditChain HMAC-SHA256(prev‖event) 链式签名 + `verify_permission_chain` 篡改/删除/重排检测（RFC 4231 向量校验）
-- **OTel 导出桥（T412）**：`otel` feature——健康快照指标（池饱和度/等待/慢查询）导出 OTLP/HTTP JSON 信封（手工 HTTP/1.1 客户端零新增依赖），传输失败 stdout fallback 兜底，mock collector 单测
-- **Kit 全能力注册（T413）**：`DbNexusCacheModule`/`DbNexusAuditModule`/`DbNexusHealthModule` 卫星模块——池/缓存/审计/健康四能力均可独立 require；`kit` feature 隐含 `audit`/`sql-parser`/`health-check` 全能力闭包
-- **端到端性能基准（T414）**：`benches/e2e_bench.rs`——池获取/简单查询/批量写三基准（sqlite 临时文件库），`docs/PERFORMANCE.md` 记录本机基线
-- **运维 CLI（T415）**：`dbnexus-cli` 新增 `migrate`（应用迁移目录）/`health`（健康 JSON）/`user`（管理员增删 MVP，`dbnexus_users` 表加盐 SHA-256）子命令，统一 JSON 输出 + 退出码 0/1/2 契约（13 单测 + 6 assert_cmd e2e）
-- **统一注入检测引擎（T417）**：`InjectionEngine`——关系型/DDL/图三处规则表合并为单一注册表并按子串包含去重（4 条冗余剪除），parity 测试锁定与遗留规则表的误报轮廓一致
-- **泛型仓储（T418）**：`repository` feature——`Repository<T>` CRUD 端口 + `JsonRepository` 参考实现（标识符白名单 + SQL 转义，复用 query_rows 管道）+ `impl_json_repository!` 实现宏
-- **数据 API 网关（T419）**：`data-api` feature——`DataApiGateway` 实体→JSON 查询端点生成器（表/列白名单投影 + eq/contains 过滤 + 排序白名单 + 分页钳制 + manifest 导出），供 sdforge 数据集成
-- **prepare 缓存（T420）**：`prepare-cache` feature——`PreparedStatementCache` 语句级 LRU（池级就绪标记 + 命中/淘汰指标，`enable_prepare_cache` + `Session::execute_cached`）
-- **权限统一门面（T421）**：`permission-facade` feature——`PermissionFacade::apply` 一处配置全局生效（RBAC 角色策略 + 字段脱敏 + RLS 谓词组合换装，支持热重放）
-- **查询 DSL 宏（T422）**：`query-dsl` feature——`q!` 类型安全查询片段（ident 列引用 + literal 值 + AND 条件组合 + 排序/分页，标识符/值注入免疫）
-- **实体事件总线 + Outbox（T423）**：`entity-events` feature——`EntityEvent`/`EntityEventBus` + `DbOutboxStore`（pending/dispatched 状态）+ `OutboxDispatcher`（dispatch_once + spawn 后台轮询）
+- **统一行查询 API**：
+- **Saga 持久化恢复**：
+- **字段级自动脱敏与 RLS**：
+- **confers 热重载**：
+- **结构化健康导出**：
+- **COPY 批量写入**：
+- **DB 审计存储**：
+- **权限变更审计链**：
+- **OTel 导出桥**：
+- **Kit 全能力注册**：
+- **端到端性能基准**：
+- **运维 CLI**：
+- **统一注入检测引擎**：
+- **泛型仓储**：
+- **数据 API 网关**：
+- **prepare 缓存**：
+- **权限统一门面**：
+- **查询 DSL 宏**：
+- **实体事件总线 + Outbox**：
 
 ### Changed
 
 - **Saga 补偿不再静默**：补偿失败记录到 `SagaStepLog`，新增 `CompensationFailed` 终态，不再吞掉补偿错误
 - `cache_provider` 存储从 `Option<Arc<...>>` 改为 `ArcSwapOption<Arc<...>>`，消除 unsafe 写入（`#![forbid(unsafe_code)]` 兼容）
 - `arc-swap` 依赖扩展到 `cache` 和 `oxcache-integration` feature
-- **Retry 自动接线（T410）**：`query_rows` 幂等行查询自动应用 RetryPolicy 退避重试（SELECT 重试/写类不重试契约）
-- **副本负载均衡（T411）**：`replica-routing` 真实实现——读写分离路由 + 副本 weight/(1+latency) 确定性选择 + 连续失败剔除与半开恢复，副本状态对接健康导出
-- **DDL 守卫规范化（T416）**：`DdlGuardPolicy` 统一端口（白名单/干跑/审计装饰器），Session 三处分散 DDL 检查收敛为单一漏斗，支持 `DbPoolBuilder::ddl_guard`/`DbPool::set_ddl_guard` 注入
-- **错误体系统一（T424）**：`ErrorCode` 统一错误码表（分段数值码 + 机器可读名）+ `UnifiedDbError` 顶层结构（与 `foundation::DbError`/`DbNexusError` 双向 `From` 兼容层，JSON 形态与 `QueryErrorReport` 桥接）
-- **大文件拆分（T425）**：`db_pool.rs` 拆为 `db_pool/{mod,access,health,status}.rs`、`saga.rs` 拆为 `saga/{mod,types,store,orchestrator}.rs`——纯移动 + `pub use` 路径兼容，既有测试全绿护航
-- `DbNexusModule` 能力类型改为 `Arc<DbPool>`（T413 前置），仍可按 `ConnectionPool` trait 对象使用
+- **Retry 自动接线**：
+- **副本负载均衡**：
+- **DDL 守卫规范化**：
+- **错误体系统一**：
+- **大文件拆分**：
+- `DbNexusModule` 能力类型改为 `Arc<DbPool>`（前置），仍可按 `ConnectionPool` trait 对象使用
 
 ### Fixed
 
@@ -324,20 +324,20 @@
 
 - `trait-kit` 依赖升级 `0.2` → `0.3`
 - `oxcache` 依赖升级 `0.3.4` → `0.3.8`（trait-kit 0.3 支持）
-- `parse_url`（Neo4j）返回 `Result`，无凭据时从环境变量读取或返回明确错误（LOW-001）
+- `parse_url`（Neo4j）返回 `Result`，无凭据时从环境变量读取或返回明确错误
 - `LadybugConnection` 使用 `Arc<Semaphore>` 限制并发数（替代 `Vec<Connection>` 连接池，因 lbug 生命周期限制）
 
 ### 修复
 
-- **HIGH-001**：图事务并发竞态 — `execute_cypher` 的 take → 锁外 await → put back 模式在并发下绕过事务隔离，新增 `graph_op_mutex` 串行化图操作
+- 图事务并发竞态 — `execute_cypher` 的 take → 锁外 await → put back 模式在并发下绕过事务隔离，新增 `graph_op_mutex` 串行化图操作
 - **FM-3.1**（RPN=216）：`execute_cypher` panic 时事务隔离被绕过 — PoisonGuard RAII 模式在 unwinding 时设置 poisoned 标记
 - **FM-3.6**（RPN=294）：`Session::Drop` 不处理图事务 — 通过级联 Drop 解决（LadybugTransaction actor 自动 ROLLBACK，Neo4jTransaction::Drop spawn rollback）
 - **FM-2.2**（RPN=168）：`Neo4jTransaction` 无 Drop impl — 实现 Drop，`try_lock` + `spawn` rollback task
 - **FM-1.6**（RPN=144）：`begin_graph_txn` 无并发限制 — `LadybugTransaction` 持有 `OwnedSemaphorePermit` 直到 commit/rollback
 - **M-48**：`LadybugConnection::parse_url` 路径遍历校验 — 拒绝包含 `..` 的路径
 - **M-49**：`Neo4jConnection::parse_url` 错误信息不回显原始 URL — 避免凭据泄露
-- **MED-004**：`LadybugConnection::execute_cypher` 行获取逻辑重复 — 去重为 `execute_cypher_on_conn` 共享函数
-- **MED-006**：宏参数类型不匹配时静默忽略 — 4 个参数 + hooks 加 `else` 分支报错
+- `LadybugConnection::execute_cypher` 行获取逻辑重复 — 去重为 `execute_cypher_on_conn` 共享函数
+- 宏参数类型不匹配时静默忽略 — 4 个参数 + hooks 加 `else` 分支报错
 
 ### ⚠️ BREAKING CHANGES
 
@@ -359,7 +359,7 @@
 - **权限导出去重**: 消除重复的权限模块导出
 - **RUSTSEC-2023-0071 文档化**: 记录 `rsa` crate 安全公告（上游暂无修复，已在 `deny.toml` 中声明忽略）
 
-### 变更（Phase 6 前置）
+### 变更
 
 - **edition 2024 升级**: workspace 从 edition 2021 升级到 edition 2024
 - **rust-version 1.85**: 最低支持的 Rust 版本提升至 1.85（edition 2024 要求）
@@ -449,7 +449,7 @@
 - **冗余预加载移除**: 优化启动时无用的预加载逻辑
 - **`deny.toml` 添加 RUSTSEC-2023-0071**: 安全公告加入 cargo-deny 策略
 
-#### 最终回归修复（T024）
+#### 最终回归修复
 
 - **DuckDB DDL 设计 bug**: `execute_duckdb_raw` 文档声明支持 DDL 但代码无条件拒绝，修复为 admin role + DdlGuard AST 验证后执行（对齐 `execute_raw_ddl`）
 - **DuckDB 健康检查查询失败**: `SELECT 1 AS health` 因 `parse_operation_async` 返回 `Ok(None)` 被拒绝，修复为 admin role 允许执行（对齐 `execute` 的 None 路径）

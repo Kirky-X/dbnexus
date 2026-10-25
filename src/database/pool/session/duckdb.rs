@@ -42,9 +42,9 @@ impl Session {
             match parser.parse_operation_async(sql).await {
                 Ok(Some((table_name, action))) => {
                     if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                        return Err(DbError::Permission(
-                            "Failed to extract table name for permission checking".to_string(),
-                        ));
+                        return Err(DbError::Permission(i18n::t_simple(
+                            "session-permission-table-extract-failed",
+                        )));
                     }
                     if !self.is_admin {
                         super::check_table_or_error(&self.permission_ctx, &table_name, &action)
@@ -55,10 +55,9 @@ impl Session {
                     // admin role 对无法解析的语句直接执行（支持 SELECT 1 等无表名健康检查）；
                     // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                     if !self.is_admin {
-                        return Err(DbError::Permission(
-                            "SQL statement requires a valid table name for permission checking"
-                                .to_string(),
-                        ));
+                        return Err(DbError::Permission(i18n::t_simple(
+                            "session-permission-table-name-required",
+                        )));
                     }
                 }
                 Err(_) => {
@@ -73,9 +72,9 @@ impl Session {
                                 &[("role", sanitize_log_field(&self.role))]
                             )
                         );
-                        return Err(DbError::Permission(
-                            "Failed to parse SQL statement for permission checking".to_string(),
-                        ));
+                        return Err(DbError::Permission(i18n::t_simple(
+                            "session-permission-parse-failed",
+                        )));
                     }
                 }
             }
@@ -113,10 +112,10 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            return Err(DbError::Permission(
-                "execute_duckdb_with_params requires the sql-parser feature to be enabled for security checks"
-                    .to_string(),
-            ));
+            return Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required-secure",
+                &[("function", "execute_duckdb_with_params".to_string())],
+            )));
         }
 
         #[cfg(feature = "sql-parser")]
@@ -156,10 +155,10 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            return Err(DbError::Permission(
-                "execute_duckdb_raw_with_params requires the sql-parser feature to be enabled for security checks"
-                    .to_string(),
-            ));
+            return Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required-secure",
+                &[("function", "execute_duckdb_raw_with_params".to_string())],
+            )));
         }
 
         #[cfg(feature = "sql-parser")]
@@ -201,10 +200,10 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = &statements;
-            return Err(DbError::Permission(
-                "execute_duckdb_transaction requires the sql-parser feature to be enabled for security checks"
-                    .to_string(),
-            ));
+            return Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required-secure",
+                &[("function", "execute_duckdb_transaction".to_string())],
+            )));
         }
 
         #[cfg(feature = "sql-parser")]
@@ -235,19 +234,19 @@ impl Session {
         #[cfg(feature = "sql-parser")]
         {
             if is_ddl_operation(sql) {
-                return Err(DbError::Permission(
-                    "DDL operations are not allowed in DuckDB query context".to_string(),
-                ));
+                return Err(DbError::Permission(i18n::t_simple(
+                    "session-ddl-not-allowed-duckdb",
+                )));
             }
         }
 
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            Err(DbError::Permission(
-                "execute_duckdb requires the sql-parser feature to be enabled for security checks"
-                    .to_string(),
-            ))
+            Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required-secure",
+                &[("function", "execute_duckdb".to_string())],
+            )))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -258,9 +257,9 @@ impl Session {
                 match parser.parse_operation_async(sql).await {
                     Ok(Some((table_name, action))) => {
                         if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                            return Err(DbError::Permission(
-                                "Failed to extract table name for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-table-extract-failed",
+                            )));
                         }
                         if !self.is_admin {
                             super::check_table_or_error(&self.permission_ctx, &table_name, &action)
@@ -272,18 +271,17 @@ impl Session {
                         // 支持 SELECT 1 / SELECT 1 AS health 等无表名健康检查查询；
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                         if !self.is_admin {
-                            return Err(DbError::Permission(
-                                "SQL statement requires a valid table name for permission checking"
-                                    .to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-table-name-required",
+                            )));
                         }
                     }
                     Err(_) => {
                         // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
                         if !self.is_admin {
-                            return Err(DbError::Permission(
-                                "Failed to parse SQL statement for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-parse-failed",
+                            )));
                         }
                     }
                 }
@@ -345,9 +343,10 @@ impl Session {
         #[cfg(not(feature = "sql-parser"))]
         {
             let _ = sql;
-            Err(DbError::Permission(
-                "execute_duckdb_raw requires the sql-parser feature to be enabled for security checks".to_string(),
-            ))
+            Err(DbError::Permission(i18n::t(
+                "session-sql-parser-feature-required-secure",
+                &[("function", "execute_duckdb_raw".to_string())],
+            )))
         }
 
         #[cfg(feature = "sql-parser")]
@@ -358,9 +357,9 @@ impl Session {
                 match parser.parse_operation_async(sql).await {
                     Ok(Some((table_name, action))) => {
                         if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                            return Err(DbError::Permission(
-                                "Failed to extract table name for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-table-extract-failed",
+                            )));
                         }
                         if !self.is_admin {
                             super::check_table_or_error(&self.permission_ctx, &table_name, &action)
@@ -371,18 +370,17 @@ impl Session {
                         // admin role 对无法解析的语句直接执行（对齐 execute 的 None 路径），
                         // 非 admin role 拒绝（安全默认：无法解析则无法做权限检查）。
                         if !self.is_admin {
-                            return Err(DbError::Permission(
-                                "SQL statement requires a valid table name for permission checking"
-                                    .to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-table-name-required",
+                            )));
                         }
                     }
                     Err(_) => {
                         // 解析失败：admin role 放行（对齐 Ok(None) 路径），非 admin 拒绝。
                         if !self.is_admin {
-                            return Err(DbError::Permission(
-                                "Failed to parse SQL statement for permission checking".to_string(),
-                            ));
+                            return Err(DbError::Permission(i18n::t_simple(
+                                "session-permission-parse-failed",
+                            )));
                         }
                     }
                 }

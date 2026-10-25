@@ -176,7 +176,7 @@ async fn test_session_execute_raw_ddl_non_admin_fails() {
 
 /// execute_raw_ddl 对 DropTable/DropDatabase 的白名单边界
 ///
-/// 真实行为核正（阶段 2 验收）：自 0540954 起 admin 路径 DdlGuard 白名单放行
+/// 真实行为核正：自 0540954 起 admin 路径 DdlGuard 白名单放行
 /// DropTable（迁移事务混合 DDL+DML 场景，表级权限由 security_gate 前置检查，
 /// 见 `ddl_guard.rs` 的 ALLOWED_DDL_STATEMENTS 注释；后续 6487866/aad4601
 /// 持续演化白名单）。原断言“DROP TABLE 应被拒（仅允许 DROP INDEX/VIEW）”

@@ -6,7 +6,7 @@
 
 use dbnexus::contains_sql_injection;
 
-// 小写变体测试 - 任务 1.4 要求
+// 小写变体测试
 
 /// 测试堆叠查询注入的小写变体（; DROP TABLE 等）
 #[test]
@@ -336,7 +336,7 @@ fn test_ddl_guard_vs_sql_injection() {
         "a legal CREATE TABLE should pass the DDL Guard"
     );
 
-    // DDL Guard 边界（真实行为核正，阶段 2 验收）：自 0540954 起白名单放行
+    // DDL Guard 边界（真实行为核正）：自 0540954 起白名单放行
     // DropTable（迁移场景，见 ddl_guard.rs ALLOWED_DDL_STATEMENTS），原断言
     // “DROP TABLE 应被拒”已过时；未列入白名单且命中 FORBIDDEN_PATTERNS 的
     // DROP DATABASE 仍被拒
