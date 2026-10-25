@@ -6,21 +6,23 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository = "https://github.com/Kirky-X/dbnexus"
+homepage = "https://github.com/Kirky-X/dbnexus"
+documentation = "https://docs.rs/dbnexus-cli"
+keywords = ["database", "orm", "sea-orm", "sql"]
+categories = ["database", "asynchronous"]
 description = "DBNexus CLI tool for database migration and management"
 
 [[bin]]
 name = "dbnexus-cli"
 path = "src/main.rs"
 
-# Database drivers (互斥 - 必须且只能选一个)
-# 使用时: cargo run --features sqlite|postgres|mysql
+# 数据库驱动（互斥：必须且只能选一个）：cargo run --features sqlite|postgres|mysql
 [features]
 default = ["sqlite", "migration", "all-optional", "health-check", "audit", "sharding", "permission-engine"]
 sqlite = ["dbnexus/sqlite"]
 postgres = ["dbnexus/postgres"]
 mysql = ["dbnexus/mysql"]
 
-# Re-export dbnexus features for conditional compilation
 sql-parser = ["dbnexus/sql-parser"]
 permission = ["dbnexus/permission"]
 config-env = ["dbnexus/config-env"]

@@ -1,11 +1,5 @@
 [workspace]
-members = [
-    ".",
-    "macros",
-    "limiter-port",
-    "src/tools/cli",
-    "examples",
-]
+members = [".", "macros", "limiter-port", "src/tools/cli", "examples"]
 resolver = "2"
 
 [workspace.package]
@@ -15,39 +9,25 @@ rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/dbnexus"
+homepage = "https://github.com/Kirky-X/dbnexus"
 documentation = "https://docs.rs/dbnexus"
 keywords = ["database", "orm", "sea-orm", "sql"]
 categories = ["database", "asynchronous"]
 
 [workspace.dependencies]
-# Async runtime
 tokio = { version = "1.53", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
-
-# Error handling
 thiserror = "2.0"
 anyhow = "1.0"
-
-# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde-saphyr = { version = "1.3", default-features = false, features = ["serialize", "deserialize"] }
 serde_json = "1.0"
-
-# Database - 不包含数据库驱动，由各子包自行选择
+# 不包含数据库驱动，由各子包自行选择
 sea-orm = { version = "2.0", default-features = false }
-
-# Time
 time = { version = "0.3", features = ["formatting", "parsing"] }
-
-# Caching - 基于 oxcache 的缓存系统
-
-# Internal packages
-dbnexus-macros = { path = "macros", version = "0.6.0-rc.10" }
+dbnexus-macros = { version = "0.6.0-rc.10", path = "macros" }
 # 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
-dbnexus-limiter-port = { path = "limiter-port", version = "0.6.0-rc.10" }
-
-# Validation（root + examples 共享）
+dbnexus-limiter-port = { version = "0.6.0-rc.10", path = "limiter-port" }
 validator = { version = "0.21", features = ["derive"] }
-
 # HTTP 健康端点（http-health feature 生成 axum Router，server 能力交给消费方）
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 
@@ -67,55 +47,34 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "An enterprise-grade database abstraction layer for Rust with built-in permission control and connection pooling"
-# 禁用 examples 自动发现：examples/ 目录下存在独立的 dbnexus-examples crate（含自有 Cargo.toml），
-# 其 src/*.rs 文件不应被主包自动识别为示例。所有示例由 dbnexus-examples 子 crate 独立管理。
+# 禁用 examples 自动发现：examples/ 是独立 dbnexus-examples crate，主包不得识别其 src/*.rs
 autoexamples = false
 
 [features]
 # ⚠️ 驱动互斥（严格无例外）：embedded（sqlite/duckdb）与 server-side（postgres/mysql）不可混合
 default = []
-
 # 无驱动默认集：供 CI 矩阵以 --features <db> 选择后端
-default-no-db = [
-    "runtime-tokio-rustls",
-    "permission",
-    "sql-parser",
-    "macros",
-    "config-env",
-    "with-time",
-]
+default-no-db = ["runtime-tokio-rustls", "permission", "sql-parser", "macros", "config-env", "with-time"]
 
-# === 运行时 (互斥 - 必须且只能选一个) ===
-runtime-tokio-rustls = [
-    "sea-orm/runtime-tokio-rustls",
-    "tokio/rt-multi-thread",
-    "tokio/fs",
-]
-runtime-tokio-native-tls = [
-    "sea-orm/runtime-tokio-native-tls",
-    "tokio/rt-multi-thread",
-    "tokio/fs",
-]
-# 实现状态：tokio 为非可选核心依赖恒开（见 [workspace.dependencies]），本 feature
-# 仅转发 sea-orm 的 async-std 运行时支持，dbnexus 自身仍构建于 tokio 之上。
-runtime-async-std = [
-    "sea-orm/runtime-async-std",
-]
+# 运行时（互斥：必须且只能选一个）
+runtime-tokio-rustls = ["sea-orm/runtime-tokio-rustls", "tokio/rt-multi-thread", "tokio/fs"]
+runtime-tokio-native-tls = ["sea-orm/runtime-tokio-native-tls", "tokio/rt-multi-thread", "tokio/fs"]
+# 实现状态：tokio 为非可选核心依赖恒开，本 feature 仅转发 sea-orm 的 async-std 运行时支持
+runtime-async-std = ["sea-orm/runtime-async-std"]
 
-# === 数据库驱动 (互斥 - 必须且只能选一个) ===
-sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros"]
+# 数据库驱动（互斥：必须且只能选一个；图数据库可与关系型共存）
+sqlite = ["sea-orm/sqlx-sqlite", "sea-orm/macros"]  # 嵌入式（sea-orm/macros 供 derive 实体编译）
 postgres = ["sea-orm/sqlx-postgres", "sea-orm/macros"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm/macros"]
 duckdb = ["dep:duckdb", "sea-orm/macros"]  # 嵌入式分析型数据库（sea-orm/macros 供 global-index 等 derive 实体编译）
-# Graph database drivers (can coexist with relational drivers per design 2.8)
 ladybug = ["dep:lbug"]   # 嵌入式图数据库（Ladybug，原 Kuzu）
 neo4j = ["dep:neo4rs"]   # Neo4j 图数据库服务器
 
-# === 核心功能 (可选) ===
 permission = ["dashmap", "futures", "yaml", "sql-parser", "arc-swap", "cache", "dep:dbnexus-limiter-port", "oxcache/stale"]  # 权限控制（sql-parser 防注入；cache 为策略缓存；limiter-port 可注入外部限流）
 # permission-with-cache 聚合已移除（纯别名）；带缓存用 permission + cache
 sql-parser = ["sqlparser", "regex", "unicode-normalization", "sea-orm/with-json", "dep:oxcache", "oxcache/memory"]  # prepare_cache 以 oxcache 为后端，单开须激活 oxcache
@@ -123,24 +82,19 @@ data-protection = ["dep:sha2"]  # 字段脱敏与行级安全
 config-confers = ["dep:confers", "confers/change-stream", "permission"]  # confers 配置热重载
 macros = ["dbnexus-macros"]
 cache = ["dep:oxcache", "arc-swap", "cache-available"]  # 缓存功能（基于 oxcache；arc-swap 用于无锁 cache_provider 读取）
-
-# trait-kit 0.4 AsyncKit integration (DbNexusModule).
+# trait-kit AsyncKit integration (DbNexusModule)
 oxcache-integration = ["dep:oxcache", "arc-swap", "cache-available", "dep:sha2"]
-# 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration
-# 均隐含本 feature，池/会话代码统一以此判定缓存能力，避免重复 any(...) 组合。
+# 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration 均隐含本 feature，池/会话代码统一以此判定缓存能力
 cache-available = []
 # kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
 kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
-# === 配置支持 ===
 yaml = ["dep:serde-saphyr"]  # YAML 配置支持（合并原 config-yaml 别名）
 config-env = []  # 环境变量配置（无额外依赖）
 
-# === 连接池增强 ===
 pool-health-check = ["futures"]  # 连接池健康检查
 pool-warmup = ["futures"]  # 连接池预热
 
-# === 可观测性 ===
 observability = ["metrics", "health-check"]
 metrics = ["dep:parking_lot"]  # Prometheus 格式 metrics 导出（parking_lot 用于 MetricsCollector 内部 RwLock）
 health-check = []  # 健康检查模块（内置，无额外依赖）
@@ -148,7 +102,6 @@ otel = ["health-check"]  # OTel 导出桥（慢查询/池指标 → OTLP/HTTP + 
 # http-health：产出 /healthz /readyz /metrics 的 axum Router（不含 serve）
 http-health = ["dep:axum", "health-check"]
 
-# === 数据管理 ===
 data-management = ["migration", "auto-migrate", "sharding", "global-index"]
 migration = ["sqlparser", "regex"]  # 数据库迁移
 auto-migrate = ["migration"]  # 自动迁移
@@ -156,16 +109,14 @@ sharding = ["twox-hash", "chrono", "futures", "dashmap"]  # 数据分片（dashm
 global-index = ["chrono", "with-json", "entity-macros"]  # 全局索引（实体 derive 经 entity-macros 转发，无驱动组合可用）
 with-json = ["sea-orm/with-json"]  # JSON 支持（global-index 需要）
 with-time = ["sea-orm/with-time"]  # time crate 支持（timestamps 功能需要）
-with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono 类型支持（DateTime/NaiveDateTime 字段）
+with-chrono = ["sea-orm/with-chrono", "chrono"]  # chrono类型支持（DateTime/NaiveDateTime 字段）
 with-uuid = ["sea-orm/with-uuid", "dep:uuid"]  # UUID 类型支持（uuid::Uuid 字段）
 validation = ["validator", "with-time"]  # 数据验证（validator crate + timestamps 依赖）
-# sea-orm MockDatabase 转发（仅测试用；经 dbnexus::sea_orm re-export 使用 MockDatabase
-# 的消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
+# sea-orm MockDatabase 转发（仅测试用；消费方开启此 feature，避免为 MockDatabase 保留 sea-orm 直依赖）
 mock = ["sea-orm/mock"]
 # sea-orm 派生宏转发：DeriveEntityModel/DeriveRelation/FromQueryResult 由 macros 门控
 entity-macros = ["sea-orm/macros"]
 
-# === 分布式能力 ===
 retry = ["sql-parser", "dep:rand"]  # 运行时重试 + 指数退避（需要 sql-parser 判断幂等性，rand 用于 jitter）
 failover = ["pool-health-check"]  # 连接故障转移（CircuitBreaker + HealthCheck 协同）
 replica-routing = []  # 副本路由（基于复制 lag 检测的读写分离）
@@ -174,7 +125,7 @@ scatter-gather = ["sharding"]  # 跨分片查询引擎（scatter-gather 执行�
 copy = []
 repository = []  # 泛型仓储 Repository<T> CRUD 端口（DbPool JSON 行参考实现 + impl_json_repository! 宏）
 data-api = ["repository"]  # 数据 API 网关雏形（实体→JSON 查询端点生成器，供 sdforge 集成）
-prepare-cache = ["dep:oxcache"]  # 语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）；oxcache 取 minimal 档（memory 后端 + 同步面 + metrics）承载容量淘汰
+prepare-cache = ["dep:oxcache"]  # 语句级 prepared statement LRU 缓存（池级就绪标记 + 命中率指标）；oxcache 取 minimal 档承载容量淘汰
 permission-facade = ["permission", "data-protection"]  # 权限统一门面（RBAC+脱敏+RLS 单一入口）
 query-dsl = []  # 查询 DSL 宏 q!（类型安全查询片段：ident 列引用 + literal 值 + AND 条件组合）
 entity-events = ["repository"]  # 实体事件总线 + Outbox（复用仓储标识符/字面量工具 + 变更事件持久化 + 后台投递 + 总线消费）
@@ -183,57 +134,24 @@ saga = ["sharding", "dep:uuid"]  # 分布式事务 Saga 编排器
 distributed-id = []  # 分布式 ID 生成器（Snowflake 默认实现）
 distributed-capabilities = ["retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 分布式能力聚合 feature
 
-# === 安全与合规 ===
 security = ["audit", "permission-engine"]
 audit = ["chrono", "dep:uuid"]  # 审计日志
 permission-engine = ["dashmap", "cache", "futures", "regex", "permission"]  # 高级权限引擎（依赖 permission 提供基础权限类型）
 authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 
-# 开发工具：bench 已删除：criterion 经 [dev-dependencies] 提供（benches 不经 feature 启用），原 optional 依赖从未被任何代码路径激活
+# bench 已删除：criterion 经 [dev-dependencies] 提供，benches 不经 feature 启用
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
-# === 预设配置 ===
-# 嵌入式/边缘设备 - 超轻量配置
-embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]
-
-# 微服务 - 优化的配置
-microservice = [
-    "runtime-tokio-rustls",
-    "postgres",
-    "permission",
-    "sql-parser",
-    "config-env",
-    "observability",
-]
-
-# 单体应用 - 完整配置
-monolith = [
-    "runtime-tokio-rustls",
-    "postgres",
-    "permission",
-    "sql-parser",
-    "yaml",
-    "data-management",
-    "security",
-    "observability",
-    "retry",
-    "failover",
-    "replica-routing",
-    "scatter-gather",
-    "shard-migration",
-    "saga",
-    "distributed-id",
-]
-
-# 企业级 - 全功能配置
-enterprise = ["postgres", "monolith", "permission-engine"]
-
+# 预设配置
+embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]  # 嵌入式/边缘设备 - 超轻量配置
+microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "observability"]  # 微服务
+monolith = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "yaml", "data-management", "security", "observability", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 单体应用 - 完整配置
+enterprise = ["postgres", "monolith", "permission-engine"]  # 企业级 - 全功能配置
 # 所有可选功能（不包括数据库驱动；成员均无 embedded/server 驱动互斥风险）
 all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "kit", "data-protection", "http-health"]
 
 [dependencies]
-# Workspace dependencies
 tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
@@ -244,16 +162,15 @@ sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 axum = { workspace = true, optional = true }
 parking_lot = { version = "0.12", optional = true }
-chrono = { version = "0.4", optional = true, features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"], optional = true }
 sha2 = { version = "0.11", optional = true }
 confers = { version = "0.6.0-rc.11", default-features = false, optional = true }
 twox-hash = { version = "2.1", optional = true }
 url = "2.5"
 async-trait = "0.1"
-uuid = { version = "1.26", optional = true, features = ["v4"] }
+uuid = { version = "1.26", features = ["v4"], optional = true }
 validator = { workspace = true, optional = true }
-
-# External dependencies 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；未安装 logger 时为 no-op，默认构建行为不变
+# 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；未安装 logger 时为 no-op，默认构建行为不变
 log = { version = "0.4", default-features = false, features = ["std"] }
 regex = { version = "1.13", optional = true }
 sqlparser = { version = "0.63", optional = true }
@@ -261,45 +178,29 @@ futures = { version = "0.3", optional = true }
 dashmap = { version = "6.2", optional = true }
 # Lock-free read for permission config (COW pattern)
 arc-swap = { version = "1.9", optional = true }
-# Cache via oxcache - moka is used internally by oxcache as backend.
-oxcache = { version = "0.5.0-rc.8", optional = true, default-features = false, features = ["memory"] }
-
-# Rate limiter port（限流端口，permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
+# Cache via oxcache (moka is used internally by oxcache as backend)
+oxcache = { version = "0.5.0-rc.8", default-features = false, features = ["memory"], optional = true }
+# Rate limiter port（permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
-
-# trait-kit integration (optional, feature-gated via `kit`).
-# Mirrors oxcache/limiteron pattern.
+# trait-kit integration (optional, feature-gated via `kit`; mirrors oxcache/limiteron pattern)
 trait-kit = { version = "0.5.0-rc.10", default-features = false, features = ["async"], optional = true }
-
-# DuckDB embedded database (duckdb feature)
-duckdb = { version = "1.10505", optional = true, features = ["bundled"] }
-
-# Ladybug embedded graph database (ladybug feature)
+duckdb = { version = "1.10505", features = ["bundled"], optional = true }
 lbug = { version = "0.21", optional = true }
-# Neo4j graph database server (neo4j feature)
 neo4rs = { version = "0.9.0-rc.10", optional = true }
-
-# Authentication dependencies
 # jsonwebtoken: v11 使用 aws_lc_rs 后端，API 与 v10 兼容
 jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"], optional = true }
 bcrypt = { version = "0.19", optional = true }
-
 unicode-normalization = { version = "0.1", optional = true }
 rand = { version = "0.10", optional = true }
-
 # ICU4X 国际化（核心特性，始终可用）
 icu = { version = "2.3", default-features = false, features = ["compiled_data"] }
 writeable = "0.6"
 sys-locale = "0.3"
-# 规则12：显式特性声明（两 crate 默认特性集为空，与 confers/inklog 一致）
-fluent-bundle = { version = "0.16", default-features = false, features = [] }
-unic-langid = { version = "0.9", default-features = false, features = [] }
-
-
-# Internal packages
+# 显式关闭 default（两 crate 默认特性集为空，与 confers/inklog 一致）
+fluent-bundle = { version = "0.16", default-features = false }
+unic-langid = { version = "0.9", default-features = false }
 dbnexus-macros = { workspace = true, optional = true }
-
-# Testing utilities (also in dev-dependencies)
+# Testing utilities（同时出现在 dev-dependencies，optional 供 test-utils feature 拉入）
 assert_cmd = { version = "2.2", optional = true }
 tempfile = { version = "3.27", optional = true }
 
@@ -309,6 +210,7 @@ predicates = "3.1"
 criterion = "0.8"
 tempfile = "3.27"
 futures = "0.3"
+testcontainers = "0.28"
 # http-health 端点契约测试：tower ServiceExt::oneshot 直测 Router（不起真实服务器）
 tower = { version = "0.5", default-features = false, features = ["util"] }
 http-body-util = "0.1"
@@ -892,8 +794,6 @@ path = "tests/feature_mutex_guards.rs"
 name = "feature_dependency_contract"
 path = "tests/feature_dependency_contract.rs"
 
-[dev-dependencies.testcontainers]
-version = "0.28"
 [profile.release]
 opt-level = 3
 lto = "fat"
@@ -902,5 +802,3 @@ strip = true
 
 [profile.bench]
 inherits = "release"
-
-# 本地开发联调 [patch] 占位（当前无）

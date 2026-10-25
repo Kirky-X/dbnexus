@@ -6,6 +6,9 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 documentation.workspace = true
 description = "Rate limiter port (trait Limiter) shared by dbnexus and limiteron; only dependency is async-trait"
 

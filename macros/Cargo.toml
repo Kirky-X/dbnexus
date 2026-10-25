@@ -6,6 +6,9 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 documentation.workspace = true
 description = "Procedural macros for dbnexus"
 
@@ -13,7 +16,6 @@ description = "Procedural macros for dbnexus"
 proc-macro = true
 
 [dependencies]
-# Proc macro dependencies
 syn = { version = "3.0", features = ["full", "extra-traits"] }
 quote = "1.0"
 proc-macro2 = "1.0"
