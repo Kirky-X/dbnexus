@@ -117,7 +117,7 @@ The core foundation (no optional-feature dependencies) and the `default-no-db` a
 | `saga` | Saga distributed transactions: persistent log, startup recovery, compensation orchestration |
 | `distributed-id` | Snowflake distributed ID generation |
 
-> 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (http-health unreleased).
+> 🆕 marks capabilities added in 0.6.0-rc.4 and later; see the [Changelog](docs/CHANGELOG.md) for per-item versions (http-health added in 0.6.0-rc.6).
 
 </details>
 
@@ -237,14 +237,14 @@ Model::find_all(&session).await?; // Error: permission denied
 
 Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers. `sqlite` / `postgres` / `mysql` are backed by the corresponding sea-orm/sqlx drivers, while `duckdb` (embedded analytical), `ladybug` (formerly Kuzu) and `neo4j` use their own native bindings; see [Database Support](#-database-support) for each driver's database, type and introduction version.
 
-> 🚫 **Do not enable the `duckdb` feature** (since 2026-10-16): the upstream `zip` crate has been fully yanked on crates.io (only 9.0.3 remains). The `duckdb` chain resolves through `libduckdb-sys` (pinned to `zip ^6`), which can no longer be resolved — enabling this feature from scratch fails at dependency resolution. Existing projects with a committed `Cargo.lock` are unaffected. This will be lifted once duckdb-rs upstream publishes a release adapted to zip 9.x; until then use the `sqlite` / `postgres` / `mysql` drivers instead.
+> ℹ️ **`duckdb` feature status update** (October 2026): the earlier resolution failure caused by the full yank of the upstream `zip` crate no longer applies under the current lockfile — `libduckdb-sys` / `duckdb` are at 1.20000.0 in `Cargo.lock`, whose build-time dependencies no longer include `zip`. Existing projects can follow by refreshing the lockfile (`cargo update -p libduckdb-sys`); the compile-time mutual exclusion between `duckdb` and `ladybug` still applies (see [known limitations](#️-database-support)).
 
 ### Core Capabilities
 
 | Flag | Description | Default |
 |------|------|:----:|
 | `permission` | Table-level RBAC; hard-depends on `sql-parser` and enables `yaml` + `cache` | No |
-| `sql-parser` | SQL parsing, table extraction and injection detection (parse-result cache is an in-tree sync LRU; no longer auto-enables `cache`) | No |
+| `sql-parser` | SQL parsing, table extraction and injection detection (the parse-result cache is backed by the oxcache memory backend; does not imply the `cache` feature) | No |
 | `macros` | `dbnexus-macros` procedural macros (`db_entity` / `db_repository`) | No |
 | `default-no-db` | Driver-less default aggregate (runtime + permission + sql-parser + macros + config-env + with-time) for CI driver-matrix testing | No |
 
@@ -394,7 +394,7 @@ dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.9):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.10):
 
 <details>
 <summary>📄 Code · bash</summary>
@@ -466,7 +466,7 @@ See [Architecture · Core Execution Pipeline](docs/ARCHITECTURE.md#核心执行�
 | `sqlite` | SQLite | Embedded relational | Initial |
 | `postgres` | PostgreSQL | Server relational | Initial |
 | `mysql` | MySQL | Server relational | Initial |
-| `duckdb` 🚫 | DuckDB | Embedded analytical (currently unusable: upstream zip yank breaks resolution, see the feature flags notice) | 0.3.0 |
+| `duckdb` | DuckDB | Embedded analytical | 0.3.0 |
 | `ladybug` | Ladybug (formerly Kuzu) | Embedded graph | 0.4.0 |
 | `neo4j` | Neo4j | Graph server | 0.4.0 |
 
@@ -492,12 +492,12 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicitly registered integration targets under `tests/**` (feature-gated), end-to-end scenarios in `tests/e2e/` (isolated via `cfg(feature)`), `postgres_testcontainers` / `mysql_testcontainers` container-level tests (per-test container isolation), doc tests (run separately in CI via `cargo test --doc`), and criterion benchmarks under [benches/](benches/) (see [Performance](#-performance)). The test pyramid baseline, driver-group matrix and E2E scenario definitions are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
-### Test scale (as of 0.6.0-rc.9)
+### Test scale (as of 0.6.0-rc.10)
 
 | Metric | Value | Source |
 |------|------|------|
-| Total test functions | 2765 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1358 + tests 1405 + macros 2) |
-| Registered test targets | 88 `[[test]]` | `Cargo.toml` |
+| Total test functions | 2869 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1433 + tests 1434 + macros 2) |
+| Registered test targets | 87 `[[test]]` | `Cargo.toml` |
 | Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | Coverage gate | ≥ 95% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
 
@@ -584,7 +584,9 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.6.0-rc.9 | 2026-10-06 | Remaining ops CLI commands (permission-check / pool-status / audit-query / shard-info); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
+| 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA configuration surface and BUSY-aware write retry; YAML backend migration `serde_yaml_ng` → `serde-saphyr` (removes the `RUSTSEC-2024-0449` unsafe-libyaml root cause); CLI help/error text i18n; dependency security upgrades (rustls 0.23.46, `libduckdb-sys` build-time `zip` ^6 → ^9) |
+| 0.6.0-rc.9 | 2026-10-10 | `PermissionCache` absorbed into oxcache (breaking: trimmed non-equivalent public methods, read/write surface made async); connection-pool return made synchronous (fixes stale idle-queue view and invisible data caused by deferred return); idle-connection validation window fix and over-provisioning prevention |
+| 0.6.0-rc.6 | 2026-10-06 | Remaining ops CLI commands (pool-status / audit-query / shard-info / permission-check); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` forwarding sea-orm derives; `sea_orm` re-export decoupled from driver features; i18n overhaul; sha2 0.11; cross-repo path deps moved to crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands (version 0.6.0-rc.3 was skipped and never published; its content shipped with this release) |
 | 0.6.0-rc.2 | 2026-09-03 | Removed the `tracing` feature; strict four-driver mutual exclusion (compile-time `compile_error!`); completed JOIN/subquery cross-table permission checks; `h2` security upgrade |

@@ -117,7 +117,7 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 | `saga` | Saga 分布式事务：持久化日志、启动恢复、补偿编排 |
 | `distributed-id` | Snowflake 分布式 ID 生成 |
 
-> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（http-health 为未发布新增）。
+> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
 </details>
 
@@ -237,14 +237,14 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 关系型驱动四选一（编译期互斥）；图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库、类型与引入版本见[数据库支持](#-数据库支持)。
 
-> 🚫 **请勿启用 `duckdb` 特性**（2026-10-16 起）：上游 `zip` crate 在 crates.io 全系 yank（仅 9.0.3 可用），`duckdb` 链经 `libduckdb-sys`（锁定 `zip ^6`）无法完成依赖解析，从零启用该特性会在依赖解析阶段直接报错。已提交 `Cargo.lock` 的存量项目不受影响。等待 duckdb-rs 上游发布适配 zip 9.x 的版本后解除，此前请改用 `sqlite` / `postgres` / `mysql` 驱动。
+> ℹ️ **`duckdb` 特性状态更新**（2026-10）：早前"上游 `zip` crate 全系 yank 导致依赖解析失败"的阻塞，在当前锁文件下已不存在——`Cargo.lock` 中 `libduckdb-sys` / `duckdb` 已为 1.20000.0，其构建期依赖不再包含 `zip`。存量项目刷新锁文件（`cargo update -p libduckdb-sys`）即可跟进；`duckdb` 与 `ladybug` 的编译期互斥限制仍然有效（见[已知限制](#️-数据库支持)）。
 
 ### 核心能力
 
 | 标志 | 说明 | 默认 |
 |------|------|:----:|
 | `permission` | 表级 RBAC 权限控制，强制依赖 `sql-parser`，并启用 `yaml` 与 `cache` | 否 |
-| `sql-parser` | SQL 解析、表名提取与注入检测（解析结果缓存为库内同步 LRU，不再自动启用 `cache`） | 否 |
+| `sql-parser` | SQL 解析、表名提取与注入检测（解析结果缓存由 oxcache memory 后端承载，不隐含 `cache` 特性） | 否 |
 | `macros` | `dbnexus-macros` 过程宏（`db_entity` / `db_repository`） | 否 |
 | `default-no-db` | 无驱动的默认聚合（运行时 + permission + sql-parser + macros + config-env + with-time），供 CI 按驱动组合测试 | 否 |
 
@@ -394,7 +394,7 @@ dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 
 ## 💻 示例
 
-全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.9）：
+全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0-rc.10）：
 
 <details>
 <summary>📄 代码 · bash</summary>
@@ -492,11 +492,11 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 测试分六层承载：`src/**` 内 `#[cfg(test)]` 单元测试、`tests/**` 显式注册的集成测试目标（按 feature 门控）、`tests/e2e/` 端到端场景（按 `cfg(feature)` 隔离）、`postgres_testcontainers` / `mysql_testcontainers` 容器级测试（每测试独立容器隔离）、doc tests（CI 单独运行 `cargo test --doc`）与 [benches/](benches/) 基准测试（见[性能](#-性能)）。金字塔基线、驱动组矩阵与 E2E 场景定义详见 [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)。
 
-### 测试规模（截至 0.6.0-rc.9）
+### 测试规模（截至 0.6.0-rc.10）
 
 | 指标 | 数值 | 来源 |
 |------|------|------|
-| 测试函数总数 | 2765 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1358 + tests 1405 + macros 2） |
+| 测试函数总数 | 2869 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1433 + tests 1434 + macros 2） |
 | 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
 | 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
 | 覆盖率门禁 | ≥ 95% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
@@ -584,7 +584,9 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
-| 0.6.0-rc.9 | 2026-10-06 | 运维 CLI 剩余命令（权限校验/池状态/审计查询/分片信息）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
+| 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA 配置面与 BUSY 感知写重试；YAML 后端迁移 `serde_yaml_ng` → `serde-saphyr`（消除 `RUSTSEC-2024-0449` unsafe-libyaml 根源）；CLI 帮助/错误文案 i18n；依赖安全升级（rustls 0.23.46、`libduckdb-sys` 构建期 `zip` ^6 → ^9） |
+| 0.6.0-rc.9 | 2026-10-10 | `PermissionCache` 吸收进 oxcache（breaking：精简无等价公开方法、读写面改异步）；连接池归还改为同步完成（修复归还延迟导致的空闲队列误判与数据不可见）；空闲连接校验窗口修复与回填不超额创建 |
+| 0.6.0-rc.6 | 2026-10-06 | 运维 CLI 剩余命令（池状态/审计查询/分片信息/权限校验）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` 转发 sea-orm 派生宏；`sea_orm` re-export 解绑驱动 feature；i18n 整改；sha2 0.11；跨仓 path 依赖改走 crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | 统一行查询 `query_rows`；Saga 持久化恢复；字段级脱敏与行级安全（`data-protection`）；权限统一门面与查询 DSL；COPY 批量写入与 OTel 导出桥；端到端基准 `e2e_bench`；运维 CLI `migrate`/`health`/`user` 子命令（0.6.0-rc.3 版本号跳过未发布，内容随本版发布） |
 | 0.6.0-rc.2 | 2026-09-03 | 移除 `tracing` 特性；四驱动互斥严格化（编译期 `compile_error!`）；补全 JOIN/子查询跨表权限检查；`h2` 安全升级 |

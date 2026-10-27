@@ -52,7 +52,7 @@
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -72,13 +72,13 @@ tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.6.0-rc.9", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
+dbnexus = { version = "0.6.0-rc.10", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.6.0-rc.9", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
+dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
 **重要**：关系型驱动之间一次只能启用一个，混用在编译期直接报错。
@@ -257,17 +257,17 @@ pub struct Model {
 
 | 参数 | 描述 | 默认值 |
 |------|------|--------|
-| `ttl` | 缓存存活时间（秒） | 60 |
+| `ttl` | 缓存存活时间（秒） | 300 |
 | `strategy` | 缓存策略 | `"lru"` |
-| `max_capacity` | 最大缓存容量 | 5000 |
+| `max_capacity` | 最大缓存容量 | 10000 |
 
 `audit(...)` 子参数：
 
 | 参数 | 描述 | 默认值 |
 |------|------|--------|
-| `table_name` | 审计日志表名 | `"audit_log"` |
+| `table_name` | 审计日志表名 | 空串（`""`，未配置时生成的 `AUDIT_TABLE_NAME` 为空串，需自行指定才有业务含义） |
 | `operations` | 审计的操作列表 | `["INSERT", "UPDATE", "DELETE"]` |
-| `roles` | 允许审计的角色列表 | 无 |
+| `roles` | 允许审计的角色列表 | `["admin"]` |
 | `log_values` | 是否记录字段值 | `true` |
 
 ### 复杂实体示例
@@ -608,7 +608,7 @@ tx.commit().await?; // 显式提交；若此前发生错误且守护被丢弃，
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["cache"]
 ```
 
@@ -637,7 +637,7 @@ assert_eq!(Product::cache_key(1), "products:1");
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["metrics"]
 ```
 
@@ -652,7 +652,7 @@ println!("{}", collector.export_prometheus());
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["audit"]
 ```
 
@@ -677,7 +677,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景，以分析只读旁�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["duckdb"]
 ```
 
@@ -716,7 +716,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["authentication"]
 ```
 
@@ -756,7 +756,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["sql-parser"]
 ```
 
@@ -805,7 +805,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["sharding"]
 ```
 
@@ -833,7 +833,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["validation"]
 ```
 
@@ -863,7 +863,7 @@ DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0-rc.9"
+version = "0.6.0-rc.10"
 features = ["ladybug"]  # 或 "neo4j"
 ```
 
@@ -872,7 +872,8 @@ use dbnexus::{GraphConnection, LadybugConnection};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let conn = LadybugConnection::new("ladybug::memory:")?;
+    // 第二个参数为并发查询数（Semaphore 许可证数，最小值 1）
+    let conn = LadybugConnection::new("ladybug::memory:", 4)?;
 
     // 创建节点
     conn.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
@@ -988,7 +989,7 @@ Model::delete(&session, 1).await?;
 
 ### 连接池耗尽
 
-**症状**：`DbError::ConnectionPool("Connection pool exhausted")`
+**症状**：`DbError::Connection(...)`——`DbError` 无 `ConnectionPool` 变体；池耗尽经 sea-orm 连接获取错误以 `Connection` 变体透传（duckdb 池取空为 `DbErr::Custom` 携带池耗尽文案）。
 
 **解决方案**：
 

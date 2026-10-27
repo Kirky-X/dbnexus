@@ -107,13 +107,13 @@ pub struct Session { /* 字段私有 */ }
 | `is_in_transaction` | `async fn is_in_transaction(&self) -> bool` | 检查是否在事务中 |
 | `query_cache_get` / `query_cache_set` | `async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>>` 等 | 只读查询结果缓存读写（`cache`，0.6.0-rc.4） |
 
-`execute` 可能返回的错误：
+`execute` 可能返回的错误（SQL 解析失败不产生错误——`execute` 内部解析失败时跳过权限检查直接执行；解析器自身的解析错误是独立类型 `SqlParseError`，不经 `DbError` 返回）：
 
 | 错误 | 场景 |
 |------|------|
-| `DbError::Permission` | 权限被拒绝 |
-| `DbError::SqlParse` | 无效的 SQL 语法 |
-| `DbError::Database` | 数据库错误 |
+| `DbError::Permission` | 权限被拒绝（表级授权、DDL 守卫拦截） |
+| `DbError::RateLimited` | 权限检查触发限流（429 语义，携带 `retry_after_secs`） |
+| `DbError::Connection` | 数据库执行/连接错误（sea-orm `DbErr` 经 `#[from]` 透传，含连接获取超时） |
 
 **示例**：
 
@@ -244,7 +244,7 @@ pub struct PoolConfig {
 | `replica_config` | `None`（`replica-routing`） | 无（仅配置源 / 程序化） |
 | `sqlite_pragmas` | `None`（`sqlite`） | 无（仅配置源 / 程序化） |
 
-> `from_env` 不读这四个字段的环境变量（固定 `CacheConfig::default()` 与 `None`）；后四个字段是对应 feature 下的 `#[cfg]` 可选字段，未启用时既不存在于结构体、也不参与序列化。配置类型均未标 `deny_unknown_fields`，因此向未启用 feature 的配置源写 `failover_config:` 等子节点会被 serde **静默忽略**（不报错），需对应 feature 重新构建才会生效。
+> `from_env` 不读这五个字段的环境变量（固定 `CacheConfig::default()` 与 `None`）；后四个字段是对应 feature 下的 `#[cfg]` 可选字段，未启用时既不存在于结构体、也不参与序列化。配置类型均未标 `deny_unknown_fields`，因此向未启用 feature 的配置源写 `failover_config:` 等子节点会被 serde **静默忽略**（不报错），需对应 feature 重新构建才会生效。
 
 ### `SqlitePragmas`（`sqlite` feature，`sqlite_pragmas:` 子节点）
 
@@ -323,7 +323,7 @@ failover_config:              # 需 `failover` feature
 | 方法 | 签名 | 特性要求 |
 |------|------|----------|
 | `DbConfig::from_env` | `fn from_env() -> Result<DbConfig, ConfigError>` | `config-env` |
-| `DbConfig::from_yaml_str` | `fn from_yaml_str(yaml: &str) -> Result<DbConfig, serde_yaml_ng::Error>` | `yaml` |
+| `DbConfig::from_yaml_str` | `fn from_yaml_str(yaml: &str) -> Result<DbConfig, serde_saphyr::Error>` | `yaml` |
 | `DbConfig::from_json_str` | `fn from_json_str(json: &str) -> Result<DbConfig, serde_json::Error>` | 无 |
 
 **示例**：
@@ -387,7 +387,7 @@ pub struct PermissionConfig {
 
 | 方法 | 签名 | 特性要求 |
 |------|------|----------|
-| `from_yaml_str` | `fn from_yaml_str(yaml: &str) -> Result<Self, serde_yaml_ng::Error>` | `yaml` |
+| `from_yaml_str` | `fn from_yaml_str(yaml: &str) -> Result<Self, serde_saphyr::Error>` | `yaml` |
 | `deny_all` | `fn deny_all() -> Self` | 创建拒绝所有访问的配置 |
 
 YAML 格式见[用户指南 · 权限控制](USER_GUIDE.md#-权限控制)。
@@ -439,7 +439,6 @@ let pdp = PolicyDecisionPoint::builder()
 | `cache(...)` | 生成缓存配置（`cache` 特性） |
 | `audit(...)` | 生成审计配置（`audit` 特性） |
 | `hooks(...)` | 6 个生命周期钩子：`before_insert` / `after_insert` / `before_update` / `after_update` / `before_delete` / `after_delete`；编排顺序为 校验 → 时间戳 → 用户钩子 |
-| `schema(backend)` | 生成 `migration::schema::Table`（基于 `sea_orm::Schema::create_table_from_entity`） |
 
 > 权限控制不通过宏声明，而是由 `Session` 在运行时根据权限配置（YAML/JSON）强制执行。
 
@@ -510,6 +509,12 @@ pub enum DbError {
     /// 权限错误
     Permission(String),
 
+    /// 速率限制拒绝（HTTP 429 语义；权限检查触发限流时返回，区别于策略拒绝）
+    RateLimited {
+        /// 建议等待时间（秒）；`None` = 限流后端未提供
+        retry_after_secs: Option<u64>,
+    },
+
     /// 事务错误
     Transaction(String),
 
@@ -519,9 +524,23 @@ pub enum DbError {
     /// 缓存操作错误
     Cache(String),
 
+    /// 查询错误
+    Query(String),
+
     /// 数据验证错误（validation 特性）
     #[cfg(feature = "validation")]
     Validation(String),
+
+    /// 当前操作不被该后端/特性支持（显性拒绝，避免静默降级）
+    Unsupported(String),
+
+    /// 乐观锁版本冲突（`update_if_version` 条件未命中时返回）
+    VersionConflict {
+        /// 冲突的表名
+        table: String,
+        /// 冲突的行 ID
+        id: i64,
+    },
 }
 ```
 
@@ -620,7 +639,7 @@ pub type Operation = PermissionAction;
 | `permission-facade` | `PermissionFacade`（RBAC + 脱敏 + RLS 统一门面；租户谓词只注入单表 SELECT，admin 通道不注入） |
 | `data-protection` | 字段脱敏与行级安全谓词注入（读出口 `query_rows` + raw 写出口 UPDATE/DELETE；谓词列名白名单校验，谓词值转义后写为字面量） |
 | `authentication` | `AuthenticationManager`、`JwtManager`、`PasswordHasher` |
-| `sql-parser` | `SqlParser`、`DdlGuard`、`InjectionEngine`、`is_ddl_operation`、`contains_sql_injection` |
+| `sql-parser` | `SqlParser`、`DdlGuard`、`is_ddl_operation`、`contains_sql_injection`（`InjectionEngine` 类型本身无条件导出，见[注入检测](#注入检测-injectionenginesql-parser-特性)） |
 | `sharding` | `ShardRouter`、`ShardConfig`、`create_strategy` |
 | `global-index` | `GlobalIndex`、`IndexEntry`、`SyncResult` |
 | `retry` | `RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation` |
@@ -669,13 +688,13 @@ println!("{}", collector.export_prometheus());        // Prometheus 文本格式
 use dbnexus::{CircuitBreaker, CircuitBreakerConfig, HealthChecker};
 
 let checker = HealthChecker::new(1000); // check_timeout_ms（毫秒）
-let status: HealthCheckResult = checker.check().await;
+let status = checker.check().await;
 
 // 熔断器：连续失败达到阈值自动打开，半开恢复
 let breaker = CircuitBreaker::new(CircuitBreakerConfig::default());
 ```
 
-`HealthCheckResult` 携带 `HealthStatus`（`Healthy` / `Unhealthy(String)` / `Degraded(String)`）、检查耗时与详细信息。
+`HealthCheckResult` 携带 `HealthStatus`（`Healthy` / `Unhealthy(String)` / `Degraded(String)`）、检查耗时与详细信息；该类型**未从 crate 根导出**，类型标注须经全路径 `dbnexus::observability::health::HealthCheckResult` 引用。
 
 ### 审计日志 `AuditLogger`（`audit` 特性）
 
@@ -814,8 +833,8 @@ let size = conn.pool_size();
 ```rust
 use dbnexus::{GraphConnection, LadybugConnection};
 
-// Ladybug 嵌入式图数据库
-let conn = LadybugConnection::new("ladybug:path/to/graph.db")?;
+// Ladybug 嵌入式图数据库（第二个参数为并发查询数 pool_size，最小值 1）
+let conn = LadybugConnection::new("ladybug:path/to/graph.db", 4)?;
 let result = conn.execute_cypher("MATCH (n) RETURN n").await?;
 
 // Neo4j 服务器端图数据库
@@ -826,8 +845,11 @@ let conn = Neo4jConnection::new("neo4j://localhost:7687", "user", "pass").await?
 **Session 图事务支持**：
 
 ```rust
-// Session 经图操作互斥串行化执行 Cypher，支持 begin/commit/rollback
-session.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
+// Session 经图操作互斥串行化执行 Cypher，支持 begin/commit/rollback；
+// 公开入口只有 execute_cypher_with_params（参数化通道，带注入防护）
+let mut params = std::collections::HashMap::new();
+params.insert("name".to_string(), serde_json::json!("Alice"));
+session.execute_cypher_with_params("CREATE (n:User {name: $name})", params).await?;
 ```
 
 > 裸 Cypher 执行已废弃：统一使用 `execute_cypher_with_params` 参数化通道（默认实现拒绝静默回退）。
@@ -969,9 +991,9 @@ assert!(contains_sql_injection("'; DROP TABLE--"));
 
 **导出类型**：`SqlParser`、`SqlOperationType`、`SqlParseError`、`is_ddl_operation`、`contains_sql_injection`
 
-### 注入检测 `InjectionEngine`（`sql-parser` 特性）
+### 注入检测 `InjectionEngine`（类型无条件导出；部分方法按 `sql-parser` 特性门控）
 
-统一注入检测引擎：关系型 / DDL / 图三处规则表合并为单一注册表（0.6.0-rc.4），按类别（`RuleCategory`）扫描。
+统一注入检测引擎：关系型 / DDL / 图三处规则表合并为单一注册表（0.6.0-rc.4），按类别（`RuleCategory`）扫描。`InjectionEngine` / `RuleCategory` 不依赖 `sql-parser` 特性即可使用——`global()` / `scan()` / `scan_ddl()` / `scan_graph()` 无特性门控，仅 `scan_relational` 等关系型 SQL 解析相关方法按 `sql-parser` 门控。
 
 ```rust
 use dbnexus::{InjectionEngine, RuleCategory};

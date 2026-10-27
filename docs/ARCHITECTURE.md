@@ -68,7 +68,7 @@ DBNexus 的架构遵循**分层设计**，具有清晰的关注点分离，使�
 | 特性 | 依赖 | 原因 |
 |------|------|------|
 | `permission` | `sql-parser`（强制）、`dashmap`、`futures`、`yaml`、`arc-swap` | 防止 SQL 注入绕过权限检查；dashmap 用于并发权限上下文，yaml 用于策略解析，arc-swap 用于无锁配置读取 |
-| `sql-parser` | `sqlparser`、`regex`、`unicode-normalization` | 解析结果缓存为库内同步 LRU（prepare_cache 端口），不隐含 `cache`→oxcache |
+| `sql-parser` | `sqlparser`、`regex`、`unicode-normalization`、`oxcache/memory` | 解析结果缓存（prepare_cache 端口）由 oxcache memory 后端承载，不隐含 dbnexus `cache` 特性 |
 | `permission-engine` | `permission`、`cache`、`dashmap`、`futures`、`regex` | 高级权限引擎需要基础权限类型、缓存策略决策与并发支持 |
 
 > 这些依赖关系在 `src/lib.rs` 中通过 `compile_error!` 宏强制检查，缺失依赖将导致编译失败；数据库驱动（嵌入式与服务器端）混用同样在编译期报错，无逃生门。
@@ -153,7 +153,7 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 |------|------|
 | `lib.rs` | 模块声明、编译期特性互斥检查、公共 API 导出 |
 | `error.rs` | `DbNexusError`、`ErrorCode`、`UnifiedDbError`、`QueryErrorReport`（顶层统一错误体系） |
-| `tools/cli/` | `dbnexus-cli` 运维 CLI（`create` / `up` / `migrate` / `health` / `user` 子命令） |
+| `tools/cli/` | `dbnexus-cli` 运维 CLI（`create` / `up` / `down` / `status` / `test-connection` / `generate` / `list` / `migrate` / `health` / `user` / `pool-status` / `audit-query` / `shard-info` / `permission-check` 子命令，多数经 feature 门控） |
 
 ### 公共类型层 `common/`
 
@@ -292,8 +292,8 @@ impl Model {
     pub async fn find_all(session: &Session) -> DbResult<Vec<Model>> { /* ... */ }
     // update / delete / delete_many / count / exists / find_by_ids ...
 
-    pub const TABLE_NAME: &str = "users";
-    pub const PRIMARY_KEY: &str = "id";
+    pub fn table_name() -> &'static str { "users" }
+    pub fn primary_key_column() -> &'static str { "id" }
 }
 ```
 
