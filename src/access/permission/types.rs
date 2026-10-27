@@ -321,9 +321,9 @@ impl GraphPermissionContext {
             Ok(())
         } else {
             // 不回显 admin 角色名（内部配置，不应成为调用方的探测信道）
-            Err(crate::foundation::DbError::Permission(format!(
-                "Graph operation denied for role '{}': administrator role required",
-                self.role
+            Err(crate::foundation::DbError::Permission(crate::i18n::t(
+                "graph-op-denied-admin-required",
+                &[("role", self.role.clone())],
             )))
         }
     }

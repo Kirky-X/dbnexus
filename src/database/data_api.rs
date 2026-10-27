@@ -45,6 +45,7 @@ use crate::database::DbPool;
 use crate::database::identifier::is_safe_identifier;
 use crate::database::repository::sql_literal;
 use crate::foundation::{DbError, DbResult};
+use crate::i18n;
 
 /// 单表查询端点声明
 #[derive(Debug, Clone)]
@@ -241,8 +242,9 @@ impl OwnerScope {
     /// 归属列名不是安全标识符时返回 `DbError::Config`
     pub fn new(column: &str, value: &str) -> DbResult<Self> {
         if !is_safe_identifier(column) {
-            return Err(DbError::Config(format!(
-                "data-api owner column must be a safe identifier: '{column}'"
+            return Err(DbError::Config(i18n::t(
+                "data-api-owner-column-unsafe",
+                &[("column", column.to_string())],
             )));
         }
         Ok(Self {
@@ -286,12 +288,9 @@ impl DataApiGateway {
 
     /// 查询执行角色（未声明 → fail-closed）
     fn query_role(&self) -> DbResult<&str> {
-        self.role.as_deref().ok_or_else(|| {
-            DbError::Config(
-                "data-api query role is not configured; call with_role() before querying"
-                    .to_string(),
-            )
-        })
+        self.role
+            .as_deref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("data-api-query-role-not-configured")))
     }
 
     /// 注册端点

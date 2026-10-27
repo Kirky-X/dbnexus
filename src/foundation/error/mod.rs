@@ -73,7 +73,7 @@ pub enum DbError {
     ///
     /// 面向调用方的文本只含行 id：表名属库内结构信息，不随错误外泄
     /// （`table` 字段保留，供服务端日志与结构化上报使用）。
-    #[error("Version conflict for id {id}")]
+    #[error("{}", crate::i18n::t("db-version-conflict", &[("id", id.to_string())]))]
     VersionConflict {
         /// 冲突的表名
         table: String,

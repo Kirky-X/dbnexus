@@ -109,6 +109,10 @@ perm-cache-log-clear-failed = PermissionCache clear failed: { $error }
 perm-cache-provider-no-policy = permission provider has no policy for role '{ $role }'
 perm-cache-provider-not-configured = no permission provider configured for role '{ $role }'
 
+# --- Graph permission gate (canonical mirror of the string embedded in
+# src/access/permission/types.rs) ---
+graph-op-denied-admin-required = Graph operation denied for role '{ $role }': administrator role required
+
 sql-parse-error = Failed to parse SQL: { $reason }
 sql-unsupported-statement = Unsupported SQL statement type: { $stmt_type }
 sql-empty-statement = Empty SQL statement
@@ -128,6 +132,7 @@ auth-token-expired = Token expired
 auth-user-not-found = User not found: { $user }
 auth-password-hash = Password hash failed: { $reason }
 auth-user-limit-reached = User storage limit reached: { $reason }
+auth-password-too-long-bcrypt = Password must not exceed { $max_len } bytes (bcrypt truncation limit)
 
 circuit-breaker = Circuit breaker is { $state }
 circuit-breaker-closed = circuit breaker closed: successes={ $successes } success_threshold={ $threshold }
@@ -154,6 +159,7 @@ snowflake-clock-backtrack = Clock backtrack: waited timestamp { $waited_ts } sti
 snowflake-timestamp-overflow = Timestamp overflow: { $timestamp } exceeds 41-bit capacity
 
 nexus-unsupported-database = Invalid database URL: { $scheme }
+nexus-url-parse-failed = failed to parse URL (scheme={ $scheme }): { $error }
 
 error-category-permission = Permission
 error-category-injection-risk = InjectionRisk
@@ -267,6 +273,7 @@ repository-version-field-missing = update_if_version requires field '{ $column }
 repository-version-column-integer = version column '{ $column }' must be an integer
 repository-column-unsafe = repository column must be a safe identifier: '{ $column }'
 repository-entity-deserialize-failed = entity deserialize failed: { $error }
+repository-query-role-not-configured = repository query role is not configured; call with_role() before querying
 
 shard-route-unregistered = shard key '{ $key }' routed to unregistered shard { $shard_id }
 shard-migration-orchestration-not-implemented = Shard migration orchestration is not implemented yet: the MigrationExecutor is not wired in, so this shard ran no migrations
@@ -317,6 +324,8 @@ session-sql-parser-feature-required = { $function } requires the sql-parser feat
 session-sql-parser-feature-required-secure = { $function } requires the sql-parser feature to be enabled for security checks
 session-rls-parse-failed = failed to parse SQL statement for row-level security
 session-rls-not-applicable = row-level security policy cannot be applied to this statement
+session-rls-multi-table-unsafe = row-level security does not support statements referencing the protected table more than once (self-join or subquery)
+session-rls-single-table-required = row-level security requires a single-table statement
 session-query-rows-select-only = query_rows only allows SELECT statements
 session-query-rows-sqlite-single-table = query_rows on sqlite (MVP) requires a single-table SELECT statement
 session-query-rows-sqlite-postgres-only = query_rows MVP supports postgres/sqlite backends only
@@ -326,3 +335,20 @@ session-cypher-multiple-statements = Cypher query contains multiple statements (
 session-cypher-line-comment = Cypher query contains line comment '//' - potential injection
 session-cypher-block-comment = Cypher query contains block comment '/* */' - potential injection
 session-cypher-dangerous-procedure = Cypher query calls dangerous procedure ('{ $procedure }') - potential privilege escalation
+
+# --- Row-level security policy error (canonical mirror of the strings embedded in
+# src/access/data_protection.rs) ---
+rls-unsafe-predicate-column = RLS policy for table '{ $table }' has an unsafe predicate column '{ $column }'
+rls-set-operations-unsupported = RLS policy does not support set operations (UNION/INTERSECT/EXCEPT)
+
+# --- Data API gateway (canonical mirror of the strings embedded in
+# src/database/data_api.rs) ---
+data-api-owner-column-unsafe = data-api owner column must be a safe identifier: '{ $column }'
+data-api-query-role-not-configured = data-api query role is not configured; call with_role() before querying
+
+# --- Query fragment DSL (canonical mirror of the strings embedded in
+# src/database/query_dsl.rs) ---
+query-fragment-column-unsafe = query fragment column name must be a safe identifier: '{ $column }'
+query-fragment-table-unsafe = query fragment table name must be a safe identifier: '{ $table }'
+query-fragment-condition-column-unsafe = query fragment condition column must be a safe identifier: '{ $column }'
+query-fragment-order-column-unsafe = query fragment order column must be a safe identifier: '{ $column }'

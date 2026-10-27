@@ -553,6 +553,26 @@ mod tests {
             "session-cypher-line-comment",
             "session-cypher-block-comment",
             "session-cypher-dangerous-procedure",
+            // i18n 审计接线批次：口令 bcrypt 上限 / RLS 策略错误与日志 /
+            // 图操作权限门 / data-api 与查询片段 fail-closed / URL 解析
+            "auth-password-too-long-bcrypt",
+            "rls-unsafe-predicate-column",
+            "rls-set-operations-unsupported",
+            "graph-op-denied-admin-required",
+            "data-api-owner-column-unsafe",
+            "data-api-query-role-not-configured",
+            "repository-query-role-not-configured",
+            "query-fragment-column-unsafe",
+            "query-fragment-table-unsafe",
+            "query-fragment-condition-column-unsafe",
+            "query-fragment-order-column-unsafe",
+            "session-rls-multi-table-unsafe",
+            "session-rls-single-table-required",
+            "nexus-url-parse-failed",
+            "auth-log-policy-max-len-exceeds-bcrypt",
+            "auth-log-legacy-verify-exceeds-limit",
+            "auth-log-legacy-verify-split-multibyte",
+            "session-log-rls-rejected",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -879,6 +899,114 @@ mod tests {
                 "Cypher query calls dangerous procedure ('apoc.load') - potential privilege escalation",
                 "Cypher 查询调用了危险过程（'apoc.load'）- 疑似提权",
             ),
+            (
+                "auth-password-too-long-bcrypt",
+                &[("max_len", "72")],
+                "Password must not exceed 72 bytes (bcrypt truncation limit)",
+                "密码长度不得超过 72 字节（bcrypt 截断上限）",
+            ),
+            (
+                "rls-unsafe-predicate-column",
+                &[("table", "t"), ("column", "c")],
+                "RLS policy for table 't' has an unsafe predicate column 'c'",
+                "表 't' 的行级安全策略包含不安全的谓词列 'c'",
+            ),
+            (
+                "rls-set-operations-unsupported",
+                &[],
+                "RLS policy does not support set operations (UNION/INTERSECT/EXCEPT)",
+                "行级安全策略不支持集合操作（UNION/INTERSECT/EXCEPT）",
+            ),
+            (
+                "graph-op-denied-admin-required",
+                &[("role", "analyst")],
+                "Graph operation denied for role 'analyst': administrator role required",
+                "角色 'analyst' 的图操作被拒绝: 需要 admin 角色",
+            ),
+            (
+                "data-api-owner-column-unsafe",
+                &[("column", "c")],
+                "data-api owner column must be a safe identifier: 'c'",
+                "data-api 归属列必须是安全标识符: 'c'",
+            ),
+            (
+                "data-api-query-role-not-configured",
+                &[],
+                "data-api query role is not configured; call with_role() before querying",
+                "data-api 查询角色未配置；查询前请先调用 with_role()",
+            ),
+            (
+                "repository-query-role-not-configured",
+                &[],
+                "repository query role is not configured; call with_role() before querying",
+                "repository 查询角色未配置；查询前请先调用 with_role()",
+            ),
+            (
+                "query-fragment-column-unsafe",
+                &[("column", "c")],
+                "query fragment column name must be a safe identifier: 'c'",
+                "查询片段列名必须是安全标识符: 'c'",
+            ),
+            (
+                "query-fragment-table-unsafe",
+                &[("table", "t")],
+                "query fragment table name must be a safe identifier: 't'",
+                "查询片段表名必须是安全标识符: 't'",
+            ),
+            (
+                "query-fragment-condition-column-unsafe",
+                &[("column", "c")],
+                "query fragment condition column must be a safe identifier: 'c'",
+                "查询片段条件列必须是安全标识符: 'c'",
+            ),
+            (
+                "query-fragment-order-column-unsafe",
+                &[("column", "o")],
+                "query fragment order column must be a safe identifier: 'o'",
+                "查询片段排序列必须是安全标识符: 'o'",
+            ),
+            (
+                "session-rls-multi-table-unsafe",
+                &[],
+                "row-level security does not support statements referencing the protected table more than once (self-join or subquery)",
+                "行级安全不支持多次引用受保护表的语句（自连接或子查询）",
+            ),
+            (
+                "session-rls-single-table-required",
+                &[],
+                "row-level security requires a single-table statement",
+                "行级安全要求单表语句",
+            ),
+            (
+                "nexus-url-parse-failed",
+                &[("scheme", "<unknown>"), ("error", "E")],
+                "failed to parse URL (scheme=<unknown>): E",
+                "URL 解析失败（scheme=<unknown>）: E",
+            ),
+            (
+                "auth-log-policy-max-len-exceeds-bcrypt",
+                &[("max_len", "100"), ("limit", "72")],
+                "password policy max_len 100 exceeds the bcrypt limit of 72 bytes; the effective limit is 72 bytes",
+                "密码策略 max_len 100 超过 bcrypt 上限 72 字节；实际生效上限为 72 字节",
+            ),
+            (
+                "auth-log-legacy-verify-exceeds-limit",
+                &[],
+                "legacy password verification: password exceeds the bcrypt limit, verifying against the legacy 72-byte prefix",
+                "存量口令校验: 口令超过 bcrypt 上限，按存量 72 字节前缀比对",
+            ),
+            (
+                "auth-log-legacy-verify-split-multibyte",
+                &[],
+                "legacy password verification failed and the 72-byte cut splits a multi-byte character: the stored hash covers a byte sequence that is not valid UTF-8 and cannot be re-verified — this account requires a password reset",
+                "存量口令校验失败，72 字节截断切开了多字节字符: 存量哈希覆盖的字节序列不是合法 UTF-8，无法重新校验 —— 该账号需要重设口令",
+            ),
+            (
+                "session-log-rls-rejected",
+                &[("error", "E")],
+                "row-level security policy rejected: E",
+                "行级安全策略被拒绝: E",
+            ),
         ];
         for (key, args, en, zh) in cases {
             let owned: Vec<(&str, String)> =
@@ -944,6 +1072,9 @@ mod tests {
             ("status", "HTTP/1.1 500".to_string()),
             ("protocol", "ftp".to_string()),
             ("op", "get_or_prepare".to_string()),
+            ("max_len", "12".to_string()),
+            ("limit", "72".to_string()),
+            ("scheme", "ftp".to_string()),
         ];
         const NEW_KEYS: &[&str] = &[
             "db-unsupported",
@@ -1098,6 +1229,24 @@ mod tests {
             "perm-cache-provider-no-policy",
             "perm-cache-provider-not-configured",
             "perm-provider-yaml-parse-error",
+            "auth-password-too-long-bcrypt",
+            "rls-unsafe-predicate-column",
+            "rls-set-operations-unsupported",
+            "graph-op-denied-admin-required",
+            "data-api-owner-column-unsafe",
+            "data-api-query-role-not-configured",
+            "repository-query-role-not-configured",
+            "query-fragment-column-unsafe",
+            "query-fragment-table-unsafe",
+            "query-fragment-condition-column-unsafe",
+            "query-fragment-order-column-unsafe",
+            "session-rls-multi-table-unsafe",
+            "session-rls-single-table-required",
+            "nexus-url-parse-failed",
+            "auth-log-policy-max-len-exceeds-bcrypt",
+            "auth-log-legacy-verify-exceeds-limit",
+            "auth-log-legacy-verify-split-multibyte",
+            "session-log-rls-rejected",
         ];
         for key in NEW_KEYS {
             for lang in ["en", "zh"] {

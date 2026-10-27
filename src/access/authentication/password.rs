@@ -3,6 +3,7 @@
 //! 密码哈希和验证模块
 
 use super::models::{AuthError, AuthResult};
+use crate::i18n;
 use bcrypt::{hash, verify};
 
 /// 测试密码的程序化派生：固定种子生成，避免源码出现密码形态字面量（CodeQL）。
@@ -272,8 +273,9 @@ impl PasswordPolicy {
         let max_len = self.effective_max_len();
         let byte_len = password.len();
         if byte_len > max_len {
-            return Err(AuthError::PasswordHash(format!(
-                "Password must not exceed {max_len} bytes (bcrypt truncation limit)"
+            return Err(AuthError::PasswordHash(i18n::t(
+                "auth-password-too-long-bcrypt",
+                &[("max_len", max_len.to_string())],
             )));
         }
 
@@ -347,11 +349,14 @@ impl PasswordHasher {
     pub fn with_policy(policy: PasswordPolicy) -> Self {
         if policy.max_len > BCRYPT_MAX_BYTES {
             log::warn!(
-                "password policy max_len {} exceeds the bcrypt limit of {} bytes; \
-                 the effective limit is {} bytes",
-                policy.max_len,
-                BCRYPT_MAX_BYTES,
-                BCRYPT_MAX_BYTES
+                "{}",
+                i18n::t(
+                    "auth-log-policy-max-len-exceeds-bcrypt",
+                    &[
+                        ("max_len", policy.max_len.to_string()),
+                        ("limit", BCRYPT_MAX_BYTES.to_string()),
+                    ],
+                )
             );
         }
         Self { policy }
@@ -403,10 +408,7 @@ impl PasswordHasher {
     /// 属性，本方法只在显式调用时启用，默认验证路径不启用。
     pub fn verify_legacy(&self, password: &str, hash: &str) -> AuthResult<()> {
         if Self::exceeds_bcrypt_length(password) {
-            log::warn!(
-                "legacy password verification: password exceeds the bcrypt limit, \
-                        verifying against the legacy 72-byte prefix"
-            );
+            log::warn!("{}", i18n::t_simple("auth-log-legacy-verify-exceeds-limit"));
             let truncated = Self::bcrypt_prefix(password);
             let is_valid = verify(truncated, hash).map_err(|_| AuthError::InvalidCredentials)?;
             if is_valid {
@@ -423,10 +425,8 @@ impl PasswordHasher {
             // existence; the operator gets the detail from this log.
             if !password.is_char_boundary(BCRYPT_MAX_BYTES) {
                 log::warn!(
-                    "legacy password verification failed and the 72-byte cut splits a \
-                            multi-byte character: the stored hash covers a byte sequence that \
-                            is not valid UTF-8 and cannot be re-verified — this account requires \
-                            a password reset"
+                    "{}",
+                    i18n::t_simple("auth-log-legacy-verify-split-multibyte")
                 );
             }
             return Err(AuthError::InvalidCredentials);
@@ -452,8 +452,9 @@ impl PasswordHasher {
     fn ensure_bcrypt_length(password: &str) -> AuthResult<()> {
         let byte_len = password.len();
         if byte_len > BCRYPT_MAX_BYTES {
-            return Err(AuthError::PasswordHash(format!(
-                "Password must not exceed {BCRYPT_MAX_BYTES} bytes (bcrypt truncation limit)"
+            return Err(AuthError::PasswordHash(i18n::t(
+                "auth-password-too-long-bcrypt",
+                &[("max_len", BCRYPT_MAX_BYTES.to_string())],
             )));
         }
         Ok(())

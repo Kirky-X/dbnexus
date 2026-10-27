@@ -268,7 +268,10 @@ impl Session {
         )
         .map_err(|e| {
             // 细节只进服务端日志，对外不回显策略细节
-            log::warn!("row-level security policy rejected: {e}");
+            log::warn!(
+                "{}",
+                i18n::t("session-log-rls-rejected", &[("error", e.to_string())])
+            );
             DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
         })
     }
@@ -596,7 +599,10 @@ impl Session {
                     rls.inject(sql, primary_table.as_deref(), sql_dialect(backend))
                         .map_err(|e| {
                             // 细节只进服务端日志，对外不回显策略细节
-                            log::warn!("row-level security policy rejected: {e}");
+                            log::warn!(
+                                "{}",
+                                i18n::t("session-log-rls-rejected", &[("error", e.to_string())])
+                            );
                             DbError::Permission(i18n::t_simple("session-rls-not-applicable"))
                         })?
                 }
@@ -1047,8 +1053,8 @@ fn rls_multi_table_error(tables: &[String]) -> String {
     distinct.sort_unstable();
     distinct.dedup();
     if distinct.len() == 1 {
-        "row-level security does not support statements referencing the protected table more than once (self-join or subquery)".to_string()
+        i18n::t_simple("session-rls-multi-table-unsafe")
     } else {
-        "row-level security requires a single-table statement".to_string()
+        i18n::t_simple("session-rls-single-table-required")
     }
 }

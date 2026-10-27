@@ -10,6 +10,7 @@
 use sha2::{Digest, Sha256};
 
 use crate::database::sql_text::{SqlBackend, escape_sql_literal_content};
+use crate::i18n;
 
 // 字段级脱敏
 
@@ -252,12 +253,15 @@ impl std::fmt::Display for RlsError {
         match self {
             Self::UnsafePolicyColumn { table, column } => write!(
                 f,
-                "RLS policy for table '{table}' has an unsafe predicate column '{column}'"
+                "{}",
+                i18n::t(
+                    "rls-unsafe-predicate-column",
+                    &[("table", table.clone()), ("column", column.clone())],
+                )
             ),
-            Self::UnsupportedSetOperation => write!(
-                f,
-                "RLS policy does not support set operations (UNION/INTERSECT/EXCEPT)"
-            ),
+            Self::UnsupportedSetOperation => {
+                write!(f, "{}", i18n::t_simple("rls-set-operations-unsupported"))
+            }
         }
     }
 }

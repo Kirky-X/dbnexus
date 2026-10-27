@@ -21,6 +21,13 @@ pool-log-idle-check-wait-timeout = 连接池获取等待空闲连接校验回填
 session-log-sql-parse-denied = 权限被拒绝: role={ $role } reason=sql-parse-failure (fail-closed)
 session-log-permission-denied = 权限被拒绝: action={ $action } table={ $table }
 session-log-rate-limited = 速率受限: 表访问被限流 (retry_after={ $retry_after })
+session-log-rls-rejected = 行级安全策略被拒绝: { $error }
+
+# --- 认证口令策略（canonical mirror，与 src/access/authentication/password.rs
+# 内嵌的规范串逐字一致） ---
+auth-log-policy-max-len-exceeds-bcrypt = 密码策略 max_len { $max_len } 超过 bcrypt 上限 { $limit } 字节；实际生效上限为 { $limit } 字节
+auth-log-legacy-verify-exceeds-limit = 存量口令校验: 口令超过 bcrypt 上限，按存量 72 字节前缀比对
+auth-log-legacy-verify-split-multibyte = 存量口令校验失败，72 字节截断切开了多字节字符: 存量哈希覆盖的字节序列不是合法 UTF-8，无法重新校验 —— 该账号需要重设口令
 
 otel-serialize-failed = 序列化失败: { $error }
 otel-http-task-failed = otlp HTTP 任务失败: { $error }

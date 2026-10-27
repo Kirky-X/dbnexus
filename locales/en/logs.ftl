@@ -22,6 +22,13 @@ pool-log-idle-check-wait-timeout = pool acquire waited for idle-connection check
 session-log-sql-parse-denied = permission denied: role={ $role } reason=sql-parse-failure (fail-closed)
 session-log-permission-denied = permission denied: action={ $action } table={ $table }
 session-log-rate-limited = rate limited: table access throttled (retry_after={ $retry_after })
+session-log-rls-rejected = row-level security policy rejected: { $error }
+
+# --- Authentication password policy (canonical mirror of the strings embedded in
+# src/access/authentication/password.rs) ---
+auth-log-policy-max-len-exceeds-bcrypt = password policy max_len { $max_len } exceeds the bcrypt limit of { $limit } bytes; the effective limit is { $limit } bytes
+auth-log-legacy-verify-exceeds-limit = legacy password verification: password exceeds the bcrypt limit, verifying against the legacy 72-byte prefix
+auth-log-legacy-verify-split-multibyte = legacy password verification failed and the 72-byte cut splits a multi-byte character: the stored hash covers a byte sequence that is not valid UTF-8 and cannot be re-verified — this account requires a password reset
 
 otel-serialize-failed = serialize failed: { $error }
 otel-http-task-failed = otlp http task failed: { $error }

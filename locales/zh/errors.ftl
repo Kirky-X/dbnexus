@@ -106,6 +106,10 @@ perm-cache-log-clear-failed = PermissionCache clear 失败: { $error }
 perm-cache-provider-no-policy = 权限提供器没有角色 '{ $role }' 的策略
 perm-cache-provider-not-configured = 未为角色 '{ $role }' 配置权限提供器
 
+# --- 图操作权限门（canonical mirror，与 src/access/permission/types.rs 内嵌的
+# 规范串逐字一致） ---
+graph-op-denied-admin-required = 角色 '{ $role }' 的图操作被拒绝: 需要 admin 角色
+
 sql-parse-error = SQL 解析失败: { $reason }
 sql-unsupported-statement = 不支持的 SQL 语句类型: { $stmt_type }
 sql-empty-statement = 空的 SQL 语句
@@ -125,6 +129,7 @@ auth-token-expired = 令牌已过期
 auth-user-not-found = 用户未找到: { $user }
 auth-password-hash = 密码哈希失败: { $reason }
 auth-user-limit-reached = 用户存储已达上限: { $reason }
+auth-password-too-long-bcrypt = 密码长度不得超过 { $max_len } 字节（bcrypt 截断上限）
 
 circuit-breaker = 断路器处于 { $state } 状态
 circuit-breaker-closed = 断路器闭合: successes={ $successes } success_threshold={ $threshold }
@@ -151,6 +156,7 @@ snowflake-clock-backtrack = 时钟回拨: 等待后的时间戳 { $waited_ts } �
 snowflake-timestamp-overflow = 时间戳溢出: { $timestamp } 超出 41 位容量
 
 nexus-unsupported-database = 无效的数据库 URL: { $scheme }
+nexus-url-parse-failed = URL 解析失败（scheme={ $scheme }）: { $error }
 
 error-category-permission = 权限
 error-category-injection-risk = 注入风险
@@ -264,6 +270,7 @@ repository-version-field-missing = update_if_version 要求实体包含字段 '{
 repository-version-column-integer = 版本列 '{ $column }' 必须是整数
 repository-column-unsafe = repository 列必须是安全标识符: '{ $column }'
 repository-entity-deserialize-failed = 实体反序列化失败: { $error }
+repository-query-role-not-configured = repository 查询角色未配置；查询前请先调用 with_role()
 
 shard-route-unregistered = 分片键 '{ $key }' 路由到未注册的分片 { $shard_id }
 shard-migration-orchestration-not-implemented = 分片迁移编排尚未实现：未接入 MigrationExecutor，该分片未执行任何迁移
@@ -313,6 +320,8 @@ session-sql-parser-feature-required = { $function } 需要启用 sql-parser 特�
 session-sql-parser-feature-required-secure = { $function } 需要启用 sql-parser 特性以执行安全检查
 session-rls-parse-failed = 解析行级安全所需的 SQL 语句失败
 session-rls-not-applicable = 行级安全策略无法应用于该语句
+session-rls-multi-table-unsafe = 行级安全不支持多次引用受保护表的语句（自连接或子查询）
+session-rls-single-table-required = 行级安全要求单表语句
 session-query-rows-select-only = query_rows 只允许 SELECT 语句
 session-query-rows-sqlite-single-table = sqlite 上的 query_rows（MVP）要求单表 SELECT 语句
 session-query-rows-sqlite-postgres-only = query_rows 的 MVP 仅支持 postgres/sqlite 后端
@@ -322,3 +331,20 @@ session-cypher-multiple-statements = Cypher 查询包含多条语句（查询内
 session-cypher-line-comment = Cypher 查询包含行注释 '//' - 疑似注入
 session-cypher-block-comment = Cypher 查询包含块注释 '/* */' - 疑似注入
 session-cypher-dangerous-procedure = Cypher 查询调用了危险过程（'{ $procedure }'）- 疑似提权
+
+# --- 行级安全策略错误（canonical mirror，与 src/access/data_protection.rs 内嵌的
+# 规范串逐字一致） ---
+rls-unsafe-predicate-column = 表 '{ $table }' 的行级安全策略包含不安全的谓词列 '{ $column }'
+rls-set-operations-unsupported = 行级安全策略不支持集合操作（UNION/INTERSECT/EXCEPT）
+
+# --- 数据 API 网关（canonical mirror，与 src/database/data_api.rs 内嵌的规范串
+# 逐字一致） ---
+data-api-owner-column-unsafe = data-api 归属列必须是安全标识符: '{ $column }'
+data-api-query-role-not-configured = data-api 查询角色未配置；查询前请先调用 with_role()
+
+# --- 查询片段 DSL（canonical mirror，与 src/database/query_dsl.rs 内嵌的规范串
+# 逐字一致） ---
+query-fragment-column-unsafe = 查询片段列名必须是安全标识符: '{ $column }'
+query-fragment-table-unsafe = 查询片段表名必须是安全标识符: '{ $table }'
+query-fragment-condition-column-unsafe = 查询片段条件列必须是安全标识符: '{ $column }'
+query-fragment-order-column-unsafe = 查询片段排序列必须是安全标识符: '{ $column }'

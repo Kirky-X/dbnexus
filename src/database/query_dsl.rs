@@ -122,8 +122,9 @@ impl QueryFragment {
                 .iter()
                 .map(|c| {
                     if !is_safe_ident(c) {
-                        return Err(crate::foundation::DbError::Config(format!(
-                            "query fragment column name must be a safe identifier: '{c}'"
+                        return Err(crate::foundation::DbError::Config(crate::i18n::t(
+                            "query-fragment-column-unsafe",
+                            &[("column", c.clone())],
                         )));
                     }
                     Ok(c.clone())
@@ -133,8 +134,9 @@ impl QueryFragment {
         };
         let table = self.table.as_deref().unwrap_or("(?)");
         if !(table == "(?)" || is_safe_ident(table)) {
-            return Err(crate::foundation::DbError::Config(format!(
-                "query fragment table name must be a safe identifier: '{table}'"
+            return Err(crate::foundation::DbError::Config(crate::i18n::t(
+                "query-fragment-table-unsafe",
+                &[("table", table.to_string())],
             )));
         }
 
@@ -143,9 +145,9 @@ impl QueryFragment {
             let mut clauses: Vec<String> = Vec::with_capacity(self.conditions.len());
             for c in &self.conditions {
                 if !is_safe_ident(&c.column) {
-                    return Err(crate::foundation::DbError::Config(format!(
-                        "query fragment condition column must be a safe identifier: '{}'",
-                        c.column
+                    return Err(crate::foundation::DbError::Config(crate::i18n::t(
+                        "query-fragment-condition-column-unsafe",
+                        &[("column", c.column.clone())],
                     )));
                 }
                 clauses.push(format!("{} {} {}", c.column, c.op.as_sql(), c.literal));
@@ -155,8 +157,9 @@ impl QueryFragment {
         }
         if let Some(order) = &self.order_column {
             if !is_safe_ident(order) {
-                return Err(crate::foundation::DbError::Config(format!(
-                    "query fragment order column must be a safe identifier: '{order}'"
+                return Err(crate::foundation::DbError::Config(crate::i18n::t(
+                    "query-fragment-order-column-unsafe",
+                    &[("column", order.clone())],
                 )));
             }
             let dir = if self.order_desc { "DESC" } else { "ASC" };

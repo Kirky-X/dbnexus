@@ -167,12 +167,9 @@ impl JsonRepository {
     /// 未声明角色时拒绝执行查询：默认 admin 会同时绕过表级 RBAC 与
     /// RLS 谓词注入，仓储是 CRUD 出口，不应以超管身份静默兜底。
     fn role_ref(&self) -> DbResult<&str> {
-        self.role.as_deref().ok_or_else(|| {
-            DbError::Config(
-                "repository query role is not configured; call with_role() before querying"
-                    .to_string(),
-            )
-        })
+        self.role
+            .as_deref()
+            .ok_or_else(|| DbError::Config(i18n::t_simple("repository-query-role-not-configured")))
     }
 
     /// 设置显式列清单（列投影，避免 `SELECT *`）

@@ -373,9 +373,12 @@ impl DatabaseType {
 
         let parsed = url::Url::parse(url).map_err(|e| {
             // 错误文本不回显原始 URL：连接串常含用户名/口令，回显即凭据泄漏
-            crate::error::DbNexusError::UnsupportedDatabaseScheme(format!(
-                "failed to parse URL (scheme={}): {e}",
-                url_scheme_hint(url)
+            crate::error::DbNexusError::UnsupportedDatabaseScheme(crate::i18n::t(
+                "nexus-url-parse-failed",
+                &[
+                    ("scheme", url_scheme_hint(url).to_string()),
+                    ("error", e.to_string()),
+                ],
             ))
         })?;
 
