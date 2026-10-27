@@ -1388,8 +1388,18 @@ roles:
         operations: ["select"]
 "#;
 
+    /// retry 维度的占位类型：非 retry 组合下恒为不可构造类型，
+    /// 所有非 retry 调用点恒传 None，无需按组合分支
+    #[cfg(not(feature = "retry"))]
+    type RetryPolicy = core::convert::Infallible;
+
+    #[cfg(feature = "retry")]
+    use crate::reliability::RetryPolicy;
+
     async fn pool_with_analyst_role(
-        retry_policy: Option<crate::reliability::RetryPolicy>,
+        #[cfg_attr(not(feature = "retry"), allow(unused_variables))] retry_policy: Option<
+            RetryPolicy,
+        >,
     ) -> (std::path::PathBuf, crate::database::DbPool) {
         let path = std::env::temp_dir().join(format!(
             "dbnexus_session_perm_{}_{}.yaml",
@@ -1403,6 +1413,7 @@ roles:
         let config = DbConfig {
             url: "sqlite::memory:".to_string(),
             permissions_path: Some(path.to_string_lossy().to_string()),
+            #[cfg(feature = "retry")]
             retry_policy,
             ..Default::default()
         };
@@ -1550,9 +1561,10 @@ roles:
     }
 
     /// retry 策略：幂等查询失败自动重试，重试耗尽返回最后错误
+    #[cfg(feature = "retry")]
     #[tokio::test]
     async fn retry_policy_exhaustion_returns_last_error() {
-        let policy = crate::reliability::RetryPolicy {
+        let policy = RetryPolicy {
             max_retries: 2,
             initial_backoff_ms: 1,
             jitter: false,

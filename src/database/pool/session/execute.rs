@@ -216,7 +216,7 @@ impl Session {
         #[cfg(feature = "data-protection")]
         let effective_sql = self.rls_inject_raw(sql, backend).await?;
         #[cfg(not(feature = "data-protection"))]
-        let effective_sql = sql;
+        let effective_sql = sql.to_owned();
         let stmt = build_statement(backend, effective_sql, params);
         if let Some(tx) = tx_opt {
             tx.execute_raw(stmt).await.map_err(DbError::Connection)
@@ -1027,7 +1027,9 @@ async fn parse_sql_for_permission(sql: &str) -> DbResult<Option<(String, Permiss
 }
 
 /// SQL 字面量转义的后端口径（MySQL 反斜杠语义与 SQL 标准不同）
-#[cfg(feature = "data-protection")]
+///
+/// 消费点全部位于 sql-parser 门控函数（rls_inject_raw / query_rows_execute）内
+#[cfg(all(feature = "data-protection", feature = "sql-parser"))]
 fn sql_dialect(backend: sea_orm::DbBackend) -> crate::database::sql_text::SqlBackend {
     match backend {
         sea_orm::DbBackend::MySql => crate::database::sql_text::SqlBackend::MySql,
@@ -1039,7 +1041,7 @@ fn sql_dialect(backend: sea_orm::DbBackend) -> crate::database::sql_text::SqlBac
 ///
 /// 区分"同一张表被多次引用"（自连接/自引用子查询）与真正的多表语句：
 /// 前者语句本身是单表语义，报"单表"会误导排查。
-#[cfg(feature = "data-protection")]
+#[cfg(all(feature = "data-protection", feature = "sql-parser"))]
 fn rls_multi_table_error(tables: &[String]) -> String {
     let mut distinct: Vec<&str> = tables.iter().map(String::as_str).collect();
     distinct.sort_unstable();

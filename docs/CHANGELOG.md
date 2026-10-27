@@ -30,6 +30,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`QueryFragment::to_sql` 标识符校验由 panic 改为返回错误（breaking）**：签名 `fn to_sql(&self) -> String` → `fn to_sql(&self) -> DbResult<String>`（`query-dsl` feature）。表名/列名/条件列/排序列未过白名单时返回 `DbError::Config`，不再线程 panic（公共 API 不得以 panic 表达输入校验失败）。迁移：原 `fragment.to_sql()` 调用点补 `?`（或 `expect`/`unwrap_err`）
+
 ## [0.6.0-rc.10] - 2026-10-19
 
 ### Added

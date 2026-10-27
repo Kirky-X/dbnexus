@@ -132,7 +132,9 @@ impl DbPool {
     }
 
     /// 数据保护策略世代读数（查询缓存 key 派生用；换装单调递增）
-    #[cfg(feature = "data-protection")]
+    ///
+    /// 唯一消费点在 oxcache_query_cache 的 key 派生（oxcache-integration 门控）
+    #[cfg(all(feature = "data-protection", feature = "oxcache-integration"))]
     pub(crate) fn data_protection_epoch(&self) -> u64 {
         self.inner
             .data_protection_epoch
