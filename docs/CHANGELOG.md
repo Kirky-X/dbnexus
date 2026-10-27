@@ -421,7 +421,7 @@
 
 ### Fixed
 
-#### 正确性修复（diting 审查）
+#### 正确性修复
 
 - **`mask_email` UTF-8 字节切片 panic**: 非 ASCII 本地部分（中文/emoji）按字节切片会 panic，改用 `chars()` 安全处理
 - **`ShardRouter::default()` 除零 panic**: 默认 `total_shards=0` 导致 `% total_shards` 除零，改为 `total_shards=1`（单一分片语义）+ 防御性检查
@@ -430,12 +430,12 @@
 - **`warmup_connections` 静默丢弃失败**: 全部失败时仍返回 `Ok(())`，改为全部失败返回 `Err` + 部分失败 warn 日志（规则 12）
 - **`validate_role_name` 静默 fail-open**: 无权限配置时静默使用安全默认策略，添加 warn 日志显性化（规则 12，CRITICAL 风险保守修复）
 
-#### 安全修复（diting 审查）
+#### 安全修复
 
 - **`verify_token` 不校验 `token_type`**: refresh token 可用作 access token（权限提升风险），新增 `verify_access_token`/`verify_refresh_token` 方法额外校验 `token_type`
 - **`add_user` 无法验证密码强度**: 接收已哈希 `password_hash`，新增 `register_user(username, password, role)` 方法执行 `validate_strength → hash → insert` 完整流程
 
-#### 安全审查修复（tiangang SAST + diting 6 CRITICAL/5 HIGH）
+#### 安全审查修复
 
 - **DuckDB SQL 注入防护**: `execute_duckdb_raw` 添加 admin role + DdlGuard AST 验证（对齐 `execute_raw_ddl` 行为），非 admin role 拒绝 DDL
 - **令牌桶竞态修复**: RateLimiter 内部状态更新改为原子操作
