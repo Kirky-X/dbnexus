@@ -179,9 +179,9 @@ fn main() {
     let demo_phone = "13800000000";
     let result = SensitiveMasker::mask(demo_phone, MaskType::Phone).unwrap();
     println!(
-        "  ✓ created via Default + static method call: <{} chars> → {}",
+        "  ✓ created via Default + static method call: <{} chars> → <{} masked chars>",
         demo_phone.len(),
-        result
+        result.len()
     );
     println!();
 
