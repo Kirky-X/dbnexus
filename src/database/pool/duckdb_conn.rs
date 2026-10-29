@@ -1523,10 +1523,14 @@ mod tests {
                 .is_err(),
             "a batch containing an invalid statement should fail"
         );
-        // 失败批之后连接已归还池：后续 execute_batch / execute 均仍可用
-        conn.execute_batch("CREATE TABLE ok_table (id INTEGER); INSERT INTO ok_table VALUES (1)")
-            .await
-            .expect("the connection should be returned to the pool after a failed batch");
+        // 失败批之后连接已归还池：后续 execute_batch / execute 均仍可用。
+        // execute_batch 非原子：失败批中 CREATE TABLE 已落库，第二批用
+        // IF NOT EXISTS 幂等重建，避免与失败批残留的表名冲突
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS ok_table (id INTEGER); INSERT INTO ok_table VALUES (1)",
+        )
+        .await
+        .expect("the connection should be returned to the pool after a failed batch");
         conn.execute("INSERT INTO ok_table VALUES (2)")
             .await
             .expect("execute should still be usable");

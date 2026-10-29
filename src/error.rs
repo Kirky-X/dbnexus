@@ -22,7 +22,10 @@ pub enum DbNexusError {
     ///
     /// 载荷为具体原因（解析失败详情或不支持的 scheme 名），前缀保持中性：
     /// 解析失败不是"scheme 不支持"，前缀须与实际语义一致。
-    #[error("Invalid database URL: {0}")]
+    #[error("{}", crate::i18n::t(
+        "nexus-unsupported-database",
+        &[("scheme", .0.clone())]
+    ))]
     UnsupportedDatabaseScheme(String),
 }
 
