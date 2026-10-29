@@ -2,14 +2,14 @@
 # 历史 RUSTSEC-2023-0071 (rsa) ignore 已移除 — jsonwebtoken 升至 10.4.0 后 rsa
 # 不再在依赖树，漏洞随升级自然消失（advisory 已 "not encountered"）
 #
-# RUSTSEC-2026-0235 (rkyv <0.8.17 越界读) — 书面豁免：
-# rkyv 仅经 rust_decimal 1.42.1 的可选特性 `rkyv`（默认 off，default=["serde","std"]）
-# 出现在 Cargo.lock（cargo 锁文件记录全部可选依赖），dbnexus 实际构建图未启用该特性，
-# 漏洞代码不会被编译/加载。rkyv 0.8 需 rust_decimal 进行 major 依赖升级，超出本次
-# +0.1 发布范围，记入审查卷宗待上游 rust_decimal 迁移后移除。
-# ⚠ cargo-audit 0.22+ 已移除 audit.toml 配置文件支持，ignore 须经 CLI 传递：
-#   cargo audit --ignore RUSTSEC-2026-0235
+# 历史 RUSTSEC-2026-0235 (rkyv <0.8.17 越界读) 书面豁免已解除 — rust_decimal
+# 升至 1.43.0 后 rkyv 彻底离开依赖树（Cargo.lock 无该包），advisory 不再触发，
+# 无需任何 ignore（本地 cargo audit 0.22.2 与 CI security job 均裸跑通过）。
+#
+# 遗留知悉项（非漏洞）：async-std 1.13.2 unmaintained（RUSTSEC-2025-0052），
+# 经 sea-orm 2.0 → sqlx-core 0.9 的可选 runtime 依赖进入锁文件，dbnexus 默认
+# 构建与 CI 矩阵均未启用 runtime-async-std，代码不参与编译。待 sea-orm/sqlx
+# 上游剔除 async-std 后自然消失。
 [advisories]
 ignore = [
-    "RUSTSEC-2026-0235",
 ]

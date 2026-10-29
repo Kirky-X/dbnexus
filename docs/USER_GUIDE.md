@@ -53,7 +53,7 @@
 ```toml
 [dependencies]
 dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
-tokio = { version = "1.53", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 ```
 
 > DBNexus 的 `default` 特性为空：运行时、数据库驱动与功能特性均需显式启用。

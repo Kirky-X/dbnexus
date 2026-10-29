@@ -16,13 +16,13 @@ description = "Procedural macros for dbnexus"
 proc-macro = true
 
 [dependencies]
-syn = { version = "3.0", features = ["full", "extra-traits"] }
-quote = "1.0"
-proc-macro2 = "1.0"
-regex = "1.13"
+syn = { version = "3.0", default-features = false, features = ["derive", "parsing", "printing", "clone-impls", "proc-macro", "full", "extra-traits"] }
+quote = { version = "1.0", default-features = false, features = ["proc-macro"] }
+proc-macro2 = { version = "1.0", default-features = false, features = ["proc-macro"] }
+regex = { version = "1.13", default-features = false, features = ["std", "perf", "unicode"] }
 
 [dev-dependencies]
-trybuild = "1.0"
+trybuild = { version = "1.0", default-features = false, features = ["diff"] }
 sea-orm = { workspace = true, default-features = false, features = ["macros"] }
 # trybuild 经 dbnexus::db_entity 引宏（dev-dep 循环合法）；permission 供展开引用
 dbnexus = { path = "..", default-features = false, features = ["macros", "permission"] }

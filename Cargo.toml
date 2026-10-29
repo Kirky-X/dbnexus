@@ -15,19 +15,19 @@ keywords = ["database", "orm", "sea-orm", "sql"]
 categories = ["database", "asynchronous"]
 
 [workspace.dependencies]
-tokio = { version = "1.53", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
-thiserror = "2.0"
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde-saphyr = { version = "1.3", default-features = false, features = ["serialize", "deserialize"] }
-serde_json = "1.0"
+tokio = { version = "1.54", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync", "fs"] }
+thiserror = { version = "2.0", default-features = false, features = ["std"] }
+anyhow = { version = "1.0", default-features = false, features = ["std"] }
+serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
+serde-saphyr = { version = "2.0", default-features = false, features = ["serialize", "deserialize"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
 # 不包含数据库驱动，由各子包自行选择
 sea-orm = { version = "2.0", default-features = false }
-time = { version = "0.3", features = ["formatting", "parsing"] }
-dbnexus-macros = { version = "0.6.0-rc.10", path = "macros" }
+time = { version = "0.3", default-features = false, features = ["std", "formatting", "parsing"] }
+dbnexus-macros = { version = "0.6.0-rc.10", path = "macros", default-features = false }
 # 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
-dbnexus-limiter-port = { version = "0.6.0-rc.10", path = "limiter-port" }
-validator = { version = "0.21", features = ["derive"] }
+dbnexus-limiter-port = { version = "0.6.0-rc.10", path = "limiter-port", default-features = false }
+validator = { version = "0.21", default-features = false, features = ["derive"] }
 # HTTP 健康端点（http-health feature 生成 axum Router，server 能力交给消费方）
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 
@@ -161,59 +161,59 @@ serde_json = { workspace = true }
 sea-orm = { workspace = true, default-features = false }
 time = { workspace = true }
 axum = { workspace = true, optional = true }
-parking_lot = { version = "0.12", optional = true }
-chrono = { version = "0.4", features = ["serde"], optional = true }
-sha2 = { version = "0.11", optional = true }
-confers = { version = "0.6.0-rc.11", default-features = false, optional = true }
-twox-hash = { version = "2.1", optional = true }
-url = "2.5"
-async-trait = "0.1"
-uuid = { version = "1.26", features = ["v4"], optional = true }
+parking_lot = { version = "0.13", default-features = false, optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"], optional = true }
+sha2 = { version = "0.11", default-features = false, features = ["alloc"], optional = true }
+confers = { version = "0.6.0-rc.12", default-features = false, optional = true }
+twox-hash = { version = "2.1", default-features = false, features = ["std", "xxhash64"], optional = true }
+url = { version = "2.5", default-features = false, features = ["std"] }
+async-trait = { version = "0.1", default-features = false }
+uuid = { version = "1.29", default-features = false, features = ["std", "v4"], optional = true }
 validator = { workspace = true, optional = true }
 # 结构化日志门面：池超时/权限拒绝/熔断/慢查询接线点经 log 宏发记录；未安装 logger 时为 no-op，默认构建行为不变
 log = { version = "0.4", default-features = false, features = ["std"] }
-regex = { version = "1.13", optional = true }
-sqlparser = { version = "0.63", optional = true }
-futures = { version = "0.3", optional = true }
-dashmap = { version = "6.2", optional = true }
+regex = { version = "1.13", default-features = false, features = ["std", "perf", "unicode"], optional = true }
+sqlparser = { version = "0.63", default-features = false, features = ["std", "recursive-protection"], optional = true }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await", "executor"], optional = true }
+dashmap = { version = "6.2", default-features = false, optional = true }
 # Lock-free read for permission config (COW pattern)
-arc-swap = { version = "1.9", optional = true }
+arc-swap = { version = "1.9", default-features = false, optional = true }
 # Cache via oxcache (moka is used internally by oxcache as backend)
-oxcache = { version = "0.5.0-rc.8", default-features = false, features = ["memory"], optional = true }
+oxcache = { version = "0.5.0-rc.11", default-features = false, features = ["memory"], optional = true }
 # Rate limiter port（permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
 # trait-kit integration (optional, feature-gated via `kit`; mirrors oxcache/limiteron pattern)
-trait-kit = { version = "0.5.0-rc.10", default-features = false, features = ["async"], optional = true }
-duckdb = { version = "1.10505", features = ["bundled"], optional = true }
-lbug = { version = "0.21", optional = true }
-neo4rs = { version = "0.9.0-rc.10", optional = true }
+trait-kit = { version = "0.5.0-rc.11", default-features = false, features = ["async"], optional = true }
+duckdb = { version = "1.20000", default-features = false, features = ["bundled"], optional = true }
+lbug = { version = "0.22", default-features = false, optional = true }
+neo4rs = { version = "0.9.0-rc.10", default-features = false, optional = true }
 # jsonwebtoken: v11 使用 aws_lc_rs 后端，API 与 v10 兼容
-jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"], optional = true }
-bcrypt = { version = "0.19", optional = true }
-unicode-normalization = { version = "0.1", optional = true }
-rand = { version = "0.10", optional = true }
+jsonwebtoken = { version = "11.1", default-features = false, features = ["use_pem", "aws_lc_rs"], optional = true }
+bcrypt = { version = "0.19", default-features = false, features = ["std", "zeroize"], optional = true }
+unicode-normalization = { version = "0.1", default-features = false, features = ["std"], optional = true }
+rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "sys_rng", "thread_rng"], optional = true }
 # ICU4X 国际化（核心特性，始终可用）
-icu = { version = "2.3", default-features = false, features = ["compiled_data"] }
-writeable = "0.6"
-sys-locale = "0.3"
+icu = { version = "2.4", default-features = false, features = ["compiled_data"] }
+writeable = { version = "0.6", default-features = false, features = ["alloc"] }
+sys-locale = { version = "0.3", default-features = false }
 # 显式关闭 default（两 crate 默认特性集为空，与 confers/inklog 一致）
 fluent-bundle = { version = "0.16", default-features = false }
 unic-langid = { version = "0.9", default-features = false }
 dbnexus-macros = { workspace = true, optional = true }
 # Testing utilities（同时出现在 dev-dependencies，optional 供 test-utils feature 拉入）
-assert_cmd = { version = "2.2", optional = true }
-tempfile = { version = "3.27", optional = true }
+assert_cmd = { version = "2.2", default-features = false, features = ["color", "color-auto"], optional = true }
+tempfile = { version = "3.27", default-features = false, features = ["getrandom"], optional = true }
 
 [dev-dependencies]
-assert_cmd = "2.2"
-predicates = "3.1"
-criterion = "0.8"
-tempfile = "3.27"
-futures = "0.3"
-testcontainers = "0.28"
+assert_cmd = { version = "2.2", default-features = false, features = ["color", "color-auto"] }
+predicates = { version = "3.1", default-features = false, features = ["diff", "regex", "float-cmp", "normalize-line-endings", "color"] }
+criterion = { version = "0.8", default-features = false, features = ["rayon", "plotters", "cargo_bench_support"] }
+tempfile = { version = "3.27", default-features = false, features = ["getrandom"] }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await", "executor"] }
+testcontainers = { version = "0.28", default-features = false }
 # http-health 端点契约测试：tower ServiceExt::oneshot 直测 Router（不起真实服务器）
 tower = { version = "0.5", default-features = false, features = ["util"] }
-http-body-util = "0.1"
+http-body-util = { version = "0.1", default-features = false }
 
 [lints]
 workspace = true

@@ -40,17 +40,17 @@ mysql-full = ["mysql", "all-optional", "dbnexus/runtime-tokio-rustls"]
 [dependencies]
 dbnexus = { version = "0.6.0-rc.10", path = "../../..", default-features = false }
 sea-orm = { workspace = true, default-features = false, features = ["runtime-tokio-rustls"] }
-clap = { version = "4.6", features = ["derive", "env"] }
+clap = { version = "4.6", default-features = false, features = ["std", "color", "help", "usage", "error-context", "suggestions", "derive", "env"] }
 tokio = { workspace = true }
-chrono = { version = "0.4", features = ["std"] }
-url = { version = "2.5" }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+url = { version = "2.5", default-features = false, features = ["std"] }
 serde_json = { workspace = true }
-sha2 = "0.11"
+sha2 = { version = "0.11", default-features = false }
 
 [dev-dependencies]
-assert_cmd = "2.2"
-predicates = "3.1"
-tempfile = "3.27"
+assert_cmd = { version = "2.2", default-features = false, features = ["color", "color-auto"] }
+predicates = { version = "3.1", default-features = false, features = ["diff", "regex", "float-cmp", "normalize-line-endings", "color"] }
+tempfile = { version = "3.27", default-features = false }
 
 [lints]
 workspace = true
