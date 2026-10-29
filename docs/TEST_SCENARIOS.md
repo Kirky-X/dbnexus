@@ -24,8 +24,8 @@
 |------|------|----------|
 | L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]` | error/common_types/config/domain 等模块自测，随 `--lib` 运行 |
 | L2 集成测试 | `tests/**` 深路径，87 个 `[[test]]` 显式注册 | 单元/集成分层目录（unit/integration/） |
-| L3 E2E 场景 | `tests/e2e/`（e2e_advanced 88 测试 + e2e_distributed 10 测试） | 98 测试，按 cfg(feature) 隔离 |
-| L4 容器级 | `postgres_testcontainers` + `mysql_testcontainers` | 各 14 测试，每测试独立容器隔离 |
+| L3 E2E 场景 | `tests/e2e/`（e2e_advanced 86 测试 + e2e_distributed 10 测试） | 96 测试，按 cfg(feature) 隔离 |
+| L4 容器级 | `postgres_testcontainers` + `mysql_testcontainers` | 30 测试（postgres 16 + mysql 14），每测试独立容器隔离 |
 
 驱动组全量结果（CI 口径 `--no-default-features --features <db>,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros --no-fail-fast`）：
 
@@ -57,7 +57,7 @@
 
 ## E2E 场景定义
 
-### tests/e2e/e2e_advanced.rs（88 测试，cfg(feature) 分域）
+### tests/e2e/e2e_advanced.rs（86 测试，cfg(feature) 分域）
 
 | 域 | feature 门 | 场景要点 |
 |----|------------|----------|

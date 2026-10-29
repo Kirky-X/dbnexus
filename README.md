@@ -434,7 +434,7 @@ cargo build --all-targets
 
 </details>
 
-\* `graph_ladybug` 因与 `duckdb` 存在 mbedtls 链接冲突未注册为 bin，需单独编译：`cargo build --bin graph_ladybug --no-default-features --features "runtime-tokio-rustls,sqlite,cache,ladybug"`。
+\* `graph_ladybug` 因与 `duckdb` 存在 mbedtls 链接冲突未注册为 `[[bin]]`，暂无编译运行途径（`cargo build --bin graph_ladybug` 报 `no bin target named` 错误）；需使用时先在 `examples/Cargo.toml` 注册 `[[bin]]`（源码见 `examples/src/graph/graph_ladybug.rs`）。
 
 完整说明见 [examples/README.md](examples/README.md)。
 

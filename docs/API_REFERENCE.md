@@ -68,7 +68,7 @@ pub struct DbPool { /* 字段私有 */ }
 | 错误 | 场景 |
 |------|------|
 | `DbError::Permission` | 角色不在权限配置中 |
-| `DbError::ConnectionPool` | 获取连接失败 |
+| `DbError::Connection` | 获取连接失败（`DbError` 无 `ConnectionPool` 变体，池获取失败经 sea-orm `DbErr` 以 `Connection` 变体透传） |
 
 **示例**：
 
@@ -107,7 +107,7 @@ pub struct Session { /* 字段私有 */ }
 | `is_in_transaction` | `async fn is_in_transaction(&self) -> bool` | 检查是否在事务中 |
 | `query_cache_get` / `query_cache_set` | `async fn query_cache_get(&self, key: &str) -> Option<Vec<u8>>` 等 | 只读查询结果缓存读写（`cache`，0.6.0-rc.4） |
 
-`execute` 可能返回的错误（SQL 解析失败不产生错误——`execute` 内部解析失败时跳过权限检查直接执行；解析器自身的解析错误是独立类型 `SqlParseError`，不经 `DbError` 返回）：
+`execute` 可能返回的错误（解析失败并非静默放行：解析失败或不支持的语句会落入 `execute` 的 None 分支转交 `execute_raw` 管道，非 admin 角色在解析失败时返回 `DbError::Permission`（fail-closed），仅 admin 放行；解析为 DDL/DCL/Transaction 的语句对所有角色返回 `DbError::Permission`）：
 
 | 错误 | 场景 |
 |------|------|
@@ -436,11 +436,12 @@ let pdp = PolicyDecisionPoint::builder()
 | `timestamps = true` | 自动管理 `created_at` / `updated_at`（经 `ActiveModelBehavior::before_save`） |
 | `soft_delete = true` | 自动注入 `deleted_at` 字段并改写 `find*` / `delete` 语义，额外生成 `force_delete` |
 | `validate` | 集成 `validator` crate（`validation` 特性） |
+| `permissions(...)` | 实体级权限白名单：`permissions(roles = [...], operations = [...])`；编译期生成 `ALLOWED_ROLES` / `ALLOWED_OPERATIONS` 常量与 `allowed_roles()` / `allowed_operations()` / `check_permission()` / `check_operation()` 方法（示例见 `permission_macro`） |
 | `cache(...)` | 生成缓存配置（`cache` 特性） |
 | `audit(...)` | 生成审计配置（`audit` 特性） |
 | `hooks(...)` | 6 个生命周期钩子：`before_insert` / `after_insert` / `before_update` / `after_update` / `before_delete` / `after_delete`；编排顺序为 校验 → 时间戳 → 用户钩子 |
 
-> 权限控制不通过宏声明，而是由 `Session` 在运行时根据权限配置（YAML/JSON）强制执行。
+> 宏的 `permissions(...)` 只生成实体级白名单常量与校验方法，需显式调用；SQL 执行链路的权限控制仍由 `Session` 在运行时根据权限配置（YAML/JSON）强制执行。
 
 **生成的方法**：
 

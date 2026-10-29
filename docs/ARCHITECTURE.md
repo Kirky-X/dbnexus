@@ -67,7 +67,7 @@ DBNexus 的架构遵循**分层设计**，具有清晰的关注点分离，使�
 
 | 特性 | 依赖 | 原因 |
 |------|------|------|
-| `permission` | `sql-parser`（强制）、`dashmap`、`futures`、`yaml`、`arc-swap` | 防止 SQL 注入绕过权限检查；dashmap 用于并发权限上下文，yaml 用于策略解析，arc-swap 用于无锁配置读取 |
+| `permission` | `sql-parser`（强制）、`dashmap`、`futures`、`yaml`、`arc-swap`、`cache` | 防止 SQL 注入绕过权限检查；dashmap 用于并发权限上下文，yaml 用于策略解析，arc-swap 用于无锁配置读取，cache 用于权限策略缓存 |
 | `sql-parser` | `sqlparser`、`regex`、`unicode-normalization`、`oxcache/memory` | 解析结果缓存（prepare_cache 端口）由 oxcache memory 后端承载，不隐含 dbnexus `cache` 特性 |
 | `permission-engine` | `permission`、`cache`、`dashmap`、`futures`、`regex` | 高级权限引擎需要基础权限类型、缓存策略决策与并发支持 |
 

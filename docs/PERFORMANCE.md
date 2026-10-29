@@ -29,7 +29,7 @@
 | `benches/e2e_bench.rs` | 端到端：池获取 / 行查询 / 批量写 | `cargo bench --bench e2e_bench --features "sqlite,runtime-tokio-rustls,sql-parser"` |
 | `benches/batch_insert_bench.rs` | 多值 INSERT：逐行 vs 500 行分块（sqlite 临时文件库） | `cargo bench --bench batch_insert_bench --features "sqlite,copy,sql-parser,runtime-tokio-rustls"` |
 | `benches/duckdb_copy_bench.rs` | DuckDB COPY：逐行 vs `copy_in`（duckdb::memory:） | `cargo bench --bench duckdb_copy_bench --features "duckdb,copy,sql-parser,runtime-tokio-rustls"` |
-| `benches/permission_bench.rs` | 池构造（sqlite::memory:）、DbConfig 路径 | `cargo bench --bench permission_bench --features permission` |
+| `benches/permission_bench.rs` | 池构造（sqlite::memory:）、DbConfig 路径 | `cargo bench --bench permission_bench --features "sqlite,runtime-tokio-rustls"`（`[[bench]]` required-features 为 `sqlite` + `runtime-tokio-rustls`，仅传 `permission` 会被 cargo 静默跳过） |
 | `benches/permission_engine_bench.rs` | PermissionCache insert / get / miss | `cargo bench --bench permission_engine_bench --features permission-engine` |
 | `benches/sharding_bench.rs` | 分片路由哈希、跨分片绑定冲突检测 | `cargo bench --bench sharding_bench --features sharding` |
 | `benches/metrics_bench.rs` | 百分位计算、Prometheus 导出（含 1/50/200 标签规模曲线 + 慢查询环满态）、直方图记录、health_snapshot（`metrics,sqlite,health-check,sql-parser,runtime-tokio-rustls`） | `cargo bench --bench metrics_bench --features metrics` |
@@ -162,9 +162,6 @@ N+1 形态 200 次点查（sqlite 临时文件库 + Moka 后端），命中收�
 
 ## CI 门禁说明
 
-```bash
-# CI 中仅验证基准可编译可运行（不设阈值断言，防虚拟机抖动误报）：
-cargo bench --bench e2e_bench --features "sqlite,runtime-tokio-rustls,sql-parser" -- --test
-```
+CI 不运行基准：`.github/workflows/` 下全部工作流均无 bench 步骤（`grep 'bench' .github/workflows/*.yml` 零命中），基准仅按上表命令在本地运行。
 
 阈值断言待在稳定硬件上采集多轮数据后另行启用。

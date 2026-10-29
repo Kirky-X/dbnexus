@@ -25,7 +25,7 @@
 ```rust
 use dbnexus::{db_entity, db_repository};
 
-#[db_entity(table = "users")]
+#[db_entity(table_name = "users", primary_key = "id")]
 struct User {
     id: i64,
     name: String,

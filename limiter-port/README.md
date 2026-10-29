@@ -25,8 +25,8 @@ struct MyLimiter;
 #[async_trait::async_trait]
 impl Limiter for MyLimiter {
     async fn check(&self, key: &str) -> Result<RateLimitDecision, RateLimitError> {
-        // 自定义判定：Allow 放行，Deny 拒绝并可携带 retry_after
-        Ok(RateLimitDecision::Allow)
+        // 自定义判定：allow() 放行，deny(retry_after) 拒绝并可携带 retry_after
+        Ok(RateLimitDecision::allow())
     }
 }
 ```

@@ -125,12 +125,7 @@ cargo run -p dbnexus-examples --bin <示例名>
 |------|------|----------|
 | `graph_neo4j` | 演示 `Neo4jConnection` 的 URL 解析、环境变量凭据回退与连接失败时的优雅降级（无服务器时仅演示降级） | `cargo run -p dbnexus-examples --bin graph_neo4j` |
 
-`graph_ladybug`（Ladybug 嵌入式图数据库，DDL/节点/关系操作）**未注册为 `[[bin]]`**：它需要 `ladybug` feature，而该 feature 与 `duckdb` 存在 mbedtls 链接冲突，故需单独编译（见 `Cargo.toml` 内注释）：
-
-```bash
-cargo build --bin graph_ladybug --no-default-features \
-  --features "runtime-tokio-rustls,sqlite,cache,ladybug"
-```
+`graph_ladybug`（Ladybug 嵌入式图数据库，DDL/节点/关系操作）**未注册为 `[[bin]]`**：它需要 `ladybug` feature，而该 feature 与 `duckdb` 存在 mbedtls 链接冲突，故 `examples/Cargo.toml` 未为其注册 `[[bin]]`（见该文件内注释）。因此没有可用的编译运行命令——`cargo build --bin graph_ladybug` 会报 `no bin target named` 错误；需使用时先注册 `[[bin]]`（源码位于 `src/graph/graph_ladybug.rs`）。
 
 ## 分布式能力 (distributed/)
 
@@ -183,14 +178,14 @@ cargo build -p dbnexus-examples --all-targets
 说明：
 
 - `database_postgres`、`database_mysql`、`graph_neo4j` 在没有可用数据库服务时会优雅降级退出，无需预先部署服务即可运行。
-- `graph_ladybug` 不在上述清单内（未注册为 bin），编译方式见[图数据库模块](#图数据库模块-graph)。
+- `graph_ladybug` 不在上述清单内（未注册为 bin，暂无编译运行途径），说明见[图数据库模块](#图数据库模块-graph)。
 
 ## 已启用的 feature
 
-示例所需的 feature 已在 `Cargo.toml` 的 `dbnexus` 依赖中统一启用：
+示例所需的 feature 主要在 `Cargo.toml` 的 `dbnexus` 依赖中统一启用（运行时除外，见下）：
 
-- **数据库**：`sqlite`、`duckdb`、`neo4j`（`ladybug` 因与 `duckdb` 的 mbedtls 链接冲突未启用，仅供 `graph_ladybug` 单独编译时使用）
-- **运行时**：`runtime-tokio-rustls`
+- **数据库**：`sqlite`、`duckdb`、`neo4j`（`ladybug` 因与 `duckdb` 的 mbedtls 链接冲突未启用，`graph_ladybug` 亦因此未注册为 bin）
+- **运行时**：`runtime-tokio-rustls`——不在 `dbnexus` 依赖的 features 内，由 examples 自身的 `sea-orm` 直依赖提供（`examples/Cargo.toml` 中 `sea-orm` `features = ["runtime-tokio-rustls", "sqlx-sqlite", "macros"]`）
 - **安全与权限**：`permission`、`permission-engine`、`sql-parser`、`authentication`、`validation`
 - **配置**：`yaml`、`config-env`
 - **数据管理**：`cache`、`migration`、`auto-migrate`、`sharding`、`global-index`、`pool-warmup`、`pool-health-check`
