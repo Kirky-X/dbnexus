@@ -13,7 +13,7 @@
 //!   admin 角色会同时绕过表级 RBAC 与 RLS 谓词注入，只能显式 opt-in；
 //! - **归属判定**：网关不做隐式归属隔离——`get`/`list` 只按主键与调用方
 //!   给出的过滤条件取数；多租户场景须用 `get_owned`/`list_owned` 传入
-//!   来自认证上下文的 [`OwnerScope`]，归属值不得取自请求参数；
+//!   来自认证上下文的 [`OwnerScope`](crate::database::data_api::OwnerScope)，归属值不得取自请求参数；
 //! - **列白名单**：SELECT 仅返回声明暴露的列；过滤/排序列同样必须
 //!   在白名单内，违规返回 `DbError::Permission`（可映射 HTTP 403/400）；
 //! - **标识符校验**：表名/列名一律 `is_safe_identifier` 白名单校验；
