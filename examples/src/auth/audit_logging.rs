@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("    user_id      = <{} chars>", event.user_id.len());
     println!("    severity     = {}", event.severity);
     println!("    result       = {}", event.result);
-    println!("    request_id   = {}", event.request_id);
+    println!("    request_id   = <{} chars>", event.request_id.len());
 
     // 使用快捷构造方法记录各类审计事件
     println!("\n--- 6. record various audit events ---");
