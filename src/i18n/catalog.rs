@@ -573,6 +573,10 @@ mod tests {
             "auth-log-legacy-verify-exceeds-limit",
             "auth-log-legacy-verify-split-multibyte",
             "session-log-rls-rejected",
+            // i18n 接线批次：连接池角色校验错误 + 审计日志/脱敏示例输出行
+            "perm-role-not-allowed-without-config",
+            "example-audit-logging-request-id-chars",
+            "example-sensitive-masker-default-static-masked",
         ];
         for key in NEW_KEYS {
             assert!(
@@ -1007,6 +1011,24 @@ mod tests {
                 "row-level security policy rejected: E",
                 "行级安全策略被拒绝: E",
             ),
+            (
+                "perm-role-not-allowed-without-config",
+                &[("role", "guest")],
+                "Role 'guest' is not allowed without explicit permission configuration",
+                "缺少显式权限配置，角色 'guest' 不被允许",
+            ),
+            (
+                "example-audit-logging-request-id-chars",
+                &[("chars", "11")],
+                "request_id   = <11 chars>",
+                "request_id   = <11 字符>",
+            ),
+            (
+                "example-sensitive-masker-default-static-masked",
+                &[("chars", "11"), ("masked_chars", "6")],
+                "✓ created via Default + static method call: <11 chars> → <6 masked chars>",
+                "✓ 通过 Default + 静态方法调用创建: <11 字符> → <6 脱敏后字符>",
+            ),
         ];
         for (key, args, en, zh) in cases {
             let owned: Vec<(&str, String)> =
@@ -1075,6 +1097,8 @@ mod tests {
             ("max_len", "12".to_string()),
             ("limit", "72".to_string()),
             ("scheme", "ftp".to_string()),
+            ("chars", "C".to_string()),
+            ("masked_chars", "MC".to_string()),
         ];
         const NEW_KEYS: &[&str] = &[
             "db-unsupported",
@@ -1247,6 +1271,10 @@ mod tests {
             "auth-log-legacy-verify-exceeds-limit",
             "auth-log-legacy-verify-split-multibyte",
             "session-log-rls-rejected",
+            // i18n 接线批次：连接池角色校验错误 + 审计日志/脱敏示例输出行
+            "perm-role-not-allowed-without-config",
+            "example-audit-logging-request-id-chars",
+            "example-sensitive-masker-default-static-masked",
         ];
         for key in NEW_KEYS {
             for lang in ["en", "zh"] {

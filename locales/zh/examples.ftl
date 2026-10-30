@@ -9,3 +9,6 @@ example-audit-logging-title = 📝 DBNexus 审计日志示例
 example-rate-limiter-title = ⏱  DBNexus 速率限制器示例
 example-kit-usage-title = 🧰 DBNexus AsyncKit + DbNexusModule 依赖注入示例
 example-health-check-title = 🩺 DBNexus 健康检查与熔断器示例
+
+example-audit-logging-request-id-chars = request_id   = <{ $chars } 字符>
+example-sensitive-masker-default-static-masked = ✓ 通过 Default + 静态方法调用创建: <{ $chars } 字符> → <{ $masked_chars } 脱敏后字符>

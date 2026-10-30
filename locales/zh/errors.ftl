@@ -309,6 +309,10 @@ migration-graph-alter-unsupported = 图数据库不支持关系型 ALTER TABLE �
 # 规范串逐字一致） ---
 perm-config-role-not-found = 权限配置中未找到该角色
 
+# --- 连接池访问角色校验（canonical mirror，与 src/database/pool/db_pool/access.rs
+# 内嵌的规范串逐字一致） ---
+perm-role-not-allowed-without-config = 缺少显式权限配置，角色 '{ $role }' 不被允许
+
 # --- 会话层（canonical mirror：英文模式与 src/database/pool/session/
 # {execute,duckdb,mod}.rs 构造点内嵌的规范串逐字一致） ---
 session-ddl-not-allowed-context = 当前上下文不允许 DDL 操作

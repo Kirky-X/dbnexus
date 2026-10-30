@@ -18,7 +18,7 @@
 
 use dbnexus::{
     AuditConfig, AuditEvent, AuditEventBuilder, AuditLogger, AuditOperation, AuditQueryFilters,
-    AuditSeverity, AuditStatus, MemoryAuditStorage, t_simple,
+    AuditSeverity, AuditStatus, MemoryAuditStorage, t, t_simple,
 };
 use std::sync::Arc;
 
@@ -125,7 +125,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("    user_id      = <{} chars>", event.user_id.len());
     println!("    severity     = {}", event.severity);
     println!("    result       = {}", event.result);
-    println!("    request_id   = <{} chars>", event.request_id.len());
+    println!(
+        "    {}",
+        t(
+            "example-audit-logging-request-id-chars",
+            &[("chars", event.request_id.len().to_string())]
+        )
+    );
 
     // 使用快捷构造方法记录各类审计事件
     println!("\n--- 6. record various audit events ---");

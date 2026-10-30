@@ -18,7 +18,7 @@
 //! cargo run --example sensitive_masker
 //! ```
 
-use dbnexus::{MaskType, SensitiveError, SensitiveMasker};
+use dbnexus::{MaskType, SensitiveError, SensitiveMasker, t};
 
 /// 打印脱敏结果
 fn print_mask(label: &str, data: &str, mask_type: MaskType) {
@@ -179,9 +179,14 @@ fn main() {
     let demo_phone = "13800000000";
     let result = SensitiveMasker::mask(demo_phone, MaskType::Phone).unwrap();
     println!(
-        "  ✓ created via Default + static method call: <{} chars> → <{} masked chars>",
-        demo_phone.len(),
-        result.len()
+        "  {}",
+        t(
+            "example-sensitive-masker-default-static-masked",
+            &[
+                ("chars", demo_phone.len().to_string()),
+                ("masked_chars", result.len().to_string()),
+            ]
+        )
     );
     println!();
 

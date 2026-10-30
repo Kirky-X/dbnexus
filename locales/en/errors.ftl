@@ -312,6 +312,10 @@ migration-graph-alter-unsupported = Graph databases do not support relational AL
 # src/access/permission/context.rs) ---
 perm-config-role-not-found = Role not found in permission config
 
+# --- Pool access role validation (canonical mirror of the string embedded in
+# src/database/pool/db_pool/access.rs) ---
+perm-role-not-allowed-without-config = Role '{ $role }' is not allowed without explicit permission configuration
+
 # --- Session layer (canonical mirror: English patterns identical to the
 # canonical strings embedded at the construction sites in
 # src/database/pool/session/{execute,duckdb,mod}.rs) ---
