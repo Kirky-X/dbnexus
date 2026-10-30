@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1551,7 +1551,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-cli"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 dependencies = [
  "assert_cmd",
  "chrono",
@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-examples"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 dependencies = [
  "async-trait",
  "axum",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-limiter-port"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 dependencies = [
  "async-trait",
  "tokio",
@@ -1597,7 +1597,7 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-macros"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 dependencies = [
  "dbnexus",
  "proc-macro2",
@@ -3832,9 +3832,9 @@ dependencies = [
 
 [[package]]
 name = "oxcache"
-version = "0.5.0-rc.11"
+version = "0.5.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e7692b7941fc7bd70021726c9fc0840c82a483e5d03eedfb625f21934a5a9d6"
+checksum = "41f58d435b2d2848ba0e04cb31be9c7c00fd33cc60d6b60fb52083d57dc646de"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -5804,9 +5804,9 @@ dependencies = [
 
 [[package]]
 name = "trait-kit"
-version = "0.5.0-rc.11"
+version = "0.5.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af81efe05c217a17c4a09a5faeb3e8d202639e49781a0a3b1c5969d636e12e70"
+checksum = "0a9fa4c077e939f17a6f0bda0fc720ef1af104636f7da4ef2d5d29de9cd200ac"
 dependencies = [
  "fluent-bundle",
  "log",
@@ -6582,7 +6582,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "trait-kit"
-version = "0.5.0-rc.12"

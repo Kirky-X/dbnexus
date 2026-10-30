@@ -33,10 +33,13 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc.11] - 2026-10-31
+
 ### Changed
 
 - **`QueryFragment::to_sql` 标识符校验由 panic 改为返回错误（breaking）**：签名 `fn to_sql(&self) -> String` → `fn to_sql(&self) -> DbResult<String>`（`query-dsl` feature）。表名/列名/条件列/排序列未过白名单时返回 `DbError::Config`，不再线程 panic（公共 API 不得以 panic 表达输入校验失败）。迁移：原 `fragment.to_sql()` 调用点补 `?`（或 `expect`/`unwrap_err`）
 - **依赖刷新（rc.10 定版后入库）**：`duckdb`/`libduckdb-sys` 锁定版本 1.10506.1 → 1.20000.0（manifest 相应由 `1.10505` 收敛为 `1.20000`，并收紧 `default-features = false`）；`confers` 0.6.0-rc.11 → 0.6.0-rc.12、`oxcache` 0.5.0-rc.8 → 0.5.0-rc.11、`trait-kit` 0.5.0-rc.10 → 0.5.0-rc.11；`lbug` 0.21 → 0.22 并收紧 `default-features = false`；`neo4rs` 保持 0.9.0-rc.10 并收紧 `default-features = false`。README 特性状态节已按 `duckdb` 1.20000.0 表述
+- **自研依赖对齐 rc.12 波次（发布定稿）**：`oxcache` 0.5.0-rc.11 → 0.5.0-rc.12、`trait-kit` 0.5.0-rc.11 → 0.5.0-rc.12（两者已发布至 crates.io）；子 crate `dbnexus-macros`/`dbnexus-limiter-port` 自钉同步 0.6.0-rc.11
 
 ## [0.6.0-rc.10] - 2026-10-19
 
@@ -733,7 +736,8 @@ cargo build
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
 
-[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.10...HEAD
+[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.11...HEAD
+[0.6.0-rc.11]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.10...v0.6.0-rc.11
 [0.6.0-rc.10]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.9...v0.6.0-rc.10
 [0.6.0-rc.9]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.8...v0.6.0-rc.9
 [0.6.0-rc.8]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.7...v0.6.0-rc.8

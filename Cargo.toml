@@ -3,7 +3,7 @@ members = [".", "macros", "limiter-port", "src/tools/cli", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -24,9 +24,9 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 # 不包含数据库驱动，由各子包自行选择
 sea-orm = { version = "2.0", default-features = false }
 time = { version = "0.3", default-features = false, features = ["std", "formatting", "parsing"] }
-dbnexus-macros = { version = "0.6.0-rc.10", path = "macros", default-features = false }
+dbnexus-macros = { version = "0.6.0-rc.11", path = "macros", default-features = false }
 # 限流端口（层级抽取，防 dbnexus↔limiteron 包级循环依赖；limiteron 可无 dbnexus 依赖实现本端口）
-dbnexus-limiter-port = { version = "0.6.0-rc.10", path = "limiter-port", default-features = false }
+dbnexus-limiter-port = { version = "0.6.0-rc.11", path = "limiter-port", default-features = false }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
 # HTTP 健康端点（http-health feature 生成 axum Router，server 能力交给消费方）
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
@@ -179,11 +179,11 @@ dashmap = { version = "6.2", default-features = false, optional = true }
 # Lock-free read for permission config (COW pattern)
 arc-swap = { version = "1.9", default-features = false, optional = true }
 # Cache via oxcache (moka is used internally by oxcache as backend)
-oxcache = { version = "0.5.0-rc.11", default-features = false, features = ["memory"], optional = true }
+oxcache = { version = "0.5.0-rc.12", default-features = false, features = ["memory"], optional = true }
 # Rate limiter port（permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
 # trait-kit integration (optional, feature-gated via `kit`; mirrors oxcache/limiteron pattern)
-trait-kit = { version = "0.5.0-rc.11", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.12", default-features = false, features = ["async"], optional = true }
 duckdb = { version = "1.20000", default-features = false, features = ["bundled"], optional = true }
 lbug = { version = "0.22", default-features = false, optional = true }
 neo4rs = { version = "0.9.0-rc.10", default-features = false, optional = true }
