@@ -59,7 +59,7 @@ pub struct DbPool { /* 字段私有 */ }
 | `set_ddl_guard` | `fn set_ddl_guard(&self, guard: Arc<dyn DdlGuardPolicy>)` | 注入统一 DDL 守卫策略（`sql-parser`） |
 | `enable_prepare_cache` | `fn enable_prepare_cache(&self, capacity: usize)` | 启用语句级 prepared statement LRU 缓存（`prepare-cache`） |
 | `prepare_cache_stats` | `fn prepare_cache_stats(&self) -> Option<PrepareCacheStats>` | 语句缓存命中率指标（`prepare-cache`） |
-| `set_permission_config` | `async fn set_permission_config(&self, config: &PermissionConfig)` | 运行时更新权限配置（`permission`） |
+| `set_permission_config` | `async fn set_permission_config(&self, config: PermissionConfig) -> DbResult<()>` | 运行时替换权限配置，按值传入（角色策略缓存同步换装，`permission`） |
 
 #### 错误
 

@@ -182,6 +182,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
 
+    // Create the table (DDL is admin-only; macro-generated CRUD does not create tables)
+    session
+        .execute_raw_ddl("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
+        .await?;
+
     // Macro-generated CRUD: every statement goes through parsing and table-level permission checks
     let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
     Model::insert(&session, user).await?;
@@ -235,7 +240,7 @@ Model::find_all(&session).await?; // Error: permission denied
 
 ### Database Drivers
 
-Pick exactly one relational driver (compile-time mutual exclusion); graph drivers can coexist with relational drivers. `sqlite` / `postgres` / `mysql` are backed by the corresponding sea-orm/sqlx drivers, while `duckdb` (embedded analytical), `ladybug` (formerly Kuzu) and `neo4j` use their own native bindings; see [Database Support](#-database-support) for each driver's database, type and introduction version.
+Relational drivers are mutually exclusive by group (compile-time `compile_error!` guards): `postgres` and `mysql` are exclusive, embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) are exclusive, `duckdb` and `ladybug` are exclusive; `sqlite` and `duckdb` can coexist. Graph drivers can coexist with relational drivers. `sqlite` / `postgres` / `mysql` are backed by the corresponding sea-orm/sqlx drivers, while `duckdb` (embedded analytical), `ladybug` (formerly Kuzu) and `neo4j` use their own native bindings; see [Database Support](#-database-support) for each driver's database, type and introduction version.
 
 > ℹ️ **`duckdb` feature status update** (October 2026): the earlier resolution failure caused by the full yank of the upstream `zip` crate no longer applies under the current lockfile — `libduckdb-sys` / `duckdb` are at 1.20000.0 in `Cargo.lock`, whose build-time dependencies no longer include `zip`. Existing projects can follow by refreshing the lockfile (`cargo update -p libduckdb-sys`); the compile-time mutual exclusion between `duckdb` and `ladybug` still applies (see [known limitations](#️-database-support)).
 
@@ -585,7 +590,9 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 | Version | Date | Highlights |
 |---------|------|------------|
 | 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA configuration surface and BUSY-aware write retry; YAML backend migration `serde_yaml_ng` → `serde-saphyr` (removes the `RUSTSEC-2024-0449` unsafe-libyaml root cause); CLI help/error text i18n; dependency security upgrades (rustls 0.23.46, `libduckdb-sys` build-time `zip` ^6 → ^9) |
-| 0.6.0-rc.9 | 2026-10-10 | `PermissionCache` absorbed into oxcache (breaking: trimmed non-equivalent public methods, read/write surface made async); connection-pool return made synchronous (fixes stale idle-queue view and invisible data caused by deferred return); idle-connection validation window fix and over-provisioning prevention |
+| 0.6.0-rc.9 | 2026-10-11 | The `sql-parser` feature implies `dep:oxcache` + `oxcache/memory` (the prepare cache is backed by oxcache; reverts the rc.6 "decoupling" whose wording did not match the implementation, see [0.6.0-rc.9](docs/CHANGELOG.md#060-rc9---2026-10-11)) |
+| 0.6.0-rc.8 | 2026-10-11 | The `oxcache` dependency declaration adds the `memory` feature with `default-features = false`, fixing the missing `DashMapMemoryBackend` in the `sql-parser` combination after the default tightening |
+| 0.6.0-rc.7 | 2026-10-11 | `PermissionCache` absorbed into oxcache (breaking: trimmed non-equivalent public methods, read/write surface made async); connection-pool return made synchronous (fixes stale idle-queue view and invisible data caused by deferred return); idle-connection validation window fix and over-provisioning prevention; `DbConfig::for_sqlite_path` bootstrap constructor; CLI user-facing text i18n |
 | 0.6.0-rc.6 | 2026-10-06 | Remaining ops CLI commands (pool-status / audit-query / shard-info / permission-check); duckdb serialized write gate, generic `with_transaction`, `execute_batch` batching, RAII pool return; customizable migration history table & markers; cache-guard (penetration/breakdown/avalanche) and cross-shard merge; read-after-write sticky window; bound-parameterized execution; business shard-key routing; unified rate limiting (new workspace member `dbnexus-limiter-port` plus 429/`Retry-After` semantics); the `http-health` endpoint generator; `oxcache-integration` first-class query caching (security context mixed into key derivation); `sql-parser` decoupled from oxcache; [security] backend-aware `sql_literal` escaping fixing MySQL backslash injection |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` forwarding sea-orm derives; `sea_orm` re-export decoupled from driver features; i18n overhaul; sha2 0.11; cross-repo path deps moved to crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | Unified `query_rows` row-query API; Saga persistent recovery; field-level masking and row-level security (`data-protection`); permission facade and query DSL; COPY batch writes and the OTel export bridge; `e2e_bench` end-to-end benchmark; ops CLI `migrate`/`health`/`user` subcommands (version 0.6.0-rc.3 was skipped and never published; its content shipped with this release) |

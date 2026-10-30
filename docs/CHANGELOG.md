@@ -10,6 +10,9 @@
 
 - [Unreleased](#unreleased)
 - [0.6.0-rc.10 - 2026-10-19](#060-rc10---2026-10-19)
+- [0.6.0-rc.9 - 2026-10-11](#060-rc9---2026-10-11)
+- [0.6.0-rc.8 - 2026-10-11](#060-rc8---2026-10-11)
+- [0.6.0-rc.7 - 2026-10-11](#060-rc7---2026-10-11)
 - [0.6.0-rc.6 - 2026-10-06](#060-rc6---2026-10-06)
 - [0.6.0-rc.5 - 2026-09-21](#060-rc5---2026-09-21)
 - [0.6.0-rc.4 - 2026-09-14](#060-rc4---2026-09-14)
@@ -33,6 +36,7 @@
 ### Changed
 
 - **`QueryFragment::to_sql` 标识符校验由 panic 改为返回错误（breaking）**：签名 `fn to_sql(&self) -> String` → `fn to_sql(&self) -> DbResult<String>`（`query-dsl` feature）。表名/列名/条件列/排序列未过白名单时返回 `DbError::Config`，不再线程 panic（公共 API 不得以 panic 表达输入校验失败）。迁移：原 `fragment.to_sql()` 调用点补 `?`（或 `expect`/`unwrap_err`）
+- **依赖刷新（rc.10 定版后入库）**：`duckdb`/`libduckdb-sys` 锁定版本 1.10506.1 → 1.20000.0（manifest 相应由 `1.10505` 收敛为 `1.20000`，并收紧 `default-features = false`）；`confers` 0.6.0-rc.11 → 0.6.0-rc.12、`oxcache` 0.5.0-rc.8 → 0.5.0-rc.11、`trait-kit` 0.5.0-rc.10 → 0.5.0-rc.11；`lbug` 0.21 → 0.22 并收紧 `default-features = false`；`neo4rs` 保持 0.9.0-rc.10 并收紧 `default-features = false`。README 特性状态节已按 `duckdb` 1.20000.0 表述
 
 ## [0.6.0-rc.10] - 2026-10-19
 
@@ -47,17 +51,40 @@
 - **发布依赖传播**：`confers` rc.10 → rc.11、`trait-kit` rc.9 → rc.10（子 crate `dbnexus-macros`/`dbnexus-limiter-port` 自钉同步 rc.10）；`oxcache` 保持 rc.8（反向可选边，断环约定）。
 - **依赖升级（2026-10-19 入库）**：`rustls` 0.23.45 → 0.23.46——修 RUSTSEC-2026-0346/0347/0348/0349（`Debug` 泄露 TLS 会话密钥、ECH 拒绝后缓冲的应用数据外发、Brotli 证书解压 1 GiB 分配、未认证 ServerHello 降级为经典密钥交换）；`duckdb` 1.10506.0 → 1.10506.1（`libduckdb-sys` 同步升级，其构建期 `zip` 需求 ^6 → ^9）——修 zip 6.0.0 的 RUSTSEC-2026-0367/0368/0369（符号链接逃逸 / 经符号链接施加 Unix 权限 / SUID·SGID 位保留，最高 critical 9.1）。`deny.toml` / `.cargo/audit.toml` 未新增豁免（7 项公告均为升级即修）
 
-## [0.6.0-rc.9] - 2026-10-10
+## [0.6.0-rc.9] - 2026-10-11
+
+### Fixed
+
+- **`sql-parser` feature 蕴含 `dep:oxcache` + `oxcache/memory`**：`prepare_cache`（同步 LRU）以 oxcache `DashMapMemoryBackend` 为后端，`sql-parser` 单开须激活 oxcache——回转 rc.6「sql-parser 与 cache/oxcache 解耦」条目（该口径与实现不符，见 rc.6 条目末注记），并修复 rc.8 default 收紧后 `sql-parser` 组合缺 `DashMapMemoryBackend` 的编译失败
+
+## [0.6.0-rc.8] - 2026-10-11
+
+### Fixed
+
+- **`oxcache` 依赖声明补 `memory` feature**：oxcache 可选依赖声明收紧为 `default-features = false` 并显式携带 `features = ["memory"]`，修复 default 收紧后 `sql-parser` 组合缺 `DashMapMemoryBackend`（后续由 rc.9 的 feature 蕴含进一步收敛）
+
+## [0.6.0-rc.7] - 2026-10-11
 
 ### Removed
 
 - **`PermissionCache` 手写实现吸收进 oxcache（breaking）**：`PermissionCache` 由 DashMap 双表手写 TTL/SWR/节流迁移为 oxcache `Cache`（stale + offload 特性）承载。移除无 oxcache 等价且无生产消费方的 `len`/`is_empty`/`is_expired` 公开方法；读写面（`get`/`insert`/`invalidate`/`clear`/`refresh`）改为异步方法；`with_refresh_interval` 映射为 stale 窗口长度（原时间窗节流语义由 stale 窗口 + offload 在飞去重承担）；miss 路径新增 provider 回填能力（provider 返回 None 时任何路径不写缓存、保留旧值）。`permission` feature 追加 `oxcache/stale` 依赖
+
+### Added
+
+- **`DbConfig::for_sqlite_path`**：sqlite 自举便捷构造
 
 ### Fixed
 
 - **连接池归还改为同步完成**：`release_connection` 原在 `try_lock` 失败时经 `tokio::spawn` 延迟 push 连接——归还被推迟到下一个调度点，紧随其后的 `acquire_connection` 在 push 落地前看到空 idle 队列而新建连接（对 `duckdb::memory:` 等「新连接即新库」的后端，新建连接看不到此前建表数据）。现改为 std Mutex 同步归还，临界区仅队列 push/len、notify 与信号量许可归还，不含 await
 - **空闲连接校验窗口内不再新建冗余连接**：`clean_invalid_connections` / `validate_and_recreate_connections` 不再持 idle 锁跨 await（原实现会阻塞归还侧），改为「取走校验 + 回填」，并以 `idle_check_in_progress` 标记校验在途；`acquire_connection` 在空闲队列为空且标记置位时等待回填后重试取用。等待预算取 `acquire_timeout` 剩余额度与 500ms 的较小值，并计入等待者指标；校验方异常滞留到期时降级新建并记 warn。标记经守卫在函数返回（含错误路径）时清除并唤醒等待方
 - **校验回填不超额创建**：`validate_and_recreate_connections` 补建最小连接数时校验 `max_connections` 上限，避免与并发取连接叠加造成空闲队列超配
+
+### Changed
+
+- **i18n 清扫**：CLI 用户可见文案默认英文并接入 catalog
+- **`prepare_cache` 复用 oxcache `CacheBuilder`**：prepared statement LRU 与权限缓存共享缓存构建路径
+- **冗余 feature 清理**：删除空死 feature `config-toml` 与无引用聚合 `dev-full`
+- **CI/发布流水线**：GitHub Action 引用固定到 40 位 SHA；release 工作流按 tag 后缀（rc/beta/alpha）标记 pre-release；覆盖率门禁 90% → 95%
 
 ## [0.6.0-rc.6] - 2026-10-06
 
@@ -84,7 +111,7 @@
 
 ### Changed
 
-- **sql-parser 与 cache/oxcache 解耦**：`sql-parser` 不再隐含 `cache`→oxcache——复核确认耦合面唯一为 `SqlParser` 的解析结果缓存（原经 oxcache `Cache` 的 moka 异步后端），现改由库内同步 LRU 承接（复用 `prepare_cache` 的 `PreparedStatementCache` 端口，新增 `get`/`insert`/`clear` 探测式方法，条目与命中/未命中/淘汰统计语义不变；失败解析不入缓存行为保持）；`permission` 对 oxcache 的真实消费（DbPool 权限策略缓存）改为显式携带 `cache`，`permission`/`default-no-db` 闭包总体不变；`sql-parser` 单独启用（如 `retry` 组合）不再背 oxcache/moka；`cargo tree` 实证 `--features sql-parser` 闭包零 oxcache；`prepare_cache` 模块本体去 feature 门控（对外 re-export 仍由 `prepare-cache` 门控）；`SqlParser` 公开 API 签名不变（构造/清空保持 async 签名，`Default` 不再依赖 tokio runtime）；契约测试 `tests/feature_dependency_contract.rs` 经 `cargo metadata` 固化解耦不变量
+- **sql-parser 与 cache/oxcache 解耦**：`sql-parser` 不再隐含 `cache`→oxcache——复核确认耦合面唯一为 `SqlParser` 的解析结果缓存（原经 oxcache `Cache` 的 moka 异步后端），现改由库内同步 LRU 承接（复用 `prepare_cache` 的 `PreparedStatementCache` 端口，新增 `get`/`insert`/`clear` 探测式方法，条目与命中/未命中/淘汰统计语义不变；失败解析不入缓存行为保持）；`permission` 对 oxcache 的真实消费（DbPool 权限策略缓存）改为显式携带 `cache`，`permission`/`default-no-db` 闭包总体不变；`sql-parser` 单独启用（如 `retry` 组合）不再背 oxcache/moka；`cargo tree` 实证 `--features sql-parser` 闭包零 oxcache；`prepare_cache` 模块本体去 feature 门控（对外 re-export 仍由 `prepare-cache` 门控）；`SqlParser` 公开 API 签名不变（构造/清空保持 async 签名，`Default` 不再依赖 tokio runtime）；契约测试 `tests/feature_dependency_contract.rs` 经 `cargo metadata` 固化解耦不变量（**注**：rc.7 起 `prepare_cache` 改以 oxcache 为缓存后端，rc.8/rc.9 将 `sql-parser` 重新蕴含 `dep:oxcache` + `oxcache/memory`——本条「`--features sql-parser` 闭包零 oxcache」口径已失效，现状以 `Cargo.toml` 的 `sql-parser` feature 声明与 rc.9 条目为准）
 
 - **驱动互斥守卫（`duckdb` × `ladybug`）**：mbedtls 重复符号链接冲突升级为编译期互斥——冲突根因定位为两驱动 bundled 各自 vendor 一份 mbedtls 静态库（libduckdb-sys 的 `duckdb/third_party/mbedtls` 与 lbug 的 `lbug-src/third_party/mbedtls`，均以同名 `mbedtls` 静态库整档链接，duckdb 侧另有 rsa_alt/sha256_alt 等符号替换实现），依赖层面无解；`duckdb` 与 `ladybug` 同启用即 `compile_error!`（给出分组启用指引），`ladybug` + `sqlite` 组合不受影响；守卫契约测试 `tests/feature_mutex_guards.rs` 固化守卫存在性/作用域（全守卫统一 `not(clippy)` 门控）
 
@@ -706,7 +733,11 @@ cargo build
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
 
-[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.6...HEAD
+[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.10...HEAD
+[0.6.0-rc.10]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.9...v0.6.0-rc.10
+[0.6.0-rc.9]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.8...v0.6.0-rc.9
+[0.6.0-rc.8]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.7...v0.6.0-rc.8
+[0.6.0-rc.7]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.6...v0.6.0-rc.7
 [0.6.0-rc.6]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.5...v0.6.0-rc.6
 [0.6.0-rc.5]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.4...v0.6.0-rc.5
 [0.6.0-rc.4]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.2...v0.6.0-rc.4

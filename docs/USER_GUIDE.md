@@ -63,11 +63,11 @@ tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 
 | 驱动特性 | 数据库 | 类型 | 约束 |
 |----------|--------|------|------|
-| `sqlite` | SQLite | 嵌入式关系型 | 与其他关系型驱动互斥 |
-| `postgres` | PostgreSQL | 服务器关系型 | 与其他关系型驱动互斥 |
-| `mysql` | MySQL | 服务器关系型 | 与其他关系型驱动互斥 |
-| `duckdb` | DuckDB | 嵌入式分析型 | 与其他关系型驱动互斥 |
-| `ladybug` | Ladybug | 嵌入式图数据库 | 可与关系型驱动共存 |
+| `sqlite` | SQLite | 嵌入式关系型 | 与服务器端驱动（`postgres`/`mysql`）互斥；可与 `duckdb` 共存 |
+| `postgres` | PostgreSQL | 服务器关系型 | 与嵌入式驱动（`sqlite`/`duckdb`）互斥；与 `mysql` 互斥 |
+| `mysql` | MySQL | 服务器关系型 | 与嵌入式驱动（`sqlite`/`duckdb`）互斥；与 `postgres` 互斥 |
+| `duckdb` | DuckDB | 嵌入式分析型 | 与服务器端驱动（`postgres`/`mysql`）互斥；与 `ladybug` 互斥；可与 `sqlite` 共存 |
+| `ladybug` | Ladybug | 嵌入式图数据库 | 与 `duckdb` 互斥（mbedtls 重复符号链接冲突）；可与关系型驱动共存 |
 | `neo4j` | Neo4j | 图数据库服务器 | 可与关系型驱动共存 |
 
 ```toml
@@ -81,7 +81,7 @@ dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "postgr
 dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
-**重要**：关系型驱动之间一次只能启用一个，混用在编译期直接报错。
+**重要**：驱动互斥按分组生效，共三条编译期守卫（`compile_error!`）：`postgres` 与 `mysql` 互斥；嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）互斥；`duckdb` 与 `ladybug` 互斥。同一侧可共存（如 `sqlite` + `duckdb`），冲突组合在编译期直接报错。
 
 ### 验证安装
 
@@ -859,7 +859,7 @@ fn process_input(input: &UserInput) -> Result<(), DbError> {
 
 ### 图数据库（需要 `ladybug` 或 `neo4j` 特性）
 
-DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库与关系型数据库不互斥、可混合使用。`LadybugConnection` / `Neo4jConnection` 构造与 `execute_cypher` / `query_cypher` 等方法签名、导出类型见 [API 参考 · 图数据库](API_REFERENCE.md#-图数据库)；裸 Cypher 执行已废弃，统一使用 `execute_cypher_with_params` 参数化通道（带注入防护）。
+DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库与关系型数据库不互斥、可混合使用。`LadybugConnection` / `Neo4jConnection` 构造与 `execute_cypher` 方法签名、导出类型见 [API 参考 · 图数据库](API_REFERENCE.md#-图数据库)；裸 Cypher 执行已废弃，统一使用 `execute_cypher_with_params` 参数化通道（带注入防护）。
 
 ```toml
 [dependencies.dbnexus]
@@ -868,7 +868,7 @@ features = ["ladybug"]  # 或 "neo4j"
 ```
 
 ```rust
-use dbnexus::{GraphConnection, LadybugConnection};
+use dbnexus::{GraphConnection, GraphExecResult, LadybugConnection};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -878,9 +878,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 创建节点
     conn.execute_cypher("CREATE (n:User {name: 'Alice'})").await?;
 
-    // 查询
-    let result = conn.query_cypher("MATCH (n:User) RETURN n").await?;
-    println!("节点数: {}", result.rows.len());
+    // 查询：execute_cypher 返回 GraphExecResult 枚举，读操作为 Query(GraphQueryResult)
+    let result = conn.execute_cypher("MATCH (n:User) RETURN n").await?;
+    match result {
+        GraphExecResult::Query(q) => println!("节点数: {}", q.rows.len()),
+        GraphExecResult::Write { rows_affected } => println!("影响行数: {}", rows_affected),
+    }
 
     Ok(())
 }

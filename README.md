@@ -182,6 +182,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = DbPool::new("sqlite::memory:").await?;
     let session = pool.get_session("admin").await?;
 
+    // 建表（DDL 仅限 admin 角色；宏生成的 CRUD 不含建表逻辑）
+    session
+        .execute_raw_ddl("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)")
+        .await?;
+
     // 宏生成的 CRUD：每条语句都经过解析与表级权限检查
     let user = Model { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() };
     Model::insert(&session, user).await?;
@@ -235,7 +240,7 @@ Model::find_all(&session).await?; // 错误：权限被拒绝
 
 ### 数据库驱动
 
-关系型驱动四选一（编译期互斥）；图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库、类型与引入版本见[数据库支持](#-数据库支持)。
+关系型驱动按分组互斥（编译期 `compile_error!` 守卫）：`postgres` 与 `mysql` 互斥，嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）互斥，`duckdb` 与 `ladybug` 互斥；`sqlite` 与 `duckdb` 可共存。图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库、类型与引入版本见[数据库支持](#-数据库支持)。
 
 > ℹ️ **`duckdb` 特性状态更新**（2026-10）：早前"上游 `zip` crate 全系 yank 导致依赖解析失败"的阻塞，在当前锁文件下已不存在——`Cargo.lock` 中 `libduckdb-sys` / `duckdb` 已为 1.20000.0，其构建期依赖不再包含 `zip`。存量项目刷新锁文件（`cargo update -p libduckdb-sys`）即可跟进；`duckdb` 与 `ladybug` 的编译期互斥限制仍然有效（见[已知限制](#️-数据库支持)）。
 
@@ -585,7 +590,9 @@ DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分
 | 版本 | 日期 | 要点 |
 |------|------|------|
 | 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA 配置面与 BUSY 感知写重试；YAML 后端迁移 `serde_yaml_ng` → `serde-saphyr`（消除 `RUSTSEC-2024-0449` unsafe-libyaml 根源）；CLI 帮助/错误文案 i18n；依赖安全升级（rustls 0.23.46、`libduckdb-sys` 构建期 `zip` ^6 → ^9） |
-| 0.6.0-rc.9 | 2026-10-10 | `PermissionCache` 吸收进 oxcache（breaking：精简无等价公开方法、读写面改异步）；连接池归还改为同步完成（修复归还延迟导致的空闲队列误判与数据不可见）；空闲连接校验窗口修复与回填不超额创建 |
+| 0.6.0-rc.9 | 2026-10-11 | `sql-parser` feature 蕴含 `dep:oxcache` + `oxcache/memory`（prepare 缓存以 oxcache 为后端，回转 rc.6 的「解耦」——该口径与实现不符，见 [0.6.0-rc.9](docs/CHANGELOG.md#060-rc9---2026-10-11)） |
+| 0.6.0-rc.8 | 2026-10-11 | `oxcache` 依赖声明补 `memory` feature 并收紧 `default-features = false`，修复 default 收紧后 `sql-parser` 组合缺 `DashMapMemoryBackend` |
+| 0.6.0-rc.7 | 2026-10-11 | `PermissionCache` 吸收进 oxcache（breaking：精简无等价公开方法、读写面改异步）；连接池归还改为同步完成（修复归还延迟导致的空闲队列误判与数据不可见）；空闲连接校验窗口修复与回填不超额创建；`DbConfig::for_sqlite_path` 自举构造；CLI 用户可见文案 i18n |
 | 0.6.0-rc.6 | 2026-10-06 | 运维 CLI 剩余命令（池状态/审计查询/分片信息/权限校验）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
 | 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` 转发 sea-orm 派生宏；`sea_orm` re-export 解绑驱动 feature；i18n 整改；sha2 0.11；跨仓 path 依赖改走 crates.io |
 | 0.6.0-rc.4 | 2026-09-14 | 统一行查询 `query_rows`；Saga 持久化恢复；字段级脱敏与行级安全（`data-protection`）；权限统一门面与查询 DSL；COPY 批量写入与 OTel 导出桥；端到端基准 `e2e_bench`；运维 CLI `migrate`/`health`/`user` 子命令（0.6.0-rc.3 版本号跳过未发布，内容随本版发布） |
