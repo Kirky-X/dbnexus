@@ -142,3 +142,6 @@ reviews/
 # CHANGELOG.md      - 变更历史
 # rustfmt.toml      - 代码格式化配置
 # .cargo/config.toml - Cargo 配置(如需共享)
+
+# ZCode 工作区配置（agents/agents-catalog/rules 为指向工作区根的软链）
+.zcode/
