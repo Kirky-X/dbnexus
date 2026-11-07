@@ -121,6 +121,7 @@ impl DbPool {
                 "max_waiters": st.max_waiters,
                 "borrow_count": st.borrow_count,
                 "max_active": st.max_active,
+                "external": st.external,
                 "max_connections": self.inner.config.pool_config.max_connections,
                 "saturation": saturation,
             },

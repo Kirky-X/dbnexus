@@ -533,6 +533,7 @@ mod tests {
             max_waiters: 0,
             borrow_count: 0,
             max_active: 0,
+            external: 0,
         };
         // Verify the mapping logic directly.
         if pool_status.total == 0 {

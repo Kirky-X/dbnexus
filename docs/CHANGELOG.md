@@ -33,6 +33,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **外部连接记账 `DbPool::track_external_connection()`**：登记池外物理连接的 RAII API（返回 `ExternalConnectionGuard`，Drop 即注销，无手动释放路径，计数漂移在构造上不可能）。`PoolStatus` 新增 `external` 字段，`health_snapshot().pool` 新增 `external` 键。口径说明：①记账不占信号量许可，不改变 `max_connections` 配额，池外连接上限由数据库侧兜底；②`external` 不并入 `total`/`active`，`idle` 与饱和度口径不变，真实物理占用 = 外层指标 + external（仍非 PG 会话总数——内层 sqlx 池自持的空闲连接同样不计入）。典型场景：调用方经 `Session.connection()` 取 SeaORM 连接后自行 `begin()` 事务长期持锁（如 PG advisory lock），该连接在外层池计数之外。
+
 ## [0.6.0-rc.11] - 2026-10-31
 
 ### Changed

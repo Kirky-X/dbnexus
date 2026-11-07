@@ -114,6 +114,7 @@ impl DbPool {
         let max_waiters = self.inner.max_waiters.load(Ordering::SeqCst);
         let borrow_count = self.inner.borrow_count.load(Ordering::SeqCst);
         let max_active = self.inner.max_active.load(Ordering::SeqCst);
+        let external = self.inner.external_count.load(Ordering::SeqCst);
 
         PoolStatus {
             total,
@@ -123,6 +124,7 @@ impl DbPool {
             max_waiters,
             borrow_count,
             max_active,
+            external,
         }
     }
 

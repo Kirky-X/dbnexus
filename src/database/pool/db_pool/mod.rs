@@ -6,6 +6,7 @@
 
 // 大文件拆分：按职责纯移动的子模块（行为不变）
 mod access;
+mod external;
 mod health;
 mod status;
 
@@ -210,6 +211,13 @@ pub(crate) struct DbPoolInner {
     /// 活跃连接数
     pub(super) active_count: AtomicU32,
 
+    /// 外部连接记账：经 [`DbPool::track_external_connection`] 登记的池外物理连接现值
+    ///
+    /// 与 `active_count` 同为现值计数，但统计对象不同：`active_count` 是外层
+    /// 池单元借用数，本字段是外部调用方（如经 `Session.connection()` 拿到
+    /// SeaORM 连接后自行 `begin()` 事务）在池外占用的物理连接数。
+    pub(super) external_count: AtomicU32,
+
     /// 总连接数
     pub(super) total_count: AtomicU32,
 
@@ -413,6 +421,7 @@ impl DbPool {
                 idle_connections: SyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
+                external_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
                 idle_check_in_progress: AtomicU32::new(0),
                 #[cfg(feature = "permission")]
@@ -517,6 +526,7 @@ impl DbPool {
                 idle_connections: SyncMutex::new(idle_vec),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
+                external_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(pool_size as u32),
                 idle_check_in_progress: AtomicU32::new(0),
                 #[cfg(feature = "permission")]
@@ -656,6 +666,7 @@ impl DbPool {
                 idle_connections: SyncMutex::new(Vec::new()),
                 connection_available: Notify::new(),
                 active_count: AtomicU32::new(0),
+                external_count: AtomicU32::new(0),
                 total_count: AtomicU32::new(0),
                 idle_check_in_progress: AtomicU32::new(0),
                 health_check_shutdown: Arc::new(Notify::new()),
@@ -1086,6 +1097,13 @@ pub struct PoolStatus {
 
     /// 最大活跃连接数（历史峰值）
     pub max_active: u32,
+
+    /// 外部连接记账：经 `track_external_connection` 登记的池外物理连接现值
+    ///
+    /// 不计入 `total`/`active`——外层池单元与池外物理连接是两类资源，混计会
+    /// 破坏 `idle = total - active` 与饱和度口径。真实物理占用 = 外层指标 + 本值
+    /// （仍非 PG 会话总数：内层 sqlx 池自持的空闲连接同样不计入）。
+    pub external: u32,
 }
 
 // 实现 ConnectionPool trait
