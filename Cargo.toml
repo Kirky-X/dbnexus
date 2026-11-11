@@ -87,7 +87,8 @@ oxcache-integration = ["dep:oxcache", "arc-swap", "cache-available", "dep:sha2"]
 # 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration 均隐含本 feature，池/会话代码统一以此判定缓存能力
 cache-available = []
 # kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
-kit = ["dep:trait-kit", "oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
+# （trait-kit 依赖本体已常驻承载 i18n 栈，此处只转发 kit 集成能力）
+kit = ["oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
 yaml = ["dep:serde-saphyr"]  # YAML 配置支持（合并原 config-yaml 别名）
 config-env = []  # 环境变量配置（无额外依赖）
@@ -182,8 +183,9 @@ arc-swap = { version = "1.9", default-features = false, optional = true }
 oxcache = { version = "0.5.0-rc.12", default-features = false, features = ["memory"], optional = true }
 # Rate limiter port（permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
-# trait-kit integration (optional, feature-gated via `kit`; mirrors oxcache/limiteron pattern)
-trait-kit = { version = "0.5.0-rc.12", default-features = false, features = ["async"], optional = true }
+# trait-kit i18n stack (常驻：消息目录注册面 + ICU4X 格式化层，core feature 无门控；
+# kit 集成面另经 `kit` feature 转发 lifecycle/health/observer 能力)
+trait-kit = { version = "0.5.0-rc.13", default-features = false, features = ["i18n"] }
 duckdb = { version = "1.20000", default-features = false, features = ["bundled"], optional = true }
 lbug = { version = "0.22", default-features = false, optional = true }
 neo4rs = { version = "0.9.0-rc.10", default-features = false, optional = true }
@@ -192,13 +194,10 @@ jsonwebtoken = { version = "11.1", default-features = false, features = ["use_pe
 bcrypt = { version = "0.19", default-features = false, features = ["std", "zeroize"], optional = true }
 unicode-normalization = { version = "0.1", default-features = false, features = ["std"], optional = true }
 rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "sys_rng", "thread_rng"], optional = true }
-# ICU4X 国际化（核心特性，始终可用）
-icu = { version = "2.4", default-features = false, features = ["compiled_data"] }
-writeable = { version = "0.6", default-features = false, features = ["alloc"] }
+# ICU4X/fluent 直接依赖已随 trait-kit i18n 栈切换移除（格式化走
+# trait-kit I18nFormatter，消息目录走 I18nManager 注册面）；sys-locale
+# 仍为 locale 探测（set_locale_from_system）的显式直接依赖
 sys-locale = { version = "0.3", default-features = false }
-# 显式关闭 default（两 crate 默认特性集为空，与 confers/inklog 一致）
-fluent-bundle = { version = "0.16", default-features = false }
-unic-langid = { version = "0.9", default-features = false }
 dbnexus-macros = { workspace = true, optional = true }
 # Testing utilities（同时出现在 dev-dependencies，optional 供 test-utils feature 拉入）
 assert_cmd = { version = "2.2", default-features = false, features = ["color", "color-auto"], optional = true }

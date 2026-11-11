@@ -1,30 +1,43 @@
 // Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Message catalog for i18n translations powered by Fluent.
+//! Message catalog for i18n translations.
 //!
-//! All translations are defined as Fluent (FTL) resource strings,
-//! parsed into `FluentBundle` instances at first access and cached
-//! via `OnceLock` for the lifetime of the process.
+//! All translations live in Fluent (FTL) resource files under `locales/`;
+//! this catalog embeds them at compile time, parses `key = value` lines
+//! into a static KV table on first access, and registers every entry into
+//! the `trait-kit` I18nManager host-registry (`register_translation`), so
+//! host frameworks (sdforge et al.) resolve dbnexus messages through the
+//! kit query chain as well.
 //!
-//! Each message key maps to an FTL pattern with `{ $variable }`
-//! placeholders resolved at format time by the Fluent engine.
+//! The catalog's FTL sources are plain `{ $variable }` templates (verified
+//! by guards: no selectors, terms, attributes, or multiline patterns), so
+//! single-pass placeholder substitution is behaviorally identical to the
+//! previous `fluent-bundle` runtime — without a process-resident Fluent
+//! dependency.
+//!
+//! Lookup chains (unchanged from the previous Fluent-backed catalog):
+//! - [`translate`]: current language bucket → English → the bare key;
+//! - [`translate_en`]: English → the bare key;
+//! - [`format_from_bundle`]: requested language bucket (unknown language
+//!   falls back to English) → `None`.
 
-use fluent_bundle::concurrent::FluentBundle;
-use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
-use unic_langid::LanguageIdentifier;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+use trait_kit::i18n::I18nManager;
 
 use super::locale::current_locale;
+
 /// Translate a message key to the current locale.
 ///
-/// Looks up `key` in the Fluent message catalog for the current locale,
+/// Looks up `key` in the catalog for the current locale,
 /// formats any `{ $var }` placeholders with values from `args`,
 /// and returns the resolved string.
 ///
 /// Falls back to English if the key is not found in the current locale.
 /// Falls back to the key itself if not found in English (should not happen).
 pub fn translate(key: &str, args: &[(&str, String)]) -> String {
-    let locale = current_locale();
-    let lang = locale.id.language.as_str();
+    let lang = lang_bucket_of(current_locale());
 
     // Try current locale, then English fallback
     format_from_bundle(lang, key, args)
@@ -49,8 +62,8 @@ pub fn t_simple(key: &str) -> String {
 
 /// Translate a message key with no arguments — the canonical entry point.
 ///
-/// Same contract as [`translate()`]: the current locale's bundle first, the
-/// `en` bundle second, the bare key as the last resort. The default locale is
+/// Same contract as [`translate()`]: the current locale's bucket first, the
+/// `en` bucket second, the bare key as the last resort. The default locale is
 /// English unless the user explicitly selects another language
 /// (see [`super::locale`]).
 pub fn tr(key: &str) -> String {
@@ -66,32 +79,23 @@ pub fn tr_args(key: &str, args: &[(&str, String)]) -> String {
     translate(key, args)
 }
 
-// Fluent bundle management
+// Catalog table management
 
-/// Cached concurrent Fluent bundles (thread-safe, built once on first access).
-/// Format a message from the Fluent catalog for the given language.
+/// Map a locale tag to its catalog language bucket (`"zh"` / `"en"`).
 ///
-/// Visible to the crate so `DbI18nFormatter` can resolve messages for an
-/// explicit locale instead of the process-global current locale.
-pub(crate) fn format_from_bundle(lang: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
-    let bundle = build_bundle(lang);
-
-    let msg = bundle.get_message(key)?;
-    let pattern = msg.value()?;
-
-    let mut fluent_args = FluentArgs::new();
-    for (name, value) in args {
-        fluent_args.set(*name, FluentValue::from(value.clone()));
+/// Same rule as the trait-kit registry normalization: a lowercase `zh`
+/// prefix selects the zh bucket, everything else (including unknown
+/// languages) resolves to `en`.
+fn lang_bucket_of(locale_tag: &str) -> &'static str {
+    if locale_tag.to_lowercase().starts_with("zh") {
+        "zh"
+    } else {
+        "en"
     }
-
-    let mut errors = vec![];
-    let result = bundle.format_pattern(pattern, Some(&fluent_args), &mut errors);
-    Some(result.to_string())
 }
 
-// Embedded Fluent resources (compile-time mirror of the locales/ directory)
-
-/// Language packs embedded at compile time, as `(locales-relative path, FTL source)`.
+/// Embedded language packs (compile-time mirror of the locales/ directory),
+/// as `(locales-relative path, FTL source)`.
 ///
 /// The translated text lives only in the `.ftl` files; the table is kept in
 /// lockstep with the on-disk `locales/` directory by the
@@ -131,37 +135,149 @@ pub const EMBEDDED_LOCALES: &[(&str, &str)] = &[
     ),
 ];
 
-/// Build the Fluent bundle of one language from its embedded language packs.
+/// Parse one embedded FTL source into `(key, template)` pairs.
 ///
-/// Resources are added in [`EMBEDDED_LOCALES`] order. A key defined twice in
-/// one language panics here: a conflicting catalog must never ship silently.
-fn build_bundle(lang: &str) -> FluentBundle<FluentResource> {
-    // 未知 locale 回退 EN（既有契约）：请求语言无内嵌资源时用 EN 包，
-    // 避免空 bundle 让所有查询静默返回 None。
-    let requested = if EMBEDDED_LOCALES
-        .iter()
-        .any(|(p, _)| p.starts_with(&format!("locales/{lang}/")))
-    {
-        lang
-    } else {
-        "en"
-    };
-    let prefix = format!("locales/{requested}/");
-    let langid: LanguageIdentifier = lang
-        .parse()
-        .expect("language pack directories use valid language identifiers");
-    let mut bundle = FluentBundle::new_concurrent(vec![langid]);
-    bundle.set_use_isolating(false);
+/// Line-based extraction (janvi/CodeNexus catalog pattern): blank lines and
+/// `#` comments are skipped, a message line must contain `=`, and the key is
+/// the trimmed first segment restricted to `[A-Za-z0-9_-]`. All shipped FTL
+/// sources are verified single-line `key = value` files (guards in the test
+/// module), so line parsing is behaviorally identical to a full Fluent parse.
+fn parse_entries(source: &'static str) -> Vec<(&'static str, &'static str)> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') || !trimmed.contains('=') {
+                return None;
+            }
+            let (raw_key, raw_value) = trimmed.split_once('=')?;
+            let key = raw_key.trim();
+            if key.is_empty()
+                || !key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return None;
+            }
+            Some((key, raw_value.trim()))
+        })
+        .collect()
+}
+
+/// Language bucket → `key → template` table, built once on first access.
+type CatalogTables = HashMap<&'static str, HashMap<&'static str, &'static str>>;
+
+/// Build the bucket tables from the embedded packs and register every entry
+/// into the trait-kit I18nManager host-registry.
+///
+/// A key defined twice in one language bucket panics here: a conflicting
+/// catalog must never ship silently (same contract as the previous
+/// `FluentBundle::add_resource` panic path). The trait-kit registration makes
+/// dbnexus messages visible on the kit query chain
+/// (`registered[current] → built-in[current] → registered[en] → …`), so host
+/// frameworks with their own storage bridge resolve them without a direct
+/// dbnexus dependency.
+fn build_tables_and_register() -> CatalogTables {
+    let mut tables: CatalogTables = HashMap::new();
     for &(path, ftl) in EMBEDDED_LOCALES {
-        if !path.starts_with(&prefix) {
-            continue;
-        }
-        let resource = FluentResource::try_new(ftl.to_string()).unwrap_or_else(|e| e.0);
-        if let Err(errors) = bundle.add_resource(resource) {
-            panic!("FTL resource {path} conflicts with an earlier key: {errors:?}");
+        let Some(lang) = path
+            .strip_prefix("locales/")
+            .and_then(|rest| rest.split('/').next())
+        else {
+            panic!("embedded locale path must be locales/<lang>/…: {path}");
+        };
+        let bucket = tables.entry(lang).or_default();
+        for (key, template) in parse_entries(ftl) {
+            if bucket.insert(key, template).is_some() {
+                panic!("FTL resource {path} conflicts with an earlier key: {key}");
+            }
+            I18nManager::register_translation(lang, key, template);
         }
     }
-    bundle
+    tables
+}
+
+/// Process-wide catalog tables + trait-kit registration (built once).
+static CATALOG: OnceLock<CatalogTables> = OnceLock::new();
+
+fn catalog_tables() -> &'static CatalogTables {
+    CATALOG.get_or_init(build_tables_and_register)
+}
+
+/// Ensure the embedded catalog is parsed and registered into the trait-kit
+/// I18nManager host-registry (idempotent, process-wide).
+///
+/// Called lazily by every translation entry point; hosts that want the kit
+/// query chain populated eagerly (before the first dbnexus translation) may
+/// call this at startup.
+pub fn ensure_registered() {
+    let _ = catalog_tables();
+}
+
+/// Resolve the bucket for `lang`, falling back to the English bucket for
+/// unknown languages (existing contract: a locale without an embedded pack
+/// must not silently drop every lookup).
+fn bucket_for(lang: &str) -> Option<&'static HashMap<&'static str, &'static str>> {
+    let tables = catalog_tables();
+    match tables.get(lang) {
+        Some(bucket) if !bucket.is_empty() => Some(bucket),
+        _ => tables.get("en"),
+    }
+}
+
+/// Format a message from the catalog for the given language.
+///
+/// Visible to the crate so `DbI18nFormatter` can resolve messages for an
+/// explicit locale instead of the process-global current locale.
+///
+/// Returns `None` when the key is absent from both the requested bucket and
+/// the English fallback bucket.
+pub(crate) fn format_from_bundle(lang: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
+    bucket_for(lang)?
+        .get(key)
+        .map(|template| format_template(template, args))
+}
+
+/// `{ $name }` placeholder substitution (single pass).
+///
+/// Same semantics as the trait-kit registered-template path: `{ $name }` and
+/// `{$name}` are both recognized (trimmed `$` prefix), argument values are
+/// inserted literally and never re-parsed (injection-safe single pass), and
+/// unknown placeholders plus non-placeholder braces are preserved verbatim.
+fn format_template(template: &str, args: &[(&str, String)]) -> String {
+    if args.is_empty() || !template.contains('{') {
+        return template.to_string();
+    }
+    let borrowed: Vec<(&str, &str)> = args
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect();
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let Some(close_rel) = rest[open..].find('}') else {
+            break;
+        };
+        let inner = rest[open + 1..open + close_rel].trim();
+        match inner.strip_prefix('$').map(str::trim) {
+            Some(name) if !name.is_empty() => {
+                out.push_str(&rest[..open]);
+                match borrowed.iter().find(|(arg_name, _)| *arg_name == name) {
+                    Some((_, value)) => out.push_str(value),
+                    // Unknown placeholder: keep the original `{ $name }` text.
+                    None => out.push_str(&rest[open..=open + close_rel]),
+                }
+                rest = &rest[open + close_rel + 1..];
+            }
+            _ => {
+                // Non-placeholder brace: emit the opening brace and rescan.
+                out.push_str(&rest[..=open]);
+                rest = &rest[open + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 // Tests
@@ -1399,11 +1515,54 @@ mod tests {
         );
 
         for (path, ftl) in EMBEDDED_LOCALES {
+            // fluent-bundle 运行时已随注册面切换移除；语法守卫降级为
+            // 行解析口径：每个语言包至少解析出一条非空模板的消息行
+            // （空值/注释/无键行会被 parse_entries 静默跳过，等价于
+            // Fluent 解析失败后该行不可查询的降级语义）。
+            let entries = parse_entries(ftl);
             assert!(
-                FluentResource::try_new((*ftl).to_string()).is_ok(),
-                "{path} must parse as Fluent without errors"
+                !entries.is_empty(),
+                "{path} must yield at least one parseable `key = value` message"
+            );
+            assert!(
+                entries.iter().all(|(_, template)| !template.is_empty()),
+                "{path} must not contain empty message values"
             );
         }
+    }
+
+    /// 守卫：注册面与本地 KV 镜像同源同量——`build_tables_and_register`
+    /// 把每条 KV 同步注册进 trait-kit I18nManager，两桶必须齐备且键数
+    /// 相等（缺失桶 = locales/ 目录结构破坏，单侧键 = 翻译退化裸键）。
+    #[test]
+    fn test_ensure_registered_matches_local_tables() {
+        ensure_registered();
+        let tables = catalog_tables();
+        assert!(
+            tables.values().all(|bucket| !bucket.is_empty()),
+            "every catalog bucket must be non-empty"
+        );
+        assert_eq!(
+            tables["en"].len(),
+            tables["zh"].len(),
+            "en/zh bucket sizes must match (drift = one-sided key)"
+        );
+    }
+
+    /// 注册面行为冒烟：经 trait-kit 查询链（en 全局实例）能解析 dbnexus
+    /// 注册的英文消息与 `{ $name }` 占位符替换。
+    #[test]
+    fn test_trait_kit_registry_resolves_dbnexus_messages() {
+        ensure_registered();
+        let mgr = I18nManager::init();
+        assert_eq!(
+            mgr.translate("pool-acquire-timeout", &[]),
+            "Failed to acquire connection within timeout"
+        );
+        assert_eq!(
+            mgr.translate("config-missing-field", &[("field", "dbnexus.url")]),
+            "Missing required configuration: dbnexus.url"
+        );
     }
 
     /// 守卫：`cli-help-*` 键全部在 CLI 二进制源码里有字面量引用。

@@ -1,26 +1,30 @@
 // Copyright (c) 2025-2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! ICU4X + Fluent-backed internationalization for database operations.
+//! Internationalization for database operations, layered on the trait-kit
+//! i18n stack (Fluent-style message templates + ICU4X formatting).
 //!
 //! Provides:
 //! - **Locale detection**: Default display language is strictly English;
 //!   `DBNEXUS_LANG` environment variable, the CLI `--lang` flag, and the
 //!   manual `set_locale()` API negotiate explicitly, and
 //!   `set_locale_from_system()` opts into host-locale detection.
-//! - **Message catalog**: Fluent (FTL) translations embedded at compile time
-//!   for 2 languages (en, zh), resolved via `fluent-bundle` concurrent bundles.
-//!   Covers all error types and CLI output.
+//! - **Message catalog**: `key = value` templates embedded at compile time
+//!   for 2 languages (en, zh) from `locales/{en,zh}/*.ftl`, registered into
+//!   the trait-kit `I18nManager` host-registry on first access (host
+//!   frameworks resolve dbnexus messages through the kit query chain too).
 //! - **LocalizedMsg / I18nExt traits**: Extension traits for error types to
 //!   provide `to_localized_string()` and `message_en()`.
-//! - **DbI18nFormatter**: ICU4X locale-aware number/date/plural/collation formatting.
+//! - **DbI18nFormatter**: ICU4X locale-aware number/date/plural/collation
+//!   formatting, delegating to the trait-kit `I18nFormatter`.
 //!
-//! This is a **core feature** — always available, no feature flag required.
+//! This is a **core feature** — always available, no feature flag required
+//! (trait-kit is a non-optional dependency carrying the shared i18n stack).
 //!
 //! # Locale Priority
 //!
 //! 1. `set_locale()` override (also the CLI `--lang` fast path)
 //! 2. `DBNEXUS_LANG` environment variable
-//! 3. `"en"` — the default display language is strictly English
+//! 3. `"en-US"` — the default display language is strictly English
 //!
 //! System locale detection is an explicit opt-in (`set_locale_from_system()`),
 //! never part of the default chain.
@@ -53,11 +57,8 @@ pub use catalog::{t, t_simple, translate};
 #[allow(unused_imports)]
 pub use locale::{current_locale, set_locale, set_locale_from_system};
 
-use icu::collator::CollatorBorrowed;
-use icu::decimal::DecimalFormatter;
-use icu::locale::Locale;
-use icu::plurals::PluralRules;
 use thiserror::Error;
+use trait_kit::i18n::I18nFormatter;
 
 /// Errors returned by [`DbI18nFormatter`] operations.
 #[derive(Debug, Error)]
@@ -86,16 +87,20 @@ pub enum I18nError {
     FormatError(String),
 }
 
-/// Locale-aware formatter backed by ICU4X compiled data.
+/// Locale-aware formatter backed by the trait-kit ICU4X formatter.
 ///
 /// Construct with [`DbI18nFormatter::new`] using a BCP-47 locale tag
-/// (e.g. `"en-US"`, `"zh-CN"`). All formatters are created eagerly so
-/// that repeated formatting calls are allocation-light.
+/// (e.g. `"en-US"`, `"zh-CN"`). The underlying trait-kit formatter is
+/// created eagerly so that repeated formatting calls are allocation-light.
+///
+/// Thread model: the inner ICU4X formatters are documented by trait-kit as
+/// per-thread values — construct one `DbI18nFormatter` per thread instead of
+/// sharing it across threads.
 pub struct DbI18nFormatter {
-    locale: Locale,
-    decimal_formatter: DecimalFormatter,
-    plural_rules: PluralRules,
-    collator: CollatorBorrowed<'static>,
+    inner: I18nFormatter,
+    /// The constructor locale tag, kept verbatim for catalog bucket
+    /// resolution (`I18nFormatter` exposes no tag accessor of its own).
+    locale_tag: String,
 }
 
 #[cfg(test)]
@@ -130,7 +135,7 @@ mod tests {
         let fmt = DbI18nFormatter::new("en").expect("en locale");
         let msg = fmt.format_migration_message(1).expect("migration message");
         assert!(
-            msg.contains("1"),
+            msg.contains('1'),
             "message should contain count: got '{msg}'"
         );
         assert!(
@@ -140,7 +145,7 @@ mod tests {
 
         let msg2 = fmt.format_migration_message(5).expect("migration message");
         assert!(
-            msg2.contains("5"),
+            msg2.contains('5'),
             "message should contain count: got '{msg2}'"
         );
     }
@@ -154,7 +159,7 @@ mod tests {
             "zh-CN migration message should contain Chinese text: got '{msg}'"
         );
         assert!(
-            msg.contains("1"),
+            msg.contains('1'),
             "message should contain count: got '{msg}'"
         );
     }

@@ -30,18 +30,30 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      matrix:
+        # 显式语言矩阵替代 Autobuild（该 action 对 Rust 走自带 autobuild.sh
+        # 黑盒构建，feature 集不受仓内控制；本仓驱动互斥禁 --all-features，
+        # 必须显式指定构建命令与 feature 集）
+        language: [rust]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
         with:
-          languages: rust
+          languages: ${{ matrix.language }}
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
+      # 显式构建（与 ci.yml Check/Build 同 feature 口径；sqlite 与 server-side
+      # 驱动互斥，故仅 sqlite 腿，postgres/mysql 由 CI 矩阵另行覆盖）
+      - name: Build
+        run: cargo build --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
         with:
-          category: "/language:rust"
+          category: "/language:${{ matrix.language }}"

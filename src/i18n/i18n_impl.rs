@@ -2,35 +2,43 @@
 // SPDX-License-Identifier: MIT
 //! i18n module implementation details.
 //!
-//! Contains function implementations and impl blocks extracted from [`super`].
-
-use super::*;
+//! [`DbI18nFormatter`] delegates all ICU4X formatting (number / date /
+//! plural / collation) to the trait-kit `I18nFormatter` (the shared i18n
+//! formatting layer of the kit ecosystem); dbnexus keeps only the SQL-facing
+//! conveniences (`format_row_count`, `format_migration_message`) and its own
+//! stable error type.
 
 use std::cmp::Ordering;
-use std::str::FromStr;
 
-use icu::collator::Collator;
-use icu::collator::options::CollatorOptions;
-use icu::datetime::DateTimeFormatter;
-use icu::datetime::fieldsets::YMD;
-use icu::datetime::input::{Date, DateTime, Time};
-use icu::decimal::DecimalFormatter;
-use icu::decimal::input::Decimal;
-use icu::decimal::options::DecimalFormatterOptions;
-use icu::locale::Locale;
-use icu::plurals::{PluralCategory, PluralRules, PluralRulesOptions};
-use writeable::Writeable;
+use trait_kit::i18n::I18nFormatter;
 
-/// Map a [`PluralCategory`] to its capitalized CLDR name (e.g. `"One"`, `"Other"`).
-fn plural_category_name(category: PluralCategory) -> &'static str {
-    match category {
-        PluralCategory::Zero => "Zero",
-        PluralCategory::One => "One",
-        PluralCategory::Two => "Two",
-        PluralCategory::Few => "Few",
-        PluralCategory::Many => "Many",
-        PluralCategory::Other => "Other",
+use super::DbI18nFormatter;
+use super::I18nError;
+use super::catalog;
+
+/// Convert a trait-kit i18n error into the dbnexus error type
+/// (same variant shapes, one-to-one).
+impl From<trait_kit::i18n::I18nError> for I18nError {
+    fn from(err: trait_kit::i18n::I18nError) -> Self {
+        use trait_kit::i18n::I18nError as Tk;
+        match err {
+            Tk::InvalidLocale { input, reason } => Self::InvalidLocale { input, reason },
+            Tk::InvalidNumber { input, reason } => Self::InvalidNumber { input, reason },
+            Tk::DateError(detail) => Self::DateError(detail),
+            Tk::FormatError(detail) => Self::FormatError(detail),
+        }
     }
+}
+
+/// Map a plural category to its capitalized CLDR name (e.g. `"One"`,
+/// `"Other"`).
+///
+/// The category enum (`icu_plurals::PluralCategory`) is not re-exported by
+/// trait-kit, so the variant name is taken from its `Debug` output — the
+/// variants are exactly the capitalized CLDR category names
+/// (`Zero`/`One`/`Two`/`Few`/`Many`/`Other`), a stable icu_plurals surface.
+fn plural_category_name<C: std::fmt::Debug>(category: C) -> String {
+    format!("{category:?}")
 }
 
 // 消息目录（Message Catalog）
@@ -46,27 +54,10 @@ impl DbI18nFormatter {
     /// Returns [`I18nError::InvalidLocale`] if the tag cannot be parsed,
     /// or [`I18nError::FormatError`] if ICU4X lacks compiled data for it.
     pub fn new(locale: &str) -> Result<Self, I18nError> {
-        let parsed = Locale::from_str(locale).map_err(|e| I18nError::InvalidLocale {
-            input: locale.to_string(),
-            reason: e.to_string(),
-        })?;
-
-        let decimal_formatter =
-            DecimalFormatter::try_new(parsed.clone().into(), DecimalFormatterOptions::default())
-                .map_err(|e| I18nError::FormatError(e.to_string()))?;
-
-        let plural_rules =
-            PluralRules::try_new(parsed.clone().into(), PluralRulesOptions::default())
-                .map_err(|e| I18nError::FormatError(e.to_string()))?;
-
-        let collator = Collator::try_new(parsed.clone().into(), CollatorOptions::default())
-            .map_err(|e| I18nError::FormatError(e.to_string()))?;
-
+        let inner = I18nFormatter::new(locale).map_err(I18nError::from)?;
         Ok(Self {
-            locale: parsed,
-            decimal_formatter,
-            plural_rules,
-            collator,
+            inner,
+            locale_tag: locale.to_string(),
         })
     }
 
@@ -77,19 +68,7 @@ impl DbI18nFormatter {
     /// Returns [`I18nError::InvalidNumber`] for non-finite values or
     /// if the value cannot be parsed into a fixed decimal.
     pub fn format_number(&self, value: f64) -> Result<String, I18nError> {
-        if !value.is_finite() {
-            return Err(I18nError::InvalidNumber {
-                input: value.to_string(),
-                reason: "value is not finite (NaN or Infinity)".into(),
-            });
-        }
-        let repr = format!("{value}");
-        let decimal = Decimal::from_str(&repr).map_err(|e| I18nError::InvalidNumber {
-            input: repr,
-            reason: e.to_string(),
-        })?;
-        let formatted = self.decimal_formatter.format(&decimal);
-        Ok(formatted.write_to_string().into_owned())
+        self.inner.format_number(value).map_err(I18nError::from)
     }
 
     /// Format a row count with locale-sensitive grouping separators
@@ -112,8 +91,8 @@ impl DbI18nFormatter {
     /// Returns [`I18nError::InvalidNumber`] if the count cannot be formatted.
     pub fn format_migration_message(&self, count: u64) -> Result<String, I18nError> {
         let count_str = self.format_number(count as f64)?;
-        Ok(super::catalog::format_from_bundle(
-            self.locale.id.language.as_str(),
+        Ok(catalog::format_from_bundle(
+            self.language_bucket(),
             "migration",
             &[("count", count_str)],
         )
@@ -127,15 +106,9 @@ impl DbI18nFormatter {
     /// Returns [`I18nError::DateError`] if any component is out of range,
     /// or [`I18nError::FormatError`] if the formatter cannot be constructed.
     pub fn format_timestamp(&self, year: i32, month: u8, day: u8) -> Result<String, I18nError> {
-        let date =
-            Date::try_new_iso(year, month, day).map_err(|e| I18nError::DateError(e.to_string()))?;
-        let time = Time::try_new(0, 0, 0, 0).map_err(|e| I18nError::DateError(e.to_string()))?;
-        let datetime = DateTime { date, time };
-
-        let dtf = DateTimeFormatter::try_new(self.locale.clone().into(), YMD::medium())
-            .map_err(|e| I18nError::FormatError(e.to_string()))?;
-        let formatted = dtf.format(&datetime);
-        Ok(formatted.write_to_string().into_owned())
+        self.inner
+            .format_date(year, month, day)
+            .map_err(I18nError::from)
     }
 
     /// Return the plural category name for `count` in the formatter's locale
@@ -145,7 +118,8 @@ impl DbI18nFormatter {
     /// This method does not currently fail, but returns `Result` for API
     /// consistency with the other formatting methods.
     pub fn plural_category(&self, count: u64) -> Result<String, I18nError> {
-        Ok(plural_category_name(self.plural_rules.category_for(count)).to_string())
+        let category = self.inner.plural_category(count).map_err(I18nError::from)?;
+        Ok(plural_category_name(category))
     }
 
     /// Compare two strings (e.g. SQL error messages) using locale-sensitive
@@ -155,7 +129,17 @@ impl DbI18nFormatter {
     /// This method does not currently fail, but returns `Result` for API
     /// consistency with the other formatting methods.
     pub fn compare_strings(&self, a: &str, b: &str) -> Result<Ordering, I18nError> {
-        Ok(self.collator.compare(a, b))
+        self.inner.compare(a, b).map_err(I18nError::from)
+    }
+
+    /// The catalog language bucket (`"zh"` / `"en"`) this formatter resolves
+    /// messages for.
+    fn language_bucket(&self) -> &'static str {
+        if self.locale_tag.to_lowercase().starts_with("zh") {
+            "zh"
+        } else {
+            "en"
+        }
     }
 }
 

@@ -12,4 +12,9 @@
 # 上游剔除 async-std 后自然消失。
 [advisories]
 ignore = [
+    # RUSTSEC-2026-0459 (libsqlite3-sys 捆绑 C SQLite CVE-2026-119375) —
+    # 修复版不可达（sqlx-sqlite 0.9.0 上限 <0.38.0，无更新 sqlx；bundled 由
+    # sea-orm 特性链硬接，下游无法切系统库）。AV:L 本地向量，需打开攻击者
+    # 可写的 db+wal 文件对；与 deny.toml 同步豁免，sqlx 放宽上限后回收。
+    "RUSTSEC-2026-0459",
 ]

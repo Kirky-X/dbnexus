@@ -18,6 +18,19 @@ ignore = [
     "RUSTSEC-2024-0384",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2025-0134",
+    # RUSTSEC-2026-0440 (astral-tokio-tar unmaintained) — testcontainers 0.28
+    # dev-dependency 传递引入（testcontainers 已是 crates.io 最新版，无升级路径）。
+    # 仅测试链路（postgres/mysql testcontainers 集成测试），不进发布依赖图；
+    # 待 testcontainers 上游替换 tar 实现后自然消除。
+    "RUSTSEC-2026-0440",
+    # RUSTSEC-2026-0459 (libsqlite3-sys 捆绑 C SQLite CVE-2026-119375) —
+    # 修复版 libsqlite3-sys >= 0.39 不可达：sqlx-sqlite 0.9.0 上限 <0.38.0 且
+    # crates.io 无更新 sqlx；bundled 由 sea-orm "sqlx-sqlite" → sqlx
+    # "sqlite-bundled" 特性链硬接，下游无法切系统 SQLite。
+    # 攻击面 AV:L（本地）：需受害进程打开攻击者可写的 db + 同名 -wal 文件对，
+    # 影响为读未初始化内存；dbnexus 使用方打开自持库文件，风险有限。
+    # 解锁前提：sqlx 发布放宽 libsqlite3-sys 上限的版本 → 升级并回收本豁免。
+    "RUSTSEC-2026-0459",
     # RUSTSEC-2024-0449(unsafe-libyaml unmaintained)已随 yaml 后端迁移
     # serde_yaml_ng → serde-saphyr(纯 Rust)退出依赖图,豁免条目回收。
 ]
