@@ -18,8 +18,8 @@
 //! Lookup chains (unchanged from the previous Fluent-backed catalog):
 //! - [`translate`]: current language bucket → English → the bare key;
 //! - [`translate_en`]: English → the bare key;
-//! - [`format_from_bundle`]: requested language bucket (unknown language
-//!   falls back to English) → `None`.
+//! - `format_from_bundle`（pub(crate)，rustdoc 私有项不外链）：requested
+//!   language bucket (unknown language falls back to English) → `None`.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
