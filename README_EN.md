@@ -144,7 +144,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0-rc.10", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -358,16 +358,16 @@ Relational drivers are mutually exclusive by group (compile-time `compile_error!
 
 ```toml
 # Embedded/edge devices (minimal)
-dbnexus = { version = "0.6.0-rc.10", features = ["embedded"] }
+dbnexus = { version = "0.6.0", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0-rc.10", features = ["microservice"] }
+dbnexus = { version = "0.6.0", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0-rc.10", features = ["monolith"] }
+dbnexus = { version = "0.6.0", features = ["monolith"] }
 
 # Enterprise (full features)
-dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
+dbnexus = { version = "0.6.0", features = ["enterprise"] }
 ```
 
 </details>
@@ -399,7 +399,7 @@ dbnexus = { version = "0.6.0-rc.10", features = ["enterprise"] }
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0-rc.10):
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace with `publish = false`), **52 binary targets** in total (as of 0.6.0):
 
 <details>
 <summary>📄 Code · bash</summary>
@@ -497,7 +497,7 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 Tests are carried by six layers: `#[cfg(test)]` unit tests in `src/**`, explicitly registered integration targets under `tests/**` (feature-gated), end-to-end scenarios in `tests/e2e/` (isolated via `cfg(feature)`), `postgres_testcontainers` / `mysql_testcontainers` container-level tests (per-test container isolation), doc tests (run separately in CI via `cargo test --doc`), and criterion benchmarks under [benches/](benches/) (see [Performance](#-performance)). The test pyramid baseline, driver-group matrix and E2E scenario definitions are documented in [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
-### Test scale (as of 0.6.0-rc.10)
+### Test scale (as of 0.6.0)
 
 | Metric | Value | Source |
 |------|------|------|
@@ -589,6 +589,7 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for the full version history.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.6.0 | 2026-11-14 | External connection accounting `track_external_connection` RAII API; i18n stack migrated to trait-kit (self-maintained fluent runtime retired); in-house deps finalized `trait-kit` 0.5.0 / `confers` 0.6.0 / `oxcache` 0.5.0 |
 | 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA configuration surface and BUSY-aware write retry; YAML backend migration `serde_yaml_ng` → `serde-saphyr` (removes the `RUSTSEC-2024-0449` unsafe-libyaml root cause); CLI help/error text i18n; dependency security upgrades (rustls 0.23.46, `libduckdb-sys` build-time `zip` ^6 → ^9) |
 | 0.6.0-rc.9 | 2026-10-11 | The `sql-parser` feature implies `dep:oxcache` + `oxcache/memory` (the prepare cache is backed by oxcache; reverts the rc.6 "decoupling" whose wording did not match the implementation, see [0.6.0-rc.9](docs/CHANGELOG.md#060-rc9---2026-10-11)) |
 | 0.6.0-rc.8 | 2026-10-11 | The `oxcache` dependency declaration adds the `memory` feature with `default-features = false`, fixing the missing `DashMapMemoryBackend` in the `sql-parser` combination after the default tightening |

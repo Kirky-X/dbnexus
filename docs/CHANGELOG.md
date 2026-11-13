@@ -8,7 +8,7 @@
 <details open>
 <summary>📑 版本索引</summary>
 
-- [Unreleased](#unreleased)
+- [0.6.0 - 2026-11-14](#060---2026-11-14)
 - [0.6.0-rc.10 - 2026-10-19](#060-rc10---2026-10-19)
 - [0.6.0-rc.9 - 2026-10-11](#060-rc9---2026-10-11)
 - [0.6.0-rc.8 - 2026-10-11](#060-rc8---2026-10-11)
@@ -31,11 +31,19 @@
 
 </details>
 
-## [Unreleased]
+## [0.6.0] - 2026-11-14
 
 ### Added
 
 - **外部连接记账 `DbPool::track_external_connection()`**：登记池外物理连接的 RAII API（返回 `ExternalConnectionGuard`，Drop 即注销，无手动释放路径，计数漂移在构造上不可能）。`PoolStatus` 新增 `external` 字段，`health_snapshot().pool` 新增 `external` 键。口径说明：①记账不占信号量许可，不改变 `max_connections` 配额，池外连接上限由数据库侧兜底；②`external` 不并入 `total`/`active`，`idle` 与饱和度口径不变，真实物理占用 = 外层指标 + external（仍非 PG 会话总数——内层 sqlx 池自持的空闲连接同样不计入）。典型场景：调用方经 `Session.connection()` 取 SeaORM 连接后自行 `begin()` 事务长期持锁（如 PG advisory lock），该连接在外层池计数之外。
+
+### Changed
+
+- **i18n 栈迁移 trait-kit**：catalog 切 trait-kit `I18nManager` 注册面、格式化委托 `I18nFormatter`，退役自研 fluent 运行时；ICU4X/fluent 直接依赖随切换移除（`icu_casemap`/`icu_list`/`icu_segmenter`/`icu_experimental` 退出依赖图）
+- **自研依赖定版（0.6.0 正式版）**：`trait-kit` 0.5.0-rc.14 → **0.5.0**、`confers` 0.6.0-rc.13 → **0.6.0**、`oxcache` 0.5.0-rc.12 → **0.5.0**（三者均已发布至 crates.io）；manifest 版本精度由 rc 钉版收敛为 minor（`"0.5"`/`"0.6"`）；子 crate `dbnexus-macros`/`dbnexus-limiter-port` 同步 0.6.0
+- **依赖刷新**：`libduckdb-sys` 锁定 1.20000.0 → 1.20000.2、`lbug` 0.22.1 → 0.22.3、`neo4rs` 0.9.0-rc.10 → 0.9.0-rc.11、`prost` 0.14.4 → 0.14.6（`itertools` 0.15 经 `prost-derive` 进入，BSD-2-Clause 许可已在 `deny.toml` 放行）
+- **rustdoc**：`src/i18n/catalog.rs` 私有项 intra-doc 链接改纯文本（修复 `private_intra_doc_links` 阻断 CI Documentation 腿）；examples 密码种子字面量改字节串写法（clippy）
+- **CI**：CodeQL action 升级（init/analyze）
 
 ## [0.6.0-rc.11] - 2026-10-31
 
@@ -740,7 +748,7 @@ cargo build
 - Documentation inconsistencies with Cargo.toml
 - No practical presets for common use cases
 
-[Unreleased]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.11...HEAD
+[0.6.0]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.11...v0.6.0
 [0.6.0-rc.11]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.10...v0.6.0-rc.11
 [0.6.0-rc.10]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.9...v0.6.0-rc.10
 [0.6.0-rc.9]: https://github.com/Kirky-X/dbnexus/compare/v0.6.0-rc.8...v0.6.0-rc.9

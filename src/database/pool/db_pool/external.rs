@@ -66,6 +66,7 @@ impl super::DbPool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "sqlite")]
     use super::super::{DbConfig, DbPool};
 
     /// 守卫生命周期：track +1 / Drop -1，多条并存按现值递减
