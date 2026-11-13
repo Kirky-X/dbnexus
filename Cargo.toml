@@ -165,7 +165,7 @@ axum = { workspace = true, optional = true }
 parking_lot = { version = "0.13", default-features = false, optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"], optional = true }
 sha2 = { version = "0.11", default-features = false, features = ["alloc"], optional = true }
-confers = { version = "0.6.0-rc.12", default-features = false, optional = true }
+confers = { version = "0.6.0-rc.13", default-features = false, optional = true }
 twox-hash = { version = "2.1", default-features = false, features = ["std", "xxhash64"], optional = true }
 url = { version = "2.5", default-features = false, features = ["std"] }
 async-trait = { version = "0.1", default-features = false }
@@ -185,7 +185,7 @@ oxcache = { version = "0.5.0-rc.12", default-features = false, features = ["memo
 dbnexus-limiter-port = { workspace = true, optional = true }
 # trait-kit i18n stack (常驻：消息目录注册面 + ICU4X 格式化层，core feature 无门控；
 # kit 集成面另经 `kit` feature 转发 lifecycle/health/observer 能力)
-trait-kit = { version = "0.5.0-rc.13", default-features = false, features = ["i18n"] }
+trait-kit = { version = "0.5.0-rc.14", default-features = false, features = ["i18n"] }
 duckdb = { version = "1.20000", default-features = false, features = ["bundled"], optional = true }
 lbug = { version = "0.22", default-features = false, optional = true }
 neo4rs = { version = "0.9.0-rc.10", default-features = false, optional = true }
