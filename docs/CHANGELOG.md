@@ -31,6 +31,14 @@
 
 </details>
 
+## [0.6.1] - 2026-11-15
+
+### Added
+
+- `embedded-runtime` feature: runtime (tokio + rustls) + config-env **without** any
+  database backend. `embedded` is unchanged and still includes `sqlite`. Consumers
+  that only need the embedded runtime should switch to `embedded-runtime`.
+
 ## [0.6.0] - 2026-11-14
 
 ### Added

@@ -3,7 +3,7 @@ members = [".", "macros", "limiter-port", "src/tools/cli", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -146,6 +146,9 @@ cli-tests = []
 
 # 预设配置
 embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]  # 嵌入式/边缘设备 - 超轻量配置
+# embedded-runtime = embedded 去掉 sqlite 后端：只需嵌入式运行时（tokio+rustls+config-env）
+# 而不带 libsqlite3-sys 解析闭包的消费者用它（0.6.1 新增，纯增量，embedded 未变）
+embedded-runtime = ["runtime-tokio-rustls", "config-env"]
 microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "observability"]  # 微服务
 monolith = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "yaml", "data-management", "security", "observability", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 单体应用 - 完整配置
 enterprise = ["postgres", "monolith", "permission-engine"]  # 企业级 - 全功能配置
