@@ -205,3 +205,20 @@ cargo test --features mysql
 ## 📄 License
 
 Submitted code will be licensed under the MIT license, consistent with the project.
+
+---
+
+## 🗺️ Development Roadmap
+
+### Short Term (0.6.0 stable release)
+
+- [ ] Release 0.6.0 stable: after rc validation, update the trait-kit 0.5.0 / oxcache 0.5.0 dependency requirements per the workspace propagation table, verify with `cargo publish --dry-run`, then tag to trigger the automated release.yml publish
+- [x] Align the declared MSRV with actual dependency requirements — unified to 1.97.1 per workspace CONFIG_BASELINE (2026-09-06), covering the 1.94 transitive requirement
+- [x] Restore regular MySQL integration test runs — the CI `test` job now runs a regular `db: [sqlite, postgres, mysql]` matrix: a MySQL 8.0 service container (readiness via mysqladmin health check, then `DATABASE_URL` injection), full test + doc test runs with `--features mysql,default-no-db,all-optional` (2026-09-30)
+
+### Mid Term
+
+- [x] Resolve the mbedtls duplicate-symbol link conflict when `duckdb` and `ladybug` are enabled together — root cause is each driver bundling its own vendored mbedtls static library (unresolvable at the dependency level); a compile-time mutex guard now fails the combination with grouping guidance, `ladybug` + `sqlite` stays allowed (2026-09-30)
+- [x] Follow up on Medium items filed during code quality reviews — query-cache policy-change stale reads fixed: key derivation includes the data-protection epoch, `set_data_protection` invalidates old entries on swap (2026-09-30)
+
+> Items compiled from the [CHANGELOG.md](CHANGELOG.md) and repository acceptance records.

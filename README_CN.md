@@ -1,10 +1,10 @@
+[English](README.md) | 中文
+
 <div align="center">
 
 <img src="docs/assets/dbnexus.png" alt="DBNexus Logo" width="240">
 
 [![Rust 2024](https://img.shields.io/badge/Rust-2024-edded?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![Rustc 1.97.1+](https://img.shields.io/badge/Rustc-1.97.1+-orange.svg?style=for-the-badge)](https://www.rust-lang.org/) [![crates.io](https://img.shields.io/crates/v/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![docs.rs](https://img.shields.io/docsrs/dbnexus?style=for-the-badge)](https://docs.rs/dbnexus) [![downloads](https://img.shields.io/crates/d/dbnexus?style=for-the-badge)](https://crates.io/crates/dbnexus) [![CI](https://img.shields.io/github/actions/workflow/status/Kirky-X/dbnexus/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/Kirky-X/dbnexus/actions/workflows/ci.yml) [![coverage](https://img.shields.io/codecov/c/github/Kirky-X/dbnexus?style=for-the-badge)](https://codecov.io/gh/Kirky-X/dbnexus) [![license](https://img.shields.io/crates/l/dbnexus?style=for-the-badge)](LICENSE)
-
-**中文** | [English](README_EN.md)
 
 **企业级 Rust 数据库抽象层**
 
@@ -42,7 +42,6 @@
 - [🧪 测试](#-测试)
 - [📊 性能](#-性能)
 - [🔒 安全](#-安全)
-- [🗺️ 开发路线图](#️-开发路线图)
 - [🤝 参与贡献](#-参与贡献)
 - [📋 更新日志](#-更新日志)
 - [📄 许可证](#-许可证)
@@ -81,45 +80,11 @@ DBNexus 基于 Sea-ORM 构建，提供一种**声明式**的数据库访问方�
 </tr>
 <tr>
 <td width="50%" style="vertical-align:top; padding: 12px">📦 <b>过程宏与环境变量配置</b><br><span style="color:#64748B"><code>macros</code> 提供 <code>#[db_repository]</code> 等宏；<code>config-env</code> 支持 <code>DbConfig::from_env</code> 直读环境变量</span></td>
-<td width="50%" style="vertical-align:top; padding: 12px">🏢 <b>企业级特性按需装配</b><br><span style="color:#64748B">metrics / audit / migration / sharding / authentication / saga 等 20+ 特性门控启用，见下方折叠清单</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🏢 <b>企业级特性按需装配</b><br><span style="color:#64748B">metrics / audit / migration / sharding / authentication / saga 等 20+ 特性门控启用，完整清单见下方链接</span></td>
 </tr>
 </table>
 
-核心基座（无可选特性依赖）与 `default-no-db` 聚合能力已列入上表；其余企业级特性均按 feature 门控、按需启用，完整清单见下方折叠。
-
-<details>
-<summary>🏢 企业级特性完整清单（按需启用）</summary>
-
-| 特性 | 说明 |
-|------|------|
-| `metrics` | Prometheus 格式指标导出，含慢查询检测 |
-| `audit` | 审计日志，admin 绕过权限的操作同样记录 |
-| `migration` / `auto-migrate` | 数据库迁移与自动迁移执行 |
-| `sharding` | 数据分片：一致性哈希策略与会话级分片路由 |
-| `global-index` | 跨分片全局索引 |
-| `cache` | oxcache 缓存（moka 为 L1 后端），`ArcSwap` 无锁读取 |
-| `permission-engine` | 高级权限引擎：策略决策点、角色继承链、缓存与限流 |
-| `authentication` | JWT 认证（访问/刷新令牌区分校验）+ bcrypt 密码强度策略 |
-| `data-protection` 🆕 | 字段级自动脱敏（mask/哈希/截断）与行级安全谓词注入（读出口 + raw 写出口 UPDATE/DELETE；单表语句；多表/集合操作 fail-closed 拒绝） |
-| `permission-facade` 🆕 | RBAC + 脱敏 + RLS 统一门面，一处配置全局生效（admin 通道不注入租户谓词） |
-| `query-dsl` 🆕 | `q!` 类型安全查询片段宏，标识符与值注入免疫 |
-| `repository` / `data-api` 🆕 | 泛型仓储 `Repository<T>`；实体到 JSON 的数据 API 网关 |
-| `prepare-cache` 🆕 | 语句级 prepared statement LRU 缓存与命中率指标 |
-| `copy` 🆕 | 批量写入：COPY 封装（pg 协议 / DuckDB 文件 COPY 按驱动门控）+ 多值 INSERT 构建（batch_insert 500 分块参数化） |
-| `entity-events` 🆕 | 实体事件总线 + Outbox 持久化投递 |
-| `otel` 🆕 | 健康快照指标导出 OTLP/HTTP（stdout fallback 兜底） |
-| `kit` | trait-kit AsyncKit 集成，注册即获得池/缓存/审计/健康全能力 |
-| `config-confers` 🆕 | confers 配置热重载（`ArcSwap` 原子换装） |
-| `retry` | 运行时重试：幂等判断 + 指数退避 |
-| `failover` | 连接故障转移：CircuitBreaker 状态机与健康检查协同 |
-| `replica-routing` | 副本路由读写分离：按 weight 与延迟选择、半开恢复 |
-| `scatter-gather` | 跨分片聚合查询，支持 SUM / COUNT / AVG 合并 |
-| `saga` | Saga 分布式事务：持久化日志、启动恢复、补偿编排 |
-| `distributed-id` | Snowflake 分布式 ID 生成 |
-
-> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](docs/CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
-
-</details>
+核心基座（无可选特性依赖）与 `default-no-db` 聚合能力已列入上表；其余企业级特性（metrics / audit / migration / sharding / cache / authentication / saga 等 20+ 项）均按 feature 门控、按需启用，完整清单见[用户指南 · 企业级特性完整清单](docs/cn/USER_GUIDE.md#-企业级特性完整清单按需启用)。
 
 ---
 
@@ -199,178 +164,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 </details>
 
-<details>
-<summary>🎬 权限控制：未授权角色被拒绝</summary>
-
-```rust
-// admin 角色默认放行（无权限配置文件时的安全默认）
-let session = pool.get_session("admin").await?;
-Model::find_all(&session).await?;
-
-// guest 角色未在策略中定义时被拒绝；策略中未授权的表同样拒绝
-let session = pool.get_session("guest").await?;
-Model::find_all(&session).await?; // 错误：权限被拒绝
-```
-
-</details>
-
-### 🧭 核心概念
-
-| 概念 | 一句话说明 |
-|------|-----------|
-| `DbPool` | 连接池入口，可从 URL 或 `DbConfig` 构建，管理连接生命周期 |
-| `Session` | 按角色获取的会话句柄，RAII 归还连接，承载事务与执行通道 |
-| `#[db_entity]` | 一个宏生成 Sea-ORM 实体模型 + 一组带权限检查的 CRUD 方法（insert/find/update/delete 及批量、分页、存在性等 14+ 个） |
-| 权限策略 | 角色 → 表 → 操作的 RBAC 策略（内存或 YAML），JOIN/子查询表同样受检 |
-| 特性门控 | 驱动互斥在编译期 `compile_error!` 强制，未启用的能力零开销 |
+权限拒绝行为（未授权角色与未授权表均被拒）与权限策略配置见[用户指南 · 权限控制](docs/cn/USER_GUIDE.md#-权限控制)；核心概念（`DbPool` / `Session` / `#[db_entity]` / 权限策略 / 特性门控）的完整说明见[用户指南](docs/cn/USER_GUIDE.md)。
 
 ---
 
 ## 🎨 特性标志
 
-`default = []`：无任何默认特性，运行时、数据库驱动与功能特性均需显式启用。嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动严格互斥，混用直接编译失败。
-
-### 运行时（互斥，三选一）
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `runtime-tokio-rustls` | Tokio 运行时 + rustls TLS | 否 |
-| `runtime-tokio-native-tls` | Tokio 运行时 + native-tls | 否 |
-| `runtime-async-std` | async-std 运行时 | 否 |
-
-### 数据库驱动
-
-关系型驱动按分组互斥（编译期 `compile_error!` 守卫）：`postgres` 与 `mysql` 互斥，嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）互斥，`duckdb` 与 `ladybug` 互斥；`sqlite` 与 `duckdb` 可共存。图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库、类型与引入版本见[数据库支持](#-数据库支持)。
-
-> ℹ️ **`duckdb` 特性状态更新**（2026-10）：早前"上游 `zip` crate 全系 yank 导致依赖解析失败"的阻塞，在当前锁文件下已不存在——`Cargo.lock` 中 `libduckdb-sys` / `duckdb` 已为 1.20000.0，其构建期依赖不再包含 `zip`。存量项目刷新锁文件（`cargo update -p libduckdb-sys`）即可跟进；`duckdb` 与 `ladybug` 的编译期互斥限制仍然有效（见[已知限制](#️-数据库支持)）。
-
-### 核心能力
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `permission` | 表级 RBAC 权限控制，强制依赖 `sql-parser`，并启用 `yaml` 与 `cache` | 否 |
-| `sql-parser` | SQL 解析、表名提取与注入检测（解析结果缓存由 oxcache memory 后端承载，不隐含 `cache` 特性） | 否 |
-| `macros` | `dbnexus-macros` 过程宏（`db_entity` / `db_repository`） | 否 |
-| `default-no-db` | 无驱动的默认聚合（运行时 + permission + sql-parser + macros + config-env + with-time），供 CI 按驱动组合测试 | 否 |
-
-### 数据访问与集成
-
-<details>
-<summary>📋 表格</summary>
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `cache` | oxcache 缓存（moka L1 后端）+ `ArcSwap` 无锁读取 | 否 |
-| `cache-available` | 内部能力标记位（无自有代码）：由 `cache` 与 `oxcache-integration` 蕴含，供下游与门控测试探测缓存面是否就绪 | 否 |
-| `oxcache-integration` | OxcacheDbCacheAdapter 适配器 + `OxcacheQueryCache` 查询缓存装饰器（query_cached/invalidate_table） | 否 |
-| `kit` | trait-kit AsyncKit 集成，隐含池/缓存/审计/健康全能力闭包 | 否 |
-| `repository` | 泛型仓储 `Repository<T>` CRUD 端口 + `impl_json_repository!` 宏 | 否 |
-| `data-api` | 数据 API 网关：实体到 JSON 查询端点（白名单 + 过滤 + 分页） | 否 |
-| `prepare-cache` | 语句级 prepared statement LRU 缓存 | 否 |
-| `query-dsl` | `q!` 类型安全查询片段宏 | 否 |
-| `entity-events` | 实体事件总线 + Outbox | 否 |
-| `copy` | 批量写入：COPY 封装 + 多值 INSERT 构建（batch_insert） | 否 |
-| `data-protection` | 字段脱敏与行级安全谓词注入 | 否 |
-| `permission-facade` | RBAC + 脱敏 + RLS 统一门面 | 否 |
-| `config-confers` | confers 配置热重载 | 否 |
-
-</details>
-
-### 可观测性
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `metrics` | Prometheus 格式指标导出（含慢查询检测） | 否 |
-| `health-check` | 健康检查模块与 `health_snapshot` 结构化导出 | 否 |
-| `observability` | `metrics` + `health-check` 聚合 | 否 |
-| `otel` | OTLP/HTTP JSON 信封导出桥 | 否 |
-| `http-health` 🆕 | HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 `/healthz`（liveness）/`/readyz`（readiness，池快照+熔断器判定）/`/metrics`（Prometheus）的 axum Router；仅生成 Router 不含 serve，默认构建零 HTTP 依赖 | 否 |
-
-> 结构化日志：池超时/权限拒绝/熔断/慢查询四类接线点经 `log` 门面发记录（无条件编译，未安装 logger 时为 no-op，默认构建行为不变）。日志后端（如 inklog `LoggerManager`）由**消费方自行安装**为全局 `log` 后端，记录即路由到其结构化管道——dbnexus 不依赖任何日志后端 crate（inklog 已反向 optional 依赖 dbnexus，互依赖会构成包级循环，见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 适配器方向约定）。
-
-### 数据管理
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `migration` | 数据库迁移 | 否 |
-| `auto-migrate` | 自动迁移执行 | 否 |
-| `sharding` | 数据分片（策略与会话级路由） | 否 |
-| `global-index` | 跨分片全局索引 | 否 |
-| `data-management` | 上述四项的聚合 | 否 |
-
-### 分布式能力
-
-<details>
-<summary>📋 表格</summary>
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `retry` | 运行时重试 + 指数退避（幂等判断） | 否 |
-| `failover` | 连接故障转移（CircuitBreaker + 健康检查） | 否 |
-| `replica-routing` | 副本路由读写分离 | 否 |
-| `scatter-gather` | 跨分片聚合查询执行器 | 否 |
-| `shard-migration` | 分片迁移编排 | 否 |
-| `saga` | Saga 分布式事务编排（持久化恢复） | 否 |
-| `distributed-id` | Snowflake 分布式 ID | 否 |
-| `distributed-capabilities` | 上述 7 项的聚合 | 否 |
-
-</details>
-
-### 安全与合规
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `audit` | 审计日志（操作 + 用户上下文） | 否 |
-| `permission-engine` | 高级权限引擎（依赖 `permission`） | 否 |
-| `authentication` | JWT 认证 + bcrypt 密码强度策略 | 否 |
-| `security` | `audit` + `permission-engine` 聚合 | 否 |
-
-<details>
-<summary>📦 类型、配置源、连接池增强与开发工具特性</summary>
-
-| 标志 | 说明 | 默认 |
-|------|------|:----:|
-| `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm 类型桥接（JSON / time / chrono / UUID 字段） | 否 |
-| `validation` | validator 数据验证 | 否 |
-| `yaml` | YAML 权限/配置文件解析 | 否 |
-| `config-env` | 环境变量配置（无额外依赖） | 否 |
-| `pool-health-check` | 连接池健康检查 | 否 |
-| `pool-warmup` | 连接池预热 | 否 |
-| `test-utils` | 测试辅助工具（tempfile / assert_cmd） | 否 |
-| `cli-tests` | CLI 集成测试门控 | 否 |
-
-</details>
-
-### 特性预设
-
-| 预设 | 特性 | 使用场景 |
-|------|------|----------|
-| `embedded` | `runtime-tokio-rustls`, `sqlite`, `config-env` | 嵌入式/边缘设备超最小配置 |
-| `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
-| `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, 全部 7 项分布式能力 | 单体应用 |
-| `enterprise` | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
-| `all-optional` | 除数据库驱动外的 26 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / kit / data-protection / http-health） | 全功能验证（手动追加驱动） |
-
-### 使用示例
-
-<details>
-<summary>📄 代码 · toml</summary>
-
-```toml
-# 嵌入式/边缘设备（最小配置）
-dbnexus = { version = "0.6.0", features = ["embedded"] }
-
-# 微服务
-dbnexus = { version = "0.6.0", features = ["microservice"] }
-
-# 单体应用
-dbnexus = { version = "0.6.0", features = ["monolith"] }
-
-# 企业级（完整功能）
-dbnexus = { version = "0.6.0", features = ["enterprise"] }
-```
-
-</details>
+`default = []`：无任何默认特性，运行时、数据库驱动与功能特性均需显式启用；嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动编译期严格互斥。运行时、驱动、核心能力、数据访问、可观测性、数据管理、分布式、安全合规全部标志与特性预设见[用户指南 · 特性标志参考](docs/cn/USER_GUIDE.md#特性标志参考)。
 
 ---
 
@@ -381,15 +181,15 @@ dbnexus = { version = "0.6.0", features = ["enterprise"] }
 
 | 文档 | 说明 |
 |------|------|
-| [📖 用户指南](docs/USER_GUIDE.md) | 从安装到进阶的完整使用教程 |
-| [📘 API 参考](docs/API_REFERENCE.md) | 全部公开 API 的详细说明 |
-| [🏗️ 架构文档](docs/ARCHITECTURE.md) | 设计理念、模块划分、数据流与安全/性能设计 |
-| [⛔ 限流与迁移指南](docs/RATE_LIMITING.md) | `dbnexus-limiter-port` 端口拓扑、令牌桶/外部后端选型与 403/429 语义迁移 |
-| [📊 性能基线](docs/PERFORMANCE.md) | 端到端基准数据与复现命令 |
-| [🔒 安全文档](docs/SECURITY.md) | 纵深防御设计、最佳实践与漏洞报告流程 |
-| [📋 更新日志](docs/CHANGELOG.md) | 每个版本的变更记录 |
-| [🤝 贡献指南](docs/CONTRIBUTING.md) | TDD 工作流、代码规范与提交/PR 流程 |
-| [🧪 测试场景固化](docs/TEST_SCENARIOS.md) | 测试金字塔基线、驱动组矩阵与 E2E 场景定义 |
+| [📖 用户指南](docs/cn/USER_GUIDE.md) | 从安装到进阶的完整使用教程 |
+| [📘 API 参考](docs/cn/API_REFERENCE.md) | 全部公开 API 的详细说明 |
+| [🏗️ 架构文档](docs/cn/ARCHITECTURE.md) | 设计理念、模块划分、数据流与安全/性能设计 |
+| [⛔ 限流与迁移指南](docs/cn/RATE_LIMITING.md) | `dbnexus-limiter-port` 端口拓扑、令牌桶/外部后端选型与 403/429 语义迁移 |
+| [📊 性能基线](docs/cn/PERFORMANCE.md) | 端到端基准数据与复现命令 |
+| [🔒 安全文档](docs/cn/SECURITY.md) | 纵深防御设计、最佳实践与漏洞报告流程 |
+| [📋 更新日志](docs/cn/CHANGELOG.md) | 每个版本的变更记录 |
+| [🤝 贡献指南](docs/cn/CONTRIBUTING.md) | TDD 工作流、代码规范与提交/PR 流程 |
+| [🧪 测试场景固化](docs/cn/TEST_SCENARIOS.md) | 测试金字塔基线、驱动组矩阵与 E2E 场景定义 |
 | [📦 在线 API 文档](https://docs.rs/dbnexus) | docs.rs 自动生成的最新文档 |
 | [📦 crates.io](https://crates.io/crates/dbnexus) | 发布页面 |
 
@@ -399,67 +199,17 @@ dbnexus = { version = "0.6.0", features = ["enterprise"] }
 
 ## 💻 示例
 
-全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理，`publish = false`），共 **52 个二进制目标**（截至 0.6.0）：
-
-<details>
-<summary>📄 代码 · bash</summary>
-
-```bash
-cd examples
-
-# 运行单个示例（每个示例是一个 bin 目标）
-cargo run --bin basic_crud --features "sqlite,permission,macros"
-
-# 编译全部示例
-cargo build --all-targets
-```
-
-</details>
-
-<details>
-<summary>📋 表格</summary>
-
-| 模块 | 示例 | 说明 |
-|------|------|------|
-| 基础 | `basic_connection`、`basic_crud`、`basic_transaction` | 连接池 / `#[db_entity]` CRUD / 事务 |
-| 配置 | `config_env`、`config_yaml`、`config_toml`、`config_presets` | 环境变量 / YAML / TOML / 预设对比 |
-| 数据库 | `database_sqlite`、`database_postgres`、`database_mysql`、`duckdb_query`、`migration`、`sharding`、`global_index`、`pool_management` | 驱动连接 / OLAP 查询 / 迁移 / 分片 / 全局索引 / 池管理 |
-| 权限 | `permission_rbac`、`permission_yaml`、`permission_macro`、`permission_engine` | RBAC / YAML 策略 / 宏权限 / 权限引擎 |
-| 安全 | `sql_parser`、`sql_injection_detection`、`ddl_guard`、`sensitive_masker`、`rate_limiter` | SQL 解析 / 注入检测 / DDL 守卫 / 脱敏 / 限流 |
-| 认证与审计 | `authentication_jwt`、`authentication_password`、`audit_logging` | JWT / 密码哈希 / 审计日志 |
-| 可观测性 | `metrics_prometheus`、`health_check`、`latency_histogram`、`http_health` | 指标 / 健康检查与熔断 / 延迟直方图 / HTTP 健康端点 |
-| 宏 | `macros_db_entity`、`macros_db_crud`、`macros_db_audit`、`macros_db_cache`、`macros_soft_delete_unique`、`macros_db_entity_v2`、`macros_advanced_query` | 宏全量能力（CRUD/审计/缓存/软删除/hooks/分页） |
-| 图数据库 | `graph_ladybug`*、`graph_neo4j` | Ladybug 嵌入式图 DB / Neo4j 服务器 |
-| 分布式能力 | `distributed_id`、`saga`、`scatter_gather`、`replica_routing`、`shard_migration` | Snowflake ID / Saga / 跨分片聚合 / 读写分离 / 分片迁移 |
-| 可靠性 | `retry`、`failover` | 重试退避 / 熔断故障转移 |
-| 国际化 | `i18n_formatting` | ICU4X locale 格式化 |
-| 集成与缓存 | `oxcache_adapter`、`cache_standalone` | oxcache 适配 / 自定义缓存 Provider |
-| Kit | `kit_usage`、`kit_advanced` | 能力注册 / 多能力组合 |
-| 通用 | `error_handling` | 结构化错误报告 |
-
-</details>
-
-\* `graph_ladybug` 因与 `duckdb` 存在 mbedtls 链接冲突未注册为 `[[bin]]`，暂无编译运行途径（`cargo build --bin graph_ladybug` 报 `no bin target named` 错误）；需使用时先在 `examples/Cargo.toml` 注册 `[[bin]]`（源码见 `examples/src/graph/graph_ladybug.rs`）。
-
-完整说明见 [examples/README.md](examples/README.md)。
-
-### 📝 代码片段
-
-高级配置与环境变量、事务与监控等更多代码片段见[用户指南](docs/USER_GUIDE.md)（配置、事务、指标章节）与 [API 参考](docs/API_REFERENCE.md)。
+全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理），共 **52 个二进制目标**（截至 0.6.0）。运行命令、按模块清单与 `graph_ladybug` 限制说明见 [examples/README.md](examples/README.md)；更多配置、事务与监控代码片段见[用户指南](docs/cn/USER_GUIDE.md)与 [API 参考](docs/cn/API_REFERENCE.md)。
 
 ---
 
 ## 🏗️ 架构
 
-DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`database` 模块承载连接池、Session、迁移、分片、Saga 与 scatter-gather，`access` 模块集中 SQL 解析、权限引擎、认证与脱敏，`domain` 模块沉淀权限/审计/迁移的领域抽象，`observability` 与 `reliability` 分别提供指标健康与重试容错。所有可选能力经特性门控编译期裁剪，过程宏 `dbnexus-macros` 在编译期为实体生成带权限检查的 CRUD 代码。
-
-分层模块设计、各层职责与模块全景图的详细设计（设计理念、模块划分、数据流与安全/性能设计）见[架构文档](docs/ARCHITECTURE.md#系统架构)。
+DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`database` 模块承载连接池、Session、迁移、分片、Saga 与 scatter-gather，`access` 模块集中 SQL 解析、权限引擎、认证与脱敏，`domain` 模块沉淀权限/审计/迁移的领域抽象，`observability` 与 `reliability` 分别提供指标健康与重试容错。所有可选能力经特性门控编译期裁剪，过程宏 `dbnexus-macros` 在编译期为实体生成带权限检查的 CRUD 代码。分层模块设计、各层职责与模块全景图的详细设计见[架构文档 · 系统架构](docs/cn/ARCHITECTURE.md#系统架构)。
 
 ### 🔗 核心执行路径
 
-`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下的真实执行管道：`get_session` 校验角色后，语句经"拒绝 DDL → 解析 → 权限检查 → 驱动执行"返回；表名检查（提取有效性 + 逐表授权）归属权限检查环节、由 admin 角色整体前置绕过（无表语句如 `SELECT 1` 不触达任何表），非 admin 角色 fail-closed——提取不到表名或表名非法即拒绝，JOIN / 子查询涉及的目标表逐一受检（rc.2 补全），解析失败时同样 admin 放行、非 admin 拒绝；`retry` 幂等重试、`metrics` 慢查询观测与 `audit` 的 admin 绕过记录均挂接于此管道（源码见 [src/database/pool/session/](src/database/pool/session/mod.rs)）。
-
-完整时序图与路径要点见[架构文档 · 核心执行管道](docs/ARCHITECTURE.md#核心执行管道)。
+`Session::execute_raw` 在 `sql-parser` + `permission` 特性组合下经「拒绝 DDL → 解析 → 逐表权限检查 → 驱动执行」管道执行，非 admin 角色 fail-closed（表名提取失败或非法即拒绝，JOIN / 子查询目标表逐一受检），`retry` / `metrics` / `audit` 均挂接于此管道。完整时序图与路径要点见[架构文档 · 核心执行管道](docs/cn/ARCHITECTURE.md#核心执行管道)。
 
 ### 🌐 数据库支持
 
@@ -493,112 +243,33 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 ## 🧪 测试
 
-### 测试策略矩阵
-
-测试分六层承载：`src/**` 内 `#[cfg(test)]` 单元测试、`tests/**` 显式注册的集成测试目标（按 feature 门控）、`tests/e2e/` 端到端场景（按 `cfg(feature)` 隔离）、`postgres_testcontainers` / `mysql_testcontainers` 容器级测试（每测试独立容器隔离）、doc tests（CI 单独运行 `cargo test --doc`）与 [benches/](benches/) 基准测试（见[性能](#-性能)）。金字塔基线、驱动组矩阵与 E2E 场景定义详见 [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)。
-
-### 测试规模（截至 0.6.0）
-
-| 指标 | 数值 | 来源 |
-|------|------|------|
-| 测试函数总数 | 2869 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1433 + tests 1434 + macros 2） |
-| 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
-| 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md) |
-| 覆盖率门禁 | ≥ 95% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |
-
-### 运行命令（与 CI 一致）
-
-<details>
-<summary>📄 代码 · bash</summary>
-
-```bash
-# 全量测试（CI 标准特性组合；sqlite/postgres/mysql/duckdb 驱动互斥，不使用 --all-features）
-cargo test --no-default-features --features sqlite,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
-
-# 切换数据库后端运行集成测试（CI 以 services 容器提供 PostgreSQL 15 / MySQL 8.0）
-cargo test --no-default-features --features postgres,default-no-db,all-optional --workspace --exclude dbnexus-examples --exclude dbnexus-macros
-
-# 文档测试
-cargo test --no-default-features --features sqlite,default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
-```
-
-</details>
-
-> 嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动在编译期严格互斥（`compile_error!`），验证多驱动时按分组特性组合运行。
+测试分六层承载：`src/**` 单元测试、`tests/**` 集成测试目标、`tests/e2e/` 端到端场景、`postgres/mysql_testcontainers` 容器级测试、doc tests 与 [benches/](benches/) 基准；规模 2869 个测试函数、87 个测试目标，行覆盖门禁 ≥ 95%。金字塔基线、驱动组矩阵与 E2E 场景定义见[测试场景固化](docs/cn/TEST_SCENARIOS.md)（规模数据见[测试规模](docs/cn/TEST_SCENARIOS.md#测试规模截至-060)），运行命令见[贡献指南 · 测试规范](docs/cn/CONTRIBUTING.md#-测试规范)。
 
 ---
 
 ## 📊 性能
 
-DBNexus 遵循零成本抽象原则，性能相关能力均为设计层面保证：零成本特性门控（`#[cfg(feature = ...)]` 编译期裁剪）、无锁热路径（池状态原子维护、权限配置与缓存 Provider 经 `ArcSwap` 无锁读取、`AcqRel` 内存序）、异步优先（全部 I/O `async/await`，读多写少状态用 `RwLock`）、连接池策略（LRU 复用、最大连接限制、最小连接预热、健康检查剔除死连接），以及 0.5.1 热路径优化（注入检测模式表静态化、Saga 补偿查找预索引、`Session` 并发读优化、`DbConfig` Arc 共享）。设计细节见[架构文档 · 性能架构](docs/ARCHITECTURE.md#性能架构)。
-
-### 端到端基准
-
-仓库内置 9 个 criterion 基准：`permission_bench`、`permission_engine_bench`、`sharding_bench`、`metrics_bench`、`e2e_bench`、`batch_insert_bench`、`duckdb_copy_bench`、`oxcache_query_cache_bench`、`prepare_cache_bench`（位于 [benches/](benches/)，`cargo bench` 运行）。端到端基线（2026-09-11 采样，非 SLA）：`DbPool::get_session` 句柄获取 ≈ 0.24 µs、`DbPool::query_rows` 单行完整管道 ≈ 480 µs、`Session::execute_raw` 64 行循环 INSERT ≈ 708 ms/迭代（≈ 11 ms/行）。测量环境、逐项解读与复现命令见[性能基线 · 端到端基线](docs/PERFORMANCE.md#端到端基线)。
-
-### 历史优化对照
-
-两轮平台优化的累计结果（6 项基准全部正向提升、无回退，平均累计提升约 5.5%）见 [benches/baseline-after.md](benches/baseline-after.md) 与[性能基线 · 历史优化对照](docs/PERFORMANCE.md#历史优化对照)。
+DBNexus 遵循零成本抽象原则：特性门控编译期裁剪、无锁热路径（池状态原子维护、权限配置与缓存 `ArcSwap` 无锁读取、`AcqRel` 内存序）、异步优先 I/O、连接池策略（LRU 复用、最大连接限制、最小连接预热、健康检查剔除死连接）。基准设施（9 个 criterion 基准位于 [benches/](benches/)）、端到端基线与历史优化对照见[性能基线](docs/cn/PERFORMANCE.md)。
 
 ---
 
 ## 🔒 安全
 
-DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上分为五层（完整设计见[安全文档](docs/SECURITY.md)）：
+DBNexus 从设计之初就以内建安全为目标，纵深防御自下而上五层：编译时保证（全库 `#![forbid(unsafe_code)]`、驱动互斥 `compile_error!`）、运行时表级 RBAC（JOIN/子查询受检、TTL 权限缓存 + singleflight、令牌桶限流）、注入防护（默认参数化、`SqlParser` 表名提取 + 统一注入引擎、`DdlGuard` AST 校验且 DDL 仅限 admin）、认证与配置安全（JWT 访问/刷新令牌区分校验、bcrypt 密码策略、路径遍历校验）、审计与脱敏（admin 绕过同样记录、`SensitiveMasker`）；供应链安全由 CI 常开的 `cargo deny check` 与 `cargo audit`、CodeQL、Dependabot 及 pre-commit 私钥扫描保障。完整设计见[安全文档](docs/cn/SECURITY.md)。
 
-| 层级 | 机制 |
-|------|------|
-| 编译时保证 | 全库 `#![forbid(unsafe_code)]`；嵌入式与服务器端驱动混用直接 `compile_error!`；特性依赖缺失即编译失败，无静默降级 |
-| 运行时权限 | 表级 RBAC 覆盖 JOIN/子查询跨表路径；带 TTL 的权限缓存 + singleflight 防击穿；令牌桶限流防滥用 |
-| 注入防护 | 默认参数化查询；`SqlParser` 表名提取与 `InjectionEngine` 统一注入检测（含 Unicode 归一化）；`DdlGuard` AST 校验且 DDL 仅限 admin；图查询统一参数化通道 |
-| 认证与配置 | JWT 访问/刷新令牌区分校验、撤销缓存 TTL 化；bcrypt 密码策略；路径遍历校验，URL 解析错误不回显凭据 |
-| 审计与脱敏 | `audit` 完整操作与用户上下文日志（admin 绕过同样记录）；`SensitiveMasker` 多类型脱敏与行级安全 |
-
-供应链安全：CI 常开 `cargo deny check`（许可证/公告/重复依赖，豁免留痕于 [deny.toml](deny.toml)）与 `cargo audit`（[audit.toml](audit.toml)），CodeQL 语义扫描与 Dependabot 自动更新，pre-commit 私钥扫描拦截。
-
-**漏洞报告**：请勿通过公开 Issue 提交。请使用 GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/policy) 私密通道（"Report a vulnerability"）。响应承诺：48 小时内确认，7 天内给出初步评估（见 [SECURITY.md](docs/SECURITY.md)）。
-
----
-
-## 🗺️ 开发路线图
-
-### 短期（0.6.0 正式发布）
-
-- [ ] 发布 0.6.0 正式版：完成 rc 验证后按工作区传导表更新 trait-kit 0.5.0 / oxcache 0.5.0 依赖要求，`cargo publish --dry-run` 核对后打 tag 触发 release.yml 自动发布
-- [x] 对齐 MSRV 声明与依赖实际要求 — 已按工作区 CONFIG_BASELINE 统一为 1.97.1（2026-09-06），覆盖传递依赖的 1.94 要求
-- [x] 恢复 MySQL 集成测试的常规运行 — CI `test` job 以 matrix `db: [sqlite, postgres, mysql]` 常规运行：MySQL 8.0 service 容器（mysqladmin 健康检查就绪后注入 `DATABASE_URL`），`--features mysql,default-no-db,all-optional` 全量测试 + doc tests（2026-09-30）
-
-### 中期
-
-- [x] 解决 `duckdb` 与 `ladybug` 同时启用时的 mbedtls 重复符号链接冲突 — 冲突源为两驱动 bundled 各自 vendor 的 mbedtls 静态库（依赖层面无解），已建编译期互斥守卫：同启用即编译失败并给出分组指引，`ladybug` + `sqlite` 组合不受影响（2026-09-30）
-- [x] 跟进代码质量审查留档的 Medium 项 — 查询缓存策略换装脏读已修：key 派生纳入数据保护策略世代，`set_data_protection` 换装即失效旧条目（2026-09-30）
-
-> 条目整理自 [CHANGELOG.md](docs/CHANGELOG.md) 与仓库验收记录。
+**漏洞报告**：请勿通过公开 Issue 提交。请使用 GitHub [Security Advisories](https://github.com/Kirky-X/dbnexus/security/policy) 私密通道（"Report a vulnerability"）。响应承诺：48 小时内确认，7 天内给出初步评估。
 
 ---
 
 ## 🤝 参与贡献
 
-欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装方式 `lefthook install` 或 `pip install pre-commit && pre-commit install`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 95%），以及提交/PR 流程。
+欢迎贡献！请先阅读 [CONTRIBUTING.md](docs/cn/CONTRIBUTING.md)，了解 TDD 工作流、开发环境要求（Rust 1.97.1 工具链、lefthook / pre-commit 钩子——安装方式 `lefthook install` 或 `pip install pre-commit && pre-commit install`，禁止 `--no-verify` 绕过、Conventional Commits 提交信息）与质量门禁（`cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny check`、`cargo audit`、行覆盖 ≥ 95%），以及提交/PR 流程。
 
 ---
 
 ## 📋 更新日志
 
-完整版本历史见 [CHANGELOG.md](docs/CHANGELOG.md)。
-
-| 版本 | 日期 | 要点 |
-|------|------|------|
-| 0.6.0 | 2026-11-14 | 外部连接记账 `track_external_connection` RAII API；i18n 栈迁移 trait-kit（退役自研 fluent 运行时）；自研依赖定版 `trait-kit` 0.5.0 / `confers` 0.6.0 / `oxcache` 0.5.0 |
-| 0.6.0-rc.10 | 2026-10-19 | SQLite PRAGMA 配置面与 BUSY 感知写重试；YAML 后端迁移 `serde_yaml_ng` → `serde-saphyr`（消除 `RUSTSEC-2024-0449` unsafe-libyaml 根源）；CLI 帮助/错误文案 i18n；依赖安全升级（rustls 0.23.46、`libduckdb-sys` 构建期 `zip` ^6 → ^9） |
-| 0.6.0-rc.9 | 2026-10-11 | `sql-parser` feature 蕴含 `dep:oxcache` + `oxcache/memory`（prepare 缓存以 oxcache 为后端，回转 rc.6 的「解耦」——该口径与实现不符，见 [0.6.0-rc.9](docs/CHANGELOG.md#060-rc9---2026-10-11)） |
-| 0.6.0-rc.8 | 2026-10-11 | `oxcache` 依赖声明补 `memory` feature 并收紧 `default-features = false`，修复 default 收紧后 `sql-parser` 组合缺 `DashMapMemoryBackend` |
-| 0.6.0-rc.7 | 2026-10-11 | `PermissionCache` 吸收进 oxcache（breaking：精简无等价公开方法、读写面改异步）；连接池归还改为同步完成（修复归还延迟导致的空闲队列误判与数据不可见）；空闲连接校验窗口修复与回填不超额创建；`DbConfig::for_sqlite_path` 自举构造；CLI 用户可见文案 i18n |
-| 0.6.0-rc.6 | 2026-10-06 | 运维 CLI 剩余命令（池状态/审计查询/分片信息/权限校验）；duckdb 串行写闸/泛型事务/多语句批量/池 RAII 归还；迁移历史表与标记集定制；缓存三防与跨分片归并；写后读粘性窗口；绑定参数化执行；业务分片键路由；限流统一（新 workspace 成员 `dbnexus-limiter-port` 端口 + 429/`Retry-After` 语义）；`http-health` 端点生成器；`oxcache-integration` 查询缓存一等集成（安全上下文参入 key 派生）；`sql-parser` 与 oxcache 解耦；【安全】`sql_literal` 后端感知转义修复 MySQL 反斜杠注入 |
-| 0.6.0-rc.5 | 2026-09-21 | dbnexus-macros `entity-macros` 转发 sea-orm 派生宏；`sea_orm` re-export 解绑驱动 feature；i18n 整改；sha2 0.11；跨仓 path 依赖改走 crates.io |
-| 0.6.0-rc.4 | 2026-09-14 | 统一行查询 `query_rows`；Saga 持久化恢复；字段级脱敏与行级安全（`data-protection`）；权限统一门面与查询 DSL；COPY 批量写入与 OTel 导出桥；端到端基准 `e2e_bench`；运维 CLI `migrate`/`health`/`user` 子命令（0.6.0-rc.3 版本号跳过未发布，内容随本版发布） |
-| 0.6.0-rc.2 | 2026-09-03 | 移除 `tracing` 特性；四驱动互斥严格化（编译期 `compile_error!`）；补全 JOIN/子查询跨表权限检查；`h2` 安全升级 |
-| 0.5.1 | 2026-08-06 | 热路径性能优化（注入检测静态表、Session 读写锁化、`DbConfig` Arc 共享等）；清理弃用 builder 方法 |
+完整版本历史见 [CHANGELOG.md](docs/cn/CHANGELOG.md)。
 
 ---
 
@@ -628,7 +299,7 @@ Copyright (c) 2025-2026 Kirky.X🌠
 | [💬 Discussions](https://github.com/Kirky-X/dbnexus/discussions) | 提问和分享想法 |
 | [🐙 GitHub](https://github.com/Kirky-X/dbnexus) | 查看源代码 |
 
-安全漏洞请勿通过公开 Issue 提交，参见[安全文档](docs/SECURITY.md)的漏洞报告流程。
+安全漏洞请勿通过公开 Issue 提交，参见[安全文档](docs/cn/SECURITY.md)的漏洞报告流程。
 
 ---
 

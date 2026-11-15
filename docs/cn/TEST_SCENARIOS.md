@@ -106,3 +106,14 @@
 | audit | `cargo audit --stale` | rc=0（RUSTSEC-2025-0134 在 allowed，neo4rs 传递依赖） |
 | examples | `examples/test_all_examples.sh`（项目自带脚本，52 个 [[bin]]，graph_ladybug 除外） | 52/52 通过，0 警告 0 失败 |
 | macros | `cargo test -p dbnexus-macros`（CI exclude，本地补验） | db_entity_tests 2 聚合全过（pass×6 + compile_fail×3） |
+
+---
+
+## 测试规模（截至 0.6.0）
+
+| 指标 | 数值 | 来源 |
+|------|------|------|
+| 测试函数总数 | 2869 个 `#[test]` / `#[tokio::test]` | grep 统计（`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`：src 1433 + tests 1434 + macros 2） |
+| 显式注册测试目标 | 87 个 `[[test]]` | `Cargo.toml` |
+| 驱动组全量通过 | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 | 见上文[测试金字塔基线](#测试金字塔基线) |
+| 覆盖率门禁 | ≥ 95% 行覆盖 | `.github/workflows/ci.yml`（llvm-cov） |

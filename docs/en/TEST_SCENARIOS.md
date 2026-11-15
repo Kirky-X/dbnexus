@@ -106,3 +106,14 @@ The following findings were recorded during driver-group matrix verification; al
 | audit | `cargo audit --stale` | rc=0 (RUSTSEC-2025-0134 in allowed, a neo4rs transitive dependency) |
 | examples | `examples/test_all_examples.sh` (the project's own script, 52 [[bin]] targets, graph_ladybug excluded) | 52/52 passed, 0 warnings 0 failures |
 | macros | `cargo test -p dbnexus-macros` (excluded in CI, verified locally) | db_entity_tests 2 aggregates all passed (pass×6 + compile_fail×3) |
+
+---
+
+## Test Scale (as of 0.6.0)
+
+| Metric | Value | Source |
+|------|------|------|
+| Total test functions | 2869 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1433 + tests 1434 + macros 2) |
+| Registered test targets | 87 `[[test]]` | `Cargo.toml` |
+| Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | see [Test Pyramid Baseline](#test-pyramid-baseline) above |
+| Coverage gate | ≥ 95% line coverage | `.github/workflows/ci.yml` (llvm-cov) |
