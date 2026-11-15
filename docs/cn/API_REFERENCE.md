@@ -375,7 +375,7 @@ pub enum PermissionAction {
 
 > 权限缓存带 TTL 与 singleflight 请求合并（防缓存击穿），支持后台热加载。
 > 限流统一：`Limiter` 端口（`dbnexus-limiter-port` crate）抽取令牌桶与外部后端
-> 的公共契约，429/403 语义与会话层映射见 `docs/RATE_LIMITING.md`。
+> 的公共契约，429/403 语义与会话层映射见 `docs/cn/RATE_LIMITING.md`。
 
 ### `PermissionConfig`
 

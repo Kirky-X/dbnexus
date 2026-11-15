@@ -253,7 +253,7 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 > 器驻留对方一侧：
 > `Limiter` 端口位于 workspace 成员 `limiter-port/`（`dbnexus-limiter-port`，
 > 仅依赖 async-trait，不依赖 dbnexus 与 limiteron 任何一方），令牌桶实现端口为默认限流后端，外部后端经应用组合根注入，
-> 详见 `docs/RATE_LIMITING.md`。
+> 详见 `docs/cn/RATE_LIMITING.md`。
 
 ### 国际化模块 `i18n/`
 
