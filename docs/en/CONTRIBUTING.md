@@ -212,7 +212,7 @@ Submitted code will be licensed under the MIT license, consistent with the proje
 
 ### Short Term (0.6.0 stable release)
 
-- [ ] Release 0.6.0 stable: after rc validation, update the trait-kit 0.5.0 / oxcache 0.5.0 dependency requirements per the workspace propagation table, verify with `cargo publish --dry-run`, then tag to trigger the automated release.yml publish
+- [x] Release 0.6.0 stable — released (tag v0.6.0, 2026-11-14; trait-kit 0.5 / oxcache 0.5 dependency requirements updated per the stable-version propagation table); 0.6.1 followed on 2026-11-15
 - [x] Align the declared MSRV with actual dependency requirements — unified to 1.97.1 per workspace CONFIG_BASELINE (2026-09-06), covering the 1.94 transitive requirement
 - [x] Restore regular MySQL integration test runs — the CI `test` job now runs a regular `db: [sqlite, postgres, mysql]` matrix: a MySQL 8.0 service container (readiness via mysqladmin health check, then `DATABASE_URL` injection), full test + doc test runs with `--features mysql,default-no-db,all-optional` (2026-09-30)
 

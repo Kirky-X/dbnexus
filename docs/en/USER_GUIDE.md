@@ -52,7 +52,7 @@ Add the dependencies to `Cargo.toml`:
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -72,13 +72,13 @@ tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # Minimal configuration for embedded devices
-dbnexus = { version = "0.6.0", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
+dbnexus = { version = "0.6.1", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
 
 # PostgreSQL with enterprise features
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
 
 # SQLite with basic features
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
 **Important**: driver mutual exclusion is enforced per group, with three compile-time guards (`compile_error!`) in total: `postgres` and `mysql` are mutually exclusive; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) are mutually exclusive; `duckdb` and `ladybug` are mutually exclusive. Same-side combinations can coexist (e.g. `sqlite` + `duckdb`); conflicting combinations fail the build at compile time.
@@ -608,7 +608,7 @@ After enabling the `cache` feature, a cache backend can be injected via `DbCache
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["cache"]
 ```
 
@@ -637,7 +637,7 @@ Enable Prometheus metrics:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["metrics"]
 ```
 
@@ -652,7 +652,7 @@ println!("{}", collector.export_prometheus());
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["audit"]
 ```
 
@@ -677,7 +677,7 @@ DuckDB is an embedded analytical database suited to OLAP scenarios, integrated a
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["duckdb"]
 ```
 
@@ -716,7 +716,7 @@ Enable the JWT-based user authentication system:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["authentication"]
 ```
 
@@ -756,7 +756,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["sql-parser"]
 ```
 
@@ -805,7 +805,7 @@ Enable data sharding for horizontal scaling:
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["sharding"]
 ```
 
@@ -833,7 +833,7 @@ After enabling the `validation` feature, `DbError` gains a `Validation(String)` 
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["validation"]
 ```
 
@@ -863,7 +863,7 @@ DBNexus unifies graph databases through the `GraphConnection` trait; graph datab
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["ladybug"]  # or "neo4j"
 ```
 
@@ -1343,16 +1343,16 @@ Relational drivers are mutually exclusive by group (compile-time `compile_error!
 
 ```toml
 # Embedded/edge devices (minimal)
-dbnexus = { version = "0.6.0", features = ["embedded"] }
+dbnexus = { version = "0.6.1", features = ["embedded"] }
 
 # Microservices
-dbnexus = { version = "0.6.0", features = ["microservice"] }
+dbnexus = { version = "0.6.1", features = ["microservice"] }
 
 # Monolithic applications
-dbnexus = { version = "0.6.0", features = ["monolith"] }
+dbnexus = { version = "0.6.1", features = ["monolith"] }
 
 # Enterprise (full features)
-dbnexus = { version = "0.6.0", features = ["enterprise"] }
+dbnexus = { version = "0.6.1", features = ["enterprise"] }
 ```
 
 </details>

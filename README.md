@@ -109,7 +109,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -199,7 +199,7 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 ## 💻 Examples
 
-All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace), **52 binary targets** in total (as of 0.6.0). For run commands, the per-module listing and the `graph_ladybug` limitation, see [examples/README.md](examples/README.md); for more configuration, transaction and monitoring snippets, see the [User Guide](docs/en/USER_GUIDE.md) and the [API Reference](docs/en/API_REFERENCE.md).
+All examples live in [examples/](examples/) (a separate crate `dbnexus-examples`, managed in the workspace), **52 binary targets** in total (as of 0.6.1). For run commands, the per-module listing and the `graph_ladybug` limitation, see [examples/README.md](examples/README.md); for more configuration, transaction and monitoring snippets, see the [User Guide](docs/en/USER_GUIDE.md) and the [API Reference](docs/en/API_REFERENCE.md).
 
 ---
 
@@ -243,7 +243,7 @@ Protocol-compatible databases (no extra feature needed, just use the correspondi
 
 ## 🧪 Testing
 
-Tests are carried by six layers: `src/**` unit tests, `tests/**` integration targets, `tests/e2e/` end-to-end scenarios, `postgres/mysql_testcontainers` container-level tests, doc tests, and [benches/](benches/) benchmarks; the scale is 2869 test functions and 87 test targets, with a line-coverage gate of ≥ 95%. For the test pyramid baseline, driver-group matrix and E2E scenario definitions, see [Test Scenarios](docs/en/TEST_SCENARIOS.md) (scale data in [Test Scale](docs/en/TEST_SCENARIOS.md#test-scale-as-of-060)); for run commands, see [Contributing · Testing Conventions](docs/en/CONTRIBUTING.md#-testing-conventions).
+Tests are carried by six layers: `src/**` unit tests, `tests/**` integration targets, `tests/e2e/` end-to-end scenarios, `postgres/mysql_testcontainers` container-level tests, doc tests, and [benches/](benches/) benchmarks; the scale is 2873 test functions and 87 test targets, with a line-coverage gate of ≥ 95%. For the test pyramid baseline, driver-group matrix and E2E scenario definitions, see [Test Scenarios](docs/en/TEST_SCENARIOS.md) (scale data in [Test Scale](docs/en/TEST_SCENARIOS.md#test-scale-as-of-061)); for run commands, see [Contributing · Testing Conventions](docs/en/CONTRIBUTING.md#-testing-conventions).
 
 ---
 

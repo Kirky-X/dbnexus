@@ -109,7 +109,7 @@ cargo add tokio --features rt-multi-thread,macros
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 💻 示例
 
-全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理），共 **52 个二进制目标**（截至 0.6.0）。运行命令、按模块清单与 `graph_ladybug` 限制说明见 [examples/README.md](examples/README.md)；更多配置、事务与监控代码片段见[用户指南](docs/cn/USER_GUIDE.md)与 [API 参考](docs/cn/API_REFERENCE.md)。
+全部示例位于 [examples/](examples/)（独立 crate `dbnexus-examples`，随 workspace 管理），共 **52 个二进制目标**（截至 0.6.1）。运行命令、按模块清单与 `graph_ladybug` 限制说明见 [examples/README.md](examples/README.md)；更多配置、事务与监控代码片段见[用户指南](docs/cn/USER_GUIDE.md)与 [API 参考](docs/cn/API_REFERENCE.md)。
 
 ---
 
@@ -243,7 +243,7 @@ DBNexus 采用分层模块设计：`foundation` 提供配置与错误基座，`d
 
 ## 🧪 测试
 
-测试分六层承载：`src/**` 单元测试、`tests/**` 集成测试目标、`tests/e2e/` 端到端场景、`postgres/mysql_testcontainers` 容器级测试、doc tests 与 [benches/](benches/) 基准；规模 2869 个测试函数、87 个测试目标，行覆盖门禁 ≥ 95%。金字塔基线、驱动组矩阵与 E2E 场景定义见[测试场景固化](docs/cn/TEST_SCENARIOS.md)（规模数据见[测试规模](docs/cn/TEST_SCENARIOS.md#测试规模截至-060)），运行命令见[贡献指南 · 测试规范](docs/cn/CONTRIBUTING.md#-测试规范)。
+测试分六层承载：`src/**` 单元测试、`tests/**` 集成测试目标、`tests/e2e/` 端到端场景、`postgres/mysql_testcontainers` 容器级测试、doc tests 与 [benches/](benches/) 基准；规模 2873 个测试函数、87 个测试目标，行覆盖门禁 ≥ 95%。金字塔基线、驱动组矩阵与 E2E 场景定义见[测试场景固化](docs/cn/TEST_SCENARIOS.md)（规模数据见[测试规模](docs/cn/TEST_SCENARIOS.md#测试规模截至-061)），运行命令见[贡献指南 · 测试规范](docs/cn/CONTRIBUTING.md#-测试规范)。
 
 ---
 

@@ -109,11 +109,11 @@ The following findings were recorded during driver-group matrix verification; al
 
 ---
 
-## Test Scale (as of 0.6.0)
+## Test Scale (as of 0.6.1)
 
 | Metric | Value | Source |
 |------|------|------|
-| Total test functions | 2869 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1433 + tests 1434 + macros 2) |
+| Total test functions | 2873 `#[test]` / `#[tokio::test]` | grep count (`grep -rEc '#\[(tokio::)?test\b' --include='*.rs' src tests macros`: src 1437 + tests 1434 + macros 2) |
 | Registered test targets | 87 `[[test]]` | `Cargo.toml` |
-| Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | see [Test Pyramid Baseline](#test-pyramid-baseline) above |
+| Driver-group full runs | sqlite 1712 / postgres 1276 / mysql 1276 / duckdb 1300 passed | see [Test Pyramid Baseline](#test-pyramid-baseline) above (0.6.0 run baseline) |
 | Coverage gate | ≥ 95% line coverage | `.github/workflows/ci.yml` (llvm-cov) |

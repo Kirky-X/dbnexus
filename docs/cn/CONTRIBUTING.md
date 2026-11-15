@@ -212,7 +212,7 @@ cargo test --features mysql
 
 ### 短期（0.6.0 正式发布）
 
-- [ ] 发布 0.6.0 正式版：完成 rc 验证后按工作区传导表更新 trait-kit 0.5.0 / oxcache 0.5.0 依赖要求，`cargo publish --dry-run` 核对后打 tag 触发 release.yml 自动发布
+- [x] 发布 0.6.0 正式版 — 已发布（tag v0.6.0，2026-11-14；trait-kit 0.5 / oxcache 0.5 依赖要求已按稳定版传导更新），后续 0.6.1 已于 2026-11-15 发布
 - [x] 对齐 MSRV 声明与依赖实际要求 — 已按工作区 CONFIG_BASELINE 统一为 1.97.1（2026-09-06），覆盖传递依赖的 1.94 要求
 - [x] 恢复 MySQL 集成测试的常规运行 — CI `test` job 以 matrix `db: [sqlite, postgres, mysql]` 常规运行：MySQL 8.0 service 容器（mysqladmin 健康检查就绪后注入 `DATABASE_URL`），`--features mysql,default-no-db,all-optional` 全量测试 + doc tests（2026-09-30）
 
