@@ -4,8 +4,17 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+      - "LICENSE*"
   pull_request:
     branches: [main, develop]
+  schedule:
+    # 每周一 03:00 UTC：跨平台 build 全矩阵（含 macOS/Windows 腿）兜底
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -175,22 +184,42 @@ jobs:
       - name: Run doc tests
         run: cargo test --no-default-features --features ${{ matrix.db }},default-no-db,all-optional --doc --workspace --exclude dbnexus-examples --exclude dbnexus-macros
 
+  # 跨平台构建矩阵计算：push/PR 只展开 ubuntu 腿（macOS/Windows runner 计价
+  # 10 倍，降频为每周 schedule 兜底）；schedule/workflow_dispatch 展开全矩阵。
+  # matrix context 在 job 级 if 中不可用（actions/runner WorkflowTemplateConverter
+  # 的 s_jobIfNamedValues 仅允许 github/vars/inputs/needs，引用 matrix 会报
+  # Unrecognized named-value 导致 startup_failure），故裁剪逻辑放进 gate 输出的
+  # 动态矩阵，行为与逐腿 job 级 if 等价。
+  build-matrix:
+    name: Compute build matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        # event_name 经 env 传入而非内插 run（避免 template-injection 面）
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo 'matrix={"os":["ubuntu-latest","macos-latest","windows-latest"],"db":["sqlite"],"include":[{"os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"},{"os":"macos-latest","target":"x86_64-apple-darwin"},{"os":"windows-latest","target":"x86_64-pc-windows-msvc"}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"os":["ubuntu-latest"],"db":["sqlite"],"include":[{"os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"}]}' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build (${{ matrix.os }})
+    needs:
+      - build-matrix
+    # job 级 if 覆盖默认门禁，显式声明依赖成功（needs.build-matrix 无 if 分支，
+    # result 恒为 success，此处显式化与默认门禁等价）
+    if: needs.build-matrix.result == 'success'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        db: [sqlite]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
