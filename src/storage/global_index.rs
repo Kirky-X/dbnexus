@@ -566,7 +566,7 @@ mod lookup_index_tests {
 
     static IDX_TEST_DB_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-    /// R-gidx-001: init 后查询列二级索引存在
+    /// init 后查询列二级索引存在
     #[tokio::test]
     async fn lookup_index_is_created_with_table() {
         let n = IDX_TEST_DB_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -593,7 +593,7 @@ mod lookup_index_tests {
         );
     }
 
-    /// R-gidx-001: 二次 init（表与索引已存在）不报错
+    /// 二次 init（表与索引已存在）不报错
     #[tokio::test]
     async fn init_is_idempotent() {
         let n = IDX_TEST_DB_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

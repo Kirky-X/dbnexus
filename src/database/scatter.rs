@@ -429,7 +429,7 @@ mod merge_tests {
     use super::*;
     use serde_json::json;
 
-    /// 三分片交错数据归并后与全量排序结果一致（R-scatter-001）
+    /// 三分片交错数据归并后与全量排序结果一致
     #[test]
     fn merge_orders_rows_globally_across_shards() {
         let shard_rows = vec![
@@ -529,7 +529,7 @@ mod merge_tests {
         assert_eq!(merged.len(), 2);
     }
 
-    /// 全局分页（R-scatter-002）：offset/limit 作用于全局行序
+    /// 全局分页：offset/limit 作用于全局行序
     #[test]
     fn global_pagination_applies_after_merge() {
         let shard_rows = vec![

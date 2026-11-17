@@ -1093,7 +1093,7 @@ mod tests {
 mod key_routing_tests {
     use super::*;
 
-    /// 同一 key 重复路由必须恒定（R-sharding-001）
+    /// 同一 key 重复路由必须恒定
     #[test]
     fn same_key_routes_identically_across_calls() {
         for strategy in [
@@ -1108,7 +1108,7 @@ mod key_routing_tests {
         }
     }
 
-    /// key 分布不得塌缩到单分片（R-sharding-001）
+    /// key 分布不得塌缩到单分片
     #[test]
     fn keys_distribute_across_shards() {
         for strategy in [
@@ -1129,7 +1129,7 @@ mod key_routing_tests {
         }
     }
 
-    /// 一致性哈希扩容最小迁移；朴素取模对照组大面积迁移（R-sharding-002）
+    /// 一致性哈希扩容最小迁移；朴素取模对照组大面积迁移
     #[test]
     fn consistent_hash_minimizes_migration_on_scale_up() {
         let strategy = ConsistentHashStrategy::default();
@@ -1162,7 +1162,7 @@ mod key_routing_tests {
         );
     }
 
-    /// route_for_key 走策略并要求分片已注册；get_session_for_key 无池时返回 None（R-sharding-003）
+    /// route_for_key 走策略并要求分片已注册；get_session_for_key 无池时返回 None
     #[test]
     fn router_route_for_key_requires_registered_shard() {
         let mut router = ShardRouter::new(ConsistentHashStrategy::default(), 4);

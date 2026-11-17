@@ -733,7 +733,7 @@ mod sticky_tests {
         )
     }
 
-    /// R-replica-001: 写后粘性窗口内读主库、不探测副本
+    /// 写后粘性窗口内读主库、不探测副本
     #[tokio::test]
     async fn read_goes_primary_within_sticky_window() {
         let balancer = make_balancer_async(Duration::from_secs(5)).await;
@@ -744,7 +744,7 @@ mod sticky_tests {
         assert!(balancer.last_selected_replica().is_none());
     }
 
-    /// R-replica-001: 粘性窗口关闭（ZERO）时读按 lag 路由副本
+    /// 粘性窗口关闭（ZERO）时读按 lag 路由副本
     #[tokio::test]
     async fn read_goes_replica_when_sticky_disabled() {
         let balancer = make_balancer_async(Duration::ZERO).await;
@@ -754,7 +754,7 @@ mod sticky_tests {
         assert_eq!(balancer.last_selected_replica().as_deref(), Some("r1"));
     }
 
-    /// R-replica-001: 写失败不打点粘性窗口
+    /// 写失败不打点粘性窗口
     #[tokio::test]
     async fn failed_write_does_not_open_sticky_window() {
         let balancer = make_balancer_async(Duration::from_secs(5)).await;
@@ -817,7 +817,7 @@ mod probe_tests {
         }
     }
 
-    /// R-replica-002: probe_interval 内复用探测结果，不重复探测
+    /// probe_interval 内复用探测结果，不重复探测
     #[tokio::test]
     async fn probe_results_are_cached_within_interval() {
         let detector = Arc::new(SlowDetector {
@@ -855,7 +855,7 @@ mod probe_tests {
         );
     }
 
-    /// R-replica-003: 候选副本并行探测（3×60ms 串行≈180ms，并行应远低于）
+    /// 候选副本并行探测（3×60ms 串行≈180ms，并行应远低于）
     #[tokio::test]
     async fn candidates_are_probed_concurrently() {
         let primary = Arc::new(DbPool::new("sqlite::memory:").await.expect("pool"));
@@ -920,7 +920,7 @@ mod sticky_write_failure_tests {
 
     use std::sync::atomic::Ordering;
 
-    /// R-replica-001: 写失败（主库 get_session Err）不打点粘性窗口——
+    /// 写失败（主库 get_session Err）不打点粘性窗口——
     /// 失败写之后窗口内的读仍按 lag 正常路由副本
     #[tokio::test]
     async fn failed_write_does_not_open_sticky_window_under_permission() {

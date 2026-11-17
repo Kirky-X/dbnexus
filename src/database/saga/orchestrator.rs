@@ -502,7 +502,7 @@ mod persist_failure_tests {
         }]
     }
 
-    /// R-saga-001: persist 失败显性化——结果携带失败计数，saga 正常返回
+    /// persist 失败显性化——结果携带失败计数，saga 正常返回
     #[tokio::test]
     async fn persist_failures_surface_in_result() {
         let orchestrator = SagaOrchestrator::new_with_log_store(
@@ -518,7 +518,7 @@ mod persist_failure_tests {
         assert_eq!(result.status, SagaStatus::Failed);
     }
 
-    /// R-saga-001: persist 全部成功时计数为 0
+    /// persist 全部成功时计数为 0
     #[tokio::test]
     async fn persist_failures_zero_when_store_healthy() {
         let orchestrator = SagaOrchestrator::new(Arc::new(ShardRouter::default()));
@@ -678,7 +678,7 @@ mod replay_compensation_tests {
         }
     }
 
-    /// R-saga-002: 重放跳过已成功补偿（Some(true)）的步骤，Some(false) 的重试
+    /// 重放跳过已成功补偿（Some(true)）的步骤，Some(false) 的重试
     #[tokio::test]
     async fn replay_skips_already_compensated_steps() {
         let saga_id = "saga-replay-test".to_string();

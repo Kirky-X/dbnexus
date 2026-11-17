@@ -668,7 +668,7 @@ macro_rules! impl_json_repository {
         /// 乐观锁更新（转发 [`JsonRepository::update_if_version`]）
         impl $repo {
             /// 带版本条件的比较并置换：见 [`JsonRepository::update_if_version`]
-            ///（宏按实体生成；未用到乐观锁的实例化点会触发 dead_code，故放行）
+            /// （宏按实体生成；未用到乐观锁的实例化点会触发 dead_code，故放行）
             #[allow(dead_code)]
             pub async fn update_if_version(
                 &self,
@@ -726,7 +726,7 @@ mod tests {
         assert_eq!(lit, "'[1,2]'");
     }
 
-    /// R-repo-001: MySQL 后端必须同时转义反斜杠——仅加倍单引号会被 `\'`
+    /// MySQL 后端必须同时转义反斜杠——仅加倍单引号会被 `\'`
     /// 序列击穿（值以反斜杠结尾时悬空引号改变字面量边界）
     #[test]
     fn test_sql_literal_mysql_backslash_escaping() {

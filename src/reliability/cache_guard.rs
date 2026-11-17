@@ -206,7 +206,7 @@ mod tests {
         }
     }
 
-    /// R-cache-001: 抖动边界 + 非恒值 + ratio=0 + 非法 ratio
+    /// 抖动边界 + 非恒值 + ratio=0 + 非法 ratio
     #[test]
     fn jittered_ttl_stays_in_bounds_and_varies() {
         let base = Duration::from_secs(60);
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(jittered_ttl(base, 1.5), base);
     }
 
-    /// R-cache-002: 负缓存——loader 返回 None 后第二次不再调用 loader
+    /// 负缓存——loader 返回 None 后第二次不再调用 loader
     #[tokio::test]
     async fn negative_cache_blocks_repeat_penetration() {
         let guard = CacheGuard::new(MockCache::shared());
@@ -252,7 +252,7 @@ mod tests {
         );
     }
 
-    /// R-cache-002: 正常值路径 cache-aside 语义
+    /// 正常值路径 cache-aside 语义
     #[tokio::test]
     async fn value_path_is_plain_cache_aside() {
         let guard = CacheGuard::new(MockCache::shared());
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
-    /// R-cache-003: 同 key 32 路并发，loader 仅执行一次
+    /// 同 key 32 路并发，loader 仅执行一次
     #[tokio::test]
     async fn singleflight_coalesces_concurrent_rebuilds() {
         let guard = Arc::new(CacheGuard::new(MockCache::shared()));
@@ -301,7 +301,7 @@ mod tests {
         );
     }
 
-    /// R-cache-003: loader 失败可重试（互斥体在错误路径释放）
+    /// loader 失败可重试（互斥体在错误路径释放）
     #[tokio::test]
     async fn loader_failure_is_retryable() {
         let guard = CacheGuard::new(MockCache::shared());

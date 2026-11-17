@@ -21,7 +21,7 @@
 //! 纯校验函数（决策层，无副作用），双执行的代价可接受；顺序语义不受
 //! 影响（每键至多执行一次 prepare，既有顺序测试继续钉住）。未如原
 //! 实现持 Mutex 跨 prepare 调用——不为"至多一次"自建 per-key in-flight
-//! 守卫（见 design D2 Alternatives）。
+//! 守卫（见 Alternatives）。
 //!
 //! # 口径说明
 //!
@@ -364,7 +364,7 @@ mod tests {
     }
 
     /// (b) 容量界与最近使用条目存活：逐 victim 精确序列断言已随
-    /// TinyLFU 准入删除（design D2），改锚容量界 + 账目一致 + 存活性质
+    /// TinyLFU 准入删除，改锚容量界 + 账目一致 + 存活性质
     #[test]
     fn test_lru_eviction_respects_capacity_and_recency() {
         let cache: PreparedStatementCache<()> = PreparedStatementCache::new(2);

@@ -1226,7 +1226,7 @@ mod for_update_tests {
     use super::*;
     use crate::database::DbPool;
 
-    /// R-txn-001: 非事务下调用必须拒绝（拿到锁即释 = 假防护）
+    /// 非事务下调用必须拒绝（拿到锁即释 = 假防护）
     #[tokio::test]
     async fn query_rows_for_update_requires_active_transaction() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1239,7 +1239,7 @@ mod for_update_tests {
         assert!(err.message().contains("requires an active transaction"));
     }
 
-    /// R-txn-001: 事务内执行当前读，读得见未提交写（同一事务连接）
+    /// 事务内执行当前读，读得见未提交写（同一事务连接）
     #[tokio::test]
     async fn query_rows_for_update_executes_inside_transaction() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1265,7 +1265,7 @@ mod for_update_tests {
         session.rollback().await.expect("rollback");
     }
 
-    /// R-txn-001: 回滚后（事务结束）再次当前读被拒绝
+    /// 回滚后（事务结束）再次当前读被拒绝
     #[tokio::test]
     async fn query_rows_for_update_rejected_after_rollback() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1285,7 +1285,7 @@ mod isolation_level_tests {
     use super::*;
     use crate::database::DbPool;
 
-    /// R-txn-002: sqlite 上以指定隔离级别开启事务并回滚
+    /// sqlite 上以指定隔离级别开启事务并回滚
     #[tokio::test]
     async fn begin_with_isolation_opens_transaction_on_sqlite() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1300,7 +1300,7 @@ mod isolation_level_tests {
         assert!(!session.is_in_transaction().await);
     }
 
-    /// R-txn-002: 重复开启返回 Already in transaction（与 begin_transaction 一致）
+    /// 重复开启返回 Already in transaction（与 begin_transaction 一致）
     #[tokio::test]
     async fn double_begin_with_isolation_rejected() {
         let pool = DbPool::new("sqlite::memory:").await.expect("pool");
@@ -1324,7 +1324,7 @@ mod isolation_level_tests {
         session.rollback().await.expect("rollback");
     }
 
-    /// R-txn-002: 四档级别映射到 sea-orm 不丢档
+    /// 四档级别映射到 sea-orm 不丢档
     #[test]
     fn all_levels_map_to_sea_orm() {
         use super::DbIsolationLevel::*;

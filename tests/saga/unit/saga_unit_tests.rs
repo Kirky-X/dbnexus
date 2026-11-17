@@ -396,7 +396,7 @@ mod db_saga_recovery_tests {
     }
 
     /// 日志中的步骤未在重供定义中找到：无法补偿 → CompensationFailed
-    ///（不得把"漏补偿"报告为干净失败）
+    /// （不得把"漏补偿"报告为干净失败）
     #[tokio::test]
     async fn test_replay_unknown_step_is_compensation_failed() {
         let (url, path) = temp_db_url("unknown-step");

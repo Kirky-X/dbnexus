@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 限流端口统一测试
 //!
-//! 覆盖 R-dbnexus-003 验收面：
+//! 覆盖验收面：
 //! - Limiter 端口契约（令牌桶实现端口、外部后端注入）
 //! - 双后端切换配置生效（令牌桶默认 / 外部端口实现）
 //! - 429 响应语义（RateLimited 决策携带 Retry-After，区别于策略拒绝）

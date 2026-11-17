@@ -441,7 +441,7 @@ mod tests {
     }
 
     /// (c) 并发 get 过期 key：provider 恰好被调用一次
-    ///（offload in-flight 同 key 去重承载，替代手写 try_reserve_refresh 时间窗节流）
+    /// （offload in-flight 同 key 去重承载，替代手写 try_reserve_refresh 时间窗节流）
     // TTL 50ms + burst 前等 60ms：条目进入 stale 窗口触发回源；回源写回后
     // 条目有 50ms 新鲜窗，覆盖被阻塞 provider 拖住的迟到竞速者（避免其把
     // "刚刷新又转 stale"的条目再次回源——那是 SWR 语义而非去重失效）。
@@ -541,7 +541,7 @@ mod tests {
     }
 
     /// 并发 refresh 过期 key：provider 恰好被调用一次
-    ///（in-flight 去重同时覆盖显式 refresh 路径）
+    /// （in-flight 去重同时覆盖显式 refresh 路径）
     #[tokio::test(flavor = "multi_thread", worker_threads = 18)]
     async fn test_concurrent_refresh_single_provider_call() {
         let provider = Arc::new(CountingProvider::with_delay(Duration::from_millis(20)));
