@@ -375,7 +375,7 @@ pub enum PermissionAction {
 
 > 权限缓存带 TTL 与 singleflight 请求合并（防缓存击穿），支持后台热加载。
 > 限流统一：`Limiter` 端口（`dbnexus-limiter-port` crate）抽取令牌桶与外部后端
-> 的公共契约，429/403 语义与会话层映射见 `docs/RATE_LIMITING.md`。
+> 的公共契约，429/403 语义与会话层映射见 `docs/cn/RATE_LIMITING.md`。
 
 ### `PermissionConfig`
 
@@ -640,7 +640,7 @@ pub type Operation = PermissionAction;
 | `permission-facade` | `PermissionFacade`（RBAC + 脱敏 + RLS 统一门面；租户谓词只注入单表 SELECT，admin 通道不注入） |
 | `data-protection` | 字段脱敏与行级安全谓词注入（读出口 `query_rows` + raw 写出口 UPDATE/DELETE；谓词列名白名单校验，谓词值转义后写为字面量） |
 | `authentication` | `AuthenticationManager`、`JwtManager`、`PasswordHasher` |
-| `sql-parser` | `SqlParser`、`DdlGuard`、`is_ddl_operation`、`contains_sql_injection`（`InjectionEngine` 类型本身无条件导出，见[注入检测](#注入检测-injectionenginesql-parser-特性)） |
+| `sql-parser` | `SqlParser`、`DdlGuard`、`is_ddl_operation`、`contains_sql_injection`（`InjectionEngine` 类型本身无条件导出，见[注入检测](#注入检测-injectionengine类型无条件导出部分方法按-sql-parser-特性门控)） |
 | `sharding` | `ShardRouter`、`ShardConfig`、`create_strategy` |
 | `global-index` | `GlobalIndex`、`IndexEntry`、`SyncResult` |
 | `retry` | `RetryPolicy`、`RetryExecutor`、`RetryError`、`is_idempotent_operation` |

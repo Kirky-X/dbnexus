@@ -86,8 +86,7 @@ cache = ["dep:oxcache", "arc-swap", "cache-available"]  # 缓存功能（基于 
 oxcache-integration = ["dep:oxcache", "arc-swap", "cache-available", "dep:sha2"]
 # 内部谓词：缓存能力可用（oxcache 后端或 DI 注入）。cache 与 oxcache-integration 均隐含本 feature，池/会话代码统一以此判定缓存能力
 cache-available = []
-# kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require
-# （trait-kit 依赖本体已常驻承载 i18n 栈，此处只转发 kit 集成能力）
+# kit 隐含全部能力 feature 闭包（池/缓存/审计/健康），注册即全能力可 require；trait-kit 依赖本体已常驻承载 i18n 栈，此处只转发 kit 集成能力
 kit = ["oxcache-integration", "oxcache/kit", "trait-kit/lifecycle", "trait-kit/health", "trait-kit/observer", "audit", "sql-parser", "health-check"]
 
 yaml = ["dep:serde-saphyr"]  # YAML 配置支持（合并原 config-yaml 别名）
@@ -144,10 +143,8 @@ authentication = ["jsonwebtoken", "bcrypt"]  # JWT 认证系统
 test-utils = ["tempfile", "assert_cmd"]  # 测试辅助工具
 cli-tests = []
 
-# 预设配置
 embedded = ["runtime-tokio-rustls", "sqlite", "config-env"]  # 嵌入式/边缘设备 - 超轻量配置
-# embedded-runtime = embedded 去掉 sqlite 后端：只需嵌入式运行时（tokio+rustls+config-env）
-# 而不带 libsqlite3-sys 解析闭包的消费者用它（0.6.1 新增，纯增量，embedded 未变）
+# embedded-runtime = embedded 去掉 sqlite：仅需嵌入式运行时（tokio+rustls+config-env）且不带 libsqlite3-sys 解析闭包者用（0.6.1 新增）
 embedded-runtime = ["runtime-tokio-rustls", "config-env"]
 microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "config-env", "observability"]  # 微服务
 monolith = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "yaml", "data-management", "security", "observability", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 单体应用 - 完整配置
@@ -186,8 +183,7 @@ arc-swap = { version = "1.9", default-features = false, optional = true }
 oxcache = { version = "0.5", default-features = false, features = ["memory"], optional = true }
 # Rate limiter port（permission feature 专用；独立小 crate 防 dbnexus↔limiteron 循环依赖）
 dbnexus-limiter-port = { workspace = true, optional = true }
-# trait-kit i18n stack (常驻：消息目录注册面 + ICU4X 格式化层，core feature 无门控；
-# kit 集成面另经 `kit` feature 转发 lifecycle/health/observer 能力)
+# trait-kit i18n stack (常驻：消息目录注册面 + ICU4X 格式化层，core feature 无门控；kit 集成面另经 kit feature 转发 lifecycle/health/observer 能力)
 trait-kit = { version = "0.5", default-features = false, features = ["i18n"] }
 duckdb = { version = "1.20000", default-features = false, features = ["bundled"], optional = true }
 lbug = { version = "0.22", default-features = false, optional = true }
@@ -197,9 +193,8 @@ jsonwebtoken = { version = "11.1", default-features = false, features = ["use_pe
 bcrypt = { version = "0.19", default-features = false, features = ["std", "zeroize"], optional = true }
 unicode-normalization = { version = "0.1", default-features = false, features = ["std"], optional = true }
 rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "sys_rng", "thread_rng"], optional = true }
-# ICU4X/fluent 直接依赖已随 trait-kit i18n 栈切换移除（格式化走
-# trait-kit I18nFormatter，消息目录走 I18nManager 注册面）；sys-locale
-# 仍为 locale 探测（set_locale_from_system）的显式直接依赖
+# ICU4X/fluent 直接依赖已随 trait-kit i18n 切换移除（走 I18nFormatter / I18nManager 注册面）
+# sys-locale 仍为 locale 探测（set_locale_from_system）的显式直接依赖
 sys-locale = { version = "0.3", default-features = false }
 dbnexus-macros = { workspace = true, optional = true }
 # Testing utilities（同时出现在 dev-dependencies，optional 供 test-utils feature 拉入）
@@ -229,8 +224,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "core_entity_integration"
 path = "tests/core/integration/entity_integration.rs"
 required-features = ["macros", "sqlite"]
-# 注意：这个测试支持多种数据库，但 required-features 只能指定一个
-# 当使用 postgres/mysql 特性运行时，SQLite 仍会被编译，但测试会正确选择数据库
+# 注意：这个测试支持多种数据库，但 required-features 只能指定一个；当使用 postgres/mysql 特性运行时，SQLite 仍会被编译，但测试会正确选择数据库
 
 [[test]]
 name = "core_sql_parser_integration"
@@ -240,8 +234,7 @@ required-features = ["sql-parser", "permission"]
 [[test]]
 name = "core_session_transaction"
 path = "tests/core/integration/session_transaction.rs"
-# sqlite：全部用例经 common helper 依赖 sqlite::memory:（embedded 专属），
-# 无 sqlite 驱动组（postgres/mysql/duckdb）下必 panic，故门控至 embedded 组
+# sqlite：用例经 common helper 依赖 sqlite::memory:（embedded 专属），无 sqlite 驱动组必 panic，故门控至 embedded
 required-features = ["permission", "sqlite"]
 
 [[test]]
@@ -413,8 +406,7 @@ path = "benches/duckdb_copy_bench.rs"
 harness = false
 required-features = ["duckdb", "copy", "sql-parser", "runtime-tokio-rustls"]
 
-# tests/mod.rs 需要 sqlite 特性才能正确运行
-# 因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
+# tests/mod.rs 需要 sqlite 特性才能正确运行，因为 entity_integration 测试使用硬编码的 sqlite::memory: 连接
 [[test]]
 name = "mod"
 path = "tests/mod.rs"
@@ -714,8 +706,7 @@ required-features = ["permission"]
 [[test]]
 name = "rate_limit_port_tests"
 path = "tests/permission/unit/rate_limit_port_tests.rs"
-# audit：文件含 2 个 #[cfg(feature = "audit")] 审计用例，目标必须随 audit
-# 编译，保证注册用例全部可运行（仅 permission 时审计用例会被静默剔除）
+# audit：文件含 2 个 #[cfg(feature = "audit")] 审计用例，目标必须随 audit 编译，保证注册用例全部可运行（仅 permission 时审计用例会被静默剔除）
 required-features = ["permission", "audit"]
 
 # Pool 单元测试 - 连接池配置/限制/超时/泄漏检测
@@ -778,15 +769,13 @@ name = "e2e_distributed"
 path = "tests/e2e/e2e_distributed.rs"
 required-features = ["sqlite", "runtime-tokio-rustls"]
 
-# Kit feature gate — 验证 `kit` feature 拉入 `trait-kit/observer` 后
-# `DbNexusBuildObserver` 可用且 AsyncKit 构建管线正常计数
+# Kit feature gate — 验证 kit feature 拉入 trait-kit/observer 后 DbNexusBuildObserver 可用且 AsyncKit 构建管线正常计数
 [[test]]
 name = "kit_feature_gate"
 path = "tests/kit_feature_gate.rs"
 required-features = ["kit", "sqlite", "runtime-tokio-rustls"]
 
-# 编译期 feature 互斥守卫契约（源码级，无需任何 feature；真正触发守卫需
-# bundled C++ 全量编译，代价过高，以守卫存在性/作用域断言固化）
+# 编译期 feature 互斥守卫契约（源码级，无需任何 feature；真正触发守卫需 bundled C++ 全量编译，代价过高，以守卫存在性/作用域断言固化）
 [[test]]
 name = "feature_mutex_guards"
 path = "tests/feature_mutex_guards.rs"

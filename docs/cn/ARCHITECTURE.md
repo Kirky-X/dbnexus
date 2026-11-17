@@ -55,7 +55,7 @@ DBNexus 的架构遵循**分层设计**，具有清晰的关注点分离，使�
 
 ### 2. 特性门控架构
 
-特性被组织成逻辑组并在编译时启用（完整特性表见 [README](../README.md#-特性标志)）：
+特性被组织成逻辑组并在编译时启用（完整特性表见 [用户指南 · 特性标志参考](USER_GUIDE.md#特性标志参考)）：
 
 **核心基座（始终可用）**：RAII 连接池、基本配置管理、ICU4X 国际化格式化。
 
@@ -253,7 +253,7 @@ DBNexus 采用分层模块设计，每层有明确职责，各层经 `src/lib.rs
 > 器驻留对方一侧：
 > `Limiter` 端口位于 workspace 成员 `limiter-port/`（`dbnexus-limiter-port`，
 > 仅依赖 async-trait，不依赖 dbnexus 与 limiteron 任何一方），令牌桶实现端口为默认限流后端，外部后端经应用组合根注入，
-> 详见 `docs/RATE_LIMITING.md`。
+> 详见 `docs/cn/RATE_LIMITING.md`。
 
 ### 国际化模块 `i18n/`
 

@@ -22,7 +22,7 @@
 
 ## 基准设施
 
-仓库内置 9 个 criterion 基准（位于 [benches/](../benches/)），criterion 经 dev-dependencies 提供、不经 feature 启用：
+仓库内置 9 个 criterion 基准（位于 [benches/](../../benches/)），criterion 经 dev-dependencies 提供、不经 feature 启用：
 
 | 基准文件 | 覆盖面 | 运行命令 |
 |----------|--------|----------|
@@ -36,7 +36,7 @@
 | `benches/oxcache_query_cache_bench.rs` | oxcache 查询缓存装饰器：N+1 形态查询的穿透（miss）vs 命中（hit）路径（sqlite 临时文件库 + Moka 后端） | `cargo bench --bench oxcache_query_cache_bench --features "sqlite,oxcache-integration,sql-parser,runtime-tokio-rustls"` |
 | `benches/prepare_cache_bench.rs` | 语句级 prepared statement LRU 缓存：满容量稳态插入淘汰成本不随容量线性劣化 | `cargo bench --bench prepare_cache_bench --features prepare-cache` |
 
-两轮平台优化的过程记录与逐轮对照见 [benches/baseline-after.md](../benches/baseline-after.md)。
+两轮平台优化的过程记录与逐轮对照见 [benches/baseline-after.md](../../benches/baseline-after.md)。
 
 ---
 
@@ -139,13 +139,13 @@ N+1 形态 200 次点查（sqlite 临时文件库 + Moka 后端），命中收�
 
 命中收益倍数双口径：**暖态 ≈ 90-120×**（稳态复测口径，容量/收益决策用此），冷首轮可达 ≈ 1045×（文件库首 IO 放大，非稳态）。命中路径稳定（±11% 内），穿透路径随宿主 IO 波动大——收益评估以命中路径成本 + 暖态穿透为准；装饰器自身热路径（key 派生 + 后端 get）单查询亚微秒级。
 
-单项数据与两轮优化的逐轮对照表见 [benches/baseline-after.md](../benches/baseline-after.md)。
+单项数据与两轮优化的逐轮对照表见 [benches/baseline-after.md](../../benches/baseline-after.md)。
 
 ---
 
 ## 历史优化对照
 
-两轮平台优化的累计结果（摘自 [benches/baseline-after.md](../benches/baseline-after.md)，2026-08-14，Linux x86_64，release profile，lto=thin）：
+两轮平台优化的累计结果（摘自 [benches/baseline-after.md](../../benches/baseline-after.md)，2026-08-14，Linux x86_64，release profile，lto=thin）：
 
 | 基准项 | 原始基线 (µs) | 最终 (µs) | 累计变化 |
 |--------|---------------|-----------|----------|

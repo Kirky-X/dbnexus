@@ -2,7 +2,7 @@
 
 在应用程序中使用 DBNexus 的完整指南，覆盖安装、配置、实体定义、CRUD、权限控制、事务与高级特性。
 
-> 周边文档：[📘 API 参考](API_REFERENCE.md) ｜ [🏗️ 架构文档](ARCHITECTURE.md) ｜ [🔒 安全文档](SECURITY.md) ｜ [📊 性能基线](PERFORMANCE.md)。特性全表见 [README](../README.md#-特性标志)。
+> 周边文档：[📘 API 参考](API_REFERENCE.md) ｜ [🏗️ 架构文档](ARCHITECTURE.md) ｜ [🔒 安全文档](SECURITY.md) ｜ [📊 性能基线](PERFORMANCE.md)。特性全表见下文[特性标志参考](#特性标志参考)。
 
 ## 📋 目录
 
@@ -52,7 +52,7 @@
 
 ```toml
 [dependencies]
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission", "macros"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -72,13 +72,13 @@ tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 
 ```toml
 # 嵌入式设备最小配置
-dbnexus = { version = "0.6.0", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
+dbnexus = { version = "0.6.1", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "config-env"] }
 
 # 带企业特性的 PostgreSQL
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "postgres", "permission", "metrics", "audit"] }
 
 # 带基础特性的 SQLite
-dbnexus = { version = "0.6.0", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
+dbnexus = { version = "0.6.1", features = ["runtime-tokio-rustls", "sqlite", "permission"] }
 ```
 
 **重要**：驱动互斥按分组生效，共三条编译期守卫（`compile_error!`）：`postgres` 与 `mysql` 互斥；嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）互斥；`duckdb` 与 `ladybug` 互斥。同一侧可共存（如 `sqlite` + `duckdb`），冲突组合在编译期直接报错。
@@ -608,7 +608,7 @@ tx.commit().await?; // 显式提交；若此前发生错误且守护被丢弃，
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["cache"]
 ```
 
@@ -637,7 +637,7 @@ assert_eq!(Product::cache_key(1), "products:1");
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["metrics"]
 ```
 
@@ -652,7 +652,7 @@ println!("{}", collector.export_prometheus());
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["audit"]
 ```
 
@@ -677,7 +677,7 @@ DuckDB 是嵌入式分析型数据库，适合 OLAP 场景，以分析只读旁�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["duckdb"]
 ```
 
@@ -716,7 +716,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["authentication"]
 ```
 
@@ -756,7 +756,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["sql-parser"]
 ```
 
@@ -805,7 +805,7 @@ fn main() {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["sharding"]
 ```
 
@@ -833,7 +833,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["validation"]
 ```
 
@@ -863,7 +863,7 @@ DBNexus 通过 `GraphConnection` trait 统一抽象图数据库，图数据库�
 
 ```toml
 [dependencies.dbnexus]
-version = "0.6.0"
+version = "0.6.1"
 features = ["ladybug"]  # 或 "neo4j"
 ```
 
@@ -1116,7 +1116,7 @@ Model::delete(&session, 1).await?;
 
 ## 📦 完整示例
 
-改编自 [examples/src/basic/basic_crud.rs](../examples/src/basic/basic_crud.rs)（共 52 个可运行示例，见 [examples/README.md](../examples/README.md)）：
+改编自 [examples/src/basic/basic_crud.rs](../../examples/src/basic/basic_crud.rs)（共 52 个可运行示例，见 [examples/README.md](../../examples/README.md)）：
 
 ```rust
 use dbnexus::{db_entity, DbPool};
@@ -1177,3 +1177,182 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | [📊 性能基线](PERFORMANCE.md) | 端到端基准数据与复现命令 |
 | [🧪 测试场景固化](TEST_SCENARIOS.md) | 测试金字塔基线、驱动组矩阵与 E2E 场景定义 |
 | [📦 在线 API 文档](https://docs.rs/dbnexus) | docs.rs 自动生成的最新文档 |
+
+---
+
+## 🏢 企业级特性完整清单（按需启用）
+
+| 特性 | 说明 |
+|------|------|
+| `metrics` | Prometheus 格式指标导出，含慢查询检测 |
+| `audit` | 审计日志，admin 绕过权限的操作同样记录 |
+| `migration` / `auto-migrate` | 数据库迁移与自动迁移执行 |
+| `sharding` | 数据分片：一致性哈希策略与会话级分片路由 |
+| `global-index` | 跨分片全局索引 |
+| `cache` | oxcache 缓存（moka 为 L1 后端），`ArcSwap` 无锁读取 |
+| `permission-engine` | 高级权限引擎：策略决策点、角色继承链、缓存与限流 |
+| `authentication` | JWT 认证（访问/刷新令牌区分校验）+ bcrypt 密码强度策略 |
+| `data-protection` 🆕 | 字段级自动脱敏（mask/哈希/截断）与行级安全谓词注入（读出口 + raw 写出口 UPDATE/DELETE；单表语句；多表/集合操作 fail-closed 拒绝） |
+| `permission-facade` 🆕 | RBAC + 脱敏 + RLS 统一门面，一处配置全局生效（admin 通道不注入租户谓词） |
+| `query-dsl` 🆕 | `q!` 类型安全查询片段宏，标识符与值注入免疫 |
+| `repository` / `data-api` 🆕 | 泛型仓储 `Repository<T>`；实体到 JSON 的数据 API 网关 |
+| `prepare-cache` 🆕 | 语句级 prepared statement LRU 缓存与命中率指标 |
+| `copy` 🆕 | 批量写入：COPY 封装（pg 协议 / DuckDB 文件 COPY 按驱动门控）+ 多值 INSERT 构建（batch_insert 500 分块参数化） |
+| `entity-events` 🆕 | 实体事件总线 + Outbox 持久化投递 |
+| `otel` 🆕 | 健康快照指标导出 OTLP/HTTP（stdout fallback 兜底） |
+| `kit` | trait-kit AsyncKit 集成，注册即获得池/缓存/审计/健康全能力 |
+| `config-confers` 🆕 | confers 配置热重载（`ArcSwap` 原子换装） |
+| `retry` | 运行时重试：幂等判断 + 指数退避 |
+| `failover` | 连接故障转移：CircuitBreaker 状态机与健康检查协同 |
+| `replica-routing` | 副本路由读写分离：按 weight 与延迟选择、半开恢复 |
+| `scatter-gather` | 跨分片聚合查询，支持 SUM / COUNT / AVG 合并 |
+| `saga` | Saga 分布式事务：持久化日志、启动恢复、补偿编排 |
+| `distributed-id` | Snowflake 分布式 ID 生成 |
+
+> 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
+
+## 特性标志参考
+
+`default = []`：无任何默认特性，运行时、数据库驱动与功能特性均需显式启用。嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动严格互斥，混用直接编译失败。
+
+### 运行时（互斥，三选一）
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `runtime-tokio-rustls` | Tokio 运行时 + rustls TLS | 否 |
+| `runtime-tokio-native-tls` | Tokio 运行时 + native-tls | 否 |
+| `runtime-async-std` | async-std 运行时 | 否 |
+
+### 数据库驱动
+
+关系型驱动按分组互斥（编译期 `compile_error!` 守卫）：`postgres` 与 `mysql` 互斥，嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）互斥，`duckdb` 与 `ladybug` 互斥；`sqlite` 与 `duckdb` 可共存。图数据库驱动可与关系型驱动共存。`sqlite` / `postgres` / `mysql` 基于 sea-orm/sqlx 对应驱动实现，`duckdb`（嵌入式分析型）、`ladybug`（原 Kuzu）与 `neo4j` 为各自的原生绑定；各驱动的数据库与类型见[选择数据库驱动](#选择数据库驱动)。
+
+> ℹ️ **`duckdb` 特性状态更新**（2026-10）：早前"上游 `zip` crate 全系 yank 导致依赖解析失败"的阻塞，在当前锁文件下已不存在——`Cargo.lock` 中 `libduckdb-sys` / `duckdb` 已为 1.20000.0，其构建期依赖不再包含 `zip`。存量项目刷新锁文件（`cargo update -p libduckdb-sys`）即可跟进；`duckdb` 与 `ladybug` 的编译期互斥限制仍然有效（见[选择数据库驱动](#选择数据库驱动)）。
+
+### 核心能力
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `permission` | 表级 RBAC 权限控制，强制依赖 `sql-parser`，并启用 `yaml` 与 `cache` | 否 |
+| `sql-parser` | SQL 解析、表名提取与注入检测（解析结果缓存由 oxcache memory 后端承载，不隐含 `cache` 特性） | 否 |
+| `macros` | `dbnexus-macros` 过程宏（`db_entity` / `db_repository`） | 否 |
+| `default-no-db` | 无驱动的默认聚合（运行时 + permission + sql-parser + macros + config-env + with-time），供 CI 按驱动组合测试 | 否 |
+
+### 数据访问与集成
+
+<details>
+<summary>📋 表格</summary>
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `cache` | oxcache 缓存（moka L1 后端）+ `ArcSwap` 无锁读取 | 否 |
+| `cache-available` | 内部能力标记位（无自有代码）：由 `cache` 与 `oxcache-integration` 蕴含，供下游与门控测试探测缓存面是否就绪 | 否 |
+| `oxcache-integration` | OxcacheDbCacheAdapter 适配器 + `OxcacheQueryCache` 查询缓存装饰器（query_cached/invalidate_table） | 否 |
+| `kit` | trait-kit AsyncKit 集成，隐含池/缓存/审计/健康全能力闭包 | 否 |
+| `repository` | 泛型仓储 `Repository<T>` CRUD 端口 + `impl_json_repository!` 宏 | 否 |
+| `data-api` | 数据 API 网关：实体到 JSON 查询端点（白名单 + 过滤 + 分页） | 否 |
+| `prepare-cache` | 语句级 prepared statement LRU 缓存 | 否 |
+| `query-dsl` | `q!` 类型安全查询片段宏 | 否 |
+| `entity-events` | 实体事件总线 + Outbox | 否 |
+| `copy` | 批量写入：COPY 封装 + 多值 INSERT 构建（batch_insert） | 否 |
+| `data-protection` | 字段脱敏与行级安全谓词注入 | 否 |
+| `permission-facade` | RBAC + 脱敏 + RLS 统一门面 | 否 |
+| `config-confers` | confers 配置热重载 | 否 |
+
+</details>
+
+### 可观测性
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `metrics` | Prometheus 格式指标导出（含慢查询检测） | 否 |
+| `health-check` | 健康检查模块与 `health_snapshot` 结构化导出 | 否 |
+| `observability` | `metrics` + `health-check` 聚合 | 否 |
+| `otel` | OTLP/HTTP JSON 信封导出桥 | 否 |
+| `http-health` 🆕 | HTTP 健康端点生成器：`HealthRouterBuilder` 产出挂载 `/healthz`（liveness）/`/readyz`（readiness，池快照+熔断器判定）/`/metrics`（Prometheus）的 axum Router；仅生成 Router 不含 serve，默认构建零 HTTP 依赖 | 否 |
+
+> 结构化日志：池超时/权限拒绝/熔断/慢查询四类接线点经 `log` 门面发记录（无条件编译，未安装 logger 时为 no-op，默认构建行为不变）。日志后端（如 inklog `LoggerManager`）由**消费方自行安装**为全局 `log` 后端，记录即路由到其结构化管道——dbnexus 不依赖任何日志后端 crate（inklog 已反向 optional 依赖 dbnexus，互依赖会构成包级循环，见 [ARCHITECTURE.md](ARCHITECTURE.md) 适配器方向约定）。
+
+### 数据管理
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `migration` | 数据库迁移 | 否 |
+| `auto-migrate` | 自动迁移执行 | 否 |
+| `sharding` | 数据分片（策略与会话级路由） | 否 |
+| `global-index` | 跨分片全局索引 | 否 |
+| `data-management` | 上述四项的聚合 | 否 |
+
+### 分布式能力
+
+<details>
+<summary>📋 表格</summary>
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `retry` | 运行时重试 + 指数退避（幂等判断） | 否 |
+| `failover` | 连接故障转移（CircuitBreaker + 健康检查） | 否 |
+| `replica-routing` | 副本路由读写分离 | 否 |
+| `scatter-gather` | 跨分片聚合查询执行器 | 否 |
+| `shard-migration` | 分片迁移编排 | 否 |
+| `saga` | Saga 分布式事务编排（持久化恢复） | 否 |
+| `distributed-id` | Snowflake 分布式 ID | 否 |
+| `distributed-capabilities` | 上述 7 项的聚合 | 否 |
+
+</details>
+
+### 安全与合规
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `audit` | 审计日志（操作 + 用户上下文） | 否 |
+| `permission-engine` | 高级权限引擎（依赖 `permission`） | 否 |
+| `authentication` | JWT 认证 + bcrypt 密码强度策略 | 否 |
+| `security` | `audit` + `permission-engine` 聚合 | 否 |
+
+<details>
+<summary>📦 类型、配置源、连接池增强与开发工具特性</summary>
+
+| 标志 | 说明 | 默认 |
+|------|------|:----:|
+| `with-json` / `with-time` / `with-chrono` / `with-uuid` | sea-orm 类型桥接（JSON / time / chrono / UUID 字段） | 否 |
+| `validation` | validator 数据验证 | 否 |
+| `yaml` | YAML 权限/配置文件解析 | 否 |
+| `config-env` | 环境变量配置（无额外依赖） | 否 |
+| `pool-health-check` | 连接池健康检查 | 否 |
+| `pool-warmup` | 连接池预热 | 否 |
+| `test-utils` | 测试辅助工具（tempfile / assert_cmd） | 否 |
+| `cli-tests` | CLI 集成测试门控 | 否 |
+
+</details>
+
+### 特性预设
+
+| 预设 | 特性 | 使用场景 |
+|------|------|----------|
+| `embedded` | `runtime-tokio-rustls`, `sqlite`, `config-env` | 嵌入式/边缘设备超最小配置 |
+| `microservice` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `config-env`, `observability` | 微服务部署 |
+| `monolith` | `runtime-tokio-rustls`, `postgres`, `permission`, `sql-parser`, `yaml`, `data-management`, `security`, `observability`, 全部 7 项分布式能力 | 单体应用 |
+| `enterprise` | `postgres`, `monolith`, `permission-engine` | 完整企业功能 |
+| `all-optional` | 除数据库驱动外的 26 项可选特性（cache / observability / data-management / security / migration / retry / failover / replica-routing / scatter-gather / shard-migration / saga / distributed-id / repository / data-api / prepare-cache / validation / authentication / query-dsl / entity-events / permission-facade / config-confers / copy / otel / kit / data-protection / http-health） | 全功能验证（手动追加驱动） |
+
+### 使用示例
+
+<details>
+<summary>📄 代码 · toml</summary>
+
+```toml
+# 嵌入式/边缘设备（最小配置）
+dbnexus = { version = "0.6.1", features = ["embedded"] }
+
+# 微服务
+dbnexus = { version = "0.6.1", features = ["microservice"] }
+
+# 单体应用
+dbnexus = { version = "0.6.1", features = ["monolith"] }
+
+# 企业级（完整功能）
+dbnexus = { version = "0.6.1", features = ["enterprise"] }
+```
+
+</details>
