@@ -1258,6 +1258,20 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## MCP Tool Surface (`mcp` feature)
+
+`dbnexus-cli mcp-serve` runs a stdio MCP server. Its tools are constrained by the permission engine — no raw SQL tool is exposed:
+
+| Tool | Behavior |
+|---|---|
+| `dbnexus_query(table, filters, limit)` | Registered endpoint only; column whitelist; `eq`/`contains` filters; `limit` clamped to `max_page_size`; full RBAC/RLS/masking chain via `DataApiGateway` |
+| `dbnexus_schema(table)` | Declared endpoint metadata (table, columns, orderable, page limits); no live schema introspection; unregistered tables return a uniform error |
+| `dbnexus_explain(sql)` | `Session::explain_access` preview: allow/deny, tables checked, denial reason code, RLS applied/degraded; SQL is not executed |
+
+Configuration is via environment variables: `DBNEXUS_MCP_DATABASE_URL`, `DBNEXUS_MCP_ROLE`, `DBNEXUS_MCP_ENDPOINTS` (JSON array of `{table, columns, max_page_size}`), and optional `DBNEXUS_MCP_OWNER_COLUMN` / `DBNEXUS_MCP_OWNER_VALUE`. Missing required values or invalid JSON exits with code 2.
+
+Operational boundary: stdio mode uses one service role. For multiple agents or roles, run one server process per role; per-session role switching needs a future authenticated transport.
+
 ## Feature Flags Reference
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly. Embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive; mixing them fails the build.

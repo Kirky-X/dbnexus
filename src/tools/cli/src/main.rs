@@ -132,6 +132,10 @@ enum Commands {
         profile: Option<String>,
     },
 
+    /// MCP Server stdio 模式（工具受权限引擎约束；配置经环境变量装配）
+    #[cfg(feature = "mcp")]
+    McpServe,
+
     /// 连接池状态快照（health_snapshot 结构，JSON 输出）
     #[cfg(feature = "health-check")]
     PoolStatus,
@@ -479,7 +483,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(feature = "permission-engine"))]
     let permission_check_free = false;
     let doctor_free = matches!(cli.command, Commands::Doctor { .. });
-    let needs_db = !(shard_info_free || permission_check_free || doctor_free);
+    #[cfg(feature = "mcp")]
+    let mcp_serve_free = matches!(cli.command, Commands::McpServe { .. });
+    #[cfg(not(feature = "mcp"))]
+    let mcp_serve_free = false;
+    let needs_db = !(shard_info_free || permission_check_free || doctor_free || mcp_serve_free);
     let database_url: String = if needs_db {
         cli.database_url.unwrap_or_else(|| {
             eprintln!("{}", i18n::t_simple("cli-database-url-required"));
@@ -552,6 +560,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Doctor { profile } => {
             let code = run_doctor_json(profile.as_deref());
+            std::process::exit(code as i32);
+        }
+        #[cfg(feature = "mcp")]
+        Commands::McpServe => {
+            let code = run_mcp_serve().await;
             std::process::exit(code as i32);
         }
         Commands::User { action } => {
@@ -1618,6 +1631,142 @@ async fn run_migrate_json(
         "already_applied": migrations.len() - to_apply.len(),
         "url": mask_database_url(database_url),
     }));
+    ExitCode::Ok
+}
+
+/// MCP Server stdio 模式：环境变量装配 → 权限约束工具服务
+///
+/// 环境变量：
+/// - `DBNEXUS_MCP_DATABASE_URL`（必填）
+/// - `DBNEXUS_MCP_ROLE`（必填）
+/// - `DBNEXUS_MCP_ENDPOINTS`（必填，JSON 数组）
+/// - `DBNEXUS_MCP_OWNER_COLUMN` / `DBNEXUS_MCP_OWNER_VALUE`（可选，成对）
+/// 缺必填或 JSON 非法 → 退出码 2。
+#[cfg(feature = "mcp")]
+async fn run_mcp_serve() -> ExitCode {
+    use dbnexus::database::data_api::OwnerScope;
+    use dbnexus::database::data_api::TableEndpoint;
+    use dbnexus::integrations::mcp_server::{DbnexusMcpServer, McpServerConfig};
+    use std::sync::Arc;
+
+    let url = match std::env::var("DBNEXUS_MCP_DATABASE_URL") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_database_url_required"
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let role = match std::env::var("DBNEXUS_MCP_ROLE") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_role_required"
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let endpoints_raw = match std::env::var("DBNEXUS_MCP_ENDPOINTS") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_endpoints_required"
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let endpoint_specs: Vec<serde_json::Value> = match serde_json::from_str(&endpoints_raw) {
+        Ok(v) => v,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_endpoints_invalid_json", "error": e.to_string()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let mut endpoints = Vec::new();
+    for spec in endpoint_specs {
+        let table = spec
+            .get("table")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let columns: Vec<&str> = spec
+            .get("columns")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+        let endpoint = match TableEndpoint::new(table, &columns) {
+            Ok(mut e) => {
+                if let Some(max) = spec.get("max_page_size").and_then(|v| v.as_u64()) {
+                    e.max_page_size = max;
+                }
+                e
+            }
+            Err(e) => {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "mcp_endpoint_invalid", "error": e.message()
+                }));
+                return ExitCode::UsageError;
+            }
+        };
+        endpoints.push((table.to_string(), endpoint));
+    }
+
+    let owner_scope = match (
+        std::env::var("DBNEXUS_MCP_OWNER_COLUMN"),
+        std::env::var("DBNEXUS_MCP_OWNER_VALUE"),
+    ) {
+        (Ok(column), Ok(value)) => match OwnerScope::new(&column, &value) {
+            Ok(scope) => Some(scope),
+            Err(e) => {
+                print_json(&serde_json::json!({
+                    "status": "error", "error_code": "mcp_owner_scope_invalid", "error": e.message()
+                }));
+                return ExitCode::UsageError;
+            }
+        },
+        _ => None,
+    };
+
+    let pool = match DbPool::new(&url).await {
+        Ok(pool) => Arc::new(pool),
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_pool_failed", "error": e.message()
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+    let server = match DbnexusMcpServer::new(
+        pool,
+        McpServerConfig {
+            role,
+            endpoints,
+            owner_scope,
+        },
+    ) {
+        Ok(server) => server,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_server_failed", "error": e.message()
+            }));
+            return ExitCode::UsageError;
+        }
+    };
+    let service = match rmcp::serve_server(server, rmcp::transport::stdio_pipes()).await {
+        Ok(service) => service,
+        Err(e) => {
+            print_json(&serde_json::json!({
+                "status": "error", "error_code": "mcp_serve_failed", "error": e.to_string()
+            }));
+            return ExitCode::RuntimeFailure;
+        }
+    };
+    if let Err(e) = service.waiting().await {
+        eprintln!("mcp serve error: {e}");
+        return ExitCode::RuntimeFailure;
+    }
     ExitCode::Ok
 }
 

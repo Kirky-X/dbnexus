@@ -860,3 +860,35 @@ fn test_doctor_invalid_profile_exit_2() {
         "invalid profile should exit 2"
     );
 }
+
+/// mcp-serve 缺必填环境变量 → 退出码 2（不起长驻进程）
+#[cfg(feature = "mcp")]
+#[test]
+fn test_mcp_serve_missing_env_exit_2() {
+    let output = cli()
+        .arg("mcp-serve")
+        .env_remove("DBNEXUS_MCP_DATABASE_URL")
+        .env_remove("DBNEXUS_MCP_ROLE")
+        .env_remove("DBNEXUS_MCP_ENDPOINTS")
+        .output()
+        .expect("run mcp-serve");
+    assert_eq!(output.status.code(), Some(2));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "mcp_database_url_required");
+}
+
+/// mcp-serve 非法 ENDPOINTS JSON → 退出码 2
+#[cfg(feature = "mcp")]
+#[test]
+fn test_mcp_serve_invalid_endpoints_exit_2() {
+    let output = cli()
+        .arg("mcp-serve")
+        .env("DBNEXUS_MCP_DATABASE_URL", "sqlite::memory:")
+        .env("DBNEXUS_MCP_ROLE", "reader")
+        .env("DBNEXUS_MCP_ENDPOINTS", "not-json")
+        .output()
+        .expect("run mcp-serve");
+    assert_eq!(output.status.code(), Some(2));
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["error_code"], "mcp_endpoints_invalid_json");
+}

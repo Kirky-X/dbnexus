@@ -26,6 +26,7 @@ mysql = ["dbnexus/mysql"]
 sql-parser = ["dbnexus/sql-parser"]
 permission = ["dbnexus/permission"]
 config-env = ["dbnexus/config-env"]
+mcp = ["dbnexus/mcp", "dbnexus/config-env", "dep:rmcp"]
 audit = ["dbnexus/audit", "dbnexus/sql-parser"]
 metrics = ["dbnexus/metrics"]
 health-check = ["dbnexus/health-check"]
@@ -39,6 +40,7 @@ mysql-full = ["mysql", "all-optional", "dbnexus/runtime-tokio-rustls"]
 
 [dependencies]
 dbnexus = { version = "0.6.0", path = "../../..", default-features = false }
+rmcp = { version = "3.11", default-features = false, optional = true, features = ["server", "transport-io"] }
 sea-orm = { workspace = true, default-features = false, features = ["runtime-tokio-rustls"] }
 clap = { version = "4.6", default-features = false, features = ["std", "color", "help", "usage", "error-context", "suggestions", "derive", "env"] }
 tokio = { workspace = true }

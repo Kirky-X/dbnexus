@@ -446,3 +446,43 @@ async fn test_session_serial_acquire_release() {
         drop(session);
     }
 }
+
+/// explain_access：admin 恒放行；非 admin 解析失败与未授权表返回拒绝原因码
+#[cfg(all(feature = "permission", feature = "sql-parser"))]
+#[tokio::test]
+async fn test_explain_access_paths() {
+    use dbnexus::DbPool;
+
+    let (config, _temp_dir) = common::get_test_config_with_permissions(true);
+    let pool = DbPool::with_config(config).await.unwrap();
+
+    let admin = pool.get_session("admin").await.unwrap();
+    let explanation = admin
+        .explain_access("SELECT * FROM missing_table")
+        .await
+        .unwrap();
+    assert!(explanation.allowed, "admin should be allowed");
+
+    let reader = pool.get_session("user").await.unwrap();
+    let allowed = reader.explain_access("SELECT * FROM users").await.unwrap();
+    assert!(
+        allowed.allowed,
+        "user should be allowed on users: {allowed:?}"
+    );
+    assert_eq!(allowed.tables_checked, vec!["users".to_string()]);
+    assert!(!allowed.rls_applied);
+
+    let denied = reader
+        .explain_access("SELECT * FROM secrets")
+        .await
+        .unwrap();
+    assert!(!denied.allowed);
+    assert_eq!(denied.denial_reason.as_deref(), Some("TABLE_NOT_IN_POLICY"));
+
+    let parse_failed = reader.explain_access("NOT VALID SQL !!!").await.unwrap();
+    assert!(!parse_failed.allowed);
+    assert_eq!(
+        parse_failed.denial_reason.as_deref(),
+        Some("SQL_PARSE_FAILED")
+    );
+}

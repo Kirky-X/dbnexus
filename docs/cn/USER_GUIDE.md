@@ -1230,6 +1230,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## MCP 工具面（`mcp` 特性）
+
+`dbnexus-cli mcp-serve` 启动 stdio MCP server；工具受权限引擎约束，不暴露原始 SQL 工具：
+
+| 工具 | 行为 |
+|---|---|
+| `dbnexus_query(table, filters, limit)` | 仅已注册端点；列白名单；`eq`/`contains` 过滤；`limit` 钳制到 `max_page_size`；经 `DataApiGateway` 走完整 RBAC/RLS/脱敏链 |
+| `dbnexus_schema(table)` | 返回端点声明元数据（表名/列/可排序列/分页上限）；不做活库内省；未注册表返回统一错误 |
+| `dbnexus_explain(sql)` | `Session::explain_access` 预演：允许/拒绝、检查表、原因码、RLS 应用/降级；不执行 SQL |
+
+配置经环境变量：`DBNEXUS_MCP_DATABASE_URL`、`DBNEXUS_MCP_ROLE`、`DBNEXUS_MCP_ENDPOINTS`（`{table, columns, max_page_size}` 的 JSON 数组），可选 `DBNEXUS_MCP_OWNER_COLUMN` / `DBNEXUS_MCP_OWNER_VALUE`。缺必填或 JSON 非法退出码 2。
+
+运维边界：stdio 模式单服务角色；多 Agent/多角色场景按角色各起一个 server 进程；会话级角色切换需后续认证传输支持。
+
 ## 特性标志参考
 
 `default = []`：无任何默认特性，运行时、数据库驱动与功能特性均需显式启用。嵌入式（`sqlite`/`duckdb`）与服务器端（`postgres`/`mysql`）驱动严格互斥，混用直接编译失败。
