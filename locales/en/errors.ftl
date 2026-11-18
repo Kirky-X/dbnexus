@@ -103,6 +103,7 @@ perm-provider-yaml-parse-error = YAML parse error (path='{ $path }'): { $error }
 perm-provider-lock-error = Lock error: permission provider internal state is poisoned
 perm-rate-limiter-error = rate limiter backend error: { $error }
 perm-rate-limit-audit-dropped = rate limit audit event dropped: { $error }
+perm-denied-audit-dropped = permission denial audit event dropped: { $error }
 perm-cache-log-insert-failed = PermissionCache insert failed (error omits the raw key): { $error }
 perm-cache-log-invalidate-failed = PermissionCache invalidate failed (error omits the raw key): { $error }
 perm-cache-log-clear-failed = PermissionCache clear failed: { $error }

@@ -1542,7 +1542,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("non-SELECT must be rejected by query_rows");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a non-SELECT in query_rows should be denied by permissions, actual: {err:?}"
     );
 
@@ -1552,7 +1552,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("DDL must be rejected by query_rows");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "DDL in query_rows should be denied by permissions, actual: {err:?}"
     );
 
@@ -1563,7 +1563,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("parse failure must be denied for non-admin");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a non-admin parse failure should be denied by permissions, actual: {err:?}"
     );
 
@@ -1573,7 +1573,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("table-less query must be denied for non-admin");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a non-admin query without a table name should be denied by permissions, actual: {err:?}"
     );
 
@@ -1583,7 +1583,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("invalid table name must be denied for non-admin");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a non-admin invalid table name should be denied by permissions, actual: {err:?}"
     );
 
@@ -1593,7 +1593,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
         .await
         .expect_err("parse failure must be denied for non-admin query_rows");
     assert!(
-        matches!(err, dbnexus::DbError::Permission(_)),
+        err.is_permission_denial(),
         "a non-admin row query parse failure should be denied by permissions, actual: {err:?}"
     );
 
@@ -1609,7 +1609,7 @@ async fn test_sql_guards_fail_closed_for_non_select_and_parse_failure() {
             .await
             .expect_err("non-DML statements must be rejected by execute_raw");
         assert!(
-            matches!(err, dbnexus::DbError::Permission(_)),
+            err.is_permission_denial(),
             "{sql} should be denied by permissions, actual: {err:?}"
         );
     }

@@ -30,6 +30,24 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 /// 此值作为后备默认值使用，实际应从 `CacheConfig.policy_cache_capacity` 获取。
 const DEFAULT_POLICY_CACHE_CAPACITY: usize = 4096;
 
+/// 审计字段脱敏：剔除控制字符与 Unicode 格式字符，与 Session 日志口径一致
+#[cfg(feature = "audit")]
+fn sanitize_audit_field(input: &str) -> String {
+    input
+        .chars()
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(
+                    c,
+                    '\u{200B}'..='\u{200F}'
+                        | '\u{202A}'..='\u{202E}'
+                        | '\u{2066}'..='\u{2069}'
+                        | '\u{FEFF}'
+                )
+        })
+        .collect()
+}
+
 /// 构造内置令牌桶限流器（默认后端，实现 `Limiter` 端口）
 fn token_bucket_limiter(max_requests: u32, window_secs: u64) -> Arc<dyn Limiter> {
     Arc::new(RateLimiter::new(
@@ -691,6 +709,48 @@ impl PermissionContext {
         } else {
             TableAccessDecision::Denied
         }
+    }
+
+    /// 权限拒绝审计事件（audit feature；未挂载审计器时为 no-op）
+    ///
+    /// detail 仅含 reason_code 与脱敏后的表名/角色名，不含 SQL 片段。
+    #[cfg(feature = "audit")]
+    pub async fn audit_denied(
+        &self,
+        table: &str,
+        operation: &PermissionAction,
+        reason_code: &'static str,
+    ) {
+        let Some(logger) = &self.audit_logger else {
+            return;
+        };
+        let safe_table = sanitize_audit_field(table);
+        let safe_role = sanitize_audit_field(&self.role);
+        let extra = format!(
+            r#"{{"reason_code":"{reason_code}","table":"{safe_table}","role":"{safe_role}","operation":"{operation}"}}"#
+        );
+        let mut event = AuditEvent::create("table_access", &safe_table, &safe_role)
+            .with_user(&safe_role, "")
+            .with_result(AuditStatus::Failure)
+            .with_severity(AuditSeverity::Low)
+            .with_extra(&extra);
+        event.operation = AuditOperation::Other("permission_denied".to_string());
+        if let Err(err) = logger.log(event).await {
+            log::warn!(
+                "{}",
+                i18n::t("perm-denied-audit-dropped", &[("error", err.to_string())])
+            );
+        }
+    }
+
+    /// 权限拒绝审计 no-op（未启用 audit feature）
+    #[cfg(not(feature = "audit"))]
+    pub async fn audit_denied(
+        &self,
+        _table: &str,
+        _operation: &PermissionAction,
+        _reason_code: &'static str,
+    ) {
     }
 
     /// 限流拒绝审计事件（audit feature；未挂载审计器时为 no-op）
@@ -1578,5 +1638,46 @@ mod tests {
 
         assert!(!ctx.has_role_policy("ghost").await);
         assert!(!ctx.has_role_policy("other").await);
+    }
+
+    /// audit_denied：拒绝事件落库且 detail 不含原始 SQL
+    #[cfg(feature = "audit")]
+    #[tokio::test]
+    async fn test_audit_denied_records_reason_code_without_sql() {
+        use crate::domain::audit::{AuditConfig, AuditQueryFilters, MemoryAuditStorage};
+
+        let storage = Arc::new(MemoryAuditStorage::new(16));
+        let config = AuditConfig {
+            enabled: true,
+            storage_path: None,
+            sync_write: true,
+            max_file_size: 1024 * 1024,
+            retention_count: 3,
+            sensitive_fields: vec![],
+            alert_operations: vec![],
+            alert_severity: AuditSeverity::High,
+        };
+        let logger = Arc::new(AuditLogger::with_config(config, storage.clone()));
+
+        let mut ctx = PermissionContext::with_cache_size("analyst".to_string(), 32)
+            .await
+            .unwrap();
+        ctx.set_audit_logger(logger.clone());
+
+        ctx.audit_denied("orders", &PermissionAction::Select, "TABLE_NOT_IN_POLICY")
+            .await;
+
+        let events = logger.query(&AuditQueryFilters::default()).await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].operation,
+            AuditOperation::Other("permission_denied".to_string())
+        );
+        let detail = events[0].extra.as_deref().unwrap_or_default();
+        assert!(detail.contains("TABLE_NOT_IN_POLICY"), "detail: {detail}");
+        assert!(
+            !detail.contains("SELECT * FROM"),
+            "detail must not carry SQL"
+        );
     }
 }

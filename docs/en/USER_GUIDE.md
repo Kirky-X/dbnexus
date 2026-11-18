@@ -497,6 +497,25 @@ Model::find_all(&user_session).await?;         // OK
 Model::insert(&user_session, user).await?;     // Error: permission denied
 ```
 
+### Structured Denial Reason Codes
+
+Permission denials return `DbError::PermissionDenied { reason }`; `reason.reason_code()` yields a stable machine-readable code.
+HTTP / MCP layers can read the `reason_code` field of `UnifiedDbError::to_json()`; the legacy `DbError::Permission(String)` does not carry this field.
+
+| Reason Code | Meaning |
+| --- | --- |
+| `DDL_FORBIDDEN` | DDL statements are rejected by this API |
+| `UNSUPPORTED_STATEMENT` | Statement type is not supported for permission checking |
+| `TABLE_EXTRACT_FAILED` | No valid table name could be extracted |
+| `SQL_PARSE_FAILED` | SQL statement could not be parsed |
+| `TABLE_NOT_IN_POLICY` | The role policy does not authorize the table |
+| `ROLE_NOT_DEFINED` | The role has no loaded permission policy |
+| `RLS_PARSE_FAILED` | Parsing failed before row-level security injection |
+| `RLS_MULTI_TABLE_UNSUPPORTED` | Row-level security supports single-table statements only |
+| `RLS_PREDICATE_REJECTED` | The row-level security predicate could not be applied |
+
+Denial reasons never carry raw SQL; table and role names are sanitized before entering errors and audit records.
+
 ### Wildcard Table
 
 The `"*"` of the admin role in the permission policy example above is the wildcard table: it matches all tables and grants the role every operation listed for it.

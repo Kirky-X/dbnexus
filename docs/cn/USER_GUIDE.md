@@ -497,6 +497,25 @@ Model::find_all(&user_session).await?;         // OK
 Model::insert(&user_session, user).await?;     // 错误：权限被拒绝
 ```
 
+### 结构化拒绝原因码
+
+权限拒绝返回 `DbError::PermissionDenied { reason }`，`reason.reason_code()` 给出稳定的机器可读码。
+HTTP / MCP 层可在 `UnifiedDbError::to_json()` 的 `reason_code` 字段读取；旧的 `DbError::Permission(String)` 不携带该字段。
+
+| 原因码 | 含义 |
+| --- | --- |
+| `DDL_FORBIDDEN` | 此接口拒绝 DDL 语句 |
+| `UNSUPPORTED_STATEMENT` | 语句类型不支持权限检查 |
+| `TABLE_EXTRACT_FAILED` | 未能提取有效表名 |
+| `SQL_PARSE_FAILED` | SQL 解析失败 |
+| `TABLE_NOT_IN_POLICY` | 角色策略未授权该表 |
+| `ROLE_NOT_DEFINED` | 角色未加载权限策略 |
+| `RLS_PARSE_FAILED` | 行级安全注入前解析失败 |
+| `RLS_MULTI_TABLE_UNSUPPORTED` | 行级安全仅支持单表语句 |
+| `RLS_PREDICATE_REJECTED` | 行级安全谓词无法应用 |
+
+拒绝原因不携带原始 SQL；表名与角色名经脱敏后进入错误与审计通道。
+
 ### 通配符表
 
 定义权限策略示例中 admin 角色的 `"*"` 即通配符表：匹配所有表，并授予该角色列出的全部操作。

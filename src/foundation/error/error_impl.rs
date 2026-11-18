@@ -12,6 +12,22 @@ impl DbError {
         Self::Connection(error)
     }
 
+    /// 是否为权限拒绝（含旧版 Permission(String) 与结构化 PermissionDenied）
+    pub fn is_permission_denial(&self) -> bool {
+        matches!(
+            self,
+            DbError::Permission(_) | DbError::PermissionDenied { .. }
+        )
+    }
+
+    /// 结构化拒绝原因码（仅 PermissionDenied 携带）
+    pub fn denial_reason_code(&self) -> Option<&'static str> {
+        match self {
+            DbError::PermissionDenied { reason } => Some(reason.reason_code()),
+            _ => None,
+        }
+    }
+
     /// 获取错误消息
     pub fn message(&self) -> String {
         match self {

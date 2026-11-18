@@ -851,9 +851,7 @@ impl Session {
             match parsed {
                 Some((table_name, action)) => {
                     if table_name.is_empty() || is_invalid_table_name(&table_name) {
-                        return Err(DbError::Permission(i18n::t_simple(
-                            "session-permission-table-extract-failed",
-                        )));
+                        return Err(crate::foundation::DenialReason::TableExtractFailed.into());
                     }
                     // 权限检查（含 admin 角色绕过）
                     self.check_permission(&table_name, &action).await?;

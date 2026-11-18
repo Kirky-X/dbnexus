@@ -612,3 +612,27 @@ fn test_query_error_report_clone() {
     assert_eq!(original.table, cloned.table);
     assert_eq!(original.operation, cloned.operation);
 }
+
+/// 结构化权限拒绝应输出稳定 reason_code 字段（新变体专属，旧变体不含）
+#[test]
+fn test_unified_error_json_reason_code() {
+    use dbnexus::UnifiedDbError;
+    use dbnexus::foundation::DenialReason;
+
+    let reason = DenialReason::TableNotInPolicy {
+        table: "orders".to_string(),
+        action: "Select".to_string(),
+    };
+    let unified: UnifiedDbError = DbError::PermissionDenied { reason }.into();
+    let json = unified.to_json();
+    assert_eq!(json["code"], 2000);
+    assert_eq!(json["name"], "PermissionDenied");
+    assert_eq!(json["reason_code"], "TABLE_NOT_IN_POLICY");
+    assert!(json["message"].as_str().unwrap().contains("orders"));
+
+    // 旧变体 JSON 不含 reason_code
+    let legacy: UnifiedDbError = DbError::Permission("denied".to_string()).into();
+    let legacy_json = legacy.to_json();
+    assert!(legacy_json.get("reason_code").is_none());
+    assert_eq!(legacy_json["code"], 2000);
+}

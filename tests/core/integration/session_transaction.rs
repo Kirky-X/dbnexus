@@ -9,8 +9,6 @@
 // 因此此处统一加 cfg gate，避免在 `--features "permission authentication sql-parser ladybug"`
 // 等无数据库驱动的特性组合下触发 unused_imports / dead_code 警告。
 #[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
-use dbnexus::DbError;
-#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 use dbnexus::DbPool;
 #[cfg(all(
     feature = "permission",
@@ -248,7 +246,7 @@ async fn test_execute_raw_ddl_admin_only() {
             common::generate_test_table_name("user_only")
         ))
         .await;
-    assert!(matches!(denied, Err(DbError::Permission(_))));
+    assert!(denied.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -266,7 +264,7 @@ async fn test_execute_raw_denies_ddl() {
     let result = session
         .execute_raw("CREATE TABLE IF NOT EXISTS ddl_blocked (id INTEGER PRIMARY KEY)")
         .await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -287,7 +285,7 @@ async fn test_execute_raw_requires_sql_parser_feature() {
     let result = session.execute_raw("SELECT 1").await;
     assert!(matches!(
         result,
-        Err(DbError::Permission(msg)) if msg.contains("sql-parser")
+        Err(dbnexus::DbError::Permission(msg)) if msg.contains("sql-parser")
     ));
 }
 
@@ -333,7 +331,7 @@ roles:
 
     // 非 admin：解析失败 fail-closed 拒绝（admin 对解析失败放行，对齐 Err 分支语义）
     let result = user_session.execute_raw("THIS IS NOT VALID SQL").await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -497,13 +495,15 @@ async fn test_check_permission_denied_returns_permission_error() {
     let result = session.check_permission("orders", &Operation::Select).await;
     match result {
         Ok(_) => panic!("expected permission denied"),
-        // 消息经 i18n 本地化（zh-CN 下为中文措辞）+ Display 为大写，断言大小写不敏感参数
-        Err(DbError::Permission(msg)) => {
-            let lower = msg.to_lowercase();
-            assert!(lower.contains("orders"), "should mention table: {msg}");
-            assert!(lower.contains("select"), "should mention operation: {msg}");
+        Err(e) => {
+            assert!(e.is_permission_denial(), "unexpected error: {e}");
+            let lower = e.message().to_lowercase();
+            assert!(lower.contains("orders"), "should mention table: {lower}");
+            assert!(
+                lower.contains("select"),
+                "should mention operation: {lower}"
+            );
         }
-        Err(e) => panic!("unexpected error: {e}"),
     }
 }
 
@@ -522,7 +522,7 @@ async fn test_execute_denies_ddl() {
     let result = session
         .execute("CREATE TABLE IF NOT EXISTS ddl_blocked_2 (id INTEGER PRIMARY KEY)")
         .await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -560,7 +560,7 @@ roles:
     let result = session
         .execute_with_operation("SELECT 1 FROM orders", &Operation::Select)
         .await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -692,7 +692,7 @@ roles:
         .await
         .expect("Failed to get session");
     let result = user_session.execute("SELECT 1").await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -742,7 +742,7 @@ async fn test_execute_denied_by_permission() {
         .expect("Failed to get session");
 
     let result = session.execute("SELECT 1 FROM orders").await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -763,7 +763,7 @@ async fn test_execute_with_operation_denies_ddl() {
             &Operation::Select,
         )
         .await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]
@@ -1013,7 +1013,9 @@ roles:
 
     let result = session.execute_raw("SELECT 1 FROM \"\"").await;
     assert!(
-        matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name"))
+        result
+            .as_ref()
+            .is_err_and(|e| e.denial_reason_code() == Some("TABLE_EXTRACT_FAILED"))
     );
 }
 
@@ -1057,7 +1059,9 @@ roles:
 
     let result = session.execute("SELECT 1 FROM \"\"").await;
     assert!(
-        matches!(result, Err(DbError::Permission(msg)) if msg.contains("Failed to extract table name"))
+        result
+            .as_ref()
+            .is_err_and(|e| e.denial_reason_code() == Some("TABLE_EXTRACT_FAILED"))
     );
 }
 
@@ -1096,7 +1100,7 @@ roles:
     let result = session
         .execute_with_operation("SELECT 1 FROM orders ", &Operation::Select)
         .await;
-    assert!(matches!(result, Err(DbError::Permission(_))));
+    assert!(result.as_ref().is_err_and(|e| e.is_permission_denial()));
 }
 
 #[tokio::test]

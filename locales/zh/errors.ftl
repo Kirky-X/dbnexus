@@ -100,6 +100,7 @@ perm-provider-yaml-parse-error = YAML 解析错误（path='{ $path }'）: { $err
 perm-provider-lock-error = 锁错误: 权限提供器内部状态已中毒
 perm-rate-limiter-error = 限流后端故障: { $error }
 perm-rate-limit-audit-dropped = 限流审计事件已丢弃: { $error }
+perm-denied-audit-dropped = 权限拒绝审计事件已丢弃: { $error }
 perm-cache-log-insert-failed = PermissionCache 插入失败（错误不含键原文）: { $error }
 perm-cache-log-invalidate-failed = PermissionCache invalidate 失败（错误不含键原文）: { $error }
 perm-cache-log-clear-failed = PermissionCache clear 失败: { $error }

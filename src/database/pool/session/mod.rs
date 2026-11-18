@@ -419,6 +419,7 @@ async fn permission_denied_with_reason(
             role: sanitize_log_field(ctx.role()),
         }
     };
+    ctx.audit_denied(table, action, reason.reason_code()).await;
     DbError::PermissionDenied { reason }
 }
 

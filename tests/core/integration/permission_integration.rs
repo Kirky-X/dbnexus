@@ -310,7 +310,7 @@ async fn test_join_and_subquery_cross_table_access_denied() {
         .execute_raw("SELECT * FROM users JOIN orders ON users.id = orders.user_id")
         .await;
     assert!(
-        matches!(joined, Err(DbError::Permission(_))),
+        joined.as_ref().is_err_and(|e| e.is_permission_denial()),
         "JOIN to unauthorized table must be denied, got: {:?}",
         joined.err()
     );
@@ -320,7 +320,7 @@ async fn test_join_and_subquery_cross_table_access_denied() {
         .execute_raw("SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)")
         .await;
     assert!(
-        matches!(subquery, Err(DbError::Permission(_))),
+        subquery.as_ref().is_err_and(|e| e.is_permission_denial()),
         "subquery on unauthorized table must be denied, got: {:?}",
         subquery.err()
     );
@@ -330,7 +330,7 @@ async fn test_join_and_subquery_cross_table_access_denied() {
         .execute_raw("SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)")
         .await;
     assert!(
-        matches!(exists, Err(DbError::Permission(_))),
+        exists.as_ref().is_err_and(|e| e.is_permission_denial()),
         "EXISTS subquery on unauthorized table must be denied, got: {:?}",
         exists.err()
     );
@@ -372,7 +372,7 @@ async fn test_admin_bypasses_table_name_validity_check() {
         .expect("Failed to get session");
     let denied = user_session.execute_raw("SELECT 1").await;
     assert!(
-        matches!(denied, Err(DbError::Permission(_))),
+        denied.as_ref().is_err_and(|e| e.is_permission_denial()),
         "non-admin table-free statements must stay denied (fail-closed), got: {:?}",
         denied.err()
     );
