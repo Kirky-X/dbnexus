@@ -125,6 +125,13 @@ enum Commands {
         action: UserAction,
     },
 
+    /// 安全姿态自审计（feature 组合检查，JSON 输出，退出码 0/1/2）
+    Doctor {
+        /// 聚合到 production 判定档（缺省 development）
+        #[arg(long, value_parser = ["development", "production"])]
+        profile: Option<String>,
+    },
+
     /// 连接池状态快照（health_snapshot 结构，JSON 输出）
     #[cfg(feature = "health-check")]
     PoolStatus,
@@ -471,7 +478,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let permission_check_free = matches!(cli.command, Commands::PermissionCheck { .. });
     #[cfg(not(feature = "permission-engine"))]
     let permission_check_free = false;
-    let needs_db = !(shard_info_free || permission_check_free);
+    let doctor_free = matches!(cli.command, Commands::Doctor { .. });
+    let needs_db = !(shard_info_free || permission_check_free || doctor_free);
     let database_url: String = if needs_db {
         cli.database_url.unwrap_or_else(|| {
             eprintln!("{}", i18n::t_simple("cli-database-url-required"));
@@ -540,6 +548,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Health => {
             let code = run_health_json(&database_url).await;
+            std::process::exit(code as i32);
+        }
+        Commands::Doctor { profile } => {
+            let code = run_doctor_json(profile.as_deref());
             std::process::exit(code as i32);
         }
         Commands::User { action } => {
@@ -1607,6 +1619,26 @@ async fn run_migrate_json(
         "url": mask_database_url(database_url),
     }));
     ExitCode::Ok
+}
+
+/// 安全姿态自审计（JSON 输出）
+///
+/// 退出码：0 达标 / 1 production 档存在未满足 Required 项 / 2 用法错误
+/// profile 经 clap value_parser 限定为 development|production，此处不需再校验。
+fn run_doctor_json(profile: Option<&str>) -> ExitCode {
+    let profile = match profile {
+        Some("production") => dbnexus::PostureProfile::Production,
+        _ => dbnexus::PostureProfile::Development,
+    };
+    let posture = dbnexus::security_posture(profile);
+    let value = serde_json::to_value(&posture).expect("SecurityPosture must serialize");
+    let non_compliant = posture.status == "NonCompliant";
+    print_json(&value);
+    if non_compliant {
+        ExitCode::RuntimeFailure
+    } else {
+        ExitCode::Ok
+    }
 }
 
 /// 数据库健康检查（JSON 输出）

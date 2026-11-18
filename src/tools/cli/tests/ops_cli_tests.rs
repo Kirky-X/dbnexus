@@ -820,3 +820,43 @@ fn test_permission_check_invalid_action_exit_2() {
     assert_eq!(json["error_code"], "invalid_action");
     std::fs::remove_file(&perms).unwrap();
 }
+
+/// doctor --profile production：CLI default features 含 permission-engine → permission 链，
+/// Required 项全满足；JSON 输出 status=Compliant，checks 含 rbac/injection-detection enabled
+#[test]
+fn test_doctor_production_compliant() {
+    let output = cli()
+        .args(["doctor", "--profile", "production"])
+        .output()
+        .expect("run doctor");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "compliant posture should exit 0"
+    );
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["profile"], "Production");
+    assert_eq!(json["status"], "Compliant");
+    let checks = json["checks"].as_array().expect("checks array");
+    for id in ["rbac", "injection-detection"] {
+        let check = checks
+            .iter()
+            .find(|c| c["id"] == id)
+            .unwrap_or_else(|| panic!("missing check {id}"));
+        assert_eq!(check["enabled"], true, "{id} must be enabled");
+    }
+}
+
+/// doctor --profile bogus：value_parser 拒绝非法值，退出码 2
+#[test]
+fn test_doctor_invalid_profile_exit_2() {
+    let output = cli()
+        .args(["doctor", "--profile", "bogus"])
+        .output()
+        .expect("run doctor");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid profile should exit 2"
+    );
+}
