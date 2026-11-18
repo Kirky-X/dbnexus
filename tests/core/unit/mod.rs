@@ -6,4 +6,5 @@
 // pub mod edge_cases;
 pub mod common_types_tests;
 pub mod config_unit_tests;
+pub mod denial_reason_tests;
 pub mod error_unit_tests;

@@ -352,3 +352,14 @@ query-fragment-column-unsafe = 查询片段列名必须是安全标识符: '{ $c
 query-fragment-table-unsafe = 查询片段表名必须是安全标识符: '{ $table }'
 query-fragment-condition-column-unsafe = 查询片段条件列必须是安全标识符: '{ $column }'
 query-fragment-order-column-unsafe = 查询片段排序列必须是安全标识符: '{ $column }'
+
+# --- 结构化拒绝原因（机器可读原因码） ---
+denial-reason-ddl-forbidden = 此接口不允许执行 DDL 语句
+denial-reason-unsupported-statement = 该语句类型不支持权限检查
+denial-reason-table-extract-failed = 提取权限检查所需有效表名失败
+denial-reason-sql-parse-failed = 解析权限检查所需 SQL 语句失败
+denial-reason-table-not-in-policy = 对表 { $table } 的 { $action } 权限被拒绝
+denial-reason-role-not-defined = 角色 { $role } 未加载权限策略
+denial-reason-rls-parse-failed = 解析行级安全注入所需 SQL 语句失败
+denial-reason-rls-multi-table-unsupported = 行级安全仅支持单表语句；该语句引用了 { $tables }
+denial-reason-rls-predicate-rejected = 行级安全谓词无法应用于表 { $table }

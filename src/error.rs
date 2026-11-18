@@ -133,6 +133,8 @@ pub struct UnifiedDbError {
     message: String,
     /// 底层错误文本（兼容层无法持有非 'static 源，故保存文本）
     source_text: Option<String>,
+    /// 结构化拒绝原因码（仅 DbError::PermissionDenied 转换时携带）
+    reason_code: Option<&'static str>,
 }
 
 impl UnifiedDbError {
@@ -142,7 +144,19 @@ impl UnifiedDbError {
             code,
             message: message.into(),
             source_text: None,
+            reason_code: None,
         }
+    }
+
+    /// 附加结构化拒绝原因码
+    pub fn with_reason_code(mut self, reason_code: &'static str) -> Self {
+        self.reason_code = Some(reason_code);
+        self
+    }
+
+    /// 结构化拒绝原因码（仅结构化权限拒绝携带）
+    pub fn reason_code(&self) -> Option<&'static str> {
+        self.reason_code
     }
 
     /// 附加底层错误文本
@@ -168,12 +182,16 @@ impl UnifiedDbError {
 
     /// 机器可读 JSON 形态（供日志/监控/跨语言协议输出）
     pub fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut value = serde_json::json!({
             "code": self.code.code(),
             "name": self.code.name(),
             "message": self.message,
             "source": self.source_text,
-        })
+        });
+        if let Some(reason_code) = self.reason_code {
+            value["reason_code"] = serde_json::json!(reason_code);
+        }
+        value
     }
 }
 
@@ -201,6 +219,7 @@ impl From<crate::foundation::DbError> for UnifiedDbError {
         let code = match &err {
             crate::foundation::DbError::Connection(_) => ErrorCode::Connection,
             crate::foundation::DbError::Permission(_) => ErrorCode::PermissionDenied,
+            crate::foundation::DbError::PermissionDenied { .. } => ErrorCode::PermissionDenied,
             crate::foundation::DbError::RateLimited { .. } => ErrorCode::RateLimited,
             crate::foundation::DbError::Transaction(_) => ErrorCode::Transaction,
             crate::foundation::DbError::Migration(_) => ErrorCode::Migration,
@@ -212,7 +231,15 @@ impl From<crate::foundation::DbError> for UnifiedDbError {
             crate::foundation::DbError::Unsupported(_) => ErrorCode::Query,
             crate::foundation::DbError::VersionConflict { .. } => ErrorCode::Query,
         };
-        Self::new(code, err.to_string()).with_source(err.to_string())
+        let reason_code = match &err {
+            crate::foundation::DbError::PermissionDenied { reason } => Some(reason.reason_code()),
+            _ => None,
+        };
+        let unified = Self::new(code, err.to_string()).with_source(err.to_string());
+        match reason_code {
+            Some(rc) => unified.with_reason_code(rc),
+            None => unified,
+        }
     }
 }
 

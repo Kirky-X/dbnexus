@@ -18,6 +18,7 @@ impl DbError {
             DbError::Connection(e) => e.to_string(),
             DbError::Config(msg) => msg.clone(),
             DbError::Permission(msg) => msg.clone(),
+            DbError::PermissionDenied { reason } => reason.message(),
             DbError::RateLimited { retry_after_secs } => match retry_after_secs {
                 Some(secs) => crate::i18n::t(
                     "db-rate-limited-retry",
@@ -36,6 +37,13 @@ impl DbError {
                 crate::i18n::t("db-version-conflict", &[("id", id.to_string())])
             }
         }
+    }
+}
+
+/// 从结构化拒绝原因创建 DbError::PermissionDenied
+impl From<DenialReason> for DbError {
+    fn from(reason: DenialReason) -> Self {
+        Self::PermissionDenied { reason }
     }
 }
 

@@ -356,3 +356,14 @@ query-fragment-column-unsafe = query fragment column name must be a safe identif
 query-fragment-table-unsafe = query fragment table name must be a safe identifier: '{ $table }'
 query-fragment-condition-column-unsafe = query fragment condition column must be a safe identifier: '{ $column }'
 query-fragment-order-column-unsafe = query fragment order column must be a safe identifier: '{ $column }'
+
+# --- Structured denial reasons (machine-readable reason codes) ---
+denial-reason-ddl-forbidden = DDL statements are not allowed through this API
+denial-reason-unsupported-statement = Statement type is not supported for permission checking
+denial-reason-table-extract-failed = Failed to extract a valid table name for permission checking
+denial-reason-sql-parse-failed = Failed to parse SQL statement for permission checking
+denial-reason-table-not-in-policy = Permission denied for { $action } on table { $table }
+denial-reason-role-not-defined = Role { $role } has no loaded permission policy
+denial-reason-rls-parse-failed = Failed to parse SQL statement for row-level security injection
+denial-reason-rls-multi-table-unsupported = Row-level security supports single-table statements only; statement references { $tables }
+denial-reason-rls-predicate-rejected = Row-level security predicate cannot be applied to table { $table }

@@ -17,7 +17,12 @@
 
 // 子错误类型定义
 
+pub mod denial;
+
 mod error_impl;
+
+/// 权限拒绝的结构化原因重导出
+pub use denial::DenialReason;
 
 /// 数据库操作错误
 #[derive(Debug, thiserror::Error)]
@@ -33,6 +38,14 @@ pub enum DbError {
     /// 权限错误
     #[error("Permission denied: {0}")]
     Permission(String),
+
+    /// 权限拒绝（结构化原因码）。与 Permission(String) 并存：
+    /// 新代码用本变体，Permission(String) 仅为既有调用方保留。
+    #[error("{}", reason.message())]
+    PermissionDenied {
+        /// 结构化拒绝原因（reason_code 机器可读，Display 走 i18n）
+        reason: DenialReason,
+    },
 
     /// 速率限制拒绝（HTTP 429 语义；权限检查触发限流时返回，区别于策略拒绝）
     #[error(
@@ -160,6 +173,7 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Connection(_) => "db-connection",
             Self::Config(_) => "db-config",
             Self::Permission(_) => "db-permission",
+            Self::PermissionDenied { reason } => reason.message_key(),
             // 携带建议秒数走 -retry 键插值；未携带走无秒数键（两模板
             // 双语齐备，见 i18n::catalog）
             Self::RateLimited { retry_after_secs } => {
@@ -185,6 +199,7 @@ impl crate::i18n::error_ext::LocalizedMsg for DbError {
             Self::Connection(err) => vec![("error", err.to_string())],
             Self::Config(msg) => vec![("message", msg.clone())],
             Self::Permission(msg) => vec![("message", msg.clone())],
+            Self::PermissionDenied { reason } => reason.message_args(),
             Self::RateLimited { retry_after_secs } => vec![(
                 "retry_after_secs",
                 retry_after_secs.map_or_else(String::new, |secs| secs.to_string()),
