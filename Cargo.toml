@@ -150,6 +150,7 @@ microservice = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", 
 monolith = ["runtime-tokio-rustls", "postgres", "permission", "sql-parser", "yaml", "data-management", "security", "observability", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id"]  # 单体应用 - 完整配置
 enterprise = ["postgres", "monolith", "permission-engine"]  # 企业级 - 全功能配置
 # 所有可选功能（不包括数据库驱动；成员均无 embedded/server 驱动互斥风险）
+retention = ["chrono", "sql-parser"]  # 数据保留策略（宏注解 + 确定性批删/归档执行件）
 query-guard = ["sql-parser", "dep:sha2"]  # 查询计划回归防护（EXPLAIN 信号 + 基线比对）
 all-optional = ["cache", "observability", "data-management", "security", "migration", "retry", "failover", "replica-routing", "scatter-gather", "shard-migration", "saga", "distributed-id", "repository", "data-api", "prepare-cache", "validation", "authentication", "query-dsl", "entity-events", "permission-facade", "config-confers", "copy", "otel", "kit", "data-protection", "http-health"]
 mcp = ["dep:rmcp", "permission", "sql-parser", "data-api"]
@@ -414,6 +415,12 @@ required-features = ["duckdb", "copy", "sql-parser", "runtime-tokio-rustls"]
 name = "mod"
 path = "tests/mod.rs"
 required-features = ["sqlite", "test-utils", "futures"]
+
+# Retention policy SQLite integration test
+[[test]]
+name = "retention_integration"
+path = "tests/retention/integration.rs"
+required-features = ["retention", "sqlite", "runtime-tokio-rustls", "sql-parser"]
 
 # Query guard SQLite real-DB test
 [[test]]

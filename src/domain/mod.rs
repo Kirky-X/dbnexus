@@ -8,6 +8,8 @@ pub mod cache_provider;
 
 #[cfg(feature = "permission")]
 pub mod permission;
+#[cfg(feature = "retention")]
+pub mod retention;
 
 pub mod migration;
 
@@ -43,4 +45,9 @@ pub use migration::{
 };
 pub use migration::{
     ColumnChange, ColumnChangeType, ColumnDefinition, MigrationMetadata, TableSnapshot,
+};
+
+#[cfg(feature = "retention")]
+pub use retention::{
+    HasRetentionMeta, PurgeReport, RetentionError, RetentionExecutor, RetentionPolicy,
 };

@@ -227,6 +227,10 @@ pub use crate::database::entity_events::{
     DbOutboxStore, EntityAction, EntityEvent, EntityEventBus, InMemoryEntityEventBus,
     OutboxDispatcher, OutboxStore,
 };
+#[cfg(feature = "retention")]
+pub use crate::domain::{
+    HasRetentionMeta, PurgeReport, RetentionError, RetentionExecutor, RetentionPolicy,
+};
 
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]
 pub use crate::access::GraphPermissionContext;
