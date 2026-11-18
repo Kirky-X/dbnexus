@@ -12,7 +12,6 @@ use dbnexus::i18n;
 use dbnexus::{DbError, DbPool, DbResult};
 use std::fs;
 #[cfg(any(feature = "migration", feature = "permission-engine"))]
-#[cfg(feature = "permission")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -134,7 +133,7 @@ enum Commands {
     },
 
     /// 权限策略干跑（纯评估，不连数据库；JSON 输出，退出码 0/1/2）
-    #[cfg(feature = "permission")]
+    #[cfg(feature = "permission-engine")]
     PolicyDryRun {
         /// 候选策略 YAML（必填）
         #[arg(long)]
@@ -501,11 +500,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(feature = "permission-engine"))]
     let permission_check_free = false;
     let doctor_free = matches!(cli.command, Commands::Doctor { .. }) || {
-        #[cfg(feature = "permission")]
+        #[cfg(feature = "permission-engine")]
         {
             matches!(cli.command, Commands::PolicyDryRun { .. })
         }
-        #[cfg(not(feature = "permission"))]
+        #[cfg(not(feature = "permission-engine"))]
         {
             false
         }
@@ -589,7 +588,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let code = run_doctor_json(profile.as_deref());
             std::process::exit(code as i32);
         }
-        #[cfg(feature = "permission")]
+        #[cfg(feature = "permission-engine")]
         Commands::PolicyDryRun {
             candidate,
             baseline,
@@ -1808,7 +1807,7 @@ async fn run_mcp_serve() -> ExitCode {
 }
 
 /// SQL 查询文件解析：每行一条，`--` 注释与空行跳过，保留原始行号
-#[cfg(feature = "permission")]
+#[cfg(feature = "permission-engine")]
 fn parse_query_file(content: &str) -> Vec<(usize, String)> {
     content
         .lines()
@@ -1825,7 +1824,7 @@ fn parse_query_file(content: &str) -> Vec<(usize, String)> {
 }
 
 /// 权限策略干跑：读 YAML/查询文件 → 纯评估 → JSON 输出
-#[cfg(feature = "permission")]
+#[cfg(feature = "permission-engine")]
 async fn run_policy_dry_run(
     candidate: &Path,
     baseline: Option<&Path>,
@@ -2667,7 +2666,7 @@ fn mask_url_in_text(text: &str, url: &str) -> String {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "permission")]
+    #[cfg(feature = "permission-engine")]
     #[test]
     fn test_parse_query_file_line_numbers() {
         let content = "-- comment\nSELECT 1;\n\nSELECT * FROM users;\n-- trailing\n";
