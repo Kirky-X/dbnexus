@@ -37,6 +37,9 @@ pub use security::{
     AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard,
 };
 pub use security::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
+pub use security::{
+    PostureCheck, PostureProfile, PostureSeverity, SecurityPosture, security_posture,
+};
 
 // Re-exports: permission
 #[cfg(all(feature = "permission", any(feature = "ladybug", feature = "neo4j")))]

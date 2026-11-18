@@ -208,6 +208,11 @@ pub use crate::access::permission_facade::{PermissionFacade, PermissionFacadeCon
 #[cfg(feature = "query-dsl")]
 pub use crate::database::query_dsl::{DslCondition, DslOp, QueryFragment};
 
+// 安全姿态自审计（恒编译，纯函数）
+pub use crate::access::{
+    PostureCheck, PostureProfile, PostureSeverity, SecurityPosture, security_posture,
+};
+
 // 实体事件总线 + Outbox（entity-events feature）
 pub use crate::access::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};
 #[cfg(feature = "entity-events")]

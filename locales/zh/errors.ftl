@@ -364,3 +364,14 @@ denial-reason-role-not-defined = 角色 { $role } 未加载权限策略
 denial-reason-rls-parse-failed = 解析行级安全注入所需 SQL 语句失败
 denial-reason-rls-multi-table-unsupported = 行级安全仅支持单表语句；该语句引用了 { $tables }
 denial-reason-rls-predicate-rejected = 行级安全谓词无法应用于表 { $table }
+
+# --- 安全姿态缺失影响说明 ---
+posture-effect-rbac = 未编译表级 RBAC（RolePolicy.tables）；访问控制不可用
+posture-effect-injection-detection = 未编译 SQL 解析、DDL 拒绝与表名提取；原始 SQL 出口无法执行注入检查
+posture-effect-policy-cache = 未编译策略缓存（TTL/单飞）；策略重载可能发生缓存击穿
+posture-effect-rls-and-masking = 未编译行级安全谓词与字段脱敏
+posture-effect-pdp = 未编译 PolicyDecisionPoint（决策/缓存/限流）；仅基础权限层可用
+posture-effect-unified-facade = 未编译 RBAC+脱敏+RLS 统一门面
+posture-effect-audit = 未编译审计日志（AuditLogger/DbAuditStorage）
+posture-effect-jwt-auth = 未编译 JWT 双令牌认证与 bcrypt
+posture-effect-drivers = 未编译任何关系型数据库驱动 feature

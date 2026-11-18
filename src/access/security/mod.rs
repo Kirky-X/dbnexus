@@ -6,10 +6,14 @@
 
 #[cfg(feature = "sql-parser")]
 mod ddl_guard;
+pub mod posture;
 mod sensitive;
 
 #[cfg(feature = "sql-parser")]
 pub use ddl_guard::{
     AuditingDdlGuard, DdlAuditRecord, DdlGuard, DdlGuardPolicy, DdlValidationResult, DryRunDdlGuard,
+};
+pub use posture::{
+    PostureCheck, PostureProfile, PostureSeverity, SecurityPosture, security_posture,
 };
 pub use sensitive::{MaskType, SensitiveError, SensitiveMasker, SensitiveResult};

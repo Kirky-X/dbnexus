@@ -368,3 +368,14 @@ denial-reason-role-not-defined = Role { $role } has no loaded permission policy
 denial-reason-rls-parse-failed = Failed to parse SQL statement for row-level security injection
 denial-reason-rls-multi-table-unsupported = Row-level security supports single-table statements only; statement references { $tables }
 denial-reason-rls-predicate-rejected = Row-level security predicate cannot be applied to table { $table }
+
+# --- Security posture effect descriptions ---
+posture-effect-rbac = Table-level RBAC (RolePolicy.tables) is not compiled in; access control is unavailable
+posture-effect-injection-detection = SQL parsing, DDL rejection and table-name extraction are not compiled in; the raw SQL gate cannot enforce injection checks
+posture-effect-policy-cache = Policy cache (TTL/singleflight) is not compiled in; policy reloads may stampede
+posture-effect-rls-and-masking = Row-level security predicates and field masking are not compiled in
+posture-effect-pdp = PolicyDecisionPoint (decision/cache/rate-limit) is not compiled in; only the base permission layer is available
+posture-effect-unified-facade = The unified RBAC+masking+RLS facade is not compiled in
+posture-effect-audit = Audit logging (AuditLogger/DbAuditStorage) is not compiled in
+posture-effect-jwt-auth = JWT dual-token authentication and bcrypt are not compiled in
+posture-effect-drivers = No relational database driver feature is compiled in
