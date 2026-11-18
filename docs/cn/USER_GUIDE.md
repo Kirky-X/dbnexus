@@ -1230,6 +1230,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## 查询计划回归防护（`query-guard` 特性）
+
+`dbnexus-cli query-guard` 将 `EXPLAIN` 计划信号与基线比对，在部署前拦截计划退化：
+
+```bash
+# 1. 从当前库生成基线
+dbnexus-cli query-guard --database sqlite:prod.db --baseline baseline.json --queries queries.sql --update-baseline
+
+# 2. CI 中对候选库卡口（有回归退出码 1）
+dbnexus-cli query-guard --database sqlite:candidate.db --baseline baseline.json --queries queries.sql
+```
+
+信号：`full_scan`、`est_rows`（优化器预估）、`uses_index`。回归判定：基线无全表扫描而当前出现（默认开启），或预估行数增长超过 `--rows-growth-pct`（默认 300%，即 4 倍；严格大于）。基线键为查询指纹（字面量归一化），因此 `WHERE id = 1` 与 `WHERE id = 2` 共用条目。仅 `SELECT` 语句参与 EXPLAIN，其余计入 `skipped`（对写语句做 EXPLAIN 有副作用风险）。图数据库（Ladybug/Neo4j）不支持。
+
+这是静态计划检查，不是执行计时（属 `metrics`/`otel` 域），也不提供自动索引建议。
+
 ## Schema 漂移检测
 
 `dbnexus-cli schema-diff` 比较两侧（各为活库 URL 或 schema JSON 文件），输出 JSON 结构差异报告：

@@ -1258,6 +1258,22 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Query Plan Regression Guard (`query-guard` feature)
+
+`dbnexus-cli query-guard` compares `EXPLAIN` plan signals against a baseline to catch degradations before deployment:
+
+```bash
+# 1. Generate a baseline from the current database
+dbnexus-cli query-guard --database sqlite:prod.db --baseline baseline.json --queries queries.sql --update-baseline
+
+# 2. Gate a candidate database in CI (exit 1 on regression)
+dbnexus-cli query-guard --database sqlite:candidate.db --baseline baseline.json --queries queries.sql
+```
+
+Signals: `full_scan`, `est_rows` (optimizer estimate), `uses_index`. Regressions: a new full table scan where the baseline had none (enabled by default), or estimated row growth above `--rows-growth-pct` (default 300%, i.e. 4x; strict greater-than). Baseline keys are query fingerprints (SQL literals normalized), so `WHERE id = 1` and `WHERE id = 2` share one entry. Only `SELECT` statements are explained; others are counted as `skipped` (EXPLAIN of writes has side-effect risk). Graph backends (Ladybug/Neo4j) are unsupported.
+
+This is a static plan check, not execution timing (which belongs to `metrics`/`otel`) and not an automatic index advisor.
+
 ## Schema Drift Detection
 
 `dbnexus-cli schema-diff` compares two sides (each a live database URL or a schema JSON file) and emits a JSON structural diff:

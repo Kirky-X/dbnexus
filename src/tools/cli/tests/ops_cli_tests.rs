@@ -1062,3 +1062,107 @@ fn test_schema_diff_exit_codes() {
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// query-guard：--update-baseline 回路 + 比对退出码；缺 baseline 退出码 2
+#[cfg(feature = "query-guard")]
+#[test]
+fn test_query_guard_baseline_flow() {
+    use sea_orm::{ConnectionTrait, Database};
+
+    let dir = std::env::temp_dir().join(format!(
+        "dbnexus_query_guard_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db_path = dir.join("guard.db");
+    let url = format!("sqlite:{}?mode=rwc", db_path.display());
+
+    // 建表 + 索引（经 sea_orm 直接）
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let conn = Database::connect(&url).await.unwrap();
+        conn.execute_unprepared(
+            "CREATE TABLE guard_t (id INTEGER PRIMARY KEY, key_col TEXT, other TEXT)",
+        )
+        .await
+        .unwrap();
+        conn.execute_unprepared("CREATE INDEX idx_guard_key ON guard_t(key_col)")
+            .await
+            .unwrap();
+        for i in 0..10 {
+            conn.execute_unprepared(&format!("INSERT INTO guard_t VALUES ({i}, 'k{i}', 'o{i}')"))
+                .await
+                .unwrap();
+        }
+    });
+
+    let baseline = dir.join("baseline.json");
+    let queries = dir.join("queries.sql");
+    std::fs::write(
+        &queries,
+        "SELECT * FROM guard_t WHERE key_col = 'k1'\n-- comment\nUPDATE guard_t SET other='x'\n",
+    )
+    .unwrap();
+
+    // update-baseline → 0
+    let output = cli()
+        .args([
+            "query-guard",
+            "--database",
+            &url,
+            "--baseline",
+            baseline.to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+            "--update-baseline",
+        ])
+        .output()
+        .expect("run query-guard update");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "update baseline should exit 0"
+    );
+
+    // 同库比对 → 0，UPDATE 被 skip
+    let output = cli()
+        .args([
+            "query-guard",
+            "--database",
+            &url,
+            "--baseline",
+            baseline.to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run query-guard compare");
+    assert_eq!(output.status.code(), Some(0), "same plan should exit 0");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(
+        json["skipped"].as_array().unwrap().len(),
+        1,
+        "UPDATE should be skipped"
+    );
+
+    // 缺 baseline → 2
+    let output = cli()
+        .args([
+            "query-guard",
+            "--database",
+            &url,
+            "--baseline",
+            dir.join("missing.json").to_str().unwrap(),
+            "--queries",
+            queries.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run query-guard missing baseline");
+    assert_eq!(output.status.code(), Some(2));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}

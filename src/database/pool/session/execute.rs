@@ -654,6 +654,7 @@ impl Session {
                 }
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
+                #[cfg(feature = "permission")]
                 self.apply_origin_constraints(&mut out).await?;
                 Ok(out)
             }
@@ -676,6 +677,7 @@ impl Session {
                     rows.iter().map(|r| sqlite_row_to_json(r, &cols)).collect();
                 #[cfg(feature = "data-protection")]
                 self.apply_masking(&mut out).await;
+                #[cfg(feature = "permission")]
                 self.apply_origin_constraints(&mut out).await?;
                 Ok(out)
             }

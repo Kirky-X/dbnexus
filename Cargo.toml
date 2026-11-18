@@ -415,6 +415,12 @@ name = "mod"
 path = "tests/mod.rs"
 required-features = ["sqlite", "test-utils", "futures"]
 
+# Query guard SQLite real-DB test
+[[test]]
+name = "query_guard_tests"
+path = "tests/pool/unit/query_guard_tests.rs"
+required-features = ["query-guard", "sqlite", "runtime-tokio-rustls"]
+
 # Pool semaphore test
 [[test]]
 name = "pool_semaphore_test"

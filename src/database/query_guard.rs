@@ -168,10 +168,10 @@ fn parse_postgres_plan(plan: &serde_json::Value) -> DbResult<PlanSignal> {
                 *idx = true;
             }
         }
-        if let Some(r) = node.get("Plan Rows").and_then(|v| v.as_u64()) {
-            if rows.is_none() {
-                *rows = Some(r);
-            }
+        if let None = rows
+            && let Some(r) = node.get("Plan Rows").and_then(|v| v.as_u64())
+        {
+            *rows = Some(r);
         }
         if let Some(children) = node.get("Plans").and_then(|v| v.as_array()) {
             for c in children {
@@ -197,7 +197,7 @@ fn parse_mysql_plan(plan: &serde_json::Value) -> DbResult<PlanSignal> {
     let key_present = plan
         .get("key")
         .and_then(|v| v.as_str())
-        .map_or(false, |s| !s.is_empty());
+        .is_some_and(|s| !s.is_empty());
     let full_scan = typ == "ALL";
     let uses_index = key_present && matches!(typ, "ref" | "eq_ref" | "range" | "index" | "const");
     let est_rows = plan.get("rows").and_then(|v| v.as_u64()).or_else(|| {
@@ -287,7 +287,7 @@ pub async fn collect_signals(
             .first()
             .ok_or_else(|| DbError::Query("empty EXPLAIN result".into()))?;
         let value = plan_value(plan);
-        let signal = parse_plan_signal(backend.clone(), &value)?;
+        let signal = parse_plan_signal(backend, &value)?;
         out.insert(fingerprint(sql), signal);
     }
     Ok(out)

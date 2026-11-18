@@ -125,6 +125,26 @@ enum Commands {
         action: UserAction,
     },
 
+    /// 查询计划回归防护（EXPLAIN 信号 vs 基线；JSON 输出，退出码 0/1/2）
+    #[cfg(feature = "query-guard")]
+    QueryGuard {
+        /// 数据库连接 URL
+        #[arg(long)]
+        database: String,
+        /// 基线 JSON 文件
+        #[arg(long)]
+        baseline: PathBuf,
+        /// SQL 文件（每行一条；仅 SELECT 语句参与，其余跳过）
+        #[arg(long)]
+        queries: PathBuf,
+        /// 预估行数增长阈值百分比（缺省 300）
+        #[arg(long)]
+        rows_growth_pct: Option<u32>,
+        /// 更新基线模式：以当前库信号覆写基线文件后退出
+        #[arg(long, default_value = "false")]
+        update_baseline: bool,
+    },
+
     /// 活库/Schema 文件间结构差异报告（JSON 输出；退出码 0 相同 / 1 有差异 / 2 错误）
     #[cfg(feature = "migration")]
     SchemaDiff {
@@ -512,6 +532,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let permission_check_free = false;
     #[cfg(feature = "migration")]
     let schema_diff_free = matches!(cli.command, Commands::SchemaDiff { .. });
+    #[cfg(feature = "query-guard")]
+    let query_guard_free = matches!(cli.command, Commands::QueryGuard { .. });
+    #[cfg(not(feature = "query-guard"))]
+    let query_guard_free = false;
     #[cfg(not(feature = "migration"))]
     let schema_diff_free = false;
     let doctor_free = matches!(cli.command, Commands::Doctor { .. }) || schema_diff_free || {
@@ -528,7 +552,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mcp_serve_free = matches!(cli.command, Commands::McpServe { .. });
     #[cfg(not(feature = "mcp"))]
     let mcp_serve_free = false;
-    let needs_db = !(shard_info_free || permission_check_free || doctor_free || mcp_serve_free);
+    let needs_db = !(shard_info_free
+        || permission_check_free
+        || doctor_free
+        || mcp_serve_free
+        || query_guard_free);
     let database_url: String = if needs_db {
         cli.database_url.unwrap_or_else(|| {
             eprintln!("{}", i18n::t_simple("cli-database-url-required"));
@@ -597,6 +625,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Health => {
             let code = run_health_json(&database_url).await;
+            std::process::exit(code as i32);
+        }
+        #[cfg(feature = "query-guard")]
+        Commands::QueryGuard {
+            database,
+            baseline,
+            queries,
+            rows_growth_pct,
+            update_baseline,
+        } => {
+            let code = run_query_guard(
+                &database,
+                &baseline,
+                &queries,
+                *rows_growth_pct,
+                *update_baseline,
+            )
+            .await;
             std::process::exit(code as i32);
         }
         #[cfg(feature = "migration")]
@@ -1514,6 +1560,131 @@ fn generate_schema_diff_sql(from_content: &str, to_content: &str) -> Result<Diff
         }
     }
     Ok(DiffSql { up, down })
+}
+
+/// 查询计划守卫：批量 EXPLAIN → 基线比对 → JSON 报告
+#[cfg(feature = "query-guard")]
+async fn run_query_guard(
+    database: &str,
+    baseline_path: &Path,
+    queries_path: &Path,
+    rows_growth_pct: Option<u32>,
+    update_baseline: bool,
+) -> ExitCode {
+    use dbnexus::database::query_guard::{GuardRules, collect_signals, compare};
+    use dbnexus::foundation::DatabaseType;
+
+    let queries_content = match fs::read_to_string(queries_path) {
+        Ok(v) => v,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"queries_read_failed","error":e.to_string()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+    let all_lines: Vec<(usize, &str)> = queries_content
+        .lines()
+        .enumerate()
+        .map(|(i, l)| (i + 1, l.trim()))
+        .filter(|(_, l)| !l.is_empty() && !l.starts_with("--"))
+        .collect();
+    // 仅放行 SELECT 起始语句（EXPLAIN 写语句有副作用风险）
+    let mut sqls = Vec::new();
+    let mut skipped = Vec::new();
+    for (line, text) in &all_lines {
+        if text.to_ascii_lowercase().starts_with("select") {
+            sqls.push((*line, text.to_string()));
+        } else {
+            skipped.push(*line);
+        }
+    }
+
+    let conn = match sea_orm::Database::connect(database).await {
+        Ok(c) => c,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"database_connect_failed","error":e.to_string()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+    let backend = if database.starts_with("postgres") {
+        DatabaseType::Postgres
+    } else if database.starts_with("mysql:") {
+        DatabaseType::MySql
+    } else if database.starts_with("duckdb:") {
+        DatabaseType::DuckDb
+    } else if database.starts_with("sqlite:") {
+        DatabaseType::Sqlite
+    } else {
+        DatabaseType::Ladybug
+    };
+    let sql_texts: Vec<String> = sqls.iter().map(|(_, s)| s.clone()).collect();
+    let signals = match collect_signals(&conn, backend, &sql_texts).await {
+        Ok(s) => s,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"explain_failed","error":e.message()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+
+    let rules = GuardRules {
+        est_rows_growth_pct: rows_growth_pct.unwrap_or(300),
+        ..Default::default()
+    };
+
+    if update_baseline {
+        let json = serde_json::to_string_pretty(&signals).unwrap_or_default();
+        if let Err(e) = fs::write(baseline_path, json) {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"baseline_write_failed","error":e.to_string()}),
+            );
+            return ExitCode::UsageError;
+        }
+        print_json(&serde_json::json!({"status":"ok","updated":signals.len()}));
+        return ExitCode::Ok;
+    }
+
+    let baseline_content = match fs::read_to_string(baseline_path) {
+        Ok(v) => v,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"baseline_read_failed","error":e.to_string()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+    let baseline: std::collections::BTreeMap<String, dbnexus::database::query_guard::PlanSignal> =
+        match serde_json::from_str(&baseline_content) {
+            Ok(v) => v,
+            Err(e) => {
+                print_json(
+                    &serde_json::json!({"status":"error","error_code":"baseline_invalid_json","error":e.to_string()}),
+                );
+                return ExitCode::UsageError;
+            }
+        };
+    let regressions = compare(&baseline, &signals, &rules);
+    let new_queries = signals
+        .keys()
+        .filter(|fp| !baseline.contains_key(*fp))
+        .count();
+    let has_regression = !regressions.is_empty();
+    print_json(&serde_json::json!({
+        "per_query": signals.iter().map(|(fp, sig)| serde_json::json!({"fingerprint":fp,"signal":sig})).collect::<Vec<_>>(),
+        "regressions": regressions,
+        "skipped": skipped,
+        "new_queries": new_queries,
+        "collisions": [],
+    }));
+    if has_regression {
+        ExitCode::RuntimeFailure
+    } else {
+        ExitCode::Ok
+    }
 }
 
 /// schema-diff 侧解析：URL 视为连接串，否则视为 schema JSON 文件

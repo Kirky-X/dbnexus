@@ -172,6 +172,10 @@ For permission-denial behavior (unauthorized roles and unauthorized tables are b
 
 `default = []`: no default features; runtime, database driver and functional features must all be enabled explicitly; embedded (`sqlite`/`duckdb`) and server-side (`postgres`/`mysql`) drivers are strictly mutually exclusive at compile time. For all flags and presets — runtimes, drivers, core capabilities, data access, observability, data management, distributed capabilities, security and compliance — see [User Guide · Feature Flags Reference](docs/en/USER_GUIDE.md#feature-flags-reference).
 
+### Query plan regression guard
+
+`dbnexus-cli query-guard` compares EXPLAIN signals against a baseline JSON and exits 1 on plan regressions (new full scan or row-growth threshold).
+
 ### Schema drift detection
 
 `dbnexus-cli schema-diff` compares live databases or schema JSON files and exits 1 on structural drift (CI gate); `generate --from-schema/--to-schema` emits real UP/DOWN DDL.
