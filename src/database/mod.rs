@@ -48,6 +48,8 @@ pub mod data_api;
 /// 查询 DSL 宏
 #[cfg(feature = "query-dsl")]
 pub mod query_dsl;
+#[cfg(feature = "query-guard")]
+pub mod query_guard;
 
 /// 实体事件总线 + Outbox
 #[cfg(feature = "entity-events")]

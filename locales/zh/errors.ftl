@@ -389,3 +389,6 @@ dry-run-role-not-defined = 候选策略中未定义角色 { $role }
 introspect-unsupported-backend = 图数据库后端（Ladybug/Neo4j）不支持 schema 内省
 introspect-query-failed = schema 内省查询失败
 introspect-unknown-type = 后端 { $backend } 的未知列类型 '{ $type }'；已映射为文本型
+
+# --- 查询计划守卫 ---
+query-guard-unsupported-backend = 查询计划守卫不支持图数据库后端（Ladybug/Neo4j）

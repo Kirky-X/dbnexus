@@ -393,3 +393,6 @@ dry-run-role-not-defined = role { $role } is not defined in candidate policy
 introspect-unsupported-backend = Schema introspection is not supported for graph backends (Ladybug/Neo4j)
 introspect-query-failed = Schema introspection query failed
 introspect-unknown-type = Unknown column type '{ $type }' for backend { $backend }; mapped to text
+
+# --- Query guard ---
+query-guard-unsupported-backend = Query plan guard does not support graph backends (Ladybug/Neo4j)
