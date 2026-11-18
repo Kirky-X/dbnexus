@@ -352,13 +352,13 @@ required-features = ["migration", "sqlite"]
 [[test]]
 name = "postgres_testcontainers"
 path = "tests/postgres_testcontainers.rs"
-required-features = ["postgres", "runtime-tokio-rustls", "sql-parser", "permission", "data-protection"]
+required-features = ["postgres", "runtime-tokio-rustls", "sql-parser", "permission", "data-protection", "migration"]
 
 # Docker testcontainers 集成测试 - MySQL（需要 Docker 环境）
 [[test]]
 name = "mysql_testcontainers"
 path = "tests/mysql_testcontainers.rs"
-required-features = ["mysql", "runtime-tokio-rustls", "sql-parser"]
+required-features = ["mysql", "runtime-tokio-rustls", "sql-parser", "migration"]
 
 [[bench]]
 name = "permission_bench"

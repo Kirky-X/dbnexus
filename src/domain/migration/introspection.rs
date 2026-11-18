@@ -25,7 +25,7 @@ pub async fn introspect_schema(
     match backend {
         DatabaseType::Sqlite => introspect_sqlite(conn, &mut schema).await?,
         DatabaseType::Postgres => {
-            introspect_information_schema(conn, &mut schema, "public").await?
+            introspect_information_schema(conn, &mut schema, "'public'").await?
         }
         DatabaseType::MySql => {
             introspect_information_schema(conn, &mut schema, "DATABASE()").await?
@@ -175,15 +175,20 @@ async fn introspect_information_schema(
     schema: &mut Schema,
     scope: &str,
 ) -> DbResult<()> {
-    let tables = query_json(
-        conn,
-        &format!("SELECT table_name FROM information_schema.tables WHERE table_schema = {scope}"),
-    )
-    .await?;
+    let tables_query = if scope == "DATABASE()" {
+        "SHOW TABLES".to_string()
+    } else {
+        format!("SELECT table_name FROM information_schema.tables WHERE table_schema = {scope}")
+    };
+    let tables = query_json(conn, &tables_query).await?;
     for row in tables {
         let name = row
             .get("table_name")
             .and_then(|v| v.as_str())
+            .or_else(|| {
+                row.as_object()
+                    .and_then(|m| m.values().find_map(|v| v.as_str()))
+            })
             .unwrap_or_default();
         if name.is_empty() {
             continue;
@@ -219,6 +224,21 @@ async fn introspect_information_schema(
             column.default_value = default;
             table.columns.push(column);
         }
+        // 主键：information_schema 标准途径（PG/MySQL 均支持）
+        let pk_rows = query_json(
+            conn,
+            &format!("SELECT kcu.column_name AS pk_column FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = {scope} AND tc.table_name = '{escaped}'"),
+        )
+        .await?;
+        for p in &pk_rows {
+            if let Some(col) = p.get("pk_column").and_then(|v| v.as_str()) {
+                table.primary_key_columns.push(col.to_string());
+                if let Some(column) = table.columns.iter_mut().find(|c| c.name == col) {
+                    column.is_primary_key = true;
+                }
+            }
+        }
+        table.primary_key_columns.sort_unstable();
         schema.add_table(table);
     }
     Ok(())
@@ -230,6 +250,10 @@ async fn introspect_duckdb(conn: &DatabaseConnection, schema: &mut Schema) -> Db
         let name = row
             .get("table_name")
             .and_then(|v| v.as_str())
+            .or_else(|| {
+                row.as_object()
+                    .and_then(|m| m.values().find_map(|v| v.as_str()))
+            })
             .unwrap_or_default();
         if name.is_empty() {
             continue;

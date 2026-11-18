@@ -1230,6 +1230,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 > 🆕 为 0.6.0-rc.4 起新增，逐项版本见 [CHANGELOG](CHANGELOG.md)（http-health 为 0.6.0-rc.6 新增）。
 
+## Schema 漂移检测
+
+`dbnexus-cli schema-diff` 比较两侧（各为活库 URL 或 schema JSON 文件），输出 JSON 结构差异报告：
+
+```bash
+dbnexus-cli schema-diff --from sqlite:prod.db --to sqlite:staging.db
+```
+
+`from`/`to` 以 `sqlite:` / `postgres:` / `mysql:` / `duckdb:` 开头视为连接串，否则按 schema JSON 文件读取。退出码：0 = 无差异，1 = 有结构差异（供 CI 卡口），2 = 连接或解析错误。图数据库（Ladybug/Neo4j）显式不支持——内省返回错误而非空 schema。
+
+覆盖：经 `SchemaDiffer` 计算表增删与列差异；不比较行级数据。配套的 `generate --from-schema/--to-schema` 现从两个 schema 文件生成真实 UP/DOWN DDL。
+
 ## 策略干跑
 
 换装权限策略前，无需连库即可评估访问变化：

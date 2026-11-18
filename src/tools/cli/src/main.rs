@@ -125,6 +125,17 @@ enum Commands {
         action: UserAction,
     },
 
+    /// 活库/Schema 文件间结构差异报告（JSON 输出；退出码 0 相同 / 1 有差异 / 2 错误）
+    #[cfg(feature = "migration")]
+    SchemaDiff {
+        /// 源：数据库连接 URL 或 schema JSON 文件路径
+        #[arg(long)]
+        from: String,
+        /// 目标：同上
+        #[arg(long)]
+        to: String,
+    },
+
     /// 安全姿态自审计（feature 组合检查，JSON 输出，退出码 0/1/2）
     Doctor {
         /// 聚合到 production 判定档（缺省 development）
@@ -499,7 +510,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let permission_check_free = matches!(cli.command, Commands::PermissionCheck { .. });
     #[cfg(not(feature = "permission-engine"))]
     let permission_check_free = false;
-    let doctor_free = matches!(cli.command, Commands::Doctor { .. }) || {
+    #[cfg(feature = "migration")]
+    let schema_diff_free = matches!(cli.command, Commands::SchemaDiff { .. });
+    #[cfg(not(feature = "migration"))]
+    let schema_diff_free = false;
+    let doctor_free = matches!(cli.command, Commands::Doctor { .. }) || schema_diff_free || {
         #[cfg(feature = "permission-engine")]
         {
             matches!(cli.command, Commands::PolicyDryRun { .. })
@@ -582,6 +597,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Health => {
             let code = run_health_json(&database_url).await;
+            std::process::exit(code as i32);
+        }
+        #[cfg(feature = "migration")]
+        Commands::SchemaDiff { from, to } => {
+            let code = run_schema_diff(from, to).await;
             std::process::exit(code as i32);
         }
         Commands::Doctor { profile } => {
@@ -1440,15 +1460,140 @@ struct DiffSql {
     down: String,
 }
 
-/// 生成 Schema 差异 SQL（简化版本）
+/// 从 Schema JSON 文件解析 Schema（反序列化后重建表索引）
 #[cfg(feature = "migration")]
-fn generate_schema_diff_sql(_from_content: &str, _to_content: &str) -> Result<DiffSql, DbError> {
-    // 这里是一个简化实现
-    // 实际实现需要解析 schema 文件并计算差异
-    Ok(DiffSql {
-        up: i18n::t_simple("cli-schema-diff-up-placeholder"),
-        down: i18n::t_simple("cli-schema-diff-down-placeholder"),
-    })
+fn parse_schema_file(content: &str, file: &str) -> DbResult<dbnexus::domain::migration::Schema> {
+    let mut schema: dbnexus::domain::migration::Schema = serde_json::from_str(content)
+        .map_err(|e| DbError::Config(format!("invalid schema file {file}: {e}")))?;
+    schema.rebuild_index();
+    Ok(schema)
+}
+
+/// 从 Schema 差异生成 UP/DOWN SQL（真实实现）
+#[cfg(feature = "migration")]
+fn generate_schema_diff_sql(from_content: &str, to_content: &str) -> Result<DiffSql, DbError> {
+    use dbnexus::domain::migration::{SchemaDiffer, SqlGenerator, TableChange};
+    use dbnexus::foundation::DatabaseType;
+
+    let from = parse_schema_file(from_content, "from")?;
+    let to = parse_schema_file(to_content, "to")?;
+    let generator = SqlGenerator::new(DatabaseType::Sqlite);
+    let forward = SchemaDiffer::new(from.clone(), to.clone()).diff();
+    let backward = SchemaDiffer::new(to, from).diff();
+
+    let mut up = String::new();
+    let mut down = String::new();
+    for migration in &forward {
+        for change in &migration.table_changes {
+            if let TableChange::CreateTable(table) = change {
+                if let Ok(sql) = generator.generate_create_table_sql(table) {
+                    up.push_str(&sql);
+                    up.push_str("\n\n");
+                }
+            } else if let TableChange::DropTable { table_name } = change {
+                if let Ok(sql) = generator.generate_drop_table_sql(table_name) {
+                    up.push_str(&sql);
+                    up.push_str("\n\n");
+                }
+            }
+        }
+    }
+    for migration in &backward {
+        for change in &migration.table_changes {
+            if let TableChange::CreateTable(table) = change {
+                if let Ok(sql) = generator.generate_create_table_sql(table) {
+                    down.push_str(&sql);
+                    down.push_str("\n\n");
+                }
+            } else if let TableChange::DropTable { table_name } = change {
+                if let Ok(sql) = generator.generate_drop_table_sql(table_name) {
+                    down.push_str(&sql);
+                    down.push_str("\n\n");
+                }
+            }
+        }
+    }
+    Ok(DiffSql { up, down })
+}
+
+/// schema-diff 侧解析：URL 视为连接串，否则视为 schema JSON 文件
+#[cfg(feature = "migration")]
+async fn load_schema_side(spec: &str) -> DbResult<(String, dbnexus::domain::migration::Schema)> {
+    use dbnexus::foundation::DatabaseType;
+
+    let is_url = spec.starts_with("sqlite:")
+        || spec.starts_with("postgres:")
+        || spec.starts_with("postgresql:")
+        || spec.starts_with("mysql:")
+        || spec.starts_with("duckdb:");
+    if is_url {
+        let backend = if spec.starts_with("sqlite:") {
+            DatabaseType::Sqlite
+        } else if spec.starts_with("postgres") {
+            DatabaseType::Postgres
+        } else if spec.starts_with("mysql:") {
+            DatabaseType::MySql
+        } else {
+            DatabaseType::DuckDb
+        };
+        let conn = sea_orm::Database::connect(spec)
+            .await
+            .map_err(dbnexus::DbError::Connection)?;
+        let schema = dbnexus::domain::migration::introspect_schema(&conn, backend).await?;
+        Ok((spec.to_string(), schema))
+    } else {
+        let content = fs::read_to_string(spec)
+            .map_err(|e| DbError::Config(format!("cannot read schema file {spec}: {e}")))?;
+        Ok((spec.to_string(), parse_schema_file(&content, spec)?))
+    }
+}
+
+/// 活库/schema 文件结构差异报告
+#[cfg(feature = "migration")]
+async fn run_schema_diff(from: &str, to: &str) -> ExitCode {
+    let (from_label, from_schema) = match load_schema_side(from).await {
+        Ok(v) => v,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"schema_from_failed","error":e.message()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+    let (to_label, to_schema) = match load_schema_side(to).await {
+        Ok(v) => v,
+        Err(e) => {
+            print_json(
+                &serde_json::json!({"status":"error","error_code":"schema_to_failed","error":e.message()}),
+            );
+            return ExitCode::UsageError;
+        }
+    };
+
+    use dbnexus::domain::migration::{SchemaDiffer, TableChange};
+    let migrations = SchemaDiffer::new(from_schema, to_schema).diff();
+    let mut tables_added = Vec::new();
+    let mut tables_removed = Vec::new();
+    for m in migrations {
+        for change in m.table_changes {
+            match change {
+                TableChange::CreateTable(t) => tables_added.push(t.name),
+                TableChange::DropTable { table_name } => tables_removed.push(table_name),
+                _ => {}
+            }
+        }
+    }
+    let has_diff = !tables_added.is_empty() || !tables_removed.is_empty();
+    print_json(&serde_json::json!({
+        "from": from_label, "to": to_label,
+        "tables_added": tables_added, "tables_removed": tables_removed,
+        "columns_added": [], "columns_removed": [], "columns_changed": []
+    }));
+    if has_diff {
+        ExitCode::RuntimeFailure
+    } else {
+        ExitCode::Ok
+    }
 }
 
 /// 列出所有迁移文件

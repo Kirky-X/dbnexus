@@ -13,6 +13,8 @@
 
 #![cfg(feature = "mysql")]
 
+use sea_orm::ConnectionTrait;
+
 use dbnexus::{DbConfig, DbPool};
 use testcontainers::GenericImage;
 use testcontainers::core::{ContainerAsync, ImageExt, WaitFor};
@@ -578,4 +580,37 @@ async fn test_mysql_concurrent_access() {
         .await
         .expect("COUNT query should succeed");
     assert_eq!(result.rows_affected(), 0, "COUNT query should succeed");
+}
+
+/// 活库 schema 内省（MySQL）：建表 → introspect_schema → 断言列/主键往返
+#[cfg(feature = "migration")]
+#[tokio::test]
+async fn test_mysql_introspect_schema_roundtrip() {
+    let (_container, url) = setup_mysql().await;
+    let conn = sea_orm::Database::connect(&url)
+        .await
+        .expect("connect mysql");
+    conn.execute_unprepared(
+        "CREATE TABLE introspect_users (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL, active BOOLEAN)",
+    )
+    .await
+    .expect("create table");
+
+    let schema = dbnexus::domain::migration::introspect_schema(
+        &conn,
+        dbnexus::foundation::DatabaseType::MySql,
+    )
+    .await
+    .expect("introspect schema");
+    eprintln!(
+        "introspected tables: {:?}",
+        schema.tables.iter().map(|t| &t.name).collect::<Vec<_>>()
+    );
+    let table = schema
+        .tables
+        .iter()
+        .find(|t| t.name == "introspect_users")
+        .expect("table");
+    assert_eq!(table.columns.len(), 3);
+    assert_eq!(table.primary_key_columns, vec!["id".to_string()]);
 }

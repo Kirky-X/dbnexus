@@ -13,6 +13,8 @@
 
 #![cfg(feature = "postgres")]
 
+use sea_orm::ConnectionTrait;
+
 use dbnexus::{DbConfig, DbPool};
 use testcontainers::GenericImage;
 use testcontainers::core::{ContainerAsync, ImageExt, WaitFor};
@@ -745,4 +747,39 @@ async fn test_postgres_rls_predicate_on_non_text_column() {
         "only the tenant's row may be returned, got {rows:?}"
     );
     assert_eq!(rows[0]["tenant_id"], 100);
+}
+
+/// 活库 schema 内省（PostgreSQL）：建表 → introspect_schema → 断言列/主键往返
+#[cfg(feature = "migration")]
+#[tokio::test]
+async fn test_postgres_introspect_schema_roundtrip() {
+    let (_container, url) = setup_postgres().await;
+    let conn = sea_orm::Database::connect(&url)
+        .await
+        .expect("connect postgres");
+    conn.execute_unprepared(
+        "CREATE TABLE introspect_users (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL, active BOOLEAN)",
+    )
+    .await
+    .expect("create table");
+
+    let schema = dbnexus::domain::migration::introspect_schema(
+        &conn,
+        dbnexus::foundation::DatabaseType::Postgres,
+    )
+    .await
+    .expect("introspect schema");
+    let table = schema
+        .tables
+        .iter()
+        .find(|t| t.name == "introspect_users")
+        .expect("table");
+    assert_eq!(table.columns.len(), 3);
+    assert_eq!(table.primary_key_columns, vec!["id".to_string()]);
+    assert!(
+        table
+            .columns
+            .iter()
+            .any(|c| c.name == "name" && !c.is_nullable)
+    );
 }

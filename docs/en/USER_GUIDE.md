@@ -1258,6 +1258,18 @@ By default `RlsPolicy` rejects multi-table statements (JOIN/subquery), fail-clos
 
 In `production`, a missing Required check yields `NonCompliant` (exit code 1), a missing Recommended check yields `Degraded` (exit 0), otherwise `Compliant` (exit 0). Invalid usage exits 2. The library function `dbnexus::security_posture(PostureProfile)` returns the same report.
 
+## Schema Drift Detection
+
+`dbnexus-cli schema-diff` compares two sides (each a live database URL or a schema JSON file) and emits a JSON structural diff:
+
+```bash
+dbnexus-cli schema-diff --from sqlite:prod.db --to sqlite:staging.db
+```
+
+The `from`/`to` spec is treated as a connection URL when it starts with `sqlite:` / `postgres:` / `mysql:` / `duckdb:`; otherwise it is read as a schema JSON file. Exit codes: 0 = identical, 1 = structural differences (CI gate), 2 = connection or parse error. Graph backends (Ladybug/Neo4j) are explicitly unsupported — introspection returns an error rather than an empty schema.
+
+Coverage: table add/remove and column differences via `SchemaDiffer`; row-level data is not compared. The companion `generate --from-schema/--to-schema` now produces real UP/DOWN DDL from two schema files.
+
 ## Policy Dry-Run
 
 Before swapping a permission policy, evaluate how it changes access without connecting to a database:

@@ -997,3 +997,68 @@ fn test_policy_dry_run_exit_codes() {
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// schema-diff：两库有差异退出码 1；相同退出码 0；坏 URL 退出码 2
+#[cfg(feature = "migration")]
+#[test]
+fn test_schema_diff_exit_codes() {
+    let dir = std::env::temp_dir().join(format!(
+        "dbnexus_schema_diff_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    // 构造两个 Schema JSON 文件做文件↔文件差异测试
+    let empty_schema = r#"{"database_type":"Sqlite","tables":[]}"#;
+    let one_table = r#"{"database_type":"Sqlite","tables":[{"name":"users","columns":[],"primary_key_columns":[],"indexes":[],"foreign_keys":[],"comment":null}]}"#;
+    let f1 = dir.join("one.json");
+    let f2 = dir.join("empty.json");
+    std::fs::write(&f1, one_table).unwrap();
+    std::fs::write(&f2, empty_schema).unwrap();
+
+    // 文件↔文件：有差异 → 1
+    let output = cli()
+        .args([
+            "schema-diff",
+            "--from",
+            f1.to_str().unwrap(),
+            "--to",
+            f2.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run schema-diff");
+    assert_eq!(output.status.code(), Some(1), "differences should exit 1");
+    let json = parse_json_line(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(json["tables_removed"][0], "users");
+
+    // 相同 → 0
+    let output = cli()
+        .args([
+            "schema-diff",
+            "--from",
+            f1.to_str().unwrap(),
+            "--to",
+            f1.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run schema-diff");
+    assert_eq!(output.status.code(), Some(0));
+
+    // 坏 URL → 2（不可达 sqlite 路径）
+    let output = cli()
+        .args([
+            "schema-diff",
+            "--from",
+            "sqlite:/nonexistent/dir/db.sqlite?mode=rw",
+            "--to",
+            f1.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run schema-diff");
+    assert_eq!(output.status.code(), Some(2));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
